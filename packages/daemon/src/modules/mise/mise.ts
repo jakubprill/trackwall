@@ -18,6 +18,7 @@ import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { waitLimited } from "../../infra/wait-limit.ts";
 import { type MiseCliResult, miseFailure, runMiseCli } from "./mise-cli.ts";
 import { type MiseEnv, NO_MISE_ENV, readMiseEnv } from "./mise-env.ts";
+import { type TrackedPaths, taskOrigins } from "./task-origin.ts";
 
 /**
  * The `mise` module (§4, ADR-20): the mise tasks of workspace repos and their runs. The list comes from `mise tasks ls --json`
@@ -66,6 +67,8 @@ export interface MiseDeps {
   procs: MiseProcs;
   repos: MiseRepos;
   tasks: MiseTaskWorktrees;
+  /** Which files of a repo git tracks, for the origin of its mise tasks (ADR-110). */
+  vcs: TrackedPaths;
   /** The `mise` program with any arguments before the command; `["mise"]` in the daemon, a fake in tests. */
   command: readonly string[];
   /** The environment of the user's processes (`PATH` from the login shell on macOS). */
@@ -74,12 +77,20 @@ export interface MiseDeps {
   onTrusted: (repo: string) => void;
 }
 
-/** The `mise tasks ls --json` fields we use; the rest (dependencies, sources, `run`) stays in mise. */
-const ListedTask = z.object({ name: z.string(), description: z.string().nullish(), hide: z.boolean().optional() });
+/**
+ * The `mise tasks ls --json` fields we use; the rest (dependencies, `sources`, `run`) stays in mise. `source` is the file
+ * that defines the mise task (a config file, or the script of a file mise task), as a full path.
+ */
+const ListedTask = z.object({
+  name: z.string(),
+  description: z.string().nullish(),
+  hide: z.boolean().optional(),
+  source: z.string().nullish(),
+});
 const ListedTasks = z.array(ListedTask);
 
-/** A mise task from `mise tasks ls`, still without a run state. */
-type ListedMiseTask = Omit<MiseTask, "run">;
+/** A mise task from `mise tasks ls`, still without a run state, and with the source as mise gave it, not yet its origin. */
+type ListedMiseTask = Pick<MiseTask, "name" | "description" | "source">;
 type TaskList = { kind: Exclude<MiseTasks["kind"], "ok">; message: string } | { kind: "ok"; tasks: ListedMiseTask[] };
 
 /** A fragment of mise's message about an untrusted config (`Config files in … are not trusted`). */
@@ -136,13 +147,22 @@ export class Mise {
     this.deps = deps;
   }
 
-  /** The mise tasks of a repo root with their runs there. */
+  /** The mise tasks of a repo root with their runs there, and where each is defined (ADR-110). */
   async tasks(repo: string): Promise<MiseTasks> {
     const root: MiseTarget = { repo, task: null };
     const dir = await this.deps.repos.repoPath(repo);
     const listed = await this.list(dir, await this.deps.env());
     if (listed.kind !== "ok") return { ...listed, running: this.liveOutside(root, []) };
-    const tasks: MiseTask[] = listed.tasks.map((t) => ({ ...t, run: this.deps.procs.state(owner(root, t.name)) ?? null }));
+    const originOf = await taskOrigins(
+      dir,
+      listed.tasks.map((t) => t.source),
+      this.deps.vcs,
+    );
+    const tasks: MiseTask[] = listed.tasks.map((t) => ({
+      ...t,
+      ...originOf(t.source),
+      run: this.deps.procs.state(owner(root, t.name)) ?? null,
+    }));
     return { kind: "ok", tasks: [...tasks, ...this.liveOutside(root, tasks)] };
   }
 
@@ -160,7 +180,7 @@ export class Mise {
   private liveOutside(target: MiseTarget, listed: readonly ListedMiseTask[]): MiseTask[] {
     return this.liveRuns(target)
       .filter(({ name }) => !listed.some((t) => t.name === name))
-      .map(({ name, run }) => ({ name, description: "", run }));
+      .map(({ name, run }) => ({ name, description: "", source: null, origin: null, run }));
   }
 
   /** mise tasks the daemon started in `target` whose group has not ended yet (also while stopping). */
@@ -446,7 +466,7 @@ export function parseTaskList(result: MiseCliResult): TaskList {
   if (!parsed.success) return { kind: "error", message: `unexpected mise tasks ls --json format: ${z.prettifyError(parsed.error)}` };
   const tasks = parsed.data
     .filter((t) => !t.hide && MiseTaskName.safeParse(t.name).success)
-    .map((t) => ({ name: t.name, description: t.description ?? "" }));
+    .map((t) => ({ name: t.name, description: t.description ?? "", source: t.source ?? null }));
   return { kind: "ok", tasks };
 }
 

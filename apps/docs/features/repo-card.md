@@ -23,7 +23,7 @@ Select a repo: it opens on its "Card" tab. Trackwall reads the build and configu
 
 The card covers the packages the repo provides and uses, required tools (`mise.toml`, `.tool-versions`, `.nvmrc`, build wrappers), frameworks, Spring Boot apps and their ports, HTTP endpoints from controllers and OpenAPI specs with their request and response types, the fields of those types (Java records and classes, Kotlin `data class`, enums), and HTTP clients (Feign, `@HttpExchange`, WebClient, RestClient, RestTemplate) with the addresses from `application*.yml` in every profile, from `.env` and from the frontend's dev proxy.
 
-From the card Trackwall gives each repo tags: `java`, `typescript`, `frontend`, `backend`, `bff`, `library`, `monorepo`, and `no-mise` for a repo without mise tasks. The tags show on the repo list, with the reason in a tooltip, and the filter above the list narrows it to repos that have every tag you select.
+From the card Trackwall gives each repo tags: `java`, `typescript`, `frontend`, `backend`, `bff`, `library`, `monorepo`, `no-mise` for a repo without mise tasks, and `local-mise` for a repo with mise tasks only your clone has, in `mise.local.toml` or a `mise.toml` kept out of git. The tags show on the repo list, with the reason in a tooltip, and the filter above the list narrows it to repos that have every tag you select.
 
 ## Use it
 
@@ -38,5 +38,6 @@ From the card Trackwall gives each repo tags: `java`, `typescript`, `frontend`, 
 - Endpoints also come from OpenAPI specs in Java repos: any YAML or JSON file with an `openapi` or `swagger` key, whatever its name. An endpoint that is only in a spec, for example because its interface is generated during the build, shows the "OpenAPI" badge and the controller method that implements it; hover the path to see the operation's summary. A spec your build uses to generate a client for another service is left out, because those endpoints belong to that service.
 - When a card is missing something, "Incomplete" at its top says what and why: a file not read (the repo is larger than the card reads), an invalid file (a `pom.xml` or `package.json` that does not parse), code not parsed (endpoints without request and response types), or a list cut short.
 - `no-mise` shows as the warning "no mise tasks": the setup and build steps of the [Batch command](/features/batch-command) and the [mise tasks](/features/mise-tasks) tab have nothing to run in that repo.
+- `local-mise` means a new clone or another computer lacks those tasks until you restore them from the [local config backup](/features/local-config).
 - Add your own tags under `repoTags` in `~/.trackwall/workspace.yaml`, as a tag and the repo names or remote addresses it matches: `repoTags: { core-api: ["*-core"] }`. You edit this file by hand.
 - The card is what the [connection graph](/features/graph) and the [MCP server](/features/mcp) build on.

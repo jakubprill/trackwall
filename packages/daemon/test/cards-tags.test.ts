@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { RepoCard } from "@trackwall/protocol";
+import type { DeclaredMiseTask, RepoCard } from "@trackwall/protocol";
 import { globMatcher } from "../src/infra/glob.ts";
 import { extractCard } from "../src/modules/cards/extract-card.ts";
 import type { RepoSnapshot } from "../src/modules/cards/snapshot.ts";
@@ -32,7 +32,7 @@ const SPRING_BFF_POM = `<project>
 
 describe("repo tags", () => {
   const tagsOf = (card: RepoCard, id: string, remote: string | null = null, rules = {}) =>
-    repoTags(card, { id, remote, localMiseTasks: 0 }, rules).map((t) => `${t.name}: ${t.reason}`);
+    repoTags(card, { id, remote, localMiseTasks: [] }, rules).map((t) => `${t.name}: ${t.reason}`);
 
   test("a BFF in Spring: java, backend and bff (from the name), each with a reason", () => {
     const card = extractCard(snapshotOf({ "pom.xml": SPRING_BFF_POM }), parsers, NO_REACH);
@@ -95,7 +95,7 @@ describe("repo tags", () => {
       "core-api: repoTags rule in workspace.yaml: *-core",
       "payments: repoTags rule in workspace.yaml: gitlab.example.com/Payments/**",
     ]);
-    expect(repoTags(null, { id: "web", remote: null, localMiseTasks: 0 }, rules)).toEqual([]);
+    expect(repoTags(null, { id: "web", remote: null, localMiseTasks: [] }, rules)).toEqual([]);
   });
 });
 
@@ -128,7 +128,7 @@ describe("mise configuration and the no-mise tag", () => {
 
   test("a repo without mise configuration and a repo with a mise.toml without mise tasks get no-mise with a reason, and one with a mise task does not", () => {
     const noMise = (files: Record<string, string>, paths: string[] = []) =>
-      repoTags(extractCard(snapshotOf(files, paths), parsers, NO_REACH), { id: "app", remote: null, localMiseTasks: 0 }, {}).find(
+      repoTags(extractCard(snapshotOf(files, paths), parsers, NO_REACH), { id: "app", remote: null, localMiseTasks: [] }, {}).find(
         (t) => t.name === "no-mise",
       )?.reason;
     expect(noMise({})).toBe("no mise config in the repo root");
@@ -140,17 +140,23 @@ describe("mise configuration and the no-mise tag", () => {
     expect(noMise({}, ["mise.toml"])).toBeUndefined();
   });
 
-  test("mise tasks in the repo's mise.local.toml take away no-mise, which the commit alone would give", () => {
+  test("local mise tasks take away no-mise, which the commit alone would give, and give local-mise with the files", () => {
     const card = extractCard(snapshotOf({}), parsers, NO_REACH);
-    const noMise = (localMiseTasks: number) =>
-      repoTags(card, { id: "app", remote: null, localMiseTasks }, {}).find((t) => t.name === "no-mise")?.reason;
-    expect(noMise(0)).toBe("no mise config in the repo root");
-    expect(noMise(2)).toBeUndefined();
+    const tagsWith = (localMiseTasks: DeclaredMiseTask[]) =>
+      repoTags(card, { id: "app", remote: null, localMiseTasks }, {}).map((t) => `${t.name}: ${t.reason}`);
+    expect(tagsWith([])).toEqual(["no-mise: no mise config in the repo root"]);
+    expect(
+      tagsWith([
+        { name: "build", evidence: { path: "mise.toml", line: 1 } },
+        { name: "dev", evidence: { path: "mise.local.toml", line: 1 } },
+        { name: "lint", evidence: { path: "mise.local.toml", line: 4 } },
+      ]),
+    ).toEqual(["local-mise: 3 mise tasks in mise.toml and mise.local.toml, outside git"]);
   });
 
   test("source files the card did not read (a failed search) do not hide no-mise, and a truncated file list does", () => {
     const noMise = (snapshot: RepoSnapshot) =>
-      repoTags(extractCard(snapshot, parsers, NO_REACH), { id: "app", remote: null, localMiseTasks: 0 }, {}).find(
+      repoTags(extractCard(snapshot, parsers, NO_REACH), { id: "app", remote: null, localMiseTasks: [] }, {}).find(
         (t) => t.name === "no-mise",
       )?.reason;
     const searchFailed = {
@@ -173,7 +179,7 @@ describe("mise configuration and the no-mise tag", () => {
       NO_REACH,
     );
     expect(card.mise.configFiles).toEqual(["mise.toml", ".config/mise.toml", "mise/conf.d/broken.toml"]);
-    expect(repoTags(card, { id: "app", remote: null, localMiseTasks: 0 }, {}).find((t) => t.name === "no-mise")?.reason).toBe(
+    expect(repoTags(card, { id: "app", remote: null, localMiseTasks: [] }, {}).find((t) => t.name === "no-mise")?.reason).toBe(
       "mise.toml declares no tasks",
     );
     expect(card.problems.map((p) => `${p.code} ${p.path}`)).toEqual(["file-invalid mise/conf.d/broken.toml"]);

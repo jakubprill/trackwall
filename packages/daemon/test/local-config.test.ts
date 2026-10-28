@@ -105,15 +105,32 @@ describe("the local config store", () => {
 
   test("a file the repo's commits have is not local config and stays out of the store", async () => {
     const { projects, store, facade, backUp } = await setup();
-    makeRepo({ ".worktreeinclude": ".env\n" }, "web", projects);
+    makeRepo({ "mise.toml": TASKS, ".worktreeinclude": ".env\n" }, "web", projects);
 
     await backUp();
 
     expect(existsSync(join(store, "web"))).toBe(false);
     expect((await facade.localConfig.repo("web")).files).toEqual([
+      { kind: "tracked", file: "mise.toml" },
       { kind: "absent", file: "mise.local.toml" },
       { kind: "tracked", file: ".worktreeinclude" },
     ]);
+  });
+
+  test("a mise.toml kept out of git is backed up and restored into a new clone like mise.local.toml", async () => {
+    const { projects, store, facade, backUp, storeLog } = await setup();
+    const orders = makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
+    writeFileSync(join(orders, "mise.toml"), TASKS);
+    await backUp();
+    expect(storeLog()).toBe("Trackwall|Back up orders: mise.toml\n\norders/mise.toml");
+
+    rmSync(orders, { recursive: true, force: true });
+    makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
+    await facade.localConfig.restore("orders");
+
+    expect(readFileSync(join(orders, "mise.toml"), "utf8")).toBe(TASKS);
+    expect(readFileSync(join(store, "orders", "mise.toml"), "utf8")).toBe(TASKS);
+    expect(readFileSync(join(orders, ".git", "info", "exclude"), "utf8")).toEndWith("\n/mise.toml\n");
   });
 
   test(
@@ -155,6 +172,7 @@ describe("the local config store", () => {
         {
           repo: "billing",
           files: [
+            { kind: "absent", file: "mise.toml" },
             { kind: "absent", file: "mise.local.toml" },
             { kind: "missing", file: ".worktreeinclude" },
           ],
@@ -162,6 +180,7 @@ describe("the local config store", () => {
         {
           repo: "orders",
           files: [
+            { kind: "absent", file: "mise.toml" },
             { kind: "pending", file: "mise.local.toml", ignored: false },
             { kind: "absent", file: ".worktreeinclude" },
           ],
@@ -178,20 +197,33 @@ describe("the local config store", () => {
     const orders = makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
     writeFileSync(join(orders, "mise.local.toml"), TASKS);
     await backUp();
-    expect((await facade.localConfig.repo("orders")).files[0]).toEqual({ kind: "backed_up", file: "mise.local.toml", ignored: false });
+    expect((await facade.localConfig.repo("orders")).files[1]).toEqual({ kind: "backed_up", file: "mise.local.toml", ignored: false });
 
     // A new clone: the folder is gone and comes back without the file.
     rmSync(orders, { recursive: true, force: true });
     makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
     await backUp();
-    expect((await facade.localConfig.repo("orders")).files[0]).toEqual({ kind: "missing", file: "mise.local.toml" });
+    expect((await facade.localConfig.repo("orders")).files[1]).toEqual({ kind: "missing", file: "mise.local.toml" });
 
     const restored = await facade.localConfig.restore("orders");
 
     expect(readFileSync(join(orders, "mise.local.toml"), "utf8")).toBe(TASKS);
-    expect(restored.files[0]).toEqual({ kind: "backed_up", file: "mise.local.toml", ignored: true });
+    expect(restored.files[1]).toEqual({ kind: "backed_up", file: "mise.local.toml", ignored: true });
     expect(readFileSync(join(orders, ".git", "info", "exclude"), "utf8")).toEndWith("\n/mise.local.toml\n");
     expect(gitIn(orders, "status", "--porcelain")).toBe("");
+  });
+
+  test("a backed-up mise.toml the team has since committed is the repo's, so Restore never writes the old copy over it", async () => {
+    const { projects, facade, backUp } = await setup();
+    const orders = makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
+    writeFileSync(join(orders, "mise.toml"), TASKS);
+    await backUp();
+    commitFiles(orders, { "mise.toml": '[tasks.build]\nrun = "mvn verify"\n' }, "add mise.toml");
+    rmSync(join(orders, "mise.toml"));
+
+    expect((await facade.localConfig.repo("orders")).files[0]).toEqual({ kind: "tracked", file: "mise.toml" });
+    await expect(facade.localConfig.restore("orders")).rejects.toThrow("the local config store has nothing this repo lacks");
+    expect(existsSync(join(orders, "mise.toml"))).toBe(false);
   });
 
   test("Ignore adds the unignored local config files to info/exclude once, keeping the user's lines", async () => {
@@ -205,7 +237,7 @@ describe("the local config store", () => {
     const again = await facade.localConfig.ignore("orders");
 
     expect(readFileSync(join(orders, ".git", "info", "exclude"), "utf8")).toBe("# mine\n*.log\n/mise.local.toml\n/.worktreeinclude\n");
-    expect(again.files.map((f) => (f.kind === "pending" || f.kind === "backed_up" ? f.ignored : f.kind))).toEqual([true, true]);
+    expect(again.files.map((f) => (f.kind === "pending" || f.kind === "backed_up" ? f.ignored : f.kind))).toEqual(["absent", true, true]);
   });
 
   test("a task worktree ignores the restored file too, because info/exclude is shared with the repo", async () => {

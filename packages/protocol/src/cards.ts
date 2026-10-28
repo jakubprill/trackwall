@@ -202,6 +202,12 @@ export type TagName = z.infer<typeof TagName>;
 /** The tag of a repo without mise tasks in the commit (ADR-34); the UI marks it in the repo list, because such a repo has nothing to run. */
 export const NO_MISE_TAG = "no-mise";
 
+/**
+ * The tag of a repo with mise tasks in files git does not keep (`mise.local.toml`, a `mise.toml` kept out of git, ADR-110):
+ * only this clone has them, and the local config store keeps their backup.
+ */
+export const LOCAL_MISE_TAG = "local-mise";
+
 /** A repo tag with the reason the repo got it (a sentence for a person, for example "react dependency in package.json"). */
 export const RepoTag = z.object({ name: TagName, reason: z.string() });
 export type RepoTag = z.infer<typeof RepoTag>;

@@ -155,15 +155,18 @@ export class LocalConfig {
       LOCAL_CONFIG_FILES.map(async (file) => ({ file, inRepo: await readRegularFile(join(dir, file), MAX_LOCAL_CONFIG_BYTES) })),
     );
     const present = read.filter((f) => f.inRepo !== undefined).map((f) => f.file);
-    const tracked = await this.#deps.vcs.trackedPaths(dir, present);
+    // A file deleted from the working directory is still the repo's while the index tracks it, so Restore never writes an
+    // old local copy over a file the team has since committed, such as `mise.toml` (ADR-110).
+    const asked = read.filter((f) => f.inRepo !== undefined || inStore.has(storePath(dir, f.file))).map((f) => f.file);
+    const tracked = await this.#deps.vcs.trackedPaths(dir, asked);
     const ignored = await this.#deps.vcs.ignoredPaths(
       dir,
       present.filter((file) => !tracked.has(file)),
     );
     const files = read.map(({ file, inRepo }): LocalConfigFileState => {
       const backup = inStore.get(storePath(dir, file));
-      if (inRepo === undefined) return backup === undefined ? { kind: "absent", file } : { kind: "missing", file };
       if (tracked.has(file)) return { kind: "tracked", file };
+      if (inRepo === undefined) return backup === undefined ? { kind: "absent", file } : { kind: "missing", file };
       return { kind: backup?.equals(inRepo) ? "backed_up" : "pending", file, ignored: ignored.has(file) };
     });
     return { repo: id, files };
