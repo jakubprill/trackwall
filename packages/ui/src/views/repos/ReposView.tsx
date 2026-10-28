@@ -1,6 +1,6 @@
 import { NO_MISE_TAG, type Repo, type RepoList, type RepoTag, type RunningMiseTask, type SessionList } from "@trackwall/protocol";
 import { FolderOpen, Plus, RefreshCw } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { StatusLabel } from "@/components/StatusLabel";
@@ -63,9 +63,7 @@ export function ReposView({
 }) {
   const [selected, setSelected] = useState(initialRepo);
   const [panel, setPanel] = useState<Panel>("repo");
-  // Filled in below, once the filtered list is known; read when a round of statuses starts (ADR-113).
-  const first = useRef<readonly string[]>([]);
-  const list = useRepoList(conn, repoWatch.options(REPO_LIST_PACE), first);
+  const list = useRepoList(conn, repoWatch.options(REPO_LIST_PACE));
   const sync = useSyncRun(conn, list.reload);
   const synced = syncedByPath(sync.run);
   const batch = useBatchRun(conn, list.reload);
@@ -75,7 +73,8 @@ export function ReposView({
   const filter = useTagFilter(conn, allRepos, repoWatch);
   const repos = filter.repos;
   const current = repos.find((r) => r.id === selected) ?? repos[0];
-  first.current = shownFirst(selected, repos);
+  // The selected repo and the top of the list get their statuses first (ADR-113); only remembered, so every render may.
+  useEffect(() => list.showFirst(shownFirst(selected, repos)));
   const canSync = Boolean(list.data?.projectsDir) && !needsSettings;
   const syncedAgo = sync.run && relativeTime(sync.run.startedAt, new Date());
 

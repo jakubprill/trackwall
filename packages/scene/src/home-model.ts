@@ -16,6 +16,14 @@ import type { EdgeKind } from "@trackwall/protocol";
 export const HOME_REPO_STATES = ["loading", "clean", "behind", "changed", "unavailable"] as const;
 export type HomeRepoState = (typeof HOME_REPO_STATES)[number];
 
+/**
+ * A repo that waits for the user: the "Needs you" queue, a loud label and a strong glow. A `loading` repo does not, until its
+ * status says so.
+ */
+export function repoNeedsYou(state: HomeRepoState): boolean {
+  return state !== "clean" && state !== "loading";
+}
+
 export interface HomeRepo {
   id: string;
   /**

@@ -1,49 +1,45 @@
 import { type Repo, type RepoList, workspaceApi } from "@trackwall/protocol";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { post } from "./api.ts";
 import type { Connection } from "./connection.ts";
-import { REPO_BATCH_SIZE, repoBatches, withLoadedRepos } from "./repo-batches.ts";
+import { RepoStatusRounds } from "./repo-status-rounds.ts";
 import { type RemoteHandle, type RemoteOptions, useRemote } from "./use-remote.ts";
+
+export type RepoListHandle = RemoteHandle<RepoList> & {
+  /** The repos the view shows: the next round asks for them first. Selecting or filtering does not start a round. */
+  showFirst: (ids: readonly string[]) => void;
+};
 
 /**
  * The repo list of a view, loaded lazily (ADR-113): the quick list without git at once, every repo `loading`, then the
- * statuses in batches, `first` (the repos the view shows) before the rest. A refresh keeps the statuses already shown until
- * their new ones come, so the list does not flash back to `loading`. `first` is read when a round starts, not watched:
- * selecting a repo or filtering does not start a new round. Errors are the quick list's: a failed batch stops the
- * round, and the next refresh asks again.
+ * statuses in rounds of batches (`RepoStatusRounds`). A refresh keeps the statuses already shown until their new ones
+ * come, so the list does not flash back to `loading`. The error is the quick list's, or else the last failed batch's.
  */
-export function useRepoList(
-  conn: Connection,
-  options: RemoteOptions<RepoList>,
-  first: { readonly current: readonly string[] },
-): RemoteHandle<RepoList> {
+export function useRepoList(conn: Connection, options: RemoteOptions<RepoList>): RepoListHandle {
   const load = useCallback(() => post(conn, workspaceApi.entries, {}), [conn]);
   const entries = useRemote(load, options);
-  const [loaded, setLoaded] = useState<ReadonlyMap<string, Repo>>(() => new Map());
+  const first = useRef<readonly string[]>([]);
+  const [rounds, setRounds] = useState<RepoStatusRounds>();
+  const [shown, setShown] = useState<{ repos: Repo[]; error?: string }>();
 
   useEffect(() => {
-    setLoaded(new Map());
+    setShown(undefined);
+    const next: RepoStatusRounds = new RepoStatusRounds({
+      fetch: (ids) => post(conn, workspaceApi.repos, { repos: ids }),
+      first: () => first.current,
+      changed: () => setShown({ repos: next.repos, error: next.error }),
+    });
+    setRounds(next);
+    return () => next.stop();
   }, [conn]);
 
   useEffect(() => {
-    const ids = entries.data?.repos.map((r) => r.id);
-    if (!ids) return;
-    let current = true;
-    void (async () => {
-      for (const batch of repoBatches(ids, first.current, REPO_BATCH_SIZE)) {
-        const repos = await post(conn, workspaceApi.repos, { repos: batch }).catch(() => undefined);
-        if (!current || !repos) return;
-        setLoaded((prev) => new Map([...prev, ...repos.map((r): [string, Repo] => [r.id, r])]));
-      }
-    })();
-    return () => {
-      current = false;
-    };
-  }, [conn, entries.data, first]);
+    if (rounds && entries.data) rounds.refresh(entries.data.repos);
+  }, [rounds, entries.data]);
 
-  const data = useMemo(
-    () => entries.data && { ...entries.data, repos: withLoadedRepos(entries.data.repos, loaded) },
-    [entries.data, loaded],
-  );
-  return { ...entries, data };
+  const data = useMemo(() => entries.data && { ...entries.data, repos: shown?.repos ?? entries.data.repos }, [entries.data, shown]);
+  const showFirst = useCallback((ids: readonly string[]) => {
+    first.current = ids;
+  }, []);
+  return { ...entries, data, error: entries.error ?? shown?.error, showFirst };
 }

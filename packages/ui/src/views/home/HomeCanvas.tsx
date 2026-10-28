@@ -1,6 +1,6 @@
 import { CameraRig, Engine, Labels, type LoopDriver, Pointer } from "@pawnjs/core";
 import { HomeScene, type LabelTarget } from "@trackwall/scene";
-import type { HomeKey, HomeModel } from "@trackwall/scene/model";
+import { type HomeKey, type HomeModel, repoNeedsYou } from "@trackwall/scene/model";
 import { useEffect, useRef } from "react";
 import { errorMessage } from "@/lib/api";
 import { HOME_CAMERA_FOV, HOME_CAMERA_MAX_DISTANCE, homeCameraDistance, homeCameraPosition } from "@/lib/home-camera";
@@ -193,12 +193,12 @@ function sceneLabel(target: LabelTarget): HTMLElement {
   }
   const { repo, tone } = target;
   const status = homeRepoStatus(repo);
-  // A clean repo with a full label has a running task: work going on, in the primary colour like on the scene.
-  const color = tone === "quiet" ? "text-muted-foreground" : repo.state === "clean" ? "text-primary" : statusTextClass(status.tone);
+  // A clean or loading repo with a full label has a running task: work going on, in the primary colour like on the scene.
+  const color = tone === "quiet" ? "text-muted-foreground" : !repoNeedsYou(repo.state) ? "text-primary" : statusTextClass(status.tone);
   label.className = cn("scene-callout text-2xs", color);
 
   label.append(line(repo.id, tone === "quiet" ? "" : "text-muted-foreground"));
-  if (repo.state !== "clean") label.append(line(status.label, "text-sm"));
+  if (repoNeedsYou(repo.state)) label.append(line(status.label, "text-sm"));
   if (repo.runningTask !== null) label.append(line(`running ${repo.runningTask}`, "text-primary"));
   return label;
 }

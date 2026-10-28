@@ -33,9 +33,6 @@ import { NeedsYouPanel } from "./NeedsYouPanel.tsx";
 /** The scene's own messages are for people developing Trackwall, so a failure shows a general text, as in `HomeCanvas`. */
 const CANVAS_FAILED = "the 3D view failed to load";
 
-/** Every repo is on the scene at once, so none goes first (ADR-113). */
-const NO_PRIORITY: { readonly current: readonly string[] } = { current: [] };
-
 const HomeCanvas = lazy(() => import("./HomeCanvas.tsx").then((m) => ({ default: m.HomeCanvas })));
 
 export function HomeView({
@@ -60,7 +57,7 @@ export function HomeView({
   onOpenDaemon: () => void;
   onOpenSettings: (category: SettingsCategory) => void;
 }) {
-  const repos = useRepoList(conn, repoWatch.options(REPO_LIST_PACE), NO_PRIORITY);
+  const repos = useRepoList(conn, repoWatch.options(REPO_LIST_PACE));
   const graph = useRemote(
     useCallback(() => post(conn, graphApi.graph, {}), [conn]),
     repoWatch.options(GRAPH_PACE),

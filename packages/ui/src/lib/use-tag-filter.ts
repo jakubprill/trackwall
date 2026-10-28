@@ -1,5 +1,5 @@
 import { cardsApi, type Repo, type RepoTag } from "@trackwall/protocol";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { post } from "./api.ts";
 import type { Connection } from "./connection.ts";
 import { hasAllTags, tagCounts, tagsByRepo, toggleTag } from "./repo-tags.ts";
@@ -24,7 +24,11 @@ export interface TagFilterHandle {
  */
 export function useTagFilter(conn: Connection, all: readonly Repo[], repoWatch: RepoWatchHandle): TagFilterHandle {
   const [selected, setSelected] = useState<string[]>([]);
-  const heads = all.map((r) => `${r.id}@${r.status.kind === "ok" ? (r.status.head?.hash ?? "") : ""}`).join(",");
+  const [heads, setHeads] = useState("");
+  // While statuses come in batches (ADR-113), every batch would change the key and read the cards again: wait for the last.
+  useEffect(() => {
+    if (!all.some((r) => r.status.kind === "loading")) setHeads(headsKey(all));
+  }, [all]);
   const load = useCallback(() => post(conn, cardsApi.tags, {}), [conn]);
   const remote = useRemote(load, { ...repoWatch.options(REPO_TAGS_PACE), refreshKey: heads });
   const tags = useMemo(() => tagsByRepo(remote.data), [remote.data]);
@@ -36,4 +40,9 @@ export function useTagFilter(conn: Connection, all: readonly Repo[], repoWatch: 
     toggle: (name) => setSelected((current) => toggleTag(current, name)),
     clear: () => setSelected([]),
   };
+}
+
+/** Changes when the set of repos or any HEAD in it changes. */
+function headsKey(repos: readonly Repo[]): string {
+  return repos.map((r) => `${r.id}@${r.status.kind === "ok" ? (r.status.head?.hash ?? "") : ""}`).join(",");
 }

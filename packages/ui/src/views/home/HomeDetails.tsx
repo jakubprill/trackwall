@@ -7,6 +7,7 @@ import {
   type HomeSessionState,
   parseHomeKey,
   repoKey,
+  repoNeedsYou,
   sessionKey,
 } from "@trackwall/scene/model";
 import { X } from "lucide-react";
@@ -209,7 +210,7 @@ function Summary({ model }: { model: HomeModel }) {
   const count = (state: HomeSessionState) => model.sessions.filter((s) => s.state === state).length;
   const rows = [
     ["Repos", model.repos.length],
-    ["Not clean", model.repos.filter((r) => r.state !== "clean").length],
+    ["Not clean", model.repos.filter((r) => repoNeedsYou(r.state)).length],
     ["Sessions working", count("working")],
     ["Waiting for you", count("attention")],
     ["Sessions idle", count("idle")],

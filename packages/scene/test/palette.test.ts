@@ -23,3 +23,7 @@ test("a clean repo has the muted colour, not the idle one, which is nearly the b
   expect(repoStateColor("clean", palette)).toBe("#000004");
   expect(repoStateColor("changed", palette)).toBe("#000002");
 });
+
+test("a repo whose status has not come yet is faint, in the idle colour", () => {
+  expect(repoStateColor("loading", palette)).toBe("#000005");
+});
