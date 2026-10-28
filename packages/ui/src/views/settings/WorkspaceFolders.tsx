@@ -3,8 +3,10 @@ import { useCallback } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
+import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 import { FolderForm } from "./FolderForm.tsx";
 
@@ -41,8 +43,10 @@ export function WorkspaceFolders({ conn, onRetry, onSaved }: { conn: Connection;
             />
           )}
           {!settings.data && !settings.error && <Loading />}
+          {settings.data?.projectsDir === null && <SuggestedProjectsDir conn={conn} use={saveProjectsDir} />}
           {settings.data && (
             <FolderForm
+              key={settings.data.projectsDir ?? ""}
               {...PROJECTS_DIR}
               initialPath={settings.data.projectsDir ?? ""}
               configFile={settings.data.configFile}
@@ -86,6 +90,34 @@ export function WorkspaceFolders({ conn, onRetry, onSaved }: { conn: Connection;
         </Surface>
       )}
     </>
+  );
+}
+
+/**
+ * A folder of the home folder that looks like a projects folder (`Dev`, `Projects`…), offered with one button while none
+ * is set, so that the usual case needs no typing or browsing.
+ */
+function SuggestedProjectsDir({ conn, use }: { conn: Connection; use: (path: string) => Promise<void> }) {
+  const load = useCallback(() => post(conn, workspaceApi.suggestedProjectsDir, {}), [conn]);
+  const suggestion = useRemote(load);
+  const save = useAction(
+    (path: string) => use(path),
+    () => {},
+  );
+  if (!suggestion.data) return null;
+  const path = suggestion.data;
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span>
+          Found <span className="font-mono text-xs">{path}</span> in your home folder.
+        </span>
+        <Button size="sm" onClick={() => save.run(path)} disabled={save.pending}>
+          Use this folder
+        </Button>
+      </div>
+      {save.error && <p className="text-destructive text-xs break-words">{save.error}</p>}
+    </div>
   );
 }
 
