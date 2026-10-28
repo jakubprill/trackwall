@@ -7,7 +7,7 @@ import { Logs } from "../src/modules/logs/logs.ts";
 import { Mise, parseTaskList } from "../src/modules/mise/mise.ts";
 import { ProcessGroups } from "../src/modules/procs/process-groups.ts";
 import { RuntimeFile } from "../src/modules/procs/runtime-file.ts";
-import { Vcs } from "../src/modules/vcs/vcs.ts";
+import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { groupPlatform } from "../src/platform/group-platform.ts";
 import { isAlive, waitUntil } from "../src/platform/process-group.ts";
 import { commitFiles, gitIn } from "./support/git-repo.ts";
@@ -64,7 +64,15 @@ function setup(config: object, command: readonly string[] = FAKE_MISE) {
   const removeRepo = () => {
     present = false;
   };
-  const mise = new Mise({ procs, repos, tasks, vcs: new Vcs(), command, env: async () => process.env, onTrusted: () => {} });
+  const mise = new Mise({
+    procs,
+    repos,
+    tasks,
+    vcs: new Vcs(systemTempFolder),
+    command,
+    env: async () => process.env,
+    onTrusted: () => {},
+  });
   return { mise, home, repoDir, worktree, procs, logs, removeRepo, refuseWorktree };
 }
 

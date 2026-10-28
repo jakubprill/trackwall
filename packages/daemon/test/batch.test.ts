@@ -9,7 +9,7 @@ import { Logs } from "../src/modules/logs/logs.ts";
 import { Mise } from "../src/modules/mise/mise.ts";
 import { ProcessGroups } from "../src/modules/procs/process-groups.ts";
 import { RuntimeFile } from "../src/modules/procs/runtime-file.ts";
-import { Vcs } from "../src/modules/vcs/vcs.ts";
+import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { groupPlatform } from "../src/platform/group-platform.ts";
 import { type GroupPlatform, isAlive, waitUntil } from "../src/platform/process-group.ts";
 
@@ -56,7 +56,7 @@ function setup(
     procs,
     repos: { repoPath, projectsDir: async () => home },
     tasks: NO_TASKS,
-    vcs: new Vcs(),
+    vcs: new Vcs(systemTempFolder),
     command: FAKE_MISE,
     env: async () => process.env,
     onTrusted: () => {},

@@ -12,7 +12,7 @@ import { ProcessGroups } from "../src/modules/procs/process-groups.ts";
 import { RuntimeFile } from "../src/modules/procs/runtime-file.ts";
 import { probePort } from "../src/modules/services/port-probe.ts";
 import { Services } from "../src/modules/services/services.ts";
-import { Vcs } from "../src/modules/vcs/vcs.ts";
+import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { groupPlatform } from "../src/platform/group-platform.ts";
 
 const FAKE_MISE = [process.execPath, join(import.meta.dir, "fixtures", "fake-mise.ts")];
@@ -71,7 +71,7 @@ function setup(
     procs,
     repos: { repoPath, projectsDir: async () => home },
     tasks: worktrees,
-    vcs: new Vcs(),
+    vcs: new Vcs(systemTempFolder),
     command: FAKE_MISE,
     env,
     onTrusted: () => {},
