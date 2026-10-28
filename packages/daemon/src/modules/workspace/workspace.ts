@@ -37,6 +37,7 @@ import { type CodeSearchQuery, type CodeSearchVcs, searchCode } from "./code-sea
 import { describeDroppedFolder } from "./dropped-folder.ts";
 import { dirKey, findRepos, projectsDirUnavailable, type RepoEntry, resolveFolderSetting, takenNames } from "./projects-dir.ts";
 import { moveRepoOut } from "./repo-removal.ts";
+import { suggestedProjectsDir } from "./suggested-projects-dir.ts";
 import { SyncRuns } from "./sync-runs.ts";
 import { sessionToolPermissions, supervisorToolPermissions } from "./tool-permissions.ts";
 import type { WorkspaceFile } from "./workspace-file.ts";
@@ -120,6 +121,12 @@ export class Workspace {
       defaultWorktreesDir: projectsDir === null ? null : defaultWorktreesDir(projectsDir),
       configFile: this.configFile(),
     };
+  }
+
+  /** A projects folder to offer, only while none is set; a bad one in `workspace.yaml` is `invalid_config`, fixed with the form. */
+  async suggestedProjectsDir(home: string): Promise<string | null> {
+    if (this.deps.file.projectsDir() !== null) return null;
+    return suggestedProjectsDir(home);
   }
 
   async setProjectsDir(path: string): Promise<WorkspaceSettings> {

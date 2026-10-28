@@ -122,6 +122,60 @@ describe("workspace", () => {
     SLOW_TEST_TIMEOUT_MS,
   );
 
+  test("without a projects folder, Dev in the home folder is offered ahead of Projects, under its spelling on disk", async () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
+    mkdirSync(join(home, "Projects"));
+    mkdirSync(join(home, "dev"));
+    const workspace = new Workspace({
+      file: new WorkspaceFile(join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml")),
+      vcs: new Vcs(systemTempFolder),
+      hosting: fakeHosting().hosting,
+      openEditor: () => {},
+      openFolder: () => {},
+    });
+
+    expect(await workspace.suggestedProjectsDir(home)).toBe(join(home, "dev"));
+  });
+
+  test("Visual Studio's source/repos is offered too, a file named Dev is not, and an empty home folder offers nothing", async () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
+    const workspace = new Workspace({
+      file: new WorkspaceFile(join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml")),
+      vcs: new Vcs(systemTempFolder),
+      hosting: fakeHosting().hosting,
+      openEditor: () => {},
+      openFolder: () => {},
+    });
+    expect(await workspace.suggestedProjectsDir(home)).toBeNull();
+
+    writeFileSync(join(home, "Dev"), "not a folder");
+    mkdirSync(join(home, "source", "repos"), { recursive: true });
+    expect(await workspace.suggestedProjectsDir(home)).toBe(join(home, "source", "repos"));
+  });
+
+  test("a Dev folder linked to another place (a junction on Windows) is offered under its own path", async () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
+    const elsewhere = mkdtempSync(join(tmpdir(), "trackwall-elsewhere-"));
+    symlinkSync(elsewhere, join(home, "Dev"), "junction");
+    const workspace = new Workspace({
+      file: new WorkspaceFile(join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml")),
+      vcs: new Vcs(systemTempFolder),
+      hosting: fakeHosting().hosting,
+      openEditor: () => {},
+      openFolder: () => {},
+    });
+
+    expect(await workspace.suggestedProjectsDir(home)).toBe(join(home, "Dev"));
+  });
+
+  test("once a projects folder is set, nothing is offered", async () => {
+    const { workspace } = await workspaceWithProjectsDir();
+    const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
+    mkdirSync(join(home, "Dev"));
+
+    expect(await workspace.suggestedProjectsDir(home)).toBeNull();
+  });
+
   test(
     "setting the folder saves the full path in workspace.yaml",
     async () => {
