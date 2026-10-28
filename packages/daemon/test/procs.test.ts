@@ -533,3 +533,48 @@ describe.skipIf(process.versions.bun === undefined)("procs with the leader in a 
     }
   });
 });
+
+describe("procs with the leader on a channel (ADR-107)", () => {
+  test(
+    "what the caller writes reaches the leader's stdin, its stdout goes only to the caller, and its stderr to the masked last lines",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "trackwall-procs-"));
+      const logsDir = mkdtempSync(join(tmpdir(), "trackwall-procs-logs-"));
+      const logs = new Logs({ dir: logsDir, maxFileBytes: 1024 * 1024, log: () => {} });
+      const groups = new ProcessGroups({
+        logs,
+        runtime: new RuntimeFile(join(dir, "runtime.json")),
+        platform: groupPlatform(),
+        log: () => {},
+      });
+      let stdout = "";
+      const echo =
+        "process.stdin.once('data', (d) => { process.stdout.write('got ' + d); console.error('token ' + process.env.TOKEN); process.exit(0); })";
+      const spec = {
+        owner: "agent:x",
+        command: [process.execPath, "-e", echo],
+        cwd: dir,
+        env: { ...process.env, TOKEN: "secret-token-123" },
+        secrets: ["secret-token-123"],
+        onStdout: (chunk: Buffer) => {
+          stdout += chunk.toString("utf8");
+        },
+      };
+
+      const { channel } = await groups.startChannel(spec);
+      await expect(groups.startChannel(spec)).rejects.toThrow("owner agent:x already has a group");
+      channel.write("hello\n");
+
+      expect(await waitUntil(() => groups.state("agent:x")?.kind === "exited", 15_000)).toBe(true);
+      expect(stdout).toBe("got hello\n");
+      const state = groups.state("agent:x");
+      if (state?.kind !== "exited") throw new Error(`group not ended: ${state?.kind}`);
+      expect(state.lastLines).toContain("token ***");
+      // A write after the end goes nowhere instead of failing.
+      channel.write("late\n");
+      logs.flush();
+      expect(readdirSync(logsDir)).toEqual([]);
+    },
+    TIMEOUT,
+  );
+});

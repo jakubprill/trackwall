@@ -5,6 +5,7 @@ import type { Facade } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
 import { MCP_PATH, type McpEndpoint, SESSION_TOKEN_HEADER } from "../mcp/endpoint.ts";
 import { readBody } from "./body.ts";
+import { conversationSocketRoute } from "./conversation-socket.ts";
 import type { EventHub } from "./event-hub.ts";
 import { eventSocketRoute } from "./event-socket.ts";
 import { hasValidToken, OriginPolicy } from "./guard.ts";
@@ -83,7 +84,7 @@ export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer
   const closeSockets = attachSockets(server, {
     token: options.token,
     policy: () => policy,
-    routes: [eventSocketRoute(options.events), ptySocketRoute(options.facade)],
+    routes: [eventSocketRoute(options.events), ptySocketRoute(options.facade), conversationSocketRoute(options.facade)],
   });
   return {
     server,

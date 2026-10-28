@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
+import { ConversationId } from "./acp-messages.ts";
 import { readStateFile } from "./state-file.ts";
 
 /**
@@ -13,6 +14,8 @@ export const LastSupervisor = z.object({
   session: z.uuid(),
   /** Copilot CLI keeps a conversation under the id (the supervisor had a prompt): only then is there one to go on with. */
   hasConversation: z.boolean(),
+  /** Copilot CLI's id of the conversation when it is not the session id (one started in the conversation view, ADR-107). */
+  conversation: ConversationId.optional(),
 });
 export type LastSupervisor = z.infer<typeof LastSupervisor>;
 
@@ -39,7 +42,8 @@ export class LastSupervisorFile {
   /** The newest supervisor the daemon lists now; written only when it changed. */
   follow(last: LastSupervisor): void {
     const known = this.read();
-    if (known?.session === last.session && known.hasConversation === last.hasConversation) return;
+    if (known?.session === last.session && known.hasConversation === last.hasConversation && known.conversation === last.conversation)
+      return;
     writeFileAtomic(this.#path, `${JSON.stringify(last, null, 2)}\n`);
     this.#last = last;
   }

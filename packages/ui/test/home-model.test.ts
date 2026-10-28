@@ -29,6 +29,7 @@ function session(id: string, repoId: string, over: Partial<Session> = {}): Sessi
     task: null,
     dialog: null,
     environment: { variables: [], secrets: [], agentSecrets: [], problem: null },
+    view: "terminal",
     ...over,
   };
 }

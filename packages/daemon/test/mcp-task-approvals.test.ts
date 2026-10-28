@@ -21,7 +21,7 @@ afterAll(async () => {
 }, 30_000);
 
 async function supervisorClient(): Promise<{ id: string; client: Client }> {
-  const supervisor = await daemon.facade.agents.startSupervisor("new");
+  const supervisor = await daemon.facade.agents.startSupervisor("new", "terminal");
   const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, supervisor.id);
   clients.push(client);
   return { id: supervisor.id, client };

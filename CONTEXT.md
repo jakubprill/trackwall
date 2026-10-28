@@ -434,6 +434,10 @@ _Avoid_: read, acknowledged
 **Idle** (`isIdle`, `IDLE_LABEL`, dashboard state `idle`):
 A running session in `Input` the user has already seen (ADR-47): the agent waits for the next prompt, but no longer waits for you. Shown as "idle" in Sessions and in calm grey on the dashboard.
 
+**Conversation view** (`SessionView` `"conversation"`, `ConversationView`, `AcpSession`, `ConversationEntry`; "conversation view" in the UI):
+How a session shows when the daemon runs Copilot CLI over the Agent Client Protocol (`copilot --acp`) instead of in a terminal (ADR-107): a list of what the user and the agent said and the tools the agent called, its approval and a message box, all plain text in the page. The other `SessionView` is `"terminal"`, the session terminal. For now only the supervisor starts in it, when the user turns it on in the supervisor panel; its conversation goes on in either view.
+_Avoid_: chat, transcript (that is Copilot CLI's own record)
+
 **Session terminal** (`SessionTerminal`):
 xterm.js in the Sessions view and the supervisor panel, connected over the WebSocket `/ws/pty/<session>` to the session's PTY. Several session terminals, also in different windows, can show the same session; the PTY takes the size of the last one that reported it, and a window that comes to the front reports the size of its terminals again (ADR-49).
 _Avoid_: terminal window (a window is the app window)

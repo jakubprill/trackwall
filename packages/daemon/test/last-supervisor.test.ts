@@ -32,6 +32,18 @@ describe("the newest supervisor whose conversation a start goes on with", () => 
     expect(statSync(path).mtimeMs).toBe(before);
   });
 
+  test("a supervisor of the conversation view keeps Copilot CLI's id of its conversation", () => {
+    const path = newPath();
+    const conversation = "776c64bf-f49f-46e9-b18c-2e4a7c7d5473";
+    new LastSupervisorFile(path, () => {}).follow({ session: SUPERVISOR, hasConversation: true, conversation });
+
+    expect(new LastSupervisorFile(path, () => {}).read()).toEqual({
+      session: SUPERVISOR,
+      hasConversation: true,
+      conversation,
+    });
+  });
+
   test("without a file there is none", () => {
     const path = newPath();
 

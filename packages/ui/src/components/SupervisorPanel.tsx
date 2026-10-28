@@ -1,12 +1,25 @@
-import { agentsApi, countLabel, type SupervisorConversation } from "@trackwall/protocol";
-import { BellRing, Crown, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Play, Plus, Square, Sunrise } from "lucide-react";
+import { agentsApi, countLabel, type SessionView, type SupervisorConversation } from "@trackwall/protocol";
+import {
+  BellRing,
+  Crown,
+  Maximize2,
+  MessagesSquare,
+  Minimize2,
+  PanelRightClose,
+  PanelRightOpen,
+  Play,
+  Plus,
+  Square,
+  Sunrise,
+} from "lucide-react";
 import { type FocusEvent, useEffect, useRef, useState } from "react";
-import { SessionTerminal } from "@/components/SessionTerminal";
+import { SessionScreen } from "@/components/SessionScreen";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import { readSupervisorView, saveSupervisorView } from "@/lib/conversation";
 import { dayStartLabel, type StartButton, startErrorShown } from "@/lib/day-start";
 import { IS_MAC } from "@/lib/platform";
 import {
@@ -58,6 +71,11 @@ export function SupervisorPanel({
   const { session } = supervisor;
   // Here rather than in the header, which folding the panel unmounts: an old day start failure must not come back then.
   const [lastStart, setLastStart] = useState<StartButton>("day");
+  const [view, setView] = useState(() => readSupervisorView(() => window.localStorage));
+  const chooseView = (next: SessionView) => {
+    setView(next);
+    saveSupervisorView(() => window.localStorage, next);
+  };
   const panel = useRef<HTMLElement>(null);
   // Focus that lands anywhere outside the panel takes the keyboard out of it. A blur would say the same, but none
   // comes when the focused terminal is removed (a reconnect, a supervisor gone after a daemon restart).
@@ -89,17 +107,15 @@ export function SupervisorPanel({
         supervisor={supervisor}
         lastStart={lastStart}
         onStart={setLastStart}
+        view={view}
+        onView={chooseView}
         onChanged={onChanged}
         layout={layout}
         onLayout={onLayout}
         onFold={fold}
       />
       <DelegatedWork work={supervisor.work} onOpen={onOpenInSessions} />
-      {session ? (
-        <SessionTerminal key={session.id} conn={conn} session={session.id} live={isLive(session)} selected={focused} />
-      ) : (
-        <NoSupervisor />
-      )}
+      {session ? <SessionScreen conn={conn} session={session} selected={focused} /> : <NoSupervisor />}
     </aside>
   );
 }
@@ -135,6 +151,8 @@ function SupervisorHeader({
   supervisor,
   lastStart,
   onStart,
+  view,
+  onView,
   onChanged,
   layout,
   onLayout,
@@ -145,13 +163,19 @@ function SupervisorHeader({
   /** The start button the user pressed last. */
   lastStart: StartButton;
   onStart: (button: StartButton) => void;
+  /** The view the next start shows the supervisor in (ADR-107). */
+  view: SessionView;
+  onView: (view: SessionView) => void;
   onChanged: () => void;
   layout: SupervisorLayout;
   onLayout: (layout: SupervisorLayout) => void;
   onFold: () => void;
 }) {
   const { session, waitingProposals } = supervisor;
-  const start = useAction((conversation: SupervisorConversation) => post(conn, agentsApi.startSupervisor, { conversation }), onChanged);
+  const start = useAction(
+    (conversation: SupervisorConversation) => post(conn, agentsApi.startSupervisor, { conversation, view }),
+    onChanged,
+  );
   const stop = useAction((id: string) => post(conn, agentsApi.stop, { session: id }), onChanged);
   const day = useDayStart(conn, onChanged);
   const running = session !== undefined && isLive(session) ? session : undefined;
@@ -191,7 +215,7 @@ function SupervisorHeader({
                 size="sm"
                 onClick={() => {
                   onStart("day");
-                  day.start();
+                  day.start(view);
                 }}
                 disabled={day.running || start.pending}
                 title="Sync every repo and get a briefing"
@@ -213,6 +237,7 @@ function SupervisorHeader({
                   {conversation === "new" && supervisor.resumable ? <Plus /> : <Play />} {label}
                 </Button>
               ))}
+              <ViewToggle view={view} onView={onView} />
             </>
           )}
           <Button
@@ -232,6 +257,27 @@ function SupervisorHeader({
       {session?.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
       {error && <span className="text-destructive text-xs">{error}</span>}
     </header>
+  );
+}
+
+/** Which view the next start shows the supervisor in: a terminal, or the conversation view (ADR-107), still a preview. */
+function ViewToggle({ view, onView }: { view: SessionView; onView: (view: SessionView) => void }) {
+  const conversation = view === "conversation";
+  return (
+    <Button
+      variant={conversation ? "secondary" : "ghost"}
+      size="icon"
+      aria-pressed={conversation}
+      onClick={() => onView(conversation ? "terminal" : "conversation")}
+      aria-label="Start in the conversation view"
+      title={
+        conversation
+          ? "The supervisor starts in the conversation view (preview); click to start it in a terminal"
+          : "The supervisor starts in a terminal; click to start it in the conversation view (preview)"
+      }
+    >
+      <MessagesSquare />
+    </Button>
   );
 }
 

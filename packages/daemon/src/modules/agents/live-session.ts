@@ -9,6 +9,7 @@ import type {
   TaskUpdate,
 } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
+import type { AgentSession } from "./agent-session.ts";
 import { type CopilotHookOutput, hookOutputFor } from "./copilot-hook-output.ts";
 import type { CopilotHookEvent, CopilotHookRecord } from "./copilot-hook-record.ts";
 import { approvalRequest } from "./copilot-hooks.ts";
@@ -112,6 +113,11 @@ export interface LiveSessionOptions {
   promptOnStart: boolean;
   /** Copilot CLI already keeps a conversation under the session's id (a first message, or a resumed conversation; ADR-95). */
   hasConversation: boolean;
+  /**
+   * Copilot CLI's id of the conversation: the session id (`--session-id`), unless the session resumed one started in
+   * the conversation view, where Copilot CLI picked the id (ADR-107).
+   */
+  conversation?: string;
   /** The Copilot CLI program the session runs, the full path from `findCopilot`. */
   program: string;
   /** What the session got from mise when it started (ADR-93). */
@@ -131,13 +137,16 @@ export interface LiveSessionOptions {
   onEvent: (event: SessionEvent) => void;
 }
 
-export class LiveSession {
+export class LiveSession implements AgentSession {
+  readonly sessionView = "terminal";
   readonly id: string;
   readonly repo: string | null;
   readonly supervisor: boolean;
   readonly task: string | null;
   readonly startedAt = new Date().toISOString();
   readonly environment: SessionEnvironment;
+  /** Copilot CLI's id of the conversation, which a later start resumes (ADR-95, ADR-107). */
+  readonly conversation: string;
   readonly #run: () => RunState | undefined;
   readonly #promptText: () => string | undefined;
   readonly #onUserText: () => void;
@@ -193,6 +202,7 @@ export class LiveSession {
     this.supervisor = o.supervisor;
     this.task = o.task;
     this.environment = o.environment;
+    this.conversation = o.conversation ?? o.id;
     this.#run = o.run;
     this.#promptText = o.prompt;
     this.#onUserText = o.onUserText;
@@ -415,6 +425,7 @@ export class LiveSession {
       task: this.task,
       dialog: run.kind === "running" ? this.#dialog() : null,
       environment: this.environment,
+      view: "terminal",
     };
   }
 

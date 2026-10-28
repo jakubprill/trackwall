@@ -1,7 +1,7 @@
 import type { RunningMiseTask, Session, Task, TaskMessage } from "@trackwall/protocol";
 import { Maximize2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { SessionTerminal } from "@/components/SessionTerminal";
+import { SessionScreen } from "@/components/SessionScreen";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
@@ -10,7 +10,7 @@ import { IS_MAC } from "@/lib/platform";
 import { entryId, entrySession, proposalsName, type SessionEntry, type SessionSelection } from "@/lib/session-entries";
 import { type GridPage, gridShape } from "@/lib/session-grid";
 import { sessionShortcutLabel } from "@/lib/session-shortcut";
-import { isLive, PROPOSAL_STATUS, sessionPlace, sessionStateLabel } from "@/lib/session-state";
+import { PROPOSAL_STATUS, sessionPlace, sessionStateLabel } from "@/lib/session-state";
 import { useSessionClose } from "@/lib/use-session-close";
 import { useTaskEnding } from "@/lib/use-task-ending";
 import { cn } from "@/lib/utils";
@@ -198,7 +198,7 @@ function SessionTile({
           // The question lies over the terminal instead of pushing it down, so that it does not resize the PTY mid-turn.
           <div className="relative flex min-h-0 flex-1 flex-col">
             <SessionCloseConfirmation close={close} className="absolute inset-x-0 top-0 z-10" />
-            <SessionTerminal conn={conn} session={session.id} live={isLive(session)} selected={selected} />
+            <SessionScreen conn={conn} session={session} selected={selected} />
           </div>
         )}
         {entry.kind === "proposals" && (
