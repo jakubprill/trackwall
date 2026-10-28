@@ -20,42 +20,64 @@ export interface GitProgram {
 
 export const GIT_FROM_PATH: GitProgram = { command: "git", pathPrefix: [] };
 
+/** Where the program for local calls came from: git from `PATH`, the chosen one, or `PATH` because the chosen one did not answer. */
+export type GitProgramSource = "path" | "chosen" | "fallback";
+
+export interface GitResolution {
+  program: GitProgram;
+  source: GitProgramSource;
+}
+
 /**
- * The "Git program" setting (ADR-112), handed over by `Vcs.useGitProgram` when the daemon starts and when Settings saves it;
- * `null` for git from `PATH`. Kept here, not read from `workspace.yaml` per call, because every git call asks for it.
+ * The "Git program" setting (ADR-112), handed over by `Vcs.useGitProgram` when the daemon starts, when Settings saves it and
+ * when Settings reads it; `null` for git from `PATH`. Process-wide, like the slots of `git.ts`, because `git()` is a free
+ * function every part of `vcs` calls; kept here, not read from `workspace.yaml` per call, because every git call asks for it.
  */
 let setting: string | null = null;
 /** One resolution per program ever chosen, so that switching back and forth asks `--exec-path` once per program. */
-const resolved = new Map<string | null, Promise<GitProgram>>();
+const resolved = new Map<string | null, Promise<GitResolution>>();
+/** Programs whose last resolution fell back to `PATH`: handing one over again tries it again. */
+const fellBack = new Set<string>();
 
 export function useGitProgram(path: string | null): void {
   setting = path;
+  if (path !== null && fellBack.delete(path)) resolved.delete(path);
 }
 
 export function chosenGitProgram(): string | null {
   return setting;
 }
 
-/**
- * The program for local git calls, resolved once per setting. A chosen program that no longer answers gives git from `PATH`,
- * which still works, and the doctor names the git it got (ADR-112).
- */
-export function gitProgram(): Promise<GitProgram> {
-  const known = resolved.get(setting);
-  if (known) return known;
-  const program = resolveProgram(setting);
-  resolved.set(setting, program);
-  return program;
+/** The program for local git calls (see `gitResolution`). */
+export async function gitProgram(): Promise<GitProgram> {
+  return (await gitResolution()).program;
 }
 
-function resolveProgram(chosen: string | null): Promise<GitProgram> {
-  if (process.platform !== "win32") return Promise.resolve(chosen === null ? GIT_FROM_PATH : { command: chosen, pathPrefix: [] });
+/**
+ * The program for local git calls and where it came from, resolved once per setting. A chosen program that does not answer
+ * gives git from `PATH`, which still works, and the doctor says so (ADR-112).
+ */
+export function gitResolution(): Promise<GitResolution> {
+  const known = resolved.get(setting);
+  if (known) return known;
+  const resolution = resolveProgram(setting);
+  resolved.set(setting, resolution);
+  return resolution;
+}
+
+async function resolveProgram(chosen: string | null): Promise<GitResolution> {
+  if (chosen === null && process.platform !== "win32") return { program: GIT_FROM_PATH, source: "path" };
   // The chosen program can be MinGit's launcher `cmd\git.exe` too: asking it for `--exec-path` finds the real binary.
   const command = chosen ?? "git";
-  return runProgram(command, ["--exec-path"], { label: "git --exec-path", env: process.env, timeoutMs: 30_000 }).then(
-    ({ stdout }) => directGit(stdout.toString("utf8").trim(), existsSync) ?? { command, pathPrefix: [] },
-    () => GIT_FROM_PATH,
-  );
+  try {
+    const { stdout } = await runProgram(command, ["--exec-path"], { label: "git --exec-path", env: process.env, timeoutMs: 30_000 });
+    const direct = process.platform === "win32" ? directGit(stdout.toString("utf8").trim(), existsSync) : undefined;
+    return { program: direct ?? { command, pathPrefix: [] }, source: chosen === null ? "path" : "chosen" };
+  } catch {
+    if (chosen === null) return { program: GIT_FROM_PATH, source: "path" };
+    fellBack.add(chosen);
+    return { program: GIT_FROM_PATH, source: "fallback" };
+  }
 }
 
 /**

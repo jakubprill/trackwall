@@ -1,7 +1,7 @@
 import { realpath } from "node:fs/promises";
 import { delimiter, dirname, resolve as resolvePath } from "node:path";
 import { type RunOptions, type RunOutput, runProgram } from "../../infra/run-program.ts";
-import { chosenGitProgram, GIT_FROM_PATH, gitProgram, withPathPrefix } from "./git-program.ts";
+import { chosenGitProgram, GIT_FROM_PATH, type GitProgramSource, gitProgram, gitResolution, withPathPrefix } from "./git-program.ts";
 import { Slots } from "./slots.ts";
 import { WaitingCalls } from "./waiting-calls.ts";
 
@@ -149,21 +149,21 @@ export function slowCallNote(label: string, repoDir: string, waitedMs: number, r
 
 /** `git --version` of the git the daemon runs and which program that is: the doctor shows them (ADR-101, ADR-112). */
 export async function gitVersion(timeoutMs: number): Promise<GitVersion> {
-  const program = await gitProgram();
+  const { program, source } = await gitResolution();
   const { stdout } = await runProgram(program.command, ["--version"], {
     label: "git --version",
     env: withPathPrefix(gitEnv(), program.pathPrefix),
     timeoutMs,
   });
-  const fromPath = program.command === GIT_FROM_PATH.command;
-  return { output: stdout.toString("utf8").trim(), program: fromPath ? null : program.command, chosen: chosenGitProgram() };
+  return { output: stdout.toString("utf8").trim(), program: program.command, source, chosen: chosenGitProgram() };
 }
 
 export interface GitVersion {
   /** What `git --version` printed. */
   output: string;
-  /** The full path of the program the daemon starts for local calls; `null` for `git` from `PATH`. */
-  program: string | null;
+  /** The program the daemon starts for local calls: `git` from `PATH`, or the full path of the binary it resolved. */
+  program: string;
+  source: GitProgramSource;
   /** The "Git program" setting (ADR-112); `null` for git from `PATH`. */
   chosen: string | null;
 }

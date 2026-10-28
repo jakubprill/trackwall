@@ -118,6 +118,8 @@ export class Workspace {
     // A bad `worktreesDir` typed by hand must not take away the projects folder form, and saving a folder fixes it.
     const worktreesDir = configOrProblem(() => this.deps.file.worktreesDir(), null);
     const gitProgram = configOrProblem(() => this.deps.file.gitProgram(), null);
+    // What Settings shows is what runs: a hand edit of `gitProgram` applies when Settings reads it (ADR-112).
+    this.deps.vcs.useGitProgram(gitProgram.value);
     return {
       projectsDir,
       worktreesDir: worktreesDir.value,
@@ -148,12 +150,11 @@ export class Workspace {
 
   /**
    * The git for local git calls (ADR-112), checked by running it first; `null` goes back to git from `PATH`. Takes effect at
-   * once. A hand edit of `workspace.yaml` takes effect at the next daemon start (`useGitProgramFromFile`).
+   * once. A hand edit of `workspace.yaml` takes effect when Settings reads it (`settings`) or at the next daemon start.
    */
   async setGitProgram(path: string | null): Promise<WorkspaceSettings> {
     if (path !== null) await this.checkedGitProgram(path);
     this.deps.file.setGitProgram(path);
-    this.deps.vcs.useGitProgram(path);
     return this.settings();
   }
 

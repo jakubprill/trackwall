@@ -111,7 +111,10 @@ export class Vcs {
     return checkGitProgram(path, GIT_PROGRAM_CHECK_TIMEOUT_MS);
   }
 
-  /** From now on local git calls start `path`, or git from `PATH` for `null` (ADR-112); network commands keep git from `PATH`. */
+  /**
+   * From now on local git calls start `path`, or git from `PATH` for `null` (ADR-112); network commands keep git from `PATH`.
+   * Process-wide, not per instance: `git()` reads it for every call. A path that fell back to `PATH` is tried again.
+   */
   useGitProgram(path: string | null): void {
     useGitProgram(path);
   }

@@ -9,8 +9,8 @@ export function GitProgramSurface({ settings, save }: { settings: WorkspaceSetti
       <div className="flex flex-col gap-4 p-4">
         <p className="text-muted-foreground text-sm">
           The git Trackwall runs to read your repos: status, history, repo cards and task worktrees. Empty means git from PATH. Choose
-          another one, for example MinGit unpacked into your projects folder, when starting git is slow on this machine. Fetch, push and
-          clone always use git from PATH, so your sign-in keeps working.
+          another one, for example MinGit unpacked into a folder your antivirus skips, when starting git is slow on this machine. Fetch,
+          push and clone always use git from PATH, so your sign-in keeps working.
         </p>
         <PathForm
           key={settings.gitProgram ?? ""}

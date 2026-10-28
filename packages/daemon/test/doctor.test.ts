@@ -204,13 +204,19 @@ describe("the git check with a Git program chosen in Settings (ADR-112)", () => 
     const check = await gitCheck({
       output: "git version 2.47.1.windows.1",
       program: "C:\\Dev\\tools\\MinGit\\mingw64\\bin\\git.exe",
+      source: "chosen",
       chosen: "C:\\Dev\\tools\\MinGit\\cmd\\git.exe",
     });
     expect(check).toMatchObject({ status: "ok", summary: "git 2.47.1 at C:\\Dev\\tools\\MinGit\\mingw64\\bin\\git.exe" });
   });
 
   test("warns when the chosen program did not answer and the daemon fell back to git from PATH", async () => {
-    const check = await gitCheck({ output: "git version 2.47.1", program: null, chosen: "C:\\Dev\\tools\\MinGit\\cmd\\git.exe" });
+    const check = await gitCheck({
+      output: "git version 2.47.1",
+      program: "git",
+      source: "fallback",
+      chosen: "C:\\Dev\\tools\\MinGit\\cmd\\git.exe",
+    });
     expect(check).toMatchObject({
       status: "warn",
       summary: "git 2.47.1 from PATH: the Git program C:\\Dev\\tools\\MinGit\\cmd\\git.exe did not answer.",

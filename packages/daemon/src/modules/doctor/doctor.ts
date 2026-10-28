@@ -31,7 +31,13 @@ export interface DoctorDeps {
   /** Runs a program without a shell; the error says why it failed. */
   run: (command: string, args: readonly string[], o: { env: NodeJS.ProcessEnv; timeoutMs: number }) => Promise<string>;
   /** `git --version` of the git the daemon runs and which program that is (`vcs`). */
-  gitVersion: (timeoutMs: number) => Promise<{ output: string; program: string | null; chosen: string | null }>;
+  gitVersion: (timeoutMs: number) => Promise<{
+    output: string;
+    program: string;
+    /** `fallback`: the Git program from Settings did not answer, and git from `PATH` runs instead (ADR-112). */
+    source: "path" | "chosen" | "fallback";
+    chosen: string | null;
+  }>;
   /** Resolves when `gh` or `glab` is signed in to the repo host (`vcs`); the error says why not. */
   signedIn: (host: RepoHost, timeoutMs: number) => Promise<void>;
   /** Copilot CLI found as sessions find it (`agents`), so the doctor's answer is the sessions' answer. */
@@ -125,15 +131,12 @@ export class Doctor {
   private async git(): Promise<Outcome> {
     const version = await settle(this.deps.gitVersion(CHECK_TIMEOUT_MS));
     if (!version.ok) return fail(`git: ${version.message}`, "Install Git (git-scm.com) and restart Trackwall.");
-    const { output, program, chosen } = version.value;
-    const summary = `git ${versionIn(output) ?? firstLine(output)}${program === null ? "" : ` at ${program}`}`;
-    // A chosen program that no longer answers leaves the daemon on git from `PATH` (ADR-112).
-    if (chosen !== null && program === null)
-      return warn(
-        `${summary} from PATH: the Git program ${chosen} did not answer.`,
-        "Fix or clear the Git program in Settings > Workspace.",
-      );
-    return ok(summary);
+    const { output, program, source, chosen } = version.value;
+    const git = `git ${versionIn(output) ?? firstLine(output)}`;
+    if (source === "fallback")
+      return warn(`${git} from PATH: the Git program ${chosen} did not answer.`, "Fix or clear the Git program in Settings > Workspace.");
+    // Git for Windows from `PATH` resolves to its real binary (ADR-79), which is worth naming too.
+    return ok(program === "git" ? git : `${git} at ${program}`);
   }
 
   private async copilotCli({ env }: CheckContext): Promise<Outcome> {

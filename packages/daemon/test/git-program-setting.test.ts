@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
+import { useGitProgram } from "../src/modules/vcs/git-program.ts";
 import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
@@ -38,7 +39,7 @@ async function workspaceWithRepo() {
 
 describe("the Git program setting", () => {
   // The setting lives in `vcs` for the whole process; a test must not leave it to the next one.
-  afterEach(() => new Vcs(systemTempFolder).useGitProgram(null));
+  afterEach(() => useGitProgram(null));
 
   test(
     "a git chosen by its full path is saved in workspace.yaml, runs the repo list at once, and Use default goes back to PATH",
@@ -84,6 +85,36 @@ describe("the Git program setting", () => {
       message: expect.stringContaining("must be a full path"),
     });
   });
+
+  test(
+    "a chosen git that does not answer leaves the daemon on git from PATH, the repo list keeps working and the doctor's source says so",
+    async () => {
+      const { workspace, vcs, file } = await workspaceWithRepo();
+      const missing = join(tmpdir(), "trackwall-no-such-git", process.platform === "win32" ? "git.exe" : "git");
+      new WorkspaceFile(file).setGitProgram(missing);
+
+      workspace.useGitProgramFromFile();
+
+      expect(await vcs.version(15_000)).toMatchObject({ source: "fallback", chosen: missing, program: "git" });
+      const [orders] = (await workspace.list()).repos;
+      expect(orders?.status.kind).toBe("ok");
+    },
+    SLOW_TEST_TIMEOUT_MS,
+  );
+
+  test(
+    "a git typed into workspace.yaml by hand runs once Settings reads it",
+    async () => {
+      const { workspace, vcs, file } = await workspaceWithRepo();
+      const git = gitOnPath();
+      new WorkspaceFile(file).setGitProgram(git);
+
+      expect(workspace.settings().gitProgram).toBe(git);
+
+      expect((await vcs.version(15_000)).source).toBe("chosen");
+    },
+    SLOW_TEST_TIMEOUT_MS,
+  );
 
   test(
     "a git saved in workspace.yaml is used from the daemon's start",
