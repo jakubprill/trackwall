@@ -1,5 +1,5 @@
 import { agentsApi, countLabel, type SupervisorConversation } from "@trackwall/protocol";
-import { BellRing, Crown, PanelRightClose, PanelRightOpen, Play, Plus, Square, Sunrise } from "lucide-react";
+import { BellRing, Crown, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Play, Plus, Square, Sunrise } from "lucide-react";
 import { type FocusEvent, useEffect, useRef, useState } from "react";
 import { SessionTerminal } from "@/components/SessionTerminal";
 import { StatusLabel } from "@/components/StatusLabel";
@@ -22,6 +22,7 @@ import {
 import { ariaSessionShortcut, SUPERVISOR_SHORTCUT, sessionShortcutLabel } from "@/lib/session-shortcut";
 import { isLive, PROPOSAL_STATUS, SUPERVISOR, sessionPlace, sessionStateLabel } from "@/lib/session-state";
 import { type SupervisorSummary, supervisorStarts } from "@/lib/supervisor";
+import { type SupervisorLayout, widenedOrNarrowed } from "@/lib/supervisor-layout";
 import { useAction } from "@/lib/use-action";
 import { useDayStart } from "@/lib/use-day-start";
 import { cn } from "@/lib/utils";
@@ -30,15 +31,16 @@ const SHORTCUT = sessionShortcutLabel(SUPERVISOR_SHORTCUT, IS_MAC);
 
 /**
  * The supervisor panel (ADR-58) on the right of every view: the terminal of the one session above all repos, what it
- * delegated, and a start button while there is none. Pinned, it takes a column next to the view; folded, a narrow
- * strip that still shows when the supervisor or its proposals wait for you. `focused` says the keyboard is in the
- * panel: `App` sets it on Alt+0 or a jump to the supervisor, and the panel reports the keyboard coming and going.
+ * delegated, and a start button while there is none. Pinned, it takes a column next to the view; wide, most of the
+ * window, for reading the supervisor's answers; folded, a narrow strip that still shows when the supervisor or its
+ * proposals wait for you. `focused` says the keyboard is in the panel: `App` sets it on Alt+0 or a jump to the
+ * supervisor, and the panel reports the keyboard coming and going.
  */
 export function SupervisorPanel({
   conn,
   supervisor,
-  pinned,
-  onPinned,
+  layout,
+  onLayout,
   focused,
   onFocusedChange,
   onOpenInSessions,
@@ -46,8 +48,8 @@ export function SupervisorPanel({
 }: {
   conn: Connection;
   supervisor: SupervisorSummary;
-  pinned: boolean;
-  onPinned: (pinned: boolean) => void;
+  layout: SupervisorLayout;
+  onLayout: (layout: SupervisorLayout) => void;
   focused: boolean;
   onFocusedChange: (focused: boolean) => void;
   onOpenInSessions: (selection: SessionSelection) => void;
@@ -66,19 +68,19 @@ export function SupervisorPanel({
     document.addEventListener("focusin", moved);
     return () => document.removeEventListener("focusin", moved);
   }, [onFocusedChange]);
-  if (!pinned) return <FoldedSupervisor supervisor={supervisor} onUnfold={() => onPinned(true)} />;
+  if (layout === "folded") return <FoldedSupervisor supervisor={supervisor} onUnfold={() => onLayout("pinned")} />;
   const leave = (event: FocusEvent) => {
     if (!(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) onFocusedChange(false);
   };
   const fold = () => {
     onFocusedChange(false);
-    onPinned(false);
+    onLayout("folded");
   };
   return (
     <aside
       ref={panel}
       aria-label={SUPERVISOR}
-      className="bg-card flex w-supervisor min-w-0 shrink-0 flex-col border-l"
+      className={cn("bg-card flex min-w-0 shrink-0 flex-col border-l", layout === "wide" ? "w-supervisor-wide" : "w-supervisor")}
       onFocus={() => onFocusedChange(true)}
       onBlur={leave}
     >
@@ -88,6 +90,8 @@ export function SupervisorPanel({
         lastStart={lastStart}
         onStart={setLastStart}
         onChanged={onChanged}
+        layout={layout}
+        onLayout={onLayout}
         onFold={fold}
       />
       <DelegatedWork work={supervisor.work} onOpen={onOpenInSessions} />
@@ -132,6 +136,8 @@ function SupervisorHeader({
   lastStart,
   onStart,
   onChanged,
+  layout,
+  onLayout,
   onFold,
 }: {
   conn: Connection;
@@ -140,6 +146,8 @@ function SupervisorHeader({
   lastStart: StartButton;
   onStart: (button: StartButton) => void;
   onChanged: () => void;
+  layout: SupervisorLayout;
+  onLayout: (layout: SupervisorLayout) => void;
   onFold: () => void;
 }) {
   const { session, waitingProposals } = supervisor;
@@ -155,6 +163,7 @@ function SupervisorHeader({
     supervisorStartedAt: session?.startedAt,
   });
   const error = running ? stop.error : startError;
+  const wide = layout === "wide";
   return (
     <header className="flex flex-col gap-1 border-b px-4 py-2">
       <div className="flex min-w-0 items-center gap-3">
@@ -206,6 +215,15 @@ function SupervisorHeader({
               ))}
             </>
           )}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onLayout(widenedOrNarrowed(layout))}
+            aria-label={wide ? "Narrow the supervisor panel" : "Widen the supervisor panel"}
+            title={wide ? "Narrow the panel" : "Widen the panel to read the supervisor"}
+          >
+            {wide ? <Minimize2 /> : <Maximize2 />}
+          </Button>
           <Button variant="ghost" size="icon" onClick={onFold} aria-label="Fold the supervisor panel" title="Fold the panel">
             <PanelRightClose />
           </Button>

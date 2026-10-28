@@ -85,13 +85,24 @@ export async function withStartLock<T>(home: string, fn: () => Promise<T>, timeo
   }
 }
 
-/** `false` when the lock already exists; any other file system error propagates. */
+/**
+ * Whether creating the lock failed because another start holds it, so the start waits and tries again. On Windows
+ * that also shows as EPERM or EACCES: the holder has just removed the lock, and until its last handle closes the file
+ * is "delete pending", which refuses a new file of that name. A lasting permission problem then ends in the lock's
+ * timeout, with its path in the message.
+ */
+export function lockHeldElsewhere(code: string | undefined, platform: NodeJS.Platform = process.platform): boolean {
+  if (code === "EEXIST") return true;
+  return platform === "win32" && (code === "EPERM" || code === "EACCES");
+}
+
+/** `false` when another start holds the lock; any other file system error propagates. */
 function tryCreateLock(lock: string): boolean {
   let fd: number;
   try {
     fd = openSync(lock, "wx", 0o600);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "EEXIST") return false;
+    if (lockHeldElsewhere((err as NodeJS.ErrnoException).code)) return false;
     throw err;
   }
   try {

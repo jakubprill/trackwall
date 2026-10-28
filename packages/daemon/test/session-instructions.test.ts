@@ -91,6 +91,16 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     expect(text).toContain(MCP_INSTRUCTIONS);
   });
 
+  test("the supervisor answers short, with the conclusion first, because the user reads it in a side panel", () => {
+    const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
+    writeSessionInstructions(sessionDir, "0.5.0", { kind: "supervisor", changesCode: false });
+    const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
+    expect(text).toContain(
+      "The user reads you in a side panel next to their work, so answer short: the conclusion or the decision you need first",
+    );
+    expect(text).toContain("Leave out what the tools already showed, long tables and repeated output");
+  });
+
   test("the supervisor proposes no task for a request outside one repo, and sends a follow-up to the running task instead of a new one (ADR-81)", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
     writeSessionInstructions(sessionDir, "0.5.0", { kind: "supervisor", changesCode: false });
