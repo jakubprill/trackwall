@@ -7,6 +7,8 @@ import {
   type RepoHost,
   type RepoHostKind,
   TESTED_COPILOT_CLI_VERSION,
+  type WorkspaceKeysRead,
+  workspaceKeysSummary,
 } from "@trackwall/protocol";
 import { trustedFolderOf, trustedFolders } from "./copilot-trust.ts";
 import { compareVersions, versionIn } from "./version.ts";
@@ -39,6 +41,10 @@ export interface DoctorDeps {
   /** `null` while the projects folder is not set; throws when the workspace settings cannot be read. */
   projectsDir: () => Promise<string | null>;
   repoHosts: () => RepoHost[];
+  /** The full path of `workspace.yaml`. */
+  workspaceFile: string;
+  /** Each key of `workspace.yaml` (ADR-108); throws when the file as a whole cannot be read. */
+  workspaceKeys: () => WorkspaceKeysRead;
   now: () => Date;
 }
 
@@ -61,6 +67,7 @@ export class Doctor {
     this.deps = deps;
     this.checks = {
       "projects-folder": (ctx) => this.projectsFolder(ctx),
+      "workspace-file": () => this.workspaceFile(),
       git: () => this.git(),
       "copilot-cli": (ctx) => this.copilotCli(ctx),
       "copilot-trusted-folder": (ctx) => this.copilotTrustedFolder(ctx),
@@ -93,6 +100,26 @@ export class Doctor {
     );
     if (!isDir) return fail(`The projects folder ${dir} does not exist.`, 'Create it, or choose another folder in "Settings > Workspace".');
     return ok(dir);
+  }
+
+  /**
+   * Every key of `workspace.yaml` reads and is Trackwall's (ADR-108): a key typed wrong by hand quietly leaves its
+   * setting at the default, so the doctor names it with its line. Without the file there is nothing to check.
+   */
+  private async workspaceFile(): Promise<Outcome> {
+    const path = this.deps.workspaceFile;
+    const exists = await stat(path).then(
+      () => true,
+      () => false,
+    );
+    if (!exists) return null;
+    const fix = `Correct it in ${path}; "Settings > Files" shows every key with its value and what is wrong.`;
+    const keys = await settle(Promise.resolve().then(() => this.deps.workspaceKeys()));
+    if (!keys.ok) return fail(keys.message, fix);
+    const summary = workspaceKeysSummary(keys.value);
+    if (summary.state === "broken") return fail(`workspace.yaml: ${summary.text}.`, fix);
+    if (summary.state === "unknown") return warn(`workspace.yaml: ${summary.text}.`, fix);
+    return ok(`workspace.yaml: ${summary.text}.`);
   }
 
   private async git(): Promise<Outcome> {

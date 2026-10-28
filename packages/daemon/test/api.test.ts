@@ -74,6 +74,7 @@ const openedFolders: string[] = [];
 function modules() {
   const facade = createFacade({
     home: mkdtempSync(join(tmpdir(), "trackwall-home-")),
+    homeFrom: "flag",
     openUrl: (url) => openedUrls.push(url),
     openFolder: (dir) => openedFolders.push(dir),
     miseCommand: ["mise"],

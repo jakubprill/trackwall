@@ -1,15 +1,24 @@
 import { join } from "node:path";
-import { SERVICE_RELEASE_MS } from "@trackwall/protocol";
+import { SERVICE_RELEASE_MS, type StateDirSource } from "@trackwall/protocol";
 import { vscodeUrl } from "./infra/editor-url.ts";
 import { DomainError } from "./infra/errors.ts";
 import { runProgram } from "./infra/run-program.ts";
-import { Agents, type AgentsDeps } from "./modules/agents/agents.ts";
+import {
+  Agents,
+  type AgentsDeps,
+  LAST_SUPERVISOR_FILE,
+  LEGACY_WORKTREES_DIR,
+  RESUMABLE_SESSIONS_FILE,
+  TASKS_FILE,
+} from "./modules/agents/agents.ts";
 import { resolveCopilot } from "./modules/agents/copilot-command.ts";
 import { Batch } from "./modules/batch/batch.ts";
 import { CardCache } from "./modules/cards/card-cache.ts";
 import { Cards } from "./modules/cards/cards.ts";
+import { ConfigFiles } from "./modules/config-files/config-files.ts";
 import { DayStart } from "./modules/day-start/day-start.ts";
 import { DayStartFile } from "./modules/day-start/day-start-file.ts";
+import { trustedFolderOf, trustedFolders } from "./modules/doctor/copilot-trust.ts";
 import { Doctor } from "./modules/doctor/doctor.ts";
 import { ErrorJournal } from "./modules/error-journal/error-journal.ts";
 import type { ErrorJournalWorkspace } from "./modules/error-journal/known-values.ts";
@@ -59,6 +68,8 @@ export interface Facade {
   errorJournal: ErrorJournal;
   /** Checks of what Trackwall needs on this computer, each with what to do when it fails (ADR-101). */
   doctor: Doctor;
+  /** Every file and folder Trackwall reads or writes, with its state, and the keys of `workspace.yaml` (ADR-108). */
+  configFiles: ConfigFiles;
   /**
    * Opens a link from a README in the system (ADR-35): an `http` or `https` address checked by the `ExternalLink` schema.
    * It belongs to no module, because it concerns neither a repo nor the daemon's state.
@@ -86,6 +97,8 @@ export interface FacadeOptions {
    * (`cards/`, ADR-25) and the last day start (`day-start.json`, ADR-70).
    */
   home: string;
+  /** How the state directory was chosen: `--home`, `TRACKWALL_HOME` or the default (`resolveTrackwallHome`). */
+  homeFrom: StateDirSource;
   openUrl: (url: string) => void;
   openFolder: (dir: string) => void;
   /** The `mise` program with arguments before the command (`["mise"]` in the daemon). */
@@ -216,7 +229,36 @@ export function createFacade(o: FacadeOptions): Facade {
         throw err;
       }),
     repoHosts: () => workspace.repoHosts(),
+    workspaceFile: workspace.configFile(),
+    workspaceKeys: () => workspace.workspaceKeys(),
     now: () => new Date(),
+  });
+  const configFiles = new ConfigFiles({
+    stateDir: { path: o.home, from: o.homeFrom },
+    statePaths: {
+      "workspace-file": workspace.configFile(),
+      "tasks-file": join(o.home, TASKS_FILE),
+      "resumable-sessions-file": join(o.home, RESUMABLE_SESSIONS_FILE),
+      "last-supervisor-file": join(o.home, LAST_SUPERVISOR_FILE),
+      "day-start-file": join(o.home, DAY_START_FILE),
+      "cards-dir": join(o.home, CARDS_DIR),
+      "logs-dir": join(o.home, LOGS_DIR),
+      "legacy-worktrees-dir": join(o.home, LEGACY_WORKTREES_DIR),
+    },
+    // A projects folder that is not set or cannot be read is a state the view shows, not an error of the whole list.
+    projectsDir: () => workspace.projectsDir().catch(() => null),
+    worktreesDir: () => workspace.worktreesDir().catch(() => null),
+    workspaceKeys: () => workspace.workspaceKeys(),
+    env: o.userEnv,
+    copilotTrust: trustedFolders,
+    trustedFolderOf,
+    projectsMiseEnv: async () => {
+      const env = await mise.sessionEnv({ repo: null, task: null });
+      return { variables: Object.keys(env.vars), secrets: env.secretNames, problem: env.problem };
+    },
+    localConfigStore: () => localConfig.store(),
+    openEditor: (path) => o.openUrl(vscodeUrl(path)),
+    openFolder: o.openFolder,
   });
   return {
     workspace,
@@ -236,6 +278,7 @@ export function createFacade(o: FacadeOptions): Facade {
     dayStart,
     errorJournal,
     doctor,
+    configFiles,
     openLink: o.openUrl,
   };
 }

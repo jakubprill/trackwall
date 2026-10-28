@@ -27,6 +27,7 @@ import {
   type ToolPermissions,
   type TreeEntry,
   type WorkingTreeChanges,
+  type WorkspaceKeysRead,
   type WorkspaceSettings,
 } from "@trackwall/protocol";
 import { configOrProblem, DomainError, messageOf } from "../../infra/errors.ts";
@@ -373,6 +374,11 @@ export class Workspace {
   /** The full path of `workspace.yaml`, e.g. as the evidence of a user entry in the graph. */
   configFile(): string {
     return this.deps.file.path;
+  }
+
+  /** Each key of `workspace.yaml` with its value and where it comes from (ADR-108); throws when the file cannot be read. */
+  workspaceKeys(): WorkspaceKeysRead {
+    return this.deps.file.keyStates();
   }
 
   /** Without a projects folder set there are no repos. */

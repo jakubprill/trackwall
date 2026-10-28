@@ -20,7 +20,7 @@ Move between views with the keyboard, and spread Trackwall over several windows 
 
 The bar at the left edge of the window switches views, as in VS Code: "Home", "Repos", "Sessions" and "Overview" at the top, "Settings" at the bottom. Hover over an icon to see the view's name and key.
 
-"Settings" lists its categories on the left: "Workspace" (the projects folder, the task worktrees folder and the local config backup), "Repo hosts", "Agents" (connecting Copilot CLI), "App" (start at sign-in, updates and how the Home scene looks) and "Diagnostics" (the doctor, the state of the daemon and Trackwall's own errors). Click a category to see its settings. In a narrow window the categories sit in a row above them.
+"Settings" lists its categories on the left: "Workspace" (the projects folder, the task worktrees folder and the local config backup), "Repo hosts", "Agents" (connecting Copilot CLI), "App" (start at sign-in, updates and how the Home scene looks), "Files" (every file Trackwall reads or writes, see [Config files](/features/config-files)) and "Diagnostics" (the doctor, the state of the daemon and Trackwall's own errors). Click a category to see its settings. In a narrow window the categories sit in a row above them.
 
 Any view can open in a new window: right-click its icon and choose "Open in new window", press Ctrl+Shift with the view's digit, or choose "New window" in the tray. Every window has its own view bar, switches views on its own and shows the same sessions and repos live. Each window's title names its view ("Sessions – Trackwall"), so you can tell them apart in the taskbar.
 

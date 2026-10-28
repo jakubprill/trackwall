@@ -1,0 +1,60 @@
+import {
+  type AgentSecrets,
+  countLabel,
+  type DayStartSettings,
+  DEFAULT_WORKTREES_DIR_NAME,
+  type GraphConfig,
+  type RepoHost,
+  type RepoTagRules,
+  type SupervisorSettings,
+  type ToolPermissionRules,
+  type WorkspaceKey,
+} from "@trackwall/protocol";
+
+/**
+ * A key of `workspace.yaml` in one line for the view of the config files (ADR-108): a path as it is, a list by its names
+ * or its count, never the whole value, which only the file shows in full.
+ */
+
+/** The value of each key as `WorkspaceFile` reads it. */
+export interface WorkspaceKeyValues {
+  projectsDir: string | null;
+  worktreesDir: string | null;
+  repoHosts: RepoHost[];
+  toolPermissions: ToolPermissionRules;
+  agentSecrets: AgentSecrets;
+  supervisor: SupervisorSettings;
+  repoTags: RepoTagRules;
+  dayStart: DayStartSettings | null;
+  graph: GraphConfig;
+}
+
+/** How long a value from the file may be in the line; a longer one is cut. */
+const MAX_VALUE_CHARS = 120;
+
+export const workspaceKeyValue: { [K in WorkspaceKey]: (value: WorkspaceKeyValues[K]) => string } = {
+  projectsDir: (dir) => dir ?? "not set",
+  worktreesDir: (dir) => dir ?? `${DEFAULT_WORKTREES_DIR_NAME} in the projects folder`,
+  repoHosts: (hosts) => (hosts.length === 0 ? "none" : hosts.map((h) => h.host).join(", ")),
+  toolPermissions: (rules) => (rules.length === 0 ? "none" : countLabel(rules.length, { one: "rule", other: "rules" })),
+  agentSecrets: (names) => (names.length === 0 ? "none" : names.join(", ")),
+  supervisor: (settings) => `changesCode: ${settings.changesCode}`,
+  repoTags: (rules) => {
+    const tags = Object.keys(rules);
+    return tags.length === 0 ? "none" : `${countLabel(tags.length, { one: "tag", other: "tags" })}: ${tags.join(", ")}`;
+  },
+  dayStart: (settings) => (settings === null ? "not set" : `prompt: ${oneLine(settings.prompt)}`),
+  graph: (graph) => {
+    const parts = [
+      countLabel(Object.keys(graph.packages).length, { one: "package alias", other: "package aliases" }),
+      countLabel(Object.keys(graph.apps).length, { one: "app alias", other: "app aliases" }),
+      countLabel(graph.edges.length, { one: "edge", other: "edges" }),
+    ];
+    return parts.join(", ");
+  },
+};
+
+function oneLine(text: string): string {
+  const line = text.replace(/\s+/g, " ").trim();
+  return line.length > MAX_VALUE_CHARS ? `${line.slice(0, MAX_VALUE_CHARS - 1)}…` : line;
+}

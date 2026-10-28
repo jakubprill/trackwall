@@ -136,6 +136,12 @@ const SHOTS: Record<string, (page: Page) => Promise<void>> = {
     await page.getByRole("listitem").filter({ hasText: "Run locally" }).getByRole("button", { name: "Log" }).click();
     await settle(page, 2500);
   },
+  "config-files": async (page) => {
+    await page.keyboard.press("Control+,");
+    await page.getByRole("button", { name: "Files", exact: true }).click();
+    await page.getByText("workspace.yaml", { exact: true }).waitFor();
+    await settle(page);
+  },
 };
 
 /**

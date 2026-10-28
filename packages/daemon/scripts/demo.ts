@@ -43,6 +43,7 @@ writeFileSync(join(home, "workspace.yaml"), `projectsDir: ${JSON.stringify(proje
 const log = (msg: string) => process.stderr.write(`[demo] ${msg}\n`);
 const facade = createFacade({
   home,
+  homeFrom: "flag",
   openUrl: (url) => log(`open ${url}`),
   openFolder: (folder) => log(`open ${folder}`),
   miseCommand: ["mise"],

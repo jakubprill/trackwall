@@ -545,8 +545,12 @@ Trackwall's own errors on this computer: the daemon's unexpected errors, the UI'
 _Avoid_: crash log, telemetry, bug report (nothing is sent)
 
 **Doctor** (`Doctor`, the `doctor` module, `doctorApi`; in the UI *Doctor* in Settings):
-The checks of what Trackwall needs on this computer: the projects folder, git, Copilot CLI and its trusted folders, mise, `gh` and `glab` signed in to the repo hosts (ADR-101). Each is a **doctor check** (`DoctorCheck`) with a state (`ok`, `warn`, `fail`), what was found and what to do. It only reads.
+The checks of what Trackwall needs on this computer: the projects folder, every key of `workspace.yaml`, git, Copilot CLI and its trusted folders, mise, `gh` and `glab` signed in to the repo hosts (ADR-101). Each is a **doctor check** (`DoctorCheck`) with a state (`ok`, `warn`, `fail`), what was found and what to do. It only reads.
 _Avoid_: health check (that is `GET /api/health`), diagnostics, setup wizard
+
+**Config files** (`ConfigFiles`, the `config-files` module, `configFilesApi`; in the UI *Files* in Settings):
+Every file and folder Trackwall reads or writes on this computer, grouped by **place** (`ConfigPlace`: Trackwall's state folder, the projects folder, Copilot CLI's folder). Each is a **config entry** (`ConfigEntry`, what it is for in `CONFIG_ENTRIES`) with a state (`present`, `missing`, `invalid`), and each key of `workspace.yaml` a **workspace key** (`WorkspaceKeyState`) with its value and whether it comes from the file or the default (ADR-108). It only reads.
+_Avoid_: settings (the Settings view changes values; this one shows where they live), config dump
 
 **Anonymization** (`anonymize`):
 Replacing what names the computer, its user or their repos in a Trackwall error's message (paths, user and computer names, repo names, hosts, addresses, token shapes) with a label such as `<projects>` or `<host>`, before it is saved (ADR-94). Do not confuse with masking, which hides secret values in process output.

@@ -60,6 +60,7 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
   const copilot = options.copilot ?? FAKE_COPILOT;
   const facade = createFacade({
     home,
+    homeFrom: "flag",
     openUrl: options.openUrl ?? (() => {}),
     openFolder: () => {},
     miseCommand: options.miseCommand,

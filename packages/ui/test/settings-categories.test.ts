@@ -2,8 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { FIRST_SETTINGS_CATEGORY, SETTINGS_CATEGORIES, settingsCategory } from "../src/lib/settings-categories.ts";
 
 describe("Settings categories", () => {
-  test("the list shows Workspace, Repo hosts, Agents, App and Diagnostics in this order", () => {
-    expect(SETTINGS_CATEGORIES.map((c) => c.label)).toEqual(["Workspace", "Repo hosts", "Agents", "App", "Diagnostics"]);
+  test("the list shows Workspace, Repo hosts, Agents, App, Files and Diagnostics in this order", () => {
+    expect(SETTINGS_CATEGORIES.map((c) => c.label)).toEqual(["Workspace", "Repo hosts", "Agents", "App", "Files", "Diagnostics"]);
+  });
+
+  test("Files shows every config file, then the local config of every repo", () => {
+    expect(settingsCategory("files").sections).toEqual(["config-files", "local-config-repos"]);
   });
 
   test("every section is in exactly one category", () => {

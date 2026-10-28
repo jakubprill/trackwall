@@ -16,6 +16,7 @@ async function setup(projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"
   const logged: string[] = [];
   const facade = createFacade({
     home: mkdtempSync(join(tmpdir(), "trackwall-home-")),
+    homeFrom: "flag",
     openUrl: () => {},
     openFolder: () => {},
     miseCommand: ["mise"],
@@ -131,6 +132,44 @@ describe("the local config store", () => {
       expect(gitProcessesStarted() - before).toBe(0);
     },
     // Making 20 repos takes a hundred git processes, which on a Windows runner is longer than the default 5 s.
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
+    "the list of all repos has only those with local config or a backup, and git runs only in those",
+    async () => {
+      const { projects, facade, backUp } = await setup();
+      const orders = makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
+      const billing = makeRepo({ "pom.xml": "<project/>" }, "billing", projects);
+      makeRepo({ "pom.xml": "<project/>" }, "web", projects);
+      writeFileSync(join(orders, "mise.local.toml"), TASKS);
+      writeFileSync(join(billing, ".worktreeinclude"), "mise.local.toml\n");
+      await backUp();
+      rmSync(join(billing, ".worktreeinclude"));
+      writeFileSync(join(orders, "mise.local.toml"), `${TASKS}[tasks.test]\nrun = "mvn -q test"\n`);
+
+      const before = gitProcessesStarted();
+      const repos = await facade.localConfig.repos();
+
+      expect(repos).toEqual([
+        {
+          repo: "billing",
+          files: [
+            { kind: "absent", file: "mise.local.toml" },
+            { kind: "missing", file: ".worktreeinclude" },
+          ],
+        },
+        {
+          repo: "orders",
+          files: [
+            { kind: "pending", file: "mise.local.toml", ignored: false },
+            { kind: "absent", file: ".worktreeinclude" },
+          ],
+        },
+      ]);
+      // The store once, then the tracked and ignored files of the one repo that has a file.
+      expect(gitProcessesStarted() - before).toBeLessThanOrEqual(4);
+    },
     REAL_GIT_TIMEOUT,
   );
 
@@ -413,6 +452,7 @@ describe("the local config store", () => {
   test("without a projects folder there is no store and nothing to back up", async () => {
     const facade = createFacade({
       home: mkdtempSync(join(tmpdir(), "trackwall-home-")),
+      homeFrom: "flag",
       openUrl: () => {},
       openFolder: () => {},
       miseCommand: ["mise"],

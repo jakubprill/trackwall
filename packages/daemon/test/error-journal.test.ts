@@ -24,6 +24,7 @@ let mcp: Client;
 function newFacade(): Facade {
   return createFacade({
     home,
+    homeFrom: "flag",
     openUrl: () => {},
     openFolder: () => {},
     miseCommand: ["trackwall-test-no-mise"],

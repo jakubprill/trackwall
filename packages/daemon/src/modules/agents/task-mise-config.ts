@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { Dirent } from "node:fs";
 import { lstat, readdir, readFile, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { MiseConfigChange, TaskMiseConfig } from "@trackwall/protocol";
+import { MISE_CONFIG_NAME, type MiseConfigChange, type TaskMiseConfig } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
 import { isInside } from "../../infra/path-inside.ts";
 
@@ -19,8 +19,6 @@ import { isInside } from "../../infra/path-inside.ts";
 /** Path relative to the worktree root, with `/`, mapped to the SHA-256 of the file's content. */
 export type MiseSnapshot = Record<string, string>;
 
-/** A mise config file name: `mise.toml`, `.mise.toml`, `mise.local.toml`, `mise.dev.toml`, `.mise.dev.local.toml`… */
-const CONFIG_NAME = /^\.?mise(\.[^/\\]+)?\.toml$/i;
 /** Read in the worktree root besides the config files. */
 const ROOT_FILE = /^\.tool-versions$/i;
 /** Directories mise reads whole: `config.toml`, `conf.d/` and file tasks, or file tasks only (`mise-tasks`). */
@@ -44,8 +42,8 @@ interface Walk {
 /** The mise files of a worktree with their content, sorted by path. */
 async function readMiseFiles(worktree: string): Promise<Map<string, Buffer>> {
   const walk: Walk = { root: worktree, realRoot: await realpath(worktree), files: new Map(), bytes: 0 };
-  await addMatching(walk, [], (name) => CONFIG_NAME.test(name) || ROOT_FILE.test(name));
-  for (const dir of await dirsNamed(walk, [], [".config"])) await addMatching(walk, dir, (name) => CONFIG_NAME.test(name));
+  await addMatching(walk, [], (name) => MISE_CONFIG_NAME.test(name) || ROOT_FILE.test(name));
+  for (const dir of await dirsNamed(walk, [], [".config"])) await addMatching(walk, dir, (name) => MISE_CONFIG_NAME.test(name));
   for (const names of MISE_DIRS) for (const dir of await dirsNamed(walk, [], names)) await addTree(walk, dir);
   return new Map([...walk.files].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 }

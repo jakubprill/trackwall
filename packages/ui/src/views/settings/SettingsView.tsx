@@ -5,11 +5,13 @@ import type { LiveFeed } from "@/lib/daemon-events";
 import { SETTINGS_CATEGORIES, type SettingsCategory, type SettingsSection, settingsCategory } from "@/lib/settings-categories";
 import type { AppUpdateHandle } from "@/lib/use-app-update";
 import { cn } from "@/lib/utils";
+import { ConfigFilesSurface } from "./ConfigFilesSurface.tsx";
 import { ConnectCopilotSurface } from "./ConnectCopilotSurface.tsx";
 import { DaemonSurface } from "./DaemonSurface.tsx";
 import { DoctorSurface } from "./DoctorSurface.tsx";
 import { ErrorJournalSurface } from "./ErrorJournalSurface.tsx";
 import { HomeSceneSurface } from "./HomeSceneSurface.tsx";
+import { LocalConfigReposSurface } from "./LocalConfigReposSurface.tsx";
 import { LocalConfigStoreSurface } from "./LocalConfigStoreSurface.tsx";
 import { RepoHostsSurface } from "./RepoHostsSurface.tsx";
 import { StartAtSignInSurface } from "./StartAtSignInSurface.tsx";
@@ -85,6 +87,10 @@ function Section({ section, conn, update, warmupLive, onRetry, onSaved }: Settin
       return <HomeSceneSurface />;
     case "daemon":
       return <DaemonSurface conn={conn} warmupLive={warmupLive} onRetry={onRetry} />;
+    case "config-files":
+      return <ConfigFilesSurface conn={conn} />;
+    case "local-config-repos":
+      return <LocalConfigReposSurface conn={conn} />;
     case "doctor":
       return <DoctorSurface conn={conn} />;
     case "trackwall-errors":
