@@ -5,6 +5,7 @@ export * from "./cards.ts";
 export * from "./changes.ts";
 export * from "./code-search.ts";
 export * from "./config-files.ts";
+export * from "./conversation.ts";
 export * from "./copilot-cli-version.ts";
 export * from "./daemon.ts";
 export * from "./day-start.ts";

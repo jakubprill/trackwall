@@ -15,6 +15,7 @@ import {
   type Session,
   type SessionEnvironment,
   type SessionList,
+  type SessionView,
   type SupervisorConversation,
   type SupervisorSettings,
   type Task,
@@ -30,18 +31,27 @@ import {
   type Verification,
 } from "@trackwall/protocol";
 import { DomainError, SpawnFailure } from "../../infra/errors.ts";
+import { AcpSession, type ConversationViewer, type ConversationWindow } from "./acp-session.ts";
+import type { AgentSession } from "./agent-session.ts";
 import { resolveCopilot, toolPermissionArgs } from "./copilot-command.ts";
 import type { CopilotHookOutput } from "./copilot-hook-output.ts";
 import { CopilotHookEvent } from "./copilot-hook-record.ts";
 import { writeCopilotPlugin } from "./copilot-plugin.ts";
 import { appendHookRecord } from "./hook-tail.ts";
 import { inboxPrompt } from "./inbox-prompt.ts";
-import { LastSupervisorFile } from "./last-supervisor.ts";
-import { LiveSession, type SessionPty, type SessionWindow } from "./live-session.ts";
+import { type LastSupervisor, LastSupervisorFile } from "./last-supervisor.ts";
+import { LiveSession, type SessionEvent, type SessionPty, type SessionWindow } from "./live-session.ts";
 import { MiseTrustNotices } from "./mise-trust-notices.ts";
 import { withLoopbackNoProxy } from "./no-proxy.ts";
 import { proposedByOf, proposerKeyOf, proposerOf, SUPERVISOR } from "./proposer.ts";
-import { type ResumableSession, ResumableSessions, type ResumeLaunch, resumablePlace, resumeLaunch } from "./resumable-sessions.ts";
+import {
+  type ConversationLaunch,
+  type ResumableSession,
+  ResumableSessions,
+  resumablePlace,
+  type SessionLaunch,
+  sessionLaunch,
+} from "./resumable-sessions.ts";
 import { type SessionMiseEnv, sessionMiseLaunch } from "./session-env.ts";
 import { type SessionRole, withInstructionsDir, writeSessionInstructions } from "./session-instructions.ts";
 import { SessionTokens } from "./session-tokens.ts";
@@ -114,6 +124,15 @@ interface AgentsProcs {
     rows: number;
     onData: (bytes: Uint8Array) => void;
   }): Promise<{ run: RunState; terminal: SessionPty }>;
+  /** A session in the conversation view (ADR-107): Copilot CLI over ACP on its standard streams. */
+  startChannel(spec: {
+    owner: string;
+    command: readonly string[];
+    cwd: string;
+    env: NodeJS.ProcessEnv;
+    secrets: readonly string[];
+    onStdout: (chunk: Buffer) => void;
+  }): Promise<{ run: RunState; channel: { write(data: string): void } }>;
   state(owner: string): RunState | undefined;
   stop(owner: string): Promise<RunState | undefined>;
   liveIn(dir: string): boolean;
@@ -185,7 +204,7 @@ export type WaitTarget = { session: string } | { task: string };
 
 export class Agents {
   readonly #deps: AgentsDeps;
-  readonly #sessions = new Map<string, LiveSession>();
+  readonly #sessions = new Map<string, AgentSession>();
   readonly #tokens = new SessionTokens();
   readonly #tasks: AgentTasks;
   readonly #proposals = new TaskProposals();
@@ -236,7 +255,7 @@ export class Agents {
     const tasks = this.#tasks.list();
     // A proposal being approved that is already a task is only a task: the UI and `list_sessions` see one object.
     const proposals = this.#proposals.list().filter((p) => !tasks.some((t) => t.id === p.id));
-    const lastSupervisor = this.#resumableSupervisor() ?? null;
+    const lastSupervisor = this.#resumableSupervisor()?.session ?? null;
     return { sessions: this.#views(), tasks, proposals, messages: this.#coordination.messages(), lastSupervisor };
   }
 
@@ -264,30 +283,29 @@ export class Agents {
    * has started, so a failed start keeps the last screen; the work they delegated stays, marked as the supervisor's
    * (`ProposedBy.supervisor`). With `last` it goes on with the newest supervisor's conversation under its id (ADR-96);
    * that start closes the ended supervisor first, since an id is listed once, so when it fails the last screen is gone.
+   * `view` is a terminal or the conversation view (ADR-107); the last conversation goes on in either.
    */
-  async startSupervisor(conversation: SupervisorConversation): Promise<Session> {
+  async startSupervisor(conversation: SupervisorConversation, view: SessionView): Promise<Session> {
     if (this.#supervisorStart) return this.#supervisorStart;
     const running = this.#runningSupervisor();
     if (running) return running;
     const last = conversation === "last" ? this.#resumableSupervisor() : undefined;
-    return last === undefined
-      ? this.#startNewSupervisor(null)
-      : this.#startSupervisorAs(resumeLaunch({ session: last, hasConversation: true }));
+    return last === undefined ? this.#startNewSupervisor(null, view) : this.#startSupervisorAs(sessionLaunch(view, last));
   }
 
   /** The newest supervisor while Copilot CLI keeps its conversation, which a start with `last` goes on with (ADR-96). */
-  #resumableSupervisor(): string | undefined {
+  #resumableSupervisor(): LastSupervisor | undefined {
     const last = this.#lastSupervisor.read();
-    return last?.hasConversation ? last.session : undefined;
+    return last?.hasConversation ? last : undefined;
   }
 
   /**
    * A new supervisor with `firstMessage` as its first message (`--interactive`), so it works from the start: the day start
    * (ADR-70). While a supervisor starts or runs, `bad_request`: the user stops it first, so no conversation ends without them.
    */
-  async startSupervisorWith(firstMessage: string): Promise<Session> {
+  async startSupervisorWith(firstMessage: string, view: SessionView): Promise<Session> {
     this.assertNoSupervisor();
-    return this.#startNewSupervisor(firstMessage);
+    return this.#startNewSupervisor(firstMessage, view);
   }
 
   /** `bad_request` while a supervisor starts or runs (ADR-70). */
@@ -301,28 +319,31 @@ export class Agents {
   }
 
   /**
-   * `firstMessage` is the first message (`--interactive`) of the new supervisor; `null` for none. Its id is also Copilot
-   * CLI's session id, so a restart can resume it (ADR-95).
+   * `firstMessage` is the first message (`--interactive`) of the new supervisor; `null` for none. In a terminal its id
+   * is also Copilot CLI's session id, so a restart can resume it (ADR-95); in the conversation view Copilot CLI picks
+   * the conversation's id (ADR-107).
    */
-  #startNewSupervisor(firstMessage: string | null): Promise<Session> {
+  #startNewSupervisor(firstMessage: string | null, view: SessionView): Promise<Session> {
     const id = randomUUID();
+    if (view === "conversation") return this.#startSupervisorAs({ view, id, load: undefined, firstMessage: firstMessage ?? undefined });
     const args = [`--session-id=${id}`, ...(firstMessage === null ? [] : [`--interactive=${firstMessage}`])];
-    return this.#startSupervisorAs({ id, args, promptOnStart: firstMessage !== null, hasConversation: firstMessage !== null });
+    const started = firstMessage !== null;
+    return this.#startSupervisorAs({ view, id, args, promptOnStart: started, hasConversation: started, conversation: id });
   }
 
-  #startSupervisorAs(spec: ResumeLaunch): Promise<Session> {
+  #startSupervisorAs(spec: SessionLaunch): Promise<Session> {
     this.#supervisorStart = this.#replaceSupervisor(spec).finally(() => {
       this.#supervisorStart = undefined;
     });
     return this.#supervisorStart;
   }
 
-  async #replaceSupervisor(spec: ResumeLaunch): Promise<Session> {
+  async #replaceSupervisor(spec: SessionLaunch): Promise<Session> {
     const ended = this.#views().filter(isSupervisor);
     const cwd = await this.#deps.repos.projectsDir();
     // The ended supervisor whose conversation this one goes on with under its id gives up its place before the start.
     if (this.#sessions.has(spec.id)) this.#close(spec.id);
-    const started = await this.#launch({ ...spec, repo: null, supervisor: true, cwd, task: null });
+    const started = await this.#launchAs(spec, { repo: null, supervisor: true, cwd, task: null });
     // One of them may have been dismissed during the start; the start has still succeeded.
     for (const old of ended) if (old.id !== spec.id && this.#sessions.has(old.id)) this.#close(old.id);
     return started;
@@ -668,31 +689,21 @@ export class Agents {
    * Copilot CLI in `cwd` (the repo root or the worktree of task `task`) with arguments before the session's arguments;
    * `promptOnStart` when the arguments carry the first message (`--interactive`), so the session works from the start.
    */
-  async #launch({ id = randomUUID(), repo, supervisor, cwd, task, args, promptOnStart, hasConversation }: LaunchSpec): Promise<Session> {
-    const userEnv = await this.#deps.env();
-    // The user's `PATH`, not mise's: a mise config an agent can change must not choose the program that gets every secret.
-    const copilot = resolveCopilot(this.#deps.copilot, userEnv);
-    if ("missing" in copilot) throw new DomainError("agent_unavailable", copilot.message);
-    const { program, args: prefix } = copilot;
-    const permissions = this.#deps.repos.toolPermissions({ repo, supervisor });
-    const mise = sessionMiseLaunch(await this.#deps.miseEnv({ repo, task }), userEnv, this.#deps.repos.agentSecrets());
-    // The MCP server and the hooks are the daemon on `127.0.0.1`, which a proxy of the user must not get (ADR-89).
-    const env = withLoopbackNoProxy({ ...mise.env, TERM: "xterm-256color", COLORTERM: "truecolor", ...LOOPBACK_HOOKS_ENV });
-    const role = this.#role(repo, supervisor, task);
-    if (this.#sessions.has(id)) throw new Error(`session ${id} is already listed`);
-    const dir = sessionDir(this.#deps.home, id);
-    const token = this.#tokens.issue(id);
+  async #launch({ id = randomUUID(), args, promptOnStart, hasConversation, conversation, ...place }: LaunchSpec): Promise<Session> {
+    const { repo, task, cwd } = place;
+    const setup = await this.#setUp(id, place);
+    const { program, dir, token, mise } = setup;
     let prepared: PreparedSession;
     try {
       prepared = this.#prepare({
         id,
-        role,
-        repo,
-        task,
+        ...place,
+        role: setup.role,
         dir,
         token,
         promptOnStart,
         hasConversation,
+        conversation,
         program,
         environment: mise.environment,
       });
@@ -705,19 +716,9 @@ export class Agents {
     try {
       const { terminal } = await this.#deps.procs.startTerminal({
         owner: owner(id),
-        command: [
-          program,
-          ...prefix,
-          "--plugin-dir",
-          join(dir, "plugin"),
-          "--additional-mcp-config",
-          `@${join(dir, MCP_CONFIG_FILE)}`,
-          ...toolPermissionArgs(permissions),
-          ...mise.args,
-          ...args,
-        ],
+        command: [program, ...setup.prefix, "--plugin-dir", join(dir, "plugin"), ...setup.args, ...args],
         cwd,
-        env: instructionsDir === null ? env : withInstructionsDir(env, instructionsDir),
+        env: sessionEnv(setup.env, instructionsDir),
         secrets: mise.secretValues,
         cols: INITIAL_COLS,
         rows: INITIAL_ROWS,
@@ -730,13 +731,94 @@ export class Agents {
       rmSync(dir, { recursive: true, force: true });
       throw domainError(repo, err);
     }
-    this.#sessions.set(id, session);
+    this.#listed(session, task);
+    return this.#view(session);
+  }
+
+  /**
+   * Copilot CLI over ACP (ADR-107) in `cwd`: the same MCP server, instructions, tool permissions and mise environment as
+   * in a terminal, without the session plugin, since the protocol itself says what the session does.
+   */
+  async #launchConversation({ id, load, firstMessage, ...place }: ConversationLaunch & SessionPlace): Promise<Session> {
+    const { repo, supervisor, task, cwd } = place;
+    const setup = await this.#setUp(id, place);
+    const { program, dir, token, mise } = setup;
+    let instructionsDir: string | null;
+    try {
+      instructionsDir = this.#writeSessionFiles(id, setup.role, dir, token);
+    } catch (err) {
+      this.#tokens.revoke(id);
+      rmSync(dir, { recursive: true, force: true });
+      throw err;
+    }
+    const session = new AcpSession({
+      id,
+      repo,
+      supervisor,
+      task,
+      cwd,
+      load,
+      firstMessage,
+      environment: mise.environment,
+      run: () => this.#deps.procs.state(owner(id)),
+      ...this.#sessionCallbacks(id, supervisor, task),
+      log: this.#deps.log,
+    });
+    try {
+      const { channel } = await this.#deps.procs.startChannel({
+        owner: owner(id),
+        command: [program, ...setup.prefix, "--acp", ...setup.args],
+        cwd,
+        env: sessionEnv(setup.env, instructionsDir),
+        secrets: mise.secretValues,
+        onStdout: (chunk) => session.output(chunk),
+      });
+      session.connect(channel);
+      await session.start();
+    } catch (err) {
+      await this.#deps.procs.stop(owner(id)).catch(() => undefined);
+      this.#tokens.revoke(id);
+      session.dispose();
+      rmSync(dir, { recursive: true, force: true });
+      throw domainError(repo, err);
+    }
+    this.#listed(session, task);
+    return this.#view(session);
+  }
+
+  /** What every start needs: Copilot CLI, the session directory and token, and the arguments and environment it gets. */
+  async #setUp(id: string, { repo, supervisor, task }: SessionPlace): Promise<SessionSetup> {
+    const userEnv = await this.#deps.env();
+    // The user's `PATH`, not mise's: a mise config an agent can change must not choose the program that gets every secret.
+    const copilot = resolveCopilot(this.#deps.copilot, userEnv);
+    if ("missing" in copilot) throw new DomainError("agent_unavailable", copilot.message);
+    const permissions = this.#deps.repos.toolPermissions({ repo, supervisor });
+    const mise = sessionMiseLaunch(await this.#deps.miseEnv({ repo, task }), userEnv, this.#deps.repos.agentSecrets());
+    // The MCP server and the hooks are the daemon on `127.0.0.1`, which a proxy of the user must not get (ADR-89).
+    const env = withLoopbackNoProxy({ ...mise.env, TERM: "xterm-256color", COLORTERM: "truecolor", ...LOOPBACK_HOOKS_ENV });
+    if (this.#sessions.has(id)) throw new Error(`session ${id} is already listed`);
+    const dir = sessionDir(this.#deps.home, id);
+    const args = ["--additional-mcp-config", `@${join(dir, MCP_CONFIG_FILE)}`, ...toolPermissionArgs(permissions), ...mise.args];
+    return {
+      program: copilot.program,
+      prefix: copilot.args,
+      args,
+      env,
+      mise,
+      role: this.#role(repo, supervisor, task),
+      dir,
+      token: this.#tokens.issue(id),
+    };
+  }
+
+  /** A started session joins the list. */
+  #listed(session: AgentSession, task: string | null): void {
+    this.#sessions.set(session.id, session);
     // A review or a message sent while the task had no running session (ADR-62, ADR-68); the prompt names only what is
     // unread, and nothing is typed when nothing is. Not the updates of a new supervisor or main session: the user starts
     // those to talk, and the next update asks them anyway.
     if (task !== null) session.askToRead();
     this.#startTicking();
-    return this.#view(session);
   }
 
   #role(repo: string | null, supervisor: boolean, task: string | null): SessionRole {
@@ -767,7 +849,35 @@ export class Agents {
 
   /** A session terminal: first the screen image, then live output, and `onClosed` when the session disappears. */
   attach(id: string, viewer: ScreenViewer, onSnapshot: (snapshot: string) => void, onClosed: () => void): SessionWindow {
-    return this.#get(id).attach(viewer, onSnapshot, onClosed);
+    const session = this.#get(id);
+    if (!(session instanceof LiveSession)) throw new DomainError("bad_request", `session ${id} shows as a conversation, not a terminal`);
+    return session.attach(viewer, onSnapshot, onClosed);
+  }
+
+  /** A session's conversation view (ADR-107): all entries, then the changed ones, and `closed` when the session disappears. */
+  attachConversation(id: string, viewer: ConversationViewer): ConversationWindow {
+    return this.#conversationOf(id).attachConversation(viewer);
+  }
+
+  /** A message from the user to a session in the conversation view (ADR-107). */
+  say(id: string, text: string): Session {
+    const session = this.#conversationOf(id);
+    if (!this.#isRunning(session)) throw new DomainError("bad_request", "the session is no longer running");
+    session.say(text);
+    return this.#view(session);
+  }
+
+  /** Stops the turn of a session in the conversation view (ADR-107). */
+  interrupt(id: string): Session {
+    const session = this.#conversationOf(id);
+    session.interrupt();
+    return this.#view(session);
+  }
+
+  #conversationOf(id: string): AcpSession {
+    const session = this.#get(id);
+    if (!(session instanceof AcpSession)) throw new DomainError("bad_request", `session ${id} runs in a terminal, not as a conversation`);
+    return session;
   }
 
   /**
@@ -804,19 +914,24 @@ export class Agents {
   }
 
   async #resumeLeft(left: ResumableSession): Promise<void> {
-    const { session: id, repo, task, hasConversation } = left;
+    const { repo, task } = left;
     if (task !== null) {
       await this.#tasks.resume(task);
       return;
     }
-    const spec = resumeLaunch({ session: id, hasConversation });
+    const spec = sessionLaunch(left.view, left);
     if (left.supervisor) {
       if (this.#supervisorStart || this.#runningSupervisor()) throw new Error("a supervisor already runs");
       await this.#startSupervisorAs(spec);
       return;
     }
     const cwd = repo === null ? await this.#deps.repos.projectsDir() : await this.#deps.repos.repoPath(repo);
-    await this.#launch({ ...spec, repo, supervisor: false, cwd, task: null });
+    await this.#launchAs(spec, { repo, supervisor: false, cwd, task: null });
+  }
+
+  /** A start in the view it names, in `place`. */
+  #launchAs(spec: SessionLaunch, place: SessionPlace): Promise<Session> {
+    return spec.view === "terminal" ? this.#launch({ ...spec, ...place }) : this.#launchConversation({ ...spec, ...place });
   }
 
   /** Daemon exit, before `procs.stopAll`: the sessions it stops stay in the list for the next daemon to resume (ADR-95). */
@@ -855,19 +970,24 @@ export class Agents {
    * The session directory with the session plugin, MCP config, session instructions and an empty
    * `hooks.jsonl`, before Copilot CLI starts.
    */
-  #prepare({ id, role, repo, task, dir, token, promptOnStart, hasConversation, program, environment }: SessionFiles): PreparedSession {
+  #prepare({
+    id,
+    role,
+    repo,
+    task,
+    dir,
+    token,
+    promptOnStart,
+    hasConversation,
+    conversation,
+    program,
+    environment,
+  }: SessionFiles): PreparedSession {
     const supervisor = role.kind === "supervisor";
-    const pluginDir = join(dir, "plugin");
     const hooksFile = join(dir, HOOKS_FILENAME);
-    mkdirSync(dir, { recursive: true });
+    const instructionsDir = this.#writeSessionFiles(id, role, dir, token);
     writeFileSync(hooksFile, "");
-    // User-only: the server's headers carry the daemon token and the session token (§8).
-    const mcpConfig = copilotHttpMcpServers(this.#deps.sessionMcpServer(token));
-    writeFileSync(join(dir, MCP_CONFIG_FILE), JSON.stringify(mcpConfig, null, 2), { mode: 0o600 });
-    writeCopilotPlugin(pluginDir, (event) => ({ type: "http", ...this.#deps.sessionHook(event, token) }));
-    const instructionsDir = writeSessionInstructions(dir, this.#deps.version, role);
-    if (instructionsDir === null)
-      this.#deps.log(`session ${id} starts without Trackwall instructions: the session directory path has a comma`);
+    writeCopilotPlugin(join(dir, "plugin"), (event) => ({ type: "http", ...this.#deps.sessionHook(event, token) }));
     const session = new LiveSession({
       id,
       repo,
@@ -878,13 +998,37 @@ export class Agents {
       hooksFile,
       promptOnStart,
       hasConversation,
+      conversation,
       program,
       environment,
       run: () => this.#deps.procs.state(owner(id)),
+      ...this.#sessionCallbacks(id, supervisor, task),
+    });
+    return { session, instructionsDir };
+  }
+
+  /**
+   * The session directory with the MCP config and session instructions, which both views share; returns the
+   * instructions directory, `null` when it could not be written.
+   */
+  #writeSessionFiles(id: string, role: SessionRole, dir: string, token: string): string | null {
+    mkdirSync(dir, { recursive: true });
+    // User-only: the server's headers carry the daemon token and the session token (§8).
+    const mcpConfig = copilotHttpMcpServers(this.#deps.sessionMcpServer(token));
+    writeFileSync(join(dir, MCP_CONFIG_FILE), JSON.stringify(mcpConfig, null, 2), { mode: 0o600 });
+    const instructionsDir = writeSessionInstructions(dir, this.#deps.version, role);
+    if (instructionsDir === null)
+      this.#deps.log(`session ${id} starts without Trackwall instructions: the session directory path has a comma`);
+    return instructionsDir;
+  }
+
+  /** How a session of either view tells the daemon what it did. */
+  #sessionCallbacks(id: string, supervisor: boolean, task: string | null) {
+    return {
       prompt: () => this.#inboxPrompt({ id, supervisor, task }),
       onUserText: () => this.#coordination.userTyped({ id, task }),
       onPromptSent: () => this.#miseTrust.promptSent(id),
-      onEvent: (event) => {
+      onEvent: (event: SessionEvent) => {
         if (event.kind === "turn_ended") this.#miseTrust.turnEnded(id);
         // The session reads its hooks inside the user's key or another session's call: news for the proposer must not fail them.
         try {
@@ -893,8 +1037,7 @@ export class Agents {
           this.#deps.log(`session ${id}: telling the proposer: ${String(err)}`);
         }
       },
-    });
-    return { session, instructionsDir };
+    };
   }
 
   #startTicking(): void {
@@ -903,7 +1046,7 @@ export class Agents {
   }
 
   #tick(): void {
-    const live: LiveSession[] = [];
+    const live: AgentSession[] = [];
     for (const session of this.#sessions.values()) {
       try {
         if (session.tick()) live.push(session);
@@ -918,10 +1061,10 @@ export class Agents {
   }
 
   /** The list of running sessions a restart resumes (ADR-95); a failed write is retried at the next tick. */
-  #followLive(live: readonly LiveSession[]): void {
+  #followLive(live: readonly AgentSession[]): void {
     try {
       this.#resumable.follow(
-        live.map(({ id, repo, supervisor, task, hasConversation }) => ({ session: id, repo, supervisor, task, hasConversation })),
+        live.map((s) => ({ session: s.id, repo: s.repo, supervisor: s.supervisor, task: s.task, view: s.sessionView, ...resumedAs(s) })),
       );
     } catch (err) {
       this.#deps.log(`writing ${RESUMABLE_SESSIONS_FILE}: ${String(err)}`);
@@ -933,35 +1076,35 @@ export class Agents {
     const newest = [...this.#sessions.values()].findLast(isSupervisor);
     if (newest === undefined) return;
     try {
-      this.#lastSupervisor.follow({ session: newest.id, hasConversation: newest.hasConversation });
+      this.#lastSupervisor.follow({ session: newest.id, ...resumedAs(newest) });
     } catch (err) {
       this.#deps.log(`writing ${LAST_SUPERVISOR_FILE}: ${String(err)}`);
     }
   }
 
   /** The task's newest session while it runs. */
-  #runningOfTask(task: string): LiveSession | undefined {
+  #runningOfTask(task: string): AgentSession | undefined {
     return [...this.#sessions.values()].reverse().find((s) => s.task === task && this.#isRunning(s));
   }
 
   /** The state after the hooks already written, as `#fresh` reads it. */
-  #isRunning(session: LiveSession): boolean {
+  #isRunning(session: AgentSession): boolean {
     return this.#fresh(session)?.run.kind === "running";
   }
 
-  #get(id: string): LiveSession {
+  #get(id: string): AgentSession {
     const session = this.#sessions.get(id);
     if (!session) throw new DomainError("not_found", `no session ${id}`);
     return session;
   }
 
   /** The session's state after reading new hook records and the end of the process. */
-  #fresh(session: LiveSession): Session | undefined {
+  #fresh(session: AgentSession): Session | undefined {
     session.tick();
     return session.view();
   }
 
-  #view(session: LiveSession): Session {
+  #view(session: AgentSession): Session {
     const view = this.#fresh(session);
     if (!view) throw new Error(`session ${session.id} has no process group`);
     return view;
@@ -980,18 +1123,38 @@ export class Agents {
  * What `#launch` starts: Copilot CLI in a repo root, in a task's worktree, or the supervisor or a free session in the
  * projects folder.
  */
-interface LaunchSpec {
+interface LaunchSpec extends SessionPlace {
   /** The session id; a new one by default. */
   id?: string;
   /** Copilot CLI already keeps a conversation under the id: the arguments carry the first message or resume it (ADR-95). */
   hasConversation: boolean;
+  /** Copilot CLI's id of the conversation when it is not the session id (ADR-107). */
+  conversation?: string;
+  args: readonly string[];
+  promptOnStart: boolean;
+}
+
+/** Where a session runs and what it is. */
+interface SessionPlace {
   /** `null` in the projects folder. */
   repo: string | null;
   supervisor: boolean;
   cwd: string;
   task: string | null;
+}
+
+/** What `#setUp` gives a start of either view. */
+interface SessionSetup {
+  program: string;
+  /** Arguments of the program before Copilot CLI's own (`node <copilot>.js`). */
+  prefix: readonly string[];
+  /** The MCP config, tool permissions and mise's arguments. */
   args: readonly string[];
-  promptOnStart: boolean;
+  env: NodeJS.ProcessEnv;
+  mise: ReturnType<typeof sessionMiseLaunch>;
+  role: SessionRole;
+  dir: string;
+  token: string;
 }
 
 /** The directory of a new session and what follows from it for `LiveSession`. */
@@ -1004,6 +1167,7 @@ interface SessionFiles {
   token: string;
   promptOnStart: boolean;
   hasConversation: boolean;
+  conversation: string | undefined;
   /** The Copilot CLI program the session starts. */
   program: string;
   /** What the session got from mise (ADR-93). */
@@ -1014,6 +1178,17 @@ interface SessionFiles {
 interface PreparedSession {
   session: LiveSession;
   instructionsDir: string | null;
+}
+
+/** The session's environment with the directory of its Trackwall instructions, when there is one. */
+function sessionEnv(env: NodeJS.ProcessEnv, instructionsDir: string | null): NodeJS.ProcessEnv {
+  return instructionsDir === null ? env : withInstructionsDir(env, instructionsDir);
+}
+
+/** How a restart or a start with `last` goes on with the session's conversation (ADR-95, ADR-96, ADR-107). */
+function resumedAs(session: AgentSession): { hasConversation: boolean; conversation?: string } {
+  const { hasConversation, conversation } = session;
+  return conversation === undefined || conversation === session.id ? { hasConversation } : { hasConversation, conversation };
 }
 
 /** The group owner key in `procs`; only ever built, never taken apart again. */

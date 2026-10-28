@@ -17,6 +17,7 @@ function session(id: string, needsAttention: boolean, dialog: Session["dialog"] 
     task: null,
     dialog,
     environment: { variables: [], secrets: [], agentSecrets: [], problem: null },
+    view: "terminal",
   };
 }
 

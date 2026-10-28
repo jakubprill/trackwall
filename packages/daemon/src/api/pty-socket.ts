@@ -2,6 +2,7 @@ import { PTY_CLOSE_NOT_FOUND, PTY_CLOSE_SLOW, PTY_SOCKET_PREFIX, PTY_SUBPROTOCOL
 import type { RawData, WebSocket } from "ws";
 import type { Facade } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
+import { parseJsonFrame } from "./socket-json.ts";
 import type { SocketRoute } from "./sockets.ts";
 
 /**
@@ -49,7 +50,7 @@ function serve(ws: WebSocket, session: string, facade: Facade): void {
   }
   ws.on("message", (data: RawData, isBinary: boolean) => {
     if (isBinary) return;
-    const parsed = PtyClientMessage.safeParse(parseJson(data));
+    const parsed = PtyClientMessage.safeParse(parseJsonFrame(data));
     if (!parsed.success) return;
     const message = parsed.data;
     switch (message.type) {
@@ -63,14 +64,4 @@ function serve(ws: WebSocket, session: string, facade: Facade): void {
   });
   ws.on("close", () => attachment.detach());
   ws.on("error", () => attachment.detach());
-}
-
-/** A text frame from the client; `ws` gives it as a `Buffer`, in pieces or as an `ArrayBuffer`. */
-function parseJson(data: RawData): unknown {
-  const bytes = Array.isArray(data) ? Buffer.concat(data) : Buffer.isBuffer(data) ? data : Buffer.from(new Uint8Array(data));
-  try {
-    return JSON.parse(bytes.toString("utf8"));
-  } catch {
-    return undefined;
-  }
 }

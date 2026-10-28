@@ -84,7 +84,7 @@ async function finished(dayStart: DayStart): Promise<DayStartRun> {
 
 /** A day start run to its end, which must have started the supervisor. */
 async function startDay(dayStart: DayStart): Promise<DayStartRun> {
-  await dayStart.start();
+  await dayStart.start("terminal");
   const run = await finished(dayStart);
   expect(run.error).toBeNull();
   return run;
@@ -117,6 +117,7 @@ function session(fields: Partial<Session>): Session {
     task: null,
     dialog: null,
     environment: { variables: [], secrets: [], agentSecrets: [], problem: null },
+    view: "terminal",
     ...fields,
   };
 }
@@ -297,7 +298,7 @@ describe("the day start", () => {
     const { dayStart, workspace, cloned } = setup({ supervisorRuns: true });
     cloned("api");
 
-    await expect(dayStart.start()).rejects.toThrow("the supervisor is running; stop it to start your day with a new one");
+    await expect(dayStart.start("terminal")).rejects.toThrow("the supervisor is running; stop it to start your day with a new one");
     expect(workspace.syncRun()).toBeNull();
     expect(dayStart.run()).toBeNull();
   });
@@ -308,7 +309,7 @@ describe("the day start", () => {
       const { dayStart, cloned, firstMessages } = setup();
       cloned("api");
 
-      const [first, second] = await Promise.all([dayStart.start(), dayStart.start()]);
+      const [first, second] = await Promise.all([dayStart.start("terminal"), dayStart.start("terminal")]);
       expect(second.startedAt).toBe(first.startedAt);
       await finished(dayStart);
       expect(firstMessages).toHaveLength(1);
@@ -325,7 +326,7 @@ describe("the day start", () => {
       expect(good.firstMessages[0]).toEndWith("each, so I can ask for the ones I want.\n\nCheck my open issues in the tracker.");
 
       const bad = setup({ workspaceYaml: "dayStart:\n  prompt: ''\n" });
-      await expect(bad.dayStart.start()).rejects.toThrow(/dayStart/);
+      await expect(bad.dayStart.start("terminal")).rejects.toThrow(/dayStart/);
     },
     GIT_HEAVY_MS,
   );
@@ -336,7 +337,7 @@ describe("the day start", () => {
       const { dayStart, cloned } = setup({ supervisorFails: "no Copilot CLI in PATH" });
       cloned("api");
 
-      await dayStart.start();
+      await dayStart.start("terminal");
       const run = await finished(dayStart);
 
       expect(run).toMatchObject({ step: "supervisor", error: "no Copilot CLI in PATH", supervisor: null });

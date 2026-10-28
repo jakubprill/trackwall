@@ -47,6 +47,7 @@ function view(id: string, taskId: string | null, state: TaskState | null, run: S
     task: taskId,
     dialog: null,
     environment: { variables: [], secrets: [], agentSecrets: [], problem: null },
+    view: "terminal",
   };
 }
 

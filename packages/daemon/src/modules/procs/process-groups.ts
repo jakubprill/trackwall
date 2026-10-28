@@ -47,6 +47,19 @@ export interface TerminalGroupSpec extends GroupSpec {
   onData: (bytes: Uint8Array) => void;
 }
 
+/**
+ * A group whose leader speaks a protocol on its standard streams (`copilot --acp`, ADR-107): the caller gets stdout and
+ * writes stdin; stderr goes only to the last lines of the `exited` state, like a PTY screen (no log).
+ */
+export interface ChannelGroupSpec extends GroupSpec {
+  onStdout: (chunk: Buffer) => void;
+}
+
+/** The input of a channel group's leader. */
+export interface GroupChannel {
+  write(data: string): void;
+}
+
 /** The group leader's terminal: keyboard input and the window size. */
 export interface GroupTerminal {
   write(data: string): void;
@@ -143,24 +156,50 @@ export class ProcessGroups {
    * hand back the existing one, but goes on under its id once it ended (the supervisor's last conversation, ADR-96).
    */
   async startTerminal(spec: TerminalGroupSpec): Promise<{ run: RunState; terminal: GroupTerminal }> {
-    if (this.closing) throw new SpawnFailure("spawn_failed", "the daemon is stopping");
-    const current = this.groups.get(spec.owner);
-    if ((current && current.phase.kind !== "exited") || this.starting.has(spec.owner))
-      throw new Error(`owner ${spec.owner} already has a group`);
-    // `starting` is set before the first await, so a second start of the owner meanwhile is refused.
-    const started = Promise.resolve(this.deps.terminals).then((terminals) => {
+    const { run, launched } = await this.startOwned(spec, async () => {
+      const terminals = await this.deps.terminals;
       if (!terminals) throw new SpawnFailure("terminal_unavailable", "this daemon runtime has no PTY (daemon under Node)");
       return this.spawnGroup(spec, async (cwd) =>
         launchTerminal(terminals, spec, cwd, this.deps.logs.lastLinesOnly(spec.env, spec.secrets)),
       );
     });
+    return { run, terminal: launched.leader };
+  }
+
+  /**
+   * Starts a group whose leader is a protocol peer on stdin and stdout (ADR-107), and returns its input. Like
+   * `startTerminal`, the owner must have no group, or only one that has ended.
+   */
+  async startChannel(spec: ChannelGroupSpec): Promise<{ run: RunState; channel: GroupChannel }> {
+    const { run, launched } = await this.startOwned(spec, () =>
+      this.spawnGroup(spec, (cwd, platform) =>
+        launchChannel(spec, cwd, platform.detached, this.deps.logs.lastLinesOnly(spec.env, spec.secrets)),
+      ),
+    );
+    return { run, channel: launched.channel };
+  }
+
+  /**
+   * The start of a group the caller owns as a whole (a terminal, a channel): refused while the owner has a live group
+   * or one starting, and listed in `starting` until it has started, so a stop meanwhile waits for it.
+   */
+  private async startOwned<L extends Launched>(
+    spec: GroupSpec,
+    spawnIt: () => Promise<{ group: Group; launched: L }>,
+  ): Promise<{ run: RunState; launched: L }> {
+    if (this.closing) throw new SpawnFailure("spawn_failed", "the daemon is stopping");
+    const current = this.groups.get(spec.owner);
+    if ((current && current.phase.kind !== "exited") || this.starting.has(spec.owner))
+      throw new Error(`owner ${spec.owner} already has a group`);
+    // `starting` is set before the first await, so a second start of the owner meanwhile is refused.
+    const started = spawnIt();
     const run = started.then(({ group }) => stateOf(group));
     // The caller receives a start error through `started`; `starting` only lets others wait for the start to finish.
     run.catch(() => {});
     this.starting.set(spec.owner, run);
     try {
       const { group, launched } = await started;
-      return { run: stateOf(group), terminal: launched.leader };
+      return { run: stateOf(group), launched };
     } finally {
       this.starting.delete(spec.owner);
     }
@@ -352,11 +391,46 @@ interface Launched {
 
 /** A leader with pipes (stdin, stdout, stderr), like a mise task. */
 async function launchPiped(spec: GroupSpec, cwd: string, detached: boolean, output: RunOutput): Promise<Launched> {
+  const { leader, leaderExit } = await spawnOnPipes(spec, cwd, detached, (child) => attachOutput(child, output));
+  return { leader, leaderExit, output };
+}
+
+/** A leader on pipes whose stdout goes to the caller (a protocol, not log lines) and stderr to the last lines. */
+async function launchChannel(
+  spec: ChannelGroupSpec,
+  cwd: string,
+  detached: boolean,
+  output: RunOutput,
+): Promise<Launched & { channel: GroupChannel }> {
+  const { child, leader, leaderExit } = await spawnOnPipes(spec, cwd, detached, (started) => {
+    started.stdout?.on("data", (chunk: Buffer) => spec.onStdout(chunk));
+    started.stderr?.on("data", (chunk: Buffer) => output.push("stderr", chunk));
+    started.stderr?.on("end", () => output.end("stderr"));
+    started.stdin?.on("error", () => {});
+    started.on("error", () => {});
+  });
+  const channel = {
+    write: (data: string) => {
+      if (child.stdin?.writable) child.stdin.write(data);
+    },
+  };
+  return { leader, leaderExit, output, channel };
+}
+
+/**
+ * Starts the leader on pipes; `wire` connects its streams at once, since a short process may answer, or end, before the
+ * first `await`.
+ */
+async function spawnOnPipes(
+  spec: GroupSpec,
+  cwd: string,
+  detached: boolean,
+  wire: (child: ChildProcess) => void,
+): Promise<{ child: ChildProcess; leader: Launched["leader"]; leaderExit: Promise<Exit> }> {
   const [program, ...args] = spec.command;
   if (program === undefined) throw new Error("empty command");
   const child = spawn(program, args, { cwd, env: spec.env, detached, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
-  // The process output and end are wired at once: a short mise task may end before the first `await` happens.
-  attachOutput(child, output);
+  wire(child);
   const leaderExit = new Promise<Exit>((resolve) => {
     child.once("exit", (code, signal) => resolve({ code, signal, at: new Date().toISOString() }));
   });
@@ -369,7 +443,7 @@ async function launchPiped(spec: GroupSpec, cwd: string, detached: boolean, outp
     hasExited: () => child.exitCode !== null || child.signalCode !== null,
     kill: () => void child.kill("SIGKILL"),
   };
-  return { leader, leaderExit, output };
+  return { child, leader, leaderExit };
 }
 
 /** A leader in a PTY is also the terminal; its output goes to the caller and to the last lines of the `exited` state. */

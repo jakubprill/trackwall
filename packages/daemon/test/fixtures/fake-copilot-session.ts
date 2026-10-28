@@ -15,7 +15,8 @@
  * agent's tool) and prints its PID, so that the test can check that stopping the session ends the whole group. The
  * helper starts only after input from the user, because on Windows the leader joins the job a moment after the start.
  * Like Copilot CLI it keeps a conversation per session id once the session has had a prompt (a marker file in the
- * temporary directory), and refuses `--resume=<id>` of an id without one (ADR-95). `--version` alone prints the version.
+ * temporary directory), and refuses `--resume=<id>` of an id without one (ADR-95). `--version` alone prints the version,
+ * and `--acp` runs the ACP mode of `fake-copilot-acp.ts` (ADR-107).
  */
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -27,14 +28,13 @@ import { ESCAPE } from "../../src/modules/agents/copilot-keys.ts";
 import { stripAnsi } from "../../src/modules/logs/stream-lines.ts";
 import { PARALLEL_TOOLS_PROMPT, PROMPT_PLACEHOLDER, type ReferenceHook, reference } from "../support/copilot-reference.ts";
 import { pluginHooks } from "../support/plugin-hooks.ts";
+import { serveAcp } from "./fake-copilot-acp.ts";
 
 // `--version` answers as Copilot CLI does (`GitHub Copilot CLI 1.0.103.` and a hint), for the doctor (ADR-101).
 if (process.argv[2] === "--version") {
   process.stdout.write(`GitHub Copilot CLI ${TESTED_COPILOT_CLI_VERSION}.\nRun 'copilot update' to check for updates.\n`);
   process.exit(0);
 }
-
-const fire = pluginHooks(process.argv, "s1");
 
 /**
  * MCP servers from the user's `$COPILOT_HOME/mcp-config.json` and then from `--additional-mcp-config @<file>`, which
@@ -78,6 +78,15 @@ const shownEnv = (process.env.FAKE_COPILOT_SHOW_ENV ?? "").split(",").filter((na
 const hiddenEnv = (taskArgs.find((a) => a.startsWith("--secret-env-vars="))?.slice("--secret-env-vars=".length) ?? "").split(",");
 const toolEnv = (name: string) => (hiddenEnv.includes(name) ? "(hidden)" : (process.env[name] ?? "(unset)"));
 
+// `--acp` speaks ACP on stdin and stdout instead of drawing a screen (ADR-107); the rest of this file never runs then.
+// `FAKE_COPILOT_ACP_EXIT` makes it end before the handshake, like a Copilot CLI that cannot start.
+if (process.argv.includes("--acp")) {
+  if (process.env.FAKE_COPILOT_ACP_EXIT !== undefined) process.exit(3);
+  serveAcp({ mcpServers, instructionFiles, args: taskArgs, allowAllTools });
+  await new Promise<never>(() => {});
+}
+
+const fire = pluginHooks(process.argv, "s1");
 const real = reference();
 const title = (text: string) => process.stdout.write(`\x1b]0;${text}\x07`);
 const draw = (lines: readonly string[]) => process.stdout.write(`${lines.join("\r\n")}\r\n`);

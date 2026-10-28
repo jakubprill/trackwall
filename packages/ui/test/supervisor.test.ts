@@ -22,6 +22,7 @@ function session(id: string, repo: string | null, run: Session["run"]["kind"] = 
     task: null,
     dialog: null,
     environment: { variables: [], secrets: [], agentSecrets: [], problem: null },
+    view: "terminal",
   };
 }
 

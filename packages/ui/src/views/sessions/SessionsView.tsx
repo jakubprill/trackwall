@@ -11,7 +11,7 @@ import { BellRing, Crown, Lightbulb, Plus, Square, X } from "lucide-react";
 import { useCallback, useRef } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
-import { SessionTerminal } from "@/components/SessionTerminal";
+import { SessionScreen } from "@/components/SessionScreen";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -673,7 +673,7 @@ function SessionPanel({
         )}
       </header>
       <SessionEnvironment environment={session.environment} />
-      <SessionTerminal conn={conn} session={session.id} live={live} selected />
+      <SessionScreen conn={conn} session={session} selected />
     </>
   );
 }
