@@ -204,6 +204,7 @@ export function createFacade(o: FacadeOptions): Facade {
   // A new repo or one whose HEAD moved gets its card in the background, so the next graph does not wait for it (ADR-63).
   const repoWatch = new RepoWatch({ repos: workspace, vcs, onHeadMoved: (repos) => cards.warmUp(repos), log: o.log });
   const localConfig = new LocalConfig({ repos: workspace, vcs, log: o.log, pushDir: join(o.home, LOCAL_CONFIG_PUSH_DIR) });
+  const board = new Board({ projectsDir: () => workspace.projectsDir() });
   const agents = new Agents({
     procs,
     repos: workspace,
@@ -217,6 +218,7 @@ export function createFacade(o: FacadeOptions): Facade {
     sessionHook: o.sessionHook,
     sessionMcpServer: o.sessionMcpServer,
     openEditor,
+    boardHas: (item) => board.has(item),
     log: o.log,
   });
   const mise: Mise = new Mise({
@@ -229,7 +231,6 @@ export function createFacade(o: FacadeOptions): Facade {
     onTrusted: (repo) => agents.miseTrusted({ repo, task: null }),
   });
   const batch = new Batch({ workspace, mise, log: o.log });
-  const board = new Board({ projectsDir: () => workspace.projectsDir() });
   const graph = new Graph({ cards, workspace });
   const taskPort = (repo: string, task: string) => agents.taskOfRepo(task, repo).port;
   const services = new Services({ mise, logs, graph, cards, taskPort, env: o.userEnv, ...SERVICE_TIMING });

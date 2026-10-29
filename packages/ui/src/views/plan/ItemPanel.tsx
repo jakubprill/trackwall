@@ -1,4 +1,4 @@
-import { BoardColumn, type BoardItem, boardApi, type Task, workspaceApi } from "@trackwall/protocol";
+import { BoardColumn, type BoardItem, type BoardItemChange, boardApi, type Task, workspaceApi } from "@trackwall/protocol";
 import { ExternalLink, GitBranch, Trash2, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -11,8 +11,6 @@ import type { Connection } from "@/lib/connection";
 import { useOpenWebLink } from "@/lib/desktop";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
-
-type ItemChange = Partial<Pick<BoardItem, "title" | "body" | "repos" | "link" | "column">>;
 
 /**
  * The selected item of Plan: its text to edit, its column, repos and ticket link, where it is filed, a line to split it,
@@ -39,7 +37,7 @@ export function ItemPanel({
   onRemoved: () => void;
   onChanged: () => void;
 }) {
-  const update = useAction((change: ItemChange) => post(conn, boardApi.update, { item: item.id, ...change }), onChanged);
+  const update = useAction((change: BoardItemChange) => post(conn, boardApi.update, { item: item.id, ...change }), onChanged);
   const move = useAction((parent: string | null) => post(conn, boardApi.move, { item: item.id, parent, before: null }), onChanged);
   const isProject = item.kind === "project";
   const error = update.error ?? move.error;
@@ -100,7 +98,7 @@ function ItemText({
   conn: Connection;
   item: BoardItem;
   pending: boolean;
-  onSave: (change: ItemChange) => void;
+  onSave: (change: BoardItemChange) => void;
 }) {
   const [title, setTitle] = useState(item.title);
   const [body, setBody] = useState(item.body);

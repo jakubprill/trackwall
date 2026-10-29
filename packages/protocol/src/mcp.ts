@@ -30,24 +30,14 @@ import {
   TaskTitle,
   visibleText,
 } from "./agents.ts";
-import {
-  AgentBoardColumn,
-  BOARD_ITEM_BODY_MAX,
-  BOARD_ITEM_TITLE_MAX,
-  BoardColumn,
-  BoardItem,
-  BoardItemBody,
-  BoardItemId,
-  BoardItemKind,
-  BoardItemRepos,
-  BoardItemTitle,
-} from "./board.ts";
 import { RepoCardResult, TagName } from "./cards.ts";
 import { CODE_SEARCH_LINE_MAX_CHARS, CODE_SEARCH_MAX_MATCHES, CodePathspecs, CodeQuery, SearchCodeResult } from "./code-search.ts";
 import { DAY_REPORT_COMMITS, DayReport } from "./day-start.ts";
 import { FindEndpointResult, MAX_FOUND_ENDPOINTS, MAX_SUBGRAPH_DEPTH, Subgraph, WhoCallsResult } from "./graph.ts";
 import { HttpMethod } from "./http.ts";
 import { LOG_BUFFER_RECORDS, LOG_ERRORS_MAX, LOG_TAIL_MAX, LogErrorLevel, LogErrors, LogTail } from "./logs.ts";
+import { LIST_REPOS, RepoArg } from "./mcp-args.ts";
+import { boardMcpTools, ItemArg, LIST_ITEMS } from "./mcp-board.ts";
 import { MiseTaskName, MiseTasks, RunningMiseTask } from "./mise.ts";
 import { RunState } from "./procs.ts";
 import { ReviewComment } from "./review.ts";
@@ -65,7 +55,7 @@ import { TASK_UPDATES_KEPT, TaskUpdate } from "./task-updates.ts";
 import { TEST_RESULTS_MAX_FAILURES, TestResults } from "./test-results.ts";
 import { trackwallDirLabel } from "./trackwall-dir.ts";
 import { VERIFICATION_MAX_ERRORS, VERIFICATION_MAX_FAILURES, VERIFY_MISE_TASK, Verification } from "./verification.ts";
-import { Commit, ExternalLink, Repo, RepoId, RepoOverview } from "./workspace.ts";
+import { Commit, Repo, RepoId, RepoOverview } from "./workspace.ts";
 
 /**
  * Contract of the daemon's MCP tools (§5.3, ADR-24): the name, the description for the agent, the input and the result of
@@ -208,33 +198,6 @@ export const GetUpdatesResult = z.object({
 });
 export type GetUpdatesResult = z.infer<typeof GetUpdatesResult>;
 
-/** How much of an item's body `list_items` returns; `get_item` gives the whole body. */
-export const BOARD_EXCERPT_MAX = 280;
-
-/** A board item in a list (ADR-133): without its body, but with its start and how many items and tasks hang under it. */
-export const BoardItemSummary = BoardItem.omit({ body: true }).extend({
-  excerpt: z.string(),
-  children: z.number().int().nonnegative(),
-  tasks: z.number().int().nonnegative(),
-});
-export type BoardItemSummary = z.infer<typeof BoardItemSummary>;
-
-export const ListItemsResult = z.object({ items: z.array(BoardItemSummary) });
-export type ListItemsResult = z.infer<typeof ListItemsResult>;
-
-export const GetItemResult = z.object({
-  item: BoardItem,
-  /** The items above it, from its project (or the first item without a parent) down to its parent. */
-  path: z.array(BoardItem.pick({ id: true, kind: true, title: true })),
-  children: z.array(BoardItemSummary),
-  /** The tasks started on it, newest first. */
-  tasks: z.array(Task),
-});
-export type GetItemResult = z.infer<typeof GetItemResult>;
-
-export const BoardItemResult = z.object({ item: BoardItem });
-export type BoardItemResult = z.infer<typeof BoardItemResult>;
-
 /** The day report of the last day start (ADR-70); `null` before the first one. */
 export const GetDayReportResult = z.object({ report: DayReport.nullable() });
 export type GetDayReportResult = z.infer<typeof GetDayReportResult>;
@@ -342,7 +305,6 @@ type McpToolEffect<Args extends z.ZodObject> =
 export type McpTool<Args extends z.ZodObject = z.ZodObject, Result extends z.ZodObject = z.ZodObject> = McpToolBase<Args, Result> &
   McpToolEffect<Args>;
 
-const LIST_REPOS = "list_repos";
 const GET_REPO = "get_repo";
 const LIST_SESSIONS = "list_sessions";
 const GET_SESSION = "get_session";
@@ -359,11 +321,6 @@ const WAIT_FOR_SESSION = "wait_for_session";
 const RUN_MISE_TASK = "run_mise_task";
 const WAIT_FOR_MISE_TASK = "wait_for_mise_task";
 const TAIL = "tail";
-const LIST_ITEMS = "list_items";
-const GET_ITEM = "get_item";
-const CREATE_ITEM = "create_item";
-const UPDATE_ITEM = "update_item";
-const ItemArg = BoardItemId.describe(`board item id from ${LIST_ITEMS} or ${GET_ITEM} (the id field)`);
 
 /**
  * How a task's agent weighs its proposer's messages against the task's prompt (ADR-68), in its session instructions and
@@ -379,7 +336,6 @@ export const TASK_MESSAGE_RULE =
 /** What a proposer sends its task with `send_message` (ADR-68, ADR-81): one list for the tool, the MCP instruction and the supervisor's role. */
 export const TASK_MESSAGE_USES =
   "a correction, an answer to the task's question, a follow-up on its topic, or what changed elsewhere that it must take into account";
-const RepoArg = RepoId.describe(`repo id from ${LIST_REPOS} (the id field)`);
 const RepoTagsArg = z.array(TagName).max(20);
 const MiseTaskArg = MiseTaskName.describe(`mise task name from ${GET_REPO} (the miseTasks field)`);
 /** A mise task in a task's worktree instead of the repo root (ADR-59). */
@@ -750,80 +706,7 @@ export const mcpTools = {
       .strict(),
     result: ProposeTaskResult,
   },
-  listItems: {
-    name: LIST_ITEMS,
-    readOnly: true,
-    description:
-      "The user's board: business projects (kind project), the work split under them as a tree of items (kind item, " +
-      "parent: the item or project above), and ideas in the inbox (items with no parent). Each comes with its column " +
-      `(ideas, ready, in_progress, review, done, dropped), repos, link to the issue tracker, the first ${BOARD_EXCERPT_MAX} ` +
-      "characters of its body (excerpt) and how many items (children) and tasks hang under it. Every argument narrows the " +
-      `list: parent lists the items right under one item or project, inbox: true only the ideas without a place. Read one with ${GET_ITEM}.`,
-    args: z
-      .object({
-        kind: BoardItemKind.optional(),
-        parent: ItemArg.optional().describe("only the items right under this item or project"),
-        inbox: z.boolean().optional().describe("true: only ideas in the inbox (items with no parent)"),
-        column: BoardColumn.optional(),
-        repo: RepoArg.optional().describe("only items about this repo"),
-        query: z.string().trim().min(1).max(200).optional().describe("only items whose title or body contains this text, any case"),
-      })
-      .strict(),
-    result: ListItemsResult,
-  },
-  getItem: {
-    name: GET_ITEM,
-    readOnly: true,
-    description:
-      "One board item with its whole body (Markdown: the plan, notes, acceptance criteria), the path from its project down " +
-      "to it, the items right under it and the tasks started on it. Use it before you split an item or propose a task for it.",
-    args: z.object({ item: ItemArg }).strict(),
-    result: GetItemResult,
-  },
-  createItem: {
-    name: CREATE_ITEM,
-    readOnly: false,
-    destructive: false,
-    description:
-      "Write an idea or a piece of work on the user's board so it is not lost: when the user asks you to note something " +
-      "for later, when you find work outside your task (a bug, a follow-up, a part that turns out bigger), or to split an " +
-      `item into smaller ones under it (parent). It lands in the ideas column, marked as written by an agent; nothing starts ` +
-      `from it, and the user files, starts or drops it. Without parent: a task session's item goes under the item of its ` +
-      `own task, anyone else's into the inbox. Give a title that says what, up to ${BOARD_ITEM_TITLE_MAX} characters, and ` +
-      "in body why and what you know, so the user can judge it later without you.",
-    args: z
-      .object({
-        title: visibleText(BoardItemTitle).describe("one line, e.g. Retry the invoice export after a timeout"),
-        body: visibleText(BoardItemBody)
-          .default("")
-          .describe(`Markdown, up to ${BOARD_ITEM_BODY_MAX} characters: why, what you found, where in the code`),
-        parent: ItemArg.optional().describe("the item or project it belongs under"),
-        repos: BoardItemRepos.optional().describe(`repo ids from ${LIST_REPOS} it is about`),
-        link: ExternalLink.optional().describe("its ticket or page in the issue tracker, when there is one"),
-      })
-      .strict(),
-    result: BoardItemResult,
-  },
-  updateItem: {
-    name: UPDATE_ITEM,
-    readOnly: false,
-    destructive: false,
-    description:
-      "Change a board item's title, body, repos or link, or move it between ideas and ready, for example after the user " +
-      "agreed on its plan with you. Only the fields given change. Projects, other columns, moving in the tree and removing " +
-      "are the user's, in Trackwall's Plan view.",
-    args: z
-      .object({
-        item: ItemArg,
-        title: visibleText(BoardItemTitle).optional(),
-        body: visibleText(BoardItemBody).optional().describe("the whole new body, Markdown"),
-        repos: BoardItemRepos.optional(),
-        link: ExternalLink.nullable().optional(),
-        column: AgentBoardColumn.optional(),
-      })
-      .strict(),
-    result: BoardItemResult,
-  },
+  ...boardMcpTools,
   reportResult: {
     name: REPORT_RESULT,
     readOnly: false,

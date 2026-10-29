@@ -94,7 +94,7 @@ async function setTheScene(): Promise<void> {
   const main = sessions[0];
   if (main === undefined) throw new Error("no main session");
   const propose = (repo: string, title: string, prompt: string) =>
-    facade.agents.propose(main.id, { repo, title, prompt, model: null, approvals: "ask" });
+    facade.agents.propose(main.id, { repo, title, prompt, model: null, approvals: "ask", item: null });
   const retry = await propose(
     "payments",
     "Retry the payment call",

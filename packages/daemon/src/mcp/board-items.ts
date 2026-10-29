@@ -1,15 +1,8 @@
-import {
-  BOARD_EXCERPT_MAX,
-  type BoardItem,
-  type BoardItemSummary,
-  compareSiblings,
-  type GetItemResult,
-  type Task,
-} from "@trackwall/protocol";
+import { BOARD_EXCERPT_MAX, type BoardItem, type BoardItemSummary, type Task } from "@trackwall/protocol";
 
 /**
- * The board as the MCP tools show it (ADR-133): a list without bodies, with what hangs under each item, and one item
- * with the path down to it. Pure functions over the board and the task list, which come from two modules.
+ * The board as the MCP tools show it (ADR-133): which items a filter takes, and a list without bodies, with what hangs
+ * under each item. Pure functions over the board and the task list, which come from two modules.
  */
 
 export interface ItemFilter {
@@ -38,30 +31,20 @@ function isIdea(item: BoardItem): boolean {
   return item.kind === "item" && item.parent === null;
 }
 
-export function itemSummary(item: BoardItem, items: readonly BoardItem[], tasks: readonly Task[]): BoardItemSummary {
-  const { body, ...fields } = item;
-  return {
+/** Items as `list_items` lists them: without bodies, with how many items and tasks hang under each. */
+export function itemSummaries(listed: readonly BoardItem[], items: readonly BoardItem[], tasks: readonly Task[]): BoardItemSummary[] {
+  const children = countBy(items.filter((it) => it.kind === "item").map((it) => it.parent));
+  const started = countBy(tasks.map((t) => t.item));
+  return listed.map(({ body, ...fields }) => ({
     ...fields,
     excerpt: body.length > BOARD_EXCERPT_MAX ? `${body.slice(0, BOARD_EXCERPT_MAX)}…` : body,
-    children: items.filter((it) => it.parent === item.id).length,
-    tasks: tasks.filter((t) => t.item === item.id).length,
-  };
+    children: children.get(fields.id) ?? 0,
+    tasks: started.get(fields.id) ?? 0,
+  }));
 }
 
-/** Siblings in the order the Plan view shows them. */
-export function inOrder(items: readonly BoardItem[]): BoardItem[] {
-  return [...items].sort(compareSiblings);
-}
-
-/** The items above `item`, from the top down; a cycle in hand-edited files ends the walk. */
-export function itemPath(item: BoardItem, items: readonly BoardItem[]): GetItemResult["path"] {
-  const path: GetItemResult["path"] = [];
-  const seen = new Set([item.id]);
-  for (let at = items.find((it) => it.id === item.parent); at !== undefined && !seen.has(at.id); ) {
-    path.unshift({ id: at.id, kind: at.kind, title: at.title });
-    seen.add(at.id);
-    const parent = at.parent;
-    at = items.find((it) => it.id === parent);
-  }
-  return path;
+function countBy(keys: readonly (string | null)[]): Map<string | null, number> {
+  const counts = new Map<string | null, number>();
+  for (const key of keys) counts.set(key, (counts.get(key) ?? 0) + 1);
+  return counts;
 }

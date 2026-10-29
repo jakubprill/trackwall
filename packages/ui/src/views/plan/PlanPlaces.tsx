@@ -1,9 +1,9 @@
-import { type BoardItem, boardApi } from "@trackwall/protocol";
+import { type BoardItem, boardApi, childrenOf } from "@trackwall/protocol";
 import { FolderKanban, Inbox } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { post } from "@/lib/api";
-import { childrenOf, isArchived, type PlanPlace, projectsOf } from "@/lib/board-tree";
+import { isArchived, type PlanPlace, projectsOf } from "@/lib/board-tree";
 import type { Connection } from "@/lib/connection";
 import { useAction } from "@/lib/use-action";
 import { cn } from "@/lib/utils";

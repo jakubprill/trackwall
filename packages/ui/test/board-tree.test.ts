@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { type BoardItem, TASK_PROMPT_MAX } from "@trackwall/protocol";
-import { childrenOf, ideaFields, indentMove, outdentMove, outline, projectOf, shiftMove, startPrompt } from "../src/lib/board-tree.ts";
+import { type BoardItem, childrenOf, TASK_PROMPT_MAX } from "@trackwall/protocol";
+import { ideaFields, indentMove, outdentMove, outline, projectOf, shiftMove, startPrompt } from "../src/lib/board-tree.ts";
 
 function item(id: string, fields: Partial<BoardItem> = {}): BoardItem {
   return {

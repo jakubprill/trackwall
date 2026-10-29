@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { type JavaNavigationOffer, javaNavigationOffer } from "@/lib/java-navigation";
-import { firstListedRepo, type NewSessionStart, newSessionStart, sessionsInSameFolder } from "@/lib/new-session";
+import { type FromItem, firstListedRepo, formStart, type NewSessionStart, newSessionForm, sessionsInSameFolder } from "@/lib/new-session";
 import { tagsByRepo } from "@/lib/repo-tags";
 import type { SessionSelection } from "@/lib/session-entries";
 import { readStartChoice, type StartChoice, saveStartChoice } from "@/lib/start-choices";
@@ -24,15 +24,6 @@ import { typedModel } from "@/lib/task-model";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 import { StartOptions } from "./StartOptions.tsx";
-
-/** The board item a task is for (ADR-133), with the form's heading; none for the form in Sessions. */
-interface FromItem {
-  item: string | null;
-  repos: readonly string[];
-  prompt: string;
-  heading: string;
-}
-const NO_ITEM: FromItem = { item: null, repos: [], prompt: "", heading: "New task or session for the agent" };
 
 /** The place choice's value for the projects folder; a repo id is never empty. */
 const PROJECTS_FOLDER = "";
@@ -50,34 +41,35 @@ const PROJECTS_FOLDER = "";
 export function NewSession({
   conn,
   sessions,
-  fromItem = NO_ITEM,
+  fromItem,
   onStarted,
   onCancel,
 }: {
   conn: Connection;
   /** The listed sessions, for the warning about another agent in the same working copy. */
   sessions: readonly Session[];
-  /** The board item the task is for: its first repo, the prompt to start from, and its id for `Task.item`. */
+  /** The board item the task is for; then the form starts only a task, in a repo. */
   fromItem?: FromItem;
   onStarted: (selection: SessionSelection) => void;
   onCancel?: () => void;
 }) {
+  const form = newSessionForm(fromItem);
   const load = useCallback(() => post(conn, workspaceApi.list, {}), [conn]);
   const repos = useRemote(load);
   const [place, setPlace] = useState<string>();
   const [edited, setEdited] = useState<ReadonlyMap<string, StartChoice>>(new Map());
-  const [prompt, setPrompt] = useState(fromItem.prompt);
+  const [prompt, setPrompt] = useState(form.prompt);
   const [approvals, setApprovals] = useState<TaskApprovals>("ask");
-  const chosen = place ?? firstListedRepo(fromItem.repos, repos.data?.repos) ?? repos.data?.repos[0]?.id ?? PROJECTS_FOLDER;
+  const chosen = place ?? firstListedRepo(form.repos, repos.data?.repos) ?? repos.data?.repos[0]?.id ?? PROJECTS_FOLDER;
   const repo = chosen === PROJECTS_FOLDER ? null : chosen;
   const remembered = useMemo(() => readStartChoice(() => window.localStorage, chosen), [chosen]);
   const choice = edited.get(chosen) ?? remembered;
   const choose = (next: Partial<StartChoice>) => setEdited(new Map(edited).set(chosen, { ...choice, ...next }));
   const model = typedModel(choice.model);
-  const start = newSessionStart(repo, choice.worktree, prompt);
+  const start = formStart(form, repo, choice.worktree, prompt);
   const java = useJavaNavigationOffer(conn, repo);
   const javaNavigation = java.kind === "ready" && choice.javaNavigation;
-  const { item } = fromItem;
+  const { item } = form;
   const createTask = useAction(
     (repo: string, prompt: string) =>
       post(conn, agentsApi.createTask, { repo, prompt, approvals, model: model ?? null, javaNavigation, item }),
@@ -98,23 +90,11 @@ export function NewSession({
 
   return (
     <div className="flex max-w-3xl flex-col gap-4 p-6">
-      <h3 className="hud-label">{fromItem.heading}</h3>
+      <h3 className="hud-label">{form.heading}</h3>
       {repos.error && <ErrorWithRetry message={repos.error} onRetry={repos.reload} />}
       {repos.data && (
         <>
-          <select
-            aria-label="Where the agent works"
-            value={chosen}
-            onChange={(e) => setPlace(e.target.value)}
-            className="border-input bg-card h-9 w-fit min-w-48 rounded-md border px-3 text-sm"
-          >
-            {repos.data.repos.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.id}
-              </option>
-            ))}
-            <option value={PROJECTS_FOLDER}>No repo: the projects folder</option>
-          </select>
+          <PlaceSelect repos={repos.data.repos} value={chosen} projectsFolder={form.sessions} onChange={setPlace} />
           <Textarea
             aria-label="Prompt for the agent"
             placeholder={
@@ -128,7 +108,9 @@ export function NewSession({
             rows={5}
           />
           <StartOptions
-            worktree={repo === null ? undefined : { value: choice.worktree, onChange: (worktree) => choose({ worktree }) }}
+            worktree={
+              repo === null || !form.sessions ? undefined : { value: choice.worktree, onChange: (worktree) => choose({ worktree }) }
+            }
             {...(start.kind === "session"
               ? {}
               : {
@@ -156,6 +138,35 @@ export function NewSession({
       )}
       {error && <p className="text-destructive text-sm whitespace-pre-wrap">{error}</p>}
     </div>
+  );
+}
+
+/** Where the agent works: a repo, or the projects folder for a session. */
+function PlaceSelect({
+  repos,
+  value,
+  projectsFolder,
+  onChange,
+}: {
+  repos: readonly { id: string }[];
+  value: string;
+  projectsFolder: boolean;
+  onChange: (place: string) => void;
+}) {
+  return (
+    <select
+      aria-label="Where the agent works"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="border-input bg-card h-9 w-fit min-w-48 rounded-md border px-3 text-sm"
+    >
+      {repos.map((r) => (
+        <option key={r.id} value={r.id}>
+          {r.id}
+        </option>
+      ))}
+      {projectsFolder && <option value={PROJECTS_FOLDER}>No repo: the projects folder</option>}
+    </select>
   );
 }
 
@@ -214,7 +225,7 @@ function StartButton({
       <Play /> Start session
     </Button>
   ) : (
-    <Button onClick={onClick} disabled={disabled || invalidModel || start.kind === "needs-prompt"}>
+    <Button onClick={onClick} disabled={disabled || invalidModel || start.kind === "needs-prompt" || start.kind === "needs-repo"}>
       <GitBranch /> Create task
     </Button>
   );

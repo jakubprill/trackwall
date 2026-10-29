@@ -207,6 +207,8 @@ export interface AgentsDeps {
   sessionMcpServer: (sessionToken: string) => HttpEndpoint;
   /** Opens a directory in VS Code (a task's worktree). */
   openEditor: (dir: string) => void;
+  /** Whether a board item is on the board (ADR-133): a task or a proposal names only an existing one. */
+  boardHas: (item: string) => Promise<boolean>;
   log: (msg: string) => void;
 }
 
@@ -393,11 +395,12 @@ export class Agents {
   /** A task proposal from session `caller` (`null`: an agent outside Trackwall) in a repo from the projects folder (ADR-39). */
   async propose(
     caller: string | null,
-    proposal: Pick<TaskProposal, "repo" | "title" | "prompt" | "model" | "approvals"> & { item?: string | null },
+    proposal: Pick<TaskProposal, "repo" | "title" | "prompt" | "model" | "approvals" | "item">,
   ): Promise<TaskProposal> {
     await this.#deps.repos.repoPath(proposal.repo);
+    await this.#assertOnBoard(proposal.item);
     const proposedBy = proposedByOf(caller === null ? null : this.session(caller));
-    return this.#proposals.add({ kind: "task", ...proposal, item: proposal.item ?? null, proposedBy });
+    return this.#proposals.add({ kind: "task", ...proposal, proposedBy });
   }
 
   /** A proposal to remove a repo from the projects folder (ADR-83), from session `caller` like a task proposal. */
@@ -581,7 +584,7 @@ export class Agents {
    * Copilot CLI's default when it is `null` (ADR-98), with `javaNavigation` gets the Java language server (ADR-99), and
    * works on board item `item` (ADR-133), which the caller has checked.
    */
-  createTask(
+  async createTask(
     repo: string,
     prompt: string,
     approvals: TaskApprovals = "ask",
@@ -589,7 +592,22 @@ export class Agents {
     javaNavigation = false,
     item: string | null = null,
   ): Promise<Task> {
+    await this.#assertOnBoard(item);
     return this.#tasks.create(repo, prompt, { id: randomUUID(), title: null, proposedBy: null, model, approvals, javaNavigation, item });
+  }
+
+  /**
+   * Where session `caller`'s agent writes down what it finds (ADR-133): the task it works on, and that task's board item
+   * while the item is still on the board; both `null` for a session without a task.
+   */
+  async findingsPlace(caller: string | null): Promise<{ task: string | null; item: string | null }> {
+    const task = caller === null ? null : this.session(caller).task;
+    const item = task === null ? null : this.task(task).item;
+    return { task, item: item !== null && (await this.#deps.boardHas(item)) ? item : null };
+  }
+
+  async #assertOnBoard(item: string | null): Promise<void> {
+    if (item !== null && !(await this.#deps.boardHas(item))) throw new DomainError("not_found", `no board item ${item}`);
   }
 
   /** What the New session form offers on this computer: whether tasks can get Java navigation now, or why not (ADR-99). */

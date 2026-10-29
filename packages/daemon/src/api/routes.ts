@@ -150,11 +150,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(agentsApi.say, (f, b) => f.agents.say(b.session, b.text)),
   route(agentsApi.interrupt, (f, b) => f.agents.interrupt(b.session)),
   route(agentsApi.dismiss, (f, b) => f.agents.dismiss(b.session)),
-  route(agentsApi.createTask, async (f, b) => {
-    // The item must exist, as a repo must; the board and the tasks are two modules, so the check is made here.
-    if (b.item !== null) await f.board.item(b.item);
-    return f.agents.createTask(b.repo, b.prompt, b.approvals, b.model, b.javaNavigation, b.item);
-  }),
+  route(agentsApi.createTask, (f, b) => f.agents.createTask(b.repo, b.prompt, b.approvals, b.model, b.javaNavigation, b.item)),
   route(agentsApi.startOptions, (f) => f.agents.startOptions()),
   route(agentsApi.resumeTask, (f, b) => f.agents.resumeTask(b.task)),
   route(agentsApi.taskChanges, (f, b) => f.agents.taskChanges(b.task)),

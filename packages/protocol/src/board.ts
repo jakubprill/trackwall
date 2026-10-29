@@ -60,16 +60,17 @@ export type BoardItemAuthor = z.infer<typeof BoardItemAuthor>;
 export const BoardItem = z.object({
   id: BoardItemId,
   kind: BoardItemKind,
-  title: z.string(),
-  body: z.string(),
+  // The same limits as when it is written, since a file in the projects folder can also be written by hand (§8).
+  title: BoardItemTitle,
+  body: BoardItemBody,
   /** The item above it; `null` for a project and for an idea in the inbox. */
   parent: BoardItemId.nullable(),
   column: BoardColumn,
   /** The place among its siblings, smallest first; ties by `createdAt`. */
   order: z.number(),
-  repos: z.array(RepoId),
+  repos: BoardItemRepos,
   /** The item's ticket or page in the issue tracker; Trackwall only links to it (ADR-133). */
-  link: z.string().nullable(),
+  link: ExternalLink.nullable(),
   createdBy: BoardItemAuthor,
   /** ISO 8601. */
   createdAt: z.string(),
@@ -81,6 +82,24 @@ export type BoardItem = z.infer<typeof BoardItem>;
 /** The order of siblings, here and in the Plan view: by `order`, ties by when they were made. */
 export function compareSiblings(a: BoardItem, b: BoardItem): number {
   return a.order - b.order || a.createdAt.localeCompare(b.createdAt);
+}
+
+/** Items right under `parent` (`null`: the ideas in the inbox) in their order; a project is never anyone's child. */
+export function childrenOf(items: readonly BoardItem[], parent: string | null): BoardItem[] {
+  return items.filter((it) => it.kind === "item" && it.parent === parent).sort(compareSiblings);
+}
+
+/** The items above `item`, from the top (its project) down to its parent; a cycle in hand-edited files ends the walk. */
+export function ancestorsOf(items: readonly BoardItem[], item: BoardItem): BoardItem[] {
+  const above: BoardItem[] = [];
+  const seen = new Set([item.id]);
+  for (let at = items.find((it) => it.id === item.parent); at !== undefined && !seen.has(at.id); ) {
+    above.unshift(at);
+    seen.add(at.id);
+    const parent = at.parent;
+    at = items.find((it) => it.id === parent);
+  }
+  return above;
 }
 
 /** A file of the board folder the daemon could not read; it is left as it is, and the board goes on without it. */
@@ -146,3 +165,6 @@ export const boardApi = {
   /** Deletes an item's file; refused while it has children, so a subtree is never lost by one click. */
   remove: endpoint("remove", ItemRequest, Done),
 };
+
+/** What `board/update` changes on an item: only the fields given. */
+export type BoardItemChange = Omit<z.infer<typeof boardApi.update.request>, "item">;

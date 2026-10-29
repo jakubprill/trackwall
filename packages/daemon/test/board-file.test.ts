@@ -43,6 +43,18 @@ describe("a board item's file", () => {
     });
   });
 
+  test("a file written by hand holds no more than the board itself accepts: one-line title, an http(s) link, a body within its limit", () => {
+    expect(readItemFile(ITEM.id, writeItemFile({ ...ITEM, title: "two\nlines" }))).toMatchObject({
+      problem: expect.stringContaining("title"),
+    });
+    expect(readItemFile(ITEM.id, writeItemFile({ ...ITEM, link: "javascript:alert(1)" }))).toMatchObject({
+      problem: expect.stringContaining("link"),
+    });
+    expect(readItemFile(ITEM.id, writeItemFile({ ...ITEM, body: "x".repeat(20_001) }))).toMatchObject({
+      problem: expect.stringContaining("20000"),
+    });
+  });
+
   test("only <uuid>.md files in the folder are items", () => {
     expect(itemIdOfFile(`${ITEM.id}.md`)).toBe(ITEM.id);
     expect(itemIdOfFile(`${ITEM.id}.md.4242.tmp`)).toBeUndefined();

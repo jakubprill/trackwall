@@ -2,6 +2,9 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import {
   type AgentRepo,
   type AgentSession,
+  ancestorsOf,
+  childrenOf,
+  compareSiblings,
   isSupervisor,
   type McpTool,
   type MiseTarget,
@@ -15,7 +18,7 @@ import {
 import { z } from "zod";
 import type { Facade } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
-import { inOrder, itemPath, itemSummary, matchesItem } from "./board-items.ts";
+import { itemSummaries, matchesItem } from "./board-items.ts";
 
 /**
  * The daemon's MCP tools (§5.3, ADR-24): each is a thin mapping onto the facade, so the agent sees the same state as the UI
@@ -231,8 +234,6 @@ const runs: ToolRuns = {
   getDayReport: async (facade) => ({ report: facade.dayStart.report() }),
   getTaskChanges: (facade, { task, paths, maxPatchBytes }) => facade.agents.agentTaskChanges(task, maxPatchBytes, paths),
   proposeTask: async (facade, { model, approvals, item, ...proposal }, { caller }) => {
-    // The item must exist, as the repo must (ADR-133).
-    if (item !== undefined) await facade.board.item(item);
     // Without a model the task runs on Copilot CLI's default (ADR-98); without a mode its agent asks (ADR-105).
     return {
       proposal: await facade.agents.propose(caller, {
@@ -249,27 +250,22 @@ const runs: ToolRuns = {
   listItems: async (facade, filter) => {
     const { items } = await facade.board.board();
     const { tasks } = facade.agents.sessions();
-    return { items: inOrder(items.filter((item) => matchesItem(item, filter))).map((item) => itemSummary(item, items, tasks)) };
+    return { items: itemSummaries(items.filter((item) => matchesItem(item, filter)).sort(compareSiblings), items, tasks) };
   },
   getItem: async (facade, { item: id }) => {
-    const { items } = await facade.board.board();
-    const item = items.find((it) => it.id === id);
-    if (!item) throw new DomainError("not_found", `no board item ${id}`);
+    const [item, { items }] = await Promise.all([facade.board.item(id), facade.board.board()]);
     const { tasks } = facade.agents.sessions();
     return {
       item,
-      path: itemPath(item, items),
-      children: inOrder(items.filter((it) => it.parent === id)).map((child) => itemSummary(child, items, tasks)),
+      path: ancestorsOf(items, item).map(({ id, kind, title }) => ({ id, kind, title })),
+      children: itemSummaries(childrenOf(items, id), items, tasks),
       tasks: tasks.filter((task) => task.item === id),
     };
   },
   createItem: async (facade, { title, body, parent, repos, link }, { caller }) => {
-    const task = caller === null ? null : facade.agents.session(caller).task;
-    // A task session's finding goes under its own task's item, while that item is still on the board (ADR-133).
-    const own = task === null ? null : facade.agents.task(task).item;
-    const ownParent = own !== null && (await facade.board.board()).items.some((it) => it.id === own) ? own : null;
+    const { task, item: own } = await facade.agents.findingsPlace(caller);
     const item = await facade.board.create(
-      { kind: "item", title, body, parent: parent ?? ownParent, repos: repos ?? [], link: link ?? null, column: "ideas" },
+      { kind: "item", title, body, parent: parent ?? own, repos: repos ?? [], link: link ?? null, column: "ideas" },
       { kind: "agent", task },
     );
     return { item };

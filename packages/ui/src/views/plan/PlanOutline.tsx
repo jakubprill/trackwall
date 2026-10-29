@@ -1,4 +1,4 @@
-import { type BoardItem, boardApi, countLabel, type Task } from "@trackwall/protocol";
+import { type BoardItem, boardApi, childrenOf, countLabel, type Task } from "@trackwall/protocol";
 import { Bot, ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { post } from "@/lib/api";
 import {
   COLUMN_LABELS,
-  childrenOf,
   type ItemMove,
   ideaFields,
   isArchived,

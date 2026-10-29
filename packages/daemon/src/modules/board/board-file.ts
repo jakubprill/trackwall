@@ -47,5 +47,7 @@ export function readItemFile(id: string, text: string): { item: BoardItem } | { 
   const parsed = Frontmatter.safeParse(fields);
   if (!parsed.success) return { problem: z.prettifyError(parsed.error) };
   if (parsed.data.id !== id) return { problem: `the frontmatter names item ${parsed.data.id}, not the file's ${id}` };
-  return { item: { ...parsed.data, body: normalized.slice(closing + FENCE.length + 2) } };
+  const body = BoardItem.shape.body.safeParse(normalized.slice(closing + FENCE.length + 2));
+  if (!body.success) return { problem: z.prettifyError(body.error) };
+  return { item: { ...parsed.data, body: body.data } };
 }

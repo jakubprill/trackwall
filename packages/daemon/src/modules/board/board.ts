@@ -3,15 +3,18 @@ import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type AgentBoardColumn,
+  ancestorsOf,
   type BoardColumn,
   type BoardItem,
   type BoardItemAuthor,
+  type BoardItemChange,
   type BoardItemKind,
   type BoardProblem,
-  compareSiblings,
+  childrenOf,
 } from "@trackwall/protocol";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
 import { DomainError, messageOf } from "../../infra/errors.ts";
+import { mapLimit } from "../../infra/map-limit.ts";
 import { readRegularFile } from "../../infra/regular-file.ts";
 import { ensureTrackwallDir } from "../../infra/trackwall-dir.ts";
 import { itemFileName, itemIdOfFile, readItemFile, writeItemFile } from "./board-file.ts";
@@ -28,6 +31,13 @@ import { itemFileName, itemIdOfFile, readItemFile, writeItemFile } from "./board
 const MAX_ITEM_FILE_BYTES = 128 * 1024;
 /** Files read at most; a folder with more is a sign of something other than the user's board, and the rest is a problem. */
 const MAX_ITEM_FILES = 5000;
+/**
+ * Items the board takes at most, well below the files it reads, so an agent writing ideas in a loop is refused before
+ * the board stops reading the user's own items (§8).
+ */
+export const MAX_BOARD_ITEMS = 2000;
+/** Files read at the same time: enough to hide the disk's latency, few enough to leave file handles for the rest. */
+const READ_AT_ONCE = 16;
 
 export interface BoardDeps {
   /** The projects folder; refused (`bad_request`, `projects_dir_unavailable`) when it is not set or not there. */
@@ -43,8 +53,6 @@ export interface NewBoardItem {
   link: string | null;
   column: BoardColumn;
 }
-
-export type BoardItemChange = Partial<Pick<BoardItem, "title" | "body" | "repos" | "link" | "column">>;
 
 export class Board {
   readonly #deps: BoardDeps;
@@ -62,35 +70,23 @@ export class Board {
   }
 
   async board(): Promise<{ items: BoardItem[]; problems: BoardProblem[] }> {
-    const dir = await this.#dir();
-    const names = (await readdir(dir)).sort();
-    const items: BoardItem[] = [];
-    const problems: BoardProblem[] = [];
-    let read = 0;
-    for (const name of names) {
-      const id = itemIdOfFile(name);
-      if (id === undefined) continue;
-      if (read++ >= MAX_ITEM_FILES) {
-        problems.push({ file: name, message: `the board reads at most ${MAX_ITEM_FILES} files` });
-        break;
-      }
-      const file = await readItem(join(dir, name), id);
-      if ("item" in file) items.push(file.item);
-      else problems.push({ file: name, message: file.problem });
-    }
-    return { items, problems };
+    return readBoard(await this.#dir());
   }
 
   async item(id: string): Promise<BoardItem> {
-    const item = (await this.board()).items.find((it) => it.id === id);
-    if (!item) throw new DomainError("not_found", `no board item ${id}`);
-    return item;
+    return found((await this.board()).items, id);
+  }
+
+  async has(id: string): Promise<boolean> {
+    return (await this.board()).items.some((it) => it.id === id);
   }
 
   create(input: NewBoardItem, author: BoardItemAuthor): Promise<BoardItem> {
     return this.#write(async (items, dir) => {
       if (input.kind === "project" && input.parent !== null) throw new DomainError("bad_request", "a project has no parent");
       if (input.parent !== null) found(items, input.parent);
+      if (items.length >= MAX_BOARD_ITEMS)
+        throw new DomainError("bad_request", `the board holds ${MAX_BOARD_ITEMS} items, its limit; remove some in Plan first`);
       const now = new Date().toISOString();
       const item: BoardItem = {
         id: randomUUID(),
@@ -130,11 +126,12 @@ export class Board {
     return this.#write(async (items, dir) => {
       const current = found(items, id);
       if (current.kind === "project") throw new DomainError("bad_request", "a project does not move");
-      if (parent !== null && (parent === id || isBelow(items, parent, id)))
+      const target = parent === null ? null : found(items, parent);
+      if (target !== null && (target.id === id || ancestorsOf(items, target).some((it) => it.id === id)))
         throw new DomainError("bad_request", "an item cannot go under itself or under an item below it");
-      if (parent !== null) found(items, parent);
-      const siblings = items.filter((it) => it.kind === "item" && it.parent === parent && it.id !== id).sort(compareSiblings);
-      const item: BoardItem = { ...current, parent, order: orderBefore(siblings, before), updatedAt: new Date().toISOString() };
+      const siblings = childrenOf(items, parent).filter((it) => it.id !== id);
+      const order = placeBefore(dir, siblings, before);
+      const item: BoardItem = { ...current, parent, order, updatedAt: new Date().toISOString() };
       save(dir, item);
       return item;
     });
@@ -143,7 +140,7 @@ export class Board {
   remove(id: string): Promise<void> {
     return this.#write(async (items, dir) => {
       found(items, id);
-      const children = items.filter((it) => it.parent === id).length;
+      const children = childrenOf(items, id).length;
       if (children > 0) throw new DomainError("bad_request", `item ${id} has ${children} item(s) under it; move or remove them first`);
       await rm(join(dir, itemFileName(id)), { force: true });
     });
@@ -158,7 +155,7 @@ export class Board {
   #write<T>(change: (items: BoardItem[], dir: string) => Promise<T>): Promise<T> {
     const run = this.#writing.then(async () => {
       const dir = await this.#dir();
-      const result = await change((await this.board()).items, dir);
+      const result = await change((await readBoard(dir)).items, dir);
       this.#revision++;
       return result;
     });
@@ -187,29 +184,55 @@ function found(items: readonly BoardItem[], id: string): BoardItem {
   return item;
 }
 
-/** Whether `id` lies somewhere below `ancestor`; a cycle in hand-edited files ends the walk instead of looping. */
-function isBelow(items: readonly BoardItem[], id: string, ancestor: string): boolean {
-  const seen = new Set<string>();
-  for (let at = items.find((it) => it.id === id)?.parent ?? null; at !== null && !seen.has(at); ) {
-    if (at === ancestor) return true;
-    seen.add(at);
-    at = items.find((it) => it.id === at)?.parent ?? null;
-  }
-  return false;
-}
-
 function lastOrder(items: readonly BoardItem[], kind: BoardItemKind, parent: string | null): number {
-  const siblings = items.filter((it) => it.kind === kind && it.parent === parent);
+  const siblings = kind === "item" ? childrenOf(items, parent) : items.filter((it) => it.kind === "project");
   return siblings.reduce((max, it) => Math.max(max, it.order), 0);
 }
 
-/** An order that puts an item just before `before` among `siblings`, or after the last when `before` is `null`. */
-function orderBefore(siblings: readonly BoardItem[], before: string | null): number {
+/**
+ * The order that puts an item just before `before` among `siblings` (in their order), or after the last when `before` is
+ * `null`. Halving a gap runs out after some fifty moves into it, so then the siblings are numbered 1, 2, 3… again first.
+ */
+function placeBefore(dir: string, siblings: readonly BoardItem[], before: string | null): number {
+  const order = orderBefore(siblings, before);
+  if (order !== undefined) return order;
+  const renumbered = siblings.map((it, at) => ({ ...it, order: at + 1 }));
+  for (const it of renumbered) save(dir, it);
+  const again = orderBefore(renumbered, before);
+  if (again === undefined) throw new DomainError("internal", "renumbered siblings have no gap");
+  return again;
+}
+
+/** `undefined` when the two neighbours are too close for a number between them. */
+function orderBefore(siblings: readonly BoardItem[], before: string | null): number | undefined {
   if (before === null) return (siblings.at(-1)?.order ?? 0) + 1;
   const at = siblings.findIndex((it) => it.id === before);
   if (at === -1) throw new DomainError("bad_request", `item ${before} is not a sibling there`);
   const next = siblings[at];
   const previous = siblings[at - 1];
   if (next === undefined) throw new DomainError("internal", "a found sibling is missing");
-  return previous === undefined ? next.order - 1 : (previous.order + next.order) / 2;
+  if (previous === undefined) return next.order - 1;
+  const between = (previous.order + next.order) / 2;
+  return previous.order < between && between < next.order ? between : undefined;
+}
+
+/** Every item file of the folder, read a few at a time; a file that holds no item is a problem, the rest still loads. */
+async function readBoard(dir: string): Promise<{ items: BoardItem[]; problems: BoardProblem[] }> {
+  const files = (await readdir(dir)).sort().flatMap((name) => {
+    const id = itemIdOfFile(name);
+    return id === undefined ? [] : [{ name, id }];
+  });
+  const read = await mapLimit(files.slice(0, MAX_ITEM_FILES), READ_AT_ONCE, async ({ name, id }) => ({
+    name,
+    file: await readItem(join(dir, name), id),
+  }));
+  const items: BoardItem[] = [];
+  const problems: BoardProblem[] = [];
+  for (const { name, file } of read) {
+    if ("item" in file) items.push(file.item);
+    else problems.push({ file: name, message: file.problem });
+  }
+  if (files.length > MAX_ITEM_FILES)
+    problems.push({ file: files[MAX_ITEM_FILES]?.name ?? "", message: `the board reads at most ${MAX_ITEM_FILES} files` });
+  return { items, problems };
 }

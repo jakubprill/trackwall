@@ -1,4 +1,12 @@
-import { BOARD_ITEM_TITLE_MAX, type BoardColumn, type BoardItem, compareSiblings, TASK_PROMPT_MAX } from "@trackwall/protocol";
+import {
+  ancestorsOf,
+  BOARD_ITEM_TITLE_MAX,
+  type BoardColumn,
+  type BoardItem,
+  childrenOf,
+  compareSiblings,
+  TASK_PROMPT_MAX,
+} from "@trackwall/protocol";
 
 /**
  * The board as the Plan view shows it (ADR-133): the inbox of ideas, the business projects, and under each its tree of
@@ -12,11 +20,6 @@ export type PlanPlace = { kind: "inbox" } | { kind: "project"; id: string };
 export interface ItemMove {
   parent: string | null;
   before: string | null;
-}
-
-/** Items under `parent` (`null`: the ideas in the inbox) in their order; projects are never anyone's children. */
-export function childrenOf(items: readonly BoardItem[], parent: string | null): BoardItem[] {
-  return items.filter((it) => it.kind === "item" && it.parent === parent).sort(compareSiblings);
 }
 
 export function projectsOf(items: readonly BoardItem[]): BoardItem[] {
@@ -55,14 +58,7 @@ export function outline(items: readonly BoardItem[], project: string, folded: Re
 
 /** The project an item lies in; `undefined` for an idea in the inbox and its children. */
 export function projectOf(items: readonly BoardItem[], item: BoardItem): BoardItem | undefined {
-  const seen = new Set<string>();
-  for (let at: BoardItem | undefined = item; at !== undefined && !seen.has(at.id); ) {
-    if (at.kind === "project") return at;
-    seen.add(at.id);
-    const parent: string | null = at.parent;
-    at = items.find((it) => it.id === parent);
-  }
-  return undefined;
+  return [...ancestorsOf(items, item), item].find((it) => it.kind === "project");
 }
 
 /** Tab: under the sibling just above, as its last child; `undefined` for the first sibling, which has none above. */
@@ -101,14 +97,7 @@ export function shiftMove(items: readonly BoardItem[], item: BoardItem, directio
  * holds. The user edits it before the start.
  */
 export function startPrompt(items: readonly BoardItem[], item: BoardItem): string {
-  const above: string[] = [];
-  const seen = new Set<string>([item.id]);
-  for (let at = items.find((it) => it.id === item.parent); at !== undefined && !seen.has(at.id); ) {
-    above.unshift(at.title);
-    seen.add(at.id);
-    const parent = at.parent;
-    at = items.find((it) => it.id === parent);
-  }
+  const above = ancestorsOf(items, item).map((it) => it.title);
   const context = above.length > 0 ? `Part of: ${above.join(" › ")}\n\n` : "";
   const text = `${context}${item.title}${item.body.trim() === "" ? "" : `\n\n${item.body.trim()}`}`;
   return text.length > TASK_PROMPT_MAX ? text.slice(0, TASK_PROMPT_MAX) : text;

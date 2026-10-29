@@ -88,7 +88,6 @@ export function PlanView({
               item: startingItem.id,
               repos: startingItem.repos,
               prompt: startPrompt(items, startingItem),
-              heading: "New task for this item",
             }}
             onStarted={(selection) => {
               setStarting(undefined);
