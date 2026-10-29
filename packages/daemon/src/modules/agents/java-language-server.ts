@@ -56,7 +56,7 @@ export function javaNavigationProblem(settings: JavaNavigationSettings, platform
  * root is imported with Gradle by default, and Gradle's import is the one that hung and failed on a missing toolchain,
  * while Maven needs only the JDK jdtls runs on.
  */
-export function prefersMaven(worktree: string): boolean {
+export function mavenOnlyImport(worktree: string): boolean {
   return isFile(join(worktree, "pom.xml")) && GRADLE_BUILD_FILES.some((name) => isFile(join(worktree, name)));
 }
 
@@ -69,7 +69,7 @@ const MAVEN_ONLY = { settings: { java: { import: { gradle: { enabled: false } } 
 export function javaLanguageServer(
   settings: JavaNavigationSettings,
   dataDir: string,
-  o: { mavenOnly: boolean },
+  mavenOnly: boolean,
   platform = process.platform,
   arch = process.arch,
 ): LspServer {
@@ -101,7 +101,7 @@ export function javaLanguageServer(
       join(dataDir, "workspace"),
     ],
     fileExtensions: { ".java": "java" },
-    ...(o.mavenOnly ? { initializationOptions: MAVEN_ONLY } : {}),
+    ...(mavenOnly ? { initializationOptions: MAVEN_ONLY } : {}),
   };
 }
 

@@ -1,4 +1,5 @@
 import {
+  JAVA_NAVIGATION_STALL_MS,
   JAVA_TAG,
   type JavaNavigationInstall,
   type JavaNavigationState,
@@ -58,8 +59,7 @@ export function javaNavigationMark(status: JavaNavigationStatus): { label: strin
       return {
         label: "Java import stalled",
         tone: "warning",
-        title:
-          "jdtls has been importing for over 5 minutes. Run /lsp logs in the session to see why, or resume the task to start it again.",
+        title: `jdtls has been importing for over ${JAVA_NAVIGATION_STALL_MS / 60_000} minutes. Run /lsp logs in the session to see why, or resume the task to start it again.`,
       };
     case "ready":
       return { label: "Java ready", tone: "ok", title: "jdtls has imported the project; the agent's lsp tool answers." };

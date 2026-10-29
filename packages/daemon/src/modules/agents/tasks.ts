@@ -28,7 +28,7 @@ import {
   type JavaNavigationReadiness,
   javaLanguageServer,
   javaNavigationReadiness,
-  prefersMaven,
+  mavenOnlyImport,
 } from "./java-language-server.ts";
 import { jdtlsStatus, readJdtlsLog } from "./jdtls-log.ts";
 import { TASK_BRANCH_PREFIX, taskSlug, taskWorktree } from "./task-branch.ts";
@@ -498,14 +498,16 @@ export class AgentTasks {
       return {};
     }
     const data = await this.#languageServerData(task);
-    return { [JAVA_LSP_SERVER]: javaLanguageServer(settings, data, { mavenOnly: prefersMaven(task.worktree) }) };
+    return { [JAVA_LSP_SERVER]: javaLanguageServer(settings, data, mavenOnlyImport(task.worktree)) };
   }
 
   /** How the task's jdtls is doing (ADR-124), from its log; `null` for a task without Java navigation. */
   async javaNavigationStatus(id: string): Promise<JavaNavigationStatus | null> {
     const task = this.#get(id);
     if (!task.javaNavigation) return null;
-    return jdtlsStatus(await readJdtlsLog(await this.#languageServerData(task)), new Date());
+    const running = this.#deps.sessions.of(task.id).find((s) => s.run.kind !== "exited");
+    const startedAt = running === undefined ? null : new Date(running.startedAt);
+    return jdtlsStatus(await readJdtlsLog(await this.#languageServerData(task)), new Date(), startedAt);
   }
 
   /** The task's jdtls data folder in the projects folder. */

@@ -28,6 +28,13 @@ function agentsWithJavaNavigation(dir: string, projects: string | null, settings
   return makeAgents({ shop: dir }, undefined, projects, undefined, undefined, undefined, undefined, undefined, settings);
 }
 
+/** A time as Eclipse writes it in its log: the computer's local time, to the millisecond. */
+function eclipseLogTime(t: Date): string {
+  const two = (n: number) => String(n).padStart(2, "0");
+  const date = `${t.getFullYear()}-${two(t.getMonth() + 1)}-${two(t.getDate())}`;
+  return `${date} ${two(t.getHours())}:${two(t.getMinutes())}:${two(t.getSeconds())}.${String(t.getMilliseconds()).padStart(3, "0")}`;
+}
+
 function sessionOf(agents: Agents, task: string): string {
   const [session, ...more] = agents.sessions().sessions.filter((s) => s.task === task);
   if (!session || more.length > 0) throw new Error(`task ${task} does not have exactly one session`);
@@ -170,7 +177,7 @@ describe.skipIf(process.versions.bun === undefined)("Java navigation for tasks (
     writeFileSync(
       join(metadata, ".log"),
       [
-        "!SESSION 2026-10-29 10:00:00.000 -----------------------------------------------",
+        `!SESSION ${eclipseLogTime(new Date())} -----------------------------------------------`,
         "!ENTRY org.eclipse.buildship.core 4 0 2026-10-29 10:00:40.000",
         "!MESSAGE Synchronize project shop failed due to an error connecting to the Gradle build.",
       ].join("\n"),

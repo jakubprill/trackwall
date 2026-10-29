@@ -499,6 +499,9 @@ export type JavaNavigationState = z.infer<typeof JavaNavigationState>;
  * 8601), `stalled` when importing has gone on past the limit, `ready` once the workspace is initialized without an
  * error, `failed` with the first error jdtls logged (a Gradle or Maven import that failed, a missing JDK).
  */
+/** How long jdtls may import before a task's Java navigation counts as stalled: cold imports took 51 to 82 s (ADR-99). */
+export const JAVA_NAVIGATION_STALL_MS = 5 * 60 * 1000;
+
 export const JavaNavigationStatus = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("starting") }),
   z.object({ kind: z.literal("importing"), since: z.string() }),
