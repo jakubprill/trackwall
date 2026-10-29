@@ -9,7 +9,7 @@ The doctor in Settings checks what Trackwall needs on your computer and says wha
 
 ## What you get
 
-- One list of what Trackwall relies on: your projects folder, your workspace settings file, Git, Copilot CLI, mise, and gh or glab for your repo hosts.
+- One list of what Trackwall relies on: your projects folder, your workspace settings file, Git, Copilot CLI, mise, Java navigation once you set it up, and gh or glab for your repo hosts.
 - For each problem, the step that fixes it, such as the folder to add to Copilot CLI's trusted folders or the login command.
 - A warning when your Copilot CLI is older than the version Trackwall is tested with.
 - A fresh check whenever you open "Settings > Diagnostics" or click "Check again".
@@ -28,6 +28,7 @@ The checks are:
 | Copilot CLI | Trackwall finds it the way it starts sessions, and it is not older than the version Trackwall is tested with |
 | Copilot CLI trusted folder | `trustedFolders` in Copilot CLI's `config.json` covers your projects folder, so Copilot CLI does not ask before working in each repo and task |
 | mise | `mise --version` answers; repo tasks, services and task verification need it |
+| Java navigation | tasks can start the Java language server with the paths in your settings; shown only once you set up [Java navigation](/features/java-navigation) |
 | GitHub CLI (gh), GitLab CLI (glab) | it is signed in to every repo host of that kind in "Repo hosts"; shown only when you have such a host |
 
 The doctor only looks. It never changes a setting, installs anything or signs you in, and its results are not saved or sent anywhere.

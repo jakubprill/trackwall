@@ -9,6 +9,7 @@ import {
   type Endpoint,
   errorJournalApi,
   graphApi,
+  javaNavigationApi,
   localConfigApi,
   logsApi,
   mergeRequestsApi,
@@ -79,6 +80,8 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(cardsApi.warmup, (f) => f.cards.warmupProgress()),
   route(graphApi.graph, (f) => f.graph.graph()),
   route(doctorApi.run, (f) => f.doctor.run()),
+  route(javaNavigationApi.state, (f) => f.javaNavigation.state()),
+  route(javaNavigationApi.startInstall, (f) => f.javaNavigation.startInstall()),
   route(configFilesApi.list, (f) => f.configFiles.list()),
   route(configFilesApi.openInEditor, async (f, b) => {
     await f.configFiles.openInEditor(b.id);

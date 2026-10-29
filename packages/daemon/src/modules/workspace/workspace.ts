@@ -457,6 +457,11 @@ export class Workspace {
     return this.deps.file.javaNavigation();
   }
 
+  /** Written by the Java navigation install (ADR-123) with the paths it installed. */
+  setJavaNavigation(settings: JavaNavigationSettings): void {
+    this.deps.file.setJavaNavigation(settings);
+  }
+
   /** The user's addition to the day start's first message (`dayStart` in `workspace.yaml`, ADR-70); `null` without one. */
   dayStartSettings(): DayStartSettings | null {
     return this.deps.file.dayStartSettings();
