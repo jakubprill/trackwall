@@ -9,6 +9,7 @@ import {
   type HttpEndpoint,
   isSupervisor,
   type JavaNavigationSettings,
+  type JavaNavigationStatus,
   type MiseTarget,
   type ReviewComment,
   type RunState,
@@ -638,6 +639,11 @@ export class Agents {
   /** Other tasks of the same repo that change the same files (ADR-44). */
   taskSharedFiles(id: string): Promise<TaskSharedFiles[]> {
     return this.#tasks.sharedFiles(id);
+  }
+
+  /** How the task's Java language server is doing (ADR-124); `null` for a task without Java navigation. */
+  taskJavaNavigation(id: string): Promise<JavaNavigationStatus | null> {
+    return this.#tasks.javaNavigationStatus(id);
   }
 
   /** A task's changes without the diff, for an agent (the MCP tool `get_session`). */

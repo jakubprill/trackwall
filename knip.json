@@ -2,7 +2,14 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "workspaces": {
     "packages/daemon": {
-      "entry": ["test/fixtures/*.ts", "scripts/copilot-record.ts", "scripts/demo/copilot.ts", "contract/*.contract.ts", "e2e/*.e2e.ts"],
+      "entry": [
+        "test/fixtures/*.ts",
+        "scripts/copilot-record.ts",
+        "scripts/demo/copilot.ts",
+        "contract/*.contract.ts",
+        "contract/support/fake-language-server.ts",
+        "e2e/*.e2e.ts"
+      ],
       "ignore": ["test/fixtures/spring/**"]
     },
     "apps/docs": {

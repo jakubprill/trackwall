@@ -16,6 +16,7 @@ import { isLive, sessionStateLabel } from "@/lib/session-state";
 import { useAction } from "@/lib/use-action";
 import { useTaskDetails } from "@/lib/use-task-details";
 import { useTaskReview } from "@/lib/use-task-review";
+import { JavaNavigationMark } from "./JavaNavigationMark.tsx";
 import { SessionEnvironment } from "./SessionEnvironment.tsx";
 import { TaskChangesView } from "./TaskChangesView.tsx";
 import { scrollToSection, TaskDetails } from "./TaskDetails.tsx";
@@ -26,7 +27,7 @@ import { VerifyButton } from "./TaskVerification.tsx";
 type TaskTab = "terminal" | "changes";
 
 /**
- * The selected task (ADR-31): title or prompt, branch, task port, its model when it has one (ADR-98), a mark when it runs without approvals (ADR-105) and session state in the header, the session terminal
+ * The selected task (ADR-31): title or prompt, branch, task port, its model when it has one (ADR-98), a mark when it runs without approvals (ADR-105), how its Java language server is doing (ADR-124) and session state in the header, the session terminal
  * and the worktree changes in tabs. A task from a proposal says who proposed it. A task without a running session can
  * be resumed or ended; the worktree always opens in VS Code, and the Verify button runs the task's tests (ADR-64).
  * What the task has to say above its terminal (`TaskDetails`: warnings, messages, summary, verification, merge
@@ -108,6 +109,7 @@ export function TaskPanel({
               {task.port}
             </span>
             <TaskMarks task={task} />
+            <JavaNavigationMark conn={conn} task={task} running={liveSession !== undefined} />
             <span className="text-muted-foreground shrink-0 text-xs">
               {session ? <StatusLabel {...sessionStateLabel(session)} /> : "no session"}
             </span>

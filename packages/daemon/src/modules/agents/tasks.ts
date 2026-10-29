@@ -5,6 +5,7 @@ import {
   type ChangedFile,
   type IncludedFiles,
   type JavaNavigationSettings,
+  type JavaNavigationStatus,
   LANGUAGE_SERVER_DIR_NAME,
   noIncludedFiles,
   PATCH_MAX_BYTES,
@@ -22,7 +23,14 @@ import { DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
 import { approvalArgs } from "./copilot-command.ts";
 import type { LspServer } from "./copilot-plugin.ts";
-import { JAVA_LSP_SERVER, type JavaNavigationReadiness, javaLanguageServer, javaNavigationReadiness } from "./java-language-server.ts";
+import {
+  JAVA_LSP_SERVER,
+  type JavaNavigationReadiness,
+  javaLanguageServer,
+  javaNavigationReadiness,
+  prefersMaven,
+} from "./java-language-server.ts";
+import { jdtlsStatus, readJdtlsLog } from "./jdtls-log.ts";
 import { TASK_BRANCH_PREFIX, taskSlug, taskWorktree } from "./task-branch.ts";
 import type { StoredTask, TaskFile } from "./task-file.ts";
 import { type MiseSnapshot, miseConfigChanges, miseConfigDigest, readMiseConfig, reviewMiseConfig } from "./task-mise-config.ts";
@@ -489,7 +497,15 @@ export class AgentTasks {
       this.#deps.log(`task ${task.id} starts without Java navigation: ${problem}`);
       return {};
     }
-    return { [JAVA_LSP_SERVER]: javaLanguageServer(settings, await this.#languageServerData(task)) };
+    const data = await this.#languageServerData(task);
+    return { [JAVA_LSP_SERVER]: javaLanguageServer(settings, data, { mavenOnly: prefersMaven(task.worktree) }) };
+  }
+
+  /** How the task's jdtls is doing (ADR-124), from its log; `null` for a task without Java navigation. */
+  async javaNavigationStatus(id: string): Promise<JavaNavigationStatus | null> {
+    const task = this.#get(id);
+    if (!task.javaNavigation) return null;
+    return jdtlsStatus(await readJdtlsLog(await this.#languageServerData(task)), new Date());
   }
 
   /** The task's jdtls data folder in the projects folder. */

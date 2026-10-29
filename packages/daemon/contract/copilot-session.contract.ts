@@ -16,6 +16,7 @@ import { type ModelRequest, type ScriptedModel, startScriptedModel } from "./sup
 import { USER_MCP_ISSUES, USER_MCP_SERVER, USER_MCP_TOOL } from "./support/user-mcp-server.ts";
 
 const USER_MCP_SERVER_SCRIPT = join(import.meta.dir, "support", "user-mcp-server.ts");
+const FAKE_LANGUAGE_SERVER = join(import.meta.dir, "support", "fake-language-server.ts");
 
 // The contract with the real Copilot CLI (ADR-67): what the daemon relies on, checked on the pinned version with a
 // scripted model. A failure here after a Copilot CLI upgrade means the fake in test/fixtures is out of date too.
@@ -498,6 +499,36 @@ describe("Java navigation of a task with the real Copilot CLI (ADR-99)", () => {
       await agents.stop(plainSession);
     } finally {
       writeFileSync(workspaceFile, workspace);
+    }
+  });
+});
+
+describe("a language server's initializationOptions with the real Copilot CLI (ADR-124)", () => {
+  test("Copilot CLI starts an lspServers entry in the background and sends its initializationOptions in initialize", async () => {
+    // The entry has the shape of the session plugin's (§4.4); a repo's .github/lsp.json carries it here, since the plugin's
+    // only server is jdtls on java, which this test cannot run.
+    const repo = join(daemon.projects, "shop");
+    const received = join(daemon.home, "initialization-options.json");
+    const initializationOptions = { settings: { java: { import: { gradle: { enabled: false } } } } };
+    const github = join(repo, ".github");
+    const hadGithub = existsSync(github);
+    mkdirSync(github, { recursive: true });
+    const lspServers = {
+      fake: {
+        command: process.execPath,
+        args: [FAKE_LANGUAGE_SERVER, received],
+        fileExtensions: { ".java": "java" },
+        initializationOptions,
+      },
+    };
+    writeFileSync(join(github, "lsp.json"), JSON.stringify({ lspServers }));
+    try {
+      const { id } = await startSession();
+      await waitFor(daemon.facade.agents, id, () => existsSync(received), "the language server's initialize request", SESSION_MS);
+      expect(JSON.parse(readFileSync(received, "utf8"))).toEqual(initializationOptions);
+      await daemon.facade.agents.stop(id);
+    } finally {
+      rmSync(hadGithub ? join(github, "lsp.json") : github, { recursive: true, force: true });
     }
   });
 });

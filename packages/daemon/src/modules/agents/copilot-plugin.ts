@@ -17,6 +17,8 @@ export interface LspServer {
   args: string[];
   /** File extension to the LSP language id. */
   fileExtensions: Record<string, string>;
+  /** Sent to the server in its `initialize` request; jdtls reads its settings from `settings` there (ADR-124). */
+  initializationOptions?: Record<string, unknown>;
 }
 
 /**
