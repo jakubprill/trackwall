@@ -1,8 +1,10 @@
 import { join } from "node:path";
 import { SCRATCH_DIR_NAME, SERVICE_RELEASE_MS, type StateDirSource } from "@trackwall/protocol";
+import { downloadVerified } from "./infra/download.ts";
 import { vscodeUrl } from "./infra/editor-url.ts";
 import { DomainError, messageOf } from "./infra/errors.ts";
 import { runProgram } from "./infra/run-program.ts";
+import { extractTarGz } from "./infra/tar.ts";
 import {
   AGENT_QUEUES_FILE,
   Agents,
@@ -24,6 +26,8 @@ import { Doctor } from "./modules/doctor/doctor.ts";
 import { ErrorJournal } from "./modules/error-journal/error-journal.ts";
 import type { ErrorJournalWorkspace } from "./modules/error-journal/known-values.ts";
 import { Graph } from "./modules/graph/graph.ts";
+import { JavaNavigation } from "./modules/java-navigation/java-navigation.ts";
+import { JDTLS_JAVA, JDTLS_RELEASE, type JdtlsRelease } from "./modules/java-navigation/jdtls-release.ts";
 import { LocalConfig } from "./modules/local-config/local-config.ts";
 import { Logs } from "./modules/logs/logs.ts";
 import { MergeRequests } from "./modules/merge-requests/merge-requests.ts";
@@ -69,6 +73,8 @@ export interface Facade {
   errorJournal: ErrorJournal;
   /** Checks of what Trackwall needs on this computer, each with what to do when it fails (ADR-101). */
   doctor: Doctor;
+  /** Installs jdtls and its Java for tasks' Java navigation, from Settings (ADR-123). */
+  javaNavigation: JavaNavigation;
   /** Every file and folder Trackwall reads or writes, with its state, and the keys of `workspace.yaml` (ADR-108). */
   configFiles: ConfigFiles;
   /**
@@ -91,6 +97,9 @@ const LOGS_DIR = "logs";
 const LOG_FILE_MAX_BYTES = 10 * 1024 * 1024;
 /** Service readiness (ADR-45): checks twice a second, and five minutes for a start, because Gradle and Maven compile first. */
 const SERVICE_TIMING = { intervalMs: 500, startupMs: 5 * 60 * 1000, settleMs: 500, releaseMs: SERVICE_RELEASE_MS };
+/** The jdtls archive is about 50 MB; ten minutes is a slow line, four times its size is a server sending something else. */
+const JDTLS_DOWNLOAD = { timeoutMs: 10 * 60 * 1000, maxBytes: 200 * 1024 * 1024 };
+const JDTLS_UNPACK_TIMEOUT_MS = 5 * 60 * 1000;
 
 export interface FacadeOptions {
   /**
@@ -116,6 +125,8 @@ export interface FacadeOptions {
   hostingClis: HostingClis;
   /** The environment of processes started for the user (`userEnv`). */
   userEnv: () => Promise<NodeJS.ProcessEnv>;
+  /** The jdtls release the Java navigation install downloads (ADR-123): the pinned one in the daemon, a local archive in tests. */
+  jdtlsRelease?: JdtlsRelease;
   /** The folder the daemon serves the UI from: the error journal maps the UI's frames with its source maps (ADR-94). */
   uiDir?: string;
   log: (msg: string) => void;
@@ -233,6 +244,17 @@ export function createFacade(o: FacadeOptions): Facade {
     log: o.log,
   });
   const errorJournal = createErrorJournal({ ...o, workspace });
+  const javaNavigationReadiness = () => agents.startOptions().javaNavigation;
+  const javaNavigation = new JavaNavigation({
+    repos: workspace,
+    readiness: javaNavigationReadiness,
+    release: o.jdtlsRelease ?? JDTLS_RELEASE,
+    java: JDTLS_JAVA,
+    download: (url, file, sha256) => downloadVerified(url, file, { sha256, ...JDTLS_DOWNLOAD }),
+    extract: async (archive, dir) => extractTarGz(archive, dir, { env: await o.userEnv(), timeoutMs: JDTLS_UNPACK_TIMEOUT_MS }),
+    installTool: (spec, dir) => mise.installTool(spec, dir),
+    log: o.log,
+  });
   const doctor = new Doctor({
     env: o.userEnv,
     run: async (command, args, { env, timeoutMs }) =>
@@ -250,6 +272,7 @@ export function createFacade(o: FacadeOptions): Facade {
     repoHosts: () => workspace.repoHosts(),
     workspaceFile: workspace.configFile(),
     workspaceKeys: () => workspace.workspaceKeys(),
+    javaNavigation: javaNavigationReadiness,
     now: () => new Date(),
   });
   const configFiles = new ConfigFiles({
@@ -298,6 +321,7 @@ export function createFacade(o: FacadeOptions): Facade {
     dayStart,
     errorJournal,
     doctor,
+    javaNavigation,
     configFiles,
     openLink: o.openUrl,
   };

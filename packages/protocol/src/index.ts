@@ -16,6 +16,7 @@ export * from "./events.ts";
 export * from "./evidence.ts";
 export * from "./graph.ts";
 export * from "./http.ts";
+export * from "./java-navigation.ts";
 export * from "./links.ts";
 export * from "./local-config.ts";
 export * from "./logs.ts";

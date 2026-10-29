@@ -339,7 +339,7 @@ Whether a task's agent asks the user before tools: `ask` (the default) as every 
 _Avoid_: YOLO, autopilot (Copilot CLI's own modes, not what Trackwall passes), auto-approve
 
 **Java navigation** (`Task.javaNavigation`, `javaNavigation` in `workspace.yaml`, `JavaNavigationSettings`; "Java navigation" on the start pill):
-A Java language server (jdtls) a task's sessions get for Copilot CLI's `lsp` tool, started by Copilot CLI from the session plugin in the task's worktree with the task's own index. The user installs jdtls and names its paths in `workspace.yaml`, then turns the pill on for a task in a repo tagged java (ADR-99).
+A Java language server (jdtls) a task's sessions get for Copilot CLI's `lsp` tool, started by Copilot CLI from the session plugin in the task's worktree with the task's own index. The user installs jdtls and its Java with "Install" in Settings › Agents, which writes their paths into `workspace.yaml` (ADR-123), or names their own there by hand, then turns the pill on for a task in a repo tagged java (ADR-99).
 _Avoid_: LSP (the protocol, not the option), code intelligence, indexing
 
 **Task proposal** (`TaskProposal`, MCP tool `propose_task`, the `approve-proposal` and `reject-proposal` actions):

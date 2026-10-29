@@ -2,7 +2,8 @@ import { spawn } from "node:child_process";
 import { spawnFailure } from "../../infra/errors.ts";
 
 /**
- * Short `mise` calls for queries (`tasks ls`, `trust`): without a process group, with a time limit. mise tasks
+ * Short `mise` calls for queries (`tasks ls`, `trust`), and installing one tool outside a repo (ADR-123): without a process
+ * group, with a time limit. mise tasks
  * run through the `procs` module, never this way. It does not throw: every result is a state the module shows the user.
  * Ending after the limit applies only to `mise`; a program that mise started from the `[env]` of a trusted
  * config may survive (§8).
@@ -24,6 +25,7 @@ export function runMiseCli(
   args: readonly string[],
   cwd: string,
   env: NodeJS.ProcessEnv,
+  timeoutMs = TIMEOUT_MS,
 ): Promise<MiseCliResult> {
   const [program, ...pre] = command;
   if (program === undefined) throw new Error("empty mise command");
@@ -35,8 +37,8 @@ export function runMiseCli(
     const timer = setTimeout(() => {
       child.stdout.destroy();
       child.kill();
-      resolve({ kind: "failed", message: `mise ${args[0]} did not finish within ${TIMEOUT_MS / 1000} s` });
-    }, TIMEOUT_MS);
+      resolve({ kind: "failed", message: `mise ${args[0]} did not finish within ${timeoutMs / 1000} s` });
+    }, timeoutMs);
     child.stdout.on("data", (chunk: Buffer) => {
       size += chunk.length;
       if (size <= MAX_STDOUT_BYTES) return void out.push(chunk);

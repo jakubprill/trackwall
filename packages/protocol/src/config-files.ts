@@ -233,7 +233,7 @@ export interface WorkspaceKeyInfo {
   purpose: string;
   docs: DocsPage;
   /** The Settings category that changes the key; `null` for a key only written by hand. */
-  settings: "workspace" | "repo-hosts" | null;
+  settings: "workspace" | "repo-hosts" | "agents" | null;
 }
 
 export const WORKSPACE_KEYS: Record<WorkspaceKey, WorkspaceKeyInfo> = {
@@ -243,7 +243,7 @@ export const WORKSPACE_KEYS: Record<WorkspaceKey, WorkspaceKeyInfo> = {
   repoHosts: { purpose: "Where the Repos view searches and clones from.", docs: "repos", settings: "repo-hosts" },
   toolPermissions: { purpose: "Which tools sessions may use without asking you.", docs: "approvals", settings: null },
   agentSecrets: { purpose: "The secrets from mise that the tools of sessions may read.", docs: "mise-environment", settings: null },
-  javaNavigation: { purpose: "The Java language server tasks can get for code navigation.", docs: "java-navigation", settings: null },
+  javaNavigation: { purpose: "The Java language server tasks can get for code navigation.", docs: "java-navigation", settings: "agents" },
   supervisor: { purpose: "Whether the supervisor may change code itself.", docs: "supervisor", settings: null },
   repoTags: { purpose: "Your own tags on repo cards, by repo name or address.", docs: "repo-card", settings: null },
   dayStart: { purpose: "Your addition to the first message of Start my day.", docs: "start-my-day", settings: null },

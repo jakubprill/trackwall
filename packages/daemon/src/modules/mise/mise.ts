@@ -97,6 +97,10 @@ type TaskList = { kind: Exclude<MiseTasks["kind"], "ok">; message: string } | { 
 const UNTRUSTED = /not trusted/i;
 /** mise setting with directories whose configs it trusts, separated like `PATH` (`list_by_os_path_separator`). */
 const TRUSTED_PATHS_ENV = "MISE_TRUSTED_CONFIG_PATHS";
+/** mise setting with directories above which it looks for no config. */
+const CEILING_PATHS_ENV = "MISE_CEILING_PATHS";
+/** `mise install` of a JDK downloads about 200 MB. */
+const TOOL_INSTALL_TIMEOUT_MS = 15 * 60 * 1000;
 
 /**
  * The directory and environment of a run, and the values of the secrets mise adds to it from its `[env]`, which the
@@ -282,6 +286,24 @@ export class Mise {
     const tasks = await this.tasks(repo);
     if (tasks.kind === "ok") this.deps.onTrusted(repo);
     return tasks;
+  }
+
+  /**
+   * Installs one tool outside any repo and returns its folder (`mise install <spec>`, then `mise where <spec>`): the Java
+   * that the Java navigation install runs jdtls on (ADR-123). `dir` is where mise runs, a folder without a mise config,
+   * and mise looks for none above it, so neither a repo's config nor the projects folder's takes part. Not in a process
+   * group: `mise install` of one tool downloads and unpacks it itself.
+   */
+  async installTool(spec: string, dir: string): Promise<string> {
+    const env = { ...(await this.deps.env()), [CEILING_PATHS_ENV]: dir };
+    await this.cliOutput(await runMiseCli(this.deps.command, ["install", spec], dir, env, TOOL_INSTALL_TIMEOUT_MS));
+    return (await this.cliOutput(await runMiseCli(this.deps.command, ["where", spec], dir, env))).trim();
+  }
+
+  private cliOutput(result: MiseCliResult): string {
+    if (result.kind !== "exited") throw new DomainError("mise_unavailable", result.message);
+    if (result.code !== 0) throw new DomainError("mise_unavailable", miseFailure(result.stderr, result.code));
+    return result.stdout;
   }
 
   /**
