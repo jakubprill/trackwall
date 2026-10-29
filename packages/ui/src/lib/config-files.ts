@@ -99,6 +99,8 @@ export function workspaceKeyChangedIn(key: WorkspaceKey): string {
       return "Settings › Workspace";
     case "repo-hosts":
       return "Settings › Repo hosts";
+    case "agents":
+      return "Settings › Agents";
     case null:
       return "by hand";
   }

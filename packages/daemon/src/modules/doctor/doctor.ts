@@ -4,6 +4,7 @@ import {
   DoctorCheckId,
   type DoctorReport,
   HOST_CLI,
+  type JavaNavigationState,
   type RepoHost,
   type RepoHostKind,
   TESTED_COPILOT_CLI_VERSION,
@@ -54,6 +55,8 @@ export interface DoctorDeps {
   workspaceFile: string;
   /** Each key of `workspace.yaml` (ADR-108); throws when the file as a whole cannot be read. */
   workspaceKeys: () => WorkspaceKeysRead;
+  /** Whether tasks can get Java navigation (`agents`); `null` while `javaNavigation` is not in `workspace.yaml`. */
+  javaNavigation: () => JavaNavigationState;
   now: () => Date;
 }
 
@@ -82,6 +85,7 @@ export class Doctor {
       "copilot-cli": (ctx) => this.copilotCli(ctx),
       "copilot-trusted-folder": (ctx) => this.copilotTrustedFolder(ctx),
       mise: (ctx) => this.mise(ctx),
+      "java-navigation": async () => this.javaNavigation(),
       "github-cli": () => this.hostCli("github"),
       "gitlab-cli": () => this.hostCli("gitlab"),
     };
@@ -185,6 +189,17 @@ export class Doctor {
         "Install mise (mise.jdx.dev) and restart Trackwall; repo tasks, services and task verification need it.",
       );
     return ok(`mise ${versionIn(version.value) ?? firstLine(version.value)}`);
+  }
+
+  /** Only for someone who set Java navigation up: a path that went missing greys it out on the New session form. */
+  private javaNavigation(): Outcome {
+    const state = this.deps.javaNavigation();
+    if (state === null) return null;
+    if (state.problem === null) return ok("Tasks can get Java navigation.");
+    return fail(
+      `Java navigation cannot start: ${state.problem}.`,
+      'Install it again in "Settings > Agents", or correct javaNavigation in workspace.yaml.',
+    );
   }
 
   /** Whether `gh` or `glab` is signed in to every repo host of its kind; every host that is not is named at once. */
