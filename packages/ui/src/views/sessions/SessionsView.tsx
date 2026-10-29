@@ -674,7 +674,7 @@ function SessionPanel({
         )}
       </header>
       <SessionEnvironment environment={session.environment} />
-      <EnvironmentChangeNotice conn={conn} session={session} onRestarted={onChanged} />
+      <EnvironmentChangeNotice key={session.id} conn={conn} session={session} onRestarted={onChanged} />
       <SessionScreen conn={conn} session={session} selected />
     </>
   );

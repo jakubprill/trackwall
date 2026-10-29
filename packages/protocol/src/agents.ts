@@ -204,9 +204,9 @@ export const EnvironmentChange = z.object({
   removed: z.array(z.string()),
   /** Variables whose value changed, e.g. a new token. */
   changed: z.array(z.string()),
-  /** Secrets the agent's tools would get now (added to `agentSecrets`). */
+  /** Variables the agent's tools would get now and do not: a secret added to `agentSecrets`, or one mise no longer redacts. */
   shared: z.array(z.string()),
-  /** Secrets the agent's tools would no longer get (taken out of `agentSecrets`). */
+  /** Variables the agent's tools have and would no longer get: a secret taken out of `agentSecrets`, or one mise now redacts. */
   unshared: z.array(z.string()),
 });
 export type EnvironmentChange = z.infer<typeof EnvironmentChange>;

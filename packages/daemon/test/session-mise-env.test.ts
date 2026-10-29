@@ -168,7 +168,7 @@ describe.skipIf(process.versions.bun === undefined)(
       workspace();
       const started = await agents.start("shop", "use the token");
       await waitFor(agents, started.id, (s) => s.state !== null, "the first prompt");
-      expect(await agents.environmentChange(started.id)).toBeNull();
+      expect(await agents.environmentChange(started.id)).toEqual({ change: null });
 
       const shopMise = join(daemon.projects, "shop", "fake-mise.json");
       writeFileSync(
@@ -177,7 +177,7 @@ describe.skipIf(process.versions.bun === undefined)(
       );
       workspace("agentSecrets: [JIRA_KEY]\n");
       try {
-        expect(await agents.environmentChange(started.id)).toEqual({
+        expect((await agents.environmentChange(started.id)).change).toEqual({
           added: ["SHOP_FLAG"],
           removed: [],
           changed: ["GITLAB_TOKEN"],
@@ -194,7 +194,7 @@ describe.skipIf(process.versions.bun === undefined)(
         expect(window.text()).toContain("Env JIRA_KEY=jira-key-from-age");
         expect(restarted.environment.variables).toContain("SHOP_FLAG");
         expect(restarted.environment.agentSecrets).toEqual(["JIRA_KEY"]);
-        expect(await agents.environmentChange(restarted.id)).toBeNull();
+        expect(await agents.environmentChange(restarted.id)).toEqual({ change: null });
         window.attachment.detach();
         await agents.stop(restarted.id);
       } finally {
@@ -215,9 +215,9 @@ describe.skipIf(process.versions.bun === undefined)(
       projectsMise({ env: { SHOP_REGION: "projects-folder", DEV_TOKEN: "dev-token-value" } });
       workspace("agentSecrets: [JIRA_KEY]\n");
       const added = { added: ["DEV_TOKEN"], removed: [], changed: [], shared: [], unshared: [] };
-      expect(await agents.environmentChange(supervisor.id)).toEqual(added);
-      expect(await agents.environmentChange(free.id)).toEqual(added);
-      expect(await agents.environmentChange(taskSession.id)).toEqual({ ...added, added: [], shared: ["JIRA_KEY"] });
+      expect((await agents.environmentChange(supervisor.id)).change).toEqual(added);
+      expect((await agents.environmentChange(free.id)).change).toEqual(added);
+      expect((await agents.environmentChange(taskSession.id)).change).toEqual({ ...added, added: [], shared: ["JIRA_KEY"] });
 
       for (const [before, conversation] of [
         [supervisor, supervisor.id],
@@ -229,11 +229,43 @@ describe.skipIf(process.versions.bun === undefined)(
         await waitFor(agents, after.id, () => window.text().includes(`Argument: --resume=${conversation}`), "the resumed conversation");
 
         expect(after).toMatchObject({ repo: before.repo, supervisor: before.supervisor, task: before.task });
-        expect(await agents.environmentChange(after.id)).toBeNull();
+        expect(await agents.environmentChange(after.id)).toEqual({ change: null });
         window.attachment.detach();
         await agents.stop(after.id);
       }
       expect(agents.sessions().sessions.filter((s) => s.task === task.id)).toHaveLength(1);
+    }, 60_000);
+
+    test("a second restart of a session while the first one runs is refused, and one session stays listed", async () => {
+      const { agents } = daemon.facade;
+      projectsMise({ env: { SHOP_REGION: "projects-folder" } });
+      workspace();
+      const started = await agents.start(null, "Compare the two APIs");
+      await waitFor(agents, started.id, (s) => s.state !== null, "the first prompt");
+
+      const [first, second] = await Promise.allSettled([agents.restart(started.id), agents.restart(started.id)]);
+
+      expect(first.status).toBe("fulfilled");
+      expect(second).toMatchObject({ status: "rejected", reason: { code: "bad_request" } });
+      const listed = agents.sessions().sessions.filter((s) => s.id === started.id);
+      expect(listed.map((s) => s.run.kind)).toEqual(["running"]);
+      await agents.stop(started.id);
+    }, 60_000);
+
+    test("a restart that the configuration refuses leaves the session running as it was", async () => {
+      const { agents } = daemon.facade;
+      projectsMise({ env: { SHOP_REGION: "projects-folder" } });
+      workspace();
+      const started = await agents.start("shop", "use the token");
+      await waitFor(agents, started.id, (s) => s.state !== null, "the first prompt");
+      workspace('agentSecrets: ["not a variable name"]\n');
+      try {
+        await expect(agents.restart(started.id)).rejects.toMatchObject({ code: "invalid_config" });
+        expect(agents.session(started.id).run.kind).toBe("running");
+      } finally {
+        workspace();
+      }
+      await agents.stop(started.id);
     }, 60_000);
 
     test("an ended session is not restarted", async () => {
@@ -242,7 +274,7 @@ describe.skipIf(process.versions.bun === undefined)(
       await agents.stop(started.id);
 
       await expect(agents.restart(started.id)).rejects.toMatchObject({ code: "bad_request" });
-      expect(await agents.environmentChange(started.id)).toBeNull();
+      expect(await agents.environmentChange(started.id)).toEqual({ change: null });
     }, 60_000);
   },
 );

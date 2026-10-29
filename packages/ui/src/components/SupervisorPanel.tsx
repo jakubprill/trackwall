@@ -115,7 +115,7 @@ export function SupervisorPanel({
         onLayout={onLayout}
         onFold={fold}
       />
-      <EnvironmentChangeNotice conn={conn} session={session} onRestarted={onChanged} />
+      <EnvironmentChangeNotice key={session?.id} conn={conn} session={session} onRestarted={onChanged} />
       <DelegatedWork work={supervisor.work} onOpen={onOpenInSessions} />
       {session ? <SessionScreen conn={conn} session={session} selected={focused} /> : <NoSupervisor />}
     </aside>

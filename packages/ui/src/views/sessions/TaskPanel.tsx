@@ -137,7 +137,7 @@ export function TaskPanel({
         </div>
       </header>
       <SessionEnvironment environment={session?.environment} />
-      <EnvironmentChangeNotice conn={conn} session={session} onRestarted={onChanged} />
+      <EnvironmentChangeNotice key={session?.id} conn={conn} session={session} onRestarted={onChanged} />
       {confirmingRemoval && <TaskRemoval conn={conn} task={task} onRemoved={onRemoved} onCancel={() => setRemoving(false)} />}
       <TaskNoticeStrip
         notices={details.notices}

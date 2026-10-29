@@ -496,7 +496,7 @@ The secrets from mise the agent's shell and local MCP servers get; every other o
 **Environment change** (`EnvironmentChange`, `Agents.environmentChange`; in the UI *The environment from mise changed*):
 How the session environment mise would give a running session now differs from the one it started with: new, changed and removed names, and the secrets its tools would now get or no longer get; never values (ADR-119).
 
-**Restart** (`Agents.restart`, `agentsApi.restart`; in the UI *Restart to apply*):
+**Session restart** (`Agents.restart`, `agentsApi.restart`; in the UI *Restart to apply*):
 Stopping a running session and starting it again with the same conversation, place and view, so it gets the environment and settings of now; a task's session restarts as Resume does (ADR-119). Unlike Resume, which starts an ended task's session again.
 
 **Session plugin** (`writeCopilotPlugin`):
