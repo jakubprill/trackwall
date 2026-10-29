@@ -280,9 +280,7 @@ export class Mise {
   async trust(repo: string): Promise<MiseTasks> {
     // The repo root only: a task worktree is trusted by its mise config instead (ADR-59, `agents`).
     const dir = await this.deps.repos.repoPath(repo);
-    const result = await runMiseCli(this.deps.command, ["trust"], dir, await this.deps.env());
-    if (result.kind !== "exited") throw new DomainError("mise_unavailable", result.message);
-    if (result.code !== 0) throw new DomainError("mise_unavailable", miseFailure(result.stderr, result.code));
+    this.cliOutput(await runMiseCli(this.deps.command, ["trust"], dir, await this.deps.env()));
     const tasks = await this.tasks(repo);
     if (tasks.kind === "ok") this.deps.onTrusted(repo);
     return tasks;
@@ -290,8 +288,8 @@ export class Mise {
 
   /**
    * Installs one tool outside any repo and returns its folder (`mise install <spec>`, then `mise where <spec>`): the Java
-   * that the Java navigation install runs jdtls on (ADR-123). `dir` is where mise runs, a folder without a mise config,
-   * and mise looks for none above it, so neither a repo's config nor the projects folder's takes part. Not in a process
+   * that the Java navigation install runs jdtls on (ADR-123). `dir` is where mise runs, an empty folder, and mise looks
+   * for no config above it, so neither a repo's config nor the projects folder's takes part. Not in a process
    * group: `mise install` of one tool downloads and unpacks it itself.
    */
   async installTool(spec: string, dir: string): Promise<string> {
@@ -300,6 +298,7 @@ export class Mise {
     return (await this.cliOutput(await runMiseCli(this.deps.command, ["where", spec], dir, env))).trim();
   }
 
+  /** The output of a mise call that ended well; otherwise `mise_unavailable` with mise's message. */
   private cliOutput(result: MiseCliResult): string {
     if (result.kind !== "exited") throw new DomainError("mise_unavailable", result.message);
     if (result.code !== 0) throw new DomainError("mise_unavailable", miseFailure(result.stderr, result.code));

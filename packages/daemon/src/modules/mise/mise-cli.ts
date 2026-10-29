@@ -3,15 +3,16 @@ import { spawnFailure } from "../../infra/errors.ts";
 
 /**
  * Short `mise` calls for queries (`tasks ls`, `trust`), and installing one tool outside a repo (ADR-123): without a process
- * group, with a time limit. mise tasks
- * run through the `procs` module, never this way. It does not throw: every result is a state the module shows the user.
- * Ending after the limit applies only to `mise`; a program that mise started from the `[env]` of a trusted
- * config may survive (§8).
+ * group, with a time limit. mise tasks run through the `procs` module, never this way. It does not throw: every result is
+ * a state the module shows the user. Ending after the limit applies only to `mise`; a program that mise started from the
+ * `[env]` of a trusted config may survive (§8).
  */
 
 const TIMEOUT_MS = 15_000;
 /** `mise tasks ls --json` with hundreds of mise tasks is a few hundred KB; more means something is wrong. */
 const MAX_STDOUT_BYTES = 4 * 1024 * 1024;
+/** The end of stderr is kept: on an error the cause is there, and before it `mise install` may print minutes of progress. */
+const STDERR_TAIL_BYTES = 16 * 1024;
 
 export type MiseCliResult =
   | { kind: "exited"; code: number | null; stdout: string; stderr: string }
@@ -48,7 +49,12 @@ export function runMiseCli(
       child.kill();
       resolve({ kind: "failed", message: `mise ${args[0]}: output larger than ${MAX_STDOUT_BYTES} B` });
     });
-    child.stderr.on("data", (chunk: Buffer) => err.push(chunk));
+    let errSize = 0;
+    child.stderr.on("data", (chunk: Buffer) => {
+      err.push(chunk);
+      errSize += chunk.length;
+      while (errSize - (err[0]?.length ?? 0) >= STDERR_TAIL_BYTES) errSize -= err.shift()?.length ?? 0;
+    });
     child.on("error", (e: NodeJS.ErrnoException) => {
       clearTimeout(timer);
       resolve({ kind: "not_started", message: spawnFailure(program, e).message });

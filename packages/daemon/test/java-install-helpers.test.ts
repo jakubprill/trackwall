@@ -9,9 +9,9 @@ import { tarProgram } from "../src/infra/tar.ts";
 import { javaProgramIn } from "../src/modules/java-navigation/java-program.ts";
 
 describe("the tar that unpacks jdtls", () => {
-  test("is tar from PATH on macOS and Linux, and System32's tar.exe by full path on Windows", () => {
-    expect(tarProgram("darwin", {})).toBe("tar");
-    expect(tarProgram("linux", {})).toBe("tar");
+  test("is the system's tar by full path: /usr/bin/tar on macOS and Linux, System32's tar.exe on Windows", () => {
+    expect(tarProgram("darwin", {})).toBe("/usr/bin/tar");
+    expect(tarProgram("linux", {})).toBe("/usr/bin/tar");
     expect(tarProgram("win32", { SystemRoot: "D:\\Windows" })).toBe("D:\\Windows\\System32\\tar.exe");
     expect(tarProgram("win32", {})).toBe("C:\\Windows\\System32\\tar.exe");
   });

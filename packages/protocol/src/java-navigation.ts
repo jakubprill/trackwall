@@ -14,9 +14,7 @@ export const JavaNavigationInstall = z.object({
   jdtls: z.string(),
   /** The Java it installs through mise (`temurin-25`). */
   java: z.string(),
-  /** An install is in progress; the UI asks again until it ends. */
-  running: z.boolean(),
-  /** What the running install does now, in a few words; `null` when none runs. */
+  /** What the running install does now, in a few words; `null` when none runs. The UI asks again until it is `null`. */
   step: z.string().nullable(),
   /** Why the last install failed; `null` after one that worked, and while none has run since the daemon started. */
   error: z.string().nullable(),
@@ -31,7 +29,7 @@ function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string,
 
 export const javaNavigationApi = {
   /** The install's state, from daemon memory. */
-  install: endpoint("install", z.object({}).strict(), JavaNavigationInstall),
+  state: endpoint("state", z.object({}).strict(), JavaNavigationInstall),
   /**
    * Starts installing jdtls and its Java, and returns at once with the install running; a second start while one runs
    * returns the running one. Only from the UI, never from MCP: it downloads and writes `workspace.yaml`.

@@ -26,8 +26,8 @@ const TONE_CLASS: Record<JavaNavigationSetupTone, string> = {
  * and saves their paths in `workspace.yaml`; the line under it says how far it got and whether tasks can get it.
  */
 export function JavaNavigationSurface({ conn }: { conn: Connection }) {
-  const load = useCallback(() => post(conn, javaNavigationApi.install, {}), [conn]);
-  const install = useRemote(load, { pollMs: (data) => (data?.running ? RUNNING_POLL_MS : IDLE_POLL_MS) });
+  const load = useCallback(() => post(conn, javaNavigationApi.state, {}), [conn]);
+  const install = useRemote(load, { pollMs: (data) => (data?.step ? RUNNING_POLL_MS : IDLE_POLL_MS) });
   const start = useAction(() => post(conn, javaNavigationApi.startInstall, {}), install.reload);
   return (
     <Surface label="Java navigation">
@@ -50,7 +50,7 @@ function JavaNavigationSetup({ install, pending, onInstall }: { install: JavaNav
         downloads jdtls {install.jdtls} into your projects folder and Java {install.java} with mise, about 250 MB together.
       </p>
       <div className="flex items-center gap-3">
-        <Button variant="outline" size="sm" disabled={pending || install.running} onClick={onInstall}>
+        <Button variant="outline" size="sm" disabled={pending || install.step !== null} onClick={onInstall}>
           {setup.button}
         </Button>
         <span className={cn("min-w-0 text-xs break-words", TONE_CLASS[setup.tone])}>{setup.line}</span>

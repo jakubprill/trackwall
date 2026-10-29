@@ -125,7 +125,7 @@ export interface FacadeOptions {
   hostingClis: HostingClis;
   /** The environment of processes started for the user (`userEnv`). */
   userEnv: () => Promise<NodeJS.ProcessEnv>;
-  /** The jdtls release the Java navigation install downloads (ADR-123): the pinned one in the daemon, a local archive in tests. */
+  /** Only for tests, which point the Java navigation install at a local archive; the daemon leaves it out for the pinned release (ADR-123). */
   jdtlsRelease?: JdtlsRelease;
   /** The folder the daemon serves the UI from: the error journal maps the UI's frames with its source maps (ADR-94). */
   uiDir?: string;

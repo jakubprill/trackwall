@@ -21,13 +21,14 @@ export function javaNavigationOffer(tags: readonly RepoTag[] | undefined, state:
 export type JavaNavigationSetupTone = "muted" | "ok" | "error";
 
 /**
- * What the Java navigation section of Settings says (ADR-123): a running install's step, then a failed install's error,
- * then whether tasks can get it now. The button installs, or installs again over settings that do not work.
+ * What the Java navigation section of Settings says (ADR-123): a running install's step, then whether tasks can get it
+ * now, with the last install's error while they cannot (a fix by hand after a failed install makes it old news). The button installs, or installs again over settings that do not work.
  */
 export function javaNavigationSetup(install: JavaNavigationInstall): { line: string; tone: JavaNavigationSetupTone; button: string } {
   const button = install.readiness === null ? "Install" : "Install again";
-  if (install.running) return { line: `${install.step ?? "Installing"}…`, tone: "muted", button };
-  if (install.error !== null) return { line: `The install failed: ${install.error}`, tone: "error", button };
+  if (install.step !== null) return { line: `${install.step}…`, tone: "muted", button };
+  const ready = install.readiness !== null && install.readiness.problem === null;
+  if (install.error !== null && !ready) return { line: `The install failed: ${install.error}`, tone: "error", button };
   if (install.readiness === null) return { line: "Not set up yet.", tone: "muted", button };
   if (install.readiness.problem !== null) return { line: `Cannot start: ${install.readiness.problem}.`, tone: "error", button };
   return { line: "Ready: tasks in Java repos can get it on the New session form.", tone: "ok", button };

@@ -39,9 +39,14 @@ export async function downloadVerified(
 /** The chunks of a response body; through its reader, since `fetch`'s stream type is not the one `Readable.fromWeb` takes. */
 async function* chunksOf(body: ReadableStream<Uint8Array>): AsyncGenerator<Uint8Array> {
   const reader = body.getReader();
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) return;
-    yield value;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) return;
+      yield value;
+    }
+  } finally {
+    // A download stopped early (the size limit, a failed write) ends the transfer too, instead of reading on to the time limit.
+    await reader.cancel().catch(() => {});
   }
 }

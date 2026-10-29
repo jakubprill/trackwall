@@ -80,8 +80,8 @@ function installFacade(o: { release?: Partial<JdtlsRelease>; miseError?: string 
 async function installed(facade: Facade): Promise<JavaNavigationInstall> {
   const until = Date.now() + 20_000;
   for (;;) {
-    const install = facade.javaNavigation.install();
-    if (!install.running) return install;
+    const install = facade.javaNavigation.state();
+    if (install.step === null) return install;
     if (Date.now() > until) throw new Error(`the install did not end; last state ${JSON.stringify(install)}`);
     await new Promise((r) => setTimeout(r, 50));
   }
@@ -93,16 +93,15 @@ describe("installing Java navigation from Settings (ADR-123)", () => {
   test("downloads jdtls into the projects folder, installs Java with mise and saves both paths, so tasks can get it", async () => {
     const { facade, projects, installs, lsp } = installFacade();
     await facade.workspace.setProjectsDir(projects);
-    expect(facade.javaNavigation.install()).toEqual({
+    expect(facade.javaNavigation.state()).toEqual({
       jdtls: "1.63.0",
       java: "temurin-25",
-      running: false,
       step: null,
       error: null,
       readiness: null,
     });
-    expect(facade.javaNavigation.startInstall().running).toBe(true);
-    expect(await installed(facade)).toMatchObject({ running: false, step: null, error: null, readiness: { problem: null } });
+    expect(facade.javaNavigation.startInstall().step).toBe("Starting");
+    expect(await installed(facade)).toMatchObject({ step: null, error: null, readiness: { problem: null } });
     const jdtls = join(lsp, "jdtls-1.63.0");
     expect(facade.workspace.javaNavigation()).toEqual({
       jdtls,
@@ -111,17 +110,21 @@ describe("installing Java navigation from Settings (ADR-123)", () => {
     });
     expect(readdirSync(join(jdtls, "plugins"))).toEqual(["org.eclipse.equinox.launcher_1.8.0.v20260804-1928.jar"]);
     expect(readdirSync(lsp)).toEqual(["jdtls-1.63.0"]);
-    // mise runs in the language server folder and looks for no config above it, so the projects folder's mise config stays out.
-    expect(JSON.parse(readFileSync(join(installs, "calls.log"), "utf8"))).toEqual({ ceiling: lsp, cwd: lsp });
+    // mise runs in an empty folder of the install's own and looks for no config above it, so no mise config takes part.
+    const mise = JSON.parse(readFileSync(join(installs, "calls.log"), "utf8"));
+    expect(mise.ceiling).toBe(mise.cwd);
+    expect(mise.cwd.startsWith(join(lsp, ".install-"))).toBe(true);
     expect(facade.agents.startOptions()).toEqual({ javaNavigation: { problem: null } });
   });
 
-  test("a second install reuses the unpacked release and keeps the Lombok jar the user named", async () => {
-    const { facade, projects } = installFacade();
+  test("installing again downloads and checks the release again, replaces what is there and keeps the Lombok jar the user named", async () => {
+    const { facade, projects, lsp } = installFacade();
     await facade.workspace.setProjectsDir(projects);
     facade.javaNavigation.startInstall();
     await installed(facade);
     const before = downloads;
+    const planted = join(lsp, "jdtls-1.63.0", "plugins", "planted.jar");
+    writeFileSync(planted, "not from the release");
     const lombok = join(projects, "lombok.jar");
     writeFileSync(lombok, "jar");
     const settings = facade.workspace.javaNavigation();
@@ -129,8 +132,19 @@ describe("installing Java navigation from Settings (ADR-123)", () => {
     facade.workspace.setJavaNavigation({ ...settings, java: join(projects, "gone", "java"), lombok });
     facade.javaNavigation.startInstall();
     expect(await installed(facade)).toMatchObject({ error: null, readiness: { problem: null } });
-    expect(downloads).toBe(before);
+    expect(downloads).toBe(before + 1);
+    expect(existsSync(planted)).toBe(false);
+    expect(readdirSync(lsp)).toEqual(["jdtls-1.63.0"]);
     expect(facade.workspace.javaNavigation()).toEqual({ ...settings, lombok });
+  });
+
+  test("a temporary folder left by a daemon that stopped mid-install is removed by the next install", async () => {
+    const { facade, projects, lsp } = installFacade();
+    await facade.workspace.setProjectsDir(projects);
+    mkdirSync(join(lsp, ".install-left"), { recursive: true });
+    facade.javaNavigation.startInstall();
+    await installed(facade);
+    expect(readdirSync(lsp)).toEqual(["jdtls-1.63.0"]);
   });
 
   test("an archive whose SHA-256 differs from the pinned one fails the install and leaves nothing behind", async () => {

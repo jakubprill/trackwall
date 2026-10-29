@@ -28,22 +28,23 @@ describe("Java navigation on the New session form", () => {
 });
 
 describe("the Java navigation section of Settings", () => {
-  const install = { jdtls: "1.63.0", java: "temurin-25", running: false, step: null, error: null, readiness: null };
+  const install = { jdtls: "1.63.0", java: "temurin-25", step: null, error: null, readiness: null };
 
   test("says what is missing and offers to install", () => {
     expect(javaNavigationSetup(install)).toEqual({ line: "Not set up yet.", tone: "muted", button: "Install" });
   });
 
   test("shows the step of a running install", () => {
-    expect(javaNavigationSetup({ ...install, running: true, step: "Downloading jdtls 1.63.0" }).line).toBe("Downloading jdtls 1.63.0…");
+    expect(javaNavigationSetup({ ...install, step: "Downloading jdtls 1.63.0" }).line).toBe("Downloading jdtls 1.63.0…");
   });
 
-  test("names why the last install failed before anything else", () => {
-    expect(javaNavigationSetup({ ...install, error: "mise ERROR offline", readiness: { problem: null } })).toEqual({
+  test("names why the last install failed while tasks cannot get it, and not after a fix by hand", () => {
+    expect(javaNavigationSetup({ ...install, error: "mise ERROR offline", readiness: { problem: "no Java program at /x/java" } })).toEqual({
       line: "The install failed: mise ERROR offline",
       tone: "error",
       button: "Install again",
     });
+    expect(javaNavigationSetup({ ...install, error: "mise ERROR offline", readiness: { problem: null } }).tone).toBe("ok");
   });
 
   test("says whether tasks can get it with the settings in place", () => {
