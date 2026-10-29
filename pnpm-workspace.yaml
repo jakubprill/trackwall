@@ -19,7 +19,8 @@ overrides:
   # Pinned for the whole workspace, so that VitePress and vitepress-plugin-llms see the same types.
   "@types/markdown-it": "14.1.2"
   # Mermaid 11 (from @streamdown/mermaid, the README view) asks for KaTeX 0.16, which has GHSA-238p-pmpm-9mq7, fixed
-  # in 0.18.2. Mermaid 12 moved to KaTeX 0.18 with the same API; remove this when @streamdown/mermaid takes Mermaid 12.
+  # in 0.18.2. Mermaid calls only `katex.renderToString`, which 0.18 keeps, and Mermaid 12 itself moved to 0.18. 0.18.11
+  # is deprecated as a breaking release, so 0.18.10. Remove this when @streamdown/mermaid takes Mermaid 12.
   "mermaid>katex": "0.18.10"
 
 packageExtensions:
