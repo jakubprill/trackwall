@@ -15,7 +15,7 @@ import { DomainError, messageOf } from "../../infra/errors.ts";
 import { fileKey } from "../../infra/file-key.ts";
 import { localConfigStoreDir } from "../../infra/old-trackwall-folders.ts";
 import { readRegularFile } from "../../infra/regular-file.ts";
-import { ensureTrackwallDir } from "../../infra/trackwall-dir.ts";
+import { ensureTrackwallDir, trackwallDir } from "../../infra/trackwall-dir.ts";
 
 /**
  * The `local-config` module (§4.13, ADR-86): the files a repo keeps outside git on purpose (`LOCAL_CONFIG_FILES`), backed
@@ -360,9 +360,10 @@ export class LocalConfig {
     }
   }
 
-  /** `.trackwall` must be a real folder before the store in it is made or written (ADR-125). */
+  /** `.trackwall` must be a real folder before the store in it is made or written (ADR-125); the store checks itself. */
   async #ensureStore(store: string): Promise<void> {
-    await ensureTrackwallDir(await this.#deps.repos.projectsDir());
+    const projectsDir = await this.#deps.repos.projectsDir();
+    if (store === trackwallDir(projectsDir, "local")) await ensureTrackwallDir(projectsDir);
     await this.#deps.vcs.ensureBackupRepo(store);
   }
 

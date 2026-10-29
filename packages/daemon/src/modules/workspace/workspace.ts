@@ -34,6 +34,7 @@ import {
 import { configOrProblem, DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
 import { moveOldTrackwallFolders, oldWorktreesDir, removeEmptyWorktreesDir } from "../../infra/old-trackwall-folders.ts";
+import { ensureTrackwallDir } from "../../infra/trackwall-dir.ts";
 import { CloneJobs } from "./clone-jobs.ts";
 import { type CodeSearchQuery, type CodeSearchVcs, searchCode } from "./code-search.ts";
 import { describeDroppedFolder } from "./dropped-folder.ts";
@@ -400,6 +401,16 @@ export class Workspace {
     const dir = this.deps.file.worktreesDir() ?? defaultWorktreesDir(projectsDir);
     await checkWorktreesDir(dir, projectsDir);
     return dir;
+  }
+
+  /**
+   * `worktreesDir` for a task about to be created: the default folder, `.trackwall/worktrees`, is made here and refused
+   * when `.trackwall` is a link (ADR-125); a folder the user chose is git's to make.
+   */
+  async newTaskWorktreesDir(): Promise<string> {
+    const dir = await this.worktreesDir();
+    const projectsDir = await this.projectsDir();
+    return dir === defaultWorktreesDir(projectsDir) ? ensureTrackwallDir(projectsDir, "worktrees") : dir;
   }
 
   /** Repos from the projects folder (identifier and root), for modules that read every repo (`cards`). */

@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
-import { mkdir, readdir, rename, rmdir } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readdir, rename, rmdir } from "node:fs/promises";
+import { join } from "node:path";
 import type { TrackwallFolder } from "@trackwall/protocol";
 import { messageOf } from "./errors.ts";
 import { ensureTrackwallDir, trackwallDir } from "./trackwall-dir.ts";
@@ -65,7 +65,7 @@ async function moveStore(projectsDir: string, log: (msg: string) => void): Promi
     log(`${old} stays where it is: ${dir} exists too; keep the one you want and delete the other`);
     return;
   }
-  await moveLogged(projectsDir, old, dir, log);
+  await moveLogged(old, dir, () => ensureTrackwallDir(projectsDir), log);
 }
 
 async function moveEntries(projectsDir: string, folder: TrackwallFolder, log: (msg: string) => void): Promise<void> {
@@ -75,15 +75,15 @@ async function moveEntries(projectsDir: string, folder: TrackwallFolder, log: (m
   for (const name of names) {
     const target = join(trackwallDir(projectsDir, folder), name);
     if (existsSync(target)) log(`${join(old, name)} stays where it is: ${target} exists too`);
-    else await moveLogged(projectsDir, join(old, name), target, log);
+    else await moveLogged(join(old, name), target, () => ensureTrackwallDir(projectsDir, folder), log);
   }
   await rmdir(old).catch(() => {});
 }
 
-async function moveLogged(projectsDir: string, from: string, to: string, log: (msg: string) => void): Promise<void> {
+/** `makeParent` makes and checks the folder `to` goes into. */
+async function moveLogged(from: string, to: string, makeParent: () => Promise<string>, log: (msg: string) => void): Promise<void> {
   try {
-    await ensureTrackwallDir(projectsDir);
-    await mkdir(dirname(to), { recursive: true });
+    await makeParent();
     await rename(from, to);
     log(`moved ${from} to ${to}`);
   } catch (err) {

@@ -9,13 +9,24 @@ export function trackwallDir(projectsDir: string, folder: TrackwallFolder): stri
 }
 
 /**
- * Makes `.trackwall` when it is missing and refuses it when it is not a real folder, before Trackwall writes in it: a
- * link there, which an agent with file tools in the projects folder can make, would send every folder of it, and the
- * local config, worktrees and removed repos Trackwall puts there, somewhere else.
+ * `.trackwall` and, with `folder`, that folder of it, made where missing and refused where not a real folder, before
+ * Trackwall writes there; returns the deepest. A link, which an agent with file tools in the projects folder can make,
+ * would send what Trackwall puts there (the local config, worktrees, removed repos) somewhere else. Each is made without
+ * `recursive`, so a projects folder that is gone (a drive unplugged, a folder renamed) is not made again.
  */
-export async function ensureTrackwallDir(projectsDir: string): Promise<void> {
-  const dir = join(projectsDir, TRACKWALL_DIR);
-  await mkdir(dir, { recursive: true });
+export async function ensureTrackwallDir(projectsDir: string, folder?: TrackwallFolder): Promise<string> {
+  const base = join(projectsDir, TRACKWALL_DIR);
+  await ensureRealFolder(base);
+  if (folder === undefined) return base;
+  const dir = trackwallDir(projectsDir, folder);
+  await ensureRealFolder(dir);
+  return dir;
+}
+
+async function ensureRealFolder(dir: string): Promise<void> {
+  await mkdir(dir).catch((err: NodeJS.ErrnoException) => {
+    if (err.code !== "EEXIST") throw err;
+  });
   if (!(await lstat(dir)).isDirectory())
     throw new DomainError("bad_request", `${dir} is not a folder (a link?); Trackwall writes only into a real one`);
 }

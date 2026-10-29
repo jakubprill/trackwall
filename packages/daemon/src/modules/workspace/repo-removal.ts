@@ -1,7 +1,7 @@
-import { mkdir, rename, stat } from "node:fs/promises";
+import { rename, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { DomainError } from "../../infra/errors.ts";
-import { ensureTrackwallDir, trackwallDir } from "../../infra/trackwall-dir.ts";
+import { ensureTrackwallDir } from "../../infra/trackwall-dir.ts";
 
 /**
  * Removing a repo from the projects folder (ADR-83): its folder moves into `.trackwall/removed` (ADR-125),
@@ -15,9 +15,7 @@ import { ensureTrackwallDir, trackwallDir } from "../../infra/trackwall-dir.ts";
  * after everything else is awaited, so its checks still hold when the folder moves.
  */
 export async function moveRepoOut(projectsDir: string, repoDir: string, beforeMove: () => void): Promise<string> {
-  const removedDir = trackwallDir(projectsDir, "removed");
-  await ensureTrackwallDir(projectsDir);
-  await mkdir(removedDir, { recursive: true });
+  const removedDir = await ensureTrackwallDir(projectsDir, "removed");
   const target = await freeName(removedDir, basename(repoDir));
   beforeMove();
   try {

@@ -95,8 +95,8 @@ export interface AgentTasksDeps {
   vcs: TasksVcs;
   repos: {
     repoPath(id: string): Promise<string>;
-    /** The task worktrees folder for a new task (ADR-84). */
-    worktreesDir(): Promise<string>;
+    /** The task worktrees folder for a new task (ADR-84), made when it is the default one in `.trackwall` (ADR-125). */
+    newTaskWorktreesDir(): Promise<string>;
     /** The projects folder, which holds the tasks' language server data (ADR-99). */
     projectsDir(): Promise<string>;
     /** `javaNavigation` from `workspace.yaml` (ADR-99); `null` without the key. */
@@ -193,9 +193,7 @@ export class AgentTasks {
     if (javaProblem !== null) throw new DomainError("bad_request", `Java navigation cannot start: ${javaProblem}`);
     const repoDir = await this.#deps.repos.repoPath(repo);
     const base = await asRepoUnavailable(repo, this.#deps.vcs.defaultBase(repoDir));
-    const worktreesDir = await this.#deps.repos.worktreesDir();
-    // The default worktrees folder and the task's Java language server data lie in `.trackwall` (ADR-125).
-    await ensureTrackwallDir(await this.#deps.repos.projectsDir());
+    const worktreesDir = await this.#deps.repos.newTaskWorktreesDir();
     const task = this.#known({
       id,
       repo,
@@ -491,7 +489,7 @@ export class AgentTasks {
       this.#deps.log(`task ${task.id} starts without Java navigation: ${problem}`);
       return {};
     }
-    await ensureTrackwallDir(await this.#deps.repos.projectsDir());
+    await ensureTrackwallDir(await this.#deps.repos.projectsDir(), "lsp");
     return { [JAVA_LSP_SERVER]: javaLanguageServer(settings, await this.#languageServerData(task)) };
   }
 
