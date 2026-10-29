@@ -14,7 +14,7 @@ This page uses VS Code's Dev Containers extension. Any container works the same 
 ## What you need
 
 - Docker (Docker Desktop on Windows or macOS) and VS Code with the Dev Containers extension.
-- Repos cloned into a Docker volume, not a folder of your computer mounted into the container: a mounted folder is as slow as before.
+- Repos cloned into a Docker volume, not a folder of your computer mounted into the container: a mounted folder is as slow as before, and the [doctor](/features/doctor) warns about it.
 - A Linux image with git, curl and unzip. Debian or Ubuntu is the simplest. On Alpine, Bun also needs `libstdc++` and `libgcc` (`apk add libstdc++ libgcc`).
 
 ## Set up the container
