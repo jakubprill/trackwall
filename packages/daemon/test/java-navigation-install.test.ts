@@ -113,7 +113,7 @@ describe("installing Java navigation from Settings (ADR-123)", () => {
     // mise runs in an empty folder of the install's own and looks for no config above it, so no mise config takes part.
     const mise = JSON.parse(readFileSync(join(installs, "calls.log"), "utf8"));
     expect(mise.ceiling).toBe(mise.cwd);
-    expect(mise.cwd.startsWith(join(realpathSync(lsp), ".install-"))).toBe(true);
+    expect(mise.cwd.startsWith(join(realpathSync.native(lsp), ".install-"))).toBe(true);
     expect(facade.agents.startOptions()).toEqual({ javaNavigation: { problem: null } });
   });
 
