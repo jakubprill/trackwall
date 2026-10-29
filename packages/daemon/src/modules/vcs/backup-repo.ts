@@ -130,20 +130,34 @@ export async function backupRemote(dir: string): Promise<BackupRemote | null> {
 /**
  * Why the store cannot be pushed to `url`, or `null`. Only to an HTTPS or SSH address: a local path or a shared folder is
  * a repo an agent may have written, and its `pre-receive` hook would run as the user, out of reach of `core.hooksPath`
- * here. Never with a space, a backslash or a control character, which parsers read differently (a URL parser takes `\`
- * for `/`, curl does not), so the address the user saw is the one git connects to.
+ * here. The user allows the address as they read it, so it must name the host git connects to plainly: only printable
+ * ASCII without a space or backslash (a URL parser takes `\` for `/`, curl does not; a Cyrillic letter looks like a Latin
+ * one), and an SSH user without `.` or `:`, so `ssh://github.com@other.example/x` cannot pass for `github.com`, and no `@`
+ * after the host of `host:path`, so `other.example:x@github.com:me/x` cannot either.
  */
-export function pushAddressProblem(url: string): string | null {
-  if ([...url].some((c) => c === "\\" || c.trim() === "" || c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f))
-    return "The store's remote has a space, a backslash or a control character; Trackwall does not push to such an address";
+function pushAddressProblem(url: string): string | null {
+  if ([...url].some((c) => c === "\\" || c.charCodeAt(0) <= 0x20 || c.charCodeAt(0) >= 0x7f))
+    return "The store's remote has a space, a backslash or a character outside ASCII; Trackwall does not push to such an address";
+  if (misleadingSshAddress(url))
+    return "The store's remote has a user or path that looks like a host; Trackwall does not push to such an address";
   if (networkAddress(url) === undefined)
     return "The store's remote is not an HTTPS or SSH address of a repo host; Trackwall pushes the store only to one";
   return null;
 }
 
+/** `ssh://user@host/path` or `user@host:path` whose user or path could be read as the host. */
+function misleadingSshAddress(url: string): boolean {
+  const ssh = /^ssh:\/\/([^/]*)@[^/@]*\//i.exec(url);
+  if (ssh) return /[.:@]/.test(ssh[1] ?? "");
+  if (url.includes("://")) return false;
+  const colon = url.indexOf(":");
+  const user = url.slice(0, colon).split("@").slice(0, -1).join("@");
+  return /[.:@]/.test(user) || url.slice(colon + 1).includes("@");
+}
+
 /**
  * Pushes `commit` of the store to `main` at `url`, the address the user allowed (ADR-127), never forced: a remote another
- * computer pushed to first refuses it. The push runs in `pushDir`, a bare repo in the state folder whose config only the
+ * computer pushed to first refuses it. The push runs in `pushDir`, a repo in the state folder whose config only the
  * daemon writes, which reads the store's objects through `objects/info/alternates`: the store's own config, which an
  * agent can rewrite at any moment, plays no part, so no `pushurl`, second address, `sshCommand` or credential helper
  * written there between a check and the push can redirect it or run a program.
@@ -166,13 +180,16 @@ export async function pushBackups(store: string, pushDir: string, url: string, c
   );
 }
 
-/** `pushDir` as a bare repo that borrows the store's objects; the store's folder can change with the projects folder. */
+/**
+ * `pushDir` as a repo that borrows the store's objects; the store's folder can change with the projects folder. Not bare,
+ * since git refuses to find a bare repo under `safe.bareRepository=explicit`, which a careful user may set.
+ */
 async function ensurePushRepo(pushDir: string, store: string): Promise<void> {
   await mkdir(pushDir, { recursive: true });
   if (!(await lstat(pushDir)).isDirectory()) throw new Error(`${pushDir} is not a folder (a link?)`);
-  if (!existsSync(join(pushDir, "HEAD"))) await git(pushDir, ["init", "-q", "--bare"]);
+  if (!existsSync(join(pushDir, ".git", "HEAD"))) await git(pushDir, ["init", "-q"]);
   // Forward slashes, which git reads on every system.
-  await writeFile(join(pushDir, "objects", "info", "alternates"), `${join(store, ".git", "objects").replaceAll("\\", "/")}\n`);
+  await writeFile(join(pushDir, ".git", "objects", "info", "alternates"), `${join(store, ".git", "objects").replaceAll("\\", "/")}\n`);
 }
 
 function updateIndex(path: string, oid: string): string[] {

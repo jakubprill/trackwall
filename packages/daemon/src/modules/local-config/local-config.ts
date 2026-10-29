@@ -42,7 +42,8 @@ interface LocalConfigRepos {
   projectsDir(): Promise<string>;
   /** The address the user allowed the store to be pushed to (`localConfigRemote`, ADR-127); `null` for none. */
   localConfigRemote(): string | null;
-  setLocalConfigRemote(url: string): void;
+  /** `null` removes the key. */
+  setLocalConfigRemote(url: string | null): void;
 }
 
 /** What `local-config` needs from `vcs`; wired in the facade. */
@@ -94,6 +95,8 @@ export class LocalConfig {
    */
   #pushed: { head: string; url: string | null } | undefined;
   #pushing: Promise<void> | undefined;
+  /** The address `#push` is about. */
+  #pushTarget: string | undefined;
 
   constructor(deps: LocalConfigDeps) {
     this.#deps = deps;
@@ -156,6 +159,12 @@ export class LocalConfig {
       throw new DomainError("bad_request", `The store's remote is no longer ${shown}; look at it again before you allow it`);
     if (remote.problem !== null) throw new DomainError("bad_request", remote.problem);
     this.#deps.repos.setLocalConfigRemote(remote.url);
+    return this.store();
+  }
+
+  /** Pushes the store nowhere from now on; the backups stay on this computer (ADR-127). */
+  stopPushing(): Promise<LocalConfigStore> {
+    this.#deps.repos.setLocalConfigRemote(null);
     return this.store();
   }
 
@@ -380,6 +389,9 @@ export class LocalConfig {
       this.#pushed = { head, url };
       return;
     }
+    // The last push's result belongs to its address: a new one starts afresh, without waiting out the old one's failure.
+    if (url !== this.#pushTarget) this.#push = { kind: "none" };
+    this.#pushTarget = url;
     const retryMs = this.#deps.pushRetryMs ?? PUSH_RETRY_MS;
     if (this.#push.kind === "failed" && Date.now() - Date.parse(this.#push.at) < retryMs) return;
     this.#pushing = this.#pushStore(store, head, url).finally(() => {
@@ -389,6 +401,8 @@ export class LocalConfig {
 
   async #pushStore(store: string, head: string, url: string): Promise<void> {
     try {
+      // A store the check refuses is not pushed either; the push itself reads nothing of the store's config.
+      await this.#ensureStore(store);
       await this.#deps.vcs.pushBackups(store, this.#deps.pushDir, url, head);
       this.#push = { kind: "ok", at: new Date().toISOString() };
       this.#pushed = { head, url };

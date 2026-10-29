@@ -89,7 +89,7 @@ describe("the local config store in the settings", () => {
 
     expect(localConfigStoreLines(unallowed, now).push).toEqual({
       tone: "warning",
-      text: "Not pushed: the backups stay on this computer until you allow the store's remote.",
+      text: "Not pushed: the backups stay on this computer until you choose a remote to push to.",
     });
     expect(remoteToAllow(unallowed)).toEqual({ remote, problem: null });
     expect(remoteToAllow({ ...unallowed, remoteProblem: "origin has 2 addresses" })).toEqual({ remote, problem: "origin has 2 addresses" });

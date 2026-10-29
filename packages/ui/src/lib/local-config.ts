@@ -45,7 +45,10 @@ export function localConfigStoreLines(store: LocalConfigStore, now: Date): { bac
     : "Nothing backed up yet.";
   if (store.pushesTo === null) {
     if (store.remote === null) return { backup, push: { text: "No remote: the backups stay on this computer." } };
-    return { backup, push: { tone: "warning", text: "Not pushed: the backups stay on this computer until you allow the store's remote." } };
+    return {
+      backup,
+      push: { tone: "warning", text: "Not pushed: the backups stay on this computer until you choose a remote to push to." },
+    };
   }
   switch (store.push.kind) {
     case "none":

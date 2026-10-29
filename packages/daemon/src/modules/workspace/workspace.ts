@@ -454,7 +454,7 @@ export class Workspace {
     return this.deps.file.localConfigRemote();
   }
 
-  setLocalConfigRemote(url: string): void {
+  setLocalConfigRemote(url: string | null): void {
     this.deps.file.setLocalConfigRemote(url);
   }
 

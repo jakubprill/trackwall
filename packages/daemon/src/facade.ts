@@ -99,7 +99,7 @@ const WORKSPACE_FILE = "workspace.yaml";
 const RUNTIME_FILE = "runtime.json";
 const CARDS_DIR = "cards";
 /** The bare repo the local config store is pushed from (ADR-127). */
-const LOCAL_CONFIG_PUSH_DIR = "local-config-push.git";
+const LOCAL_CONFIG_PUSH_DIR = "local-config-push";
 const DAY_START_FILE = "day-start.json";
 const LOGS_DIR = "logs";
 /** The limit of one source JSONL file; with the previous file after rotation a source takes at most twice that. */

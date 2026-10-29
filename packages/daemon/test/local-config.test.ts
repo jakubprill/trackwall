@@ -388,7 +388,76 @@ describe("the local config store", () => {
     REAL_GIT_TIMEOUT,
   );
 
-  test("a remote is not allowed when it changed since the user saw it, has several addresses or an address parsers read differently", async () => {
+  test(
+    "the push reads nothing of the store's config, so keys written there after the check neither redirect it nor run a program",
+    async () => {
+      const { projects, store, backUp } = await setup();
+      const orders = makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
+      writeFileSync(join(orders, "mise.local.toml"), TASKS);
+      await backUp();
+      const head = gitIn(store, "rev-parse", "main").trim();
+      const marker = join(projects, "program-ran").replaceAll("\\", "/");
+      const OTHER_REMOTE = "ssh://git@backups.example.com/someone-else/backups.git";
+      // Keys the store's check refuses, as an agent could write them between the check and the push.
+      gitIn(store, "remote", "add", "origin", OTHER_REMOTE);
+      gitIn(store, "config", "remote.origin.pushurl", OTHER_REMOTE);
+      gitIn(store, "config", `url.${OTHER_REMOTE}.pushInsteadOf`, BACKUPS_REMOTE);
+      gitIn(store, "config", "credential.helper", `!touch "${marker}"`);
+      gitIn(store, "config", "core.sshCommand", `touch "${marker}"`);
+
+      await withBackupsRemote(async (bare) => {
+        gitIn(projects, "init", "-q", "--bare", bare);
+        const other = join(bare, "..", "..", "someone-else", "backups.git");
+        gitIn(projects, "init", "-q", "--bare", other);
+        const pushDir = join(mkdtempSync(join(tmpdir(), "trackwall-home-")), "local-config-push");
+
+        await new Vcs(systemTempFolder).pushBackups(store, pushDir, BACKUPS_REMOTE, head);
+
+        expect(gitIn(bare, "rev-parse", "main").trim()).toBe(head);
+        expect(gitIn(other, "branch", "--list").trim()).toBe("");
+        expect(existsSync(marker)).toBe(false);
+      });
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test("an address that names its host misleadingly cannot be pushed to", async () => {
+    const { projects, store, facade, backUp } = await setup();
+    const orders = makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
+    writeFileSync(join(orders, "mise.local.toml"), TASKS);
+    await backUp();
+    gitIn(store, "remote", "add", "origin", BACKUPS_REMOTE);
+
+    for (const [url, problem] of [
+      // A URL parser reads `\` as `/` and shows backups.example.com; curl connects to elsewhere.example.
+      ["https://backups.example.com\\@elsewhere.example/me/backups.git", "a backslash"],
+      // A Cyrillic і in place of the Latin i.
+      ["https://backups.exаmple.com/me/backups.git", "outside ASCII"],
+      // ssh connects to elsewhere.example in all three.
+      ["ssh://backups.example.com@elsewhere.example/me/backups.git", "looks like a host"],
+      ["backups.example.com@elsewhere.example:me/backups.git", "looks like a host"],
+      ["elsewhere.example:x@backups.example.com:me/backups.git", "looks like a host"],
+    ] as const) {
+      gitIn(store, "remote", "set-url", "origin", url);
+      expect((await facade.localConfig.store()).remoteProblem).toContain(problem);
+    }
+    gitIn(store, "remote", "set-url", "origin", "git@backups.example.com:me/backups.git");
+    expect((await facade.localConfig.store()).remoteProblem).toBe(null);
+  });
+
+  test("Stop pushing keeps the backups on this computer", async () => {
+    const { projects, store, facade, backUp } = await setup();
+    const orders = makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
+    writeFileSync(join(orders, "mise.local.toml"), TASKS);
+    await backUp();
+    gitIn(store, "remote", "add", "origin", BACKUPS_REMOTE);
+    await facade.localConfig.allowRemote(BACKUPS_REMOTE);
+
+    expect(await facade.localConfig.stopPushing()).toMatchObject({ pushesTo: null, remote: BACKUPS_REMOTE, remoteAllowed: false });
+    expect(facade.workspace.localConfigRemote()).toBe(null);
+  });
+
+  test("a remote is not allowed when it changed since the user saw it, or has several addresses", async () => {
     const { projects, store, facade, backUp } = await setup();
     const orders = makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
     writeFileSync(join(orders, "mise.local.toml"), TASKS);
@@ -403,11 +472,6 @@ describe("the local config store", () => {
     gitIn(store, "remote", "set-url", "--add", "origin", "ssh://git@backups.example.com/someone-else/backups.git");
     expect((await facade.localConfig.store()).remoteProblem).toBe("origin has 2 addresses; Trackwall pushes the store only to one");
     await expect(facade.localConfig.allowRemote("https://backups.example.com/me/backups.git")).rejects.toThrow("has 2 addresses");
-
-    // A URL parser reads `\` as `/` and shows backups.example.com; curl connects to elsewhere.example.
-    gitIn(store, "remote", "remove", "origin");
-    gitIn(store, "remote", "add", "origin", "https://backups.example.com\\@elsewhere.example/me/backups.git");
-    await expect(facade.localConfig.allowRemote("https://elsewhere.example/me/backups.git")).rejects.toThrow("a backslash");
     expect(facade.workspace.localConfigRemote()).toBe(null);
   });
 
@@ -597,7 +661,7 @@ describe("the local config store", () => {
       const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
       const { facade } = await setup(projects);
       const vcs = new Vcs(systemTempFolder);
-      const pushDir = join(mkdtempSync(join(tmpdir(), "trackwall-home-")), "local-config-push.git");
+      const pushDir = join(mkdtempSync(join(tmpdir(), "trackwall-home-")), "local-config-push");
       const localConfig = new LocalConfig({ repos: facade.workspace, vcs, log: () => {}, pushDir, pushRetryMs: 0 });
       const backUp = async () => {
         await localConfig.backUp();

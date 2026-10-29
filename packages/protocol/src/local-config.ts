@@ -123,4 +123,6 @@ export const localConfigApi = {
    * remote that changed meanwhile is refused. Only from the UI, never from MCP: an agent must not choose where the backups go.
    */
   allowRemote: endpoint("allow-remote", z.object({ remote: z.string() }).strict(), LocalConfigStore),
+  /** Pushes the store nowhere from now on (removes `localConfigRemote`). Only from the UI, like `allowRemote`. */
+  stopPushing: endpoint("stop-pushing", z.object({}).strict(), LocalConfigStore),
 };

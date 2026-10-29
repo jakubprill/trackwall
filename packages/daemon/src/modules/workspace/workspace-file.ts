@@ -185,7 +185,7 @@ export class WorkspaceFile {
     this.set("javaNavigation", lombok === null ? paths : settings);
   }
 
-  setLocalConfigRemote(url: string): void {
+  setLocalConfigRemote(url: string | null): void {
     this.set("localConfigRemote", url);
   }
 

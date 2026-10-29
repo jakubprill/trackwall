@@ -22,6 +22,7 @@ export function LocalConfigStoreSurface({ conn }: { conn: Connection }) {
   const load = useCallback(() => post(conn, localConfigApi.store, {}), [conn]);
   const store = useRemote(load, { pollMs: POLL_MS });
   const allow = useAction((remote: string) => post(conn, localConfigApi.allowRemote, { remote }), store.reload);
+  const stop = useAction(() => post(conn, localConfigApi.stopPushing, {}), store.reload);
   return (
     <Surface label="Local config store">
       <div className="flex flex-col gap-3 p-4">
@@ -36,6 +37,14 @@ export function LocalConfigStoreSurface({ conn }: { conn: Connection }) {
         {store.data?.dir === null && <p className="text-sm">Set the projects folder first.</p>}
         {store.data?.dir && (
           <StoreDetails dir={store.data.dir} {...localConfigStoreLines(store.data, new Date())} problem={store.data.problem} />
+        )}
+        {store.data?.pushesTo && (
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="sm" disabled={stop.pending} onClick={() => stop.run()}>
+              Stop pushing
+            </Button>
+            {stop.error && <p className="text-destructive text-xs">{stop.error}</p>}
+          </div>
         )}
         {store.data?.dir && (
           <AllowRemote offer={remoteToAllow(store.data)} pending={allow.pending} error={allow.error} onAllow={allow.run} />
@@ -91,8 +100,8 @@ function AllowRemote({
       ) : (
         <>
           <p className="text-muted-foreground text-xs">
-            Allow it only if you added it yourself and it is your own private repo. If you did not, remove it with git (git remote remove
-            origin).
+            Push to it only if you added it yourself and it is your own private repo. If you did not, remove it with git (git remote remove
+            origin): Trackwall never pushes to an address you did not choose.
           </p>
           <div className="flex items-center gap-3">
             <Button variant="outline" size="sm" disabled={pending} onClick={() => onAllow(offer.remote)}>
