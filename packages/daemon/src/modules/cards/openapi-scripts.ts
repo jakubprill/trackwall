@@ -56,7 +56,7 @@ function scriptsOf(text: string): Record<string, string> | undefined {
 }
 
 /** The origins of the addresses `openapi-typescript` reads in a script: its first argument that is not an option. */
-export function downloadedSpecs(script: string): string[] {
+function downloadedSpecs(script: string): string[] {
   if (script.length > MAX_SCRIPT_LENGTH) return [];
   const words = script.split(/\s+/);
   return words.flatMap((word, i) => {
