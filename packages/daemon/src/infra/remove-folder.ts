@@ -12,7 +12,7 @@ const REMOVE_BACKOFF_MS = 50;
 const RETRYABLE = new Set(["EBUSY", "EPERM", "ENOTEMPTY"]);
 
 /** One attempt at removing a folder; `removeFolder` retries it. */
-export type FolderRemoval = (path: string) => void | Promise<void>;
+export type FolderRemoval = (path: string) => Promise<void>;
 
 /** The default: a folder that is not there is an error, so a wrong path does not pass unnoticed. */
 export const removeExisting: FolderRemoval = (path) => rm(path, { recursive: true });
