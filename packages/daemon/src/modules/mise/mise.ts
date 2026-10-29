@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { realpath } from "node:fs/promises";
 import { delimiter } from "node:path";
 import {
   type LogSource,
@@ -288,14 +289,18 @@ export class Mise {
 
   /**
    * Installs one tool outside any repo and returns its folder (`mise install <spec>`, then `mise where <spec>`): the Java
-   * that the Java navigation install runs jdtls on (ADR-123). `dir` is where mise runs, an empty folder, and mise looks
+   * that the Java navigation install runs jdtls on (ADR-123). `dir` is where mise runs (by its real path), an empty folder, and mise looks
    * for no config above it, so neither a repo's config nor the projects folder's takes part. Not in a process
    * group: `mise install` of one tool downloads and unpacks it itself.
    */
   async installTool(spec: string, dir: string): Promise<string> {
-    const env = { ...(await this.deps.env()), [CEILING_PATHS_ENV]: dir };
-    await this.cliOutput(await runMiseCli(this.deps.command, ["install", spec], dir, env, TOOL_INSTALL_TIMEOUT_MS));
-    return (await this.cliOutput(await runMiseCli(this.deps.command, ["where", spec], dir, env))).trim();
+    // mise compares its ceiling with its working directory as the system resolves it, so a link in the path (macOS's
+    // /var to /private/var, a linked projects folder) would leave the ceiling unmatched and let configs above count. A
+    // volume whose paths cannot be resolved (some RAM and network drives on Windows) keeps the path as given.
+    const cwd = await realpath(dir).catch(() => dir);
+    const env = { ...(await this.deps.env()), [CEILING_PATHS_ENV]: cwd };
+    await this.cliOutput(await runMiseCli(this.deps.command, ["install", spec], cwd, env, TOOL_INSTALL_TIMEOUT_MS));
+    return (await this.cliOutput(await runMiseCli(this.deps.command, ["where", spec], cwd, env))).trim();
   }
 
   /** The output of a mise call that ended well; otherwise `mise_unavailable` with mise's message. */
