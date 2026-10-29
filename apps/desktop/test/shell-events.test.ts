@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { TaskState, TRACKWALL_LINK_KINDS, TRACKWALL_LINK_SCHEME } from "@trackwall/protocol";
+import { DAEMON_INFO_PATH, TaskState, TRACKWALL_LINK_KINDS, TRACKWALL_LINK_SCHEME } from "@trackwall/protocol";
 import { z } from "zod";
 import { parseFile, REPO } from "../scripts/lib.ts";
 
@@ -218,4 +218,28 @@ test("the UI reads and switches the start at sign-in through the commands the sh
   expect(/const ENABLED_COMMAND = "(\w+)";/.exec(ui)?.[1]).toBe("autostart_enabled");
   expect(/const SET_COMMAND = "(\w+)";/.exec(ui)?.[1]).toBe("set_autostart");
   expect(ui).toContain("invoke<unknown>(SET_COMMAND, { enabled })");
+});
+
+test("the UI switches where the daemon runs with the commands the shell defines", () => {
+  const shell = read("apps/desktop/src-tauri/src/remote_daemon.rs");
+  const ui = read("packages/ui/src/lib/remote-daemon.ts");
+  const commands = [...shell.matchAll(/#\[tauri::command\]\s*pub (?:async )?fn (\w+)/g)].map((m) => m[1]);
+  expect(commands).toEqual(["remote_daemon_port", "use_remote_daemon", "use_own_daemon"]);
+  const uiCommands = [...ui.matchAll(/_COMMAND = "([^"]+)";/g)].map((m) => m[1]);
+  expect(uiCommands).toEqual(commands);
+  expect(shell).toContain("address: String");
+  expect(ui).toContain("invoke(USE_REMOTE_COMMAND, { address })");
+});
+
+test("the UI opens links and VS Code outside the window with the command the shell defines", () => {
+  const shell = /#\[tauri::command\]\s*pub fn (\w+)\((\w+): String\)/.exec(read("apps/desktop/src-tauri/src/system_open.rs"));
+  const ui = read("packages/ui/src/lib/desktop.ts");
+  expect(shell?.[1]).toBe("open_outside");
+  expect(/const OPEN_OUTSIDE_COMMAND = "([^"]+)";/.exec(ui)?.[1]).toBe(shell?.[1]);
+  expect(ui).toContain(`invoke(OPEN_OUTSIDE_COMMAND, { ${shell?.[2]} })`);
+});
+
+test("the shell checks a remote daemon's token on the daemon info path of protocol", () => {
+  const shell = /const DAEMON_INFO_PATH: &str = "([^"]+)";/.exec(read("apps/desktop/src-tauri/src/daemon.rs"))?.[1];
+  expect(shell).toBe(DAEMON_INFO_PATH);
 });

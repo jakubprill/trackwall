@@ -1,0 +1,20 @@
+import { RemoteDaemonForm } from "@/components/RemoteDaemonForm";
+import { Surface } from "@/components/Surface";
+import { inDesktopShell } from "@/lib/app-window";
+
+/** Whether the desktop app runs its own daemon or connects to one in a dev container (ADR-130). */
+export function RemoteDaemonSurface() {
+  return (
+    <Surface label="Daemon in a container">
+      <div className="flex flex-col gap-3 p-4">
+        {inDesktopShell() ? (
+          <RemoteDaemonForm />
+        ) : (
+          <p className="text-sm">
+            This page uses the daemon that served it. The desktop app can connect to a daemon in a dev container too.
+          </p>
+        )}
+      </div>
+    </Surface>
+  );
+}

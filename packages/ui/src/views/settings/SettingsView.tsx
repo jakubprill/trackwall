@@ -1,5 +1,6 @@
 import type { CardWarmupProgress } from "@trackwall/protocol";
 import { type ReactNode, useState } from "react";
+import { RemoteDaemonSurface } from "@/components/RemoteDaemonSurface";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { SETTINGS_CATEGORIES, type SettingsCategory, type SettingsSection, settingsCategory } from "@/lib/settings-categories";
@@ -84,6 +85,8 @@ function Section({ section, conn, update, warmupLive, onRetry, onSaved }: Settin
       return <JavaNavigationSurface conn={conn} />;
     case "start-at-sign-in":
       return <StartAtSignInSurface />;
+    case "remote-daemon":
+      return <RemoteDaemonSurface />;
     case "updates":
       return <UpdatesSurface handle={update} />;
     case "home-scene":

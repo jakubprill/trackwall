@@ -1,10 +1,12 @@
 //! The state of the shell's connection to the daemon (§5.4): start in the background, the UI waiting for the result, retry and stop.
 //! Guarantees that after `stop` the shell will not start the daemon again, so no exit path leaves an orphan.
+//! With a remote daemon (ADR-130) the same states hold, but "start" only connects and "stop" leaves the daemon running.
 
 use crate::daemon::{self, Connection};
+use crate::remote_daemon::RemoteDaemon;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
 
 /// The answer for a UI that asks for the daemon while the shell is already closing.
 const SHELL_EXITING: &str = "the app is quitting";
@@ -25,6 +27,8 @@ enum Phase {
 pub struct DaemonState {
     /// The state directory, resolved once when the shell starts; an error reaches the UI on a start attempt.
     home: Result<PathBuf, String>,
+    /// Set once in `setup`, before the first start, from the saved file; switching it restarts the app.
+    remote: OnceLock<RemoteDaemon>,
     phase: Mutex<Phase>,
     changed: Condvar,
     cancel: AtomicBool,
@@ -32,7 +36,24 @@ pub struct DaemonState {
 
 impl DaemonState {
     pub fn new(home: Result<PathBuf, String>) -> Self {
-        DaemonState { home, phase: Mutex::new(Phase::Idle), changed: Condvar::new(), cancel: AtomicBool::new(false) }
+        DaemonState {
+            home,
+            remote: OnceLock::new(),
+            phase: Mutex::new(Phase::Idle),
+            changed: Condvar::new(),
+            cancel: AtomicBool::new(false),
+        }
+    }
+
+    /// Makes the shell connect to `remote` instead of starting its own daemon; only before the first start.
+    pub fn use_remote(&self, remote: RemoteDaemon) {
+        if self.remote.set(remote).is_err() {
+            crate::report_error!("a remote daemon was set twice; the app keeps the first until it restarts");
+        }
+    }
+
+    pub fn remote(&self) -> Option<&RemoteDaemon> {
+        self.remote.get()
     }
 
     /// Starts in the background if there has been no start yet or the previous one failed.
@@ -48,7 +69,10 @@ impl DaemonState {
         }
         let me = Arc::clone(self);
         std::thread::spawn(move || {
-            let result = me.home.clone().and_then(|home| daemon::ensure_daemon(&home, &me.cancel));
+            let result = match me.remote.get() {
+                Some(remote) => daemon::connect_remote(remote),
+                None => me.home.clone().and_then(|home| daemon::ensure_daemon(&home, &me.cancel)),
+            };
             *me.lock() = match result {
                 Ok(conn) => Phase::Ready(conn),
                 Err(err) => {
@@ -63,12 +87,18 @@ impl DaemonState {
         });
     }
 
-    /// Like `start`, but also when the saved daemon has stopped answering (for example ended from outside the app).
+    /// Like `start`, but also when the saved daemon has stopped answering (for example ended from outside the app), or,
+    /// for a remote daemon, no longer takes its token.
     pub fn restart_if_down(self: &Arc<Self>) {
         {
             let mut phase = self.lock();
             if let Phase::Ready(conn) = &*phase {
-                if daemon::health(conn.port).as_deref() == Some(daemon::VERSION) {
+                // A remote daemon restarted on the same port answers health but no longer takes the saved token.
+                let alive = match self.remote.get() {
+                    Some(remote) => daemon::connect_remote(remote).is_ok(),
+                    None => daemon::health(conn.port).as_deref() == Some(daemon::VERSION),
+                };
+                if alive {
                     return;
                 }
                 *phase = Phase::Idle;
@@ -98,6 +128,7 @@ impl DaemonState {
     }
 
     /// Cancels a start in progress and stops the daemon gracefully; returns once the daemon has stopped answering.
+    /// A remote daemon is not the app's to stop: it keeps running for its container and its other windows.
     /// Later calls wait for the first one to finish, so that no exit path ends the process halfway.
     pub fn stop(&self) {
         let started = {
@@ -114,8 +145,10 @@ impl DaemonState {
                 _ => None,
             }
         };
-        eprintln!("[desktop] quitting the app: stopping the daemon");
-        self.shutdown(started.as_ref());
+        if self.remote.get().is_none() {
+            eprintln!("[desktop] quitting the app: stopping the daemon");
+            self.shutdown(started.as_ref());
+        }
         *self.lock() = Phase::Stopped;
         self.changed.notify_all();
     }
@@ -268,6 +301,93 @@ mod tests {
         state.stop();
 
         assert_eq!(ui.join().expect("waiting UI").unwrap_err(), SHELL_EXITING);
+    }
+
+    fn remote(port: u16, token: &str) -> RemoteDaemon {
+        RemoteDaemon { port, token: token.into() }
+    }
+
+    #[test]
+    fn with_a_remote_daemon_start_connects_to_it_with_its_token() {
+        let (port, rx) = fake_daemon();
+        let state = Arc::new(DaemonState::new(no_home()));
+        state.use_remote(remote(port, "secret"));
+
+        state.start();
+
+        let conn = state.wait().expect("connection to the remote daemon");
+        assert_eq!((conn.base_url, conn.token), (format!("http://127.0.0.1:{port}"), "secret".to_owned()));
+        assert!(rx.try_iter().any(|r| r.starts_with("GET /api/daemon/info") && r.contains("Authorization: Bearer secret\r\n")));
+    }
+
+    #[test]
+    fn quitting_the_app_leaves_a_remote_daemon_running() {
+        let (port, rx) = fake_daemon();
+        let state = Arc::new(DaemonState::new(no_home()));
+        state.use_remote(remote(port, "secret"));
+        state.start();
+        state.wait().expect("connection to the remote daemon");
+
+        state.stop();
+
+        assert!(shutdown_requests(&rx).is_empty());
+        assert!(!port_is_closed(port));
+        assert_eq!(state.wait().unwrap_err(), SHELL_EXITING);
+    }
+
+    #[test]
+    fn a_remote_daemon_that_rejects_the_token_fails_the_start_with_a_reason() {
+        let port = rejecting_daemon();
+        let state = Arc::new(DaemonState::new(no_home()));
+        state.use_remote(remote(port, "old"));
+
+        state.start();
+
+        assert!(state.wait().unwrap_err().contains("did not accept the token"));
+    }
+
+    #[test]
+    fn a_remote_daemon_nobody_answers_for_fails_the_start_with_a_reason() {
+        let port = TcpListener::bind("127.0.0.1:0").expect("bind 127.0.0.1:0").local_addr().expect("address").port();
+        let state = Arc::new(DaemonState::new(no_home()));
+        state.use_remote(remote(port, "secret"));
+
+        state.start();
+
+        assert!(state.wait().unwrap_err().contains(&format!("No Trackwall daemon answers at 127.0.0.1:{port}")));
+    }
+
+    #[test]
+    fn retry_with_a_remote_daemon_that_took_a_new_token_fails_with_a_reason() {
+        // The daemon restarted on the same port: health still answers, the saved token no longer works.
+        let port = rejecting_daemon();
+        let state = Arc::new(DaemonState::new(no_home()));
+        state.use_remote(remote(port, "old"));
+        *state.lock() = Phase::Ready(Connection { base_url: format!("http://127.0.0.1:{port}"), token: "old".into(), port });
+
+        state.restart_if_down();
+
+        assert!(state.wait().unwrap_err().contains("did not accept the token"));
+    }
+
+    /// A daemon of the shell's version that answers health and rejects every token, like one restarted with a new token.
+    fn rejecting_daemon() -> u16 {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind 127.0.0.1:0");
+        let port = listener.local_addr().expect("listening address").port();
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().flatten() {
+                let mut buf = [0u8; 4096];
+                let Ok(n) = stream.read(&mut buf) else { continue };
+                let health = String::from_utf8_lossy(&buf[..n]).starts_with("GET /api/health");
+                let (status, body) = if health {
+                    ("200 OK", format!(r#"{{"ok":true,"data":{{"version":"{}"}}}}"#, daemon::VERSION))
+                } else {
+                    ("401 Unauthorized", r#"{"ok":false}"#.to_owned())
+                };
+                let _ = stream.write_all(format!("HTTP/1.1 {status}\r\nContent-Length: {}\r\n\r\n{body}", body.len()).as_bytes());
+            }
+        });
+        port
     }
 
     #[test]

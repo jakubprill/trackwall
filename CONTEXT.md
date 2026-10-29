@@ -9,8 +9,12 @@ The `trackwall-daemon` process, which holds all the state and all the logic. The
 _Avoid_: backend, server (without qualification)
 
 **Shell** (`apps/desktop`):
-The Tauri app: windows, tray, starting and supervising the daemon as a sidecar, the WebView2 check. It contains no domain logic.
+The Tauri app: windows, tray, starting and supervising the daemon as a sidecar or connecting to a remote daemon, the WebView2 check. It contains no domain logic.
 _Avoid_: app (when only Tauri is meant)
+
+**Remote daemon** (`RemoteDaemon`, `remote_daemon.rs`, `remote-daemon.json`; in the UI *daemon in a container*):
+A daemon the desktop app connects to through a port forwarded to 127.0.0.1, typically in a dev container, instead of starting its own as a sidecar (ADR-130). The app neither starts nor stops it. Its opposite is the app's **own daemon**.
+_Avoid_: external daemon, server
 
 **App update** (`updates.rs`, `UpdateCheck`; in the UI *update*):
 A newer version of Trackwall from GitHub Releases, installed by the shell after the user's click and followed by a restart (ADR-53). Its **update package** is the archive the updater downloads and checks against the signature: the release zip on Windows (`portable_update.rs`), `.app.tar.gz` on macOS; the **update manifest** is `latest.json` in the release.

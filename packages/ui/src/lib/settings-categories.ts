@@ -26,7 +26,7 @@ export const SETTINGS_CATEGORIES = [
     id: "app",
     label: "App",
     description: "The desktop app on this computer.",
-    sections: ["start-at-sign-in", "updates", "home-scene"],
+    sections: ["start-at-sign-in", "remote-daemon", "updates", "home-scene"],
   },
   {
     id: "files",

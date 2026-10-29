@@ -26,6 +26,8 @@ mod win_text;
 // Tested on every system, used only on Windows (ADR-53).
 #[cfg_attr(not(windows), allow(dead_code))]
 mod portable_update;
+mod remote_daemon;
+mod system_open;
 mod updates;
 mod window_effect;
 mod windows;
@@ -141,6 +143,10 @@ fn main() {
             window_shows,
             jump::take_jump,
             link::open_link,
+            system_open::open_outside,
+            remote_daemon::remote_daemon_port,
+            remote_daemon::use_remote_daemon,
+            remote_daemon::use_own_daemon,
             clipboard::copy_text,
             open_from_tray_panel,
             folder_picker::pick_projects_folder,
@@ -152,6 +158,9 @@ fn main() {
             zoom::zoom_window
         ])
         .setup(move |app| {
+            if let Some(remote) = remote_daemon::load(app.handle()) {
+                state.use_remote(remote);
+            }
             state.start();
             // Files of the version this one replaced (ADR-53); in the background, because they are freed only once it exits.
             #[cfg(windows)]
