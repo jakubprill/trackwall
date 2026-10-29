@@ -1,4 +1,5 @@
-import { lstat, mkdir, mkdtemp } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { lstat, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { removeFolder, removeIfPresent } from "../../infra/remove-folder.ts";
 import { existingCommit, git, symbolicRef } from "./git.ts";
@@ -17,8 +18,8 @@ import { networkAddress } from "./remote.ts";
  * filter, attribute or hook runs and the user's own index keeps what they staged; only the backed-up paths are then
  * updated in the index, so `git status` in the store stays clean. Every git command that writes runs without hooks and
  * signing, under a fixed identity, because the daemon, not the user, made it, and the push goes only to an HTTPS or SSH
- * address, since hooks on the receiving side are beyond this side's reach, and only to the address the user allowed
- * (ADR-127), since `git remote add` keys are allowed and an agent can write them too.
+ * address, since hooks on the receiving side are beyond this side's reach, and only to the address the user allowed,
+ * from a repo outside the store (ADR-127), since `git remote add` keys are allowed here and an agent can write them too.
  */
 
 const IDENTITY = ["user.name=Trackwall", "user.email=trackwall@localhost", "commit.gpgSign=false"];
@@ -106,56 +107,72 @@ export async function storeHead(dir: string): Promise<string | null> {
 }
 
 /**
- * The store's main remote. `url` is its address as the store's config has it, which is what the user allows (ADR-127);
- * `shown` is `host/path` for an HTTPS or SSH address, never with a user or token, otherwise only the remote's name, which
- * the backups are never pushed to (`pushBackups`). `url` is `null` when the remote has several addresses, since a push
- * would go to each.
+ * The store's main remote as the user may allow it (ADR-127): its address as the store's config writes it, and why it
+ * cannot be allowed, if it cannot. `null` without a main remote.
  */
 export interface BackupRemote {
-  url: string | null;
-  shown: string;
-  /** Whether the address is one the store may be pushed to at all. */
-  network: boolean;
+  url: string;
+  problem: string | null;
 }
 
-/** The store's main remote; `null` without one. */
 export async function backupRemote(dir: string): Promise<BackupRemote | null> {
   if (!(await isRealGitDir(dir))) return null;
   const config = await readConfig(dir);
   const remote = mainRemote(config);
   if (!remote) return null;
-  const address = networkAddress(remote.url);
-  const urls = config.remoteUrls.get(remote.name) ?? [];
-  return { url: urls.length === 1 ? (urls[0] ?? null) : null, shown: address ?? remote.name, network: address !== undefined };
+  const urls = config.remotes.get(remote.name) ?? [];
+  const url = urls[0] ?? remote.url;
+  // git pushes to every address of a remote, so a user allowing what they see would allow more than they see.
+  if (urls.length !== 1) return { url, problem: `${remote.name} has ${urls.length} addresses; Trackwall pushes the store only to one` };
+  return { url, problem: pushAddressProblem(url) };
 }
 
-/** What became of a push: `no_remote` and `not_allowed` push nothing. */
-export type BackupPush = "pushed" | "no_remote" | "not_allowed";
+/**
+ * Why the store cannot be pushed to `url`, or `null`. Only to an HTTPS or SSH address: a local path or a shared folder is
+ * a repo an agent may have written, and its `pre-receive` hook would run as the user, out of reach of `core.hooksPath`
+ * here. Never with a space, a backslash or a control character, which parsers read differently (a URL parser takes `\`
+ * for `/`, curl does not), so the address the user saw is the one git connects to.
+ */
+export function pushAddressProblem(url: string): string | null {
+  if ([...url].some((c) => c === "\\" || c.trim() === "" || c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f))
+    return "The store's remote has a space, a backslash or a control character; Trackwall does not push to such an address";
+  if (networkAddress(url) === undefined)
+    return "The store's remote is not an HTTPS or SSH address of a repo host; Trackwall pushes the store only to one";
+  return null;
+}
 
 /**
- * Pushes `main` to the main remote, never forced: a remote another computer pushed to first refuses it. Only to an HTTPS
- * or SSH address: a local path or a shared folder is a repo an agent may have written, and its `pre-receive` hook would
- * run as the user, out of reach of `core.hooksPath` here. Only when the remote's one address is `allowedUrl`, the one the
- * user allowed (ADR-127), so a remote with several addresses is never pushed: the check reads the config right before the push, as `ensureBackupRepo` does for the keys that
- * could redirect it. Call after `ensureBackupRepo`, which keeps `pushurl` and other redirections out of the store's config.
+ * Pushes `commit` of the store to `main` at `url`, the address the user allowed (ADR-127), never forced: a remote another
+ * computer pushed to first refuses it. The push runs in `pushDir`, a bare repo in the state folder whose config only the
+ * daemon writes, which reads the store's objects through `objects/info/alternates`: the store's own config, which an
+ * agent can rewrite at any moment, plays no part, so no `pushurl`, second address, `sshCommand` or credential helper
+ * written there between a check and the push can redirect it or run a program.
  */
-export async function pushBackups(dir: string, allowedUrl: string | null): Promise<BackupPush> {
-  const config = await readConfig(dir);
-  const remote = mainRemote(config);
-  if (!remote) return "no_remote";
-  const urls = config.remoteUrls.get(remote.name) ?? [];
-  if (urls.length !== 1 || urls[0] !== allowedUrl) return "not_allowed";
-  // An address allowed by hand in `workspace.yaml` is checked too.
-  if (networkAddress(remote.url) === undefined)
-    throw new Error(`${remote.name} is not an HTTPS or SSH address of a repo host; Trackwall pushes the store only to one`);
+export async function pushBackups(store: string, pushDir: string, url: string, commit: string): Promise<void> {
+  const problem = pushAddressProblem(url);
+  if (problem !== null) throw new Error(problem);
+  await ensurePushRepo(pushDir, store);
+  const config = await readConfig(pushDir);
   await withoutHooks((hooksPath) =>
-    git(dir, ["push", "--no-follow-tags", "--no-recurse-submodules", "--", remote.name, `${BRANCH}:${BRANCH}`], {
-      timeoutMs: PUSH_TIMEOUT_MS,
-      network: { sshCommand: config.sshCommand },
-      config: [hooksPath, `remote.${remote.name}.receivepack=git-receive-pack`, "push.gpgSign=false"],
-    }),
+    git(
+      pushDir,
+      ["push", "--no-follow-tags", "--no-recurse-submodules", "--receive-pack=git-receive-pack", "--", url, `${commit}:${BRANCH}`],
+      {
+        timeoutMs: PUSH_TIMEOUT_MS,
+        network: { sshCommand: config.sshCommand },
+        config: [hooksPath, "push.gpgSign=false"],
+      },
+    ),
   );
-  return "pushed";
+}
+
+/** `pushDir` as a bare repo that borrows the store's objects; the store's folder can change with the projects folder. */
+async function ensurePushRepo(pushDir: string, store: string): Promise<void> {
+  await mkdir(pushDir, { recursive: true });
+  if (!(await lstat(pushDir)).isDirectory()) throw new Error(`${pushDir} is not a folder (a link?)`);
+  if (!existsSync(join(pushDir, "HEAD"))) await git(pushDir, ["init", "-q", "--bare"]);
+  // Forward slashes, which git reads on every system.
+  await writeFile(join(pushDir, "objects", "info", "alternates"), `${join(store, ".git", "objects").replaceAll("\\", "/")}\n`);
 }
 
 function updateIndex(path: string, oid: string): string[] {

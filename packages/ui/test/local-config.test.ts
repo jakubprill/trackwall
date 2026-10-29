@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { LocalConfigStore, RepoLocalConfig } from "@trackwall/protocol";
 import {
-  canAllowRemote,
   canIgnore,
   canRestore,
   hasLocalConfig,
   localConfigFileStatus,
   localConfigStoreLines,
+  remoteToAllow,
 } from "../src/lib/local-config.ts";
 
 describe("a repo's local config files", () => {
@@ -66,11 +66,14 @@ describe("the local config store in the settings", () => {
   const store: LocalConfigStore = {
     dir: "C:\\Users\\me\\Dev\\.trackwall\\local",
     lastBackup: { hash: "abc", subject: "Back up orders: mise.local.toml", author: "Trackwall", date: "2026-10-26T14:55:00Z" },
+    pushesTo: null,
     remote: null,
     remoteAllowed: false,
+    remoteProblem: null,
     push: { kind: "none" },
     problem: null,
   };
+  const remote = "https://git.example.com/me/trackwall-local.git";
 
   test("the last backup and, without a remote, that the backups stay on this computer", () => {
     expect(localConfigStoreLines(store, now)).toEqual({
@@ -78,38 +81,41 @@ describe("the local config store in the settings", () => {
       push: { text: "No remote: the backups stay on this computer." },
     });
     expect(localConfigStoreLines({ ...store, lastBackup: null }, now).backup).toBe("Nothing backed up yet.");
+    expect(remoteToAllow(store)).toBe(null);
   });
 
-  test("a remote nobody allowed is not pushed to, whatever the last push did, and offers Allow", () => {
-    const remote = "git.example.com/me/trackwall-local";
-    const pushedBefore = { ...store, remote, push: { kind: "ok", at: "2026-10-26T14:59:30Z" } } as const;
+  test("a remote nobody allowed is not pushed to, and is offered to allow, or says why it cannot be", () => {
+    const unallowed = { ...store, remote };
 
-    expect(localConfigStoreLines(pushedBefore, now).push).toEqual({
+    expect(localConfigStoreLines(unallowed, now).push).toEqual({
       tone: "warning",
-      text: "Not pushed to git.example.com/me/trackwall-local: Trackwall pushes only to a remote you allow here.",
+      text: "Not pushed: the backups stay on this computer until you allow the store's remote.",
     });
-    expect([canAllowRemote(store), canAllowRemote(pushedBefore), canAllowRemote({ ...pushedBefore, remoteAllowed: true })]).toEqual([
-      false,
-      true,
-      false,
-    ]);
+    expect(remoteToAllow(unallowed)).toEqual({ remote, problem: null });
+    expect(remoteToAllow({ ...unallowed, remoteProblem: "origin has 2 addresses" })).toEqual({ remote, problem: "origin has 2 addresses" });
   });
 
-  test("with an allowed remote, the last push or why it failed", () => {
-    const remote = "git.example.com/me/trackwall-local";
-    const allowed = { ...store, remote, remoteAllowed: true };
-    expect(localConfigStoreLines(allowed, now).push).toEqual({
-      text: "Pushes to git.example.com/me/trackwall-local after the next backup.",
-    });
-    expect(localConfigStoreLines({ ...allowed, push: { kind: "ok", at: "2026-10-26T14:59:30Z" } }, now).push).toEqual({
-      tone: "ok",
-      text: "Pushed to git.example.com/me/trackwall-local just now.",
-    });
+  test("the store is pushed to the allowed address even when its remote changed, which is offered again", () => {
+    const changed = {
+      ...store,
+      pushesTo: remote,
+      remote: "https://elsewhere.example/x.git",
+      push: { kind: "ok", at: "2026-10-26T14:59:30Z" },
+    } as const;
+
+    expect(localConfigStoreLines(changed, now).push).toEqual({ tone: "ok", text: `Pushed to ${remote} just now.` });
+    expect(remoteToAllow(changed)).toEqual({ remote: "https://elsewhere.example/x.git", problem: null });
+    expect(remoteToAllow({ ...changed, remote, remoteAllowed: true })).toBe(null);
+  });
+
+  test("with an allowed remote, the next push, the last one or why it failed", () => {
+    const allowed = { ...store, pushesTo: remote, remote, remoteAllowed: true };
+    expect(localConfigStoreLines(allowed, now).push).toEqual({ text: `Pushes to ${remote} after the next backup.` });
     expect(
       localConfigStoreLines({ ...allowed, push: { kind: "failed", at: "2026-10-26T14:59:30Z", message: "rejected" } }, now).push,
     ).toEqual({
       tone: "error",
-      text: "Push to git.example.com/me/trackwall-local failed: rejected",
+      text: `Push to ${remote} failed: rejected`,
     });
   });
 });

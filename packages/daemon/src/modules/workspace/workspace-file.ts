@@ -24,7 +24,7 @@ import { type WorkspaceKeyValues, workspaceKeyValue } from "./workspace-key-valu
 /**
  * `workspace.yaml` (§4.5, ADR-13): the workspace configuration, which the user can edit by hand and keep
  * in a private repo. Read on every use, so a manual edit works without restarting the daemon. A write changes
- * only one key (`projectsDir`, `worktreesDir`, `gitProgram`, `repoHosts`, `javaNavigation`, which the Java navigation install writes, or `localConfigRemote`, which "Allow pushes" for the local config store writes; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `supervisor` and `agentSecrets` only by hand) and keeps comments and the other keys,
+ * only one key (`projectsDir`, `worktreesDir`, `gitProgram`, `repoHosts`, `javaNavigation`, which the Java navigation install writes, or `localConfigRemote`, which "Push to this remote" for the local config store writes; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `supervisor` and `agentSecrets` only by hand) and keeps comments and the other keys,
  * including the `repos` list from version 0.2.0, which is no longer read (ADR-18): it is the user's file, so removing it is up to them.
  */
 
@@ -72,7 +72,7 @@ const Keys: { [K in WorkspaceKey]: z.ZodType<WorkspaceKeyValues[K], unknown> } =
   )
     .nullish()
     .transform((settings) => settings ?? null),
-  // The only address the local config store is pushed to (ADR-127); set by "Allow pushes" in Settings or by hand.
+  // The only address the local config store is pushed to (ADR-127); set by "Push to this remote" in Settings or by hand.
   localConfigRemote: z
     .string()
     .min(1)

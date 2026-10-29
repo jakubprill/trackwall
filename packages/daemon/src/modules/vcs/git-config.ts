@@ -7,10 +7,8 @@ import { git } from "./git.ts";
  */
 
 export interface GitConfig {
-  /** Remotes by name, in configuration order; the first `url` when a remote has several. */
-  remotes: ReadonlyMap<string, string>;
-  /** Every `url` of each remote, as written: git pushes to each of them. */
-  remoteUrls: ReadonlyMap<string, readonly string[]>;
+  /** Remotes by name, in configuration order, with every `url` as written: git pushes to each, and fetches from the first. */
+  remotes: ReadonlyMap<string, readonly string[]>;
   /** Address shortcuts: `url.<base>.insteadOf = <prefix>` as prefix → base. */
   insteadOf: ReadonlyMap<string, string>;
   /** `core.sshCommand`, when the user set it. */
@@ -24,8 +22,7 @@ export async function readConfig(dir: string): Promise<GitConfig> {
 
 /** The result of `git config -z --list`: `key\nvalue` entries separated by NUL; a key without a value has no `\n`. */
 export function parseConfig(out: string): GitConfig {
-  const remotes = new Map<string, string>();
-  const remoteUrls = new Map<string, string[]>();
+  const remotes = new Map<string, string[]>();
   const insteadOf = new Map<string, string>();
   let sshCommand: string | undefined;
   for (const entry of out.split("\0")) {
@@ -36,13 +33,11 @@ export function parseConfig(out: string): GitConfig {
     // Git gives the section and key name in lower case, and the subsection (a remote name, an address) unchanged.
     const remote = /^remote\.(.+)\.url$/s.exec(key)?.[1];
     const base = /^url\.(.+)\.insteadof$/s.exec(key)?.[1];
-    if (remote !== undefined) {
-      if (!remotes.has(remote)) remotes.set(remote, value);
-      remoteUrls.set(remote, [...(remoteUrls.get(remote) ?? []), value]);
-    } else if (base !== undefined) insteadOf.set(value, base);
+    if (remote !== undefined) remotes.set(remote, [...(remotes.get(remote) ?? []), value]);
+    else if (base !== undefined) insteadOf.set(value, base);
     else if (key === "core.sshcommand") sshCommand = value;
   }
-  return { remotes, remoteUrls, insteadOf, sshCommand };
+  return { remotes, insteadOf, sshCommand };
 }
 
 /**
@@ -50,10 +45,11 @@ export function parseConfig(out: string): GitConfig {
  * applying `insteadOf` (the longest matching prefix, as in git), i.e. the one git really connects to.
  */
 export function mainRemote(config: GitConfig): { name: string; url: string } | undefined {
-  const origin = config.remotes.get("origin");
+  const origin = config.remotes.get("origin")?.[0];
   if (origin !== undefined) return { name: "origin", url: rewrite(origin, config.insteadOf) };
   const [only] = config.remotes;
-  if (only && config.remotes.size === 1) return { name: only[0], url: rewrite(only[1], config.insteadOf) };
+  const onlyUrl = only?.[1][0];
+  if (only && onlyUrl !== undefined && config.remotes.size === 1) return { name: only[0], url: rewrite(onlyUrl, config.insteadOf) };
   return undefined;
 }
 

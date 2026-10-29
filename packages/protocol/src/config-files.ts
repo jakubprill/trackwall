@@ -23,6 +23,7 @@ export const ConfigEntryId = z.enum([
   "day-start-file",
   "cards-dir",
   "logs-dir",
+  "local-config-push-repo",
   "legacy-worktrees-dir",
   "projects-mise-config",
   "local-config-store",
@@ -139,6 +140,14 @@ export const CONFIG_ENTRIES: Record<ConfigEntryId, ConfigEntryInfo> = {
     internal: true,
     purpose: "The output of mise tasks and Trackwall's own errors.",
     docs: "trackwall-errors",
+  },
+  "local-config-push-repo": {
+    place: "state",
+    kind: "folder",
+    writer: "trackwall",
+    internal: true,
+    purpose: "The repo the local config store is pushed from, so only Trackwall chooses where the backups go.",
+    docs: "local-config",
   },
   "legacy-worktrees-dir": {
     place: "state",

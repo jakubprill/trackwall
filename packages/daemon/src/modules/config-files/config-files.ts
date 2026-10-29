@@ -36,6 +36,7 @@ type StateEntryId =
   | "day-start-file"
   | "cards-dir"
   | "logs-dir"
+  | "local-config-push-repo"
   | "legacy-worktrees-dir";
 
 /** Copilot CLI's `config.json` as the doctor reads it (`trustedFolders`); the facade's wiring checks the two agree. */
@@ -143,6 +144,7 @@ export class ConfigFiles {
       case "day-start-file":
       case "cards-dir":
       case "logs-dir":
+      case "local-config-push-repo":
       case "legacy-worktrees-dir":
         return plainEntry(this.#deps.statePaths[id]);
       case "projects-mise-config":
@@ -299,10 +301,10 @@ function miseEnvDetail({ variables, secrets }: ProjectsMiseEnv): string {
 function storeDetail(store: LocalConfigStore): string {
   const backup =
     store.lastBackup === null ? "nothing backed up yet" : `last backup ${store.lastBackup.date.slice(0, 16).replace("T", " ")}`;
-  if (store.remote === null) return `${backup}, on this computer only`;
-  if (store.push.kind === "failed") return `${backup}, push to ${store.remote} failed: ${store.push.message}`;
-  if (store.push.kind === "none") return `${backup}, remote ${store.remote}`;
-  return `${backup}, pushed to ${store.remote}`;
+  if (store.pushesTo === null) return `${backup}, on this computer only`;
+  if (store.push.kind === "failed") return `${backup}, push to ${store.pushesTo} failed: ${store.push.message}`;
+  if (store.push.kind === "none") return `${backup}, pushes to ${store.pushesTo}`;
+  return `${backup}, pushed to ${store.pushesTo}`;
 }
 
 function trustsDetail(folders: readonly string[]): string {

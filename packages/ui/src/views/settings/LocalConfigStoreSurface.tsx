@@ -7,7 +7,7 @@ import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { canAllowRemote, localConfigStoreLines } from "@/lib/local-config";
+import { localConfigStoreLines, remoteToAllow } from "@/lib/local-config";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 
@@ -37,8 +37,8 @@ export function LocalConfigStoreSurface({ conn }: { conn: Connection }) {
         {store.data?.dir && (
           <StoreDetails dir={store.data.dir} {...localConfigStoreLines(store.data, new Date())} problem={store.data.problem} />
         )}
-        {store.data?.remote && canAllowRemote(store.data) && (
-          <AllowRemote remote={store.data.remote} pending={allow.pending} error={allow.error} onAllow={allow.run} />
+        {store.data?.dir && (
+          <AllowRemote offer={remoteToAllow(store.data)} pending={allow.pending} error={allow.error} onAllow={allow.run} />
         )}
       </div>
     </Surface>
@@ -70,27 +70,38 @@ function StoreDetails({
 
 /** Only the user chooses where the backups go: an agent can change the store's remote, never this setting. */
 function AllowRemote({
-  remote,
+  offer,
   pending,
   error,
   onAllow,
 }: {
-  remote: string;
+  offer: ReturnType<typeof remoteToAllow>;
   pending: boolean;
   error: string | undefined;
   onAllow: (remote: string) => void;
 }) {
+  if (offer === null) return null;
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-muted-foreground text-xs">
-        Allow it only if {remote} is your own private repo. If you did not add it, remove it with git (git remote remove origin).
+      <p className="text-sm">
+        The store's remote is <span className="font-mono text-xs break-all">{offer.remote}</span>, which Trackwall does not push to.
       </p>
-      <div className="flex items-center gap-3">
-        <Button variant="outline" size="sm" disabled={pending} onClick={() => onAllow(remote)}>
-          Allow pushes to {remote}
-        </Button>
-        {error && <p className="text-destructive text-xs">{error}</p>}
-      </div>
+      {offer.problem ? (
+        <p className="text-destructive text-xs">{offer.problem}</p>
+      ) : (
+        <>
+          <p className="text-muted-foreground text-xs">
+            Allow it only if you added it yourself and it is your own private repo. If you did not, remove it with git (git remote remove
+            origin).
+          </p>
+          <div className="flex items-center gap-3">
+            <Button variant="outline" size="sm" disabled={pending} onClick={() => onAllow(offer.remote)}>
+              Push to this remote
+            </Button>
+            {error && <p className="text-destructive text-xs">{error}</p>}
+          </div>
+        </>
+      )}
     </div>
   );
 }

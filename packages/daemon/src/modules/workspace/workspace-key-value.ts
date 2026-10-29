@@ -10,6 +10,7 @@ import {
   type ToolPermissionRules,
   trackwallDirLabel,
   type WorkspaceKey,
+  withoutUserInfo,
 } from "@trackwall/protocol";
 
 /**
@@ -58,8 +59,7 @@ export const workspaceKeyValue: { [K in WorkspaceKey]: (value: WorkspaceKeyValue
     return parts.join(", ");
   },
   javaNavigation: (settings) => (settings === null ? "not set" : `jdtls: ${settings.jdtls}`),
-  // An HTTPS address may carry a user and token; the line shows it without them.
-  localConfigRemote: (url) => (url === null ? "none: the store is not pushed" : url.replace(/^([a-z+]+:\/\/)[^/@]*@/i, "$1")),
+  localConfigRemote: (url) => (url === null ? "none: the store is not pushed" : withoutUserInfo(url)),
 };
 
 function oneLine(text: string): string {

@@ -31,15 +31,16 @@ The "mise tasks" tab of a repo shows a "Local config" section with each file's s
 2. If the repo's agent tasks should get the file too, add the line `mise.local.toml` to `.worktreeinclude` in the repo root.
 3. Open the repo's "mise tasks" tab and press "Ignore locally" if the section shows a warning.
 4. For a copy off this computer, create an empty private repo on your repo host and add it to the store with git: `git -C <projects folder>/.trackwall/local remote add origin <HTTPS or SSH address>`.
-5. Open "Settings > Workspace" and press "Allow pushes to …" under the local config store. Trackwall pushes the next backup.
+5. Open "Settings > Workspace" and press "Push to this remote" under the local config store. Trackwall pushes the next backup there.
 
 ## Good to know
 
 - Only `mise.toml`, `mise.local.toml` and `.worktreeinclude` are backed up, and only real files of up to 256 KB, never a link.
 - Values in `[env]` of a backed-up `mise.toml` or `mise.local.toml` go into the store and to its remote. Keep secrets out of the file, or keep the remote private.
 - The store's commits are made by "Trackwall", without your git hooks and signing.
-- Trackwall pushes the store only to the address you allowed. An agent that can write in your projects folder could change the store's remote; then nothing is pushed, and "Settings" shows the new remote with "Allow pushes" again. Allow it only if you changed it yourself.
-- Trackwall pushes the store only to an HTTPS or SSH address. A remote in a local or shared folder cannot be allowed, and a remote with several addresses neither.
+- Trackwall pushes the store only to the address you allowed, whatever the store's remote says later. An agent that can write in your projects folder could change that remote; the backups still go only to your address, and "Settings" shows the new remote with "Push to this remote". Press it only if you changed the remote yourself.
+- Trackwall keeps the address you allowed in `~/.trackwall/workspace.yaml` as you wrote it. If it has a token in it and you keep that file in a repo, use a credential helper instead of the token.
+- Trackwall pushes the store only to an HTTPS or SSH address. A remote in a local or shared folder cannot be allowed, and neither can a remote with several addresses or with a space or backslash in its address.
 - When another computer pushed to the remote first, the push fails and "Settings" says so. Pull in the store yourself; Trackwall never pulls or forces a push. After a pull, each computer's own file wins: where it differs, Trackwall commits it on top, and the other version stays in the history.
 - Trackwall checks the store before it uses it. If its `.git/config` has a setting git did not write itself, such as a filter, the backup stops and "Settings" names the setting to remove.
 - Restore never overwrites a file: a repo that already has its own `mise.local.toml` keeps it, and the next backup takes that one, with the old version kept in the store's history.
