@@ -16,7 +16,7 @@ One button syncs every repo and starts the supervisor with a briefing of what ch
 
 ## How it works
 
-Press "Start my day" in the supervisor panel. Trackwall syncs every repo first, as "Sync all" in "Repos" does, and the button says what it is doing: "Syncing repos…", then "Writing the day report…", then "Starting the supervisor…".
+Press "Start my day" in the supervisor panel. Trackwall syncs every repo first, as "Sync all" in "Repos" does, and the panel lists the steps with the one under way marked: sync every repo, write what changed since your last day start, start the supervisor with the briefing.
 
 Trackwall then writes a day report. It compares each repo's main branch on the server with what it was at your last day start: how many commits came in, with the newest ones and who wrote them, whether the history was rewritten, and which repos are new. It adds the repos the sync skipped, with the reason (for example uncommitted changes on the checked-out branch), and every open task: whether its agent waits for you, when it last reported, and how many commits its repo's main branch has that the task does not. Repos with nothing new are only counted, so the report stays short with many repos.
 

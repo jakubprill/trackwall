@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { DayStartRun } from "@trackwall/protocol";
-import { dayStartFailure, dayStartLabel, startErrorShown } from "../src/lib/day-start.ts";
+import { dayStartFailure, dayStartSteps, startErrorShown } from "../src/lib/day-start.ts";
 
 const run = (fields: Partial<DayStartRun>): DayStartRun => ({
   startedAt: "2026-10-26T07:00:00.000Z",
@@ -13,13 +13,16 @@ const run = (fields: Partial<DayStartRun>): DayStartRun => ({
 const ended = "2026-10-26T07:02:00.000Z";
 
 describe("the day start in the UI", () => {
-  test("the button names the running step, and otherwise itself", () => {
-    expect(dayStartLabel(undefined)).toBe("Start my day");
-    expect(dayStartLabel(null)).toBe("Start my day");
-    expect(dayStartLabel(run({ step: "sync" }))).toBe("Syncing repos…");
-    expect(dayStartLabel(run({ step: "report" }))).toBe("Writing the day report…");
-    expect(dayStartLabel(run({ step: "supervisor" }))).toBe("Starting the supervisor…");
-    expect(dayStartLabel(run({ step: "supervisor", finishedAt: ended }))).toBe("Start my day");
+  test("a running day start lists its steps: done, the one under way, and those ahead; a finished one lists none", () => {
+    expect(dayStartSteps(run({ step: "report" }))).toEqual([
+      { label: "Sync every repo", status: "done" },
+      { label: "Write what changed since your last day start", status: "now" },
+      { label: "Start the supervisor with the briefing", status: "next" },
+    ]);
+    expect(dayStartSteps(run({ step: "sync" })).map((s) => s.status)).toEqual(["now", "next", "next"]);
+    expect(dayStartSteps(run({ step: "supervisor", finishedAt: ended }))).toEqual([]);
+    expect(dayStartSteps(null)).toEqual([]);
+    expect(dayStartSteps(undefined)).toEqual([]);
   });
 
   test("a day start that stopped says in which step and why; a running or successful one says nothing", () => {

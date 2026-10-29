@@ -9,7 +9,7 @@ import {
   SUPERVISOR_TARGET,
   type WaitingTarget,
 } from "../src/lib/session-entries.ts";
-import { agentsInTurn, closeCutsOffTurn, sessionPlace, sessionStateLabel } from "../src/lib/session-state.ts";
+import { agentsInTurn, closeCutsOffTurn, inTurn, sessionPlace, sessionStateLabel } from "../src/lib/session-state.ts";
 
 const running = { kind: "running", runId: "r", startedAt: "2026-10-23T10:00:00Z", pid: 10 } as const;
 
@@ -94,6 +94,19 @@ describe("closing a session", () => {
   test("closes at once when the session is already stopping or has ended", () => {
     expect(closeCutsOffTurn(session("a", change("Working"), { kind: "stopping", runId: "r", startedAt: "", pid: 10 }))).toBe(false);
     expect(closeCutsOffTurn(session("a", change("Working"), exited(1)))).toBe(false);
+  });
+});
+
+describe("a turn the conversation view's Stop the turn ends", () => {
+  test("is under way while the agent works or asks for approval of a step or a plan", () => {
+    expect(inTurn(session("a", change("Working")))).toBe(true);
+    expect(inTurn(waiting("a", change("Approval")))).toBe(true);
+    expect(inTurn(waiting("a", change("Plan")))).toBe(true);
+  });
+
+  test("is not while the agent waits for a prompt, or once the session stops", () => {
+    expect(inTurn(waiting("a", change("Input")))).toBe(false);
+    expect(inTurn(session("a", change("Working"), { kind: "stopping", runId: "r", startedAt: "", pid: 10 }))).toBe(false);
   });
 });
 

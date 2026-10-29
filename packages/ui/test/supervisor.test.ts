@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test";
 import type { Session, SessionList, Task, TaskProposal } from "@trackwall/protocol";
 import { entryId, proposerLabel, sessionRows } from "../src/lib/session-entries.ts";
 import { attentionCount, sessionTitle } from "../src/lib/session-state.ts";
-import { selectsSupervisor, showingTakesKeyboard, supervisorStarts, supervisorSummary } from "../src/lib/supervisor.ts";
+import {
+  selectsSupervisor,
+  showingTakesKeyboard,
+  supervisorChoices,
+  supervisorStateLabel,
+  supervisorSummary,
+} from "../src/lib/supervisor.ts";
 import { readSupervisorLayout, saveSupervisorLayout, unfolded, widenedOrNarrowed } from "../src/lib/supervisor-layout.ts";
 
 function session(id: string, repo: string | null, run: Session["run"]["kind"] = "running"): Session {
@@ -170,19 +176,68 @@ describe("the supervisor (ADR-58)", () => {
   });
 });
 
-describe("the supervisor's start buttons (ADR-96)", () => {
-  test("while the last supervisor's conversation can go on, the panel offers Resume and New", () => {
-    const data = list({ sessions: [session("sup", null, "exited")], lastSupervisor: "sup" });
+describe("the supervisor's start card (ADR-96, ADR-126)", () => {
+  const morning = new Date("2026-10-29T13:00:00.000Z");
+  const dayRun = (startedAt: string, supervisor: string | null) => ({
+    startedAt,
+    finishedAt: startedAt,
+    step: "supervisor" as const,
+    error: supervisor === null ? "no Copilot CLI in PATH" : null,
+    supervisor,
+  });
+  const titles = (choices: { title: string }[]) => choices.map((c) => c.title);
 
-    expect(supervisorStarts(summary(data)).map((s) => `${s.label} ${s.conversation}`)).toEqual(["Resume last", "New new"]);
+  test("before today's day start, Start my day comes first, then Continue and New conversation", () => {
+    const resumable = summary(list({ sessions: [session("sup", null, "exited")], lastSupervisor: "sup" }));
+    const yesterday = dayRun("2026-10-28T12:00:00.000Z", "8a6e0c7e-3b0f-4a43-9d0e-6e7fd0a0c001");
+
+    expect(titles(supervisorChoices(resumable, null, morning))).toEqual([
+      "Start my day",
+      "Continue the last conversation",
+      "New conversation",
+    ]);
+    expect(titles(supervisorChoices(resumable, yesterday, morning))).toEqual([
+      "Start my day",
+      "Continue the last conversation",
+      "New conversation",
+    ]);
   });
 
-  test("Resume is offered also when the daemon no longer lists the last supervisor, after a restart", () => {
-    expect(supervisorStarts(summary(list({ lastSupervisor: "sup" }))).map((s) => s.label)).toEqual(["Resume", "New"]);
+  test("once a day start has started the supervisor today, Continue comes first and Start my day says again", () => {
+    const resumable = summary(list({ lastSupervisor: "sup" }));
+    const today = dayRun("2026-10-29T12:00:00.000Z", "8a6e0c7e-3b0f-4a43-9d0e-6e7fd0a0c001");
+
+    const choices = supervisorChoices(resumable, today, morning);
+    expect(titles(choices)).toEqual(["Continue the last conversation", "Start my day again", "New conversation"]);
+    expect(choices.map((c) => c.kind)).toEqual(["last", "day", "new"]);
   });
 
-  test("without a conversation to go on with, one start begins a new one", () => {
-    expect(supervisorStarts(summary(list({}))).map((s) => `${s.label} ${s.conversation}`)).toEqual(["Start supervisor new"]);
-    expect(supervisorStarts(summary(list({ sessions: [session("sup", null, "exited")] }))).map((s) => s.label)).toEqual(["Start again"]);
+  test("a day start that failed today leaves Start my day first", () => {
+    const resumable = summary(list({ lastSupervisor: "sup" }));
+
+    expect(titles(supervisorChoices(resumable, dayRun("2026-10-29T12:00:00.000Z", null), morning))[0]).toBe("Start my day");
+  });
+
+  test("without a conversation to go on with, only Start my day and New conversation, also after a day start today", () => {
+    const ended = summary(list({ sessions: [session("sup", null, "exited")] }));
+    const today = dayRun("2026-10-29T12:00:00.000Z", "8a6e0c7e-3b0f-4a43-9d0e-6e7fd0a0c001");
+
+    expect(titles(supervisorChoices(ended, null, morning))).toEqual(["Start my day", "New conversation"]);
+    expect(titles(supervisorChoices(ended, today, morning))).toEqual(["Start my day again", "New conversation"]);
+  });
+});
+
+describe("the supervisor's state in the panel header (ADR-126)", () => {
+  const clock = (iso: string) => iso.slice(11, 16);
+
+  test("says not running without a supervisor, and starting your day while a day start runs", () => {
+    expect(supervisorStateLabel(undefined, false, clock)).toEqual({ label: "not running" });
+    expect(supervisorStateLabel(undefined, true, clock)).toEqual({ tone: "warning", label: "starting your day…" });
+  });
+
+  test("a supervisor you stopped says stopped and when", () => {
+    const ended = summary(list({ sessions: [session("sup", null, "exited")] })).session;
+
+    expect(supervisorStateLabel(ended, false, clock)).toEqual({ label: "stopped at 10:00" });
   });
 });
