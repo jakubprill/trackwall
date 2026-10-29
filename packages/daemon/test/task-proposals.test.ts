@@ -74,7 +74,7 @@ describe("task proposals", () => {
     before.take(approved.id);
 
     const after = new TaskProposals(() => {});
-    after.restore(before.stored(), (id) => id === approved.id);
+    after.restore(before.stored(), { hasTask: (id) => id === approved.id, hasFolder: () => true });
 
     expect(after.list()).toEqual([waiting]);
     expect(after.take(waiting.id)).toEqual(waiting);
@@ -90,12 +90,25 @@ describe("task proposals", () => {
     expect(before.stored().removalDirs).toEqual({ [kept.id]: "/projects/shop" });
 
     const after = new TaskProposals(() => {});
-    after.restore(before.stored(), () => false);
+    after.restore(before.stored(), { hasTask: () => false, hasFolder: () => true });
     expect(after.removalDir(kept.id)).toBe("/projects/shop");
 
     const planted = new TaskProposals(() => {});
-    planted.restore({ ...before.stored(), removalDirs: {} }, () => false);
+    planted.restore({ ...before.stored(), removalDirs: {} }, { hasTask: () => false, hasFolder: () => true });
     expect(planted.list()).toEqual([]);
+  });
+
+  test("a repo removal whose folder is gone after the restart is dropped: its approval moved it while the daemon stopped", () => {
+    const removal = { ...PROPOSAL, kind: "remove_repo" as const, title: "Remove shop" };
+    const before = new TaskProposals(() => {});
+    const moved = before.add(removal, "/projects/shop");
+    const waiting = before.add({ ...removal, title: "Remove web" }, "/projects/web");
+
+    const after = new TaskProposals(() => {});
+    after.restore(before.stored(), { hasTask: () => false, hasFolder: (dir) => dir === "/projects/web" });
+
+    expect(after.list()).toEqual([waiting]);
+    expect(after.removalDir(moved.id)).toBeUndefined();
   });
 
   test("every change of what waits is reported, taking a proposal for approval is not", () => {

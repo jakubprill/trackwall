@@ -10,9 +10,11 @@ import {
   VERIFICATION_MAX_ERRORS,
   VERIFICATION_MAX_FAILURES,
   VERIFY_MISE_TASK,
-  type Verification,
+  Verification,
 } from "@trackwall/protocol";
+import { z } from "zod";
 import { DomainError, messageOf } from "../../infra/errors.ts";
+import { FollowedStateFile } from "../../infra/state-file.ts";
 import { waitLimited } from "../../infra/wait-limit.ts";
 
 /**
@@ -20,8 +22,19 @@ import { waitLimited } from "../../infra/wait-limit.ts";
  * pass?". It runs the mise task `test` in the task's worktree through `mise` (so the run is the same process group and
  * log the task panel and `run_mise_task` show) and, once the group has ended, sums up the exit code, the JUnit reports
  * written since the run started (`test-results`) and the errors of the run's log (`logs`) into a verdict. It composes
- * those modules and runs nothing itself, like `batch`. Kept only in memory, the last verification of every task.
+ * those modules and runs nothing itself, like `batch`. It keeps the last verification of every task, also across a
+ * daemon restart (ADR-115) in `verifications.json`, which follows every change while the daemon works and stops
+ * following once it stops (`keepForRestart`), so the runs the stop ends do not reach it as failures.
  */
+
+export const VERIFICATIONS_FILE = "verifications.json";
+
+/** What `verifications.json` keeps: the last verification of each task. */
+const StoredVerifications = z.object({ verifications: z.array(Verification) });
+type StoredVerifications = z.infer<typeof StoredVerifications>;
+
+/** Why a verification the previous daemon left running has no verdict: its run ended with that daemon. */
+const STOPPED_WITH_DAEMON = "Trackwall stopped during the run, so it has no verdict; verify again";
 
 /** What the module needs from `agents`: a task's repo, and whether the task still exists. */
 interface VerificationTasks {
@@ -54,6 +67,8 @@ export interface VerificationsDeps {
   logs: VerificationLogs;
   /** A verification has its verdict (`passed`, `failed` or `cancelled`); the task's proposer hears about it (ADR-68). */
   onVerdict: (verification: Verification) => void;
+  /** `verifications.json` in the state directory. */
+  file: string;
   log: (msg: string) => void;
 }
 
@@ -75,9 +90,41 @@ export class Verifications {
   readonly #byTask = new Map<string, Entry>();
   /** A start in progress per task: two clicks (or the button and the agent) at once give one verification. */
   readonly #starting = new Map<string, Promise<Verification>>();
+  readonly #file: FollowedStateFile<StoredVerifications>;
 
   constructor(deps: VerificationsDeps) {
     this.#deps = deps;
+    this.#file = new FollowedStateFile(deps.file, StoredVerifications, {
+      broken: (problem, aside) => deps.log(`${deps.file}: ${problem}; file moved to ${aside}, the tasks start without verifications`),
+      log: deps.log,
+    });
+    this.#restore();
+  }
+
+  /**
+   * Daemon start: the verifications the previous daemon left, of the tasks still there; a missing or broken file leaves
+   * none. One still `running` there is from a daemon that crashed: its run ended with it, at a time nobody saw.
+   */
+  #restore(): void {
+    const stored = this.#file.read();
+    if (stored === undefined) return;
+    for (const verification of stored.verifications) {
+      if (!this.#deps.tasks.findTask(verification.task)) continue;
+      const restored = verification.state === "running" ? stoppedWithDaemon(verification, null) : verification;
+      this.#byTask.set(verification.task, { verification: restored, done: Promise.resolve() });
+    }
+  }
+
+  /**
+   * Daemon exit, before `procs.stopAll`: the file keeps the verifications of this moment for the next daemon, a running
+   * one as cancelled now, since the stop ends its run; the verdict that run then gives stays in this daemon.
+   */
+  keepForRestart(): void {
+    const now = new Date().toISOString();
+    this.#file.follow({
+      verifications: [...this.#byTask.values()].map(({ verification: v }) => (v.state === "running" ? stoppedWithDaemon(v, now) : v)),
+    });
+    this.#file.stopFollowing();
   }
 
   /**
@@ -147,12 +194,14 @@ export class Verifications {
       },
     );
     this.#byTask.set(task, entry);
+    this.#follow();
     return entry.verification;
   }
 
   /** The verdict goes into the entry and to its listener; it stands whatever the listener does with it. */
   #settle(entry: Entry, verification: Verification): void {
     entry.verification = verification;
+    this.#follow();
     try {
       this.#deps.onVerdict(verification);
     } catch (err) {
@@ -160,9 +209,18 @@ export class Verifications {
     }
   }
 
-  /** Ended tasks keep no verification: their failures and log lines would stay in memory for nobody. */
+  /**
+   * Ended tasks keep no verification: their failures and log lines would stay in memory and in the file for nobody. The
+   * file follows at once, also when the start that prunes them then fails.
+   */
   #forgetEndedTasks(): void {
     for (const task of this.#byTask.keys()) if (!this.#deps.tasks.findTask(task)) this.#byTask.delete(task);
+    this.#follow();
+  }
+
+  /** The verifications as they are now, for the next daemon. */
+  #follow(): void {
+    this.#file.follow({ verifications: [...this.#byTask.values()].map((entry) => entry.verification) });
   }
 
   /** The verdict once the run's group has ended: the exit code, then the reports the run wrote, then its log errors. */
@@ -207,6 +265,11 @@ export class Verifications {
       .reverse()
       .slice(0, VERIFICATION_MAX_ERRORS);
   }
+}
+
+/** A verification whose run the daemon's stop ended, so it has no verdict; `finishedAt` when the stop was seen. */
+function stoppedWithDaemon(verification: Verification, finishedAt: string | null): Verification {
+  return { ...verification, state: "cancelled", finishedAt, message: STOPPED_WITH_DAEMON };
 }
 
 function runningVerification({ repo, task }: TaskTarget, run: RunState): Verification {

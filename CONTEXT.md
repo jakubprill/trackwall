@@ -143,7 +143,7 @@ The outcome of the latest test runs in a repo root or a task's worktree, read fr
 _Avoid_: test run (that is the mise task that wrote the reports), coverage
 
 **Verification** (`Verification`, module `verification`, `verificationApi`, MCP tool `verify_task`; UI "Verify" and the "Verification" section of the task panel):
-One verdict on a task's changes (ADR-64): the mise task `test` (`VERIFY_MISE_TASK`) run in the task's worktree, then `passed` (exit code 0 and no failed test in the test reports the run wrote), `failed` (with the first failed tests and log errors) or `cancelled`; `running` until the run ends. Kept in daemon memory, the last one of each task.
+One verdict on a task's changes (ADR-64): the mise task `test` (`VERIFY_MISE_TASK`) run in the task's worktree, then `passed` (exit code 0 and no failed test in the test reports the run wrote), `failed` (with the first failed tests and log errors) or `cancelled`; `running` until the run ends. The last one of each task is kept, also across a daemon restart (`verifications.json`, ADR-115); one whose run the restart ended comes back `cancelled`.
 _Avoid_: check, CI, validation (that is a schema at the point of entry)
 
 **Code search** (`searchCode`, MCP tool `search_code`, result `SearchCodeResult`):
@@ -391,7 +391,7 @@ What the daemon saw happen to delegated work, for the proposer: a turn that ende
 _Avoid_: event (that is a `/ws` event), notification (that is a system notification), status
 
 **Agent queues** (`agent-queues.json`, `AgentQueues`, `agentQueuesFile`):
-Everything that waits in the `agents` module for the user or an agent: task proposals, unread review comments, task messages and task updates. Kept in the state directory, so a daemon restart or an update does not lose them; the sessions that come back are asked to read what is unread (ADR-115).
+Everything that waits in the `agents` module for the user or an agent: task proposals, unread review comments, task messages, task updates and mise trust notices. Kept in the state directory, so a daemon restart or an update does not lose them; the sessions that come back are asked to read what is unread (ADR-115).
 _Avoid_: inbox, mailbox, outbox
 
 **Main session** (`proposedBy` of a task and a proposal):
