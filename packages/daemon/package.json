@@ -13,7 +13,7 @@
     "build": "bun scripts/build.ts",
     "demo": "bun scripts/demo.ts",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "bun test",
+    "test": "bun test --preload ./test/support/default-timeout.ts",
     "test:contract": "bun scripts/contract.ts",
     "test:jvm": "bun test ./jvm/java-projects.jvm.ts",
     "test:e2e": "bun scripts/e2e.ts"
