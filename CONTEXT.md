@@ -217,7 +217,7 @@ _Avoid_: service, microservice (for a fact from the card)
 A method and full path (context path, controller prefix, method path) from a Spring controller, with the handler `Class.method`, or an operation of an OpenAPI spec in the repo that no mapping in the code matches (`source: "openapi"`, ADR-87), whose handler is the controller method named like its `operationId` or `null`. A `null` method is any method (`@RequestMapping` without `method`). It has a request type (`request`, the parameter with `@RequestBody`) and a response type (`response`, the return type without `ResponseEntity`, `Mono` and similar wrappers), `null` when there is none or it was not read (ADR-38).
 
 **OpenAPI spec** (`readOpenApiSpec`, `withOpenApi`; `ProvidedEndpoint.operation`, `OpenApiOperation`):
-An OpenAPI 3 or Swagger 2 file in the repo, found by its `openapi` or `swagger` key whatever its name, that describes the repo's own API; a spec the build generates a client from describes another app and is not read for endpoints (ADR-87). Its operation (`operationId`, summary, file and line) is on the endpoint it describes. In product texts "OpenAPI spec" and, for an endpoint only in a spec, "OpenAPI".
+An OpenAPI 3 or Swagger 2 file in the repo, found by its `openapi` or `swagger` key whatever its name, that describes the repo's own API; a spec the build generates a client from, and any spec in a repo without a Java build, describes another app, so it is not read for endpoints (ADR-87) but is an HTTP client of the kind `openapi` (`specClient`, ADR-129). Its operation (`operationId`, summary, file and line) is on the endpoint it describes. In product texts "OpenAPI spec" and, for an endpoint only in a spec, "OpenAPI".
 _Avoid_: swagger (for both versions), contract (that is the request and response types)
 
 **Endpoint contract** (`ProvidedEndpoint.request` and `response`, computed by `extractContracts`):
@@ -232,10 +232,10 @@ A data type from the repo that an endpoint takes or returns, and the types of it
 _Avoid_: model, entity (for a type from the card)
 
 **HTTP client** (`ConsumedHttp`, `kind: "http"` on the card, kind `HttpClientVia`):
-A place from which the repo calls HTTP: a Feign or `@HttpExchange` interface, a class with `WebClient`, `RestClient` or `RestTemplate`, an address from Spring configuration, `.env` or the frontend proxy. It has the target app's name or an address, the profiles in which that address applies, and calls. An address on the card has no user, password, query or path segments that look like a token.
+A place from which the repo calls HTTP: a Feign or `@HttpExchange` interface, a class with `WebClient`, `RestClient` or `RestTemplate`, an address from Spring configuration, `.env` or the frontend proxy, or an OpenAPI spec of another app the repo generates a client from, also one a `package.json` script downloads for `openapi-typescript` (ADR-129). It has the target app's name or an address, the profiles in which that address applies, and calls. An address on the card has no user, password, query or path segments that look like a token.
 
 **Call** (`HttpCall`):
-A method and path that an HTTP client calls, with the line in the code. A part of the path known only at run time is `{}`.
+A method and path that an HTTP client calls, with the line in the code, and for a call from an OpenAPI spec the operation's `operationId` (ADR-129). A part of the path known only at run time is `{}`.
 
 **Profile** (Spring profile, `ConsumedHttp.profiles`):
 A name from `application-<profile>.yml` or `spring.config.activate.on-profile`; `default` is the configuration without a profile. A client with an address from configuration has a separate entry for every profile in which the address is different.
@@ -280,7 +280,7 @@ A connection entered by the user (`from`, `to`, `note`, and `kind`, `calls` unle
 The file and line from which a fact on the card or a connection in the graph follows; a connection's evidence also has the repo (or `null` for `workspace.yaml`) and a sentence about what is in that place.
 
 **Confidence** (`confidence`, `EdgeConfidence` in the graph):
-`exact`, `high`, `medium` or `low`. A connection from a package built by one repo and a manual connection are `exact`, from a package alias `high`, from a package built by several repos `medium`. An HTTP connection: `exact` when the app name points to one repo and every call has an endpoint in it, `high` for the app name or an app alias alone, `medium` for a host equal to the repo name, a port on `localhost` or paths matching one repo, `low` for paths matching several repos (ADR-30). In the UI: certain, almost certain, likely, possible. With `low` the daemon does nothing automatically.
+`exact`, `high`, `medium` or `low`. A connection from a package built by one repo and a manual connection are `exact`, from a package alias `high`, from a package built by several repos `medium`. An HTTP connection: `exact` when the app name points to one repo and every call has an endpoint in it, `high` for the app name or an app alias alone, `medium` for a host equal to the repo name, a port on `localhost` or paths matching one repo, `low` for paths matching several repos (ADR-30); for an OpenAPI spec, `high` when one repo serves most of its operations, `low` when several do (ADR-129). In the UI: certain, almost certain, likely, possible. With `low` the daemon does nothing automatically.
 
 **Overview** (the "Overview" view, `GraphView`, view identifier `graph`):
 The view with the connection graph at full width and a details panel of the selected repo (what it uses, who uses it, evidence).

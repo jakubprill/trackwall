@@ -1,0 +1,11 @@
+{
+  "name": "back-office",
+  "private": true,
+  "scripts": {
+    "generate:catalog": "openapi-typescript src/api/catalog.openapi.json -o src/api/catalog.ts",
+    "generate:orders": "npx openapi-typescript http://localhost:8090/v3/api-docs --output src/api/orders.ts"
+  },
+  "dependencies": {
+    "react": "19.1.0"
+  }
+}

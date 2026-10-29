@@ -23,9 +23,12 @@ export class EndpointCalls {
     for (const client of index.clients) push(this.clients, client.repo, client);
   }
 
-  /** The endpoints of `repo` whose handlers reach this call of `client`; `null` when the repo's card could not trace. */
+  /**
+   * The endpoints of `repo` whose handlers reach this call of `client`; `null` when the repo's card could not trace, and
+   * for a client from a spec, whose generated code is not in the repo, so no reach can lead to it (ADR-129).
+   */
   from(repo: string, client: ConsumedHttp, call: HttpCall): EndpointRef[] | null {
-    if (!this.index.reachTraced.has(repo)) return null;
+    if (!this.index.reachTraced.has(repo) || client.via === "openapi") return null;
     return this.reachers.get(callKey(repo, client.name, call.evidence)) ?? [];
   }
 
