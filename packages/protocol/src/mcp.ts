@@ -8,7 +8,6 @@ import {
   FolderActionReason,
   JavaNavigationStatus,
   PromptDelivery,
-  REMOVED_REPOS_DIR,
   Session,
   SessionId,
   TASK_MESSAGE_MAX,
@@ -52,6 +51,7 @@ import {
 import { SyncRepo } from "./sync.ts";
 import { TASK_UPDATES_KEPT, TaskUpdate } from "./task-updates.ts";
 import { TEST_RESULTS_MAX_FAILURES, TestResults } from "./test-results.ts";
+import { trackwallDirLabel } from "./trackwall-dir.ts";
 import { VERIFICATION_MAX_ERRORS, VERIFICATION_MAX_FAILURES, VERIFY_MISE_TASK, Verification } from "./verification.ts";
 import { Commit, Repo, RepoId, RepoOverview } from "./workspace.ts";
 
@@ -689,7 +689,7 @@ export const mcpTools = {
       "Propose an action on the projects folder that a task cannot do, because a task works in a worktree of one repo. " +
       "Trackwall shows it to the user next to task proposals, and nothing happens until the user approves it (or " +
       "rejects it, with a reason). Actions: remove_repo, which moves the repo's folder out of the projects folder into " +
-      `${REMOVED_REPOS_DIR} there (the user can move it back by hand); Trackwall refuses it while a session, a task or a ` +
+      `${trackwallDirLabel("removed")} there (the user can move it back by hand); Trackwall refuses it while a session, a task or a ` +
       "mise task runs in the repo, so the user ends those first. Give the reason the user asked for it. In a Trackwall " +
       `session, end your turn: Trackwall asks you to call ${GET_UPDATES} once the user decided.`,
     args: z

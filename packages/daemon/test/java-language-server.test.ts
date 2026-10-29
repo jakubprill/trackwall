@@ -26,7 +26,7 @@ describe("the Java language server of a task (ADR-99)", () => {
     const jdtls = jdtlsFolder();
     const settings = { jdtls, java: "/opt/jdk-25/bin/java", lombok: null };
 
-    const server = javaLanguageServer(settings, "/projects/.trackwall-lsp/task-1", false, "darwin", "arm64");
+    const server = javaLanguageServer(settings, "/projects/.trackwall/lsp/task-1", false, "darwin", "arm64");
 
     expect(server.command).toBe("/opt/jdk-25/bin/java");
     expect(server.fileExtensions).toEqual({ ".java": "java" });
@@ -36,9 +36,9 @@ describe("the Java language server of a task (ADR-99)", () => {
       "-jar",
       join(jdtls, "plugins", "org.eclipse.equinox.launcher_1.7.100.v20251111.jar"),
       "-configuration",
-      join("/projects/.trackwall-lsp/task-1", "configuration"),
+      join("/projects/.trackwall/lsp/task-1", "configuration"),
       "-data",
-      join("/projects/.trackwall-lsp/task-1", "workspace"),
+      join("/projects/.trackwall/lsp/task-1", "workspace"),
     ]);
     expect(server.args.some((arg) => arg.startsWith("-javaagent:"))).toBe(false);
     expect(server.initializationOptions).toBeUndefined();

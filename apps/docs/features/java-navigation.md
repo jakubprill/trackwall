@@ -44,5 +44,5 @@ javaNavigation:
 - A project with both a `pom.xml` and a Gradle build is imported with Maven, which needs nothing beyond the Java jdtls runs on.
 - Every path in `javaNavigation` must be a full path. A path that is not there greys the pill out until you fix it or click "Install again"; a resumed task then starts without navigation.
 - The install needs mise and access to download.eclipse.org and to the place mise downloads Java from. Trackwall checks the jdtls download against the checksum of the release it was built with, so a newer jdtls comes with a newer Trackwall.
-- The index of each task lives in `.trackwall-lsp` in your projects folder and is deleted when you end the task.
+- The index of each task lives in `.trackwall/lsp` in your projects folder and is deleted when you end the task.
 - jdtls on Windows starts without Python: Trackwall runs it with `java` directly.

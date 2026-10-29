@@ -155,8 +155,8 @@ interface AgentsProcs {
 interface AgentsRepos {
   repoPath(id: string): Promise<string>;
   projectsDir(): Promise<string>;
-  /** The task worktrees folder for a new task (ADR-84). */
-  worktreesDir(): Promise<string>;
+  /** The task worktrees folder for a new task (ADR-84), made when it is the default one in `.trackwall` (ADR-125). */
+  newTaskWorktreesDir(): Promise<string>;
   /** The `toolPermissions` patterns for a session in repo `repo` (`null` in the projects folder) or the supervisor, ADR-66. */
   toolPermissions(session: Pick<Session, "repo" | "supervisor">): ToolPermissions;
   /** `supervisor` from `workspace.yaml` (ADR-78); `invalid_config` for a bad key. */

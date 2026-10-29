@@ -1,4 +1,4 @@
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import {
   type AgentSecrets,
   type CloneJob,
@@ -33,6 +33,8 @@ import {
 } from "@trackwall/protocol";
 import { configOrProblem, DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
+import { moveOldTrackwallFolders, oldWorktreesDir, removeEmptyWorktreesDir } from "../../infra/old-trackwall-folders.ts";
+import { ensureTrackwallDir } from "../../infra/trackwall-dir.ts";
 import { CloneJobs } from "./clone-jobs.ts";
 import { type CodeSearchQuery, type CodeSearchVcs, searchCode } from "./code-search.ts";
 import { describeDroppedFolder } from "./dropped-folder.ts";
@@ -179,6 +181,19 @@ export class Workspace {
     if (path !== null) await this.checkedGitProgram(path);
     this.deps.file.setGitProgram(path);
     return this.settings();
+  }
+
+  /**
+   * At the daemon start (ADR-125): the folders Trackwall kept in the projects folder before `.trackwall` move into it, and
+   * the old default task worktrees folder goes once it is empty, unless `worktreesDir` names it or cannot be read.
+   */
+  async moveOldTrackwallFolders(log: (msg: string) => void): Promise<void> {
+    const projectsDir = configOrProblem(() => this.deps.file.projectsDir(), null).value;
+    if (projectsDir === null) return;
+    await moveOldTrackwallFolders(projectsDir, log);
+    const chosen = configOrProblem(() => this.deps.file.worktreesDir(), null);
+    const oldDir = oldWorktreesDir(projectsDir);
+    if (chosen.problem === null && (chosen.value === null || relative(chosen.value, oldDir) !== "")) await removeEmptyWorktreesDir(oldDir);
   }
 
   /** Hands the saved "Git program" to `vcs` at the daemon start; a bad key means git from `PATH`, and Settings shows why. */
@@ -378,7 +393,7 @@ export class Workspace {
   }
 
   /**
-   * The folder for a new task's worktree (ADR-84): `worktreesDir` or `.trackwall-worktrees` in the projects folder,
+   * The folder for a new task's worktree (ADR-84): `worktreesDir` or `.trackwall/worktrees` in the projects folder,
    * checked again here, because the projects folder may have changed since the setting was saved.
    */
   async worktreesDir(): Promise<string> {
@@ -386,6 +401,16 @@ export class Workspace {
     const dir = this.deps.file.worktreesDir() ?? defaultWorktreesDir(projectsDir);
     await checkWorktreesDir(dir, projectsDir);
     return dir;
+  }
+
+  /**
+   * `worktreesDir` for a task about to be created: the default folder, `.trackwall/worktrees`, is made here and refused
+   * when `.trackwall` is a link (ADR-125); a folder the user chose is git's to make.
+   */
+  async newTaskWorktreesDir(): Promise<string> {
+    const dir = await this.worktreesDir();
+    const projectsDir = await this.projectsDir();
+    return dir === defaultWorktreesDir(projectsDir) ? ensureTrackwallDir(projectsDir, "worktrees") : dir;
   }
 
   /** Repos from the projects folder (identifier and root), for modules that read every repo (`cards`). */

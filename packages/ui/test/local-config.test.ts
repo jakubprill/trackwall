@@ -57,7 +57,7 @@ describe("a repo's local config files", () => {
 describe("the local config store in the settings", () => {
   const now = new Date("2026-10-26T15:00:00Z");
   const store: LocalConfigStore = {
-    dir: "C:\\Users\\me\\Dev\\.trackwall-local",
+    dir: "C:\\Users\\me\\Dev\\.trackwall\\local",
     lastBackup: { hash: "abc", subject: "Back up orders: mise.local.toml", author: "Trackwall", date: "2026-10-26T14:55:00Z" },
     remote: null,
     push: { kind: "none" },

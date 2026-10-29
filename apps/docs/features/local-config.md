@@ -19,7 +19,7 @@ Keep mise tasks only on your computer, out of the repo, with every version backe
 
 Some teams do not want mise configuration in their repos. Then the tasks you work out for a repo, by hand or with an agent, go into `mise.local.toml` in the repo root. mise reads it on top of `mise.toml`, so the [mise tasks](/features/mise-tasks) tab, the [Batch command](/features/batch-command), [Services](/features/services) and agents run these tasks like any other.
 
-Trackwall watches `mise.toml`, `mise.local.toml` and `.worktreeinclude` in every repo of your projects folder. A few seconds after one of them changes, it copies the file into the local config store: the folder `.trackwall-local` in your projects folder, a git repo with one folder per repo. Each copy is a commit, so an older version is always there. A file that disappears from a repo stays in the store. A file the repo's own commits already have is the team's, and Trackwall leaves it alone: a `mise.toml` the repo commits is never copied, one you keep out of git is.
+Trackwall watches `mise.toml`, `mise.local.toml` and `.worktreeinclude` in every repo of your projects folder. A few seconds after one of them changes, it copies the file into the local config store: the folder `.trackwall/local` in your projects folder, a git repo with one folder per repo. Each copy is a commit, so an older version is always there. A file that disappears from a repo stays in the store. A file the repo's own commits already have is the team's, and Trackwall leaves it alone: a `mise.toml` the repo commits is never copied, one you keep out of git is.
 
 The "mise tasks" tab of a repo shows a "Local config" section with each file's state. When you clone a repo with the "+" button above the [repo list](/features/repos), its files come back from the store before the clone shows as done. In a repo cloned another way the state is "only in the store", and "Restore from the store" puts the files back. A file git does not ignore shows a warning: anyone working in the repo could commit it, an agent too. "Ignore locally" adds it to the clone's `.git/info/exclude`, which git never pushes. Restore does this by itself. [Where agents work](/guide/where-agents-work) shows how these files reach a session in the repo and a task's worktree.
 
@@ -30,7 +30,7 @@ The "mise tasks" tab of a repo shows a "Local config" section with each file's s
 1. Write your tasks in `mise.local.toml` in the repo root, under `[tasks]` as in `mise.toml`.
 2. If the repo's agent tasks should get the file too, add the line `mise.local.toml` to `.worktreeinclude` in the repo root.
 3. Open the repo's "mise tasks" tab and press "Ignore locally" if the section shows a warning.
-4. For a copy off this computer, create an empty private repo on your repo host and add it to the store with git: `git -C <projects folder>/.trackwall-local remote add origin <HTTPS or SSH address>`.
+4. For a copy off this computer, create an empty private repo on your repo host and add it to the store with git: `git -C <projects folder>/.trackwall/local remote add origin <HTTPS or SSH address>`.
 
 ## Good to know
 

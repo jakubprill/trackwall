@@ -74,7 +74,7 @@ function installFacade(o: { release?: Partial<JdtlsRelease>; miseError?: string 
     jdtlsRelease: { version: "1.63.0", url, sha256, ...o.release },
     log: () => {},
   });
-  return { facade, projects, installs, lsp: join(projects, ".trackwall-lsp") };
+  return { facade, projects, installs, lsp: join(projects, ".trackwall", "lsp") };
 }
 
 async function installed(facade: Facade): Promise<JavaNavigationInstall> {

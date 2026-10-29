@@ -23,8 +23,8 @@ const report: ConfigFilesReport = {
     { id: "tasks-file", name: "tasks.json", path: "C:\\Users\\me\\.trackwall\\tasks.json", state: "present", detail: "2 KB" },
     {
       id: "local-config-store",
-      name: ".trackwall-local",
-      path: "C:\\Users\\me\\Dev\\.trackwall-local",
+      name: ".trackwall/local",
+      path: "C:\\Users\\me\\Dev\\.trackwall\\local",
       state: "present",
       detail: "on this computer only",
     },

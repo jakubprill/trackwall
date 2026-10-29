@@ -56,7 +56,7 @@ export function makeAgents(
         if (projectsDir === null) throw new DomainError("bad_request", "set the projects folder first");
         return projectsDir;
       },
-      worktreesDir: async () => worktreesDir(),
+      newTaskWorktreesDir: async () => worktreesDir(),
       toolPermissions: () => toolPermissions,
       supervisorSettings: () => supervisor,
       agentSecrets: () => [],

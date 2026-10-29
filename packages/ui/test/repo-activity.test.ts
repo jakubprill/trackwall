@@ -30,7 +30,7 @@ function task(id: string, repo: string, title: string): Task {
     branch: `trackwall/${id}`,
     baseBranch: "main",
     base: "a".repeat(40),
-    worktree: `/projects/.trackwall-worktrees/${repo}/${id}`,
+    worktree: `/projects/.trackwall/worktrees/${repo}/${id}`,
     createdAt: AT,
     title,
     proposedBy: null,

@@ -4,7 +4,6 @@ import { basename, join } from "node:path";
 import {
   type Commit,
   LOCAL_CONFIG_FILES,
-  LOCAL_CONFIG_STORE_DIR,
   type LocalConfigFileName,
   type LocalConfigFileState,
   type LocalConfigPush,
@@ -14,11 +13,13 @@ import {
 } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { fileKey } from "../../infra/file-key.ts";
+import { localConfigStoreDir } from "../../infra/old-trackwall-folders.ts";
 import { readRegularFile } from "../../infra/regular-file.ts";
+import { ensureTrackwallDir, trackwallDir } from "../../infra/trackwall-dir.ts";
 
 /**
  * The `local-config` module (§4.13, ADR-86): the files a repo keeps outside git on purpose (`LOCAL_CONFIG_FILES`), backed
- * up into the local config store, `.trackwall-local` in the projects folder, as `<repo folder>/<file>`. The store is a git
+ * up into the local config store, `.trackwall/local` in the projects folder (ADR-125), as `<repo folder>/<file>`. The store is a git
  * repo the daemon commits to and, when it has a remote, pushes, so every version is in its history and a new computer
  * clones it. The store's last commit is the backup: every few seconds the daemon compares each repo's files by `stat`,
  * reads only the changed ones and commits those whose content differs from the last commit's. The repo's file wins: a
@@ -313,7 +314,7 @@ export class LocalConfig {
     const differing = changed.filter((c) => !inStore.get(storePath(c.dir, c.file))?.equals(c.content));
     const toBackUp = await this.#untracked(differing);
     if (toBackUp.length > 0) {
-      await this.#deps.vcs.ensureBackupRepo(store);
+      await this.#ensureStore(store);
       const files = toBackUp.map((c) => ({ path: storePath(c.dir, c.file), content: c.content }));
       await this.#deps.vcs.commitBackups(store, files, backupMessage(toBackUp));
       this.#compared = { store, head: await this.#deps.vcs.storeHead(store) };
@@ -349,7 +350,7 @@ export class LocalConfig {
 
   async #pushStore(store: string, head: string): Promise<void> {
     try {
-      await this.#deps.vcs.ensureBackupRepo(store);
+      await this.#ensureStore(store);
       if (await this.#deps.vcs.pushBackups(store)) this.#push = { kind: "ok", at: new Date().toISOString() };
       this.#pushed = head;
     } catch (err) {
@@ -359,9 +360,16 @@ export class LocalConfig {
     }
   }
 
+  /** `.trackwall` must be a real folder before the store in it is made or written (ADR-125); the store checks itself. */
+  async #ensureStore(store: string): Promise<void> {
+    const projectsDir = await this.#deps.repos.projectsDir();
+    if (store === trackwallDir(projectsDir, "local")) await ensureTrackwallDir(projectsDir);
+    await this.#deps.vcs.ensureBackupRepo(store);
+  }
+
   async #storeDir(): Promise<string | null> {
     try {
-      return join(await this.#deps.repos.projectsDir(), LOCAL_CONFIG_STORE_DIR);
+      return localConfigStoreDir(await this.#deps.repos.projectsDir());
     } catch (err) {
       if (err instanceof DomainError && err.code === "bad_request") return null;
       throw err;

@@ -6,7 +6,6 @@ import {
   type IncludedFiles,
   type JavaNavigationSettings,
   type JavaNavigationStatus,
-  LANGUAGE_SERVER_DIR_NAME,
   noIncludedFiles,
   PATCH_MAX_BYTES,
   type ProposedBy,
@@ -21,6 +20,7 @@ import {
 } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
+import { ensureTrackwallDir, trackwallDir } from "../../infra/trackwall-dir.ts";
 import { approvalArgs } from "./copilot-command.ts";
 import type { LspServer } from "./copilot-plugin.ts";
 import {
@@ -103,8 +103,8 @@ export interface AgentTasksDeps {
   vcs: TasksVcs;
   repos: {
     repoPath(id: string): Promise<string>;
-    /** The task worktrees folder for a new task (ADR-84). */
-    worktreesDir(): Promise<string>;
+    /** The task worktrees folder for a new task (ADR-84), made when it is the default one in `.trackwall` (ADR-125). */
+    newTaskWorktreesDir(): Promise<string>;
     /** The projects folder, which holds the tasks' language server data (ADR-99). */
     projectsDir(): Promise<string>;
     /** `javaNavigation` from `workspace.yaml` (ADR-99); `null` without the key. */
@@ -201,7 +201,7 @@ export class AgentTasks {
     if (javaProblem !== null) throw new DomainError("bad_request", `Java navigation cannot start: ${javaProblem}`);
     const repoDir = await this.#deps.repos.repoPath(repo);
     const base = await asRepoUnavailable(repo, this.#deps.vcs.defaultBase(repoDir));
-    const worktreesDir = await this.#deps.repos.worktreesDir();
+    const worktreesDir = await this.#deps.repos.newTaskWorktreesDir();
     const task = this.#known({
       id,
       repo,
@@ -497,6 +497,7 @@ export class AgentTasks {
       this.#deps.log(`task ${task.id} starts without Java navigation: ${problem}`);
       return {};
     }
+    await ensureTrackwallDir(await this.#deps.repos.projectsDir(), "lsp");
     const data = await this.#languageServerData(task);
     return { [JAVA_LSP_SERVER]: javaLanguageServer(settings, data, mavenOnlyImport(task.worktree)) };
   }
@@ -512,7 +513,7 @@ export class AgentTasks {
 
   /** The task's jdtls data folder in the projects folder. */
   async #languageServerData(task: KnownTask): Promise<string> {
-    return join(await this.#deps.repos.projectsDir(), LANGUAGE_SERVER_DIR_NAME, task.id);
+    return join(trackwallDir(await this.#deps.repos.projectsDir(), "lsp"), task.id);
   }
 
   /** A running session writes in the worktree and holds its files (on Windows it blocks deletion), so stop it first. */

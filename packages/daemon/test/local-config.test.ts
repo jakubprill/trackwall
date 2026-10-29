@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFacade, HOSTING_CLIS } from "../src/facade.ts";
@@ -32,7 +32,7 @@ async function setup(projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"
     log: (msg) => logged.push(msg),
   });
   await facade.workspace.setProjectsDir(projects);
-  const store = join(projects, ".trackwall-local");
+  const store = join(projects, ".trackwall", "local");
   const backUp = async () => {
     await facade.localConfig.backUp();
     await facade.localConfig.settled();
@@ -96,7 +96,7 @@ describe("the local config store", () => {
     await backUp();
 
     expect(storeLog()).toBe("Trackwall|Back up orders: mise.local.toml\n\norders/mise.local.toml");
-    expect(readdirSync(join(projects, ".trackwall-scratch"))).toEqual([]);
+    expect(readdirSync(join(projects, ".trackwall", "scratch"))).toEqual([]);
   });
 
   test("without a change nothing is committed, and a changed file is a new commit", async () => {
@@ -472,8 +472,9 @@ describe("the local config store", () => {
   test("a link in place of the store is refused, so nothing is written where it points", async () => {
     const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
     const elsewhere = mkdtempSync(join(tmpdir(), "trackwall-elsewhere-"));
+    mkdirSync(join(projects, ".trackwall"));
     try {
-      symlinkSync(elsewhere, join(projects, ".trackwall-local"), "junction");
+      symlinkSync(elsewhere, join(projects, ".trackwall", "local"), "junction");
     } catch {
       // A system that does not let the user make links: there is nothing to follow.
       return;
@@ -485,6 +486,25 @@ describe("the local config store", () => {
     await backUp();
 
     expect(existsSync(join(elsewhere, ".git"))).toBe(false);
+    expect((await facade.localConfig.store()).problem).toContain("is not a folder");
+  });
+
+  test("a link in place of .trackwall is refused too, so the store is not made where it points", async () => {
+    const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
+    const elsewhere = mkdtempSync(join(tmpdir(), "trackwall-elsewhere-"));
+    try {
+      symlinkSync(elsewhere, join(projects, ".trackwall"), "junction");
+    } catch {
+      // A system that does not let the user make links: there is nothing to follow.
+      return;
+    }
+    const { facade, backUp } = await setup(projects);
+    const orders = makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
+    writeFileSync(join(orders, "mise.local.toml"), TASKS);
+
+    await backUp();
+
+    expect(existsSync(join(elsewhere, "local"))).toBe(false);
     expect((await facade.localConfig.store()).problem).toContain("is not a folder");
   });
 
@@ -502,7 +522,7 @@ describe("the local config store", () => {
       const orders = makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
       writeFileSync(join(orders, "mise.local.toml"), TASKS);
       await backUp();
-      gitIn(join(projects, ".trackwall-local"), "remote", "add", "origin", BACKUPS_REMOTE);
+      gitIn(join(projects, ".trackwall", "local"), "remote", "add", "origin", BACKUPS_REMOTE);
       await withBackupsRemote(async (bare) => {
         writeFileSync(join(orders, "mise.local.toml"), `${TASKS}# second\n`);
         await backUp();
