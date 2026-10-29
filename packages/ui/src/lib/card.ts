@@ -34,6 +34,7 @@ export const HTTP_CLIENT_LABELS: Record<HttpClientVia, string> = {
   config: "configuration",
   env: ".env",
   proxy: "proxy",
+  openapi: "OpenAPI spec",
 };
 
 /** What a card problem means for the card (ADR-80); `Record` forces an entry for every code in the contract. */

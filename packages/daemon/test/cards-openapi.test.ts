@@ -236,3 +236,83 @@ paths:
     ]);
   });
 });
+
+describe("clients from the OpenAPI specs of other apps (ADR-129)", () => {
+  /** Each spec client as `<name> <url>: <method> <path> <operationId> @<line>, …`. */
+  function specClients(c: RepoCard): string[] {
+    return c.consumes.flatMap((h) =>
+      h.kind === "http" && h.via === "openapi"
+        ? [
+            `${h.name} ${h.url} @${h.evidence.path}: ${h.calls.map((x) => `${x.method} ${x.path} ${x.operationId} @${x.evidence.line}`).join(", ")}`,
+          ]
+        : [],
+    );
+  }
+
+  test("a frontend's spec is a client named by its title, with the server address and every operation as a call", () => {
+    const spec = `openapi: 3.0.1
+info: { title: Orders BFF, version: "1" }
+servers:
+  - url: https://user:secret@{host}/shop
+    variables:
+      host: { default: gateway.example.com }
+paths:
+  /v1/orders/{orderId}:
+    get:
+      operationId: getOrder
+      responses: { "200": { description: ok } }
+    delete:
+      responses: { "204": { description: gone } }
+`;
+    const c = extractCard(snapshotOf({ "package.json": '{"name":"shop-web"}', "src/api/orders.yaml": spec }), parsers, NO_REACH);
+    expect(specClients(c)).toEqual([
+      "Orders BFF https://***@gateway.example.com/shop @src/api/orders.yaml: GET /v1/orders/{orderId} getOrder @9, DELETE /v1/orders/{orderId} null @12",
+    ]);
+  });
+
+  test("a relative server path goes in front of the calls, and a spec without a title is named by its file", () => {
+    const spec = ORDERS_SPEC.replace('info: { title: Orders, version: "1" }\n', "servers: [{ url: /orders-bff }]\n");
+    const c = extractCard(snapshotOf({ "package.json": '{"name":"shop-web"}', "openapi/orders-bff.yaml": spec }), parsers, NO_REACH);
+    expect(specClients(c)).toEqual(["orders-bff null @openapi/orders-bff.yaml: GET /orders-bff/api/orders/{id} getOrder @5"]);
+  });
+
+  test("catalog: the spec the build generates a client from is a client, and the spec it generates its interface from is not", () => {
+    const c = extractCard(snapshotOf(fixtureFiles("catalog")), parsers, NO_REACH);
+    expect(specClients(c)).toEqual(["Orders null @src/main/resources/openapi/orders-api.yaml: GET /api/orders/{id} getOrder @7"]);
+  });
+});
+
+describe("specs a package.json script downloads for openapi-typescript (ADR-129)", () => {
+  test("the address openapi-typescript reads is a client with the address's origin and no calls; a spec file from the repo adds nothing", () => {
+    const packageJson = JSON.stringify(
+      {
+        name: "shop-web",
+        scripts: {
+          "api:orders":
+            "npx openapi-typescript@7 https://user:pw@orders-bff.dev.example.com/v3/api-docs -o src/api/orders.ts && prettier -w src/api",
+          "api:local": "openapi-typescript --alphabetize 'http://localhost:8090/v3/api-docs'",
+          "api:file": "openapi-typescript ./openapi/stock.yaml -o src/api/stock.ts",
+          "api:output-first": "openapi-typescript -o src/api/stock.ts http://localhost:8091/v3/api-docs",
+          build: "vite build",
+        },
+      },
+      null,
+      2,
+    );
+    const c = extractCard(snapshotOf({ "package.json": packageJson }), parsers, NO_REACH);
+    expect(
+      c.consumes.flatMap((h) => (h.kind === "http" ? [`${h.via} ${h.name} ${h.url} ${h.calls.length} @${h.evidence.line}`] : [])),
+    ).toEqual([
+      "openapi api:orders https://orders-bff.dev.example.com 0 @4",
+      "openapi api:local http://localhost:8090 0 @5",
+      "openapi api:output-first http://localhost:8091 0 @7",
+    ]);
+    // A script named like a dependency gets its own line, not the dependency's.
+    const named =
+      '{\n  "dependencies": { "orders": "1.0.0" },\n  "scripts": {\n    "orders": "openapi-typescript http://localhost:8090/v3/api-docs"\n  }\n}';
+    const lines = extractCard(snapshotOf({ "package.json": named }), parsers, NO_REACH).consumes.flatMap((h) =>
+      h.kind === "http" ? [h.evidence.line] : [],
+    );
+    expect(lines).toEqual([4]);
+  });
+});

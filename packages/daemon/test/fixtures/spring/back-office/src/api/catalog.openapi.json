@@ -1,0 +1,16 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "Catalog", "version": "1.0.0" },
+  "servers": [{ "url": "https://gateway.example.com/shop" }],
+  "paths": {
+    "/catalog/v1/products/{id}": {
+      "get": { "operationId": "getProduct", "responses": { "200": { "description": "The product" } } }
+    },
+    "/catalog/v1/products": {
+      "post": { "operationId": "createProduct", "responses": { "201": { "description": "Added" } } }
+    },
+    "/catalog/v1/categories": {
+      "get": { "operationId": "listCategories", "responses": { "200": { "description": "The categories" } } }
+    }
+  }
+}

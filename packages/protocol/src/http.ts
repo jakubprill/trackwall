@@ -51,9 +51,20 @@ export type Dto = z.infer<typeof Dto>;
 /**
  * Where an HTTP client comes from: an `@FeignClient` interface, an `@HttpExchange` interface (Spring 6), `WebClient`,
  * `RestClient` or `RestTemplate` calls in a class, an address in the Spring configuration (`config`), a variable in a
- * frontend's `.env` (`env`) or the proxy target of a frontend dev server (`proxy`).
+ * frontend's `.env` (`env`), the proxy target of a frontend dev server (`proxy`) or an OpenAPI spec of another app that
+ * the repo keeps to generate its client from (`openapi`, ADR-129).
  */
-export const HttpClientVia = z.enum(["feign", "http-interface", "webclient", "rest-client", "rest-template", "config", "env", "proxy"]);
+export const HttpClientVia = z.enum([
+  "feign",
+  "http-interface",
+  "webclient",
+  "rest-client",
+  "rest-template",
+  "config",
+  "env",
+  "proxy",
+  "openapi",
+]);
 export type HttpClientVia = z.infer<typeof HttpClientVia>;
 
 /** One client call: the method and the path without the base address (`/orders/{id}`). */
@@ -62,6 +73,8 @@ export const HttpCall = z.object({
   method: HttpMethod.nullable(),
   /** The path relative to the client address, with `{…}` variables; a part built from a variable in code is `{}`. */
   path: z.string(),
+  /** The `operationId` of a call from an OpenAPI spec (ADR-129); `null` for a call read from code, or without one. */
+  operationId: z.string().nullable(),
   evidence: Evidence,
 });
 export type HttpCall = z.infer<typeof HttpCall>;

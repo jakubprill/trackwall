@@ -1,5 +1,6 @@
 import {
   type CardProblem,
+  type ConsumedHttp,
   httpPathSegments,
   joinHttpPath,
   type OpenApiOperation,
@@ -10,6 +11,7 @@ import { messageOf } from "../../infra/errors.ts";
 import { push } from "./call-types.ts";
 import { ConstantTable } from "./java-expr.ts";
 import { annotationNamed, parseJavaFile } from "./java-source.ts";
+import { specClient } from "./openapi-clients.ts";
 import { generates, type SpecGeneration, specGenerations } from "./openapi-generators.ts";
 import { isSpecCandidate, mayBeSpec, type OpenApiSpec, readOpenApiSpec, type SpecOperation } from "./openapi-spec.ts";
 import { baseName } from "./repo-path.ts";
@@ -24,12 +26,15 @@ import { mappingOf, REQUEST_MAPPINGS } from "./spring-module.ts";
  * path, or a handler named like its `operationId`) adds its `operationId` and summary to that endpoint; any other
  * operation becomes an endpoint with source `openapi`: the usual case is a controller implementing an interface the
  * build generates from the spec into `target/`, which is not in the repo. Such an endpoint gets the controller method
- * named like the `operationId` as its handler, so its reach is traced like a mapped one (ADR-82).
+ * named like the `operationId` as its handler, so its reach is traced like a mapped one (ADR-82). Every other spec
+ * describes an app the repo calls, so it becomes a client (`openapi-clients.ts`, ADR-129).
  */
 
 export interface OpenApiEndpoints {
   /** The `provides` facts in the same order, endpoints with the operations describing them, then the endpoints from specs only. */
   provides: Provided[];
+  /** A client per spec of another app: a client spec of the build, or any spec in a repo without a Java build (ADR-129). */
+  clients: ConsumedHttp[];
   problems: CardProblem[];
 }
 
@@ -50,8 +55,9 @@ interface ReadSpec {
 
 export function withOpenApi(snapshot: RepoSnapshot, provides: readonly Provided[]): OpenApiEndpoints {
   const problems: CardProblem[] = [];
-  const specs = ownSpecs(snapshot, problems);
-  if (specs.length === 0) return { provides: [...provides], problems };
+  const { own: specs, called } = repoSpecs(snapshot, problems);
+  const clients = called.map((read) => specClient(read.path, read.spec));
+  if (specs.length === 0) return { provides: [...provides], clients, problems };
   // The Spring extractor reports problems of the configuration; here it only gives the app and the context path.
   const configs = readSpringConfigs(snapshot, { problems: [] });
   const handlers = new HandlerIndex(snapshot);
@@ -72,7 +78,7 @@ export function withOpenApi(snapshot: RepoSnapshot, provides: readonly Provided[
     }
   }
   const withOperations = provides.map((p) => (p.kind === "endpoint" ? { ...p, operation: described.get(p) ?? p.operation } : p));
-  return { provides: [...withOperations, ...added.values()], problems };
+  return { provides: [...withOperations, ...added.values()], clients, problems };
 }
 
 /** The mapped endpoint an operation describes, or the endpoint it becomes when the code maps none. */
@@ -96,21 +102,26 @@ function placeOperation(
 }
 
 /**
- * The specs that describe this repo's API, each with the module whose app runs it. Only in a Java build: a frontend
- * keeps the specs of the backends it calls.
+ * The specs in the repo: those that describe its API (`own`), each with the module whose app runs it, and those of the
+ * apps it calls (`called`). Only a Java build has its own: a frontend keeps the specs of the backends it calls, and a
+ * Java build the specs it generates a client from.
  */
-function ownSpecs(snapshot: RepoSnapshot, problems: CardProblem[]): ReadSpec[] {
-  if (!snapshot.paths.some(isJvmBuildFile)) return [];
+function repoSpecs(snapshot: RepoSnapshot, problems: CardProblem[]): { own: ReadSpec[]; called: ReadSpec[] } {
+  const found: { own: ReadSpec[]; called: ReadSpec[] } = { own: [], called: [] };
   const files = snapshot.paths.filter((p) => isSpecCandidate(p) && mayBeSpec(snapshot.text(p) ?? ""));
-  if (files.length === 0) return [];
-  const generations = specGenerations(snapshot);
-  return files.flatMap((path) => {
+  if (files.length === 0) return found;
+  const javaBuild = snapshot.paths.some(isJvmBuildFile);
+  const generations = javaBuild ? specGenerations(snapshot) : [];
+  for (const path of files) {
     const own = generations.filter((g) => generates(g, path));
     const generation = own.find((g) => g.server);
-    if (own.length > 0 && generation === undefined) return [];
     const spec = readSpec(snapshot, path, problems);
-    return spec ? [{ path, spec, module: generation?.module ?? moduleOf(path), generation }] : [];
-  });
+    if (spec === undefined) continue;
+    const read = { path, spec, module: generation?.module ?? moduleOf(path), generation };
+    if (javaBuild && (own.length === 0 || generation !== undefined)) found.own.push(read);
+    else found.called.push(read);
+  }
+  return found;
 }
 
 function isJvmBuildFile(path: string): boolean {

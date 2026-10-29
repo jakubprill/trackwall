@@ -6,7 +6,7 @@ import {
   httpUrlPath,
   type ProvidedEndpoint,
 } from "@trackwall/protocol";
-import { isLiteral } from "./http-index.ts";
+import { isLiteral } from "./path-segment.ts";
 
 /**
  * The `find_endpoint` query (§5.3, ADR-30, ADR-87) as an agent writes it: a path (`/api/orders/42`, also without the

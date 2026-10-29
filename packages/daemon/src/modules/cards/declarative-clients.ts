@@ -66,7 +66,12 @@ function methodCalls(
     if (!mapping) continue;
     for (const path of mapping.paths)
       for (const httpMethod of mapping.methods)
-        calls.push({ method: httpMethod, path: joinHttpPath(prefix, path), evidence: { path: file.path, line: mapping.line } });
+        calls.push({
+          method: httpMethod,
+          path: joinHttpPath(prefix, path),
+          operationId: null,
+          evidence: { path: file.path, line: mapping.line },
+        });
   }
   return calls;
 }
