@@ -26,7 +26,7 @@ export const NO_DESKTOP_NOTE =
 
 /** Why only VS Code opens, and how. */
 export const IN_CONTAINER_NOTE =
-  "Trackwall runs in a container: VS Code opens files and folders inside it with the Dev Containers extension, and no file manager can show them.";
+  "Trackwall runs in a container: VS Code opens files and folders inside it with the Dev Containers extension. To show them in the file manager, set the projects folder on this computer in the desktop app's Settings › App.";
 
 export function useDesktop(): boolean {
   return useContext(DaemonPlaceContext).desktop;
