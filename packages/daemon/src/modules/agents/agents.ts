@@ -852,8 +852,8 @@ export class Agents {
   }
 
   /**
-   * How the environment mise would give the running session now differs from the one it started with (ADR-119); `null`
-   * for none, and for an ended session, which starts with the new one anyway.
+   * How the environment mise would give the running session now differs from the one it started with (ADR-119);
+   * `change: null` for none, and for an ended session, which starts with the new one anyway.
    */
   async environmentChange(id: string): Promise<EnvironmentCheck> {
     const session = this.#get(id);
@@ -880,6 +880,9 @@ export class Agents {
       // What can refuse the start (a bad name in `agentSecrets`, Copilot CLI gone) refuses it before the stop, so the
       // session goes on as it was.
       await this.#startInputs(session);
+      // The user may have stopped or closed the session meanwhile: it is not started again behind their back.
+      if (this.#sessions.get(id) !== session || !this.#isRunning(session))
+        throw new DomainError("bad_request", "the session has ended; start it again instead");
       await this.#deps.procs.stop(owner(id));
       if (task === null && !supervisor) this.#unlist(session);
       return await this.#resumeLeft(left);

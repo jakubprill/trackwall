@@ -56,6 +56,21 @@ describe("a running session's environment against the one mise gives now (ADR-11
     });
   });
 
+  test("a new secret already in agentSecrets is named as new and as for the agent's tools", () => {
+    const environments = new SessionEnvironments();
+    environments.remember("s1", ...place({ MAVEN_OPTS: "-Xmx2g" }, [], ["JIRA_TOKEN"]));
+
+    expect(
+      environments.changeSince("s1", ...place({ MAVEN_OPTS: "-Xmx2g", JIRA_TOKEN: "jira-1" }, ["JIRA_TOKEN"], ["JIRA_TOKEN"])),
+    ).toEqual({
+      added: ["JIRA_TOKEN"],
+      removed: [],
+      changed: [],
+      shared: ["JIRA_TOKEN"],
+      unshared: [],
+    });
+  });
+
   test("a session it forgot, or never knew, has no change", () => {
     const environments = new SessionEnvironments();
     environments.remember("s1", ...place({ A: "1" }, [], []));

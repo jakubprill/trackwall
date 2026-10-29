@@ -48,7 +48,8 @@ function environmentChange(started: Snapshot, now: Snapshot): EnvironmentChange 
   const before = started.environment;
   const after = now.environment;
   // A name the tools do not get is a secret outside `agentSecrets`: one added there, or one mise no longer redacts,
-  // reaches them; one taken out, or a variable mise now redacts, no longer does.
+  // reaches them; one taken out, or a variable mise now redacts, no longer does. `MISE_AGE_KEY` from the user's own
+  // environment is not mise's, so it is not compared.
   const hiddenBefore = hiddenFromTools(before);
   const hiddenAfter = hiddenFromTools(after);
   const change: EnvironmentChange = {
@@ -58,7 +59,11 @@ function environmentChange(started: Snapshot, now: Snapshot): EnvironmentChange 
       const startedWith = started.digests.get(name);
       return startedWith !== undefined && startedWith !== now.digests.get(name);
     }),
-    shared: missingFrom(hiddenBefore, hiddenAfter).filter((name) => after.variables.includes(name)),
+    shared: [
+      ...missingFrom(hiddenBefore, hiddenAfter).filter((name) => after.variables.includes(name)),
+      // A new secret the tools get at once, being in `agentSecrets` already.
+      ...missingFrom(after.agentSecrets, before.variables),
+    ],
     unshared: missingFrom(hiddenAfter, hiddenBefore).filter((name) => before.variables.includes(name)),
   };
   return Object.values(change).some((names) => names.length > 0) ? change : null;
