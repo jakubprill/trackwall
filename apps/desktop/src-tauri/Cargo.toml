@@ -18,7 +18,7 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2.12.1", features = ["tray-icon"] }
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 tauri-plugin-deep-link = "2"
-tauri-plugin-updater = "2.14"
+tauri-plugin-updater = "2.14.1"
 tauri-plugin-window-state = "2"
 tauri-plugin-global-shortcut = "2"
 serde = { version = "1", features = ["derive"] }
@@ -27,7 +27,7 @@ tauri-plugin-dialog = "2"
 # Writing text to the clipboard (`copy_text`); without the default `image-data`, which would bring in image decoders.
 arboard = { version = "3", default-features = false }
 # Unpacking the portable Windows update (ADR-53); built on every system so that its tests run everywhere.
-zip = { version = "4", default-features = false, features = ["deflate-flate2"] }
+zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
 # zip asks flate2 for no backend; without this one the build depends on another crate happening to enable it.
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 # Cancelling the update download (`select!` against a `Notify`, ADR-53); already in the build through Tauri.

@@ -339,7 +339,7 @@ Whether a task's agent asks the user before tools: `ask` (the default) as every 
 _Avoid_: YOLO, autopilot (Copilot CLI's own modes, not what Trackwall passes), auto-approve
 
 **Task proposal** (`TaskProposal`, MCP tool `propose_task`, the `approve-proposal` and `reject-proposal` actions):
-A task that a session or an agent outside Trackwall submitted through MCP and that waits in the Sessions view for the user's decision: "Start task" turns it into a task with the same identifier, "Reject…" rejects it with an optional rejection reason. Until then nothing starts. It lives only in daemon memory (ADR-39). The proposals of one main session are one entry in the Sessions view, reviewed together (ADR-55).
+A task that a session or an agent outside Trackwall submitted through MCP and that waits in the Sessions view for the user's decision: "Start task" turns it into a task with the same identifier, "Reject…" rejects it with an optional rejection reason. Until then nothing starts. It waits also across a daemon restart, in the agent queues (ADR-39, ADR-115). The proposals of one main session are one entry in the Sessions view, reviewed together (ADR-55).
 _Avoid_: order, request, application
 
 **Folder action** (`propose_folder_action`, `ProposalKind`):
@@ -363,7 +363,7 @@ The review comments the user sends to a task's agent together, from the task's "
 _Avoid_: code review (that is the pre-PR review in `AGENTS.md`), feedback
 
 **Review comment** (`ReviewComment`, `ReviewSide`, MCP tool `get_review_comments`):
-What the user writes on one line of a task's changes for its agent: the file, the side (`new` for an added or unchanged line, `old` for a removed one), the line number, the line's code and the text. Queued in daemon memory until the task's session reads it with `get_review_comments`, which marks it read (ADR-62).
+What the user writes on one line of a task's changes for its agent: the file, the side (`new` for an added or unchanged line, `old` for a removed one), the line number, the line's code and the text. Queued, also across a daemon restart (ADR-115), until the task's session reads it with `get_review_comments`, which marks it read (ADR-62).
 _Avoid_: note, remark, comment on a merge request (that lives on the repo host)
 
 **Merge request** (`MergeRequest`, module `merge-requests`, `mergeRequestsApi`; the "Merge request" section of the task panel):
@@ -385,6 +385,10 @@ _Avoid_: note, comment (that is a review comment), chat
 **Task update** (`TaskUpdate`, MCP tool `get_updates`):
 What the daemon saw happen to delegated work, for the proposer: a turn that ended, an error, the end of the session, a reported result, a verification verdict, a rejected proposal. The daemon asks the proposer to read it, so the supervisor or a main session does not poll (ADR-68).
 _Avoid_: event (that is a `/ws` event), notification (that is a system notification), status
+
+**Agent queues** (`agent-queues.json`, `AgentQueues`, `agentQueuesFile`):
+Everything that waits in the `agents` module for the user or an agent: task proposals, unread review comments, task messages and task updates. Kept in the state directory, so a daemon restart or an update does not lose them; the sessions that come back are asked to read what is unread (ADR-115).
+_Avoid_: inbox, mailbox, outbox
 
 **Main session** (`proposedBy` of a task and a proposal):
 A session or supervising agent that talks to the user and commissions work to other agents with task proposals, then hears about their sessions through task updates (`get_updates`; an agent outside Trackwall waits with `wait_for_session`) and reads the summaries, like a coordinator with threads in Claude (ADR-39). It is a role, not a separate kind of session: any Trackwall session or an agent outside Trackwall (`proposedBy.session: null`); the supervisor is the main session above all repos (ADR-58). In the Sessions view its tasks and proposals sit indented under it, and it carries a "main" badge with their count.
@@ -500,6 +504,12 @@ A variable of the session environment that mise redacts (`redact = true`, an age
 
 **Agent secrets** (`agentSecrets` in `workspace.yaml`, `SessionEnvironment.agentSecrets`):
 The secrets from mise the agent's shell and local MCP servers get; every other one goes to Copilot CLI's `--secret-env-vars` (ADR-93). By hand only.
+
+**Environment change** (`EnvironmentChange`, `Agents.environmentChange`; in the UI *The environment from mise changed*):
+How the session environment mise would give a running session now differs from the one it started with: new, changed and removed names, and the secrets its tools would now get or no longer get; never values (ADR-119).
+
+**Session restart** (`Agents.restart`, `agentsApi.restart`; in the UI *Restart to apply*):
+Stopping a running session and starting it again with the same conversation, place and view, so it gets the environment and settings of now; a task's session restarts as Resume does (ADR-119). Unlike Resume, which starts an ended task's session again.
 
 **Session plugin** (`writeCopilotPlugin`):
 A directory with `plugin.json` and `hooks.json` that the daemon gives Copilot CLI through `--plugin-dir`, so that hooks report the state of this one session only (ADR-17).

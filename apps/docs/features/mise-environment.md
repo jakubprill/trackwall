@@ -13,7 +13,7 @@ Give every agent session the variables and tokens from your mise config, with se
 - One `mise.toml` in your projects folder sets tokens and settings for every repo, task and the supervisor.
 - Secrets stay encrypted in the file and are decrypted only when a session starts.
 - The agent's shell and its local MCP servers get only the secrets you name.
-- The session panel and its tile in the grid show which variables a session got, never their values.
+- The session panel and its tile in the grid show which variables a session got, never their values, and the panel says when a change to your config has not reached a running session yet.
 
 ## How it works
 
@@ -41,7 +41,7 @@ Under the session's header a line says how many variables it got from mise, whic
 ## Good to know
 
 - It needs `mise` on your `PATH`. Without it sessions start with your own environment only.
-- Trackwall reads the environment when a session starts. A change to `mise.toml` reaches a session after you resume or start it again.
+- Trackwall reads the environment when a session starts, since Copilot CLI cannot take a new one while it runs. When `mise.toml` or `agentSecrets` changes, a running session shows "The environment from mise changed" with the names that are new, changed or removed (never the values). **Restart to apply** stops the session and starts it again with the same conversation: a free session, a session in a repo, a task and the supervisor alike. The button waits while the agent is in the middle of a turn. Trackwall checks every 15 seconds while the panel is open.
 - A config mise does not trust is never trusted for you: trust a repo's config in its [mise tasks](/features/mise-tasks) tab. A task's worktree uses its own config only while the agent has not changed it.
 - A secret the agent's tools get is like a token in your shell: the agent can print it in its terminal or write it to a file. List only what your tools need.
 - Hiding a secret keeps it out of the agent's commands by accident, not from an agent that tries: it can run `mise env` or read your age key like any program you run.

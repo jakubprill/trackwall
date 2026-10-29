@@ -9,6 +9,7 @@ import {
 } from "@trackwall/protocol";
 import { BellRing, Crown, Lightbulb, Plus, Square, X } from "lucide-react";
 import { useCallback, useRef } from "react";
+import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { SessionScreen } from "@/components/SessionScreen";
@@ -673,6 +674,7 @@ function SessionPanel({
         )}
       </header>
       <SessionEnvironment environment={session.environment} />
+      <EnvironmentChangeNotice key={session.id} conn={conn} session={session} onRestarted={onChanged} />
       <SessionScreen conn={conn} session={session} selected />
     </>
   );

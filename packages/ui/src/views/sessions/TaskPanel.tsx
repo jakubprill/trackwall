@@ -1,6 +1,7 @@
 import { agentsApi, type RunningMiseTask, type Session, TASK_PORT_ENV, type Task, type TaskMessage } from "@trackwall/protocol";
 import { Bot, Code, GitBranch, Play, Plug, ShieldOff, Square, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
+import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
 import { SessionTerminal } from "@/components/SessionTerminal";
 import { StatusLabel } from "@/components/StatusLabel";
 import { TabBar } from "@/components/TabBar";
@@ -136,6 +137,7 @@ export function TaskPanel({
         </div>
       </header>
       <SessionEnvironment environment={session?.environment} />
+      <EnvironmentChangeNotice key={session?.id} conn={conn} session={session} onRestarted={onChanged} />
       {confirmingRemoval && <TaskRemoval conn={conn} task={task} onRemoved={onRemoved} onCancel={() => setRemoving(false)} />}
       <TaskNoticeStrip
         notices={details.notices}
