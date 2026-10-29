@@ -23,6 +23,8 @@ export const Health = z.object({
 export type Health = z.infer<typeof Health>;
 export const HealthResult = apiResult(Health);
 
+export const DAEMON_INFO_PATH = "/api/daemon/info";
+
 /** `GET /api/daemon/info`: details of the daemon process, needs the token. */
 export const DaemonInfo = z.object({
   version: z.string(),

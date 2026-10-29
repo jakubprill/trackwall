@@ -7,6 +7,7 @@ import { EventHub } from "../../src/api/event-hub.ts";
 import { sessionHookRequest } from "../../src/api/hooks.ts";
 import { startApi } from "../../src/api/server.ts";
 import { createFacade, type FacadeOptions, HOSTING_CLIS } from "../../src/facade.ts";
+import { desktopOpeners } from "../../src/infra/desktop.ts";
 import { writeDaemonFile } from "../../src/infra/discovery.ts";
 import { loopbackRequest } from "../../src/infra/loopback.ts";
 import { createMcpEndpoint, sessionMcpRequest } from "../../src/mcp/endpoint.ts";
@@ -38,6 +39,8 @@ export interface SessionApiOptions {
   restartOf?: { home: string; projects: string };
   /** Addresses the daemon asks the system to open; dropped without it. */
   openUrl?: (url: string) => void;
+  /** `false` for a daemon in a container, which refuses to open anything with `no_desktop` (ADR-120); `true` by default. */
+  desktop?: boolean;
 }
 
 interface CopilotUnderTest {
@@ -58,11 +61,13 @@ export const ONE_REPO: SessionApiOptions = { repos: { shop: { "README.md": "# sh
 export async function startSessionApi(token: string, options: SessionApiOptions = ONE_REPO) {
   const { home, projects } = options.restartOf ?? newDirs(options.repos);
   const copilot = options.copilot ?? FAKE_COPILOT;
+  const desktop = options.desktop ?? true;
+  const openers = desktopOpeners(desktop, { openUrl: options.openUrl ?? (() => {}), openFolder: () => {} });
   const facade = createFacade({
     home,
     homeFrom: "flag",
-    openUrl: options.openUrl ?? (() => {}),
-    openFolder: () => {},
+    openUrl: openers.openUrl,
+    openFolder: openers.openFolder,
     miseCommand: options.miseCommand,
     copilotCommand: copilot.command,
     version: "0.0.0-test",
@@ -78,7 +83,7 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
     token,
     version: "1",
     uiDir: options.uiDir,
-    // The page asks once whether the daemon has a desktop (ADR-120); like the desktop app's daemon, this one has.
+    // The page asks once whether the daemon has a desktop (ADR-120).
     info: () => ({
       version: "0.0.0-test",
       pid: process.pid,
@@ -90,7 +95,7 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
       launchedBy: "manual",
       home,
       mcpStdioCommand: ["trackwall-daemon", "mcp-stdio"],
-      desktop: true,
+      desktop,
     }),
     onShutdown: () => {},
     facade,

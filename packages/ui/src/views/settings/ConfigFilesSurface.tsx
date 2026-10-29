@@ -25,7 +25,7 @@ import {
   workspaceKeyChangedIn,
 } from "@/lib/config-files";
 import type { Connection } from "@/lib/connection";
-import { useDesktop, useOpenWebLink } from "@/lib/desktop";
+import { NO_DESKTOP_NOTE, useDesktop, useOpenWebLink } from "@/lib/desktop";
 import { FILE_MANAGER } from "@/lib/platform";
 import { useRemote } from "@/lib/use-remote";
 
@@ -56,6 +56,7 @@ export function ConfigFilesSurface({ conn }: { conn: Connection }) {
       {report.error && <ErrorWithRetry message={report.error} onRetry={report.reload} />}
       {!report.data && !report.error && <Loading />}
       {error && <p className="text-destructive text-xs">{error}</p>}
+      {!desktop && <p className="text-muted-foreground text-xs">{NO_DESKTOP_NOTE}</p>}
       {report.data &&
         configGroups(report.data).map((group) => (
           <Surface

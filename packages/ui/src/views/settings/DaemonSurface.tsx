@@ -1,4 +1,4 @@
-import { type CardWarmupProgress, DaemonInfo } from "@trackwall/protocol";
+import { type CardWarmupProgress, DAEMON_INFO_PATH, DaemonInfo } from "@trackwall/protocol";
 import { RefreshCw } from "lucide-react";
 import { useCallback } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -26,7 +26,7 @@ export function DaemonSurface({
   warmupLive: LiveFeed<CardWarmupProgress> | undefined;
   onRetry: () => void;
 }) {
-  const load = useCallback(() => call(conn, "/api/daemon/info", DaemonInfo), [conn]);
+  const load = useCallback(() => call(conn, DAEMON_INFO_PATH, DaemonInfo), [conn]);
   const info = useRemote(load, { pollMs: POLL_MS });
   const warmup = useCardWarmup(conn, warmupLive).data;
   /** Data only from the last successful response; after an error the panel shows the error instead of stale values. */

@@ -2,7 +2,7 @@ import { mergeRequestsApi } from "@trackwall/protocol";
 import { useCallback } from "react";
 import { post } from "./api.ts";
 import type { Connection } from "./connection.ts";
-import { openInNewTab, useDesktop } from "./desktop.ts";
+import { openEmptyTab, openInNewTabOnceKnown, useDesktop } from "./desktop.ts";
 import { MERGE_REQUEST_POLL_MS, type MergeRequestDraftText } from "./merge-request.ts";
 import { useAction } from "./use-action.ts";
 import { useRemote } from "./use-remote.ts";
@@ -19,8 +19,7 @@ export function useTaskMergeRequest(conn: Connection, task: string, paused: bool
   const openForm = useAction(async (draft: MergeRequestDraftText) => {
     // Without a desktop on the daemon's side this page opens the form itself (ADR-120).
     if (desktop) return post(conn, mergeRequestsApi.openForm, { task, ...draft });
-    const { url } = await post(conn, mergeRequestsApi.formUrl, { task, ...draft });
-    if (!openInNewTab(url)) throw new Error("the browser blocked the new tab; allow pop-ups for this page");
+    return openInNewTabOnceKnown(async () => (await post(conn, mergeRequestsApi.formUrl, { task, ...draft })).url, openEmptyTab);
   }, remote.reload);
   return {
     state: remote.data,

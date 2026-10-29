@@ -22,6 +22,7 @@ export function hasDesktop({ platform, env, exists }: DesktopProbe): boolean {
   return Boolean(env.DISPLAY || env.WAYLAND_DISPLAY);
 }
 
+/** The facade's `openUrl` and `openFolder`, repeated here because infrastructure does not import the facade. */
 export interface Openers {
   openUrl: (url: string) => void;
   openFolder: (dir: string) => void;

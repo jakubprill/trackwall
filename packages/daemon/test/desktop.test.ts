@@ -1,15 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { DaemonInfoResult, workspaceApi } from "@trackwall/protocol";
-import { EventHub } from "../src/api/event-hub.ts";
-import { type ApiServer, startApi } from "../src/api/server.ts";
-import { createFacade, HOSTING_CLIS } from "../src/facade.ts";
-import { desktopOpeners, hasDesktop } from "../src/infra/desktop.ts";
+import { agentsApi, configFilesApi, DaemonInfoResult, mergeRequestsApi, workspaceApi } from "@trackwall/protocol";
+import { hasDesktop } from "../src/infra/desktop.ts";
 import { loopbackRequest } from "../src/infra/loopback.ts";
-import { createMcpEndpoint } from "../src/mcp/endpoint.ts";
-import { makeRepo } from "./support/git-repo.ts";
+import { gitIn } from "./support/git-repo.ts";
+import { fakeHostingClis } from "./support/hosting.ts";
+import { startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
 describe("hasDesktop", () => {
@@ -36,82 +33,78 @@ describe("hasDesktop", () => {
 
 describe("a daemon without a desktop", () => {
   const TOKEN = "t".repeat(43);
-  const openedUrls: string[] = [];
-  const openedFolders: string[] = [];
-  let api: ApiServer;
+  const opened: string[] = [];
+  let daemon: Awaited<ReturnType<typeof startSessionApi>>;
 
   beforeAll(async () => {
-    const openers = desktopOpeners(false, { openUrl: (url) => openedUrls.push(url), openFolder: (dir) => openedFolders.push(dir) });
-    const facade = createFacade({
-      home: mkdtempSync(join(tmpdir(), "trackwall-home-")),
-      homeFrom: "flag",
-      openUrl: openers.openUrl,
-      openFolder: openers.openFolder,
+    daemon = await startSessionApi(TOKEN, {
+      repos: { shop: { "README.md": "# shop\n" } },
       miseCommand: ["mise"],
-      copilotCommand: ["copilot"],
-      version: "0.0.0-test",
-      sessionHook: () => ({ url: "http://127.0.0.1:9/hooks/unused", headers: {} }),
-      sessionMcpServer: (sessionToken) => ({ url: "http://127.0.0.1:9/mcp", headers: { "x-trackwall-session-token": sessionToken } }),
-      hostingClis: HOSTING_CLIS,
-      userEnv: async () => process.env,
-      log: () => {},
+      hostingClis: fakeHostingClis({ apiResponses: { "projects/shop%2Fshop/merge_requests": [] } }).clis,
+      openUrl: (url) => opened.push(url),
+      desktop: false,
     });
-    api = await startApi({
-      token: TOKEN,
-      version: "9.9.9",
-      info: () => ({
-        version: "9.9.9",
-        pid: 1,
-        startedAt: "2026-10-29T00:00:00Z",
-        uptimeMs: 0,
-        platform: "linux",
-        arch: "x64",
-        runtime: { name: "bun", version: "x" },
-        launchedBy: "manual",
-        home: "/tmp",
-        mcpStdioCommand: ["trackwall-daemon", "mcp-stdio"],
-        desktop: false,
-      }),
-      onShutdown: () => {},
-      facade,
-      mcp: createMcpEndpoint({ facade, version: "test", log: () => {} }),
-      events: new EventHub({ facade, log: () => {} }),
-    });
+    gitIn(join(daemon.projects, "shop"), "remote", "add", "origin", "https://gitlab.example.com/shop/shop.git");
+    daemon.facade.workspace.setRepoHosts([{ kind: "gitlab", host: "gitlab.example.com" }]);
   }, SLOW_TEST_TIMEOUT_MS);
 
-  afterAll(() => api.close());
+  afterAll(async () => {
+    await daemon.stop();
+  });
 
   const post = (path: string, body: unknown) =>
-    loopbackRequest(api.port, path, {
+    loopbackRequest(daemon.api.port, path, {
       token: TOKEN,
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
+      timeoutMs: 10_000,
     });
 
   test("says so in its info, so the page opens web links itself", async () => {
-    const res = await loopbackRequest(api.port, "/api/daemon/info", { token: TOKEN });
+    const res = await loopbackRequest(daemon.api.port, "/api/daemon/info", { token: TOKEN });
     expect(DaemonInfoResult.parse(JSON.parse(res.body))).toMatchObject({ ok: true, data: { desktop: false } });
   });
 
-  test("refuses to open a link, a repo folder or VS Code with no_desktop instead of failing unseen", async () => {
-    const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
-    makeRepo({ "a.txt": "1" }, "shop", projects);
-    expect((await post(workspaceApi.setProjectsDir.path, { path: projects })).status).toBe(200);
-
+  test("refuses to open a link, a repo folder, VS Code or a config file with no_desktop instead of failing unseen", async () => {
     for (const [path, body] of [
       [workspaceApi.openLink.path, { url: "https://example.com/docs" }],
       [workspaceApi.openFolder.path, { repo: "shop" }],
       [workspaceApi.openEditor.path, { repo: "shop" }],
+      [configFilesApi.openInEditor.path, { id: "workspace-file" }],
+      [configFilesApi.showInFolder.path, { id: "workspace-file" }],
     ] as const) {
       const res = await post(path, body);
-      expect(res.status).toBe(409);
+      expect({ path, status: res.status }).toEqual({ path, status: 409 });
       expect(JSON.parse(res.body)).toMatchObject({
         ok: false,
         error: { code: "no_desktop", message: expect.stringContaining("container") },
       });
     }
-    expect(openedUrls).toEqual([]);
-    expect(openedFolders).toEqual([]);
+    expect(opened).toEqual([]);
   });
+
+  test.skipIf(process.versions.bun === undefined)(
+    "gives the merge request form's address to the page, and refuses to open the form itself",
+    async () => {
+      const task = await daemon.facade.agents.createTask("shop", "Add a discount");
+      writeFileSync(join(task.worktree, "change.txt"), "10% off\n");
+      gitIn(task.worktree, "add", "change.txt");
+      gitIn(task.worktree, "commit", "-qm", "Add a discount");
+      gitIn(task.worktree, "update-ref", `refs/remotes/origin/${task.branch}`, "HEAD");
+      const draft = { task: task.id, title: "Add a discount", description: "Adds 10% off." };
+
+      const asked = await daemon.post(mergeRequestsApi.formUrl, draft);
+      expect(asked.url).toStartWith("https://gitlab.example.com/shop/shop/-/merge_requests/new?");
+      for (const [path, body] of [
+        [mergeRequestsApi.openForm.path, draft],
+        [agentsApi.openTaskEditor.path, { task: task.id }],
+      ] as const) {
+        const res = await post(path, body);
+        expect(JSON.parse(res.body)).toMatchObject({ ok: false, error: { code: "no_desktop" } });
+      }
+      expect(opened).toEqual([]);
+    },
+    60_000,
+  );
 });
