@@ -233,6 +233,24 @@ describe.skipIf(process.versions.bun === undefined)("pushing a task branch (real
     await refused("remote.origin.pushurl", elsewhere, "origin pushes to a local or unusual address, not to gitlab.example.com/shop/orders");
     // A second address: git pushes to every `url` of a remote without a `pushurl`.
     await refused("remote.origin.url", "ssh://git@evil.example.com/shop/orders.git", "origin pushes to evil.example.com/shop/orders");
+    // scp syntax: git connects to the host before the first colon, not to the one after the `@`.
+    await refused(
+      "remote.origin.pushurl",
+      "evil.example.com:x@gitlab.example.com:shop/orders.git",
+      "origin pushes to evil.example.com/x@gitlab.example.com:shop/orders",
+    );
+    // git decodes an ssh URL before it takes the host: ssh connects to evil.example.com.
+    await refused(
+      "remote.origin.pushurl",
+      "ssh://evil.example.com%2F@gitlab.example.com/shop/orders.git",
+      "origin pushes to a local or unusual address",
+    );
+    // curl connects to evil.example.com, while the WHATWG parser reads gitlab.example.com and resolves `..`.
+    await refused(
+      "remote.origin.pushurl",
+      "https://gitlab.example.com\\@evil.example.com/../shop/orders.git",
+      "origin pushes to a local or unusual address",
+    );
 
     expect(gitIn(elsewhere, "branch", "--list", task.branch).trim()).toBe("");
     expect(gitIn(bare, "branch", "--list", task.branch).trim()).toBe("");
