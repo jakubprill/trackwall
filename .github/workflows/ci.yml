@@ -218,9 +218,13 @@ jobs:
         run: pnpm --filter @trackwall/daemon build
       - name: smoke test of the binary
         run: bun packages/daemon/scripts/smoke.ts packages/daemon/dist/trackwall-daemon-x86_64-unknown-linux-gnu
-      # The headless shell and the system libraries it needs (apt, as root in the container).
+      # The headless shell and the system libraries it needs (apt, as root in the container), and DejaVu Sans Mono, the
+      # monospace font of the Linux runner: the terminal's rows follow the font, and a user's browser runs on their own
+      # computer, not in the container, so the image's fonts are not what Trackwall is drawn with.
       - name: Chromium for Playwright
-        run: pnpm --filter @trackwall/daemon exec playwright install --with-deps --only-shell chromium
+        run: |
+          pnpm --filter @trackwall/daemon exec playwright install --with-deps --only-shell chromium
+          apt-get install -y --no-install-recommends fonts-dejavu-core
       - run: pnpm test:e2e
 
   # The build is the longest step of a run, so it has its own job next to `test`, not after it. Only on the desktop
