@@ -12,10 +12,12 @@ import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { DaemonPlaceContext, IN_CONTAINER_NOTE, NO_DESKTOP_NOTE } from "@/lib/desktop";
 import { TRUNCATED_NOTE } from "@/lib/format";
+import { showInHostFolder } from "@/lib/host-folder";
 import { FILE_MANAGER } from "@/lib/platform";
 import { type RepoActivityTarget, repoActivity } from "@/lib/repo-activity";
 import { REPO_TABS, type RepoTab } from "@/lib/repo-tabs";
 import type { SessionSelection } from "@/lib/session-entries";
+import { useHostFolder } from "@/lib/use-host-folder";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { useRunningMiseTasks } from "@/lib/use-running-mise-tasks";
 import { PlainReadme, ReadmeFallback } from "./ReadmeFallback.tsx";
@@ -33,12 +35,15 @@ const ReadmeMarkdown = lazy(() => import("./ReadmeMarkdown.tsx").then((m) => ({ 
 export function RepoDetail({
   conn,
   repo,
+  projectsDir,
   sessions,
   runningLive,
   onOpenInSessions,
 }: {
   conn: Connection;
   repo: Repo;
+  /** The daemon's projects folder, for showing the repo through that folder on this computer (ADR-131); unknown until the list loads. */
+  projectsDir: string | null | undefined;
   /** `undefined` until the first session list arrives: the bar then shows only mise tasks. */
   sessions: SessionList | undefined;
   /** Running mise tasks from the events; `undefined` for a moment after a connection change, and polled until then. */
@@ -67,7 +72,7 @@ export function RepoDetail({
           <p className="text-muted-foreground font-mono text-xs break-all">{repo.path}</p>
           {repo.remote && <p className="text-muted-foreground font-mono text-xs break-all">{repo.remote}</p>}
         </div>
-        <RepoActions conn={conn} repo={repo} />
+        <RepoActions conn={conn} repo={repo} projectsDir={projectsDir} />
       </header>
       {status.kind === "loading" && <Loading />}
       {status.kind === "unavailable" && (
@@ -98,11 +103,13 @@ function Loaded({ remote, children }: { remote: RemoteHandle<RepoOverview>; chil
 
 /**
  * Opens the repo in VS Code or in the system's folder app (ADR-51); the daemon does it, so it works in the browser too,
- * except when the daemon has no desktop (ADR-120). In a container the page opens VS Code attached to it (ADR-121).
+ * except when the daemon has no desktop (ADR-120). In a container the page opens VS Code attached to it (ADR-121), and the
+ * desktop app shows the folder through the projects folder on this computer, when the user has set it (ADR-131).
  */
-function RepoActions({ conn, repo }: { conn: Connection; repo: Repo }) {
+function RepoActions({ conn, repo, projectsDir }: { conn: Connection; repo: Repo; projectsDir: string | null | undefined }) {
   const [error, setError] = useState<string>();
   const { desktop, container } = useContext(DaemonPlaceContext);
+  const hostFolder = useHostFolder(desktop, projectsDir, repo.path);
   const open = (endpoint: typeof workspaceApi.openEditor | typeof workspaceApi.openFolder) => {
     setError(undefined);
     post(conn, endpoint, { repo: repo.id }).catch((err: unknown) => setError(errorMessage(err)));
@@ -116,6 +123,18 @@ function RepoActions({ conn, repo }: { conn: Connection; repo: Repo }) {
             <FolderOpen /> Show in {FILE_MANAGER}
           </Button>
         )}
+        {hostFolder && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setError(undefined);
+              showInHostFolder(hostFolder).catch((err: unknown) => setError(errorMessage(err)));
+            }}
+          >
+            <FolderOpen /> Show in {FILE_MANAGER}
+          </Button>
+        )}
         <EditorButton
           path={repo.path}
           label="Open in VS Code"
@@ -123,7 +142,9 @@ function RepoActions({ conn, repo }: { conn: Connection; repo: Repo }) {
           disabled={repo.status.kind !== "ok"}
         />
       </div>
-      {!desktop && <p className="text-muted-foreground text-right text-xs">{container ? IN_CONTAINER_NOTE : NO_DESKTOP_NOTE}</p>}
+      {!desktop && !hostFolder && (
+        <p className="text-muted-foreground text-right text-xs">{container ? IN_CONTAINER_NOTE : NO_DESKTOP_NOTE}</p>
+      )}
       {error && <p className="text-destructive text-xs">{error}</p>}
     </div>
   );

@@ -16,6 +16,10 @@ _Avoid_: app (when only Tauri is meant)
 A daemon the desktop app connects to through a port forwarded to 127.0.0.1, typically in a dev container, instead of starting its own as a sidecar (ADR-130). The app neither starts nor stops it. Its opposite is the app's **own daemon**.
 _Avoid_: external daemon, server
 
+**Projects folder on this computer** (`host_folder.rs`, `hostProjectsFolder`, `host-projects-folder.json`; in the UI *projects folder on this computer*):
+Where this computer reaches the projects folder of a remote daemon, for example a Docker volume through `\\wsl.localhost\…`; the desktop app shows a repo of the container in Explorer through it (ADR-131).
+_Avoid_: host path, volume path
+
 **App update** (`updates.rs`, `UpdateCheck`; in the UI *update*):
 A newer version of Trackwall from GitHub Releases, installed by the shell after the user's click and followed by a restart (ADR-53). Its **update package** is the archive the updater downloads and checks against the signature: the release zip on Windows (`portable_update.rs`), `.app.tar.gz` on macOS; the **update manifest** is `latest.json` in the release.
 _Avoid_: upgrade, sync (that is the repo synchronization)
