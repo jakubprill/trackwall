@@ -10,6 +10,12 @@ import { isInside } from "../../infra/path-inside.ts";
  * `~/.copilot`); an entry covers its subfolders (§4.4). Only read: the daemon never changes Copilot CLI's configuration.
  */
 
+/**
+ * Copilot CLI writes `config.json` with `//` comment lines before the object (seen on 1.0.103 and 1.0.105, pinned by a
+ * contract test). A JSON string cannot hold a line break, so a line that starts with `//` is always a comment.
+ */
+const COMMENT_LINE = /^\s*\/\/.*$/gm;
+
 const CopilotConfig = z.object({ trustedFolders: z.array(z.string()).optional() });
 
 export type TrustedFolders =
@@ -32,7 +38,7 @@ export async function trustedFolders(env: NodeJS.ProcessEnv): Promise<TrustedFol
     return { kind: "unreadable", file, message: err instanceof Error ? err.message : String(err) };
   }
   try {
-    const parsed = CopilotConfig.safeParse(JSON.parse(text));
+    const parsed = CopilotConfig.safeParse(JSON.parse(text.replace(COMMENT_LINE, "")));
     if (!parsed.success) return { kind: "unreadable", file, message: "trustedFolders is not a list of folders" };
     return { kind: "read", file, folders: parsed.data.trustedFolders ?? [] };
   } catch {

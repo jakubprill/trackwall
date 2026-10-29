@@ -4,7 +4,7 @@
  * network and not the developer's Copilot settings take part. Everything else is the daemon as `main.ts` builds it: the session plugin's HTTP hooks, the
  * HTTP MCP entry and the session instructions.
  */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { copilotCli, PINNED_COPILOT_ENV } from "../../scripts/copilot-cli.ts";
 import { sessionHooksFile } from "../../src/modules/agents/agents.ts";
@@ -29,8 +29,12 @@ function isCopilotSetting(name: string): boolean {
  */
 function byokEnv(model: ScriptedModel, dirs: { home: string; projects: string }): NodeJS.ProcessEnv {
   const copilotHome = join(dirs.home, "copilot-home");
-  mkdirSync(copilotHome, { recursive: true });
-  writeFileSync(join(copilotHome, "config.json"), JSON.stringify({ trustedFolders: [dirs.projects, dirs.home] }));
+  const config = join(copilotHome, "config.json");
+  // Written once: Copilot CLI then rewrites the file in its own format, which the doctor must read as it is.
+  if (!existsSync(config)) {
+    mkdirSync(copilotHome, { recursive: true });
+    writeFileSync(config, JSON.stringify({ trustedFolders: [dirs.projects, dirs.home] }));
+  }
   const inherited = Object.fromEntries(Object.entries(process.env).filter(([name]) => !isCopilotSetting(name)));
   return {
     ...inherited,
