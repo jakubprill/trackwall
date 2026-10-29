@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { apiResult } from "./api.ts";
+import { ContainerId } from "./container.ts";
 
 /** The name of the daemon's header and discovery file; one place for the daemon, UI, Tauri and CLI. */
 export const DAEMON_FILE = "daemon.json";
@@ -47,6 +48,8 @@ export const DaemonInfo = z.object({
    * refused with `no_desktop`.
    */
   desktop: z.boolean(),
+  /** The container the daemon runs in, for VS Code links into it (ADR-121); `null` outside one or when it cannot tell. */
+  container: ContainerId.nullable(),
 });
 export type DaemonInfo = z.infer<typeof DaemonInfo>;
 export const DaemonInfoResult = apiResult(DaemonInfo);

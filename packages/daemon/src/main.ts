@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { arch, platform } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,7 +9,7 @@ import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
 import { createErrorJournal, createFacade, type Facade, HOSTING_CLIS } from "./facade.ts";
 import { type CommandLine, type DaemonArgs, MCP_STDIO_COMMAND, parseCommandLine, USAGE } from "./infra/args.ts";
-import { desktopOpeners, hasDesktop } from "./infra/desktop.ts";
+import { desktopOpeners, hasDesktop, ownContainer } from "./infra/desktop.ts";
 import { newToken, probeRunningDaemon, watchDaemonFile, withStartLock, writeDaemonFile } from "./infra/discovery.ts";
 import { watchEventLoopStalls } from "./infra/event-loop-stalls.ts";
 import { resolveTrackwallHome, trackwallHome } from "./infra/home.ts";
@@ -71,6 +71,7 @@ async function start(
   let facade: Facade | undefined;
   let stopWatching = () => {};
   const desktop = hasDesktop({ platform: process.platform, env: process.env, exists: existsSync });
+  const container = ownContainer({ exists: existsSync, read: (path) => readFileSync(path, "utf8") });
   // Sessions start only through the API, so their hooks and MCP server always have its port.
   const apiPort = () => {
     if (!api) throw new Error("a session started before the API listens");
@@ -126,6 +127,7 @@ async function start(
           home,
           mcpStdioCommand: mcpStdioCommand(home),
           desktop,
+          container,
         }),
         onShutdown: () => void shutdown("POST /api/daemon/shutdown"),
         facade,

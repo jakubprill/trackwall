@@ -2,7 +2,7 @@ import { isAbsolute } from "node:path";
 import { noIncludedFiles, Task } from "@trackwall/protocol";
 import { z } from "zod";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
-import { readStateFile } from "./state-file.ts";
+import { readStateFile } from "../../infra/state-file.ts";
 import { TaskBranch } from "./task-branch.ts";
 import { MAX_MISE_PATH } from "./task-mise-config.ts";
 

@@ -51,4 +51,4 @@ A key Trackwall cannot read shows its line and the reason in red, and a key Trac
 - `daemon.json` and each session's files hold the key the app and sessions use to reach Trackwall, so they are not in the list.
 - For the mise config, only the names of the variables and secrets are shown, never their values.
 - mise also reads config from the folders above the projects folder and its own global config; the list shows only the one in the projects folder.
-- When Trackwall runs in a [dev container](/guide/dev-container), "Open in VS Code" and "Show in Explorer" are not there; "Docs" opens in a new tab of your browser.
+- When Trackwall runs in a [dev container](/guide/dev-container), "Open in VS Code" opens the file in VS Code attached to the container (with the Dev Containers extension), "Show in Explorer" is not there, and "Docs" opens in a new tab of your browser.
