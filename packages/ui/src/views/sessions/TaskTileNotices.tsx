@@ -6,7 +6,7 @@ import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { newWarnings, type TaskNotice, tileNotices } from "@/lib/task-notices";
 import { useTaskDetails } from "@/lib/use-task-details";
-import type { TileOverlay as TileOverlayState } from "@/lib/use-tile-overlay";
+import type { TileOverlayContent, TileOverlay as TileOverlayState } from "@/lib/use-tile-overlay";
 import { cn } from "@/lib/utils";
 import { TaskEditorButton } from "./TaskButtons.tsx";
 import { scrollToSection, TaskDetails } from "./TaskDetails.tsx";
@@ -70,7 +70,7 @@ export function useTaskTileNotices({
   const markSeen = () => setSeen(new Set([...(seen ?? []), ...warningKeys]));
   const openFor = (notice: TaskNotice | undefined) => {
     markSeen();
-    overlay.open(notice?.section === "mise-config" ? { kind: "mise-config" } : { kind: "notices", section: notice?.section });
+    overlay.open(contentFor(notice));
   };
   const close = () => {
     markSeen();
@@ -92,7 +92,7 @@ export function useTaskTileNotices({
         {tile.chips.map((notice) => (
           <TileNoticeChip
             key={notice.key}
-            ref={notice.section === "mise-config" ? overlay.trigger("mise-config") : undefined}
+            ref={overlay.trigger(contentFor(notice))}
             notice={notice}
             open={isOpen(notice)}
             onToggle={() => (isOpen(notice) ? close() : openFor(notice))}
@@ -103,7 +103,7 @@ export function useTaskTileNotices({
           </TileNoticeChip>
         ))}
         <NoticeBadge
-          ref={overlay.trigger("notices")}
+          ref={overlay.trigger({ kind: "notices" })}
           notices={tile.others}
           open={shown?.kind === "notices" && section === undefined}
           onToggle={() => (shown?.kind === "notices" ? close() : openFor(undefined))}
@@ -145,10 +145,15 @@ export function useTaskTileNotices({
             />
           </div>
         </TileOverlay>
-        <NewWarningBanner unseen={opened ? [] : unseen} onShow={() => openFor(unseen[0])} onDismiss={markSeen} />
+        <NewWarningBanner unseen={shown ? [] : unseen} onShow={() => openFor(unseen[0])} onDismiss={markSeen} />
       </>
     ),
   };
+}
+
+/** What a notice opens over the terminal: the mise config alone, or the task's sections at its own; the badge, at none. */
+function contentFor(notice: TaskNotice | undefined): TileOverlayContent {
+  return notice?.section === "mise-config" ? { kind: "mise-config" } : { kind: "notices", section: notice?.section };
 }
 
 /**

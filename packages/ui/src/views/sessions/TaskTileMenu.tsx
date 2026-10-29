@@ -46,7 +46,7 @@ export function useTaskTileMenu({
   return {
     button: (
       <Button
-        ref={overlay.trigger("menu")}
+        ref={overlay.trigger({ kind: "menu" })}
         variant="ghost"
         size="icon"
         className="size-6 shrink-0"

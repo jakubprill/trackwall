@@ -214,7 +214,15 @@ function SessionTile({
           <Maximize2 />
         </Button>
         {session && <SessionCloseButton close={close} />}
-        {sessionlessTask && <EndTaskButton onClick={ending.show} />}
+        {/* Ending the task takes the tile's body, so whatever lay over it closes. */}
+        {sessionlessTask && (
+          <EndTaskButton
+            onClick={() => {
+              overlay.close();
+              ending.show();
+            }}
+          />
+        )}
       </header>
       {/* The notices lie over the body like the close question, so that they do not resize the PTY. */}
       <div className="relative flex min-h-0 flex-1 flex-col">
