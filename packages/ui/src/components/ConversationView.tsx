@@ -11,13 +11,12 @@ import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { AgentDialogCard } from "@/components/AgentDialogCard";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { sendsMessage, TOOL_STATUS, withEntries } from "@/lib/conversation";
 import { daemonSocket } from "@/lib/daemon-socket";
 import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
-import { isLive } from "@/lib/session-state";
+import { inTurn, isLive } from "@/lib/session-state";
 import { browserTimers } from "@/lib/timers";
 import { useAction } from "@/lib/use-action";
 import { FocusReporter, terminalInFront } from "@/lib/window-focus";
@@ -103,7 +102,7 @@ export function ConversationView({ conn, session, selected }: { conn: Connection
   }, [entries]);
 
   const live = session.run.kind === "running";
-  const working = live && (session.state?.state === "Working" || session.state?.state === "Approval");
+  const working = inTurn(session);
   const ended = !isLive(session);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -129,7 +128,7 @@ export function ConversationView({ conn, session, selected }: { conn: Connection
           <AgentDialogCard key={`${id}:${session.dialog.id}`} conn={conn} session={id} dialog={session.dialog} onOpen={() => {}} />
         </div>
       )}
-      <Composer conn={conn} session={id} live={live} working={working} focused={selected && !keyboardElsewhere} />
+      {live && <Composer conn={conn} session={id} working={working} focused={selected && !keyboardElsewhere} />}
     </div>
   );
 }
@@ -158,20 +157,11 @@ function Entry({ entry }: { entry: ConversationEntry }) {
   }
 }
 
-/** The message box: Enter sends, Shift+Enter is a new line; a message written during a turn goes once it ends. Stop ends the turn. */
-function Composer({
-  conn,
-  session,
-  live,
-  working,
-  focused,
-}: {
-  conn: Connection;
-  session: string;
-  live: boolean;
-  working: boolean;
-  focused: boolean;
-}) {
+/**
+ * The message box of a running session: Enter sends, Shift+Enter is a new line; a message written during a turn goes
+ * once it ends. Stop ends the turn. The box grows with the text, and its buttons sit inside it on one line.
+ */
+function Composer({ conn, session, working, focused }: { conn: Connection; session: string; working: boolean; focused: boolean }) {
   const [text, setText] = useState("");
   const box = useRef<HTMLTextAreaElement>(null);
   const say = useAction(
@@ -185,21 +175,28 @@ function Composer({
   useEffect(() => {
     if (focused) box.current?.focus();
   }, [focused]);
+  // The box grows with the text up to its max-h. Set from the script, since CSS `field-sizing` is missing in older
+  // WebKit, which the desktop shell uses on macOS.
+  useLayoutEffect(() => {
+    const element = box.current;
+    if (!element) return;
+    element.style.height = "auto";
+    element.style.height = `${element.scrollHeight}px`;
+  }, [text]);
   const send = () => {
     if (text.trim() !== "" && !say.pending) say.run(text);
   };
   const error = say.error ?? stop.error;
   return (
     <div className="flex flex-col gap-1 border-t px-3 py-2">
-      <div className="flex items-end gap-2">
-        <Textarea
+      <div className="border-input dark:bg-muted focus-within:border-ring focus-within:ring-ring/50 flex items-end gap-2 rounded-md border py-1.5 pr-1.5 pl-3 focus-within:ring-[3px]">
+        <textarea
           ref={box}
           aria-label="Message to the agent"
-          placeholder={live ? (working ? "Write the next message…" : "Write to the agent…") : "The session has ended"}
+          placeholder={working ? "Write the next message…" : "Write to the agent…"}
           value={text}
-          disabled={!live}
-          rows={2}
-          className="max-h-48 min-h-0 flex-1 resize-none"
+          rows={1}
+          className="placeholder:text-muted-foreground max-h-48 min-w-0 flex-1 resize-none self-center bg-transparent py-1 text-sm outline-none"
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (!sendsMessage(e.nativeEvent)) return;
@@ -207,24 +204,25 @@ function Composer({
             send();
           }}
         />
-        <div className="flex flex-col gap-1">
-          <Button size="icon" aria-label="Send" title="Send (Enter)" disabled={!live || say.pending || text.trim() === ""} onClick={send}>
-            <SendHorizontal />
+        {working && (
+          <Button size="sm" variant="outline" title="Stop the turn; the session goes on" disabled={stop.pending} onClick={() => stop.run()}>
+            <Square /> Stop the turn
           </Button>
-          {working && (
-            <Button
-              size="icon"
-              variant="outline"
-              aria-label="Stop the turn"
-              title="Stop the turn"
-              disabled={stop.pending}
-              onClick={() => stop.run()}
-            >
-              <Square />
-            </Button>
-          )}
-        </div>
+        )}
+        <Button
+          size="icon"
+          className="size-8"
+          aria-label="Send"
+          title="Send (Enter)"
+          disabled={say.pending || text.trim() === ""}
+          onClick={send}
+        >
+          <SendHorizontal />
+        </Button>
       </div>
+      <p className="text-muted-foreground text-xs">
+        Enter sends, Shift+Enter is a new line{working ? "; a message written now goes when the turn ends" : ""}
+      </p>
       {error && <p className="text-destructive text-xs">{error}</p>}
     </div>
   );
