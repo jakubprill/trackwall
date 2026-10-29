@@ -18,6 +18,9 @@ overrides:
   # VitePress 1.6 bundles markdown-it types from before 14.2; with 14.2 its markdown hook rejects markdown-it plugins.
   # Pinned for the whole workspace, so that VitePress and vitepress-plugin-llms see the same types.
   "@types/markdown-it": "14.1.2"
+  # Mermaid 11 (from @streamdown/mermaid, the README view) asks for KaTeX 0.16, which has GHSA-238p-pmpm-9mq7, fixed
+  # in 0.18.2. Mermaid 12 moved to KaTeX 0.18 with the same API; remove this when @streamdown/mermaid takes Mermaid 12.
+  "mermaid>katex": "0.18.11"
 
 packageExtensions:
   # vitepress-plugin-llms types its Vite plugin against `vite` without declaring it, so it got whichever Vite pnpm

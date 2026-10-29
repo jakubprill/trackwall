@@ -143,7 +143,9 @@ fn unpack(package: &[u8], into: &Path) -> Result<(), String> {
             .and_then(|path| path.strip_prefix(PACKAGE_ROOT).ok().map(Path::to_path_buf))
             // `enclosed_name` lets through a `..` that stays inside the archive, such as `Trackwall/../x`.
             .filter(|relative| relative.components().all(|c| matches!(c, Component::Normal(_))))
-            .ok_or_else(|| format!("The update package has an entry outside the {PACKAGE_ROOT} folder: {}", entry.name()))?;
+            .ok_or_else(|| {
+                format!("The update package has an entry outside the {PACKAGE_ROOT} folder: {}", String::from_utf8_lossy(entry.name_raw()))
+            })?;
         let target = into.join(relative);
         let written = if entry.is_dir() {
             fs::create_dir_all(&target)
@@ -311,6 +313,18 @@ mod tests {
         files.push(("Trackwall/../escaped.txt", "x"));
         let err = install(&app, &package(&files)).unwrap_err();
         assert!(err.starts_with("The update package has an entry outside the Trackwall folder"), "{err}");
+        assert!(!app.join(".update").exists(), "nothing of the failed update is left");
+        assert_eq!(fs::read_to_string(app.join("trackwall.exe")).unwrap(), "shell 1");
+        fs::remove_dir_all(app).unwrap();
+    }
+
+    #[test]
+    fn install_rejects_a_symbolic_link_in_the_package() {
+        let app = installed_app("symlink");
+        let mut zip = zip::ZipWriter::new_append(Cursor::new(package(&NEW_BUILD))).unwrap();
+        zip.add_symlink("Trackwall/ui/link", "../../outside", SimpleFileOptions::default()).unwrap();
+        let err = install(&app, &zip.finish().unwrap().into_inner()).unwrap_err();
+        assert_eq!(err, "The update package has an entry outside the Trackwall folder: Trackwall/ui/link");
         assert!(!app.join(".update").exists(), "nothing of the failed update is left");
         assert_eq!(fs::read_to_string(app.join("trackwall.exe")).unwrap(), "shell 1");
         fs::remove_dir_all(app).unwrap();
