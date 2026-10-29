@@ -52,11 +52,11 @@ test("every feature page has a title and a one-sentence description of at most 1
   }
 });
 
-test("a feature page opens with its title and repeats its description as the lede", () => {
-  for (const file of featurePages) {
-    const { title, description, body } = featurePage(file);
+test("a feature or guide page opens with its title and repeats its description as the lede", () => {
+  for (const path of [...featurePages.map((f) => `features/${f}`), ...guidePages.map((f) => `guide/${f}`)]) {
+    const { fields, body } = frontmatter(path);
     const [heading, , lede] = body.split("\n");
-    expect({ file, heading, lede }).toEqual({ file, heading: `# ${title}`, lede: description });
+    expect({ path, heading, lede }).toEqual({ path, heading: `# ${String(fields.title)}`, lede: String(fields.description) });
   }
 });
 
@@ -112,23 +112,13 @@ test("no page of the site points at decision records or the developer documents"
   expect(pointing).toEqual([]);
 });
 
-test("every guide page opens with its title and description and is in the sidebar under that title", () => {
-  const inSidebar = new Map(
-    SIDEBAR.flatMap((entry) => entry.items ?? [])
-      .filter((item) => item.link?.startsWith("/guide/"))
-      .map((item) => [`${item.link?.replace(/^\/guide\//, "")}.md`, item.text]),
-  );
-  expect([...inSidebar.keys()].sort()).toEqual([...guidePages].sort());
-  for (const file of guidePages) {
-    const { fields, body } = frontmatter(`guide/${file}`);
-    const [heading, , lede] = body.split("\n");
-    expect({ file, heading, lede, sidebar: inSidebar.get(file) }).toEqual({
-      file,
-      heading: `# ${String(fields.title)}`,
-      lede: String(fields.description),
-      sidebar: String(fields.title),
-    });
-  }
+test("every guide page is in the sidebar under its title", () => {
+  const inSidebar = SIDEBAR.flatMap((entry) => entry.items ?? [])
+    .filter((item) => item.link?.startsWith("/guide/"))
+    .map((item) => ({ file: `${item.link?.replace(/^\/guide\//, "")}.md`, text: item.text }))
+    .sort((a, b) => a.file.localeCompare(b.file));
+  const titles = [...guidePages].sort().map((file) => ({ file, text: String(frontmatter(`guide/${file}`).fields.title) }));
+  expect(inSidebar).toEqual(titles);
 });
 
 test("every screenshot a page shows is in public/screenshots", () => {

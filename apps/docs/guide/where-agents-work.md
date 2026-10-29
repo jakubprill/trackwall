@@ -52,20 +52,19 @@ mise reads every config from the folder an agent works in up to the top of your 
    ▼
  Task worktree             the files of the task's branch
                            + your ignored files, copied once when the task starts
-                           + SERVER_PORT and PORT: the task's own port
+                           + SERVER_PORT and PORT for mise tasks run there
                            ← an agent task works here
 ```
 
 ## What each agent sees
 
-| Where it works | Projects folder `mise.toml` | Repo `mise.toml` | Your `mise.local.toml` | Task port |
+| Where it works | Projects folder `mise.toml` | The repo's committed `mise.toml` | Your own `mise.local.toml`, or a `mise.toml` git ignores | Task port in mise tasks |
 |---|---|---|---|---|
 | [Supervisor](/features/supervisor), free session | yes | no | no | no |
-| [Session](/features/sessions) in a repo | yes | yes | yes | no |
-| "mise tasks" tab, [Services](/features/services), [Batch command](/features/batch-command) | yes | yes | yes | no |
-| [Agent task](/features/tasks) | yes | as on the task's branch | only when `.worktreeinclude` lists it | yes |
+| [Session](/features/sessions) in a repo; "mise tasks" tab, [Services](/features/services) and [Batch command](/features/batch-command) in the repo | yes | yes | yes | no |
+| [Agent task](/features/tasks), and services and mise tasks in its worktree | yes | as on the task's branch | only the files `.worktreeinclude` lists | yes |
 
-A session gets its environment when it starts: change a `mise.toml` and the session sees it after you resume or start it again. [Environment from mise](/features/mise-environment) tells how secrets in these files stay hidden from the agent's tools, and [Environment variables](/guide/environment-variables) lists every variable involved.
+When mise cannot give the environment of a place, a session gets the one of the place above it, and the line under its header says why: a repo whose config you have not trusted yet gives the projects folder's, and a worktree whose mise files the agent changed gives the repo root's until you press "Trust this config". [Environment from mise](/features/mise-environment) tells how secrets in these files stay hidden from the agent's tools, and [Environment variables](/guide/environment-variables) lists every variable involved.
 
 ## A task's worktree
 
@@ -80,22 +79,18 @@ mise.local.toml
 src/main/resources/application-local.yml
 ```
 
-Trackwall copies a file only when git ignores it, so a copy never overwrites a file of the branch and the agent cannot commit it by accident. A file you ignore with "Ignore locally" counts: the repo's own ignore list applies to its worktrees too. The copy happens once, when the task starts; a later change in the repo does not reach the worktree. The task panel lists what it copied and what it left out, and [Agent tasks](/features/tasks) has the limits.
-
-The worktree runs mise tasks only with config you agreed to: the repo root's config must be trusted, and the worktree's mise files must be the ones it started with. When the agent changes one, nothing runs there until you read the change and press "Trust this config".
+Only files git ignores are copied, and a file you ignore with "Ignore locally" counts, since a repo's ignore list applies to its worktrees too. The copy is made once, when the task starts. [Agent tasks](/features/tasks) has the limits, and how the worktree's mise config is trusted.
 
 ## Your local config and the store
 
 Some teams keep mise config out of their repos. Then your own tasks go into `mise.local.toml`, or into a whole `mise.toml` that git ignores. These files live only in your clone: delete the folder, and they are gone.
 
-The local config store keeps them safe. A few seconds after `mise.toml`, `mise.local.toml` or `.worktreeinclude` changes in a repo, Trackwall copies it to `.trackwall-local/<repo>/` and commits it there, so every version stays. A `mise.toml` the repo commits is the team's and is never copied. When you clone the repo again with Trackwall, the files come back before the clone shows as done, and git is told to ignore them.
+The local config store keeps them safe: Trackwall copies each of them, and `.worktreeinclude`, to `.trackwall-local/<repo>/` a few seconds after it changes, with every version kept, and puts them back when you clone the repo again.
 
 The store and the worktrees never meet. The store backs up and restores your repo's own folder; a worktree gets its files from the repo root through `.worktreeinclude`. So the path of a file is always store → repo → worktree, and you only ever edit the one in the repo. [Local config backup](/features/local-config) has the details, including a private remote for a second computer.
 
 ## Good to know
 
 - Moving worktrees with "Task worktrees folder" in Settings to a folder outside your projects folder also moves them out from under its `mise.toml`: tasks there no longer get the tokens set in it.
-- A worktree has only what is on its branch and what `.worktreeinclude` copies. A file you add to the repo after the task started does not reach it; end the task and start a new one, or copy the file yourself.
-- `.worktreeinclude` itself can stay untracked, and the store backs it up like your mise files.
+- A worktree has only what is on its branch and what `.worktreeinclude` copied when the task started. A file you add to the repo later does not reach it; copy it yourself, or start a new task.
 - mise also reads config in the folders above your projects folder and its global config, so a variable set there reaches every agent too.
-- Tasks created before worktrees moved into the projects folder keep theirs in `~/.trackwall/worktrees/<repo>/` until they end.
