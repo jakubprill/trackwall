@@ -46,6 +46,11 @@ const MID_TURN_STATES: ReadonlySet<TaskStateChange["state"]> = new Set(["Working
  * at once.
  */
 export function closeCutsOffTurn(session: Session): boolean {
+  return inTurn(session);
+}
+
+/** The agent runs and is in the middle of a turn, which the conversation view's "Stop the turn" ends. */
+export function inTurn(session: Session): boolean {
   return session.run.kind === "running" && session.state !== null && MID_TURN_STATES.has(session.state.state);
 }
 

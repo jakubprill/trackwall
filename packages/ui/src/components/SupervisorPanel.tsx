@@ -1,27 +1,15 @@
-import { agentsApi, countLabel, type SessionView, type SupervisorConversation } from "@trackwall/protocol";
-import {
-  BellRing,
-  Crown,
-  Maximize2,
-  MessagesSquare,
-  Minimize2,
-  PanelRightClose,
-  PanelRightOpen,
-  Play,
-  Plus,
-  Square,
-  Sunrise,
-} from "lucide-react";
+import { agentsApi, countLabel, type Session } from "@trackwall/protocol";
+import { BellRing, Crown, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Square } from "lucide-react";
 import { type FocusEvent, useEffect, useRef, useState } from "react";
 import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
 import { SessionScreen } from "@/components/SessionScreen";
 import { StatusLabel } from "@/components/StatusLabel";
+import { SupervisorStart } from "@/components/SupervisorStart";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { readSupervisorView, saveSupervisorView } from "@/lib/conversation";
-import { dayStartLabel, type StartButton, startErrorShown } from "@/lib/day-start";
+import type { StartButton } from "@/lib/day-start";
 import { IS_MAC } from "@/lib/platform";
 import {
   entryId,
@@ -35,10 +23,10 @@ import {
 } from "@/lib/session-entries";
 import { ariaSessionShortcut, SUPERVISOR_SHORTCUT, sessionShortcutLabel } from "@/lib/session-shortcut";
 import { isLive, PROPOSAL_STATUS, SUPERVISOR, sessionPlace, sessionStateLabel } from "@/lib/session-state";
-import { type SupervisorSummary, supervisorStarts } from "@/lib/supervisor";
+import { type SupervisorSummary, supervisorStateLabel } from "@/lib/supervisor";
 import { type SupervisorLayout, widenedOrNarrowed } from "@/lib/supervisor-layout";
 import { useAction } from "@/lib/use-action";
-import { useDayStart } from "@/lib/use-day-start";
+import { type DayStartHandle, useDayStart } from "@/lib/use-day-start";
 import { cn } from "@/lib/utils";
 
 const SHORTCUT = sessionShortcutLabel(SUPERVISOR_SHORTCUT, IS_MAC);
@@ -69,14 +57,8 @@ export function SupervisorPanel({
   onOpenInSessions: (selection: SessionSelection) => void;
   onChanged: () => void;
 }) {
-  const { session } = supervisor;
-  // Here rather than in the header, which folding the panel unmounts: an old day start failure must not come back then.
+  // Here rather than in the start card, which folding the panel unmounts: an old day start failure must not come back then.
   const [lastStart, setLastStart] = useState<StartButton>("day");
-  const [view, setView] = useState(() => readSupervisorView(() => window.localStorage));
-  const chooseView = (next: SessionView) => {
-    setView(next);
-    saveSupervisorView(() => window.localStorage, next);
-  };
   const panel = useRef<HTMLElement>(null);
   // Focus that lands anywhere outside the panel takes the keyboard out of it. A blur would say the same, but none
   // comes when the focused terminal is removed (a reconnect, a supervisor gone after a daemon restart).
@@ -103,21 +85,18 @@ export function SupervisorPanel({
       onFocus={() => onFocusedChange(true)}
       onBlur={leave}
     >
-      <SupervisorHeader
+      <SupervisorBody
         conn={conn}
         supervisor={supervisor}
         lastStart={lastStart}
         onStart={setLastStart}
-        view={view}
-        onView={chooseView}
+        focused={focused}
+        onOpenInSessions={onOpenInSessions}
         onChanged={onChanged}
         layout={layout}
         onLayout={onLayout}
         onFold={fold}
       />
-      <EnvironmentChangeNotice key={session?.id} conn={conn} session={session} onRestarted={onChanged} />
-      <DelegatedWork work={supervisor.work} onOpen={onOpenInSessions} />
-      {session ? <SessionScreen conn={conn} session={session} selected={focused} /> : <NoSupervisor />}
     </aside>
   );
 }
@@ -145,16 +124,17 @@ function FoldedSupervisor({ supervisor, onUnfold }: { supervisor: SupervisorSumm
 }
 
 /**
- * Name, state and what it works on; Stop while it runs, and Start my day or a plain start (Resume and New while the last
- * conversation can go on) once it has ended or before the first.
+ * The header with the supervisor's state, then the start card while none runs (ADR-126), what it delegated, and its
+ * screen: the running supervisor's, or what the last one left. The day start lives here, since
+ * both the header and the start card show it.
  */
-function SupervisorHeader({
+function SupervisorBody({
   conn,
   supervisor,
   lastStart,
   onStart,
-  view,
-  onView,
+  focused,
+  onOpenInSessions,
   onChanged,
   layout,
   onLayout,
@@ -162,85 +142,87 @@ function SupervisorHeader({
 }: {
   conn: Connection;
   supervisor: SupervisorSummary;
-  /** The start button the user pressed last. */
   lastStart: StartButton;
   onStart: (button: StartButton) => void;
-  /** The view the next start shows the supervisor in (ADR-107). */
-  view: SessionView;
-  onView: (view: SessionView) => void;
+  focused: boolean;
+  onOpenInSessions: (selection: SessionSelection) => void;
+  onChanged: () => void;
+  layout: SupervisorLayout;
+  onLayout: (layout: SupervisorLayout) => void;
+  onFold: () => void;
+}) {
+  const { session } = supervisor;
+  const day = useDayStart(conn, onChanged);
+  const running = session !== undefined && isLive(session) ? session : undefined;
+  return (
+    <>
+      <SupervisorHeader
+        conn={conn}
+        supervisor={supervisor}
+        running={running}
+        day={day}
+        onChanged={onChanged}
+        layout={layout}
+        onLayout={onLayout}
+        onFold={onFold}
+      />
+      <EnvironmentChangeNotice key={session?.id} conn={conn} session={session} onRestarted={onChanged} />
+      {!running && (
+        <SupervisorStart conn={conn} supervisor={supervisor} day={day} lastStart={lastStart} onStart={onStart} onChanged={onChanged} />
+      )}
+      <DelegatedWork work={supervisor.work} onOpen={onOpenInSessions} />
+      {session && <SessionScreen conn={conn} session={session} selected={focused} />}
+    </>
+  );
+}
+
+/** The time of day in the user's locale; `supervisorStateLabel` takes it, so its tests do not depend on the locale. */
+const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+/** Name and state, and Stop while the supervisor runs (ADR-126); starting it is the start card's. */
+function SupervisorHeader({
+  conn,
+  supervisor,
+  running,
+  day,
+  onChanged,
+  layout,
+  onLayout,
+  onFold,
+}: {
+  conn: Connection;
+  supervisor: SupervisorSummary;
+  /** The supervisor while it runs. */
+  running: Session | undefined;
+  day: DayStartHandle;
   onChanged: () => void;
   layout: SupervisorLayout;
   onLayout: (layout: SupervisorLayout) => void;
   onFold: () => void;
 }) {
   const { session, waitingProposals } = supervisor;
-  const start = useAction(
-    (conversation: SupervisorConversation) => post(conn, agentsApi.startSupervisor, { conversation, view }),
-    onChanged,
-  );
   const stop = useAction((id: string) => post(conn, agentsApi.stop, { session: id }), onChanged);
-  const day = useDayStart(conn, onChanged);
-  const running = session !== undefined && isLive(session) ? session : undefined;
-  const startError = startErrorShown({
-    lastStart,
-    supervisorError: start.error,
-    dayError: day.error,
-    dayRun: day.run,
-    supervisorStartedAt: session?.startedAt,
-  });
-  const error = running ? stop.error : startError;
   const wide = layout === "wide";
   return (
     <header className="flex flex-col gap-1 border-b px-4 py-2">
       <div className="flex min-w-0 items-center gap-3">
         <Crown className="text-primary size-4 shrink-0" aria-hidden />
         <h2 className="hud-label">{SUPERVISOR}</h2>
-        {session && (
-          <span className="text-muted-foreground min-w-0 truncate text-xs">
-            <StatusLabel {...sessionStateLabel(session)} />
-          </span>
-        )}
+        <span className="text-muted-foreground min-w-0 truncate text-xs">
+          <StatusLabel {...supervisorStateLabel(session, day.running, clock)} />
+        </span>
         {waitingProposals > 0 && <ProposalsWaiting count={waitingProposals} />}
         <span className="ml-auto flex shrink-0 items-center gap-1">
-          {running ? (
+          {running && (
             <Button
               variant="outline"
               size="sm"
               onClick={() => stop.run(running.id)}
               disabled={stop.pending || running.run.kind === "stopping"}
+              title="End the supervisor; you can continue its conversation later"
             >
               <Square /> Stop
             </Button>
-          ) : (
-            <>
-              <Button
-                size="sm"
-                onClick={() => {
-                  onStart("day");
-                  day.start(view);
-                }}
-                disabled={day.running || start.pending}
-                title="Sync every repo and get a briefing"
-              >
-                <Sunrise /> {dayStartLabel(day.run)}
-              </Button>
-              {supervisorStarts(supervisor).map(({ conversation, label, title }) => (
-                <Button
-                  key={conversation}
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    onStart("supervisor");
-                    start.run(conversation);
-                  }}
-                  disabled={start.pending || day.running}
-                  title={title}
-                >
-                  {conversation === "new" && supervisor.resumable ? <Plus /> : <Play />} {label}
-                </Button>
-              ))}
-              <ViewToggle view={view} onView={onView} />
-            </>
           )}
           <Button
             variant="ghost"
@@ -256,30 +238,8 @@ function SupervisorHeader({
           </Button>
         </span>
       </div>
-      {session?.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
-      {error && <span className="text-destructive text-xs">{error}</span>}
+      {running && stop.error && <span className="text-destructive text-xs">{stop.error}</span>}
     </header>
-  );
-}
-
-/** Which view the next start shows the supervisor in: a terminal, or the conversation view (ADR-107), still a preview. */
-function ViewToggle({ view, onView }: { view: SessionView; onView: (view: SessionView) => void }) {
-  const conversation = view === "conversation";
-  return (
-    <Button
-      variant={conversation ? "secondary" : "ghost"}
-      size="icon"
-      aria-pressed={conversation}
-      onClick={() => onView(conversation ? "terminal" : "conversation")}
-      aria-label="Start in the conversation view"
-      title={
-        conversation
-          ? "The supervisor starts in the conversation view (preview); click to start it in a terminal"
-          : "The supervisor starts in a terminal; click to start it in the conversation view (preview)"
-      }
-    >
-      <MessagesSquare />
-    </Button>
   );
 }
 
@@ -326,21 +286,5 @@ function ProposalsWaiting({ count }: { count: number }) {
     <Badge variant="outline" className="text-warning" aria-label={label} title={label}>
       {count}
     </Badge>
-  );
-}
-
-function NoSupervisor() {
-  return (
-    <div className="text-muted-foreground flex flex-col gap-3 p-4 text-sm">
-      <p>
-        The supervisor is one Copilot CLI session above all your repos. Tell it what you want done; it plans the work, proposes a task for
-        each repo, and follows the agents that run them.
-      </p>
-      <p>Every task it proposes waits for your approval in Sessions, and nothing starts without it.</p>
-      <p>
-        Start my day syncs every repo first, then starts the supervisor with a briefing of what changed since your last day start and what
-        waits for you.
-      </p>
-    </div>
   );
 }
