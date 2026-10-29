@@ -6,6 +6,7 @@ import { TESTED_COPILOT_CLI_VERSION } from "@trackwall/protocol";
 import { createFacade } from "../src/facade.ts";
 import { trustedFolderOf } from "../src/modules/doctor/copilot-trust.ts";
 import { copilotVersionOutcome, Doctor, type DoctorDeps } from "../src/modules/doctor/doctor.ts";
+import { folderStorage } from "../src/modules/doctor/folder-storage.ts";
 import { compareVersions, versionIn } from "../src/modules/doctor/version.ts";
 import { fakeHostingClis } from "./support/hosting.ts";
 
@@ -186,6 +187,7 @@ describe("doctor", () => {
       repoHosts: () => {
         throw new Error("workspace.yaml is invalid: repoHosts");
       },
+      mountTable: async () => null,
       workspaceFile: join(tmpdir(), "trackwall-doctor-no-such-workspace.yaml"),
       workspaceKeys: () => ({ keys: [], unknown: [] }),
       now: () => NOW,
@@ -214,6 +216,7 @@ describe("the git check with a Git program chosen in Settings (ADR-112)", () => 
       mise: ["mise"],
       projectsDir: async () => null,
       repoHosts: () => [],
+      mountTable: async () => null,
       workspaceFile: join(tmpdir(), "trackwall-doctor-no-such-workspace.yaml"),
       workspaceKeys: () => ({ keys: [], unknown: [] }),
       now: () => NOW,
@@ -280,5 +283,62 @@ describe("Copilot CLI trusted folders", () => {
     expect(trustedFolderOf(join(root, "projects"), [root])).toBe(root);
     expect(trustedFolderOf(root, [root])).toBe(root);
     expect(trustedFolderOf(`${root}-old`, [root])).toBeNull();
+  });
+});
+
+describe("where the projects folder's files live on Linux", () => {
+  const mountinfo = [
+    "1590 1572 0:150 / / rw,relatime - overlay overlay rw,lowerdir=/var/lib/docker/overlay2/l/A",
+    "1603 1590 254:1 /docker/volumes/workspace-repos/_data /workspaces rw,relatime - ext4 /dev/vda1 rw",
+    "1610 1590 0:160 /run/desktop/mnt/host/c/Users/me/Dev /mnt/dev rw,noatime - 9p C:\\134Users\\134me\\134Dev rw",
+    "1611 1590 0:161 /Users/me/My\\040Projects /mnt/my\\040projects rw - fakeowner /run/host_mark/Users rw",
+  ].join("\n");
+
+  test("a Docker volume is the Linux file system", () => {
+    expect(folderStorage(mountinfo, "/workspaces/shop")).toEqual({ mountPoint: "/workspaces", fsType: "ext4", sharedFromHost: false });
+  });
+
+  test("a folder of the computer mounted into the container is shared from the host", () => {
+    expect(folderStorage(mountinfo, "/mnt/dev")).toEqual({ mountPoint: "/mnt/dev", fsType: "9p", sharedFromHost: true });
+  });
+
+  test("a mount point with a space is read from the kernel's escape", () => {
+    expect(folderStorage(mountinfo, "/mnt/my projects/shop")?.fsType).toBe("fakeowner");
+  });
+
+  test("a folder whose name only starts like a mount point is not in it", () => {
+    expect(folderStorage(mountinfo, "/mnt/devtools")).toEqual({ mountPoint: "/", fsType: "overlay", sharedFromHost: false });
+  });
+
+  function storageCheck(table: string | null, projectsDir: string) {
+    const deps: DoctorDeps = {
+      env: async () => process.env,
+      run: () => Promise.resolve(""),
+      gitVersion: () => Promise.resolve({ output: "git version 2.47.1", program: "git", source: "path", chosen: null }),
+      signedIn: () => Promise.resolve(),
+      resolveCopilot: () => ({ program: "copilot", args: [] }),
+      mise: ["mise"],
+      projectsDir: async () => projectsDir,
+      repoHosts: () => [],
+      mountTable: async () => table,
+      workspaceFile: join(tmpdir(), "trackwall-doctor-no-such-workspace.yaml"),
+      workspaceKeys: () => ({ keys: [], unknown: [] }),
+      now: () => NOW,
+    };
+    return new Doctor(deps).run().then((report) => report.checks.find((c) => c.id === "projects-folder-storage"));
+  }
+
+  test("the doctor warns about a projects folder shared from the computer, and says where to clone instead", async () => {
+    const check = await storageCheck(mountinfo, "/mnt/dev");
+    expect(check).toMatchObject({
+      status: "warn",
+      summary: "The projects folder is a folder of your computer mounted into Linux (9p at /mnt/dev), so git and builds there are slow.",
+    });
+    expect(check?.fix).toContain("Docker volume");
+  });
+
+  test("a projects folder in the Linux file system, or a computer without a mount table, gets no row", async () => {
+    expect(await storageCheck(mountinfo, "/workspaces")).toBeUndefined();
+    expect(await storageCheck(null, "C:\\Users\\me\\Dev")).toBeUndefined();
   });
 });

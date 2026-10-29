@@ -39,6 +39,7 @@ import { RepoWatch } from "./modules/workspace/repo-watch.ts";
 import { Workspace } from "./modules/workspace/workspace.ts";
 import { WorkspaceFile } from "./modules/workspace/workspace-file.ts";
 import { groupPlatform } from "./platform/group-platform.ts";
+import { mountTable } from "./platform/mount-table.ts";
 import { terminalPlatform } from "./platform/terminal.ts";
 
 /**
@@ -254,6 +255,7 @@ export function createFacade(o: FacadeOptions): Facade {
         throw err;
       }),
     repoHosts: () => workspace.repoHosts(),
+    mountTable,
     workspaceFile: workspace.configFile(),
     workspaceKeys: () => workspace.workspaceKeys(),
     now: () => new Date(),
