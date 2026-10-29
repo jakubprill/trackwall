@@ -2,57 +2,58 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { removeFolder } from "./support/remove-folder.ts";
+import { removeFolder } from "../src/infra/remove-folder.ts";
 
 function errno(code: string): NodeJS.ErrnoException {
   return Object.assign(new Error(`${code}: rm failed`), { code });
 }
 
-describe("removing a test's folder", () => {
-  test("a folder goes away with everything in it", () => {
+describe("removing a folder", () => {
+  test("a folder goes away with everything in it, and one that is not there is an error", async () => {
     const dir = mkdtempSync(join(tmpdir(), "trackwall-remove-"));
     mkdirSync(join(dir, "nested"));
     writeFileSync(join(dir, "nested", "file.txt"), "x");
 
-    removeFolder(dir);
+    await removeFolder(dir);
 
     expect(existsSync(dir)).toBe(false);
+    await expect(removeFolder(dir)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  test("a file still held for a moment, as a binary that just exited on Windows, is retried until it is free", () => {
+  test("a file still held for a moment, as on Windows after git or a binary exits, is retried until it is free", async () => {
     const failures = ["EBUSY", "EPERM", "ENOTEMPTY"];
     const attempts: string[] = [];
 
-    removeFolder("C:\\temp\\probe", (path) => {
+    await removeFolder("C:\\worktrees\\shop-fix", async (path) => {
       attempts.push(path);
       const code = failures.shift();
       if (code !== undefined) throw errno(code);
     });
 
-    expect(attempts).toEqual(["C:\\temp\\probe", "C:\\temp\\probe", "C:\\temp\\probe", "C:\\temp\\probe"]);
+    expect(attempts).toEqual(["C:\\worktrees\\shop-fix", "C:\\worktrees\\shop-fix", "C:\\worktrees\\shop-fix", "C:\\worktrees\\shop-fix"]);
   });
 
-  test("any other error is thrown at once", () => {
+  test("any other error is thrown at once", async () => {
     let attempts = 0;
 
-    expect(() =>
-      removeFolder("C:\\temp\\probe", () => {
+    await expect(
+      removeFolder("C:\\worktrees\\shop-fix", async () => {
         attempts++;
         throw errno("EACCES");
       }),
-    ).toThrow("EACCES");
+    ).rejects.toThrow("EACCES");
     expect(attempts).toBe(1);
   });
 
-  test("a folder still held after the last of ten attempts is thrown", () => {
+  test("a folder still held after the last of ten attempts is thrown", async () => {
     let attempts = 0;
 
-    expect(() =>
-      removeFolder("C:\\temp\\probe", () => {
+    await expect(
+      removeFolder("C:\\worktrees\\shop-fix", async () => {
         attempts++;
         throw errno("EBUSY");
       }),
-    ).toThrow("EBUSY");
+    ).rejects.toThrow("EBUSY");
     expect(attempts).toBe(10);
   });
 });

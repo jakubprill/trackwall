@@ -2,12 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
+import { removeFolder } from "../src/infra/remove-folder.ts";
 import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 import { makeRepo } from "./support/git-repo.ts";
 import { fakeHosting } from "./support/hosting.ts";
-import { removeFolder } from "./support/remove-folder.ts";
 
 function newWorkspace() {
   const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
@@ -131,7 +131,7 @@ describe("dropped folder", () => {
 
     const projects = tempDir("trackwall-projects-");
     await workspace.setProjectsDir(projects);
-    removeFolder(projects);
+    await removeFolder(projects);
     expect(await workspace.droppedFolder(other)).toEqual({ kind: "folder-with-repos", path: other, repos: 1 });
   });
 });

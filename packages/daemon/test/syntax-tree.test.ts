@@ -3,8 +3,8 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { removeFolder } from "../src/infra/remove-folder.ts";
 import { loadSyntaxParsers, PARSE_TIME_LIMIT_MS } from "../src/modules/cards/syntax-tree.ts";
-import { removeFolder } from "./support/remove-folder.ts";
 import { RUNTIMES } from "./support/runtimes.ts";
 
 const root = join(import.meta.dir, "..");
@@ -71,7 +71,7 @@ describe("Java and Kotlin syntax trees", () => {
 
   test(
     "the grammars are embedded in the binary from bun build --compile and work from it",
-    () => {
+    async () => {
       const dir = mkdtempSync(join(tmpdir(), "trackwall-syntax-"));
       try {
         const bin = join(dir, process.platform === "win32" ? "probe.exe" : "probe");
@@ -88,7 +88,7 @@ describe("Java and Kotlin syntax trees", () => {
           embedded: true,
         });
       } finally {
-        removeFolder(dir);
+        await removeFolder(dir);
       }
     },
     { timeout: 120_000 },
