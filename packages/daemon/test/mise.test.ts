@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DomainError } from "../src/infra/errors.ts";
+import { removeFolder } from "../src/infra/remove-folder.ts";
 import { Logs } from "../src/modules/logs/logs.ts";
 import { Mise, parseTaskList } from "../src/modules/mise/mise.ts";
 import { ProcessGroups } from "../src/modules/procs/process-groups.ts";
@@ -11,7 +12,6 @@ import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { groupPlatform } from "../src/platform/group-platform.ts";
 import { isAlive, waitUntil } from "../src/platform/process-group.ts";
 import { commitFiles, gitIn } from "./support/git-repo.ts";
-import { removeFolder } from "./support/remove-folder.ts";
 
 const FAKE_MISE = [process.execPath, join(import.meta.dir, "fixtures", "fake-mise.ts")];
 const TIMEOUT = 30_000;
@@ -510,7 +510,7 @@ describe("the environment mise sets (ADR-93)", () => {
   test("a repo folder that is gone is the session's problem, not a missing mise", async () => {
     const { mise, home } = setup({ tasks: [] });
     writeFileSync(join(home, "fake-mise.json"), JSON.stringify({ tasks: [], env: { SHOP_REGION: "eu" } }));
-    removeFolder(join(home, "web"));
+    await removeFolder(join(home, "web"));
 
     const env = await mise.sessionEnv({ repo: "web", task: null });
     expect(env.vars).toEqual({ SHOP_REGION: "eu" });

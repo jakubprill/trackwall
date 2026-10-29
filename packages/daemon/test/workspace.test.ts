@@ -4,13 +4,13 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFil
 import { tmpdir } from "node:os";
 import { join, posix, win32 } from "node:path";
 import { vscodeUrl } from "../src/infra/editor-url.ts";
+import { removeFolder } from "../src/infra/remove-folder.ts";
 import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { isFullPath } from "../src/modules/workspace/full-path.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 import { gitIn, makeRepo } from "./support/git-repo.ts";
 import { fakeHosting } from "./support/hosting.ts";
-import { removeFolder } from "./support/remove-folder.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
 /** A workspace with a set, empty projects folder. */
@@ -76,7 +76,7 @@ describe("workspace", () => {
       const dir = makeRepo({ a: "1" }, "api", projects);
       expect((await workspace.list()).repos.map((r) => r.id)).toEqual(["api"]);
 
-      removeFolder(dir);
+      await removeFolder(dir);
       expect((await workspace.list()).repos).toEqual([]);
       await expect(workspace.overview("api")).rejects.toMatchObject({ code: "not_found" });
     },
@@ -244,7 +244,7 @@ describe("workspace", () => {
     "a folder that vanished after being set is projects_dir_unavailable with its path",
     async () => {
       const { workspace, projects } = await workspaceWithProjectsDir();
-      removeFolder(projects);
+      await removeFolder(projects);
 
       await expect(workspace.list()).rejects.toMatchObject({
         code: "projects_dir_unavailable",
