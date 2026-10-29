@@ -19,7 +19,7 @@ describe("back in Sessions from another view", () => {
     });
     await page.reload();
     await showSessions(page);
-    await page.getByRole("checkbox", { name: "In its own worktree" }).uncheck();
+    await page.getByRole("button", { name: "Own worktree", pressed: true }).click();
     await page.getByRole("button", { name: "Start session" }).click();
     await waitForTerminal(page, "Welcome to the fake");
 

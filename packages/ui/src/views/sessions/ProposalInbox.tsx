@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { Connection } from "@/lib/connection";
 import { relativeTime } from "@/lib/format";
-import { type ProposalStart, typedModel } from "@/lib/proposal-decisions";
+import type { ProposalStart } from "@/lib/proposal-decisions";
 import {
   type ProposalsEntry,
   proposalKindLabel,
@@ -15,12 +15,12 @@ import {
   type SessionSelection,
 } from "@/lib/session-entries";
 import { toggle } from "@/lib/set-toggle";
+import { typedModel } from "@/lib/task-model";
 import { useProposalDecisions } from "@/lib/use-proposal-decisions";
 import { cn } from "@/lib/utils";
 import { ProposalActions, ProposalError } from "./ProposalActions.tsx";
-import { ProposalModel } from "./ProposalModel.tsx";
 import { RepoRemovalNote } from "./RepoRemovalNote.tsx";
-import { TaskApprovalsChoice } from "./TaskApprovalsChoice.tsx";
+import { StartOptions } from "./StartOptions.tsx";
 
 /**
  * The task proposals of one main session or of agents outside Trackwall (ADR-39, ADR-55), reviewed together as the plan
@@ -157,15 +157,10 @@ export function ProposalInbox({
                         maxLength={TASK_PROMPT_MAX}
                         rows={8}
                       />
-                      <ProposalModel
-                        title={p.title}
-                        value={modelTextOf(p)}
-                        onChange={(value) => setModels(new Map(models).set(p.id, value))}
-                      />
-                      <TaskApprovalsChoice
-                        label={`Run without asking for approvals: ${p.title}`}
-                        value={approvalsOf(p)}
-                        onChange={(value) => setApprovals(new Map(approvals).set(p.id, value))}
+                      <StartOptions
+                        subject={p.title}
+                        approvals={{ value: approvalsOf(p), onChange: (value) => setApprovals(new Map(approvals).set(p.id, value)) }}
+                        model={{ value: modelTextOf(p), onChange: (value) => setModels(new Map(models).set(p.id, value)) }}
                         disabled={decisions.pending}
                       />
                     </>

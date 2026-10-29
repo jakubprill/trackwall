@@ -19,7 +19,7 @@ Run several Copilot CLI agents side by side, each in its own repo, and always kn
 
 ## How it works
 
-Open "Sessions", press "+" and pick where the agent works. With a repo and "In its own worktree" checked, your prompt becomes an [agent task](/features/tasks) on its own branch. Uncheck it and "Start session" opens Copilot CLI in the repo's own folder, the working copy your editor uses; pick "No repo: the projects folder" instead and it opens a free session in your projects folder, which can look at every repo. Either way the prompt is optional: what you write there is the agent's first message, otherwise you type in its terminal. Copilot CLI starts in a terminal inside Trackwall, already connected to the [Trackwall MCP server](/features/mcp). Start as many sessions as you like; the list on the left shows each one with its repo (or "Free session"), its state and what the agent is doing right now.
+Open "Sessions", press "+" and pick where the agent works. With a repo and the "Own worktree" pill on, your prompt becomes an [agent task](/features/tasks) on its own branch. Turn it off and "Start session" opens Copilot CLI in the repo's own folder, the working copy your editor uses; pick "No repo: the projects folder" instead and it opens a free session in your projects folder, which can look at every repo. Either way the prompt is optional: what you write there is the agent's first message, otherwise you type in its terminal. Copilot CLI starts in a terminal inside Trackwall, already connected to the [Trackwall MCP server](/features/mcp). Start as many sessions as you like; the list on the left shows each one with its repo (or "Free session"), its state and what the agent is doing right now.
 
 A session without its own worktree changes your files directly: there is no "Changes" tab, review, "Verify" or merge request, which only a task has. The form says so, and warns you when another session already works in the same folder, because two agents in one working copy change each other's files and switch its branch under each other.
 
@@ -35,7 +35,7 @@ Every session also gets short instructions from Trackwall on how to work with yo
 
 1. Install Copilot CLI and sign in to it.
 2. Open "Sessions" (Ctrl+3, ⌘3 on macOS).
-3. Press "+", pick a repo (or "No repo: the projects folder"), uncheck "In its own worktree" and press "Start session".
+3. Press "+", pick a repo (or "No repo: the projects folder"), turn off the "Own worktree" pill and press "Start session".
 4. Work in the terminal as you would in any Copilot CLI session.
 5. When a session waits for you, press Alt+J to jump to it.
 

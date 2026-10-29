@@ -1,4 +1,4 @@
-import { type Task, type TaskApprovals, TaskModel } from "@trackwall/protocol";
+import type { Task, TaskApprovals } from "@trackwall/protocol";
 import { errorMessage } from "./api.ts";
 import type { ProposalsEntry, SessionSelection } from "./session-entries.ts";
 
@@ -14,16 +14,6 @@ export interface ProposalStart {
   /** `null` for Copilot CLI's default model. */
   model: string | null;
   approvals: TaskApprovals;
-}
-
-/**
- * The model typed in a proposal's model field (ADR-98): an empty field is Copilot CLI's default (`null`), an id the
- * daemon would refuse is `undefined`, so the start waits until the user fixes it.
- */
-export function typedModel(text: string): string | null | undefined {
-  if (text.trim() === "") return null;
-  const model = TaskModel.safeParse(text);
-  return model.success ? model.data : undefined;
 }
 
 /**

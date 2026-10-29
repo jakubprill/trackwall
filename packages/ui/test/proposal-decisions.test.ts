@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { Task, TaskProposal } from "@trackwall/protocol";
-import { selectionAfterDecision, showsGroup, startProposals, typedModel } from "../src/lib/proposal-decisions.ts";
+import { selectionAfterDecision, showsGroup, startProposals } from "../src/lib/proposal-decisions.ts";
 import type { ProposalsEntry } from "../src/lib/session-entries.ts";
+import { typedModel } from "../src/lib/task-model.ts";
 
 function proposal(id: string): TaskProposal {
   return {

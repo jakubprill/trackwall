@@ -1,16 +1,18 @@
 import { agentsApi, countLabel, pluralNoun, type Session, TASK_PROMPT_MAX, type TaskApprovals, workspaceApi } from "@trackwall/protocol";
 import { GitBranch, Play } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { newSessionStart, sessionsInSameFolder } from "@/lib/new-session";
+import { type NewSessionStart, newSessionStart, sessionsInSameFolder } from "@/lib/new-session";
 import type { SessionSelection } from "@/lib/session-entries";
+import { readStartChoice, type StartChoice, saveStartChoice } from "@/lib/start-choices";
+import { typedModel } from "@/lib/task-model";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
-import { TaskApprovalsChoice } from "./TaskApprovalsChoice.tsx";
+import { StartOptions } from "./StartOptions.tsx";
 
 /** The place choice's value for the projects folder; a repo id is never empty. */
 const PROJECTS_FOLDER = "";
@@ -19,7 +21,9 @@ const PROJECTS_FOLDER = "";
  * A new task or session (ADR-100): a repo from the projects folder, or the projects folder itself, and a prompt for the
  * agent. In a repo with its own worktree it becomes a task (ADR-31); without one a main session in the repo's working
  * copy (ADR-26), and in the projects folder a free session, both with the prompt as their first message when there is one.
- * Only a task, which works in its own worktree, can run without asking for approvals (ADR-105).
+ * Only a task, which works in its own worktree, can run on a chosen model (ADR-98) and without asking for approvals
+ * (ADR-105). The options are a row of pills under the prompt (`StartOptions`); the worktree and the model come back as
+ * the user last started from that place, the approvals mode always starts at asking.
  */
 export function NewSession({
   conn,
@@ -36,14 +40,18 @@ export function NewSession({
   const load = useCallback(() => post(conn, workspaceApi.list, {}), [conn]);
   const repos = useRemote(load);
   const [place, setPlace] = useState<string>();
-  const [worktree, setWorktree] = useState(true);
+  const [edited, setEdited] = useState<ReadonlyMap<string, StartChoice>>(new Map());
   const [prompt, setPrompt] = useState("");
   const [approvals, setApprovals] = useState<TaskApprovals>("ask");
   const chosen = place ?? repos.data?.repos[0]?.id ?? PROJECTS_FOLDER;
   const repo = chosen === PROJECTS_FOLDER ? null : chosen;
-  const start = newSessionStart(repo, worktree, prompt);
+  const remembered = useMemo(() => readStartChoice(() => window.localStorage, chosen), [chosen]);
+  const choice = edited.get(chosen) ?? remembered;
+  const choose = (next: Partial<StartChoice>) => setEdited(new Map(edited).set(chosen, { ...choice, ...next }));
+  const model = typedModel(choice.model);
+  const start = newSessionStart(repo, choice.worktree, prompt);
   const createTask = useAction(
-    (repo: string, prompt: string) => post(conn, agentsApi.createTask, { repo, prompt, approvals }),
+    (repo: string, prompt: string) => post(conn, agentsApi.createTask, { repo, prompt, approvals, model: model ?? null }),
     (task) => onStarted({ kind: "task", id: task.id }),
   );
   const startSession = useAction(
@@ -53,6 +61,8 @@ export function NewSession({
   const pending = createTask.pending || startSession.pending;
   const error = createTask.error ?? startSession.error;
   const run = () => {
+    // A model that is not an id is not remembered: a task waits for it to be fixed, a session does not use it.
+    if (model !== undefined) saveStartChoice(() => window.localStorage, chosen, choice);
     if (start.kind === "task") createTask.run(start.repo, start.prompt);
     if (start.kind === "session") startSession.run(start.repo, start.prompt);
   };
@@ -60,40 +70,22 @@ export function NewSession({
   return (
     <div className="flex max-w-3xl flex-col gap-4 p-6">
       <h3 className="hud-label">New task or session for the agent</h3>
-      <p className="text-muted-foreground max-w-prose text-sm">
-        In its own worktree, Trackwall creates a new branch from the default branch of the chosen repo in a separate folder and starts
-        Copilot CLI there with your prompt, so several tasks in one repo stay out of each other's way, and the Changes tab shows what the
-        agent changes. The session runs in a terminal owned by the daemon, also after you close the window.
-      </p>
       {repos.error && <ErrorWithRetry message={repos.error} onRetry={repos.reload} />}
       {repos.data && (
         <>
-          <div className="flex flex-wrap items-center gap-4">
-            <select
-              aria-label="Where the agent works"
-              value={chosen}
-              onChange={(e) => setPlace(e.target.value)}
-              className="border-input bg-card h-9 w-fit min-w-48 rounded-md border px-3 text-sm"
-            >
-              {repos.data.repos.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.id}
-                </option>
-              ))}
-              <option value={PROJECTS_FOLDER}>No repo: the projects folder</option>
-            </select>
-            {repo !== null && (
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="accent-primary size-4 shrink-0"
-                  checked={worktree}
-                  onChange={(e) => setWorktree(e.target.checked)}
-                />
-                In its own worktree
-              </label>
-            )}
-          </div>
+          <select
+            aria-label="Where the agent works"
+            value={chosen}
+            onChange={(e) => setPlace(e.target.value)}
+            className="border-input bg-card h-9 w-fit min-w-48 rounded-md border px-3 text-sm"
+          >
+            {repos.data.repos.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.id}
+              </option>
+            ))}
+            <option value={PROJECTS_FOLDER}>No repo: the projects folder</option>
+          </select>
           <Textarea
             aria-label="Prompt for the agent"
             placeholder={
@@ -106,21 +98,15 @@ export function NewSession({
             maxLength={TASK_PROMPT_MAX}
             rows={5}
           />
-          {start.kind === "session" ? (
-            <WithoutWorktree repo={repo} sessions={sessions} />
-          ) : (
-            <TaskApprovalsChoice label="Run without asking for approvals" value={approvals} onChange={setApprovals} disabled={pending} />
-          )}
+          <StartOptions
+            worktree={repo === null ? undefined : { value: choice.worktree, onChange: (worktree) => choose({ worktree }) }}
+            approvals={start.kind === "session" ? undefined : { value: approvals, onChange: setApprovals }}
+            model={start.kind === "session" ? undefined : { value: choice.model, onChange: (text) => choose({ model: text }) }}
+            disabled={pending}
+          />
+          {start.kind === "session" && <WithoutWorktree repo={repo} sessions={sessions} />}
           <div className="flex flex-wrap items-center gap-2">
-            {start.kind === "session" ? (
-              <Button onClick={run} disabled={pending}>
-                <Play /> Start session
-              </Button>
-            ) : (
-              <Button onClick={run} disabled={pending || start.kind === "needs-prompt"}>
-                <GitBranch /> Create task
-              </Button>
-            )}
+            <StartButton start={start} disabled={pending} invalidModel={model === undefined} onClick={run} />
             {onCancel && (
               <Button variant="ghost" onClick={onCancel}>
                 Cancel
@@ -158,5 +144,28 @@ function WithoutWorktree({ repo, sessions }: { repo: string | null; sessions: re
         </p>
       )}
     </div>
+  );
+}
+
+/** "Start session" for a session, "Create task" for a task, which needs a prompt and, when a model is typed, a model id. */
+function StartButton({
+  start,
+  disabled,
+  invalidModel,
+  onClick,
+}: {
+  start: NewSessionStart;
+  disabled: boolean;
+  invalidModel: boolean;
+  onClick: () => void;
+}) {
+  return start.kind === "session" ? (
+    <Button onClick={onClick} disabled={disabled}>
+      <Play /> Start session
+    </Button>
+  ) : (
+    <Button onClick={onClick} disabled={disabled || invalidModel || start.kind === "needs-prompt"}>
+      <GitBranch /> Create task
+    </Button>
   );
 }
