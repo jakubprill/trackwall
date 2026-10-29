@@ -469,6 +469,10 @@ _Avoid_: popup, tray menu (that is the menu on a right click)
 The state of a session's screen, which the daemon keeps in a windowless terminal emulator and sends to a session terminal on connection, before further output.
 _Avoid_: screenshot (that is a picture), output history
 
+**Last screen** (`LastScreens`, `useLastScreens`):
+The screen a session terminal showed when it closed, kept by the window and shown in that session's terminal when it opens again, until the screen image comes (ADR-117).
+_Avoid_: cached screen, screenshot
+
 **Task state** (`TaskState`, change: `TaskStateChange`; *state* in product texts):
 `Working`, `Input`, `Approval`, `Plan`, `Done`, `Error` or `Stale`, always with a source (`hook`, `osc`, `screen`, `keyboard`, `timeout`, `exit`) and a confidence (§4.4).
 
