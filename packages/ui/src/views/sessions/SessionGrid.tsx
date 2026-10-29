@@ -16,7 +16,7 @@ import { useTaskEnding } from "@/lib/use-task-ending";
 import { cn } from "@/lib/utils";
 import { ProposalTile } from "./ProposalTile.tsx";
 import { EndTaskButton, SessionCloseButton, SessionCloseConfirmation, TaskEnding } from "./SessionClose.tsx";
-import { useSessionEnvironmentTile } from "./SessionEnvironment.tsx";
+import { useSessionEnvironmentTile } from "./SessionEnvironmentTile.tsx";
 import { TaskLine } from "./TaskLine.tsx";
 import { useTaskTileNotices } from "./TaskTileNotices.tsx";
 

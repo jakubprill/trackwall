@@ -9,6 +9,7 @@ import { useTaskDetails } from "@/lib/use-task-details";
 import { cn } from "@/lib/utils";
 import { scrollToSection, TaskDetails } from "./TaskDetails.tsx";
 import { NoticeBadge, NoticeChips } from "./TaskNotices.tsx";
+import { TileOverlay } from "./TileOverlay.tsx";
 
 /** A selected tile checks its warnings as often as the task panel, the others less often: each check reads git. */
 const UNSELECTED_WARNING_POLL_MS = 15_000;
@@ -77,19 +78,11 @@ export function useTaskTileNotices({
   return {
     badge: <NoticeBadge ref={badge} notices={details.notices} open={open} onToggle={open ? close : show} />,
     // Hidden rather than unmounted when closed, so that a section keeps what the user did in it (the mise config shown
-    // for trust, an open log). The close question comes later in the tile and lies over the notices.
+    // for trust, an open log). The close question comes later in the tile and lies over the notices; a new warning lies
+    // over every overlay, the environment card too, so that it is never hidden behind one.
     overlay: (
       <>
-        <section
-          ref={overlay}
-          tabIndex={-1}
-          hidden={!open}
-          aria-label="Task notices overlay"
-          onKeyDown={(event) => {
-            if (event.key === "Escape") close();
-          }}
-          className="bg-card absolute inset-x-1 top-1 z-10 flex max-h-2/3 flex-col overflow-hidden rounded-md border shadow-lg outline-none"
-        >
+        <TileOverlay ref={overlay} open={open} label="Task notices overlay" onEscape={close}>
           <div className="flex items-center gap-2 border-b px-2 py-1">
             <NoticeChips notices={details.notices} onOpen={(section) => scrollToSection(overlay.current, section)} />
             <Button variant="ghost" size="icon" className="size-6 shrink-0" onClick={close} aria-label="Close task notices">
@@ -99,13 +92,13 @@ export function useTaskTileNotices({
           <div className="min-h-0 overflow-y-auto">
             <TaskDetails conn={conn} task={task} details={details} sessions={sessions} onOpenTask={onOpenTask} />
           </div>
-        </section>
+        </TileOverlay>
         {/* Mounted while the tile is, so that a screen reader announces the warning when its text comes. */}
         <div
           role="status"
           className={cn(
             !open && unseen.length > 0
-              ? "bg-card border-warning/50 text-warning absolute inset-x-1 top-1 z-10 flex items-center gap-2 rounded-md border px-2 py-1 text-xs shadow-lg"
+              ? "bg-card border-warning/50 text-warning absolute inset-x-1 top-1 z-20 flex items-center gap-2 rounded-md border px-2 py-1 text-xs shadow-lg"
               : "sr-only",
           )}
         >

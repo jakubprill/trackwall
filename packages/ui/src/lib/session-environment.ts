@@ -1,4 +1,5 @@
 import { countLabel, type SessionEnvironment } from "@trackwall/protocol";
+import type { FocusTimers } from "./window-focus.ts";
 
 /**
  * What the session panel and a grid tile say about the environment a session got from mise (ADR-93): only names,
@@ -33,28 +34,71 @@ export function sessionEnvironmentLines(environment: SessionEnvironment): Sessio
   };
 }
 
-/**
- * The environment card on a grid tile (ADR-93): hovering the badge shows it, clicking pins it until another click or
- * Escape, and leaving the badge and the card hides it only while it is not pinned.
- */
+/** The card waits a moment before it shows on hover and before it hides, so that passing the mouse over does nothing. */
+export const HOVER_OPEN_MS = 250;
+export const HOVER_CLOSE_MS = 200;
+
 export interface EnvironmentCardState {
   open: boolean;
   pinned: boolean;
 }
 
-export type EnvironmentCardEvent = "hover" | "leave" | "click" | "escape";
-
 export const ENVIRONMENT_CARD_CLOSED: EnvironmentCardState = { open: false, pinned: false };
 
-export function nextEnvironmentCard(state: EnvironmentCardState, event: EnvironmentCardEvent): EnvironmentCardState {
-  switch (event) {
-    case "hover":
-      return { ...state, open: true };
-    case "leave":
-      return state.pinned ? state : ENVIRONMENT_CARD_CLOSED;
-    case "click":
-      return state.pinned ? ENVIRONMENT_CARD_CLOSED : { open: true, pinned: true };
-    case "escape":
-      return ENVIRONMENT_CARD_CLOSED;
+/**
+ * The environment card on a grid tile (ADR-93): hovering the badge or the card shows it after a moment, leaving both
+ * hides it after a moment unless a click pinned it, and a second click or Escape closes it at once. Moving from the
+ * badge to the card keeps it open, since entering the card cancels the pending hide.
+ */
+export class EnvironmentCard<Timer> {
+  readonly #onChange: (state: EnvironmentCardState) => void;
+  readonly #timers: FocusTimers<Timer>;
+  #timer: Timer | undefined;
+  #state = ENVIRONMENT_CARD_CLOSED;
+
+  constructor(onChange: (state: EnvironmentCardState) => void, timers: FocusTimers<Timer>) {
+    this.#onChange = onChange;
+    this.#timers = timers;
+  }
+
+  enter(): void {
+    this.#cancel();
+    if (!this.#state.open) this.#later({ open: true, pinned: false }, HOVER_OPEN_MS);
+  }
+
+  leave(): void {
+    this.#cancel();
+    if (this.#state.open && !this.#state.pinned) this.#later(ENVIRONMENT_CARD_CLOSED, HOVER_CLOSE_MS);
+  }
+
+  click(): void {
+    this.#set(this.#state.pinned ? ENVIRONMENT_CARD_CLOSED : { open: true, pinned: true });
+  }
+
+  /** Escape, or the session no longer has an environment to show. */
+  close(): void {
+    this.#set(ENVIRONMENT_CARD_CLOSED);
+  }
+
+  dispose(): void {
+    this.#cancel();
+  }
+
+  #later(state: EnvironmentCardState, ms: number): void {
+    this.#timer = this.#timers.set(() => {
+      this.#timer = undefined;
+      this.#set(state);
+    }, ms);
+  }
+
+  #set(state: EnvironmentCardState): void {
+    this.#cancel();
+    this.#state = state;
+    this.#onChange(state);
+  }
+
+  #cancel(): void {
+    if (this.#timer !== undefined) this.#timers.clear(this.#timer);
+    this.#timer = undefined;
   }
 }
