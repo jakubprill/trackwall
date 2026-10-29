@@ -137,15 +137,17 @@ fn unpack(package: &[u8], into: &Path) -> Result<(), String> {
     let mut archive = zip::ZipArchive::new(Cursor::new(package)).map_err(invalid)?;
     for index in 0..archive.len() {
         let mut entry = archive.by_index(index).map_err(invalid)?;
+        let name = String::from_utf8_lossy(entry.name_raw()).into_owned();
+        // A release has no links; unpacked, one could point outside `into` and a later entry would be written through it.
+        if entry.is_symlink() {
+            return Err(format!("The update package has a symbolic link: {name}"));
+        }
         let relative = entry
             .enclosed_name()
-            .filter(|_| !entry.is_symlink())
             .and_then(|path| path.strip_prefix(PACKAGE_ROOT).ok().map(Path::to_path_buf))
             // `enclosed_name` lets through a `..` that stays inside the archive, such as `Trackwall/../x`.
             .filter(|relative| relative.components().all(|c| matches!(c, Component::Normal(_))))
-            .ok_or_else(|| {
-                format!("The update package has an entry outside the {PACKAGE_ROOT} folder: {}", String::from_utf8_lossy(entry.name_raw()))
-            })?;
+            .ok_or_else(|| format!("The update package has an entry outside the {PACKAGE_ROOT} folder: {name}"))?;
         let target = into.join(relative);
         let written = if entry.is_dir() {
             fs::create_dir_all(&target)
@@ -324,7 +326,7 @@ mod tests {
         let mut zip = zip::ZipWriter::new_append(Cursor::new(package(&NEW_BUILD))).unwrap();
         zip.add_symlink("Trackwall/ui/link", "../../outside", SimpleFileOptions::default()).unwrap();
         let err = install(&app, &zip.finish().unwrap().into_inner()).unwrap_err();
-        assert_eq!(err, "The update package has an entry outside the Trackwall folder: Trackwall/ui/link");
+        assert_eq!(err, "The update package has a symbolic link: Trackwall/ui/link");
         assert!(!app.join(".update").exists(), "nothing of the failed update is left");
         assert_eq!(fs::read_to_string(app.join("trackwall.exe")).unwrap(), "shell 1");
         fs::remove_dir_all(app).unwrap();
