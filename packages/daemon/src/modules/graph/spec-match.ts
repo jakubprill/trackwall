@@ -66,16 +66,18 @@ export class SpecEndpointIndex {
   }
 
   /**
-   * Each call's candidates, by repo: the endpoints whose path ends the longest way like the call's (at least up to its last
-   * fixed segment), and those with its `operationId`. The longest way in the whole workspace, not in each repo: in a repo
-   * that has only `{}/status` like `/orders/{id}/status`, the call's resource is not there.
+   * Each call's candidates, by repo, among the repos `among` accepts: the endpoints whose path ends the longest way like
+   * the call's (at least up to its last fixed segment), and those with its `operationId`. The longest way in all those
+   * repos, not in each: in a repo that has only `{}/status` like `/orders/{id}/status`, the call's resource is not there.
+   * The client's own repo is asked about apart from the others, so a BFF mirroring the backend's paths does not take the
+   * candidates from the backend.
    */
-  candidates(calls: readonly SpecCall[]): Map<string, Map<SpecCall, SpecEndpoint[]>> {
+  candidates(calls: readonly SpecCall[], among: (repo: string) => boolean): Map<string, Map<SpecCall, SpecEndpoint[]>> {
     const byRepo = new Map<string, Map<SpecCall, SpecEndpoint[]>>();
     for (const call of calls) {
       const id = call.call.operationId;
-      const byId = id ? (this.byOperation.get(id) ?? []) : [];
-      for (const e of new Set([...this.longestEnd(call.segments), ...byId])) {
+      const byId = (id ? (this.byOperation.get(id) ?? []) : []).filter((e) => among(e.repo));
+      for (const e of new Set([...this.longestEnd(call.segments, among), ...byId])) {
         const ofRepo = byRepo.get(e.repo) ?? new Map<SpecCall, SpecEndpoint[]>();
         byRepo.set(e.repo, ofRepo);
         push(ofRepo, call, e);
@@ -84,11 +86,11 @@ export class SpecEndpointIndex {
     return byRepo;
   }
 
-  private longestEnd(segments: readonly string[]): readonly SpecEndpoint[] {
+  private longestEnd(segments: readonly string[], among: (repo: string) => boolean): readonly SpecEndpoint[] {
     const shortest = shortestEnd(segments);
     for (let length = segments.length; length >= shortest && shortest > 0; length--) {
-      const found = this.byEnd.get(endKey(segments, length));
-      if (found) return found;
+      const found = (this.byEnd.get(endKey(segments, length)) ?? []).filter((e) => among(e.repo));
+      if (found.length > 0) return found;
     }
     return [];
   }

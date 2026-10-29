@@ -292,6 +292,7 @@ describe("specs a package.json script downloads for openapi-typescript (ADR-129)
             "npx openapi-typescript@7 https://user:pw@orders-bff.dev.example.com/v3/api-docs -o src/api/orders.ts && prettier -w src/api",
           "api:local": "openapi-typescript --alphabetize 'http://localhost:8090/v3/api-docs'",
           "api:file": "openapi-typescript ./openapi/stock.yaml -o src/api/stock.ts",
+          "api:output-first": "openapi-typescript -o src/api/stock.ts http://localhost:8091/v3/api-docs",
           build: "vite build",
         },
       },
@@ -301,6 +302,17 @@ describe("specs a package.json script downloads for openapi-typescript (ADR-129)
     const c = extractCard(snapshotOf({ "package.json": packageJson }), parsers, NO_REACH);
     expect(
       c.consumes.flatMap((h) => (h.kind === "http" ? [`${h.via} ${h.name} ${h.url} ${h.calls.length} @${h.evidence.line}`] : [])),
-    ).toEqual(["openapi api:orders https://orders-bff.dev.example.com 0 @4", "openapi api:local http://localhost:8090 0 @5"]);
+    ).toEqual([
+      "openapi api:orders https://orders-bff.dev.example.com 0 @4",
+      "openapi api:local http://localhost:8090 0 @5",
+      "openapi api:output-first http://localhost:8091 0 @7",
+    ]);
+    // A script named like a dependency gets its own line, not the dependency's.
+    const named =
+      '{\n  "dependencies": { "orders": "1.0.0" },\n  "scripts": {\n    "orders": "openapi-typescript http://localhost:8090/v3/api-docs"\n  }\n}';
+    const lines = extractCard(snapshotOf({ "package.json": named }), parsers, NO_REACH).consumes.flatMap((h) =>
+      h.kind === "http" ? [h.evidence.line] : [],
+    );
+    expect(lines).toEqual([4]);
   });
 });

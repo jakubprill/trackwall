@@ -88,8 +88,8 @@ interface IndexedEndpoint {
   specific: boolean;
 }
 
-/** Server path segments that name no app: `api`, a version (`v1`, `v2.1`). */
-const GENERIC_SEGMENT = /^(api|v\d+(\.\d+)*)$/i;
+/** Host labels and server path segments that name no app: `api`, `www`, a number (an IP address), a version (`v1`, `v2.1`). */
+const GENERIC_SEGMENT = /^(api|www|\d+|v\d+(\.\d+)*)$/i;
 
 /** Hosts under which an app runs on a developer's computer; for them the port says what the target is. */
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0", "[::1]", "host.docker.internal"]);
@@ -288,16 +288,13 @@ export class HttpIndex {
    */
   private byOperations(from: string, client: ConsumedHttp, base: string): { others: HttpTarget[]; own: boolean } {
     const calls = specCalls(base, client);
-    const byRepo = this.specEndpoints.candidates(calls);
-    let own = false;
-    const served = [...byRepo].flatMap(([repo, candidates]) => {
+    const ofOthers = this.specEndpoints.candidates(calls, (repo) => repo !== from);
+    const ownCandidates = this.specEndpoints.candidates(calls, (repo) => repo === from).get(from);
+    const own = ownCandidates !== undefined && specCoverage(calls, matchSpecCalls(calls, ownCandidates)).any >= MIN_SPEC_COVERAGE;
+    const served = [...ofOthers].flatMap(([repo, candidates]) => {
       const matches = matchSpecCalls(calls, candidates);
       const coverage = specCoverage(calls, matches);
       if (coverage.any < MIN_SPEC_COVERAGE) return [];
-      if (repo === from) {
-        own = true;
-        return [];
-      }
       const target: HttpTarget = {
         repo,
         basis: "operations",
@@ -328,7 +325,7 @@ export class HttpIndex {
     const host = url && url.scheme !== "lb" ? url.host : undefined;
     const local = host !== undefined && isLocalHost(host);
     const names = [
-      ...(host && !local ? [host.split(".")[0] ?? ""] : []),
+      ...(host && !local ? [host.split(".")[0] ?? ""].filter((label) => !GENERIC_SEGMENT.test(label)) : []),
       ...titleNames(client.name),
       ...httpPathSegments(base)
         .filter((s) => isLiteral(s) && !GENERIC_SEGMENT.test(s))
@@ -389,7 +386,7 @@ export class HttpIndex {
     const ofApp = (e: { endpoint: ProvidedEndpoint }) => app === undefined || e.endpoint.app === null || e.endpoint.app === app;
     if (client.via === "openapi") {
       const calls = specCalls(base, client);
-      const ofRepo = [...(this.specEndpoints.candidates(calls).get(repo) ?? [])];
+      const ofRepo = [...(this.specEndpoints.candidates(calls, (r) => r === repo).get(repo) ?? [])];
       return matchedCalls(matchSpecCalls(calls, new Map(ofRepo.map(([call, list]) => [call, list.filter(ofApp)]))));
     }
     const endpoints = (this.endpointsByRepo.get(repo) ?? []).filter(ofApp);

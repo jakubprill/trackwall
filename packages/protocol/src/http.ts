@@ -334,13 +334,12 @@ export function httpSegmentsMatch(call: readonly string[], endpoint: readonly st
     const segment = endpoint[i] ?? "";
     if (segment === "**") return true;
     const other = call[i];
-    if (other === undefined || !httpSegmentMatches(other, segment)) return false;
+    if (other === undefined || !segmentMatches(other, segment)) return false;
   }
   return call.length === endpoint.length;
 }
 
-/** Whether two path segments match: the same text, or a variable (`{id}`, `{}`, `*`) on either side. */
-export function httpSegmentMatches(a: string, b: string): boolean {
+function segmentMatches(a: string, b: string): boolean {
   return a === b || isVariable(a) || isVariable(b);
 }
 

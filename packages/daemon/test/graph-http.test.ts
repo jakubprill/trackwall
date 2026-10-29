@@ -585,6 +585,9 @@ describe("clients from OpenAPI specs (ADR-129)", () => {
     const mirror = [endpoint("/api/orders/{id}"), endpoint("/api/orders", "POST")];
     const backend = repo("orders-api", card([endpoint("/orders/api/orders/{id}"), endpoint("/orders/api/orders", "POST")], []));
     expect(edges([repo("orders-bff", card(mirror, [client])), backend])).toEqual([["orders-bff", "orders-api", "Orders", "high"]]);
+    // The backend's paths without the BFF's prefix end less like the calls than the mirror does, and still count.
+    const shorter = repo("orders-api", card([endpoint("/orders/{id}"), endpoint("/orders", "POST")], []));
+    expect(edges([repo("orders-bff", card(mirror, [client])), shorter])).toEqual([["orders-bff", "orders-api", "Orders", "high"]]);
     const alone = buildGraph([repo("orders-bff", card(mirror, [client]))], { config: NO_CONFIG, file: CONFIG_FILE, problems: [] });
     expect([alone.edges, alone.problems]).toEqual([[], []]);
   });
@@ -606,6 +609,14 @@ describe("clients from OpenAPI specs (ADR-129)", () => {
     expect(graph.problems.map((p) => p.message)).toEqual([
       "no app in the list serves the spec api:orders downloads from http://localhost:9999; its host or localhost port names none",
     ]);
+    // A public API, a host label that names no app, and a spec without operations are not calls the graph can miss.
+    const api = repo("api", card([app("api")], []));
+    const quiet = buildGraph([repo("web", card([], [downloaded("https://api.example.com"), spec({ name: "Shared schemas" })])), api], {
+      config: NO_CONFIG,
+      file: CONFIG_FILE,
+      problems: [],
+    });
+    expect([quiet.edges, quiet.problems]).toEqual([[], []]);
   });
 
   test("find_endpoint lists the spec's repo as a caller, without the endpoints that make the call, since the generated client is not in the repo", () => {

@@ -15,6 +15,7 @@ import { type Extracted, emptyExtracted, keyLines, type RepoSnapshot } from "./s
 const PackageScripts = z.object({ scripts: z.record(z.string(), z.string()) });
 /** The generator's command, also run through `npx` or with a version (`openapi-typescript@7`). */
 const GENERATOR = /(^|\/)openapi-typescript(@[\w.-]+)?$/;
+const OUTPUT_OPTIONS = new Set(["-o", "--output"]);
 /** A longer script is not one a person wrote. */
 const MAX_SCRIPT_LENGTH = 2000;
 
@@ -24,26 +25,39 @@ export function readsOpenApiScriptFile(path: string): boolean {
 
 export function extractOpenApiScripts(snapshot: RepoSnapshot): Extracted<never, ConsumedHttp> {
   const out: Extracted<never, ConsumedHttp> = emptyExtracted();
-  for (const path of snapshot.paths.filter(readsOpenApiScriptFile)) {
-    const text = snapshot.text(path);
-    const scripts = text === undefined ? undefined : scriptsOf(text);
-    if (text === undefined || scripts === undefined) continue;
-    const lines = keyLines(text, JSON_KEY);
-    for (const [name, script] of Object.entries(scripts))
-      for (const url of downloadedSpecs(script))
-        out.consumes.push({
-          kind: "http",
-          via: "openapi",
-          name,
-          app: null,
-          url,
-          profiles: [],
-          urlSource: null,
-          calls: [],
-          evidence: { path, line: lines.get(name) ?? null },
-        });
-  }
+  for (const path of snapshot.paths.filter(readsOpenApiScriptFile)) out.consumes.push(...scriptClients(path, snapshot.text(path)));
   return out;
+}
+
+function scriptClients(path: string, text: string | undefined): ConsumedHttp[] {
+  const scripts = text === undefined ? undefined : scriptsOf(text);
+  if (text === undefined || scripts === undefined) return [];
+  const line = scriptLines(text);
+  return Object.entries(scripts).flatMap(([name, script]) =>
+    downloadedSpecs(script).map(
+      (url): ConsumedHttp => ({
+        kind: "http",
+        via: "openapi",
+        name,
+        app: null,
+        url,
+        profiles: [],
+        urlSource: null,
+        calls: [],
+        evidence: { path, line: line(name) },
+      }),
+    ),
+  );
+}
+
+/** The line of a script's name, looked for after the `scripts` key: a script called like a dependency must not take its line. */
+function scriptLines(text: string): (name: string) => number | null {
+  const from = keyLines(text, JSON_KEY).get("scripts") ?? 1;
+  const lines = keyLines(text.split("\n").slice(from).join("\n"), JSON_KEY);
+  return (name) => {
+    const line = lines.get(name);
+    return line === undefined ? null : from + line;
+  };
 }
 
 function scriptsOf(text: string): Record<string, string> | undefined {
@@ -55,13 +69,16 @@ function scriptsOf(text: string): Record<string, string> | undefined {
   }
 }
 
-/** The origins of the addresses `openapi-typescript` reads in a script: its first argument that is not an option. */
+/**
+ * The origins of the addresses `openapi-typescript` reads in a script: its first argument that is neither an option nor
+ * the value of `-o`/`--output`. Another option with a separate value in front of the input hides the input (§8).
+ */
 function downloadedSpecs(script: string): string[] {
   if (script.length > MAX_SCRIPT_LENGTH) return [];
   const words = script.split(/\s+/);
   return words.flatMap((word, i) => {
     if (!GENERATOR.test(word)) return [];
-    const input = words.slice(i + 1).find((w) => !w.startsWith("-"));
+    const input = words.slice(i + 1).find((w, j, rest) => !w.startsWith("-") && !OUTPUT_OPTIONS.has(rest[j - 1] ?? ""));
     const url = input === undefined ? undefined : parseHttpUrl(input.replace(/^["']|["']$/g, ""));
     if (url === undefined || url.scheme === "lb") return [];
     // Only the origin: a user and password in front of the host do not reach the card.
