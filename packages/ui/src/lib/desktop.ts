@@ -1,36 +1,61 @@
 import { isTauri } from "@tauri-apps/api/core";
-import { DAEMON_INFO_PATH, DaemonInfo, WebAddress, workspaceApi } from "@trackwall/protocol";
+import { type ContainerId, containerEditorUrl, DAEMON_INFO_PATH, DaemonInfo, WebAddress, workspaceApi } from "@trackwall/protocol";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { call, post } from "./api.ts";
 import type { Connection } from "./connection.ts";
 
 /**
- * Whether the daemon opens links, folders and VS Code on this computer (`DaemonInfo.desktop`, ADR-120). A daemon in a
- * container has no desktop: this page then opens web links in a new tab itself, and the buttons that open a folder or
- * VS Code are hidden. `true` until the daemon says otherwise, since the Tauri window always runs next to its own daemon.
+ * Where the daemon runs, from its info: whether it opens links, folders and VS Code on this computer
+ * (`DaemonInfo.desktop`, ADR-120) and the container it runs in (ADR-121). A daemon in a container has no desktop: this
+ * page then opens web links in a new tab itself, VS Code opens attached to the container, and the buttons that open a
+ * folder are hidden. A desktop until the daemon says otherwise, since the Tauri window always runs next to its own daemon.
  */
-export const DesktopContext = createContext(true);
+export interface DaemonPlace {
+  desktop: boolean;
+  container: ContainerId | null;
+}
+
+const ON_A_DESKTOP: DaemonPlace = { desktop: true, container: null };
+
+export const DaemonPlaceContext = createContext(ON_A_DESKTOP);
 
 /** Why the buttons that open a folder or VS Code are not there. */
 export const NO_DESKTOP_NOTE =
   "Trackwall runs without a desktop here (for example in a container), so it opens no folders or VS Code on your computer.";
 
+/** Why only VS Code opens, and how. */
+export const IN_CONTAINER_NOTE =
+  "Trackwall runs in a container: VS Code opens files and folders inside it with the Dev Containers extension, and no file manager can show them.";
+
 export function useDesktop(): boolean {
-  return useContext(DesktopContext);
+  return useContext(DaemonPlaceContext).desktop;
 }
 
-/** Asks the daemon once whether it has a desktop; only a page in a browser can be looking at a daemon in a container. */
-export function useDaemonDesktop(conn: Connection | undefined): boolean {
-  const [desktop, setDesktop] = useState(true);
+/**
+ * The address that opens a folder or file in VS Code from this page, when the daemon cannot open it itself: inside the
+ * daemon's container (ADR-121). `undefined` when the daemon opens it, or when nothing can.
+ */
+export function editorLinkFor(place: DaemonPlace, path: string): string | undefined {
+  if (place.desktop || !place.container) return undefined;
+  return containerEditorUrl(place.container, path);
+}
+
+export function useEditorLink(path: string): string | undefined {
+  return editorLinkFor(useContext(DaemonPlaceContext), path);
+}
+
+/** Asks the daemon once where it runs; only a page in a browser can be looking at a daemon in a container. */
+export function useDaemonPlace(conn: Connection | undefined): DaemonPlace {
+  const [place, setPlace] = useState(ON_A_DESKTOP);
   useEffect(() => {
     if (!conn || isTauri()) return;
     // Without an answer the page behaves as before: the daemon opens links and says no_desktop when it cannot.
     call(conn, DAEMON_INFO_PATH, DaemonInfo).then(
-      (info) => setDesktop(info.desktop),
+      (info) => setPlace({ desktop: info.desktop, container: info.container }),
       () => {},
     );
   }, [conn]);
-  return desktop;
+  return place;
 }
 
 export interface WebLinkOpeners {

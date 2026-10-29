@@ -59,6 +59,7 @@ beforeAll(async () => {
       home: "/tmp",
       mcpStdioCommand: ["trackwall-daemon", "mcp-stdio"],
       desktop: true,
+      container: null,
     }),
     onShutdown: () => {
       shutdowns++;

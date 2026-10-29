@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { openInNewTabOnceKnown, openWebLink } from "../src/lib/desktop.ts";
+import { editorLinkFor, openInNewTabOnceKnown, openWebLink } from "../src/lib/desktop.ts";
 
 describe("opening a web link", () => {
   test("a daemon with a desktop opens it in the system browser, and the page opens no tab", async () => {
@@ -110,5 +110,21 @@ describe("opening a tab for an address the daemon gives later", () => {
       ),
     ).rejects.toThrow("the browser blocked the new tab");
     expect(asked).toBe(false);
+  });
+});
+
+describe("the page's VS Code link", () => {
+  const container = "de4cc610b398445a55cd4802f1b0dc38776d583533fd7283c9d76e5825fd5f81";
+
+  test("a daemon in a container gets VS Code attached to it, opened by the page", () => {
+    expect(editorLinkFor({ desktop: false, container }, "/workspaces/shop")).toStartWith("vscode://vscode-remote/attached-container+");
+  });
+
+  test("a daemon with a desktop opens VS Code itself, so the page builds no link", () => {
+    expect(editorLinkFor({ desktop: true, container: null }, "/home/me/Dev/shop")).toBeUndefined();
+  });
+
+  test("without a desktop or a known container nothing can open VS Code", () => {
+    expect(editorLinkFor({ desktop: false, container: null }, "/workspaces/shop")).toBeUndefined();
   });
 });
