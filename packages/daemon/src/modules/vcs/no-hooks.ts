@@ -1,6 +1,7 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { removeFolder, removeIfPresent } from "../../infra/remove-folder.ts";
 
 /**
  * An empty hooks directory for one git command (`core.hooksPath`): `--no-verify` skips only some hooks, while a push or a
@@ -12,6 +13,7 @@ export async function withoutHooks<T>(run: (hooksPath: string) => Promise<T>): P
   try {
     return await run(`core.hooksPath=${noHooks}`);
   } finally {
-    rmSync(noHooks, { recursive: true, force: true });
+    // An empty folder left in the system temp folder harms nothing, so failing to remove it does not fail the command.
+    await removeFolder(noHooks, removeIfPresent).catch(() => undefined);
   }
 }
