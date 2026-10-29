@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { removeFolder } from "../src/infra/remove-folder.ts";
+import { removeFolder, removeIfPresent } from "../src/infra/remove-folder.ts";
 
 function errno(code: string): NodeJS.ErrnoException {
   return Object.assign(new Error(`${code}: rm failed`), { code });
@@ -18,6 +18,15 @@ describe("removing a folder", () => {
 
     expect(existsSync(dir)).toBe(false);
     await expect(removeFolder(dir)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  test("a folder that may already be gone is removed if present, without an error when it is not", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "trackwall-remove-"));
+
+    await removeFolder(dir, removeIfPresent);
+    await removeFolder(dir, removeIfPresent);
+
+    expect(existsSync(dir)).toBe(false);
   });
 
   test("a file still held for a moment, as on Windows after git or a binary exits, is retried until it is free", async () => {
