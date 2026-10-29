@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { javaNavigationOffer, javaNavigationSetup } from "../src/lib/java-navigation.ts";
+import { javaNavigationMark, javaNavigationOffer, javaNavigationPollMs, javaNavigationSetup } from "../src/lib/java-navigation.ts";
 
 const JAVA = [{ name: "java", reason: "build file pom.xml" }];
 const TYPESCRIPT = [{ name: "typescript", reason: "typescript dependency in package.json" }];
@@ -56,5 +56,25 @@ describe("the Java navigation section of Settings", () => {
     expect(javaNavigationSetup({ ...install, readiness: { problem: "no Java program at /x/java" } }).line).toBe(
       "Cannot start: no Java program at /x/java.",
     );
+  });
+});
+
+describe("the Java navigation mark of a running task", () => {
+  test("is muted while jdtls starts and imports, and asks again often", () => {
+    expect(javaNavigationMark({ kind: "starting" }).label).toBe("Java starting");
+    expect(javaNavigationMark({ kind: "starting" }).tone).toBeUndefined();
+    expect(javaNavigationMark({ kind: "importing", since: "2026-10-29T10:00:00.000Z" })).toMatchObject({ label: "Java importing" });
+    expect(javaNavigationPollMs({ kind: "importing", since: "2026-10-29T10:00:00.000Z" })).toBe(3000);
+  });
+
+  test("warns when the import stalls, names jdtls's error when it failed, and is ok when ready", () => {
+    expect(javaNavigationMark({ kind: "stalled", since: "2026-10-29T10:00:00.000Z" })).toMatchObject({ tone: "warning" });
+    expect(javaNavigationMark({ kind: "failed", message: "Initialization failed" })).toEqual({
+      label: "Java import failed",
+      tone: "error",
+      title: "jdtls could not import the project, so the agent's lsp tool answers with nothing: Initialization failed",
+    });
+    expect(javaNavigationMark({ kind: "ready" })).toMatchObject({ label: "Java ready", tone: "ok" });
+    expect(javaNavigationPollMs({ kind: "ready" })).toBe(30_000);
   });
 });

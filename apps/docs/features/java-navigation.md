@@ -40,7 +40,8 @@ javaNavigation:
 
 - Only agent tasks get it, not main sessions, free sessions, the supervisor or tasks started from a proposal.
 - The first start of a task indexes the whole project: about a minute for a Spring Boot service, and up to 2 GB of memory per task while it runs. Several tasks with navigation at once each run their own jdtls.
-- jdtls imports the project with Maven or Gradle and downloads its dependencies, as your IDE does. If the import fails, for example because Gradle needs a Java version you have not installed, the agent's questions come back empty. Run `/lsp logs` in the session to see why.
+- jdtls imports the project with Maven or Gradle and downloads its dependencies, as your IDE does. While the task's session runs, its header says how far jdtls is: starting, importing, ready, or that the import failed or stalled, with jdtls's error in the tooltip. Until it says ready, the agent's questions come back empty; after a failed import, for example because Gradle needs a Java version you have not installed, they stay empty. Run `/lsp logs` in the session for the details.
+- A project with both a `pom.xml` and a Gradle build is imported with Maven, which needs nothing beyond the Java jdtls runs on.
 - Every path in `javaNavigation` must be a full path. A path that is not there greys the pill out until you fix it or click "Install again"; a resumed task then starts without navigation.
 - The install needs mise and access to download.eclipse.org and to the place mise downloads Java from. Trackwall checks the jdtls download against the checksum of the release it was built with, so a newer jdtls comes with a newer Trackwall.
 - The index of each task lives in `.trackwall/lsp` in your projects folder and is deleted when you end the task.

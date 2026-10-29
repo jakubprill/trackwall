@@ -490,6 +490,24 @@ function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string,
 export const JavaNavigationState = z.object({ problem: z.string().nullable() }).nullable();
 export type JavaNavigationState = z.infer<typeof JavaNavigationState>;
 
+/**
+ * How a task's Java language server is doing (ADR-124), read from jdtls's own log in the task's data folder, since jdtls
+ * reports ready also after an import that failed: `starting` before jdtls wrote anything, `importing` since `since` (ISO
+ * 8601), `stalled` when importing has gone on past the limit, `ready` once the workspace is initialized without an
+ * error, `failed` with the first error jdtls logged (a Gradle or Maven import that failed, a missing JDK).
+ */
+/** How long jdtls may import before a task's Java navigation counts as stalled: cold imports took 51 to 82 s (ADR-99). */
+export const JAVA_NAVIGATION_STALL_MS = 5 * 60 * 1000;
+
+export const JavaNavigationStatus = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("starting") }),
+  z.object({ kind: z.literal("importing"), since: z.string() }),
+  z.object({ kind: z.literal("stalled"), since: z.string() }),
+  z.object({ kind: z.literal("ready") }),
+  z.object({ kind: z.literal("failed"), message: z.string() }),
+]);
+export type JavaNavigationStatus = z.infer<typeof JavaNavigationStatus>;
+
 export const StartOptions = z.object({ javaNavigation: JavaNavigationState });
 export type StartOptions = z.infer<typeof StartOptions>;
 
@@ -572,6 +590,8 @@ export const agentsApi = {
   ),
   /** Other tasks of the same repo that change the same files (ADR-44); tasks whose changes cannot be read are left out. */
   taskSharedFiles: endpoint("task-shared-files", TaskRequest, SharedFilesList),
+  /** How the task's Java language server is doing (ADR-124); `null` for a task without Java navigation. */
+  taskJavaNavigation: endpoint("task-java-navigation", TaskRequest, JavaNavigationStatus.nullable()),
   openTaskEditor: endpoint("open-task-editor", TaskRequest, Done),
   /** The worktree's mise config against the trusted one (ADR-59). */
   taskMiseConfig: endpoint("task-mise-config", TaskRequest, TaskMiseConfig),

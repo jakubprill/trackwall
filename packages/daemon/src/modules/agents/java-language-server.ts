@@ -51,10 +51,25 @@ export function javaNavigationProblem(settings: JavaNavigationSettings, platform
   return null;
 }
 
+/**
+ * Whether jdtls imports the worktree with Maven only (ADR-124): a project with both a `pom.xml` and a Gradle build at its
+ * root is imported with Gradle by default, and Gradle's import is the one that hung and failed on a missing toolchain,
+ * while Maven needs only the JDK jdtls runs on.
+ */
+export function mavenOnlyImport(worktree: string): boolean {
+  return isFile(join(worktree, "pom.xml")) && GRADLE_BUILD_FILES.some((name) => isFile(join(worktree, name)));
+}
+
+const GRADLE_BUILD_FILES = ["build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"];
+
+/** jdtls's settings for an import with Maven only, in the shape of VS Code's `java.*` settings. */
+const MAVEN_ONLY = { settings: { java: { import: { gradle: { enabled: false } } } } };
+
 /** The jdtls entry for a session whose data folder is `dataDir`, for settings `javaNavigationProblem` found no problem in. */
 export function javaLanguageServer(
   settings: JavaNavigationSettings,
   dataDir: string,
+  mavenOnly: boolean,
   platform = process.platform,
   arch = process.arch,
 ): LspServer {
@@ -86,6 +101,7 @@ export function javaLanguageServer(
       join(dataDir, "workspace"),
     ],
     fileExtensions: { ".java": "java" },
+    ...(mavenOnly ? { initializationOptions: MAVEN_ONLY } : {}),
   };
 }
 

@@ -8,6 +8,7 @@ import {
   javaNavigationProblem,
   javaNavigationReadiness,
   javaNavigationState,
+  mavenOnlyImport,
 } from "../src/modules/agents/java-language-server.ts";
 
 /** A jdtls folder as its release archive unpacks: the launcher jar in `plugins/` and one configuration folder per system. */
@@ -25,7 +26,7 @@ describe("the Java language server of a task (ADR-99)", () => {
     const jdtls = jdtlsFolder();
     const settings = { jdtls, java: "/opt/jdk-25/bin/java", lombok: null };
 
-    const server = javaLanguageServer(settings, "/projects/.trackwall/lsp/task-1", "darwin", "arm64");
+    const server = javaLanguageServer(settings, "/projects/.trackwall/lsp/task-1", false, "darwin", "arm64");
 
     expect(server.command).toBe("/opt/jdk-25/bin/java");
     expect(server.fileExtensions).toEqual({ ".java": "java" });
@@ -40,13 +41,14 @@ describe("the Java language server of a task (ADR-99)", () => {
       join("/projects/.trackwall/lsp/task-1", "workspace"),
     ]);
     expect(server.args.some((arg) => arg.startsWith("-javaagent:"))).toBe(false);
+    expect(server.initializationOptions).toBeUndefined();
   });
 
   test("each system gets its own jdtls configuration folder", () => {
     const jdtls = jdtlsFolder();
     const settings = { jdtls, java: "java", lombok: null };
     const configOf = (platform: NodeJS.Platform, arch: NodeJS.Architecture) =>
-      javaLanguageServer(settings, "/data", platform, arch).args.find((arg) => arg.startsWith("-Dosgi.sharedConfiguration.area="));
+      javaLanguageServer(settings, "/data", false, platform, arch).args.find((arg) => arg.startsWith("-Dosgi.sharedConfiguration.area="));
 
     expect(configOf("win32", "x64")).toBe(`-Dosgi.sharedConfiguration.area=${join(jdtls, "config_win")}`);
     expect(configOf("darwin", "x64")).toBe(`-Dosgi.sharedConfiguration.area=${join(jdtls, "config_mac")}`);
@@ -56,7 +58,7 @@ describe("the Java language server of a task (ADR-99)", () => {
 
   test("Lombok, when set, is a Java agent before the launcher jar", () => {
     const jdtls = jdtlsFolder();
-    const server = javaLanguageServer({ jdtls, java: "java", lombok: "/opt/lombok.jar" }, "/data", "linux", "x64");
+    const server = javaLanguageServer({ jdtls, java: "java", lombok: "/opt/lombok.jar" }, "/data", false, "linux", "x64");
 
     expect(server.args.indexOf("-javaagent:/opt/lombok.jar")).toBeLessThan(server.args.indexOf("-jar"));
   });
@@ -97,5 +99,26 @@ describe("the Java language server of a task (ADR-99)", () => {
     expect(invalid).toEqual({ settings: null, problem: "workspace.yaml: javaNavigation: jdtls, java and lombok must be full paths" });
     expect(javaNavigationState(invalid)).toEqual({ problem: "workspace.yaml: javaNavigation: jdtls, java and lombok must be full paths" });
     expect(javaNavigationState(javaNavigationReadiness(() => settings))).toEqual({ problem: null });
+  });
+});
+
+describe("Maven before Gradle for jdtls's import (ADR-124)", () => {
+  test("a project with a pom.xml and a Gradle build is imported with Maven only, and one with one build as jdtls chooses", () => {
+    const both = mkdtempSync(join(tmpdir(), "trackwall-both-builds-"));
+    writeFileSync(join(both, "pom.xml"), "<project/>");
+    writeFileSync(join(both, "build.gradle.kts"), "");
+    const gradle = mkdtempSync(join(tmpdir(), "trackwall-gradle-"));
+    writeFileSync(join(gradle, "build.gradle"), "");
+    const maven = mkdtempSync(join(tmpdir(), "trackwall-maven-"));
+    writeFileSync(join(maven, "pom.xml"), "<project/>");
+
+    expect([mavenOnlyImport(both), mavenOnlyImport(gradle), mavenOnlyImport(maven)]).toEqual([true, false, false]);
+  });
+
+  test("Maven only is jdtls's setting java.import.gradle.enabled: false, sent in its initialize request", () => {
+    const settings = { jdtls: jdtlsFolder(), java: "java", lombok: null };
+    expect(javaLanguageServer(settings, "/data", true).initializationOptions).toEqual({
+      settings: { java: { import: { gradle: { enabled: false } } } },
+    });
   });
 });

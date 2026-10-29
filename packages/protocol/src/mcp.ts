@@ -6,6 +6,7 @@ import {
   AgentTaskChanges,
   FOLDER_ACTION_REASON_MAX,
   FolderActionReason,
+  JavaNavigationStatus,
   PromptDelivery,
   Session,
   SessionId,
@@ -160,6 +161,8 @@ export const GetSessionResult = z.object({
   changesError: z.string().nullable(),
   /** The task's last verification (ADR-64); `null` without a task or before the first one. */
   verification: Verification.nullable(),
+  /** How the task's Java language server is doing (ADR-124): whether the `lsp` tool can answer yet; `null` without Java navigation. */
+  javaNavigation: JavaNavigationStatus.nullable(),
 });
 export type GetSessionResult = z.infer<typeof GetSessionResult>;
 
@@ -590,7 +593,10 @@ export const mcpTools = {
       "true when there were more), commits on the task branch and the number of uncommitted entries, without the diff " +
       `itself; ${GET_TASK_CHANGES} adds the diff. changes: null with changesError when they cannot be computed ` +
       `(e.g. the worktree was deleted or the task is being ended). verification is the task's last ${VERIFY_TASK} result ` +
-      "(passed, failed with the first failed tests and errors, running, cancelled), null before the first one.",
+      "(passed, failed with the first failed tests and errors, running, cancelled), null before the first one. javaNavigation, " +
+      "for a task with Java navigation, says whether its lsp tool can answer: starting, importing (since), stalled (importing " +
+      "past the limit), ready, or failed with jdtls's first error (e.g. a Gradle import that needs a JDK that is missing); " +
+      "lsp answers come back empty until ready.",
     args: z.object({ session: SessionId.describe(`session id from ${LIST_SESSIONS} (the id field)`) }).strict(),
     result: GetSessionResult,
   },

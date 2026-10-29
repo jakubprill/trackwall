@@ -28,6 +28,13 @@ function agentsWithJavaNavigation(dir: string, projects: string | null, settings
   return makeAgents({ shop: dir }, undefined, projects, undefined, undefined, undefined, undefined, undefined, settings);
 }
 
+/** A time as Eclipse writes it in its log: the computer's local time, to the millisecond. */
+function eclipseLogTime(t: Date): string {
+  const two = (n: number) => String(n).padStart(2, "0");
+  const date = `${t.getFullYear()}-${two(t.getMonth() + 1)}-${two(t.getDate())}`;
+  return `${date} ${two(t.getHours())}:${two(t.getMinutes())}:${two(t.getSeconds())}.${String(t.getMilliseconds()).padStart(3, "0")}`;
+}
+
 function sessionOf(agents: Agents, task: string): string {
   const [session, ...more] = agents.sessions().sessions.filter((s) => s.task === task);
   if (!session || more.length > 0) throw new Error(`task ${task} does not have exactly one session`);
@@ -37,7 +44,15 @@ function sessionOf(agents: Agents, task: string): string {
 /** The session plugin's manifest, which carries the language servers to Copilot CLI. */
 const PluginManifest = z.object({
   lspServers: z
-    .record(z.string(), z.object({ command: z.string(), args: z.array(z.string()), fileExtensions: z.record(z.string(), z.string()) }))
+    .record(
+      z.string(),
+      z.object({
+        command: z.string(),
+        args: z.array(z.string()),
+        fileExtensions: z.record(z.string(), z.string()),
+        initializationOptions: z.unknown().optional(),
+      }),
+    )
     .optional(),
 });
 const pluginManifest = (home: string, session: string) =>
@@ -133,5 +148,46 @@ describe.skipIf(process.versions.bun === undefined)("Java navigation for tasks (
     await agents.stop(resumed);
     await agents.removeTask(task.id, false, true);
     expect(existsSync(data)).toBe(false);
+  }, 60_000);
+
+  test("a repo with both a pom.xml and a Gradle build gets jdtls set to import with Maven only (ADR-124)", async () => {
+    const dir = makeRepo({ "pom.xml": "<project/>\n", "build.gradle": "plugins { id 'java' }\n" }, "shop");
+    const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
+    const settings = jdtlsSettings();
+    const { agents, procs, home } = agentsWithJavaNavigation(dir, projects, () => settings);
+    cleanups.push(() => procs.stopAll());
+
+    const task = await agents.createTask("shop", "find the callers", "ask", null, true);
+    expect(pluginManifest(home, sessionOf(agents, task.id)).lspServers?.java?.initializationOptions).toEqual({
+      settings: { java: { import: { gradle: { enabled: false } } } },
+    });
+  }, 60_000);
+
+  test("the task says how its jdtls is doing from the log in its data folder, and a task without navigation says nothing (ADR-124)", async () => {
+    const dir = makeRepo({ "pom.xml": "<project/>\n" }, "shop");
+    const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
+    const settings = jdtlsSettings();
+    const { agents, procs } = agentsWithJavaNavigation(dir, projects, () => settings);
+    cleanups.push(() => procs.stopAll());
+    const task = await agents.createTask("shop", "find the callers", "ask", null, true);
+    expect(await agents.taskJavaNavigation(task.id)).toEqual({ kind: "starting" });
+
+    const metadata = join(projects, ".trackwall", "lsp", task.id, "workspace", ".metadata");
+    mkdirSync(metadata, { recursive: true });
+    writeFileSync(
+      join(metadata, ".log"),
+      [
+        `!SESSION ${eclipseLogTime(new Date())} -----------------------------------------------`,
+        "!ENTRY org.eclipse.buildship.core 4 0 2026-10-29 10:00:40.000",
+        "!MESSAGE Synchronize project shop failed due to an error connecting to the Gradle build.",
+      ].join("\n"),
+    );
+    expect(await agents.taskJavaNavigation(task.id)).toEqual({
+      kind: "failed",
+      message: "Synchronize project shop failed due to an error connecting to the Gradle build.",
+    });
+
+    const plain = await agents.createTask("shop", "update the README");
+    expect(await agents.taskJavaNavigation(plain.id)).toBeNull();
   }, 60_000);
 });

@@ -210,17 +210,21 @@ const runs: ToolRuns = {
   },
   getSession: async (facade, { session: id }) => {
     const session = agentSession(facade.agents.session(id));
-    if (session.task === null) return { session, task: null, changes: null, changesError: null, verification: null };
+    if (session.task === null) return { session, task: null, changes: null, changesError: null, verification: null, javaNavigation: null };
     const task = facade.agents.task(session.task);
     const verification = facade.verifications.get(task.id);
     // The session and the task exist even when the changes cannot be computed (worktree deleted by hand, ending in progress).
-    return facade.agents.taskChangesSummary(task.id).then(
-      (changes) => ({ session, task, changes, changesError: null, verification }),
-      (err: unknown) => {
-        if (!(err instanceof DomainError)) throw err;
-        return { session, task, changes: null, changesError: `${err.code}: ${err.message}`, verification };
-      },
-    );
+    const [javaNavigation, summary] = await Promise.all([
+      facade.agents.taskJavaNavigation(task.id),
+      facade.agents.taskChangesSummary(task.id).then(
+        (changes) => ({ changes, changesError: null }),
+        (err: unknown) => {
+          if (!(err instanceof DomainError)) throw err;
+          return { changes: null, changesError: `${err.code}: ${err.message}` };
+        },
+      ),
+    ]);
+    return { session, task, ...summary, verification, javaNavigation };
   },
   getDayReport: async (facade) => ({ report: facade.dayStart.report() }),
   getTaskChanges: (facade, { task, paths, maxPatchBytes }) => facade.agents.agentTaskChanges(task, maxPatchBytes, paths),
