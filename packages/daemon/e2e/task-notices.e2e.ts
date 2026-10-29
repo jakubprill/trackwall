@@ -10,7 +10,7 @@ const FAKE_MISE = [process.execPath, join(import.meta.dir, "..", "test", "fixtur
 const trackwall = useTrackwall({ repos: { shop: { "README.md": "# shop\n" } }, miseCommand: FAKE_MISE });
 
 describe("a task's notices", () => {
-  test("a warning that comes while the grid shows the task lies over its terminal, and the badge opens the task's sections without resizing the terminal", async () => {
+  test("a warning that comes while the grid shows the task lies over its terminal, and the mise chip in the tile's header opens the config to trust without resizing the terminal", async () => {
     const { daemon } = trackwall();
     const page = await trackwall().open();
     await showSessions(page);
@@ -30,18 +30,23 @@ describe("a task's notices", () => {
     await banner.waitFor();
     await banner.getByRole("button", { name: "Show" }).click();
 
-    const overlay = page.getByRole("region", { name: "Task notices overlay" });
+    const overlay = page.getByRole("region", { name: "mise config overlay" });
     await overlay.getByRole("region", { name: "mise config of this worktree" }).getByText("added mise.local.toml").waitFor();
     expect(await terminal.boundingBox()).toEqual(before);
     await page.keyboard.press("Escape");
     await overlay.waitFor({ state: "hidden" });
     expect(await banner.count()).toBe(0);
-    await page.getByRole("button", { name: "Task notices: 1 warning" }).waitFor();
+    // The chip stays in the tile's header until the config is trusted.
+    const chip = page.getByRole("button", { name: "The agent changed the mise config" });
+    await chip.waitFor();
 
     // In the one-entry layout the same warning is a chip that opens the task's sections.
     await page.getByRole("group", { name: "Layout" }).getByRole("button", { name: "1", exact: true }).click();
-    await page.getByRole("list", { name: "Task notices" }).getByRole("button", { name: "The agent changed the mise config" }).click();
-    await page.getByRole("region", { name: "Task details" }).getByRole("button", { name: "Trust this config" }).click();
-    await page.getByRole("list", { name: "Task notices" }).waitFor({ state: "detached" });
+    await page.getByRole("list", { name: "Task notices" }).getByRole("button", { name: "The agent changed the mise config" }).waitFor();
+
+    await page.getByRole("group", { name: "Layout" }).getByRole("button", { name: "2", exact: true }).click();
+    await chip.click();
+    await overlay.getByRole("button", { name: "Trust this config" }).click();
+    await chip.waitFor({ state: "detached" });
   }, 60_000);
 });

@@ -83,9 +83,11 @@ function includedNotices({ files, problems }: Task["included"]): TaskNotice[] {
   return notices;
 }
 
+const MISE_UNAVAILABLE_KEY = "mise-config:unavailable";
+
 function miseConfigNotices(config: TaskNoticeInput["miseConfig"]): TaskNotice[] {
   if (config === "unavailable")
-    return [{ section: "mise-config", key: "mise-config:unavailable", tone: "warning", label: "mise tasks cannot run here" }];
+    return [{ section: "mise-config", key: MISE_UNAVAILABLE_KEY, tone: "warning", label: "mise tasks cannot run here" }];
   if (!config || config.changes.length === 0) return [];
   return [
     {
@@ -122,4 +124,23 @@ function verificationNotices(verification: Verification | null): TaskNotice[] {
  */
 export function newWarnings(notices: readonly TaskNotice[], seen: ReadonlySet<string>): TaskNotice[] {
   return notices.filter((n) => n.tone === "warning" && !seen.has(n.key));
+}
+
+/** How a grid tile's header shows the notices: two get chips of their own, the rest count on the badge. */
+export interface TileNotices {
+  /** The mise config: mise tasks stop in the worktree until the user trusts it, so it stays in sight until then. */
+  miseConfig: { notice: TaskNotice; needsTrust: boolean } | undefined;
+  /** The verification while it runs and once it passed or failed: a short result that matters at a glance. */
+  verification: TaskNotice | undefined;
+  others: TaskNotice[];
+}
+
+export function tileNotices(notices: readonly TaskNotice[]): TileNotices {
+  const mise = notices.find((n) => n.section === "mise-config");
+  const verification = notices.find((n) => n.section === "verification" && n.tone !== "info");
+  return {
+    miseConfig: mise && { notice: mise, needsTrust: mise.key !== MISE_UNAVAILABLE_KEY },
+    verification,
+    others: notices.filter((n) => n !== mise && n !== verification),
+  };
 }

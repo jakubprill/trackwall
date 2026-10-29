@@ -1,6 +1,6 @@
 import { countLabel } from "@trackwall/protocol";
 import { ChevronDown, ChevronUp, Info, TriangleAlert } from "lucide-react";
-import type { Ref } from "react";
+import type { ReactNode } from "react";
 import type { TaskNotice, TaskNoticeTone, TaskSection } from "@/lib/task-notices";
 import { cn } from "@/lib/utils";
 
@@ -69,17 +69,7 @@ export function TaskNoticeStrip({
 }
 
 /** A grid tile's badge: the number of warnings, or of other notices when there are none. Nothing without notices. */
-export function NoticeBadge({
-  ref,
-  notices,
-  open,
-  onToggle,
-}: {
-  ref: Ref<HTMLButtonElement>;
-  notices: readonly TaskNotice[];
-  open: boolean;
-  onToggle: () => void;
-}) {
+export function NoticeBadge({ notices, open, onToggle }: { notices: readonly TaskNotice[]; open: boolean; onToggle: () => void }) {
   if (notices.length === 0) return null;
   const warnings = notices.filter((n) => n.tone === "warning").length;
   const label =
@@ -88,7 +78,6 @@ export function NoticeBadge({
       : countLabel(notices.length, { one: "notice", other: "notices" });
   return (
     <button
-      ref={ref}
       type="button"
       onClick={onToggle}
       aria-expanded={open}
@@ -101,6 +90,35 @@ export function NoticeBadge({
     >
       {warnings > 0 ? <TriangleAlert className="size-3" aria-hidden /> : <Info className="size-3" aria-hidden />}
       {warnings > 0 ? warnings : notices.length}
+    </button>
+  );
+}
+
+/**
+ * A chip of its own in a grid tile's header for one notice (`tileNotices`): the mise config to trust and the
+ * verification. Its full text is the tooltip, since the chip shortens it to fit a narrow tile.
+ */
+export function TileNoticeChip({
+  notice,
+  open,
+  onToggle,
+  children,
+}: {
+  notice: TaskNotice;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      aria-label={notice.label}
+      title={notice.label}
+      className={cn("flex shrink-0 items-center gap-1 rounded-full border px-1.5 text-xs whitespace-nowrap", TONE_CLASS[notice.tone])}
+    >
+      {children}
     </button>
   );
 }

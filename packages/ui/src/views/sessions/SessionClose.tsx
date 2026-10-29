@@ -62,7 +62,7 @@ export function SessionCloseConfirmation({ close, className }: { close: SessionC
     <div
       {...(close.confirming ? { role: "alertdialog", "aria-label": "Close session" } : { role: "alert" })}
       onMouseDown={keepSelection}
-      className={cn("bg-card flex flex-wrap items-center gap-2 border-b px-2 py-1.5", className)}
+      className={cn("bg-overlay flex flex-wrap items-center gap-2 border-b px-2 py-1.5", className)}
     >
       {close.confirming && (
         <>
