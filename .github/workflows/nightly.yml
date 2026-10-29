@@ -4,7 +4,8 @@ name: Nightly
 # - the contract tests on the newest stable Copilot CLI on npm instead of the pinned one; a failure on main opens an
 #   issue for that version (ADR-67, clarification of 2026-10-26);
 # - the tests with real Java builds (jvm.yml, ADR-72); a failure on main opens one issue, closed by the next green night;
-# - the whole of ci.yml with macOS added, which PRs run without it (ADR-109); a failure on main opens one issue the same way.
+# - the whole of ci.yml with Windows and macOS added, which PRs run without them (ADR-128); a failure on main opens one
+#   issue the same way.
 on:
   schedule:
     # Once a night (UTC), outside the full hour when scheduled runs queue the longest.
@@ -147,7 +148,7 @@ jobs:
 
             To fix: reproduce with `pnpm test:jvm` (docs/development.md, "Tests with real Java builds"), fix the daemon and add the new output to the unit tests in `packages/daemon/test`. This issue closes on the first night the tests pass again.
 
-  # PRs run CI without macOS (ADR-109), so the night runs all of it on all three systems. Not on a manual run for one
+  # PRs run CI on Linux only (ADR-128), so the night runs all of it on all three systems. Not on a manual run for one
   # Copilot CLI version, which is about the contract tests only.
   ci:
     if: inputs.copilot-cli == ''
@@ -155,6 +156,7 @@ jobs:
       contents: read
     uses: ./.github/workflows/ci.yml
     with:
+      windows: true
       macos: true
 
   # The same rules as `report`. `CI ok` sums up the run; the jobs that failed are in the run's log.
@@ -185,6 +187,6 @@ jobs:
           body: |
             The nightly run of CI on Linux, Windows and macOS fails on main: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-            PRs run CI on Linux and Windows only, so a change that breaks macOS reaches main and shows up here first; a job that fails on Linux or Windows too is more likely a flaky test. The failed jobs of the run name the system and the test.
+            PRs run CI on Linux only, so a change that breaks Windows or macOS reaches main and shows up here first; a job that fails on Linux too is more likely a flaky test. The failed jobs of the run name the system and the test.
 
-            To fix: reproduce on a Mac, or run CI on the fix's branch by hand with macOS ticked (Actions → CI → Run workflow), and fix it in a PR. This issue closes on the first night CI passes again.
+            To fix: reproduce on that system, or run CI on the fix's branch by hand with Windows or macOS ticked (Actions → CI → Run workflow), and fix it in a PR. This issue closes on the first night CI passes again.

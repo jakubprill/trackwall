@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { networkEnv } from "../src/modules/vcs/git.ts";
 import { mainRemote, parseConfig } from "../src/modules/vcs/git-config.ts";
-import { remoteAddress } from "../src/modules/vcs/remote.ts";
+import { networkAddress, remoteAddress } from "../src/modules/vcs/remote.ts";
 
 describe("remote repo address", () => {
   test("SSH, scp and HTTPS to the same repo give the same address, without the user, token, port and .git", () => {
@@ -27,6 +27,48 @@ describe("remote repo address", () => {
       "",
     ])
       expect(remoteAddress(url)).toBeUndefined();
+  });
+
+  test("tokens, ports and IPv6 hosts in a URL still give the address", () => {
+    expect(remoteAddress("https://oauth2:glpat%2Fx@gitlab.example.com:8443/shop/api.git")).toBe("gitlab.example.com/shop/api");
+    expect(remoteAddress("ssh://git@[::1]:22/shop/api.git")).toBe("[::1]/shop/api");
+  });
+
+  test("an scp address names the host before the first colon, after the last @, where git and ssh connect", () => {
+    expect(remoteAddress("evil.example:x@github.com:me/x")).toBe("evil.example/x@github.com:me/x");
+    expect(remoteAddress("a@b@evil.example:me/x")).toBe("evil.example/me/x");
+    expect(remoteAddress("git@github.com:me/x.git")).toBe("github.com/me/x");
+  });
+
+  test("an address git would read differently from the check, is not a hosting address", () => {
+    for (const url of [
+      // curl connects to evil.example; the WHATWG parser sees github.com and resolves `..` to `/me/x`.
+      "https://github.com\\@evil.example/../me/x",
+      "https://git%68ub.com/me/x",
+      "https://\uff47ithub.com/me/x",
+      "https://git\thub.com/me/x",
+      "ssh://evil.example?@github.com/me/x",
+      "https://github.com/other/x/../../me/x",
+      "https://github.com/other/%2e%2e/me/x",
+      // git decodes an ssh URL before it takes the host, so ssh connects to evil.example.
+      "ssh://evil.example%2F@github.com/me/x",
+      "ssh://git@evil.example%2Fx@github.com/me/x",
+      "https://a@evil.example@github.com/me/x",
+      "[evil.example:x@github.com]:me/x",
+      "-oProxyCommand=evil:me/x",
+    ])
+      expect(remoteAddress(url)).toBeUndefined();
+  });
+
+  test("a push address in a form the check could misread never equals the fetch address", () => {
+    const fetchesFrom = networkAddress("git@github.com:me/x.git");
+    expect(fetchesFrom).toBe("github.com/me/x");
+    for (const pushurl of [
+      "evil.example:x@github.com:me/x",
+      "ssh://evil.example%2F@github.com/me/x",
+      "https://github.com\\@evil.example/../me/x",
+    ])
+      expect(networkAddress(pushurl)).not.toBe(fetchesFrom);
   });
 
   test("the main remote is origin, and without it the only remote; with several and no origin we do not guess", () => {

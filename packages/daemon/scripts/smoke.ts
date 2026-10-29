@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { apiResult, cardsApi, DaemonInfoResult, HealthResult, MCP_SERVER_NAME, workspaceApi } from "@trackwall/protocol";
 import { z } from "zod";
+import { CONTAINER_MARKERS } from "../src/infra/desktop.ts";
 import { daemonFilePath, readDaemonFile } from "../src/infra/discovery.ts";
 import { loopbackRequest } from "../src/infra/loopback.ts";
 
@@ -46,6 +47,12 @@ if (!health.ok || health.data.version !== version) throw new Error(`health: ${JS
 const info = DaemonInfoResult.parse(await get("/api/daemon/info"));
 if (!info.ok || info.data.runtime.name !== "bun") throw new Error(`info: ${JSON.stringify(info)}`);
 console.log(`info: ${info.data.platform}/${info.data.arch}, ${info.data.runtime.name} ${info.data.runtime.version}`);
+// In a container (the `container` job of CI, ADR-128) the binary must see it: no desktop to open links on (ADR-120) and
+// the container's id for VS Code links into it (ADR-121).
+if (CONTAINER_MARKERS.some((marker) => existsSync(marker))) {
+  if (info.data.desktop || info.data.container === null) throw new Error(`in a container: ${JSON.stringify(info.data)}`);
+  console.log(`container: ${info.data.container}, no desktop`);
+}
 
 // The Stdio bridge from the command the UI shows for `copilot mcp add` (in the binary: the binary itself and `mcp-stdio`),
 // started the way Copilot CLI starts it: one JSON-RPC line on input, the reply in the first line of output.
