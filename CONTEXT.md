@@ -253,7 +253,7 @@ The repos from the projects folder as nodes (`GraphNode`) and the connections be
 _Avoid_: map, dependency diagram
 
 **Connection** (`GraphEdge`; *edge* in the architecture document and in code):
-A link from the repo that uses to the repo that is used, with a kind (`EdgeKind`: `depends-on`, needed to build, or `calls`, called at runtime; ADR-116), a source (`EdgeSource`: `package` and `http` from cards, `manual` from `workspace.yaml`; later `topic`), a key (a package name, an app name, a host or `localhost:<port>`, a description), a confidence and evidence. One pair of repos can have several connections; the "Overview" view draws them as one line. In the UI "calls · HTTP", "depends on · package". A repo *exposes* its endpoints on its card (`provides` of the kind `endpoint`); that is not a connection.
+A link from the repo that uses to the repo that is used, with a kind (`EdgeKind`: `depends-on`, needed to build, or `calls`, called at runtime; ADR-116; topics will add a kind), a source (`EdgeSource`: `package` and `http` from cards, `manual` from `workspace.yaml`), a key (a package name, an app name, a host or `localhost:<port>`, a description), a confidence and evidence. One pair of repos can have several connections; the "Overview" view draws them as one line. In the UI "calls · HTTP", "depends on · package". A repo *exposes* its endpoints on its card (`provides` of the kind `endpoint`); that is not a connection.
 
 **Graph problem** (`GraphProblem`, code `GraphProblemCode`; UI "Calls without a target"):
 A gap in a repo's facts that only the whole graph shows, with a code like a card problem (ADR-116): `unresolved-call-target`, an HTTP client the code uses that points to no repo in the list.

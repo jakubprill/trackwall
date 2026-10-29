@@ -427,6 +427,15 @@ describe("calls without a target (ADR-116)", () => {
     ]);
   });
 
+  test("calls that match only an endpoint of the client's own repo (a sibling app) are not a problem", () => {
+    const graph = buildGraph(
+      [repo("shop", card([endpoint("/api/stock/{sku}")], [client({ via: "rest-client", name: "StockClient", calls: getStock })]))],
+      { config: NO_CONFIG, file: CONFIG_FILE, problems: [] },
+    );
+    expect(graph.edges).toEqual([]);
+    expect(graph.problems).toEqual([]);
+  });
+
   test("an address in the configuration without calls or a name, and a client pointing to its own repo, are not problems", () => {
     const graph = buildGraph(
       [

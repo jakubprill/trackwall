@@ -10,7 +10,8 @@ import type { GraphCardInput } from "./graph-input.ts";
 export interface Join {
   edges: EdgeSet;
   resolve: (ref: string) => string[];
-  problems: string[];
+  /** Errors in the `graph` entries of `workspace.yaml`, for `RepoGraph.configProblems`. */
+  configProblems: string[];
   /**
    * Package and app aliases as a `Map`: the name comes from a repo, and an object from YAML would for the name `constructor` or
    * `toString` give back a function from the prototype.

@@ -156,12 +156,19 @@ export class HttpIndex {
     if (known?.from === from) return known.resolution;
     const url = client.url === null ? undefined : parseHttpUrl(client.url);
     const byName = this.byName(from, client, url);
-    const resolution =
-      byName === undefined
-        ? { targets: this.byPath(from, client, url?.path ?? ""), ownRepo: false }
-        : { targets: byName.filter((t) => t.repo !== from), ownRepo: byName.every((t) => t.repo === from) };
+    const resolution = byName === undefined ? this.byPathResolution(from, client, url?.path ?? "") : this.byNameResolution(from, byName);
     this.resolutions.set(client, { from, resolution });
     return resolution;
+  }
+
+  private byNameResolution(from: string, found: HttpTarget[]): HttpResolution {
+    return { targets: found.filter((t) => t.repo !== from), ownRepo: found.every((t) => t.repo === from) };
+  }
+
+  /** By path, calls that match only endpoints of the client's own repo (an app calling its sibling app) are resolved too. */
+  private byPathResolution(from: string, client: ConsumedHttp, base: string): HttpResolution {
+    const targets = this.byPath(from, client, base);
+    return { targets, ownRepo: targets.length === 0 && this.match(from, client, base).length > 0 };
   }
 
   /** Targets by app name, alias, host or port, the client's own repo included; `undefined` when none of them points to anything. */

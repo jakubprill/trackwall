@@ -33,7 +33,7 @@ export function buildGraphWithIndex(cards: readonly GraphCardInput[], input: Gra
     nodes: cards.map(graphNode),
     edges: join.edges.sorted(),
     problems: unresolvedCalls(http),
-    configProblems: join.problems,
+    configProblems: join.configProblems,
     configFile: input.file,
   };
   return { graph, http };
@@ -43,7 +43,7 @@ export function buildGraphWithIndex(cards: readonly GraphCardInput[], input: Gra
 function joinOf(cards: readonly GraphCardInput[], { config, file, problems }: GraphConfigInput): Join {
   const appAliases = new Map(Object.entries(config.apps).map(([name, ref]) => [name.toLowerCase(), ref]));
   const aliases = new Map(Object.entries(config.packages));
-  return { edges: new EdgeSet(), resolve: repoResolver(cards), problems: [...problems], aliases, appAliases, file };
+  return { edges: new EdgeSet(), resolve: repoResolver(cards), configProblems: [...problems], aliases, appAliases, file };
 }
 
 function addPackageEdgesOf(join: Join, cards: readonly GraphCardInput[]): void {
@@ -99,22 +99,22 @@ function addAliasEdges(join: Join, from: string, pkg: ConsumedPackage): void {
 
 function checkAliases(join: Join): void {
   for (const [name, ref] of join.aliases) {
-    if (join.resolve(ref).length === 0) join.problems.push(`graph.packages “${name}”: ${missingRepo(ref)}`);
+    if (join.resolve(ref).length === 0) join.configProblems.push(`graph.packages “${name}”: ${missingRepo(ref)}`);
   }
   for (const [name, ref] of join.appAliases) {
-    if (join.resolve(ref).length === 0) join.problems.push(`graph.apps “${name}”: ${missingRepo(ref)}`);
+    if (join.resolve(ref).length === 0) join.configProblems.push(`graph.apps “${name}”: ${missingRepo(ref)}`);
   }
 }
 
 function addManualEdges(join: Join, manual: ManualEdge, i: number): void {
   const froms = join.resolve(manual.from);
   const tos = join.resolve(manual.to);
-  if (froms.length === 0) join.problems.push(`graph.edges[${i}].from: ${missingRepo(manual.from)}`);
-  if (tos.length === 0) join.problems.push(`graph.edges[${i}].to: ${missingRepo(manual.to)}`);
+  if (froms.length === 0) join.configProblems.push(`graph.edges[${i}].from: ${missingRepo(manual.from)}`);
+  if (tos.length === 0) join.configProblems.push(`graph.edges[${i}].to: ${missingRepo(manual.to)}`);
   const evidence: EdgeEvidence = { repo: null, path: join.file, line: null, detail: `graph.edges[${i}]: ${manual.from} → ${manual.to}` };
   const pairs = froms.flatMap((from) => tos.filter((to) => to !== from).map((to) => ({ from, to })));
   if (froms.length > 0 && tos.length > 0 && pairs.length === 0) {
-    join.problems.push(`graph.edges[${i}]: from and to point to the same repo (${froms.join(", ")})`);
+    join.configProblems.push(`graph.edges[${i}]: from and to point to the same repo (${froms.join(", ")})`);
   }
   for (const { from, to } of pairs) {
     join.edges.add({ from, to, kind: manual.kind, source: "manual", key: manual.note, confidence: "exact", evidence: [evidence] });

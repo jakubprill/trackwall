@@ -90,7 +90,7 @@ export function GraphNodePanel({
       {problems.length > 0 && (
         <Section label="Calls without a target" empty="">
           {problems.map((problem) => (
-            <ProblemItem key={`${problem.client}:${problem.evidence.path}:${problem.evidence.line}`} problem={problem} />
+            <ProblemItem key={`${problem.via}:${problem.client}:${problem.evidence.path}:${problem.evidence.line}`} problem={problem} />
           ))}
         </Section>
       )}

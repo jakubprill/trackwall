@@ -43,6 +43,14 @@ describe("the no-endpoints card problem (ADR-116)", () => {
     expect(noEndpointsProblems([], [uses("org.springframework.boot:spring-boot-starter-web", "testImplementation")])).toEqual([]);
   });
 
+  test("a library that needs Spring MVC only to compile (provided, compileOnly) is not a web app", () => {
+    expect(noEndpointsProblems([], [uses("org.springframework:spring-webmvc", "provided")])).toEqual([]);
+    expect(noEndpointsProblems([], [uses("org.springframework:spring-webmvc", "compileOnly")])).toEqual([]);
+    expect(
+      noEndpointsProblems([], [uses("org.springframework.boot:spring-boot-starter-web", "implementation")]).map((p) => p.code),
+    ).toEqual(["no-endpoints"]);
+  });
+
   test("a gateway, a Config Server, a Eureka server and a Spring Boot Admin server serve the framework's endpoints, not a gap", () => {
     for (const server of [
       "org.springframework.cloud:spring-cloud-starter-gateway",

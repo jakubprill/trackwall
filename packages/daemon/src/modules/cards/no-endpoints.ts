@@ -14,9 +14,16 @@ const WEB_SERVER = /^org\.springframework(\.boot:spring-boot-starter-web(flux)?|
 const FRAMEWORK_ENDPOINTS =
   /^(org\.springframework\.cloud:(spring-cloud-starter-gateway.*|spring-cloud-config-server|spring-cloud-starter-netflix-eureka-server)|de\.codecentric:spring-boot-admin-starter-server)$/;
 
+/**
+ * The scopes that put a dependency into the running app: Maven `compile` and `runtime`, Gradle `implementation`, `api`,
+ * `runtimeOnly` and the old `compile` and `runtime`. A test dependency, and a library's `provided` or `compileOnly` one,
+ * do not make the repo a web app.
+ */
+const APP_SCOPES = new Set(["compile", "runtime", "implementation", "api", "runtimeOnly"]);
+
 export function noEndpointsProblems(provides: readonly Provided[], consumes: readonly Consumed[]): CardProblem[] {
   if (provides.some((p) => p.kind === "endpoint")) return [];
-  const packages = consumes.filter((c): c is ConsumedPackage => c.kind === "package" && c.ecosystem === "maven" && !isTestScope(c));
+  const packages = consumes.filter((c): c is ConsumedPackage => c.kind === "package" && c.ecosystem === "maven" && APP_SCOPES.has(c.scope));
   if (packages.some((p) => FRAMEWORK_ENDPOINTS.test(p.name))) return [];
   const web = packages.find((p) => WEB_SERVER.test(p.name));
   if (web === undefined) return [];
@@ -27,9 +34,4 @@ export function noEndpointsProblems(provides: readonly Provided[], consumes: rea
       message: `uses ${web.name}, but the card found no endpoint: controllers from a library, JAX-RS or RouterFunction are not read`,
     },
   ];
-}
-
-/** Maven `test`, Gradle `testImplementation`, `testRuntimeOnly`…: a test dependency does not make the app a web app. */
-function isTestScope(pkg: ConsumedPackage): boolean {
-  return /^test/i.test(pkg.scope);
 }
