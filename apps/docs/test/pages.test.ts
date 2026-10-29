@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CONFIG_ENTRIES, WORKSPACE_KEYS } from "@trackwall/protocol";
-import { FEATURE_GROUPS } from "../.vitepress/sidebar.ts";
+import { FEATURE_GROUPS, SIDEBAR } from "../.vitepress/sidebar.ts";
 
 // Every feature page follows TEMPLATE.md, so "All features", the sidebar and llms.txt stay complete (ADR-56).
 const DOCS = join(import.meta.dir, "..");
@@ -110,6 +110,25 @@ test("a feature card on the home page shows the description of its page", () => 
 test("no page of the site points at decision records or the developer documents", () => {
   const pointing = sitePages.filter((path) => /ADR-\d+|§\d|\/blob\/main\/docs\//.test(read(path)));
   expect(pointing).toEqual([]);
+});
+
+test("every guide page opens with its title and description and is in the sidebar under that title", () => {
+  const inSidebar = new Map(
+    SIDEBAR.flatMap((entry) => entry.items ?? [])
+      .filter((item) => item.link?.startsWith("/guide/"))
+      .map((item) => [`${item.link?.replace(/^\/guide\//, "")}.md`, item.text]),
+  );
+  expect([...inSidebar.keys()].sort()).toEqual([...guidePages].sort());
+  for (const file of guidePages) {
+    const { fields, body } = frontmatter(`guide/${file}`);
+    const [heading, , lede] = body.split("\n");
+    expect({ file, heading, lede, sidebar: inSidebar.get(file) }).toEqual({
+      file,
+      heading: `# ${String(fields.title)}`,
+      lede: String(fields.description),
+      sidebar: String(fields.title),
+    });
+  }
 });
 
 test("every screenshot a page shows is in public/screenshots", () => {
