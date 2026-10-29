@@ -501,7 +501,11 @@ export const agentsApi = {
   /** Removes an ended session from the list; a running one cannot be closed without stopping it. */
   dismiss: endpoint("dismiss", SessionRequest, SessionList),
   /** Creates a worktree on a new branch from the default branch and starts Copilot CLI in it with the prompt (ADR-31). */
-  createTask: endpoint("create-task", z.object({ repo: RepoId, prompt: TaskPrompt, approvals: TaskApprovals }).strict(), Task),
+  createTask: endpoint(
+    "create-task",
+    z.object({ repo: RepoId, prompt: TaskPrompt, approvals: TaskApprovals, model: TaskModel.nullable().default(null) }).strict(),
+    Task,
+  ),
   /** A new session for a task that has no running session: Copilot CLI resumes the task's conversation (`--resume`). */
   resumeTask: endpoint("resume-task", TaskRequest, Task),
   taskChanges: endpoint("task-changes", TaskRequest, TaskChanges),

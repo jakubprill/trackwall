@@ -29,8 +29,12 @@ describe("an agent task, verified and reviewed", () => {
     const page = await trackwall().open();
     await showSessions(page);
     await page.getByRole("textbox", { name: "Prompt for the agent" }).fill(PROMPT);
+    // The model pill opens a field for a model id, and the task's session starts on it.
+    await page.getByRole("button", { name: "Model for the agent: Copilot CLI default" }).click();
+    await page.getByRole("textbox", { name: "Model for the agent" }).fill("gpt-5.5");
     await page.getByRole("button", { name: "Create task" }).click();
     await waitForTerminal(page, `--interactive=${PROMPT}`);
+    await waitForTerminal(page, "Argument: --model=gpt-5.5");
 
     await page.getByRole("button", { name: "Verify" }).click();
     // The sections above the terminal are folded into one strip of notices until "Details" unfolds them.

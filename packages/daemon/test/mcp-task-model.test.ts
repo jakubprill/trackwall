@@ -109,6 +109,22 @@ describe.skipIf(process.versions.bun === undefined)("the model of a proposed tas
     await daemon.facade.agents.stop(supervisor.id);
   }, 60_000);
 
+  test("a task the user types with a model starts its session on it", async () => {
+    const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "describe the repo", approvals: "ask", model: "gpt-5.5" });
+    expect(task.model).toBe("gpt-5.5");
+    const session = sessionOf(task.id);
+    expect(await argumentsOf(session, "--session-id=")).toContain("Argument: --model=gpt-5.5");
+    await waitFor(daemon.facade.agents, session, (s) => s.state !== null, "sessionStart");
+    await daemon.facade.agents.stop(session);
+    await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
+  }, 60_000);
+
+  test("a task the user types with a model that is not an id is refused before its worktree is created", async () => {
+    const refused = daemon.post(agentsApi.createTask, { repo: "shop", prompt: "describe the repo", approvals: "ask", model: "--yolo" });
+    await expect(refused).rejects.toThrow("a model id is letters, digits");
+    expect(daemon.facade.agents.sessions().tasks).toEqual([]);
+  }, 30_000);
+
   test("a model that is not an id is refused before anything is proposed, so it never reaches Copilot CLI as an option", async () => {
     const supervisor = await supervisorClient();
     for (const model of ["opus 5.5", "--yolo"]) {

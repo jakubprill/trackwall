@@ -557,9 +557,12 @@ export class Agents {
     throw new DomainError("not_found", `no task or task proposal ${target.task}`);
   }
 
-  /** A task the user typed; its agent asks before tools unless the user chose `auto` (ADR-105). */
-  createTask(repo: string, prompt: string, approvals: TaskApprovals = "ask"): Promise<Task> {
-    return this.#tasks.create(repo, prompt, { id: randomUUID(), title: null, proposedBy: null, model: null, approvals });
+  /**
+   * A task the user typed; its agent asks before tools unless the user chose `auto` (ADR-105), and runs on `model`, or
+   * Copilot CLI's default when it is `null` (ADR-98).
+   */
+  createTask(repo: string, prompt: string, approvals: TaskApprovals = "ask", model: string | null = null): Promise<Task> {
+    return this.#tasks.create(repo, prompt, { id: randomUUID(), title: null, proposedBy: null, model, approvals });
   }
 
   resumeTask(id: string): Promise<Task> {
