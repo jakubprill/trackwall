@@ -1,4 +1,4 @@
-import { createContext } from "react";
+import { createContext, useContext } from "react";
 
 /**
  * The screen a session terminal showed when it closed, kept per session in the window (ADR-117). A terminal that opens
@@ -37,5 +37,11 @@ export class LastScreens {
   }
 }
 
-/** The window's screens, which `App` provides; without it (`null`) a terminal opens black until the daemon's image comes. */
+/** The main window's screens, which `main.tsx` provides around `App`. */
 export const LastScreensContext = createContext<LastScreens | null>(null);
+
+export function useLastScreens(): LastScreens {
+  const screens = useContext(LastScreensContext);
+  if (screens === null) throw new Error("a session terminal outside the main window: no LastScreensContext above it");
+  return screens;
+}

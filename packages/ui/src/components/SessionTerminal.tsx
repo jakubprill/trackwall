@@ -12,7 +12,7 @@ import { daemonSocket } from "@/lib/daemon-socket";
 import { DROP_HOVER_RING, FILE_DROP_TARGET, FileDropEvent } from "@/lib/file-drop";
 import { InputBeforeOpen } from "@/lib/input-before-open";
 import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
-import { LastScreensContext } from "@/lib/last-screens";
+import { useLastScreens } from "@/lib/last-screens";
 import { oncePerFrame } from "@/lib/once-per-frame";
 import { pastedPaths } from "@/lib/pasted-paths";
 import { IS_MAC } from "@/lib/platform";
@@ -30,6 +30,8 @@ const COPY_FAILED = "Could not copy the selection to the clipboard; select the t
 const OSC_CLIPBOARD = 52;
 /** A screen image that comes sooner than this needs no word about it; the label would only flash. */
 const CONNECTING_LABEL_MS = 300;
+/** RIS: xterm.js resets the whole terminal, as `Terminal.reset` does, at this point of the output. */
+const RESET = "\x1bc";
 
 /**
  * The session terminal of one session (§4.4, ADR-26): xterm.js connected over a WebSocket to the PTY in the daemon. The
@@ -68,7 +70,7 @@ export function SessionTerminal({
   const updateFocus = useRef<() => void>(undefined);
   const [notice, setNotice] = useState<string>();
   const [connecting, setConnecting] = useState(false);
-  const lastScreens = useContext(LastScreensContext);
+  const lastScreens = useLastScreens();
 
   useEffect(() => {
     const element = host.current;
@@ -107,7 +109,7 @@ export function SessionTerminal({
       return true;
     });
     fit.fit();
-    const kept = lastScreens?.shown(session, terminal.cols);
+    const kept = lastScreens.shown(session, terminal.cols);
     if (kept !== undefined) terminal.write(kept);
     let screenCame = false;
     const slowScreen = setTimeout(() => setConnecting(true), CONNECTING_LABEL_MS);
@@ -149,8 +151,9 @@ export function SessionTerminal({
       ws.onmessage = (event: MessageEvent<ArrayBuffer | string>) => {
         // A text frame is the screen image at the start of the connection: it replaces what the window showed before.
         if (typeof event.data === "string") {
-          terminal.reset();
-          terminal.write(event.data);
+          // A reset in the stream, not `terminal.reset()`: the kept screen may still wait in xterm.js's write queue, and
+          // a reset outside it would leave that rest to be drawn under the image.
+          terminal.write(`${RESET}${event.data}`);
           screenCame = true;
           clearTimeout(slowScreen);
           setConnecting(false);
@@ -160,7 +163,11 @@ export function SessionTerminal({
       };
       ws.onclose = (event) => {
         if (disposed) return;
-        if (event.code === PTY_CLOSE_NOT_FOUND) return setNotice("This session no longer exists in the daemon.");
+        if (event.code === PTY_CLOSE_NOT_FOUND) {
+          clearTimeout(slowScreen);
+          setConnecting(false);
+          return setNotice("This session no longer exists in the daemon.");
+        }
         setNotice(
           early.fail()
             ? "Could not connect to the session terminal, so the keys you typed were dropped; reconnecting…"
@@ -217,7 +224,7 @@ export function SessionTerminal({
       // Only a screen the daemon sent: one still waiting for it shows the kept screen, which stays kept as it is. Without
       // the modes: the kept screen is a picture to look at until the image comes, not a mouse mode to type in.
       if (screenCame)
-        lastScreens?.keep(session, { cols: terminal.cols, screen: serializer.serialize({ scrollback: 0, excludeModes: true }) });
+        lastScreens.keep(session, { cols: terminal.cols, screen: serializer.serialize({ scrollback: 0, excludeModes: true }) });
       resizer.dispose();
       resize.disconnect();
       container.removeEventListener(FileDropEvent.type, takeDrop);

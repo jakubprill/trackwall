@@ -12,12 +12,13 @@ describe("the log line of an event loop that stood still", () => {
 
   test("code that holds the loop for a second gets a line about it", async () => {
     const lines: string[] = [];
-    watchEventLoopStalls((line) => lines.push(line));
+    const stop = watchEventLoopStalls((line) => lines.push(line));
     const until = performance.now() + 1_000;
     while (performance.now() < until) {
       // holds the event loop, as a process start an antivirus scans does
     }
     await new Promise((resolve) => setTimeout(resolve, 400));
+    stop();
     // The check due 250 ms after the start comes about 750 ms late; a slow machine may stall the loop again meanwhile,
     // so the line is looked for, not counted.
     const stalls = lines.map((line) => Number(/^the event loop stood still for at least (\d+) ms$/.exec(line)?.[1]));

@@ -15,8 +15,8 @@ export function stallNote(lateMs: number): string | undefined {
   return `the event loop stood still for at least ${Math.round(lateMs)} ms`;
 }
 
-/** Watches the event loop for as long as the process runs; the watch does not keep it alive. */
-export function watchEventLoopStalls(log: (msg: string) => void): void {
+/** Watches the event loop until the returned function stops it; the watch does not keep the process alive. */
+export function watchEventLoopStalls(log: (msg: string) => void): () => void {
   let last = performance.now();
   const timer = setInterval(() => {
     const now = performance.now();
@@ -25,4 +25,5 @@ export function watchEventLoopStalls(log: (msg: string) => void): void {
     if (note) log(note);
   }, CHECK_MS);
   timer.unref();
+  return () => clearInterval(timer);
 }
