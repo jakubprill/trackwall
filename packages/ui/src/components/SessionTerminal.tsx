@@ -267,7 +267,7 @@ export function SessionTerminal({
         <div ref={host} className="absolute inset-2 font-mono" />
         {/* Over the terminal, not above it: a bar in the flow would shrink the terminal and make the TUI redraw. */}
         {connecting && (
-          <p className="bg-card text-muted-foreground pointer-events-none absolute right-4 bottom-4 rounded-md border px-3 py-1 text-xs shadow-lg">
+          <p className="bg-overlay text-muted-foreground pointer-events-none absolute right-4 bottom-4 rounded-md border px-3 py-1 text-xs shadow-lg">
             Connecting to the session…
           </p>
         )}

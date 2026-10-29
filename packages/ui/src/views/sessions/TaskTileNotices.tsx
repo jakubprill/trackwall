@@ -1,24 +1,29 @@
 import type { RunningMiseTask, Session, Task, TaskMessage } from "@trackwall/protocol";
-import { X } from "lucide-react";
+import { ShieldAlert, ShieldCheck, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
-import { newWarnings } from "@/lib/task-notices";
+import { newWarnings, type TaskNotice, tileNotices } from "@/lib/task-notices";
 import { useTaskDetails } from "@/lib/use-task-details";
+import type { TileOverlayContent, TileOverlay as TileOverlayState } from "@/lib/use-tile-overlay";
 import { cn } from "@/lib/utils";
+import { TaskEditorButton } from "./TaskButtons.tsx";
 import { scrollToSection, TaskDetails } from "./TaskDetails.tsx";
-import { NoticeBadge, NoticeChips } from "./TaskNotices.tsx";
+import { NoticeBadge, NoticeChips, TileNoticeChip } from "./TaskNotices.tsx";
 import { TileOverlay } from "./TileOverlay.tsx";
 
 /** A selected tile checks its warnings as often as the task panel, the others less often: each check reads git. */
 const UNSELECTED_WARNING_POLL_MS = 15_000;
 
 /**
- * A task's notices on a grid tile (ADR-91): a badge in the tile's header opens the task's sections as an overlay
- * over the terminal, so that the terminal keeps its size, and a warning that shows up while the grid is open lies
- * over the terminal as one line until the user opens or closes it. Warnings the task had when the tile appeared count
- * as seen: the badge already says them. Without a task (a session in a repo root, task proposals) there is neither.
+ * A task's notices on a grid tile (ADR-91): in the tile's header a chip of its own for the mise config while mise tasks
+ * wait for the user's trust and for the verification, and a badge for the rest (`tileNotices`). The badge and the
+ * verification chip open the task's sections over the terminal, so that the terminal keeps its size; the mise chip
+ * opens the same overlay with only the mise config, with Trust and VS Code. A warning that shows up while the grid is
+ * open lies over the terminal as one line until the user opens or closes it. Warnings the task had when the tile
+ * appeared count as seen: the header already says them. Without a task (a session in a repo root, task proposals)
+ * there is nothing. The tile's `overlay` decides what is open, shared with the task menu.
  */
 export function useTaskTileNotices({
   conn,
@@ -29,6 +34,7 @@ export function useTaskTileNotices({
   runningLive,
   selected,
   paused,
+  overlay,
   onOpenTask,
 }: {
   conn: Connection;
@@ -41,6 +47,7 @@ export function useTaskTileNotices({
   selected: boolean;
   /** While the task is being ended, nothing is loaded. */
   paused: boolean;
+  overlay: TileOverlayState;
   onOpenTask: (id: string) => void;
 }) {
   const details = useTaskDetails({
@@ -52,72 +59,131 @@ export function useTaskTileNotices({
     paused,
     warningPollMs: selected ? undefined : UNSELECTED_WARNING_POLL_MS,
   });
-  const [open, setOpen] = useState(false);
   const [seen, setSeen] = useState<ReadonlySet<string>>();
-  const overlay = useRef<HTMLElement>(null);
-  const badge = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLElement>(null);
+  const { opened } = overlay;
+  const shown = opened?.kind === "notices" || opened?.kind === "mise-config" ? opened : undefined;
   const warningKeys = details.notices.filter((n) => n.tone === "warning").map((n) => n.key);
   if (seen === undefined && details.warningsChecked) setSeen(new Set(warningKeys));
   const unseen = seen ? newWarnings(details.notices, seen) : [];
+  // Warnings that came while the overlay was open have been read there.
   const markSeen = () => setSeen(new Set([...(seen ?? []), ...warningKeys]));
-  const show = () => {
+  const openFor = (notice: TaskNotice | undefined) => {
     markSeen();
-    setOpen(true);
+    overlay.open(contentFor(notice));
   };
-  // Warnings that came while the overlay was open have been read there; the keyboard goes back to the badge.
   const close = () => {
     markSeen();
-    setOpen(false);
-    badge.current?.focus();
+    overlay.close();
   };
+  const section = shown?.kind === "notices" ? shown.section : undefined;
   useEffect(() => {
-    if (open) overlay.current?.focus();
-  }, [open]);
-  if (!task) return { badge: null, overlay: null };
+    if (!shown) return;
+    panel.current?.focus();
+    if (section) scrollToSection(panel.current, section);
+  }, [shown, section]);
+  if (!task) return { chips: null, overlay: null, details };
+  const tile = tileNotices(details.notices);
+  const isOpen = (notice: TaskNotice) => (notice.section === "mise-config" ? shown?.kind === "mise-config" : section === notice.section);
 
   return {
-    badge: <NoticeBadge ref={badge} notices={details.notices} open={open} onToggle={open ? close : show} />,
+    chips: (
+      <>
+        {tile.chips.map((notice) => (
+          <TileNoticeChip
+            key={notice.key}
+            ref={overlay.trigger(contentFor(notice))}
+            notice={notice}
+            open={isOpen(notice)}
+            onToggle={() => (isOpen(notice) ? close() : openFor(notice))}
+          >
+            {notice.tone === "warning" ? <ShieldAlert className="size-3" aria-hidden /> : <ShieldCheck className="size-3" aria-hidden />}
+            {/* A narrow tile keeps the verification's colour and icon; the mise chip says what to do, so it keeps its text. */}
+            <span className={cn(notice.section === "verification" && "@max-sm:hidden")}>{notice.chip}</span>
+          </TileNoticeChip>
+        ))}
+        <NoticeBadge
+          ref={overlay.trigger({ kind: "notices" })}
+          notices={tile.others}
+          open={shown?.kind === "notices" && section === undefined}
+          onToggle={() => (shown?.kind === "notices" ? close() : openFor(undefined))}
+        />
+      </>
+    ),
+    details,
     // Hidden rather than unmounted when closed, so that a section keeps what the user did in it (the mise config shown
-    // for trust, an open log). From the bottom: the overlays (the environment card, then these notices), the line of a
-    // new warning (z-20), so that no overlay hides it, and the close question (z-30), which the user is answering.
+    // for trust, an open log). From the bottom: the overlays (the environment card, then these), the line of a new
+    // warning (z-20), so that no overlay hides it, and the close question (z-30), which the user is answering.
     overlay: (
       <>
-        <TileOverlay ref={overlay} open={open} label="Task notices overlay" onEscape={close}>
+        <TileOverlay
+          ref={panel}
+          open={shown !== undefined}
+          label={shown?.kind === "mise-config" ? "mise config overlay" : "Task notices overlay"}
+          onEscape={close}
+        >
           <div className="flex items-center gap-2 border-b px-2 py-1">
-            <NoticeChips notices={details.notices} onOpen={(section) => scrollToSection(overlay.current, section)} />
+            {shown?.kind === "mise-config" ? (
+              <span className="flex flex-1 justify-end">
+                <TaskEditorButton conn={conn} task={task} label="Open in VS Code" />
+              </span>
+            ) : (
+              <NoticeChips notices={details.notices} onOpen={(s) => scrollToSection(panel.current, s)} />
+            )}
             <Button variant="ghost" size="icon" className="size-6 shrink-0" onClick={close} aria-label="Close task notices">
               <X />
             </Button>
           </div>
           <div className="min-h-0 overflow-y-auto">
-            <TaskDetails conn={conn} task={task} details={details} sessions={sessions} onOpenTask={onOpenTask} />
+            <TaskDetails
+              conn={conn}
+              task={task}
+              details={details}
+              sessions={sessions}
+              onOpenTask={onOpenTask}
+              only={shown?.kind === "mise-config" ? "mise-config" : undefined}
+            />
           </div>
         </TileOverlay>
-        {/* Mounted while the tile is, so that a screen reader announces the warning when its text comes. */}
-        <div
-          role="status"
-          className={cn(
-            !open && unseen.length > 0
-              ? "bg-card border-warning/50 text-warning absolute inset-x-1 top-1 z-20 flex items-center gap-2 rounded-md border px-2 py-1 text-xs shadow-lg"
-              : "sr-only",
-          )}
-        >
-          {!open && unseen.length > 0 && (
-            <>
-              <span className="min-w-0 flex-1 truncate">
-                {unseen[0]?.label}
-                {unseen.length > 1 && ` and ${unseen.length - 1} more`}
-              </span>
-              <Button variant="outline" size="sm" className="h-6 shrink-0" onClick={show}>
-                Show
-              </Button>
-              <Button variant="ghost" size="icon" className="size-6 shrink-0" onClick={markSeen} aria-label="Dismiss the warning">
-                <X />
-              </Button>
-            </>
-          )}
-        </div>
+        <NewWarningBanner unseen={shown ? [] : unseen} onShow={() => openFor(unseen[0])} onDismiss={markSeen} />
       </>
     ),
   };
+}
+
+/** What a notice opens over the terminal: the mise config alone, or the task's sections at its own; the badge, at none. */
+function contentFor(notice: TaskNotice | undefined): TileOverlayContent {
+  return notice?.section === "mise-config" ? { kind: "mise-config" } : { kind: "notices", section: notice?.section };
+}
+
+/**
+ * The line of a warning that came while the grid is open, over the terminal until the user opens or dismisses it.
+ * Mounted while the tile is, so that a screen reader announces the warning when its text comes.
+ */
+function NewWarningBanner({ unseen, onShow, onDismiss }: { unseen: readonly TaskNotice[]; onShow: () => void; onDismiss: () => void }) {
+  return (
+    <div
+      role="status"
+      className={cn(
+        unseen.length > 0
+          ? "bg-overlay border-warning/50 text-warning absolute inset-x-1 top-1 z-20 flex items-center gap-2 rounded-md border px-2 py-1 text-xs shadow-lg"
+          : "sr-only",
+      )}
+    >
+      {unseen.length > 0 && (
+        <>
+          <span className="min-w-0 flex-1 truncate">
+            {unseen[0]?.label}
+            {unseen.length > 1 && ` and ${unseen.length - 1} more`}
+          </span>
+          <Button variant="outline" size="sm" className="h-6 shrink-0" onClick={onShow}>
+            Show
+          </Button>
+          <Button variant="ghost" size="icon" className="size-6 shrink-0" onClick={onDismiss} aria-label="Dismiss the warning">
+            <X />
+          </Button>
+        </>
+      )}
+    </div>
+  );
 }

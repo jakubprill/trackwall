@@ -18,6 +18,9 @@
   --foreground: oklch(0.96 0.008 230);
   --card: oklch(0.19 0.014 240 / var(--surface-alpha, 1));
   --card-foreground: oklch(0.96 0.008 230);
+  /* The card colour that stays opaque in a window with a background effect: a panel over a terminal, whose text would
+     show through a translucent surface. */
+  --overlay: oklch(0.19 0.014 240);
   --primary: oklch(0.82 0.12 210);
   --primary-foreground: oklch(0.18 0.03 230);
   --secondary: oklch(0.25 0.016 240 / var(--fill-alpha, 1));
@@ -110,6 +113,7 @@
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-overlay: var(--overlay);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);

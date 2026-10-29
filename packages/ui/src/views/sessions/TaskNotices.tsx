@@ -1,6 +1,6 @@
 import { countLabel } from "@trackwall/protocol";
 import { ChevronDown, ChevronUp, Info, TriangleAlert } from "lucide-react";
-import type { Ref } from "react";
+import type { ReactNode, Ref } from "react";
 import type { TaskNotice, TaskNoticeTone, TaskSection } from "@/lib/task-notices";
 import { cn } from "@/lib/utils";
 
@@ -75,7 +75,7 @@ export function NoticeBadge({
   open,
   onToggle,
 }: {
-  ref: Ref<HTMLButtonElement>;
+  ref?: Ref<HTMLButtonElement>;
   notices: readonly TaskNotice[];
   open: boolean;
   onToggle: () => void;
@@ -101,6 +101,38 @@ export function NoticeBadge({
     >
       {warnings > 0 ? <TriangleAlert className="size-3" aria-hidden /> : <Info className="size-3" aria-hidden />}
       {warnings > 0 ? warnings : notices.length}
+    </button>
+  );
+}
+
+/**
+ * A chip of its own in a grid tile's header for one notice (`tileNotices`): the mise config to trust and the
+ * verification. Its full text is the tooltip, since the chip shortens it to fit a narrow tile.
+ */
+export function TileNoticeChip({
+  ref,
+  notice,
+  open,
+  onToggle,
+  children,
+}: {
+  ref?: Ref<HTMLButtonElement>;
+  notice: TaskNotice;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      ref={ref}
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      aria-label={notice.label}
+      title={notice.label}
+      className={cn("flex shrink-0 items-center gap-1 rounded-full border px-1.5 text-xs whitespace-nowrap", TONE_CLASS[notice.tone])}
+    >
+      {children}
     </button>
   );
 }

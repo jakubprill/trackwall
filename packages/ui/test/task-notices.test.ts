@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Verification } from "@trackwall/protocol";
-import { newWarnings, type TaskNoticeInput, taskNotices } from "../src/lib/task-notices.ts";
+import { newWarnings, type TaskNoticeInput, taskNotices, tileNotices } from "../src/lib/task-notices.ts";
 
 const quiet: TaskNoticeInput = {
   task: { included: { files: [], problems: [] }, summary: null },
@@ -104,5 +104,38 @@ describe("newWarnings", () => {
   test("are the warnings not seen yet, never the other notices", () => {
     expect(newWarnings(notices, new Set(["shared-files:t2"])).map((n) => n.key)).toEqual(["shared-files:t3"]);
     expect(newWarnings(notices, new Set(["shared-files:t2", "shared-files:t3"]))).toEqual([]);
+  });
+});
+
+describe("tileNotices", () => {
+  const changedConfig = { neverTrusted: false, changes: [{ path: "mise.toml", change: "modified" as const, content: "" }], digest: "d1" };
+
+  test("a mise config to trust and a finished verification get chips of their own, the rest stays on the badge", () => {
+    const tile = tileNotices(
+      taskNotices({
+        ...quiet,
+        miseConfig: changedConfig,
+        verification: verification("failed"),
+        sharedWith: [{ task: "t2", name: "Extend add()", files: 1 }],
+        mergeRequest: true,
+      }),
+    );
+    expect(tile.chips.map((n) => n.chip)).toEqual(["Trust mise", "Failed"]);
+    expect(tile.others.map((n) => n.label)).toEqual(["1 file also in “Extend add()”", "Merge request"]);
+  });
+
+  test("mise that cannot run in the worktree keeps its chip, without asking for trust", () => {
+    expect(tileNotices(taskNotices({ ...quiet, miseConfig: "unavailable" })).chips.map((n) => n.chip)).toEqual(["mise"]);
+  });
+
+  test("a running verification has a chip, a cancelled one stays on the badge", () => {
+    expect(tileNotices(taskNotices({ ...quiet, verification: verification("running") })).chips.map((n) => n.chip)).toEqual(["Verifying"]);
+    const cancelled = tileNotices(taskNotices({ ...quiet, verification: verification("cancelled") }));
+    expect(cancelled.chips).toEqual([]);
+    expect(cancelled.others.map((n) => n.label)).toEqual(["Verification cancelled"]);
+  });
+
+  test("a task with nothing to say has no chips and nothing on the badge", () => {
+    expect(tileNotices(taskNotices(quiet))).toEqual({ chips: [], others: [] });
   });
 });

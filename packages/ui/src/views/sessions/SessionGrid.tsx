@@ -13,11 +13,13 @@ import { sessionShortcutLabel } from "@/lib/session-shortcut";
 import { PROPOSAL_STATUS, sessionPlace, sessionStateLabel } from "@/lib/session-state";
 import { useSessionClose } from "@/lib/use-session-close";
 import { useTaskEnding } from "@/lib/use-task-ending";
+import { useTileOverlay } from "@/lib/use-tile-overlay";
 import { cn } from "@/lib/utils";
 import { ProposalTile } from "./ProposalTile.tsx";
 import { EndTaskButton, SessionCloseButton, SessionCloseConfirmation, TaskEnding } from "./SessionClose.tsx";
 import { useSessionEnvironmentTile } from "./SessionEnvironmentTile.tsx";
 import { TaskLine } from "./TaskLine.tsx";
+import { useTaskTileMenu } from "./TaskTileMenu.tsx";
 import { useTaskTileNotices } from "./TaskTileNotices.tsx";
 
 /**
@@ -35,6 +37,7 @@ export function SessionGrid({
   selected,
   onSelect,
   onOpenAlone,
+  onOpenChanges,
   tasks,
   onChanged,
   onNavigate,
@@ -50,6 +53,8 @@ export function SessionGrid({
   selected: string;
   onSelect: (entry: SessionEntry) => void;
   onOpenAlone: (entry: SessionEntry) => void;
+  /** "Changes" in a task tile's menu: the task alone, on its changes. */
+  onOpenChanges: (task: string) => void;
   /** For a proposals tile: the tasks for the same-repo hint, the list reload and the selection after a decision. */
   tasks: readonly Task[];
   onChanged: () => void;
@@ -91,6 +96,7 @@ export function SessionGrid({
             selected={entryId(entry) === selected}
             onSelect={() => onSelect(entry)}
             onOpenAlone={() => onOpenAlone(entry)}
+            onOpenChanges={onOpenChanges}
             tasks={tasks}
             onChanged={onChanged}
             onNavigate={onNavigate}
@@ -113,6 +119,7 @@ function SessionTile({
   selected,
   onSelect,
   onOpenAlone,
+  onOpenChanges,
   tasks,
   onChanged,
   onNavigate,
@@ -129,6 +136,7 @@ function SessionTile({
   selected: boolean;
   onSelect: () => void;
   onOpenAlone: () => void;
+  onOpenChanges: (task: string) => void;
   tasks: readonly Task[];
   onChanged: () => void;
   onNavigate: (selection: SessionSelection) => void;
@@ -144,6 +152,7 @@ function SessionTile({
   const sessionlessTask = entry.kind === "task" && !session ? entry.task : undefined;
   const ending = useTaskEnding(sessionlessTask !== undefined);
   const task = entry.kind === "task" ? entry.task : undefined;
+  const overlay = useTileOverlay();
   const notices = useTaskTileNotices({
     conn,
     task,
@@ -153,7 +162,17 @@ function SessionTile({
     runningLive,
     selected,
     paused: ending.open,
+    overlay,
     onOpenTask: (id) => onNavigate({ kind: "task", id }),
+  });
+  const menu = useTaskTileMenu({
+    conn,
+    task: ending.open ? undefined : task,
+    session,
+    verification: notices.details.verification,
+    overlay,
+    onOpenChanges: () => task && onOpenChanges(task.id),
+    onChanged,
   });
   const environment = useSessionEnvironmentTile(session?.environment);
   const tile = useRef<HTMLDivElement>(null);
@@ -177,7 +196,8 @@ function SessionTile({
         selected && "ring-primary ring-2",
       )}
     >
-      <header className="bg-card flex min-w-0 items-center gap-2 border-b px-2 py-1">
+      {/* A container, so that a narrow tile shortens what its header says instead of cutting its buttons off. */}
+      <header className="bg-card @container flex min-w-0 items-center gap-2 border-b px-2 py-1">
         <span
           className={cn(
             "text-2xs shrink-0 rounded-sm px-1 font-mono",
@@ -187,19 +207,29 @@ function SessionTile({
           {sessionShortcutLabel({ kind: "position", position }, IS_MAC) ?? position}
         </span>
         <TileTitle entry={entry} />
-        {notices.badge}
+        {notices.chips}
         {environment.badge}
+        {menu.button}
         <Button variant="ghost" size="icon" className="size-6 shrink-0" onClick={onOpenAlone} aria-label="Open alone">
           <Maximize2 />
         </Button>
         {session && <SessionCloseButton close={close} />}
-        {sessionlessTask && <EndTaskButton onClick={ending.show} />}
+        {/* Ending the task takes the tile's body, so whatever lay over it closes. */}
+        {sessionlessTask && (
+          <EndTaskButton
+            onClick={() => {
+              overlay.close();
+              ending.show();
+            }}
+          />
+        )}
       </header>
       {/* The notices lie over the body like the close question, so that they do not resize the PTY. */}
       <div className="relative flex min-h-0 flex-1 flex-col">
         {/* The task's notices come after the environment card, so that opening them lies over it. */}
         {environment.card}
         {notices.overlay}
+        {menu.overlay}
         {session && (
           // The question lies over the terminal instead of pushing it down, so that it does not resize the PTY mid-turn.
           <div className="relative flex min-h-0 flex-1 flex-col">
@@ -229,7 +259,7 @@ function SessionTile({
         )}
         {sessionlessTask && !ending.open && (
           <div className="text-muted-foreground flex flex-1 items-center justify-center p-4 text-center text-xs">
-            This task has no session. Open it alone to resume it or to see its changes, or end it with the X.
+            This task has no session. Resume it from its menu, open it alone to see its changes, or end it with the X.
           </div>
         )}
       </div>
@@ -254,8 +284,9 @@ function TileTitle({ entry }: { entry: SessionEntry }) {
   return (
     <>
       <span className="min-w-0 truncate text-xs font-medium">{task?.repo ?? (session && sessionPlace(session))}</span>
-      <span className="text-muted-foreground shrink-0 text-xs">
-        {session ? <StatusLabel {...sessionStateLabel(session)} /> : "no session"}
+      {/* In a narrow tile the state is its dot, with the text as the tooltip. */}
+      <span className="text-muted-foreground shrink-0 text-xs" title={session ? sessionStateLabel(session).label : undefined}>
+        {session ? <StatusLabel {...sessionStateLabel(session)} labelClassName="@max-lg:sr-only" /> : "no session"}
       </span>
       <span className="min-w-0 flex-1 truncate" title={task?.prompt ?? session?.windowTitle ?? undefined}>
         {task ? <TaskLine task={task} /> : <span className="text-muted-foreground text-xs">{session?.windowTitle}</span>}

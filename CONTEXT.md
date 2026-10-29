@@ -327,8 +327,12 @@ The work of one agent on one repo: a prompt, a worktree, a `trackwall/<slug>` br
 _Avoid_: job; a bare *task* always means a task, a mise task is always a *mise task*
 
 **Task notice** (`TaskNotice`, `taskNotices`, "Task notices" in the UI):
-One short line for a section above a task's terminal: a warning (shared files, a changed mise config, files not copied) or what is there (messages, summary, verification, merge request, a running mise task). In the one-entry layout the notices are a strip of chips that "Details" unfolds; on a grid tile a badge opens them as an overlay, and a new warning lies over the terminal as a banner until opened or dismissed (ADR-91).
+One short line for a section above a task's terminal: a warning (shared files, a changed mise config, files not copied) or what is there (messages, summary, verification, merge request, a running mise task). In the one-entry layout the notices are a strip of chips that "Details" unfolds; on a grid tile the mise config and the verification have chips of their own in the header (`tileNotices`, `TaskNotice.chip`), a badge opens the rest as an overlay, and a new warning lies over the terminal as a banner until opened or dismissed (ADR-91).
 _Avoid_: alert, notification (that is the tray's), badge (that is only the tile's count)
+
+**Task menu** (`useTaskTileMenu`, "Task menu" in the UI):
+The ⋯ button in a task's grid tile header and what it opens over the terminal: the task's branch, port, model and start, and VS Code, Verify, Stop or Resume, "Changes" (the task alone on its changes) and "Details" (the task's notices). Only one overlay of a tile is open at a time (`useTileOverlay`).
+_Avoid_: context menu, actions
 
 **End task** (`removeTask`, "End task" in the UI):
 Removing a task's worktree, and optionally its branch. Only without a running session; what would be lost (uncommitted files, commits from a detached HEAD, a directory git no longer knows, and with the branch also the task's commits) the daemon lists in the `unsaved_changes` refusal, and it is lost only after confirmation. Files ignored by git are always lost.
