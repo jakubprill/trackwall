@@ -34,7 +34,7 @@ import { Services } from "./modules/services/services.ts";
 import { TestReports } from "./modules/test-results/test-reports.ts";
 import { Hosting, type HostingClis } from "./modules/vcs/hosting.ts";
 import { systemTempFolder, Vcs } from "./modules/vcs/vcs.ts";
-import { Verifications } from "./modules/verification/verifications.ts";
+import { VERIFICATIONS_FILE, Verifications } from "./modules/verification/verifications.ts";
 import { RepoWatch } from "./modules/workspace/repo-watch.ts";
 import { Workspace } from "./modules/workspace/workspace.ts";
 import { WorkspaceFile } from "./modules/workspace/workspace-file.ts";
@@ -76,6 +76,11 @@ export interface Facade {
    * It belongs to no module, because it concerns neither a repo nor the daemon's state.
    */
   openLink: (url: string) => void;
+  /**
+   * Daemon exit, before `procs.stopAll`: what a restart is to bring back stays as it is now, the sessions to resume
+   * (ADR-95), the agent queues and the verifications (ADR-115), so what the stop of the groups changes does not reach it.
+   */
+  keepForRestart: () => void;
 }
 
 export type { CopilotHookOutput } from "./modules/agents/copilot-hook-output.ts";
@@ -216,6 +221,7 @@ export function createFacade(o: FacadeOptions): Facade {
     testReports,
     logs,
     onVerdict: (verification) => agents.verificationFinished(verification),
+    file: join(o.home, VERIFICATIONS_FILE),
     log: o.log,
   });
   const mergeRequests = new MergeRequests({
@@ -260,6 +266,7 @@ export function createFacade(o: FacadeOptions): Facade {
       "resumable-sessions-file": join(o.home, RESUMABLE_SESSIONS_FILE),
       "last-supervisor-file": join(o.home, LAST_SUPERVISOR_FILE),
       "agent-queues-file": join(o.home, AGENT_QUEUES_FILE),
+      "verifications-file": join(o.home, VERIFICATIONS_FILE),
       "day-start-file": join(o.home, DAY_START_FILE),
       "cards-dir": join(o.home, CARDS_DIR),
       "logs-dir": join(o.home, LOGS_DIR),
@@ -300,5 +307,9 @@ export function createFacade(o: FacadeOptions): Facade {
     doctor,
     configFiles,
     openLink: o.openUrl,
+    keepForRestart: () => {
+      agents.keepRunningSessionsForResume();
+      verifications.keepForRestart();
+    },
   };
 }

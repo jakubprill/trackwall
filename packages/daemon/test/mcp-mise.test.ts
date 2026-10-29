@@ -298,6 +298,43 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
   );
 
   test(
+    "a task whose session was closed after its refusal hears of the trust in the session the user resumes, and ending the task drops it",
+    async () => {
+      const { agents } = daemon.facade;
+      const task = await agents.createTask("warehouse", "change the build");
+      const first = agents.sessions().sessions.find((s) => s.task === task.id);
+      if (!first) throw new Error("the task has no session");
+      const window = viewer(agents, first.id);
+      await waitFor(agents, first.id, () => window.text().includes("--interactive="), "the screen image");
+      window.attachment.detach();
+      writeFileSync(join(task.worktree, "mise.toml"), '[tasks.test]\nrun = "anything"\n');
+      const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, first.id);
+      clients.push(client);
+      expect(errorText(await call(client, "run_mise_task", { repo: "warehouse", task: task.id, miseTask: "test" }))).toStartWith(
+        "mise_unavailable:",
+      );
+      await agents.stop(first.id);
+      agents.dismiss(first.id);
+
+      const seen = await daemon.post(agentsApi.taskMiseConfig, { task: task.id });
+      await daemon.post(agentsApi.trustTaskMiseConfig, { task: task.id, digest: seen.digest });
+      await agents.resumeTask(task.id);
+
+      const resumed = agents.sessions().sessions.find((s) => s.task === task.id);
+      if (!resumed) throw new Error("the resumed task has no session");
+      const resumedWindow = viewer(agents, resumed.id);
+      await waitFor(agents, resumed.id, () => resumedWindow.unwrappedText().includes(TYPED_TRUST_NOTICE), "the typed notice");
+      resumedWindow.attachment.detach();
+      await agents.stop(resumed.id);
+      const queues = () => JSON.parse(readFileSync(join(daemon.home, "agent-queues.json"), "utf8"));
+      expect(queues().trustNotices).toEqual([{ recipient: { task: task.id }, waiting: { kind: "notice" } }]);
+      await agents.removeTask(task.id, false, true);
+      expect(queues().trustNotices).toEqual([]);
+    },
+    TIMEOUT,
+  );
+
+  test(
     "trusting the repo root's mise config tells the session it refused, and only that one",
     async () => {
       const config = join(daemon.projects, "shop", "fake-mise.json");
