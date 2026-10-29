@@ -17,7 +17,8 @@ import { networkAddress } from "./remote.ts";
  * filter, attribute or hook runs and the user's own index keeps what they staged; only the backed-up paths are then
  * updated in the index, so `git status` in the store stays clean. Every git command that writes runs without hooks and
  * signing, under a fixed identity, because the daemon, not the user, made it, and the push goes only to an HTTPS or SSH
- * address, since hooks on the receiving side are beyond this side's reach.
+ * address, since hooks on the receiving side are beyond this side's reach, and only to the address the user allowed
+ * (ADR-127), since `git remote add` keys are allowed and an agent can write them too.
  */
 
 const IDENTITY = ["user.name=Trackwall", "user.email=trackwall@localhost", "commit.gpgSign=false"];
@@ -105,26 +106,46 @@ export async function storeHead(dir: string): Promise<string | null> {
 }
 
 /**
- * The main remote as shown to the user: `host/path` for an HTTPS or SSH address, otherwise only the remote's name, which
- * the backups are never pushed to (`pushBackups`). `null` without a main remote.
+ * The store's main remote. `url` is its address as the store's config has it, which is what the user allows (ADR-127);
+ * `shown` is `host/path` for an HTTPS or SSH address, never with a user or token, otherwise only the remote's name, which
+ * the backups are never pushed to (`pushBackups`). `url` is `null` when the remote has several addresses, since a push
+ * would go to each.
  */
-export async function backupRemote(dir: string): Promise<string | null> {
-  if (!(await isRealGitDir(dir))) return null;
-  const remote = mainRemote(await readConfig(dir));
-  if (!remote) return null;
-  return networkAddress(remote.url) ?? remote.name;
+export interface BackupRemote {
+  url: string | null;
+  shown: string;
+  /** Whether the address is one the store may be pushed to at all. */
+  network: boolean;
 }
 
-/**
- * Pushes `main` to the main remote, never forced: a remote another computer pushed to first refuses it. `false` without
- * a main remote. Only to an HTTPS or SSH address: a local path or a shared folder is a repo an agent may have written,
- * and its `pre-receive` hook would run as the user, out of reach of `core.hooksPath` here. Call after `ensureBackupRepo`,
- * which keeps `pushurl` and other redirections out of the store's config.
- */
-export async function pushBackups(dir: string): Promise<boolean> {
+/** The store's main remote; `null` without one. */
+export async function backupRemote(dir: string): Promise<BackupRemote | null> {
+  if (!(await isRealGitDir(dir))) return null;
   const config = await readConfig(dir);
   const remote = mainRemote(config);
-  if (!remote) return false;
+  if (!remote) return null;
+  const address = networkAddress(remote.url);
+  const urls = config.remoteUrls.get(remote.name) ?? [];
+  return { url: urls.length === 1 ? (urls[0] ?? null) : null, shown: address ?? remote.name, network: address !== undefined };
+}
+
+/** What became of a push: `no_remote` and `not_allowed` push nothing. */
+export type BackupPush = "pushed" | "no_remote" | "not_allowed";
+
+/**
+ * Pushes `main` to the main remote, never forced: a remote another computer pushed to first refuses it. Only to an HTTPS
+ * or SSH address: a local path or a shared folder is a repo an agent may have written, and its `pre-receive` hook would
+ * run as the user, out of reach of `core.hooksPath` here. Only when the remote's one address is `allowedUrl`, the one the
+ * user allowed (ADR-127), so a remote with several addresses is never pushed: the check reads the config right before the push, as `ensureBackupRepo` does for the keys that
+ * could redirect it. Call after `ensureBackupRepo`, which keeps `pushurl` and other redirections out of the store's config.
+ */
+export async function pushBackups(dir: string, allowedUrl: string | null): Promise<BackupPush> {
+  const config = await readConfig(dir);
+  const remote = mainRemote(config);
+  if (!remote) return "no_remote";
+  const urls = config.remoteUrls.get(remote.name) ?? [];
+  if (urls.length !== 1 || urls[0] !== allowedUrl) return "not_allowed";
+  // An address allowed by hand in `workspace.yaml` is checked too.
   if (networkAddress(remote.url) === undefined)
     throw new Error(`${remote.name} is not an HTTPS or SSH address of a repo host; Trackwall pushes the store only to one`);
   await withoutHooks((hooksPath) =>
@@ -134,7 +155,7 @@ export async function pushBackups(dir: string): Promise<boolean> {
       config: [hooksPath, `remote.${remote.name}.receivepack=git-receive-pack`, "push.gpgSign=false"],
     }),
   );
-  return true;
+  return "pushed";
 }
 
 function updateIndex(path: string, oid: string): string[] {

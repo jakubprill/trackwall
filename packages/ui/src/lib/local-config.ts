@@ -23,6 +23,11 @@ export function localConfigFileStatus(state: LocalConfigFileState): { tone?: Sta
   }
 }
 
+/** "Allow pushes": the store has a remote the user has not allowed (ADR-127). */
+export function canAllowRemote(store: LocalConfigStore): boolean {
+  return store.remote !== null && !store.remoteAllowed;
+}
+
 /** Restore: the store has a file the repo lacks, for example in a new clone. */
 export function canRestore(config: RepoLocalConfig): boolean {
   return config.files.some((f) => f.kind === "missing");
@@ -38,12 +43,20 @@ export function hasLocalConfig(config: RepoLocalConfig): boolean {
   return config.files.some((f) => f.kind !== "absent");
 }
 
-/** The last backup and the push in one line each. */
+/**
+ * The last backup and the push in one line each. A remote the user has not allowed comes first (ADR-127): nothing is
+ * pushed to it, whatever the last push did.
+ */
 export function localConfigStoreLines(store: LocalConfigStore, now: Date): { backup: string; push: { tone?: StatusTone; text: string } } {
   const backup = store.lastBackup
     ? `Last backup ${relativeTime(store.lastBackup.date, now)}: ${store.lastBackup.subject}`
     : "Nothing backed up yet.";
   if (store.remote === null) return { backup, push: { text: "No remote: the backups stay on this computer." } };
+  if (!store.remoteAllowed)
+    return {
+      backup,
+      push: { tone: "warning", text: `Not pushed to ${store.remote}: Trackwall pushes only to a remote you allow here.` },
+    };
   switch (store.push.kind) {
     case "none":
       return { backup, push: { text: `Pushes to ${store.remote} after the next backup.` } };

@@ -105,6 +105,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(localConfigApi.repos, (f) => f.localConfig.repos()),
   route(localConfigApi.restore, (f, b) => f.localConfig.restore(b.repo)),
   route(localConfigApi.ignore, (f, b) => f.localConfig.ignore(b.repo)),
+  route(localConfigApi.allowRemote, (f, b) => f.localConfig.allowRemote(b.remote)),
   route(miseApi.tasks, (f, b) => f.mise.tasks(b.repo)),
   route(miseApi.running, (f) => f.mise.running()),
   route(miseApi.start, (f, b) => f.mise.start({ repo: b.repo, task: b.task }, b.miseTask)),

@@ -305,6 +305,7 @@ describe("the local config store", () => {
       writeFileSync(join(orders, "mise.local.toml"), TASKS);
       await backUp();
       gitIn(store, "remote", "add", "origin", BACKUPS_REMOTE);
+      await facade.localConfig.allowRemote("backups.example.com/me/backups");
 
       await withBackupsRemote(async (bare) => {
         gitIn(projects, "init", "-q", "--bare", bare);
@@ -316,7 +317,13 @@ describe("the local config store", () => {
           "Back up orders: mise.local.toml",
         ]);
         const pushed = await facade.localConfig.store();
-        expect(pushed).toMatchObject({ dir: store, remote: "backups.example.com/me/backups", push: { kind: "ok" }, problem: null });
+        expect(pushed).toMatchObject({
+          dir: store,
+          remote: "backups.example.com/me/backups",
+          remoteAllowed: true,
+          push: { kind: "ok" },
+          problem: null,
+        });
         expect(pushed.lastBackup?.subject).toBe("Back up orders: mise.local.toml");
 
         // Another computer pushed first: the push is refused, never forced.
@@ -334,7 +341,68 @@ describe("the local config store", () => {
     REAL_GIT_TIMEOUT,
   );
 
-  test("a remote in a local or shared folder is never pushed to, so its hooks never run", async () => {
+  test(
+    "a remote nobody allowed is not pushed to, and once allowed, a changed address stops the pushes until it is allowed again",
+    async () => {
+      const { projects, store, facade, logged, backUp } = await setup();
+      const orders = makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
+      writeFileSync(join(orders, "mise.local.toml"), TASKS);
+      await backUp();
+      // What an agent with file tools in the projects folder can do: `git remote add` keys are allowed in the store.
+      gitIn(store, "remote", "add", "origin", BACKUPS_REMOTE);
+      const OTHER_REMOTE = "ssh://git@backups.example.com/someone-else/backups.git";
+
+      await withBackupsRemote(async (bare) => {
+        gitIn(projects, "init", "-q", "--bare", bare);
+        const other = join(bare, "..", "..", "someone-else", "backups.git");
+        gitIn(projects, "init", "-q", "--bare", other);
+        writeFileSync(join(orders, "mise.local.toml"), `${TASKS}# second\n`);
+        await backUp();
+
+        expect(await facade.localConfig.store()).toMatchObject({ remote: "backups.example.com/me/backups", remoteAllowed: false });
+        expect(gitIn(bare, "branch", "--list").trim()).toBe("");
+        expect(logged).toContain("local config push: the store's remote is not the one allowed in Settings, nothing pushed");
+
+        // The user allows it in Settings: the next pass pushes, without a new backup.
+        await facade.localConfig.allowRemote("backups.example.com/me/backups");
+        await backUp();
+        expect(gitIn(bare, "rev-list", "--count", "main").trim()).toBe("2");
+
+        // Someone points the store elsewhere: nothing more goes out, to either remote.
+        gitIn(store, "remote", "set-url", "origin", OTHER_REMOTE);
+        writeFileSync(join(orders, "mise.local.toml"), `${TASKS}# third\n`);
+        await backUp();
+
+        expect(await facade.localConfig.store()).toMatchObject({
+          remote: "backups.example.com/someone-else/backups",
+          remoteAllowed: false,
+        });
+        expect(gitIn(other, "branch", "--list").trim()).toBe("");
+        expect(gitIn(bare, "rev-list", "--count", "main").trim()).toBe("2");
+      });
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test("a remote is not allowed when it changed since the user saw it, or has several addresses", async () => {
+    const { projects, store, facade, backUp } = await setup();
+    const orders = makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
+    writeFileSync(join(orders, "mise.local.toml"), TASKS);
+    await backUp();
+    gitIn(store, "remote", "add", "origin", BACKUPS_REMOTE);
+
+    await expect(facade.localConfig.allowRemote("backups.example.com/someone-else/backups")).rejects.toThrow(
+      "The store's remote is no longer backups.example.com/someone-else/backups",
+    );
+    gitIn(store, "remote", "set-url", "--add", "origin", "ssh://git@backups.example.com/someone-else/backups.git");
+    await expect(facade.localConfig.allowRemote("backups.example.com/me/backups")).rejects.toThrow("has several addresses");
+    // Even with the first address allowed by hand, a push would go to both, so none goes out.
+    facade.workspace.setLocalConfigRemote(BACKUPS_REMOTE);
+    expect((await facade.localConfig.store()).remoteAllowed).toBe(false);
+    expect(facade.workspace.localConfigRemote()).toBe(BACKUPS_REMOTE);
+  });
+
+  test("a remote in a local or shared folder cannot be allowed and is never pushed to, so its hooks never run", async () => {
     const { projects, store, facade, backUp } = await setup();
     const orders = makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
     writeFileSync(join(orders, "mise.local.toml"), TASKS);
@@ -345,11 +413,15 @@ describe("the local config store", () => {
     writeFileSync(join(remote, "hooks", "pre-receive"), `#!/bin/sh\ntouch "${marker.replaceAll("\\", "/")}"\n`, { mode: 0o755 });
     gitIn(store, "remote", "add", "origin", remote);
 
+    await expect(facade.localConfig.allowRemote("origin")).rejects.toThrow("origin is not an HTTPS or SSH address");
+    // Allowed by hand in workspace.yaml, it is still refused at the push.
+    facade.workspace.setLocalConfigRemote(remote);
     writeFileSync(join(orders, "mise.local.toml"), `${TASKS}# second\n`);
     await backUp();
 
     expect(await facade.localConfig.store()).toMatchObject({
       remote: "origin",
+      remoteAllowed: true,
       push: { kind: "failed", message: "origin is not an HTTPS or SSH address of a repo host; Trackwall pushes the store only to one" },
     });
     expect(existsSync(marker)).toBe(false);
@@ -523,6 +595,7 @@ describe("the local config store", () => {
       writeFileSync(join(orders, "mise.local.toml"), TASKS);
       await backUp();
       gitIn(join(projects, ".trackwall", "local"), "remote", "add", "origin", BACKUPS_REMOTE);
+      await localConfig.allowRemote("backups.example.com/me/backups");
       await withBackupsRemote(async (bare) => {
         writeFileSync(join(orders, "mise.local.toml"), `${TASKS}# second\n`);
         await backUp();
@@ -556,7 +629,14 @@ describe("the local config store", () => {
 
     await facade.localConfig.backUp();
 
-    expect(await facade.localConfig.store()).toEqual({ dir: null, lastBackup: null, remote: null, push: { kind: "none" }, problem: null });
+    expect(await facade.localConfig.store()).toEqual({
+      dir: null,
+      lastBackup: null,
+      remote: null,
+      remoteAllowed: false,
+      push: { kind: "none" },
+      problem: null,
+    });
   });
 
   test("mise tasks in mise.local.toml take away the no-mise tag the commit alone gives", async () => {

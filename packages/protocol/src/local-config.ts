@@ -70,6 +70,11 @@ export const LocalConfigStore = z.object({
   lastBackup: Commit.nullable(),
   /** The store's main remote (`origin` or the only one) as `host/path` or a path; `null` keeps the backups on this computer only. */
   remote: z.string().nullable(),
+  /**
+   * Whether the remote's address is the one the user allowed in Settings (`localConfigRemote` in `workspace.yaml`,
+   * ADR-127): the store is pushed only there, since an agent can change the store's `.git/config`. `false` without a remote.
+   */
+  remoteAllowed: z.boolean(),
   push: LocalConfigPush,
   /** Why the last backup did not finish (a file that cannot be read, a git error); `null` when it did. */
   problem: z.string().nullable(),
@@ -94,4 +99,9 @@ export const localConfigApi = {
   restore: endpoint("restore", RepoRequest, RepoLocalConfig),
   /** Has git ignore the repo's local config files that it neither tracks nor ignores, in this clone only (`.git/info/exclude`). */
   ignore: endpoint("ignore", RepoRequest, RepoLocalConfig),
+  /**
+   * Allows pushes to the store's remote (ADR-127): `remote` is the address as the user saw it in `store`, so a remote that
+   * changed meanwhile is refused. Only from the UI, never from MCP: an agent must not choose where the backups go.
+   */
+  allowRemote: endpoint("allow-remote", z.object({ remote: z.string() }).strict(), LocalConfigStore),
 };

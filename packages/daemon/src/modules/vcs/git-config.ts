@@ -9,6 +9,8 @@ import { git } from "./git.ts";
 export interface GitConfig {
   /** Remotes by name, in configuration order; the first `url` when a remote has several. */
   remotes: ReadonlyMap<string, string>;
+  /** Every `url` of each remote, as written: git pushes to each of them. */
+  remoteUrls: ReadonlyMap<string, readonly string[]>;
   /** Address shortcuts: `url.<base>.insteadOf = <prefix>` as prefix → base. */
   insteadOf: ReadonlyMap<string, string>;
   /** `core.sshCommand`, when the user set it. */
@@ -23,6 +25,7 @@ export async function readConfig(dir: string): Promise<GitConfig> {
 /** The result of `git config -z --list`: `key\nvalue` entries separated by NUL; a key without a value has no `\n`. */
 export function parseConfig(out: string): GitConfig {
   const remotes = new Map<string, string>();
+  const remoteUrls = new Map<string, string[]>();
   const insteadOf = new Map<string, string>();
   let sshCommand: string | undefined;
   for (const entry of out.split("\0")) {
@@ -33,11 +36,13 @@ export function parseConfig(out: string): GitConfig {
     // Git gives the section and key name in lower case, and the subsection (a remote name, an address) unchanged.
     const remote = /^remote\.(.+)\.url$/s.exec(key)?.[1];
     const base = /^url\.(.+)\.insteadof$/s.exec(key)?.[1];
-    if (remote !== undefined && !remotes.has(remote)) remotes.set(remote, value);
-    else if (base !== undefined) insteadOf.set(value, base);
+    if (remote !== undefined) {
+      if (!remotes.has(remote)) remotes.set(remote, value);
+      remoteUrls.set(remote, [...(remoteUrls.get(remote) ?? []), value]);
+    } else if (base !== undefined) insteadOf.set(value, base);
     else if (key === "core.sshcommand") sshCommand = value;
   }
-  return { remotes, insteadOf, sshCommand };
+  return { remotes, remoteUrls, insteadOf, sshCommand };
 }
 
 /**

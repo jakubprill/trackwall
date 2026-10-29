@@ -30,6 +30,7 @@ export interface WorkspaceKeyValues {
   dayStart: DayStartSettings | null;
   graph: GraphConfig;
   javaNavigation: JavaNavigationSettings | null;
+  localConfigRemote: string | null;
 }
 
 /** How long a value from the file may be in the line; a longer one is cut. */
@@ -57,6 +58,8 @@ export const workspaceKeyValue: { [K in WorkspaceKey]: (value: WorkspaceKeyValue
     return parts.join(", ");
   },
   javaNavigation: (settings) => (settings === null ? "not set" : `jdtls: ${settings.jdtls}`),
+  // An HTTPS address may carry a user and token; the line shows it without them.
+  localConfigRemote: (url) => (url === null ? "none: the store is not pushed" : url.replace(/^([a-z+]+:\/\/)[^/@]*@/i, "$1")),
 };
 
 function oneLine(text: string): string {

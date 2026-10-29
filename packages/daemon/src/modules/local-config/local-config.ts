@@ -11,7 +11,7 @@ import {
   MAX_LOCAL_CONFIG_BYTES,
   type RepoLocalConfig,
 } from "@trackwall/protocol";
-import { DomainError, messageOf } from "../../infra/errors.ts";
+import { configOrProblem, DomainError, messageOf } from "../../infra/errors.ts";
 import { fileKey } from "../../infra/file-key.ts";
 import { localConfigStoreDir } from "../../infra/old-trackwall-folders.ts";
 import { readRegularFile } from "../../infra/regular-file.ts";
@@ -20,7 +20,7 @@ import { ensureTrackwallDir, trackwallDir } from "../../infra/trackwall-dir.ts";
 /**
  * The `local-config` module (§4.13, ADR-86): the files a repo keeps outside git on purpose (`LOCAL_CONFIG_FILES`), backed
  * up into the local config store, `.trackwall/local` in the projects folder (ADR-125), as `<repo folder>/<file>`. The store is a git
- * repo the daemon commits to and, when it has a remote, pushes, so every version is in its history and a new computer
+ * repo the daemon commits to and, when it has a remote the user allowed (ADR-127), pushes, so every version is in its history and a new computer
  * clones it. The store's last commit is the backup: every few seconds the daemon compares each repo's files by `stat`,
  * reads only the changed ones and commits those whose content differs from the last commit's. The repo's file wins: a
  * store that changed under the daemon (a pull, a projects folder moved) is compared again in full, and a file that differs
@@ -39,6 +39,9 @@ interface LocalConfigRepos {
   repoPath(id: string): Promise<string>;
   /** `bad_request` while the projects folder is not set. */
   projectsDir(): Promise<string>;
+  /** The address the user allowed the store to be pushed to (`localConfigRemote`, ADR-127); `null` for none. */
+  localConfigRemote(): string | null;
+  setLocalConfigRemote(url: string): void;
 }
 
 /** What `local-config` needs from `vcs`; wired in the facade. */
@@ -50,8 +53,8 @@ interface LocalConfigVcs {
   commitBackups(dir: string, files: readonly { path: string; content: Buffer }[], message: string): Promise<boolean>;
   storeHead(dir: string): Promise<string | null>;
   readFiles(dir: string, commit: string, paths: readonly string[], maxBytes: number): Promise<Map<string, Buffer>>;
-  backupRemote(dir: string): Promise<string | null>;
-  pushBackups(dir: string): Promise<boolean>;
+  backupRemote(dir: string): Promise<{ url: string | null; shown: string; network: boolean } | null>;
+  pushBackups(dir: string, allowedUrl: string | null): Promise<"pushed" | "no_remote" | "not_allowed">;
   log(dir: string, limit: number): Promise<Commit[]>;
 }
 
@@ -82,7 +85,10 @@ export class LocalConfig {
   #checking: Promise<void> | undefined;
   #problem: string | null = null;
   #push: LocalConfigPush = { kind: "none" };
-  /** The store commit the last push took (or found no remote for); `undefined` at the start, since the last run may have ended before its push. */
+  /**
+   * The store commit the last push took (or found no remote, or no allowed one, for); `undefined` at the start, since the
+   * last run may have ended before its push, and after the user allows a remote.
+   */
   #pushed: string | undefined;
   #pushing: Promise<void> | undefined;
 
@@ -119,10 +125,29 @@ export class LocalConfig {
   async store(): Promise<LocalConfigStore> {
     const dir = await this.#storeDir();
     const base = { push: this.#push, problem: this.#problem };
-    if (dir === null) return { dir, lastBackup: null, remote: null, ...base };
+    if (dir === null) return { dir, lastBackup: null, remote: null, remoteAllowed: false, ...base };
     const head = await this.#deps.vcs.storeHead(dir);
     const [lastBackup] = head === null ? [] : await this.#deps.vcs.log(dir, 1);
-    return { dir, lastBackup: lastBackup ?? null, remote: await this.#deps.vcs.backupRemote(dir), ...base };
+    const remote = await this.#deps.vcs.backupRemote(dir);
+    const remoteAllowed = remote !== null && remote.url !== null && remote.url === this.#allowedRemote();
+    return { dir, lastBackup: lastBackup ?? null, remote: remote?.shown ?? null, remoteAllowed, ...base };
+  }
+
+  /**
+   * Allows pushes to the store's remote (ADR-127), which the user saw as `shown`; a remote that changed since, has no
+   * single address or is not an HTTPS or SSH address is refused. The next backup pass pushes.
+   */
+  async allowRemote(shown: string): Promise<LocalConfigStore> {
+    const dir = await this.#storeDir();
+    const remote = dir === null ? null : await this.#deps.vcs.backupRemote(dir);
+    if (remote === null || remote.shown !== shown)
+      throw new DomainError("bad_request", `The store's remote is no longer ${shown}; look at it again before you allow it`);
+    if (!remote.network)
+      throw new DomainError("bad_request", `${shown} is not an HTTPS or SSH address; Trackwall pushes the store only to one`);
+    if (remote.url === null) throw new DomainError("bad_request", `${shown} has several addresses; Trackwall pushes the store only to one`);
+    this.#deps.repos.setLocalConfigRemote(remote.url);
+    this.#pushed = undefined;
+    return this.store();
   }
 
   async repo(id: string): Promise<RepoLocalConfig> {
@@ -351,7 +376,11 @@ export class LocalConfig {
   async #pushStore(store: string, head: string): Promise<void> {
     try {
       await this.#ensureStore(store);
-      if (await this.#deps.vcs.pushBackups(store)) this.#push = { kind: "ok", at: new Date().toISOString() };
+      const pushed = await this.#deps.vcs.pushBackups(store, this.#allowedRemote());
+      if (pushed === "pushed") this.#push = { kind: "ok", at: new Date().toISOString() };
+      // Settings shows the remote that is not allowed; the log says once per backup why nothing went out.
+      if (pushed === "not_allowed")
+        this.#deps.log("local config push: the store's remote is not the one allowed in Settings, nothing pushed");
       this.#pushed = head;
     } catch (err) {
       const message = messageOf(err);
@@ -365,6 +394,11 @@ export class LocalConfig {
     const projectsDir = await this.#deps.repos.projectsDir();
     if (store === trackwallDir(projectsDir, "local")) await ensureTrackwallDir(projectsDir);
     await this.#deps.vcs.ensureBackupRepo(store);
+  }
+
+  /** A `workspace.yaml` that cannot be read allows no remote: Settings › Files says what to fix. */
+  #allowedRemote(): string | null {
+    return configOrProblem(() => this.#deps.repos.localConfigRemote(), null).value;
   }
 
   async #storeDir(): Promise<string | null> {
