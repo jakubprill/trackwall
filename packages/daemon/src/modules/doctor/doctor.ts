@@ -1,4 +1,4 @@
-import { stat } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import {
   type DoctorCheck,
   DoctorCheckId,
@@ -12,6 +12,7 @@ import {
   workspaceKeysSummary,
 } from "@trackwall/protocol";
 import { trustedFolderOf, trustedFolders } from "./copilot-trust.ts";
+import { folderStorage } from "./folder-storage.ts";
 import { compareVersions, versionIn } from "./version.ts";
 
 /**
@@ -48,6 +49,8 @@ export interface DoctorDeps {
   /** `null` while the projects folder is not set; throws when the workspace settings cannot be read. */
   projectsDir: () => Promise<string | null>;
   repoHosts: () => RepoHost[];
+  /** `/proc/self/mountinfo` on Linux, `null` elsewhere: where the projects folder's files live. */
+  mountTable: () => Promise<string | null>;
   /** The full path of `workspace.yaml`. */
   workspaceFile: string;
   /** Each key of `workspace.yaml` (ADR-108); throws when the file as a whole cannot be read. */
@@ -76,6 +79,7 @@ export class Doctor {
     this.deps = deps;
     this.checks = {
       "projects-folder": (ctx) => this.projectsFolder(ctx),
+      "projects-folder-storage": (ctx) => this.projectsFolderStorage(ctx),
       "workspace-file": () => this.workspaceFile(),
       git: () => this.git(),
       "copilot-cli": (ctx) => this.copilotCli(ctx),
@@ -110,6 +114,20 @@ export class Doctor {
     );
     if (!isDir) return fail(`The projects folder ${dir} does not exist.`, 'Create it, or choose another folder in "Settings > Workspace".');
     return ok(dir);
+  }
+
+  /** Only a projects folder on a folder of the user's computer mounted into Linux is worth a row: it works, slowly. */
+  private async projectsFolderStorage({ projectsDir }: CheckContext): Promise<Outcome> {
+    if (!projectsDir.ok || projectsDir.value === null) return null;
+    // A link such as `~/code` to `/mnt/c/...` on WSL is exactly the slow case; a folder that does not exist is the other check's.
+    const dir = await realpath(projectsDir.value).catch(() => null);
+    const table = dir === null ? null : await this.deps.mountTable();
+    const storage = table === null || dir === null ? null : folderStorage(table, dir);
+    if (!storage?.sharedFromHost) return null;
+    return warn(
+      `The projects folder is a folder of your computer mounted into Linux (${storage.fsType} at ${storage.mountPoint}), so git and builds there are slow.`,
+      'Clone the repos into the Linux file system instead, for example a Docker volume or a folder in your Linux home, and choose that folder in "Settings > Workspace".',
+    );
   }
 
   /**

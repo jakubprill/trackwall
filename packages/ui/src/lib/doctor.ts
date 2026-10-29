@@ -3,6 +3,7 @@ import { countLabel, type DoctorCheckId, type DoctorReport, type DoctorStatus } 
 /** What each doctor check is about, as Settings names it (ADR-101). */
 const CHECK_TITLES: Record<DoctorCheckId, string> = {
   "projects-folder": "Projects folder",
+  "projects-folder-storage": "Projects folder storage",
   "workspace-file": "Workspace settings file",
   git: "Git",
   "copilot-cli": "Copilot CLI",
