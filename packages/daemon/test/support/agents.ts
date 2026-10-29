@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Session, SupervisorSettings, ToolPermissions } from "@trackwall/protocol";
+import type { JavaNavigationSettings, Session, SupervisorSettings, ToolPermissions } from "@trackwall/protocol";
 import { DomainError } from "../../src/infra/errors.ts";
 import { Agents, type AgentsDeps } from "../../src/modules/agents/agents.ts";
 import { Logs } from "../../src/modules/logs/logs.ts";
@@ -22,7 +22,8 @@ const fakeCopilot = join(import.meta.dir, "..", "fixtures", "fake-copilot-sessio
  * projects folder. `toolPermissions` are the patterns every session gets from the workspace (ADR-66), and
  * `supervisor` is `supervisor` from the workspace (ADR-78). `worktreesDir` is the task worktrees folder the workspace gives
  * new tasks (ADR-84); by default one in `home`, so that a restarted daemon with the same `home` finds the same folder.
- * `miseEnv` is what mise sets for a session (ADR-93); nothing by default.
+ * `miseEnv` is what mise sets for a session (ADR-93); nothing by default. `javaNavigation` is `javaNavigation` from the
+ * workspace (ADR-99), read at every task start; not set by default.
  */
 export function makeAgents(
   repos: Record<string, string>,
@@ -33,6 +34,7 @@ export function makeAgents(
   supervisor: SupervisorSettings = { changesCode: false },
   worktreesDir: () => string = () => join(home, "task-worktrees"),
   miseEnv: AgentsDeps["miseEnv"] = async () => ({ vars: {}, secretNames: [], secretValues: [], problem: null }),
+  javaNavigation: () => JavaNavigationSettings | null = () => null,
 ) {
   const procs = new ProcessGroups({
     logs: new Logs({ dir: join(home, "logs"), maxFileBytes: 1024 * 1024, log: () => {} }),
@@ -58,6 +60,7 @@ export function makeAgents(
       toolPermissions: () => toolPermissions,
       supervisorSettings: () => supervisor,
       agentSecrets: () => [],
+      javaNavigation,
       removeRepo: () => Promise.reject(new Error("unused")),
     },
     vcs: new Vcs(systemTempFolder),

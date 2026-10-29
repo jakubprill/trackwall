@@ -4,6 +4,7 @@ import {
   AgentSecrets,
   DayStartSettings,
   GraphConfig,
+  JavaNavigationSettings,
   type RepoHost,
   RepoHosts,
   RepoTagRules,
@@ -23,7 +24,7 @@ import { type WorkspaceKeyValues, workspaceKeyValue } from "./workspace-key-valu
 /**
  * `workspace.yaml` (§4.5, ADR-13): the workspace configuration, which the user can edit by hand and keep
  * in a private repo. Read on every use, so a manual edit works without restarting the daemon. A write changes
- * only one key (`projectsDir`, `worktreesDir`, `gitProgram` or `repoHosts`; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `supervisor` and `agentSecrets` only by hand) and keeps comments and the other keys,
+ * only one key (`projectsDir`, `worktreesDir`, `gitProgram` or `repoHosts`; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `supervisor`, `agentSecrets` and `javaNavigation` only by hand) and keeps comments and the other keys,
  * including the `repos` list from version 0.2.0, which is no longer read (ADR-18): it is the user's file, so removing it is up to them.
  */
 
@@ -64,6 +65,13 @@ const Keys: { [K in WorkspaceKey]: z.ZodType<WorkspaceKeyValues[K], unknown> } =
   supervisor: SupervisorSettings.nullish().transform((settings) => settings ?? { changesCode: false }),
   // The secrets from mise that the tools of sessions get (ADR-93); only by hand, like `repoTags`.
   agentSecrets: AgentSecrets.nullish().transform((names) => names ?? []),
+  // The Java language server for tasks (ADR-99); only by hand, like `repoTags`.
+  javaNavigation: JavaNavigationSettings.refine(
+    (settings) => [settings.jdtls, settings.java, settings.lombok].every((path) => path === null || isFullPath(path)),
+    "jdtls, java and lombok must be full paths",
+  )
+    .nullish()
+    .transform((settings) => settings ?? null),
 };
 type Key = WorkspaceKey;
 
@@ -122,6 +130,11 @@ export class WorkspaceFile {
   /** The secrets from mise that the tools of sessions get (`agentSecrets`, ADR-93); none without the key. */
   agentSecrets(): AgentSecrets {
     return this.get("agentSecrets", Keys.agentSecrets);
+  }
+
+  /** The Java language server for tasks (`javaNavigation`, ADR-99); `null` without the key. */
+  javaNavigation(): JavaNavigationSettings | null {
+    return this.get("javaNavigation", Keys.javaNavigation);
   }
 
   /**

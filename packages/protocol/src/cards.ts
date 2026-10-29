@@ -201,6 +201,9 @@ export const TagName = z
   .regex(/^[a-z0-9][a-z0-9-]*$/, "tag name: lowercase letters, digits and '-', not starting with '-'");
 export type TagName = z.infer<typeof TagName>;
 
+/** The tag of a repo with a Maven or Gradle build file; the New session form offers Java navigation in it (ADR-99). */
+export const JAVA_TAG = "java";
+
 /** The tag of a repo without mise tasks in the commit (ADR-34); the UI marks it in the repo list, because such a repo has nothing to run. */
 export const NO_MISE_TAG = "no-mise";
 

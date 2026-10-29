@@ -286,6 +286,8 @@ export const Task = z.object({
   model: TaskModel.nullable(),
   /** How its sessions answer tool approvals (ADR-105). */
   approvals: TaskApprovals,
+  /** Whether its sessions get the Java language server for code navigation (ADR-99). */
+  javaNavigation: z.boolean(),
   /** The last summary from the task session (`report_result`); `null` until it has reported one. */
   summary: z.object({ text: z.string(), reportedAt: z.string() }).nullable(),
   /** The task port (ADR-61): `TASK_PORT_ENV` in every mise task run in the worktree, and the port of the task's service. */
@@ -484,6 +486,16 @@ function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string,
   return { path: `/api/agents/${action}`, request, data };
 }
 
+/**
+ * Java navigation as a task could get it now (ADR-99): `null` without `javaNavigation` in `workspace.yaml`, otherwise
+ * `problem`, why the language server cannot start (a path that is not there, a folder without jdtls), `null` when it can.
+ */
+export const JavaNavigationState = z.object({ problem: z.string().nullable() }).nullable();
+export type JavaNavigationState = z.infer<typeof JavaNavigationState>;
+
+export const StartOptions = z.object({ javaNavigation: JavaNavigationState });
+export type StartOptions = z.infer<typeof StartOptions>;
+
 const SessionRequest = z.object({ session: SessionId }).strict();
 const TaskRequest = z.object({ task: TaskId }).strict();
 const ProposalRequest = z.object({ proposal: TaskId }).strict();
@@ -533,10 +545,20 @@ export const agentsApi = {
   answerDialog: endpoint("answer-dialog", SessionRequest.extend({ dialog: z.string().min(1).max(64), answer: DialogAnswer }), Session),
   /** Removes an ended session from the list; a running one cannot be closed without stopping it. */
   dismiss: endpoint("dismiss", SessionRequest, SessionList),
+  /** What the New session form can offer before a start: whether Java navigation (ADR-99) is set up. */
+  startOptions: endpoint("start-options", z.object({}).strict(), StartOptions),
   /** Creates a worktree on a new branch from the default branch and starts Copilot CLI in it with the prompt (ADR-31). */
   createTask: endpoint(
     "create-task",
-    z.object({ repo: RepoId, prompt: TaskPrompt, approvals: TaskApprovals, model: TaskModel.nullable().default(null) }).strict(),
+    z
+      .object({
+        repo: RepoId,
+        prompt: TaskPrompt,
+        approvals: TaskApprovals,
+        model: TaskModel.nullable().default(null),
+        javaNavigation: z.boolean().default(false),
+      })
+      .strict(),
     Task,
   ),
   /** A new session for a task that has no running session: Copilot CLI resumes the task's conversation (`--resume`). */

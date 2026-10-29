@@ -1,4 +1,13 @@
-import { agentsApi, countLabel, pluralNoun, type Session, TASK_PROMPT_MAX, type TaskApprovals, workspaceApi } from "@trackwall/protocol";
+import {
+  agentsApi,
+  cardsApi,
+  countLabel,
+  pluralNoun,
+  type Session,
+  TASK_PROMPT_MAX,
+  type TaskApprovals,
+  workspaceApi,
+} from "@trackwall/protocol";
 import { GitBranch, Play } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -6,7 +15,9 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import { type JavaNavigationOffer, javaNavigationOffer } from "@/lib/java-navigation";
 import { type NewSessionStart, newSessionStart, sessionsInSameFolder } from "@/lib/new-session";
+import { tagsByRepo } from "@/lib/repo-tags";
 import type { SessionSelection } from "@/lib/session-entries";
 import { readStartChoice, type StartChoice, saveStartChoice } from "@/lib/start-choices";
 import { typedModel } from "@/lib/task-model";
@@ -22,8 +33,9 @@ const PROJECTS_FOLDER = "";
  * agent. In a repo with its own worktree it becomes a task (ADR-31); without one a main session in the repo's working
  * copy (ADR-26), and in the projects folder a free session, both with the prompt as their first message when there is one.
  * Only a task, which works in its own worktree, can run on a chosen model (ADR-98) and without asking for approvals
- * (ADR-105). The options are a row of pills under the prompt (`StartOptions`); the worktree and the model come back as
- * the user last started from that place, the approvals mode always starts at asking.
+ * (ADR-105), and, in a repo tagged java, with a Java language server (ADR-99). The options are a row of pills under the
+ * prompt (`StartOptions`); the worktree, the model and Java navigation come back as the user last started from that
+ * place, the approvals mode always starts at asking.
  */
 export function NewSession({
   conn,
@@ -50,8 +62,10 @@ export function NewSession({
   const choose = (next: Partial<StartChoice>) => setEdited(new Map(edited).set(chosen, { ...choice, ...next }));
   const model = typedModel(choice.model);
   const start = newSessionStart(repo, choice.worktree, prompt);
+  const java = useJavaNavigationOffer(conn, repo);
+  const javaNavigation = java.kind === "ready" && choice.javaNavigation;
   const createTask = useAction(
-    (repo: string, prompt: string) => post(conn, agentsApi.createTask, { repo, prompt, approvals, model: model ?? null }),
+    (repo: string, prompt: string) => post(conn, agentsApi.createTask, { repo, prompt, approvals, model: model ?? null, javaNavigation }),
     (task) => onStarted({ kind: "task", id: task.id }),
   );
   const startSession = useAction(
@@ -100,8 +114,13 @@ export function NewSession({
           />
           <StartOptions
             worktree={repo === null ? undefined : { value: choice.worktree, onChange: (worktree) => choose({ worktree }) }}
-            approvals={start.kind === "session" ? undefined : { value: approvals, onChange: setApprovals }}
-            model={start.kind === "session" ? undefined : { value: choice.model, onChange: (text) => choose({ model: text }) }}
+            {...(start.kind === "session"
+              ? {}
+              : {
+                  approvals: { value: approvals, onChange: setApprovals },
+                  model: { value: choice.model, onChange: (text: string) => choose({ model: text }) },
+                  javaNavigation: javaNavigationPill(java, choice.javaNavigation, (on) => choose({ javaNavigation: on })),
+                })}
             disabled={pending}
           />
           {start.kind === "session" && <WithoutWorktree repo={repo} sessions={sessions} />}
@@ -123,6 +142,22 @@ export function NewSession({
       {error && <p className="text-destructive text-sm whitespace-pre-wrap">{error}</p>}
     </div>
   );
+}
+
+/** Java navigation for a task in `repo` (ADR-99), from the repo's tags and the daemon's settings. */
+function useJavaNavigationOffer(conn: Connection, repo: string | null): JavaNavigationOffer {
+  const loadTags = useCallback(() => post(conn, cardsApi.tags, {}), [conn]);
+  const tags = useRemote(loadTags);
+  // Asked again for each repo chosen, so that a fix in workspace.yaml shows without reopening the form.
+  const loadOptions = useCallback(() => post(conn, agentsApi.startOptions, {}), [conn, repo]);
+  const options = useRemote(loadOptions);
+  return javaNavigationOffer(repo === null ? undefined : tagsByRepo(tags.data).get(repo), options.data?.javaNavigation);
+}
+
+/** The Java navigation pill of a task, or none where the offer is hidden. */
+function javaNavigationPill(offer: JavaNavigationOffer, value: boolean, onChange: (value: boolean) => void) {
+  if (offer.kind === "hidden") return undefined;
+  return { value, onChange, unavailable: offer.kind === "unavailable" ? offer.reason : null };
 }
 
 /** What a session without its own worktree gives up, and the agents it would share the working copy with. */

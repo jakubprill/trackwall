@@ -53,7 +53,7 @@ describe("config files", () => {
       name: "workspace.yaml",
       path: workspaceFile,
       state: "present",
-      detail: "2 of 10 keys set in the file",
+      detail: "2 of 11 keys set in the file",
     });
     expect(entry("tasks-file")).toEqual({
       id: "tasks-file",
@@ -84,6 +84,13 @@ describe("config files", () => {
       state: "missing",
       detail: null,
     });
+    expect(entry("language-server-dir")).toEqual({
+      id: "language-server-dir",
+      name: ".trackwall-lsp",
+      path: join(projects, ".trackwall-lsp"),
+      state: "missing",
+      detail: null,
+    });
     expect(entry("projects-mise-config")).toEqual({
       id: "projects-mise-config",
       name: "mise.toml",
@@ -105,6 +112,7 @@ describe("config files", () => {
       ["repoHosts", "default", "none", null],
       ["toolPermissions", "default", "none", null],
       ["agentSecrets", "file", "GITLAB_TOKEN", 2],
+      ["javaNavigation", "default", "not set", null],
       ["supervisor", "default", "changesCode: false", null],
       ["repoTags", "default", "none", null],
       ["dayStart", "default", "not set", null],

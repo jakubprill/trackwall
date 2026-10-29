@@ -44,7 +44,7 @@ Every task also gets a port of its own, shown in the task's header. Every mise t
 ## Use it
 
 1. Open "Sessions" and press "+".
-2. Pick a repo, write the prompt and start the task. The pills under the prompt hold the task's options: turn on "No approvals" when the agent may work without stopping for you, and press "Model: default" to type a Copilot CLI model id for this task. Hover over a pill to see what it does. The form remembers the worktree and model choice for each repo, but "No approvals" is always off at first.
+2. Pick a repo, write the prompt and start the task. The pills under the prompt hold the task's options: turn on "No approvals" when the agent may work without stopping for you, and press "Model: default" to type a Copilot CLI model id for this task. In a Java repo, "Java navigation" gives the agent a language server once you have set it up ([Java navigation](/features/java-navigation)). Hover over a pill to see what it does. The form remembers the worktree, model and Java navigation choice for each repo, but "No approvals" is always off at first.
 3. Watch the agent in the terminal and its work in "Changes".
 4. Press "Verify" to see whether its tests pass.
 5. Comment on the lines you want changed and press "Send N comments to the agent"; repeat until you are happy.

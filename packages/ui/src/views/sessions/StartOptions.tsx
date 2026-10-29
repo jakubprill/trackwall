@@ -7,7 +7,9 @@ import { cn } from "@/lib/utils";
 /**
  * The options of a new task or session as one row of pills under its prompt, on the New session form and on a task
  * proposal: each pill shows its state and a click changes it, its explanation is the pill's tooltip, and a pill is there
- * only where the option means something (a model and an approvals mode only for a task in its own worktree). An option
+ * only where the option means something (a model and an approvals mode only for a task in its own worktree, Java
+ * navigation only for a task in a repo tagged java). A pill the user cannot turn on yet stays visible with the reason
+ * in its tooltip. An option
  * that gives up a safeguard (no worktree, no approvals) has a warning dot, and no approvals also its consequences under
  * the row, before the start.
  */
@@ -16,6 +18,7 @@ export function StartOptions({
   worktree,
   approvals,
   model,
+  javaNavigation,
   disabled,
 }: {
   /** What the options belong to, named in every accessible name so that several proposals on one screen keep their controls apart. */
@@ -23,6 +26,8 @@ export function StartOptions({
   worktree?: { value: boolean; onChange: (value: boolean) => void };
   approvals?: { value: TaskApprovals; onChange: (value: TaskApprovals) => void };
   model?: { value: string; onChange: (value: string) => void };
+  /** `unavailable` is why it cannot be turned on now; `null` when it can. */
+  javaNavigation?: { value: boolean; onChange: (value: boolean) => void; unavailable: string | null };
   disabled: boolean;
 }) {
   return (
@@ -53,6 +58,19 @@ export function StartOptions({
           </Pill>
         )}
         {model && <ModelPill subject={subject} value={model.value} onChange={model.onChange} disabled={disabled} />}
+        {javaNavigation && (
+          <Pill
+            label={named("Java navigation", subject)}
+            on={javaNavigation.value && javaNavigation.unavailable === null}
+            risky={false}
+            disabled={disabled}
+            unavailable={javaNavigation.unavailable}
+            onClick={() => javaNavigation.onChange(!javaNavigation.value)}
+            tooltip="The agent gets a Java language server for its own worktree: it finds definitions, usages and implementations instead of searching the text. The first start indexes the project, which takes a minute or more and up to 2 GB of memory."
+          >
+            Java navigation
+          </Pill>
+        )}
       </div>
       {approvals?.value === "auto" && (
         <p className="text-warning max-w-prose text-xs">
@@ -69,6 +87,7 @@ function Pill({
   on,
   risky,
   disabled,
+  unavailable = null,
   onClick,
   tooltip,
   children,
@@ -77,6 +96,8 @@ function Pill({
   on: boolean;
   risky: boolean;
   disabled: boolean;
+  /** Why the option cannot be turned on now: the pill stays focusable, so its tooltip still tells the user, and a click does nothing. */
+  unavailable?: string | null;
   onClick: () => void;
   tooltip: string;
   children: ReactNode;
@@ -86,11 +107,12 @@ function Pill({
       type="button"
       aria-label={label}
       aria-pressed={on}
-      title={tooltip}
+      aria-disabled={unavailable !== null}
+      title={unavailable ?? tooltip}
       disabled={disabled}
-      onClick={onClick}
+      onClick={unavailable === null ? onClick : undefined}
       className={cn(
-        "inline-flex h-8 items-center gap-2 rounded-full border px-3 text-sm transition-colors disabled:opacity-50",
+        "inline-flex h-8 items-center gap-2 rounded-full border px-3 text-sm transition-colors disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50",
         "focus-visible:ring-ring/50 outline-none focus-visible:ring-[3px]",
         on ? "border-primary/45 bg-accent text-foreground" : "border-input text-muted-foreground border-dashed",
         risky && "border-warning/55",
