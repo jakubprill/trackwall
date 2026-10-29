@@ -22,8 +22,9 @@ const START_LINES = [
 ];
 
 describe("how a task's jdtls is doing, from its log (ADR-124)", () => {
-  test("before jdtls wrote its log it is starting", () => {
+  test("before jdtls wrote its log it is starting, and so with a start line whose time is no time", () => {
     expect(jdtlsStatus(null, after(0), null)).toEqual({ kind: "starting" });
+    expect(jdtlsStatus("!SESSION 2026-13-01 10:00:00.000 ---", after(0), null)).toEqual({ kind: "starting" });
   });
 
   test("a start without the end of its import is importing since the start, and stalled after the limit", () => {

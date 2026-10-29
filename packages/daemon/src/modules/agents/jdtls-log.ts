@@ -85,7 +85,10 @@ function messageOf(line: string): string | null {
 /** The `!SESSION` line's time is the computer's local time, as a date-time without an offset is read. */
 function sessionTime(line: string): Date | null {
   const m = SESSION.exec(line);
-  return m === null ? null : new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}.${m[7]}`);
+  if (m === null) return null;
+  const time = new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}.${m[7]}`);
+  // A month 13 the pattern lets through is no time, as is a line an agent wrote.
+  return Number.isNaN(time.getTime()) ? null : time;
 }
 
 function cut(text: string): string {
