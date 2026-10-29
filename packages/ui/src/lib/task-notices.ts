@@ -14,6 +14,7 @@ export type TaskSection =
   | "summary"
   | "verification"
   | "merge-request"
+  | "service"
   | "mise-runs";
 
 /** `warning` asks the user to act; the others say how something went or that it is there. */

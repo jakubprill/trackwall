@@ -270,10 +270,10 @@ const runs: ToolRuns = {
     const verify = () => facade.verifications.verify(task, runId, timeoutSeconds * 1000, signal);
     return { verification: await facade.agents.runNeedingMiseTrust(caller, target, verify) };
   },
-  startService: async (facade, { repo, task, dependencies, timeoutSeconds }, { caller }) => {
+  startService: async (facade, { repo, task, lease, dependencies, timeoutSeconds }, { caller }) => {
     // Only the root comes from the session; its dependencies come from the graph, so they may be other repos.
     const target = callerTarget(facade, caller, repo, task, SERVICE_ACTION);
-    const start = () => facade.services.start({ ...target, dependencies, waitMs: timeoutSeconds * 1000 });
+    const start = () => facade.services.start({ ...target, lease, dependencies, waitMs: timeoutSeconds * 1000 });
     return { slice: await facade.agents.runNeedingMiseTrust(caller, target, start) };
   },
   stopService: async (facade, { repo, task, dependencies }, { caller }) => {

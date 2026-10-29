@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { Service, SliceMember } from "@trackwall/protocol";
-import { isServiceLive, memberLabel, serviceStateLabel } from "../src/lib/service-state.ts";
+import { isServiceLive, leaseHolder, memberLabel, serviceStateLabel } from "../src/lib/service-state.ts";
 
 const RUN = { kind: "running", runId: "r1", startedAt: "2026-10-24T10:00:00.000Z", pid: 42 } as const;
 const service = (state: Service["state"], port: number | null = 8081): Service => ({
   repo: "orders",
   task: null,
+  lease: false,
   state,
   port,
   portSource: port === null ? null : "log",
@@ -41,5 +42,14 @@ describe("service state in the UI", () => {
   test("only a stopped or crashed service has a Start button", () => {
     expect(["starting", "healthy", "unhealthy", "stopping"].every((s) => isServiceLive(service(s as Service["state"])))).toBe(true);
     expect(isServiceLive(service("stopped")) || isServiceLive(service("crashed")) || isServiceLive(null)).toBe(false);
+  });
+
+  test("the lease holder is the live task service with a lease in that repo, not a stopped one or another repo's", () => {
+    const leased = { ...service("healthy"), task: "t1", lease: true };
+    const stopped = { ...service("stopped"), task: "t2", lease: true };
+    const elsewhere = { ...service("healthy"), repo: "bff", task: "t3", lease: true };
+
+    expect(leaseHolder([service("stopped"), stopped, elsewhere, leased], "orders")).toBe(leased);
+    expect(leaseHolder([service("healthy"), stopped], "orders")).toBeUndefined();
   });
 });

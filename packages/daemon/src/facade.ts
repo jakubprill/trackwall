@@ -228,7 +228,7 @@ export function createFacade(o: FacadeOptions): Facade {
   const batch = new Batch({ workspace, mise, log: o.log });
   const graph = new Graph({ cards, workspace });
   const taskPort = (repo: string, task: string) => agents.taskOfRepo(task, repo).port;
-  const services = new Services({ mise, logs, graph, cards, taskPort, env: o.userEnv, ...SERVICE_TIMING });
+  const services = new Services({ mise, logs, graph, cards, taskPort, env: o.userEnv, log: o.log, ...SERVICE_TIMING });
   const testReports = new TestReports({ repos: workspace, tasks: agents, logs, env: o.userEnv });
   const verifications = new Verifications({
     tasks: agents,

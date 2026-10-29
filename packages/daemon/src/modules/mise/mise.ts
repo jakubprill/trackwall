@@ -196,8 +196,12 @@ export class Mise {
     });
   }
 
-  async start(target: MiseTarget, miseTask: string): Promise<RunState> {
-    const place = await this.place(target);
+  /**
+   * Starts a mise task from the current list. `port` replaces the task port of a run in a task worktree: the repo root's
+   * port a task's service takes on a lease (ADR-132).
+   */
+  async start(target: MiseTarget, miseTask: string, port?: number): Promise<RunState> {
+    const place = await this.place(target, port);
     if (!(await this.hasTask(place, miseTask))) throw new DomainError("not_found", `${where(target)} has no mise task "${miseTask}"`);
     const run = await this.launch(
       owner(target, miseTask),
@@ -313,17 +317,20 @@ export class Mise {
   /**
    * Where a run of `target` happens. A task worktree (ADR-59) needs the repo root's config trusted, since the user
    * trusted the worktree's first config by trusting the root's, and the worktree's mise config as the user trusted it;
-   * then mise gets the worktree as a trusted path in this run's environment only, and the task port (ADR-61). The
-   * worktree is checked last, as close to the run as the listing of its tasks allows (§8).
+   * then mise gets the worktree as a trusted path in this run's environment only, and the task port (ADR-61) or the
+   * `port` given instead. The worktree is checked last, as close to the run as the listing of its tasks allows (§8).
    */
-  private async place(target: MiseTarget): Promise<RunPlace> {
+  private async place(target: MiseTarget, port?: number): Promise<RunPlace> {
     const root = await this.deps.repos.repoPath(target.repo);
     const env = await this.deps.env();
-    if (target.task === null) return { dir: root, env, secrets: await this.secretsIn(root, env) };
+    if (target.task === null) {
+      if (port !== undefined) throw new Error(`a port is given only to a run in a task worktree, not in the root of ${target.repo}`);
+      return { dir: root, env, secrets: await this.secretsIn(root, env) };
+    }
     const listed = await this.list(root, env);
     if (listed.kind !== "ok") throw new DomainError("mise_unavailable", `${target.repo}: ${listed.message}`);
-    const { worktree, port } = await this.deps.tasks.trustedTaskWorktree(target.task, target.repo);
-    const worktreeEnv = withTaskPort(trustingPath(env, worktree), port);
+    const { worktree, port: taskPort } = await this.deps.tasks.trustedTaskWorktree(target.task, target.repo);
+    const worktreeEnv = withTaskPort(trustingPath(env, worktree), port ?? taskPort);
     return { dir: worktree, env: worktreeEnv, secrets: await this.secretsIn(worktree, worktreeEnv) };
   }
 
