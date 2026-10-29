@@ -1,6 +1,6 @@
 import { readFileSync, renameSync } from "node:fs";
 import { z } from "zod";
-import { writeFileAtomic } from "../../infra/atomic-write.ts";
+import { writeFileAtomic } from "./atomic-write.ts";
 
 /**
  * A JSON file of the state directory read through its schema: `undefined` when it is missing. A file that is not JSON
@@ -26,20 +26,27 @@ export function readStateFile<T>(path: string, schema: z.ZodType<T>, broken: (pr
 /**
  * A state file that follows a value while the daemon works (ADR-95, ADR-115): written when its JSON changes, and never
  * again once the daemon stops (`stopFollowing`), so the value of that moment stays for the next daemon, whatever the
- * stop itself changes.
+ * stop itself changes. A failed write goes to `log` and is tried again at the next `follow`, so the change that asked
+ * for it never fails.
  */
 export class FollowedStateFile<T> {
   readonly #path: string;
   readonly #schema: z.ZodType<T>;
   readonly #broken: (problem: string, aside: string) => void;
+  readonly #log: (msg: string) => void;
   /** The last content written, so an unchanged value is not written again. */
   #written: string | undefined;
   #following = true;
 
-  constructor(path: string, schema: z.ZodType<T>, broken: (problem: string, aside: string) => void) {
+  constructor(
+    path: string,
+    schema: z.ZodType<T>,
+    { broken, log }: { broken: (problem: string, aside: string) => void; log: (msg: string) => void },
+  ) {
     this.#path = path;
     this.#schema = schema;
     this.#broken = broken;
+    this.#log = log;
   }
 
   /** What the previous daemon left, as `readStateFile` reads it. */
@@ -52,8 +59,12 @@ export class FollowedStateFile<T> {
     if (!this.#following) return;
     const text = `${JSON.stringify(value, null, 2)}\n`;
     if (text === this.#written) return;
-    writeFileAtomic(this.#path, text);
-    this.#written = text;
+    try {
+      writeFileAtomic(this.#path, text);
+      this.#written = text;
+    } catch (err) {
+      this.#log(`writing ${this.#path}: ${String(err)}`);
+    }
   }
 
   stopFollowing(): void {

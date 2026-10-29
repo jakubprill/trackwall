@@ -1,8 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ReviewComment } from "@trackwall/protocol";
+import { miseApi, type ReviewComment } from "@trackwall/protocol";
+import { z } from "zod";
 import { viewer, waitFor } from "./support/agents.ts";
+import { connectSessionClient } from "./support/mcp-client.ts";
+import { untilInputBox } from "./support/screen-lines.ts";
 import { startSessionApi } from "./support/session-api.ts";
 
 const TOKEN = "s".repeat(43);
@@ -273,6 +277,22 @@ describe.skipIf(process.versions.bun === undefined)(
       expect(after.facade.agents.sessions().proposals).toEqual([]);
     }, 60_000);
 
+    test("a repo removal whose folder went while the daemon stopped does not come back as waiting", async () => {
+      const before = await startDaemon();
+      const { agents } = before.facade;
+      const supervisor = await agents.startSupervisor("new", "terminal");
+      await waitFor(agents, supervisor.id, (s) => s.state !== null, "the supervisor's input box");
+      await agents.proposeRepoRemoval(supervisor.id, "shop", "Not needed any more");
+      const kept = await agents.propose(supervisor.id, { ...PROPOSAL, title: "Login test" });
+
+      await stopDaemon(before);
+      // What an approval the stop no longer wrote down does: the folder moves away.
+      renameSync(join(before.projects, "shop"), join(mkdtempSync(join(tmpdir(), "trackwall-removed-")), "shop"));
+      const after = await startDaemon({ home: before.home, projects: before.projects });
+
+      expect(after.facade.agents.sessions().proposals).toEqual([kept]);
+    }, 60_000);
+
     test("a broken file of the queues is moved aside and the next daemon starts with none", async () => {
       const before = await startDaemon();
       await stopDaemon(before);
@@ -284,6 +304,79 @@ describe.skipIf(process.versions.bun === undefined)(
       expect(existsSync(join(before.home, QUEUES_FILE))).toBe(false);
       expect(readdirSync(before.home).filter((name) => name.startsWith(`${QUEUES_FILE}.broken-`))).toHaveLength(1);
     });
+  },
+);
+
+const FAKE_MISE = [process.execPath, join(import.meta.dir, "fixtures", "fake-mise.ts")];
+/** Fake mise config (see `fixtures/fake-mise.ts`): `test` logs a failure and exits with code 1. */
+const MISE_CONFIG = JSON.stringify({ tasks: [{ name: "test" }], exits: { test: 1 }, prints: { test: ["[ERROR] CartTest.sums failed"] } });
+/** The fake's prompt line for the typed notice that the user trusted the mise config (ADR-92). */
+const TYPED_TRUST_NOTICE = "Thinking about: The user trusted the mise config that refused your last run_mise_task";
+
+async function startMiseDaemon(restartOf?: { home: string; projects: string }) {
+  const daemon = await startSessionApi(TOKEN, { repos: { shop: { "fake-mise.json": MISE_CONFIG } }, miseCommand: FAKE_MISE, restartOf });
+  daemons.push(daemon);
+  return daemon;
+}
+
+/** The first text of a tool error (`<code>: <message>`). */
+function errorText(result: Awaited<ReturnType<Awaited<ReturnType<typeof connectSessionClient>>["callTool"]>>): string {
+  expect(result.isError).toBe(true);
+  const [first] = z.array(z.object({ text: z.string() })).parse(result.content);
+  return first?.text ?? "";
+}
+
+describe.skipIf(process.versions.bun === undefined)(
+  "mise trust and verifications across a daemon restart (real PTY, git and process groups, fake Copilot CLI and mise, ADR-115)",
+  () => {
+    test("sessions refused for an untrusted mise config before the restart are told when the user trusts it after", async () => {
+      const before = await startMiseDaemon();
+      const { agents } = before.facade;
+      const config = join(before.projects, "shop", "fake-mise.json");
+      writeFileSync(config, JSON.stringify({ ...JSON.parse(MISE_CONFIG), untrusted: true }));
+      const main = await agents.start("shop");
+      await untilInputBox(viewer(agents, main.id), "empty");
+      const task = await agents.createTask("shop", "change the build");
+      const first = await resumedSessionOf(before, task.id);
+      const window = viewer(agents, first);
+      await waitFor(agents, first, () => window.text().includes("--interactive="), "the task session's screen");
+      window.attachment.detach();
+      writeFileSync(join(task.worktree, "mise.toml"), '[tasks.test]\nrun = "anything"\n');
+      for (const [session, target] of [
+        [main.id, { repo: "shop", miseTask: "test" }],
+        [first, { repo: "shop", task: task.id, miseTask: "test" }],
+      ] as const) {
+        const client = await connectSessionClient(before.api.port, TOKEN, before.home, session);
+        expect(errorText(await client.callTool({ name: "run_mise_task", arguments: target }))).toStartWith("mise_unavailable:");
+        await client.close();
+      }
+
+      await stopDaemon(before);
+      const after = await startMiseDaemon({ home: before.home, projects: before.projects });
+      // The task's session comes back under a new id, and hears through its task.
+      const resumed = await resumedSessionOf(after, task.id);
+      const windows = [main.id, resumed].map((id) => ({ id, window: viewer(after.facade.agents, id) }));
+      for (const { window } of windows) await untilInputBox(window, "empty");
+      // A trust of the repo root tells the sessions refused in its task worktrees too.
+      await after.post(miseApi.trust, { repo: "shop" });
+
+      for (const { id, window } of windows) {
+        await waitFor(after.facade.agents, id, () => window.unwrappedText().includes(TYPED_TRUST_NOTICE), "the typed notice");
+        window.attachment.detach();
+      }
+    }, 90_000);
+
+    test("a task's last verification is still there after the restart", async () => {
+      const before = await startMiseDaemon();
+      const task = await before.facade.agents.createTask("shop", "fix the cart");
+      const verdict = await before.facade.verifications.verify(task.id, undefined, 30_000, new AbortController().signal);
+      expect(verdict).toMatchObject({ state: "failed", message: "mise task test exited with code 1" });
+
+      await stopDaemon(before);
+      const after = await startMiseDaemon({ home: before.home, projects: before.projects });
+
+      expect(after.facade.verifications.get(task.id)).toEqual(verdict);
+    }, 60_000);
   },
 );
 

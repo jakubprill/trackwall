@@ -34,6 +34,7 @@ type StateEntryId =
   | "resumable-sessions-file"
   | "last-supervisor-file"
   | "agent-queues-file"
+  | "verifications-file"
   | "day-start-file"
   | "cards-dir"
   | "logs-dir"
@@ -140,6 +141,7 @@ export class ConfigFiles {
       case "resumable-sessions-file":
       case "last-supervisor-file":
       case "agent-queues-file":
+      case "verifications-file":
       case "day-start-file":
       case "cards-dir":
       case "logs-dir":
