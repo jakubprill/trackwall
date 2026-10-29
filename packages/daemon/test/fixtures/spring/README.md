@@ -18,7 +18,8 @@ Seven made-up shop repos on which the tests check the HTTP extractors, endpoint 
   `openapi/orders-api.yaml`, whose operation is not a catalog endpoint.
 - `shop-web`: a frontend with `VITE_API_URL` and a Vite proxy to `orders-bff` on `localhost:8090`.
 - `back-office`: a frontend that keeps the catalog's spec as a bundler left it (ADR-129): a gateway in `servers`, paths
-  under `/catalog/v1` instead of the app's `/catalog/api`, and the same `operationId`s.
+  under `/catalog/v1` instead of the app's `/catalog/api`, and the same `operationId`s; and a script that generates the
+  orders client with `openapi-typescript` from the spec `orders-bff` serves on `localhost:8090`.
 
 This is data, not Trackwall code: knip does not check it (`ignore` in `knip.json`), because the frontend's `vite.config.mjs`
 has no importer.

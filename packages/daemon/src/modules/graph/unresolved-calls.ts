@@ -21,12 +21,14 @@ export function unresolvedCalls(index: HttpIndex): GraphProblem[] {
 }
 
 function isCall(client: ConsumedHttp): boolean {
-  return client.calls.length > 0 || client.app !== null;
+  return client.calls.length > 0 || client.app !== null || client.via === "openapi";
 }
 
 /** What the graph looked for, and the entry that would connect it: an alias by name or host, or an app's port for `localhost`. */
 function message(client: ConsumedHttp): string {
   // A spec's server address is often a gateway's, so an alias for its host would send every spec behind it to one repo.
+  if (client.via === "openapi" && client.calls.length === 0)
+    return `no app in the list serves the spec ${client.name} downloads from ${client.url}; its host or localhost port names none`;
   if (client.via === "openapi")
     return `no repo in the list serves ${MIN_SPEC_COVERAGE * 100}% of the operations of ${client.name} (by operationId, or by path with another prefix)`;
   const url = client.url === null ? undefined : parseHttpUrl(client.url);

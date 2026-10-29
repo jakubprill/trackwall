@@ -228,7 +228,7 @@ A data type from the repo that an endpoint takes or returns, and the types of it
 _Avoid_: model, entity (for a type from the card)
 
 **HTTP client** (`ConsumedHttp`, `kind: "http"` on the card, kind `HttpClientVia`):
-A place from which the repo calls HTTP: a Feign or `@HttpExchange` interface, a class with `WebClient`, `RestClient` or `RestTemplate`, an address from Spring configuration, `.env` or the frontend proxy, or an OpenAPI spec of another app the repo generates a client from (ADR-129). It has the target app's name or an address, the profiles in which that address applies, and calls. An address on the card has no user, password, query or path segments that look like a token.
+A place from which the repo calls HTTP: a Feign or `@HttpExchange` interface, a class with `WebClient`, `RestClient` or `RestTemplate`, an address from Spring configuration, `.env` or the frontend proxy, or an OpenAPI spec of another app the repo generates a client from, also one a `package.json` script downloads for `openapi-typescript` (ADR-129). It has the target app's name or an address, the profiles in which that address applies, and calls. An address on the card has no user, password, query or path segments that look like a token.
 
 **Call** (`HttpCall`):
 A method and path that an HTTP client calls, with the line in the code, and for a call from an OpenAPI spec the operation's `operationId` (ADR-129). A part of the path known only at run time is `{}`.

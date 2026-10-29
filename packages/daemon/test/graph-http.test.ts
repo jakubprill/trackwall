@@ -522,12 +522,19 @@ describe("clients from OpenAPI specs (ADR-129)", () => {
     expect(graph.problems).toEqual([]);
   });
 
-  test("an operationId matches the endpoint its spec describes whatever the path, and a repo with the same paths wins over one whose paths only end alike", () => {
-    const byId = spec({ calls: ops(["GET", "/x/order", "getOrder"], ["POST", "/x/order", "placeOrder"]) });
-    const ids = [described("/api/orders/{id}", "GET", "getOrder"), described("/api/orders", "POST", "placeOrder")];
+  test("an operationId matches the endpoint its spec describes when that path holds the call's last fixed segment, and a repo with the same paths wins over one whose paths only end alike", () => {
+    const byId = spec({
+      calls: ops(["GET", "/order-service/orders", "listOrders"], ["GET", "/order-service/orders/{id}/summary", "getOrder"]),
+    });
+    const ids = [described("/api/orders/all", "GET", "listOrders"), described("/api/orders/{id}", "GET", "getOrder")];
+    // Only listOrders: getOrder's path has no `summary`, so the id alone does not match.
     expect(edges([repo("web", card([], [byId])), repo("orders-api", card(ids, []))])).toEqual([
       ["web", "orders-api", "Orders BFF", "high"],
     ]);
+    // Ids like getById repeat across services; on another resource they match nothing.
+    const generic = spec({ calls: ops(["GET", "/orders/{id}", "getById"], ["GET", "/orders", "findAll"]) });
+    const users = [described("/users/{id}", "GET", "getById"), described("/users", "GET", "findAll")];
+    expect(edges([repo("web", card([], [generic])), repo("users-api", card(users, []))])).toEqual([]);
 
     const byPath = spec({ calls: ops(["GET", "/api/orders/{id}", null]) });
     expect(
@@ -558,7 +565,11 @@ describe("clients from OpenAPI specs (ADR-129)", () => {
     expect(edges([repo("web", card([], [behindGateway])), inventory])).toEqual([["web", "inventory", "inventory", "high"]]);
     expect(edges([repo("web", card([], [titled])), inventory])).toEqual([["web", "inventory", "inventory", "high"]]);
 
-    const graph = buildGraph([repo("web", card([], [titled]))], { config: NO_CONFIG, file: CONFIG_FILE, problems: [] });
+    // The host names the gateway, which has endpoints but serves none of the calls, so the title decides.
+    const gateway = repo("gateway", card([app("gateway"), endpoint("/shop/**")], []));
+    expect(edges([repo("web", card([], [titled])), gateway, inventory])).toEqual([["web", "inventory", "inventory", "high"]]);
+
+    const graph = buildGraph([repo("web", card([], [titled])), gateway], { config: NO_CONFIG, file: CONFIG_FILE, problems: [] });
     expect(graph.problems.map((p) => [p.repo, p.via, p.client, p.message])).toEqual([
       [
         "web",
@@ -566,6 +577,34 @@ describe("clients from OpenAPI specs (ADR-129)", () => {
         "Inventory API",
         "no repo in the list serves 50% of the operations of Inventory API (by operationId, or by path with another prefix)",
       ],
+    ]);
+  });
+
+  test("a BFF serving the paths of the spec it generates a client from still connects to the backend, and serving them alone ends the search", () => {
+    const client = spec({ name: "Orders", calls: ops(["GET", "/api/orders/{id}", "getOrder"], ["POST", "/api/orders", null]) });
+    const mirror = [endpoint("/api/orders/{id}"), endpoint("/api/orders", "POST")];
+    const backend = repo("orders-api", card([endpoint("/orders/api/orders/{id}"), endpoint("/orders/api/orders", "POST")], []));
+    expect(edges([repo("orders-bff", card(mirror, [client])), backend])).toEqual([["orders-bff", "orders-api", "Orders", "high"]]);
+    const alone = buildGraph([repo("orders-bff", card(mirror, [client]))], { config: NO_CONFIG, file: CONFIG_FILE, problems: [] });
+    expect([alone.edges, alone.problems]).toEqual([[], []]);
+  });
+
+  test("a spec a script downloads has no calls, so its host or localhost port alone names the app, and an address naming none is a call without a target", () => {
+    const downloaded = (url: string) => spec({ name: "api:orders", url, evidence: { path: "package.json", line: 5 } });
+    const bff = repo("orders-bff", card([app("orders-bff", 8090), endpoint("/api/orders/{id}")], []));
+    expect(edges([repo("web", card([], [downloaded("https://orders-bff.dev.example.com")])), bff])).toEqual([
+      ["web", "orders-bff", "orders-bff", "high"],
+    ]);
+    expect(edges([repo("web", card([], [downloaded("http://localhost:8090")])), bff])).toEqual([
+      ["web", "orders-bff", "localhost:8090", "medium"],
+    ]);
+    const graph = buildGraph([repo("web", card([], [downloaded("http://localhost:9999")])), bff], {
+      config: NO_CONFIG,
+      file: CONFIG_FILE,
+      problems: [],
+    });
+    expect(graph.problems.map((p) => p.message)).toEqual([
+      "no app in the list serves the spec api:orders downloads from http://localhost:9999; its host or localhost port names none",
     ]);
   });
 
@@ -703,6 +742,8 @@ describe("the graph and find_endpoint on real git", () => {
       const edges = (await graph.graph()).edges.filter((e) => e.from === "back-office" || e.from === "catalog");
       expect(edges.map((e) => [e.from, e.to, e.key, e.confidence])).toEqual([
         ["back-office", "catalog", "Catalog", "high"],
+        // The spec the generate:orders script downloads from orders-bff's port.
+        ["back-office", "orders-bff", "localhost:8090", "medium"],
         ["catalog", "orders-api", "Orders", "high"],
       ]);
       const [product] = (await graph.findEndpoint("/catalog/api/products/42", "GET")).endpoints;

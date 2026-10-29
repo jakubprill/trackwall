@@ -281,3 +281,26 @@ paths:
     expect(specClients(c)).toEqual(["Orders null @src/main/resources/openapi/orders-api.yaml: GET /api/orders/{id} getOrder @7"]);
   });
 });
+
+describe("specs a package.json script downloads for openapi-typescript (ADR-129)", () => {
+  test("the address openapi-typescript reads is a client with the address's origin and no calls; a spec file from the repo adds nothing", () => {
+    const packageJson = JSON.stringify(
+      {
+        name: "shop-web",
+        scripts: {
+          "api:orders":
+            "npx openapi-typescript@7 https://user:pw@orders-bff.dev.example.com/v3/api-docs -o src/api/orders.ts && prettier -w src/api",
+          "api:local": "openapi-typescript --alphabetize 'http://localhost:8090/v3/api-docs'",
+          "api:file": "openapi-typescript ./openapi/stock.yaml -o src/api/stock.ts",
+          build: "vite build",
+        },
+      },
+      null,
+      2,
+    );
+    const c = extractCard(snapshotOf({ "package.json": packageJson }), parsers, NO_REACH);
+    expect(
+      c.consumes.flatMap((h) => (h.kind === "http" ? [`${h.via} ${h.name} ${h.url} ${h.calls.length} @${h.evidence.line}`] : [])),
+    ).toEqual(["openapi api:orders https://orders-bff.dev.example.com 0 @4", "openapi api:local http://localhost:8090 0 @5"]);
+  });
+});

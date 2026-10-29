@@ -11,6 +11,7 @@ import { extractMiseSetup, isMiseConfigFile } from "./mise-tasks.ts";
 import { noEndpointsProblems } from "./no-endpoints.ts";
 import { extractNpm, readsNpmFile } from "./npm.ts";
 import { withOpenApi } from "./openapi-endpoints.ts";
+import { extractOpenApiScripts, readsOpenApiScriptFile } from "./openapi-scripts.ts";
 import { SPEC_SEARCH } from "./openapi-spec.ts";
 import type { ContentSearch, SourceSelection } from "./read-snapshot.ts";
 import { dirOf } from "./repo-path.ts";
@@ -39,6 +40,7 @@ const BUILD_EXTRACTORS = [
 const HTTP_EXTRACTORS = [
   { reads: readsSpringConfigFile, extract: extractSpring },
   { reads: readsFrontendHttpFile, extract: extractFrontendHttp },
+  { reads: readsOpenApiScriptFile, extract: extractOpenApiScripts },
 ];
 
 /** Whether some extractor reads file `path`; only such files (and the chosen source files) are taken from git when reading a commit. */
@@ -84,7 +86,8 @@ export function extractCard(snapshot: RepoSnapshot, parsers: SyntaxParsers, call
   // After the contracts: an endpoint from a spec has its types from the spec, not from a method's syntax (ADR-87).
   const openApi = withOpenApi(snapshot, contracts.provides);
   const consumes = unique([...all.flatMap((e) => e.consumes), ...openApi.clients]);
-  const clients = consumes.filter((c): c is ConsumedHttp => c.kind === "http");
+  // A spec's calls are made by a client generated during the build, which is not in the repo, so no code reaches them.
+  const clients = consumes.filter((c): c is ConsumedHttp => c.kind === "http" && c.via !== "openapi");
   return {
     commit: snapshot.commit,
     buildFiles: all.flatMap((e) => e.buildFiles),
