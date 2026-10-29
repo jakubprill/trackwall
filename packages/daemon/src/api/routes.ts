@@ -121,6 +121,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(verificationApi.cancel, (f, b) => f.verifications.cancel(b.task)),
   route(mergeRequestsApi.get, (f, b) => f.mergeRequests.get(b.task)),
   route(mergeRequestsApi.push, (f, b) => f.mergeRequests.push(b.task)),
+  route(mergeRequestsApi.formUrl, async (f, b) => ({ url: await f.mergeRequests.formUrl(b) })),
   route(mergeRequestsApi.openForm, async (f, b) => {
     await f.mergeRequests.openForm(b);
     return null;

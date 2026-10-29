@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import type { ApiResult, DaemonInfo, ErrorCode, Health } from "@trackwall/protocol";
+import { type ApiResult, DAEMON_INFO_PATH, type DaemonInfo, type ErrorCode, type Health } from "@trackwall/protocol";
 import type { Facade } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
 import { MCP_PATH, type McpEndpoint, SESSION_TOKEN_HEADER } from "../mcp/endpoint.ts";
@@ -50,6 +50,7 @@ const STATUS: Record<ErrorCode, number> = {
   unsaved_changes: 409,
   dialog_changed: 409,
   service_unavailable: 409,
+  no_desktop: 409,
   internal: 500,
 };
 
@@ -152,7 +153,7 @@ function journalArea(url: string | undefined): string {
 
 /** `/api/*` routes with the token, already checked. */
 async function handleApi(req: IncomingMessage, res: ServerResponse, path: string, o: ApiOptions): Promise<void> {
-  if (path === "/api/daemon/info" && req.method === "GET") return ok<DaemonInfo>(res, o.info());
+  if (path === DAEMON_INFO_PATH && req.method === "GET") return ok<DaemonInfo>(res, o.info());
   if (path === "/api/daemon/shutdown" && req.method === "POST") {
     await drain(req);
     ok(res, { stopping: true as const });

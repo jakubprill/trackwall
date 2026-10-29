@@ -1,4 +1,4 @@
-import { DaemonInfo, mcpTools } from "@trackwall/protocol";
+import { DAEMON_INFO_PATH, DaemonInfo, mcpTools } from "@trackwall/protocol";
 import { Check, Copy } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -19,7 +19,7 @@ const TOOL_NAMES = Object.values(mcpTools)
  * The UI writes nothing into the Copilot CLI config; `copilot mcp add` does that on the user's side.
  */
 export function ConnectCopilotSurface({ conn, onRetry }: { conn: Connection; onRetry: () => void }) {
-  const load = useCallback(() => call(conn, "/api/daemon/info", DaemonInfo), [conn]);
+  const load = useCallback(() => call(conn, DAEMON_INFO_PATH, DaemonInfo), [conn]);
   const info = useRemote(load);
   if (info.data) return <ConnectCopilot info={info.data} />;
   return (

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
+import { useDesktop } from "@/lib/desktop";
 import { relativeTime } from "@/lib/format";
 import { proposerLabel, taskName } from "@/lib/session-entries";
 import { isLive, sessionStateLabel } from "@/lib/session-state";
@@ -74,6 +75,7 @@ export function TaskPanel({
       onChanged();
     },
   );
+  const desktop = useDesktop();
   const openEditor = useAction(
     () => post(conn, agentsApi.openTaskEditor, { task: task.id }),
     () => {},
@@ -119,9 +121,11 @@ export function TaskPanel({
         {error && <span className="text-destructive max-w-xs truncate text-xs">{error}</span>}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <VerifyButton state={details.verification} disabled={confirmingRemoval} />
-          <Button variant="outline" size="sm" onClick={openEditor.run} disabled={openEditor.pending}>
-            <Code /> VS Code
-          </Button>
+          {desktop && (
+            <Button variant="outline" size="sm" onClick={openEditor.run} disabled={openEditor.pending}>
+              <Code /> VS Code
+            </Button>
+          )}
           {liveSession ? (
             <StopButton conn={conn} session={liveSession} onStopped={onChanged} />
           ) : (

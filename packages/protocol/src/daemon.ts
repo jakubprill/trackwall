@@ -23,6 +23,8 @@ export const Health = z.object({
 export type Health = z.infer<typeof Health>;
 export const HealthResult = apiResult(Health);
 
+export const DAEMON_INFO_PATH = "/api/daemon/info";
+
 /** `GET /api/daemon/info`: details of the daemon process, needs the token. */
 export const DaemonInfo = z.object({
   version: z.string(),
@@ -39,6 +41,12 @@ export const DaemonInfo = z.object({
    * for an agent CLI's MCP config: the full path of the binary, and when run from source, the runtime and the script.
    */
   mcpStdioCommand: z.array(z.string()).min(1),
+  /**
+   * Whether the daemon opens links, folders and VS Code on the user's desktop (ADR-120). `false` in a container or on a
+   * Linux system without a graphical session: the page opens web links itself, and opening a folder or VS Code is
+   * refused with `no_desktop`.
+   */
+  desktop: z.boolean(),
 });
 export type DaemonInfo = z.infer<typeof DaemonInfo>;
 export const DaemonInfoResult = apiResult(DaemonInfo);

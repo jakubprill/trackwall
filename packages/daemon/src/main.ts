@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { existsSync } from "node:fs";
 import { arch, platform } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +9,7 @@ import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
 import { createErrorJournal, createFacade, type Facade, HOSTING_CLIS } from "./facade.ts";
 import { type CommandLine, type DaemonArgs, MCP_STDIO_COMMAND, parseCommandLine, USAGE } from "./infra/args.ts";
+import { desktopOpeners, hasDesktop } from "./infra/desktop.ts";
 import { newToken, probeRunningDaemon, watchDaemonFile, withStartLock, writeDaemonFile } from "./infra/discovery.ts";
 import { watchEventLoopStalls } from "./infra/event-loop-stalls.ts";
 import { resolveTrackwallHome, trackwallHome } from "./infra/home.ts";
@@ -68,6 +70,7 @@ async function start(
   let api: ApiServer | undefined;
   let facade: Facade | undefined;
   let stopWatching = () => {};
+  const desktop = hasDesktop({ platform: process.platform, env: process.env, exists: existsSync });
   // Sessions start only through the API, so their hooks and MCP server always have its port.
   const apiPort = () => {
     if (!api) throw new Error("a session started before the API listens");
@@ -83,11 +86,12 @@ async function start(
     const running = await probeRunningDaemon(home);
     if (running) return { kind: "existing" as const, ...running };
     const token = newToken();
+    const openers = desktopOpeners(desktop, { openUrl: openBrowser, openFolder });
     facade = createFacade({
       home,
       homeFrom: resolveTrackwallHome(args.home).from,
-      openUrl: openBrowser,
-      openFolder,
+      openUrl: openers.openUrl,
+      openFolder: openers.openFolder,
       miseCommand: ["mise"],
       copilotCommand: ["copilot"],
       version: VERSION,
@@ -119,6 +123,7 @@ async function start(
           launchedBy: args.parent === undefined ? "manual" : "desktop",
           home,
           mcpStdioCommand: mcpStdioCommand(home),
+          desktop,
         }),
         onShutdown: () => void shutdown("POST /api/daemon/shutdown"),
         facade,
@@ -143,7 +148,7 @@ async function start(
       process.exit(EXIT_OTHER_VERSION_RUNNING);
     }
     log(`daemon ${VERSION} is already running (pid ${started.file.pid}, port ${started.file.port})`);
-    if (args.ui) openBrowser(uiUrl(started.file.port, started.file.token));
+    if (args.ui) openUi(desktop, uiUrl(started.file.port, started.file.token));
     return;
   }
 
@@ -157,7 +162,7 @@ async function start(
   log(`trackwall-daemon ${VERSION} at http://127.0.0.1:${self.port} (pid ${process.pid}, ${runtimeInfo().name}, state in ${home})`);
   if (!uiDir) log("no built UI: the API works, but no page will be served (build packages/ui or pass --ui-dir)");
   if (args.ui) {
-    if (uiDir) openBrowser(uiUrl(self.port, self.token));
+    if (uiDir) openUi(desktop, uiUrl(self.port, self.token));
     else log("--ui ignored because there is no UI to show");
   }
 }
@@ -172,6 +177,12 @@ function resolveUiDir(explicit: string | undefined): string | undefined {
     // in a compiled binary import.meta.url points to the virtual file system
   }
   return candidates.find(isUiDir);
+}
+
+/** Without a desktop (ADR-120) there is no browser to open; the address is not logged, since it carries the token. */
+function openUi(desktop: boolean, url: string): void {
+  if (desktop) openBrowser(url);
+  else log("--ui ignored: no desktop to open a browser on; open the address with the token from daemon.json");
 }
 
 /** The token in the URL fragment: it does not reach the server, logs or the Referer header. The UI removes it from the address bar. */

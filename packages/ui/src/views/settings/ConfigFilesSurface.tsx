@@ -6,7 +6,6 @@ import {
   type UnknownWorkspaceKey,
   WORKSPACE_KEYS,
   type WorkspaceKeyState,
-  workspaceApi,
 } from "@trackwall/protocol";
 import { BookOpen, Code, FolderOpen } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
@@ -26,6 +25,7 @@ import {
   workspaceKeyChangedIn,
 } from "@/lib/config-files";
 import type { Connection } from "@/lib/connection";
+import { NO_DESKTOP_NOTE, useDesktop, useOpenWebLink } from "@/lib/desktop";
 import { FILE_MANAGER } from "@/lib/platform";
 import { useRemote } from "@/lib/use-remote";
 
@@ -42,10 +42,13 @@ export function ConfigFilesSurface({ conn }: { conn: Connection }) {
     setError(undefined);
     request.catch((err: unknown) => setError(errorMessage(err)));
   };
+  const desktop = useDesktop();
+  const openLink = useOpenWebLink(conn);
   const actions: EntryActions = {
+    desktop,
     open: (id) => act(post(conn, configFilesApi.openInEditor, { id })),
     show: (id) => act(post(conn, configFilesApi.showInFolder, { id })),
-    docs: (page) => act(post(conn, workspaceApi.openLink, { url: docsUrl(page) })),
+    docs: (page) => act(openLink(docsUrl(page))),
   };
   const problems = report.data && configProblemCount(report.data);
   return (
@@ -53,6 +56,7 @@ export function ConfigFilesSurface({ conn }: { conn: Connection }) {
       {report.error && <ErrorWithRetry message={report.error} onRetry={report.reload} />}
       {!report.data && !report.error && <Loading />}
       {error && <p className="text-destructive text-xs">{error}</p>}
+      {!desktop && <p className="text-muted-foreground text-xs">{NO_DESKTOP_NOTE}</p>}
       {report.data &&
         configGroups(report.data).map((group) => (
           <Surface
@@ -90,6 +94,8 @@ const HIDDEN_FILES =
   "daemon.json and each session's files hold the key the app and sessions use to reach Trackwall, so they are not listed.";
 
 interface EntryActions {
+  /** Whether the daemon can open a file or a folder on this computer (ADR-120); without it those buttons are hidden. */
+  desktop: boolean;
   open: (id: ConfigEntry["id"]) => void;
   show: (id: ConfigEntry["id"]) => void;
   docs: (page: DocsPage) => void;
@@ -124,12 +130,12 @@ function EntryRow({ entry, actions, children }: { entry: ConfigEntry; actions: E
       )}
       {entry.path && <p className="text-muted-foreground font-mono text-xs break-all">{entry.path}</p>}
       <div className="flex flex-wrap gap-2 pt-1">
-        {info.kind === "file" && there && (
+        {info.kind === "file" && there && actions.desktop && (
           <Button variant="outline" size="sm" onClick={() => actions.open(entry.id)}>
             <Code /> Open in VS Code
           </Button>
         )}
-        {there && (
+        {there && actions.desktop && (
           <Button variant="outline" size="sm" onClick={() => actions.show(entry.id)}>
             <FolderOpen /> Show in {FILE_MANAGER}
           </Button>

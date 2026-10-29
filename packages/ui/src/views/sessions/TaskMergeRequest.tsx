@@ -7,7 +7,6 @@ import {
   type TaskMergeRequest as State,
   type Task,
   type Verification,
-  workspaceApi,
 } from "@trackwall/protocol";
 import { GitPullRequestArrow, Upload } from "lucide-react";
 import { useState } from "react";
@@ -15,8 +14,9 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { errorMessage, post } from "@/lib/api";
+import { errorMessage } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import { useOpenWebLink } from "@/lib/desktop";
 import {
   branchPushLabel,
   canPush,
@@ -99,10 +99,11 @@ function HostNote({ state }: { state: State }) {
 
 function FoundMergeRequest({ conn, project, mergeRequest }: { conn: Connection; project: HostedProject; mergeRequest: MergeRequest }) {
   const [linkError, setLinkError] = useState<string>();
+  const openLink = useOpenWebLink(conn);
   const open = (url: string) => {
     const link = ExternalLink.safeParse(url);
     if (!link.success) return setLinkError("the repo host gave an address Trackwall does not open");
-    post(conn, workspaceApi.openLink, { url: link.data }).catch((err: unknown) => setLinkError(errorMessage(err)));
+    openLink(link.data).catch((err: unknown) => setLinkError(errorMessage(err)));
   };
   const { pipeline } = mergeRequest;
   return (

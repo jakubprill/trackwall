@@ -1,11 +1,4 @@
-import {
-  countLabel,
-  LOCAL_CONFIG_FILES,
-  LOCAL_CONFIG_STORE_DIR,
-  localConfigApi,
-  type RepoLocalConfig,
-  workspaceApi,
-} from "@trackwall/protocol";
+import { countLabel, LOCAL_CONFIG_FILES, LOCAL_CONFIG_STORE_DIR, localConfigApi, type RepoLocalConfig } from "@trackwall/protocol";
 import { BookOpen, EyeOff, RotateCcw } from "lucide-react";
 import { useCallback } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -16,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import { docsUrl } from "@/lib/config-files";
 import type { Connection } from "@/lib/connection";
+import { useOpenWebLink } from "@/lib/desktop";
 import { canIgnore, canRestore, localConfigFileStatus } from "@/lib/local-config";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
@@ -34,8 +28,9 @@ const FILE_PURPOSES: Record<(typeof LOCAL_CONFIG_FILES)[number], string> = {
 export function LocalConfigReposSurface({ conn }: { conn: Connection }) {
   const load = useCallback(() => post(conn, localConfigApi.repos, {}), [conn]);
   const repos = useRemote(load);
+  const openLink = useOpenWebLink(conn);
   const docs = useAction(
-    () => post(conn, workspaceApi.openLink, { url: docsUrl("local-config") }),
+    () => openLink(docsUrl("local-config")),
     () => {},
   );
   return (

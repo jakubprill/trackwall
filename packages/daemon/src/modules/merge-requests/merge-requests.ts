@@ -97,10 +97,18 @@ export class MergeRequests {
   }
 
   /**
-   * Opens the repo host's form for a merge request from the task branch with the draft the user approved. Refused when
-   * the form would not show what the user reviewed (commits not pushed yet) or would make a second open merge request.
+   * Opens the repo host's form for a merge request from the task branch with the draft the user approved, on the desktop.
    */
   async openForm(draft: MergeRequestDraft): Promise<void> {
+    this.#deps.openUrl(await this.formUrl(draft));
+  }
+
+  /**
+   * The address of the repo host's form for a merge request from the task branch with the draft the user approved, for a
+   * page that opens it itself when the daemon has no desktop (ADR-120). Refused when the form would not show what the user
+   * reviewed (commits not pushed yet) or would make a second open merge request.
+   */
+  async formUrl(draft: MergeRequestDraft): Promise<string> {
     const task = this.#deps.tasks.task(draft.task);
     const state = await this.get(draft.task);
     if (!state.project) throw unknownHost(task);
@@ -109,9 +117,7 @@ export class MergeRequests {
     if (state.lookup?.kind === "found" && state.lookup.mergeRequest.state === "open")
       throw new DomainError("bad_request", `branch ${task.branch} already has an open merge request: ${state.lookup.mergeRequest.url}`);
     const { title, description } = draft;
-    this.#deps.openUrl(
-      this.#deps.hosting.mergeRequestForm(state.project, { source: task.branch, target: state.targetBranch, title, description }),
-    );
+    return this.#deps.hosting.mergeRequestForm(state.project, { source: task.branch, target: state.targetBranch, title, description });
   }
 
   #lookup(task: Task, project: HostedProject): Promise<MergeRequestLookup> {

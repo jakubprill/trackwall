@@ -27,6 +27,11 @@ export const ErrorCode = z.enum([
    * agent moved on, or the dialog changed; nothing was typed.
    */
   "dialog_changed",
+  /**
+   * The daemon cannot open a link, a folder or VS Code on the user's desktop, because it runs without one (in a container,
+   * ADR-120); `DaemonInfo.desktop` says so in advance.
+   */
+  "no_desktop",
   "internal",
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
