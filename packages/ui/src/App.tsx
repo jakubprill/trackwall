@@ -9,7 +9,7 @@ import { Loading } from "@/components/Loading";
 import { SupervisorPanel } from "@/components/SupervisorPanel";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { inDesktopShell, openWindow, reportShown, START_PARAMS, showViewMenu, startFromLocation } from "@/lib/app-window";
-import { DesktopContext, useDaemonDesktop } from "@/lib/desktop";
+import { DaemonPlaceContext, useDaemonPlace } from "@/lib/desktop";
 import { DROP_HINT } from "@/lib/dropped-folder";
 import type { DroppedPaths } from "@/lib/file-drop";
 import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
@@ -76,7 +76,7 @@ export function App() {
     () => startFromLocation(window.location.search, START_PARAMS.sessionLayout, SESSION_LAYOUTS) ?? "1",
   );
   const { conn, epoch, error, retry } = useConnection();
-  const desktop = useDaemonDesktop(conn);
+  const daemonPlace = useDaemonPlace(conn);
   // A folder dropped outside a session (ADR-51); `seq` mounts a new bar for every drop, also of the same folder. A drop
   // without a daemon connection is ignored, rather than answered whenever the connection comes back.
   const [dropped, setDropped] = useState<{ paths: DroppedPaths; seq: number }>();
@@ -184,7 +184,7 @@ export function App() {
     },
   );
   return (
-    <DesktopContext.Provider value={desktop}>
+    <DaemonPlaceContext.Provider value={daemonPlace}>
       <div className="flex h-screen">
         <ActivityBar
           views={VIEWS}
@@ -296,7 +296,7 @@ export function App() {
           </KeyboardElsewhere.Provider>
         )}
       </div>
-    </DesktopContext.Provider>
+    </DaemonPlaceContext.Provider>
   );
 }
 
