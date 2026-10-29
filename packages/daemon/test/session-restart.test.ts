@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { ReviewComment } from "@trackwall/protocol";
 import { viewer, waitFor } from "./support/agents.ts";
 import { startSessionApi } from "./support/session-api.ts";
 
 const TOKEN = "s".repeat(43);
 const RESUMABLE_FILE = "resumable-sessions.json";
+const QUEUES_FILE = "agent-queues.json";
 const daemons: Awaited<ReturnType<typeof startSessionApi>>[] = [];
 
 // A limit instead of the default none: a hung cleanup on Windows is to be an error of this file, not an hour of the job.
@@ -176,6 +178,114 @@ describe.skipIf(process.versions.bun === undefined)("sessions across a daemon re
     expect(readdirSync(before.home).filter((name) => name.startsWith(`${RESUMABLE_FILE}.broken-`))).toHaveLength(1);
   });
 });
+
+const COMMENT: ReviewComment = { path: "README.md", side: "new", line: 1, code: "# shop", text: "Name the port." };
+const PROPOSAL = { repo: "shop", prompt: "add a login test", model: null, approvals: "ask" as const };
+
+describe.skipIf(process.versions.bun === undefined)(
+  "what waits across a daemon restart (real PTY and git, fake Copilot CLI, ADR-115)",
+  () => {
+    test("a review and a message for a stopped task reach the session the user resumes in the next daemon", async () => {
+      const before = await startDaemon();
+      const { agents } = before.facade;
+      const supervisor = await agents.startSupervisor("new", "terminal");
+      await waitFor(agents, supervisor.id, (s) => s.state !== null, "the supervisor's input box");
+      const proposal = await agents.propose(supervisor.id, { ...PROPOSAL, title: "Login test" });
+      const task = await agents.approveProposal(proposal.id, proposal.prompt, null, "ask");
+      const first = await resumedSessionOf(before, task.id);
+      await waitFor(agents, first, (s) => s.state !== null, "the task session's state");
+      await agents.stop(first);
+      expect(agents.sendReview(task.id, [COMMENT])).toEqual({ unread: 1, delivery: "on_resume" });
+      expect(agents.sendMessage(supervisor.id, task.id, "Use the v2 API").delivery).toBe("on_resume");
+
+      await stopDaemon(before);
+      const after = await startDaemon({ home: before.home, projects: before.projects });
+      await after.facade.agents.resumeTask(task.id);
+
+      const resumed = await resumedSessionOf(after, task.id);
+      const window = viewer(after.facade.agents, resumed);
+      await waitFor(
+        after.facade.agents,
+        resumed,
+        () => window.unwrappedText().includes("Thinking about: The user sent a review of your changes in Trackwall"),
+        "the typed prompt to read the review and the message",
+      );
+      window.attachment.detach();
+      expect(after.facade.agents.takeReviewComments(resumed)).toEqual([COMMENT]);
+      expect(after.facade.agents.takeMessages(resumed).map((m) => m.text)).toEqual(["Use the v2 API"]);
+      expect(after.facade.agents.sessions().messages.map((m) => m.text)).toEqual(["Use the v2 API"]);
+    }, 60_000);
+
+    test("a waiting proposal and the unread updates come back, the stop adds none, and the resumed sessions are asked to read them", async () => {
+      const before = await startDaemon();
+      const { agents } = before.facade;
+      const supervisor = await agents.startSupervisor("new", "terminal");
+      const main = await agents.start("shop");
+      await waitFor(agents, supervisor.id, (s) => s.state !== null, "the supervisor's input box");
+      await waitFor(agents, main.id, (s) => s.state !== null, "the main session's input box");
+      // A task of the supervisor that is in its first turn when the daemon stops; the fake stays in it until it gets a line.
+      const delegated = await agents.propose(supervisor.id, { ...PROPOSAL, title: "Delegated" });
+      const task = await agents.approveProposal(delegated.id, delegated.prompt, null, "ask");
+      await waitFor(agents, await resumedSessionOf(before, task.id), (s) => s.state?.state === "Working", "the task's first turn");
+      agents.takeUpdates(supervisor.id);
+      const waiting = await agents.propose(supervisor.id, { ...PROPOSAL, title: "Login test" });
+      const rejected = await agents.propose(supervisor.id, { ...PROPOSAL, title: "Logout test" });
+      agents.rejectProposal(rejected.id, "Not now");
+      const byMain = await agents.propose(main.id, { ...PROPOSAL, title: "Signup test" });
+      agents.rejectProposal(byMain.id, undefined);
+
+      await stopDaemon(before);
+      const after = await startDaemon({ home: before.home, projects: before.projects });
+
+      expect(after.facade.agents.sessions().proposals).toEqual([waiting]);
+      for (const id of [supervisor.id, main.id]) {
+        await waitFor(after.facade.agents, id, (s) => s.run.kind === "running", "the session started again");
+        const window = viewer(after.facade.agents, id);
+        await waitFor(
+          after.facade.agents,
+          id,
+          () => window.unwrappedText().includes("Thinking about: There is news about the work you delegated in Trackwall"),
+          "the typed prompt to read the updates",
+        );
+        window.attachment.detach();
+      }
+      // The task session the stop ended is not news: the next daemon resumes it.
+      expect(after.facade.agents.takeUpdates(supervisor.id).updates).toEqual([
+        { kind: "proposal_rejected", task: rejected.id, session: null, reason: "Not now", at: expect.any(String) },
+      ]);
+      expect(after.facade.agents.takeUpdates(main.id).updates.map((u) => u.task)).toEqual([byMain.id]);
+      const approved = await after.facade.agents.approveProposal(waiting.id, waiting.prompt, null, "ask");
+      expect(approved).toMatchObject({ id: waiting.id, title: "Login test", proposedBy: { session: supervisor.id, supervisor: true } });
+    }, 60_000);
+
+    test("a repo removal proposed before the restart is approved in the next daemon", async () => {
+      const before = await startDaemon();
+      const { agents } = before.facade;
+      const supervisor = await agents.startSupervisor("new", "terminal");
+      await waitFor(agents, supervisor.id, (s) => s.state !== null, "the supervisor's input box");
+      const removal = await agents.proposeRepoRemoval(supervisor.id, "shop", "Not needed any more");
+
+      await stopDaemon(before);
+      const after = await startDaemon({ home: before.home, projects: before.projects });
+
+      await after.facade.agents.approveRepoRemoval(removal.id);
+      expect(existsSync(join(before.projects, "shop"))).toBe(false);
+      expect(after.facade.agents.sessions().proposals).toEqual([]);
+    }, 60_000);
+
+    test("a broken file of the queues is moved aside and the next daemon starts with none", async () => {
+      const before = await startDaemon();
+      await stopDaemon(before);
+      writeFileSync(join(before.home, QUEUES_FILE), '{"proposals": {"pending": "all of them"}}');
+
+      const after = await startDaemon({ home: before.home, projects: before.projects });
+
+      expect(after.facade.agents.sessions().proposals).toEqual([]);
+      expect(existsSync(join(before.home, QUEUES_FILE))).toBe(false);
+      expect(readdirSync(before.home).filter((name) => name.startsWith(`${QUEUES_FILE}.broken-`))).toHaveLength(1);
+    });
+  },
+);
 
 describe.skipIf(process.versions.bun === undefined)("the supervisor's last conversation (real PTY, fake Copilot CLI, ADR-96)", () => {
   test("Resume goes on with the ended supervisor's conversation under its id, New starts another one", async () => {
