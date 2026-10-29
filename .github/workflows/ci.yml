@@ -1,17 +1,17 @@
 name: CI
 
-# The repo is public, so standard runners cost nothing, but every run is a wait (ADR-22, ADR-109). Every PR runs:
+# The repo is public, so standard runners cost nothing, but every run is a wait (ADR-22, ADR-128). Every PR runs Linux only,
+# where Trackwall is used day to day (a Linux container with the repos in a volume):
 # - lint, rustfmt, typecheck, tests and the documentation site build on Linux, plus the dependency audit;
-# - tests on Windows;
-# - the contract tests with the real Copilot CLI on Linux and Windows (ADR-67);
-# - the E2E tests of the UI in Chromium on Linux and Windows (ADR-71);
-# - the daemon build and the Tauri portable build on Windows (clippy, cargo test, sidecar smoke test);
+# - the contract tests with the real Copilot CLI on Linux (ADR-67);
+# - in a Debian container: the daemon built as a binary with its smoke test, and the E2E tests of the UI in Chromium (ADR-71);
 # - the aggregate `CI ok` job, the only check to require in main branch protection.
-# macOS joins every one of these jobs every night (nightly.yml calls this workflow with `macos`), in a manual run with
-# `macos` ticked, and at release (release.yml tests and builds on it).
-# A push to main runs only the Linux job, the audit and the Windows build: `CI ok` is strict in main's protection, so the
-# merged tree is the one the PR already tested, and the build is what keeps main's Rust cache warm for PRs.
-# Jobs run in parallel: a run takes as long as the longest job (Windows), not the sum.
+# Windows and macOS join the tests, the contract tests, the E2E tests and the desktop build (Tauri, clippy, cargo test,
+# sidecar smoke test, portable) every night (nightly.yml calls this workflow with `windows` and `macos`), in a manual run
+# with them ticked, and at release (release.yml tests and builds on both).
+# A push to main runs only the Linux job and the audit: `CI ok` is strict in main's protection, so the merged tree is the
+# one the PR already tested.
+# Jobs run in parallel: a run takes as long as the longest job, not the sum.
 # No paths-ignore: the required check must report on every PR, and tests check docs/release-notes.
 # release.yml builds releases independently of this file.
 on:
@@ -20,12 +20,20 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
+      windows:
+        description: Also run tests, contract tests, E2E tests and the build on Windows
+        type: boolean
+        default: false
       macos:
         description: Also run tests, contract tests, E2E tests and the build on macOS
         type: boolean
         default: false
   workflow_call:
     inputs:
+      windows:
+        description: Also run tests, contract tests, E2E tests and the build on Windows
+        type: boolean
+        default: false
       macos:
         description: Also run tests, contract tests, E2E tests and the build on macOS
         type: boolean
@@ -102,15 +110,37 @@ jobs:
           package-manager-cache: false
       - run: pnpm audit --audit-level high
 
-  # Not on a push to main, which only repeats what the PR tested (see the top of this file). The jobs skipped on a push
-  # (`test`, `contract`, `e2e`) are listed again in `CI ok`.
+  # The desktop systems this run adds to Linux, in one place for every job below: none on a PR or a push, the ones ticked
+  # in a manual run, both at night.
+  systems:
+    name: desktop systems of this run
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      desktop: ${{ steps.pick.outputs.desktop }}
+      all: ${{ steps.pick.outputs.all }}
+    steps:
+      - id: pick
+        env:
+          WINDOWS: ${{ inputs.windows == true }}
+          MACOS: ${{ inputs.macos == true }}
+        run: |
+          desktop=$(jq -cn --argjson windows "$WINDOWS" --argjson macos "$MACOS" \
+            '[if $windows then "windows-latest" else empty end, if $macos then "macos-latest" else empty end]')
+          echo "desktop systems: $desktop"
+          echo "desktop=$desktop" >> "$GITHUB_OUTPUT"
+          echo "all=$(jq -c '["ubuntu-latest"] + .' <<< "$desktop")" >> "$GITHUB_OUTPUT"
+
+  # Only when the run adds a desktop system (Linux runs the tests in `check`), which a PR or a push to main never does.
+  # The jobs that may be skipped are listed again in `CI ok`.
   test:
     name: test (${{ matrix.os }})
-    if: github.event_name != 'push'
+    needs: systems
+    if: needs.systems.outputs.desktop != '[]'
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(inputs.macos && '["windows-latest", "macos-latest"]' || '["windows-latest"]') }}
+        os: ${{ fromJSON(needs.systems.outputs.desktop) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     permissions:
@@ -127,22 +157,25 @@ jobs:
 
   # The real Copilot CLI of the pinned version (ADR-67); nightly.yml runs the same on the newest one on all three systems.
   contract:
+    needs: systems
     if: github.event_name != 'push'
     permissions:
       contents: read
     uses: ./.github/workflows/contract.yml
     with:
-      systems: ${{ inputs.macos && '["ubuntu-latest", "windows-latest", "macos-latest"]' || '["ubuntu-latest", "windows-latest"]' }}
+      systems: ${{ needs.systems.outputs.all }}
 
-  # Four paths through the built UI in Chromium from Playwright, on the daemon with the fake Copilot CLI (ADR-71). Also on
-  # Windows, because the fake's screen reaches the browser through the PTY, which is ConPTY there.
+  # The paths through the built UI in Chromium from Playwright, on the daemon with the fake Copilot CLI (ADR-71), on the
+  # desktop systems of the run: on Windows the fake's screen reaches the browser through ConPTY. Linux runs them in
+  # `container`.
   e2e:
     name: e2e (${{ matrix.os }})
-    if: github.event_name != 'push'
+    needs: systems
+    if: needs.systems.outputs.desktop != '[]'
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(inputs.macos && '["ubuntu-latest", "windows-latest", "macos-latest"]' || '["ubuntu-latest", "windows-latest"]') }}
+        os: ${{ fromJSON(needs.systems.outputs.desktop) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     permissions:
@@ -155,18 +188,55 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           bun-version: ${{ env.BUN_VERSION }}
-      # Only the headless shell, which a headless launch uses; on Linux also the system libraries it needs.
+      # Only the headless shell, which a headless launch uses.
       - name: Chromium for Playwright
-        run: pnpm --filter @trackwall/daemon exec playwright install ${{ runner.os == 'Linux' && '--with-deps' || '' }} --only-shell chromium
+        run: pnpm --filter @trackwall/daemon exec playwright install --only-shell chromium
       - run: pnpm test:e2e
 
-  # The build is the longest step of a run, so it has its own job next to `test`, not after it.
+  # Trackwall where it is used day to day (ADR-128): the daemon in a Debian container, the image of the dev container page
+  # of the documentation (apps/docs/guide/dev-container.md), as root; the smoke test checks that the binary sees the
+  # container as there (no desktop, ADR-120, and the container's id, ADR-121). The image is pinned to a digest, as
+  # actions are pinned to a SHA; a new digest comes in by hand.
+  container:
+    name: build, smoke test, e2e (Debian container)
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/devcontainers/base:debian@sha256:71b6fe7c4e07ec747a94a72b2a17f2f8c286eaa7b1c59862888df764efb8b6c6
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: daemon binary for Linux
+        run: pnpm --filter @trackwall/daemon build
+      - name: smoke test of the binary
+        run: bun packages/daemon/scripts/smoke.ts packages/daemon/dist/trackwall-daemon-x86_64-unknown-linux-gnu
+      # The headless shell and the system libraries it needs (apt, as root in the container), and DejaVu Sans Mono, the
+      # monospace font of the Linux runner: the terminal's rows follow the font, and a user's browser runs on their own
+      # computer, not in the container, so the image's fonts are not what Trackwall is drawn with.
+      - name: Chromium for Playwright
+        run: |
+          pnpm --filter @trackwall/daemon exec playwright install --with-deps --only-shell chromium
+          apt-get install -y --no-install-recommends fonts-dejavu-core
+      - run: pnpm test:e2e
+
+  # The build is the longest step of a run, so it has its own job next to `test`, not after it. Only on the desktop
+  # systems of the run, which a push to main never adds.
   desktop:
     name: build, portable (${{ matrix.os }})
+    needs: systems
+    if: needs.systems.outputs.desktop != '[]'
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(inputs.macos && '["windows-latest", "macos-latest"]' || '["windows-latest"]') }}
+        os: ${{ fromJSON(needs.systems.outputs.desktop) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     permissions:
@@ -188,8 +258,8 @@ jobs:
           workspaces: apps/desktop/src-tauri
           # The same key as in release.yml (without it the key contains the job name), so that a release hits the cache from main.
           shared-key: desktop
-          # Only main saves the cache (on a push for Windows, at night for macOS); PR runs read it instead of keeping their
-          # own copies within the 10 GB limit.
+          # Only main saves the cache (at night); a manual run of a branch reads it instead of keeping its own copy within
+          # the 10 GB limit, and a release reads it too.
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: pnpm build:desktop
       # After the build, because tauri-build needs the sidecar binary that build:desktop creates.
@@ -208,11 +278,11 @@ jobs:
 
   # The check to require in main protection (the repo owner sets it up): matrix job names may change, this one does not.
   # `always()`, because GitHub counts a skipped required check as passed; here a skipped or
-  # cancelled dependency gives a red result, except the jobs a push to main skips on purpose (their `if`, kept in step
-  # with the list below).
+  # cancelled dependency gives a red result, except the jobs skipped on purpose (their `if`, kept in step with the lists
+  # below): the desktop systems' jobs when the run adds none, and on a push to main the jobs that repeat the PR.
   ci-ok:
     name: CI ok
-    needs: [check, audit, test, contract, e2e, desktop]
+    needs: [check, audit, systems, test, contract, e2e, container, desktop]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -221,8 +291,11 @@ jobs:
         env:
           RESULTS: ${{ toJSON(needs) }}
           EVENT: ${{ github.event_name }}
+          DESKTOP: ${{ needs.systems.outputs.desktop }}
         run: |
-          passed='.value.result == "success" or ($event == "push" and .value.result == "skipped" and (.key | IN("test", "contract", "e2e")))'
-          jq -e --arg event "$EVENT" "all(to_entries[]; $passed)" <<< "$RESULTS" > /dev/null && exit 0
-          jq -r --arg event "$EVENT" "to_entries[] | select(($passed) | not) | \"::error::\\(.key): \\(.value.result)\"" <<< "$RESULTS"
+          skippable='(if $desktop == "[]" then ["test", "e2e", "desktop"] else [] end) + (if $event == "push" then ["contract", "container"] else [] end)'
+          passed=".value.result == \"success\" or (.value.result == \"skipped\" and (.key | IN(($skippable)[])))"
+          args=(--arg event "$EVENT" --arg desktop "$DESKTOP")
+          jq -e "${args[@]}" "all(to_entries[]; $passed)" <<< "$RESULTS" > /dev/null && exit 0
+          jq -r "${args[@]}" "to_entries[] | select(($passed) | not) | \"::error::\\(.key): \\(.value.result)\"" <<< "$RESULTS"
           exit 1

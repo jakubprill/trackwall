@@ -1,7 +1,7 @@
 name: Contract tests
 
 # The contract tests with the real Copilot CLI in BYOK mode against a scripted model (ADR-67): no account and no secret.
-# Called by ci.yml on every PR with the pinned version (Linux and Windows; macOS at night and in a manual run, ADR-109),
+# Called by ci.yml with the pinned version (Linux on every PR; Windows and macOS at night and in a manual run, ADR-128),
 # and by nightly.yml with the newest one on all three systems, so both run the same steps.
 on:
   workflow_call:

@@ -23,7 +23,7 @@ To check manually:
 <!-- Full wording of the points: AGENTS.md, section "Definition of done". -->
 
 - [ ] 1. Tests at every layer the change touches, named under "How it was checked" (bug fix: a test that fails without it): logic, daemon flow, a contract test for what the daemon relies on from Copilot CLI (`pnpm test:contract`), a case in the tests with real Java builds for what it reads from them (`pnpm test:jvm`), the E2E test of a key UI path (`pnpm test:e2e`)
-- [ ] 2. System-dependent code has a test in the Windows + macOS matrix (CI on the PR, `CI ok` check); the rest listed above as "to check manually"
+- [ ] 2. System-dependent code has a test that CI runs on Windows and macOS (every night, or a linked manual run with that system ticked for Windows- or macOS-specific code, AGENTS.md); the rest listed above as "to check manually"
 - [ ] 3. The commands from AGENTS.md pass locally
 - [ ] 4. Documentation updated in this PR
 - [ ] 5. Nothing company-specific
