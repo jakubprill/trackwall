@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFacade, HOSTING_CLIS } from "../src/facade.ts";
@@ -472,6 +472,7 @@ describe("the local config store", () => {
   test("a link in place of the store is refused, so nothing is written where it points", async () => {
     const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
     const elsewhere = mkdtempSync(join(tmpdir(), "trackwall-elsewhere-"));
+    mkdirSync(join(projects, ".trackwall"));
     try {
       symlinkSync(elsewhere, join(projects, ".trackwall", "local"), "junction");
     } catch {
@@ -485,6 +486,25 @@ describe("the local config store", () => {
     await backUp();
 
     expect(existsSync(join(elsewhere, ".git"))).toBe(false);
+    expect((await facade.localConfig.store()).problem).toContain("is not a folder");
+  });
+
+  test("a link in place of .trackwall is refused too, so the store is not made where it points", async () => {
+    const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
+    const elsewhere = mkdtempSync(join(tmpdir(), "trackwall-elsewhere-"));
+    try {
+      symlinkSync(elsewhere, join(projects, ".trackwall"), "junction");
+    } catch {
+      // A system that does not let the user make links: there is nothing to follow.
+      return;
+    }
+    const { facade, backUp } = await setup(projects);
+    const orders = makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
+    writeFileSync(join(orders, "mise.local.toml"), TASKS);
+
+    await backUp();
+
+    expect(existsSync(join(elsewhere, "local"))).toBe(false);
     expect((await facade.localConfig.store()).problem).toContain("is not a folder");
   });
 

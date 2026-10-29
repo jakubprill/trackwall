@@ -103,11 +103,11 @@ async function start(
       log,
     });
     onFacade(facade);
-    // Under the start lock and before anything runs in them, so no session or git command holds a file of a moving folder.
-    await facade.workspace.moveOldTrackwallFolders(log);
     facade.agents.sweepLeftovers();
     // Under the start lock: a second daemon cannot meanwhile start a group that this one would take for an orphan.
     await facade.procs.sweepOrphans().catch((err: unknown) => log(`cleaning up orphans from runtime.json: ${String(err)}`));
+    // Under the start lock too, after the orphans are gone and before anything starts, so nothing holds a moving folder.
+    await facade.workspace.moveOldTrackwallFolders(log);
     api = await startApi(
       {
         token,

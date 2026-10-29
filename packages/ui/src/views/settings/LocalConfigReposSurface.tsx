@@ -1,11 +1,4 @@
-import {
-  countLabel,
-  LOCAL_CONFIG_FILES,
-  LOCAL_CONFIG_STORE_DIR,
-  localConfigApi,
-  type RepoLocalConfig,
-  trackwallDirLabel,
-} from "@trackwall/protocol";
+import { countLabel, LOCAL_CONFIG_FILES, localConfigApi, type RepoLocalConfig, trackwallDirLabel } from "@trackwall/protocol";
 import { BookOpen, EyeOff, RotateCcw } from "lucide-react";
 import { useCallback } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -44,8 +37,8 @@ export function LocalConfigReposSurface({ conn }: { conn: Connection }) {
     <Surface label="Local config in repos" meta={repos.data ? countLabel(repos.data.length, { one: "repo", other: "repos" }) : undefined}>
       <div className="flex flex-col gap-2 px-3 py-2">
         <p className="text-muted-foreground text-xs">
-          Files a repo keeps out of git on purpose, only on this computer. Trackwall backs them up to{" "}
-          {trackwallDirLabel(LOCAL_CONFIG_STORE_DIR)} in the projects folder and copies them into task worktrees.
+          Files a repo keeps out of git on purpose, only on this computer. Trackwall backs them up to {trackwallDirLabel("local")} in the
+          projects folder and copies them into task worktrees.
         </p>
         <ul className="text-muted-foreground flex flex-col gap-0.5 text-xs">
           {LOCAL_CONFIG_FILES.map((file) => (

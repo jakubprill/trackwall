@@ -1,11 +1,10 @@
 import { mkdir, rename, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { REMOVED_REPOS_DIR } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
-import { trackwallDir } from "../../infra/trackwall-dir.ts";
+import { ensureTrackwallDir, trackwallDir } from "../../infra/trackwall-dir.ts";
 
 /**
- * Removing a repo from the projects folder (ADR-83): its folder moves into `REMOVED_REPOS_DIR` of `.trackwall` (ADR-125),
+ * Removing a repo from the projects folder (ADR-83): its folder moves into `.trackwall/removed` (ADR-125),
  * which the repo list skips like every hidden folder. A move on the same drive is one rename, keeps files outside git
  * (`.env`, local settings, unpushed branches) and can be undone by hand; deleting is left to the user. The caller
  * makes sure nothing of Trackwall runs in the repo; a file another program holds open fails the rename on Windows.
@@ -16,7 +15,8 @@ import { trackwallDir } from "../../infra/trackwall-dir.ts";
  * after everything else is awaited, so its checks still hold when the folder moves.
  */
 export async function moveRepoOut(projectsDir: string, repoDir: string, beforeMove: () => void): Promise<string> {
-  const removedDir = trackwallDir(projectsDir, REMOVED_REPOS_DIR);
+  const removedDir = trackwallDir(projectsDir, "removed");
+  await ensureTrackwallDir(projectsDir);
   await mkdir(removedDir, { recursive: true });
   const target = await freeName(removedDir, basename(repoDir));
   beforeMove();

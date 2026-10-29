@@ -6,13 +6,9 @@ import {
   ConfigEntryId,
   type ConfigFilesReport,
   countLabel,
-  DEFAULT_WORKTREES_DIR_NAME,
-  LANGUAGE_SERVER_DIR_NAME,
-  LOCAL_CONFIG_STORE_DIR,
   type LocalConfigStore,
   MISE_CONFIG_NAME,
-  REMOVED_REPOS_DIR,
-  SCRATCH_DIR_NAME,
+  type TrackwallFolder,
   trackwallDirLabel,
   type WorkspaceKeyState,
   type WorkspaceKeysRead,
@@ -156,9 +152,9 @@ export class ConfigFiles {
       case "removed-repos-dir":
         return removedRepos(ctx.projectsDir);
       case "scratch-dir":
-        return trackwallEntry(ctx.projectsDir, SCRATCH_DIR_NAME);
+        return trackwallEntry(ctx.projectsDir, "scratch");
       case "language-server-dir":
-        return trackwallEntry(ctx.projectsDir, LANGUAGE_SERVER_DIR_NAME);
+        return trackwallEntry(ctx.projectsDir, "lsp");
       case "copilot-config":
         return this.#copilotConfig(ctx);
     }
@@ -180,11 +176,11 @@ export class ConfigFiles {
   }
 
   async #localConfigStore(projectsDir: string | null): Promise<Found> {
-    if (projectsDir === null) return notSet(trackwallDirLabel(LOCAL_CONFIG_STORE_DIR));
+    if (projectsDir === null) return notSet(trackwallDirLabel("local"));
     const store = await this.#deps.localConfigStore();
-    if (store.dir === null) return notSet(trackwallDirLabel(LOCAL_CONFIG_STORE_DIR));
+    if (store.dir === null) return notSet(trackwallDirLabel("local"));
     // Until it moves, the store is still in its folder from before ADR-125, and the entry says so by its name.
-    const found = { ...(await plainEntry(store.dir)), name: labelOf(projectsDir, store.dir, LOCAL_CONFIG_STORE_DIR) };
+    const found = { ...(await plainEntry(store.dir)), name: labelOf(projectsDir, store.dir, "local") };
     if (found.state === "missing") return found;
     if (store.problem !== null) return { ...found, state: "invalid", detail: store.problem };
     return { ...found, detail: storeDetail(store) };
@@ -207,8 +203,8 @@ function notSet(name: string): Found {
 }
 
 async function taskWorktrees(projectsDir: string | null, dir: string | null): Promise<Found> {
-  if (projectsDir === null || dir === null) return notSet(trackwallDirLabel(DEFAULT_WORKTREES_DIR_NAME));
-  const name = labelOf(projectsDir, dir, DEFAULT_WORKTREES_DIR_NAME);
+  if (projectsDir === null || dir === null) return notSet(trackwallDirLabel("worktrees"));
+  const name = labelOf(projectsDir, dir, "worktrees");
   const repos = await readdir(dir, { withFileTypes: true }).catch(() => null);
   if (repos === null) return { name, path: dir, state: "missing", detail: null };
   const counts = await Promise.all(
@@ -226,21 +222,21 @@ async function taskWorktrees(projectsDir: string | null, dir: string | null): Pr
 }
 
 async function removedRepos(projectsDir: string | null): Promise<Found> {
-  const name = trackwallDirLabel(REMOVED_REPOS_DIR);
+  const name = trackwallDirLabel("removed");
   if (projectsDir === null) return notSet(name);
-  const path = trackwallDir(projectsDir, REMOVED_REPOS_DIR);
+  const path = trackwallDir(projectsDir, "removed");
   const repos = await readdir(path).catch(() => null);
   if (repos === null) return { name, path, state: "missing", detail: null };
   return { name, path, state: "present", detail: countLabel(repos.length, { one: "repo", other: "repos" }) };
 }
 
 /** `.trackwall/<name>` when `path` is that folder of `.trackwall`, otherwise the path's own name. */
-function labelOf(projectsDir: string, path: string, name: string): string {
+function labelOf(projectsDir: string, path: string, name: TrackwallFolder): string {
   return path === trackwallDir(projectsDir, name) ? trackwallDirLabel(name) : basename(path);
 }
 
 /** A folder of `.trackwall` in the projects folder, under the name the user reads: `.trackwall/scratch`. */
-async function trackwallEntry(projectsDir: string | null, name: string): Promise<Found> {
+async function trackwallEntry(projectsDir: string | null, name: TrackwallFolder): Promise<Found> {
   const label = trackwallDirLabel(name);
   if (projectsDir === null) return notSet(label);
   return { ...(await plainEntry(trackwallDir(projectsDir, name))), name: label };

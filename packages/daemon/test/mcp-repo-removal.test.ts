@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
-import { agentsApi, GetUpdatesResult, ProposeTaskResult, REMOVED_REPOS_DIR, TRACKWALL_DIR, workspaceApi } from "@trackwall/protocol";
+import { agentsApi, GetUpdatesResult, ProposeTaskResult, TRACKWALL_DIR, workspaceApi } from "@trackwall/protocol";
 import { waitFor } from "./support/agents.ts";
 import { makeRepo } from "./support/git-repo.ts";
 import { connectHttpClient, connectSessionClient } from "./support/mcp-client.ts";
@@ -47,7 +47,7 @@ async function proposeRemoval(client: Client, repo: string, reason: string) {
   return ProposeTaskResult.parse(result.structuredContent).proposal;
 }
 
-const removedDir = () => join(daemon.projects, TRACKWALL_DIR, REMOVED_REPOS_DIR);
+const removedDir = () => join(daemon.projects, TRACKWALL_DIR, "removed");
 const repoIds = async () => (await daemon.post(workspaceApi.list, {})).repos.map((r) => r.id);
 
 describe.skipIf(process.versions.bun === undefined)("removing a repo from the projects folder (ADR-83)", () => {

@@ -455,6 +455,24 @@ describe("the task worktrees folder (ADR-84)", () => {
   );
 
   test(
+    "a folder of .trackwall other than its worktrees folder is refused, so no worktree lands in the local config store",
+    async () => {
+      const { workspace, projects } = await workspaceWithProjectsDir();
+      mkdirSync(join(projects, ".trackwall", "local"), { recursive: true });
+
+      await expect(workspace.setWorktreesDir(join(projects, ".trackwall", "local"))).rejects.toThrow(
+        `${join(projects, ".trackwall", "local")} lies in Trackwall's own folder ${join(projects, ".trackwall")}`,
+      );
+      await expect(workspace.setWorktreesDir(join(projects, ".trackwall"))).rejects.toThrow("lies in Trackwall's own folder");
+      mkdirSync(join(projects, ".trackwall", "worktrees"));
+      expect(await workspace.setWorktreesDir(join(projects, ".trackwall", "worktrees"))).toMatchObject({
+        worktreesDir: join(projects, ".trackwall", "worktrees"),
+      });
+    },
+    SLOW_TEST_TIMEOUT_MS,
+  );
+
+  test(
     "a folder in the projects folder that is not a repo is accepted, as dev/worktrees next to the repos",
     async () => {
       const { workspace, projects } = await workspaceWithProjectsDir();

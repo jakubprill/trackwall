@@ -1,36 +1,33 @@
 import { existsSync } from "node:fs";
 import { mkdir, readdir, rename, rmdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { LANGUAGE_SERVER_DIR_NAME, LOCAL_CONFIG_STORE_DIR, REMOVED_REPOS_DIR, SCRATCH_DIR_NAME } from "@trackwall/protocol";
+import type { TrackwallFolder } from "@trackwall/protocol";
 import { messageOf } from "./errors.ts";
-import { trackwallDir } from "./trackwall-dir.ts";
+import { ensureTrackwallDir, trackwallDir } from "./trackwall-dir.ts";
 
 /**
  * The folders Trackwall kept in the projects folder before ADR-125, each moved into `.trackwall` by a rename on the same
  * drive, so nothing is copied. A move that fails (on Windows a program can hold a file in the folder open) is logged and
- * tried again at the next start; until then the old folder keeps working where it matters. The task worktrees folder is
- * not moved: a git worktree knows its path and a session may work in it, so each task keeps the folder it remembers, and
- * the old folder goes once it is empty.
+ * tried again at the next start; until then the old store stays in use (`localConfigStoreDir`). The task worktrees
+ * folder is not moved: a git worktree knows its path and a session may work in it, so each task keeps the folder it
+ * remembers, and the old folder goes once it is empty. This file goes when no installation has the old folders left.
  */
 
-/** The local config store before ADR-125; the store stays there until it moves (`localConfigStoreDir`). */
-const OLD_LOCAL_CONFIG_STORE_DIR = ".trackwall-local";
-
-/** The default task worktrees folder before ADR-125. */
-export function oldWorktreesDir(projectsDir: string): string {
-  return join(projectsDir, ".trackwall-worktrees");
-}
+/** Each folder of `.trackwall` under its name before ADR-125. */
+const OLD_NAMES: Record<TrackwallFolder, string> = {
+  local: ".trackwall-local",
+  worktrees: ".trackwall-worktrees",
+  lsp: ".trackwall-lsp",
+  scratch: ".trackwall-scratch",
+  removed: ".trackwall-removed",
+};
 
 /** Folders of loose entries (a removed repo, a task's index, a temporary file), moved one entry at a time. */
-const OLD_ENTRY_FOLDERS: ReadonlyArray<readonly [old: string, name: string]> = [
-  [".trackwall-removed", REMOVED_REPOS_DIR],
-  [".trackwall-lsp", LANGUAGE_SERVER_DIR_NAME],
-  [".trackwall-scratch", SCRATCH_DIR_NAME],
-];
+const ENTRY_FOLDERS: readonly TrackwallFolder[] = ["removed", "lsp", "scratch"];
 
 export async function moveOldTrackwallFolders(projectsDir: string, log: (msg: string) => void): Promise<void> {
   await moveStore(projectsDir, log);
-  for (const [old, name] of OLD_ENTRY_FOLDERS) await moveEntries(join(projectsDir, old), trackwallDir(projectsDir, name), log);
+  for (const folder of ENTRY_FOLDERS) await moveEntries(projectsDir, folder, log);
 }
 
 /**
@@ -38,42 +35,14 @@ export async function moveOldTrackwallFolders(projectsDir: string, log: (msg: st
  * that a failed move does not leave the backups in one repo and start a second.
  */
 export function localConfigStoreDir(projectsDir: string): string {
-  const dir = trackwallDir(projectsDir, LOCAL_CONFIG_STORE_DIR);
-  const old = join(projectsDir, OLD_LOCAL_CONFIG_STORE_DIR);
+  const dir = trackwallDir(projectsDir, "local");
+  const old = join(projectsDir, OLD_NAMES.local);
   return !existsSync(dir) && existsSync(old) ? old : dir;
 }
 
-/** The store is one git repo, with its history and remote, so it moves as a whole. */
-async function moveStore(projectsDir: string, log: (msg: string) => void): Promise<void> {
-  const old = join(projectsDir, OLD_LOCAL_CONFIG_STORE_DIR);
-  if (!existsSync(old)) return;
-  const dir = trackwallDir(projectsDir, LOCAL_CONFIG_STORE_DIR);
-  if (existsSync(dir)) {
-    log(`${old} stays where it is: ${dir} exists too; keep the one you want and delete the other`);
-    return;
-  }
-  await moveLogged(old, dir, log);
-}
-
-async function moveEntries(old: string, dir: string, log: (msg: string) => void): Promise<void> {
-  const names = await readdir(old).catch(() => null);
-  if (names === null) return;
-  for (const name of names) {
-    const target = join(dir, name);
-    if (existsSync(target)) log(`${join(old, name)} stays where it is: ${target} exists too`);
-    else await moveLogged(join(old, name), target, log);
-  }
-  await rmdir(old).catch(() => {});
-}
-
-async function moveLogged(from: string, to: string, log: (msg: string) => void): Promise<void> {
-  try {
-    await mkdir(dirname(to), { recursive: true });
-    await rename(from, to);
-    log(`moved ${from} to ${to}`);
-  } catch (err) {
-    log(`${from} could not move to ${to}, trying again at the next start: ${messageOf(err)}`);
-  }
+/** The default task worktrees folder before ADR-125. */
+export function oldWorktreesDir(projectsDir: string): string {
+  return join(projectsDir, OLD_NAMES.worktrees);
 }
 
 /**
@@ -85,4 +54,39 @@ export async function removeEmptyWorktreesDir(dir: string): Promise<void> {
   if (repos === null) return;
   for (const repo of repos) await rmdir(join(dir, repo)).catch(() => {});
   await rmdir(dir).catch(() => {});
+}
+
+/** The store is one git repo, with its history and remote, so it moves as a whole. */
+async function moveStore(projectsDir: string, log: (msg: string) => void): Promise<void> {
+  const old = join(projectsDir, OLD_NAMES.local);
+  if (!existsSync(old)) return;
+  const dir = trackwallDir(projectsDir, "local");
+  if (existsSync(dir)) {
+    log(`${old} stays where it is: ${dir} exists too; keep the one you want and delete the other`);
+    return;
+  }
+  await moveLogged(projectsDir, old, dir, log);
+}
+
+async function moveEntries(projectsDir: string, folder: TrackwallFolder, log: (msg: string) => void): Promise<void> {
+  const old = join(projectsDir, OLD_NAMES[folder]);
+  const names = await readdir(old).catch(() => null);
+  if (names === null) return;
+  for (const name of names) {
+    const target = join(trackwallDir(projectsDir, folder), name);
+    if (existsSync(target)) log(`${join(old, name)} stays where it is: ${target} exists too`);
+    else await moveLogged(projectsDir, join(old, name), target, log);
+  }
+  await rmdir(old).catch(() => {});
+}
+
+async function moveLogged(projectsDir: string, from: string, to: string, log: (msg: string) => void): Promise<void> {
+  try {
+    await ensureTrackwallDir(projectsDir);
+    await mkdir(dirname(to), { recursive: true });
+    await rename(from, to);
+    log(`moved ${from} to ${to}`);
+  } catch (err) {
+    log(`${from} could not move to ${to}, trying again at the next start: ${messageOf(err)}`);
+  }
 }

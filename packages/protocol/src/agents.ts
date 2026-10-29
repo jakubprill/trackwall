@@ -299,7 +299,7 @@ export type Task = z.infer<typeof Task>;
 /**
  * What a proposal asks for (ADR-83): `task`, a task in the repo (`propose_task`), or an action on the projects folder
  * that a task cannot do, because a task is a worktree of one repo (`propose_folder_action`): today `remove_repo`, which
- * moves the repo out of the projects folder into `REMOVED_REPOS_DIR` of `.trackwall`.
+ * moves the repo out of the projects folder into `.trackwall/removed`.
  */
 export const ProposalKind = z.enum(["task", "remove_repo"]);
 export type ProposalKind = z.infer<typeof ProposalKind>;

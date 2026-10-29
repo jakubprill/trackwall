@@ -5,7 +5,6 @@ import {
   type ChangedFile,
   type IncludedFiles,
   type JavaNavigationSettings,
-  LANGUAGE_SERVER_DIR_NAME,
   noIncludedFiles,
   PATCH_MAX_BYTES,
   type ProposedBy,
@@ -20,7 +19,7 @@ import {
 } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
-import { trackwallDir } from "../../infra/trackwall-dir.ts";
+import { ensureTrackwallDir, trackwallDir } from "../../infra/trackwall-dir.ts";
 import { approvalArgs } from "./copilot-command.ts";
 import type { LspServer } from "./copilot-plugin.ts";
 import { JAVA_LSP_SERVER, type JavaNavigationReadiness, javaLanguageServer, javaNavigationReadiness } from "./java-language-server.ts";
@@ -195,6 +194,8 @@ export class AgentTasks {
     const repoDir = await this.#deps.repos.repoPath(repo);
     const base = await asRepoUnavailable(repo, this.#deps.vcs.defaultBase(repoDir));
     const worktreesDir = await this.#deps.repos.worktreesDir();
+    // The default worktrees folder and the task's Java language server data lie in `.trackwall` (ADR-125).
+    await ensureTrackwallDir(await this.#deps.repos.projectsDir());
     const task = this.#known({
       id,
       repo,
@@ -490,12 +491,13 @@ export class AgentTasks {
       this.#deps.log(`task ${task.id} starts without Java navigation: ${problem}`);
       return {};
     }
+    await ensureTrackwallDir(await this.#deps.repos.projectsDir());
     return { [JAVA_LSP_SERVER]: javaLanguageServer(settings, await this.#languageServerData(task)) };
   }
 
   /** The task's jdtls data folder in the projects folder. */
   async #languageServerData(task: KnownTask): Promise<string> {
-    return join(trackwallDir(await this.#deps.repos.projectsDir(), LANGUAGE_SERVER_DIR_NAME), task.id);
+    return join(trackwallDir(await this.#deps.repos.projectsDir(), "lsp"), task.id);
   }
 
   /** A running session writes in the worktree and holds its files (on Windows it blocks deletion), so stop it first. */

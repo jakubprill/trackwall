@@ -2,7 +2,6 @@ import {
   type AgentSecrets,
   countLabel,
   type DayStartSettings,
-  DEFAULT_WORKTREES_DIR_NAME,
   type GraphConfig,
   type JavaNavigationSettings,
   type RepoHost,
@@ -38,7 +37,7 @@ const MAX_VALUE_CHARS = 120;
 
 export const workspaceKeyValue: { [K in WorkspaceKey]: (value: WorkspaceKeyValues[K]) => string } = {
   projectsDir: (dir) => dir ?? "not set",
-  worktreesDir: (dir) => dir ?? `${trackwallDirLabel(DEFAULT_WORKTREES_DIR_NAME)} in the projects folder`,
+  worktreesDir: (dir) => dir ?? `${trackwallDirLabel("worktrees")} in the projects folder`,
   gitProgram: (path) => path ?? "git from PATH",
   repoHosts: (hosts) => (hosts.length === 0 ? "none" : hosts.map((h) => h.host).join(", ")),
   toolPermissions: (rules) => (rules.length === 0 ? "none" : countLabel(rules.length, { one: "rule", other: "rules" })),

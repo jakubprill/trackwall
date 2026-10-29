@@ -1,4 +1,4 @@
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative } from "node:path";
 import {
   type AgentSecrets,
   type CloneJob,
@@ -192,7 +192,7 @@ export class Workspace {
     await moveOldTrackwallFolders(projectsDir, log);
     const chosen = configOrProblem(() => this.deps.file.worktreesDir(), null);
     const oldDir = oldWorktreesDir(projectsDir);
-    if (chosen.problem === null && (chosen.value === null || resolve(chosen.value) !== oldDir)) await removeEmptyWorktreesDir(oldDir);
+    if (chosen.problem === null && (chosen.value === null || relative(chosen.value, oldDir) !== "")) await removeEmptyWorktreesDir(oldDir);
   }
 
   /** Hands the saved "Git program" to `vcs` at the daemon start; a bad key means git from `PATH`, and Settings shows why. */
