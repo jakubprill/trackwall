@@ -4,6 +4,7 @@ import {
   type DayStartSettings,
   DEFAULT_WORKTREES_DIR_NAME,
   type GraphConfig,
+  type JavaNavigationSettings,
   type RepoHost,
   type RepoTagRules,
   type SupervisorSettings,
@@ -28,6 +29,7 @@ export interface WorkspaceKeyValues {
   repoTags: RepoTagRules;
   dayStart: DayStartSettings | null;
   graph: GraphConfig;
+  javaNavigation: JavaNavigationSettings | null;
 }
 
 /** How long a value from the file may be in the line; a longer one is cut. */
@@ -54,6 +56,7 @@ export const workspaceKeyValue: { [K in WorkspaceKey]: (value: WorkspaceKeyValue
     ];
     return parts.join(", ");
   },
+  javaNavigation: (settings) => (settings === null ? "not set" : `jdtls: ${settings.jdtls}`),
 };
 
 function oneLine(text: string): string {

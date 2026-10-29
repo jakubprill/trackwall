@@ -18,6 +18,7 @@ const stored = {
   proposedBy: { session: "9b1e7d2a-0000-4000-8000-000000000000", supervisor: false },
   model: "claude-opus-5.5",
   approvals: "ask" as const,
+  javaNavigation: true,
   summary: { text: "Fixed, test added.", reportedAt: "2026-10-24T10:00:00.000Z" },
   trustedMiseConfig: { "mise.toml": "b".repeat(64) },
   port: 41003,
@@ -44,6 +45,7 @@ describe("tasks.json", () => {
       proposedBy: __,
       model: _model,
       approvals: _approvals,
+      javaNavigation: _javaNavigation,
       summary: ___,
       trustedMiseConfig: ____,
       port: _____,
@@ -59,6 +61,7 @@ describe("tasks.json", () => {
         proposedBy: null,
         model: null,
         approvals: "ask",
+        javaNavigation: false,
         summary: null,
         trustedMiseConfig: null,
         port: null,
@@ -99,6 +102,14 @@ describe("tasks.json", () => {
     writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
 
     expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, approvals: "ask" }]);
+  });
+
+  test("a task saved before Java navigation comes back without it, so its sessions start without a language server", () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
+    const { javaNavigation: _, ...old } = stored;
+    writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
+
+    expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, javaNavigation: false }]);
   });
 
   test("a task saved without approvals comes back without them", () => {

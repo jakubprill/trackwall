@@ -470,6 +470,38 @@ describe("a task's model with the real Copilot CLI (ADR-98)", () => {
   });
 });
 
+describe("Java navigation of a task with the real Copilot CLI (ADR-99)", () => {
+  test("a task with Java navigation offers the model the lsp tool from the session plugin's lspServers, and a task without it does not", async () => {
+    const { agents } = daemon.facade;
+    // A jdtls folder as its release archive unpacks. Copilot CLI offers the tool before its server answers, so this
+    // test's own program stands in for java; the server it fails to start is no part of the contract.
+    const jdtls = join(daemon.home, "jdtls");
+    mkdirSync(join(jdtls, "plugins"), { recursive: true });
+    writeFileSync(join(jdtls, "plugins", "org.eclipse.equinox.launcher_1.7.100.jar"), "");
+    for (const config of ["config_win", "config_mac", "config_mac_arm", "config_linux", "config_linux_arm"]) mkdirSync(join(jdtls, config));
+    const workspaceFile = join(daemon.home, "workspace.yaml");
+    const workspace = readFileSync(workspaceFile, "utf8");
+    writeFileSync(workspaceFile, `${workspace}\njavaNavigation: ${JSON.stringify({ jdtls, java: process.execPath })}\n`);
+    try {
+      model.reply({ text: "Looking for the callers." });
+      const task = await agents.createTask("shop", "find the callers of the login", "ask", null, true);
+      const session = taskSessionOf(task.id);
+      await endOfTurn(session);
+      expect(model.requests().at(-1)?.tools).toContain("lsp");
+      await agents.stop(session);
+
+      model.reply({ text: "Updating the README." });
+      const plain = await agents.createTask("shop", "update the README");
+      const plainSession = taskSessionOf(plain.id);
+      await endOfTurn(plainSession);
+      expect(model.requests().at(-1)?.tools).not.toContain("lsp");
+      await agents.stop(plainSession);
+    } finally {
+      writeFileSync(workspaceFile, workspace);
+    }
+  });
+});
+
 describe("a task without approvals with the real Copilot CLI (ADR-105)", () => {
   test("a task started auto runs a shell command without an approval request, and a deny rule still refuses one", async () => {
     const { agents } = daemon.facade;

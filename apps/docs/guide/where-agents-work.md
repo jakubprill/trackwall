@@ -27,6 +27,7 @@ Everything Trackwall keeps beside your repos lives in your projects folder, in f
 ├── .trackwall-worktrees/        the agent tasks' worktrees
 │   └── orders-api/
 │       └── fix-login/           one task: its branch, plus your copied files
+├── .trackwall-lsp/              the Java language server's index of each task with Java navigation
 ├── .trackwall-scratch/          git's scratch files while Trackwall reads changes
 └── .trackwall-removed/          repos the supervisor removed, until you delete them
 ```

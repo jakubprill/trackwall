@@ -40,6 +40,7 @@ function task(id: string, proposedBy: Task["proposedBy"]): Task {
     proposedBy,
     model: null,
     approvals: "ask",
+    javaNavigation: false,
     summary: null,
     port: 41000,
     included: { files: [], problems: [] },
