@@ -38,7 +38,10 @@ describe("config files", () => {
     const { facade, home, projects, copilotHome } = setup();
     await facade.workspace.setProjectsDir(projects);
     const workspaceFile = join(home, "workspace.yaml");
-    writeFileSync(workspaceFile, `${readFileSync(workspaceFile, "utf8")}agentSecrets: [GITLAB_TOKEN]\n`);
+    writeFileSync(
+      workspaceFile,
+      `${readFileSync(workspaceFile, "utf8")}agentSecrets: [GITLAB_TOKEN]\nlocalConfigRemote: https://me:secret@backups.example.com/me/backups.git\n`,
+    );
     writeFileSync(join(home, "tasks.json"), "[]");
     writeFileSync(join(copilotHome, "config.json"), JSON.stringify({ trustedFolders: [projects] }));
 
@@ -53,7 +56,7 @@ describe("config files", () => {
       name: "workspace.yaml",
       path: workspaceFile,
       state: "present",
-      detail: "2 of 11 keys set in the file",
+      detail: "3 of 12 keys set in the file",
     });
     expect(entry("tasks-file")).toEqual({
       id: "tasks-file",
@@ -113,6 +116,8 @@ describe("config files", () => {
       ["toolPermissions", "default", "none", null],
       ["agentSecrets", "file", "GITLAB_TOKEN", 2],
       ["javaNavigation", "default", "not set", null],
+      // The value without the user and token an HTTPS address may carry.
+      ["localConfigRemote", "file", "https://backups.example.com/me/backups.git", 3],
       ["supervisor", "default", "changesCode: false", null],
       ["repoTags", "default", "none", null],
       ["dayStart", "default", "not set", null],

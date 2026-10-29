@@ -449,6 +449,15 @@ export class Workspace {
     return this.deps.file.agentSecrets();
   }
 
+  /** The only address the local config store is pushed to (ADR-127); `null` until the user allows one. */
+  localConfigRemote(): string | null {
+    return this.deps.file.localConfigRemote();
+  }
+
+  setLocalConfigRemote(url: string | null): void {
+    this.deps.file.setLocalConfigRemote(url);
+  }
+
   /**
    * The Java language server for tasks (`javaNavigation` in `workspace.yaml`, ADR-99); `null` without the key,
    * `invalid_config` for a bad one.

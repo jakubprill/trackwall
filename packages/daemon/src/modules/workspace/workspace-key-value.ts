@@ -10,6 +10,7 @@ import {
   type ToolPermissionRules,
   trackwallDirLabel,
   type WorkspaceKey,
+  withoutUserInfo,
 } from "@trackwall/protocol";
 
 /**
@@ -30,6 +31,7 @@ export interface WorkspaceKeyValues {
   dayStart: DayStartSettings | null;
   graph: GraphConfig;
   javaNavigation: JavaNavigationSettings | null;
+  localConfigRemote: string | null;
 }
 
 /** How long a value from the file may be in the line; a longer one is cut. */
@@ -57,6 +59,7 @@ export const workspaceKeyValue: { [K in WorkspaceKey]: (value: WorkspaceKeyValue
     return parts.join(", ");
   },
   javaNavigation: (settings) => (settings === null ? "not set" : `jdtls: ${settings.jdtls}`),
+  localConfigRemote: (url) => (url === null ? "none: the store is not pushed" : withoutUserInfo(url)),
 };
 
 function oneLine(text: string): string {

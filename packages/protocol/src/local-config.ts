@@ -68,13 +68,37 @@ export const LocalConfigStore = z.object({
   dir: z.string().nullable(),
   /** The newest commit in the store, the last backup; `null` before the first one. */
   lastBackup: Commit.nullable(),
-  /** The store's main remote (`origin` or the only one) as `host/path` or a path; `null` keeps the backups on this computer only. */
+  /**
+   * The address the store is pushed to, the one the user allowed (`localConfigRemote` in `workspace.yaml`, ADR-127),
+   * without a user or token; `null` keeps the backups on this computer only.
+   */
+  pushesTo: z.string().nullable(),
+  /**
+   * The store's main remote (`origin` or the only one) as its config writes it, without a user or token: the address the
+   * user can allow. It is not where the store is pushed, since an agent can change it; `null` without one.
+   */
   remote: z.string().nullable(),
+  /** Whether `remote` is the address the store is pushed to. */
+  remoteAllowed: z.boolean(),
+  /** Why `remote` cannot be allowed (not HTTPS or SSH, several addresses); `null` when it can. */
+  remoteProblem: z.string().nullable(),
   push: LocalConfigPush,
   /** Why the last backup did not finish (a file that cannot be read, a git error); `null` when it did. */
   problem: z.string().nullable(),
 });
 export type LocalConfigStore = z.infer<typeof LocalConfigStore>;
+
+/**
+ * An address without the user and token an HTTP or HTTPS address may carry: `https://me:token@host/x` is
+ * `https://host/x`. Everything up to the last `@` before the path goes, so a token with an `@` in it does not show
+ * either. Any other address stays as it is: the user of `ssh://git@host/x` is no secret.
+ */
+export function withoutUserInfo(url: string): string {
+  const match = /^(https?:\/\/)([^/]*)(.*)$/is.exec(url);
+  if (!match) return url;
+  const [, scheme = "", authority = "", rest = ""] = match;
+  return `${scheme}${authority.slice(authority.lastIndexOf("@") + 1)}${rest}`;
+}
 
 function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
   return { path: `/api/local-config/${action}`, request, data };
@@ -94,4 +118,11 @@ export const localConfigApi = {
   restore: endpoint("restore", RepoRequest, RepoLocalConfig),
   /** Has git ignore the repo's local config files that it neither tracks nor ignores, in this clone only (`.git/info/exclude`). */
   ignore: endpoint("ignore", RepoRequest, RepoLocalConfig),
+  /**
+   * Pushes the store to its remote from now on (ADR-127): `remote` is the address as the user saw it in `store`, so a
+   * remote that changed meanwhile is refused. Only from the UI, never from MCP: an agent must not choose where the backups go.
+   */
+  allowRemote: endpoint("allow-remote", z.object({ remote: z.string() }).strict(), LocalConfigStore),
+  /** Pushes the store nowhere from now on (removes `localConfigRemote`). Only from the UI, like `allowRemote`. */
+  stopPushing: endpoint("stop-pushing", z.object({}).strict(), LocalConfigStore),
 };

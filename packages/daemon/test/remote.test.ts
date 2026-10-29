@@ -37,6 +37,12 @@ describe("remote repo address", () => {
     expect(config("core.bare\nfalse\0core.quotepath\0")).toBeUndefined();
   });
 
+  test("a remote keeps every address, since git pushes to each, and the first is the one it fetches from", () => {
+    const config = parseConfig("remote.origin.url\nfirst\0remote.origin.url\nsecond\0");
+    expect(config.remotes.get("origin")).toEqual(["first", "second"]);
+    expect(mainRemote(config)).toEqual({ name: "origin", url: "first" });
+  });
+
   test("the remote address is after the insteadOf shortcut, with the longest matching prefix, as in git", () => {
     const config = parseConfig(
       "url.git@gitlab.example.com:.insteadof\ngl:\0url.git@other.example.com:shop/.insteadof\ngl:shop/\0remote.origin.url\ngl:shop/api\0",
