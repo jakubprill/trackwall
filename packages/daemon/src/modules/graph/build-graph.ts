@@ -3,12 +3,13 @@ import type { GraphCardInput, GraphConfigInput } from "./graph-input.ts";
 import { EdgeSet, type Join, missingRepo, repoResolver } from "./graph-join.ts";
 import { addHttpEdges } from "./http-edges.ts";
 import { HttpIndex } from "./http-index.ts";
+import { unresolvedCalls } from "./unresolved-calls.ts";
 
 /**
- * Joining repo cards into the graph (§4.6, ADR-29, ADR-30): a package a repo uses and the repo that builds it, and an HTTP
- * client and the repo with the app or endpoints it calls, give an edge with evidence from both sides. On top of that, package
- * and app aliases and manual edges from `workspace.yaml`. A pure function: the same cards and the same configuration give the
- * same graph.
+ * Joining repo cards into the graph (§4.6, ADR-29, ADR-30, ADR-116): a package a repo uses and the repo that builds it
+ * (`depends-on`), and an HTTP client and the repo with the app or endpoints it calls (`calls`), give an edge with evidence
+ * from both sides. On top of that, package and app aliases and manual edges from `workspace.yaml`, and the clients that
+ * point to no repo as the graph's problems. A pure function: the same cards and the same configuration give the same graph.
  */
 
 interface Provider {
@@ -28,7 +29,13 @@ export function buildGraphWithIndex(cards: readonly GraphCardInput[], input: Gra
   addHttpEdges(join, http);
   checkAliases(join);
   for (const [i, manual] of input.config.edges.entries()) addManualEdges(join, manual, i);
-  const graph = { nodes: cards.map(graphNode), edges: join.edges.sorted(), configProblems: join.problems, configFile: input.file };
+  const graph = {
+    nodes: cards.map(graphNode),
+    edges: join.edges.sorted(),
+    problems: unresolvedCalls(http),
+    configProblems: join.configProblems,
+    configFile: input.file,
+  };
   return { graph, http };
 }
 
@@ -36,7 +43,7 @@ export function buildGraphWithIndex(cards: readonly GraphCardInput[], input: Gra
 function joinOf(cards: readonly GraphCardInput[], { config, file, problems }: GraphConfigInput): Join {
   const appAliases = new Map(Object.entries(config.apps).map(([name, ref]) => [name.toLowerCase(), ref]));
   const aliases = new Map(Object.entries(config.packages));
-  return { edges: new EdgeSet(), resolve: repoResolver(cards), problems: [...problems], aliases, appAliases, file };
+  return { edges: new EdgeSet(), resolve: repoResolver(cards), configProblems: [...problems], aliases, appAliases, file };
 }
 
 function addPackageEdgesOf(join: Join, cards: readonly GraphCardInput[]): void {
@@ -63,7 +70,8 @@ function addPackageEdges(join: Join, from: string, pkg: ConsumedPackage, found: 
     join.edges.add({
       from,
       to: p.repo,
-      kind: "package",
+      kind: "depends-on",
+      source: "package",
       key: pkg.name,
       confidence,
       evidence: [consumerEvidence(from, pkg), providerEvidence(p)],
@@ -77,31 +85,39 @@ function addAliasEdges(join: Join, from: string, pkg: ConsumedPackage): void {
   if (alias === undefined) return;
   const evidence: EdgeEvidence = { repo: null, path: join.file, line: null, detail: `graph.packages: ${pkg.name} → ${alias}` };
   for (const to of join.resolve(alias).filter((repo) => repo !== from)) {
-    join.edges.add({ from, to, kind: "package", key: pkg.name, confidence: "high", evidence: [consumerEvidence(from, pkg), evidence] });
+    join.edges.add({
+      from,
+      to,
+      kind: "depends-on",
+      source: "package",
+      key: pkg.name,
+      confidence: "high",
+      evidence: [consumerEvidence(from, pkg), evidence],
+    });
   }
 }
 
 function checkAliases(join: Join): void {
   for (const [name, ref] of join.aliases) {
-    if (join.resolve(ref).length === 0) join.problems.push(`graph.packages “${name}”: ${missingRepo(ref)}`);
+    if (join.resolve(ref).length === 0) join.configProblems.push(`graph.packages “${name}”: ${missingRepo(ref)}`);
   }
   for (const [name, ref] of join.appAliases) {
-    if (join.resolve(ref).length === 0) join.problems.push(`graph.apps “${name}”: ${missingRepo(ref)}`);
+    if (join.resolve(ref).length === 0) join.configProblems.push(`graph.apps “${name}”: ${missingRepo(ref)}`);
   }
 }
 
 function addManualEdges(join: Join, manual: ManualEdge, i: number): void {
   const froms = join.resolve(manual.from);
   const tos = join.resolve(manual.to);
-  if (froms.length === 0) join.problems.push(`graph.edges[${i}].from: ${missingRepo(manual.from)}`);
-  if (tos.length === 0) join.problems.push(`graph.edges[${i}].to: ${missingRepo(manual.to)}`);
+  if (froms.length === 0) join.configProblems.push(`graph.edges[${i}].from: ${missingRepo(manual.from)}`);
+  if (tos.length === 0) join.configProblems.push(`graph.edges[${i}].to: ${missingRepo(manual.to)}`);
   const evidence: EdgeEvidence = { repo: null, path: join.file, line: null, detail: `graph.edges[${i}]: ${manual.from} → ${manual.to}` };
   const pairs = froms.flatMap((from) => tos.filter((to) => to !== from).map((to) => ({ from, to })));
   if (froms.length > 0 && tos.length > 0 && pairs.length === 0) {
-    join.problems.push(`graph.edges[${i}]: from and to point to the same repo (${froms.join(", ")})`);
+    join.configProblems.push(`graph.edges[${i}]: from and to point to the same repo (${froms.join(", ")})`);
   }
   for (const { from, to } of pairs) {
-    join.edges.add({ from, to, kind: "manual", key: manual.note, confidence: "exact", evidence: [evidence] });
+    join.edges.add({ from, to, kind: manual.kind, source: "manual", key: manual.note, confidence: "exact", evidence: [evidence] });
   }
 }
 

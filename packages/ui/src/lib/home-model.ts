@@ -134,9 +134,9 @@ export function homeHasObject(model: HomeModel, key: HomeKey): boolean {
   return target?.kind === "daemon";
 }
 
-/** One connection per repo pair and kind: several pieces of evidence for the same dependency are one wire on the scene. */
+/** One connection per repo pair and source: several pieces of evidence for the same dependency are one wire on the scene. */
 function homeLinks(edges: RepoGraph["edges"]): HomeLink[] {
   const links = new Map<string, HomeLink>();
-  for (const { from, to, kind } of edges) links.set(JSON.stringify([from, to, kind]), { from, to, kind });
+  for (const { from, to, source } of edges) links.set(JSON.stringify([from, to, source]), { from, to, source });
   return [...links.values()];
 }

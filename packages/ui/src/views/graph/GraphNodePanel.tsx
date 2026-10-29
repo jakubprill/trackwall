@@ -1,10 +1,10 @@
 import {
   type EdgeConfidence,
   type EdgeEvidence,
-  type EdgeKind,
   evidenceLabel,
   type GraphEdge,
   type GraphNode,
+  type GraphProblem,
   pluralNoun,
   type RepoGraph,
 } from "@trackwall/protocol";
@@ -13,6 +13,7 @@ import type { ReactNode } from "react";
 import { Surface } from "@/components/Surface";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { edgeLabel, problemClient } from "@/lib/graph-labels";
 import type { EdgePair } from "@/lib/graph-layout";
 
 /** Edge confidence for a person (ADR-29, ADR-30; rules at `EdgeConfidence`); `Record` forces an entry for each. */
@@ -23,26 +24,23 @@ const CONFIDENCE_LABELS: Record<EdgeConfidence, string> = {
   low: "possible",
 };
 
-const EDGE_KIND_LABELS: Record<EdgeKind, string> = {
-  package: "package",
-  http: "HTTP",
-  manual: "manual",
-};
-
 /**
  * The details panel of the selected repo in the "Overview" view: whom the repo uses and who uses it, each edge with its
- * key (a package, an app or an HTTP address, a manual edge's description) and evidence. A click selects the repo on the
- * other side of an edge.
+ * key (a package, an app or an HTTP address, a manual edge's description) and evidence, and the repo's HTTP clients the
+ * graph found no target for (ADR-116). A click selects the repo on the other side of an edge.
  */
 export function GraphNodePanel({
   node,
   pairs,
+  problems,
   onSelect,
   onClose,
 }: {
   node: GraphNode;
   /** Edges grouped by repo pair, the same as in the drawing (`GraphLayout.pairs`). */
   pairs: readonly EdgePair[];
+  /** The graph's problems in this repo (`repoProblems`). */
+  problems: readonly GraphProblem[];
   onSelect: (repo: string) => void;
   onClose: () => void;
 }) {
@@ -89,7 +87,25 @@ export function GraphNodePanel({
           <PairItem key={pair.from} repo={pair.from} edges={pair.edges} onSelect={onSelect} />
         ))}
       </Section>
+      {problems.length > 0 && (
+        <Section label="Calls without a target" empty="">
+          {problems.map((problem) => (
+            <ProblemItem key={`${problem.via}:${problem.client}:${problem.evidence.path}:${problem.evidence.line}`} problem={problem} />
+          ))}
+        </Section>
+      )}
     </div>
+  );
+}
+
+/** An HTTP client the graph could not point anywhere: which one, where it is, and what entry would connect it. */
+function ProblemItem({ problem }: { problem: GraphProblem }) {
+  return (
+    <li className="flex min-w-0 flex-col gap-0.5 px-3 py-2">
+      <span className="truncate font-mono text-xs">{problemClient(problem)}</span>
+      <span className="text-muted-foreground truncate font-mono text-2xs">{evidenceLabel(problem.evidence)}</span>
+      <span className="text-warning text-xs break-words">{problem.message}</span>
+    </li>
   );
 }
 
@@ -99,14 +115,15 @@ export function GraphSummaryPanel({ graph, pairs }: { graph: RepoGraph; pairs: r
   return (
     <div className="flex flex-col gap-4 p-4">
       <p className="hud-label">Connection graph</p>
-      <dl className="grid grid-cols-3 gap-2">
+      <dl className="grid grid-cols-2 gap-2">
         <Stat label="Repos" value={graph.nodes.length} />
         <Stat label="Connections" value={pairs.length} />
         <Stat label="No card" value={withProblems} />
+        <Stat label="Calls without a target" value={graph.problems.length} />
       </dl>
       <p className="text-muted-foreground text-sm">
         A line goes from a repo to each repo whose package it depends on or whose app it calls over HTTP. Select a repo to see its
-        connections, their confidence and the evidence (file and line).
+        connections, their confidence and the evidence (file and line), and its HTTP clients that point to no repo in the list.
       </p>
       {graph.configProblems.length > 0 && (
         <Section label="Errors in graph entries" empty="">
@@ -136,9 +153,9 @@ function PairItem({ repo, edges, onSelect }: { repo: string; edges: GraphEdge[];
       </button>
       <ul className="flex flex-col gap-1.5">
         {edges.map((edge) => (
-          <li key={`${edge.kind}:${edge.key}`} className="flex min-w-0 flex-col">
+          <li key={`${edge.kind}:${edge.source}:${edge.key}`} className="flex min-w-0 flex-col">
             <span className="flex min-w-0 items-center gap-2">
-              <Badge variant={edge.kind === "manual" ? "outline" : "secondary"}>{EDGE_KIND_LABELS[edge.kind]}</Badge>
+              <Badge variant={edge.source === "manual" ? "outline" : "secondary"}>{edgeLabel(edge)}</Badge>
               <span className="min-w-0 truncate font-mono text-xs" title={edge.key}>
                 {edge.key}
               </span>

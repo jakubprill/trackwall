@@ -6,7 +6,7 @@ import { EndpointSource, HttpClientVia, HttpMethod, OpenApiOperation } from "./h
 import { RepoId } from "./workspace.ts";
 
 /**
- * Contract of the `graph` module (§4.6, ADR-29, ADR-30): the graph of connections between the repos of the projects folder.
+ * Contract of the `graph` module (§4.6, ADR-29, ADR-30, ADR-116): the graph of connections between the repos of the projects folder.
  * An edge joins a package a repo uses with the repo that builds it, an HTTP client with an application or endpoint of
  * another repo (repo cards, ADR-25), or comes from a user entry in `workspace.yaml`.
  * Every edge has evidence, and the graph is computed from the cards anew when a repo's commit or the configuration
@@ -20,6 +20,22 @@ import { RepoId } from "./workspace.ts";
 export const RepoRef = z.string().min(1).max(300);
 export type RepoRef = z.infer<typeof RepoRef>;
 
+/**
+ * What an edge says about its two repos (ADR-116): `depends-on` the first needs the second to build (a package), `calls`
+ * the first calls the second at runtime (HTTP). Only `calls` edges matter for starting a slice of services (ADR-45).
+ * Topics will come with card extractors.
+ */
+export const EdgeKind = z.enum(["depends-on", "calls"]);
+export type EdgeKind = z.infer<typeof EdgeKind>;
+
+/**
+ * Where an edge comes from (ADR-116): `package` from the cards (a repo uses a package the other builds, always
+ * `depends-on`), `http` from the cards (a repo's HTTP client calls the other's application or endpoint, always `calls`),
+ * `manual` from an entry in `workspace.yaml` (either kind).
+ */
+export const EdgeSource = z.enum(["package", "http", "manual"]);
+export type EdgeSource = z.infer<typeof EdgeSource>;
+
 /** A manual edge: a connection the cards do not see (for example an HTTP call through a gateway). */
 export const ManualEdge = z
   .object({
@@ -29,6 +45,8 @@ export const ManualEdge = z
     to: RepoRef,
     /** A description of the connection for a person and an agent, for example `HTTP /api/orders`. */
     note: z.string().min(1).max(200),
+    /** What the connection is (ADR-116); without it `calls`, the connection manual edges were written for before. */
+    kind: EdgeKind.default("calls"),
   })
   .strict();
 export type ManualEdge = z.infer<typeof ManualEdge>;
@@ -61,14 +79,6 @@ export const GraphConfig = z
 export type GraphConfig = z.infer<typeof GraphConfig>;
 
 /**
- * Where an edge comes from: `package` from the cards (a repo uses a package the other builds), `http` from the cards (a
- * repo's HTTP client calls the other's application or endpoint), `manual` from an entry in `workspace.yaml`. Topics will
- * come with card extractors.
- */
-export const EdgeKind = z.enum(["package", "http", "manual"]);
-export type EdgeKind = z.infer<typeof EdgeKind>;
-
-/**
  * Edge confidence. Package: `exact` when exactly one repo builds it; `high` from a package alias; `medium` when several
  * repos in the list build it (for example two clones of one repo). HTTP (ADR-30): `exact` when the application name
  * points to one repo and every call has an endpoint in it; `high` for the application name alone or from an application
@@ -91,6 +101,7 @@ export const GraphEdge = z.object({
   from: RepoId,
   to: RepoId,
   kind: EdgeKind,
+  source: EdgeSource,
   /** The package name for `package`, the application name or client address for `http`, the description from `workspace.yaml` for `manual`. */
   key: z.string(),
   confidence: EdgeConfidence,
@@ -115,10 +126,33 @@ export const GraphNode = z.object({
 });
 export type GraphNode = z.infer<typeof GraphNode>;
 
-/** The whole graph: nodes in the order of the repo list, edges, and errors in `graph` entries of `workspace.yaml`. */
+/**
+ * What kind of gap a graph problem is (ADR-116), like the codes of card problems (ADR-80): `unresolved-call-target` an
+ * HTTP client with calls or an app name whose target no repo in the list is (an external system, or an app the graph
+ * needs an alias in `graph.apps` for).
+ */
+export const GraphProblemCode = z.enum(["unresolved-call-target"]);
+export type GraphProblemCode = z.infer<typeof GraphProblemCode>;
+
+/** A gap the graph found in one repo's facts; it needs every card, so it is not on a card of one commit. */
+export const GraphProblem = z.object({
+  code: GraphProblemCode,
+  repo: RepoId,
+  via: HttpClientVia,
+  /** The client name from the card. */
+  client: z.string(),
+  /** Where the client is in the repo's commit. */
+  evidence: Evidence,
+  message: z.string(),
+});
+export type GraphProblem = z.infer<typeof GraphProblem>;
+
+/** The whole graph: nodes in the order of the repo list, edges, gaps, and errors in `graph` entries of `workspace.yaml`. */
 export const RepoGraph = z.object({
   nodes: z.array(GraphNode),
   edges: z.array(GraphEdge),
+  /** Gaps in the repos' facts found while joining the cards (ADR-116), in the order of the repo list. */
+  problems: z.array(GraphProblem),
   /** A `graph` entry in `workspace.yaml` that cannot be used (for example a repo not in the list), as a sentence for a person. */
   configProblems: z.array(z.string()),
   /** The full path of `workspace.yaml`, where package aliases and manual edges are added. */
@@ -135,6 +169,8 @@ export const Subgraph = z.object({
   depth: z.number().int().min(1).max(MAX_SUBGRAPH_DEPTH),
   nodes: z.array(GraphNode),
   edges: z.array(GraphEdge),
+  /** The graph's problems in the subgraph's repos (ADR-116). */
+  problems: z.array(GraphProblem),
 });
 export type Subgraph = z.infer<typeof Subgraph>;
 

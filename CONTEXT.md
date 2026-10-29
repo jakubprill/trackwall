@@ -188,7 +188,7 @@ Facts about a repo extracted deterministically from build files, configuration a
 _Avoid_: profile, metadata; "repo card" for the whole repo details panel
 
 **Card problem** (`CardProblem`, code `CardProblemCode`; UI "Incomplete"):
-Something the card is missing or shows only in part, with a code (ADR-80): `files-not-read`, `file-invalid`, `parse-incomplete`, `truncated`, and the file or module directory it concerns (empty for the repo root or the whole repo).
+Something the card is missing or shows only in part, with a code (ADR-80): `files-not-read`, `file-invalid`, `parse-incomplete`, `truncated`, `no-endpoints` (a Spring web app with no endpoint found, ADR-116), and the file or module directory it concerns (empty for the repo root or the whole repo).
 _Avoid_: error, warning (the card is still built)
 
 **Card warm-up** (`CardWarmup`, progress `CardWarmupProgress`, `cards/warmup`, topic `cards.warmup.changed`; UI "Repo cards"):
@@ -253,7 +253,11 @@ The repos from the projects folder as nodes (`GraphNode`) and the connections be
 _Avoid_: map, dependency diagram
 
 **Connection** (`GraphEdge`; *edge* in the architecture document and in code):
-A link from the repo that uses to the repo that is used, with a kind (`EdgeKind`: `package` and `http` from cards, `manual` from `workspace.yaml`; later `topic`), a key (a package name, an app name, a host or `localhost:<port>`, a description), a confidence and evidence. One pair of repos can have several connections; the "Overview" view draws them as one line.
+A link from the repo that uses to the repo that is used, with a kind (`EdgeKind`: `depends-on`, needed to build, or `calls`, called at runtime; ADR-116; topics will add a kind), a source (`EdgeSource`: `package` and `http` from cards, `manual` from `workspace.yaml`), a key (a package name, an app name, a host or `localhost:<port>`, a description), a confidence and evidence. One pair of repos can have several connections; the "Overview" view draws them as one line. In the UI "calls · HTTP", "depends on · package". A repo *exposes* its endpoints on its card (`provides` of the kind `endpoint`); that is not a connection.
+
+**Graph problem** (`GraphProblem`, code `GraphProblemCode`; UI "Calls without a target"):
+A gap in a repo's facts that only the whole graph shows, with a code like a card problem (ADR-116): `unresolved-call-target`, an HTTP client the code uses that points to no repo in the list.
+_Avoid_: error (the graph is still built), dangling call
 
 **Package alias** (`graph.packages` in `workspace.yaml`):
 A package name and the repo that provides it, when that repo's card does not show it (a package built outside the build files, a different name in the artifact repository). It works only for a package no repo on the list builds.
@@ -262,7 +266,7 @@ A package name and the repo that provides it, when that repo's card does not sho
 An app name or the host of an address (case-insensitive) and the repo that serves it, when no card has that name (a gateway address, a DNS name different from `spring.application.name`).
 
 **Manual connection** (`ManualEdge`, `graph.edges` in `workspace.yaml`):
-A connection entered by the user (`from`, `to`, `note`), for example an HTTP call the cards do not see yet. A repo is given by its identifier or remote address (`RepoRef`).
+A connection entered by the user (`from`, `to`, `note`, and `kind`, `calls` unless it says `depends-on`), for example an HTTP call the cards do not see yet. A repo is given by its identifier or remote address (`RepoRef`).
 
 **Evidence** (`Evidence`, `EdgeEvidence` in the graph):
 The file and line from which a fact on the card or a connection in the graph follows; a connection's evidence also has the repo (or `null` for `workspace.yaml`) and a sentence about what is in that place.
@@ -284,7 +288,7 @@ _Avoid_: app, microservice (when the entity in Trackwall is meant)
 `stopped`, `starting`, `healthy`, `unhealthy`, `stopping` or `crashed`; always observed, never assumed. `stopping` lasts until the process group has ended and the port no longer answers, so it also covers an app a build tool runs outside the group (Gradle's daemon) that still holds the port. In the UI `healthy` reads "ready on port N" and `unhealthy` "not answering".
 
 **Slice** (`ServiceSlice`, member `SliceMember`):
-A service with every service it calls at runtime (graph edges `http` and `manual`), started together by `start_service`, dependencies first in waves (ADR-45). A member is `pending`, `started`, `running` (it was already running) or `skipped` with the reason.
+A service with every service it calls at runtime (graph edges of the kind `calls`), started together by `start_service`, dependencies first in waves (ADR-45). A member is `pending`, `started`, `running` (it was already running) or `skipped` with the reason.
 _Avoid_: stack, environment (for the set of services)
 
 **Process group** (`ProcessGroup`):

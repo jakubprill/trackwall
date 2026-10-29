@@ -28,9 +28,9 @@ const MODEL: HomeModel = {
     { id: "s2", repo: "payments-api", state: "working" },
   ],
   links: [
-    { from: "web-shop", to: "orders-api", kind: "http" },
-    { from: "orders-api", to: "common-dto", kind: "package" },
-    { from: "payments-api", to: "common-dto", kind: "package" },
+    { from: "web-shop", to: "orders-api", source: "http" },
+    { from: "orders-api", to: "common-dto", source: "package" },
+    { from: "payments-api", to: "common-dto", source: "package" },
   ],
   daemonRunning: true,
 };
@@ -274,8 +274,8 @@ describe("dashboard scene", () => {
       repos: [repo("a>b", 0), repo("a", 0), repo("c", 1), repo("b>c", 1)],
       sessions: [],
       links: [
-        { from: "a>b", to: "c", kind: "http" },
-        { from: "a", to: "b>c", kind: "http" },
+        { from: "a>b", to: "c", source: "http" },
+        { from: "a", to: "b>c", source: "http" },
       ],
       daemonRunning: true,
     });

@@ -109,7 +109,7 @@ function Edge({
   const active = selected !== undefined && (pair.from === selected || pair.to === selected);
   const dimmed = near !== undefined && !active;
   // A dashed line when all edges of the pair are manual.
-  const manualOnly = pair.edges.every((e) => e.kind === "manual");
+  const manualOnly = pair.edges.every((e) => e.source === "manual");
   return (
     <g className={cn("transition-opacity", dimmed && "opacity-15")}>
       <path
