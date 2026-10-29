@@ -24,7 +24,7 @@ The last line prints the public key, which goes into `tauri.conf.json` through a
    Then `cargo update --workspace --manifest-path apps/desktop/src-tauri/Cargo.toml` carries the new version into `Cargo.lock` (without bumping dependencies); commit it with the rest.
 2. Write the release note `docs/release-notes/v<version>.md` in English (ADR-32) for the user: what is new, how to move from an older version, known limitations (the same test checks that the file exists and is not empty).
 3. Merge the change into `main` through a PR.
-4. Download the portable build from the CI artifact of the `main` commit you are going to tag, run it on Windows and macOS, and in the "Sessions" view start and stop one session. CI checks Job Objects and PTYs only from source, not in the compiled binary (ADR-1). The release workflow builds the binary again with the same scripts and tool versions, so this step catches a Bun bug in `--compile`, but not a difference between two runs.
+4. Download the portable build from the CI artifacts of the `main` commit you are going to tag (a PR and a push to `main` build neither, ADR-128: take the nightly run when it ran on that commit, otherwise run CI on `main` by hand with Windows and macOS ticked), run it on Windows and macOS, and in the "Sessions" view start and stop one session. CI checks Job Objects and PTYs only from source, not in the compiled binary (ADR-1). The release workflow builds the binary again with the same scripts and tool versions, so this step catches a Bun bug in `--compile`, but not a difference between two runs.
 5. On `main`, create and push a tag with the same version:
 
    ```sh
