@@ -117,13 +117,22 @@ export class JavaNavigation {
     const unpacked = join(work, "jdtls");
     await mkdir(unpacked);
     await this.#deps.extract(archive, unpacked);
-    if (await exists(target)) {
-      // Moved into the temporary folder, which goes with it; on Windows a task's running jdtls holds it, and the error says so.
-      await rename(target, join(work, "previous")).catch((err: unknown) => {
-        throw new Error(`could not replace ${target}; end the tasks with Java navigation and install again (${messageOf(err)})`);
-      });
+    if (!(await exists(target))) {
+      await rename(unpacked, target);
+      return target;
     }
-    await rename(unpacked, target);
+    // The earlier copy goes into the temporary folder and away with it; on Windows a task's running jdtls holds it, and the error says so.
+    const previous = join(work, "previous");
+    await rename(target, previous).catch((err: unknown) => {
+      throw new Error(`could not replace ${target}; end the tasks with Java navigation and install again (${messageOf(err)})`);
+    });
+    try {
+      await rename(unpacked, target);
+    } catch (err) {
+      // The settings still name `target`: the earlier copy goes back rather than leave them pointing at nothing.
+      await rename(previous, target);
+      throw err;
+    }
     return target;
   }
 }

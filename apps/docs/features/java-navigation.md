@@ -25,7 +25,7 @@ While Trackwall cannot start jdtls, the pill stays grey: hover it to see why, fo
 ## Use it
 
 1. Open "Settings", choose "Agents" and click "Install" in the "Java navigation" section. Trackwall downloads jdtls into your projects folder and installs Java 25 with [mise](/features/mise-tasks), about 250 MB together; the line next to the button shows each step and says "Ready" at the end. Your projects can stay on their own Java versions.
-2. If your projects use Lombok, add `lombok: /full/path/to/lombok.jar` under `javaNavigation` in `~/.trackwall/workspace.yaml`, so jdtls understands the generated getters. "Install again" keeps it, and also repairs the jdtls folder if something changed it.
+2. If your projects use Lombok, add `lombok: /full/path/to/lombok.jar` under `javaNavigation` in `~/.trackwall/workspace.yaml`, so jdtls understands the generated getters. "Install again" keeps it, and also repairs the jdtls folder if something changed it; end the tasks with Java navigation first.
 3. Open "Sessions", choose a Java repo on the New session form, turn on "Java navigation" and create the task.
 
 To use a jdtls and Java of your own instead, skip the button and write their full paths into `workspace.yaml`:

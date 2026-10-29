@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { win32 } from "node:path";
 import { runProgram } from "./run-program.ts";
 
@@ -9,8 +10,10 @@ export async function extractTarGz(archive: string, dir: string, o: { env: NodeJ
   await runProgram(tarProgram(process.platform, o.env), ["-xzf", archive, "-C", dir], { label: "tar -xzf", ...o });
 }
 
-export function tarProgram(platform: NodeJS.Platform, env: NodeJS.ProcessEnv): string {
-  // By full path everywhere, so a `tar` earlier in the user's PATH (a shim, a tools folder) is not the one that runs.
-  if (platform !== "win32") return "/usr/bin/tar";
+/** The system's tar by full path where it has a fixed place, so a `tar` earlier in the user's PATH (a shim, a tools folder) does not run. */
+export function tarProgram(platform: NodeJS.Platform, env: NodeJS.ProcessEnv, exists: (path: string) => boolean = existsSync): string {
+  if (platform === "darwin") return "/usr/bin/tar";
+  // Linux distributions without merged /usr keep it in /bin, and NixOS has neither.
+  if (platform !== "win32") return ["/usr/bin/tar", "/bin/tar"].find(exists) ?? "tar";
   return win32.join(env.SystemRoot ?? env.SYSTEMROOT ?? "C:\\Windows", "System32", "tar.exe");
 }

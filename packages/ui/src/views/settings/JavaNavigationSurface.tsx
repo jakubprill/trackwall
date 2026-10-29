@@ -47,7 +47,8 @@ function JavaNavigationSetup({ install, pending, onInstall }: { install: JavaNav
     <>
       <p className="text-muted-foreground text-sm">
         Gives agent tasks in Java repos a language server, so the agent finds definitions and usages instead of searching text. Install
-        downloads jdtls {install.jdtls} into your projects folder and Java {install.java} with mise, about 250 MB together.
+        downloads jdtls {install.jdtls} into your projects folder and Java {install.java} with mise, about 250 MB together. Install again
+        with no Java navigation tasks running.
       </p>
       <div className="flex items-center gap-3">
         <Button variant="outline" size="sm" disabled={pending || install.step !== null} onClick={onInstall}>
