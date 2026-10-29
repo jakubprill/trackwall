@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SyncRun } from "@trackwall/protocol";
@@ -8,6 +8,7 @@ import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
 import { fakeHosting } from "./support/hosting.ts";
+import { removeFolder } from "./support/remove-folder.ts";
 
 /** A workspace with an empty projects folder and a directory for "remote" repos (a local repo as the remote). */
 async function setup() {
@@ -309,7 +310,7 @@ describe("sync of all repos", () => {
       const { workspace, projects, remotes } = await setup();
       const gone = cloned(projects, remotes, "a-gone");
       const ok = cloned(projects, remotes, "b-working");
-      rmSync(gone.upstream, { recursive: true, force: true });
+      removeFolder(gone.upstream);
       commitFiles(ok.upstream, { "new.txt": "1" }, "remote");
 
       const run = await workspace.sync().then(() => finished(workspace));

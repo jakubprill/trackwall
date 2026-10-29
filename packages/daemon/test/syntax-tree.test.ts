@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadSyntaxParsers, PARSE_TIME_LIMIT_MS } from "../src/modules/cards/syntax-tree.ts";
+import { removeFolder } from "./support/remove-folder.ts";
 import { RUNTIMES } from "./support/runtimes.ts";
 
 const root = join(import.meta.dir, "..");
@@ -87,7 +88,7 @@ describe("Java and Kotlin syntax trees", () => {
           embedded: true,
         });
       } finally {
-        rmSync(dir, { recursive: true, force: true });
+        removeFolder(dir);
       }
     },
     { timeout: 120_000 },
