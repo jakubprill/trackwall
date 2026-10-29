@@ -2,7 +2,7 @@ import type { RepoGraph, Subgraph } from "@trackwall/protocol";
 
 /**
  * Repos within `depth` edges of `repo`, in both directions (whom it uses and who uses it), and the edges between
- * them. Nodes in graph order, so the result does not depend on the traversal order.
+ * them, with the graph's problems in those repos. Nodes in graph order, so the result does not depend on the traversal order.
  */
 export function subgraph(graph: RepoGraph, repo: string, depth: number): Subgraph {
   const neighbours = new Map<string, Set<string>>();
@@ -24,5 +24,6 @@ export function subgraph(graph: RepoGraph, repo: string, depth: number): Subgrap
     depth,
     nodes: graph.nodes.filter((n) => reached.has(n.repo)),
     edges: graph.edges.filter((e) => reached.has(e.from) && reached.has(e.to)),
+    problems: graph.problems.filter((p) => reached.has(p.repo)),
   };
 }

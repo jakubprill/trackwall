@@ -28,6 +28,7 @@ test(
       hosting: fakeHosting().hosting,
       openEditor: () => {},
       openFolder: () => {},
+      afterClone: async () => {},
     });
     await workspace.setProjectsDir(projects);
     const cards = new Cards({ vcs, repos: workspace, cache: new CardCache(join(home, "cards"), () => {}), log: () => {} });
@@ -35,10 +36,10 @@ test(
     const { nodes, edges } = await new Graph({ cards, workspace }).graph();
 
     expect(nodes.map((node) => node.repo).sort()).toEqual([...DEMO_REPOS].sort());
-    const httpCalls = edges.filter((edge) => edge.kind === "http").map((edge) => `${edge.from} -> ${edge.to}`);
+    const httpCalls = edges.filter((edge) => edge.source === "http").map((edge) => `${edge.from} -> ${edge.to}`);
     const declaredCalls = DEMO_SERVICES.flatMap((service) => service.calls.map((to) => `${service.name} -> ${to}`));
     expect(httpCalls).toEqual(expect.arrayContaining(declaredCalls));
-    const usesCommons = edges.filter((edge) => edge.kind === "package" && edge.to === "shop-commons").map((edge) => edge.from);
+    const usesCommons = edges.filter((edge) => edge.kind === "depends-on" && edge.to === "shop-commons").map((edge) => edge.from);
     expect(usesCommons.sort()).toEqual(DEMO_SERVICES.map((service) => service.name).sort());
   },
   DEMO_TIMEOUT,

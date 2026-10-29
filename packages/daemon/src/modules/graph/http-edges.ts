@@ -28,7 +28,8 @@ export function addHttpEdges(join: Join, index: HttpIndex): void {
       join.edges.add({
         from: repo,
         to: target.repo,
-        kind: "http",
+        kind: "calls",
+        source: "http",
         key: target.key,
         confidence: target.confidence,
         evidence: [...clientEvidence(repo, client), ...target.evidence, ...callEvidence(repo, target)],

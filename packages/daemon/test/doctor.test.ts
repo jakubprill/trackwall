@@ -116,6 +116,27 @@ describe("doctor", () => {
   });
 
   test.each([
+    ["LF", "\n"],
+    ["CRLF", "\r\n"],
+  ])(
+    "a config.json with Copilot CLI's comment lines before the object is read, and a trusted projects folder is ok, with %s line ends",
+    async (_name, eol) => {
+      const config = [
+        "// User settings belong in settings.json.",
+        "// This file is managed automatically.",
+        "{",
+        '  "trustedFolders": ["<projects>"]',
+        "}",
+        "",
+      ].join(eol);
+      const { facade, projects } = doctorFacade({ copilot: true, mise: "2026.10.1", copilotConfig: config });
+      await facade.workspace.setProjectsDir(projects);
+      const check = (await facade.doctor.run()).checks.find((c) => c.id === "copilot-trusted-folder");
+      expect(check?.status).toBe("ok");
+    },
+  );
+
+  test.each([
     ['{"trustedFolders":["/somewhere/else"]}', "Copilot CLI does not trust the projects folder; it asks before working in each repo."],
     [null, "Copilot CLI does not trust the projects folder; it asks before working in each repo."],
     ["{ not json", "could not be read: not valid JSON."],

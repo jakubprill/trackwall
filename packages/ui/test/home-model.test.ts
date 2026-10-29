@@ -35,12 +35,13 @@ function session(id: string, repoId: string, over: Partial<Session> = {}): Sessi
   };
 }
 
-function edge(from: string, to: string, kind: GraphEdge["kind"], key = "k"): GraphEdge {
-  return { from, to, kind, key, confidence: "exact", evidence: [{ repo: from, path: "pom.xml", line: 1, detail: "dependency" }] };
+function edge(from: string, to: string, source: GraphEdge["source"], key = "k"): GraphEdge {
+  const kind = source === "package" ? "depends-on" : "calls";
+  return { from, to, kind, source, key, confidence: "exact", evidence: [{ repo: from, path: "pom.xml", line: 1, detail: "dependency" }] };
 }
 
 function graph(edges: GraphEdge[]): RepoGraph {
-  return { nodes: [], edges, configProblems: [], configFile: "/home/workspace.yaml" };
+  return { nodes: [], edges, problems: [], configProblems: [], configFile: "/home/workspace.yaml" };
 }
 
 function exited(exitCode: number, stoppedByUser = false): Session["run"] {
@@ -95,7 +96,7 @@ describe("dashboard snapshot", () => {
     ]);
   });
 
-  test("several edges of the same pair and kind are one connection; edges to repos outside the list disappear", () => {
+  test("several edges of the same pair and source are one connection; edges to repos outside the list disappear", () => {
     const model = homeModel({
       repos: [repo("web"), repo("api")],
       sessions: [],
@@ -110,8 +111,8 @@ describe("dashboard snapshot", () => {
     });
 
     expect(model.links).toEqual([
-      { from: "web", to: "api", kind: "http" },
-      { from: "web", to: "api", kind: "package" },
+      { from: "web", to: "api", source: "http" },
+      { from: "web", to: "api", source: "package" },
     ]);
   });
 

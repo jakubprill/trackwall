@@ -31,6 +31,7 @@ async function workspaceWithRepos() {
     hosting: fakeHosting().hosting,
     openEditor: () => {},
     openFolder: () => {},
+    afterClone: async () => {},
   });
   await workspace.setProjectsDir(projects);
   return { workspace, orders };

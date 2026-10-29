@@ -35,16 +35,23 @@ describe("the port and the start from a service log line", () => {
   });
 });
 
-function edge(from: string, to: string, kind: GraphEdge["kind"] = "http", confidence: GraphEdge["confidence"] = "high"): GraphEdge {
-  return { from, to, kind, key: `${to}-app`, confidence, evidence: [{ repo: from, path: "a.yml", line: 1, detail: "calls" }] };
+function edge(
+  from: string,
+  to: string,
+  source: GraphEdge["source"] = "http",
+  confidence: GraphEdge["confidence"] = "high",
+  kind: GraphEdge["kind"] = source === "package" ? "depends-on" : "calls",
+): GraphEdge {
+  return { from, to, kind, source, key: `${to}-app`, confidence, evidence: [{ repo: from, path: "a.yml", line: 1, detail: "calls" }] };
 }
 
 describe("the slice of a service", () => {
-  test("dependencies over http and manual edges start in waves before the repo, packages and low edges do not count", () => {
+  test("dependencies over calls edges start in waves before the repo, depends-on and low edges do not count", () => {
     const plan = planSlice(
       [
         edge("bff", "orders"),
         edge("bff", "customers", "manual"),
+        edge("bff", "build-tools", "manual", "exact", "depends-on"),
         edge("orders", "config", "http", "exact"),
         edge("customers", "config", "http", "medium"),
         edge("bff", "commons", "package"),

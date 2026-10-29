@@ -392,7 +392,8 @@ export const mcpTools = {
       "Eureka, Kubernetes…), the mise config files and mise tasks declared in the commit (mise) and tags with reasons. " +
       "problems: what the card is missing, each with a code: files-not-read (a read limit or a failed search; facts from " +
       "those files are missing), file-invalid (a file that could not be parsed), parse-incomplete (Java or Kotlin without " +
-      "request and response types or DTOs), truncated (a list or type cut to its beginning). " +
+      "request and response types or DTOs), truncated (a list or type cut to its beginning), no-endpoints (a Spring " +
+      "web app with no endpoint found: look for controllers in a library or JAX-RS before concluding it serves none). " +
       "card: null in a repo without commits.",
     args: z.object({ repo: RepoArg }).strict(),
     result: RepoCardResult,
@@ -479,9 +480,9 @@ export const mcpTools = {
     name: "who_calls",
     readOnly: true,
     description:
-      "Who uses a repo: connections in the graph pointing to this repo, each with a kind (package: a repo uses a " +
-      "package built in this repo; http: a repo's HTTP client calls this repo's app or endpoints; manual: a connection " +
-      "entered by the user), a key (package name, app name or address, note), a confidence (exact, high, medium, low) " +
+      "Who uses a repo: connections in the graph pointing to this repo, each with a kind (depends-on: needs it to build; " +
+      "calls: calls it at runtime) and a source (package: a repo uses a package built in this repo; http: a repo's HTTP " +
+      "client calls this repo's app or endpoints; manual: a connection entered by the user), a key (package name, app name or address, note), a confidence (exact, high, medium, low) " +
       "and evidence (repo, file, line; for http also call–endpoint pairs). Before changing a repo's API or package, " +
       "check whom it affects; find_endpoint tells which endpoints call a specific endpoint.",
     args: z.object({ repo: RepoArg }).strict(),
@@ -492,8 +493,10 @@ export const mcpTools = {
     readOnly: true,
     description:
       "Part of the connection graph around a repo: repos up to depth connections away in both directions (what it uses and " +
-      "who uses it) and the connections between them (packages, HTTP, manual), with evidence. A node has tags, Spring Boot " +
-      "app names, the number of endpoints and a problem when the repo card cannot be built.",
+      "who uses it) and the connections between them (depends-on or calls; from packages, HTTP, manual), with evidence. A " +
+      "node has tags, Spring Boot app names, the number of endpoints and a problem when the repo card cannot be built. " +
+      "problems lists the HTTP clients of these repos whose target is no repo in the list (unresolved-call-target): an " +
+      "external system, or a repo the user maps under graph.apps.",
     args: z
       .object({
         repo: RepoArg,

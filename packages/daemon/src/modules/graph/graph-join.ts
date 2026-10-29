@@ -10,7 +10,8 @@ import type { GraphCardInput } from "./graph-input.ts";
 export interface Join {
   edges: EdgeSet;
   resolve: (ref: string) => string[];
-  problems: string[];
+  /** Errors in the `graph` entries of `workspace.yaml`, for `RepoGraph.configProblems`. */
+  configProblems: string[];
   /**
    * Package and app aliases as a `Map`: the name comes from a repo, and an object from YAML would for the name `constructor` or
    * `toString` give back a function from the prototype.
@@ -26,14 +27,14 @@ const MAX_EVIDENCE = 20;
 const CONFIDENCE_ORDER: EdgeConfidence[] = ["low", "medium", "high", "exact"];
 
 /**
- * Edges without repeats: the same repo pair, kind and key is one edge. A second identical one adds evidence, and
+ * Edges without repeats: the same repo pair, kind, source and key is one edge. A second identical one adds evidence, and
  * the confidence stays the higher of the two (a Feign client with an address in two profiles is one connection).
  */
 export class EdgeSet {
   private readonly edges = new Map<string, GraphEdge>();
 
   add(edge: GraphEdge): void {
-    const id = [edge.from, edge.to, edge.kind, edge.key].join("\u0000");
+    const id = [edge.from, edge.to, edge.kind, edge.source, edge.key].join("\u0000");
     const existing = this.edges.get(id);
     if (!existing) {
       this.edges.set(id, { ...edge, evidence: uniqueEvidence(edge.evidence) });
@@ -46,7 +47,8 @@ export class EdgeSet {
 
   sorted(): GraphEdge[] {
     return [...this.edges.values()].sort(
-      (a, b) => compare(a.from, b.from) || compare(a.to, b.to) || compare(a.kind, b.kind) || compare(a.key, b.key),
+      (a, b) =>
+        compare(a.from, b.from) || compare(a.to, b.to) || compare(a.kind, b.kind) || compare(a.source, b.source) || compare(a.key, b.key),
     );
   }
 }

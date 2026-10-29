@@ -1,4 +1,4 @@
-import type { EdgeKind } from "@trackwall/protocol";
+import type { EdgeSource } from "@trackwall/protocol";
 import { type Curve, Group, Mesh, TubeGeometry, type Vector3 } from "three";
 import { box, type HomeVisual, light, unpickable } from "./kit.ts";
 
@@ -19,7 +19,7 @@ interface TubeSpec {
   radius: number;
 }
 
-export const LINK_TUBES: Record<EdgeKind, TubeSpec> = {
+export const LINK_TUBES: Record<EdgeSource, TubeSpec> = {
   http: { name: TUBE_NAMES.link, packets: 3, speed: 0.35, radius: 0.02 },
   package: { name: TUBE_NAMES.link, packets: 1, speed: 0.16, radius: 0.012 },
   manual: { name: TUBE_NAMES.link, packets: 0, speed: 0, radius: 0.007 },
