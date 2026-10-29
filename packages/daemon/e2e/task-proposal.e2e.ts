@@ -36,8 +36,8 @@ describe("a task proposal from a main session", () => {
     const model = page.getByRole("textbox", { name: "Model for the agent: Add a licence" });
     expect(await model.inputValue()).toBe("claude-opus-5.5");
     await model.fill("gpt-5.5");
-    // The proposer asked for no approvals (ADR-105): the box is ticked, and the user sees what it means before the start.
-    expect(await page.getByRole("checkbox", { name: "Run without asking for approvals: Add a licence" }).isChecked()).toBe(true);
+    // The proposer asked for no approvals (ADR-105): the pill is on, and the user sees what it means before the start.
+    await page.getByRole("button", { name: "No approvals: Add a licence", pressed: true }).waitFor();
     await page.getByText("also commands such as git push", { exact: false }).waitFor();
     await page.getByRole("button", { name: "Start task" }).click();
 

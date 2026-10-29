@@ -334,8 +334,8 @@ _Avoid_: window title (that is a session's `windowTitle`)
 The Copilot CLI model a task's session runs on, as Copilot CLI names it (`claude-opus-5.5`), passed as `--model` on every start and resume of the task's session; `null` for Copilot CLI's default. Optional: a proposer names it when the user asked for a model, and the user may change it before the start (ADR-98).
 _Avoid_: LLM, engine, agent (for the model)
 
-**Task approvals** (`Task.approvals`, `TaskProposal.approvals`, `TaskApprovals`: `ask` | `auto`; "Run without asking for approvals" in the UI, "No approvals" on the task):
-Whether a task's agent asks the user before tools: `ask` (the default) as every session does, `auto` runs every tool without asking (`--allow-all-tools`) on every start and resume, deny rules still refusing. Only for a task in its own worktree; the user ticks it when starting the task, and a proposer may suggest it on a proposal (ADR-105).
+**Task approvals** (`Task.approvals`, `TaskProposal.approvals`, `TaskApprovals`: `ask` | `auto`; "No approvals" on the start pill and on the task):
+Whether a task's agent asks the user before tools: `ask` (the default) as every session does, `auto` runs every tool without asking (`--allow-all-tools`) on every start and resume, deny rules still refusing. Only for a task in its own worktree; the user turns on the "No approvals" pill when starting the task, and a proposer may suggest it on a proposal (ADR-105).
 _Avoid_: YOLO, autopilot (Copilot CLI's own modes, not what Trackwall passes), auto-approve
 
 **Task proposal** (`TaskProposal`, MCP tool `propose_task`, the `approve-proposal` and `reject-proposal` actions):
