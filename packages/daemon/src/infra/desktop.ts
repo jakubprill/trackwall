@@ -1,3 +1,4 @@
+import type { ContainerId } from "@trackwall/protocol";
 import { DomainError } from "./errors.ts";
 
 /**
@@ -8,6 +9,15 @@ import { DomainError } from "./errors.ts";
 
 /** The files Docker and Podman put into every container. */
 const CONTAINER_MARKERS = ["/.dockerenv", "/run/.containerenv"] as const;
+
+/**
+ * The id of the container the daemon runs in, for VS Code links into it (ADR-121). Docker and Podman mount the
+ * container's `hostname`, `hosts` and `resolv.conf` from a folder named after its full id, which `/proc/self/mountinfo`
+ * shows; the hostname is only a default and the cgroup path is hidden under cgroup v2.
+ */
+export function containerId(mountinfo: string): ContainerId | null {
+  return /containers\/([0-9a-f]{64})\//.exec(mountinfo)?.[1] ?? null;
+}
 
 export interface DesktopProbe {
   platform: NodeJS.Platform;

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
-import { NO_DESKTOP_NOTE, useDesktop } from "@/lib/desktop";
+import { IN_CONTAINER_NOTE, NO_DESKTOP_NOTE, useDesktop, useEditorLink } from "@/lib/desktop";
 import { TRUNCATED_NOTE } from "@/lib/format";
 import { FILE_MANAGER } from "@/lib/platform";
 import { type RepoActivityTarget, repoActivity } from "@/lib/repo-activity";
@@ -97,16 +97,29 @@ function Loaded({ remote, children }: { remote: RemoteHandle<RepoOverview>; chil
 
 /**
  * Opens the repo in VS Code or in the system's folder app (ADR-51); the daemon does it, so it works in the browser too,
- * except when the daemon has no desktop (ADR-120).
+ * except when the daemon has no desktop (ADR-120). In a container the page opens VS Code attached to it (ADR-121).
  */
 function RepoActions({ conn, repo }: { conn: Connection; repo: Repo }) {
   const [error, setError] = useState<string>();
   const desktop = useDesktop();
+  const editorLink = useEditorLink(repo.path);
   const open = (endpoint: typeof workspaceApi.openEditor | typeof workspaceApi.openFolder) => {
     setError(undefined);
     post(conn, endpoint, { repo: repo.id }).catch((err: unknown) => setError(errorMessage(err)));
   };
 
+  if (editorLink) {
+    return (
+      <div className="flex max-w-xs flex-col items-end gap-2">
+        <Button variant="outline" size="sm" asChild>
+          <a href={editorLink}>
+            <Code /> Open in VS Code
+          </a>
+        </Button>
+        <p className="text-muted-foreground text-right text-xs">{IN_CONTAINER_NOTE}</p>
+      </div>
+    );
+  }
   if (!desktop) return <p className="text-muted-foreground max-w-xs text-right text-xs">{NO_DESKTOP_NOTE}</p>;
   return (
     <div className="flex flex-col items-end gap-2">

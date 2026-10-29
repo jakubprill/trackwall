@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
-import { useDesktop } from "@/lib/desktop";
+import { useDesktop, useEditorLink } from "@/lib/desktop";
 import { relativeTime } from "@/lib/format";
 import { proposerLabel, taskName } from "@/lib/session-entries";
 import { isLive, sessionStateLabel } from "@/lib/session-state";
@@ -75,7 +75,6 @@ export function TaskPanel({
       onChanged();
     },
   );
-  const desktop = useDesktop();
   const openEditor = useAction(
     () => post(conn, agentsApi.openTaskEditor, { task: task.id }),
     () => {},
@@ -121,11 +120,7 @@ export function TaskPanel({
         {error && <span className="text-destructive max-w-xs truncate text-xs">{error}</span>}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <VerifyButton state={details.verification} disabled={confirmingRemoval} />
-          {desktop && (
-            <Button variant="outline" size="sm" onClick={openEditor.run} disabled={openEditor.pending}>
-              <Code /> VS Code
-            </Button>
-          )}
+          <TaskEditorButton worktree={task.worktree} open={openEditor.run} opening={openEditor.pending} />
           {liveSession ? (
             <StopButton conn={conn} session={liveSession} onStopped={onChanged} />
           ) : (
@@ -213,5 +208,29 @@ function TaskMarks({ task }: { task: Task }) {
         </span>
       )}
     </>
+  );
+}
+
+/**
+ * "VS Code" for the task's worktree: the daemon opens it on its desktop, the page opens it inside the daemon's container
+ * (ADR-121), and without either the button is not there (ADR-120).
+ */
+function TaskEditorButton({ worktree, open, opening }: { worktree: string; open: () => void; opening: boolean }) {
+  const desktop = useDesktop();
+  const editorLink = useEditorLink(worktree);
+  if (editorLink) {
+    return (
+      <Button variant="outline" size="sm" asChild>
+        <a href={editorLink}>
+          <Code /> VS Code
+        </a>
+      </Button>
+    );
+  }
+  if (!desktop) return null;
+  return (
+    <Button variant="outline" size="sm" onClick={open} disabled={opening}>
+      <Code /> VS Code
+    </Button>
   );
 }

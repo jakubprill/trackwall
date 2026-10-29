@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { agentsApi, configFilesApi, DaemonInfoResult, mergeRequestsApi, workspaceApi } from "@trackwall/protocol";
-import { hasDesktop } from "../src/infra/desktop.ts";
+import { containerId, hasDesktop } from "../src/infra/desktop.ts";
 import { loopbackRequest } from "../src/infra/loopback.ts";
 import { gitIn } from "./support/git-repo.ts";
 import { fakeHostingClis } from "./support/hosting.ts";
@@ -28,6 +28,26 @@ describe("hasDesktop", () => {
     const podman = (path: string) => path === "/run/.containerenv";
     expect(hasDesktop({ platform: "linux", env: { WAYLAND_DISPLAY: "wayland-0" }, exists: docker })).toBe(false);
     expect(hasDesktop({ platform: "linux", env: { DISPLAY: ":0" }, exists: podman })).toBe(false);
+  });
+});
+
+describe("containerId", () => {
+  test("reads the container's id from the folder Docker mounts its hostname from", () => {
+    const mountinfo = [
+      "1590 1572 0:150 / / rw,relatime master:701 - overlay overlay rw,lowerdir=/var/lib/docker/overlay2/l/ABC",
+      "1601 1590 254:1 /docker/containers/de4cc610b398445a55cd4802f1b0dc38776d583533fd7283c9d76e5825fd5f81/hostname /etc/hostname rw,relatime - ext4 /dev/vda1 rw",
+    ].join("\n");
+    expect(containerId(mountinfo)).toBe("de4cc610b398445a55cd4802f1b0dc38776d583533fd7283c9d76e5825fd5f81");
+  });
+
+  test("reads it from Podman's folder too", () => {
+    const line =
+      "712 690 0:45 /containers/storage/overlay-containers/0f5c8a2f6b1e4d3c9a7b8e6d5f4c3b2a1908f7e6d5c4b3a29180706050403020/userdata/hostname /etc/hostname rw - tmpfs tmpfs rw";
+    expect(containerId(line)).toBe("0f5c8a2f6b1e4d3c9a7b8e6d5f4c3b2a1908f7e6d5c4b3a29180706050403020");
+  });
+
+  test("finds none outside a container", () => {
+    expect(containerId("25 1 8:1 / / rw,relatime shared:1 - ext4 /dev/sda1 rw")).toBeNull();
   });
 });
 
