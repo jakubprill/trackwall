@@ -59,7 +59,8 @@ describe("buildGraph: edges from cards", () => {
       {
         from: "orders-bff",
         to: "orders-api",
-        kind: "package",
+        kind: "depends-on",
+        source: "package",
         key: "com.example:orders-client",
         confidence: "exact",
         evidence: [
@@ -150,7 +151,8 @@ describe("buildGraph: graph entries in workspace.yaml", () => {
       {
         from: "orders-bff",
         to: "orders-api",
-        kind: "package",
+        kind: "depends-on",
+        source: "package",
         key: "com.example:orders-client",
         confidence: "high",
         evidence: [
@@ -189,7 +191,7 @@ describe("buildGraph: graph entries in workspace.yaml", () => {
 
   test("a manual edge joins repos by identifier with the note as the key", () => {
     const graph = buildGraph([repo("web", card([], [])), repo("orders-bff", card([], []))], {
-      config: { packages: {}, apps: {}, edges: [{ from: "web", to: "orders-bff", note: "HTTP /api/orders" }] },
+      config: { packages: {}, apps: {}, edges: [{ from: "web", to: "orders-bff", note: "HTTP /api/orders", kind: "calls" }] },
       file: CONFIG_FILE,
       problems: [],
     });
@@ -197,7 +199,8 @@ describe("buildGraph: graph entries in workspace.yaml", () => {
       {
         from: "web",
         to: "orders-bff",
-        kind: "manual",
+        kind: "calls",
+        source: "manual",
         key: "HTTP /api/orders",
         confidence: "exact",
         evidence: [{ repo: null, path: CONFIG_FILE, line: null, detail: "graph.edges[0]: web → orders-bff" }],
@@ -207,7 +210,7 @@ describe("buildGraph: graph entries in workspace.yaml", () => {
 
   test("a manual edge from a repo to itself goes to configProblems", () => {
     const graph = buildGraph([repo("web", card([], []), "gitlab.example.com/shop/web")], {
-      config: { packages: {}, apps: {}, edges: [{ from: "web", to: "gitlab.example.com/shop/web", note: "HTTP" }] },
+      config: { packages: {}, apps: {}, edges: [{ from: "web", to: "gitlab.example.com/shop/web", note: "HTTP", kind: "calls" }] },
       file: CONFIG_FILE,
       problems: [],
     });
@@ -217,7 +220,11 @@ describe("buildGraph: graph entries in workspace.yaml", () => {
 
   test("an entry with a repo outside the list goes to configProblems and gives no edge", () => {
     const graph = buildGraph([repo("web", card([], []))], {
-      config: { packages: { "com.example:x": "missing" }, apps: {}, edges: [{ from: "web", to: "also-missing", note: "HTTP" }] },
+      config: {
+        packages: { "com.example:x": "missing" },
+        apps: {},
+        edges: [{ from: "web", to: "also-missing", note: "HTTP", kind: "calls" }],
+      },
       file: CONFIG_FILE,
       problems: [],
     });
@@ -238,9 +245,9 @@ describe("subgraph", () => {
         packages: {},
         apps: {},
         edges: [
-          { from: "a", to: "b", note: "1" },
-          { from: "b", to: "c", note: "2" },
-          { from: "c", to: "d", note: "3" },
+          { from: "a", to: "b", note: "1", kind: "calls" },
+          { from: "b", to: "c", note: "2", kind: "calls" },
+          { from: "c", to: "d", note: "3", kind: "calls" },
         ],
       },
       file: CONFIG_FILE,
@@ -299,9 +306,9 @@ describe("Graph on cards from real git", () => {
 
     const result = await graph.graph();
 
-    expect(result.edges.map((e) => [e.from, e.to, e.kind, e.key, e.confidence])).toEqual([
-      ["orders", "core-lib", "package", "com.example:core-lib", "exact"],
-      ["web", "orders", "manual", "HTTP /api/orders", "exact"],
+    expect(result.edges.map((e) => [e.from, e.to, e.kind, e.source, e.key, e.confidence])).toEqual([
+      ["orders", "core-lib", "depends-on", "package", "com.example:core-lib", "exact"],
+      ["web", "orders", "calls", "manual", "HTTP /api/orders", "exact"],
     ]);
     expect(result.edges[0]?.evidence.map((e) => [e.repo, e.path, e.line])).toEqual([
       ["orders", "pom.xml", 5],
@@ -310,6 +317,27 @@ describe("Graph on cards from real git", () => {
     expect(result.configFile).toBe(workspaceFile);
     expect((await graph.whoCalls("orders")).edges.map((e) => e.from)).toEqual(["web"]);
     expect((await graph.subgraph("web", 2)).nodes.map((n) => n.repo).sort()).toEqual(["core-lib", "orders", "web"]);
+  });
+
+  test("a manual edge in workspace.yaml is calls without a kind and depends-on when it says so", async () => {
+    const { projects, workspaceFile, graph } = await setup();
+    makeRepo({ "package.json": JSON.stringify({ name: "web", private: true }) }, "web", projects);
+    makeRepo({ "package.json": JSON.stringify({ name: "api", private: true }) }, "api", projects);
+    makeRepo({ "package.json": JSON.stringify({ name: "assets", private: true }) }, "assets", projects);
+    writeFileSync(
+      workspaceFile,
+      `${readFileSync(workspaceFile, "utf8")}graph:\n  edges:\n` +
+        "    - { from: web, to: api, note: HTTP /api }\n" +
+        "    - { from: web, to: assets, note: copies the icons at build time, kind: depends-on }\n",
+    );
+
+    const result = await graph.graph();
+
+    expect(result.edges.map((e) => [e.from, e.to, e.kind, e.source])).toEqual([
+      ["web", "api", "calls", "manual"],
+      ["web", "assets", "depends-on", "manual"],
+    ]);
+    expect(result.configProblems).toEqual([]);
   });
 
   test("a bad graph key in workspace.yaml keeps the edges from the cards and gives a reason", async () => {

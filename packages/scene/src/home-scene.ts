@@ -284,14 +284,14 @@ export class HomeScene {
     const to = layout.repos.get(link.to);
     if (!from || !to) return;
     // JSON, because a repo identifier can contain any character, the separator included.
-    const key = `link:${JSON.stringify([link.from, link.to, link.kind])}`;
-    this.#put(keep, key, { from, to, kind: link.kind }, ORIGIN, () => {
+    const key = `link:${JSON.stringify([link.from, link.to, link.source])}`;
+    this.#put(keep, key, { from, to, source: link.source }, ORIGIN, () => {
       const curve = new QuadraticBezierCurve3(
         new Vector3(from.x, LINK_Y, from.z),
         new Vector3(((from.x + to.x) / 2) * LINK_BEND, LINK_Y, ((from.z + to.z) / 2) * LINK_BEND),
         new Vector3(to.x, LINK_Y, to.z),
       );
-      const visual = linkTube(curve, LINK_TUBES[link.kind], this.#options.palette.primary);
+      const visual = linkTube(curve, LINK_TUBES[link.source], this.#options.palette.primary);
       this.#links.set(key, { link, visual });
       return visual;
     });

@@ -3,8 +3,8 @@ import { DomainError } from "../../infra/errors.ts";
 
 /**
  * Which services a start brings up and in what order (§4.3, ADR-45): the repo asked for and every repo it calls at
- * runtime, transitively. Runtime means `http` and `manual` edges of the graph; `package` edges matter only for the
- * build, and `low` edges (paths that match endpoints of several repos) are too uncertain to start a process for.
+ * runtime, transitively. Runtime means `calls` edges of the graph (HTTP, and manual ones not marked `depends-on`,
+ * ADR-116); `depends-on` edges matter only for the build, and `low` edges (paths that match endpoints of several repos) are too uncertain to start a process for.
  * Dependencies start in waves: a repo starts once every repo it calls within the slice has settled, so a config
  * server or a registry comes up before its clients. Repos in a cycle start together in the last wave.
  */
@@ -17,7 +17,7 @@ export interface SlicePlan {
 }
 
 function isRuntimeEdge(edge: GraphEdge): boolean {
-  return edge.kind !== "package" && edge.confidence !== "low" && edge.from !== edge.to;
+  return edge.kind === "calls" && edge.confidence !== "low" && edge.from !== edge.to;
 }
 
 export function planSlice(edges: readonly GraphEdge[], root: string): SlicePlan {

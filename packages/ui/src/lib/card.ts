@@ -42,4 +42,5 @@ export const CARD_PROBLEM_LABELS: Record<CardProblemCode, string> = {
   "file-invalid": "invalid file",
   "parse-incomplete": "not parsed",
   truncated: "cut short",
+  "no-endpoints": "no endpoints",
 };

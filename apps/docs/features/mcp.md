@@ -35,7 +35,7 @@ The agent sees the same projects folder you see in Trackwall, through the tools 
 | `get_repo_card` | The [repo card](/features/repo-card), with evidence. |
 | `search_code` | Text or a regular expression in all repos at once, narrowed by repo, tag or path, with line and context. |
 | `who_calls` | Who uses a repo, through packages and HTTP, with evidence. |
-| `subgraph_for` | The part of the connection graph around a repo. |
+| `subgraph_for` | The part of the connection graph around a repo, with its calls that lead to no repo. |
 | `find_endpoint` | An HTTP endpoint from code or an OpenAPI spec, by path, URL or words, with its types, the repos and endpoints that call it, and the endpoints it calls. |
 | `run_mise_task`, `wait_for_mise_task`, `stop_mise_task`, `list_running_mise_tasks` | Run a repo's mise task, wait up to 55 s for it, stop it, list what runs. With `task`, in that task's worktree. |
 | `tail` | A mise task's log from a cursor, with secrets replaced by `***`; with `task`, the run in that task's worktree. |

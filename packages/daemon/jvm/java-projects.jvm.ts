@@ -131,6 +131,8 @@ function cardSummary({ repo, card, tags }: RepoCardResult) {
       c.kind === "http" ? [[c.name, c.via, c.url, c.calls.map((call) => [call.method, call.path])]] : [],
     ),
     tags: tags.map((t) => t.name),
+    // A Spring web app with its controllers read gets no `no-endpoints` (ADR-116).
+    noEndpoints: card.problems.some((p) => p.code === "no-endpoints"),
   };
 }
 
@@ -200,6 +202,7 @@ describe("a Maven project and a Gradle project", () => {
         ],
         http: [],
         tags: ["backend", "java"],
+        noEndpoints: false,
       },
       {
         buildFiles: [["build.gradle.kts", "gradle"]],
@@ -207,6 +210,7 @@ describe("a Maven project and a Gradle project", () => {
         endpoints: [["GET", "/api/checkout/{orderId}", "CheckoutDto"]],
         http: [["OrdersClient", "rest-client", `http://localhost:${ORDERS_PORT}`, [["GET", "/api/orders/{id}"]]]],
         tags: ["backend", "java"],
+        noEndpoints: false,
       },
     ]);
   });
