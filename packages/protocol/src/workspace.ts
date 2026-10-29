@@ -244,6 +244,13 @@ export type FileContent = z.infer<typeof FileContent>;
  */
 export const ExternalLink = z.url({ protocol: /^https?$/, normalize: true }).max(2048);
 
+/**
+ * An address the page itself opens in a new tab when the daemon has no desktop (ADR-120): only `http` or `https`, since a
+ * `javascript:` address would run with the page's origin and read its token. No length limit beyond the browser's, as a
+ * merge request form carries its description in the address.
+ */
+export const WebAddress = z.url({ protocol: /^https?$/ });
+
 export const RepoOverview = z.object({
   /** `format` says whether the README is Markdown (ADR-35); `.txt`, `.rst` and `.adoc` are text. */
   readme: z.object({ path: z.string(), text: z.string(), truncated: z.boolean(), format: z.enum(["markdown", "text"]) }).nullable(),

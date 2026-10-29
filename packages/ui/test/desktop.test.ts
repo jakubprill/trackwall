@@ -88,6 +88,16 @@ describe("opening a tab for an address the daemon gives later", () => {
     expect(events).toEqual(["tab closed"]);
   });
 
+  test("a long merge request form address opens, since its description is part of the address", async () => {
+    const opened: string[] = [];
+    const form = `https://git.example.com/shop/-/merge_requests/new?merge_request[description]=${"%C5%BC".repeat(1100)}`;
+    await openInNewTabOnceKnown(
+      async () => form,
+      () => ({ go: (url) => opened.push(url), close: () => {} }),
+    );
+    expect(opened).toEqual([form]);
+  });
+
   test("a tab the browser blocked asks nothing of the daemon", async () => {
     let asked = false;
     await expect(

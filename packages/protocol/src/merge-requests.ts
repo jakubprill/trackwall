@@ -2,6 +2,7 @@ import { z } from "zod";
 import { TaskId } from "./agents.ts";
 import { Done, type Endpoint } from "./api.ts";
 import { RepoHostKind } from "./repo-hosts.ts";
+import { WebAddress } from "./workspace.ts";
 
 /**
  * Contract of the `merge-requests` module (§4.12, ADR-77): a finished task on its way to a merge request. The daemon
@@ -139,5 +140,5 @@ export const mergeRequestsApi = {
    */
   openForm: endpoint("open-form", MergeRequestDraft, Done),
   /** The address `openForm` opens, with the same refusals, for a page that opens it itself when the daemon has no desktop (ADR-120). */
-  formUrl: endpoint("form-url", MergeRequestDraft, z.object({ url: z.string() })),
+  formUrl: endpoint("form-url", MergeRequestDraft, z.object({ url: WebAddress })),
 };

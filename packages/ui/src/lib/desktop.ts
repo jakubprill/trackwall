@@ -1,5 +1,5 @@
 import { isTauri } from "@tauri-apps/api/core";
-import { DAEMON_INFO_PATH, DaemonInfo, ExternalLink, workspaceApi } from "@trackwall/protocol";
+import { DAEMON_INFO_PATH, DaemonInfo, WebAddress, workspaceApi } from "@trackwall/protocol";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { call, post } from "./api.ts";
 import type { Connection } from "./connection.ts";
@@ -43,12 +43,9 @@ export interface WebLinkOpeners {
 
 const BLOCKED_TAB = "the browser blocked the new tab; allow pop-ups for this page";
 
-/**
- * Only an `http` or `https` address goes into a tab of this page, as only such an address passes `open-link`: a
- * `javascript:` address from a README or a repo host's answer would run with this page's origin and read its token.
- */
+/** Only an `http` or `https` address goes into a tab of this page (`WebAddress`). */
 function webAddress(url: string): string {
-  const parsed = ExternalLink.safeParse(url);
+  const parsed = WebAddress.safeParse(url);
   if (!parsed.success) throw new Error(`not a web address: ${url.slice(0, 80)}`);
   return parsed.data;
 }
