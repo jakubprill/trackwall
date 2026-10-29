@@ -2,6 +2,7 @@ import type { SessionEnvironment } from "@trackwall/protocol";
 import { KeyRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ENVIRONMENT_CARD_CLOSED, EnvironmentCard, sessionEnvironmentLines } from "@/lib/session-environment";
+import { browserTimers } from "@/lib/timers";
 import { cn } from "@/lib/utils";
 import { EnvironmentNames, EnvironmentProblem } from "./SessionEnvironment.tsx";
 import { TileOverlay } from "./TileOverlay.tsx";
@@ -14,9 +15,7 @@ import { TileOverlay } from "./TileOverlay.tsx";
  */
 export function useSessionEnvironmentTile(environment: SessionEnvironment | undefined) {
   const [state, setState] = useState(ENVIRONMENT_CARD_CLOSED);
-  const [card] = useState(
-    () => new EnvironmentCard(setState, { set: (run, ms) => setTimeout(run, ms), clear: (timer) => clearTimeout(timer) }),
-  );
+  const [card] = useState(() => new EnvironmentCard(setState, browserTimers));
   const overlay = useRef<HTMLElement>(null);
   const badge = useRef<HTMLButtonElement>(null);
   const lines = environment && sessionEnvironmentLines(environment);

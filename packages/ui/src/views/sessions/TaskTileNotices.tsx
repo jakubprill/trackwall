@@ -78,8 +78,8 @@ export function useTaskTileNotices({
   return {
     badge: <NoticeBadge ref={badge} notices={details.notices} open={open} onToggle={open ? close : show} />,
     // Hidden rather than unmounted when closed, so that a section keeps what the user did in it (the mise config shown
-    // for trust, an open log). The close question comes later in the tile and lies over the notices; a new warning lies
-    // over every overlay, the environment card too, so that it is never hidden behind one.
+    // for trust, an open log). From the bottom: the overlays (the environment card, then these notices), the line of a
+    // new warning (z-20), so that no overlay hides it, and the close question (z-30), which the user is answering.
     overlay: (
       <>
         <TileOverlay ref={overlay} open={open} label="Task notices overlay" onEscape={close}>

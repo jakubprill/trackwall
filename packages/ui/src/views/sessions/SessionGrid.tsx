@@ -197,12 +197,13 @@ function SessionTile({
       </header>
       {/* The notices lie over the body like the close question, so that they do not resize the PTY. */}
       <div className="relative flex min-h-0 flex-1 flex-col">
-        {notices.overlay}
+        {/* The task's notices come after the environment card, so that opening them lies over it. */}
         {environment.card}
+        {notices.overlay}
         {session && (
           // The question lies over the terminal instead of pushing it down, so that it does not resize the PTY mid-turn.
           <div className="relative flex min-h-0 flex-1 flex-col">
-            <SessionCloseConfirmation close={close} className="absolute inset-x-0 top-0 z-10" />
+            <SessionCloseConfirmation close={close} className="absolute inset-x-0 top-0 z-30" />
             <SessionScreen conn={conn} session={session} selected={selected} />
           </div>
         )}

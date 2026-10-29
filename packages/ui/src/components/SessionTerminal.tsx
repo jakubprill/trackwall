@@ -18,6 +18,7 @@ import { asksProgramToCopy, copiesSelection, keepsSelection, osc52Text, ProgramC
 import { hyperlinkHandler, trackwallLinkProvider } from "@/lib/terminal-links";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
 import { cssTokens, terminalTheme } from "@/lib/terminal-theme";
+import { browserTimers } from "@/lib/timers";
 import { cn } from "@/lib/utils";
 import { FocusReporter, terminalInFront } from "@/lib/window-focus";
 
@@ -111,7 +112,7 @@ export function SessionTerminal({
     const focus = new FocusReporter(
       (inFront) => send({ type: "focus", focused: inFront }),
       () => terminalInFront(takesFocus.current, document),
-      { set: (run, ms) => setTimeout(run, ms), clear: (focusTimer) => clearTimeout(focusTimer) },
+      browserTimers,
     );
     const sendFocus = () => focus.update();
     updateFocus.current = sendFocus;

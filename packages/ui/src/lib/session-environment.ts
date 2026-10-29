@@ -1,5 +1,5 @@
 import { countLabel, type SessionEnvironment } from "@trackwall/protocol";
-import type { FocusTimers } from "./window-focus.ts";
+import type { Timers } from "./timers.ts";
 
 /**
  * What the session panel and a grid tile say about the environment a session got from mise (ADR-93): only names,
@@ -52,11 +52,11 @@ export const ENVIRONMENT_CARD_CLOSED: EnvironmentCardState = { open: false, pinn
  */
 export class EnvironmentCard<Timer> {
   readonly #onChange: (state: EnvironmentCardState) => void;
-  readonly #timers: FocusTimers<Timer>;
+  readonly #timers: Timers<Timer>;
   #timer: Timer | undefined;
   #state = ENVIRONMENT_CARD_CLOSED;
 
-  constructor(onChange: (state: EnvironmentCardState) => void, timers: FocusTimers<Timer>) {
+  constructor(onChange: (state: EnvironmentCardState) => void, timers: Timers<Timer>) {
     this.#onChange = onChange;
     this.#timers = timers;
   }
