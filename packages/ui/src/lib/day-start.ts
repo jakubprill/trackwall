@@ -1,21 +1,24 @@
-import type { DayStartRun, DayStartStep } from "@trackwall/protocol";
+import { type DayStartRun, DayStartStep } from "@trackwall/protocol";
 
 /**
- * The day start in the UI (ADR-70): what its button says while it runs, and which start error the supervisor panel shows;
+ * The day start in the UI (ADR-70): its steps while it runs (ADR-126), and which start error the supervisor panel shows;
  * tests in `test/day-start.test.ts`.
  */
 
 const STEP_LABEL: Record<DayStartStep, string> = {
-  sync: "Syncing repos…",
-  report: "Writing the day report…",
-  supervisor: "Starting the supervisor…",
+  sync: "Sync every repo",
+  report: "Write what changed since your last day start",
+  supervisor: "Start the supervisor with the briefing",
 };
 
-const DAY_START_LABEL = "Start my day";
+/** Where a step of a running day start is: behind it, in it, or still ahead. */
+export type DayStartStepStatus = "done" | "now" | "next";
 
-/** The button's text: the running step, otherwise its own name. */
-export function dayStartLabel(run: DayStartRun | null | undefined): string {
-  return run?.finishedAt === null ? STEP_LABEL[run.step] : DAY_START_LABEL;
+/** The steps of a running day start in order, for the panel's list (ADR-126); none once it has finished. */
+export function dayStartSteps(run: DayStartRun | null | undefined): { label: string; status: DayStartStepStatus }[] {
+  if (!run || run.finishedAt !== null) return [];
+  const at = DayStartStep.options.indexOf(run.step);
+  return DayStartStep.options.map((step, i) => ({ label: STEP_LABEL[step], status: i < at ? "done" : i === at ? "now" : "next" }));
 }
 
 /**
@@ -34,7 +37,7 @@ const STEP_DOING: Record<DayStartStep, string> = {
   supervisor: "starting the supervisor",
 };
 
-/** The supervisor panel's two start buttons: a plain start of the supervisor, and Start my day. */
+/** The supervisor panel's two kinds of start: a plain start of the supervisor (Continue, New), and Start my day. */
 export type StartButton = "supervisor" | "day";
 
 /**

@@ -1,5 +1,7 @@
-import { isSupervisor, type Session, type SessionList, type SupervisorConversation } from "@trackwall/protocol";
+import { type DayStartRun, isSupervisor, type Session, type SessionList, type SupervisorConversation } from "@trackwall/protocol";
+import type { StatusTone } from "./repo-status.ts";
 import { type SessionRow, type SessionSelection, workCount } from "./session-entries.ts";
+import { sessionStateLabel } from "./session-state.ts";
 
 /**
  * The supervisor (ADR-58): the one Copilot CLI session in the projects folder, above the sessions of all repos. It is
@@ -47,25 +49,70 @@ export function supervisorSummary(list: SessionList | undefined, rows: readonly 
   };
 }
 
-/** A start button of the panel besides Start my day: which conversation it goes on with, and what it says. */
-export interface SupervisorStart {
-  conversation: SupervisorConversation;
-  label: string;
+/** The ways to start the supervisor (ADR-126): Start my day, the last conversation again, or a new empty one. */
+type SupervisorStartKind = "day" | SupervisorConversation;
+
+/** One way to start the supervisor as the panel's start card offers it: what it is called and what it does. */
+export interface SupervisorChoice {
+  kind: SupervisorStartKind;
   title: string;
+  description: string;
+  button: string;
+}
+
+const DAY: SupervisorChoice = {
+  kind: "day",
+  title: "Start my day",
+  description: "Syncs every repo, writes what changed since your last day start, and starts a new conversation with that briefing.",
+  button: "Start my day",
+};
+const DAY_AGAIN: SupervisorChoice = { ...DAY, title: "Start my day again", button: "Start my day again" };
+const LAST: SupervisorChoice = {
+  kind: "last",
+  title: "Continue the last conversation",
+  description: "Goes back to the supervisor's last conversation, with everything said so far.",
+  button: "Continue",
+};
+const NEW: SupervisorChoice = {
+  kind: "new",
+  title: "New conversation",
+  description: "Starts an empty conversation, without a sync or a briefing.",
+  button: "New conversation",
+};
+
+/**
+ * The start card's choices while no supervisor runs (ADR-126), the main one first: Start my day until a day start has
+ * started the supervisor today, then Continue while the last conversation can go on (ADR-96). New is always there.
+ */
+export function supervisorChoices(
+  supervisor: Pick<SupervisorSummary, "resumable">,
+  dayRun: DayStartRun | null | undefined,
+  now: Date,
+): SupervisorChoice[] {
+  const dayDoneToday = dayRun?.supervisor != null && sameDay(new Date(dayRun.startedAt), now);
+  const day = dayDoneToday ? DAY_AGAIN : DAY;
+  if (!supervisor.resumable) return [day, NEW];
+  return dayDoneToday ? [LAST, day, NEW] : [day, LAST, NEW];
+}
+
+/** The same calendar day where the user is. */
+function sameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 
 /**
- * The panel's start buttons while no supervisor runs: Resume and New while the last supervisor's conversation can go
- * on (ADR-96), otherwise one start of a new conversation.
+ * The supervisor's state in the panel's header (ADR-126): starting the day while a day start runs, not running without
+ * a supervisor, the state of an ended one with the time it ended at, otherwise the session's own state.
  */
-export function supervisorStarts(supervisor: Pick<SupervisorSummary, "session" | "resumable">): SupervisorStart[] {
-  if (supervisor.resumable)
-    return [
-      { conversation: "last", label: "Resume", title: "Go on with the last supervisor's conversation" },
-      { conversation: "new", label: "New", title: "Start a supervisor with a new conversation" },
-    ];
-  const label = supervisor.session ? "Start again" : "Start supervisor";
-  return [{ conversation: "new", label, title: "Start a supervisor with a new conversation" }];
+export function supervisorStateLabel(
+  session: Session | undefined,
+  dayStarting: boolean,
+  clock: (iso: string) => string,
+): { tone?: StatusTone; label: string } {
+  if (dayStarting) return { tone: "warning", label: "starting your day…" };
+  if (session === undefined) return { label: "not running" };
+  const state = sessionStateLabel(session);
+  return session.run.kind === "exited" ? { ...state, label: `${state.label} at ${clock(session.run.endedAt)}` } : state;
 }
 
 /**
