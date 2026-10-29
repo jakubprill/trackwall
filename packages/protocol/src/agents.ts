@@ -193,6 +193,28 @@ export const SessionEnvironment = z.object({
 });
 export type SessionEnvironment = z.infer<typeof SessionEnvironment>;
 
+/**
+ * How the environment a running session would get from mise now differs from the one it started with (ADR-119), by
+ * name only: Copilot CLI reads its environment once, so the session needs a restart to get the new one.
+ */
+export const EnvironmentChange = z.object({
+  /** Variables mise sets now that the session does not have. */
+  added: z.array(z.string()),
+  /** Variables the session has that mise no longer sets. */
+  removed: z.array(z.string()),
+  /** Variables whose value changed, e.g. a new token. */
+  changed: z.array(z.string()),
+  /** Secrets the agent's tools would get now (added to `agentSecrets`). */
+  shared: z.array(z.string()),
+  /** Secrets the agent's tools would no longer get (taken out of `agentSecrets`). */
+  unshared: z.array(z.string()),
+});
+export type EnvironmentChange = z.infer<typeof EnvironmentChange>;
+
+/** The answer of `environment-change`: `null` while the session's environment is the one it would get now. */
+export const EnvironmentCheck = z.object({ change: EnvironmentChange.nullable() });
+export type EnvironmentCheck = z.infer<typeof EnvironmentCheck>;
+
 export const Session = z.object({
   id: SessionId,
   /**
@@ -485,6 +507,17 @@ export const agentsApi = {
   ),
   /** Returns after confirming that no process of the session is alive; an ended session returns its state. */
   stop: endpoint("stop", SessionRequest, Session),
+  /**
+   * Whether the environment the running session would get from mise now differs from the one it started with (ADR-119):
+   * the daemon asks mise again in the session's place. Only names, never values.
+   */
+  environmentChange: endpoint("environment-change", SessionRequest, EnvironmentCheck),
+  /**
+   * Stops a running session and starts it again with the same conversation (ADR-119), in the same place and view, so it
+   * gets the environment, `agentSecrets` and tool permissions of now. A task's session resumes as Resume does; the
+   * returned session is the new one. An ended session is `bad_request`.
+   */
+  restart: endpoint("restart", SessionRequest, Session),
   /**
    * A message from the user to a session in the conversation view (ADR-107): its next prompt, sent at once when the agent
    * waits, otherwise after its turn. A session in a terminal gets what the user types there instead (`bad_request`).

@@ -13,6 +13,7 @@ import {
   Sunrise,
 } from "lucide-react";
 import { type FocusEvent, useEffect, useRef, useState } from "react";
+import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
 import { SessionScreen } from "@/components/SessionScreen";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Badge } from "@/components/ui/badge";
@@ -114,6 +115,7 @@ export function SupervisorPanel({
         onLayout={onLayout}
         onFold={fold}
       />
+      <EnvironmentChangeNotice conn={conn} session={session} onRestarted={onChanged} />
       <DelegatedWork work={supervisor.work} onOpen={onOpenInSessions} />
       {session ? <SessionScreen conn={conn} session={session} selected={focused} /> : <NoSupervisor />}
     </aside>
