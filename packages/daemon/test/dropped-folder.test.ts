@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
+import { removeFolder } from "../src/infra/remove-folder.ts";
 import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
@@ -130,7 +131,7 @@ describe("dropped folder", () => {
 
     const projects = tempDir("trackwall-projects-");
     await workspace.setProjectsDir(projects);
-    rmSync(projects, { recursive: true });
+    await removeFolder(projects);
     expect(await workspace.droppedFolder(other)).toEqual({ kind: "folder-with-repos", path: other, repos: 1 });
   });
 });

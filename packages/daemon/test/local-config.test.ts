@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFacade, HOSTING_CLIS } from "../src/facade.ts";
+import { removeFolder } from "../src/infra/remove-folder.ts";
 import { LocalConfig } from "../src/modules/local-config/local-config.ts";
 import { gitProcessesStarted } from "../src/modules/vcs/git.ts";
 import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
@@ -137,7 +138,7 @@ describe("the local config store", () => {
     await backUp();
     expect(storeLog()).toBe("Trackwall|Back up orders: mise.toml\n\norders/mise.toml");
 
-    rmSync(orders, { recursive: true, force: true });
+    await removeFolder(orders);
     makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
     await facade.localConfig.restore("orders");
 
@@ -213,7 +214,7 @@ describe("the local config store", () => {
     expect((await facade.localConfig.repo("orders")).files[1]).toEqual({ kind: "backed_up", file: "mise.local.toml", ignored: false });
 
     // A new clone: the folder is gone and comes back without the file.
-    rmSync(orders, { recursive: true, force: true });
+    await removeFolder(orders);
     makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
     await backUp();
     expect((await facade.localConfig.repo("orders")).files[1]).toEqual({ kind: "missing", file: "mise.local.toml" });
@@ -247,7 +248,7 @@ describe("the local config store", () => {
     writeFileSync(join(orders, "mise.local.toml"), TASKS);
     writeFileSync(join(orders, "mise.toml"), TASKS);
     await backUp();
-    rmSync(orders, { recursive: true, force: true });
+    await removeFolder(orders);
 
     await facade.workspace.clone(gitlab, "shop/orders");
     await facade.workspace.clone(gitlab, "shop/web");

@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SyncRun } from "@trackwall/protocol";
+import { removeFolder } from "../src/infra/remove-folder.ts";
 import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
@@ -309,7 +310,7 @@ describe("sync of all repos", () => {
       const { workspace, projects, remotes } = await setup();
       const gone = cloned(projects, remotes, "a-gone");
       const ok = cloned(projects, remotes, "b-working");
-      rmSync(gone.upstream, { recursive: true, force: true });
+      await removeFolder(gone.upstream);
       commitFiles(ok.upstream, { "new.txt": "1" }, "remote");
 
       const run = await workspace.sync().then(() => finished(workspace));

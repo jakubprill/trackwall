@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
 import { GetSessionResult, ListSessionsResult } from "@trackwall/protocol";
+import { removeFolder } from "../src/infra/remove-folder.ts";
 import { connectHttpClient } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
@@ -73,7 +74,7 @@ describe.skipIf(process.versions.bun === undefined)("sessions in MCP tools (real
     const task = await daemon.facade.agents.createTask("shop", "the worktree will disappear");
     const session = daemon.facade.agents.sessions().sessions.find((s) => s.task === task.id);
     await daemon.facade.agents.stop(session?.id ?? "");
-    rmSync(task.worktree, { recursive: true, force: true });
+    await removeFolder(task.worktree);
 
     const data = GetSessionResult.parse(
       (await client.callTool({ name: "get_session", arguments: { session: session?.id } })).structuredContent,

@@ -5,6 +5,7 @@ import {
   type AgentTaskChanges,
   copilotHttpMcpServers,
   type DialogAnswer,
+  type EnvironmentCheck,
   type HttpEndpoint,
   isSupervisor,
   type MiseTarget,
@@ -54,6 +55,7 @@ import {
   sessionLaunch,
 } from "./resumable-sessions.ts";
 import { type SessionMiseEnv, sessionMiseLaunch } from "./session-env.ts";
+import { SessionEnvironments } from "./session-env-change.ts";
 import { type SessionRole, withInstructionsDir, writeSessionInstructions } from "./session-instructions.ts";
 import { SessionTokens } from "./session-tokens.ts";
 import { outcome, sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
@@ -222,6 +224,10 @@ export class Agents {
   #left: ResumableSession[] = [];
   readonly #lastSupervisor: LastSupervisorFile;
   readonly #queues: AgentQueuesFile;
+  /** The environment each listed session started with, to tell when mise would give it another one (ADR-119). */
+  readonly #environments = new SessionEnvironments();
+  /** The sessions a restart is stopping and starting again: a second restart of one would unlist the first one's new session. */
+  readonly #restarting = new Set<string>();
 
   constructor(deps: AgentsDeps) {
     this.#deps = deps;
@@ -581,11 +587,7 @@ export class Agents {
     if (session && !isSupervisor(session) && proposerOf(task.proposedBy) !== proposerKeyOf(session))
       throw new DomainError("bad_request", `task ${id} was not proposed by this session; ask the user to resume it`);
     const resumed = await this.#tasks.resume(id);
-    // Resuming closes the task's ended sessions, so its only session is the new one, running or (when its agent exited
-    // at once or the user stopped it) already ended.
-    const started = this.#views().find((s) => s.task === id);
-    if (!started) throw new Error(`task ${id} has no session after resuming`);
-    return { task: resumed, session: started };
+    return { task: resumed, session: this.#sessionOfTask(id) };
   }
 
   /** A task by identifier (`not_found` when it does not exist or the user ended it). */
@@ -741,7 +743,7 @@ export class Agents {
       rmSync(dir, { recursive: true, force: true });
       throw domainError(repo, err);
     }
-    this.#listed(session, task);
+    this.#listed(session, task, setup);
     return this.#view(session);
   }
 
@@ -792,18 +794,14 @@ export class Agents {
       rmSync(dir, { recursive: true, force: true });
       throw domainError(repo, err);
     }
-    this.#listed(session, task);
+    this.#listed(session, task, setup);
     return this.#view(session);
   }
 
   /** What every start needs: Copilot CLI, the session directory and token, and the arguments and environment it gets. */
-  async #setUp(id: string, { repo, supervisor, task }: SessionPlace): Promise<SessionSetup> {
-    const userEnv = await this.#deps.env();
-    // The user's `PATH`, not mise's: a mise config an agent can change must not choose the program that gets every secret.
-    const copilot = resolveCopilot(this.#deps.copilot, userEnv);
-    if ("missing" in copilot) throw new DomainError("agent_unavailable", copilot.message);
-    const permissions = this.#deps.repos.toolPermissions({ repo, supervisor });
-    const mise = sessionMiseLaunch(await this.#deps.miseEnv({ repo, task }), userEnv, this.#deps.repos.agentSecrets());
+  async #setUp(id: string, place: SessionPlace): Promise<SessionSetup> {
+    const { repo, supervisor, task } = place;
+    const { copilot, permissions, miseEnv, mise } = await this.#startInputs(place);
     // The MCP server and the hooks are the daemon on `127.0.0.1`, which a proxy of the user must not get (ADR-89).
     const env = withLoopbackNoProxy({ ...mise.env, TERM: "xterm-256color", COLORTERM: "truecolor", ...LOOPBACK_HOOKS_ENV });
     if (this.#sessions.has(id)) throw new Error(`session ${id} is already listed`);
@@ -815,15 +813,36 @@ export class Agents {
       args,
       env,
       mise,
+      miseEnv,
       role: this.#role(repo, supervisor, task),
       dir,
       token: this.#tokens.issue(id),
     };
   }
 
+  /**
+   * What a start reads of the configuration, each of which can refuse it: Copilot CLI, the tool permissions and what
+   * mise gives the place with the agent secrets (ADR-93).
+   */
+  async #startInputs({ repo, supervisor, task }: Pick<SessionPlace, "repo" | "supervisor" | "task">) {
+    const userEnv = await this.#deps.env();
+    // The user's `PATH`, not mise's: a mise config an agent can change must not choose the program that gets every secret.
+    const copilot = resolveCopilot(this.#deps.copilot, userEnv);
+    if ("missing" in copilot) throw new DomainError("agent_unavailable", copilot.message);
+    const permissions = this.#deps.repos.toolPermissions({ repo, supervisor });
+    return { copilot, permissions, ...(await this.#miseLaunch({ repo, task }, userEnv)) };
+  }
+
+  /** What mise gives a session in its place now (ADR-93). */
+  async #miseLaunch(place: { repo: string | null; task: string | null }, userEnv: NodeJS.ProcessEnv) {
+    const miseEnv = await this.#deps.miseEnv(place);
+    return { miseEnv, mise: sessionMiseLaunch(miseEnv, userEnv, this.#deps.repos.agentSecrets()) };
+  }
+
   /** A started session joins the list. */
-  #listed(session: AgentSession, task: string | null): void {
+  #listed(session: AgentSession, task: string | null, { miseEnv, mise }: Pick<SessionSetup, "miseEnv" | "mise">): void {
     this.#sessions.set(session.id, session);
+    this.#environments.remember(session.id, miseEnv, mise);
     // A review or a message sent while the task had no running session (ADR-62, ADR-68); the prompt names only what is
     // unread, and nothing is typed when nothing is. Not the updates of a new supervisor or main session: the user starts
     // those to talk, and the next update asks them anyway.
@@ -840,6 +859,46 @@ export class Agents {
     const session = this.#get(id);
     await this.#deps.procs.stop(owner(id));
     return this.#view(session);
+  }
+
+  /**
+   * How the environment mise would give the running session now differs from the one it started with (ADR-119);
+   * `change: null` for none, and for an ended session, which starts with the new one anyway.
+   */
+  async environmentChange(id: string): Promise<EnvironmentCheck> {
+    const session = this.#get(id);
+    if (!this.#isRunning(session)) return { change: null };
+    const { miseEnv, mise } = await this.#miseLaunch({ repo: session.repo, task: session.task }, await this.#deps.env());
+    return { change: this.#environments.changeSince(id, miseEnv, mise) };
+  }
+
+  /**
+   * A running session stops and starts again with its conversation (ADR-119), the way a daemon restart resumes it
+   * (ADR-95): a task's session as Resume does, the supervisor, a free session and a main session under their id. The
+   * new start reads the environment, `agentSecrets` and tool permissions again. A main or free session gives up its
+   * place in the list before the start, since an id is listed once, so a failed start leaves it out of the list;
+   * Copilot CLI still keeps its conversation.
+   */
+  async restart(id: string): Promise<Session> {
+    const session = this.#get(id);
+    if (this.#restarting.has(id)) throw new DomainError("bad_request", "the session is already restarting");
+    if (!this.#isRunning(session)) throw new DomainError("bad_request", "the session has ended; start it again instead");
+    const { repo, supervisor, task } = session;
+    const left: ResumableSession = { session: id, repo, supervisor, task, view: session.sessionView, ...resumedAs(session) };
+    this.#restarting.add(id);
+    try {
+      // What can refuse the start (a bad name in `agentSecrets`, Copilot CLI gone) refuses it before the stop, so the
+      // session goes on as it was.
+      await this.#startInputs(session);
+      // The user may have stopped or closed the session meanwhile: it is not started again behind their back.
+      if (this.#sessions.get(id) !== session || !this.#isRunning(session))
+        throw new DomainError("bad_request", "the session has ended; start it again instead");
+      await this.#deps.procs.stop(owner(id));
+      if (task === null && !supervisor) this.#unlist(session);
+      return await this.#resumeLeft(left);
+    } finally {
+      this.#restarting.delete(id);
+    }
   }
 
   /** Answers a running session's approval from outside its terminal (ADR-66); see `LiveSession.answerDialog`. */
@@ -930,22 +989,30 @@ export class Agents {
     }
   }
 
-  async #resumeLeft(left: ResumableSession): Promise<void> {
+  async #resumeLeft(left: ResumableSession): Promise<Session> {
     const { repo, task } = left;
     if (task !== null) {
       await this.#tasks.resume(task);
-      return;
+      return this.#sessionOfTask(task);
     }
     const spec = sessionLaunch(left.view, left);
     if (left.supervisor) {
       if (this.#supervisorStart || this.#runningSupervisor()) throw new Error("a supervisor already runs");
-      await this.#startSupervisorAs(spec);
+      const started = await this.#startSupervisorAs(spec);
       this.#askToReadLeft(left.session);
-      return;
+      return started;
     }
     const cwd = repo === null ? await this.#deps.repos.projectsDir() : await this.#deps.repos.repoPath(repo);
-    await this.#launchAs(spec, { repo, supervisor: false, cwd, task: null });
+    const started = await this.#launchAs(spec, { repo, supervisor: false, cwd, task: null });
     this.#askToReadLeft(left.session);
+    return started;
+  }
+
+  /** A task's only session after resuming it, which closes its ended ones: running, or already ended when its agent exited at once. */
+  #sessionOfTask(task: string): Session {
+    const session = this.#views().find((s) => s.task === task);
+    if (!session) throw new Error(`task ${task} has no session after resuming`);
+    return session;
   }
 
   /**
@@ -986,12 +1053,18 @@ export class Agents {
     if (this.#deps.procs.state(owner(id))?.kind !== "exited") {
       throw new DomainError("bad_request", "the session is still running; stop it before closing");
     }
-    this.#sessions.delete(id);
-    this.#tokens.revoke(id);
+    this.#unlist(session);
     this.#coordination.sessionClosed(session);
-    this.#miseTrust.forget(id);
+  }
+
+  /** The session leaves the list with its files; what waits for it in the coordination stays for whoever comes under its id. */
+  #unlist(session: AgentSession): void {
+    this.#sessions.delete(session.id);
+    this.#environments.forget(session.id);
+    this.#tokens.revoke(session.id);
+    this.#miseTrust.forget(session.id);
     session.dispose();
-    this.#removeDir(id);
+    this.#removeDir(session.id);
   }
 
   /** Sessions, newest first. */
@@ -1185,6 +1258,8 @@ interface SessionSetup {
   args: readonly string[];
   env: NodeJS.ProcessEnv;
   mise: ReturnType<typeof sessionMiseLaunch>;
+  /** What mise gave the place, which the session's environment is compared with later (ADR-119). */
+  miseEnv: SessionMiseEnv;
   role: SessionRole;
   dir: string;
   token: string;

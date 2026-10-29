@@ -163,6 +163,7 @@
                       "!../../infra/secret-name.ts",
                       "!../../infra/file-key.ts",
                       "!../../infra/regular-file.ts",
+                      "!../../infra/remove-folder.ts",
                       "!../../infra/run-program.ts",
                       "!../../platform/**"
                     ],

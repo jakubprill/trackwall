@@ -14,6 +14,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
+import { removeFolder } from "../src/infra/remove-folder.ts";
 import type { Agents } from "../src/modules/agents/agents.ts";
 import { TASK_BRANCH_PREFIX } from "../src/modules/agents/task-branch.ts";
 import { makeAgents, viewer, waitFor } from "./support/agents.ts";
@@ -264,7 +265,7 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
 
     // On Windows the running session keeps its worktree's files open, so it stops first.
     await agents.stop(sessionOf(agents, second.id));
-    rmSync(second.worktree, { recursive: true, force: true });
+    await removeFolder(second.worktree);
     expect(await agents.taskSharedFiles(first.id)).toEqual([]);
     // The task's own changes are not a warning: without its worktree the call fails as `task-changes` does.
     await expect(agents.taskSharedFiles(second.id)).rejects.toMatchObject({ code: "not_found" });
@@ -308,7 +309,7 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     const task = await agents.createTask("shop", "interrupted removal");
     await agents.stop(sessionOf(agents, task.id));
     // This is how `git worktree remove` leaves a worktree when Windows did not let it delete a held file.
-    rmSync(join(dir, ".git", "worktrees", task.branch.slice(TASK_BRANCH_PREFIX.length)), { recursive: true });
+    await removeFolder(join(dir, ".git", "worktrees", task.branch.slice(TASK_BRANCH_PREFIX.length)));
 
     await expect(agents.removeTask(task.id, false, false)).rejects.toMatchObject({
       code: "unsaved_changes",

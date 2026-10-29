@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, posix, win32 } from "node:path";
 import { vscodeUrl } from "../src/infra/editor-url.ts";
+import { removeFolder } from "../src/infra/remove-folder.ts";
 import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { isFullPath } from "../src/modules/workspace/full-path.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
@@ -75,7 +76,7 @@ describe("workspace", () => {
       const dir = makeRepo({ a: "1" }, "api", projects);
       expect((await workspace.list()).repos.map((r) => r.id)).toEqual(["api"]);
 
-      rmSync(dir, { recursive: true, force: true });
+      await removeFolder(dir);
       expect((await workspace.list()).repos).toEqual([]);
       await expect(workspace.overview("api")).rejects.toMatchObject({ code: "not_found" });
     },
@@ -243,7 +244,7 @@ describe("workspace", () => {
     "a folder that vanished after being set is projects_dir_unavailable with its path",
     async () => {
       const { workspace, projects } = await workspaceWithProjectsDir();
-      rmSync(projects, { recursive: true, force: true });
+      await removeFolder(projects);
 
       await expect(workspace.list()).rejects.toMatchObject({
         code: "projects_dir_unavailable",

@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { removeFolder } from "../src/infra/remove-folder.ts";
 import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import type { RepoEntry } from "../src/modules/workspace/projects-dir.ts";
 import { RepoWatch } from "../src/modules/workspace/repo-watch.ts";
@@ -86,7 +87,7 @@ describe("the repo watch", () => {
     await watch.check();
     expect(handed.slice(1)).toEqual([["added"]]);
 
-    rmSync(added, { recursive: true, force: true });
+    await removeFolder(added);
     await watch.check();
     expect(handed).toHaveLength(2);
     expect(revision()).toBe(2);
