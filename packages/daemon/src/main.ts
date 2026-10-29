@@ -3,14 +3,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { arch, platform } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ContainerId } from "@trackwall/protocol";
 import { EventHub } from "./api/event-hub.ts";
 import { sessionHookRequest } from "./api/hooks.ts";
 import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
 import { createErrorJournal, createFacade, type Facade, HOSTING_CLIS } from "./facade.ts";
 import { type CommandLine, type DaemonArgs, MCP_STDIO_COMMAND, parseCommandLine, USAGE } from "./infra/args.ts";
-import { containerId, desktopOpeners, hasDesktop } from "./infra/desktop.ts";
+import { desktopOpeners, hasDesktop, ownContainer } from "./infra/desktop.ts";
 import { newToken, probeRunningDaemon, watchDaemonFile, withStartLock, writeDaemonFile } from "./infra/discovery.ts";
 import { watchEventLoopStalls } from "./infra/event-loop-stalls.ts";
 import { resolveTrackwallHome, trackwallHome } from "./infra/home.ts";
@@ -72,7 +71,7 @@ async function start(
   let facade: Facade | undefined;
   let stopWatching = () => {};
   const desktop = hasDesktop({ platform: process.platform, env: process.env, exists: existsSync });
-  const container = desktop ? null : ownContainer();
+  const container = ownContainer({ exists: existsSync, read: (path) => readFileSync(path, "utf8") });
   // Sessions start only through the API, so their hooks and MCP server always have its port.
   const apiPort = () => {
     if (!api) throw new Error("a session started before the API listens");
@@ -180,15 +179,6 @@ function resolveUiDir(explicit: string | undefined): string | undefined {
     // in a compiled binary import.meta.url points to the virtual file system
   }
   return candidates.find(isUiDir);
-}
-
-/** The container this daemon runs in (ADR-121); outside Linux and without `/proc` there is none to find. */
-function ownContainer(): ContainerId | null {
-  try {
-    return containerId(readFileSync("/proc/self/mountinfo", "utf8"));
-  } catch {
-    return null;
-  }
 }
 
 /** Without a desktop (ADR-120) there is no browser to open; the address is not logged, since it carries the token. */

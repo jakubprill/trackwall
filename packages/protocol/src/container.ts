@@ -10,7 +10,8 @@ export type ContainerId = z.infer<typeof ContainerId>;
 /**
  * The address that opens a folder or file of the container in VS Code on the user's computer, attached to the running
  * container: `vscode://vscode-remote/attached-container+<the container id in hex>/<path>`. The page opens it, since the
- * daemon in the container has no desktop (ADR-120).
+ * daemon in the container has no desktop (ADR-120). The path is a Linux path, so unlike `vscodeUrl` in the daemon, which
+ * keeps a Windows drive letter's colon, every segment is encoded whole.
  */
 export function containerEditorUrl(container: ContainerId, path: string): string {
   const hex = [...new TextEncoder().encode(container)].map((byte) => byte.toString(16).padStart(2, "0")).join("");

@@ -7,8 +7,9 @@ import {
   WORKSPACE_KEYS,
   type WorkspaceKeyState,
 } from "@trackwall/protocol";
-import { BookOpen, Code, FolderOpen } from "lucide-react";
+import { BookOpen, FolderOpen } from "lucide-react";
 import { type ReactNode, useCallback, useContext, useState } from "react";
+import { EditorButton } from "@/components/EditorButton";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { StatusLabel } from "@/components/StatusLabel";
@@ -25,7 +26,7 @@ import {
   workspaceKeyChangedIn,
 } from "@/lib/config-files";
 import type { Connection } from "@/lib/connection";
-import { DaemonPlaceContext, editorLinkFor, IN_CONTAINER_NOTE, NO_DESKTOP_NOTE, useOpenWebLink } from "@/lib/desktop";
+import { DaemonPlaceContext, IN_CONTAINER_NOTE, NO_DESKTOP_NOTE, useOpenWebLink } from "@/lib/desktop";
 import { FILE_MANAGER } from "@/lib/platform";
 import { useRemote } from "@/lib/use-remote";
 
@@ -46,7 +47,6 @@ export function ConfigFilesSurface({ conn }: { conn: Connection }) {
   const openLink = useOpenWebLink(conn);
   const actions: EntryActions = {
     desktop: place.desktop,
-    editorLink: (path) => editorLinkFor(place, path),
     open: (id) => act(post(conn, configFilesApi.openInEditor, { id })),
     show: (id) => act(post(conn, configFilesApi.showInFolder, { id })),
     docs: (page) => act(openLink(docsUrl(page))),
@@ -95,10 +95,8 @@ const HIDDEN_FILES =
   "daemon.json and each session's files hold the key the app and sessions use to reach Trackwall, so they are not listed.";
 
 interface EntryActions {
-  /** Whether the daemon can open a file or a folder on this computer (ADR-120); without it those buttons are hidden. */
+  /** Whether the daemon can show a folder on this computer (ADR-120); without it that button is hidden. */
   desktop: boolean;
-  /** The address that opens a file in VS Code inside the daemon's container (ADR-121), when the daemon cannot open it. */
-  editorLink: (path: string) => string | undefined;
   open: (id: ConfigEntry["id"]) => void;
   show: (id: ConfigEntry["id"]) => void;
   docs: (page: DocsPage) => void;
@@ -116,7 +114,6 @@ function GroupHeader({ group }: { group: ConfigGroup }) {
 function EntryRow({ entry, actions, children }: { entry: ConfigEntry; actions: EntryActions; children?: ReactNode }) {
   const info = CONFIG_ENTRIES[entry.id];
   const there = entry.state !== "missing" && entry.path !== null;
-  const editorLink = entry.path && actions.editorLink(entry.path);
   return (
     <li className="flex min-w-0 flex-col gap-1 px-3 py-2">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -134,17 +131,8 @@ function EntryRow({ entry, actions, children }: { entry: ConfigEntry; actions: E
       )}
       {entry.path && <p className="text-muted-foreground font-mono text-xs break-all">{entry.path}</p>}
       <div className="flex flex-wrap gap-2 pt-1">
-        {info.kind === "file" && there && actions.desktop && (
-          <Button variant="outline" size="sm" onClick={() => actions.open(entry.id)}>
-            <Code /> Open in VS Code
-          </Button>
-        )}
-        {info.kind === "file" && there && editorLink && (
-          <Button variant="outline" size="sm" asChild>
-            <a href={editorLink}>
-              <Code /> Open in VS Code
-            </a>
-          </Button>
+        {info.kind === "file" && entry.path !== null && entry.state !== "missing" && (
+          <EditorButton path={entry.path} label="Open in VS Code" onOpen={() => actions.open(entry.id)} />
         )}
         {there && actions.desktop && (
           <Button variant="outline" size="sm" onClick={() => actions.show(entry.id)}>

@@ -12,11 +12,28 @@ const CONTAINER_MARKERS = ["/.dockerenv", "/run/.containerenv"] as const;
 
 /**
  * The id of the container the daemon runs in, for VS Code links into it (ADR-121). Docker and Podman mount the
- * container's `hostname`, `hosts` and `resolv.conf` from a folder named after its full id, which `/proc/self/mountinfo`
- * shows; the hostname is only a default and the cgroup path is hidden under cgroup v2.
+ * container's `/etc/hostname` from a folder named after its full id, which `/proc/self/mountinfo` shows as the root of
+ * that mount; the hostname itself is only a default, and the cgroup path is hidden under cgroup v2. Only that one mount
+ * counts: a host's own table can list folders of other containers.
  */
 export function containerId(mountinfo: string): ContainerId | null {
-  return /containers\/([0-9a-f]{64})\//.exec(mountinfo)?.[1] ?? null;
+  for (const line of mountinfo.split("\n")) {
+    const [, , , root, mountPoint] = line.split(" ");
+    if (mountPoint !== "/etc/hostname" || root === undefined) continue;
+    const id = /containers\/([0-9a-f]{64})\//.exec(root)?.[1];
+    if (id) return id;
+  }
+  return null;
+}
+
+/** The container this daemon runs in, read only inside one (ADR-121); `null` elsewhere or when `/proc` cannot be read. */
+export function ownContainer({ exists, read }: { exists: (path: string) => boolean; read: (path: string) => string }): ContainerId | null {
+  if (!CONTAINER_MARKERS.some(exists)) return null;
+  try {
+    return containerId(read("/proc/self/mountinfo"));
+  } catch {
+    return null;
+  }
 }
 
 export interface DesktopProbe {

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { agentsApi, configFilesApi, DaemonInfoResult, mergeRequestsApi, workspaceApi } from "@trackwall/protocol";
-import { containerId, hasDesktop } from "../src/infra/desktop.ts";
+import { containerId, hasDesktop, ownContainer } from "../src/infra/desktop.ts";
 import { loopbackRequest } from "../src/infra/loopback.ts";
 import { gitIn } from "./support/git-repo.ts";
 import { fakeHostingClis } from "./support/hosting.ts";
@@ -49,6 +49,32 @@ describe("containerId", () => {
   test("finds none outside a container", () => {
     expect(containerId("25 1 8:1 / / rw,relatime shared:1 - ext4 /dev/sda1 rw")).toBeNull();
   });
+
+  test("ignores another container's folder in a host's own table", () => {
+    const host =
+      "880 25 0:61 / /var/lib/docker/containers/de4cc610b398445a55cd4802f1b0dc38776d583533fd7283c9d76e5825fd5f81/mounts/shm rw - tmpfs shm rw";
+    expect(containerId(host)).toBeNull();
+  });
+});
+
+describe("ownContainer", () => {
+  const docker =
+    "1601 1590 254:1 /docker/containers/de4cc610b398445a55cd4802f1b0dc38776d583533fd7283c9d76e5825fd5f81/hostname /etc/hostname rw - ext4 /dev/vda1 rw";
+
+  test("reads the mount table only inside a container", () => {
+    const read = () => docker;
+    expect(ownContainer({ exists: (path) => path === "/.dockerenv", read })).toBe(
+      "de4cc610b398445a55cd4802f1b0dc38776d583533fd7283c9d76e5825fd5f81",
+    );
+    expect(ownContainer({ exists: () => false, read })).toBeNull();
+  });
+
+  test("a mount table it cannot read means no container to link to", () => {
+    const read = () => {
+      throw new Error("ENOENT: /proc/self/mountinfo");
+    };
+    expect(ownContainer({ exists: () => true, read })).toBeNull();
+  });
 });
 
 describe("a daemon without a desktop", () => {
@@ -63,6 +89,7 @@ describe("a daemon without a desktop", () => {
       hostingClis: fakeHostingClis({ apiResponses: { "projects/shop%2Fshop/merge_requests": [] } }).clis,
       openUrl: (url) => opened.push(url),
       desktop: false,
+      container: "de4cc610b398445a55cd4802f1b0dc38776d583533fd7283c9d76e5825fd5f81",
     });
     gitIn(join(daemon.projects, "shop"), "remote", "add", "origin", "https://gitlab.example.com/shop/shop.git");
     daemon.facade.workspace.setRepoHosts([{ kind: "gitlab", host: "gitlab.example.com" }]);
@@ -81,9 +108,12 @@ describe("a daemon without a desktop", () => {
       timeoutMs: 10_000,
     });
 
-  test("says so in its info, so the page opens web links itself", async () => {
+  test("says so in its info with its container, so the page opens web links and VS Code itself", async () => {
     const res = await loopbackRequest(daemon.api.port, "/api/daemon/info", { token: TOKEN });
-    expect(DaemonInfoResult.parse(JSON.parse(res.body))).toMatchObject({ ok: true, data: { desktop: false } });
+    expect(DaemonInfoResult.parse(JSON.parse(res.body))).toMatchObject({
+      ok: true,
+      data: { desktop: false, container: "de4cc610b398445a55cd4802f1b0dc38776d583533fd7283c9d76e5825fd5f81" },
+    });
   });
 
   test("refuses to open a link, a repo folder, VS Code or a config file with no_desktop instead of failing unseen", async () => {
