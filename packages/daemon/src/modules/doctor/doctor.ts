@@ -1,4 +1,4 @@
-import { stat } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import {
   type DoctorCheck,
   DoctorCheckId,
@@ -115,8 +115,10 @@ export class Doctor {
   /** Only a projects folder on a folder of the user's computer mounted into Linux is worth a row: it works, slowly. */
   private async projectsFolderStorage({ projectsDir }: CheckContext): Promise<Outcome> {
     if (!projectsDir.ok || projectsDir.value === null) return null;
-    const table = await this.deps.mountTable();
-    const storage = table === null ? null : folderStorage(table, projectsDir.value);
+    // A link such as `~/code` to `/mnt/c/...` on WSL is exactly the slow case; a folder that does not exist is the other check's.
+    const dir = await realpath(projectsDir.value).catch(() => null);
+    const table = dir === null ? null : await this.deps.mountTable();
+    const storage = table === null || dir === null ? null : folderStorage(table, dir);
     if (!storage?.sharedFromHost) return null;
     return warn(
       `The projects folder is a folder of your computer mounted into Linux (${storage.fsType} at ${storage.mountPoint}), so git and builds there are slow.`,

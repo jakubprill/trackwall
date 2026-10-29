@@ -23,7 +23,7 @@ The checks are:
 | Check | OK when |
 | --- | --- |
 | Projects folder | it is set and exists |
-| Projects folder storage | shown only on Linux, when your projects folder is a folder of your computer mounted into a container or WSL (such as `/mnt/c/...` or a Docker bind mount), where git and builds are slow; see [Run in a dev container](/guide/dev-container) |
+| Projects folder storage | your projects folder is in the Linux file system; the line shows only on Linux, as a warning when the folder is a folder of your computer mounted into a container or WSL (such as `/mnt/c/...` or a Docker bind mount), where git and builds are slow; see [Run in a dev container](/guide/dev-container) |
 | Workspace settings file | every key of `workspace.yaml` can be read; one that cannot is named with its line, and [Config files](/features/config-files) shows them all |
 | Git | `git --version` answers; with a "Git program" chosen in Settings the line names the git it runs, and it warns when the "Git program" from Settings did not answer and git from `PATH` is used instead |
 | Copilot CLI | Trackwall finds it the way it starts sessions, and it is not older than the version Trackwall is tested with |

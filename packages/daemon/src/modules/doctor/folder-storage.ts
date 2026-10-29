@@ -1,11 +1,26 @@
 /**
  * Where on Linux the projects folder's files live (ADR-101): a folder of the user's computer mounted into a container or
  * WSL (Docker Desktop's bind mounts, WSL's `/mnt/c`) passes every file through the virtual machine, so git and builds
- * there are as slow as on the computer itself, or slower. The doctor names it, since everything else works.
+ * there are slower than on either side's own disk. The doctor names it, since everything else works.
  */
 
-/** File systems that carry a folder of the host into Linux: 9p and drvfs (WSL), virtiofs, fakeowner and gRPC FUSE (Docker Desktop), osxfs, VirtualBox. */
-const HOST_SHARED_FS = new Set(["9p", "drvfs", "virtiofs", "fakeowner", "fuse.grpcfuse", "osxfs", "fuse.osxfs", "vboxsf"]);
+/**
+ * File systems that carry a folder of the host into Linux: 9p and drvfs (WSL), virtiofs, fakeowner, gRPC FUSE and osxfs
+ * (Docker Desktop), sshfs (Lima, Colima), and the shared folders of VirtualBox, Parallels and VMware.
+ */
+const HOST_SHARED_FS = new Set([
+  "9p",
+  "drvfs",
+  "virtiofs",
+  "fakeowner",
+  "fuse.grpcfuse",
+  "osxfs",
+  "fuse.osxfs",
+  "fuse.sshfs",
+  "vboxsf",
+  "prl_fs",
+  "fuse.vmhgfs-fuse",
+]);
 
 export interface FolderStorage {
   mountPoint: string;

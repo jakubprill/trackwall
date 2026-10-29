@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TESTED_COPILOT_CLI_VERSION } from "@trackwall/protocol";
@@ -13,6 +13,25 @@ import { fakeHostingClis } from "./support/hosting.ts";
 const fakeCopilot = join(import.meta.dir, "fixtures", "fake-copilot-session.ts");
 const printVersion = join(import.meta.dir, "fixtures", "print-version.ts");
 const NOW = new Date("2026-10-27T20:00:00.000Z");
+
+/** A doctor's dependencies where everything answers and nothing is set; a test overrides only what it is about. */
+function fakeDeps(overrides: Partial<DoctorDeps>): DoctorDeps {
+  return {
+    env: async () => process.env,
+    run: () => Promise.resolve(""),
+    gitVersion: () => Promise.resolve({ output: "git version 2.47.1", program: "git", source: "path", chosen: null }),
+    signedIn: () => Promise.resolve(),
+    resolveCopilot: () => ({ program: "copilot", args: [] }),
+    mise: ["mise"],
+    projectsDir: async () => null,
+    repoHosts: () => [],
+    mountTable: async () => null,
+    workspaceFile: join(tmpdir(), "trackwall-doctor-no-such-workspace.yaml"),
+    workspaceKeys: () => ({ keys: [], unknown: [] }),
+    now: () => NOW,
+    ...overrides,
+  };
+}
 
 interface Setup {
   /** `false`: no Copilot CLI in `PATH`; otherwise the fake Copilot CLI, which says the tested version. */
@@ -176,22 +195,13 @@ describe("doctor", () => {
   });
 
   test("a program's error goes into its check as one line, and a check that throws fails alone", async () => {
-    const deps: DoctorDeps = {
-      env: async () => process.env,
+    const deps = fakeDeps({
       run: () => Promise.reject(new Error(`mise: broken install\n${"x".repeat(16_000)}`)),
       gitVersion: () => Promise.reject(new Error("program git not found in PATH")),
-      signedIn: () => Promise.resolve(),
-      resolveCopilot: () => ({ program: "copilot", args: [] }),
-      mise: ["mise"],
-      projectsDir: async () => null,
       repoHosts: () => {
         throw new Error("workspace.yaml is invalid: repoHosts");
       },
-      mountTable: async () => null,
-      workspaceFile: join(tmpdir(), "trackwall-doctor-no-such-workspace.yaml"),
-      workspaceKeys: () => ({ keys: [], unknown: [] }),
-      now: () => NOW,
-    };
+    });
     const report = await new Doctor(deps).run();
     expect(report.checkedAt).toBe(NOW.toISOString());
     expect(report.checks.map((c) => [c.id, c.status, c.summary])).toEqual([
@@ -207,20 +217,7 @@ describe("doctor", () => {
 
 describe("the git check with a Git program chosen in Settings (ADR-112)", () => {
   function gitCheck(version: Awaited<ReturnType<DoctorDeps["gitVersion"]>>) {
-    const deps: DoctorDeps = {
-      env: async () => process.env,
-      run: () => Promise.resolve(""),
-      gitVersion: () => Promise.resolve(version),
-      signedIn: () => Promise.resolve(),
-      resolveCopilot: () => ({ program: "copilot", args: [] }),
-      mise: ["mise"],
-      projectsDir: async () => null,
-      repoHosts: () => [],
-      mountTable: async () => null,
-      workspaceFile: join(tmpdir(), "trackwall-doctor-no-such-workspace.yaml"),
-      workspaceKeys: () => ({ keys: [], unknown: [] }),
-      now: () => NOW,
-    };
+    const deps = fakeDeps({ gitVersion: () => Promise.resolve(version) });
     return new Doctor(deps).run().then((report) => report.checks.find((c) => c.id === "git"));
   }
 
@@ -306,39 +303,47 @@ describe("where the projects folder's files live on Linux", () => {
     expect(folderStorage(mountinfo, "/mnt/my projects/shop")?.fsType).toBe("fakeowner");
   });
 
+  test("of a mount point mounted over, the later mount is the one that counts", () => {
+    const overmounted = `${mountinfo}\n1620 1610 0:170 / /mnt/dev rw - ext4 /dev/vdb1 rw`;
+    expect(folderStorage(overmounted, "/mnt/dev/shop")?.fsType).toBe("ext4");
+  });
+
   test("a folder whose name only starts like a mount point is not in it", () => {
     expect(folderStorage(mountinfo, "/mnt/devtools")).toEqual({ mountPoint: "/", fsType: "overlay", sharedFromHost: false });
   });
+});
+
+// The mount table and its paths are Linux's; a symlink to a folder on Windows also needs developer mode.
+describe.skipIf(process.platform === "win32")("the doctor on a projects folder mounted from the host", () => {
+  const mountinfo = "1610 1590 0:160 /run/desktop/mnt/host/c/Users/me/Dev /mnt/dev rw,noatime - 9p C:\\134Users rw";
 
   function storageCheck(table: string | null, projectsDir: string) {
-    const deps: DoctorDeps = {
-      env: async () => process.env,
-      run: () => Promise.resolve(""),
-      gitVersion: () => Promise.resolve({ output: "git version 2.47.1", program: "git", source: "path", chosen: null }),
-      signedIn: () => Promise.resolve(),
-      resolveCopilot: () => ({ program: "copilot", args: [] }),
-      mise: ["mise"],
-      projectsDir: async () => projectsDir,
-      repoHosts: () => [],
-      mountTable: async () => table,
-      workspaceFile: join(tmpdir(), "trackwall-doctor-no-such-workspace.yaml"),
-      workspaceKeys: () => ({ keys: [], unknown: [] }),
-      now: () => NOW,
-    };
+    const deps = fakeDeps({ projectsDir: async () => projectsDir, mountTable: async () => table });
     return new Doctor(deps).run().then((report) => report.checks.find((c) => c.id === "projects-folder-storage"));
   }
 
   test("the doctor warns about a projects folder shared from the computer, and says where to clone instead", async () => {
-    const check = await storageCheck(mountinfo, "/mnt/dev");
+    const shared = mkdtempSync(join(tmpdir(), "trackwall-doctor-shared-"));
+    const check = await storageCheck(`1610 1590 0:160 /run/desktop/mnt/host/c/Dev ${realpathSync(shared)} rw - 9p C:\\134Dev rw`, shared);
     expect(check).toMatchObject({
       status: "warn",
-      summary: "The projects folder is a folder of your computer mounted into Linux (9p at /mnt/dev), so git and builds there are slow.",
+      summary: `The projects folder is a folder of your computer mounted into Linux (9p at ${realpathSync(shared)}), so git and builds there are slow.`,
     });
     expect(check?.fix).toContain("Docker volume");
   });
 
-  test("a projects folder in the Linux file system, or a computer without a mount table, gets no row", async () => {
-    expect(await storageCheck(mountinfo, "/workspaces")).toBeUndefined();
-    expect(await storageCheck(null, "C:\\Users\\me\\Dev")).toBeUndefined();
+  test("a link to a shared folder, as `~/code` to `/mnt/c/...` on WSL, is followed to it", async () => {
+    const shared = mkdtempSync(join(tmpdir(), "trackwall-doctor-shared-"));
+    const link = join(mkdtempSync(join(tmpdir(), "trackwall-doctor-home-")), "code");
+    symlinkSync(shared, link, "dir");
+    const check = await storageCheck(`1610 1590 0:160 /c/Dev ${realpathSync(shared)} rw - 9p drvfs rw`, link);
+    expect(check?.status).toBe("warn");
+  });
+
+  test("a projects folder in the Linux file system, a missing one, or a computer without a mount table gets no row", async () => {
+    const local = mkdtempSync(join(tmpdir(), "trackwall-doctor-local-"));
+    expect(await storageCheck(`1590 1572 0:150 / / rw - ext4 /dev/vda1 rw`, local)).toBeUndefined();
+    expect(await storageCheck(mountinfo, "/mnt/dev/no-such-folder")).toBeUndefined();
+    expect(await storageCheck(null, local)).toBeUndefined();
   });
 });
