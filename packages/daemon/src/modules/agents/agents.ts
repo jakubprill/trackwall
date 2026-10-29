@@ -582,7 +582,7 @@ export class Agents {
   /**
    * A task the user typed; its agent asks before tools unless the user chose `auto` (ADR-105), runs on `model`, or
    * Copilot CLI's default when it is `null` (ADR-98), with `javaNavigation` gets the Java language server (ADR-99), and
-   * works on board item `item` (ADR-133), which the caller has checked.
+   * works on board item `item` (ADR-133), which must be on the board (`not_found` otherwise).
    */
   async createTask(
     repo: string,

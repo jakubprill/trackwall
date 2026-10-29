@@ -120,7 +120,7 @@ export function NewSession({
                 })}
             disabled={pending}
           />
-          {start.kind === "session" && <WithoutWorktree repo={repo} sessions={sessions} />}
+          <StartNote start={start} repo={repo} sessions={sessions} />
           <div className="flex flex-wrap items-center gap-2">
             <StartButton start={start} disabled={pending} invalidModel={model === undefined} onClick={run} />
             {onCancel && (
@@ -184,6 +184,14 @@ function useJavaNavigationOffer(conn: Connection, repo: string | null): JavaNavi
 function javaNavigationPill(offer: JavaNavigationOffer, value: boolean, onChange: (value: boolean) => void) {
   if (offer.kind === "hidden") return undefined;
   return { value, onChange, unavailable: offer.kind === "unavailable" ? offer.reason : null };
+}
+
+/** A line under the options: what a session gives up, or why a task for an item cannot start yet. */
+function StartNote({ start, repo, sessions }: { start: NewSessionStart; repo: string | null; sessions: readonly Session[] }) {
+  if (start.kind === "session") return <WithoutWorktree repo={repo} sessions={sessions} />;
+  if (start.kind === "needs-repo")
+    return <p className="text-muted-foreground text-xs">A task for this item works in a repo: add one to the projects folder first.</p>;
+  return null;
 }
 
 /** What a session without its own worktree gives up, and the agents it would share the working copy with. */
