@@ -7,8 +7,9 @@ import {
   WORKSPACE_KEYS,
   type WorkspaceKeyState,
 } from "@trackwall/protocol";
-import { BookOpen, Code, FolderOpen } from "lucide-react";
-import { type ReactNode, useCallback, useState } from "react";
+import { BookOpen, FolderOpen } from "lucide-react";
+import { type ReactNode, useCallback, useContext, useState } from "react";
+import { EditorButton } from "@/components/EditorButton";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { StatusLabel } from "@/components/StatusLabel";
@@ -25,7 +26,7 @@ import {
   workspaceKeyChangedIn,
 } from "@/lib/config-files";
 import type { Connection } from "@/lib/connection";
-import { NO_DESKTOP_NOTE, useDesktop, useOpenWebLink } from "@/lib/desktop";
+import { DaemonPlaceContext, IN_CONTAINER_NOTE, NO_DESKTOP_NOTE, useOpenWebLink } from "@/lib/desktop";
 import { FILE_MANAGER } from "@/lib/platform";
 import { useRemote } from "@/lib/use-remote";
 
@@ -42,10 +43,10 @@ export function ConfigFilesSurface({ conn }: { conn: Connection }) {
     setError(undefined);
     request.catch((err: unknown) => setError(errorMessage(err)));
   };
-  const desktop = useDesktop();
+  const place = useContext(DaemonPlaceContext);
   const openLink = useOpenWebLink(conn);
   const actions: EntryActions = {
-    desktop,
+    desktop: place.desktop,
     open: (id) => act(post(conn, configFilesApi.openInEditor, { id })),
     show: (id) => act(post(conn, configFilesApi.showInFolder, { id })),
     docs: (page) => act(openLink(docsUrl(page))),
@@ -56,7 +57,7 @@ export function ConfigFilesSurface({ conn }: { conn: Connection }) {
       {report.error && <ErrorWithRetry message={report.error} onRetry={report.reload} />}
       {!report.data && !report.error && <Loading />}
       {error && <p className="text-destructive text-xs">{error}</p>}
-      {!desktop && <p className="text-muted-foreground text-xs">{NO_DESKTOP_NOTE}</p>}
+      {!place.desktop && <p className="text-muted-foreground text-xs">{place.container ? IN_CONTAINER_NOTE : NO_DESKTOP_NOTE}</p>}
       {report.data &&
         configGroups(report.data).map((group) => (
           <Surface
@@ -94,7 +95,7 @@ const HIDDEN_FILES =
   "daemon.json and each session's files hold the key the app and sessions use to reach Trackwall, so they are not listed.";
 
 interface EntryActions {
-  /** Whether the daemon can open a file or a folder on this computer (ADR-120); without it those buttons are hidden. */
+  /** Whether the daemon can show a folder on this computer (ADR-120); without it that button is hidden. */
   desktop: boolean;
   open: (id: ConfigEntry["id"]) => void;
   show: (id: ConfigEntry["id"]) => void;
@@ -130,10 +131,8 @@ function EntryRow({ entry, actions, children }: { entry: ConfigEntry; actions: E
       )}
       {entry.path && <p className="text-muted-foreground font-mono text-xs break-all">{entry.path}</p>}
       <div className="flex flex-wrap gap-2 pt-1">
-        {info.kind === "file" && there && actions.desktop && (
-          <Button variant="outline" size="sm" onClick={() => actions.open(entry.id)}>
-            <Code /> Open in VS Code
-          </Button>
+        {info.kind === "file" && entry.path !== null && entry.state !== "missing" && (
+          <EditorButton path={entry.path} label="Open in VS Code" onOpen={() => actions.open(entry.id)} />
         )}
         {there && actions.desktop && (
           <Button variant="outline" size="sm" onClick={() => actions.show(entry.id)}>

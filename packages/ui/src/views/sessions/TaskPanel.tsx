@@ -1,6 +1,7 @@
 import { agentsApi, type RunningMiseTask, type Session, TASK_PORT_ENV, type Task, type TaskMessage } from "@trackwall/protocol";
-import { Bot, Code, GitBranch, Play, Plug, ShieldOff, Square, Trash2 } from "lucide-react";
+import { Bot, GitBranch, Play, Plug, ShieldOff, Square, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
+import { EditorButton } from "@/components/EditorButton";
 import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
 import { SessionTerminal } from "@/components/SessionTerminal";
 import { StatusLabel } from "@/components/StatusLabel";
@@ -9,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
-import { useDesktop } from "@/lib/desktop";
 import { relativeTime } from "@/lib/format";
 import { proposerLabel, taskName } from "@/lib/session-entries";
 import { isLive, sessionStateLabel } from "@/lib/session-state";
@@ -75,7 +75,6 @@ export function TaskPanel({
       onChanged();
     },
   );
-  const desktop = useDesktop();
   const openEditor = useAction(
     () => post(conn, agentsApi.openTaskEditor, { task: task.id }),
     () => {},
@@ -121,11 +120,7 @@ export function TaskPanel({
         {error && <span className="text-destructive max-w-xs truncate text-xs">{error}</span>}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <VerifyButton state={details.verification} disabled={confirmingRemoval} />
-          {desktop && (
-            <Button variant="outline" size="sm" onClick={openEditor.run} disabled={openEditor.pending}>
-              <Code /> VS Code
-            </Button>
-          )}
+          <EditorButton path={task.worktree} label="VS Code" onOpen={openEditor.run} disabled={openEditor.pending} />
           {liveSession ? (
             <StopButton conn={conn} session={liveSession} onStopped={onChanged} />
           ) : (
