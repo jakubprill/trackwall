@@ -141,6 +141,7 @@ const proposals: SessionEntry = {
       proposedBy: { session: null, supervisor: false },
       model: null,
       approvals: "ask",
+      item: null,
       createdAt: "",
     },
   ],

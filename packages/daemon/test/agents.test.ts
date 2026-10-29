@@ -309,6 +309,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
       prompt: "Add a cart test",
       model: null,
       approvals: "ask",
+      item: null,
     });
     expect(proposal.proposedBy).toEqual({ session: free.id, supervisor: false });
     window.attachment.detach();
@@ -355,6 +356,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
       prompt: "Fix the cart total",
       model: null,
       approvals: "ask",
+      item: null,
     });
     const fromSession = await agents.propose(session.id, {
       repo: "shop",
@@ -362,6 +364,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
       prompt: "Add a cart test",
       model: null,
       approvals: "ask",
+      item: null,
     });
     expect(fromSupervisor.proposedBy).toEqual({ session: supervisor.id, supervisor: true });
     expect(fromSession.proposedBy).toEqual({ session: session.id, supervisor: false });
@@ -380,6 +383,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
       prompt: "Fix the cart total",
       model: null,
       approvals: "ask",
+      item: null,
     });
     await agents.stop(first.id);
 
@@ -476,6 +480,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
       sessionHook: () => ({ url: "http://127.0.0.1:9/hooks/unused", headers: {} }),
       sessionMcpServer: () => ({ url: "http://127.0.0.1:9/mcp", headers: {} }),
       openEditor: () => {},
+      boardHas: async () => true,
       log: () => {},
     });
     await expect(missing.start("shop")).rejects.toMatchObject({ code: "agent_unavailable" });

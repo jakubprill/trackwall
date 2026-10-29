@@ -184,7 +184,7 @@ describe.skipIf(process.versions.bun === undefined)("sessions across a daemon re
 });
 
 const COMMENT: ReviewComment = { path: "README.md", side: "new", line: 1, code: "# shop", text: "Name the port." };
-const PROPOSAL = { repo: "shop", prompt: "add a login test", model: null, approvals: "ask" as const };
+const PROPOSAL = { repo: "shop", prompt: "add a login test", model: null, approvals: "ask" as const, item: null };
 
 describe.skipIf(process.versions.bun === undefined)(
   "what waits across a daemon restart (real PTY and git, fake Copilot CLI, ADR-115)",

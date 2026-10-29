@@ -25,7 +25,7 @@ A newer version of Trackwall from GitHub Releases, installed by the shell after 
 _Avoid_: upgrade, sync (that is the repo synchronization)
 
 **View** (`View`):
-A screen of the app in the UI (Home, Repos, Sessions, Overview, Settings), switched with the view bar (`ActivityBar`) at the left edge of the window or with a shortcut.
+A screen of the app in the UI (Home, Repos, Sessions, Overview, Plan, Settings), switched with the view bar (`ActivityBar`) at the left edge of the window or with a shortcut.
 _Avoid_: tab (for a whole screen)
 
 **Settings category** (`SettingsCategory`, `SETTINGS_CATEGORIES`; its sections `SettingsSection`):
@@ -563,6 +563,32 @@ A limit on a task's time and number of commits; when it is exceeded the daemon e
 
 **Summary** (`Task.summary`, MCP tool `report_result`):
 The result a task session reports with the `report_result` tool: what it did, what is left, what to check. It goes to the task's `summary` field (with the report time, in `tasks.json`), to the Sessions view and to the main session; a later one replaces the earlier (ADR-39). Eventually also to a PR proposal. Trackwall merges nothing by itself (ADR-9).
+
+## Plan
+
+**Board** (module `board`, `Board`, `boardApi`, topic `board.changed`; the "Plan" view in the UI):
+Everything the user keeps to do before it becomes a task: business projects, the items they are split into, and ideas. Files in `.trackwall/board` of the projects folder, one per board item (ADR-133). The board records the user's split; nothing starts from it by itself.
+_Avoid_: backlog, tracker, kanban (a possible view of the board, not the board)
+
+**Board item** (`BoardItem`, `BoardItemId`, MCP tools `list_items`, `get_item`, `create_item`, `update_item`; "item" in the UI and the tools):
+One entry of the board: a project or an item, with a title, a body (the plan and notes, Markdown), a parent, a board column, repos and a link to a ticket. Who wrote it is `createdBy`: the user or an agent with its task.
+_Avoid_: card (that is a repo card), ticket, issue (those are in the user's tracker, the item links to them), note
+
+**Project** (`BoardItemKind` `project`; "Project" in the UI):
+A root of the board for one business project; its items hang under it as a tree. Only the user creates one, and "Archive project" (column `done` or `dropped`) moves it under "Archived".
+_Avoid_: repo, workspace
+
+**Idea** (an item with `parent: null`; the "Inbox" in the UI):
+An item not filed under a project yet, written down so it is not lost: with Alt+N from any view (`IdeaCapture`), in the inbox, or by an agent outside a task. The inbox is the list of ideas.
+_Avoid_: draft, note
+
+**Board column** (`BoardColumn`: `ideas`, `ready`, `in_progress`, `review`, `done`, `dropped`; "Column" in the UI, `COLUMN_LABELS`):
+How far an item is: "Idea", "Ready", "In progress", "In review", "Done", "Dropped". An agent moves an item only between `ideas` and `ready`.
+_Avoid_: status (a repo's is `RepoStatus`), state (a session's)
+
+**Task item** (`Task.item`, `TaskProposal.item`):
+The board item a task was started for, with "Start task" on the item or by a task proposal that names it; `null` for a task without one. A task session's `create_item` without a parent goes under it.
+_Avoid_: parent (that is an item's place in the tree)
 
 ## Logs, events and audit
 

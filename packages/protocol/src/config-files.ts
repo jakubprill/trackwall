@@ -31,6 +31,7 @@ export const ConfigEntryId = z.enum([
   "removed-repos-dir",
   "scratch-dir",
   "language-server-dir",
+  "board-dir",
   "copilot-config",
 ]);
 export type ConfigEntryId = z.infer<typeof ConfigEntryId>;
@@ -47,6 +48,7 @@ export type DocsPage =
   | "java-navigation"
   | "local-config"
   | "mise-environment"
+  | "plan"
   | "repo-card"
   | "repos"
   | "sessions"
@@ -204,6 +206,14 @@ export const CONFIG_ENTRIES: Record<ConfigEntryId, ConfigEntryInfo> = {
     internal: false,
     purpose: "The Java language server's index of each task with Java navigation, removed when you end the task.",
     docs: "java-navigation",
+  },
+  "board-dir": {
+    place: "projects",
+    kind: "folder",
+    writer: "you",
+    internal: false,
+    purpose: "Your ideas, business projects and the work split under them, one Markdown file each, from the Plan view.",
+    docs: "plan",
   },
   "copilot-config": {
     place: "copilot",

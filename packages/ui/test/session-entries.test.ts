@@ -46,6 +46,7 @@ function task(id: string, createdAt: string): Task {
     model: null,
     approvals: "ask",
     javaNavigation: false,
+    item: null,
     summary: null,
     port: 41000,
     included: { files: [], problems: [] },
@@ -62,6 +63,7 @@ function proposal(id: string, createdAt: string, proposer: string | null = null)
     proposedBy: { session: proposer, supervisor: false },
     model: null,
     approvals: "ask",
+    item: null,
     createdAt,
   };
 }

@@ -159,6 +159,8 @@ export class ConfigFiles {
         return trackwallEntry(ctx.projectsDir, "scratch");
       case "language-server-dir":
         return trackwallEntry(ctx.projectsDir, "lsp");
+      case "board-dir":
+        return trackwallEntry(ctx.projectsDir, "board");
       case "copilot-config":
         return this.#copilotConfig(ctx);
     }

@@ -450,6 +450,7 @@ describe("a task's model with the real Copilot CLI (ADR-98)", () => {
       prompt: "review the login",
       model: REVIEW_MODEL,
       approvals: "ask",
+      item: null,
     });
     model.reply({ text: "Reviewing the login." });
     const task = await agents.approveProposal(proposal.id, proposal.prompt, proposal.model, proposal.approvals);
@@ -708,6 +709,7 @@ describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
         prompt: "add a login test",
         model: null,
         approvals: "ask",
+        item: null,
       });
       const task = await agents.approveProposal(proposal.id, "add a login test", null, "ask");
       const session = agents.sessions().sessions.find((s) => s.task === task.id);

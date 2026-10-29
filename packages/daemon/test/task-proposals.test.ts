@@ -8,6 +8,7 @@ const PROPOSAL = {
   prompt: "add a login test",
   model: null,
   approvals: "ask" as const,
+  item: null,
   proposedBy: { session: null, supervisor: false },
 };
 

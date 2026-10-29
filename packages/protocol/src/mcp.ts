@@ -36,6 +36,8 @@ import { DAY_REPORT_COMMITS, DayReport } from "./day-start.ts";
 import { FindEndpointResult, MAX_FOUND_ENDPOINTS, MAX_SUBGRAPH_DEPTH, Subgraph, WhoCallsResult } from "./graph.ts";
 import { HttpMethod } from "./http.ts";
 import { LOG_BUFFER_RECORDS, LOG_ERRORS_MAX, LOG_TAIL_MAX, LogErrorLevel, LogErrors, LogTail } from "./logs.ts";
+import { LIST_REPOS, RepoArg } from "./mcp-args.ts";
+import { boardMcpTools, ItemArg, LIST_ITEMS } from "./mcp-board.ts";
 import { MiseTaskName, MiseTasks, RunningMiseTask } from "./mise.ts";
 import { RunState } from "./procs.ts";
 import { ReviewComment } from "./review.ts";
@@ -303,7 +305,6 @@ type McpToolEffect<Args extends z.ZodObject> =
 export type McpTool<Args extends z.ZodObject = z.ZodObject, Result extends z.ZodObject = z.ZodObject> = McpToolBase<Args, Result> &
   McpToolEffect<Args>;
 
-const LIST_REPOS = "list_repos";
 const GET_REPO = "get_repo";
 const LIST_SESSIONS = "list_sessions";
 const GET_SESSION = "get_session";
@@ -335,7 +336,6 @@ export const TASK_MESSAGE_RULE =
 /** What a proposer sends its task with `send_message` (ADR-68, ADR-81): one list for the tool, the MCP instruction and the supervisor's role. */
 export const TASK_MESSAGE_USES =
   "a correction, an answer to the task's question, a follow-up on its topic, or what changed elsewhere that it must take into account";
-const RepoArg = RepoId.describe(`repo id from ${LIST_REPOS} (the id field)`);
 const RepoTagsArg = z.array(TagName).max(20);
 const MiseTaskArg = MiseTaskName.describe(`mise task name from ${GET_REPO} (the miseTasks field)`);
 /** A mise task in a task's worktree instead of the repo root (ADR-59). */
@@ -677,6 +677,9 @@ export const mcpTools = {
             "approvals; before proposing work that only reads and reports (an analysis, a review), ask the user whether it " +
             "may. The user sees it on the proposal and may change it; resuming the task keeps it.",
         ),
+        item: ItemArg.optional().describe(
+          `the board item the task works on (from ${LIST_ITEMS}), when the work is one of the user's board items; the task keeps it`,
+        ),
       })
       .strict(),
     result: ProposeTaskResult,
@@ -703,6 +706,7 @@ export const mcpTools = {
       .strict(),
     result: ProposeTaskResult,
   },
+  ...boardMcpTools,
   reportResult: {
     name: REPORT_RESULT,
     readOnly: false,

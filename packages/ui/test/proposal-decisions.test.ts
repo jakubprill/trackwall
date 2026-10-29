@@ -14,6 +14,7 @@ function proposal(id: string): TaskProposal {
     proposedBy: { session: "main", supervisor: false },
     model: null,
     approvals: "ask",
+    item: null,
     createdAt: "2026-10-25T10:00:00Z",
   };
 }
@@ -33,6 +34,7 @@ function task(id: string): Task {
     model: null,
     approvals: "ask",
     javaNavigation: false,
+    item: null,
     summary: null,
     port: 41000,
     included: { files: [], problems: [] },
