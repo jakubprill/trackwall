@@ -69,6 +69,13 @@ export const SIDEBAR: DefaultTheme.SidebarItem[] = [
       { text: "Connect Copilot CLI", link: "/guide/connect-copilot-cli" },
     ],
   },
+  {
+    text: "How it works",
+    items: [
+      { text: "Where agents work", link: "/guide/where-agents-work" },
+      { text: "Environment variables", link: "/guide/environment-variables" },
+    ],
+  },
   { text: "All features", link: "/features/" },
   ...FEATURE_GROUPS,
 ];
