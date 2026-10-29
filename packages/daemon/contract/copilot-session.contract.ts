@@ -377,6 +377,14 @@ describe("a session of the real Copilot CLI", () => {
     }
   });
 
+  test("Copilot CLI rewrites config.json with comment lines before the object, and the doctor still finds the trusted projects folder in it", async () => {
+    await startSession();
+    const config = readFileSync(join(daemon.home, "copilot-home", "config.json"), "utf8");
+    expect(config).toStartWith("//");
+    const check = (await daemon.facade.doctor.run()).checks.find((c) => c.id === "copilot-trusted-folder");
+    expect(check?.status).toBe("ok");
+  });
+
   test("/exit ends the session with sessionEnd, and the session is Done", async () => {
     const { agents } = daemon.facade;
     const { id, window } = await startSession();
