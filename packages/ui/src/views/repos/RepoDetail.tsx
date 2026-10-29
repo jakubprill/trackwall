@@ -109,29 +109,21 @@ function Loaded({ remote, children }: { remote: RemoteHandle<RepoOverview>; chil
 function RepoActions({ conn, repo, projectsDir }: { conn: Connection; repo: Repo; projectsDir: string | null | undefined }) {
   const [error, setError] = useState<string>();
   const { desktop, container } = useContext(DaemonPlaceContext);
-  const hostFolder = useHostFolder(desktop, projectsDir, repo.path);
-  const open = (endpoint: typeof workspaceApi.openEditor | typeof workspaceApi.openFolder) => {
+  const hostFolder = useHostFolder(projectsDir, repo.path);
+  const act = (request: () => Promise<unknown>) => {
     setError(undefined);
-    post(conn, endpoint, { repo: repo.id }).catch((err: unknown) => setError(errorMessage(err)));
+    request().catch((err: unknown) => setError(errorMessage(err)));
   };
+  const open = (endpoint: typeof workspaceApi.openEditor | typeof workspaceApi.openFolder) =>
+    act(() => post(conn, endpoint, { repo: repo.id }));
+  // The daemon shows the folder on its desktop; without one, the desktop app shows it through the folder on this computer.
+  const showFolder = desktop ? () => open(workspaceApi.openFolder) : hostFolder && (() => act(() => showInHostFolder(hostFolder)));
 
   return (
     <div className="flex max-w-xs flex-col items-end gap-2">
       <div className="flex flex-wrap justify-end gap-2">
-        {desktop && (
-          <Button variant="outline" size="sm" onClick={() => open(workspaceApi.openFolder)}>
-            <FolderOpen /> Show in {FILE_MANAGER}
-          </Button>
-        )}
-        {hostFolder && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setError(undefined);
-              showInHostFolder(hostFolder).catch((err: unknown) => setError(errorMessage(err)));
-            }}
-          >
+        {showFolder && (
+          <Button variant="outline" size="sm" onClick={showFolder}>
             <FolderOpen /> Show in {FILE_MANAGER}
           </Button>
         )}
@@ -142,9 +134,7 @@ function RepoActions({ conn, repo, projectsDir }: { conn: Connection; repo: Repo
           disabled={repo.status.kind !== "ok"}
         />
       </div>
-      {!desktop && !hostFolder && (
-        <p className="text-muted-foreground text-right text-xs">{container ? IN_CONTAINER_NOTE : NO_DESKTOP_NOTE}</p>
-      )}
+      {!showFolder && <p className="text-muted-foreground text-right text-xs">{container ? IN_CONTAINER_NOTE : NO_DESKTOP_NOTE}</p>}
       {error && <p className="text-destructive text-xs">{error}</p>}
     </div>
   );
