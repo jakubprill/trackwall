@@ -47,7 +47,9 @@ impl DaemonState {
 
     /// Makes the shell connect to `remote` instead of starting its own daemon; only before the first start.
     pub fn use_remote(&self, remote: RemoteDaemon) {
-        let _ = self.remote.set(remote);
+        if self.remote.set(remote).is_err() {
+            crate::report_error!("a remote daemon was set twice; the app keeps the first until it restarts");
+        }
     }
 
     pub fn remote(&self) -> Option<&RemoteDaemon> {
@@ -85,12 +87,18 @@ impl DaemonState {
         });
     }
 
-    /// Like `start`, but also when the saved daemon has stopped answering (for example ended from outside the app).
+    /// Like `start`, but also when the saved daemon has stopped answering (for example ended from outside the app), or,
+    /// for a remote daemon, no longer takes its token.
     pub fn restart_if_down(self: &Arc<Self>) {
         {
             let mut phase = self.lock();
             if let Phase::Ready(conn) = &*phase {
-                if daemon::health(conn.port).as_deref() == Some(daemon::VERSION) {
+                // A remote daemon restarted on the same port answers health but no longer takes the saved token.
+                let alive = match self.remote.get() {
+                    Some(remote) => daemon::connect_remote(remote).is_ok(),
+                    None => daemon::health(conn.port).as_deref() == Some(daemon::VERSION),
+                };
+                if alive {
                     return;
                 }
                 *phase = Phase::Idle;
@@ -347,6 +355,19 @@ mod tests {
         state.start();
 
         assert!(state.wait().unwrap_err().contains(&format!("No Trackwall daemon answers at 127.0.0.1:{port}")));
+    }
+
+    #[test]
+    fn retry_with_a_remote_daemon_that_took_a_new_token_fails_with_a_reason() {
+        // The daemon restarted on the same port: health still answers, the saved token no longer works.
+        let port = rejecting_daemon();
+        let state = Arc::new(DaemonState::new(no_home()));
+        state.use_remote(remote(port, "old"));
+        *state.lock() = Phase::Ready(Connection { base_url: format!("http://127.0.0.1:{port}"), token: "old".into(), port });
+
+        state.restart_if_down();
+
+        assert!(state.wait().unwrap_err().contains("did not accept the token"));
     }
 
     /// A daemon of the shell's version that answers health and rejects every token, like one restarted with a new token.

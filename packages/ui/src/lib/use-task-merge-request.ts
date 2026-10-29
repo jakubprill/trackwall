@@ -2,7 +2,7 @@ import { mergeRequestsApi } from "@trackwall/protocol";
 import { useCallback } from "react";
 import { post } from "./api.ts";
 import type { Connection } from "./connection.ts";
-import { openEmptyTab, openInNewTabOnceKnown, useDesktop } from "./desktop.ts";
+import { useDesktop, windowOpener } from "./desktop.ts";
 import { MERGE_REQUEST_POLL_MS, type MergeRequestDraftText } from "./merge-request.ts";
 import { useAction } from "./use-action.ts";
 import { useRemote } from "./use-remote.ts";
@@ -17,9 +17,9 @@ export function useTaskMergeRequest(conn: Connection, task: string, paused: bool
   const push = useAction(() => post(conn, mergeRequestsApi.push, { task }), remote.reload);
   const desktop = useDesktop();
   const openForm = useAction(async (draft: MergeRequestDraftText) => {
-    // Without a desktop on the daemon's side this page opens the form itself (ADR-120).
+    // Without a desktop on the daemon's side this window opens the form itself (ADR-120, ADR-130).
     if (desktop) return post(conn, mergeRequestsApi.openForm, { task, ...draft });
-    return openInNewTabOnceKnown(async () => (await post(conn, mergeRequestsApi.formUrl, { task, ...draft })).url, openEmptyTab);
+    return windowOpener.openOnceKnown(async () => (await post(conn, mergeRequestsApi.formUrl, { task, ...draft })).url);
   }, remote.reload);
   return {
     state: remote.data,

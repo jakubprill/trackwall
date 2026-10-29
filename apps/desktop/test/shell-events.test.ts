@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { TaskState, TRACKWALL_LINK_KINDS, TRACKWALL_LINK_SCHEME } from "@trackwall/protocol";
+import { DAEMON_INFO_PATH, TaskState, TRACKWALL_LINK_KINDS, TRACKWALL_LINK_SCHEME } from "@trackwall/protocol";
 import { z } from "zod";
 import { parseFile, REPO } from "../scripts/lib.ts";
 
@@ -237,4 +237,9 @@ test("the UI opens links and VS Code outside the window with the command the she
   expect(shell?.[1]).toBe("open_outside");
   expect(/const OPEN_OUTSIDE_COMMAND = "([^"]+)";/.exec(ui)?.[1]).toBe(shell?.[1]);
   expect(ui).toContain(`invoke(OPEN_OUTSIDE_COMMAND, { ${shell?.[2]} })`);
+});
+
+test("the shell checks a remote daemon's token on the daemon info path of protocol", () => {
+  const shell = /const DAEMON_INFO_PATH: &str = "([^"]+)";/.exec(read("apps/desktop/src-tauri/src/daemon.rs"))?.[1];
+  expect(shell).toBe(DAEMON_INFO_PATH);
 });

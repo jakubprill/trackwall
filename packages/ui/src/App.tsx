@@ -215,7 +215,7 @@ export function App() {
           )}
           <KeyboardElsewhere.Provider value={supervisorFocused}>
             <main className="hud-grid min-h-0 flex-1 overflow-y-auto">
-              {!conn && <NoConnection error={error} />}
+              <ConnectionState connected={conn !== undefined} error={error} />
               {/* One view that throws keeps the view bar and the other views. The key mounts the view afresh, with a fresh boundary, on
                 a view change, a reconnect (`epoch`) and every opening of a repo or a Settings category (`visit`). */}
               <ErrorBoundary
@@ -298,11 +298,12 @@ export function App() {
 }
 
 /**
- * Before the first connection: waiting for it, or, after an error, the way to switch where the desktop app's daemon
- * runs (ADR-130); the error itself is in the banner above.
+ * Waiting for the first connection, or, after an error (the banner above says which), the way to switch where the
+ * desktop app's daemon runs (ADR-130): a remote daemon that restarted wants its new token.
  */
-function NoConnection({ error }: { error: string | undefined }) {
+function ConnectionState({ connected, error }: { connected: boolean; error: string | undefined }) {
   if (error === undefined) {
+    if (connected) return null;
     return (
       <div className="p-6">
         <Loading text="Connecting to the daemon…" />

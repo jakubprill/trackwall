@@ -67,7 +67,7 @@ The desktop app can use Trackwall in the container instead of running its own, s
 2. Start Trackwall in the container and look up its address with the token, as in steps 5 and 6 above.
 3. In the app, open Settings › App › Daemon in a container, paste the address and click "Connect". When the app's own Trackwall did not start, the same field is on the screen it shows instead.
 
-The app restarts, stops its own Trackwall with its sessions, and from then on connects to the one in the container. It neither starts nor stops that one: quitting the app leaves it running. Trackwall in the container gets a new token every time it starts, so after a restart the app shows the field again; paste the new address. "Use this app's own daemon" in the same place goes back.
+The app restarts, stops its own Trackwall with its sessions, and from then on connects to the one in the container. It neither starts nor stops that one: quitting the app leaves it running. Trackwall in the container gets a new token every time it starts, so after it restarts the app says the token was not accepted and shows the field again (click "Try again" when a view reports the error first); paste the new address. "Use this app's own daemon" in the same place goes back.
 
 In the app, links and "Open in VS Code" open on your computer as they do from the browser. The folder picker and dropping files on the window are not there, since paths on your computer mean nothing inside the container. The app and Trackwall in the container must be the same version: after the app updates itself, update the container too (see the last points below).
 

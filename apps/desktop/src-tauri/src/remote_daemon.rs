@@ -73,12 +73,16 @@ pub fn remote_daemon_port(state: tauri::State<'_, Arc<DaemonState>>) -> Option<u
 /// the token, so a wrong address leaves the app as it was, then saves it and restarts the app, which stops the app's own
 /// daemon.
 #[tauri::command]
-pub async fn use_remote_daemon(app: AppHandle, address: String) -> Result<(), String> {
+pub async fn use_remote_daemon(app: AppHandle, state: tauri::State<'_, Arc<DaemonState>>, address: String) -> Result<(), String> {
     let remote = parse_address(&address)?;
+    // Its own daemon would pass the check, and the restart would then stop the daemon it was told to connect to.
+    if state.remote().is_none() && state.ready().is_some_and(|own| own.port == remote.port) {
+        return Err("That is the address of this app's own daemon. Paste the address of the daemon in the container.".into());
+    }
     let checked = remote.clone();
     tauri::async_runtime::spawn_blocking(move || daemon::connect_remote(&checked)).await.map_err(|e| e.to_string())??;
     let path = json_file::config_file(&app, FILE).ok_or("the system gives the app no configuration directory")?;
-    json_file::save(&path, &remote).map_err(|e| format!("{}: {e}", path.display()))?;
+    json_file::save_private(&path, &remote).map_err(|e| format!("{}: {e}", path.display()))?;
     restart(&app);
     Ok(())
 }

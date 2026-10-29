@@ -144,7 +144,7 @@ pub fn ensure_daemon(home: &Path, cancel: &AtomicBool) -> Result<Connection, Str
     }
 }
 
-/// An authenticated request that changes nothing; `200` tells that the token is right.
+/// An authenticated request that changes nothing; `200` tells that the token is right. `DAEMON_INFO_PATH` in protocol.
 const DAEMON_INFO_PATH: &str = "/api/daemon/info";
 
 /// Checks a remote daemon (ADR-130): it answers, has this app's version and accepts the token.

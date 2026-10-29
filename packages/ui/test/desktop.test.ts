@@ -8,20 +8,24 @@ describe("opening a web link", () => {
     await openWebLink("https://example.com/docs", {
       desktop: true,
       viaDaemon: async (url) => viaDaemon.push(url),
-      newTab: (url) => tabs.push(url) > 0,
+      inWindow: async (url) => {
+        tabs.push(url);
+      },
     });
     expect(viaDaemon).toEqual(["https://example.com/docs"]);
     expect(tabs).toEqual([]);
   });
 
-  test("a daemon without a desktop leaves it to a new tab of the page, opened before anything is awaited", () => {
+  test("a daemon without a desktop leaves it to this window (a new tab, or the system in the desktop app), opened before anything is awaited", () => {
     const viaDaemon: string[] = [];
     const tabs: string[] = [];
     // Not awaited on purpose: a browser lets a page open a tab only while it handles the click.
     void openWebLink("https://example.com/docs", {
       desktop: false,
       viaDaemon: async (url) => viaDaemon.push(url),
-      newTab: (url) => tabs.push(url) > 0,
+      inWindow: async (url) => {
+        tabs.push(url);
+      },
     });
     expect(tabs).toEqual(["https://example.com/docs"]);
     expect(viaDaemon).toEqual([]);
@@ -33,37 +37,21 @@ describe("opening a web link", () => {
       openWebLink("javascript:alert(document.cookie)", {
         desktop: false,
         viaDaemon: async () => {},
-        newTab: (url) => tabs.push(url) > 0,
+        inWindow: async (url) => {
+          tabs.push(url);
+        },
       }),
     ).rejects.toThrow("not a web address");
     expect(tabs).toEqual([]);
   });
 
-  test("the desktop app hands the link of a daemon without a desktop to the system and waits for its answer", async () => {
-    const outside: string[] = [];
-    await openWebLink("https://example.com/docs", {
-      desktop: false,
-      viaDaemon: async () => {},
-      newTab: async (url) => {
-        outside.push(url);
-      },
-    });
-    expect(outside).toEqual(["https://example.com/docs"]);
-  });
-
-  test("a link the system could not open in the desktop app is an error the window can show", async () => {
+  test("a link the window could not open (a blocked tab, a refusal of the system) is an error the window can show", async () => {
     await expect(
       openWebLink("https://example.com/docs", {
         desktop: false,
         viaDaemon: async () => {},
-        newTab: () => Promise.reject(new Error("could not open the address")),
+        inWindow: () => Promise.reject(new Error("the browser blocked the new tab")),
       }),
-    ).rejects.toThrow("could not open the address");
-  });
-
-  test("a tab the browser blocked is an error the page can show", async () => {
-    await expect(
-      openWebLink("https://example.com/docs", { desktop: false, viaDaemon: async () => {}, newTab: () => false }),
     ).rejects.toThrow("the browser blocked the new tab");
   });
 });

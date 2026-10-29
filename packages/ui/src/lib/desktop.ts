@@ -59,15 +59,23 @@ export function useDaemonPlace(conn: Connection | undefined): DaemonPlace {
   return place;
 }
 
+/**
+ * How this window opens an address itself when the daemon cannot: a page in a browser opens a new tab, the desktop app,
+ * whose WebView opens no tabs, hands it to the system (ADR-130). Chosen once, so no caller asks which one it is.
+ */
+export interface WindowOpener {
+  /** Opens a web page; rejects when it could not (the browser blocked the tab, the system refused). */
+  open: (url: string) => Promise<void>;
+  /** Opens the web page at an address the daemon has yet to give (the merge request form). */
+  openOnceKnown: (address: () => Promise<string>) => Promise<void>;
+}
+
 export interface WebLinkOpeners {
   desktop: boolean;
   /** The daemon opens the link in the system browser (`open-link`). */
   viaDaemon: (url: string) => Promise<unknown>;
-  /**
-   * Opens the link in a new tab of this page; `false` when the browser blocked it. In the desktop app, which opens no
-   * tabs, the window hands it to the system browser instead and resolves once it has.
-   */
-  newTab: (url: string) => boolean | Promise<void>;
+  /** This window opens it (`WindowOpener.open`). */
+  inWindow: (url: string) => Promise<void>;
 }
 
 const BLOCKED_TAB = "the browser blocked the new tab; allow pop-ups for this page";
@@ -79,15 +87,13 @@ function webAddress(url: string): string {
   return parsed.data;
 }
 
-/** A web link opens through the daemon on its desktop, or in a new tab of this page when the daemon has none. */
-export async function openWebLink(url: string, { desktop, viaDaemon, newTab }: WebLinkOpeners): Promise<void> {
+/** A web link opens through the daemon on its desktop, or from this window when the daemon has none. */
+export async function openWebLink(url: string, { desktop, viaDaemon, inWindow }: WebLinkOpeners): Promise<void> {
   if (desktop) {
     await viaDaemon(url);
     return;
   }
-  const opened = newTab(webAddress(url));
-  if (opened === false) throw new Error(BLOCKED_TAB);
-  if (opened !== true) await opened;
+  await inWindow(webAddress(url));
 }
 
 /** The shell command that opens a web page or VS Code attached to a container (`system_open.rs`). */
@@ -119,24 +125,17 @@ export async function openInNewTabOnceKnown(address: () => Promise<string>, empt
   }
 }
 
-/** A new tab that cannot reach back into this page; `window.open` with `noopener` would always return `null`. */
-function openInNewTab(url: string): boolean {
+/**
+ * A new tab that cannot reach back into this page; `window.open` with `noopener` would always return `null`. Async only
+ * in its result: the tab opens before the first await, while the browser still counts the click.
+ */
+async function openInNewTab(url: string): Promise<void> {
   const tab = window.open(url, "_blank");
-  if (!tab) return false;
+  if (!tab) throw new Error(BLOCKED_TAB);
   tab.opener = null;
-  return true;
 }
 
-export function openEmptyTab(): PendingTab | undefined {
-  // The desktop app has no tabs to open in the click: the address goes to the system browser once known.
-  if (isTauri()) {
-    return {
-      go: (url) => {
-        openOutside(url).catch((err: unknown) => console.error("[link] could not open the address", err));
-      },
-      close: () => {},
-    };
-  }
+function openEmptyTab(): PendingTab | undefined {
   const tab = window.open("", "_blank");
   if (!tab) return undefined;
   tab.opener = null;
@@ -148,15 +147,15 @@ export function openEmptyTab(): PendingTab | undefined {
   };
 }
 
+export const windowOpener: WindowOpener = isTauri()
+  ? { open: openOutside, openOnceKnown: async (address) => openOutside(webAddress(await address())) }
+  : { open: openInNewTab, openOnceKnown: (address) => openInNewTabOnceKnown(address, openEmptyTab) };
+
 export function useOpenWebLink(conn: Connection): (url: string) => Promise<void> {
   const desktop = useDesktop();
   return useCallback(
     (url: string) =>
-      openWebLink(url, {
-        desktop,
-        viaDaemon: (link) => post(conn, workspaceApi.openLink, { url: link }),
-        newTab: isTauri() ? openOutside : openInNewTab,
-      }),
+      openWebLink(url, { desktop, viaDaemon: (link) => post(conn, workspaceApi.openLink, { url: link }), inWindow: windowOpener.open }),
     [conn, desktop],
   );
 }
