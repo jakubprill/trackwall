@@ -9,6 +9,7 @@ import { graphLoadingText } from "@/lib/card-warmup";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { twoDigits } from "@/lib/format";
+import { repoProblems } from "@/lib/graph-labels";
 import { layoutGraph } from "@/lib/graph-layout";
 import { GRAPH_PACE } from "@/lib/repo-watch";
 import { useCardWarmup } from "@/lib/use-card-warmup";
@@ -70,7 +71,13 @@ export function GraphView({
       </section>
       <aside className="bg-card min-h-0 overflow-y-auto border-l">
         {layout && node && (
-          <GraphNodePanel node={node} pairs={layout.pairs} onSelect={setSelected} onClose={() => setSelected(undefined)} />
+          <GraphNodePanel
+            node={node}
+            pairs={layout.pairs}
+            problems={data ? repoProblems(data, node.repo) : []}
+            onSelect={setSelected}
+            onClose={() => setSelected(undefined)}
+          />
         )}
         {data && layout && !node && <GraphSummaryPanel graph={data} pairs={layout.pairs} />}
       </aside>

@@ -19,7 +19,7 @@ Start a service together with the services it calls, see when it is ready, and c
 
 ## How it works
 
-A repo with a mise task called `dev` has a "Service" panel at the top of its [mise tasks](/features/mise-tasks) tab. "Start with dependencies" looks at the [connection graph](/features/graph), finds the repos this service calls over HTTP and runs `dev` in each of them, starting a repo only once the repos it calls are up.
+A repo with a mise task called `dev` has a "Service" panel at the top of its [mise tasks](/features/mise-tasks) tab. "Start with dependencies" looks at the [connection graph](/features/graph), finds the repos this service calls over HTTP or through a "calls" connection you added, and runs `dev` in each of them, starting a repo only once the repos it calls are up.
 
 A service is "ready on port N" as soon as its port accepts connections. Trackwall takes the port from the service's log (`Tomcat started on port 8081`, `Local: http://localhost:5173`) or from `server.port` on its [repo card](/features/repo-card). A service is "not answering" when its port does not open within five minutes or stops answering, and "crashed" when its process ends by itself.
 

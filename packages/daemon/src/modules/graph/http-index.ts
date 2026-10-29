@@ -45,6 +45,15 @@ export interface HttpTarget {
   calls: MatchedCall[];
 }
 
+/**
+ * Where a client points: its targets, and whether its name, alias or port points only to the client's own repo (an app
+ * calling another app of the same repo), which is resolved although it gives no target.
+ */
+export interface HttpResolution {
+  targets: HttpTarget[];
+  ownRepo: boolean;
+}
+
 /** An HTTP client from a repo card. */
 export interface RepoClient {
   repo: string;
@@ -93,12 +102,14 @@ export class HttpIndex {
   private readonly endpointsBySegment = new Map<string, IndexedEndpoint[]>();
   private readonly tailEndpoints: IndexedEndpoint[] = [];
   private readonly appAliases: Map<string, string>;
-  private readonly resolve: (ref: string) => string[];
+  private readonly resolveRef: (ref: string) => string[];
+  /** Each client's resolution, computed once: the edges, the graph's problems and `find_endpoint` all ask for it. */
+  private readonly resolutions = new WeakMap<ConsumedHttp, { from: string; resolution: HttpResolution }>();
   private readonly file: string;
 
   constructor(cards: readonly GraphCardInput[], join: Pick<Join, "appAliases" | "resolve" | "file">) {
     this.appAliases = join.appAliases;
-    this.resolve = join.resolve;
+    this.resolveRef = join.resolve;
     this.file = join.file;
     for (const entry of cards) if (entry.kind === "ok") this.addRepo(entry);
   }
@@ -136,18 +147,31 @@ export class HttpIndex {
    * points to the client's repo ends the search without an edge (an app calls another app from the same repo).
    */
   targets(from: string, client: ConsumedHttp): HttpTarget[] {
-    const url = client.url === null ? undefined : parseHttpUrl(client.url);
-    return this.byName(from, client, url) ?? this.byPath(from, client, url?.path ?? "");
+    return this.resolve(from, client).targets;
   }
 
-  /** Targets by app name, alias, host or port; `undefined` when none of them points to anything. */
+  /** The client's targets, and whether it points only to its own repo (`HttpResolution`). */
+  resolve(from: string, client: ConsumedHttp): HttpResolution {
+    const known = this.resolutions.get(client);
+    if (known?.from === from) return known.resolution;
+    const url = client.url === null ? undefined : parseHttpUrl(client.url);
+    const byName = this.byName(from, client, url);
+    const resolution =
+      byName === undefined
+        ? { targets: this.byPath(from, client, url?.path ?? ""), ownRepo: false }
+        : { targets: byName.filter((t) => t.repo !== from), ownRepo: byName.every((t) => t.repo === from) };
+    this.resolutions.set(client, { from, resolution });
+    return resolution;
+  }
+
+  /** Targets by app name, alias, host or port, the client's own repo included; `undefined` when none of them points to anything. */
   private byName(from: string, client: ConsumedHttp, url: HttpUrl | undefined): HttpTarget[] | undefined {
     const base = url?.path ?? "";
     const name = client.app ?? (url?.scheme === "lb" ? url.host : undefined);
     const host = url && url.scheme !== "lb" ? url.host : undefined;
     const label = host?.split(".")[0];
     const port = url?.port ?? null;
-    const local = host !== undefined && LOCAL_HOSTS.has(host) && port !== null;
+    const local = host !== undefined && isLocalHost(host) && port !== null;
     const attempts: (() => HttpTarget[])[] = [
       () => (name ? this.byApp(from, name, client, base) : []),
       () => (name ? this.byAlias(name, client, base) : []),
@@ -158,7 +182,7 @@ export class HttpIndex {
     ];
     for (const attempt of attempts) {
       const found = attempt();
-      if (found.length > 0) return found.filter((t) => t.repo !== from);
+      if (found.length > 0) return found;
     }
     return undefined;
   }
@@ -180,7 +204,7 @@ export class HttpIndex {
     const ref = this.appAliases.get(name.toLowerCase());
     if (ref === undefined) return [];
     const evidence: EdgeEvidence = { repo: null, path: this.file, line: null, detail: `graph.apps: ${name} → ${ref}` };
-    return this.resolve(ref).map((repo) => ({
+    return this.resolveRef(ref).map((repo) => ({
       repo,
       basis: "alias",
       confidence: "high",
@@ -257,6 +281,11 @@ export class HttpIndex {
       return endpoints.filter((e) => matches(call, segments, e)).map((e) => ({ call, path, endpoint: e.endpoint }));
     });
   }
+}
+
+/** Whether the host is a developer's own computer, where the port, not the name, says which app it is. */
+export function isLocalHost(host: string): boolean {
+  return LOCAL_HOSTS.has(host);
 }
 
 /** The `endpointsBySegment` key: a variable (`{id}`, `*`) is `*`. */

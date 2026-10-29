@@ -8,6 +8,7 @@ import { referencedTypeNames } from "./java-tokens.ts";
 import { extractMaven, readsMavenFile } from "./maven.ts";
 import { detectMechanisms } from "./mechanisms.ts";
 import { extractMiseSetup, isMiseConfigFile } from "./mise-tasks.ts";
+import { noEndpointsProblems } from "./no-endpoints.ts";
 import { extractNpm, readsNpmFile } from "./npm.ts";
 import { withOpenApi } from "./openapi-endpoints.ts";
 import { SPEC_SEARCH } from "./openapi-spec.ts";
@@ -104,6 +105,7 @@ export function extractCard(snapshot: RepoSnapshot, parsers: SyntaxParsers, call
       ...contracts.problems,
       ...openApi.problems,
       ...calls.problems,
+      ...noEndpointsProblems(openApi.provides, consumes),
     ],
   };
 }

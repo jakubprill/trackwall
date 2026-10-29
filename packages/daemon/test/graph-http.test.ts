@@ -94,7 +94,7 @@ describe("http edges on the shop repos", () => {
   test("Feign, WebClient, RestTemplate and frontend addresses give edges with a confidence from what joins them", () => {
     const graph = buildGraph(shopCards(), { config: NO_CONFIG, file: CONFIG_FILE, problems: [] });
 
-    expect(graph.edges.map((e) => [e.from, e.to, e.kind, e.key, e.confidence])).toEqual([
+    expect(graph.edges.map((e) => [e.from, e.to, e.source, e.key, e.confidence])).toEqual([
       // Only paths matching the endpoints of one repo: the base address is outside the configuration.
       ["legacy-reports", "orders-api", "http", "OrdersReport", "medium"],
       // The app name from @FeignClient and the paths of both calls agree with orders-api.
@@ -104,6 +104,8 @@ describe("http edges on the shop repos", () => {
       // localhost:8090 from .env and the Vite proxy is the port of the orders-bff app.
       ["shop-web", "orders-bff", "http", "localhost:8090", "medium"],
     ]);
+    // Every client of the shop points to a repo of the shop.
+    expect(graph.problems).toEqual([]);
     expect(graph.nodes.map((n) => [n.repo, n.apps, n.endpoints])).toEqual([
       ["orders-api", ["orders-api"], 3],
       ["orders-bff", ["orders-bff"], 0],
@@ -353,6 +355,98 @@ describe("http edges: target matching", () => {
   });
 });
 
+describe("calls without a target (ADR-116)", () => {
+  const getStock = [{ method: "GET" as const, path: "/api/stock/{sku}", evidence: { path: "src/main/java/StockClient.java", line: 12 } }];
+
+  test("a Feign client to an app no repo has is an unresolved-call-target problem that names the alias to add", () => {
+    const graph = buildGraph(
+      [
+        repo(
+          "orders-bff",
+          card(
+            [],
+            [
+              client({
+                via: "feign",
+                name: "StockClient",
+                app: "inventory",
+                calls: getStock,
+                evidence: { path: "src/main/java/StockClient.java", line: 9 },
+              }),
+            ],
+          ),
+        ),
+        repo("orders-api", card([app("orders-api"), endpoint("/api/orders/{id}")], [])),
+      ],
+      { config: NO_CONFIG, file: CONFIG_FILE, problems: [] },
+    );
+    expect(graph.edges).toEqual([]);
+    expect(graph.problems).toEqual([
+      {
+        code: "unresolved-call-target",
+        repo: "orders-bff",
+        via: "feign",
+        client: "StockClient",
+        evidence: { path: "src/main/java/StockClient.java", line: 9 },
+        message: "no repo in the list is “inventory”; if it is one of yours, map it to its repo under graph.apps in workspace.yaml",
+      },
+    ]);
+  });
+
+  test("an alias for the app connects the client, and the problem goes away", () => {
+    const graph = buildGraph(
+      [
+        repo("orders-bff", card([], [client({ via: "feign", name: "StockClient", app: "inventory", calls: getStock })])),
+        repo("stock", card([], [])),
+      ],
+      { config: { ...NO_CONFIG, apps: { inventory: "stock" } }, file: CONFIG_FILE, problems: [] },
+    );
+    expect(graph.edges.map((e) => [e.from, e.to, e.kind, e.source])).toEqual([["orders-bff", "stock", "calls", "http"]]);
+    expect(graph.problems).toEqual([]);
+  });
+
+  test("a call to localhost names the port no app runs on, and calls matching no endpoint name the client", () => {
+    const graph = buildGraph(
+      [
+        repo(
+          "shop-web",
+          card(
+            [],
+            [
+              client({ via: "env", name: "VITE_STOCK_URL", url: "http://localhost:9999", calls: getStock }),
+              client({ via: "rest-template", name: "StockReport", calls: getStock }),
+            ],
+          ),
+        ),
+      ],
+      { config: NO_CONFIG, file: CONFIG_FILE, problems: [] },
+    );
+    expect(graph.problems.map((p) => [p.client, p.message])).toEqual([
+      ["VITE_STOCK_URL", "no app in the list runs on localhost:9999 (server.port on its card)"],
+      ["StockReport", "no repo in the list has an endpoint matching the calls of StockReport"],
+    ]);
+  });
+
+  test("an address in the configuration without calls or a name, and a client pointing to its own repo, are not problems", () => {
+    const graph = buildGraph(
+      [
+        repo(
+          "shop",
+          card(
+            [app("orders", 8080)],
+            [
+              client({ name: "management.zipkin.tracing.endpoint", url: "http://zipkin:9411/api/v2/spans" }),
+              client({ via: "feign", name: "OrdersClient", app: "orders", calls: getStock }),
+            ],
+          ),
+        ),
+      ],
+      { config: NO_CONFIG, file: CONFIG_FILE, problems: [] },
+    );
+    expect(graph.problems).toEqual([]);
+  });
+});
+
 describe("the graph and find_endpoint on real git", () => {
   // Several repos with commits and two card computations on real git take longer than the default 5 s on Windows in CI.
   const REAL_GIT_TIMEOUT = 30_000;
@@ -482,6 +576,29 @@ describe("the graph and find_endpoint on real git", () => {
       expect((await graph.graph()).edges.filter((e) => e.from === "orders-api").map((e) => [e.to, e.key, e.confidence])).toEqual([
         ["payments", "payments-service", "exact"],
       ]);
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
+    "a client to an app outside the list is a graph problem, in the whole graph and in the subgraph of its repo (ADR-116)",
+    async () => {
+      const { graph, projects } = await setup();
+      expect((await graph.graph()).problems).toEqual([]);
+      commitFiles(
+        join(projects, "orders-api"),
+        {
+          "src/main/java/com/example/orders/api/StockClient.java":
+            '@FeignClient(name = "inventory")\ninterface StockClient {\n  @GetMapping("/api/stock/{sku}") Stock level();\n}\n',
+        },
+        "Add the stock client",
+      );
+      const problems = (await graph.graph()).problems.map((p) => [p.code, p.repo, p.client, `${p.evidence.path}:${p.evidence.line}`]);
+      expect(problems).toEqual([
+        ["unresolved-call-target", "orders-api", "StockClient", "src/main/java/com/example/orders/api/StockClient.java:1"],
+      ]);
+      expect((await graph.subgraph("orders-api", 1)).problems.map((p) => p.client)).toEqual(["StockClient"]);
+      expect((await graph.subgraph("shop-web", 1)).problems).toEqual([]);
     },
     REAL_GIT_TIMEOUT,
   );

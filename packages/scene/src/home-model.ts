@@ -1,4 +1,4 @@
-import type { EdgeKind } from "@trackwall/protocol";
+import type { EdgeSource } from "@trackwall/protocol";
 
 /**
  * View model of the dashboard (ADR-33): the dashboard snapshot, that is what the scene shows, computed by the UI from the
@@ -57,7 +57,8 @@ export interface HomeSession {
 export interface HomeLink {
   from: string;
   to: string;
-  kind: EdgeKind;
+  /** Where the connection comes from: the scene draws HTTP, package and manual connections differently (ADR-116). */
+  source: EdgeSource;
 }
 
 export interface HomeModel {
