@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { sessionEnvironmentLines } from "../src/lib/session-environment.ts";
+import { ENVIRONMENT_CARD_CLOSED, nextEnvironmentCard, sessionEnvironmentLines } from "../src/lib/session-environment.ts";
 
 describe("the environment a session got from mise", () => {
-  test("names the variables, the secrets hidden from the agent's tools and those agentSecrets lets through", () => {
+  test("groups the names into secrets the agent's tools get, secrets hidden from them and the other variables", () => {
     expect(
       sessionEnvironmentLines({
         variables: ["GITLAB_TOKEN", "JIRA_TOKEN", "MAVEN_OPTS"],
@@ -12,9 +12,11 @@ describe("the environment a session got from mise", () => {
       }),
     ).toEqual({
       summary: "3 variables from mise",
-      names: "GITLAB_TOKEN\nJIRA_TOKEN\nMAVEN_OPTS",
-      hidden: ["GITLAB_TOKEN"],
+      badgeLabel: "3 variables from mise",
+      count: 3,
       shared: ["JIRA_TOKEN"],
+      hidden: ["GITLAB_TOKEN"],
+      other: ["MAVEN_OPTS"],
       problem: null,
     });
   });
@@ -26,6 +28,31 @@ describe("the environment a session got from mise", () => {
   test("shows why the session lacks mise's environment even when it got no variable", () => {
     expect(
       sessionEnvironmentLines({ variables: [], secrets: [], agentSecrets: [], problem: "shop: mise.toml is not trusted" }),
-    ).toMatchObject({ summary: "0 variables from mise", problem: "shop: mise.toml is not trusted" });
+    ).toMatchObject({
+      summary: "0 variables from mise",
+      badgeLabel: "0 variables from mise, some are missing",
+      count: 0,
+      problem: "shop: mise.toml is not trusted",
+    });
+  });
+});
+
+describe("the environment card on a grid tile", () => {
+  test("hovering the badge shows the card and leaving it hides the card again", () => {
+    const hovered = nextEnvironmentCard(ENVIRONMENT_CARD_CLOSED, "hover");
+    expect(hovered).toEqual({ open: true, pinned: false });
+    expect(nextEnvironmentCard(hovered, "leave")).toEqual({ open: false, pinned: false });
+  });
+
+  test("a click pins the card, so that leaving it with the mouse keeps it open", () => {
+    const pinned = nextEnvironmentCard(nextEnvironmentCard(ENVIRONMENT_CARD_CLOSED, "hover"), "click");
+    expect(pinned).toEqual({ open: true, pinned: true });
+    expect(nextEnvironmentCard(pinned, "leave")).toEqual({ open: true, pinned: true });
+  });
+
+  test("a second click or Escape closes a pinned card", () => {
+    const pinned = nextEnvironmentCard(ENVIRONMENT_CARD_CLOSED, "click");
+    expect(nextEnvironmentCard(pinned, "click")).toEqual({ open: false, pinned: false });
+    expect(nextEnvironmentCard(pinned, "escape")).toEqual({ open: false, pinned: false });
   });
 });
