@@ -136,6 +136,7 @@ function task(fields: Partial<Task> & Pick<Task, "base">): Task {
     proposedBy: null,
     model: null,
     approvals: "ask",
+    javaNavigation: false,
     summary: null,
     port: 41000,
     included: { files: [], problems: [] },

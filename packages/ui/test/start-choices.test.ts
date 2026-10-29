@@ -12,18 +12,23 @@ function memoryStorage(initial: Record<string, string> = {}) {
 }
 
 describe("the start options the New session form remembers for each place", () => {
-  test("a place never started from gets its own worktree and the default model", () => {
+  test("a place never started from gets its own worktree, the default model and no Java navigation", () => {
     const storage = memoryStorage();
-    expect(readStartChoice(() => storage, "shop")).toEqual({ worktree: true, model: "" });
+    expect(readStartChoice(() => storage, "shop")).toEqual({ worktree: true, model: "", javaNavigation: false });
   });
 
   test("the choice saved for one repo comes back for it and leaves the other places at the defaults", () => {
     const storage = memoryStorage();
-    saveStartChoice(() => storage, "shop", { worktree: false, model: "gpt-5.5" });
-    saveStartChoice(() => storage, "", { worktree: true, model: "claude-opus-5.5" });
-    expect(readStartChoice(() => storage, "shop")).toEqual({ worktree: false, model: "gpt-5.5" });
-    expect(readStartChoice(() => storage, "")).toEqual({ worktree: true, model: "claude-opus-5.5" });
+    saveStartChoice(() => storage, "shop", { worktree: false, model: "gpt-5.5", javaNavigation: true });
+    saveStartChoice(() => storage, "", { worktree: true, model: "claude-opus-5.5", javaNavigation: false });
+    expect(readStartChoice(() => storage, "shop")).toEqual({ worktree: false, model: "gpt-5.5", javaNavigation: true });
+    expect(readStartChoice(() => storage, "")).toEqual({ worktree: true, model: "claude-opus-5.5", javaNavigation: false });
     expect(readStartChoice(() => storage, "billing")).toEqual(DEFAULT_START_CHOICE);
+  });
+
+  test("a choice saved before Java navigation keeps its worktree and model, without navigation", () => {
+    const storage = memoryStorage({ "trackwall.start-choices": JSON.stringify({ shop: { worktree: false, model: "gpt-5.5" } }) });
+    expect(readStartChoice(() => storage, "shop")).toEqual({ worktree: false, model: "gpt-5.5", javaNavigation: false });
   });
 
   test("a stored value of another shape, such as one with an approvals mode, reads as the defaults", () => {
@@ -38,6 +43,6 @@ describe("the start options the New session form remembers for each place", () =
       throw new Error("storage is blocked");
     };
     expect(readStartChoice(failing, "shop")).toEqual(DEFAULT_START_CHOICE);
-    expect(() => saveStartChoice(failing, "shop", { worktree: false, model: "" })).not.toThrow();
+    expect(() => saveStartChoice(failing, "shop", { worktree: false, model: "", javaNavigation: false })).not.toThrow();
   });
 });

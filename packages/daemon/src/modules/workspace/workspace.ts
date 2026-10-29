@@ -9,6 +9,7 @@ import {
   type GraphConfig,
   type HostedRepo,
   type HostRepos,
+  type JavaNavigationSettings,
   PATCH_MAX_BYTES,
   type RemoteRepoList,
   type Repo,
@@ -421,6 +422,14 @@ export class Workspace {
    */
   agentSecrets(): AgentSecrets {
     return this.deps.file.agentSecrets();
+  }
+
+  /**
+   * The Java language server for tasks (`javaNavigation` in `workspace.yaml`, ADR-99); `null` without the key,
+   * `invalid_config` for a bad one.
+   */
+  javaNavigation(): JavaNavigationSettings | null {
+    return this.deps.file.javaNavigation();
   }
 
   /** The user's addition to the day start's first message (`dayStart` in `workspace.yaml`, ADR-70); `null` without one. */

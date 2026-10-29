@@ -11,7 +11,7 @@
  * a turn in which the agent calls two such commands at once: as in Copilot CLI (the contract test of ADR-66), both
  * approval requests come at once, the second dialog follows the first answer, and the first command's `postToolUse`
  * comes while the second dialog waits. The fake also prints what the tests check
- * (MCP servers, instructions, directory, arguments, the prompt) and, on every turn, starts a helper process (like an
+ * (MCP servers, instructions, language servers, directory, arguments, the prompt) and, on every turn, starts a helper process (like an
  * agent's tool) and prints its PID, so that the test can check that stopping the session ends the whole group. The
  * helper starts only after input from the user, because on Windows the leader joins the job a moment after the start.
  * Like Copilot CLI it keeps a conversation per session id once the session has had a prompt (a marker file in the
@@ -54,6 +54,17 @@ const instructionFiles = (process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS ?? "")
   .split(",")
   .filter((dir) => dir !== "" && existsSync(dir))
   .flatMap((dir) => readdirSync(dir).filter((name) => name.endsWith(".instructions.md")));
+
+/**
+ * Language servers from `lspServers` in the session plugin's `plugin.json`: like Copilot CLI (the contract test of
+ * ADR-99), the session gets the `lsp` tool with them; the fake prints their names and starts none.
+ */
+const PluginManifest = z.object({ lspServers: z.record(z.string(), z.unknown()).optional() });
+const pluginDirArg = process.argv[process.argv.indexOf("--plugin-dir") + 1];
+const lspServers =
+  pluginDirArg === undefined || !existsSync(join(pluginDirArg, "plugin.json"))
+    ? []
+    : Object.keys(PluginManifest.parse(JSON.parse(readFileSync(join(pluginDirArg, "plugin.json"), "utf8"))).lspServers ?? {});
 
 /**
  * Copilot CLI runs every tool without an approval request (ADR-105, its contract test): no dialog and no `notification`
@@ -189,6 +200,7 @@ title(startTitle);
 process.stdout.write("\x1b[?1003h\x1b[?1006h");
 process.stdout.write(`Welcome to the fake, MCP: ${mcpServers.join(", ")}\r\n`);
 process.stdout.write(`Instructions: ${instructionFiles.join(", ")}\r\n`);
+process.stdout.write(`LSP: ${lspServers.join(", ")}\r\n`);
 /** Half the session screen (`INITIAL_COLS` in `agents.ts`, 120 columns). */
 const CWD_LINE_CHARS = 60;
 // The directory in lines shorter than the screen: ConPTY on Windows wraps a longer line its own way, and the test joins the lines.

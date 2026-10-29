@@ -1,9 +1,11 @@
-import { existsSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { dirname, join } from "node:path";
 import {
   type AgentTaskChanges,
   type ChangedFile,
   type IncludedFiles,
+  type JavaNavigationSettings,
+  LANGUAGE_SERVER_DIR_NAME,
   noIncludedFiles,
   PATCH_MAX_BYTES,
   type ProposedBy,
@@ -19,6 +21,8 @@ import {
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
 import { approvalArgs } from "./copilot-command.ts";
+import type { LspServer } from "./copilot-plugin.ts";
+import { JAVA_LSP_SERVER, type JavaNavigationReadiness, javaLanguageServer, javaNavigationReadiness } from "./java-language-server.ts";
 import { TASK_BRANCH_PREFIX, taskSlug, taskWorktree } from "./task-branch.ts";
 import type { StoredTask, TaskFile } from "./task-file.ts";
 import { type MiseSnapshot, miseConfigChanges, miseConfigDigest, readMiseConfig, reviewMiseConfig } from "./task-mise-config.ts";
@@ -79,6 +83,7 @@ interface TaskSessions {
     args: readonly string[];
     promptOnStart: boolean;
     hasConversation: boolean;
+    lspServers: Record<string, LspServer>;
   }): Promise<Session>;
   /** The task's sessions, newest first. */
   of(task: string): Session[];
@@ -92,6 +97,10 @@ export interface AgentTasksDeps {
     repoPath(id: string): Promise<string>;
     /** The task worktrees folder for a new task (ADR-84). */
     worktreesDir(): Promise<string>;
+    /** The projects folder, which holds the tasks' language server data (ADR-99). */
+    projectsDir(): Promise<string>;
+    /** `javaNavigation` from `workspace.yaml` (ADR-99); `null` without the key. */
+    javaNavigation(): JavaNavigationSettings | null;
   };
   sessions: TaskSessions;
   file: TaskFile;
@@ -115,6 +124,8 @@ export interface TaskOrigin {
   model: string | null;
   /** How the task's sessions answer tool approvals (ADR-105). */
   approvals: TaskApprovals;
+  /** Whether the task's sessions get the Java language server (ADR-99). */
+  javaNavigation: boolean;
 }
 
 /** A task from the file with the worktree that follows from it, and its port (one given when it was read, if it had none). */
@@ -153,6 +164,11 @@ export class AgentTasks {
     return this.#tasks.map(view);
   }
 
+  /** Whether a task can get jdtls now (ADR-99), read from `workspace.yaml` and the disk at every call. */
+  javaNavigation(): JavaNavigationReadiness {
+    return javaNavigationReadiness(() => this.#deps.repos.javaNavigation());
+  }
+
   /** A task of the repo is being created, so its worktree may be half made (a repo removal waits for it, ADR-83). */
   creatingIn(repo: string): boolean {
     return (this.#creatingIn.get(repo) ?? 0) > 0;
@@ -171,7 +187,10 @@ export class AgentTasks {
     }
   }
 
-  async #create(repo: string, prompt: string, { id, title, proposedBy, model, approvals }: TaskOrigin): Promise<Task> {
+  async #create(repo: string, prompt: string, { id, title, proposedBy, model, approvals, javaNavigation }: TaskOrigin): Promise<Task> {
+    // Refused before the worktree exists: a task that asked for Java navigation would otherwise start without it.
+    const javaProblem = javaNavigation ? this.javaNavigation().problem : null;
+    if (javaProblem !== null) throw new DomainError("bad_request", `Java navigation cannot start: ${javaProblem}`);
     const repoDir = await this.#deps.repos.repoPath(repo);
     const base = await asRepoUnavailable(repo, this.#deps.vcs.defaultBase(repoDir));
     const worktreesDir = await this.#deps.repos.worktreesDir();
@@ -189,6 +208,7 @@ export class AgentTasks {
       proposedBy,
       model,
       approvals,
+      javaNavigation,
       summary: null,
       trustedMiseConfig: null,
       port: freeTaskPort([...this.#tasks.map((t) => t.port), ...this.#creatingPorts]),
@@ -380,7 +400,17 @@ export class AgentTasks {
       });
       this.#closeSessions(task);
       this.#save(this.#tasks.filter((t) => t.id !== id));
+      if (task.javaNavigation) await this.#removeLanguageServerData(task);
     });
+  }
+
+  /** The index jdtls built for the task; a failure only leaves files behind, so it is logged. */
+  async #removeLanguageServerData(task: KnownTask): Promise<void> {
+    try {
+      rmSync(await this.#languageServerData(task), { recursive: true, force: true });
+    } catch (err) {
+      this.#deps.log(`removing the Java navigation data of task ${task.id}: ${messageOf(err)}`);
+    }
   }
 
   /** A `job` that deletes the worktree only once git has stopped reading it; a new change computation meanwhile refuses. */
@@ -444,7 +474,27 @@ export class AgentTasks {
       args: [...modelArgs, ...approvalArgs(task.approvals), ...args],
       promptOnStart,
       hasConversation: true,
+      lspServers: await this.#lspServers(task),
     });
+  }
+
+  /**
+   * jdtls for a task with Java navigation (ADR-99). A resume whose settings were removed or broke since starts without
+   * it and logs why: the agent still works, only without the `lsp` tool.
+   */
+  async #lspServers(task: KnownTask): Promise<Record<string, LspServer>> {
+    if (!task.javaNavigation) return {};
+    const { settings, problem } = this.javaNavigation();
+    if (settings === null) {
+      this.#deps.log(`task ${task.id} starts without Java navigation: ${problem}`);
+      return {};
+    }
+    return { [JAVA_LSP_SERVER]: javaLanguageServer(settings, await this.#languageServerData(task)) };
+  }
+
+  /** The task's jdtls data folder in the projects folder. */
+  async #languageServerData(task: KnownTask): Promise<string> {
+    return join(await this.#deps.repos.projectsDir(), LANGUAGE_SERVER_DIR_NAME, task.id);
   }
 
   /** A running session writes in the worktree and holds its files (on Windows it blocks deletion), so stop it first. */

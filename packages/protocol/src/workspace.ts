@@ -170,6 +170,25 @@ export const ENV_VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export const AgentSecrets = z.array(z.string().regex(ENV_VARIABLE_NAME, "an environment variable name, e.g. JIRA_TOKEN")).max(200);
 export type AgentSecrets = z.infer<typeof AgentSecrets>;
 
+/**
+ * `javaNavigation` in `workspace.yaml` (ADR-99), by hand only: the Java language server a task's Copilot CLI session can
+ * get for code navigation (the `lsp` tool): `jdtls`, the folder of an unpacked Eclipse JDT Language Server; `java`, the
+ * Java program that runs it (the version jdtls needs, not the project's); `lombok`, the `lombok.jar` jdtls loads as an
+ * agent for a project that uses Lombok. All full paths, which the daemon checks.
+ */
+export const JavaNavigationSettings = z
+  .object({
+    jdtls: z.string().min(1),
+    java: z.string().min(1),
+    lombok: z
+      .string()
+      .min(1)
+      .nullish()
+      .transform((path) => path ?? null),
+  })
+  .strict();
+export type JavaNavigationSettings = z.infer<typeof JavaNavigationSettings>;
+
 /** The default task worktrees folder's name in the projects folder (ADR-84). */
 export const DEFAULT_WORKTREES_DIR_NAME = ".trackwall-worktrees";
 
@@ -178,6 +197,12 @@ export const DEFAULT_WORKTREES_DIR_NAME = ".trackwall-worktrees";
  * projects folder, which an antivirus may be told to skip (clarification to ADR-31).
  */
 export const SCRATCH_DIR_NAME = ".trackwall-scratch";
+
+/**
+ * The folder in the projects folder with each task's Java language server data (ADR-99), one folder per task, deleted
+ * when the task ends: in the projects folder, which an antivirus may be told to skip, and a dot-folder, so it is no repo.
+ */
+export const LANGUAGE_SERVER_DIR_NAME = ".trackwall-lsp";
 
 export const WorkspaceSettings = z.object({
   projectsDir: ProjectsDir,

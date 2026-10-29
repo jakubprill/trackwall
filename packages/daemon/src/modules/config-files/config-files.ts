@@ -7,6 +7,7 @@ import {
   type ConfigFilesReport,
   countLabel,
   DEFAULT_WORKTREES_DIR_NAME,
+  LANGUAGE_SERVER_DIR_NAME,
   LOCAL_CONFIG_STORE_DIR,
   type LocalConfigStore,
   MISE_CONFIG_NAME,
@@ -154,6 +155,8 @@ export class ConfigFiles {
         return removedRepos(ctx.projectsDir);
       case "scratch-dir":
         return ctx.projectsDir === null ? notSet(SCRATCH_DIR_NAME) : plainEntry(join(ctx.projectsDir, SCRATCH_DIR_NAME));
+      case "language-server-dir":
+        return ctx.projectsDir === null ? notSet(LANGUAGE_SERVER_DIR_NAME) : plainEntry(join(ctx.projectsDir, LANGUAGE_SERVER_DIR_NAME));
       case "copilot-config":
         return this.#copilotConfig(ctx);
     }

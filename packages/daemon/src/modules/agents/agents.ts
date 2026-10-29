@@ -8,6 +8,7 @@ import {
   type EnvironmentCheck,
   type HttpEndpoint,
   isSupervisor,
+  type JavaNavigationSettings,
   type MiseTarget,
   type ReviewComment,
   type RunState,
@@ -17,6 +18,7 @@ import {
   type SessionEnvironment,
   type SessionList,
   type SessionView,
+  type StartOptions,
   type SupervisorConversation,
   type SupervisorSettings,
   type Task,
@@ -38,9 +40,10 @@ import type { AgentSession } from "./agent-session.ts";
 import { resolveCopilot, toolPermissionArgs } from "./copilot-command.ts";
 import type { CopilotHookOutput } from "./copilot-hook-output.ts";
 import { CopilotHookEvent } from "./copilot-hook-record.ts";
-import { writeCopilotPlugin } from "./copilot-plugin.ts";
+import { type LspServer, writeCopilotPlugin } from "./copilot-plugin.ts";
 import { appendHookRecord } from "./hook-tail.ts";
 import { inboxPrompt } from "./inbox-prompt.ts";
+import { javaNavigationState } from "./java-language-server.ts";
 import { type LastSupervisor, LastSupervisorFile } from "./last-supervisor.ts";
 import { LiveSession, type SessionEvent, type SessionPty, type SessionWindow } from "./live-session.ts";
 import { MiseTrustNotices } from "./mise-trust-notices.ts";
@@ -159,6 +162,8 @@ interface AgentsRepos {
   supervisorSettings(): SupervisorSettings;
   /** `agentSecrets` from `workspace.yaml` (ADR-93): the secrets from mise a session's tools get; `invalid_config` for a bad key. */
   agentSecrets(): readonly string[];
+  /** `javaNavigation` from `workspace.yaml` (ADR-99): the Java language server for tasks; `null` without the key. */
+  javaNavigation(): JavaNavigationSettings | null;
   /** Moves the repo out of the projects folder (ADR-83) and returns where it went. */
   /**
    * Moves repo `id` out of the projects folder (ADR-83) while its folder is still `expectedDir`; `beforeMove` runs right
@@ -424,7 +429,7 @@ export class Agents {
     if (this.#proposals.get(id).kind !== "task") throw new DomainError("bad_request", `proposal ${id} is not a task`);
     const { repo, title, proposedBy } = this.#proposals.take(id);
     try {
-      return await this.#tasks.create(repo, prompt, { id, title, proposedBy, model, approvals });
+      return await this.#tasks.create(repo, prompt, { id, title, proposedBy, model, approvals, javaNavigation: false });
     } finally {
       this.#proposals.release(id, this.#tasks.find(id) === undefined);
     }
@@ -564,11 +569,22 @@ export class Agents {
   }
 
   /**
-   * A task the user typed; its agent asks before tools unless the user chose `auto` (ADR-105), and runs on `model`, or
-   * Copilot CLI's default when it is `null` (ADR-98).
+   * A task the user typed; its agent asks before tools unless the user chose `auto` (ADR-105), runs on `model`, or
+   * Copilot CLI's default when it is `null` (ADR-98), and with `javaNavigation` gets the Java language server (ADR-99).
    */
-  createTask(repo: string, prompt: string, approvals: TaskApprovals = "ask", model: string | null = null): Promise<Task> {
-    return this.#tasks.create(repo, prompt, { id: randomUUID(), title: null, proposedBy: null, model, approvals });
+  createTask(
+    repo: string,
+    prompt: string,
+    approvals: TaskApprovals = "ask",
+    model: string | null = null,
+    javaNavigation = false,
+  ): Promise<Task> {
+    return this.#tasks.create(repo, prompt, { id: randomUUID(), title: null, proposedBy: null, model, approvals, javaNavigation });
+  }
+
+  /** What the New session form offers on this computer: whether tasks can get Java navigation now, or why not (ADR-99). */
+  startOptions(): StartOptions {
+    return { javaNavigation: javaNavigationState(this.#tasks.javaNavigation()) };
   }
 
   resumeTask(id: string): Promise<Task> {
@@ -701,7 +717,15 @@ export class Agents {
    * Copilot CLI in `cwd` (the repo root or the worktree of task `task`) with arguments before the session's arguments;
    * `promptOnStart` when the arguments carry the first message (`--interactive`), so the session works from the start.
    */
-  async #launch({ id = randomUUID(), args, promptOnStart, hasConversation, conversation, ...place }: LaunchSpec): Promise<Session> {
+  async #launch({
+    id = randomUUID(),
+    args,
+    promptOnStart,
+    hasConversation,
+    conversation,
+    lspServers = {},
+    ...place
+  }: LaunchSpec): Promise<Session> {
     const { repo, task, cwd } = place;
     const setup = await this.#setUp(id, place);
     const { program, dir, token, mise } = setup;
@@ -718,6 +742,7 @@ export class Agents {
         conversation,
         program,
         environment: mise.environment,
+        lspServers,
       });
     } catch (err) {
       this.#tokens.revoke(id);
@@ -1088,12 +1113,13 @@ export class Agents {
     conversation,
     program,
     environment,
+    lspServers,
   }: SessionFiles): PreparedSession {
     const supervisor = role.kind === "supervisor";
     const hooksFile = join(dir, HOOKS_FILENAME);
     const instructionsDir = this.#writeSessionFiles(id, role, dir, token);
     writeFileSync(hooksFile, "");
-    writeCopilotPlugin(join(dir, "plugin"), (event) => ({ type: "http", ...this.#deps.sessionHook(event, token) }));
+    writeCopilotPlugin(join(dir, "plugin"), (event) => ({ type: "http", ...this.#deps.sessionHook(event, token) }), lspServers);
     const session = new LiveSession({
       id,
       repo,
@@ -1238,6 +1264,8 @@ interface LaunchSpec extends SessionPlace {
   conversation?: string;
   args: readonly string[];
   promptOnStart: boolean;
+  /** The language servers of the session's `lsp` tool (ADR-99); none by default. */
+  lspServers?: Record<string, LspServer>;
 }
 
 /** Where a session runs and what it is. */
@@ -1280,6 +1308,7 @@ interface SessionFiles {
   program: string;
   /** What the session got from mise (ADR-93). */
   environment: SessionEnvironment;
+  lspServers: Record<string, LspServer>;
 }
 
 /** A prepared session directory: the session and its instructions directory (`null` when it could not be written). */

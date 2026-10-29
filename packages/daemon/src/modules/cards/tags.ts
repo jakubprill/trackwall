@@ -3,6 +3,7 @@ import {
   type DeclaredMiseTask,
   type Evidence,
   evidenceLabel,
+  JAVA_TAG,
   LOCAL_MISE_TAG,
   type MechanismId,
   NO_MISE_TAG,
@@ -51,7 +52,7 @@ function cardTags(card: RepoCard, repo: TaggedRepo): [string, string][] {
   const packages = card.provides.filter((p) => p.kind === "package");
   const mechanism = (ids: MechanismId[]) => card.mechanisms.find((m) => ids.includes(m.id));
   const jvm = card.buildFiles.find((f) => f.tool === "maven" || f.tool === "gradle");
-  if (jvm) tags.push(["java", `build file ${jvm.path}`]);
+  if (jvm) tags.push([JAVA_TAG, `build file ${jvm.path}`]);
   const typescript = card.consumes.find((c) => c.kind === "package" && c.ecosystem === "npm" && c.name === "typescript");
   if (typescript) tags.push(["typescript", `typescript dependency in ${where(typescript.evidence)}`]);
   const frontend = mechanism(FRONTEND);

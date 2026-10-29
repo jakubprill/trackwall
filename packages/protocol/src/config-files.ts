@@ -28,6 +28,7 @@ export const ConfigEntryId = z.enum([
   "task-worktrees-dir",
   "removed-repos-dir",
   "scratch-dir",
+  "language-server-dir",
   "copilot-config",
 ]);
 export type ConfigEntryId = z.infer<typeof ConfigEntryId>;
@@ -41,6 +42,7 @@ export type DocsPage =
   | "config-files"
   | "doctor"
   | "graph"
+  | "java-navigation"
   | "local-config"
   | "mise-environment"
   | "repo-card"
@@ -177,6 +179,14 @@ export const CONFIG_ENTRIES: Record<ConfigEntryId, ConfigEntryInfo> = {
     purpose: "Git's scratch files while Trackwall reads changes or backs up local config; empty between git commands.",
     docs: "config-files",
   },
+  "language-server-dir": {
+    place: "projects",
+    kind: "folder",
+    writer: "trackwall",
+    internal: false,
+    purpose: "The Java language server's index of each task with Java navigation, removed when you end the task.",
+    docs: "java-navigation",
+  },
   "copilot-config": {
     place: "copilot",
     kind: "file",
@@ -211,6 +221,7 @@ export const WorkspaceKey = z.enum([
   "repoHosts",
   "toolPermissions",
   "agentSecrets",
+  "javaNavigation",
   "supervisor",
   "repoTags",
   "dayStart",
@@ -232,6 +243,7 @@ export const WORKSPACE_KEYS: Record<WorkspaceKey, WorkspaceKeyInfo> = {
   repoHosts: { purpose: "Where the Repos view searches and clones from.", docs: "repos", settings: "repo-hosts" },
   toolPermissions: { purpose: "Which tools sessions may use without asking you.", docs: "approvals", settings: null },
   agentSecrets: { purpose: "The secrets from mise that the tools of sessions may read.", docs: "mise-environment", settings: null },
+  javaNavigation: { purpose: "The Java language server tasks can get for code navigation.", docs: "java-navigation", settings: null },
   supervisor: { purpose: "Whether the supervisor may change code itself.", docs: "supervisor", settings: null },
   repoTags: { purpose: "Your own tags on repo cards, by repo name or address.", docs: "repo-card", settings: null },
   dayStart: { purpose: "Your addition to the first message of Start my day.", docs: "start-my-day", settings: null },

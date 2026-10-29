@@ -32,6 +32,7 @@ function task(id: string): Task {
     proposedBy: { session: "main", supervisor: false },
     model: null,
     approvals: "ask",
+    javaNavigation: false,
     summary: null,
     port: 41000,
     included: { files: [], problems: [] },
