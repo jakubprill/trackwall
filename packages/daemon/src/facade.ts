@@ -98,6 +98,8 @@ export { HOSTING_CLIS } from "./modules/vcs/hosting.ts";
 const WORKSPACE_FILE = "workspace.yaml";
 const RUNTIME_FILE = "runtime.json";
 const CARDS_DIR = "cards";
+/** The bare repo the local config store is pushed from (ADR-127). */
+const LOCAL_CONFIG_PUSH_DIR = "local-config-push";
 const DAY_START_FILE = "day-start.json";
 const LOGS_DIR = "logs";
 /** The limit of one source JSONL file; with the previous file after rotation a source takes at most twice that. */
@@ -198,7 +200,7 @@ export function createFacade(o: FacadeOptions): Facade {
   const cards = new Cards({ vcs, repos: workspace, cache, log: o.log });
   // A new repo or one whose HEAD moved gets its card in the background, so the next graph does not wait for it (ADR-63).
   const repoWatch = new RepoWatch({ repos: workspace, vcs, onHeadMoved: (repos) => cards.warmUp(repos), log: o.log });
-  const localConfig = new LocalConfig({ repos: workspace, vcs, log: o.log });
+  const localConfig = new LocalConfig({ repos: workspace, vcs, log: o.log, pushDir: join(o.home, LOCAL_CONFIG_PUSH_DIR) });
   const agents = new Agents({
     procs,
     repos: workspace,
@@ -296,6 +298,7 @@ export function createFacade(o: FacadeOptions): Facade {
       "day-start-file": join(o.home, DAY_START_FILE),
       "cards-dir": join(o.home, CARDS_DIR),
       "logs-dir": join(o.home, LOGS_DIR),
+      "local-config-push-repo": join(o.home, LOCAL_CONFIG_PUSH_DIR),
       "legacy-worktrees-dir": join(o.home, LEGACY_WORKTREES_DIR),
     },
     // A projects folder that is not set or cannot be read is a state the view shows, not an error of the whole list.

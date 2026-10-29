@@ -23,7 +23,7 @@ Trackwall watches `mise.toml`, `mise.local.toml` and `.worktreeinclude` in every
 
 The "mise tasks" tab of a repo shows a "Local config" section with each file's state. When you clone a repo with the "+" button above the [repo list](/features/repos), its files come back from the store before the clone shows as done. In a repo cloned another way the state is "only in the store", and "Restore from the store" puts the files back. A file git does not ignore shows a warning: anyone working in the repo could commit it, an agent too. "Ignore locally" adds it to the clone's `.git/info/exclude`, which git never pushes. Restore does this by itself. [Where agents work](/guide/where-agents-work) shows how these files reach a session in the repo and a task's worktree.
 
-"Settings > Workspace" shows where the store is, the last backup, and whether it was pushed. Without a remote the backups stay on this computer. With one, an HTTPS or SSH address of a private repo on a repo host, Trackwall pushes after every backup, and on another computer you clone the store into its projects folder; repos you then clone with Trackwall get their files back by themselves, and a repo already there gets them with "Restore from the store".
+"Settings > Workspace" shows where the store is, the last backup, and whether it was pushed. Without a remote the backups stay on this computer. With one, an HTTPS or SSH address of a private repo on a repo host that you allowed there, Trackwall pushes after every backup, and on another computer you clone the store into its projects folder; repos you then clone with Trackwall get their files back by themselves, and a repo already there gets them with "Restore from the store".
 
 ## Use it
 
@@ -31,13 +31,17 @@ The "mise tasks" tab of a repo shows a "Local config" section with each file's s
 2. If the repo's agent tasks should get the file too, add the line `mise.local.toml` to `.worktreeinclude` in the repo root.
 3. Open the repo's "mise tasks" tab and press "Ignore locally" if the section shows a warning.
 4. For a copy off this computer, create an empty private repo on your repo host and add it to the store with git: `git -C <projects folder>/.trackwall/local remote add origin <HTTPS or SSH address>`.
+5. Open "Settings > Workspace" and press "Push to this remote" under the local config store. Trackwall pushes the next backup there.
 
 ## Good to know
 
 - Only `mise.toml`, `mise.local.toml` and `.worktreeinclude` are backed up, and only real files of up to 256 KB, never a link.
 - Values in `[env]` of a backed-up `mise.toml` or `mise.local.toml` go into the store and to its remote. Keep secrets out of the file, or keep the remote private.
 - The store's commits are made by "Trackwall", without your git hooks and signing.
-- Trackwall pushes the store only to an HTTPS or SSH address. A remote in a local or shared folder is never pushed to, and "Settings" says so.
+- Trackwall pushes the store only to the address you allowed, whatever the store's remote says later. An agent that can write in your projects folder could change that remote; the backups still go only to your address, and "Settings" shows the new remote with "Push to this remote". Press it only if you changed the remote yourself.
+- "Stop pushing" under the store keeps the backups on this computer again. Removing the store's remote with git does not stop the pushes, since Trackwall pushes to the address you chose, not to whatever the store's remote says.
+- Trackwall keeps the address you allowed in `~/.trackwall/workspace.yaml` as you wrote it. If it has a token in it and you keep that file in a repo, use a credential helper instead of the token.
+- Trackwall pushes the store only to an HTTPS or SSH address. A remote in a local or shared folder cannot be chosen, and neither can a remote with several addresses, with a space, backslash or non-ASCII letter in its address, or whose user looks like a host name.
 - When another computer pushed to the remote first, the push fails and "Settings" says so. Pull in the store yourself; Trackwall never pulls or forces a push. After a pull, each computer's own file wins: where it differs, Trackwall commits it on top, and the other version stays in the history.
 - Trackwall checks the store before it uses it. If its `.git/config` has a setting git did not write itself, such as a filter, the backup stops and "Settings" names the setting to remove.
 - Restore never overwrites a file: a repo that already has its own `mise.local.toml` keeps it, and the next backup takes that one, with the old version kept in the store's history.
