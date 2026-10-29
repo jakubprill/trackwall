@@ -48,11 +48,11 @@ fn write(path: &Path, value: &impl Serialize, private: bool) -> std::io::Result<
     std::fs::rename(&tmp, path)
 }
 
-#[cfg(test)]
+// The only test checks file modes, which exist on macOS and Linux.
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 
-    #[cfg(unix)]
     #[test]
     fn a_private_file_is_readable_by_its_owner_only() {
         use std::os::unix::fs::PermissionsExt;
