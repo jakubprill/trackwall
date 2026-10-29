@@ -39,6 +39,8 @@ describe("a task's notices", () => {
     // The chip stays in the tile's header until the config is trusted.
     const chip = page.getByRole("button", { name: "The agent changed the mise config" });
     await chip.waitFor();
+    // The banner's "Show" is gone by then, so the keyboard goes back to the chip, not to the page.
+    expect(await page.evaluate(() => document.activeElement?.getAttribute("aria-label"))).toBe("The agent changed the mise config");
 
     // In the one-entry layout the same warning is a chip that opens the task's sections.
     await page.getByRole("group", { name: "Layout" }).getByRole("button", { name: "1", exact: true }).click();

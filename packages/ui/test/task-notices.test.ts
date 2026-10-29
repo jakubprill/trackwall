@@ -120,28 +120,22 @@ describe("tileNotices", () => {
         mergeRequest: true,
       }),
     );
-    expect(tile.miseConfig).toEqual({
-      notice: { section: "mise-config", key: "mise-config:d1", tone: "warning", label: "The agent changed the mise config" },
-      needsTrust: true,
-    });
-    expect(tile.verification?.label).toBe("Verification failed");
+    expect(tile.chips.map((n) => n.chip)).toEqual(["Trust mise", "Failed"]);
     expect(tile.others.map((n) => n.label)).toEqual(["1 file also in “Extend add()”", "Merge request"]);
   });
 
-  test("mise that cannot run in the worktree keeps its chip, but there is nothing to trust", () => {
-    const tile = tileNotices(taskNotices({ ...quiet, miseConfig: "unavailable" }));
-    expect(tile.miseConfig?.needsTrust).toBe(false);
-    expect(tile.miseConfig?.notice.label).toBe("mise tasks cannot run here");
+  test("mise that cannot run in the worktree keeps its chip, without asking for trust", () => {
+    expect(tileNotices(taskNotices({ ...quiet, miseConfig: "unavailable" })).chips.map((n) => n.chip)).toEqual(["mise"]);
   });
 
   test("a running verification has a chip, a cancelled one stays on the badge", () => {
-    expect(tileNotices(taskNotices({ ...quiet, verification: verification("running") })).verification?.label).toBe("Verifying");
+    expect(tileNotices(taskNotices({ ...quiet, verification: verification("running") })).chips.map((n) => n.chip)).toEqual(["Verifying"]);
     const cancelled = tileNotices(taskNotices({ ...quiet, verification: verification("cancelled") }));
-    expect(cancelled.verification).toBeUndefined();
+    expect(cancelled.chips).toEqual([]);
     expect(cancelled.others.map((n) => n.label)).toEqual(["Verification cancelled"]);
   });
 
   test("a task with nothing to say has no chips and nothing on the badge", () => {
-    expect(tileNotices(taskNotices(quiet))).toEqual({ miseConfig: undefined, verification: undefined, others: [] });
+    expect(tileNotices(taskNotices(quiet))).toEqual({ chips: [], others: [] });
   });
 });

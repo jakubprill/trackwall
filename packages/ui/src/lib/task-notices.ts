@@ -25,6 +25,11 @@ export interface TaskNotice {
   key: string;
   tone: TaskNoticeTone;
   label: string;
+  /**
+   * The text of a chip of its own in a grid tile's header, for what matters at a glance there: the mise config, whose
+   * tasks stop until the user trusts it, and a running, passed or failed verification. The rest counts on the badge.
+   */
+  chip?: string;
 }
 
 export interface TaskNoticeInput {
@@ -83,11 +88,9 @@ function includedNotices({ files, problems }: Task["included"]): TaskNotice[] {
   return notices;
 }
 
-const MISE_UNAVAILABLE_KEY = "mise-config:unavailable";
-
 function miseConfigNotices(config: TaskNoticeInput["miseConfig"]): TaskNotice[] {
   if (config === "unavailable")
-    return [{ section: "mise-config", key: MISE_UNAVAILABLE_KEY, tone: "warning", label: "mise tasks cannot run here" }];
+    return [{ section: "mise-config", key: "mise-config:unavailable", tone: "warning", label: "mise tasks cannot run here", chip: "mise" }];
   if (!config || config.changes.length === 0) return [];
   return [
     {
@@ -95,6 +98,7 @@ function miseConfigNotices(config: TaskNoticeInput["miseConfig"]): TaskNotice[] 
       key: `mise-config:${config.digest}`,
       tone: "warning",
       label: config.neverTrusted ? "mise config not trusted yet" : "The agent changed the mise config",
+      chip: "Trust mise",
     },
   ];
 }
@@ -106,10 +110,10 @@ function messageNotices(messages: TaskNoticeInput["messages"]): TaskNotice[] {
   return [{ section: "messages", key: "messages", tone: "info", label: unread > 0 ? `${count}, ${unread} not read` : count }];
 }
 
-const VERIFICATION_NOTICE: Record<Verification["state"], { tone: TaskNoticeTone; label: string }> = {
-  running: { tone: "running", label: "Verifying" },
-  passed: { tone: "passed", label: "Verification passed" },
-  failed: { tone: "failed", label: "Verification failed" },
+const VERIFICATION_NOTICE: Record<Verification["state"], { tone: TaskNoticeTone; label: string; chip?: string }> = {
+  running: { tone: "running", label: "Verifying", chip: "Verifying" },
+  passed: { tone: "passed", label: "Verification passed", chip: "Passed" },
+  failed: { tone: "failed", label: "Verification failed", chip: "Failed" },
   cancelled: { tone: "info", label: "Verification cancelled" },
 };
 
@@ -126,21 +130,7 @@ export function newWarnings(notices: readonly TaskNotice[], seen: ReadonlySet<st
   return notices.filter((n) => n.tone === "warning" && !seen.has(n.key));
 }
 
-/** How a grid tile's header shows the notices: two get chips of their own, the rest count on the badge. */
-export interface TileNotices {
-  /** The mise config: mise tasks stop in the worktree until the user trusts it, so it stays in sight until then. */
-  miseConfig: { notice: TaskNotice; needsTrust: boolean } | undefined;
-  /** The verification while it runs and once it passed or failed: a short result that matters at a glance. */
-  verification: TaskNotice | undefined;
-  others: TaskNotice[];
-}
-
-export function tileNotices(notices: readonly TaskNotice[]): TileNotices {
-  const mise = notices.find((n) => n.section === "mise-config");
-  const verification = notices.find((n) => n.section === "verification" && n.tone !== "info");
-  return {
-    miseConfig: mise && { notice: mise, needsTrust: mise.key !== MISE_UNAVAILABLE_KEY },
-    verification,
-    others: notices.filter((n) => n !== mise && n !== verification),
-  };
+/** A grid tile's header: the notices with a chip of their own, and the rest for the badge. */
+export function tileNotices(notices: readonly TaskNotice[]): { chips: TaskNotice[]; others: TaskNotice[] } {
+  return { chips: notices.filter((n) => n.chip !== undefined), others: notices.filter((n) => n.chip === undefined) };
 }

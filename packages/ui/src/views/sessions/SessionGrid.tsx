@@ -13,6 +13,7 @@ import { sessionShortcutLabel } from "@/lib/session-shortcut";
 import { PROPOSAL_STATUS, sessionPlace, sessionStateLabel } from "@/lib/session-state";
 import { useSessionClose } from "@/lib/use-session-close";
 import { useTaskEnding } from "@/lib/use-task-ending";
+import { useTileOverlay } from "@/lib/use-tile-overlay";
 import { cn } from "@/lib/utils";
 import { ProposalTile } from "./ProposalTile.tsx";
 import { EndTaskButton, SessionCloseButton, SessionCloseConfirmation, TaskEnding } from "./SessionClose.tsx";
@@ -151,6 +152,7 @@ function SessionTile({
   const sessionlessTask = entry.kind === "task" && !session ? entry.task : undefined;
   const ending = useTaskEnding(sessionlessTask !== undefined);
   const task = entry.kind === "task" ? entry.task : undefined;
+  const overlay = useTileOverlay();
   const notices = useTaskTileNotices({
     conn,
     task,
@@ -160,15 +162,16 @@ function SessionTile({
     runningLive,
     selected,
     paused: ending.open,
+    overlay,
     onOpenTask: (id) => onNavigate({ kind: "task", id }),
   });
   const menu = useTaskTileMenu({
     conn,
-    task,
+    task: ending.open ? undefined : task,
     session,
-    verification: notices.verification,
+    verification: notices.details.verification,
+    overlay,
     onOpenChanges: () => task && onOpenChanges(task.id),
-    onOpenDetails: notices.openDetails,
     onChanged,
   });
   const environment = useSessionEnvironmentTile(session?.environment);
@@ -248,7 +251,7 @@ function SessionTile({
         )}
         {sessionlessTask && !ending.open && (
           <div className="text-muted-foreground flex flex-1 items-center justify-center p-4 text-center text-xs">
-            This task has no session. Open it alone to resume it or to see its changes, or end it with the X.
+            This task has no session. Resume it from its menu, open it alone to see its changes, or end it with the X.
           </div>
         )}
       </div>
