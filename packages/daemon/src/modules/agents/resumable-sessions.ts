@@ -1,8 +1,7 @@
 import { RepoId, SessionView, TaskId } from "@trackwall/protocol";
 import { z } from "zod";
-import { writeFileAtomic } from "../../infra/atomic-write.ts";
 import { ConversationId } from "./acp-messages.ts";
-import { readStateFile } from "./state-file.ts";
+import { FollowedStateFile } from "./state-file.ts";
 
 /**
  * The sessions that run, kept in a file of the state directory so that the next daemon resumes them (ADR-95, §4.4):
@@ -91,36 +90,26 @@ export function sessionLaunch(view: SessionView, resumed: Resumed): SessionLaunc
 const ResumableSessionsFile = z.object({ sessions: z.array(ResumableSession) });
 
 export class ResumableSessions {
-  readonly #path: string;
-  readonly #log: (msg: string) => void;
-  /** The last content written, so an unchanged list is not written again at every check. */
-  #written: string | undefined;
-  #following = true;
+  readonly #file: FollowedStateFile<z.infer<typeof ResumableSessionsFile>>;
 
   constructor(path: string, log: (msg: string) => void) {
-    this.#path = path;
-    this.#log = log;
+    this.#file = new FollowedStateFile(path, ResumableSessionsFile, (problem, aside) =>
+      log(`${path}: ${problem}; file moved to ${aside}, no session is resumed`),
+    );
   }
 
   /** The sessions the previous daemon left; a missing file means none, a broken one is moved aside and gives none. */
   read(): ResumableSession[] {
-    const file = readStateFile(this.#path, ResumableSessionsFile, (problem, aside) =>
-      this.#log(`${this.#path}: ${problem}; file moved to ${aside}, no session is resumed`),
-    );
-    return file?.sessions ?? [];
+    return this.#file.read()?.sessions ?? [];
   }
 
   /** The sessions that run now; nothing once the daemon stops (`stopFollowing`). */
   follow(sessions: readonly ResumableSession[]): void {
-    if (!this.#following) return;
-    const text = `${JSON.stringify({ sessions }, null, 2)}\n`;
-    if (text === this.#written) return;
-    writeFileAtomic(this.#path, text);
-    this.#written = text;
+    this.#file.follow({ sessions: [...sessions] });
   }
 
   /** The daemon stops: the sessions it ends now stay in the file for the next daemon. */
   stopFollowing(): void {
-    this.#following = false;
+    this.#file.stopFollowing();
   }
 }
