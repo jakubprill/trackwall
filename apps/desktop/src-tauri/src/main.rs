@@ -13,6 +13,7 @@ mod daemon_state;
 mod error_journal;
 mod folder_picker;
 mod global_shortcut;
+mod host_folder;
 mod json_file;
 mod jump;
 mod link;
@@ -144,6 +145,9 @@ fn main() {
             jump::take_jump,
             link::open_link,
             system_open::open_outside,
+            host_folder::host_projects_folder,
+            host_folder::set_host_projects_folder,
+            host_folder::show_in_host_folder,
             remote_daemon::remote_daemon_port,
             remote_daemon::use_remote_daemon,
             remote_daemon::use_own_daemon,

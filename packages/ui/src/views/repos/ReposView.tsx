@@ -145,6 +145,7 @@ export function ReposView({
             key={current.id}
             conn={conn}
             repo={current}
+            projectsDir={list.data?.projectsDir}
             sessions={sessions}
             runningLive={runningLive}
             onOpenInSessions={onOpenInSessions}

@@ -1,7 +1,8 @@
 //! Opens a web page in the default browser, or a folder of the daemon's container in VS Code, from the window itself:
 //! a remote daemon has no desktop and cannot open them (ADR-120, ADR-130), and a WebView opens no new tabs. The same
-//! commands as the daemon's `infra/system-open.ts`.
+//! commands as the daemon's `infra/system-open.ts`. It also reveals a folder in Explorer or Finder (ADR-131).
 
+use std::path::Path;
 use std::process::{Command, Stdio};
 use tauri::Url;
 
@@ -25,6 +26,41 @@ pub fn open_outside(url: String) -> Result<(), String> {
     let mut cmd = command(url.as_str());
     cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
     cmd.spawn().map(drop).map_err(|e| format!("could not open the address: {e}"))
+}
+
+/// Shows `folder` selected in its parent folder in Explorer or Finder. Revealing, not opening: should the path turn into
+/// a file between the caller's check and the file manager (a volume a container writes to), a file is only selected,
+/// never opened or run. Linux has no such command, so there it is refused.
+pub fn reveal_folder(folder: &Path) -> Result<(), String> {
+    let mut cmd = reveal_command(folder)?;
+    cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    cmd.spawn().map(drop).map_err(|e| format!("could not show the folder: {e}"))
+}
+
+/// `/select,` with the path in quotes, as it is: Explorer splits its command line at commas (the daemon's
+/// `folderCommand`), and the path is built from parts that hold no quote.
+#[cfg(windows)]
+fn reveal_command(folder: &Path) -> Result<Command, String> {
+    use std::ffi::OsString;
+    use std::os::windows::process::CommandExt;
+    let mut arg = OsString::from("/select,\"");
+    arg.push(folder.as_os_str());
+    arg.push("\"");
+    let mut cmd = Command::new("explorer.exe");
+    cmd.raw_arg(arg);
+    Ok(cmd)
+}
+
+#[cfg(target_os = "macos")]
+fn reveal_command(folder: &Path) -> Result<Command, String> {
+    let mut cmd = Command::new("open");
+    cmd.arg("-R").arg(folder);
+    Ok(cmd)
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+fn reveal_command(_folder: &Path) -> Result<Command, String> {
+    Err("showing a folder of the container is not supported on Linux".into())
 }
 
 #[cfg(windows)]
