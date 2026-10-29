@@ -1,10 +1,6 @@
 import { mkdir, mkdtemp, readdir, rename, stat } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  type JavaNavigationInstall,
-  type JavaNavigationSettings,
-  type JavaNavigationState,
-} from "@trackwall/protocol";
+import type { JavaNavigationInstall, JavaNavigationSettings, JavaNavigationState } from "@trackwall/protocol";
 import { configOrProblem, messageOf } from "../../infra/errors.ts";
 import { removeFolder, removeIfPresent } from "../../infra/remove-folder.ts";
 import { ensureTrackwallDir } from "../../infra/trackwall-dir.ts";

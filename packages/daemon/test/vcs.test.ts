@@ -301,7 +301,7 @@ describe("vcs on real git", () => {
       const base = gitIn(dir, "rev-parse", "HEAD").trim();
       writeFileSync(join(dir, "a.txt"), "b\n");
       writeFileSync(join(dir, "new.txt"), "new\n");
-      const scratch = join(mkdtempSync(join(tmpdir(), "trackwall-projects-")), ".trackwall", "scratch");
+      const scratch = join(mkdtempSync(join(tmpdir(), "trackwall-projects-")), "scratch");
       const inProjects = new Vcs(async () => scratch);
       const gitDirBefore = readdirSync(join(dir, ".git"));
 
@@ -318,7 +318,7 @@ describe("vcs on real git", () => {
     const dir = makeRepo({ "a.txt": "a\n" }, "projects-gone");
     const base = gitIn(dir, "rev-parse", "HEAD").trim();
     const projects = join(mkdtempSync(join(tmpdir(), "trackwall-gone-")), "Dev");
-    const inGoneProjects = new Vcs(async () => join(projects, ".trackwall", "scratch"));
+    const inGoneProjects = new Vcs(async () => join(projects, "scratch"));
 
     await expect(inGoneProjects.worktreeChanges(dir, base, 0, [])).rejects.toThrow();
     expect(existsSync(projects)).toBe(false);
