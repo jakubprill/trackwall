@@ -41,7 +41,7 @@ pnpm --filter @trackwall/docs dev     # the documentation site under /trackwall/
 pnpm --filter @trackwall/docs build   # the site into apps/docs/dist; fails on a broken link between pages
 ```
 
-The daemon's `pnpm test` preloads `test/support/default-timeout.ts`, which makes `SLOW_TEST_TIMEOUT_MS` the time limit of every test and hook instead of bun's 5 s, because most of them start real git processes and a busy Windows runner starts each one slowly. A bare `bun test` in `packages/daemon` keeps bun's 5 s; add `--preload ./test/support/default-timeout.ts` when a test times out there.
+The daemon's `pnpm test` runs `bun test --timeout 30000`, which makes `SLOW_TEST_TIMEOUT_MS` (`test/support/test-timeouts.ts`, a test keeps the two equal) the time limit of every test and hook instead of bun's 5 s, because most of them start real git processes and a busy Windows runner starts each one slowly. A bare `bun test` in `packages/daemon` keeps bun's 5 s; add `--timeout 30000` when a test times out there. Not `setDefaultTimeout` in a preloaded file: it holds only for the first test file bun runs.
 
 A test removes a folder (its own temporary folder, or a repo as a user would) with `removeFolder` from `src/infra/remove-folder.ts`, not `rmSync`: on Windows a file can stay held for a moment after the process that used it has exited, and the helper retries on EBUSY, EPERM and ENOTEMPTY (Bun ignores `rm`'s own `maxRetries`).
 

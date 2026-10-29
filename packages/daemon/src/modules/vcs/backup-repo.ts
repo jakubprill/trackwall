@@ -1,5 +1,6 @@
-import { lstat, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
+import { removeFolder, removeIfPresent } from "../../infra/remove-folder.ts";
 import { existingCommit, git, symbolicRef } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { readBranchCommit } from "./head-commit.ts";
@@ -88,7 +89,8 @@ export async function commitBackups(dir: string, files: readonly BackupFile[], m
       // The old value guards against a commit someone else made meanwhile; an empty one means the branch must not exist yet.
       await git(dir, ["update-ref", "-m", message, BRANCH, made.toString("utf8").trim(), parent ?? ""], { config });
     } finally {
-      await rm(scratch, { recursive: true, force: true });
+      // A leftover index in the scratch folder harms nothing, so failing to remove it does not fail a backup that worked.
+      await removeFolder(scratch, removeIfPresent).catch(() => undefined);
     }
     for (const { path, oid } of entries) await git(dir, updateIndex(path, oid), { config });
     return true;

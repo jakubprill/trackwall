@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { removeFolder } from "../../infra/remove-folder.ts";
+import { removeFolder, removeIfPresent } from "../../infra/remove-folder.ts";
 import { git, knownDefaultBranch, revParse, symbolicRef } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { parseStatus } from "./parse.ts";
@@ -78,7 +78,7 @@ export async function removeWorktree(repoDir: string, path: string): Promise<voi
       if (await isRegistered(repoDir, path)) throw err;
     }
   }
-  if (existsSync(path)) await removeFolder(path);
+  await removeFolder(path, removeIfPresent);
   if (repo) await git(repoDir, ["worktree", "prune"]);
 }
 
