@@ -5,6 +5,8 @@
  * the chosen session, and a window the user only flicks past has not been looked at either.
  */
 
+import type { Timers } from "./timers.ts";
+
 export const SEEN_AFTER_MS = 1000;
 
 export function windowInFront(doc: Pick<Document, "hasFocus" | "visibilityState">): boolean {
@@ -16,19 +18,14 @@ export function terminalInFront(selected: boolean, doc: Pick<Document, "hasFocus
   return selected && windowInFront(doc);
 }
 
-export interface FocusTimers<Timer> {
-  set(run: () => void, ms: number): Timer;
-  clear(timer: Timer): void;
-}
-
 export class FocusReporter<Timer> {
   readonly #send: (focused: boolean) => void;
   readonly #inFront: () => boolean;
-  readonly #timers: FocusTimers<Timer>;
+  readonly #timers: Timers<Timer>;
   #timer: Timer | undefined;
   #reported = false;
 
-  constructor(send: (focused: boolean) => void, inFront: () => boolean, timers: FocusTimers<Timer>) {
+  constructor(send: (focused: boolean) => void, inFront: () => boolean, timers: Timers<Timer>) {
     this.#send = send;
     this.#inFront = inFront;
     this.#timers = timers;
