@@ -161,5 +161,120 @@ describe.skipIf(process.versions.bun === undefined)(
       second.attachment.detach();
       await daemon.facade.agents.stop(again.id);
     }, 60_000);
+
+    test("a repo session tells when a new token in mise and a name added to agentSecrets change its environment, and a restart goes on with its conversation under the new one", async () => {
+      const { agents } = daemon.facade;
+      projectsMise({ env: { SHOP_REGION: "projects-folder" } });
+      workspace();
+      const started = await agents.start("shop", "use the token");
+      await waitFor(agents, started.id, (s) => s.state !== null, "the first prompt");
+      expect(await agents.environmentChange(started.id)).toEqual({ change: null });
+
+      const shopMise = join(daemon.projects, "shop", "fake-mise.json");
+      writeFileSync(
+        shopMise,
+        JSON.stringify({ ...SHOP_MISE, env: { ...SHOP_MISE.env, GITLAB_TOKEN: "glpat-new-value", SHOP_FLAG: "on" } }),
+      );
+      workspace("agentSecrets: [JIRA_KEY]\n");
+      try {
+        expect((await agents.environmentChange(started.id)).change).toEqual({
+          added: ["SHOP_FLAG"],
+          removed: [],
+          changed: ["GITLAB_TOKEN"],
+          shared: ["JIRA_KEY"],
+          unshared: [],
+        });
+
+        const restarted = await agents.restart(started.id);
+        const window = viewer(agents, restarted.id);
+        await waitFor(agents, restarted.id, () => window.text().includes("Env SHOP_JAVA_OPTS"), "the environment on the screen");
+
+        expect(restarted.id).toBe(started.id);
+        expect(window.text()).toContain(`Argument: --resume=${started.id}`);
+        expect(window.text()).toContain("Env JIRA_KEY=jira-key-from-age");
+        expect(restarted.environment.variables).toContain("SHOP_FLAG");
+        expect(restarted.environment.agentSecrets).toEqual(["JIRA_KEY"]);
+        expect(await agents.environmentChange(restarted.id)).toEqual({ change: null });
+        window.attachment.detach();
+        await agents.stop(restarted.id);
+      } finally {
+        writeFileSync(shopMise, JSON.stringify(SHOP_MISE));
+      }
+    }, 60_000);
+
+    test("the supervisor, a free session and a task's session restart with their conversations and the environment of now", async () => {
+      const { agents } = daemon.facade;
+      projectsMise({ env: { SHOP_REGION: "projects-folder" } });
+      workspace();
+      const supervisor = await agents.startSupervisorWith("Start my day.", "terminal");
+      const free = await agents.start(null, "Compare the two APIs");
+      const task = await agents.createTask("shop", "use the token");
+      const taskSession = runningSessionOf(task.id);
+      for (const id of [supervisor.id, free.id, taskSession.id]) await waitFor(agents, id, (s) => s.state !== null, "the first prompt");
+
+      projectsMise({ env: { SHOP_REGION: "projects-folder", DEV_TOKEN: "dev-token-value" } });
+      workspace("agentSecrets: [JIRA_KEY]\n");
+      const added = { added: ["DEV_TOKEN"], removed: [], changed: [], shared: [], unshared: [] };
+      expect((await agents.environmentChange(supervisor.id)).change).toEqual(added);
+      expect((await agents.environmentChange(free.id)).change).toEqual(added);
+      expect((await agents.environmentChange(taskSession.id)).change).toEqual({ ...added, added: [], shared: ["JIRA_KEY"] });
+
+      for (const [before, conversation] of [
+        [supervisor, supervisor.id],
+        [free, free.id],
+        [taskSession, task.id],
+      ] as const) {
+        const after = await agents.restart(before.id);
+        const window = viewer(agents, after.id);
+        await waitFor(agents, after.id, () => window.text().includes(`Argument: --resume=${conversation}`), "the resumed conversation");
+
+        expect(after).toMatchObject({ repo: before.repo, supervisor: before.supervisor, task: before.task });
+        expect(await agents.environmentChange(after.id)).toEqual({ change: null });
+        window.attachment.detach();
+        await agents.stop(after.id);
+      }
+      expect(agents.sessions().sessions.filter((s) => s.task === task.id)).toHaveLength(1);
+    }, 60_000);
+
+    test("a second restart of a session while the first one runs is refused, and one session stays listed", async () => {
+      const { agents } = daemon.facade;
+      projectsMise({ env: { SHOP_REGION: "projects-folder" } });
+      workspace();
+      const started = await agents.start(null, "Compare the two APIs");
+      await waitFor(agents, started.id, (s) => s.state !== null, "the first prompt");
+
+      const [first, second] = await Promise.allSettled([agents.restart(started.id), agents.restart(started.id)]);
+
+      expect(first.status).toBe("fulfilled");
+      expect(second).toMatchObject({ status: "rejected", reason: { code: "bad_request" } });
+      const listed = agents.sessions().sessions.filter((s) => s.id === started.id);
+      expect(listed.map((s) => s.run.kind)).toEqual(["running"]);
+      await agents.stop(started.id);
+    }, 60_000);
+
+    test("a restart that the configuration refuses leaves the session running as it was", async () => {
+      const { agents } = daemon.facade;
+      projectsMise({ env: { SHOP_REGION: "projects-folder" } });
+      workspace();
+      const started = await agents.start("shop", "use the token");
+      await waitFor(agents, started.id, (s) => s.state !== null, "the first prompt");
+      workspace('agentSecrets: ["not a variable name"]\n');
+      try {
+        await expect(agents.restart(started.id)).rejects.toMatchObject({ code: "invalid_config" });
+        expect(agents.session(started.id).run.kind).toBe("running");
+      } finally {
+        workspace();
+      }
+      await agents.stop(started.id);
+    }, 60_000);
+
+    test("an ended session is not restarted", async () => {
+      const { agents } = daemon.facade;
+      const started = await agents.start("shop");
+      await agents.stop(started.id);
+
+      await expect(agents.restart(started.id)).rejects.toMatchObject({ code: "bad_request" });
+      expect(await agents.environmentChange(started.id)).toEqual({ change: null });
+    }, 60_000);
   },
 );
