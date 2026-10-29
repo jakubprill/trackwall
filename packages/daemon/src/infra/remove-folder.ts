@@ -15,7 +15,7 @@ const RETRYABLE = new Set(["EBUSY", "EPERM", "ENOTEMPTY"]);
 export type FolderRemoval = (path: string) => Promise<void>;
 
 /** The default: a folder that is not there is an error, so a wrong path does not pass unnoticed. */
-export const removeExisting: FolderRemoval = (path) => rm(path, { recursive: true });
+const removeExisting: FolderRemoval = (path) => rm(path, { recursive: true });
 
 /** For a folder that may already be gone, as a temporary folder in a `finally`. */
 export const removeIfPresent: FolderRemoval = (path) => rm(path, { recursive: true, force: true });
