@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
+import { readStateFile } from "../../infra/state-file.ts";
 import { ConversationId } from "./acp-messages.ts";
-import { readStateFile } from "./state-file.ts";
 
 /**
  * The newest supervisor, kept in a file of the state directory so that a start with `last` goes on with its

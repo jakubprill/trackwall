@@ -116,7 +116,7 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
     return endpoint.data.parse(result.data);
   }
   const stop = async () => {
-    facade.agents.keepRunningSessionsForResume();
+    facade.keepForRestart();
     await facade.procs.stopAll();
     facade.agents.close();
     await api.close();

@@ -1,7 +1,7 @@
 import { RepoId, SessionView, TaskId } from "@trackwall/protocol";
 import { z } from "zod";
+import { FollowedStateFile } from "../../infra/state-file.ts";
 import { ConversationId } from "./acp-messages.ts";
-import { FollowedStateFile } from "./state-file.ts";
 
 /**
  * The sessions that run, kept in a file of the state directory so that the next daemon resumes them (ADR-95, §4.4):
@@ -93,9 +93,10 @@ export class ResumableSessions {
   readonly #file: FollowedStateFile<z.infer<typeof ResumableSessionsFile>>;
 
   constructor(path: string, log: (msg: string) => void) {
-    this.#file = new FollowedStateFile(path, ResumableSessionsFile, (problem, aside) =>
-      log(`${path}: ${problem}; file moved to ${aside}, no session is resumed`),
-    );
+    this.#file = new FollowedStateFile(path, ResumableSessionsFile, {
+      broken: (problem, aside) => log(`${path}: ${problem}; file moved to ${aside}, no session is resumed`),
+      log,
+    });
   }
 
   /** The sessions the previous daemon left; a missing file means none, a broken one is moved aside and gives none. */
