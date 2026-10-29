@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   type AgentTaskChanges,
@@ -46,7 +46,7 @@ import { inboxPrompt } from "./inbox-prompt.ts";
 import { javaNavigationState } from "./java-language-server.ts";
 import { type LastSupervisor, LastSupervisorFile } from "./last-supervisor.ts";
 import { LiveSession, type SessionEvent, type SessionPty, type SessionWindow } from "./live-session.ts";
-import { MiseTrustNotices } from "./mise-trust-notices.ts";
+import { MiseTrustNotices, type TrustRecipient, trustRecipientOf } from "./mise-trust-notices.ts";
 import { withLoopbackNoProxy } from "./no-proxy.ts";
 import { proposedByOf, proposerKeyOf, proposerOf, SUPERVISOR } from "./proposer.ts";
 import {
@@ -219,7 +219,7 @@ export class Agents {
   readonly #tasks: AgentTasks;
   readonly #proposals = new TaskProposals(() => this.#queues.follow());
   readonly #reviews = new TaskReviews(() => this.#queues.follow());
-  readonly #miseTrust = new MiseTrustNotices();
+  readonly #miseTrust = new MiseTrustNotices(() => this.#queues.follow());
   readonly #coordination: TaskCoordination;
   /** The supervisor start under way, so that two requests at once start one supervisor, not two (ADR-58). */
   #supervisorStart: Promise<Session> | undefined;
@@ -267,6 +267,7 @@ export class Agents {
       proposals: this.#proposals,
       reviews: this.#reviews,
       coordination: this.#coordination,
+      trustNotices: this.#miseTrust,
     });
   }
 
@@ -506,7 +507,11 @@ export class Agents {
   /** The prompt for what waits unread for a session: its task's review comments and messages, and its updates. */
   #inboxPrompt(session: { id: string; supervisor: boolean; task: string | null }): string | undefined {
     const reviewComments = session.task === null ? 0 : this.#reviews.unread(session.task);
-    return inboxPrompt({ reviewComments, ...this.#coordination.unread(session), trustNotice: this.#miseTrust.waiting(session.id) });
+    return inboxPrompt({
+      reviewComments,
+      ...this.#coordination.unread(session),
+      trustNotice: this.#miseTrust.waiting(trustRecipientOf(session)),
+    });
   }
 
   /** The unread review comments of session `caller`'s own task (`get_review_comments`), which now count as read. */
@@ -668,13 +673,16 @@ export class Agents {
    * user trusts the config; any try drops what an earlier refusal waited for.
    */
   async runNeedingMiseTrust<T>(caller: string | null, target: MiseTarget, run: () => Promise<T>): Promise<T> {
-    if (caller === null) return run();
-    this.#miseTrust.forget(caller);
+    const session = caller === null ? undefined : this.#sessions.get(caller);
+    if (session === undefined) return run();
+    const recipient = trustRecipientOf(session);
+    this.#miseTrust.forget(recipient);
     try {
       return await run();
     } catch (err) {
-      if (err instanceof DomainError && err.code === "mise_unavailable" && this.#sessions.has(caller))
-        this.#miseTrust.refused(caller, target);
+      // A session that closed meanwhile, or a task that ended, has nobody to tell; a task's next session does.
+      const stillThere = "task" in recipient ? this.#tasks.find(recipient.task) !== undefined : this.#sessions.has(session.id);
+      if (err instanceof DomainError && err.code === "mise_unavailable" && stillThere) this.#miseTrust.refused(recipient, target);
       throw err;
     }
   }
@@ -685,16 +693,16 @@ export class Agents {
    * user's trust action, which a session's failure must not fail: the trust is stored by then.
    */
   miseTrusted(target: MiseTarget): void {
-    for (const id of this.#miseTrust.trusted(target)) {
-      const session = this.#sessions.get(id);
-      if (session === undefined || !this.#isRunning(session)) {
-        this.#miseTrust.forget(id);
+    for (const recipient of this.#miseTrust.trusted(target)) {
+      const session = this.#runningOf(recipient);
+      if (session === undefined) {
+        this.#miseTrust.notReached(recipient);
         continue;
       }
       try {
         session.askToRead();
       } catch (err) {
-        this.#deps.log(`session ${id}: telling it the user trusted the mise config: ${String(err)}`);
+        this.#deps.log(`session ${session.id}: telling it the user trusted the mise config: ${String(err)}`);
       }
     }
   }
@@ -710,6 +718,7 @@ export class Agents {
   async removeTask(id: string, keepBranch: boolean, discardChanges: boolean): Promise<void> {
     await this.#tasks.remove(id, keepBranch, discardChanges);
     this.#reviews.take(id);
+    this.#miseTrust.forget({ task: id });
     this.#coordination.taskEnded(id);
   }
 
@@ -980,10 +989,12 @@ export class Agents {
    */
   sweepLeftovers(): void {
     this.#left = this.#resumable.read();
+    const resumedUnderId = new Set(this.#left.filter((s) => s.task === null).map((s) => s.session));
     // A task's session comes back under a new id, so what waited for its old id has nobody to reach, as when it closes.
     this.#queues.restore({
       hasTask: (task) => this.#tasks.find(task) !== undefined,
-      hasSession: new Set(this.#left.filter((s) => s.task === null).map((s) => s.session)),
+      hasSession: (id) => resumedUnderId.has(id),
+      hasFolder: (dir) => existsSync(dir),
     });
     try {
       rmSync(join(this.#deps.home, SESSIONS_DIR), { recursive: true, force: true });
@@ -1087,7 +1098,8 @@ export class Agents {
     this.#sessions.delete(session.id);
     this.#environments.forget(session.id);
     this.#tokens.revoke(session.id);
-    this.#miseTrust.forget(session.id);
+    // A task's notice stays for its next session, like its reviews and messages.
+    if (session.task === null) this.#miseTrust.forget({ session: session.id });
     session.dispose();
     this.#removeDir(session.id);
   }
@@ -1159,9 +1171,9 @@ export class Agents {
     return {
       prompt: () => this.#inboxPrompt({ id, supervisor, task }),
       onUserText: () => this.#coordination.userTyped({ id, task }),
-      onPromptSent: () => this.#miseTrust.promptSent(id),
+      onPromptSent: () => this.#miseTrust.promptSent(trustRecipientOf({ id, task })),
       onEvent: (event: SessionEvent) => {
-        if (event.kind === "turn_ended") this.#miseTrust.turnEnded(id);
+        if (event.kind === "turn_ended") this.#miseTrust.turnEnded(trustRecipientOf({ id, task }));
         // The session reads its hooks inside the user's key or another session's call: news for the proposer must not fail them.
         try {
           this.#coordination.sessionEvent({ id, task }, event);
@@ -1194,13 +1206,9 @@ export class Agents {
 
   /** The list of running sessions a restart resumes (ADR-95); a failed write is retried at the next tick. */
   #followLive(live: readonly AgentSession[]): void {
-    try {
-      this.#resumable.follow(
-        live.map((s) => ({ session: s.id, repo: s.repo, supervisor: s.supervisor, task: s.task, view: s.sessionView, ...resumedAs(s) })),
-      );
-    } catch (err) {
-      this.#deps.log(`writing ${RESUMABLE_SESSIONS_FILE}: ${String(err)}`);
-    }
+    this.#resumable.follow(
+      live.map((s) => ({ session: s.id, repo: s.repo, supervisor: s.supervisor, task: s.task, view: s.sessionView, ...resumedAs(s) })),
+    );
   }
 
   /** The newest listed supervisor, which a start with `last` goes on with (ADR-96); a failed write is retried at the next tick. */
@@ -1212,6 +1220,13 @@ export class Agents {
     } catch (err) {
       this.#deps.log(`writing ${LAST_SUPERVISOR_FILE}: ${String(err)}`);
     }
+  }
+
+  /** The running session a trust notice is for: the newest one of its task, or the session itself. */
+  #runningOf(recipient: TrustRecipient): AgentSession | undefined {
+    if ("task" in recipient) return this.#runningOfTask(recipient.task);
+    const session = this.#sessions.get(recipient.session);
+    return session !== undefined && this.#isRunning(session) ? session : undefined;
   }
 
   /** The task's newest session while it runs. */

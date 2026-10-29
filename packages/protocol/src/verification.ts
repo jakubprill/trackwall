@@ -51,7 +51,7 @@ export const Verification = z.object({
   runId: z.string(),
   /** ISO 8601, when the run started. */
   startedAt: z.string(),
-  /** ISO 8601; `null` while running. */
+  /** ISO 8601; `null` while running, and on one cancelled because the daemon stopped during its run. */
   finishedAt: z.string().nullable(),
   /** The leader's exit code; `null` while running or when a signal ended it. */
   exitCode: z.number().int().nullable(),
@@ -80,7 +80,7 @@ export const verificationApi = {
    * `not_found` when the worktree has no mise task `test`, `mise_unavailable` when its mise config is not trusted.
    */
   start: endpoint("start", TaskRequest, Verification),
-  /** The task's last verification since the daemon started; `null` when there was none. */
+  /** The task's last verification, also from before a daemon restart; `null` when there was none. */
   get: endpoint("get", TaskRequest, Verification.nullable()),
   /** Stops the running verification's mise task like a stop in the task panel; the verification ends `cancelled`. */
   cancel: endpoint("cancel", TaskRequest, Verification.nullable()),

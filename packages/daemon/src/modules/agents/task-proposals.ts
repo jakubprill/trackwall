@@ -57,12 +57,21 @@ export class TaskProposals {
   }
 
   /**
-   * The proposals the previous daemon kept that still wait: not one that became a task while it stopped (`isTask`), nor
-   * a repo removal without its folder. The move checks the folder against the repo's folder of now (`removeRepo`), so a
-   * path from the file moves nothing else.
+   * The proposals the previous daemon kept that still wait: not one that became a task while it stopped (`hasTask`), nor
+   * a repo removal without its folder, in the file or on the disk (`hasFolder`): an approval that moved the folder while
+   * the daemon stopped reached the file no more. The move checks the folder against the repo's folder of now
+   * (`removeRepo`), so a path from the file moves nothing else.
    */
-  restore({ pending, removalDirs, rejected }: StoredProposals, isTask: (id: string) => boolean): void {
-    this.#pending = pending.filter((p) => !isTask(p.id) && (p.kind !== "remove_repo" || removalDirs[p.id] !== undefined));
+  restore(
+    { pending, removalDirs, rejected }: StoredProposals,
+    { hasTask, hasFolder }: { hasTask: (id: string) => boolean; hasFolder: (dir: string) => boolean },
+  ): void {
+    this.#pending = pending.filter((p) => {
+      if (hasTask(p.id)) return false;
+      if (p.kind !== "remove_repo") return true;
+      const dir = removalDirs[p.id];
+      return dir !== undefined && hasFolder(dir);
+    });
     this.#removalDirs.clear();
     for (const p of this.#pending) {
       const dir = removalDirs[p.id];
