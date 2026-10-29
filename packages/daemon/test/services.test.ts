@@ -754,6 +754,39 @@ describe("services from a task worktree (ADR-61)", () => {
     TIMEOUT,
   );
 
+  test(
+    "a slice that needs the repo while the task's service waits for its own dependencies joins that start, and the lease goes on",
+    async () => {
+      const webPort = await freePort();
+      const { services } = setup(
+        {
+          api: { ...DEV, servers: { dev: { delayMs: 1500 } } },
+          web: { ...DEV, servers: { dev: { port: webPort } } },
+          front: { ...DEV, servers: { dev: {} } },
+        },
+        {
+          edges: [http("web", "api"), http("front", "web")],
+          cardPorts: { web: webPort },
+          tasks: { [TASK]: { repo: "web", port: await freePort(), config: TASK_DEV } },
+        },
+      );
+      await services.start({ repo: "web", task: null, lease: false, dependencies: false, waitMs: 20_000 });
+      const leased = services.start({ repo: "web", task: TASK, lease: true, dependencies: true, waitMs: 20_000 });
+      await waitFor(async () => (await services.list()).some((s) => s.repo === "api" && s.state === "starting"));
+
+      const front = await services.start({ repo: "front", task: null, lease: false, dependencies: true, waitMs: 20_000 });
+
+      expect(front.members.map((m) => [m.repo, m.task, m.outcome, m.problem])).toEqual([
+        ["api", null, "running", null],
+        ["web", TASK, "started", null],
+        ["front", null, "started", null],
+      ]);
+      const slice = await leased;
+      expect(slice.members.at(-1)?.service).toMatchObject({ task: TASK, lease: true, state: "healthy", port: webPort });
+    },
+    TIMEOUT,
+  );
+
   test("a lease is refused for a repo without a single known port, and for a repo root", async () => {
     const { services } = setup({ web: DEV }, { tasks: { [TASK]: { repo: "web", port: 41000, config: TASK_DEV } } });
 

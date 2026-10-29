@@ -166,6 +166,7 @@ export class Services {
     const taken = task !== null && lease ? await this.takeLease({ repo, task }) : undefined;
     // No `await` between the lookup and the registration: two starts at once share one slice.
     let slice = this.slices.get(miseTargetKey(root));
+    if (taken) this.keepLeaseOnlyFor(slice, taken, dependencies);
     this.refuseOtherStart(root, dependencies);
     if (slice?.status !== "running") {
       slice = this.bringUp(root, dependencies, slice, taken);
@@ -235,6 +236,18 @@ export class Services {
     throw new DomainError("bad_request", `a start of ${where(root)} ${other} dependencies is in progress: wait for it or stop it first`);
   }
 
+  /**
+   * A lease is kept only by the start that runs on it. A start of its holder that came while the root's service was
+   * stopping (on the task port, or with the other `dependencies` value) refuses it, and the lease ends at once, so no
+   * lease is left that nothing would end.
+   */
+  private keepLeaseOnlyFor(slice: SliceRun | undefined, lease: Lease, dependencies: boolean): void {
+    if (slice?.status !== "running" || (slice.lease === lease && slice.dependencies === dependencies)) return;
+    this.endLease(lease);
+    const what = slice.lease === lease ? `${slice.dependencies ? "with" : "without"} dependencies` : "on the task port";
+    throw new DomainError("bad_request", `a start of ${where(lease.holder)} ${what} is in progress: wait for it or stop it first`);
+  }
+
   private bringUp(root: MiseTarget, dependencies: boolean, previous: SliceRun | undefined, lease: Lease | undefined): SliceRun {
     const edges = dependencies ? this.deps.graph.graph().then((g) => g.edges) : Promise.resolve([]);
     const slice: SliceRun = {
@@ -282,6 +295,9 @@ export class Services {
     }
     let start = this.starting.get(key);
     if (!start) {
+      // Skipped without registering a start: the start that took the lease must not join this one's outcome.
+      const leaseProblem = this.leaseProblem(target, this.ownLease(slice, target));
+      if (leaseProblem) return void slice.members.set(key, { target, ...skipped(leaseProblem) });
       start = this.startOne(slice, target).finally(() => this.starting.delete(key));
       this.starting.set(key, start);
     }
@@ -302,14 +318,14 @@ export class Services {
     const cursor = this.logCursor(target);
     // Right before the start: a stop that came meanwhile wins, unless another running slice still needs the service.
     if (slice.status === "cancelled" && !this.wanted(target)) return skipped("the start was cancelled by a stop");
-    const lease = miseTargetKey(target) === miseTargetKey(slice.root) ? slice.lease : undefined;
+    const lease = this.ownLease(slice, target);
     const leaseProblem = this.leaseProblem(target, lease);
     if (leaseProblem) return skipped(leaseProblem);
     try {
       const run = await this.deps.mise.start(target, SERVICE_MISE_TASK, lease?.port);
       if (lease) lease.runId = run.runId;
       const watch = this.watch({ target, run, expectedPorts: expected.ports, expectedSource: expected.source, cursor });
-      if (lease) void watch.groupEnded().then(() => this.runEnded(lease, run.runId));
+      if (lease) void watch.groupEnded().then(() => this.runEnded(lease, run.runId, watch.released()));
       return { outcome: "started", problem: null };
     } catch (err) {
       if (!(err instanceof DomainError)) throw err;
@@ -321,6 +337,11 @@ export class Services {
    * Why `target` cannot start because of a lease (ADR-132): only the start that took a lease (`own`) runs on its port,
    * and the root's service, or the holder as another slice's member, waits for the lease to end.
    */
+  /** The lease the slice took, for its root only (ADR-132). */
+  private ownLease(slice: SliceRun, target: MiseTarget): Lease | undefined {
+    return miseTargetKey(target) === miseTargetKey(slice.root) ? slice.lease : undefined;
+  }
+
   private leaseProblem(target: MiseTarget, own: Lease | undefined): string | null {
     const held = this.leases.of(target.repo);
     if (held && held !== own) return leasedPort(held);
@@ -457,14 +478,15 @@ export class Services {
   /**
    * The process group of the holder's run on the leased port has ended (stopped, crashed): the lease ends, unless a new
    * leased run took over. It ends with the group rather than the port, so an app a build tool keeps running (Gradle's
-   * daemon) does not hold the lease; the root's start then says the port still answers.
+   * daemon) does not hold the lease; the root's service waits up to `releaseMs` for the port to close (`released`), and
+   * its start says so when it still answers.
    */
-  private runEnded(lease: Lease, runId: string): void {
-    if (lease.runId === runId) this.endLease(lease);
+  private runEnded(lease: Lease, runId: string, released: Promise<void>): void {
+    if (lease.runId === runId) this.endLease(lease, released);
   }
 
   /** Gives the port back: the root's service starts again (without dependencies, which kept running) if the lease stopped it. */
-  private endLease(lease: Lease): void {
+  private endLease(lease: Lease, released: Promise<void> = Promise.resolve()): void {
     if (!this.leases.remove(lease)) return;
     const { repo, task } = lease.holder;
     this.deps.log(`the lease of port ${lease.port} of ${repo} by task ${task} ended`);
@@ -472,13 +494,16 @@ export class Services {
     // At daemon exit `procs` refuses the start, and the line below says so; nothing is left running.
     const failed = (why: string) =>
       this.deps.log(`the service of ${repo} did not start again after the lease of task ${task} ended: ${why}`);
-    this.start({ repo, task: null, lease: false, dependencies: false, waitMs: 0 }).then(
-      (slice) => {
-        const problem = slice.members.find((m) => m.outcome === "skipped")?.problem;
-        if (problem) failed(problem);
-      },
-      (err: unknown) => failed(messageOf(err)),
-    );
+    // An app shutting down a moment after its group (Gradle's daemon) gets that moment before the root's probe.
+    waitLimited(released, this.deps.releaseMs)
+      .then(() => this.start({ repo, task: null, lease: false, dependencies: false, waitMs: 0 }))
+      .then(
+        (slice) => {
+          const problem = slice.members.find((m) => m.outcome === "skipped")?.problem;
+          if (problem) failed(problem);
+        },
+        (err: unknown) => failed(messageOf(err)),
+      );
   }
 
   /** The run of the service's task `dev` while its process group is alive (also while it is being stopped). */

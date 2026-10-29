@@ -12,6 +12,11 @@ import { useRemote } from "@/lib/use-remote";
 /** As the repo's Service panel: often while the task's service runs or starts, rarely otherwise; the list does not ask mise. */
 const POLL_LIVE_MS = 1000;
 const POLL_IDLE_MS = 5000;
+/**
+ * How long the start waits before answering: long enough for the daemon to skip it (port still taken, mise config not
+ * trusted) and say why, which it decides before running anything. Without dependencies: the root's service ran, so they do.
+ */
+const SKIP_WAIT_MS = 5000;
 
 /**
  * The task's service on the repo's port (ADR-132): while the repo root's service runs, "Run on the repo's port" stops
@@ -29,7 +34,7 @@ export function TaskService({ conn, task }: { conn: Connection; task: Task }) {
   const holder = leaseHolder(services, repo);
   const [skipped, setSkipped] = useState<string | null>(null);
   const lease = useAction(
-    () => post(conn, servicesApi.start, { repo, task: id, lease: true, dependencies: true, waitMs: 0 }),
+    () => post(conn, servicesApi.start, { repo, task: id, lease: true, dependencies: false, waitMs: SKIP_WAIT_MS }),
     (slice) => {
       setSkipped(slice.members.find((m) => m.repo === repo && m.outcome === "skipped")?.problem ?? null);
       remote.reload();
