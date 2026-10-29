@@ -1,6 +1,6 @@
 import { servicesApi, type Task } from "@trackwall/protocol";
 import { ArrowLeftRight, Square } from "lucide-react";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
@@ -16,7 +16,9 @@ const POLL_IDLE_MS = 5000;
 /**
  * The task's service on the repo's port (ADR-132): while the repo root's service runs, "Run on the repo's port" stops
  * it and runs the task's service there, so whatever calls the repo reaches the task's changes; "Give the port back"
- * stops the task's service and the root's starts again. Hidden while neither runs, and while another task holds the port.
+ * stops the task's service and the root's starts again. Hidden while neither runs and nothing went wrong, and while
+ * another task holds the port. A start that the daemon skipped (the port still taken, the task's mise config not trusted)
+ * says why here, since the lease then ends at once.
  */
 export function TaskService({ conn, task }: { conn: Connection; task: Task }) {
   const load = useCallback(() => post(conn, servicesApi.list, {}), [conn]);
@@ -25,18 +27,23 @@ export function TaskService({ conn, task }: { conn: Connection; task: Task }) {
   const services = remote.data ?? [];
   const root = services.find((s) => s.repo === repo && s.task === null) ?? null;
   const holder = leaseHolder(services, repo);
+  const [skipped, setSkipped] = useState<string | null>(null);
   const lease = useAction(
     () => post(conn, servicesApi.start, { repo, task: id, lease: true, dependencies: true, waitMs: 0 }),
-    () => remote.reload(),
+    (slice) => {
+      setSkipped(slice.members.find((m) => m.repo === repo && m.outcome === "skipped")?.problem ?? null);
+      remote.reload();
+    },
   );
   const giveBack = useAction(
     () => post(conn, servicesApi.stop, { repo, task: id, dependencies: false }),
     () => remote.reload(),
   );
   const holds = holder?.task === id;
-  if (!holds && (holder || !isServiceLive(root))) return null;
+  const error = lease.error ?? giveBack.error ?? skipped;
+  const busy = lease.pending || giveBack.pending;
+  if (!holds && !error && !busy && (holder || !isServiceLive(root))) return null;
   const state = serviceStateLabel(holds ? holder : null);
-  const error = lease.error ?? giveBack.error;
 
   return (
     <section aria-label="Service on the repo's port" className="flex flex-col gap-2 border-b px-4 py-3">
@@ -45,8 +52,10 @@ export function TaskService({ conn, task }: { conn: Connection; task: Task }) {
         <span className="text-muted-foreground min-w-0 flex-1 text-xs">
           {holds ? (
             <StatusLabel tone={state.tone} label={`${state.label}: what calls ${repo} reaches this task`} />
-          ) : (
+          ) : isServiceLive(root) ? (
             `${repo} runs from the repo root on port ${root?.port ?? "?"}; run this task's service there instead`
+          ) : (
+            `${repo}'s service is not running`
           )}
         </span>
         {holds ? (
@@ -54,7 +63,15 @@ export function TaskService({ conn, task }: { conn: Connection; task: Task }) {
             <Square /> Give the port back
           </Button>
         ) : (
-          <Button variant="outline" size="sm" onClick={lease.run} disabled={lease.pending}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setSkipped(null);
+              lease.run();
+            }}
+            disabled={lease.pending}
+          >
             <ArrowLeftRight /> Run on the repo's port
           </Button>
         )}

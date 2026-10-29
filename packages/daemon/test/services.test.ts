@@ -522,6 +522,7 @@ describe("services (real process groups, fake mise and fake service)", () => {
 describe("services from a task worktree (ADR-61)", () => {
   const TASK = "0b7c1a52-3f0e-4c1e-9a43-5d2f8e6b1c07";
   const TASK_DEV = { ...DEV, servers: { dev: {} } };
+  const OTHER = "5d1e9f30-7a2b-4c6d-8e1f-2a3b4c5d6e7f";
 
   test(
     "a task's service runs from its worktree on the task port, next to the same service from the repo root",
@@ -670,6 +671,85 @@ describe("services from a task worktree (ADR-61)", () => {
       await services.stop({ repo: "api", task: TASK, dependencies: false });
       expect((await services.list()).filter((s) => s.repo === "api").map((s) => [s.task, s.state])).toEqual([[TASK, "stopped"]]);
       await services.start({ repo: "api", task: null, lease: false, dependencies: false, waitMs: 20_000 });
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "a crash of the task's service on the lease gives the port back, and the root's service starts again",
+    async () => {
+      const rootPort = await freePort();
+      const { services } = setup(
+        { web: { ...DEV, servers: { dev: { port: rootPort } } } },
+        {
+          cardPorts: { web: rootPort },
+          tasks: { [TASK]: { repo: "web", port: await freePort(), config: { ...DEV, servers: { dev: { crash: true } } } } },
+        },
+      );
+      await services.start({ repo: "web", task: null, lease: false, dependencies: false, waitMs: 20_000 });
+
+      const slice = await services.start({ repo: "web", task: TASK, lease: true, dependencies: false, waitMs: 20_000 });
+
+      expect(slice.members[0]?.service).toMatchObject({ task: TASK, lease: true, state: "crashed" });
+      await waitFor(async () => (await services.list()).some((s) => s.task === null && s.state === "healthy"));
+      const again = await services.start({ repo: "web", task: null, lease: false, dependencies: false, waitMs: 0 });
+      expect(again.members[0]?.outcome).toBe("running");
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "a lease is refused, with the root's service left running, while the task's service runs on the task port or another task holds the port",
+    async () => {
+      const rootPort = await freePort();
+      const { services } = setup(
+        { web: { ...DEV, servers: { dev: { port: rootPort } } } },
+        {
+          cardPorts: { web: rootPort },
+          tasks: {
+            [TASK]: { repo: "web", port: await freePort(), config: TASK_DEV },
+            [OTHER]: { repo: "web", port: await freePort(), config: TASK_DEV },
+          },
+        },
+      );
+      await services.start({ repo: "web", task: null, lease: false, dependencies: false, waitMs: 20_000 });
+      await services.start({ repo: "web", task: TASK, lease: false, dependencies: false, waitMs: 20_000 });
+
+      const onTaskPort = services.start({ repo: "web", task: TASK, lease: true, dependencies: false, waitMs: 0 });
+      await expect(onTaskPort).rejects.toMatchObject({
+        code: "bad_request",
+        message: `the service of task ${TASK} in web runs or starts on the task port: stop it first, then start it on the port of web`,
+      });
+      expect((await services.list()).find((s) => s.task === null)?.state).toBe("healthy");
+
+      await services.stop({ repo: "web", task: TASK, dependencies: false });
+      await services.start({ repo: "web", task: TASK, lease: true, dependencies: false, waitMs: 20_000 });
+      const other = services.start({ repo: "web", task: OTHER, lease: true, dependencies: false, waitMs: 0 });
+      await expect(other).rejects.toMatchObject({
+        code: "bad_request",
+        message: `port ${rootPort} of web is leased to the service of task ${TASK}: stop that service, which gives the port back`,
+      });
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "a lease is refused while the root's service is starting, and the start goes on",
+    async () => {
+      const rootPort = await freePort();
+      const { services } = setup(
+        { web: { ...DEV, servers: { dev: { port: rootPort, delayMs: 1500 } } } },
+        { cardPorts: { web: rootPort }, tasks: { [TASK]: { repo: "web", port: await freePort(), config: TASK_DEV } } },
+      );
+      await services.start({ repo: "web", task: null, lease: false, dependencies: false, waitMs: 0 });
+
+      const lease = services.start({ repo: "web", task: TASK, lease: true, dependencies: false, waitMs: 0 });
+
+      await expect(lease).rejects.toMatchObject({
+        code: "bad_request",
+        message: "a start of web is in progress: wait for it or stop it first",
+      });
+      await waitFor(async () => (await services.list()).some((s) => s.task === null && s.state === "healthy"));
     },
     TIMEOUT,
   );

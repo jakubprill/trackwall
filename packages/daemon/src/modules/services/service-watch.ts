@@ -105,9 +105,12 @@ export class ServiceWatch {
     return this.until((state) => state !== "stopping");
   }
 
-  /** Resolves once the watch has ended: the run crashed or stopped (and its port closed), or a newer run replaced it. */
-  finished(): Promise<void> {
-    return this.until(() => false);
+  /**
+   * Resolves once the run's process group has ended (a crash, or a stop, even while an app outside the group still holds
+   * the port), or the watch has ended.
+   */
+  groupEnded(): Promise<void> {
+    return this.until(() => this.lastRun.kind === "exited");
   }
 
   /** Checks now instead of at the next tick (right after a stop, before an endpoint call); joins a check in flight. */

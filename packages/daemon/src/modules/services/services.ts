@@ -112,6 +112,8 @@ interface SliceRun {
   plan: SlicePlan | undefined;
   /** By `miseTargetKey`, in start order. */
   members: Map<string, Member & { target: MiseTarget }>;
+  /** The lease this start took for its root (ADR-132): its run gets the leased port, and a start that never runs ends it. */
+  lease: Lease | undefined;
   /** Members an earlier start of the same root `started` that this one does not include: a stop with dependencies stops them too. */
   inherited: readonly MiseTarget[];
   done: Promise<void>;
@@ -159,16 +161,14 @@ export class Services {
     if (problem) throw new DomainError(problem.code, problem.message);
     const held = this.leases.of(repo);
     if (task === null && held) throw new DomainError("bad_request", leasedPort(held));
-    if (task !== null && lease) await (await this.takeLease({ repo, task })).ready;
+    // Every refusal comes before the lease, which stops the root's service.
+    this.refuseOtherStart(root, dependencies);
+    const taken = task !== null && lease ? await this.takeLease({ repo, task }) : undefined;
     // No `await` between the lookup and the registration: two starts at once share one slice.
     let slice = this.slices.get(miseTargetKey(root));
-    if (slice?.status === "running" && slice.dependencies !== dependencies) {
-      // Replacing it would start the repo before the dependencies of the other plan, or leave them out of a stop's reach.
-      const other = dependencies ? "without" : "with";
-      throw new DomainError("bad_request", `a start of ${where(root)} ${other} dependencies is in progress: wait for it or stop it first`);
-    }
+    this.refuseOtherStart(root, dependencies);
     if (slice?.status !== "running") {
-      slice = this.bringUp(root, dependencies, slice);
+      slice = this.bringUp(root, dependencies, slice, taken);
       this.slices.set(miseTargetKey(root), slice);
     }
     await slice.planned;
@@ -224,7 +224,18 @@ export class Services {
     return { ...result, errors };
   }
 
-  private bringUp(root: MiseTarget, dependencies: boolean, previous: SliceRun | undefined): SliceRun {
+  /**
+   * A start of the same root in progress with the other `dependencies` value is refused: replacing it would start the repo
+   * before the dependencies of the other plan, or leave them out of a stop's reach.
+   */
+  private refuseOtherStart(root: MiseTarget, dependencies: boolean): void {
+    const slice = this.slices.get(miseTargetKey(root));
+    if (slice?.status !== "running" || slice.dependencies === dependencies) return;
+    const other = dependencies ? "without" : "with";
+    throw new DomainError("bad_request", `a start of ${where(root)} ${other} dependencies is in progress: wait for it or stop it first`);
+  }
+
+  private bringUp(root: MiseTarget, dependencies: boolean, previous: SliceRun | undefined, lease: Lease | undefined): SliceRun {
     const edges = dependencies ? this.deps.graph.graph().then((g) => g.edges) : Promise.resolve([]);
     const slice: SliceRun = {
       root,
@@ -233,6 +244,7 @@ export class Services {
       planned: edges.then((e) => planSlice(e, root.repo)),
       plan: undefined,
       members: new Map(),
+      lease,
       inherited: previous ? this.startedDependencies(previous) : [],
       done: Promise.resolve(),
     };
@@ -249,8 +261,7 @@ export class Services {
       .finally(() => {
         if (slice.status === "running") slice.status = "done";
         // A lease whose service never started (skipped, cancelled, failed) gives the port back at once.
-        const lease = this.leases.heldBy(slice.root);
-        if (lease?.runId === null && !this.starting.has(miseTargetKey(slice.root))) this.endLease(lease);
+        if (slice.lease?.runId === null) this.endLease(slice.lease);
         for (const [key, member] of slice.members) {
           if (member.outcome !== "pending") continue;
           slice.members.set(key, { target: member.target, ...skipped("not started: the start was cancelled by a stop or failed") });
@@ -291,17 +302,30 @@ export class Services {
     const cursor = this.logCursor(target);
     // Right before the start: a stop that came meanwhile wins, unless another running slice still needs the service.
     if (slice.status === "cancelled" && !this.wanted(target)) return skipped("the start was cancelled by a stop");
-    const lease = this.leases.heldBy(target);
+    const lease = miseTargetKey(target) === miseTargetKey(slice.root) ? slice.lease : undefined;
+    const leaseProblem = this.leaseProblem(target, lease);
+    if (leaseProblem) return skipped(leaseProblem);
     try {
       const run = await this.deps.mise.start(target, SERVICE_MISE_TASK, lease?.port);
-      // Before the watch: the watch it replaces ends, and that must not end the lease.
       if (lease) lease.runId = run.runId;
-      this.watch({ target, run, expectedPorts: expected.ports, expectedSource: expected.source, cursor });
+      const watch = this.watch({ target, run, expectedPorts: expected.ports, expectedSource: expected.source, cursor });
+      if (lease) void watch.groupEnded().then(() => this.runEnded(lease, run.runId));
       return { outcome: "started", problem: null };
     } catch (err) {
       if (!(err instanceof DomainError)) throw err;
       return skipped(`${err.code}: ${err.message}`);
     }
+  }
+
+  /**
+   * Why `target` cannot start because of a lease (ADR-132): only the start that took a lease (`own`) runs on its port,
+   * and the root's service, or the holder as another slice's member, waits for the lease to end.
+   */
+  private leaseProblem(target: MiseTarget, own: Lease | undefined): string | null {
+    const held = this.leases.of(target.repo);
+    if (held && held !== own) return leasedPort(held);
+    if (own && held !== own) return `the lease of port ${own.port} ended before the start`;
+    return null;
   }
 
   private async stopOne(target: MiseTarget): Promise<Service | null> {
@@ -363,43 +387,53 @@ export class Services {
       startupMs: this.deps.startupMs,
     });
     this.watches.set(key, watch);
-    const lease = this.leases.heldBy(target);
-    if (lease?.runId === run.runId) void watch.finished().then(() => this.runEnded(lease, run.runId));
     return watch;
   }
 
   /**
-   * The lease `target` takes on the port of its repo root's service (ADR-132), or the one it holds already. The root's
-   * service is stopped (its start in progress refuses), and the lease is ready once it has; another task's lease and the
-   * task's own service on the task port refuse, so nothing stops without the caller knowing.
+   * The lease `holder` takes on the port of its repo root's service (ADR-132), once the root's service has stopped, or
+   * the one it holds already. Everything that could refuse is checked before the root's service stops: another task's
+   * lease, the holder's service already running or starting on the task port, and a start of the root in progress (its
+   * own or as another slice's member), so nothing stops without the caller knowing.
    */
   private async takeLease(holder: MiseTarget & { task: string }): Promise<Lease> {
     const root: MiseTarget = { repo: holder.repo, task: null };
     const port = await this.rootPort(holder.repo);
     // No `await` from here to `add`: two starts at once take one lease.
     const held = this.leases.of(holder.repo);
-    if (held?.holder.task === holder.task) return held;
+    if (held?.holder.task === holder.task) {
+      await held.ready;
+      return held;
+    }
     if (held) throw new DomainError("bad_request", leasedPort(held));
-    if (this.liveRun(holder) || this.starting.has(miseTargetKey(holder)))
+    const holderKey = miseTargetKey(holder);
+    if (this.liveRun(holder) || this.starting.has(holderKey) || this.slices.get(holderKey)?.status === "running")
       throw new DomainError(
         "bad_request",
-        `the service of ${where(holder)} runs on the task port: stop it first, then start it on the port of ${holder.repo}`,
+        `the service of ${where(holder)} runs or starts on the task port: stop it first, then start it on the port of ${holder.repo}`,
       );
-    if (this.slices.get(miseTargetKey(root))?.status === "running")
+    if (this.starting.has(miseTargetKey(root)) || this.wanted(root))
       throw new DomainError("bad_request", `a start of ${holder.repo} is in progress: wait for it or stop it first`);
     const restoreRoot = this.liveRun(root) !== undefined;
-    const lease: Lease = { holder, port, runId: null, restoreRoot, ready: Promise.resolve() };
+    const lease: Lease = {
+      holder,
+      port,
+      runId: null,
+      restoreRoot,
+      ready: restoreRoot ? this.stopForLease(root, port, holder) : Promise.resolve(),
+    };
     this.leases.add(lease);
     // A stop that fails (a group that cannot be killed) leaves the root as it is, so the lease ends unused.
-    if (restoreRoot)
-      lease.ready = this.stopOne(root).then(
-        () => {},
-        (err: unknown) => {
-          this.leases.remove(lease);
-          throw err;
-        },
-      );
+    await lease.ready.catch((err: unknown) => {
+      this.leases.remove(lease);
+      throw err;
+    });
     return lease;
+  }
+
+  private async stopForLease(root: MiseTarget, port: number, holder: MiseTarget): Promise<void> {
+    this.deps.log(`stopping the service of ${root.repo}: ${where(holder)} takes its port ${port} on a lease`);
+    await this.stopOne(root);
   }
 
   /**
@@ -407,8 +441,9 @@ export class Services {
    * Several apps on the card are refused, since the lease could take the wrong one.
    */
   private async rootPort(repo: string): Promise<number> {
-    const running = (await this.adopt({ repo, task: null }))?.view().port;
-    if (running) return running;
+    // Only a port the running service answered on or logged: before that its view shows the card's first port.
+    const view = (await this.adopt({ repo, task: null }))?.view();
+    if (view?.port && (view.state === "healthy" || view.portSource === "log")) return view.port;
     const { ports } = await this.expectedPorts({ repo, task: null });
     const [port, ...more] = ports;
     if (port !== undefined && more.length === 0) return port;
@@ -419,17 +454,30 @@ export class Services {
     throw new DomainError("bad_request", `${repo} has no single port a task's service could take: ${why}`);
   }
 
-  /** The holder's run on the leased port has ended (stopped, crashed, gone): the lease ends unless a new run took over. */
+  /**
+   * The process group of the holder's run on the leased port has ended (stopped, crashed): the lease ends, unless a new
+   * leased run took over. It ends with the group rather than the port, so an app a build tool keeps running (Gradle's
+   * daemon) does not hold the lease; the root's start then says the port still answers.
+   */
   private runEnded(lease: Lease, runId: string): void {
-    if (lease.runId === runId && !this.liveRun(lease.holder)) this.endLease(lease);
+    if (lease.runId === runId) this.endLease(lease);
   }
 
   /** Gives the port back: the root's service starts again (without dependencies, which kept running) if the lease stopped it. */
   private endLease(lease: Lease): void {
-    if (!this.leases.remove(lease) || !lease.restoreRoot) return;
-    const { repo } = lease.holder;
-    this.start({ repo, task: null, lease: false, dependencies: false, waitMs: 0 }).catch((err: unknown) =>
-      this.deps.log(`the service of ${repo} did not start again after the lease of task ${lease.holder.task} ended: ${messageOf(err)}`),
+    if (!this.leases.remove(lease)) return;
+    const { repo, task } = lease.holder;
+    this.deps.log(`the lease of port ${lease.port} of ${repo} by task ${task} ended`);
+    if (!lease.restoreRoot) return;
+    // At daemon exit `procs` refuses the start, and the line below says so; nothing is left running.
+    const failed = (why: string) =>
+      this.deps.log(`the service of ${repo} did not start again after the lease of task ${task} ended: ${why}`);
+    this.start({ repo, task: null, lease: false, dependencies: false, waitMs: 0 }).then(
+      (slice) => {
+        const problem = slice.members.find((m) => m.outcome === "skipped")?.problem;
+        if (problem) failed(problem);
+      },
+      (err: unknown) => failed(messageOf(err)),
     );
   }
 
