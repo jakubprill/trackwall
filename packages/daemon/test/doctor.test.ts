@@ -107,6 +107,20 @@ describe("doctor", () => {
     );
   });
 
+  test("Java navigation is checked only once it is set up, and a path that went missing fails with what to do", async () => {
+    const { facade, projects } = doctorFacade({ copilot: true, mise: "2026.10.1", copilotConfig: trusting });
+    await facade.workspace.setProjectsDir(projects);
+    expect((await facade.doctor.run()).checks.some((c) => c.id === "java-navigation")).toBe(false);
+    const java = join(projects, "jdk", "bin", "java");
+    facade.workspace.setJavaNavigation({ jdtls: join(projects, "jdtls"), java, lombok: null });
+    expect((await facade.doctor.run()).checks.find((c) => c.id === "java-navigation")).toEqual({
+      id: "java-navigation",
+      status: "fail",
+      summary: `Java navigation cannot start: no Java program at ${java}.`,
+      fix: 'Install it again in "Settings > Agents", or correct javaNavigation in workspace.yaml.',
+    });
+  });
+
   test("a key of workspace.yaml Trackwall does not read, such as a typo, is a warning with its line", async () => {
     const { facade, home, projects } = doctorFacade({ copilot: true, mise: "2026.10.1", copilotConfig: trusting });
     writeFileSync(join(home, "workspace.yaml"), `projectsDir: ${JSON.stringify(projects)}\ndayStrat:\n  prompt: hi\n`);
@@ -188,6 +202,7 @@ describe("doctor", () => {
       },
       workspaceFile: join(tmpdir(), "trackwall-doctor-no-such-workspace.yaml"),
       workspaceKeys: () => ({ keys: [], unknown: [] }),
+      javaNavigation: () => null,
       now: () => NOW,
     };
     const report = await new Doctor(deps).run();
@@ -216,6 +231,7 @@ describe("the git check with a Git program chosen in Settings (ADR-112)", () => 
       repoHosts: () => [],
       workspaceFile: join(tmpdir(), "trackwall-doctor-no-such-workspace.yaml"),
       workspaceKeys: () => ({ keys: [], unknown: [] }),
+      javaNavigation: () => null,
       now: () => NOW,
     };
     return new Doctor(deps).run().then((report) => report.checks.find((c) => c.id === "git"));

@@ -8,6 +8,7 @@ const CHECK_TITLES: Record<DoctorCheckId, string> = {
   "copilot-cli": "Copilot CLI",
   "copilot-trusted-folder": "Copilot CLI trusted folder",
   mise: "mise",
+  "java-navigation": "Java navigation",
   "github-cli": "GitHub CLI (gh)",
   "gitlab-cli": "GitLab CLI (glab)",
 };
