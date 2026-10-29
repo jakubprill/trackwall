@@ -6,6 +6,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { FolderDrop } from "@/components/FolderDrop";
 import { Loading } from "@/components/Loading";
+import { RemoteDaemonSurface } from "@/components/RemoteDaemonSurface";
 import { SupervisorPanel } from "@/components/SupervisorPanel";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { inDesktopShell, openWindow, reportShown, START_PARAMS, showViewMenu, startFromLocation } from "@/lib/app-window";
@@ -80,7 +81,7 @@ export function App() {
   // A folder dropped outside a session (ADR-51); `seq` mounts a new bar for every drop, also of the same folder. A drop
   // without a daemon connection is ignored, rather than answered whenever the connection comes back.
   const [dropped, setDropped] = useState<{ paths: DroppedPaths; seq: number }>();
-  const dragging = useFileDrop((paths) => {
+  const dragging = useFileDrop(daemonPlace.desktop, (paths) => {
     if (conn) setDropped((last) => ({ paths, seq: (last?.seq ?? 0) + 1 }));
   });
   const openReposFromDrop = useCallback(
@@ -214,11 +215,7 @@ export function App() {
           )}
           <KeyboardElsewhere.Provider value={supervisorFocused}>
             <main className="hud-grid min-h-0 flex-1 overflow-y-auto">
-              {!conn && !error && (
-                <div className="p-6">
-                  <Loading text="Connecting to the daemon…" />
-                </div>
-              )}
+              {!conn && <NoConnection error={error} />}
               {/* One view that throws keeps the view bar and the other views. The key mounts the view afresh, with a fresh boundary, on
                 a view change, a reconnect (`epoch`) and every opening of a repo or a Settings category (`visit`). */}
               <ErrorBoundary
@@ -297,6 +294,26 @@ export function App() {
         )}
       </div>
     </DaemonPlaceContext.Provider>
+  );
+}
+
+/**
+ * Before the first connection: waiting for it, or, after an error, the way to switch where the desktop app's daemon
+ * runs (ADR-130); the error itself is in the banner above.
+ */
+function NoConnection({ error }: { error: string | undefined }) {
+  if (error === undefined) {
+    return (
+      <div className="p-6">
+        <Loading text="Connecting to the daemon…" />
+      </div>
+    );
+  }
+  if (!inDesktopShell()) return null;
+  return (
+    <div className="max-w-3xl p-6">
+      <RemoteDaemonSurface />
+    </div>
   );
 }
 

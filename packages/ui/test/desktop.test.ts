@@ -39,6 +39,28 @@ describe("opening a web link", () => {
     expect(tabs).toEqual([]);
   });
 
+  test("the desktop app hands the link of a daemon without a desktop to the system and waits for its answer", async () => {
+    const outside: string[] = [];
+    await openWebLink("https://example.com/docs", {
+      desktop: false,
+      viaDaemon: async () => {},
+      newTab: async (url) => {
+        outside.push(url);
+      },
+    });
+    expect(outside).toEqual(["https://example.com/docs"]);
+  });
+
+  test("a link the system could not open in the desktop app is an error the window can show", async () => {
+    await expect(
+      openWebLink("https://example.com/docs", {
+        desktop: false,
+        viaDaemon: async () => {},
+        newTab: () => Promise.reject(new Error("could not open the address")),
+      }),
+    ).rejects.toThrow("could not open the address");
+  });
+
   test("a tab the browser blocked is an error the page can show", async () => {
     await expect(
       openWebLink("https://example.com/docs", { desktop: false, viaDaemon: async () => {}, newTab: () => false }),

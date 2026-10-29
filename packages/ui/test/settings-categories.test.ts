@@ -24,6 +24,10 @@ describe("Settings categories", () => {
     expect(settingsCategory("app").sections).toContain("home-scene");
   });
 
+  test("where the desktop app's daemon runs is under App, after starting at sign-in", () => {
+    expect(settingsCategory("app").sections).toEqual(["start-at-sign-in", "remote-daemon", "updates", "home-scene"]);
+  });
+
   test("Settings opens on Workspace, with the projects folder first", () => {
     expect(FIRST_SETTINGS_CATEGORY).toBe("workspace");
     expect(settingsCategory(FIRST_SETTINGS_CATEGORY).sections[0]).toBe("folders");

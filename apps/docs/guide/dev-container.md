@@ -1,13 +1,13 @@
 ---
 title: Run in a dev container
-description: Run Trackwall next to your repos in a Linux dev container and open it from the browser on your computer.
+description: Run Trackwall next to your repos in a Linux dev container and use it from the browser or the desktop app on your computer.
 ---
 
 # Run in a dev container
 
-Run Trackwall next to your repos in a Linux dev container and open it from the browser on your computer.
+Run Trackwall next to your repos in a Linux dev container and use it from the browser or the desktop app on your computer.
 
-Where security software checks every program that starts and every file it opens, git and builds can be slow on Windows. Inside a Linux container whose files live in a Docker volume, the same work is much faster. Trackwall can run there too: everything that touches your repos (git, mise tasks, services, Copilot CLI sessions and the MCP server) runs in the container, and you use Trackwall from the browser on your computer through a forwarded port.
+Where security software checks every program that starts and every file it opens, git and builds can be slow on Windows. Inside a Linux container whose files live in a Docker volume, the same work is much faster. Trackwall can run there too: everything that touches your repos (git, mise tasks, services, Copilot CLI sessions and the MCP server) runs in the container, and you use Trackwall from the browser or the desktop app on your computer through a forwarded port.
 
 This page uses VS Code's Dev Containers extension. Any container works the same way as long as port forwarding keeps the port number.
 
@@ -59,6 +59,18 @@ Trackwall has no Linux download, so it runs from its source. In a terminal of th
 
 The token changes every time Trackwall starts, so look the address up again after a restart. Trackwall stops when its terminal or the container stops.
 
+## Use the desktop app
+
+The desktop app can use Trackwall in the container instead of running its own, so you keep the tray, system notifications when a session needs you, several windows, `trackwall://` links and [Start at sign-in](/features/start-at-sign-in).
+
+1. Install the desktop app on your computer, the same version as Trackwall in the container (see [Install](/guide/install)).
+2. Start Trackwall in the container and look up its address with the token, as in steps 5 and 6 above.
+3. In the app, open Settings › App › Daemon in a container, paste the address and click "Connect". When the app's own Trackwall did not start, the same field is on the screen it shows instead.
+
+The app restarts, stops its own Trackwall with its sessions, and from then on connects to the one in the container. It neither starts nor stops that one: quitting the app leaves it running. Trackwall in the container gets a new token every time it starts, so after a restart the app shows the field again; paste the new address. "Use this app's own daemon" in the same place goes back.
+
+In the app, links and "Open in VS Code" open on your computer as they do from the browser. The folder picker and dropping files on the window are not there, since paths on your computer mean nothing inside the container. The app and Trackwall in the container must be the same version: after the app updates itself, update the container too (see the last points below).
+
 ## MCP servers on your computer
 
 Copilot CLI in the container reaches an MCP server that runs on your computer at `host.docker.internal` instead of `localhost`, for example `http://host.docker.internal:3000/mcp` in `~/.copilot/mcp-config.json` in the container. Keep `host.docker.internal` in `NO_PROXY`, or a proxy gets the request first. Docker Desktop provides that name; with Docker Engine on Linux, add `"runArgs": ["--add-host=host.docker.internal:host-gateway"]` to `devcontainer.json`.
@@ -67,7 +79,7 @@ Tokens for such servers come in through [Environment from mise](/features/mise-e
 
 ## Good to know
 
-- Trackwall runs in the browser here, without the desktop app: no tray, no system notifications and no [Start at sign-in](/features/start-at-sign-in).
+- In the browser alone there is no tray, no system notifications and no [Start at sign-in](/features/start-at-sign-in); for those, [use the desktop app](#use-the-desktop-app).
 - Links open in a new tab of your browser; when the browser blocks the new tab, allow pop-ups for the page.
 - "Open in VS Code" opens the repo, task worktree or file in VS Code on your computer, attached to the running container through the Dev Containers extension. The browser asks once whether to open VS Code. "Show in the file manager" is not there, since a folder of the container means nothing to your computer. With Podman instead of Docker, set `dev.containers.dockerPath` to `podman` in VS Code first.
 - The command from [Connect Copilot CLI](/guide/connect-copilot-cli) is a path inside the container, so it works for a Copilot CLI in the container, not on your computer.

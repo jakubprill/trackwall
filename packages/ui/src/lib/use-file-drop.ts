@@ -7,15 +7,16 @@ import { IS_WINDOWS } from "./platform.ts";
 /**
  * Listens to files dragged onto the Tauri window (ADR-51): marks the drop target under the pointer while dragging
  * and, on drop, sends it a `FileDropEvent`. A drop outside every target goes to `onUnhandled`. Returns whether files
- * are being dragged over the window; outside Tauri always `false`, because a browser does not give the page full paths.
+ * are being dragged over the window; outside Tauri always `false`, because a browser does not give the page full paths,
+ * and so without a daemon on this desktop (`enabled`, ADR-130), to which the paths of this computer mean nothing.
  */
-export function useFileDrop(onUnhandled: (paths: DroppedPaths) => void): boolean {
+export function useFileDrop(enabled: boolean, onUnhandled: (paths: DroppedPaths) => void): boolean {
   const [dragging, setDragging] = useState(false);
   const handler = useRef(onUnhandled);
   handler.current = onUnhandled;
 
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!isTauri() || !enabled) return;
     let hovered: Element | undefined;
     const hover = (next: Element | undefined) => {
       if (next === hovered) return;
@@ -56,7 +57,7 @@ export function useFileDrop(onUnhandled: (paths: DroppedPaths) => void): boolean
       hover(undefined);
       void unlisten.then((unsubscribe) => unsubscribe());
     };
-  }, []);
+  }, [enabled]);
 
   return dragging;
 }

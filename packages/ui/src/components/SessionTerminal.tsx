@@ -1,14 +1,15 @@
 import "@xterm/xterm/css/xterm.css";
 import { isTauri } from "@tauri-apps/api/core";
-import { PTY_CLOSE_NOT_FOUND, type PtyClientMessage, ptySocket, workspaceApi } from "@trackwall/protocol";
+import { PTY_CLOSE_NOT_FOUND, type PtyClientMessage, ptySocket } from "@trackwall/protocol";
 import { FitAddon } from "@xterm/addon-fit";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { Terminal } from "@xterm/xterm";
 import { useContext, useEffect, useRef, useState } from "react";
-import { errorMessage, post } from "@/lib/api";
+import { errorMessage } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
 import type { Connection } from "@/lib/connection";
 import { daemonSocket } from "@/lib/daemon-socket";
+import { useOpenWebLink } from "@/lib/desktop";
 import { DROP_HOVER_RING, FILE_DROP_TARGET, FileDropEvent } from "@/lib/file-drop";
 import { InputBeforeOpen } from "@/lib/input-before-open";
 import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
@@ -72,6 +73,10 @@ export function SessionTerminal({
   const [notice, setNotice] = useState<string>();
   const [connecting, setConnecting] = useState(false);
   const lastScreens = useLastScreens();
+  // Through a ref: whether the daemon has a desktop arrives after the terminal opens, and must not open it again.
+  const openLink = useOpenWebLink(conn);
+  const openWebLink = useRef(openLink);
+  openWebLink.current = openLink;
 
   useEffect(() => {
     const element = host.current;
@@ -88,7 +93,7 @@ export function SessionTerminal({
     if (isTauri()) {
       links = terminal.registerLinkProvider(trackwallLinkProvider(terminal, IS_MAC));
       terminal.options.linkHandler = hyperlinkHandler(IS_MAC, (url) => {
-        post(conn, workspaceApi.openLink, { url }).catch((err: unknown) => setNotice(`Could not open the link: ${errorMessage(err)}`));
+        openWebLink.current(url).catch((err: unknown) => setNotice(`Could not open the link: ${errorMessage(err)}`));
       });
     }
     terminal.open(element);

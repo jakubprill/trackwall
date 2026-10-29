@@ -1,4 +1,4 @@
-import { isTauri } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { type ContainerId, containerEditorUrl, DAEMON_INFO_PATH, DaemonInfo, WebAddress, workspaceApi } from "@trackwall/protocol";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { call, post } from "./api.ts";
@@ -8,7 +8,8 @@ import type { Connection } from "./connection.ts";
  * Where the daemon runs, from its info: whether it opens links, folders and VS Code on this computer
  * (`DaemonInfo.desktop`, ADR-120) and the container it runs in (ADR-121). A daemon in a container has no desktop: this
  * page then opens web links in a new tab itself, VS Code opens attached to the container, and the buttons that open a
- * folder are hidden. A desktop until the daemon says otherwise, since the Tauri window always runs next to its own daemon.
+ * folder are hidden. The desktop app can use such a daemon too (ADR-130): it then opens web links and VS Code itself.
+ * A desktop until the daemon says otherwise.
  */
 export interface DaemonPlace {
   desktop: boolean;
@@ -44,11 +45,11 @@ export function useEditorLink(path: string): string | undefined {
   return editorLinkFor(useContext(DaemonPlaceContext), path);
 }
 
-/** Asks the daemon once where it runs; only a page in a browser can be looking at a daemon in a container. */
+/** Asks the daemon once where it runs. */
 export function useDaemonPlace(conn: Connection | undefined): DaemonPlace {
   const [place, setPlace] = useState(ON_A_DESKTOP);
   useEffect(() => {
-    if (!conn || isTauri()) return;
+    if (!conn) return;
     // Without an answer the page behaves as before: the daemon opens links and says no_desktop when it cannot.
     call(conn, DAEMON_INFO_PATH, DaemonInfo).then(
       (info) => setPlace({ desktop: info.desktop, container: info.container }),
@@ -62,8 +63,11 @@ export interface WebLinkOpeners {
   desktop: boolean;
   /** The daemon opens the link in the system browser (`open-link`). */
   viaDaemon: (url: string) => Promise<unknown>;
-  /** Opens the link in a new tab of this page; `false` when the browser blocked it. */
-  newTab: (url: string) => boolean;
+  /**
+   * Opens the link in a new tab of this page; `false` when the browser blocked it. In the desktop app, which opens no
+   * tabs, the window hands it to the system browser instead and resolves once it has.
+   */
+  newTab: (url: string) => boolean | Promise<void>;
 }
 
 const BLOCKED_TAB = "the browser blocked the new tab; allow pop-ups for this page";
@@ -81,7 +85,17 @@ export async function openWebLink(url: string, { desktop, viaDaemon, newTab }: W
     await viaDaemon(url);
     return;
   }
-  if (!newTab(webAddress(url))) throw new Error(BLOCKED_TAB);
+  const opened = newTab(webAddress(url));
+  if (opened === false) throw new Error(BLOCKED_TAB);
+  if (opened !== true) await opened;
+}
+
+/** The shell command that opens a web page or VS Code attached to a container (`system_open.rs`). */
+const OPEN_OUTSIDE_COMMAND = "open_outside";
+
+/** The desktop app hands an address to the system itself, since its daemon may have no desktop (ADR-130). */
+export function openOutside(url: string): Promise<void> {
+  return invoke(OPEN_OUTSIDE_COMMAND, { url });
 }
 
 /** A tab opened empty in the click, pointed at its address once the daemon gives it. */
@@ -114,6 +128,15 @@ function openInNewTab(url: string): boolean {
 }
 
 export function openEmptyTab(): PendingTab | undefined {
+  // The desktop app has no tabs to open in the click: the address goes to the system browser once known.
+  if (isTauri()) {
+    return {
+      go: (url) => {
+        openOutside(url).catch((err: unknown) => console.error("[link] could not open the address", err));
+      },
+      close: () => {},
+    };
+  }
   const tab = window.open("", "_blank");
   if (!tab) return undefined;
   tab.opener = null;
@@ -129,7 +152,11 @@ export function useOpenWebLink(conn: Connection): (url: string) => Promise<void>
   const desktop = useDesktop();
   return useCallback(
     (url: string) =>
-      openWebLink(url, { desktop, viaDaemon: (link) => post(conn, workspaceApi.openLink, { url: link }), newTab: openInNewTab }),
+      openWebLink(url, {
+        desktop,
+        viaDaemon: (link) => post(conn, workspaceApi.openLink, { url: link }),
+        newTab: isTauri() ? openOutside : openInNewTab,
+      }),
     [conn, desktop],
   );
 }

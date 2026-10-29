@@ -1,8 +1,10 @@
-//! Daemon supervision (§5.4): discovery through `daemon.json`, sidecar start, `/api/health`, graceful exit.
+//! Daemon supervision (§5.4): discovery through `daemon.json`, sidecar start, `/api/health`, graceful exit, and the
+//! check of a remote daemon the app connects to instead (ADR-130).
 //!
 //! HTTP is written by hand on `TcpStream` here, because we only talk to our own daemon on loopback,
 //! and all the traffic is a few short requests. An HTTP client with TLS and async would be bigger than the rest of the shell.
 
+use crate::remote_daemon::RemoteDaemon;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::{Read, Write};
@@ -139,6 +141,37 @@ pub fn ensure_daemon(home: &Path, cancel: &AtomicBool) -> Result<Connection, Str
             ));
         }
         std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// An authenticated request that changes nothing; `200` tells that the token is right.
+const DAEMON_INFO_PATH: &str = "/api/daemon/info";
+
+/// Checks a remote daemon (ADR-130): it answers, has this app's version and accepts the token.
+pub fn connect_remote(remote: &RemoteDaemon) -> Result<Connection, String> {
+    let port = remote.port;
+    match health(port) {
+        None => {
+            return Err(format!(
+                "No Trackwall daemon answers at 127.0.0.1:{port}. Start it (for example in its container), check that the \
+                 port is forwarded to this computer, and click “Try again”."
+            ))
+        }
+        Some(v) if v != VERSION => {
+            return Err(format!(
+                "The daemon at 127.0.0.1:{port} is Trackwall {v}, but this app is {VERSION}. Update the older one so both \
+                 are the same version, and click “Try again”."
+            ))
+        }
+        Some(_) => {}
+    }
+    match http(port, "GET", DAEMON_INFO_PATH, Some(&remote.token))? {
+        (200, _) => Ok(Connection { base_url: format!("http://127.0.0.1:{port}"), token: remote.token.clone(), port }),
+        (401, _) => Err(format!(
+            "The daemon at 127.0.0.1:{port} did not accept the token: it gets a new one every time it starts. \
+             Paste the address with its current token."
+        )),
+        (status, _) => Err(format!("The daemon at 127.0.0.1:{port} answered {status} to the token check.")),
     }
 }
 

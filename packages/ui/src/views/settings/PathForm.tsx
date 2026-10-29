@@ -4,6 +4,7 @@ import { type FormEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { errorMessage } from "@/lib/api";
+import { useDesktop } from "@/lib/desktop";
 import { pickFolder } from "@/lib/folder-picker";
 
 /**
@@ -29,9 +30,10 @@ export function PathForm({
   save: (path: string) => Promise<void>;
   /** Back to the default; without it the setting has no default to go back to, or already uses it. */
   reset?: () => Promise<void>;
-  /** A folder gets the system folder picker; a program is typed or pasted. */
+  /** A folder gets the system folder picker, unless the daemon has no desktop here (ADR-130); a program is typed or pasted. */
   folder?: boolean;
 }) {
+  const desktop = useDesktop();
   const [path, setPath] = useState(initialPath);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -77,7 +79,7 @@ export function PathForm({
           aria-label={label}
           className="font-mono text-xs"
         />
-        {folder && isTauri() && (
+        {folder && isTauri() && desktop && (
           <Button type="button" variant="outline" size="sm" onClick={() => void browse()} disabled={busy}>
             <FolderOpen /> Choose…
           </Button>
