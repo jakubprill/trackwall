@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
@@ -9,6 +9,7 @@ import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
 import { fakeHosting } from "./support/hosting.ts";
+import { removeFolder } from "./support/remove-folder.ts";
 
 /** The repo watch on real git and a real projects folder; the test runs each comparison itself instead of a timer. */
 async function setup() {
@@ -86,7 +87,7 @@ describe("the repo watch", () => {
     await watch.check();
     expect(handed.slice(1)).toEqual([["added"]]);
 
-    rmSync(added, { recursive: true, force: true });
+    removeFolder(added);
     await watch.check();
     expect(handed).toHaveLength(2);
     expect(revision()).toBe(2);
