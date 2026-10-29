@@ -93,6 +93,10 @@ _Avoid_: project
 One directory on the user's disk, set in `workspace.yaml` or in the settings. Each of its direct subdirectories with `.git` is a repo of the workspace (ADR-18); a repo is added by cloning it into this folder.
 _Avoid_: workspace directory, root, folder (without qualification)
 
+**Trackwall folder** (`TRACKWALL_DIR` = `.trackwall`, `TrackwallFolder`, `trackwallDir`):
+The one hidden folder in the projects folder where Trackwall keeps everything beside the repos, one folder per purpose: `local` (the local config store), `worktrees` (the default task worktrees folder), `lsp`, `scratch` and `removed` (ADR-125). It is not the state folder `~/.trackwall`, which holds Trackwall's own memory and lies outside the projects folder.
+_Avoid_: data folder, `.trackwall-*` folders (their names before ADR-125)
+
 **Dropped folder** (`DroppedFolder`, action `dropped-folder`, UI `FolderDrop`; in Polish *upuszczony folder*):
 A folder or file dropped on the Trackwall window outside a session terminal, described by the daemon: a listed repo (or a folder inside one), the projects folder, a repo elsewhere, a hidden repo, a folder with repos, a folder without repos or a file (ADR-51). It never adds a repo by itself; it can only lead to a new projects folder.
 _Avoid_: imported repo, added repo
@@ -151,7 +155,7 @@ A fixed string or a regular expression in the files of the latest commit of many
 _Avoid_: grep (the tool underneath), index (there is none)
 
 **Task worktrees folder** (`worktreesDir` in `workspace.yaml` and `tasks.json`):
-The folder new task worktrees go into (ADR-84): the user's setting, or by default `.trackwall-worktrees` in the projects folder, which the repo list skips. Never the projects folder itself or a folder inside one of its repos. Each task keeps the folder it was created in, so changing the setting moves no existing worktree.
+The folder new task worktrees go into (ADR-84): the user's setting, or by default `.trackwall/worktrees` in the projects folder, which the repo list skips. Never the projects folder itself, a folder inside one of its repos, or a folder of `.trackwall` other than `.trackwall/worktrees`. Each task keeps the folder it was created in, so changing the setting moves no existing worktree.
 
 **Git program** (`gitProgram` in `workspace.yaml`):
 The git the daemon starts for its local git calls (ADR-112): the user's setting, a full path such as MinGit's `git.exe`, or by default git from `PATH`. Network commands (fetch, push, clone) always use git from `PATH`.
@@ -179,7 +183,7 @@ The sentence in the daemon's prompt that tells a session the user trusted the mi
 The files a repo keeps outside git on purpose, only for this clone: `mise.local.toml` (`MISE_LOCAL_CONFIG_FILE`, mise tasks, tools and variables mise reads on top of `mise.toml`), `mise.toml` (`MISE_CONFIG_FILE`) when the repo's commits do not have it (ADR-110), and `.worktreeinclude` (ADR-86). A file the repo's commits have is not local config. Each file's state against the store is `absent`, `tracked`, `backed_up`, `pending` or `missing` (`LocalConfigFileState`); "Restore from the store" copies a missing file back, and "Ignore locally" adds the files to the clone's `.git/info/exclude`.
 _Avoid_: overlay, local files (that is `.worktreeinclude`'s included files)
 
-**Local config store** (`LOCAL_CONFIG_STORE_DIR` = `.trackwall-local`, `LocalConfigStore`; UI "Local config store"):
+**Local config store** (`TrackwallFolder` `local`: `.trackwall/local`, `LocalConfigStore`; UI "Local config store"):
 The git repo in the projects folder that holds the local config of every repo as `<repo folder>/<file>`, committed by Trackwall a few seconds after a file changes and pushed to the store's remote when the user added one (ADR-86). The repo list skips it.
 _Avoid_: backup repo, overlay folder
 
@@ -350,8 +354,8 @@ _Avoid_: order, request, application
 A change to the projects folder itself that no task can make, because a task works inside one repo's worktree. A session proposes it from a closed list, it waits for the user like a task proposal, and the daemon carries it out on approval (ADR-83). Today the only one is a repo removal.
 _Avoid_: command, operation
 
-**Repo removal** (`TaskProposal.kind: "remove_repo"`, the `approve-repo-removal` action, `REMOVED_REPOS_DIR`):
-The folder action that takes a repo out of the projects folder: "Remove repo" moves its folder into `.trackwall-removed` in the projects folder, where the user can move it back or delete it, once no session, task or process runs in it (ADR-83).
+**Repo removal** (`TaskProposal.kind: "remove_repo"`, the `approve-repo-removal` action, `TrackwallFolder` `removed`):
+The folder action that takes a repo out of the projects folder: "Remove repo" moves its folder into `.trackwall/removed` in the projects folder, where the user can move it back or delete it, once no session, task or process runs in it (ADR-83).
 _Avoid_: delete repo, archive
 
 **Rejection reason** (`reason` of `reject-proposal`, `rejectionReason` of `wait_for_session`):

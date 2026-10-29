@@ -59,7 +59,7 @@ describe.skipIf(process.versions.bun === undefined)("Java navigation for tasks (
     expect(Object.keys(pluginManifest(home, session).lspServers ?? {})).toEqual(["java"]);
     expect(java?.command).toBe(process.execPath);
     expect(java?.fileExtensions).toEqual({ ".java": "java" });
-    expect(java?.args.slice(-2)).toEqual(["-data", join(projects, ".trackwall-lsp", task.id, "workspace")]);
+    expect(java?.args.slice(-2)).toEqual(["-data", join(projects, ".trackwall", "lsp", task.id, "workspace")]);
     const window = viewer(agents, session);
     await waitFor(agents, session, () => window.text().includes("LSP: java"), "the language server on the screen");
     window.attachment.detach();
@@ -121,7 +121,7 @@ describe.skipIf(process.versions.bun === undefined)("Java navigation for tasks (
     await waitFor(agents, first, (s) => s.state !== null, "the task prompt's sessionStart");
     await agents.stop(first);
     // What jdtls would have written while it indexed the worktree.
-    const data = join(projects, ".trackwall-lsp", task.id);
+    const data = join(projects, ".trackwall", "lsp", task.id);
     mkdirSync(join(data, "workspace"), { recursive: true });
 
     settings = null;

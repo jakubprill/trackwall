@@ -43,5 +43,5 @@ javaNavigation:
 - jdtls imports the project with Maven or Gradle and downloads its dependencies, as your IDE does. If the import fails, for example because Gradle needs a Java version you have not installed, the agent's questions come back empty. Run `/lsp logs` in the session to see why.
 - Every path in `javaNavigation` must be a full path. A path that is not there greys the pill out until you fix it or click "Install again"; a resumed task then starts without navigation.
 - The install needs mise and access to download.eclipse.org and to the place mise downloads Java from. Trackwall checks the jdtls download against the checksum of the release it was built with, so a newer jdtls comes with a newer Trackwall.
-- The index of each task lives in `.trackwall-lsp` in your projects folder and is deleted when you end the task.
+- The index of each task lives in `.trackwall/lsp` in your projects folder and is deleted when you end the task.
 - jdtls on Windows starts without Python: Trackwall runs it with `java` directly.

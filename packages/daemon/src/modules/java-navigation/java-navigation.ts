@@ -1,26 +1,22 @@
 import { mkdir, mkdtemp, readdir, rename, stat } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  type JavaNavigationInstall,
-  type JavaNavigationSettings,
-  type JavaNavigationState,
-  LANGUAGE_SERVER_DIR_NAME,
-} from "@trackwall/protocol";
+import type { JavaNavigationInstall, JavaNavigationSettings, JavaNavigationState } from "@trackwall/protocol";
 import { configOrProblem, messageOf } from "../../infra/errors.ts";
 import { removeFolder, removeIfPresent } from "../../infra/remove-folder.ts";
+import { ensureTrackwallDir } from "../../infra/trackwall-dir.ts";
 import { javaProgramIn } from "./java-program.ts";
 import type { JdtlsRelease } from "./jdtls-release.ts";
 
 /**
  * Installing Java navigation (§4.17, ADR-123): the pinned jdtls release, downloaded, checked against its SHA-256 and
- * unpacked into `.trackwall-lsp/jdtls-<version>` in the projects folder (the folder an antivirus may be told to skip),
+ * unpacked into `.trackwall/lsp/jdtls-<version>` in the projects folder (the folder an antivirus may be told to skip),
  * and the Java it runs on through `mise install`, whose paths then become `javaNavigation` in `workspace.yaml`. One
  * install runs at a time, in the background; its state lives in memory. Every install downloads and checks the release
  * again and replaces the folder, so "Install again" repairs a damaged or changed one and nothing unchecked is adopted;
  * the release is unpacked in a temporary folder and renamed into place, so it is there whole or not at all.
  */
 
-/** The prefix of an install's temporary folder in `.trackwall-lsp`; one left by a daemon that stopped mid-install is removed by the next. */
+/** The prefix of an install's temporary folder in `.trackwall/lsp`; one left by a daemon that stopped mid-install is removed by the next. */
 const INSTALL_DIR_PREFIX = ".install-";
 
 /** What the module needs from `workspace` and the system; the facade passes the real ones, tests fakes. */
@@ -85,8 +81,7 @@ export class JavaNavigation {
   }
 
   async #install(): Promise<void> {
-    const dir = join(await this.#deps.repos.projectsDir(), LANGUAGE_SERVER_DIR_NAME);
-    await mkdir(dir, { recursive: true });
+    const dir = await ensureTrackwallDir(await this.#deps.repos.projectsDir(), "lsp");
     await removeStaleInstalls(dir);
     const work = await mkdtemp(join(dir, INSTALL_DIR_PREFIX));
     try {

@@ -69,25 +69,25 @@ describe("config files", () => {
       state: "missing",
       detail: null,
     });
-    expect(entry("task-worktrees-dir")?.path).toBe(join(projects, ".trackwall-worktrees"));
+    expect(entry("task-worktrees-dir")?.path).toBe(join(projects, ".trackwall", "worktrees"));
     expect(entry("removed-repos-dir")).toEqual({
       id: "removed-repos-dir",
-      name: ".trackwall-removed",
-      path: join(projects, ".trackwall-removed"),
+      name: ".trackwall/removed",
+      path: join(projects, ".trackwall", "removed"),
       state: "missing",
       detail: null,
     });
     expect(entry("scratch-dir")).toEqual({
       id: "scratch-dir",
-      name: ".trackwall-scratch",
-      path: join(projects, ".trackwall-scratch"),
+      name: ".trackwall/scratch",
+      path: join(projects, ".trackwall", "scratch"),
       state: "missing",
       detail: null,
     });
     expect(entry("language-server-dir")).toEqual({
       id: "language-server-dir",
-      name: ".trackwall-lsp",
-      path: join(projects, ".trackwall-lsp"),
+      name: ".trackwall/lsp",
+      path: join(projects, ".trackwall", "lsp"),
       state: "missing",
       detail: null,
     });
@@ -107,7 +107,7 @@ describe("config files", () => {
     });
     expect(report.workspaceKeys.map((k) => [k.key, k.from, k.value, k.line])).toEqual([
       ["projectsDir", "file", projects, 1],
-      ["worktreesDir", "default", join(projects, ".trackwall-worktrees"), null],
+      ["worktreesDir", "default", join(projects, ".trackwall", "worktrees"), null],
       ["gitProgram", "default", "git from PATH", null],
       ["repoHosts", "default", "none", null],
       ["toolPermissions", "default", "none", null],
@@ -171,7 +171,7 @@ describe("config files", () => {
     expect(report.places.projects).toBeNull();
     expect(report.entries.find((e) => e.id === "local-config-store")).toEqual({
       id: "local-config-store",
-      name: ".trackwall-local",
+      name: ".trackwall/local",
       path: null,
       state: "missing",
       detail: "set the projects folder first",
@@ -184,9 +184,9 @@ describe("config files", () => {
     mkdirSync(join(home, "cards"));
     writeFileSync(join(home, "cards", "a.json"), "{}");
     writeFileSync(join(home, "cards", "b.json"), "{}");
-    mkdirSync(join(projects, ".trackwall-removed", "old-api"), { recursive: true });
-    mkdirSync(join(projects, ".trackwall-worktrees", "orders", "fix-login"), { recursive: true });
-    mkdirSync(join(projects, ".trackwall-worktrees", "orders", "add-export"), { recursive: true });
+    mkdirSync(join(projects, ".trackwall", "removed", "old-api"), { recursive: true });
+    mkdirSync(join(projects, ".trackwall", "worktrees", "orders", "fix-login"), { recursive: true });
+    mkdirSync(join(projects, ".trackwall", "worktrees", "orders", "add-export"), { recursive: true });
 
     const entries = (await facade.configFiles.list()).entries;
 

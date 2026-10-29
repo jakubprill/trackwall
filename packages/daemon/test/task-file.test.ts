@@ -8,7 +8,7 @@ const stored = {
   id: "3f2a9c1e-0000-4000-8000-000000000000",
   repo: "shop",
   repoDir: join(tmpdir(), "shop"),
-  worktreesDir: join(tmpdir(), ".trackwall-worktrees"),
+  worktreesDir: join(tmpdir(), ".trackwall", "worktrees"),
   prompt: "fix",
   branch: "trackwall/fix-3f2a9c",
   baseBranch: "main",

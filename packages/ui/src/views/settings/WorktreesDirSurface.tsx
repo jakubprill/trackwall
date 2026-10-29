@@ -2,7 +2,7 @@ import type { WorkspaceSettings } from "@trackwall/protocol";
 import { Surface } from "@/components/Surface";
 import { PathForm } from "./PathForm.tsx";
 
-/** Where new task worktrees go (ADR-84); empty means `.trackwall-worktrees` in the projects folder. */
+/** Where new task worktrees go (ADR-84); empty means `.trackwall/worktrees` in the projects folder. */
 export function WorktreesDirSurface({ settings, save }: { settings: WorkspaceSettings; save: (path: string | null) => Promise<void> }) {
   return (
     <Surface label="Task worktrees folder">

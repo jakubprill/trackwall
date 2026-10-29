@@ -460,7 +460,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
       repos: {
         repoPath: async () => repoDir,
         projectsDir: async () => repoDir,
-        worktreesDir: async () => repoDir,
+        newTaskWorktreesDir: async () => repoDir,
         toolPermissions: () => ({ allow: [], deny: [] }),
         supervisorSettings: () => ({ changesCode: false }),
         agentSecrets: () => [],

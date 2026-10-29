@@ -11,7 +11,7 @@ Every agent works in a real folder on your disk, and what it finds there is buil
 
 ## The folders on your disk
 
-Everything Trackwall keeps beside your repos lives in your projects folder, in folders whose names start with a dot. The [Repos](/features/repos) list skips them, so they never show up as repos.
+Everything Trackwall keeps beside your repos lives in one folder of your projects folder, `.trackwall`. Its name starts with a dot, so the [Repos](/features/repos) list skips it and it never shows up as a repo.
 
 ```text
 <projects folder>/
@@ -20,19 +20,22 @@ Everything Trackwall keeps beside your repos lives in your projects folder, in f
 │   ├── mise.toml                the team's tasks, committed in git
 │   ├── mise.local.toml          your tasks, only on this computer
 │   └── .worktreeinclude         which ignored files a task's worktree gets
-├── .trackwall-local/            the local config store, a git repo of its own
-│   └── orders-api/
-│       ├── mise.local.toml      every version of your file, one commit each
-│       └── .worktreeinclude
-├── .trackwall-worktrees/        the agent tasks' worktrees
-│   └── orders-api/
-│       └── fix-login/           one task: its branch, plus your copied files
-├── .trackwall-lsp/              the Java language server's index of each task with Java navigation
-├── .trackwall-scratch/          git's scratch files while Trackwall reads changes
-└── .trackwall-removed/          repos the supervisor removed, until you delete them
+└── .trackwall/
+    ├── local/                   the local config store, a git repo of its own
+    │   └── orders-api/
+    │       ├── mise.local.toml  every version of your file, one commit each
+    │       └── .worktreeinclude
+    ├── worktrees/               the agent tasks' worktrees
+    │   └── orders-api/
+    │       └── fix-login/       one task: its branch, plus your copied files
+    ├── lsp/                     the Java language server's index of each task with Java navigation
+    ├── scratch/                 git's scratch files while Trackwall reads changes
+    └── removed/                 repos the supervisor removed, until you delete them
 ```
 
-Keeping them all in one folder is deliberate. They sit on the same disk as your repos, so git is as fast in a worktree as in the repo, and an antivirus exclusion for the projects folder covers them too. One folder is also one thing to back up. "Settings > Files" lists each of them with its state; see [Config files](/features/config-files).
+Keeping them all in the projects folder is deliberate. They sit on the same disk as your repos, so git is as fast in a worktree as in the repo, and an antivirus exclusion for the projects folder covers them too. One folder is also one thing to back up. "Settings > Files" lists each of them with its state; see [Config files](/features/config-files).
+
+Earlier versions kept these folders side by side as `.trackwall-local`, `.trackwall-worktrees` and so on. Trackwall moves them into `.trackwall` when it starts. An agent task you started before keeps its worktree in `.trackwall-worktrees` until you end it, and the old folder goes once it is empty.
 
 ## How the layers stack
 
@@ -86,7 +89,7 @@ Only files git ignores are copied, and a file you ignore with "Ignore locally" c
 
 Some teams keep mise config out of their repos. Then your own tasks go into `mise.local.toml`, or into a whole `mise.toml` that git ignores. These files live only in your clone: delete the folder, and they are gone.
 
-The local config store keeps them safe: Trackwall copies each of them, and `.worktreeinclude`, to `.trackwall-local/<repo>/` a few seconds after it changes, with every version kept, and puts them back when you clone the repo again.
+The local config store keeps them safe: Trackwall copies each of them, and `.worktreeinclude`, to `.trackwall/local/<repo>/` a few seconds after it changes, with every version kept, and puts them back when you clone the repo again.
 
 The store and the worktrees never meet. The store backs up and restores your repo's own folder; a worktree gets its files from the repo root through `.worktreeinclude`. So the path of a file is always store → repo → worktree, and you only ever edit the one in the repo. [Local config backup](/features/local-config) has the details, including a private remote for a second computer.
 

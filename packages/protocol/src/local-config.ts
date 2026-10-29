@@ -29,9 +29,6 @@ export type LocalConfigFileName = z.infer<typeof LocalConfigFileName>;
 /** A local config file is a few lines; a bigger one is not backed up, so a file rewritten in a loop cannot fill the store. */
 export const MAX_LOCAL_CONFIG_BYTES = 256 * 1024;
 
-/** The folder in the projects folder that holds the local config store; the repo list skips it, like every name with a dot. */
-export const LOCAL_CONFIG_STORE_DIR = ".trackwall-local";
-
 /**
  * One local config file of a repo against the store. `ignored`: git ignores the file in the repo, so no commit takes it
  * along; a file that is not ignored can still end up in a merge request.
