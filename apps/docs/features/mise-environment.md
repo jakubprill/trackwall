@@ -13,7 +13,7 @@ Give every agent session the variables and tokens from your mise config, with se
 - One `mise.toml` in your projects folder sets tokens and settings for every repo, task and the supervisor.
 - Secrets stay encrypted in the file and are decrypted only when a session starts.
 - The agent's shell and its local MCP servers get only the secrets you name.
-- The session panel shows which variables a session got, never their values.
+- The session panel and its tile in the grid show which variables a session got, never their values.
 
 ## How it works
 
@@ -21,7 +21,7 @@ mise reads every config from the folder a session works in up through the projec
 
 A value you write with `mise set --age-encrypt` sits in the file encrypted, and mise decrypts it with your age key. mise marks such values, and those you mark with `redact = true`, as secrets; Trackwall also treats a variable whose name looks like a secret (`GITLAB_TOKEN`, `DB_PASSWORD`) as one. Copilot CLI itself has every variable, but the agent's shell and its local MCP servers do not get the secrets unless you list them in `agentSecrets`. A secret never shows in a mise task's log or in the last lines of an ended session: Trackwall replaces it with `***`.
 
-Under the session's header a line says how many variables it got from mise, which secrets are hidden from the agent's tools and which they get. When mise cannot give the environment where the session works, for example because the repo's config is not trusted yet or the age key is missing, the line says why, and the session gets the environment of the folder above it instead. If `MISE_AGE_KEY` is in your own environment, the agent's tools do not get it either.
+Under the session's header a line says how many variables it got from mise, which secrets are hidden from the agent's tools and which they get; click the number to see every name. In the grid, where there is less room, a key with the number sits next to the session's title: hover it to see the names in the same groups, or click it to keep them open. It turns yellow when something is missing. When mise cannot give the environment where the session works, for example because the repo's config is not trusted yet or the age key is missing, the line says why, and the session gets the environment of the folder above it instead. If `MISE_AGE_KEY` is in your own environment, the agent's tools do not get it either.
 
 ## Use it
 
@@ -36,7 +36,7 @@ Under the session's header a line says how many variables it got from mise, whic
      - GITLAB_TOKEN
    ```
 
-6. Start a session: the line under its header lists what it got.
+6. Start a session: the line under its header, or the key on its tile in the grid, lists what it got.
 
 ## Good to know
 

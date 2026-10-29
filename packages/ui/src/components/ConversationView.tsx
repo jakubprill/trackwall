@@ -18,6 +18,7 @@ import { sendsMessage, TOOL_STATUS, withEntries } from "@/lib/conversation";
 import { daemonSocket } from "@/lib/daemon-socket";
 import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
 import { isLive } from "@/lib/session-state";
+import { browserTimers } from "@/lib/timers";
 import { useAction } from "@/lib/use-action";
 import { FocusReporter, terminalInFront } from "@/lib/window-focus";
 
@@ -52,7 +53,7 @@ export function ConversationView({ conn, session, selected }: { conn: Connection
         if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "focus", focused }));
       },
       () => terminalInFront(inFront.current, document),
-      { set: (run, ms) => setTimeout(run, ms), clear: (focusTimer) => clearTimeout(focusTimer) },
+      browserTimers,
     );
     const sendFocus = () => focus.update();
     updateFocus.current = sendFocus;

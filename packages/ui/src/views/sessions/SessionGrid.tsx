@@ -16,6 +16,7 @@ import { useTaskEnding } from "@/lib/use-task-ending";
 import { cn } from "@/lib/utils";
 import { ProposalTile } from "./ProposalTile.tsx";
 import { EndTaskButton, SessionCloseButton, SessionCloseConfirmation, TaskEnding } from "./SessionClose.tsx";
+import { useSessionEnvironmentTile } from "./SessionEnvironmentTile.tsx";
 import { TaskLine } from "./TaskLine.tsx";
 import { useTaskTileNotices } from "./TaskTileNotices.tsx";
 
@@ -24,8 +25,9 @@ import { useTaskTileNotices } from "./TaskTileNotices.tsx";
  * a session that is waiting for you has the warning frame (also when selected). Clicking a tile or into its terminal
  * selects it; a task without a session has no terminal, so its tile leads to the full panel and its X ends the task
  * (`TaskRemoval`), and task proposals (ADR-39) show their prompts with “Start task” and “Reject…” (ADR-55). A tile
- * with a session also closes it (`useSessionClose`). Tiles appear once
- * the area is measured, so that no terminal reports a size to its session from a layout that is about to change.
+ * with a session also closes it (`useSessionClose`) and shows what it got from mise (`useSessionEnvironmentTile`).
+ * Tiles appear once the area is measured, so that no terminal reports a size to its session from a layout that is
+ * about to change.
  */
 export function SessionGrid({
   conn,
@@ -153,6 +155,7 @@ function SessionTile({
     paused: ending.open,
     onOpenTask: (id) => onNavigate({ kind: "task", id }),
   });
+  const environment = useSessionEnvironmentTile(session?.environment);
   const tile = useRef<HTMLDivElement>(null);
   // A selected tile without a terminal takes the keyboard itself, so that keys stop going to the terminal selected before.
   useEffect(() => {
@@ -185,6 +188,7 @@ function SessionTile({
         </span>
         <TileTitle entry={entry} />
         {notices.badge}
+        {environment.badge}
         <Button variant="ghost" size="icon" className="size-6 shrink-0" onClick={onOpenAlone} aria-label="Open alone">
           <Maximize2 />
         </Button>
@@ -193,11 +197,13 @@ function SessionTile({
       </header>
       {/* The notices lie over the body like the close question, so that they do not resize the PTY. */}
       <div className="relative flex min-h-0 flex-1 flex-col">
+        {/* The task's notices come after the environment card, so that opening them lies over it. */}
+        {environment.card}
         {notices.overlay}
         {session && (
           // The question lies over the terminal instead of pushing it down, so that it does not resize the PTY mid-turn.
           <div className="relative flex min-h-0 flex-1 flex-col">
-            <SessionCloseConfirmation close={close} className="absolute inset-x-0 top-0 z-10" />
+            <SessionCloseConfirmation close={close} className="absolute inset-x-0 top-0 z-30" />
             <SessionScreen conn={conn} session={session} selected={selected} />
           </div>
         )}
