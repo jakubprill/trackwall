@@ -68,7 +68,7 @@ Tokens for such servers come in through [Environment from mise](/features/mise-e
 ## Good to know
 
 - Trackwall runs in the browser here, without the desktop app: no tray, no system notifications and no [Start at sign-in](/features/start-at-sign-in).
-- Links and buttons that open something on your computer, for example a link in a README or a session, "Open in VS Code" and "Show in the file manager", open nothing yet and show no error: Trackwall tries to open them inside the container. Open a repo with VS Code's "Dev Containers: Attach to Running Container" instead.
+- Links open in a new tab of your browser. "Open in VS Code" and "Show in the file manager" are not there, since a folder of the container means nothing to your computer: open a repo with VS Code's "Dev Containers: Attach to Running Container" instead. When the browser blocks the new tab, allow pop-ups for the page.
 - The command from [Connect Copilot CLI](/guide/connect-copilot-cli) is a path inside the container, so it works for a Copilot CLI in the container, not on your computer.
 - Packages installed on Alpine do not work on Debian and the other way round. After switching the image, delete `node_modules` in `~/trackwall` and run the install and build of step 3 again.
 - To update, run `git pull` in `~/trackwall`, then the install and build of step 3, and start Trackwall again.

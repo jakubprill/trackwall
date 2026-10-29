@@ -50,6 +50,7 @@ const STATUS: Record<ErrorCode, number> = {
   unsaved_changes: 409,
   dialog_changed: 409,
   service_unavailable: 409,
+  no_desktop: 409,
   internal: 500,
 };
 

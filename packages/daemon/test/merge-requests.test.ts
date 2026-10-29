@@ -90,6 +90,9 @@ describe.skipIf(process.versions.bun === undefined)("a merge request from a task
     expect(form.searchParams.get("merge_request[target_branch]")).toBe("main");
     expect(form.searchParams.get("merge_request[title]")).toBe("Add a discount");
     expect(form.searchParams.get("merge_request[description]")).toBe("Adds 10% off.");
+    // A page whose daemon has no desktop asks for the same address and opens it itself (ADR-120).
+    const asked = await daemon.post(mergeRequestsApi.formUrl, { task: task.id, title: "Add a discount", description: "Adds 10% off." });
+    expect(asked.url).toBe(opened.at(-1) ?? "");
 
     // The user created the merge request in the form; a task whose answer is not cached yet sees it at once.
     hosting.reconfigure({
@@ -119,6 +122,9 @@ describe.skipIf(process.versions.bun === undefined)("a merge request from a task
     });
     await expect(daemon.post(mergeRequestsApi.openForm, { task: other.id, title: "Again", description: "" })).rejects.toThrow(
       "already has an open merge request: https://gitlab.example.com/shop/shop/-/merge_requests/3",
+    );
+    await expect(daemon.post(mergeRequestsApi.formUrl, { task: other.id, title: "Again", description: "" })).rejects.toThrow(
+      "already has an open merge request",
     );
     expect(opened).toHaveLength(1);
   }, 60_000);

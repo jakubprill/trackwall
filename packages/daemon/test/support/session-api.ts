@@ -78,9 +78,20 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
     token,
     version: "1",
     uiDir: options.uiDir,
-    info: () => {
-      throw new Error("unused");
-    },
+    // The page asks once whether the daemon has a desktop (ADR-120); like the desktop app's daemon, this one has.
+    info: () => ({
+      version: "0.0.0-test",
+      pid: process.pid,
+      startedAt: "2026-10-29T00:00:00Z",
+      uptimeMs: 0,
+      platform: process.platform,
+      arch: process.arch,
+      runtime: { name: "bun", version: "test" },
+      launchedBy: "manual",
+      home,
+      mcpStdioCommand: ["trackwall-daemon", "mcp-stdio"],
+      desktop: true,
+    }),
     onShutdown: () => {},
     facade,
     mcp: mcp.endpoint,

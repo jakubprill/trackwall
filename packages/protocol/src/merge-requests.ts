@@ -138,4 +138,6 @@ export const mergeRequestsApi = {
    * title and description filled in. `bad_request` while the branch has unpushed commits or the remote is on no known repo host.
    */
   openForm: endpoint("open-form", MergeRequestDraft, Done),
+  /** The address `openForm` opens, with the same refusals, for a page that opens it itself when the daemon has no desktop (ADR-120). */
+  formUrl: endpoint("form-url", MergeRequestDraft, z.object({ url: z.string() })),
 };

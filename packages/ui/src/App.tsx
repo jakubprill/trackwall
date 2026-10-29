@@ -9,6 +9,7 @@ import { Loading } from "@/components/Loading";
 import { SupervisorPanel } from "@/components/SupervisorPanel";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { inDesktopShell, openWindow, reportShown, START_PARAMS, showViewMenu, startFromLocation } from "@/lib/app-window";
+import { DesktopContext, useDaemonDesktop } from "@/lib/desktop";
 import { DROP_HINT } from "@/lib/dropped-folder";
 import type { DroppedPaths } from "@/lib/file-drop";
 import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
@@ -75,6 +76,7 @@ export function App() {
     () => startFromLocation(window.location.search, START_PARAMS.sessionLayout, SESSION_LAYOUTS) ?? "1",
   );
   const { conn, epoch, error, retry } = useConnection();
+  const desktop = useDaemonDesktop(conn);
   // A folder dropped outside a session (ADR-51); `seq` mounts a new bar for every drop, also of the same folder. A drop
   // without a daemon connection is ignored, rather than answered whenever the connection comes back.
   const [dropped, setDropped] = useState<{ paths: DroppedPaths; seq: number }>();
@@ -182,117 +184,119 @@ export function App() {
     },
   );
   return (
-    <div className="flex h-screen">
-      <ActivityBar
-        views={VIEWS}
-        active={view}
-        onSelect={setView}
-        newWindow={newWindow}
-        badges={{ sessions: attentionCount(sessions.data) }}
-      />
-      <div className="flex min-w-0 flex-1 flex-col">
-        {appUpdate && <UpdateBanner handle={appUpdate} />}
-        {error && <ErrorBanner message={error} action={{ label: "Try again", onClick: retry }} />}
-        {windowError && <ErrorBanner message={windowError} action={{ label: "Dismiss", onClick: () => setWindowError(undefined) }} />}
-        {conn && dropped && (
-          <FolderDrop
-            key={dropped.seq}
-            conn={conn}
-            paths={dropped.paths}
-            onOpenRepos={openReposFromDrop}
-            onDismiss={() => setDropped(undefined)}
-          />
-        )}
-        {dragging && conn && (
-          // Over the page, not in its flow: a bar that pushes the page down would move the terminals under the pointer.
-          <p className="bg-card text-muted-foreground pointer-events-none fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md border px-4 py-2 text-sm shadow-lg">
-            {DROP_HINT}
-          </p>
-        )}
-        <KeyboardElsewhere.Provider value={supervisorFocused}>
-          <main className="hud-grid min-h-0 flex-1 overflow-y-auto">
-            {!conn && !error && (
-              <div className="p-6">
-                <Loading text="Connecting to the daemon…" />
-              </div>
-            )}
-            {/* One view that throws keeps the view bar and the other views. The key mounts the view afresh, with a fresh boundary, on
-                a view change, a reconnect (`epoch`) and every opening of a repo or a Settings category (`visit`). */}
-            <ErrorBoundary
-              key={`${view}:${epoch}:${visit}`}
-              fallback={(message, retry) => <ViewFailed message={message} onRetry={retry} />}
-            >
-              {conn && view === "home" && (
-                <HomeView
-                  conn={conn}
-                  runningLive={runningLive}
-                  repoWatch={repoWatch}
-                  sessions={sessions}
-                  onOpenInSessions={openInSessions}
-                  onOpenRepo={openRepos}
-                  onOpenDaemon={() => openSettings("diagnostics")}
-                  onOpenSettings={openSettings}
-                />
-              )}
-              {conn && view === "repos" && (
-                <ReposView
-                  conn={conn}
-                  initialRepo={repo}
-                  repoWatch={repoWatch}
-                  sessions={sessions.data}
-                  runningLive={runningLive}
-                  onOpenInSessions={openInSessions}
-                  onRetry={retry}
-                  onOpenSettings={openSettings}
-                />
-              )}
-              {conn && view === "sessions" && (
-                <SessionsView
-                  conn={conn}
-                  sessions={sessions}
-                  runningLive={runningLive}
-                  selected={session}
-                  onSelect={openInSessions}
-                  onShowSupervisor={showSupervisor}
-                  tree={tree}
-                  supervisor={supervisor}
-                  layout={sessionLayout}
-                  onLayout={setSessionLayout}
-                />
-              )}
-              {conn && view === "graph" && <GraphView conn={conn} warmupLive={warmupLive} repoWatch={repoWatch} />}
-              {conn && view === "settings" && (
-                <div className="flex justify-center p-6">
-                  <SettingsView
-                    conn={conn}
-                    initialCategory={settingsCategory ?? FIRST_SETTINGS_CATEGORY}
-                    update={appUpdate}
-                    warmupLive={warmupLive}
-                    onRetry={retry}
-                    onSaved={() => setView("repos")}
-                  />
+    <DesktopContext.Provider value={desktop}>
+      <div className="flex h-screen">
+        <ActivityBar
+          views={VIEWS}
+          active={view}
+          onSelect={setView}
+          newWindow={newWindow}
+          badges={{ sessions: attentionCount(sessions.data) }}
+        />
+        <div className="flex min-w-0 flex-1 flex-col">
+          {appUpdate && <UpdateBanner handle={appUpdate} />}
+          {error && <ErrorBanner message={error} action={{ label: "Try again", onClick: retry }} />}
+          {windowError && <ErrorBanner message={windowError} action={{ label: "Dismiss", onClick: () => setWindowError(undefined) }} />}
+          {conn && dropped && (
+            <FolderDrop
+              key={dropped.seq}
+              conn={conn}
+              paths={dropped.paths}
+              onOpenRepos={openReposFromDrop}
+              onDismiss={() => setDropped(undefined)}
+            />
+          )}
+          {dragging && conn && (
+            // Over the page, not in its flow: a bar that pushes the page down would move the terminals under the pointer.
+            <p className="bg-card text-muted-foreground pointer-events-none fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md border px-4 py-2 text-sm shadow-lg">
+              {DROP_HINT}
+            </p>
+          )}
+          <KeyboardElsewhere.Provider value={supervisorFocused}>
+            <main className="hud-grid min-h-0 flex-1 overflow-y-auto">
+              {!conn && !error && (
+                <div className="p-6">
+                  <Loading text="Connecting to the daemon…" />
                 </div>
               )}
-            </ErrorBoundary>
-          </main>
-        </KeyboardElsewhere.Provider>
+              {/* One view that throws keeps the view bar and the other views. The key mounts the view afresh, with a fresh boundary, on
+                a view change, a reconnect (`epoch`) and every opening of a repo or a Settings category (`visit`). */}
+              <ErrorBoundary
+                key={`${view}:${epoch}:${visit}`}
+                fallback={(message, retry) => <ViewFailed message={message} onRetry={retry} />}
+              >
+                {conn && view === "home" && (
+                  <HomeView
+                    conn={conn}
+                    runningLive={runningLive}
+                    repoWatch={repoWatch}
+                    sessions={sessions}
+                    onOpenInSessions={openInSessions}
+                    onOpenRepo={openRepos}
+                    onOpenDaemon={() => openSettings("diagnostics")}
+                    onOpenSettings={openSettings}
+                  />
+                )}
+                {conn && view === "repos" && (
+                  <ReposView
+                    conn={conn}
+                    initialRepo={repo}
+                    repoWatch={repoWatch}
+                    sessions={sessions.data}
+                    runningLive={runningLive}
+                    onOpenInSessions={openInSessions}
+                    onRetry={retry}
+                    onOpenSettings={openSettings}
+                  />
+                )}
+                {conn && view === "sessions" && (
+                  <SessionsView
+                    conn={conn}
+                    sessions={sessions}
+                    runningLive={runningLive}
+                    selected={session}
+                    onSelect={openInSessions}
+                    onShowSupervisor={showSupervisor}
+                    tree={tree}
+                    supervisor={supervisor}
+                    layout={sessionLayout}
+                    onLayout={setSessionLayout}
+                  />
+                )}
+                {conn && view === "graph" && <GraphView conn={conn} warmupLive={warmupLive} repoWatch={repoWatch} />}
+                {conn && view === "settings" && (
+                  <div className="flex justify-center p-6">
+                    <SettingsView
+                      conn={conn}
+                      initialCategory={settingsCategory ?? FIRST_SETTINGS_CATEGORY}
+                      update={appUpdate}
+                      warmupLive={warmupLive}
+                      onRetry={retry}
+                      onSaved={() => setView("repos")}
+                    />
+                  </div>
+                )}
+              </ErrorBoundary>
+            </main>
+          </KeyboardElsewhere.Provider>
+        </div>
+        {conn && (
+          <KeyboardElsewhere.Provider value={false}>
+            <SupervisorPanel
+              key={epoch}
+              conn={conn}
+              supervisor={supervisor}
+              layout={supervisorLayout}
+              onLayout={chooseSupervisorLayout}
+              focused={supervisorFocused}
+              onFocusedChange={setSupervisorFocused}
+              onOpenInSessions={openInSessions}
+              onChanged={sessions.reload}
+            />
+          </KeyboardElsewhere.Provider>
+        )}
       </div>
-      {conn && (
-        <KeyboardElsewhere.Provider value={false}>
-          <SupervisorPanel
-            key={epoch}
-            conn={conn}
-            supervisor={supervisor}
-            layout={supervisorLayout}
-            onLayout={chooseSupervisorLayout}
-            focused={supervisorFocused}
-            onFocusedChange={setSupervisorFocused}
-            onOpenInSessions={openInSessions}
-            onChanged={sessions.reload}
-          />
-        </KeyboardElsewhere.Provider>
-      )}
-    </div>
+    </DesktopContext.Provider>
   );
 }
 

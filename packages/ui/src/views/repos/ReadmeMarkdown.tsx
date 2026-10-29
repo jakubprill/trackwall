@@ -1,12 +1,13 @@
 import { createMermaidPlugin } from "@streamdown/mermaid";
-import { ExternalLink, workspaceApi } from "@trackwall/protocol";
+import { ExternalLink } from "@trackwall/protocol";
 import { ImageOff } from "lucide-react";
 import { type ComponentProps, type MouseEvent, useState } from "react";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { Streamdown } from "streamdown";
-import { errorMessage, post } from "@/lib/api";
+import { errorMessage } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import { useOpenWebLink } from "@/lib/desktop";
 
 /**
  * The README as formatted Markdown (ADR-35): ready-made Streamdown (GFM, raw HTML through sanitization, Mermaid diagrams
@@ -37,6 +38,7 @@ const mermaid = { errorComponent: MermaidError };
 const MIDDLE_BUTTON = 1;
 
 export function ReadmeMarkdown({ conn, text }: { conn: Connection; text: string }) {
+  const openLink = useOpenWebLink(conn);
   const [linkError, setLinkError] = useState<string>();
   const followLink = (e: MouseEvent<HTMLDivElement>) => {
     const anchor = e.target instanceof Element ? e.target.closest("a") : null;
@@ -47,7 +49,7 @@ export function ReadmeMarkdown({ conn, text }: { conn: Connection; text: string 
     const url = ExternalLink.safeParse(anchor.getAttribute("href") ?? anchor.getAttribute("xlink:href"));
     if (!url.success) return;
     setLinkError(undefined);
-    post(conn, workspaceApi.openLink, { url: url.data }).catch((err: unknown) => setLinkError(errorMessage(err)));
+    openLink(url.data).catch((err: unknown) => setLinkError(errorMessage(err)));
   };
 
   return (
