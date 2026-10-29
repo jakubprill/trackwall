@@ -105,6 +105,7 @@ function setup() {
           ? live(key)
           : undefined,
     hasProposer: (key) => key === SUPERVISOR_WORK || sessions.has(key),
+    changed: () => {},
     log: () => {},
   });
   return { coordination, tasks, asked, running };
@@ -283,6 +284,7 @@ describe("updates on delegated work", () => {
       runningOfTask: () => undefined,
       runningProposer: () => undefined,
       hasProposer: () => false,
+      changed: () => {},
       log: () => {},
     });
 
@@ -306,7 +308,7 @@ describe("updates on delegated work", () => {
 
 describe("the kept messages and updates", () => {
   test("read messages make room for new ones; with 20 unread a new one is refused", () => {
-    const messages = new TaskMessages();
+    const messages = new TaskMessages(() => {});
     for (let i = 0; i < 20; i++) messages.add("t1", BY_MAIN, `m${i}`, Number.POSITIVE_INFINITY);
     messages.take("t1");
     messages.add("t1", BY_MAIN, "m20", Number.POSITIVE_INFINITY);
@@ -317,7 +319,7 @@ describe("the kept messages and updates", () => {
   });
 
   test("beyond 50 unread updates the oldest drop out and are counted", () => {
-    const updates = new TaskUpdates();
+    const updates = new TaskUpdates(() => {});
     for (let i = 0; i < 53; i++) updates.add(MAIN, { kind: "turn_ended", task: `t${i}`, session: null, at: "2026-10-25T12:00:00.000Z" });
 
     const taken = updates.take(MAIN);
@@ -325,6 +327,77 @@ describe("the kept messages and updates", () => {
     expect(taken.dropped).toBe(3);
     expect(taken.updates.map((u) => u.task)).toEqual(Array.from({ length: 50 }, (_, i) => `t${i + 3}`));
     expect(updates.take(MAIN)).toEqual({ updates: [], dropped: 0 });
+  });
+});
+
+describe("the coordination across a daemon restart", () => {
+  test("the next daemon gets back the messages of the tasks still there and the updates of the proposers it has (ADR-115)", () => {
+    const [kept, ended] = ["6f1d0a52-2c41-4a8e-9a3f-0c5a1b2d3e4f", "0b6c9e1a-7d2f-4c3b-8e5a-9f1d2c3b4a5e"];
+    const before = new TaskCoordination({
+      task: (id) => task(id, BY_MAIN),
+      findTask: (id) => task(id, BY_MAIN),
+      proposedBy: () => BY_MAIN,
+      proposerKey: () => MAIN,
+      runningOfTask: () => undefined,
+      runningProposer: () => undefined,
+      hasProposer: () => true,
+      changed: () => {},
+      log: () => {},
+    });
+    before.send(MAIN, kept, "use the v2 API");
+    before.send(MAIN, ended, "stop");
+    before.userTyped({ id: MAIN, task: kept });
+    before.userTyped({ id: TASK_SESSION, task: ended });
+    before.proposalRejected({ id: kept, proposedBy: BY_MAIN }, "Not now");
+    before.proposalRejected({ id: ended, proposedBy: BY_SUPERVISOR }, null);
+    before.proposalRejected({ id: ended, proposedBy: { session: TASK_SESSION, supervisor: false } }, null);
+    const stored = before.stored();
+    expect(Object.keys(stored.userInSession)).toEqual([MAIN, TASK_SESSION]);
+
+    const { coordination: after } = setup();
+    after.restore(stored, { hasTask: (id) => id === kept, hasSession: (id) => id === MAIN });
+
+    expect(after.messages().map((m) => [m.task, m.text])).toEqual([[kept, "use the v2 API"]]);
+    expect(after.takeMessages(kept).map((m) => m.text)).toEqual(["use the v2 API"]);
+    expect(after.takeUpdates(MAIN).updates).toEqual([
+      { kind: "proposal_rejected", task: kept, session: null, reason: "Not now", at: expect.any(String) },
+    ]);
+    expect(after.takeUpdates(NEW_SUPERVISOR).updates.map((u) => u.task)).toEqual([ended]);
+    // When the user last typed counts on for the sessions and tasks still there.
+    expect(after.stored()).toMatchObject({ userInSession: { [MAIN]: expect.any(Number) }, userInTask: { [kept]: expect.any(Number) } });
+    expect(Object.keys(after.stored().userInSession)).toEqual([MAIN]);
+    expect(Object.keys(after.stored().userInTask)).toEqual([kept]);
+  });
+});
+
+describe("what the agent queues file hears about (ADR-115)", () => {
+  test("a message or an update that comes or is read is a change, and so is a review's time; typing is not", () => {
+    let changes = 0;
+    const coordination = new TaskCoordination({
+      task: (id) => task(id, BY_MAIN),
+      findTask: (id) => task(id, BY_MAIN),
+      proposedBy: () => BY_MAIN,
+      proposerKey: () => MAIN,
+      runningOfTask: () => undefined,
+      runningProposer: () => undefined,
+      hasProposer: () => true,
+      changed: () => changes++,
+      log: () => {},
+    });
+
+    coordination.send(MAIN, "by-main", "use the v2 API");
+    coordination.takeMessages("by-main");
+    coordination.takeMessages("by-main");
+    expect(changes).toBe(2);
+    coordination.proposalRejected({ id: "p1", proposedBy: BY_MAIN }, null);
+    coordination.takeUpdates(MAIN);
+    coordination.takeUpdates(MAIN);
+    expect(changes).toBe(4);
+    coordination.userTyped({ id: MAIN, task: "by-main" });
+    expect(changes).toBe(4);
+    coordination.reviewed("by-main");
+    coordination.taskEnded("by-main");
+    expect(changes).toBe(6);
   });
 });
 

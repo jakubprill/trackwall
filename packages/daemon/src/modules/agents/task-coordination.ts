@@ -3,24 +3,45 @@ import {
   type ProposedBy,
   type SendMessageResult,
   type Session,
+  SessionId,
   type Task,
+  TaskId,
   type TaskMessage,
   type TaskUpdate,
   type Verification,
 } from "@trackwall/protocol";
+import { z } from "zod";
 import { DomainError } from "../../infra/errors.ts";
 import type { SessionEvent } from "./live-session.ts";
 import { proposerKeyOf, proposerOf, SUPERVISOR } from "./proposer.ts";
-import { TaskMessages } from "./task-messages.ts";
-import { TaskUpdates } from "./task-updates.ts";
+import { StoredMessages, TaskMessages } from "./task-messages.ts";
+import { StoredUpdates, TaskUpdates } from "./task-updates.ts";
 
 /**
  * Coordination between a task's proposer and the task's session (ADR-68): messages down (`send_message`, read with
  * `get_messages`), updates up (`get_updates`), and when to ask either session to read them. Only the proposer of a task
  * (`proposedBy`; for the supervisor's work, any supervisor) sends it messages, and at most `TASK_MESSAGES_WITHOUT_USER`
  * until the user takes part again, so two agents do not keep each other busy without them. Part of the `agents`
- * module; it holds no sessions itself, `agents.ts` hands them in.
+ * module; it holds no sessions itself, `agents.ts` hands them in. All of it outlives a daemon restart in
+ * `agent-queues.json` (ADR-115, `stored`, `restore`).
  */
+
+/** What `agent-queues.json` keeps of the coordination: the messages, the updates, and when the user last took part (milliseconds since the epoch). */
+const EpochMs = z.number().int().nonnegative();
+export const StoredCoordination = z.object({
+  messages: StoredMessages,
+  updates: StoredUpdates,
+  userInTask: z.record(TaskId, EpochMs),
+  userInSession: z.record(SessionId, EpochMs),
+});
+export type StoredCoordination = z.infer<typeof StoredCoordination>;
+
+/** What of the previous daemon's coordination is still there after its restart. */
+export interface Restored {
+  hasTask(task: string): boolean;
+  /** A session the next daemon resumes under the same id. */
+  hasSession(session: string): boolean;
+}
 
 /** A running session as coordination needs it: who it is, and asking it to read what waits (`LiveSession.askToRead`). */
 export interface CoordinatedSession {
@@ -44,13 +65,18 @@ export interface CoordinationDeps {
   runningProposer(proposer: string): CoordinatedSession | undefined;
   /** Whether anyone is behind a proposer key: always for `SUPERVISOR`, for a session while it is on the list. */
   hasProposer(proposer: string): boolean;
+  /**
+   * A message, an update or a review's time came, or a message or an update was read: what `stored` gives changed. Not
+   * called for the user's typing, which is too frequent; its time reaches the file with the next change.
+   */
+  changed: () => void;
   log: (msg: string) => void;
 }
 
 export class TaskCoordination {
   readonly #deps: CoordinationDeps;
-  readonly #messages = new TaskMessages();
-  readonly #updates = new TaskUpdates();
+  readonly #messages: TaskMessages;
+  readonly #updates: TaskUpdates;
   /** When the user last took part in a task: text in one of its sessions or a review (milliseconds since the epoch). */
   readonly #userInTask = new Map<string, number>();
   /** When the user last put text into a session (session id → milliseconds since the epoch). */
@@ -58,6 +84,27 @@ export class TaskCoordination {
 
   constructor(deps: CoordinationDeps) {
     this.#deps = deps;
+    this.#messages = new TaskMessages(deps.changed);
+    this.#updates = new TaskUpdates(deps.changed);
+  }
+
+  stored(): StoredCoordination {
+    return {
+      messages: this.#messages.stored(),
+      updates: this.#updates.stored(),
+      userInTask: Object.fromEntries(this.#userInTask),
+      userInSession: Object.fromEntries(this.#userInSession),
+    };
+  }
+
+  /** What the previous daemon kept, of the tasks still there, and of the supervisor and the sessions resumed under the same id. */
+  restore(stored: StoredCoordination, { hasTask, hasSession }: Restored): void {
+    this.#messages.restore(stored.messages, hasTask);
+    this.#updates.restore(stored.updates, (proposer) => proposer === SUPERVISOR || hasSession(proposer));
+    this.#userInTask.clear();
+    for (const [task, at] of Object.entries(stored.userInTask)) if (hasTask(task)) this.#userInTask.set(task, at);
+    this.#userInSession.clear();
+    for (const [session, at] of Object.entries(stored.userInSession)) if (hasSession(session)) this.#userInSession.set(session, at);
   }
 
   /**
@@ -164,6 +211,7 @@ export class TaskCoordination {
   /** The user sent task `task` a review: it counts as taking part. */
   reviewed(task: string): void {
     this.#userInTask.set(task, Date.now());
+    this.#deps.changed();
   }
 
   /** A closed session: its typing and the updates for it (unless it is the supervisor's) go. */

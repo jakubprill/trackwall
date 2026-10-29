@@ -33,6 +33,7 @@ import {
 } from "@trackwall/protocol";
 import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { AcpSession, type ConversationViewer, type ConversationWindow } from "./acp-session.ts";
+import { AgentQueuesFile } from "./agent-queues.ts";
 import type { AgentSession } from "./agent-session.ts";
 import { resolveCopilot, toolPermissionArgs } from "./copilot-command.ts";
 import type { CopilotHookOutput } from "./copilot-hook-output.ts";
@@ -96,6 +97,8 @@ export const TASKS_FILE = "tasks.json";
 /** The sessions that run, for the next daemon to resume (ADR-95). */
 export const RESUMABLE_SESSIONS_FILE = "resumable-sessions.json";
 export const LAST_SUPERVISOR_FILE = "last-supervisor.json";
+/** Proposals, reviews, messages and updates that wait, for the next daemon (ADR-115). */
+export const AGENT_QUEUES_FILE = "agent-queues.json";
 /** Where task worktrees went before ADR-84; tasks from then keep them there until they end. */
 export const LEGACY_WORKTREES_DIR = "worktrees";
 
@@ -209,10 +212,8 @@ export class Agents {
   readonly #sessions = new Map<string, AgentSession>();
   readonly #tokens = new SessionTokens();
   readonly #tasks: AgentTasks;
-  readonly #proposals = new TaskProposals();
-  /** The folder each waiting repo removal names, fixed when it was proposed: approval moves that folder or none (ADR-83). */
-  readonly #removalDirs = new Map<string, string>();
-  readonly #reviews = new TaskReviews();
+  readonly #proposals = new TaskProposals(() => this.#queues.follow());
+  readonly #reviews = new TaskReviews(() => this.#queues.follow());
   readonly #miseTrust = new MiseTrustNotices();
   readonly #coordination: TaskCoordination;
   /** The supervisor start under way, so that two requests at once start one supervisor, not two (ADR-58). */
@@ -222,6 +223,7 @@ export class Agents {
   /** The sessions the previous daemon left running, until `resumeLeftSessions` takes them (ADR-95). */
   #left: ResumableSession[] = [];
   readonly #lastSupervisor: LastSupervisorFile;
+  readonly #queues: AgentQueuesFile;
   /** The environment each listed session started with, to tell when mise would give it another one (ADR-119). */
   readonly #environments = new SessionEnvironments();
   /** The sessions a restart is stopping and starting again: a second restart of one would unlist the first one's new session. */
@@ -253,7 +255,13 @@ export class Agents {
       runningOfTask: (task) => this.#runningOfTask(task),
       runningProposer: (proposer) => [...this.#sessions.values()].find((s) => proposerKeyOf(s) === proposer && this.#isRunning(s)),
       hasProposer: (proposer) => proposer === SUPERVISOR || this.#sessions.has(proposer),
+      changed: () => this.#queues.follow(),
       log: deps.log,
+    });
+    this.#queues = new AgentQueuesFile(join(deps.home, AGENT_QUEUES_FILE), deps.log, {
+      proposals: this.#proposals,
+      reviews: this.#reviews,
+      coordination: this.#coordination,
     });
   }
 
@@ -393,17 +401,18 @@ export class Agents {
         "a task session works in its worktree and proposes no folder actions; tell your proposer instead",
       );
     const repoDir = await this.#deps.repos.repoPath(repo);
-    const proposal = this.#proposals.add({
-      kind: "remove_repo",
-      repo,
-      title: `Remove ${repo} from the projects folder`,
-      prompt: reason,
-      model: null,
-      approvals: "ask",
-      proposedBy: proposedByOf(session),
-    });
-    this.#removalDirs.set(proposal.id, repoDir);
-    return proposal;
+    return this.#proposals.add(
+      {
+        kind: "remove_repo",
+        repo,
+        title: `Remove ${repo} from the projects folder`,
+        prompt: reason,
+        model: null,
+        approvals: "ask",
+        proposedBy: proposedByOf(session),
+      },
+      repoDir,
+    );
   }
 
   /**
@@ -429,9 +438,9 @@ export class Agents {
    */
   async approveRepoRemoval(id: string): Promise<void> {
     const proposal = this.#proposals.get(id);
-    const repoDir = this.#removalDirs.get(id);
-    if (proposal.kind !== "remove_repo" || repoDir === undefined)
-      throw new DomainError("bad_request", `proposal ${id} is not a repo removal`);
+    if (proposal.kind !== "remove_repo") throw new DomainError("bad_request", `proposal ${id} is not a repo removal`);
+    const repoDir = this.#proposals.removalDir(id);
+    if (repoDir === undefined) throw new Error(`repo removal ${id} has no folder`);
     if (this.#proposals.list().some((p) => p.repo === proposal.repo && this.#proposals.approving(p.id)))
       throw new DomainError("bad_request", `${proposal.repo} is already being removed or a task of it started`);
     this.#assertNothingRunsIn(proposal.repo, repoDir);
@@ -444,7 +453,6 @@ export class Agents {
       throw err;
     }
     this.#proposals.release(id, false);
-    this.#removalDirs.delete(id);
     this.#coordination.repoRemoved(proposal, movedTo);
     for (const other of this.#proposals.list())
       if (other.repo === proposal.repo && this.#proposals.find(other.id))
@@ -464,7 +472,6 @@ export class Agents {
   rejectProposal(id: string, reason: string | undefined): void {
     const proposal = this.#proposals.get(id);
     this.#proposals.reject(id, reason ?? null);
-    this.#removalDirs.delete(id);
     this.#coordination.proposalRejected(proposal, reason ?? null);
   }
 
@@ -940,11 +947,16 @@ export class Agents {
   }
 
   /**
-   * Daemon start: session files from the previous run (sessions do not outlive the daemon), and the list of the
-   * sessions it left running, which `resumeLeftSessions` resumes once the API listens (ADR-95).
+   * Daemon start: session files from the previous run (sessions do not outlive the daemon), the list of the sessions it
+   * left running, which `resumeLeftSessions` resumes once the API listens (ADR-95), and the queues it left (ADR-115).
    */
   sweepLeftovers(): void {
     this.#left = this.#resumable.read();
+    // A task's session comes back under a new id, so what waited for its old id has nobody to reach, as when it closes.
+    this.#queues.restore({
+      hasTask: (task) => this.#tasks.find(task) !== undefined,
+      hasSession: new Set(this.#left.filter((s) => s.task === null).map((s) => s.session)),
+    });
     try {
       rmSync(join(this.#deps.home, SESSIONS_DIR), { recursive: true, force: true });
     } catch (err) {
@@ -968,6 +980,8 @@ export class Agents {
         this.#deps.log(`resumed session ${session.session} (${resumablePlace(session)})`);
       } catch (err) {
         this.#deps.log(`resuming session ${session.session}: ${String(err)}`);
+        // What waited for it has nobody to reach, as when the user closes a session (ADR-115).
+        if (session.task === null) this.#coordination.sessionClosed({ id: session.session, supervisor: session.supervisor });
       }
     }
   }
@@ -981,10 +995,14 @@ export class Agents {
     const spec = sessionLaunch(left.view, left);
     if (left.supervisor) {
       if (this.#supervisorStart || this.#runningSupervisor()) throw new Error("a supervisor already runs");
-      return this.#startSupervisorAs(spec);
+      const started = await this.#startSupervisorAs(spec);
+      this.#askToReadLeft(left.session);
+      return started;
     }
     const cwd = repo === null ? await this.#deps.repos.projectsDir() : await this.#deps.repos.repoPath(repo);
-    return this.#launchAs(spec, { repo, supervisor: false, cwd, task: null });
+    const started = await this.#launchAs(spec, { repo, supervisor: false, cwd, task: null });
+    this.#askToReadLeft(left.session);
+    return started;
   }
 
   /** A task's only session after resuming it, which closes its ended ones: running, or already ended when its agent exited at once. */
@@ -994,17 +1012,31 @@ export class Agents {
     return session;
   }
 
+  /**
+   * A supervisor or main session the restart brought back is asked to read the updates it had not read before the stop
+   * (ADR-115), unlike a new one (`#listed`); a task's session is asked anyway.
+   */
+  #askToReadLeft(id: string): void {
+    const session = this.#sessions.get(id);
+    if (session !== undefined && this.#inboxPrompt(session) !== undefined) session.askToRead();
+  }
+
   /** A start in the view it names, in `place`. */
   #launchAs(spec: SessionLaunch, place: SessionPlace): Promise<Session> {
     return spec.view === "terminal" ? this.#launch({ ...spec, ...place }) : this.#launchConversation({ ...spec, ...place });
   }
 
-  /** Daemon exit, before `procs.stopAll`: the sessions it stops stay in the list for the next daemon to resume (ADR-95). */
+  /**
+   * Daemon exit, before `procs.stopAll`: the sessions it stops stay in the list for the next daemon to resume (ADR-95),
+   * and the queues stay as they are now (ADR-115), with the user's latest typing in them.
+   */
   keepRunningSessionsForResume(): void {
     // The list of this moment, not of the last check: a session stopped or started since then counts as it is now.
     this.#followLive([...this.#sessions.values()].filter((s) => this.#deps.procs.state(owner(s.id))?.kind === "running"));
     this.#followLastSupervisor();
+    this.#queues.follow();
     this.#resumable.stopFollowing();
+    this.#queues.stopFollowing();
   }
 
   /** Daemon exit: `procs.stopAll` stops the processes, here only the observing ends. */
