@@ -26,3 +26,8 @@ export function newSessionStart(repo: string | null, worktree: boolean, prompt: 
 export function sessionsInSameFolder(sessions: readonly Session[], repo: string | null): Session[] {
   return sessions.filter((s) => isLive(s) && s.task === null && (repo === null ? isFreeSession(s) : s.repo === repo));
 }
+
+/** The first of a board item's repos that the projects folder has (ADR-133), where a task for the item starts. */
+export function firstListedRepo(repos: readonly string[], listed: readonly { id: string }[] | undefined): string | undefined {
+  return repos.find((id) => listed?.some((r) => r.id === id));
+}

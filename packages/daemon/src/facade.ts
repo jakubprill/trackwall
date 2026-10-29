@@ -17,6 +17,7 @@ import {
 } from "./modules/agents/agents.ts";
 import { resolveCopilot } from "./modules/agents/copilot-command.ts";
 import { Batch } from "./modules/batch/batch.ts";
+import { Board } from "./modules/board/board.ts";
 import { CardCache } from "./modules/cards/card-cache.ts";
 import { Cards } from "./modules/cards/cards.ts";
 import { ConfigFiles } from "./modules/config-files/config-files.ts";
@@ -64,6 +65,8 @@ export interface Facade {
   logs: Logs;
   agents: Agents;
   batch: Batch;
+  /** The user's board items in `.trackwall/board` of the projects folder (ADR-133). */
+  board: Board;
   services: Services;
   testReports: TestReports;
   verifications: Verifications;
@@ -226,6 +229,7 @@ export function createFacade(o: FacadeOptions): Facade {
     onTrusted: (repo) => agents.miseTrusted({ repo, task: null }),
   });
   const batch = new Batch({ workspace, mise, log: o.log });
+  const board = new Board({ projectsDir: () => workspace.projectsDir() });
   const graph = new Graph({ cards, workspace });
   const taskPort = (repo: string, task: string) => agents.taskOfRepo(task, repo).port;
   const services = new Services({ mise, logs, graph, cards, taskPort, env: o.userEnv, ...SERVICE_TIMING });
@@ -326,6 +330,7 @@ export function createFacade(o: FacadeOptions): Facade {
     procs,
     logs,
     batch,
+    board,
     agents,
     services,
     testReports,

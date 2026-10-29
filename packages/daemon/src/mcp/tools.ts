@@ -15,13 +15,15 @@ import {
 import { z } from "zod";
 import type { Facade } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
+import { inOrder, itemPath, itemSummary, matchesItem } from "./board-items.ts";
 
 /**
  * The daemon's MCP tools (§5.3, ADR-24): each is a thin mapping onto the facade, so the agent sees the same state as the UI
  * (§1.1). None changes the configuration or a repo (§8), none answers in a session or stops one, and only `resume_task`
  * starts one: a new session of a task the user already approved, in its own worktree (ADR-90). Only
- * `propose_task` (a proposal, which only the user turns into a task in the UI) and `report_result` (the summary of the
- * session's own task) write anything, ADR-39, `get_review_comments` marks the user's review comments read (ADR-62),
+ * `propose_task` (a proposal, which only the user turns into a task in the UI), `report_result` (the summary of the
+ * session's own task), ADR-39, and `create_item` and `update_item` (the user's board, from which nothing starts by
+ * itself, ADR-133) write anything, `get_review_comments` marks the user's review comments read (ADR-62),
  * `send_message` queues text for the session of a task the caller proposed, and `get_messages` and `get_updates` mark
  * what they return read (ADR-68);
  * only `run_mise_task` and `stop_mise_task` start and stop processes: a mise task from the current list of the repo's
@@ -228,13 +230,51 @@ const runs: ToolRuns = {
   },
   getDayReport: async (facade) => ({ report: facade.dayStart.report() }),
   getTaskChanges: (facade, { task, paths, maxPatchBytes }) => facade.agents.agentTaskChanges(task, maxPatchBytes, paths),
-  proposeTask: async (facade, { model, approvals, ...proposal }, { caller }) => ({
+  proposeTask: async (facade, { model, approvals, item, ...proposal }, { caller }) => {
+    // The item must exist, as the repo must (ADR-133).
+    if (item !== undefined) await facade.board.item(item);
     // Without a model the task runs on Copilot CLI's default (ADR-98); without a mode its agent asks (ADR-105).
-    proposal: await facade.agents.propose(caller, { ...proposal, model: model ?? null, approvals: approvals ?? "ask" }),
-  }),
+    return {
+      proposal: await facade.agents.propose(caller, {
+        ...proposal,
+        model: model ?? null,
+        approvals: approvals ?? "ask",
+        item: item ?? null,
+      }),
+    };
+  },
   proposeFolderAction: async (facade, { repo, reason }, { caller }) => ({
     proposal: await facade.agents.proposeRepoRemoval(caller, repo, reason),
   }),
+  listItems: async (facade, filter) => {
+    const { items } = await facade.board.board();
+    const { tasks } = facade.agents.sessions();
+    return { items: inOrder(items.filter((item) => matchesItem(item, filter))).map((item) => itemSummary(item, items, tasks)) };
+  },
+  getItem: async (facade, { item: id }) => {
+    const { items } = await facade.board.board();
+    const item = items.find((it) => it.id === id);
+    if (!item) throw new DomainError("not_found", `no board item ${id}`);
+    const { tasks } = facade.agents.sessions();
+    return {
+      item,
+      path: itemPath(item, items),
+      children: inOrder(items.filter((it) => it.parent === id)).map((child) => itemSummary(child, items, tasks)),
+      tasks: tasks.filter((task) => task.item === id),
+    };
+  },
+  createItem: async (facade, { title, body, parent, repos, link }, { caller }) => {
+    const task = caller === null ? null : facade.agents.session(caller).task;
+    // A task session's finding goes under its own task's item, while that item is still on the board (ADR-133).
+    const own = task === null ? null : facade.agents.task(task).item;
+    const ownParent = own !== null && (await facade.board.board()).items.some((it) => it.id === own) ? own : null;
+    const item = await facade.board.create(
+      { kind: "item", title, body, parent: parent ?? ownParent, repos: repos ?? [], link: link ?? null, column: "ideas" },
+      { kind: "agent", task },
+    );
+    return { item };
+  },
+  updateItem: async (facade, { item, ...change }) => ({ item: await facade.board.updateByAgent(item, change) }),
   reportResult: async (facade, { summary }, { caller }) => ({ task: facade.agents.reportSummary(caller, summary) }),
   getReviewComments: async (facade, _args, { caller }) => ({ comments: facade.agents.takeReviewComments(caller) }),
   sendMessage: async (facade, { task, text }, { caller }) => facade.agents.sendMessage(caller, task, text),
@@ -306,6 +346,10 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.getTaskChanges, runs.getTaskChanges),
   defineTool(mcpTools.proposeTask, runs.proposeTask),
   defineTool(mcpTools.proposeFolderAction, runs.proposeFolderAction),
+  defineTool(mcpTools.listItems, runs.listItems),
+  defineTool(mcpTools.getItem, runs.getItem),
+  defineTool(mcpTools.createItem, runs.createItem),
+  defineTool(mcpTools.updateItem, runs.updateItem),
   defineTool(mcpTools.reportResult, runs.reportResult),
   defineTool(mcpTools.getReviewComments, runs.getReviewComments),
   defineTool(mcpTools.sendMessage, runs.sendMessage),

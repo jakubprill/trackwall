@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Session } from "@trackwall/protocol";
-import { newSessionStart, sessionsInSameFolder } from "../src/lib/new-session.ts";
+import { firstListedRepo, newSessionStart, sessionsInSameFolder } from "../src/lib/new-session.ts";
 
 function session(id: string, over: Partial<Session>): Session {
   return {
@@ -67,5 +67,16 @@ describe("the running sessions a new session without its own worktree would shar
 
   test("in the projects folder: the running free sessions, not the supervisor", () => {
     expect(sessionsInSameFolder(sessions, null).map((s) => s.id)).toEqual(["free"]);
+  });
+});
+
+describe("the repo a task for a board item starts in (ADR-133)", () => {
+  test("is the item's first repo the projects folder still has", () => {
+    expect(firstListedRepo(["gone", "orders-api", "billing"], [{ id: "billing" }, { id: "orders-api" }])).toBe("orders-api");
+  });
+
+  test("is none when no repo of the item is listed, or the list has not loaded", () => {
+    expect(firstListedRepo(["gone"], [{ id: "billing" }])).toBeUndefined();
+    expect(firstListedRepo(["orders-api"], undefined)).toBeUndefined();
   });
 });

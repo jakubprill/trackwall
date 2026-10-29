@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { type JavaNavigationOffer, javaNavigationOffer } from "@/lib/java-navigation";
-import { type NewSessionStart, newSessionStart, sessionsInSameFolder } from "@/lib/new-session";
+import { firstListedRepo, type NewSessionStart, newSessionStart, sessionsInSameFolder } from "@/lib/new-session";
 import { tagsByRepo } from "@/lib/repo-tags";
 import type { SessionSelection } from "@/lib/session-entries";
 import { readStartChoice, type StartChoice, saveStartChoice } from "@/lib/start-choices";
@@ -24,6 +24,15 @@ import { typedModel } from "@/lib/task-model";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 import { StartOptions } from "./StartOptions.tsx";
+
+/** The board item a task is for (ADR-133), with the form's heading; none for the form in Sessions. */
+interface FromItem {
+  item: string | null;
+  repos: readonly string[];
+  prompt: string;
+  heading: string;
+}
+const NO_ITEM: FromItem = { item: null, repos: [], prompt: "", heading: "New task or session for the agent" };
 
 /** The place choice's value for the projects folder; a repo id is never empty. */
 const PROJECTS_FOLDER = "";
@@ -35,17 +44,21 @@ const PROJECTS_FOLDER = "";
  * Only a task, which works in its own worktree, can run on a chosen model (ADR-98) and without asking for approvals
  * (ADR-105), and, in a repo tagged java, with a Java language server (ADR-99). The options are a row of pills under the
  * prompt (`StartOptions`); the worktree, the model and Java navigation come back as the user last started from that
- * place, the approvals mode always starts at asking.
+ * place, the approvals mode always starts at asking. Started from a board item (ADR-133), the form comes with the item's
+ * repo and prompt, and the task works on the item.
  */
 export function NewSession({
   conn,
   sessions,
+  fromItem = NO_ITEM,
   onStarted,
   onCancel,
 }: {
   conn: Connection;
   /** The listed sessions, for the warning about another agent in the same working copy. */
   sessions: readonly Session[];
+  /** The board item the task is for: its first repo, the prompt to start from, and its id for `Task.item`. */
+  fromItem?: FromItem;
   onStarted: (selection: SessionSelection) => void;
   onCancel?: () => void;
 }) {
@@ -53,9 +66,9 @@ export function NewSession({
   const repos = useRemote(load);
   const [place, setPlace] = useState<string>();
   const [edited, setEdited] = useState<ReadonlyMap<string, StartChoice>>(new Map());
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt] = useState(fromItem.prompt);
   const [approvals, setApprovals] = useState<TaskApprovals>("ask");
-  const chosen = place ?? repos.data?.repos[0]?.id ?? PROJECTS_FOLDER;
+  const chosen = place ?? firstListedRepo(fromItem.repos, repos.data?.repos) ?? repos.data?.repos[0]?.id ?? PROJECTS_FOLDER;
   const repo = chosen === PROJECTS_FOLDER ? null : chosen;
   const remembered = useMemo(() => readStartChoice(() => window.localStorage, chosen), [chosen]);
   const choice = edited.get(chosen) ?? remembered;
@@ -64,8 +77,10 @@ export function NewSession({
   const start = newSessionStart(repo, choice.worktree, prompt);
   const java = useJavaNavigationOffer(conn, repo);
   const javaNavigation = java.kind === "ready" && choice.javaNavigation;
+  const { item } = fromItem;
   const createTask = useAction(
-    (repo: string, prompt: string) => post(conn, agentsApi.createTask, { repo, prompt, approvals, model: model ?? null, javaNavigation }),
+    (repo: string, prompt: string) =>
+      post(conn, agentsApi.createTask, { repo, prompt, approvals, model: model ?? null, javaNavigation, item }),
     (task) => onStarted({ kind: "task", id: task.id }),
   );
   const startSession = useAction(
@@ -83,7 +98,7 @@ export function NewSession({
 
   return (
     <div className="flex max-w-3xl flex-col gap-4 p-6">
-      <h3 className="hud-label">New task or session for the agent</h3>
+      <h3 className="hud-label">{fromItem.heading}</h3>
       {repos.error && <ErrorWithRetry message={repos.error} onRetry={repos.reload} />}
       {repos.data && (
         <>

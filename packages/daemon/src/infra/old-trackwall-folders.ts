@@ -13,8 +13,11 @@ import { ensureTrackwallDir, trackwallDir } from "./trackwall-dir.ts";
  * remembers, and the old folder goes once it is empty. This file goes when no installation has the old folders left.
  */
 
+/** The folders of `.trackwall` that had a name of their own before ADR-125; later ones (the board, ADR-133) never did. */
+type OldFolder = Exclude<TrackwallFolder, "board">;
+
 /** Each folder of `.trackwall` under its name before ADR-125. */
-const OLD_NAMES: Record<TrackwallFolder, string> = {
+const OLD_NAMES: Record<OldFolder, string> = {
   local: ".trackwall-local",
   worktrees: ".trackwall-worktrees",
   lsp: ".trackwall-lsp",
@@ -23,7 +26,7 @@ const OLD_NAMES: Record<TrackwallFolder, string> = {
 };
 
 /** Folders of loose entries (a removed repo, a task's index, a temporary file), moved one entry at a time. */
-const ENTRY_FOLDERS: readonly TrackwallFolder[] = ["removed", "lsp", "scratch"];
+const ENTRY_FOLDERS: readonly OldFolder[] = ["removed", "lsp", "scratch"];
 
 export async function moveOldTrackwallFolders(projectsDir: string, log: (msg: string) => void): Promise<void> {
   await moveStore(projectsDir, log);
@@ -68,7 +71,7 @@ async function moveStore(projectsDir: string, log: (msg: string) => void): Promi
   await moveLogged(old, dir, () => ensureTrackwallDir(projectsDir), log);
 }
 
-async function moveEntries(projectsDir: string, folder: TrackwallFolder, log: (msg: string) => void): Promise<void> {
+async function moveEntries(projectsDir: string, folder: OldFolder, log: (msg: string) => void): Promise<void> {
   const old = join(projectsDir, OLD_NAMES[folder]);
   const names = await readdir(old).catch(() => null);
   if (names === null) return;

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { SessionList } from "./agents.ts";
+import { BoardRevision } from "./board.ts";
 import { CardWarmupProgress } from "./cards.ts";
 import { RunningMiseTask } from "./mise.ts";
 import { RepoWatchState } from "./workspace.ts";
@@ -23,6 +24,8 @@ export const DaemonEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("repos.changed"), payload: RepoWatchState }),
   /** The progress of the card warm-up, the same as `cards/warmup` (ADR-63). */
   z.object({ type: z.literal("cards.warmup.changed"), payload: CardWarmupProgress }),
+  /** The board's revision (ADR-133): the client reads `board/board` again when it grows. */
+  z.object({ type: z.literal("board.changed"), payload: BoardRevision }),
 ]);
 export type DaemonEvent = z.infer<typeof DaemonEvent>;
 export type DaemonEventType = DaemonEvent["type"];

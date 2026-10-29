@@ -1,10 +1,11 @@
-import { FolderGit2, Network, Orbit, Settings, SquareTerminal } from "lucide-react";
+import { FolderGit2, ListTree, Network, Orbit, Settings, SquareTerminal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityBar, type ActivityView } from "@/components/ActivityBar";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { FolderDrop } from "@/components/FolderDrop";
+import { IdeaCapture } from "@/components/IdeaCapture";
 import { Loading } from "@/components/Loading";
 import { RemoteDaemonSurface } from "@/components/RemoteDaemonSurface";
 import { SupervisorPanel } from "@/components/SupervisorPanel";
@@ -35,6 +36,7 @@ import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { zoomStepOf, zoomWindow } from "@/lib/zoom-shortcut";
 import { GraphView } from "@/views/graph/GraphView";
 import { HomeView } from "@/views/home/HomeView";
+import { PlanView } from "@/views/plan/PlanView";
 import { ReposView } from "@/views/repos/ReposView";
 import { SessionsView } from "@/views/sessions/SessionsView";
 import { SettingsView } from "@/views/settings/SettingsView";
@@ -47,10 +49,13 @@ const VIEWS = [
   { id: "repos", label: "Repos", icon: FolderGit2, shortcut: "2", placement: "top" },
   { id: "sessions", label: "Sessions", icon: SquareTerminal, shortcut: "3", placement: "top" },
   { id: "graph", label: "Overview", icon: Network, shortcut: "4", placement: "top" },
+  { id: "plan", label: "Plan", icon: ListTree, shortcut: "5", placement: "top" },
   { id: "settings", label: "Settings", icon: Settings, shortcut: ",", placement: "bottom" },
 ] as const satisfies readonly ActivityView<string>[];
 type View = (typeof VIEWS)[number]["id"];
 const VIEW_IDS = VIEWS.map((v) => v.id);
+/** The views that show sessions or tasks, which keep the session list fresh while open. */
+const VIEWS_WITH_SESSIONS: readonly View[] = ["home", "sessions", "plan"];
 
 export function App() {
   // A repo opened from the dashboard belongs to the navigation, not to the view: any other navigation to "Repos" starts without it;
@@ -124,10 +129,11 @@ export function App() {
     setSupervisorLayout(layout);
     saveSupervisorLayout(() => window.localStorage, layout);
   }, []);
-  const sessions = useSessions(conn, events, view === "sessions" || view === "home" || supervisorLayout !== "folded");
+  const sessions = useSessions(conn, events, VIEWS_WITH_SESSIONS.includes(view) || supervisorLayout !== "folded");
   const runningLive = useMemo(() => events?.feed("mise.running.changed"), [events]);
   const repoWatch = useRepoWatch(useMemo(() => events?.feed("repos.changed"), [events]));
   const warmupLive = useMemo(() => events?.feed("cards.warmup.changed"), [events]);
+  const boardLive = useMemo(() => events?.feed("board.changed"), [events]);
   const appUpdate = useAppUpdate(sessions.data && agentsInTurn(sessions.data.sessions));
   const tree = useSessionTree(sessions);
   const { rows } = tree;
@@ -207,6 +213,8 @@ export function App() {
               onDismiss={() => setDropped(undefined)}
             />
           )}
+          {/* Alt+N writes an idea down from every view (ADR-133). */}
+          <IdeaCapture conn={conn} />
           {dragging && conn && (
             // Over the page, not in its flow: a bar that pushes the page down would move the terminals under the pointer.
             <p className="bg-card text-muted-foreground pointer-events-none fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md border px-4 py-2 text-sm shadow-lg">
@@ -261,6 +269,9 @@ export function App() {
                   />
                 )}
                 {conn && view === "graph" && <GraphView conn={conn} warmupLive={warmupLive} repoWatch={repoWatch} />}
+                {conn && view === "plan" && (
+                  <PlanView conn={conn} boardLive={boardLive} sessions={sessions.data} onOpenInSessions={openInSessions} />
+                )}
                 {conn && view === "settings" && (
                   <div className="flex justify-center p-6">
                     <SettingsView

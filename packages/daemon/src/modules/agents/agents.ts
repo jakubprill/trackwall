@@ -393,10 +393,11 @@ export class Agents {
   /** A task proposal from session `caller` (`null`: an agent outside Trackwall) in a repo from the projects folder (ADR-39). */
   async propose(
     caller: string | null,
-    proposal: Pick<TaskProposal, "repo" | "title" | "prompt" | "model" | "approvals">,
+    proposal: Pick<TaskProposal, "repo" | "title" | "prompt" | "model" | "approvals"> & { item?: string | null },
   ): Promise<TaskProposal> {
     await this.#deps.repos.repoPath(proposal.repo);
-    return this.#proposals.add({ kind: "task", ...proposal, proposedBy: proposedByOf(caller === null ? null : this.session(caller)) });
+    const proposedBy = proposedByOf(caller === null ? null : this.session(caller));
+    return this.#proposals.add({ kind: "task", ...proposal, item: proposal.item ?? null, proposedBy });
   }
 
   /** A proposal to remove a repo from the projects folder (ADR-83), from session `caller` like a task proposal. */
@@ -416,6 +417,7 @@ export class Agents {
         prompt: reason,
         model: null,
         approvals: "ask",
+        item: null,
         proposedBy: proposedByOf(session),
       },
       repoDir,
@@ -429,9 +431,9 @@ export class Agents {
    */
   async approveProposal(id: string, prompt: string, model: string | null, approvals: TaskApprovals): Promise<Task> {
     if (this.#proposals.get(id).kind !== "task") throw new DomainError("bad_request", `proposal ${id} is not a task`);
-    const { repo, title, proposedBy } = this.#proposals.take(id);
+    const { repo, title, proposedBy, item } = this.#proposals.take(id);
     try {
-      return await this.#tasks.create(repo, prompt, { id, title, proposedBy, model, approvals, javaNavigation: false });
+      return await this.#tasks.create(repo, prompt, { id, title, proposedBy, model, approvals, javaNavigation: false, item });
     } finally {
       this.#proposals.release(id, this.#tasks.find(id) === undefined);
     }
@@ -576,7 +578,8 @@ export class Agents {
 
   /**
    * A task the user typed; its agent asks before tools unless the user chose `auto` (ADR-105), runs on `model`, or
-   * Copilot CLI's default when it is `null` (ADR-98), and with `javaNavigation` gets the Java language server (ADR-99).
+   * Copilot CLI's default when it is `null` (ADR-98), with `javaNavigation` gets the Java language server (ADR-99), and
+   * works on board item `item` (ADR-133), which the caller has checked.
    */
   createTask(
     repo: string,
@@ -584,8 +587,9 @@ export class Agents {
     approvals: TaskApprovals = "ask",
     model: string | null = null,
     javaNavigation = false,
+    item: string | null = null,
   ): Promise<Task> {
-    return this.#tasks.create(repo, prompt, { id: randomUUID(), title: null, proposedBy: null, model, approvals, javaNavigation });
+    return this.#tasks.create(repo, prompt, { id: randomUUID(), title: null, proposedBy: null, model, approvals, javaNavigation, item });
   }
 
   /** What the New session form offers on this computer: whether tasks can get Java navigation now, or why not (ADR-99). */

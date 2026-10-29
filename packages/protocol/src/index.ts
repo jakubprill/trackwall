@@ -1,6 +1,7 @@
 export * from "./agents.ts";
 export * from "./api.ts";
 export * from "./batch.ts";
+export * from "./board.ts";
 export * from "./cards.ts";
 export * from "./changes.ts";
 export * from "./code-search.ts";

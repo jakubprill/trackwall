@@ -134,6 +134,8 @@ export interface TaskOrigin {
   approvals: TaskApprovals;
   /** Whether the task's sessions get the Java language server (ADR-99). */
   javaNavigation: boolean;
+  /** The board item the task works on (ADR-133); `null` for none. */
+  item: string | null;
 }
 
 /** A task from the file with the worktree that follows from it, and its port (one given when it was read, if it had none). */
@@ -195,7 +197,11 @@ export class AgentTasks {
     }
   }
 
-  async #create(repo: string, prompt: string, { id, title, proposedBy, model, approvals, javaNavigation }: TaskOrigin): Promise<Task> {
+  async #create(
+    repo: string,
+    prompt: string,
+    { id, title, proposedBy, model, approvals, javaNavigation, item }: TaskOrigin,
+  ): Promise<Task> {
     // Refused before the worktree exists: a task that asked for Java navigation would otherwise start without it.
     const javaProblem = javaNavigation ? this.javaNavigation().problem : null;
     if (javaProblem !== null) throw new DomainError("bad_request", `Java navigation cannot start: ${javaProblem}`);
@@ -217,6 +223,7 @@ export class AgentTasks {
       model,
       approvals,
       javaNavigation,
+      item,
       summary: null,
       trustedMiseConfig: null,
       port: freeTaskPort([...this.#tasks.map((t) => t.port), ...this.#creatingPorts]),
