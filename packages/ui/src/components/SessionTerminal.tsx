@@ -2,6 +2,7 @@ import "@xterm/xterm/css/xterm.css";
 import { isTauri } from "@tauri-apps/api/core";
 import { PTY_CLOSE_NOT_FOUND, type PtyClientMessage, ptySocket, workspaceApi } from "@trackwall/protocol";
 import { FitAddon } from "@xterm/addon-fit";
+import { SerializeAddon } from "@xterm/addon-serialize";
 import { Terminal } from "@xterm/xterm";
 import { useContext, useEffect, useRef, useState } from "react";
 import { errorMessage, post } from "@/lib/api";
@@ -11,6 +12,7 @@ import { daemonSocket } from "@/lib/daemon-socket";
 import { DROP_HOVER_RING, FILE_DROP_TARGET, FileDropEvent } from "@/lib/file-drop";
 import { InputBeforeOpen } from "@/lib/input-before-open";
 import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
+import { useLastScreens } from "@/lib/last-screens";
 import { oncePerFrame } from "@/lib/once-per-frame";
 import { pastedPaths } from "@/lib/pasted-paths";
 import { IS_MAC } from "@/lib/platform";
@@ -18,6 +20,7 @@ import { asksProgramToCopy, copiesSelection, keepsSelection, osc52Text, ProgramC
 import { hyperlinkHandler, trackwallLinkProvider } from "@/lib/terminal-links";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
 import { cssTokens, terminalTheme } from "@/lib/terminal-theme";
+import { browserTimers } from "@/lib/timers";
 import { cn } from "@/lib/utils";
 import { FocusReporter, terminalInFront } from "@/lib/window-focus";
 
@@ -26,6 +29,10 @@ const KEYS_DROPPED = "The terminal was still connecting to the session, so some 
 const COPY_FAILED = "Could not copy the selection to the clipboard; select the text again.";
 /** OSC 52: the program sets the clipboard (`osc52Text`). */
 const OSC_CLIPBOARD = 52;
+/** A screen image that comes sooner than this needs no word about it; the label would only flash. */
+const CONNECTING_LABEL_MS = 300;
+/** RIS: xterm.js resets the whole terminal, as `Terminal.reset` does, at this point of the output. */
+const RESET = "\x1bc";
 
 /**
  * The session terminal of one session (§4.4, ADR-26): xterm.js connected over a WebSocket to the PTY in the daemon. The
@@ -38,6 +45,8 @@ const OSC_CLIPBOARD = 52;
  * the terminal (ADR-51) are pasted as their paths, as if the user typed them. Keys typed before the first connection
  * opens wait for it (`InputBeforeOpen`). Text the program copies (OSC 52, how Copilot CLI copies its own selection) goes
  * to the clipboard only as the answer to the user's Ctrl+C or right click in this terminal (`asksProgramToCopy`).
+ * Until the daemon's screen image comes, the terminal shows the screen it had when it last closed in this window, and
+ * says it is connecting (ADR-117): where the daemon answers late, the frame would otherwise stay black for seconds.
  */
 export function SessionTerminal({
   conn,
@@ -61,6 +70,8 @@ export function SessionTerminal({
   isLive.current = live;
   const updateFocus = useRef<() => void>(undefined);
   const [notice, setNotice] = useState<string>();
+  const [connecting, setConnecting] = useState(false);
+  const lastScreens = useLastScreens();
 
   useEffect(() => {
     const element = host.current;
@@ -71,6 +82,8 @@ export function SessionTerminal({
     );
     const fit = new FitAddon();
     terminal.loadAddon(fit);
+    const serializer = new SerializeAddon();
+    terminal.loadAddon(serializer);
     let links: { dispose: () => void } | undefined;
     if (isTauri()) {
       links = terminal.registerLinkProvider(trackwallLinkProvider(terminal, IS_MAC));
@@ -97,6 +110,10 @@ export function SessionTerminal({
       return true;
     });
     fit.fit();
+    const kept = lastScreens.shown(session, terminal.cols);
+    if (kept !== undefined) terminal.write(kept);
+    let screenCame = false;
+    const slowScreen = setTimeout(() => setConnecting(true), CONNECTING_LABEL_MS);
     term.current = terminal;
     if (takesFocus.current) terminal.focus();
 
@@ -111,7 +128,7 @@ export function SessionTerminal({
     const focus = new FocusReporter(
       (inFront) => send({ type: "focus", focused: inFront }),
       () => terminalInFront(takesFocus.current, document),
-      { set: (run, ms) => setTimeout(run, ms), clear: (focusTimer) => clearTimeout(focusTimer) },
+      browserTimers,
     );
     const sendFocus = () => focus.update();
     updateFocus.current = sendFocus;
@@ -135,15 +152,23 @@ export function SessionTerminal({
       ws.onmessage = (event: MessageEvent<ArrayBuffer | string>) => {
         // A text frame is the screen image at the start of the connection: it replaces what the window showed before.
         if (typeof event.data === "string") {
-          terminal.reset();
-          terminal.write(event.data);
+          // A reset in the stream, not `terminal.reset()`: the kept screen may still wait in xterm.js's write queue, and
+          // a reset outside it would leave that rest to be drawn under the image.
+          terminal.write(`${RESET}${event.data}`);
+          screenCame = true;
+          clearTimeout(slowScreen);
+          setConnecting(false);
         } else {
           terminal.write(new Uint8Array(event.data));
         }
       };
       ws.onclose = (event) => {
         if (disposed) return;
-        if (event.code === PTY_CLOSE_NOT_FOUND) return setNotice("This session no longer exists in the daemon.");
+        if (event.code === PTY_CLOSE_NOT_FOUND) {
+          clearTimeout(slowScreen);
+          setConnecting(false);
+          return setNotice("This session no longer exists in the daemon.");
+        }
         setNotice(
           early.fail()
             ? "Could not connect to the session terminal, so the keys you typed were dropped; reconnecting…"
@@ -196,6 +221,11 @@ export function SessionTerminal({
     return () => {
       disposed = true;
       clearTimeout(timer);
+      clearTimeout(slowScreen);
+      // Only a screen the daemon sent: one still waiting for it shows the kept screen, which stays kept as it is. Without
+      // the modes: the kept screen is a picture to look at until the image comes, not a mouse mode to type in.
+      if (screenCame)
+        lastScreens.keep(session, { cols: terminal.cols, screen: serializer.serialize({ scrollback: 0, excludeModes: true }) });
       resizer.dispose();
       resize.disconnect();
       container.removeEventListener(FileDropEvent.type, takeDrop);
@@ -213,7 +243,7 @@ export function SessionTerminal({
       updateFocus.current = undefined;
       terminal.dispose();
     };
-  }, [conn, session]);
+  }, [conn, session, lastScreens]);
 
   useEffect(() => {
     if (focused) term.current?.focus();
@@ -230,6 +260,12 @@ export function SessionTerminal({
       )}
       <div ref={frame} {...{ [FILE_DROP_TARGET]: "" }} className={cn("relative min-h-0 flex-1 overflow-hidden", DROP_HOVER_RING)}>
         <div ref={host} className="absolute inset-2 font-mono" />
+        {/* Over the terminal, not above it: a bar in the flow would shrink the terminal and make the TUI redraw. */}
+        {connecting && (
+          <p className="bg-card text-muted-foreground pointer-events-none absolute right-4 bottom-4 rounded-md border px-3 py-1 text-xs shadow-lg">
+            Connecting to the session…
+          </p>
+        )}
       </div>
     </div>
   );

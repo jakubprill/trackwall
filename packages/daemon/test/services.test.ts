@@ -76,7 +76,9 @@ function setup(
     env,
     onTrusted: () => {},
   });
-  const graph = { graph: async () => ({ nodes: [], edges: opts.edges ?? [], configProblems: [], configFile: "" }) as RepoGraph };
+  const graph = {
+    graph: async () => ({ nodes: [], edges: opts.edges ?? [], problems: [], configProblems: [], configFile: "" }) as RepoGraph,
+  };
   const cards = {
     card: async (repo: string) => {
       const port = opts.cardPorts?.[repo];
@@ -113,7 +115,8 @@ function http(from: string, to: string): GraphEdge {
   return {
     from,
     to,
-    kind: "http",
+    kind: "calls",
+    source: "http",
     key: `${to}-app`,
     confidence: "high",
     evidence: [{ repo: from, path: "a.yml", line: 1, detail: "calls" }],

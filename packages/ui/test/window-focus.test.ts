@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { FocusReporter, type FocusTimers, SEEN_AFTER_MS, terminalInFront, windowInFront } from "../src/lib/window-focus.ts";
+import type { Timers } from "../src/lib/timers.ts";
+import { FocusReporter, SEEN_AFTER_MS, terminalInFront, windowInFront } from "../src/lib/window-focus.ts";
 
 /** Timers run by hand: `elapse` runs the timers that would have fired. */
 function manualTimers() {
   let now = 0;
   const pending = new Map<number, { at: number; run: () => void }>();
   let next = 0;
-  const timers: FocusTimers<number> = {
+  const timers: Timers<number> = {
     set: (run, ms) => {
       next++;
       pending.set(next, { at: now + ms, run });

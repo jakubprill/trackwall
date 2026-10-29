@@ -2,8 +2,9 @@ import { describe, expect, test } from "bun:test";
 import type { GraphEdge } from "@trackwall/protocol";
 import { edgePairs, layoutGraph, NODE_WIDTH, neighbourhood } from "../src/lib/graph-layout.ts";
 
-function edge(from: string, to: string, key = `${from}->${to}`, kind: GraphEdge["kind"] = "package"): GraphEdge {
-  return { from, to, kind, key, confidence: "exact", evidence: [{ repo: from, path: "pom.xml", line: 1, detail: key }] };
+function edge(from: string, to: string, key = `${from}->${to}`, source: GraphEdge["source"] = "package"): GraphEdge {
+  const kind = source === "package" ? "depends-on" : "calls";
+  return { from, to, kind, source, key, confidence: "exact", evidence: [{ repo: from, path: "pom.xml", line: 1, detail: key }] };
 }
 
 function columns(layout: ReturnType<typeof layoutGraph>): string[][] {
