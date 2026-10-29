@@ -23,7 +23,7 @@ import { extractTools, readsToolFile } from "./tools.ts";
 /**
  * The repo card from one commit (§4.6, ADR-25, ADR-30): build system extractors, then tools from their build
  * directories, configuration and mise tasks (ADR-34), HTTP facts (Spring and frontend) with endpoint contracts and DTOs
- * (ADR-38), endpoints from OpenAPI specs (ADR-87), the client calls each endpoint reaches from the call files (ADR-82), and the list of mechanisms from what
+ * (ADR-38), endpoints from OpenAPI specs (ADR-87) and clients from the specs of other apps (ADR-129), the client calls each endpoint reaches from the call files (ADR-82), and the list of mechanisms from what
  * the repo uses. The same commit gives the same card, unless the parsers did not produce a syntax tree in time
  * (`CardParsers.complete`, `CallFiles.complete`).
  */
@@ -76,7 +76,6 @@ export function extractCard(snapshot: RepoSnapshot, parsers: SyntaxParsers, call
     extractTools(snapshot, buildDirs),
     ...HTTP_EXTRACTORS.map((e) => e.extract(snapshot)),
   ];
-  const consumes = unique(all.flatMap((e) => e.consumes));
   const contracts = extractContracts(
     snapshot,
     all.flatMap((e) => e.provides),
@@ -84,6 +83,7 @@ export function extractCard(snapshot: RepoSnapshot, parsers: SyntaxParsers, call
   );
   // After the contracts: an endpoint from a spec has its types from the spec, not from a method's syntax (ADR-87).
   const openApi = withOpenApi(snapshot, contracts.provides);
+  const consumes = unique([...all.flatMap((e) => e.consumes), ...openApi.clients]);
   const clients = consumes.filter((c): c is ConsumedHttp => c.kind === "http");
   return {
     commit: snapshot.commit,

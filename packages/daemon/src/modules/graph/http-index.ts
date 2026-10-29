@@ -15,17 +15,20 @@ import {
 } from "@trackwall/protocol";
 import type { GraphCardInput } from "./graph-input.ts";
 import { type Join, push } from "./graph-join.ts";
+import { isLiteral } from "./path-segment.ts";
+import { MIN_SPEC_COVERAGE, matchSpecCalls, type SpecCall, type SpecCoverage, type SpecMatch, specCoverage } from "./spec-match.ts";
 
 /**
  * Matching HTTP clients from the cards to apps and endpoints of other repos (§4.6, ADR-30), shared by the `http` edges
  * and `find_endpoint`. A client points to a repo by app name (Feign `name`, `lb://name`, a host equal to
  * `spring.application.name`), by an app alias from `workspace.yaml`, by a host equal to the repo name or by the app's port
  * on `localhost`; without any of them the graph looks for a repo whose endpoints match the call paths. Call paths
- * with matched endpoints are evidence and raise the confidence.
+ * with matched endpoints are evidence and raise the confidence. A client from an OpenAPI spec (ADR-129) is matched by its
+ * operations first (`spec-match.ts`), and only without a repo serving most of them by its server address or title.
  */
 
 /** How we know a client calls a repo; ordered from the most certain. */
-type TargetBasis = "app" | "alias" | "repo-name" | "port" | "path";
+type TargetBasis = "app" | "alias" | "repo-name" | "port" | "operations" | "path";
 
 /** A client call with the repo endpoint it matches. */
 export interface MatchedCall {
@@ -101,6 +104,12 @@ export class HttpIndex {
    */
   private readonly endpointsBySegment = new Map<string, IndexedEndpoint[]>();
   private readonly tailEndpoints: IndexedEndpoint[] = [];
+  /**
+   * Endpoints by a fixed segment and its distance from the end of the path (`0/orders`), and by `operationId`: the repos
+   * a spec client can call are those with an endpoint ending like one of its calls or with one of its operations.
+   */
+  private readonly endpointsByEnd = new Map<string, IndexedEndpoint[]>();
+  private readonly endpointsByOperation = new Map<string, IndexedEndpoint[]>();
   private readonly appAliases: Map<string, string>;
   private readonly resolveRef: (ref: string) => string[];
   /** Each client's resolution, computed once: the edges, the graph's problems and `find_endpoint` all ask for it. */
@@ -134,11 +143,16 @@ export class HttpIndex {
     this.endpoints.push(indexed);
     if (!indexed.specific) return;
     push(this.endpointsByRepo, indexed.repo, indexed);
+    const operation = indexed.endpoint.operation?.id;
+    if (operation) push(this.endpointsByOperation, operation, indexed);
     if (indexed.segments.includes("**")) this.tailEndpoints.push(indexed);
     else {
       push(this.endpointsByLength, indexed.segments.length, indexed);
       const length = indexed.segments.length;
-      for (const [at, segment] of indexed.segments.entries()) push(this.endpointsBySegment, segmentKey(length, at, segment), indexed);
+      for (const [at, segment] of indexed.segments.entries()) {
+        push(this.endpointsBySegment, segmentKey(length, at, segment), indexed);
+        if (isLiteral(segment)) push(this.endpointsByEnd, endKey(length - 1 - at, segment), indexed);
+      }
     }
   }
 
@@ -155,10 +169,30 @@ export class HttpIndex {
     const known = this.resolutions.get(client);
     if (known?.from === from) return known.resolution;
     const url = client.url === null ? undefined : parseHttpUrl(client.url);
-    const byName = this.byName(from, client, url);
-    const resolution = byName === undefined ? this.byPathResolution(from, client, url?.path ?? "") : this.byNameResolution(from, byName);
+    const resolution = client.via === "openapi" ? this.specResolution(from, client, url) : this.codeResolution(from, client, url);
     this.resolutions.set(client, { from, resolution });
     return resolution;
+  }
+
+  private codeResolution(from: string, client: ConsumedHttp, url: HttpUrl | undefined): HttpResolution {
+    const byName = this.byName(from, client, url);
+    return byName === undefined ? this.byPathResolution(from, client, url?.path ?? "") : this.byNameResolution(from, byName);
+  }
+
+  /**
+   * A spec client (ADR-129): the repos serving most of its operations, since its server address is often a gateway's; without
+   * one, the app or repo its server address or title names.
+   */
+  private specResolution(from: string, client: ConsumedHttp, url: HttpUrl | undefined): HttpResolution {
+    const base = url?.path ?? "";
+    const served = this.byOperations(client, base);
+    if (served.length > 0) {
+      const targets = served.filter((t) => t.repo !== from);
+      const confidence: EdgeConfidence = targets.length === 1 ? "high" : "low";
+      return { targets: targets.map((t) => ({ ...t, confidence })), ownRepo: targets.length === 0 };
+    }
+    const byName = this.byName(from, client, url) ?? this.bySpecNames(from, client, base);
+    return byName === undefined ? { targets: [], ownRepo: false } : this.byNameResolution(from, byName);
   }
 
   private byNameResolution(from: string, found: HttpTarget[]): HttpResolution {
@@ -243,6 +277,57 @@ export class HttpIndex {
     }));
   }
 
+  /**
+   * The repos serving a spec client best: at least `MIN_SPEC_COVERAGE` of its calls, then the most of them, then the most
+   * exactly (so a repo whose paths end alike loses to the one with the same paths); the client's own repo included, and
+   * the confidence is set by the caller, which knows how many other repos there are.
+   */
+  private byOperations(client: ConsumedHttp, base: string): HttpTarget[] {
+    const calls = specCalls(base, client);
+    const repos = new Set<string>();
+    for (const { call, segments } of calls) {
+      for (const e of call.operationId ? (this.endpointsByOperation.get(call.operationId) ?? []) : []) repos.add(e.repo);
+      const last = segments.findLastIndex(isLiteral);
+      const segment = segments[last];
+      if (segment !== undefined)
+        for (const e of this.endpointsByEnd.get(endKey(segments.length - 1 - last, segment)) ?? []) repos.add(e.repo);
+    }
+    const served = [...repos].flatMap((repo) => {
+      const matches = matchSpecCalls(calls, this.endpointsByRepo.get(repo) ?? []);
+      const coverage = specCoverage(calls, matches);
+      if (coverage.any < MIN_SPEC_COVERAGE) return [];
+      const target: HttpTarget = {
+        repo,
+        basis: "operations",
+        confidence: "high",
+        key: client.name,
+        evidence: [],
+        calls: matchedCalls(matches),
+      };
+      return [{ target, coverage }];
+    });
+    const best = served.reduce<SpecCoverage>((b, { coverage: c }) => (c.any > b.any || (c.any === b.any && c.exact > b.exact) ? c : b), {
+      any: 0,
+      exact: 0,
+    });
+    return served.filter(({ coverage: c }) => c.any === best.any && c.exact === best.exact).map((s) => s.target);
+  }
+
+  /** Targets by an app or repo named like the spec's title (`Orders BFF` → `orders-bff`) or a fixed segment of its server path. */
+  private bySpecNames(from: string, client: ConsumedHttp, base: string): HttpTarget[] | undefined {
+    const names = [
+      ...titleNames(client.name),
+      ...httpPathSegments(base)
+        .filter(isLiteral)
+        .map((s) => s.toLowerCase()),
+    ];
+    for (const name of new Set(names.filter((n) => n !== ""))) {
+      const found = [...this.byApp(from, name, client, base), ...this.byRepoName(name, client, base)];
+      if (found.length > 0) return found;
+    }
+    return undefined;
+  }
+
   /** Repos with endpoints matching the client's calls: one `medium`, several `low`. */
   private byPath(from: string, client: ConsumedHttp, base: string): HttpTarget[] {
     const byRepo = new Map<string, MatchedCall[]>();
@@ -283,6 +368,7 @@ export class HttpIndex {
     const endpoints = (this.endpointsByRepo.get(repo) ?? []).filter(
       (e) => app === undefined || e.endpoint.app === null || e.endpoint.app === app,
     );
+    if (client.via === "openapi") return matchedCalls(matchSpecCalls(specCalls(base, client), endpoints));
     return client.calls.flatMap((call) => {
       const { path, segments } = callPath(base, call);
       return endpoints.filter((e) => matches(call, segments, e)).map((e) => ({ call, path, endpoint: e.endpoint }));
@@ -300,15 +386,36 @@ function segmentKey(length: number, at: number, segment: string): string {
   return `${length}/${at}/${isLiteral(segment) ? segment : "*"}`;
 }
 
+/** The `endpointsByEnd` key: a fixed segment and how many segments follow it. */
+function endKey(fromEnd: number, segment: string): string {
+  return `${fromEnd}/${segment}`;
+}
+
+/** A spec client's calls with their full paths, for `spec-match.ts`. */
+function specCalls(base: string, client: ConsumedHttp): SpecCall[] {
+  return client.calls.map((call) => ({ call, ...callPath(base, call) }));
+}
+
+function matchedCalls(matches: readonly SpecMatch[]): MatchedCall[] {
+  return matches.map((m) => ({ call: m.call.call, path: m.call.path, endpoint: m.endpoint }));
+}
+
+/**
+ * A title as app names: lowercase words joined by `-`, with and without a last word `api` (`Orders BFF API` →
+ * `orders-bff-api`, `orders-bff`).
+ */
+function titleNames(title: string): string[] {
+  const words = title
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w !== "");
+  return words.at(-1) === "api" ? [words.join("-"), words.slice(0, -1).join("-")] : [words.join("-")];
+}
+
 /** The full call path (the path from the client's address and the call path) and its segments. */
 function callPath(base: string, call: HttpCall): { path: string; segments: string[] } {
   const path = joinHttpPath(base, call.path);
   return { path, segments: httpPathSegments(path) };
-}
-
-/** Whether a path segment is fixed text, not a variable (`{id}`, `*`) or the rest of the path (`**`). */
-export function isLiteral(segment: string): boolean {
-  return !segment.startsWith("{") && segment !== "*" && segment !== "**";
 }
 
 function matches(call: HttpCall, segments: readonly string[], e: IndexedEndpoint): boolean {

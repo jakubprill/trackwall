@@ -1,5 +1,6 @@
 import { type ConsumedHttp, type GraphProblem, parseHttpUrl } from "@trackwall/protocol";
 import { type HttpIndex, isLocalHost } from "./http-index.ts";
+import { MIN_SPEC_COVERAGE } from "./spec-match.ts";
 
 /**
  * The `unresolved-call-target` graph problem (§4.6, ADR-116): an HTTP client that the code uses (it has calls, or an app
@@ -25,6 +26,9 @@ function isCall(client: ConsumedHttp): boolean {
 
 /** What the graph looked for, and the entry that would connect it: an alias by name or host, or an app's port for `localhost`. */
 function message(client: ConsumedHttp): string {
+  // A spec's server address is often a gateway's, so an alias for its host would send every spec behind it to one repo.
+  if (client.via === "openapi")
+    return `no repo in the list serves ${MIN_SPEC_COVERAGE * 100}% of the operations of ${client.name} (by operationId, or by path with another prefix)`;
   const url = client.url === null ? undefined : parseHttpUrl(client.url);
   const name = client.app ?? (url !== undefined && !isLocalHost(url.host) ? url.host : undefined);
   if (name !== undefined)

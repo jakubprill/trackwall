@@ -236,3 +236,48 @@ paths:
     ]);
   });
 });
+
+describe("clients from the OpenAPI specs of other apps (ADR-129)", () => {
+  /** Each spec client as `<name> <url>: <method> <path> <operationId> @<line>, …`. */
+  function specClients(c: RepoCard): string[] {
+    return c.consumes.flatMap((h) =>
+      h.kind === "http" && h.via === "openapi"
+        ? [
+            `${h.name} ${h.url} @${h.evidence.path}: ${h.calls.map((x) => `${x.method} ${x.path} ${x.operationId} @${x.evidence.line}`).join(", ")}`,
+          ]
+        : [],
+    );
+  }
+
+  test("a frontend's spec is a client named by its title, with the server address and every operation as a call", () => {
+    const spec = `openapi: 3.0.1
+info: { title: Orders BFF, version: "1" }
+servers:
+  - url: https://user:secret@{host}/shop
+    variables:
+      host: { default: gateway.example.com }
+paths:
+  /v1/orders/{orderId}:
+    get:
+      operationId: getOrder
+      responses: { "200": { description: ok } }
+    delete:
+      responses: { "204": { description: gone } }
+`;
+    const c = extractCard(snapshotOf({ "package.json": '{"name":"shop-web"}', "src/api/orders.yaml": spec }), parsers, NO_REACH);
+    expect(specClients(c)).toEqual([
+      "Orders BFF https://***@gateway.example.com/shop @src/api/orders.yaml: GET /v1/orders/{orderId} getOrder @9, DELETE /v1/orders/{orderId} null @12",
+    ]);
+  });
+
+  test("a relative server path goes in front of the calls, and a spec without a title is named by its file", () => {
+    const spec = ORDERS_SPEC.replace('info: { title: Orders, version: "1" }\n', "servers: [{ url: /orders-bff }]\n");
+    const c = extractCard(snapshotOf({ "package.json": '{"name":"shop-web"}', "openapi/orders-bff.yaml": spec }), parsers, NO_REACH);
+    expect(specClients(c)).toEqual(["orders-bff null @openapi/orders-bff.yaml: GET /orders-bff/api/orders/{id} getOrder @5"]);
+  });
+
+  test("catalog: the spec the build generates a client from is a client, and the spec it generates its interface from is not", () => {
+    const c = extractCard(snapshotOf(fixtureFiles("catalog")), parsers, NO_REACH);
+    expect(specClients(c)).toEqual(["Orders null @src/main/resources/openapi/orders-api.yaml: GET /api/orders/{id} getOrder @7"]);
+  });
+});

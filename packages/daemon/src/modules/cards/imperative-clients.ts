@@ -176,12 +176,12 @@ function findCalls(ctx: ScanContext): FoundCall[] {
     if (args === undefined) continue;
     const call = t.text === "uri" ? fluentCall(ctx, i, args) : templateCall(ctx, t.text, args);
     // Without the query: `?apiKey=…` in an address from code does not reach the card.
-    if (call) calls.push({ ...call, path: joinHttpPath(call.path), evidence: { path: ctx.path, line: t.line } });
+    if (call) calls.push({ ...call, path: joinHttpPath(call.path), operationId: null, evidence: { path: ctx.path, line: t.line } });
   }
   return calls;
 }
 
-type CallWithoutEvidence = Omit<FoundCall, "evidence">;
+type CallWithoutEvidence = Omit<FoundCall, "evidence" | "operationId">;
 
 /** `.get().uri("/orders/{id}", id)` or `.uri(b -> b.path("/orders").build())`; the method from the chain before `.uri`. */
 function fluentCall(ctx: ScanContext, dot: number, args: Token[][]): CallWithoutEvidence | undefined {

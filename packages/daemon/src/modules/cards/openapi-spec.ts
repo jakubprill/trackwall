@@ -26,7 +26,12 @@ export interface SpecOperation {
 export interface OpenApiSpec {
   /** `info.title`; `null` without one. */
   title: string | null;
-  /** The path of the first server address or `basePath` (`/api/v1`); `""` without one. */
+  /**
+   * The first server address with its variables replaced by their defaults (`https://api.example.com/v1`, or relative:
+   * `/v1`), or Swagger's `basePath`; `null` without one.
+   */
+  serverUrl: string | null;
+  /** The path of `serverUrl` (`/api/v1`); `""` without one. */
   basePath: string;
   operations: SpecOperation[];
   /** More operations than `MAX_OPERATIONS`; the rest are not on the card. */
@@ -100,9 +105,11 @@ export function readOpenApiSpec(text: string): OpenApiSpec | undefined {
   if (!isMap(paths)) return undefined;
   const reader = new SpecReader(root, lineCounter);
   const info = get(root, "info");
+  const serverUrl = firstServer(root);
   return {
     title: (isMap(info) ? scalarText(get(info, "title")) : undefined) ?? null,
-    basePath: basePath(root),
+    serverUrl,
+    basePath: serverUrl === null ? "" : httpUrlPath(serverUrl),
     ...reader.operations(paths),
   };
 }
@@ -115,21 +122,21 @@ function isSpecVersion(root: YAMLMap): boolean {
 }
 
 /**
- * The path part of the first server address, with `{variables}` replaced by their defaults (OpenAPI 3), or `basePath`
- * (Swagger 2); `""` without one. The address can be absolute (`https://api.example.com/v1`) or relative (`/v1`).
+ * The first server address, with `{variables}` replaced by their defaults (OpenAPI 3), or `basePath` (Swagger 2); `null`
+ * without one. The address can be absolute (`https://api.example.com/v1`) or relative (`/v1`).
  */
-function basePath(root: YAMLMap): string {
+function firstServer(root: YAMLMap): string | null {
   const swagger = scalarText(get(root, "basePath"));
   if (swagger !== undefined) return swagger;
   const servers = get(root, "servers");
   const server = isSeq(servers) ? servers.items[0] : undefined;
-  if (!isMap(server)) return "";
+  if (!isMap(server)) return null;
   const variables = get(server, "variables");
   const url = (scalarText(get(server, "url")) ?? "").replace(/\{([^{}]{1,64})\}/g, (whole, name: string) => {
     const variable = isMap(variables) ? get(variables, name) : undefined;
     return (isMap(variable) ? scalarText(get(variable, "default")) : undefined) ?? whole;
   });
-  return httpUrlPath(url);
+  return url === "" ? null : url;
 }
 
 class SpecReader {

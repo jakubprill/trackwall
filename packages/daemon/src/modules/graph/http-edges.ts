@@ -20,6 +20,7 @@ const VIA_LABELS: Record<HttpClientVia, string> = {
   config: "address in config",
   env: ".env variable",
   proxy: "dev server proxy",
+  openapi: "OpenAPI spec",
 };
 
 export function addHttpEdges(join: Join, index: HttpIndex): void {
