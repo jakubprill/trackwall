@@ -136,12 +136,12 @@ export async function backupRemote(dir: string): Promise<BackupRemote | null> {
  * after the host of `host:path`, so `other.example:x@github.com:me/x` cannot either.
  */
 function pushAddressProblem(url: string): string | null {
+  if (networkAddress(url) === undefined)
+    return "The store's remote is not an HTTPS or SSH address of a repo host; Trackwall pushes the store only to one";
   if ([...url].some((c) => c === "\\" || c.charCodeAt(0) <= 0x20 || c.charCodeAt(0) >= 0x7f))
     return "The store's remote has a space, a backslash or a character outside ASCII; Trackwall does not push to such an address";
   if (misleadingSshAddress(url))
     return "The store's remote has a user or path that looks like a host; Trackwall does not push to such an address";
-  if (networkAddress(url) === undefined)
-    return "The store's remote is not an HTTPS or SSH address of a repo host; Trackwall pushes the store only to one";
   return null;
 }
 
