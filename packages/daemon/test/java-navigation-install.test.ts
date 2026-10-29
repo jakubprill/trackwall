@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -113,7 +113,7 @@ describe("installing Java navigation from Settings (ADR-123)", () => {
     // mise runs in an empty folder of the install's own and looks for no config above it, so no mise config takes part.
     const mise = JSON.parse(readFileSync(join(installs, "calls.log"), "utf8"));
     expect(mise.ceiling).toBe(mise.cwd);
-    expect(mise.cwd.startsWith(join(lsp, ".install-"))).toBe(true);
+    expect(mise.cwd.startsWith(join(realpathSync(lsp), ".install-"))).toBe(true);
     expect(facade.agents.startOptions()).toEqual({ javaNavigation: { problem: null } });
   });
 

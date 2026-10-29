@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { realpath } from "node:fs/promises";
 import { delimiter } from "node:path";
 import {
   type LogSource,
@@ -293,9 +294,12 @@ export class Mise {
    * group: `mise install` of one tool downloads and unpacks it itself.
    */
   async installTool(spec: string, dir: string): Promise<string> {
-    const env = { ...(await this.deps.env()), [CEILING_PATHS_ENV]: dir };
-    await this.cliOutput(await runMiseCli(this.deps.command, ["install", spec], dir, env, TOOL_INSTALL_TIMEOUT_MS));
-    return (await this.cliOutput(await runMiseCli(this.deps.command, ["where", spec], dir, env))).trim();
+    // mise compares its ceiling with its working directory as the system resolves it, so a link in the path (macOS's
+    // /var to /private/var, a linked projects folder) would leave the ceiling unmatched and let configs above count.
+    const cwd = await realpath(dir);
+    const env = { ...(await this.deps.env()), [CEILING_PATHS_ENV]: cwd };
+    await this.cliOutput(await runMiseCli(this.deps.command, ["install", spec], cwd, env, TOOL_INSTALL_TIMEOUT_MS));
+    return (await this.cliOutput(await runMiseCli(this.deps.command, ["where", spec], cwd, env))).trim();
   }
 
   /** The output of a mise call that ended well; otherwise `mise_unavailable` with mise's message. */
