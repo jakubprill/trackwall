@@ -131,12 +131,12 @@ jobs:
           echo "desktop=$desktop" >> "$GITHUB_OUTPUT"
           echo "all=$(jq -c '["ubuntu-latest"] + .' <<< "$desktop")" >> "$GITHUB_OUTPUT"
 
-  # Only when the run adds a desktop system (Linux runs the tests in `check`), and not on a push to main, which only
-  # repeats what the PR tested (see the top of this file). The jobs that may be skipped are listed again in `CI ok`.
+  # Only when the run adds a desktop system (Linux runs the tests in `check`), which a PR or a push to main never does.
+  # The jobs that may be skipped are listed again in `CI ok`.
   test:
     name: test (${{ matrix.os }})
     needs: systems
-    if: github.event_name != 'push' && needs.systems.outputs.desktop != '[]'
+    if: needs.systems.outputs.desktop != '[]'
     strategy:
       fail-fast: false
       matrix:
@@ -171,7 +171,7 @@ jobs:
   e2e:
     name: e2e (${{ matrix.os }})
     needs: systems
-    if: github.event_name != 'push' && needs.systems.outputs.desktop != '[]'
+    if: needs.systems.outputs.desktop != '[]'
     strategy:
       fail-fast: false
       matrix:
@@ -194,8 +194,9 @@ jobs:
       - run: pnpm test:e2e
 
   # Trackwall where it is used day to day (ADR-128): the daemon in a Debian container, the image of the dev container page
-  # of the documentation (apps/docs/guide/dev-container.md), so the daemon sees a container as there (no desktop,
-  # ADR-120). The image is pinned to a digest, as actions are pinned to a SHA; a new digest comes in by hand.
+  # of the documentation (apps/docs/guide/dev-container.md), as root; the smoke test checks that the binary sees the
+  # container as there (no desktop, ADR-120, and the container's id, ADR-121). The image is pinned to a digest, as
+  # actions are pinned to a SHA; a new digest comes in by hand.
   container:
     name: build, smoke test, e2e (Debian container)
     if: github.event_name != 'push'
@@ -288,7 +289,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           DESKTOP: ${{ needs.systems.outputs.desktop }}
         run: |
-          skippable='(if $desktop == "[]" then ["test", "e2e", "desktop"] else [] end) + (if $event == "push" then ["test", "e2e", "contract", "container"] else [] end)'
+          skippable='(if $desktop == "[]" then ["test", "e2e", "desktop"] else [] end) + (if $event == "push" then ["contract", "container"] else [] end)'
           passed=".value.result == \"success\" or (.value.result == \"skipped\" and (.key | IN(($skippable)[])))"
           args=(--arg event "$EVENT" --arg desktop "$DESKTOP")
           jq -e "${args[@]}" "all(to_entries[]; $passed)" <<< "$RESULTS" > /dev/null && exit 0

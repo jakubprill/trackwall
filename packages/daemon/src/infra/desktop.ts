@@ -8,7 +8,7 @@ import { DomainError } from "./errors.ts";
  */
 
 /** The files Docker and Podman put into every container. */
-const CONTAINER_MARKERS = ["/.dockerenv", "/run/.containerenv"] as const;
+export const CONTAINER_MARKERS = ["/.dockerenv", "/run/.containerenv"] as const;
 
 /**
  * The id of the container the daemon runs in, for VS Code links into it (ADR-121). Docker and Podman mount the
