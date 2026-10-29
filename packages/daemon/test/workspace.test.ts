@@ -212,7 +212,7 @@ describe("workspace", () => {
         projectsDir: projects,
         worktreesDir: null,
         worktreesDirProblem: null,
-        defaultWorktreesDir: join(projects, ".trackwall-worktrees"),
+        defaultWorktreesDir: join(projects, ".trackwall", "worktrees"),
         gitProgram: null,
         gitProgramProblem: null,
         configFile: file,
@@ -423,12 +423,12 @@ describe("workspace", () => {
 
 describe("the task worktrees folder (ADR-84)", () => {
   test(
-    "by default new task worktrees go to .trackwall-worktrees in the projects folder, which the repo list does not show",
+    "by default new task worktrees go to .trackwall/worktrees in the projects folder, which the repo list does not show",
     async () => {
       const { workspace, projects } = await workspaceWithProjectsDir();
       makeRepo({ a: "1" }, "web", projects);
       const worktrees = await workspace.worktreesDir();
-      expect(worktrees).toBe(join(projects, ".trackwall-worktrees"));
+      expect(worktrees).toBe(join(projects, ".trackwall", "worktrees"));
       // A task's worktree as `agents` makes it: `<folder>/<repo>/<branch>`, with a `.git` file.
       gitIn(join(projects, "web"), "worktree", "add", "-q", "-b", "trackwall/fix-1a2b3c", join(worktrees, "web", "fix-1a2b3c"));
 
@@ -449,7 +449,7 @@ describe("the task worktrees folder (ADR-84)", () => {
 
       expect(await workspace.setWorktreesDir(null)).toMatchObject({ worktreesDir: null });
       expect(readFileSync(file, "utf8")).not.toContain("worktreesDir");
-      expect(await workspace.worktreesDir()).toBe(join(projects, ".trackwall-worktrees"));
+      expect(await workspace.worktreesDir()).toBe(join(projects, ".trackwall", "worktrees"));
     },
     SLOW_TEST_TIMEOUT_MS,
   );

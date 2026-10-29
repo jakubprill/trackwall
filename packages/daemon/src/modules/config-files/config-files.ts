@@ -13,11 +13,13 @@ import {
   MISE_CONFIG_NAME,
   REMOVED_REPOS_DIR,
   SCRATCH_DIR_NAME,
+  trackwallDirLabel,
   type WorkspaceKeyState,
   type WorkspaceKeysRead,
   workspaceKeysSummary,
 } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
+import { trackwallDir } from "../../infra/trackwall-dir.ts";
 
 /**
  * The `config-files` module (§4.16, ADR-108): every file and folder Trackwall reads or writes on this computer, where it
@@ -150,13 +152,13 @@ export class ConfigFiles {
       case "local-config-store":
         return this.#localConfigStore(ctx.projectsDir);
       case "task-worktrees-dir":
-        return taskWorktrees(ctx.worktreesDir);
+        return taskWorktrees(ctx.projectsDir, ctx.worktreesDir);
       case "removed-repos-dir":
         return removedRepos(ctx.projectsDir);
       case "scratch-dir":
-        return ctx.projectsDir === null ? notSet(SCRATCH_DIR_NAME) : plainEntry(join(ctx.projectsDir, SCRATCH_DIR_NAME));
+        return trackwallEntry(ctx.projectsDir, SCRATCH_DIR_NAME);
       case "language-server-dir":
-        return ctx.projectsDir === null ? notSet(LANGUAGE_SERVER_DIR_NAME) : plainEntry(join(ctx.projectsDir, LANGUAGE_SERVER_DIR_NAME));
+        return trackwallEntry(ctx.projectsDir, LANGUAGE_SERVER_DIR_NAME);
       case "copilot-config":
         return this.#copilotConfig(ctx);
     }
@@ -178,10 +180,11 @@ export class ConfigFiles {
   }
 
   async #localConfigStore(projectsDir: string | null): Promise<Found> {
-    if (projectsDir === null) return notSet(LOCAL_CONFIG_STORE_DIR);
+    if (projectsDir === null) return notSet(trackwallDirLabel(LOCAL_CONFIG_STORE_DIR));
     const store = await this.#deps.localConfigStore();
-    if (store.dir === null) return notSet(LOCAL_CONFIG_STORE_DIR);
-    const found = await plainEntry(store.dir);
+    if (store.dir === null) return notSet(trackwallDirLabel(LOCAL_CONFIG_STORE_DIR));
+    // Until it moves, the store is still in its folder from before ADR-125, and the entry says so by its name.
+    const found = { ...(await plainEntry(store.dir)), name: labelOf(projectsDir, store.dir, LOCAL_CONFIG_STORE_DIR) };
     if (found.state === "missing") return found;
     if (store.problem !== null) return { ...found, state: "invalid", detail: store.problem };
     return { ...found, detail: storeDetail(store) };
@@ -203,9 +206,9 @@ function notSet(name: string): Found {
   return { name, path: null, state: "missing", detail: "set the projects folder first" };
 }
 
-async function taskWorktrees(dir: string | null): Promise<Found> {
-  if (dir === null) return notSet(DEFAULT_WORKTREES_DIR_NAME);
-  const name = basename(dir);
+async function taskWorktrees(projectsDir: string | null, dir: string | null): Promise<Found> {
+  if (projectsDir === null || dir === null) return notSet(trackwallDirLabel(DEFAULT_WORKTREES_DIR_NAME));
+  const name = labelOf(projectsDir, dir, DEFAULT_WORKTREES_DIR_NAME);
   const repos = await readdir(dir, { withFileTypes: true }).catch(() => null);
   if (repos === null) return { name, path: dir, state: "missing", detail: null };
   const counts = await Promise.all(
@@ -223,11 +226,24 @@ async function taskWorktrees(dir: string | null): Promise<Found> {
 }
 
 async function removedRepos(projectsDir: string | null): Promise<Found> {
-  if (projectsDir === null) return notSet(REMOVED_REPOS_DIR);
-  const path = join(projectsDir, REMOVED_REPOS_DIR);
+  const name = trackwallDirLabel(REMOVED_REPOS_DIR);
+  if (projectsDir === null) return notSet(name);
+  const path = trackwallDir(projectsDir, REMOVED_REPOS_DIR);
   const repos = await readdir(path).catch(() => null);
-  if (repos === null) return { name: REMOVED_REPOS_DIR, path, state: "missing", detail: null };
-  return { name: REMOVED_REPOS_DIR, path, state: "present", detail: countLabel(repos.length, { one: "repo", other: "repos" }) };
+  if (repos === null) return { name, path, state: "missing", detail: null };
+  return { name, path, state: "present", detail: countLabel(repos.length, { one: "repo", other: "repos" }) };
+}
+
+/** `.trackwall/<name>` when `path` is that folder of `.trackwall`, otherwise the path's own name. */
+function labelOf(projectsDir: string, path: string, name: string): string {
+  return path === trackwallDir(projectsDir, name) ? trackwallDirLabel(name) : basename(path);
+}
+
+/** A folder of `.trackwall` in the projects folder, under the name the user reads: `.trackwall/scratch`. */
+async function trackwallEntry(projectsDir: string | null, name: string): Promise<Found> {
+  const label = trackwallDirLabel(name);
+  if (projectsDir === null) return notSet(label);
+  return { ...(await plainEntry(trackwallDir(projectsDir, name))), name: label };
 }
 
 /** The default task worktrees folder is a path in the projects folder, more use than "the default". */

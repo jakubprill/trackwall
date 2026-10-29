@@ -189,28 +189,13 @@ export const JavaNavigationSettings = z
   .strict();
 export type JavaNavigationSettings = z.infer<typeof JavaNavigationSettings>;
 
-/** The default task worktrees folder's name in the projects folder (ADR-84). */
-export const DEFAULT_WORKTREES_DIR_NAME = ".trackwall-worktrees";
-
-/**
- * The folder in the projects folder for git's temporary indexes, which Trackwall removes after each git command: in the
- * projects folder, which an antivirus may be told to skip (clarification to ADR-31).
- */
-export const SCRATCH_DIR_NAME = ".trackwall-scratch";
-
-/**
- * The folder in the projects folder with each task's Java language server data (ADR-99), one folder per task, deleted
- * when the task ends: in the projects folder, which an antivirus may be told to skip, and a dot-folder, so it is no repo.
- */
-export const LANGUAGE_SERVER_DIR_NAME = ".trackwall-lsp";
-
 export const WorkspaceSettings = z.object({
   projectsDir: ProjectsDir,
   /** `worktreesDir` from `workspace.yaml` (ADR-84): where new task worktrees go; `null` for the default. */
   worktreesDir: z.string().nullable(),
   /** Why `worktreesDir` in `workspace.yaml` cannot be read (`worktreesDir` is then `null`); saving a folder or the default fixes it. */
   worktreesDirProblem: z.string().nullable(),
-  /** The default task worktrees folder, `.trackwall-worktrees` in the projects folder; `null` while that is not set. */
+  /** The default task worktrees folder, `.trackwall/worktrees` in the projects folder; `null` while that is not set. */
   defaultWorktreesDir: z.string().nullable(),
   /** `gitProgram` from `workspace.yaml` (ADR-112): the git the daemon starts for local git calls; `null` for git from `PATH`. */
   gitProgram: z.string().nullable(),

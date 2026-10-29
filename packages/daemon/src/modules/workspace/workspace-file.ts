@@ -39,7 +39,7 @@ const Keys: { [K in WorkspaceKey]: z.ZodType<WorkspaceKeyValues[K], unknown> } =
     .refine((dir) => isFullPath(dir), NOT_FULL_PATH)
     .nullish()
     .transform((dir) => dir ?? null),
-  // Where new task worktrees go (ADR-84); a missing key means `.trackwall-worktrees` in the projects folder.
+  // Where new task worktrees go (ADR-84); a missing key means `.trackwall/worktrees` in the projects folder.
   worktreesDir: z
     .string()
     .refine((dir) => isFullPath(dir), NOT_FULL_PATH)

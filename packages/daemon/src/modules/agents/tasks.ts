@@ -20,6 +20,7 @@ import {
 } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
+import { trackwallDir } from "../../infra/trackwall-dir.ts";
 import { approvalArgs } from "./copilot-command.ts";
 import type { LspServer } from "./copilot-plugin.ts";
 import { JAVA_LSP_SERVER, type JavaNavigationReadiness, javaLanguageServer, javaNavigationReadiness } from "./java-language-server.ts";
@@ -494,7 +495,7 @@ export class AgentTasks {
 
   /** The task's jdtls data folder in the projects folder. */
   async #languageServerData(task: KnownTask): Promise<string> {
-    return join(await this.#deps.repos.projectsDir(), LANGUAGE_SERVER_DIR_NAME, task.id);
+    return join(trackwallDir(await this.#deps.repos.projectsDir(), LANGUAGE_SERVER_DIR_NAME), task.id);
   }
 
   /** A running session writes in the worktree and holds its files (on Windows it blocks deletion), so stop it first. */

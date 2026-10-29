@@ -299,7 +299,7 @@ export type Task = z.infer<typeof Task>;
 /**
  * What a proposal asks for (ADR-83): `task`, a task in the repo (`propose_task`), or an action on the projects folder
  * that a task cannot do, because a task is a worktree of one repo (`propose_folder_action`): today `remove_repo`, which
- * moves the repo out of the projects folder into `REMOVED_REPOS_DIR`.
+ * moves the repo out of the projects folder into `REMOVED_REPOS_DIR` of `.trackwall`.
  */
 export const ProposalKind = z.enum(["task", "remove_repo"]);
 export type ProposalKind = z.infer<typeof ProposalKind>;
@@ -307,9 +307,6 @@ export type ProposalKind = z.infer<typeof ProposalKind>;
 /** The proposer's reason for a folder action, shown to the user in place of a task's prompt. */
 export const FOLDER_ACTION_REASON_MAX = 2000;
 export const FolderActionReason = z.string().trim().min(1).max(FOLDER_ACTION_REASON_MAX);
-
-/** The folder in the projects folder where a removed repo goes (ADR-83); hidden, so the repo list does not see it. */
-export const REMOVED_REPOS_DIR = ".trackwall-removed";
 
 /**
  * A task proposal (ADR-39): a task that a session or an agent outside Trackwall submitted with the MCP tool `propose_task`.
@@ -600,7 +597,7 @@ export const agentsApi = {
   ),
   /**
    * Approving a proposal to remove a repo (ADR-83): refused while a session, a task or a process runs in the repo; then
-   * the repo moves into `REMOVED_REPOS_DIR` in the projects folder. A refusal leaves the proposal waiting.
+   * the repo moves into `.trackwall/removed` in the projects folder. A refusal leaves the proposal waiting.
    */
   approveRepoRemoval: endpoint("approve-repo-removal", ProposalRequest, Done),
   /**

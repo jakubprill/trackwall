@@ -203,7 +203,7 @@ export type ConfigEntryState = z.infer<typeof ConfigEntryState>;
 
 export const ConfigEntry = z.object({
   id: ConfigEntryId,
-  /** The file or folder name, also while the projects folder is not set: `workspace.yaml`, `.trackwall-local`. */
+  /** The file or folder name, also while the projects folder is not set: `workspace.yaml`, `.trackwall/local`. */
   name: z.string(),
   /** The full path; `null` when it depends on the projects folder, which is not set. */
   path: z.string().nullable(),

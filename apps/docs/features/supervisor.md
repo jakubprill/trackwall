@@ -47,7 +47,7 @@ The panel can be folded to a narrow strip at the right edge, which keeps a bell 
   supervisor:
     changesCode: true
   ```
-- Ask the supervisor to remove a repo you no longer need and it proposes the removal instead of a task. It waits for you with the other proposals; "Remove repo" moves the repo's folder into `.trackwall-removed` in your projects folder, so you can move it back or delete it for good. Trackwall refuses while a session, a task or a running service still uses the repo, and tells you what to stop first.
+- Ask the supervisor to remove a repo you no longer need and it proposes the removal instead of a task. It waits for you with the other proposals; "Remove repo" moves the repo's folder into `.trackwall/removed` in your projects folder, so you can move it back or delete it for good. Trackwall refuses while a session, a task or a running service still uses the repo, and tells you what to stop first.
 - It sees every session and task, also the ones you started yourself, but it sends messages only to the tasks it proposed, never to sessions you started, and it cannot change Trackwall's settings.
 - After five messages to a task without you, the supervisor has to ask you before it sends more. Typing anything into the supervisor or the task, or sending the task a review, counts as you taking part.
 - Stop ends the supervisor. "Resume" brings it back with the same conversation, also after you closed it or Trackwall restarted, so it still knows what you worked on; "New" starts a new one in its place. "Start my day" always starts a new one. The work it delegated stays under the "Supervisor" heading, also after Trackwall restarts.

@@ -43,5 +43,5 @@ While Trackwall cannot start jdtls, the pill stays grey: hover it to see why, fo
 - The first start of a task indexes the whole project: about a minute for a Spring Boot service, and up to 2 GB of memory per task while it runs. Several tasks with navigation at once each run their own jdtls.
 - jdtls imports the project with Maven or Gradle and downloads its dependencies, as your IDE does. If the import fails, for example because Gradle needs a Java version you have not installed, the agent's questions come back empty. Run `/lsp logs` in the session to see why.
 - Every path in `javaNavigation` must be a full path. A path that is not there greys the pill out until you fix it; a resumed task then starts without navigation.
-- The index of each task lives in `.trackwall-lsp` in your projects folder and is deleted when you end the task.
+- The index of each task lives in `.trackwall/lsp` in your projects folder and is deleted when you end the task.
 - jdtls on Windows starts without Python: Trackwall runs it with `java` directly.

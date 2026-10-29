@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { agentsApi, REMOVED_REPOS_DIR } from "@trackwall/protocol";
+import { agentsApi, REMOVED_REPOS_DIR, TRACKWALL_DIR } from "@trackwall/protocol";
 import { waitFor } from "../test/support/agents.ts";
 import { sessionList, showSessions, useTrackwall } from "./support/trackwall-ui.ts";
 
@@ -32,7 +32,7 @@ describe("a repo removal proposed by a session (ADR-83)", () => {
     await sessionList(page)
       .getByRole("button", { name: /Repo removal/ })
       .waitFor({ state: "detached" });
-    expect(existsSync(join(daemon.projects, REMOVED_REPOS_DIR, "docs", "README.md"))).toBe(true);
+    expect(existsSync(join(daemon.projects, TRACKWALL_DIR, REMOVED_REPOS_DIR, "docs", "README.md"))).toBe(true);
     expect(existsSync(join(daemon.projects, "docs"))).toBe(false);
   }, 60_000);
 });

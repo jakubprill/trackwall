@@ -3,6 +3,7 @@ import { SCRATCH_DIR_NAME, SERVICE_RELEASE_MS, type StateDirSource } from "@trac
 import { vscodeUrl } from "./infra/editor-url.ts";
 import { DomainError, messageOf } from "./infra/errors.ts";
 import { runProgram } from "./infra/run-program.ts";
+import { trackwallDir } from "./infra/trackwall-dir.ts";
 import {
   AGENT_QUEUES_FILE,
   Agents,
@@ -143,7 +144,7 @@ export function createFacade(o: FacadeOptions): Facade {
   // `workspace` is set right below, before any git command asks for the folder.
   const vcs: Vcs = new Vcs(() =>
     workspace.projectsDir().then(
-      (projects: string) => join(projects, SCRATCH_DIR_NAME),
+      (projects: string) => trackwallDir(projects, SCRATCH_DIR_NAME),
       () => systemTempFolder(),
     ),
   );

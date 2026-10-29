@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -81,6 +81,26 @@ describe.each(RUNTIMES)("daemon process under %s", (name, runtime) => {
     try {
       const file = await waitFor(() => readDaemonFile(join(fakeHome, ".trackwall")), daemon);
       expect(file.pid).toBe(daemon.pid);
+      await loopbackRequest(file.port, "/api/daemon/shutdown", { method: "POST", token: file.token });
+      expect(await daemon.exited).toBe(0);
+    } finally {
+      daemon.kill();
+    }
+  }, 20_000);
+
+  test("at start the folders from before .trackwall in the projects folder move into it", async () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-move-home-"));
+    const projects = mkdtempSync(join(tmpdir(), "trackwall-move-projects-"));
+    writeFileSync(join(home, "workspace.yaml"), `projectsDir: ${JSON.stringify(projects)}\n`);
+    mkdirSync(join(projects, ".trackwall-removed", "old-api"), { recursive: true });
+    writeFileSync(join(projects, ".trackwall-removed", "old-api", "README.md"), "# old-api\n");
+    const daemon = Bun.spawn([...runtime, MAIN], { env: { ...process.env, TRACKWALL_HOME: home }, stdout: "ignore", stderr: "ignore" });
+    try {
+      const file = await waitFor(() => readDaemonFile(home), daemon);
+
+      expect(readFileSync(join(projects, ".trackwall", "removed", "old-api", "README.md"), "utf8")).toBe("# old-api\n");
+      expect(existsSync(join(projects, ".trackwall-removed"))).toBe(false);
+
       await loopbackRequest(file.port, "/api/daemon/shutdown", { method: "POST", token: file.token });
       expect(await daemon.exited).toBe(0);
     } finally {

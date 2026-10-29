@@ -1,16 +1,17 @@
 import { isAbsolute, join, relative, sep } from "node:path";
 import { DEFAULT_WORKTREES_DIR_NAME } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
+import { trackwallDir } from "../../infra/trackwall-dir.ts";
 import { hasGit } from "./projects-dir.ts";
 
 /**
- * The task worktrees folder (§4.4, ADR-84): where new task worktrees go. By default a hidden folder in the projects
- * folder, so that worktrees sit on the same disk as the repos and fall under the same antivirus exclusion and Copilot CLI
+ * The task worktrees folder (§4.4, ADR-84): where new task worktrees go. By default a folder of `.trackwall` in the
+ * projects folder (ADR-125), so that worktrees sit on the same disk as the repos and fall under the same antivirus exclusion and Copilot CLI
  * trusted folder; the repo list skips it, because it skips names with a dot and has no `.git` itself.
  */
 
 export function defaultWorktreesDir(projectsDir: string): string {
-  return join(projectsDir, DEFAULT_WORKTREES_DIR_NAME);
+  return trackwallDir(projectsDir, DEFAULT_WORKTREES_DIR_NAME);
 }
 
 /**
