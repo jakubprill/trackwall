@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { TaskId } from "./agents.ts";
-import type { Endpoint } from "./api.ts";
+import { apiEndpoints } from "./api.ts";
 import { RunState } from "./procs.ts";
 import { RepoId } from "./workspace.ts";
 
@@ -88,9 +88,7 @@ export type MiseTasks = z.infer<typeof MiseTasks>;
 export const RunningMiseTask = z.object({ repo: RepoId, task: TaskId.nullable(), miseTask: MiseTaskName, run: RunState });
 export type RunningMiseTask = z.infer<typeof RunningMiseTask>;
 
-function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
-  return { path: `/api/mise/${action}`, request, data };
-}
+const endpoint = apiEndpoints("mise");
 
 /** `task`: a mise task in that task's worktree (ADR-59); the repo root without it. */
 const MiseTaskRequest = z.object({ repo: RepoId, task: TaskId.nullable().default(null), miseTask: MiseTaskName }).strict();

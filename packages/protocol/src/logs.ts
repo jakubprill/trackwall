@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { TaskId } from "./agents.ts";
-import type { Endpoint } from "./api.ts";
+import { apiEndpoints } from "./api.ts";
 import { MiseTaskName } from "./mise.ts";
 import { RepoId } from "./workspace.ts";
 
@@ -145,9 +145,7 @@ export type LogErrorsRequest = z.infer<typeof LogErrorsRequest>;
  */
 export type LogErrorsQuery = Omit<LogErrorsRequest, "limit"> & { limit: number };
 
-function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
-  return { path: `/api/logs/${action}`, request, data };
-}
+const endpoint = apiEndpoints("logs");
 
 export const logsApi = {
   tail: endpoint("tail", LogTailRequest, LogTail),

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { TaskId } from "./agents.ts";
-import type { Endpoint } from "./api.ts";
+import { apiEndpoints } from "./api.ts";
 import { LogError } from "./logs.ts";
 import { MiseTaskName } from "./mise.ts";
 import { TestCounts, TestFailure } from "./test-results.ts";
@@ -70,9 +70,7 @@ export type Verification = z.infer<typeof Verification>;
 
 const TaskRequest = z.object({ task: TaskId }).strict();
 
-function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
-  return { path: `/api/verification/${action}`, request, data };
-}
+const endpoint = apiEndpoints("verification");
 
 export const verificationApi = {
   /**

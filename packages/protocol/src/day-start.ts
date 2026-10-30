@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { SessionId, TaskId, TaskPrompt } from "./agents.ts";
-import type { Endpoint } from "./api.ts";
+import { apiEndpoints } from "./api.ts";
 import { SessionView } from "./conversation.ts";
 import { SyncOutcome } from "./sync.ts";
 import { TaskState } from "./task-state.ts";
@@ -99,9 +99,7 @@ export type DayStartRun = z.infer<typeof DayStartRun>;
 export const DayStartSettings = z.object({ prompt: TaskPrompt }).strict();
 export type DayStartSettings = z.infer<typeof DayStartSettings>;
 
-function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
-  return { path: `/api/day-start/${action}`, request, data };
-}
+const endpoint = apiEndpoints("day-start");
 
 export const dayStartApi = {
   /**

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Endpoint } from "./api.ts";
+import { apiEndpoints } from "./api.ts";
 import { MechanismEvidence, TagName } from "./cards.ts";
 import { Evidence } from "./evidence.ts";
 import { EndpointSource, HttpClientVia, HttpMethod, OpenApiOperation } from "./http.ts";
@@ -258,9 +258,7 @@ export const FindEndpointResult = z.object({
 });
 export type FindEndpointResult = z.infer<typeof FindEndpointResult>;
 
-function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
-  return { path: `/api/graph/${action}`, request, data };
-}
+const endpoint = apiEndpoints("graph");
 
 export const graphApi = {
   /** The graph of all repos in the projects folder, computed from the cards (the first request for a commit reads the files from git). */

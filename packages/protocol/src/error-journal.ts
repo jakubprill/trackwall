@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Done, type Endpoint } from "./api.ts";
+import { apiEndpoints, Done } from "./api.ts";
 
 /**
  * Contract of the `error-journal` module (ADR-94): Trackwall's own errors, from the daemon, the desktop shell and the UI, kept
@@ -57,9 +57,7 @@ export const UiErrorReport = z
   .strict();
 export type UiErrorReport = z.infer<typeof UiErrorReport>;
 
-function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
-  return { path: `/api/error-journal/${action}`, request, data };
-}
+const endpoint = apiEndpoints("error-journal");
 
 const Empty = z.object({}).strict();
 

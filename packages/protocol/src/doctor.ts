@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Endpoint } from "./api.ts";
+import { apiEndpoints } from "./api.ts";
 
 /**
  * Contract of the `doctor` module (ADR-101): checks of what Trackwall needs on this computer (the projects folder and, on
@@ -44,9 +44,7 @@ export const DoctorReport = z.object({
 });
 export type DoctorReport = z.infer<typeof DoctorReport>;
 
-function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
-  return { path: `/api/doctor/${action}`, request, data };
-}
+const endpoint = apiEndpoints("doctor");
 
 export const doctorApi = {
   /** Runs every check now; each has a time limit, so the report comes within seconds also without a network. */
