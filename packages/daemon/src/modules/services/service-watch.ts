@@ -37,8 +37,10 @@ export interface WatchedRun {
   /** Where the service runs: the repo root (`task: null`) or a task's worktree (ADR-61). */
   target: MiseTarget;
   run: RunState;
-  /** Ports from `server.port` on the card, or the task port, used until the log names one. */
+  /** Ports from `server.port` on the card, the task port or the leased port, used until the log names one. */
   expectedPorts: readonly number[];
+  /** Where `expectedPorts` come from. */
+  expectedSource: ServicePortSource;
   /** Log cursor from which the run's records are read: taken before the start, or the start of the daemon run. */
   cursor: number;
 }
@@ -54,6 +56,7 @@ export class ServiceWatch {
   readonly runId: string;
   private readonly deps: WatchDeps;
   private readonly expectedPorts: readonly number[];
+  private readonly expectedSource: ServicePortSource;
   private readonly startedAt: number;
   private lastRun: RunState;
   private cursor: number;
@@ -74,6 +77,7 @@ export class ServiceWatch {
     this.lastRun = watched.run;
     this.startedAt = Date.parse(watched.run.startedAt);
     this.expectedPorts = watched.expectedPorts;
+    this.expectedSource = watched.expectedSource;
     this.cursor = watched.cursor;
     this.deps = deps;
     this.schedule(0);
@@ -81,9 +85,9 @@ export class ServiceWatch {
 
   view(): Service {
     const port = this.address?.port ?? this.logPort ?? this.expectedPorts[0] ?? null;
-    const expected: ServicePortSource = this.target.task === null ? "card" : "task";
-    const portSource: ServicePortSource | null = port === null ? null : this.logPort === port ? "log" : expected;
-    return { ...this.target, state: this.state, port, portSource, run: this.lastRun, since: this.since, reason: this.reason };
+    const portSource: ServicePortSource | null = port === null ? null : this.logPort === port ? "log" : this.expectedSource;
+    const lease = this.expectedSource === "lease";
+    return { ...this.target, lease, state: this.state, port, portSource, run: this.lastRun, since: this.since, reason: this.reason };
   }
 
   /** Where to send a request: the port that answered the last probe; `null` unless `healthy`. */
@@ -99,6 +103,14 @@ export class ServiceWatch {
   /** Resolves once the service is no longer `stopping`: after a stop, once the group has ended and the port closed. */
   released(): Promise<void> {
     return this.until((state) => state !== "stopping");
+  }
+
+  /**
+   * Resolves once the run's process group has ended (a crash, or a stop, even while an app outside the group still holds
+   * the port), or the watch has ended.
+   */
+  groupEnded(): Promise<void> {
+    return this.until(() => this.lastRun.kind === "exited");
   }
 
   /** Checks now instead of at the next tick (right after a stop, before an endpoint call); joins a check in flight. */

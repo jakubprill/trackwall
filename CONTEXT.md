@@ -313,8 +313,8 @@ The key under which `procs` keeps a process group and its last state; it is give
 **Probe** (health):
 A TCP connection to the service's port on loopback (`probePort`), with the port from its log or `server.port` on its card; it decides `healthy` / `unhealthy` (ADR-45). The planned mise task `health` is not used.
 
-**Lease** (`Lease`):
-Which branch or worktree holds a service on its port. By default the main repo; a task can take it over and give it back.
+**Lease** (`Lease`, `lease` in `start_service` and `services/start`, `Service.lease`):
+A task's service running on the port of the repo root's service, so whatever calls the repo reaches the task's changes (ADR-132). Taking it stops the root's service; it ends when the task's service stops or crashes, and the root's service starts again if it was running. In the UI "Run on the repo's port" and "Give the port back".
 _Avoid_: lock, reservation
 
 **Orphan**:

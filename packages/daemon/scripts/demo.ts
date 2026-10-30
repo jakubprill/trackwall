@@ -139,7 +139,7 @@ async function setTheScene(): Promise<void> {
   // The pricing task's tests fail on what its review comment asks for, so its panel shows a failed verification (ADR-64).
   const verified = await facade.verifications.verify(pricing.id, undefined, 30_000, AbortSignal.timeout(30_000));
   if (verified.state !== "failed") throw new Error(`the pricing task's verification is ${verified.state}, not failed`);
-  const slice = await facade.services.start({ repo: "admin-bff", task: null, dependencies: true, waitMs: 20_000 });
+  const slice = await facade.services.start({ repo: "admin-bff", task: null, lease: false, dependencies: true, waitMs: 20_000 });
   const down = slice.members
     .filter((member) => member.service?.state !== "healthy")
     .map((member) => `${member.repo}: ${member.problem ?? member.service?.state ?? member.outcome}`);

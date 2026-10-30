@@ -39,3 +39,8 @@ export function memberLabel(member: SliceMember, current: Service | null): { ton
 export function isServiceLive(service: Service | null): boolean {
   return service !== null && service.state !== "stopped" && service.state !== "crashed";
 }
+
+/** The live service of a task that holds the port of `repo`'s root on a lease (ADR-132), if any. */
+export function leaseHolder(services: readonly Service[], repo: string): Service | undefined {
+  return services.find((s) => s.repo === repo && s.lease && isServiceLive(s));
+}
