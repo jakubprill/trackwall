@@ -219,8 +219,11 @@ export function createFacade(o: FacadeOptions): Facade {
     sessionMcpServer: o.sessionMcpServer,
     openEditor,
     boardHas: (item) => board.has(item),
+    onTaskRemoved: (task) => logs.removeTaskLogs(task),
     log: o.log,
   });
+  // Tasks ended while the daemon was not running left their logs behind (ADR-59).
+  logs.removeTaskLogsExcept(agents.sessions().tasks.map((t) => t.id));
   const mise: Mise = new Mise({
     procs,
     repos: workspace,

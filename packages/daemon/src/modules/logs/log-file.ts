@@ -92,6 +92,18 @@ export function logFilePath(dir: string, source: LogSource): string {
   return `${join(dir, kind, ...encoded)}.jsonl`;
 }
 
+/** The directory of every log of a task's worktree (`logs/task-mise-task/<task>`), removed with the task (ADR-59). */
+export function taskLogDir(dir: string, task: string): string {
+  return join(dir, TASK_LOG_KIND, fileName(task));
+}
+
+/** The directory of the logs of task worktrees, one subdirectory per task. */
+export function taskLogsRoot(dir: string): string {
+  return join(dir, TASK_LOG_KIND);
+}
+
+const TASK_LOG_KIND = "task-mise-task" satisfies LogSource["kind"];
+
 /** The kind and names of a source, from general to specific: the log directories and file, and the source key in memory. */
 export function sourceParts(source: LogSource): [string, ...string[]] {
   switch (source.kind) {

@@ -1,3 +1,5 @@
+import { readdirSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import {
   LOG_BUFFER_RECORDS,
   type LogErrors,
@@ -9,7 +11,7 @@ import {
   type LogTailRequest,
 } from "@trackwall/protocol";
 import { collectErrors } from "./log-errors.ts";
-import { LogFile, logFilePath, sourceParts } from "./log-file.ts";
+import { fileName, LogFile, logFilePath, sourceParts, taskLogDir, taskLogsRoot } from "./log-file.ts";
 import { logLevel } from "./log-level.ts";
 import { RunOutput } from "./run-output.ts";
 import { maskSecrets, secretValues } from "./secret-mask.ts";
@@ -17,7 +19,9 @@ import { maskSecrets, secretValues } from "./secret-mask.ts";
 /**
  * The `logs` module (§4.2, ADR-28): process output lines as records with one global `seq` for all sources.
  * Every source has a buffer of recent records in memory (for the UI and MCP, read from a cursor) and a JSONL file in the state
- * directory. A line is masked and cleaned of ANSI in `RunOutput` before it reaches the buffer or the file.
+ * directory. A line is masked and cleaned of ANSI in `RunOutput` before it reaches the buffer or the file. The logs of a
+ * task's worktree go with the task (ADR-59): its buffers and its directory when it ends, and at daemon start the
+ * directories of tasks that ended while the daemon was not running.
  */
 
 /** Writes to files in batches: a noisy process gives hundreds of lines per second. */
@@ -121,6 +125,38 @@ export class Logs {
     const cursor = fromOtherRun ? undefined : sinceSeq;
     const evicted = cursor !== undefined && sources.some((log) => cursor < log.evictedSeq);
     return { ...collectErrors(sources, { minLevel, sinceSeq: cursor, limit }), nextSeq: this.seq, dropped: fromOtherRun || evicted };
+  }
+
+  /**
+   * Removes the logs of a task that has ended (ADR-59): the buffers of its worktree's sources and their files. Nothing of
+   * the task runs any more (ending a task needs its processes stopped), so no record can come after. A directory that
+   * cannot be removed (a file held open on Windows) is logged and removed at a later daemon start.
+   */
+  removeTaskLogs(task: string): void {
+    for (const [key, log] of this.sources) if (log.source.kind === "task-mise-task" && log.source.task === task) this.sources.delete(key);
+    this.removeDir(taskLogDir(this.deps.dir, task));
+  }
+
+  /** At daemon start: removes the log directories of tasks that are not in `tasks` (ADR-59), such as ones ended while it was down. */
+  removeTaskLogsExcept(tasks: readonly string[]): void {
+    const root = taskLogsRoot(this.deps.dir);
+    const kept = new Set(tasks.map(fileName));
+    let names: string[];
+    try {
+      names = readdirSync(root);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw err;
+    }
+    for (const name of names) if (!kept.has(name)) this.removeDir(join(root, name));
+  }
+
+  private removeDir(path: string): void {
+    try {
+      rmSync(path, { recursive: true, force: true });
+    } catch (err) {
+      this.deps.log(`removing ${path}: ${String(err)}; trying again at the next daemon start`);
+    }
   }
 
   /** Writes the file buffers; called with a delay after new records and on daemon exit. */

@@ -398,4 +398,33 @@ describe("log file", () => {
         .map((l) => JSON.parse(l).msg),
     ).toEqual(["a", "b"]);
   });
+
+  test("removing a task's logs drops its buffers and its directory, and leaves other tasks and repo roots", () => {
+    const { dir, logs } = newLogs();
+    const ended = { kind: "task-mise-task", repo: "web", task: "a1", miseTask: "test" } as const;
+    const running = { kind: "task-mise-task", repo: "web", task: "b2", miseTask: "test" } as const;
+    for (const source of [ended, running, DEV]) write(logs.open(source, "r1", {}), "line");
+    logs.flush();
+
+    logs.removeTaskLogs("a1");
+
+    expect(logs.tail({ source: ended, limit: 10 }).records).toEqual([]);
+    expect(existsSync(join(dir, "task-mise-task", "a1"))).toBe(false);
+    expect(logs.tail({ source: running, limit: 10 }).records.map((r) => r.msg)).toEqual(["line"]);
+    expect(existsSync(logFilePath(dir, running))).toBe(true);
+    expect(existsSync(logFilePath(dir, DEV))).toBe(true);
+  });
+
+  test("at daemon start the log directories of tasks that no longer exist are removed", () => {
+    const { dir, logs } = newLogs();
+    mkdirSync(join(dir, "task-mise-task", "gone"), { recursive: true });
+    writeFileSync(join(dir, "task-mise-task", "gone", "test.jsonl"), "{}\n");
+    mkdirSync(join(dir, "task-mise-task", "kept"), { recursive: true });
+
+    logs.removeTaskLogsExcept(["kept"]);
+
+    expect(existsSync(join(dir, "task-mise-task", "gone"))).toBe(false);
+    expect(existsSync(join(dir, "task-mise-task", "kept"))).toBe(true);
+    expect(() => newLogs().logs.removeTaskLogsExcept([])).not.toThrow();
+  });
 });
