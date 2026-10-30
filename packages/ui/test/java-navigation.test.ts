@@ -18,6 +18,9 @@ describe("Java navigation on the New session form", () => {
     });
     expect(javaNavigationInView({ kind: "ready" }, "terminal")).toEqual({ kind: "ready" });
     expect(javaNavigationInView({ kind: "hidden" }, "conversation")).toEqual({ kind: "hidden" });
+    // Turning Chat off would not set it up, so the reason it has stays.
+    const notSetUp = { kind: "unavailable" as const, reason: "Not set up yet: install it in Settings › Agents." };
+    expect(javaNavigationInView(notSetUp, "conversation")).toEqual(notSetUp);
   });
 
   test("a repo tagged java gets it when the daemon can start the language server", () => {

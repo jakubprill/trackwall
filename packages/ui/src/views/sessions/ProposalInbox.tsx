@@ -71,12 +71,14 @@ export function ProposalInbox({
   const promptOf = (p: TaskProposal) => prompts.get(p.id) ?? p.prompt;
   const modelTextOf = (p: TaskProposal) => models.get(p.id) ?? p.model ?? "";
   const approvalsOf = (p: TaskProposal) => approvals.get(p.id) ?? p.approvals;
+  // A proposal names no view: its task shows in a terminal unless the user turns Chat on (ADR-137).
+  const viewOf = (p: TaskProposal): SessionView => views.get(p.id) ?? "terminal";
   /** The start as the user left the proposal, or `undefined` while its prompt is empty or its model not an id. */
   const startOf = (p: TaskProposal): ProposalStart | undefined => {
     const model = typedModel(modelTextOf(p));
     return promptOf(p).trim() === "" || model === undefined
       ? undefined
-      : { id: p.id, prompt: promptOf(p), model, approvals: approvalsOf(p), view: views.get(p.id) ?? "terminal" };
+      : { id: p.id, prompt: promptOf(p), model, approvals: approvalsOf(p), view: viewOf(p) };
   };
   const toStart = proposals.filter((p) => ticked.has(p.id));
   // Ticking and "Start selected" are for tasks; a folder action has its own button (ADR-83).
@@ -162,7 +164,7 @@ export function ProposalInbox({
                         subject={p.title}
                         approvals={{ value: approvalsOf(p), onChange: (value) => setApprovals(new Map(approvals).set(p.id, value)) }}
                         model={{ value: modelTextOf(p), onChange: (value) => setModels(new Map(models).set(p.id, value)) }}
-                        view={{ value: views.get(p.id) ?? "terminal", onChange: (value) => setViews(new Map(views).set(p.id, value)) }}
+                        view={{ value: viewOf(p), onChange: (value) => setViews(new Map(views).set(p.id, value)) }}
                         disabled={decisions.pending}
                       />
                     </>

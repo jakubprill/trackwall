@@ -38,7 +38,7 @@ To steer a running task, the main session sends its agent a message: a correctio
 
 ## Good to know
 
-- A proposal can name the Copilot CLI model its task runs on, for example a stronger one for a code review. The model shows in a field among the pills under the prompt: change it, or clear it to use Copilot CLI's default. Most proposals leave it empty. The task keeps its model when it is resumed, and its panel shows it next to the task port. Switching the model with `/model` in the task's terminal lasts until the task is resumed, which goes back to the task's model.
+- A proposal can name the Copilot CLI model its task runs on, for example a stronger one for a code review. The model shows in a field among the pills under the prompt: change it, or clear it to use Copilot CLI's default. Most proposals leave it empty. The task keeps its model when it is resumed, and its panel shows it next to the task port. Switching the model with `/model` in the task's terminal lasts until the task is resumed, which goes back to the task's model. Turn on "Chat (preview)" among the same pills to start the task as a conversation instead of a terminal ([agent tasks](/features/tasks)).
 - A proposal can suggest running its task without asking for approvals: its "No approvals" pill is then on, with what that means under it. Turn it off to keep the approvals. In the session grid such a proposal cannot be started from its tile: open it, so you see the pill before you start it.
 - A proposal for a repo that already has tasks says so.
 - A main session can also propose removing a repo, shown as "Repo removal" with its reason and a "Remove repo" button instead of a prompt; see the [supervisor](/features/supervisor).

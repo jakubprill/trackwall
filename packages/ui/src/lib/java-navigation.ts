@@ -31,7 +31,7 @@ export function javaNavigationOffer(tags: readonly RepoTag[] | undefined, state:
  * an offer the repo has becomes unavailable, saying how to get it back.
  */
 export function javaNavigationInView(offer: JavaNavigationOffer, view: SessionView): JavaNavigationOffer {
-  if (offer.kind === "hidden" || view === "terminal") return offer;
+  if (offer.kind !== "ready" || view === "terminal") return offer;
   return { kind: "unavailable", reason: "Needs the terminal for now: turn Chat off to use it." };
 }
 

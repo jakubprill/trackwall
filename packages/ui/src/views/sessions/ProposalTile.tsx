@@ -7,8 +7,8 @@ import { ProposalActions, ProposalError } from "./ProposalActions.tsx";
 /**
  * The body of a grid tile with task proposals (ADR-48, ADR-55): every prompt in full, to read before “Start task”,
  * which starts it as proposed (with the proposed model, ADR-98), and “Reject…”. A proposal that asks to run without
- * approvals (ADR-105) starts only from the full panel, where its pill can be turned off. Editing a prompt, a model or the mode, or starting
- * several at once is in the full panel.
+ * approvals (ADR-105) starts only from the full panel, where its pill can be turned off. Editing a prompt, a model or the mode,
+ * starting in the conversation view (ADR-137), or starting several at once is in the full panel, so a tile starts in a terminal.
  */
 export function ProposalTile({
   conn,

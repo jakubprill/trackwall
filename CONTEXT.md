@@ -436,7 +436,7 @@ A Trackwall session in the projects folder that is not the supervisor (`Session.
 _Avoid_: repo-less session, scratch session
 
 **Supervisor panel** (`SupervisorPanel`):
-The column on the right of the main window, in every view, with the supervisor's terminal, its state and the work it delegated, or, while none runs, its start card (`SupervisorStart`): "Start my day", "Continue" (the last supervisor's conversation, while Copilot CLI keeps one, `SessionList.lastSupervisor`) and "New conversation", one of them first as the main choice, and "Show as" for a terminal or the chat view (ADR-58, ADR-70, ADR-96, ADR-126). Pinned open, wide ("Widen": most of the window, for reading the supervisor), or folded to a strip that keeps a bell while the supervisor or a task proposal under it waits for you (`SupervisorLayout` in `supervisor-layout.ts`); Alt+0 unfolds it, a wide panel staying wide, and puts the keyboard in its terminal.
+The column on the right of the main window, in every view, with the supervisor's terminal, its state and the work it delegated, or, while none runs, its start card (`SupervisorStart`): "Start my day", "Continue" (the last supervisor's conversation, while Copilot CLI keeps one, `SessionList.lastSupervisor`) and "New conversation", one of them first as the main choice, and "Show as" for a terminal or the conversation view (ADR-58, ADR-70, ADR-96, ADR-126). Pinned open, wide ("Widen": most of the window, for reading the supervisor), or folded to a strip that keeps a bell while the supervisor or a task proposal under it waits for you (`SupervisorLayout` in `supervisor-layout.ts`); Alt+0 unfolds it, a wide panel staying wide, and puts the keyboard in its terminal.
 _Avoid_: sidebar (that is the list on the left of a view), drawer
 
 **Day start** (`DayStart`, `dayStartApi`, `DayStartRun`, `startSupervisorWith`; "Start my day" in the UI; `dayStart` in `workspace.yaml`):
@@ -465,9 +465,9 @@ _Avoid_: read, acknowledged
 **Idle** (`isIdle`, `IDLE_LABEL`, dashboard state `idle`):
 A running session in `Input` the user has already seen (ADR-47): the agent waits for the next prompt, but no longer waits for you. Shown as "idle" in Sessions and in calm grey on the dashboard.
 
-**Conversation view** (`SessionView` `"conversation"`, `ConversationView`, `AcpSession`, `ConversationEntry`; "conversation view" in the UI):
+**Conversation view** (`SessionView` `"conversation"`, `ConversationView`, `AcpSession`, `ConversationEntry`; "conversation view" in the UI, and "Chat (preview)" on the control that turns it on):
 How a session shows when the daemon runs Copilot CLI over the Agent Client Protocol (`copilot --acp`) instead of in a terminal (ADR-107): a list of what the user and the agent said and the tools the agent called, its approval and a message box, all plain text in the page. The other `SessionView` is `"terminal"`, the session terminal. The supervisor starts in it when the user turns it on in the supervisor panel, and a task when the user picks it for the task (`Task.view`, ADR-137); a conversation goes on in either view.
-_Avoid_: chat, transcript (that is Copilot CLI's own record)
+_Avoid_: chat outside the "Chat (preview)" control, transcript (that is Copilot CLI's own record)
 
 **Session terminal** (`SessionTerminal`):
 xterm.js in the Sessions view and the supervisor panel, connected over the WebSocket `/ws/pty/<session>` to the session's PTY. Several session terminals, also in different windows, can show the same session; the PTY takes the size of the last one that reported it, and a window that comes to the front reports the size of its terminals again (ADR-49).
