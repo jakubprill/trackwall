@@ -291,6 +291,8 @@ export const Task = z.object({
   javaNavigation: z.boolean(),
   /** The board item the task works on (ADR-133); `null` for a task started from no item. */
   item: BoardItemId.nullable(),
+  /** Whether its sessions show as a terminal or in the conversation view (ADR-137). */
+  view: SessionView,
   /** The last summary from the task session (`report_result`); `null` until it has reported one. */
   summary: z.object({ text: z.string(), reportedAt: z.string() }).nullable(),
   /** The task port (ADR-61): `TASK_PORT_ENV` in every mise task run in the worktree, and the port of the task's service. */
@@ -567,7 +569,8 @@ export const agentsApi = {
   startOptions: endpoint("start-options", z.object({}).strict(), StartOptions),
   /**
    * Creates a worktree on a new branch from the default branch and starts Copilot CLI in it with the prompt (ADR-31);
-   * with `item`, the task works on that board item (ADR-133), `not_found` when there is none.
+   * with `item`, the task works on that board item (ADR-133), `not_found` when there is none. `view` is a terminal or
+   * the conversation view for every session of the task (ADR-137); Java navigation needs a terminal (`bad_request`).
    */
   createTask: endpoint(
     "create-task",
@@ -579,11 +582,12 @@ export const agentsApi = {
         model: TaskModel.nullable().default(null),
         javaNavigation: z.boolean().default(false),
         item: BoardItemId.nullable().default(null),
+        view: SessionView.default("terminal"),
       })
       .strict(),
     Task,
   ),
-  /** A new session for a task that has no running session: Copilot CLI resumes the task's conversation (`--resume`). */
+  /** A new session for a task that has no running session, in the task's view: it goes on with the task's conversation. */
   resumeTask: endpoint("resume-task", TaskRequest, Task),
   taskChanges: endpoint("task-changes", TaskRequest, TaskChanges),
   /**
@@ -619,7 +623,12 @@ export const agentsApi = {
    */
   approveProposal: endpoint(
     "approve-proposal",
-    ProposalRequest.extend({ prompt: TaskPrompt, model: TaskModel.nullable(), approvals: TaskApprovals }),
+    ProposalRequest.extend({
+      prompt: TaskPrompt,
+      model: TaskModel.nullable(),
+      approvals: TaskApprovals,
+      view: SessionView.default("terminal"),
+    }),
     Task,
   ),
   /**

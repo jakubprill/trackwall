@@ -67,7 +67,7 @@ describe.skipIf(process.versions.bun === undefined)("Java navigation for tasks (
     cleanups.push(() => procs.stopAll());
     expect(agents.startOptions()).toEqual({ javaNavigation: { problem: null } });
 
-    const task = await agents.createTask("shop", "find the callers of OrderService", "ask", null, true);
+    const task = await agents.createTask("shop", "find the callers of OrderService", { javaNavigation: true });
     expect(task.javaNavigation).toBe(true);
     const session = sessionOf(agents, task.id);
     const java = pluginManifest(home, session).lspServers?.java;
@@ -90,7 +90,7 @@ describe.skipIf(process.versions.bun === undefined)("Java navigation for tasks (
     cleanups.push(() => procs.stopAll());
     expect(agents.startOptions()).toEqual({ javaNavigation: null });
 
-    await expect(agents.createTask("shop", "find the callers", "ask", null, true)).rejects.toMatchObject({
+    await expect(agents.createTask("shop", "find the callers", { javaNavigation: true })).rejects.toMatchObject({
       code: "bad_request",
       message: "Java navigation cannot start: javaNavigation is not set in workspace.yaml",
     });
@@ -112,7 +112,7 @@ describe.skipIf(process.versions.bun === undefined)("Java navigation for tasks (
       return settings;
     });
     cleanups.push(() => procs.stopAll());
-    const task = await agents.createTask("shop", "find the callers", "ask", null, true);
+    const task = await agents.createTask("shop", "find the callers", { javaNavigation: true });
     const first = sessionOf(agents, task.id);
     await waitFor(agents, first, (s) => s.state !== null, "the task prompt's sessionStart");
     await agents.stop(first);
@@ -131,7 +131,7 @@ describe.skipIf(process.versions.bun === undefined)("Java navigation for tasks (
     let settings: JavaNavigationSettings | null = jdtlsSettings();
     const { agents, procs, home } = agentsWithJavaNavigation(dir, projects, () => settings);
     cleanups.push(() => procs.stopAll());
-    const task = await agents.createTask("shop", "find the callers", "ask", null, true);
+    const task = await agents.createTask("shop", "find the callers", { javaNavigation: true });
     const first = sessionOf(agents, task.id);
     await waitFor(agents, first, (s) => s.state !== null, "the task prompt's sessionStart");
     await agents.stop(first);
@@ -157,7 +157,7 @@ describe.skipIf(process.versions.bun === undefined)("Java navigation for tasks (
     const { agents, procs, home } = agentsWithJavaNavigation(dir, projects, () => settings);
     cleanups.push(() => procs.stopAll());
 
-    const task = await agents.createTask("shop", "find the callers", "ask", null, true);
+    const task = await agents.createTask("shop", "find the callers", { javaNavigation: true });
     expect(pluginManifest(home, sessionOf(agents, task.id)).lspServers?.java?.initializationOptions).toEqual({
       settings: { java: { import: { gradle: { enabled: false } } } },
     });
@@ -169,7 +169,7 @@ describe.skipIf(process.versions.bun === undefined)("Java navigation for tasks (
     const settings = jdtlsSettings();
     const { agents, procs } = agentsWithJavaNavigation(dir, projects, () => settings);
     cleanups.push(() => procs.stopAll());
-    const task = await agents.createTask("shop", "find the callers", "ask", null, true);
+    const task = await agents.createTask("shop", "find the callers", { javaNavigation: true });
     expect(await agents.taskJavaNavigation(task.id)).toEqual({ kind: "starting" });
 
     const metadata = join(projects, ".trackwall", "lsp", task.id, "workspace", ".metadata");

@@ -65,7 +65,7 @@ import { TaskCoordination } from "./task-coordination.ts";
 import { TaskFile } from "./task-file.ts";
 import { TaskProposals } from "./task-proposals.ts";
 import { TaskReviews } from "./task-reviews.ts";
-import { AgentTasks, type TasksVcs } from "./tasks.ts";
+import { AgentTasks, type TaskLaunch, type TaskOptions, type TasksVcs } from "./tasks.ts";
 import type { ScreenViewer } from "./terminal-screen.ts";
 
 /**
@@ -227,7 +227,7 @@ export class Agents {
       openEditor: deps.openEditor,
       log: deps.log,
       sessions: {
-        launch: (spec) => this.#launch({ ...spec, supervisor: false }),
+        launch: (spec) => this.#launchTask(spec),
         of: (task) => this.#sessions.views().filter((s) => s.task === task),
         close: (id) => this.#close(id),
       },
@@ -353,15 +353,15 @@ export class Agents {
   }
 
   /**
-   * A task from a proposal, with the prompt, the model (ADR-98) and the approvals mode (ADR-105) as the user left them. The proposal stays on the list until there is a task with
+   * A task from a proposal, with the prompt, the model (ADR-98), the approvals mode (ADR-105) and the view (ADR-137) as the user left them. The proposal stays on the list until there is a task with
    * its identifier, but a second approval is `not_found`; it waits for a decision again when the task was not created. A
    * task left behind by a failed cleanup is ended by the user, so the proposal then disappears.
    */
-  async approveProposal(id: string, prompt: string, model: string | null, approvals: TaskApprovals): Promise<Task> {
+  async approveProposal(id: string, prompt: string, model: string | null, approvals: TaskApprovals, view: SessionView): Promise<Task> {
     if (this.#proposals.get(id).kind !== "task") throw new DomainError("bad_request", `proposal ${id} is not a task`);
     const { repo, title, proposedBy, item } = this.#proposals.take(id);
     try {
-      return await this.#tasks.create(repo, prompt, { id, title, proposedBy, model, approvals, javaNavigation: false, item });
+      return await this.#tasks.create(repo, prompt, { id, title, proposedBy, model, approvals, javaNavigation: false, item, view });
     } finally {
       this.#proposals.release(id, this.#tasks.find(id) === undefined);
     }
@@ -506,19 +506,18 @@ export class Agents {
 
   /**
    * A task the user typed; its agent asks before tools unless the user chose `auto` (ADR-105), runs on `model`, or
-   * Copilot CLI's default when it is `null` (ADR-98), with `javaNavigation` gets the Java language server (ADR-99), and
-   * works on board item `item` (ADR-133), which must be on the board (`not_found` otherwise).
+   * Copilot CLI's default when it is `null` (ADR-98), with `javaNavigation` gets the Java language server (ADR-99),
+   * works on board item `item` (ADR-133), which must be on the board (`not_found` otherwise), and shows in `view`
+   * (ADR-137).
    */
   async createTask(
     repo: string,
     prompt: string,
-    approvals: TaskApprovals = "ask",
-    model: string | null = null,
-    javaNavigation = false,
-    item: string | null = null,
+    { approvals = "ask", model = null, javaNavigation = false, item = null, view = "terminal" }: Partial<TaskOptions> = {},
   ): Promise<Task> {
     await this.#assertOnBoard(item);
-    return this.#tasks.create(repo, prompt, { id: randomUUID(), title: null, proposedBy: null, model, approvals, javaNavigation, item });
+    const origin = { id: randomUUID(), title: null, proposedBy: null, model, approvals, javaNavigation, item, view };
+    return this.#tasks.create(repo, prompt, origin);
   }
 
   /**
@@ -680,6 +679,28 @@ export class Agents {
   async #launch({ id = randomUUID(), ...spec }: Omit<TerminalLaunch, "id"> & { id?: string }): Promise<Session> {
     this.#assertNotListed(id);
     return this.#listed(await this.#launcher.terminal({ id, ...spec }));
+  }
+
+  /**
+   * A task's session in the task's view (ADR-137), under a new id: the task's conversation is under the task's id in a
+   * terminal and under Copilot CLI's id in the conversation view, which it resolves to.
+   */
+  async #launchTask({ repo, cwd, task, args, ...start }: TaskLaunch): Promise<string | undefined> {
+    const place = { repo, supervisor: false, cwd, task };
+    if (start.view === "terminal") {
+      const { promptOnStart, lspServers } = start;
+      await this.#launch({ ...place, args, promptOnStart, hasConversation: true, lspServers });
+      return undefined;
+    }
+    const started = await this.#launcher.conversation({
+      id: randomUUID(),
+      ...place,
+      args,
+      load: start.load,
+      firstMessage: start.firstMessage,
+    });
+    this.#listed(started);
+    return started.session.conversation;
   }
 
   /** A started session joins the list. */

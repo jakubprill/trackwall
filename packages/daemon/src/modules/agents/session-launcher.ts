@@ -171,9 +171,10 @@ export class SessionLauncher {
 
   /**
    * Copilot CLI over ACP (ADR-107) in `cwd`: the same MCP server, instructions, tool permissions and mise environment as
-   * in a terminal, without the session plugin, since the protocol itself says what the session does.
+   * in a terminal, without the session plugin, since the protocol itself says what the session does; `args` go after
+   * them (a task's model and approvals mode, ADR-137).
    */
-  conversation({ id, load, firstMessage, ...place }: ConversationLaunch & SessionPlace): Promise<StartedSession> {
+  conversation({ id, load, firstMessage, args = [], ...place }: ConversationStart): Promise<StartedSession> {
     const { repo, supervisor, task, cwd } = place;
     return this.#start(id, place, (setup) => {
       const instructionsDir = this.#writeSessionFiles(id, setup.role, setup.dir, setup.token);
@@ -193,7 +194,7 @@ export class SessionLauncher {
       const start = async () => {
         const { channel } = await this.#deps.procs.startChannel({
           owner: sessionOwner(id),
-          command: [setup.program, ...setup.prefix, "--acp", ...setup.args],
+          command: [setup.program, ...setup.prefix, "--acp", ...setup.args, ...args],
           cwd,
           env: sessionEnv(setup.env, instructionsDir),
           secrets: setup.mise.secretValues,
@@ -344,10 +345,14 @@ export interface SessionPlace {
   task: string | null;
 }
 
+/** A start in the conversation view in a place, with arguments after the session's own. */
+export type ConversationStart = ConversationLaunch & SessionPlace & { args?: readonly string[] };
+
 /**
  * A start in a terminal: Copilot CLI in a repo root, in a task's worktree, or the supervisor or a free session in the
  * projects folder.
  */
+
 export interface TerminalLaunch extends SessionPlace {
   id: string;
   /** Copilot CLI already keeps a conversation under the id: the arguments carry the first message or resume it (ADR-95). */

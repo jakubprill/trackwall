@@ -87,7 +87,7 @@ describe.skipIf(process.versions.bun === undefined)("sessions across a daemon re
 
   test("a task started without approvals keeps running without them in the next daemon (ADR-105)", async () => {
     const before = await startDaemon();
-    const task = await before.facade.agents.createTask("shop", "map the endpoints", "auto");
+    const task = await before.facade.agents.createTask("shop", "map the endpoints", { approvals: "auto" });
     const first = before.facade.agents.sessions().sessions.find((s) => s.task === task.id)?.id;
     if (first === undefined) throw new Error(`task ${task.id} has no session`);
     await waitFor(before.facade.agents, first, (s) => s.state !== null, "the task session's state");
@@ -195,7 +195,7 @@ describe.skipIf(process.versions.bun === undefined)(
       const supervisor = await agents.startSupervisor("new", "terminal");
       await waitFor(agents, supervisor.id, (s) => s.state !== null, "the supervisor's input box");
       const proposal = await agents.propose(supervisor.id, { ...PROPOSAL, title: "Login test" });
-      const task = await agents.approveProposal(proposal.id, proposal.prompt, null, "ask");
+      const task = await agents.approveProposal(proposal.id, proposal.prompt, null, "ask", "terminal");
       const first = await resumedSessionOf(before, task.id);
       await waitFor(agents, first, (s) => s.state !== null, "the task session's state");
       await agents.stop(first);
@@ -229,7 +229,7 @@ describe.skipIf(process.versions.bun === undefined)(
       await waitFor(agents, main.id, (s) => s.state !== null, "the main session's input box");
       // A task of the supervisor that is in its first turn when the daemon stops; the fake stays in it until it gets a line.
       const delegated = await agents.propose(supervisor.id, { ...PROPOSAL, title: "Delegated" });
-      const task = await agents.approveProposal(delegated.id, delegated.prompt, null, "ask");
+      const task = await agents.approveProposal(delegated.id, delegated.prompt, null, "ask", "terminal");
       await waitFor(agents, await resumedSessionOf(before, task.id), (s) => s.state?.state === "Working", "the task's first turn");
       agents.takeUpdates(supervisor.id);
       const waiting = await agents.propose(supervisor.id, { ...PROPOSAL, title: "Login test" });
@@ -258,7 +258,7 @@ describe.skipIf(process.versions.bun === undefined)(
         { kind: "proposal_rejected", task: rejected.id, session: null, reason: "Not now", at: expect.any(String) },
       ]);
       expect(after.facade.agents.takeUpdates(main.id).updates.map((u) => u.task)).toEqual([byMain.id]);
-      const approved = await after.facade.agents.approveProposal(waiting.id, waiting.prompt, null, "ask");
+      const approved = await after.facade.agents.approveProposal(waiting.id, waiting.prompt, null, "ask", "terminal");
       expect(approved).toMatchObject({ id: waiting.id, title: "Login test", proposedBy: { session: supervisor.id, supervisor: true } });
     }, 60_000);
 

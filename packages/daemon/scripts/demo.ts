@@ -117,7 +117,7 @@ async function setTheScene(): Promise<void> {
     "Skip the invoice when billing already has one for the order id.",
   );
   for (const proposal of [retry, notify])
-    await facade.agents.approveProposal(proposal.id, proposal.prompt, proposal.model, proposal.approvals);
+    await facade.agents.approveProposal(proposal.id, proposal.prompt, proposal.model, proposal.approvals, "terminal");
   // The main session steers its notifications task (ADR-68): its agent has read the first message, not the second yet.
   facade.agents.sendMessage(
     main.id,

@@ -74,7 +74,10 @@ export interface AcpSessionOptions {
   cwd: string;
   /** Copilot CLI's id of the conversation to go on with (`session/load`); `undefined` for a new one. */
   load: string | undefined;
-  /** The first message, sent as soon as the session is ready (the day start, ADR-70). */
+  /**
+   * The first message, sent as soon as the session is ready (the day start, ADR-70; a task's prompt, ADR-137). The
+   * daemon sends it, not the user, as `--interactive` in a terminal, so the end of its turn is reported (ADR-68).
+   */
   firstMessage: string | undefined;
   environment: SessionEnvironment;
   run: () => RunState | undefined;
@@ -128,7 +131,7 @@ export class AcpSession implements AgentSession {
   readonly #pending = new Map<string, ConversationEntry>();
   #pendingReset = false;
   #flush: ReturnType<typeof setTimeout> | undefined;
-  readonly #queued: string[] = [];
+  readonly #queued: Prompt[] = [];
   #promptAsked = false;
   #finished = false;
 
@@ -178,7 +181,7 @@ export class AcpSession implements AgentSession {
     this.#ready = true;
     this.#report("Input", "session ready");
     // Before anything the user wrote while the session started: the day start's briefing comes first.
-    if (this.#o.firstMessage !== undefined) this.#queued.unshift(this.#o.firstMessage);
+    if (this.#o.firstMessage !== undefined) this.#queued.unshift({ text: this.#o.firstMessage, by: "daemon" });
     this.#next();
   }
 
@@ -219,7 +222,7 @@ export class AcpSession implements AgentSession {
     if (this.#finished) throw new DomainError("bad_request", "the session has ended");
     this.#attention.typed();
     this.#o.onUserText();
-    this.#queued.push(text);
+    this.#queued.push({ text, by: "user" });
     this.#next();
   }
 
@@ -318,12 +321,12 @@ export class AcpSession implements AgentSession {
     this.#connection.close();
   }
 
-  /** Sends what waits, when the agent waits: the user's messages first, then the daemon's prompt. */
+  /** Sends what waits, when the agent waits: the first message and the user's messages first, then the daemon's prompt. */
   #next(): void {
     if (!this.#ready || this.#finished || this.#turn !== undefined) return;
-    const text = this.#queued.shift();
-    if (text !== undefined) {
-      this.#prompt({ text, by: "user" });
+    const queued = this.#queued.shift();
+    if (queued !== undefined) {
+      this.#prompt(queued);
       return;
     }
     if (!this.#promptAsked) return;
