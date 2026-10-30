@@ -1,4 +1,4 @@
-import { type CardWarmupProgress, graphApi } from "@trackwall/protocol";
+import { type CardWarmupProgress, graphApi, type SessionList, type Task } from "@trackwall/protocol";
 import { RefreshCw } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -12,30 +12,52 @@ import { twoDigits } from "@/lib/format";
 import { repoProblems } from "@/lib/graph-labels";
 import { layoutGraph } from "@/lib/graph-layout";
 import { GRAPH_PACE } from "@/lib/repo-watch";
+import { taskName } from "@/lib/session-entries";
+import { IMPACT_POLL_MS, impactRings } from "@/lib/task-impact";
 import { useCardWarmup } from "@/lib/use-card-warmup";
 import { useRemote } from "@/lib/use-remote";
 import type { RepoWatchHandle } from "@/lib/use-repo-watch";
 import { GraphCanvas } from "./GraphCanvas.tsx";
+import { GraphImpactPanel } from "./GraphImpactPanel.tsx";
 import { GraphNodePanel, GraphSummaryPanel } from "./GraphNodePanel.tsx";
 
 /**
  * The "Overview" view (§4.6, ADR-29): the graph of connections between repos at full width and the details panel of the
  * selected repo on the right. The daemon computes the graph from the repo cards, so a new commit in a repo changes it as soon as
  * the repo watch reports it (ADR-63). While the first graph is computed, the view shows how far the card warm-up is.
+ * Choosing a task lights the repos its change reaches, ring by ring, and dims the rest (ADR-147).
  */
 export function GraphView({
   conn,
   warmupLive,
   repoWatch,
+  sessions,
+  initialImpactTask,
 }: {
   conn: Connection;
   warmupLive: LiveFeed<CardWarmupProgress> | undefined;
   repoWatch: RepoWatchHandle;
+  /** The session list, whose tasks' impact the view can show. */
+  sessions: SessionList | undefined;
+  /** The task whose impact the view opens with, from its Impact tab. */
+  initialImpactTask: string | undefined;
 }) {
   const load = useCallback(() => post(conn, graphApi.graph, {}), [conn]);
   const graph = useRemote(load, repoWatch.options(GRAPH_PACE));
   const warmup = useCardWarmup(conn, warmupLive).data;
   const [selected, setSelected] = useState<string>();
+  const [chosenTask, setChosenTask] = useState(initialImpactTask);
+  // An ended task has no impact to show: the view goes back to the plain graph rather than asking again every few seconds.
+  const tasks = sessions?.tasks ?? [];
+  const impactTask = sessions === undefined || tasks.some((t) => t.id === chosenTask) ? chosenTask : undefined;
+  const loadImpact = useMemo(
+    () => (impactTask === undefined ? undefined : () => post(conn, graphApi.changedEndpoints, { task: impactTask })),
+    [conn, impactTask],
+  );
+  const impact = useRemote(loadImpact, { pollMs: IMPACT_POLL_MS });
+  // The answer names its task, so the last task's impact does not show under the one just chosen.
+  const changed = impact.data?.task === impactTask ? impact.data : undefined;
+  const rings = useMemo(() => changed && impactRings(changed), [changed]);
   const data = graph.data;
   const layout = useMemo(
     () =>
@@ -51,8 +73,9 @@ export function GraphView({
   return (
     <div className="grid h-full min-h-0 grid-cols-[1fr_24rem]">
       <section className="flex min-h-0 min-w-0 flex-col">
-        <header className="flex items-center justify-between px-4 pt-3 pb-2">
+        <header className="flex items-center justify-between gap-3 px-4 pt-3 pb-2">
           <h2 className="hud-label">Overview {data && <span className="text-primary">{`// ${twoDigits(data.nodes.length)}`}</span>}</h2>
+          <ImpactPicker tasks={tasks} task={impactTask} onChoose={setChosenTask} />
           <Button variant="ghost" size="icon" onClick={graph.reload} aria-label="Refresh graph">
             <RefreshCw />
           </Button>
@@ -67,7 +90,12 @@ export function GraphView({
             <Loading text={graphLoadingText(warmup)} />
           </div>
         )}
-        {data && layout && <GraphCanvas graph={data} layout={layout} selected={node?.repo} onSelect={setSelected} />}
+        {impact.error && impactTask !== undefined && (
+          <div className="px-4 pb-3">
+            <ErrorWithRetry message={impact.error} onRetry={impact.reload} />
+          </div>
+        )}
+        {data && layout && <GraphCanvas graph={data} layout={layout} selected={node?.repo} impact={rings} onSelect={setSelected} />}
       </section>
       <aside className="bg-card min-h-0 overflow-y-auto border-l">
         {layout && node && (
@@ -79,8 +107,39 @@ export function GraphView({
             onClose={() => setSelected(undefined)}
           />
         )}
-        {data && layout && !node && <GraphSummaryPanel graph={data} pairs={layout.pairs} />}
+        {data && layout && !node && changed && <GraphImpactPanel changed={changed} onSelect={setSelected} />}
+        {data && layout && !node && !changed && <GraphSummaryPanel graph={data} pairs={layout.pairs} />}
       </aside>
     </div>
+  );
+}
+
+/** The task whose impact the graph lights; "None" shows the plain graph. */
+function ImpactPicker({
+  tasks,
+  task,
+  onChoose,
+}: {
+  tasks: readonly Task[];
+  task: string | undefined;
+  onChoose: (task: string | undefined) => void;
+}) {
+  if (tasks.length === 0) return null;
+  return (
+    <label className="text-muted-foreground ml-auto flex min-w-0 items-center gap-2 text-xs">
+      Impact of
+      <select
+        value={task ?? ""}
+        onChange={(e) => onChoose(e.target.value === "" ? undefined : e.target.value)}
+        className="border-input bg-card h-8 max-w-64 min-w-0 truncate rounded-md border px-2 text-sm"
+      >
+        <option value="">no task</option>
+        {tasks.map((t) => (
+          <option key={t.id} value={t.id}>
+            {`${t.repo} · ${taskName(t)}`}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

@@ -657,6 +657,98 @@ test("more changed endpoints than the limit are cut and say so (ADR-145)", () =>
   expect(truncated).toBe(true);
 });
 
+test("the impact of a change goes from the callers of a changed endpoint to the callers of their endpoints that reach the call, nearest ring first (ADR-147)", () => {
+  const ordersCall = {
+    method: "GET" as const,
+    path: "/api/orders/{id}",
+    operationId: null,
+    evidence: { path: "src/OrdersClient.java", line: 4 },
+  };
+  const ordersClient = client({ via: "feign", name: "OrdersClient", app: "orders", calls: [ordersCall] });
+  const reach = {
+    via: "feign" as const,
+    client: "OrdersClient",
+    method: ordersCall.method,
+    path: ordersCall.path,
+    evidence: ordersCall.evidence,
+  };
+  const bffCall = { method: "GET" as const, path: "/orders/{id}", operationId: null, evidence: { path: "src/BffClient.java", line: 8 } };
+  const cards = [
+    repo("orders-api", card([app("orders"), endpoint("/api/orders/{id}")], [])),
+    // The BFF's endpoint makes the call, so the change goes on to who calls the BFF.
+    repo("bff", { ...card([app("bff"), { ...endpoint("/orders/{id}"), reaches: [reach] }], [ordersClient]), reachTraced: true }),
+    // A scheduled job makes the call: no endpoint of the repo carries the change further.
+    repo("jobs", { ...card([], [ordersClient]), reachTraced: true }),
+    // A card without reach: any of web's endpoints might make the call, so whoever calls them may be reached, or not.
+    repo("web", card([app("web"), endpoint("/web/orders")], [client({ via: "feign", name: "BffClient", app: "bff", calls: [bffCall] })])),
+    // An address without paths, like a frontend's proxy, may call the BFF's endpoint that carries the change.
+    repo("mobile", card([], [client({ name: "bff.url", app: "bff" })])),
+    repo("kiosk", {
+      ...card([], [client({ via: "feign", name: "WebClient", app: "web", calls: [{ ...bffCall, path: "/web/orders" }] })]),
+      reachTraced: true,
+    }),
+  ];
+  const { http } = buildGraphWithIndex(cards, { config: NO_CONFIG, file: CONFIG_FILE, problems: [] });
+  const change = {
+    change: "changed" as const,
+    app: null,
+    method: "GET" as const,
+    path: "/api/orders/{id}",
+    before: null,
+    after: null,
+    dtos: [],
+  };
+
+  expect(withCallers(http, "orders-api", [change]).impact).toEqual([
+    {
+      repo: "bff",
+      ring: 1,
+      uses: ["orders-api"],
+      calls: [{ repo: "orders-api", method: "GET", path: "/api/orders/{id}", handler: "Api.handle" }],
+      through: [{ method: "GET", path: "/orders/{id}", handler: "Api.handle" }],
+      sure: true,
+    },
+    {
+      repo: "jobs",
+      ring: 1,
+      uses: ["orders-api"],
+      calls: [{ repo: "orders-api", method: "GET", path: "/api/orders/{id}", handler: "Api.handle" }],
+      through: [],
+      sure: true,
+    },
+    { repo: "mobile", ring: 2, uses: ["bff"], calls: [], through: null, sure: false },
+    {
+      repo: "web",
+      ring: 2,
+      uses: ["bff"],
+      calls: [{ repo: "bff", method: "GET", path: "/orders/{id}", handler: "Api.handle" }],
+      through: null,
+      sure: true,
+    },
+    {
+      repo: "kiosk",
+      ring: 3,
+      uses: ["web"],
+      calls: [{ repo: "web", method: "GET", path: "/web/orders", handler: "Api.handle" }],
+      through: [],
+      sure: false,
+    },
+  ]);
+  // An added endpoint has no callers yet, so it reaches nobody, not even a client without paths to the task's repo.
+  const admin = repo("orders-admin", card([], [client({ name: "orders.url", app: "orders" })]));
+  const withAdmin = buildGraphWithIndex([...cards, admin], { config: NO_CONFIG, file: CONFIG_FILE, problems: [] }).http;
+  expect(withCallers(withAdmin, "orders-api", [{ ...change, change: "added" }]).impact).toEqual([]);
+  expect(withCallers(withAdmin, "orders-api", [change]).impact.find((r) => r.repo === "orders-admin")).toEqual({
+    repo: "orders-admin",
+    ring: 1,
+    uses: ["orders-api"],
+    calls: [],
+    through: null,
+    sure: false,
+  });
+  expect(withCallers(http, "orders-api", [{ ...change, change: "added" }]).impact).toEqual([]);
+});
+
 describe("the graph and find_endpoint on real git", () => {
   // Several repos with commits and two card computations on real git take longer than the default 5 s on Windows in CI.
   const REAL_GIT_TIMEOUT = 30_000;
@@ -841,6 +933,13 @@ describe("the graph and find_endpoint on real git", () => {
         ["added", "POST /api/orders/{id}/cancel", [], []],
       ]);
       expect(changed.endpoints[0]?.before).toEqual({ handler: "OrdersController.get", request: null, response: "OrderDto" });
+      // The reports read orders from their own endpoint; the BFF's Kotlin card has no reach, so the shop's frontend,
+      // which reaches it by its port, may be hit too.
+      expect(changed.impact.map((r) => [r.ring, r.repo, r.uses, r.sure, r.through?.map((e) => `${e.method} ${e.path}`) ?? null])).toEqual([
+        [1, "legacy-reports", ["orders-api"], true, ["GET /reports/orders/{id}"]],
+        [1, "orders-bff", ["orders-api"], true, null],
+        [2, "shop-web", ["orders-bff"], false, null],
+      ]);
     },
     REAL_GIT_TIMEOUT,
   );

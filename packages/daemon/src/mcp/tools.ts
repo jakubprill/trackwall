@@ -232,10 +232,7 @@ const runs: ToolRuns = {
   },
   getDayReport: async (facade) => ({ report: facade.dayStart.report() }),
   getTaskChanges: (facade, { task, paths, maxPatchBytes }) => facade.agents.agentTaskChanges(task, maxPatchBytes, paths),
-  getChangedEndpoints: async (facade, { task }) => {
-    const { repo, worktree, base } = facade.agents.task(task);
-    return { task, ...(await facade.graph.changedEndpoints(repo, worktree, base)) };
-  },
+  getChangedEndpoints: (facade, { task }) => facade.taskChangedEndpoints(task),
   proposeTask: async (facade, { model, approvals, item, ...proposal }, { caller }) => {
     // Without a model the task runs on Copilot CLI's default (ADR-98); without a mode its agent asks (ADR-105).
     return {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TaskId } from "./agents.ts";
 import { apiEndpoints } from "./api.ts";
 import { CardProblem, MechanismEvidence, TagName } from "./cards.ts";
 import { Evidence } from "./evidence.ts";
@@ -317,6 +318,42 @@ export const EndpointChanges = z.object({
 });
 export type EndpointChanges = z.infer<typeof EndpointChanges>;
 
+/** How far the impact of a change goes (ADR-147): beyond three hops a company graph is usually every repo, like `MAX_SUBGRAPH_DEPTH`. */
+export const MAX_IMPACT_RINGS = 3;
+
+/** An endpoint of another repo, as a repo of the impact calls it. */
+export const ImpactCall = EndpointRef.extend({ repo: RepoId });
+export type ImpactCall = z.infer<typeof ImpactCall>;
+
+/**
+ * A repo a task's change reaches through HTTP calls (ADR-147). Ring 1 calls a removed or changed endpoint of the task's
+ * repo; ring 2 calls an endpoint of ring 1 whose handler reaches such a call, and so on. A repo is in its nearest ring
+ * only, and the task's own repo in none.
+ */
+export const ImpactedRepo = z.object({
+  repo: RepoId,
+  ring: z.number().int().min(1).max(MAX_IMPACT_RINGS),
+  /** The repos of the ring before it (in ring 1, the task's repo) that this repo calls: never empty. */
+  uses: z.array(RepoId).min(1),
+  /**
+   * The endpoints of the ring before it (in ring 1, of the task's repo) that this repo's clients call; `[]` when only a
+   * client with an address and no known paths leads here (a frontend's proxy to its BFF).
+   */
+  calls: z.array(ImpactCall),
+  /**
+   * This repo's endpoints whose handlers reach those calls, which carry the change on to the next ring: `[]` when none
+   * does (a scheduled job or a listener makes the call), `null` when its card could not trace, so any of its endpoints
+   * may, and the next ring counts them all.
+   */
+  through: z.array(EndpointRef).nullable(),
+  /**
+   * `false` when every way into its nearest ring goes through a repo with `through: null` or a client without paths:
+   * it may be reached, or not.
+   */
+  sure: z.boolean(),
+});
+export type ImpactedRepo = z.infer<typeof ImpactedRepo>;
+
 /** The endpoints a task's commits change against its base commit (`get_changed_endpoints`, ADR-145). */
 export const ChangedEndpoints = EndpointChanges.omit({ changes: true }).extend({
   repo: RepoId,
@@ -324,12 +361,23 @@ export const ChangedEndpoints = EndpointChanges.omit({ changes: true }).extend({
   endpoints: z.array(ChangedEndpoint),
   /** More changed than `MAX_CHANGED_ENDPOINTS`. */
   truncated: z.boolean(),
+  /** The repos the removed and changed endpoints reach, nearest ring first (ADR-147). */
+  impact: z.array(ImpactedRepo),
 });
 export type ChangedEndpoints = z.infer<typeof ChangedEndpoints>;
+
+/** `ChangedEndpoints` of the task asked about, which names it, so a late answer is not taken for another task's. */
+export const TaskChangedEndpoints = ChangedEndpoints.extend({ task: TaskId });
+export type TaskChangedEndpoints = z.infer<typeof TaskChangedEndpoints>;
 
 const endpoint = apiEndpoints("graph");
 
 export const graphApi = {
   /** The graph of all repos in the projects folder, computed from the cards (the first request for a commit reads the files from git). */
   graph: endpoint("graph", z.object({}).strict(), RepoGraph),
+  /**
+   * The endpoints a task's commits change and the repos they reach (ADR-145, ADR-147), as `get_changed_endpoints` gives
+   * them to an agent; `not_found` for an unknown or ended task.
+   */
+  changedEndpoints: endpoint("changed-endpoints", z.object({ task: TaskId }).strict(), TaskChangedEndpoints),
 };

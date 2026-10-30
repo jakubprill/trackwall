@@ -227,8 +227,8 @@ function selects(selection: Exclude<SessionSelection, undefined | { kind: "new" 
   return entry.kind === "proposals" && entry.proposals.some((p) => p.id === selection.id);
 }
 
-/** The tabs of a task's panel: its session terminal and its worktree changes. */
-export type TaskTab = "terminal" | "changes";
+/** The tabs of a task's panel: its session terminal, its worktree changes and its impact on other repos (ADR-147). */
+export type TaskTab = "terminal" | "changes" | "impact";
 
 /** The tab a selection opens a task's panel on; `undefined` leaves the panel's own choice. */
 export function selectedTaskTab(selection: SessionSelection): TaskTab | undefined {
@@ -337,10 +337,19 @@ export function proposerLabel(proposedBy: ProposedBy, sessions: readonly Session
   return `proposed by ${proposerName(proposedBy, sessions)}`;
 }
 
+/**
+ * A task the user handed on from another task's impact (ADR-147): no session proposed it, the user did. The repo of
+ * the handing task comes from its session; a task without one, or ended, is only "another task".
+ */
+function handedOnBy(task: string, sessions: readonly Session[]): string {
+  const repo = latestSession(sessions, task)?.repo;
+  return repo ? `you, from the task in ${repo}` : "you, from another task";
+}
+
 /** Who a proposal or a task message (ADR-68) came from, as the end of "proposed by …" or "from …". */
 export function proposerName(proposedBy: ProposedBy, sessions: readonly Session[]): string {
   if (proposedBy.supervisor) return "the supervisor";
-  if (proposedBy.session === null) return "an agent outside Trackwall";
+  if (proposedBy.session === null) return proposedBy.task === null ? "an agent outside Trackwall" : handedOnBy(proposedBy.task, sessions);
   // A task's work came from whichever of its sessions runs now (ADR-140), the newest one when the proposing one is gone.
   const session =
     sessions.find((s) => s.id === proposedBy.session) ?? (proposedBy.task === null ? undefined : latestSession(sessions, proposedBy.task));

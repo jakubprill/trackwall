@@ -536,15 +536,19 @@ export class Agents {
    * A task the user typed; its agent asks before tools unless the user chose `auto` (ADR-105), runs on `model`, or
    * Copilot CLI's default when it is `null` (ADR-98), with `javaNavigation` gets the Java language server (ADR-99),
    * works on board item `item` (ADR-133), which must be on the board (`not_found` otherwise), and shows in `view`
-   * (ADR-137).
+   * (ADR-137). With `handoffFrom` the user hands it the work of that task (ADR-147): it becomes that task's subtask,
+   * which reads its change and reports to it as if its session had proposed it (ADR-140, ADR-143).
    */
   async createTask(
     repo: string,
     prompt: string,
     { approvals = "ask", model = null, javaNavigation = false, item = null, view = "terminal" }: Partial<TaskOptions> = {},
+    handoffFrom: string | null = null,
   ): Promise<Task> {
     await this.#assertOnBoard(item);
-    const origin = { id: randomUUID(), title: null, proposedBy: null, model, approvals, javaNavigation, item, view };
+    // `task` throws `not_found` for a task that is not on the list, before a worktree exists.
+    const proposedBy = handoffFrom === null ? null : { session: null, supervisor: false, task: this.task(handoffFrom).id };
+    const origin = { id: randomUUID(), title: null, proposedBy, model, approvals, javaNavigation, item, view };
     return this.#tasks.create(repo, prompt, origin);
   }
 

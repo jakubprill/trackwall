@@ -57,17 +57,19 @@ const VIEWS = [
 type View = (typeof VIEWS)[number]["id"];
 const VIEW_IDS = VIEWS.map((v) => v.id);
 /** The views that show sessions or tasks, which keep the session list fresh while open. */
-const VIEWS_WITH_SESSIONS: readonly View[] = ["home", "sessions", "plan"];
+const VIEWS_WITH_SESSIONS: readonly View[] = ["home", "sessions", "plan", "graph"];
 
 export function App() {
   // A repo opened from the dashboard belongs to the navigation, not to the view: any other navigation to "Repos" starts without it;
   // the same holds for the category Settings opens on.
   // An extra window starts with the view it was opened with or showed at the last run (ADR-49), the main window with
-  // Home. `visit` grows with every opening of a repo or of a Settings category, so that the view is mounted again with it even when it is already open.
-  const [{ view, repo, settingsCategory, visit }, setNav] = useState<{
+  // Home. `visit` grows with every opening of a repo, of a Settings category or of a task's impact, so that the view is mounted again with it even when it is already open.
+  const [{ view, repo, settingsCategory, impactTask, visit }, setNav] = useState<{
     view: View;
     repo?: string;
     settingsCategory?: SettingsCategory;
+    /** The task whose impact the Overview opens with (ADR-147). */
+    impactTask?: string;
     visit: number;
   }>(() => ({
     view: startFromLocation(window.location.search, START_PARAMS.view, VIEW_IDS) ?? "home",
@@ -75,6 +77,7 @@ export function App() {
   }));
   const setView = useCallback((next: View) => setNav((nav) => ({ view: next, visit: nav.visit })), []);
   const openRepos = useCallback((openRepo?: string) => setNav((nav) => ({ view: "repos", repo: openRepo, visit: nav.visit + 1 })), []);
+  const showImpact = useCallback((task: string) => setNav((nav) => ({ view: "graph", impactTask: task, visit: nav.visit + 1 })), []);
   const openSettings = useCallback(
     (category: SettingsCategory) => setNav((nav) => ({ view: "settings", settingsCategory: category, visit: nav.visit + 1 })),
     [],
@@ -267,13 +270,22 @@ export function App() {
                     selected={session}
                     onSelect={openInSessions}
                     onShowSupervisor={showSupervisor}
+                    onShowImpact={showImpact}
                     tree={tree}
                     supervisor={supervisor}
                     layout={sessionLayout}
                     onLayout={setSessionLayout}
                   />
                 )}
-                {conn && view === "graph" && <GraphView conn={conn} warmupLive={warmupLive} repoWatch={repoWatch} />}
+                {conn && view === "graph" && (
+                  <GraphView
+                    conn={conn}
+                    warmupLive={warmupLive}
+                    repoWatch={repoWatch}
+                    sessions={sessions.data}
+                    initialImpactTask={impactTask}
+                  />
+                )}
                 {conn && view === "plan" && (
                   <PlanView conn={conn} boardLive={boardLive} sessions={sessions.data} onOpenInSessions={openInSessions} />
                 )}

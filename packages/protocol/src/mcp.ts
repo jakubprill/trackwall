@@ -36,12 +36,13 @@ import { RepoCardResult, TagName } from "./cards.ts";
 import { CODE_SEARCH_LINE_MAX_CHARS, CODE_SEARCH_MAX_MATCHES, CodePathspecs, CodeQuery, SearchCodeResult } from "./code-search.ts";
 import { DAY_REPORT_COMMITS, DayReport } from "./day-start.ts";
 import {
-  ChangedEndpoints,
   FindEndpointResult,
   MAX_CHANGED_ENDPOINTS,
   MAX_FOUND_ENDPOINTS,
+  MAX_IMPACT_RINGS,
   MAX_SUBGRAPH_DEPTH,
   Subgraph,
+  TaskChangedEndpoints,
   WhoCallsResult,
 } from "./graph.ts";
 import { HttpMethod } from "./http.ts";
@@ -200,7 +201,7 @@ export type SendMessageResult = z.infer<typeof SendMessageResult>;
 export const GetMessagesResult = z.object({ messages: z.array(TaskMessage.omit({ readAt: true })) });
 export type GetMessagesResult = z.infer<typeof GetMessagesResult>;
 
-export const GetChangedEndpointsResult = ChangedEndpoints.extend({ task: TaskId });
+export const GetChangedEndpointsResult = TaskChangedEndpoints;
 export type GetChangedEndpointsResult = z.infer<typeof GetChangedEndpointsResult>;
 
 export const GetHandoffResult = z.object({ handoff: TaskHandoffState.nullable() });
@@ -674,7 +675,11 @@ export const mcpTools = {
       "The HTTP endpoints a task's commits add, remove or change against its base commit, and who calls them: each with " +
       "change (added, removed, changed), app, method and path, its contract before and after (handler, request and response " +
       "types), dtos: the DTOs reachable from its request or response whose fields or constants changed, and callers: the " +
-      `repos whose HTTP clients call it as the repo root has it, as in find_endpoint. Only committed work counts (head is the commit read): commit ` +
+      `repos whose HTTP clients call it as the repo root has it, as in find_endpoint. impact: the repos the change reaches, ` +
+      `ring 1 calling a removed or changed endpoint, ring 2 calling an endpoint of ring 1 whose handler reaches that call, up to ` +
+      `ring ${MAX_IMPACT_RINGS}, each with calls (what it calls in the ring before), through (its endpoints that make those calls; ` +
+      "null when its card could not trace) and sure (false when only an untraced repo or a client without paths leads there). " +
+      `Only committed work counts (head is the commit read): commit ` +
       `first. A changed path is a removed and an added endpoint. Use it before you propose the work that builds on your ` +
       `change, one proposal per caller repo, and to see what the task that handed you your work changed. At most ` +
       `${MAX_CHANGED_ENDPOINTS} endpoints (truncated: true when there were more). problems: what the card of the base or ` +

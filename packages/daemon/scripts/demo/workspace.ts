@@ -48,6 +48,8 @@ const GROUP = "com.example.shop";
 
 /** `orders-api` → `OrdersApi`. */
 const pascal = (name: string) => name.replace(/(^|-)([a-z])/g, (_, __, c: string) => c.toUpperCase());
+/** `orders-api` → `ordersApi`, a Java field. */
+const camel = (name: string) => pascal(name).replace(/^[A-Z]/, (c) => c.toLowerCase());
 /** `orders-api` → `ordersapi`, a Java package segment. */
 const javaPackage = (name: string) => `${GROUP}.${name.replace(/-/g, "")}`;
 
@@ -176,17 +178,31 @@ function servicePom(service: Service): string {
 `;
 }
 
+/**
+ * The service's controller; its `get` handler asks every service it calls, so the cards trace which endpoint reaches
+ * which client (ADR-82) and a change goes on from ring to ring in a task's impact (ADR-147).
+ */
 function controller(service: Service, pkg: string): string {
   const type = pascal(service.resource);
+  const clients = service.calls.map((name) => ({ type: `${pascal(name)}Client`, field: camel(name) }));
+  const imports = clients.map((c) => `import ${pkg}.clients.${c.type};\n`).join("");
+  const fields = clients.map((c) => `    private final ${c.type} ${c.field};\n`).join("");
+  const injection =
+    clients.length === 0
+      ? ""
+      : `\n    public ${type}Controller(${clients.map((c) => `${c.type} ${c.field}`).join(", ")}) {\n${clients
+          .map((c) => `        this.${c.field} = ${c.field};\n`)
+          .join("")}    }\n`;
+  const asks = clients.map((c) => `        ${c.field}.get(id);\n`).join("");
   return `package ${pkg};
 
-import org.springframework.web.bind.annotation.*;
+${imports}import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/${service.resource}")
 public class ${type}Controller {
-
+${fields}${injection}
     @GetMapping
     public List<${type}Dto> list() {
         return List.of();
@@ -194,7 +210,7 @@ public class ${type}Controller {
 
     @GetMapping("/{id}")
     public ${type}Dto get(@PathVariable String id) {
-        return new ${type}Dto(id);
+${asks}        return new ${type}Dto(id);
     }
 
     @PostMapping
@@ -300,6 +316,19 @@ export function createDemoWorkspace(projectsDir: string): void {
     "CHANGELOG.md": "- Retry payments\n",
   });
   write(join(projectsDir, "shop-web"), { "src/Checkout.tsx": "export function Checkout() {\n  return null;\n}\n" });
+}
+
+/**
+ * What the agent of the pricing task has committed so far: prices get a currency, which changes the endpoints that
+ * catalog and orders-api call, so the task's Impact tab and the Overview show how far it goes (ADR-147).
+ */
+export function commitPricingTaskContract(worktree: string): void {
+  write(worktree, {
+    "src/main/java/com/example/shop/pricing/PricesDto.java":
+      "package com.example.shop.pricing;\n\npublic record PricesDto(String id, String currency) {}\n",
+  });
+  git(worktree, "add", "--all");
+  git(worktree, "-c", "user.name=Demo", "-c", "user.email=demo@example.com", "commit", "--quiet", "-m", "Give prices a currency");
 }
 
 /**

@@ -125,6 +125,10 @@ export const TaskSummaryText = z.string().trim().min(1).max(TASK_SUMMARY_MAX);
  * (a supervising agent with the daemon token).
  */
 export const ProposedBy = z.object({
+  /**
+   * The proposing session: `null` for an agent outside Trackwall, and for a task the user handed on from another task's
+   * impact (ADR-147), which names that `task`.
+   */
   session: SessionId.nullable(),
   /**
    * The proposing session was the supervisor (ADR-58). Kept with the task, so that the supervisor's work stays under
@@ -605,6 +609,7 @@ export const agentsApi = {
    * Creates a worktree on a new branch from the default branch and starts Copilot CLI in it with the prompt (ADR-31);
    * with `item`, the task works on that board item (ADR-133), `not_found` when there is none. `view` is a terminal or
    * the conversation view for every session of the task (ADR-137); Java navigation needs a terminal (`bad_request`).
+   * With `handoffFrom`, another task hands it its work (ADR-147).
    */
   createTask: endpoint(
     "create-task",
@@ -617,6 +622,11 @@ export const agentsApi = {
         javaNavigation: z.boolean().default(false),
         item: BoardItemId.nullable().default(null),
         view: SessionView.default("terminal"),
+        /**
+         * The task whose change the new task builds on, when the user hands it on from that task's impact (ADR-147):
+         * the new task is its subtask, as if its session had proposed it (ADR-140, ADR-143); `not_found` when there is none.
+         */
+        handoffFrom: TaskId.nullable().default(null),
       })
       .strict(),
     Task,
