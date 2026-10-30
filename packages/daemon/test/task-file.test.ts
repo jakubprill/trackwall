@@ -23,6 +23,7 @@ const stored = {
   view: "conversation" as const,
   conversation: "c0ffee-1",
   summary: { text: "Fixed, test added.", reportedAt: "2026-10-24T10:00:00.000Z" },
+  handoff: null,
   trustedMiseConfig: { "mise.toml": "b".repeat(64) },
   port: 41003,
   included: { files: [".env", "config/application-local.yml"], problems: ["data.db is not a regular file (a link or a special file)"] },
@@ -72,6 +73,7 @@ describe("tasks.json", () => {
         view: "terminal",
         conversation: null,
         summary: null,
+        handoff: null,
         trustedMiseConfig: null,
         port: null,
         included: { files: [], problems: [] },
@@ -152,6 +154,23 @@ describe("tasks.json", () => {
     writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
 
     expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, worktreesDir: null }]);
+  });
+
+  test("a task handed off by another task keeps that task, its repo, branch and commit, and one saved before handoffs has none (ADR-143)", () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
+    const handoff = {
+      task: "5e7a1c3b-0000-4000-8000-000000000000",
+      repo: "payments",
+      branch: "trackwall/retry-5e7a1c",
+      commit: "c".repeat(40),
+    };
+    const file = new TaskFile(join(home, "tasks.json"), () => {});
+    file.write([{ ...stored, handoff }]);
+    expect(file.read()).toEqual([{ ...stored, handoff }]);
+
+    const { handoff: _, ...old } = stored;
+    writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
+    expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([stored]);
   });
 
   test("a task proposed before the supervisor comes back as not the supervisor's", () => {

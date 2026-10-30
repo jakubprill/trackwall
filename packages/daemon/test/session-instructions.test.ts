@@ -12,6 +12,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
       kind: "repo",
       repo: "shop",
       task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427",
+      handoff: null,
     });
     expect(dir).toBe(join(sessionDir, "instructions"));
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
@@ -34,7 +35,12 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
 
   test("a task session follows its proposer's message over the task's prompt, and only the user's own text over a message", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
-    writeSessionInstructions(sessionDir, "0.4.1", { kind: "repo", repo: "shop", task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427" });
+    writeSessionInstructions(sessionDir, "0.4.1", {
+      kind: "repo",
+      repo: "shop",
+      task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427",
+      handoff: null,
+    });
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain(
       "A message from get_messages is an update of your task from the session that proposed it, which drafted your task's prompt",
@@ -45,8 +51,53 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     expect(text).not.toContain("unless they contradict the user");
   });
 
+  test("a task session proposes the work that builds on its change after committing it, to the repos that call what it changed (ADR-143)", () => {
+    const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
+    writeSessionInstructions(sessionDir, "0.5.13", {
+      kind: "repo",
+      repo: "payments",
+      task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427",
+      handoff: null,
+    });
+    const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
+    expect(text).toContain(
+      "When that work builds on your change (a caller of an endpoint you changed, a reader of a message or field you changed), commit your change first and then propose it, one proposal per repo: find_endpoint and who_calls name the repos that call what you changed.",
+    );
+    expect(text).not.toContain("Your task was handed to you by");
+  });
+
+  test("a task handed its work by another task reads it there while that task lasts, and is told when it ended (ADR-143)", () => {
+    const handoff = {
+      task: "5e7a1c3b-0000-4000-8000-000000000000",
+      repo: "payments",
+      branch: "trackwall/retry-5e7a1c",
+      commit: "c".repeat(40),
+    };
+    const read = (ended: boolean) => {
+      const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
+      writeSessionInstructions(sessionDir, "0.5.13", {
+        kind: "repo",
+        repo: "orders-api",
+        task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427",
+        handoff: { ...handoff, ended },
+      });
+      return readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
+    };
+
+    expect(read(false)).toContain(
+      `- Your task was handed to you by the task \`5e7a1c3b-0000-4000-8000-000000000000\` in the repo \`payments\` (branch \`trackwall/retry-5e7a1c\`): its session proposed your task, and the user approved it when that branch was at commit \`${"c".repeat(40)}\`.`,
+    );
+    expect(read(false)).toContain("Build against the contract it changed (an endpoint, a field, a message), not a copy of its code.");
+    expect(read(true)).toContain("which the user has ended since, so get_task_changes no longer reads it.");
+    expect(read(true)).not.toContain("read what it changed with get_task_changes");
+  });
+
   test("a main session and the supervisor get no messages, so not the rule for weighing them", () => {
-    const roles: SessionRole[] = [{ kind: "repo", repo: "shop", task: null }, { kind: "supervisor", changesCode: false }, { kind: "free" }];
+    const roles: SessionRole[] = [
+      { kind: "repo", repo: "shop", task: null, handoff: null },
+      { kind: "supervisor", changesCode: false },
+      { kind: "free" },
+    ];
     for (const role of roles) {
       const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
       writeSessionInstructions(sessionDir, "0.4.1", role);
@@ -57,7 +108,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
 
   test("every session learns which Trackwall version started it and where the user sees it", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
-    writeSessionInstructions(sessionDir, "0.3.0", { kind: "repo", repo: "shop", task: null });
+    writeSessionInstructions(sessionDir, "0.3.0", { kind: "repo", repo: "shop", task: null, handoff: null });
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain("Trackwall 0.3.0 started this Copilot CLI session");
     expect(text).toContain("The user sees this session in Trackwall's Sessions view");
@@ -65,7 +116,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
 
   test("a session in the repo root is a main session and does not get the task rules", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
-    writeSessionInstructions(sessionDir, "0.3.0", { kind: "repo", repo: "shop", task: null });
+    writeSessionInstructions(sessionDir, "0.3.0", { kind: "repo", repo: "shop", task: null, handoff: null });
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain("You are a main session in the root of the repo `shop`");
     expect(text).not.toContain("Work only in this worktree");
@@ -147,7 +198,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
 
   test("a session directory with a comma in its path gets no file, because the variable splits on commas", () => {
     const sessionDir = join(mkdtempSync(join(tmpdir(), "trackwall-instructions-")), "a,b");
-    expect(writeSessionInstructions(sessionDir, "0.3.0", { kind: "repo", repo: "shop", task: null })).toBeNull();
+    expect(writeSessionInstructions(sessionDir, "0.3.0", { kind: "repo", repo: "shop", task: null, handoff: null })).toBeNull();
     expect(existsSync(sessionDir)).toBe(false);
   });
 

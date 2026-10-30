@@ -201,6 +201,7 @@ export class Agents {
       log: deps.log,
       tokens: this.#tokens,
       callbacks: (session) => this.#sessionCallbacks(session),
+      handoff: (task) => this.#tasks.handoff(task),
     });
     this.#resumable = new ResumableSessions(join(deps.home, RESUMABLE_SESSIONS_FILE), deps.log);
     this.#lastSupervisor = new LastSupervisorFile(join(deps.home, LAST_SUPERVISOR_FILE), deps.log);

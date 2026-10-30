@@ -399,6 +399,10 @@ _Avoid_: CI, build (a build is a mise task), checks
 The session that proposed a task: a main session, or for the supervisor's work whichever supervisor runs now. Only the proposer sends the task's session task messages (a session in Trackwall; an agent outside Trackwall sends none), and only it gets the task's task updates (ADR-68).
 _Avoid_: parent, owner, manager
 
+**Handoff** (`TaskHandoff` in `task-handoff.ts`, `StoredTask.handoff`):
+What a task whose session proposed another task hands that task: the handing task, its repo and branch, and the commit its branch was at when the user approved the proposal, taken from Trackwall's task list and git. Every session of the proposed task is told where to read the work it builds on (ADR-143).
+_Avoid_: dependency, upstream, parent task
+
 **Task message** (`TaskMessage`, MCP tools `send_message` and `get_messages`; "Messages" in the task panel):
 Text a task's proposer sends to the task's session: a correction, an answer, a change elsewhere to follow. The daemon asks the task's session to read it the way it asks for a review, and the task's agent reads it with `get_messages`. At most 5 to a task until the user takes part again (ADR-68).
 _Avoid_: note, comment (that is a review comment), chat

@@ -34,6 +34,7 @@ import {
 import { jdtlsStatus, readJdtlsLog } from "./jdtls-log.ts";
 import { TASK_BRANCH_PREFIX, taskSlug, taskWorktree } from "./task-branch.ts";
 import type { StoredTask, TaskFile } from "./task-file.ts";
+import type { HandoffFacts, TaskHandoff } from "./task-handoff.ts";
 import { type MiseSnapshot, miseConfigChanges, miseConfigDigest, readMiseConfig, reviewMiseConfig } from "./task-mise-config.ts";
 import { freeTaskPort, withTaskPorts } from "./task-port.ts";
 
@@ -84,6 +85,8 @@ export interface TasksVcs {
   deleteBranch(repoDir: string, branch: string): Promise<void>;
   pendingWork(work: TaskWork): Promise<TaskPendingWork>;
   worktreeChanges(dir: string, base: string, maxPatchBytes: number, paths: readonly string[]): Promise<TaskChanges>;
+  /** The commit HEAD is at; `null` without commits. */
+  headCommit(dir: string): Promise<string | null>;
 }
 
 /**
@@ -228,6 +231,7 @@ export class AgentTasks {
     const repoDir = await this.#deps.repos.repoPath(repo);
     const base = await asRepoUnavailable(repo, this.#deps.vcs.defaultBase(repoDir));
     const worktreesDir = await this.#deps.repos.newTaskWorktreesDir();
+    const handoff = await this.#handoffFrom(proposedBy);
     const task = this.#known({
       id,
       repo,
@@ -247,6 +251,7 @@ export class AgentTasks {
       view: sessionView,
       conversation: null,
       summary: null,
+      handoff,
       trustedMiseConfig: null,
       port: freeTaskPort([...this.#tasks.map((t) => t.port), ...this.#creatingPorts]),
       included: noIncludedFiles(),
@@ -341,6 +346,27 @@ export class AgentTasks {
   /** An action on the task is in progress (start, resume, end), e.g. the session of a new task is still starting. */
   busy(id: string): boolean {
     return this.#busy.has(id);
+  }
+
+  /** What a session of task `id` is told about the task that handed it its work (ADR-143); `null` when no task did. */
+  handoff(id: string): HandoffFacts | null {
+    const handoff = this.#tasks.find((t) => t.id === id)?.handoff ?? null;
+    if (handoff === null) return null;
+    return { ...handoff, ended: !this.#tasks.some((t) => t.id === handoff.task) };
+  }
+
+  /**
+   * The handoff of a task a task's session proposed (ADR-143): that task, read from the list, and the commit its branch is
+   * at as the user approves. A handing task already ended, or a HEAD git cannot read, leaves the new task without one.
+   */
+  async #handoffFrom(proposedBy: ProposedBy | null): Promise<TaskHandoff | null> {
+    const from = this.#tasks.find((t) => t.id === proposedBy?.task);
+    if (from === undefined) return null;
+    const commit = await this.#deps.vcs.headCommit(from.worktree).catch((err: unknown) => {
+      this.#deps.log(`reading the HEAD of task ${from.id} for its subtask: ${messageOf(err)}`);
+      return null;
+    });
+    return commit === null ? null : { task: from.id, repo: from.repo, branch: from.branch, commit };
   }
 
   /** A summary from the task session (`report_result`, ADR-39); a later one replaces the earlier one and survives a daemon restart. */
@@ -651,7 +677,7 @@ function capFiles(files: ChangedFile[]): { files: ChangedFile[]; filesTruncated:
   return { files: files.slice(0, TASK_SUMMARY_MAX_FILES), filesTruncated: files.length > TASK_SUMMARY_MAX_FILES };
 }
 
-function view({ repoDir: _, trustedMiseConfig: __, worktreesDir: ___, conversation: ____, ...task }: KnownTask): Task {
+function view({ repoDir: _, trustedMiseConfig: __, worktreesDir: ___, conversation: ____, handoff: _____, ...task }: KnownTask): Task {
   return task;
 }
 
