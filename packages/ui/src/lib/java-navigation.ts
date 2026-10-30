@@ -5,6 +5,7 @@ import {
   type JavaNavigationState,
   type JavaNavigationStatus,
   type RepoTag,
+  type SessionView,
 } from "@trackwall/protocol";
 import type { StatusTone } from "./repo-status.ts";
 
@@ -23,6 +24,15 @@ export function javaNavigationOffer(tags: readonly RepoTag[] | undefined, state:
     };
   if (state.problem !== null) return { kind: "unavailable", reason: `Cannot start: ${state.problem}.` };
   return { kind: "ready" };
+}
+
+/**
+ * The offer for a task shown in `view`: Java navigation needs a terminal for now (ADR-137), so in the conversation view
+ * an offer the repo has becomes unavailable, saying how to get it back.
+ */
+export function javaNavigationInView(offer: JavaNavigationOffer, view: SessionView): JavaNavigationOffer {
+  if (offer.kind === "hidden" || view === "terminal") return offer;
+  return { kind: "unavailable", reason: "Needs the terminal for now: turn Chat off to use it." };
 }
 
 /** The tone of the install's state line in Settings › Agents. */

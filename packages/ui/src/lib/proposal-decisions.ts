@@ -1,4 +1,4 @@
-import type { Task, TaskApprovals } from "@trackwall/protocol";
+import type { SessionView, Task, TaskApprovals } from "@trackwall/protocol";
 import { errorMessage } from "./api.ts";
 import type { ProposalsEntry, SessionSelection } from "./session-entries.ts";
 
@@ -14,6 +14,8 @@ export interface ProposalStart {
   /** `null` for Copilot CLI's default model. */
   model: string | null;
   approvals: TaskApprovals;
+  /** The view the task shows in (ADR-137). */
+  view: SessionView;
 }
 
 /**

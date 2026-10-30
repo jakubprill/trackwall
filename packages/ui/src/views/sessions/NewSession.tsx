@@ -4,6 +4,7 @@ import {
   countLabel,
   pluralNoun,
   type Session,
+  type SessionView,
   TASK_PROMPT_MAX,
   type TaskApprovals,
   workspaceApi,
@@ -15,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { type JavaNavigationOffer, javaNavigationOffer } from "@/lib/java-navigation";
+import { type JavaNavigationOffer, javaNavigationInView, javaNavigationOffer } from "@/lib/java-navigation";
 import { type FromItem, firstListedRepo, formStart, type NewSessionStart, newSessionForm, sessionsInSameFolder } from "@/lib/new-session";
 import { tagsByRepo } from "@/lib/repo-tags";
 import type { SessionSelection } from "@/lib/session-entries";
@@ -33,8 +34,8 @@ const PROJECTS_FOLDER = "";
  * agent. In a repo with its own worktree it becomes a task (ADR-31); without one a main session in the repo's working
  * copy (ADR-26), and in the projects folder a free session, both with the prompt as their first message when there is one.
  * Only a task, which works in its own worktree, can run on a chosen model (ADR-98) and without asking for approvals
- * (ADR-105), and, in a repo tagged java, with a Java language server (ADR-99). The options are a row of pills under the
- * prompt (`StartOptions`); the worktree, the model and Java navigation come back as the user last started from that
+ * (ADR-105), in the conversation view (ADR-137), and, in a repo tagged java and a terminal, with a Java language server (ADR-99). The options are a row of pills under the
+ * prompt (`StartOptions`); the worktree, the model, Java navigation and the view come back as the user last started from that
  * place, the approvals mode always starts at asking. Started from a board item (ADR-133), the form comes with the item's
  * repo and prompt, and the task works on the item.
  */
@@ -67,12 +68,12 @@ export function NewSession({
   const choose = (next: Partial<StartChoice>) => setEdited(new Map(edited).set(chosen, { ...choice, ...next }));
   const model = typedModel(choice.model);
   const start = formStart(form, repo, choice.worktree, prompt);
-  const java = useJavaNavigationOffer(conn, repo);
+  const java = javaNavigationInView(useJavaNavigationOffer(conn, repo), choice.view);
   const javaNavigation = java.kind === "ready" && choice.javaNavigation;
   const { item } = form;
   const createTask = useAction(
     (repo: string, prompt: string) =>
-      post(conn, agentsApi.createTask, { repo, prompt, approvals, model: model ?? null, javaNavigation, item }),
+      post(conn, agentsApi.createTask, { repo, prompt, approvals, model: model ?? null, javaNavigation, item, view: choice.view }),
     (task) => onStarted({ kind: "task", id: task.id }),
   );
   const startSession = useAction(
@@ -117,6 +118,7 @@ export function NewSession({
                   approvals: { value: approvals, onChange: setApprovals },
                   model: { value: choice.model, onChange: (text: string) => choose({ model: text }) },
                   javaNavigation: javaNavigationPill(java, choice.javaNavigation, (on) => choose({ javaNavigation: on })),
+                  view: { value: choice.view, onChange: (view: SessionView) => choose({ view }) },
                 })}
             disabled={pending}
           />

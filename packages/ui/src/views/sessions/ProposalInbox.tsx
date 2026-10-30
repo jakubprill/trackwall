@@ -1,4 +1,4 @@
-import { type Session, TASK_PROMPT_MAX, type Task, type TaskApprovals, type TaskProposal } from "@trackwall/protocol";
+import { type Session, type SessionView, TASK_PROMPT_MAX, type Task, type TaskApprovals, type TaskProposal } from "@trackwall/protocol";
 import { ChevronDown, ChevronRight, GitBranch, Lightbulb } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -53,6 +53,7 @@ export function ProposalInbox({
   const [prompts, setPrompts] = useState<ReadonlyMap<string, string>>(new Map());
   const [models, setModels] = useState<ReadonlyMap<string, string>>(new Map());
   const [approvals, setApprovals] = useState<ReadonlyMap<string, TaskApprovals>>(new Map());
+  const [views, setViews] = useState<ReadonlyMap<string, SessionView>>(new Map());
   const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
   // `null` once the user closed it; an id that is no longer waiting falls back to the first proposal.
   const [open, setOpen] = useState<string | null>(focus ?? proposals[0].id);
@@ -75,7 +76,7 @@ export function ProposalInbox({
     const model = typedModel(modelTextOf(p));
     return promptOf(p).trim() === "" || model === undefined
       ? undefined
-      : { id: p.id, prompt: promptOf(p), model, approvals: approvalsOf(p) };
+      : { id: p.id, prompt: promptOf(p), model, approvals: approvalsOf(p), view: views.get(p.id) ?? "terminal" };
   };
   const toStart = proposals.filter((p) => ticked.has(p.id));
   // Ticking and "Start selected" are for tasks; a folder action has its own button (ADR-83).
@@ -161,6 +162,7 @@ export function ProposalInbox({
                         subject={p.title}
                         approvals={{ value: approvalsOf(p), onChange: (value) => setApprovals(new Map(approvals).set(p.id, value)) }}
                         model={{ value: modelTextOf(p), onChange: (value) => setModels(new Map(models).set(p.id, value)) }}
+                        view={{ value: views.get(p.id) ?? "terminal", onChange: (value) => setViews(new Map(views).set(p.id, value)) }}
                         disabled={decisions.pending}
                       />
                     </>

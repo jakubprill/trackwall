@@ -41,7 +41,7 @@ export function ProposalTile({
             tasks={tasks}
             pending={decisions.pending}
             canStart={p.approvals === "ask"}
-            onStart={() => decisions.start([{ id: p.id, prompt: p.prompt, model: p.model, approvals: p.approvals }])}
+            onStart={() => decisions.start([{ id: p.id, prompt: p.prompt, model: p.model, approvals: p.approvals, view: "terminal" }])}
             onRemoveRepo={() => decisions.removeRepo(p.id)}
             onReject={(reason) => decisions.reject(p.id, reason)}
           />
