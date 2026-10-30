@@ -116,6 +116,38 @@ describe("reading from a cursor", () => {
     expect(logs.tail({ source: DEV, limit: 2 })).toMatchObject({ records: [{ msg: "3" }, { msg: "4" }], nextSeq: s + 4 });
   });
 
+  test("contains keeps the records with that text in any case, and minLevel those at that level or above", () => {
+    const { logs } = newLogs();
+    write(logs.open(DEV, "r", {}), "INFO OrderService started", "DEBUG cache warm", "WARN slow orderService call", "ERROR stock down");
+
+    expect(logs.tail({ source: DEV, limit: 10, contains: "orderservice" }).records.map((r) => r.msg)).toEqual([
+      "INFO OrderService started",
+      "WARN slow orderService call",
+    ]);
+    expect(logs.tail({ source: DEV, limit: 10, minLevel: "warn" }).records.map((r) => r.msg)).toEqual([
+      "WARN slow orderService call",
+      "ERROR stock down",
+    ]);
+    expect(logs.tail({ source: DEV, limit: 10, contains: "order", minLevel: "warn" }).records.map((r) => r.msg)).toEqual([
+      "WARN slow orderService call",
+    ]);
+  });
+
+  test("with a filter, the cursor and the limit count only matching records", () => {
+    const { logs } = newLogs();
+    const s = logs.tail({ source: DEV, limit: 1 }).nextSeq;
+    write(logs.open(DEV, "r", {}), "match 1", "other", "match 2", "other", "match 3");
+
+    expect(logs.tail({ source: DEV, sinceSeq: s, limit: 2, contains: "match" })).toMatchObject({
+      records: [{ msg: "match 1" }, { msg: "match 2" }],
+      nextSeq: s + 3,
+    });
+    expect(logs.tail({ source: DEV, sinceSeq: s + 3, limit: 2, contains: "match" })).toMatchObject({
+      records: [{ msg: "match 3" }],
+      nextSeq: s + 5,
+    });
+  });
+
   test("a cursor older than the source's buffer reports dropped and returns records from the oldest in the buffer", () => {
     const { logs } = newLogs();
     const s = logs.tail({ source: DEV, limit: 1 }).nextSeq;

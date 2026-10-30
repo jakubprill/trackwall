@@ -35,7 +35,7 @@ import { CODE_SEARCH_LINE_MAX_CHARS, CODE_SEARCH_MAX_MATCHES, CodePathspecs, Cod
 import { DAY_REPORT_COMMITS, DayReport } from "./day-start.ts";
 import { FindEndpointResult, MAX_FOUND_ENDPOINTS, MAX_SUBGRAPH_DEPTH, Subgraph, WhoCallsResult } from "./graph.ts";
 import { HttpMethod } from "./http.ts";
-import { LOG_BUFFER_RECORDS, LOG_ERRORS_MAX, LOG_TAIL_MAX, LogErrorLevel, LogErrors, LogTail } from "./logs.ts";
+import { LOG_BUFFER_RECORDS, LOG_ERRORS_MAX, LOG_TAIL_MAX, LogErrorLevel, LogErrors, LogLevel, LogTail, LogTextFilter } from "./logs.ts";
 import { LIST_REPOS, RepoArg } from "./mcp-args.ts";
 import { boardMcpTools, ItemArg, LIST_ITEMS } from "./mcp-board.ts";
 import { MiseTaskName, MiseTasks, RunningMiseTask } from "./mise.ts";
@@ -409,7 +409,8 @@ export const mcpTools = {
       "level from the line text (error, warn, info…) and text without colors, with secrets replaced by ***. Without " +
       "sinceSeq it returns the latest records; then pass nextSeq from the previous response as sinceSeq to get only " +
       `new ones. dropped: true means some records were lost (the daemon keeps the latest records of a mise task, at most ${LOG_BUFFER_RECORDS}) ` +
-      `or the cursor is from a previous Trackwall run. ${GET_REPO} lists the mise tasks and their state.`,
+      `or the cursor is from a previous Trackwall run. contains and minLevel narrow the records (the cursor and limit then ` +
+      `count only matching ones), e.g. contains "OrderService" or minLevel warn. ${GET_REPO} lists the mise tasks and their state.`,
     args: z
       .object({
         repo: RepoArg,
@@ -417,6 +418,8 @@ export const mcpTools = {
         miseTask: MiseTaskArg,
         sinceSeq: z.number().int().nonnegative().optional().describe("nextSeq from the previous response"),
         limit: z.number().int().min(1).max(LOG_TAIL_MAX).describe(`maximum number of records (up to ${LOG_TAIL_MAX})`),
+        contains: LogTextFilter.optional().describe("only records whose text contains this, without regard to case"),
+        minLevel: LogLevel.optional().describe("only records at this level or above (trace, debug, info, warn, error)"),
       })
       .strict(),
     result: LogTail,
@@ -435,13 +438,15 @@ export const mcpTools = {
       "locations not) is one entry with count and firstTs. An error still being written when you call is returned with the lines it had then. " +
       `Only the latest records are kept (at most ${LOG_BUFFER_RECORDS} per mise task, since Trackwall started). Pass nextSeq as sinceSeq ` +
       "to get only errors that started after the previous call; dropped: true as in tail. To read the log of a mise task from an error on, " +
-      "call tail with sinceSeq one less than the error's seq.",
+      "call tail with sinceSeq one less than the error's seq. contains keeps only errors with a line (also one left out of lines) " +
+      "that contains the text, e.g. an exception class or an endpoint path; count then counts only the matching occurrences.",
     args: z
       .object({
         repo: RepoArg.optional(),
         task: TaskId.optional().describe(`only the logs of mise tasks run in this task's worktree (task id from ${LIST_SESSIONS})`),
         miseTask: MiseTaskName.optional().describe(`only the log of this mise task (from ${GET_REPO}, the miseTasks field)`),
         minLevel: LogErrorLevel.default("error").describe("error (default) or warn to include warnings"),
+        contains: LogTextFilter.optional().describe("only errors with a line that contains this, without regard to case"),
         sinceSeq: z.number().int().nonnegative().optional().describe("nextSeq from the previous response"),
         limit: z
           .number()
