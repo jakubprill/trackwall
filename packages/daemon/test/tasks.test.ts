@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -715,6 +716,26 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
       expect((await agents.taskMiseConfig(task.id)).changes).toEqual([
         { path: "mise.local.toml", change: "added", content: '[env]\nB = "1"\n' },
       ]);
+    },
+    60_000,
+  );
+
+  // A FIFO needs mkfifo, which Windows does not have.
+  test.skipIf(process.platform === "win32")(
+    "copying the included files again leaves a FIFO the agent put at an included path alone instead of blocking on it",
+    async () => {
+      const dir = makeRepo({ ".gitignore": ".env\n", "README.md": "#\n" }, "shop");
+      const { agents, procs } = makeAgents({ shop: dir });
+      cleanups.push(() => procs.stopAll());
+      const task = await agents.createTask("shop", "fix the login");
+      execFileSync("mkfifo", [join(task.worktree, ".env")]);
+      writeFileSync(join(dir, ".env"), "API_TOKEN=local\n");
+      writeFileSync(join(dir, ".worktreeinclude"), ".env\n");
+
+      expect((await agents.copyIncludedFilesAgain(task.id)).included).toEqual({
+        files: [],
+        problems: [".env: the worktree has its own version of it, left as it is"],
+      });
     },
     60_000,
   );

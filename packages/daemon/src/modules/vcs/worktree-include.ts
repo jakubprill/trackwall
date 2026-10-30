@@ -80,7 +80,7 @@ async function copyOne(
   if (content === undefined) return "it is gone from the repo";
   const sha256 = createHash("sha256").update(content).digest("hex");
   const target = join(worktree, ...parts);
-  const existing = await existingContent(target);
+  const existing = await existingContent(target, content.length);
   if (existing === null) {
     // `wx`: never over a file that appeared meanwhile.
     await writeFile(target, content, { flag: "wx", mode: info.mode & 0o777 });
@@ -91,12 +91,13 @@ async function copyOne(
 }
 
 /**
- * What the worktree has at `target`: `null` for nothing, the content of a regular file, or `undefined` for anything
- * else (a link, a folder, a FIFO, a file over the limit), which counts as the worktree's own version.
+ * What the worktree has at `target`: `null` for nothing, the content of a regular file of at most `size` bytes (a larger
+ * one cannot be the root's), or `undefined` for anything else (a link, a folder, a FIFO, a larger file, one it cannot
+ * read), which counts as the worktree's own version and is left alone.
  */
-async function existingContent(target: string): Promise<Buffer | null | undefined> {
+async function existingContent(target: string, size: number): Promise<Buffer | null | undefined> {
   try {
-    return (await readRegularFile(target, MAX_BYTES)) ?? null;
+    return (await readRegularFile(target, size)) ?? null;
   } catch {
     return undefined;
   }
