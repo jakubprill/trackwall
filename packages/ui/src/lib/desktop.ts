@@ -1,5 +1,5 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { type ContainerId, containerEditorUrl, DAEMON_INFO_PATH, DaemonInfo, WebAddress, workspaceApi } from "@trackwall/protocol";
+import { containerEditorUrl, DAEMON_INFO_PATH, DaemonInfo, devContainerEditorUrl, WebAddress, workspaceApi } from "@trackwall/protocol";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { call, post } from "./api.ts";
 import type { Connection } from "./connection.ts";
@@ -7,16 +7,13 @@ import type { Connection } from "./connection.ts";
 /**
  * Where the daemon runs, from its info: whether it opens links, folders and VS Code on this computer
  * (`DaemonInfo.desktop`, ADR-120) and the container it runs in (ADR-121). A daemon in a container has no desktop: this
- * page then opens web links in a new tab itself, VS Code opens attached to the container, and the buttons that open a
+ * page then opens web links in a new tab itself, VS Code opens in the container, and the buttons that open a
  * folder are hidden. The desktop app can use such a daemon too (ADR-130): it then opens web links and VS Code itself.
  * A desktop until the daemon says otherwise.
  */
-export interface DaemonPlace {
-  desktop: boolean;
-  container: ContainerId | null;
-}
+export type DaemonPlace = Pick<DaemonInfo, "desktop" | "container" | "devContainerFolder">;
 
-const ON_A_DESKTOP: DaemonPlace = { desktop: true, container: null };
+const ON_A_DESKTOP: DaemonPlace = { desktop: true, container: null, devContainerFolder: null };
 
 export const DaemonPlaceContext = createContext(ON_A_DESKTOP);
 
@@ -34,11 +31,14 @@ export function useDesktop(): boolean {
 
 /**
  * The address that opens a folder or file in VS Code from this page, when the daemon cannot open it itself: inside the
- * daemon's container (ADR-121). `undefined` when the daemon opens it, or when nothing can.
+ * daemon's container (ADR-121), through its `devcontainer.json` when the dev container named its folder, otherwise
+ * attached to it. `undefined` when the daemon opens it, or when nothing can.
  */
 export function editorLinkFor(place: DaemonPlace, path: string): string | undefined {
-  if (place.desktop || !place.container) return undefined;
-  return containerEditorUrl(place.container, path);
+  if (place.desktop) return undefined;
+  if (place.devContainerFolder) return devContainerEditorUrl(place.devContainerFolder, path);
+  if (place.container) return containerEditorUrl(place.container, path);
+  return undefined;
 }
 
 export function useEditorLink(path: string): string | undefined {
@@ -52,7 +52,7 @@ export function useDaemonPlace(conn: Connection | undefined): DaemonPlace {
     if (!conn) return;
     // Without an answer the page behaves as before: the daemon opens links and says no_desktop when it cannot.
     call(conn, DAEMON_INFO_PATH, DaemonInfo).then(
-      (info) => setPlace({ desktop: info.desktop, container: info.container }),
+      ({ desktop, container, devContainerFolder }) => setPlace({ desktop, container, devContainerFolder }),
       () => {},
     );
   }, [conn]);
@@ -96,7 +96,7 @@ export async function openWebLink(url: string, { desktop, viaDaemon, inWindow }:
   await inWindow(webAddress(url));
 }
 
-/** The shell command that opens a web page or VS Code attached to a container (`system_open.rs`). */
+/** The shell command that opens a web page or VS Code in a container (`system_open.rs`). */
 const OPEN_OUTSIDE_COMMAND = "open_outside";
 
 /** The desktop app hands an address to the system itself, since its daemon may have no desktop (ADR-130). */

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { agentsApi, configFilesApi, DaemonInfoResult, mergeRequestsApi, workspaceApi } from "@trackwall/protocol";
-import { containerId, hasDesktop, ownContainer } from "../src/infra/desktop.ts";
+import { containerId, devContainerFolder, hasDesktop, ownContainer } from "../src/infra/desktop.ts";
 import { loopbackRequest } from "../src/infra/loopback.ts";
 import { gitIn } from "./support/git-repo.ts";
 import { fakeHostingClis } from "./support/hosting.ts";
@@ -28,6 +28,24 @@ describe("hasDesktop", () => {
     const podman = (path: string) => path === "/run/.containerenv";
     expect(hasDesktop({ platform: "linux", env: { WAYLAND_DISPLAY: "wayland-0" }, exists: docker })).toBe(false);
     expect(hasDesktop({ platform: "linux", env: { DISPLAY: ":0" }, exists: podman })).toBe(false);
+  });
+});
+
+describe("devContainerFolder", () => {
+  test("is the folder the dev container hands over, as it is, Windows backslashes and spaces included", () => {
+    const env = { TRACKWALL_DEVCONTAINER_HOST_FOLDER: String.raw`C:\Users\me\Dev\work space` };
+    expect(devContainerFolder(env, () => {})).toBe(String.raw`C:\Users\me\Dev\work space`);
+  });
+
+  test("is null when the dev container does not hand it over", () => {
+    expect(devContainerFolder({}, () => {})).toBeNull();
+    expect(devContainerFolder({ TRACKWALL_DEVCONTAINER_HOST_FOLDER: "" }, () => {})).toBeNull();
+  });
+
+  test("ignores a value with control characters and says so", () => {
+    const logged: string[] = [];
+    expect(devContainerFolder({ TRACKWALL_DEVCONTAINER_HOST_FOLDER: "C:\\Dev\nX" }, (msg) => logged.push(msg))).toBeNull();
+    expect(logged).toEqual(["TRACKWALL_DEVCONTAINER_HOST_FOLDER is not a folder path; VS Code links attach to the container instead"]);
   });
 });
 
@@ -90,6 +108,7 @@ describe("a daemon without a desktop", () => {
       openUrl: (url) => opened.push(url),
       desktop: false,
       container: "de4cc610b398445a55cd4802f1b0dc38776d583533fd7283c9d76e5825fd5f81",
+      devContainerFolder: String.raw`C:\Users\me\Dev\work space`,
     });
     gitIn(join(daemon.projects, "shop"), "remote", "add", "origin", "https://gitlab.example.com/shop/shop.git");
     daemon.facade.workspace.setRepoHosts([{ kind: "gitlab", host: "gitlab.example.com" }]);
@@ -108,11 +127,15 @@ describe("a daemon without a desktop", () => {
       timeoutMs: 10_000,
     });
 
-  test("says so in its info with its container, so the page opens web links and VS Code itself", async () => {
+  test("says so in its info with its container and dev container folder, so the page opens web links and VS Code itself", async () => {
     const res = await loopbackRequest(daemon.api.port, "/api/daemon/info", { token: TOKEN });
     expect(DaemonInfoResult.parse(JSON.parse(res.body))).toMatchObject({
       ok: true,
-      data: { desktop: false, container: "de4cc610b398445a55cd4802f1b0dc38776d583533fd7283c9d76e5825fd5f81" },
+      data: {
+        desktop: false,
+        container: "de4cc610b398445a55cd4802f1b0dc38776d583533fd7283c9d76e5825fd5f81",
+        devContainerFolder: String.raw`C:\Users\me\Dev\work space`,
+      },
     });
   });
 
