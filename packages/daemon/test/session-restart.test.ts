@@ -259,7 +259,11 @@ describe.skipIf(process.versions.bun === undefined)(
       ]);
       expect(after.facade.agents.takeUpdates(main.id).updates.map((u) => u.task)).toEqual([byMain.id]);
       const approved = await after.facade.agents.approveProposal(waiting.id, waiting.prompt, null, "ask", "terminal");
-      expect(approved).toMatchObject({ id: waiting.id, title: "Login test", proposedBy: { session: supervisor.id, supervisor: true } });
+      expect(approved).toMatchObject({
+        id: waiting.id,
+        title: "Login test",
+        proposedBy: { session: supervisor.id, supervisor: true, task: null },
+      });
     }, 60_000);
 
     test("a repo removal proposed before the restart is approved in the next daemon", async () => {

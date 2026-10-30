@@ -13,7 +13,7 @@ import {
 import { z } from "zod";
 import { DomainError } from "../../infra/errors.ts";
 import type { SessionEvent } from "./live-session.ts";
-import { proposerKeyOf, proposerOf, SUPERVISOR } from "./proposer.ts";
+import { proposerExists, proposerKeyOf, proposerKind, proposerOf, taskProposerKey } from "./proposer.ts";
 import { StoredMessages, TaskMessages } from "./task-messages.ts";
 import { StoredUpdates, TaskUpdates } from "./task-updates.ts";
 
@@ -61,9 +61,9 @@ export interface CoordinationDeps {
   proposerKey(session: string): string;
   /** The newest session of a task, while it runs. */
   runningOfTask(task: string): CoordinatedSession | undefined;
-  /** The running session behind a proposer key: the session itself, or for `SUPERVISOR` the running supervisor. */
+  /** The running session behind a proposer key: the session itself, for a task its running session, for `SUPERVISOR` the running supervisor. */
   runningProposer(proposer: string): CoordinatedSession | undefined;
-  /** Whether anyone is behind a proposer key: always for `SUPERVISOR`, for a session while it is on the list. */
+  /** Whether anyone is behind a proposer key: always for `SUPERVISOR`, for a task until it ends, for a session while it is on the list. */
   hasProposer(proposer: string): boolean;
   /**
    * A message, an update or a review's time came, or a message or an update was read: what `stored` gives changed. Not
@@ -97,10 +97,13 @@ export class TaskCoordination {
     };
   }
 
-  /** What the previous daemon kept, of the tasks still there, and of the supervisor and the sessions resumed under the same id. */
+  /**
+   * What the previous daemon kept, of the tasks still there, and of the supervisor, the tasks' sessions and the sessions
+   * resumed under the same id.
+   */
   restore(stored: StoredCoordination, { hasTask, hasSession }: Restored): void {
     this.#messages.restore(stored.messages, hasTask);
-    this.#updates.restore(stored.updates, (proposer) => proposer === SUPERVISOR || hasSession(proposer));
+    this.#updates.restore(stored.updates, (proposer) => proposerExists(proposer, { hasTask, hasSession }));
     this.#userInTask.clear();
     for (const [task, at] of Object.entries(stored.userInTask)) if (hasTask(task)) this.#userInTask.set(task, at);
     this.#userInSession.clear();
@@ -214,16 +217,19 @@ export class TaskCoordination {
     this.#deps.changed();
   }
 
-  /** A closed session: its typing and the updates for it (unless it is the supervisor's) go. */
-  sessionClosed(session: Pick<Session, "id" | "supervisor">): void {
+  /**
+   * A closed session: its typing and the updates for it go, except the supervisor's, which wait for the next supervisor,
+   * and a task session's, which wait for the task's next session until the task ends (ADR-140).
+   */
+  sessionClosed(session: Pick<Session, "id" | "supervisor" | "task">): void {
     this.#userInSession.delete(session.id);
-    const proposer = proposerKeyOf(session);
-    if (proposer !== SUPERVISOR) this.#updates.forget(proposer);
+    if (proposerKind(proposerKeyOf(session)).kind === "session") this.#updates.forget(session.id);
   }
 
-  /** An ended task: its messages go. */
+  /** An ended task: its messages and the updates on the work its sessions proposed go. */
   taskEnded(id: string): void {
     this.#messages.drop(id);
+    this.#updates.forget(taskProposerKey(id));
     this.#userInTask.delete(id);
   }
 

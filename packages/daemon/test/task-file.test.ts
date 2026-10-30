@@ -15,7 +15,7 @@ const stored = {
   base: "a".repeat(40),
   createdAt: "2026-10-23T22:00:00.000Z",
   title: "Fix the login",
-  proposedBy: { session: "9b1e7d2a-0000-4000-8000-000000000000", supervisor: false },
+  proposedBy: { session: "9b1e7d2a-0000-4000-8000-000000000000", supervisor: false, task: null },
   model: "claude-opus-5.5",
   approvals: "ask" as const,
   javaNavigation: true,

@@ -52,7 +52,7 @@ function proposal(id: string, repo: string, title: string): TaskProposal {
     repo,
     title,
     prompt: title.toLowerCase(),
-    proposedBy: { session: null, supervisor: false },
+    proposedBy: { session: null, supervisor: false, task: null },
     model: null,
     approvals: "ask",
     item: null,

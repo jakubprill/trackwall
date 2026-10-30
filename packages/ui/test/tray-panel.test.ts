@@ -27,7 +27,7 @@ const proposal: TaskProposal = {
   repo: "billing",
   title: "Retry failed invoices",
   prompt: "Retry invoices that failed to send",
-  proposedBy: { session: null, supervisor: false },
+  proposedBy: { session: null, supervisor: false, task: null },
   model: null,
   approvals: "ask",
   item: null,

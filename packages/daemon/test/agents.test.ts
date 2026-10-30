@@ -328,7 +328,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
       approvals: "ask",
       item: null,
     });
-    expect(proposal.proposedBy).toEqual({ session: free.id, supervisor: false });
+    expect(proposal.proposedBy).toEqual({ session: free.id, supervisor: false, task: null });
     window.attachment.detach();
     for (const session of [supervisor, free, another]) await agents.stop(session.id);
   }, 60_000);
@@ -383,8 +383,8 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
       approvals: "ask",
       item: null,
     });
-    expect(fromSupervisor.proposedBy).toEqual({ session: supervisor.id, supervisor: true });
-    expect(fromSession.proposedBy).toEqual({ session: session.id, supervisor: false });
+    expect(fromSupervisor.proposedBy).toEqual({ session: supervisor.id, supervisor: true, task: null });
+    expect(fromSession.proposedBy).toEqual({ session: session.id, supervisor: false, task: null });
     await agents.stop(supervisor.id);
     await agents.stop(session.id);
   }, 60_000);
