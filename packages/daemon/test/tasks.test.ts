@@ -657,6 +657,68 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     ]);
   }, 60_000);
 
+  test("copying the included files again trusts a mise file the worktree already has with the root's content", async () => {
+    const dir = makeRepo({ ".gitignore": "*.local.toml\n", "README.md": "#\n" }, "shop");
+    const { agents, procs } = makeAgents({ shop: dir });
+    cleanups.push(() => procs.stopAll());
+    const task = await agents.createTask("shop", "fix the login");
+    // The user copied it by hand before adding it to .worktreeinclude.
+    writeFileSync(join(dir, "mise.local.toml"), '[env]\nB = "1"\n');
+    writeFileSync(join(task.worktree, "mise.local.toml"), '[env]\nB = "1"\n');
+    writeFileSync(join(dir, ".worktreeinclude"), "mise.local.toml\n");
+    expect((await agents.taskMiseConfig(task.id)).changes).toEqual([
+      { path: "mise.local.toml", change: "added", content: '[env]\nB = "1"\n' },
+    ]);
+
+    expect((await agents.copyIncludedFilesAgain(task.id)).included).toEqual({ files: ["mise.local.toml"], problems: [] });
+    expect((await agents.taskMiseConfig(task.id)).changes).toEqual([]);
+  }, 60_000);
+
+  test("copying the included files again leaves a task whose mise config was never trusted untrusted", async () => {
+    const dir = makeRepo({ ".gitignore": "*.local.toml\n", "README.md": "#\n" }, "shop");
+    const first = makeAgents({ shop: dir });
+    const task = await first.agents.createTask("shop", "fix the login");
+    await first.agents.stop(sessionOf(first.agents, task.id));
+    first.agents.close();
+    await first.procs.stopAll();
+    // A task saved by a version before trusted mise configs has none.
+    const file = join(first.home, "tasks.json");
+    const saved = z.object({ tasks: z.array(z.record(z.string(), z.unknown())) }).parse(JSON.parse(readFileSync(file, "utf8")));
+    writeFileSync(file, JSON.stringify({ tasks: saved.tasks.map(({ trustedMiseConfig: _, ...t }) => t) }));
+    const { agents, procs } = makeAgents({ shop: dir }, first.home);
+    cleanups.push(() => procs.stopAll());
+    writeFileSync(join(dir, "mise.local.toml"), '[env]\nB = "1"\n');
+    writeFileSync(join(dir, ".worktreeinclude"), "mise.local.toml\n");
+
+    await agents.copyIncludedFilesAgain(task.id);
+
+    expect(await agents.taskMiseConfig(task.id)).toMatchObject({ neverTrusted: true });
+    agents.close();
+  }, 60_000);
+
+  // Git on Windows checks out a link as a text file by default, and creating one needs a privilege.
+  test.skipIf(process.platform === "win32")(
+    "copying the included files again saves what it copied when the worktree's mise config cannot be read, and trusts nothing new",
+    async () => {
+      const dir = makeRepo({ ".gitignore": "*.local.toml\nmise/\n", "README.md": "#\n" }, "shop");
+      const { agents, procs } = makeAgents({ shop: dir });
+      cleanups.push(() => procs.stopAll());
+      const task = await agents.createTask("shop", "fix the login");
+      // The agent links a mise folder to somewhere else, which the mise config refuses to read.
+      symlinkSync(mkdtempSync(join(tmpdir(), "trackwall-outside-")), join(task.worktree, "mise"));
+      writeFileSync(join(dir, "mise.local.toml"), '[env]\nB = "1"\n');
+      writeFileSync(join(dir, ".worktreeinclude"), "mise.local.toml\n");
+
+      expect((await agents.copyIncludedFilesAgain(task.id)).included).toEqual({ files: ["mise.local.toml"], problems: [] });
+
+      rmSync(join(task.worktree, "mise"));
+      expect((await agents.taskMiseConfig(task.id)).changes).toEqual([
+        { path: "mise.local.toml", change: "added", content: '[env]\nB = "1"\n' },
+      ]);
+    },
+    60_000,
+  );
+
   test("a repo root without .worktreeinclude copies nothing into a new task's worktree", async () => {
     const { dir } = cloneOnFeatureBranch();
     writeFileSync(join(dir, ".env"), "API_TOKEN=local\n");

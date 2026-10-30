@@ -608,7 +608,7 @@ export const agentsApi = {
    * Copies the files the repo root's `.worktreeinclude` names into the task's existing worktree again (ADR-61), with the
    * same rules as at its start; a file the worktree already has stays as it is. Only from the UI, never from MCP.
    */
-  copyIncludedFiles: endpoint("copy-included-files", TaskRequest, Task),
+  copyIncludedFilesAgain: endpoint("copy-included-files-again", TaskRequest, Task),
   /** The worktree's mise config against the trusted one (ADR-59). */
   taskMiseConfig: endpoint("task-mise-config", TaskRequest, TaskMiseConfig),
   /**

@@ -61,7 +61,7 @@ export function TaskEditorButton({ conn, task, label }: { conn: Connection; task
  * the task started; the "Included files" section then lists what the worktree got. The error shows next to the button.
  */
 export function CopyIncludedFilesButton({ conn, task, onCopied }: { conn: Connection; task: Task; onCopied: () => void }) {
-  const copy = useAction(() => post(conn, agentsApi.copyIncludedFiles, { task: task.id }), onCopied);
+  const copy = useAction(() => post(conn, agentsApi.copyIncludedFilesAgain, { task: task.id }), onCopied);
   return (
     <>
       {copy.error && <span className="text-destructive max-w-xs truncate text-xs">{copy.error}</span>}
@@ -72,7 +72,7 @@ export function CopyIncludedFilesButton({ conn, task, onCopied }: { conn: Connec
         disabled={copy.pending}
         title={`Copy the files the repo's ${WORKTREE_INCLUDE_FILE} names into the worktree again; files it already has stay as they are`}
       >
-        <FileInput /> Copy local files
+        <FileInput /> Copy included files
       </Button>
     </>
   );

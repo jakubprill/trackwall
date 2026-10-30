@@ -63,6 +63,9 @@ interface TaskWork {
   base: string;
 }
 
+/** Included files with the hash of each one's content from the root. */
+type CopiedFiles = IncludedFiles & { sha256: Record<string, string> };
+
 /** What would be lost when ending a task (`PendingWork` in `vcs`). */
 interface TaskPendingWork {
   uncommitted: number;
@@ -75,7 +78,8 @@ interface TaskPendingWork {
 export interface TasksVcs {
   defaultBase(dir: string): Promise<TaskBase>;
   addWorktree(repoDir: string, path: string, branch: string, commit: string): Promise<void>;
-  copyIncludedFiles(repoDir: string, worktree: string): Promise<IncludedFiles>;
+  /** With the SHA-256 of each included file's content as the root had it (`sha256` by path). */
+  copyIncludedFiles(repoDir: string, worktree: string): Promise<CopiedFiles>;
   removeWorktree(repoDir: string, path: string): Promise<void>;
   deleteBranch(repoDir: string, branch: string): Promise<void>;
   pendingWork(work: TaskWork): Promise<TaskPendingWork>;
@@ -251,7 +255,8 @@ export class AgentTasks {
     return this.#exclusive(id, async () => {
       mkdirSync(dirname(task.worktree), { recursive: true });
       await asRepoUnavailable(repo, this.#deps.vcs.addWorktree(repoDir, task.worktree, task.branch, task.base));
-      task.included = await this.#copyIncludedFiles(task);
+      const { files, problems } = await this.#copyIncludedFiles(task);
+      task.included = { files, problems };
       // The mise config of the fresh worktree is the base commit's and the ignored files copied from the repo root, whose
       // config the user trusted (ADR-59, ADR-61).
       task.trustedMiseConfig = await this.#initialMiseConfig(task);
@@ -288,28 +293,38 @@ export class AgentTasks {
   /**
    * Copies the files the repo root's `.worktreeinclude` names into the task's existing worktree again (ADR-61), for a
    * line added after the task started; `included` then says what the worktree has now. The copied files come from the
-   * root, whose config the user trusted, so like at creation they join the trusted mise config (ADR-59); a file the
-   * agent changed does not.
+   * root, whose config the user trusted, so like at creation they join the trusted mise config (ADR-59), with the hash
+   * of the root's content: a file the agent changes, before or after the copy, stays a change.
    */
   copyIncludedFilesAgain(id: string): Promise<Task> {
     if (this.#removing.has(id)) throw new DomainError("bad_request", "this task is being ended");
     const task = this.#existingWorktree(id);
     return this.#exclusive(id, async () => {
-      const included = await this.#copyIncludedFiles(task);
-      const trustedMiseConfig = await this.#trustingCopied(task, included.files);
-      const updated = { ...this.#get(id), included, trustedMiseConfig };
+      const { sha256, ...included } = await this.#copyIncludedFiles(task);
+      const miseFiles = await this.#miseFilesNow(task);
+      // Read after the copy: the user may have trusted the config while it ran.
+      const latest = this.#get(id);
+      const trustedMiseConfig =
+        latest.trustedMiseConfig === null
+          ? null
+          : { ...latest.trustedMiseConfig, ...Object.fromEntries(Object.entries(sha256).filter(([path]) => miseFiles.has(path))) };
+      const updated = { ...latest, included, trustedMiseConfig };
       this.#save(this.#tasks.map((t) => (t.id === id ? updated : t)));
       return view(updated);
     });
   }
 
-  /** The trusted mise config with the copied files among the worktree's mise files trusted as they are now. */
-  async #trustingCopied(task: KnownTask, copied: readonly string[]): Promise<MiseSnapshot | null> {
-    if (task.trustedMiseConfig === null) return null;
-    const current = await readMiseConfig(task.worktree);
-    const fromRoot = new Set(copied);
-    const trusted = Object.entries(current).filter(([path]) => fromRoot.has(path));
-    return { ...task.trustedMiseConfig, ...Object.fromEntries(trusted) };
+  /**
+   * Which paths of the worktree are mise files, to pick the copied ones that join the trusted config; none when the
+   * config cannot be read (a link, too many files), which then stays a problem the task panel shows.
+   */
+  async #miseFilesNow(task: KnownTask): Promise<Set<string>> {
+    try {
+      return new Set(Object.keys(await readMiseConfig(task.worktree)));
+    } catch (err) {
+      this.#deps.log(`reading the mise config of task ${task.id}: ${messageOf(err)}`);
+      return new Set();
+    }
   }
 
   /** A task by identifier (`not_found` when it does not exist). */
@@ -505,12 +520,12 @@ export class AgentTasks {
   }
 
   /** A failure to copy does not stop the task: the agent can still work, and the panel shows what is missing. */
-  async #copyIncludedFiles(task: KnownTask): Promise<IncludedFiles> {
+  async #copyIncludedFiles(task: KnownTask): Promise<CopiedFiles> {
     try {
       return await this.#deps.vcs.copyIncludedFiles(task.repoDir, task.worktree);
     } catch (err) {
       this.#deps.log(`copying the included files of task ${task.id}: ${messageOf(err)}`);
-      return { files: [], problems: [`copying failed: ${messageOf(err)}`] };
+      return { files: [], problems: [`copying failed: ${messageOf(err)}`], sha256: {} };
     }
   }
 

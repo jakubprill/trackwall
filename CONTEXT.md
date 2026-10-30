@@ -177,8 +177,8 @@ The commit of the default branch from which the task's branch started. The task 
 **Task port** (`Task.port`, `TASK_PORT_FIRST`…`TASK_PORT_LAST`, `TASK_PORT_ENV`):
 A port of 41000–41999 that a task holds while it exists, the lowest one no other task holds (ADR-61). Every mise task in the task's worktree gets it in `SERVER_PORT` and `PORT`, so the task's service runs next to the one from the repo root. Reserved only among tasks, not checked against other programs.
 
-**Included files** (`Task.included`, `WORKTREE_INCLUDE_FILE` = `.worktreeinclude`):
-The files git ignores that the repo root's `.worktreeinclude` names (`.gitignore` syntax), copied into a task's worktree when it is created (ADR-61): local config such as `.env`. `included.files` lists what was copied, `included.problems` what was left out and why.
+**Included files** (`Task.included`, `WORKTREE_INCLUDE_FILE` = `.worktreeinclude`; action `copy-included-files-again`, UI "Copy included files"):
+The files git ignores that the repo root's `.worktreeinclude` names (`.gitignore` syntax), copied into a task's worktree when it is created, and again when the user asks for it in a running task (ADR-61): local config such as `.env`. `included.files` lists what the worktree has from the root, `included.problems` what was left out and why.
 _Avoid_: copied files, local files
 
 **Trusted mise config** (`StoredTask.trustedMiseConfig`, `TaskMiseConfig`, actions `task-mise-config` and `trust-task-mise-config`; UI "Trust this config"):

@@ -1,8 +1,10 @@
-import { constants, existsSync } from "node:fs";
-import { copyFile, lstat, mkdir, readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
+import { lstat, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type IncludedFiles, noIncludedFiles, WORKTREE_INCLUDE_FILE } from "@trackwall/protocol";
+import { type IncludedFiles, WORKTREE_INCLUDE_FILE } from "@trackwall/protocol";
 import { messageOf } from "../../infra/errors.ts";
+import { readRegularFile } from "../../infra/regular-file.ts";
 import { git } from "./git.ts";
 
 /**
@@ -15,7 +17,9 @@ import { git } from "./git.ts";
  * and never through a linked directory: a link could point anywhere on the user's disk. Every file left out gets a
  * problem, so the user knows what the worktree lacks. Copying again into a task's existing worktree (a line added to
  * that file later) works the same: a file the worktree already has with the root's content counts as copied, and one
- * with other content stays as it is, since the agent or the user may have changed it there.
+ * with other content stays as it is, since the agent or the user may have changed it there. Each included file comes
+ * with the SHA-256 of the root's bytes that were written or compared, never of a later read of the worktree, so trust
+ * built on it (ADR-59) covers the root's content even when a running agent rewrites the file right after.
  */
 
 /** A handful of config files; more means a pattern that matches a build or dependency directory. */
@@ -26,62 +30,76 @@ const LIST_TIMEOUT_MS = 60_000;
 /** Git's refusal to check a path whose directory is a link in the worktree (`pathspec '…' is beyond a symbolic link`). */
 const BEYOND_LINK = "beyond a symbolic link";
 
+/** The included files with the SHA-256 of each one's content, as the root had it (`sha256` by path). */
+export type CopiedFiles = IncludedFiles & { sha256: Record<string, string> };
+
 type Matches = { kind: "ok"; paths: string[]; leftOut: string[] } | { kind: "too_many"; count: number | null };
 
-export async function copyIncludedFiles(repoDir: string, worktree: string): Promise<IncludedFiles> {
+export async function copyIncludedFiles(repoDir: string, worktree: string): Promise<CopiedFiles> {
   const includeFile = join(repoDir, WORKTREE_INCLUDE_FILE);
-  if (!existsSync(includeFile)) return noIncludedFiles();
+  if (!existsSync(includeFile)) return { files: [], problems: [], sha256: {} };
   const matches = await ignoredMatches(repoDir, worktree, includeFile);
   if (matches.kind === "too_many") {
     const count = matches.count ?? "so many";
-    return { files: [], problems: [`${WORKTREE_INCLUDE_FILE} matches ${count} files, more than ${MAX_FILES}; nothing was copied`] };
+    const problem = `${WORKTREE_INCLUDE_FILE} matches ${count} files, more than ${MAX_FILES}; nothing was copied`;
+    return { files: [], problems: [problem], sha256: {} };
   }
-  const included: IncludedFiles = {
-    files: [],
-    problems: matches.leftOut,
-  };
+  const copied: CopiedFiles = { files: [], problems: matches.leftOut, sha256: {} };
   let bytes = 0;
   for (const path of matches.paths) {
     try {
-      const copied = await copyOne(repoDir, worktree, path, MAX_BYTES - bytes);
-      if (typeof copied === "string") included.problems.push(`${path}: ${copied}`);
+      const one = await copyOne(repoDir, worktree, path, MAX_BYTES - bytes);
+      if (typeof one === "string") copied.problems.push(`${path}: ${one}`);
       else {
-        bytes += copied.bytes;
-        included.files.push(path);
+        bytes += one.bytes;
+        copied.files.push(path);
+        copied.sha256[path] = one.sha256;
       }
     } catch (err) {
-      included.problems.push(`${path}: ${messageOf(err)}`);
+      copied.problems.push(`${path}: ${messageOf(err)}`);
     }
   }
-  included.problems.sort();
-  return included;
+  copied.problems.sort();
+  return copied;
 }
 
-/** Copies one file; the bytes copied, or why it was not. */
-async function copyOne(repoDir: string, worktree: string, path: string, budget: number): Promise<{ bytes: number } | string> {
+/** Copies one file; the bytes written and the hash of the root's content, or why it was not copied. */
+async function copyOne(
+  repoDir: string,
+  worktree: string,
+  path: string,
+  budget: number,
+): Promise<{ bytes: number; sha256: string } | string> {
   const parts = path.split("/");
-  const info = await lstat(join(repoDir, ...parts));
+  const source = join(repoDir, ...parts);
+  const info = await lstat(source);
   if (!info.isFile()) return "not a regular file (a link or a special file)";
   if (info.size > budget) return `the files together would be more than ${MAX_BYTES / 1024 / 1024} MB`;
   if (!(await realDirectories(worktree, parts.slice(0, -1)))) return "its directory in the worktree is a link or a file";
-  const existing = await sameAsInWorktree(repoDir, worktree, parts);
-  if (existing === "same") return { bytes: 0 };
-  if (existing === "other") return "the worktree has its own version of it, left as it is";
-  await copyFile(join(repoDir, ...parts), join(worktree, ...parts), constants.COPYFILE_EXCL);
-  return { bytes: info.size };
+  const content = await readRegularFile(source, budget);
+  if (content === undefined) return "it is gone from the repo";
+  const sha256 = createHash("sha256").update(content).digest("hex");
+  const target = join(worktree, ...parts);
+  const existing = await existingContent(target);
+  if (existing === null) {
+    // `wx`: never over a file that appeared meanwhile.
+    await writeFile(target, content, { flag: "wx", mode: info.mode & 0o777 });
+    return { bytes: content.length, sha256 };
+  }
+  if (existing?.equals(content)) return { bytes: 0, sha256 };
+  return "the worktree has its own version of it, left as it is";
 }
 
-/** Whether the worktree already has the file: with the root's content, with other content (or not as a regular file), or not at all. */
-async function sameAsInWorktree(repoDir: string, worktree: string, parts: readonly string[]): Promise<"same" | "other" | "none"> {
-  const target = join(worktree, ...parts);
-  const info = await lstat(target).catch((err: NodeJS.ErrnoException) => {
-    if (err.code === "ENOENT") return null;
-    throw err;
-  });
-  if (info === null) return "none";
-  if (!info.isFile()) return "other";
-  const [inRoot, inWorktree] = await Promise.all([readFile(join(repoDir, ...parts)), readFile(target)]);
-  return inRoot.equals(inWorktree) ? "same" : "other";
+/**
+ * What the worktree has at `target`: `null` for nothing, the content of a regular file, or `undefined` for anything
+ * else (a link, a folder, a FIFO, a file over the limit), which counts as the worktree's own version.
+ */
+async function existingContent(target: string): Promise<Buffer | null | undefined> {
+  try {
+    return (await readRegularFile(target, MAX_BYTES)) ?? null;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
