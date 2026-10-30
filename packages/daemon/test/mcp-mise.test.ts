@@ -248,6 +248,29 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
   );
 
   test(
+    "ending a task removes the logs of its worktree's mise tasks, from memory and from disk",
+    async () => {
+      const task = await daemon.facade.agents.createTask("warehouse", "check the logs");
+      writeFileSync(join(task.worktree, "fake-mise.json"), JSON.stringify({ ...JSON.parse(MISE_CONFIG), prints: { test: ["tests ran"] } }));
+      await call(outside, "run_mise_task", { repo: "warehouse", task: task.id, miseTask: "test" });
+      await call(outside, "wait_for_mise_task", { repo: "warehouse", task: task.id, miseTask: "test", timeoutSeconds: 20 });
+      const source = { kind: "task-mise-task", repo: "warehouse", task: task.id, miseTask: "test" } as const;
+      expect(daemon.facade.logs.tail({ source, limit: 10 }).records.map((r) => r.msg)).toContain("tests ran");
+      daemon.facade.logs.flush();
+      const dir = join(daemon.home, "logs", "task-mise-task", task.id);
+      expect(existsSync(dir)).toBe(true);
+      for (const session of daemon.facade.agents.sessions().sessions.filter((s) => s.task === task.id))
+        await daemon.facade.agents.stop(session.id);
+
+      await daemon.facade.agents.removeTask(task.id, false, true);
+
+      expect(daemon.facade.logs.tail({ source, limit: 10 }).records).toEqual([]);
+      expect(existsSync(dir)).toBe(false);
+    },
+    TIMEOUT,
+  );
+
+  test(
     "a task session refused for the mise config it changed is told when the user trusts it, and runs the mise task then",
     async () => {
       const task = await daemon.facade.agents.createTask("warehouse", "change the build");

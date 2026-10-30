@@ -219,8 +219,12 @@ export function createFacade(o: FacadeOptions): Facade {
     sessionMcpServer: o.sessionMcpServer,
     openEditor,
     boardHas: (item) => board.has(item),
+    onTaskRemoved: (task) => logs.removeTaskLogs(task),
     log: o.log,
   });
+  // A removal that failed on a held file, or a crash before it, leaves an ended task's logs behind (ADR-59). Without a
+  // readable `tasks.json` (moved aside as broken, and it may come back) nothing is removed.
+  if (agents.taskListRead()) logs.removeTaskLogsExcept(agents.sessions().tasks.map((t) => t.id));
   const mise: Mise = new Mise({
     procs,
     repos: workspace,
