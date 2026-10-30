@@ -86,6 +86,16 @@ export class ListedSessions {
       .reverse();
   }
 
+  /**
+   * Sessions as the last cycle left them, newest first, without a cycle of their own: for a reader that comes every
+   * cycle anyway, such as the `/ws` events, where a cycle of its own would read every session twice as often.
+   */
+  viewsAsOfLastCycle(): Session[] {
+    return this.#all()
+      .flatMap((s) => s.view() ?? [])
+      .reverse();
+  }
+
   view(session: AgentSession): Session {
     const view = this.#fresh(session);
     if (!view) throw new Error(`session ${session.id} has no process group`);

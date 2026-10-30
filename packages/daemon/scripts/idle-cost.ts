@@ -71,6 +71,7 @@ const facade = createFacade({
   log: () => {},
 });
 count(Object.getPrototypeOf(facade.agents), "sessions", "agents.sessions()");
+count(Object.getPrototypeOf(facade.agents), "sessionsAsOfLastCycle", "agents.sessionsAsOfLastCycle() (/ws events)");
 // Every way out, a failure and Ctrl+C included, stops the sessions and removes the temporary state directory.
 const stop = shutdownOnce(async () => {
   await stopDaemon(home, facade, api);

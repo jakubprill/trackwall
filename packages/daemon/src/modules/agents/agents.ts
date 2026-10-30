@@ -258,11 +258,23 @@ export class Agents {
   }
 
   sessions(): SessionList {
+    return this.#list(this.#sessions.views());
+  }
+
+  /**
+   * The same list with the sessions as the last session cycle left them (`TICK_MS`), for the `/ws` events, which read
+   * it every cycle: reading every session again for them doubled the cycles while a window listened (ADR-36).
+   */
+  sessionsAsOfLastCycle(): SessionList {
+    return this.#list(this.#sessions.viewsAsOfLastCycle());
+  }
+
+  #list(sessions: Session[]): SessionList {
     const tasks = this.#tasks.list();
     // A proposal being approved that is already a task is only a task: the UI and `list_sessions` see one object.
     const proposals = this.#proposals.list().filter((p) => !tasks.some((t) => t.id === p.id));
     const lastSupervisor = this.#supervisor.resumable()?.session ?? null;
-    return { sessions: this.#sessions.views(), tasks, proposals, messages: this.#coordination.messages(), lastSupervisor };
+    return { sessions, tasks, proposals, messages: this.#coordination.messages(), lastSupervisor };
   }
 
   /** One listed session (`not_found` when it does not exist or the user closed it). */
