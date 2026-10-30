@@ -16,7 +16,7 @@
       "entry": ["features/*.data.ts"]
     }
   },
-  "ignoreBinaries": ["mise"],
+  "ignoreBinaries": ["mise", "mkfifo"],
   "ignoreIssues": {
     "packages/ui/src/components/ui/*.tsx": ["exports"]
   }
