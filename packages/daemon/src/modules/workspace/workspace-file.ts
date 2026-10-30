@@ -85,9 +85,11 @@ export class WorkspaceFile {
   readonly path: string;
   /**
    * The keys of the text last read: the repo watch asks for the projects folder every second, and parsing the YAML
-   * each time costs more than reading the file. Only for reading: `set` parses a document of its own to change.
+   * each time costs more than reading the file. Only for reading: `set` parses a document of its own to change, and
+   * `get` hands out what its zod schema returns, a copy of every object and array, so a caller cannot change the cache
+   * (a key read with `z.unknown()` or `z.custom()` would need a copy of its own).
    */
-  #parsed: { text: string; config: Record<string, unknown> } | undefined;
+  private parsed: { text: string; config: Record<string, unknown> } | undefined;
 
   constructor(path: string) {
     this.path = path;
@@ -215,10 +217,10 @@ export class WorkspaceFile {
   /** The file's keys as plain values, parsed again only when its text changed. */
   private config(): Record<string, unknown> {
     const text = this.text();
-    if (this.#parsed?.text === text) return this.#parsed.config;
+    if (this.parsed?.text === text) return this.parsed.config;
     // `parse` guarantees a map or an empty document.
     const config: Record<string, unknown> = this.parse(text).doc.toJS() ?? {};
-    this.#parsed = { text, config };
+    this.parsed = { text, config };
     return config;
   }
 
