@@ -46,7 +46,7 @@ fn decode_hex(hex: &str) -> Option<String> {
 }
 
 /// `C:\…` or `/…`, never `\\server\…`, `//server/…` or `\\?\…`.
-fn is_local_folder(folder: &str) -> bool {
+pub fn is_local_folder(folder: &str) -> bool {
     let bytes = folder.as_bytes();
     let drive = bytes.len() >= 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && matches!(bytes[2], b'\\' | b'/');
     let unix = folder.starts_with('/') && !folder.starts_with("//");

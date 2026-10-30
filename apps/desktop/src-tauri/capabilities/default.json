@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Trackwall windows (the main window and extra windows, ADR-49, and the tray panel, ADR-50): the app's commands (daemon_connection, retry_daemon, open_window, window_shows, take_jump, open_link, copy_text (writes the clipboard, never reads it), open_from_tray_panel, pick_projects_folder, the app update commands check_update, install_update and cancel_update, ADR-53, autostart_enabled, set_autostart and zoom_window, ADR-65, and open_outside, remote_daemon_port, use_remote_daemon and use_own_daemon, ADR-130, and host_projects_folder, set_host_projects_folder and show_in_host_folder, ADR-131; the updater plugin is used from Rust) and core:default (events, the native context menu of view icons), no system plugin permissions (ADR-51).",
+  "description": "Trackwall windows (the main window and extra windows, ADR-49, and the tray panel, ADR-50): the app's commands (daemon_connection, retry_daemon, open_window, window_shows, take_jump, open_link, copy_text (writes the clipboard, never reads it), open_from_tray_panel, pick_projects_folder, the app update commands check_update, install_update and cancel_update, ADR-53, autostart_enabled, set_autostart and zoom_window, ADR-65, and open_outside, remote_daemon_port, use_remote_daemon and use_own_daemon, ADR-130, and host_projects_folder, set_host_projects_folder and show_in_host_folder, ADR-131, and dev_container, set_dev_container and start_dev_container, ADR-139; the updater plugin is used from Rust) and core:default (events, the native context menu of view icons), no system plugin permissions (ADR-51).",
   "windows": ["main", "window-*", "tray-panel"],
   "permissions": ["core:default"]
 }

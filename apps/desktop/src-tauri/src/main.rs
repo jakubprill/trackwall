@@ -10,6 +10,7 @@ mod badge;
 mod clipboard;
 mod daemon;
 mod daemon_state;
+mod dev_container;
 mod error_journal;
 mod folder_picker;
 mod global_shortcut;
@@ -145,6 +146,9 @@ fn main() {
             jump::take_jump,
             link::open_link,
             system_open::open_outside,
+            dev_container::dev_container,
+            dev_container::set_dev_container,
+            dev_container::start_dev_container,
             host_folder::host_projects_folder,
             host_folder::set_host_projects_folder,
             host_folder::show_in_host_folder,

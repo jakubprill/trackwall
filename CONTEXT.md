@@ -20,6 +20,10 @@ _Avoid_: external daemon, server
 Where this computer reaches the projects folder of a remote daemon, for example a Docker volume through `\\wsl.localhost\…`; the desktop app shows a repo of the container in Explorer through it (ADR-131).
 _Avoid_: host path, volume path
 
+**Dev container to start** (`DevContainer`, `dev_container.rs`, `dev-container.json`; in the UI *dev container*):
+The folder on this computer with a dev container's configuration and the folder VS Code opens in it, saved by the desktop app; "Start" opens VS Code on it and connects to the remote daemon inside with the token read through `docker exec` (ADR-139).
+_Avoid_: devcontainer config, workspace (that is `workspace.yaml`)
+
 **App update** (`updates.rs`, `UpdateCheck`; in the UI *update*):
 A newer version of Trackwall from GitHub Releases, installed by the shell after the user's click and followed by a restart (ADR-53). Its **update package** is the archive the updater downloads and checks against the signature: the release zip on Windows (`portable_update.rs`), `.app.tar.gz` on macOS; the **update manifest** is `latest.json` in the release.
 _Avoid_: upgrade, sync (that is the repo synchronization)
