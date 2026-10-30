@@ -127,4 +127,33 @@ describe.skipIf(process.versions.bun === undefined)("services from a Trackwall s
     },
     TIMEOUT,
   );
+
+  test(
+    "a task session runs its service on the repo's port with lease, and stopping it gives the port back",
+    async () => {
+      const root = StartServiceResult.parse((await call(outside, "start_service", { repo: "shop", timeoutSeconds: 30 })).structuredContent)
+        .slice.members[0]?.service;
+      const task = await daemon.facade.agents.createTask("shop", "check the orders endpoint");
+      const session = daemon.facade.agents.sessions().sessions.find((s) => s.task === task.id);
+      if (!session) throw new Error("the task has no session");
+      const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, session.id);
+      clients.push(client);
+
+      const { slice } = StartServiceResult.parse(
+        (await call(client, "start_service", { repo: "shop", task: task.id, lease: true, timeoutSeconds: 30 })).structuredContent,
+      );
+
+      expect(slice.members).toMatchObject([{ repo: "shop", task: task.id, service: { state: "healthy", lease: true, port: root?.port } }]);
+      expect(daemonLog).toContain(
+        `start_service (session ${session.id}): {"repo":"shop","task":"${task.id}","lease":true,"dependencies":true}`,
+      );
+      await call(client, "stop_service", { repo: "shop", task: task.id });
+      const rootAgain = async () =>
+        (await daemon.facade.services.list()).some((s) => s.repo === "shop" && s.task === null && s.state === "healthy");
+      for (const until = Date.now() + 20_000; !(await rootAgain()) && Date.now() < until; ) await new Promise((r) => setTimeout(r, 100));
+      expect(await rootAgain()).toBe(true);
+      await call(outside, "stop_service", { repo: "shop" });
+    },
+    TIMEOUT,
+  );
 });

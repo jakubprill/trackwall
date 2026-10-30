@@ -97,6 +97,7 @@ function setup(
     cards,
     taskPort,
     env,
+    log: () => {},
     intervalMs: 100,
     startupMs: 1500,
     settleMs: 300,
@@ -170,7 +171,7 @@ describe("services (real process groups, fake mise and fake service)", () => {
         { edges: [http("web", "api"), http("web", "docs")] },
       );
 
-      const slice = await services.start({ repo: "web", task: null, dependencies: true, waitMs: 20_000 });
+      const slice = await services.start({ repo: "web", task: null, lease: false, dependencies: true, waitMs: 20_000 });
 
       expect(slice.settled).toBe(true);
       expect(slice.members.map((m) => [m.repo, m.outcome, m.service?.state ?? null, m.problem])).toEqual([
@@ -195,9 +196,9 @@ describe("services (real process groups, fake mise and fake service)", () => {
     "a second start does not start a running service again, it reports it as running",
     async () => {
       const { services } = setup({ web: { ...DEV, servers: { dev: {} } } });
-      const first = await services.start({ repo: "web", task: null, dependencies: false, waitMs: 20_000 });
+      const first = await services.start({ repo: "web", task: null, lease: false, dependencies: false, waitMs: 20_000 });
 
-      const second = await services.start({ repo: "web", task: null, dependencies: false, waitMs: 20_000 });
+      const second = await services.start({ repo: "web", task: null, lease: false, dependencies: false, waitMs: 20_000 });
 
       expect(second.members[0]?.outcome).toBe("running");
       expect(second.members[0]?.service?.run.runId).toBe(first.members[0]?.service?.run.runId ?? "");
@@ -210,7 +211,7 @@ describe("services (real process groups, fake mise and fake service)", () => {
     async () => {
       const { services } = setup({ web: { ...DEV, servers: { dev: { crash: true } } } });
 
-      const slice = await services.start({ repo: "web", task: null, dependencies: false, waitMs: 20_000 });
+      const slice = await services.start({ repo: "web", task: null, lease: false, dependencies: false, waitMs: 20_000 });
 
       const [member] = slice.members;
       expect(member?.service).toMatchObject({ state: "crashed", reason: "the process exited with code 1" });
@@ -224,7 +225,7 @@ describe("services (real process groups, fake mise and fake service)", () => {
     async () => {
       const { services } = setup({ web: { ...DEV, servers: { dev: { quiet: true, delayMs: 60_000 } } } });
 
-      const slice = await services.start({ repo: "web", task: null, dependencies: false, waitMs: 20_000 });
+      const slice = await services.start({ repo: "web", task: null, lease: false, dependencies: false, waitMs: 20_000 });
 
       expect(slice.members[0]?.service).toMatchObject({
         state: "unhealthy",
@@ -243,7 +244,7 @@ describe("services (real process groups, fake mise and fake service)", () => {
       const { port } = other.address() as AddressInfo;
       const { services } = setup({ web: { ...DEV, servers: { dev: {} } } }, { cardPorts: { web: port } });
 
-      const slice = await services.start({ repo: "web", task: null, dependencies: false, waitMs: 20_000 });
+      const slice = await services.start({ repo: "web", task: null, lease: false, dependencies: false, waitMs: 20_000 });
 
       expect(slice.members[0]).toMatchObject({
         outcome: "skipped",
@@ -256,7 +257,9 @@ describe("services (real process groups, fake mise and fake service)", () => {
   test("a repo without the mise task dev is not_found before anything starts", async () => {
     const { services } = setup({ web: { tasks: [{ name: "build" }] } });
 
-    await expect(services.start({ repo: "web", task: null, dependencies: true, waitMs: 0 })).rejects.toMatchObject({ code: "not_found" });
+    await expect(services.start({ repo: "web", task: null, lease: false, dependencies: true, waitMs: 0 })).rejects.toMatchObject({
+      code: "not_found",
+    });
     expect(await services.list()).toEqual([]);
   });
 
@@ -264,7 +267,7 @@ describe("services (real process groups, fake mise and fake service)", () => {
     "call returns the response with the secret masked, and errors the service logged during the call",
     async () => {
       const { services } = setup({ web: { ...DEV, servers: { dev: {} } } });
-      await services.start({ repo: "web", task: null, dependencies: false, waitMs: 20_000 });
+      await services.start({ repo: "web", task: null, lease: false, dependencies: false, waitMs: 20_000 });
 
       const ok = await services.call({
         repo: "web",
@@ -303,8 +306,8 @@ describe("services (real process groups, fake mise and fake service)", () => {
     async () => {
       const server = { ...DEV, servers: { dev: {} } };
       const { services } = setup({ web: server, api: server, auth: server }, { edges: [http("web", "api"), http("web", "auth")] });
-      await services.start({ repo: "auth", task: null, dependencies: false, waitMs: 20_000 });
-      await services.start({ repo: "web", task: null, dependencies: true, waitMs: 20_000 });
+      await services.start({ repo: "auth", task: null, lease: false, dependencies: false, waitMs: 20_000 });
+      await services.start({ repo: "web", task: null, lease: false, dependencies: true, waitMs: 20_000 });
 
       const stopped = await services.stop({ repo: "web", task: null, dependencies: true });
 
@@ -323,7 +326,7 @@ describe("services (real process groups, fake mise and fake service)", () => {
       const port = await freePort();
       const daemon = await buildDaemon(port, 1500);
       const { services } = setup({ web: { ...DEV, servers: { dev: { buildDaemon: daemon.port } } } }, { cardPorts: { web: port } });
-      const started = await services.start({ repo: "web", task: null, dependencies: false, waitMs: 20_000 });
+      const started = await services.start({ repo: "web", task: null, lease: false, dependencies: false, waitMs: 20_000 });
       expect(started.members[0]?.service).toMatchObject({ state: "healthy", port });
 
       const stopped = await services.stop({ repo: "web", task: null, dependencies: false });
@@ -340,7 +343,7 @@ describe("services (real process groups, fake mise and fake service)", () => {
       const port = await freePort();
       const daemon = await buildDaemon(port, null);
       const { services } = setup({ web: { ...DEV, servers: { dev: { buildDaemon: daemon.port } } } }, { cardPorts: { web: port } });
-      await services.start({ repo: "web", task: null, dependencies: false, waitMs: 20_000 });
+      await services.start({ repo: "web", task: null, lease: false, dependencies: false, waitMs: 20_000 });
 
       const stopped = await services.stop({ repo: "web", task: null, dependencies: false });
 
@@ -351,7 +354,7 @@ describe("services (real process groups, fake mise and fake service)", () => {
         ],
       ]);
       expect(stopped[0]?.run.kind).toBe("exited");
-      const restart = await services.start({ repo: "web", task: null, dependencies: false, waitMs: 20_000 });
+      const restart = await services.start({ repo: "web", task: null, lease: false, dependencies: false, waitMs: 20_000 });
       expect(restart.members[0]).toMatchObject({
         outcome: "skipped",
         problem: `port ${port} (server.port on the card) still answers after the stop of the service of web`,
@@ -372,7 +375,7 @@ describe("services (real process groups, fake mise and fake service)", () => {
         { web: { ...DEV, servers: { dev: { crash: true } } }, api: { ...DEV, servers: { dev: {} } } },
         { edges: [http("web", "api")] },
       );
-      const slice = await services.start({ repo: "web", task: null, dependencies: true, waitMs: 20_000 });
+      const slice = await services.start({ repo: "web", task: null, lease: false, dependencies: true, waitMs: 20_000 });
       expect(slice.members.map((m) => [m.repo, m.service?.state])).toEqual([
         ["api", "healthy"],
         ["web", "crashed"],
@@ -390,9 +393,9 @@ describe("services (real process groups, fake mise and fake service)", () => {
     async () => {
       const server = { ...DEV, servers: { dev: {} } };
       const { services } = setup({ web: server, api: server }, { edges: [http("web", "api")] });
-      await services.start({ repo: "web", task: null, dependencies: true, waitMs: 20_000 });
+      await services.start({ repo: "web", task: null, lease: false, dependencies: true, waitMs: 20_000 });
       await services.stop({ repo: "web", task: null, dependencies: false });
-      await services.start({ repo: "web", task: null, dependencies: false, waitMs: 20_000 });
+      await services.start({ repo: "web", task: null, lease: false, dependencies: false, waitMs: 20_000 });
 
       const stopped = await services.stop({ repo: "web", task: null, dependencies: true });
 
@@ -411,9 +414,9 @@ describe("services (real process groups, fake mise and fake service)", () => {
         { web: { ...DEV, servers: { dev: {} } }, api: { ...DEV, servers: { dev: { delayMs: 1000 } } } },
         { edges: [http("web", "api")] },
       );
-      await services.start({ repo: "web", task: null, dependencies: true, waitMs: 100 });
+      await services.start({ repo: "web", task: null, lease: false, dependencies: true, waitMs: 100 });
 
-      await expect(services.start({ repo: "web", task: null, dependencies: false, waitMs: 100 })).rejects.toThrow(
+      await expect(services.start({ repo: "web", task: null, lease: false, dependencies: false, waitMs: 100 })).rejects.toThrow(
         "a start of web with dependencies is in progress: wait for it or stop it first",
       );
     },
@@ -431,13 +434,13 @@ describe("services (real process groups, fake mise and fake service)", () => {
         },
         { edges: [http("web", "api"), http("shop", "api")] },
       );
-      await services.start({ repo: "shop", task: null, dependencies: true, waitMs: 100 });
-      await services.start({ repo: "web", task: null, dependencies: true, waitMs: 100 });
+      await services.start({ repo: "shop", task: null, lease: false, dependencies: true, waitMs: 100 });
+      await services.start({ repo: "web", task: null, lease: false, dependencies: true, waitMs: 100 });
 
       const stopped = await services.stop({ repo: "web", task: null, dependencies: true });
 
       expect(stopped).toEqual([]);
-      const shop = await services.start({ repo: "shop", task: null, dependencies: true, waitMs: 20_000 });
+      const shop = await services.start({ repo: "shop", task: null, lease: false, dependencies: true, waitMs: 20_000 });
       expect(shop.members.map((m) => [m.repo, m.service?.state])).toEqual([
         ["api", "healthy"],
         ["shop", "healthy"],
@@ -466,7 +469,7 @@ describe("services (real process groups, fake mise and fake service)", () => {
         { web: { ...DEV, servers: { dev: {} } }, api: { ...DEV, servers: { dev: { delayMs: 1000 } } } },
         { edges: [http("web", "api")] },
       );
-      const first = await services.start({ repo: "web", task: null, dependencies: true, waitMs: 300 });
+      const first = await services.start({ repo: "web", task: null, lease: false, dependencies: true, waitMs: 300 });
       expect(first.members.map((m) => [m.repo, m.outcome])).toEqual([
         ["api", "started"],
         ["web", "pending"],
@@ -478,7 +481,7 @@ describe("services (real process groups, fake mise and fake service)", () => {
       await new Promise((resolve) => setTimeout(resolve, 1500));
       expect(mise.run({ repo: "web", task: null }, "dev")).toBeUndefined();
       // A new start after the stop makes a new slice instead of reusing the cancelled one.
-      const again = await services.start({ repo: "web", task: null, dependencies: true, waitMs: 20_000 });
+      const again = await services.start({ repo: "web", task: null, lease: false, dependencies: true, waitMs: 20_000 });
       expect(again.members.map((m) => [m.repo, m.service?.state])).toEqual([
         ["api", "healthy"],
         ["web", "healthy"],
@@ -494,7 +497,7 @@ describe("services (real process groups, fake mise and fake service)", () => {
         { web: { ...DEV, servers: { dev: {} } }, api: { ...DEV, servers: { dev: {} } } },
         { edges: [http("web", "api")] },
       );
-      const slice = await services.start({ repo: "web", task: null, dependencies: true, waitMs: 20_000 });
+      const slice = await services.start({ repo: "web", task: null, lease: false, dependencies: true, waitMs: 20_000 });
       const apiPort = slice.members.find((m) => m.repo === "api")?.service?.port;
 
       const result = await services.call({
@@ -519,15 +522,16 @@ describe("services (real process groups, fake mise and fake service)", () => {
 describe("services from a task worktree (ADR-61)", () => {
   const TASK = "0b7c1a52-3f0e-4c1e-9a43-5d2f8e6b1c07";
   const TASK_DEV = { ...DEV, servers: { dev: {} } };
+  const OTHER = "5d1e9f30-7a2b-4c6d-8e1f-2a3b4c5d6e7f";
 
   test(
     "a task's service runs from its worktree on the task port, next to the same service from the repo root",
     async () => {
       const port = await freePort();
       const { services } = setup({ web: { ...DEV, servers: { dev: {} } } }, { tasks: { [TASK]: { repo: "web", port, config: TASK_DEV } } });
-      await services.start({ repo: "web", task: null, dependencies: false, waitMs: 20_000 });
+      await services.start({ repo: "web", task: null, lease: false, dependencies: false, waitMs: 20_000 });
 
-      const slice = await services.start({ repo: "web", task: TASK, dependencies: false, waitMs: 20_000 });
+      const slice = await services.start({ repo: "web", task: TASK, lease: false, dependencies: false, waitMs: 20_000 });
 
       expect(slice).toMatchObject({ repo: "web", task: TASK, settled: true });
       expect(slice.members[0]?.service).toMatchObject({ repo: "web", task: TASK, state: "healthy", port, portSource: "log" });
@@ -565,7 +569,7 @@ describe("services from a task worktree (ADR-61)", () => {
         { edges: [http("web", "api")], tasks: { [TASK]: { repo: "web", port, config: TASK_DEV } } },
       );
 
-      const slice = await services.start({ repo: "web", task: TASK, dependencies: true, waitMs: 20_000 });
+      const slice = await services.start({ repo: "web", task: TASK, lease: false, dependencies: true, waitMs: 20_000 });
 
       expect(slice.members.map((m) => [m.repo, m.task, m.outcome, m.service?.state ?? null])).toEqual([
         ["api", null, "started", "healthy"],
@@ -589,7 +593,7 @@ describe("services from a task worktree (ADR-61)", () => {
       const { port } = other.address() as AddressInfo;
       const { services } = setup({ web: { ...DEV, servers: { dev: {} } } }, { tasks: { [TASK]: { repo: "web", port, config: TASK_DEV } } });
 
-      const slice = await services.start({ repo: "web", task: TASK, dependencies: false, waitMs: 20_000 });
+      const slice = await services.start({ repo: "web", task: TASK, lease: false, dependencies: false, waitMs: 20_000 });
 
       expect(slice.members[0]).toMatchObject({
         outcome: "skipped",
@@ -602,9 +606,201 @@ describe("services from a task worktree (ADR-61)", () => {
   test("a task that is not in the repo is refused before anything starts", async () => {
     const { services } = setup({ web: DEV, api: DEV }, { tasks: { [TASK]: { repo: "api", port: 41000, config: TASK_DEV } } });
 
-    const start = services.start({ repo: "web", task: TASK, dependencies: false, waitMs: 1000 });
+    const start = services.start({ repo: "web", task: TASK, lease: false, dependencies: false, waitMs: 1000 });
 
     await expect(start).rejects.toMatchObject({ code: "bad_request", message: `task ${TASK} is in api, not in web` });
+    expect(await services.list()).toEqual([]);
+  });
+
+  test(
+    "a task's service on a lease takes the root's port, and the root's service starts again once it stops",
+    async () => {
+      const rootPort = await freePort();
+      const { services } = setup(
+        { web: { ...DEV, servers: { dev: { port: rootPort } } } },
+        { cardPorts: { web: rootPort }, tasks: { [TASK]: { repo: "web", port: await freePort(), config: TASK_DEV } } },
+      );
+      const before = await services.start({ repo: "web", task: null, lease: false, dependencies: false, waitMs: 20_000 });
+
+      const slice = await services.start({ repo: "web", task: TASK, lease: true, dependencies: false, waitMs: 20_000 });
+
+      expect(slice.members[0]?.service).toMatchObject({ repo: "web", task: TASK, lease: true, state: "healthy", port: rootPort });
+      expect((await services.list()).map((s) => [s.task, s.lease, s.state])).toEqual([
+        [null, false, "stopped"],
+        [TASK, true, "healthy"],
+      ]);
+      const reached = await services.call({ repo: "web", task: TASK, method: "GET", path: "/", headers: {}, body: null, timeoutMs: 5000 });
+      expect(reached.url).toBe(`http://127.0.0.1:${rootPort}/`);
+      expect(JSON.parse(reached.response?.body ?? "")).toMatchObject({ cwd: expect.stringMatching(/worktrees.0b7c1a52/) });
+
+      await services.stop({ repo: "web", task: TASK, dependencies: false });
+      await waitFor(async () => (await services.list()).some((s) => s.task === null && s.state === "healthy"));
+      const root = (await services.list()).find((s) => s.task === null);
+      expect(root).toMatchObject({ port: rootPort, lease: false });
+      expect(root?.run.runId).not.toBe(before.members[0]?.service?.run.runId ?? "");
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "while a task holds the lease, the root's service is refused and a slice that calls the repo takes the task's service",
+    async () => {
+      const apiPort = await freePort();
+      const { services } = setup(
+        { web: { ...DEV, servers: { dev: {} } }, api: { ...DEV, servers: { dev: {} } } },
+        {
+          edges: [http("web", "api")],
+          cardPorts: { api: apiPort },
+          tasks: { [TASK]: { repo: "api", port: await freePort(), config: TASK_DEV } },
+        },
+      );
+      await services.start({ repo: "api", task: TASK, lease: true, dependencies: false, waitMs: 20_000 });
+
+      const root = services.start({ repo: "api", task: null, lease: false, dependencies: false, waitMs: 0 });
+      await expect(root).rejects.toMatchObject({
+        code: "bad_request",
+        message: `port ${apiPort} of api is leased to the service of task ${TASK}: stop that service, which gives the port back`,
+      });
+      const slice = await services.start({ repo: "web", task: null, lease: false, dependencies: true, waitMs: 20_000 });
+
+      expect(slice.members.map((m) => [m.repo, m.task, m.outcome, m.problem, m.service?.port ?? null])).toEqual([
+        ["api", TASK, "running", null, apiPort],
+        ["web", null, "started", null, expect.any(Number)],
+      ]);
+      // The root's service did not run before the lease, so it does not start when the lease ends.
+      await services.stop({ repo: "api", task: TASK, dependencies: false });
+      expect((await services.list()).filter((s) => s.repo === "api").map((s) => [s.task, s.state])).toEqual([[TASK, "stopped"]]);
+      await services.start({ repo: "api", task: null, lease: false, dependencies: false, waitMs: 20_000 });
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "a crash of the task's service on the lease gives the port back, and the root's service starts again",
+    async () => {
+      const rootPort = await freePort();
+      const { services } = setup(
+        { web: { ...DEV, servers: { dev: { port: rootPort } } } },
+        {
+          cardPorts: { web: rootPort },
+          tasks: { [TASK]: { repo: "web", port: await freePort(), config: { ...DEV, servers: { dev: { crash: true } } } } },
+        },
+      );
+      await services.start({ repo: "web", task: null, lease: false, dependencies: false, waitMs: 20_000 });
+
+      const slice = await services.start({ repo: "web", task: TASK, lease: true, dependencies: false, waitMs: 20_000 });
+
+      expect(slice.members[0]?.service).toMatchObject({ task: TASK, lease: true, state: "crashed" });
+      await waitFor(async () => (await services.list()).some((s) => s.task === null && s.state === "healthy"));
+      const again = await services.start({ repo: "web", task: null, lease: false, dependencies: false, waitMs: 0 });
+      expect(again.members[0]?.outcome).toBe("running");
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "a lease is refused, with the root's service left running, while the task's service runs on the task port or another task holds the port",
+    async () => {
+      const rootPort = await freePort();
+      const { services } = setup(
+        { web: { ...DEV, servers: { dev: { port: rootPort } } } },
+        {
+          cardPorts: { web: rootPort },
+          tasks: {
+            [TASK]: { repo: "web", port: await freePort(), config: TASK_DEV },
+            [OTHER]: { repo: "web", port: await freePort(), config: TASK_DEV },
+          },
+        },
+      );
+      await services.start({ repo: "web", task: null, lease: false, dependencies: false, waitMs: 20_000 });
+      await services.start({ repo: "web", task: TASK, lease: false, dependencies: false, waitMs: 20_000 });
+
+      const onTaskPort = services.start({ repo: "web", task: TASK, lease: true, dependencies: false, waitMs: 0 });
+      await expect(onTaskPort).rejects.toMatchObject({
+        code: "bad_request",
+        message: `the service of task ${TASK} in web runs or starts on the task port: stop it first, then start it on the port of web`,
+      });
+      expect((await services.list()).find((s) => s.task === null)?.state).toBe("healthy");
+
+      await services.stop({ repo: "web", task: TASK, dependencies: false });
+      await services.start({ repo: "web", task: TASK, lease: true, dependencies: false, waitMs: 20_000 });
+      const other = services.start({ repo: "web", task: OTHER, lease: true, dependencies: false, waitMs: 0 });
+      await expect(other).rejects.toMatchObject({
+        code: "bad_request",
+        message: `port ${rootPort} of web is leased to the service of task ${TASK}: stop that service, which gives the port back`,
+      });
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "a lease is refused while the root's service is starting, and the start goes on",
+    async () => {
+      const rootPort = await freePort();
+      const { services } = setup(
+        { web: { ...DEV, servers: { dev: { port: rootPort, delayMs: 1500 } } } },
+        { cardPorts: { web: rootPort }, tasks: { [TASK]: { repo: "web", port: await freePort(), config: TASK_DEV } } },
+      );
+      await services.start({ repo: "web", task: null, lease: false, dependencies: false, waitMs: 0 });
+
+      const lease = services.start({ repo: "web", task: TASK, lease: true, dependencies: false, waitMs: 0 });
+
+      await expect(lease).rejects.toMatchObject({
+        code: "bad_request",
+        message: "a start of web is in progress: wait for it or stop it first",
+      });
+      await waitFor(async () => (await services.list()).some((s) => s.task === null && s.state === "healthy"));
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "a slice that needs the repo while the task's service waits for its own dependencies joins that start, and the lease goes on",
+    async () => {
+      const webPort = await freePort();
+      const { services } = setup(
+        {
+          api: { ...DEV, servers: { dev: { delayMs: 1500 } } },
+          web: { ...DEV, servers: { dev: { port: webPort } } },
+          front: { ...DEV, servers: { dev: {} } },
+        },
+        {
+          edges: [http("web", "api"), http("front", "web")],
+          cardPorts: { web: webPort },
+          tasks: { [TASK]: { repo: "web", port: await freePort(), config: TASK_DEV } },
+        },
+      );
+      await services.start({ repo: "web", task: null, lease: false, dependencies: false, waitMs: 20_000 });
+      const leased = services.start({ repo: "web", task: TASK, lease: true, dependencies: true, waitMs: 20_000 });
+      await waitFor(async () => (await services.list()).some((s) => s.repo === "api" && s.state === "starting"));
+
+      const front = await services.start({ repo: "front", task: null, lease: false, dependencies: true, waitMs: 20_000 });
+
+      expect(front.members.map((m) => [m.repo, m.task, m.outcome, m.problem])).toEqual([
+        ["api", null, "running", null],
+        ["web", TASK, "started", null],
+        ["front", null, "started", null],
+      ]);
+      const slice = await leased;
+      expect(slice.members.at(-1)?.service).toMatchObject({ task: TASK, lease: true, state: "healthy", port: webPort });
+    },
+    TIMEOUT,
+  );
+
+  test("a lease is refused for a repo without a single known port, and for a repo root", async () => {
+    const { services } = setup({ web: DEV }, { tasks: { [TASK]: { repo: "web", port: 41000, config: TASK_DEV } } });
+
+    const lease = services.start({ repo: "web", task: TASK, lease: true, dependencies: false, waitMs: 0 });
+
+    await expect(lease).rejects.toMatchObject({
+      code: "bad_request",
+      message: "web has no single port a task's service could take: no server.port on its card and its service is not running",
+    });
+    const fromRoot = services.start({ repo: "web", task: null, lease: true, dependencies: false, waitMs: 0 });
+    await expect(fromRoot).rejects.toMatchObject({
+      code: "bad_request",
+      message: "only a task's service can take the repo's port: give the task",
+    });
     expect(await services.list()).toEqual([]);
   });
 
@@ -613,7 +809,7 @@ describe("services from a task worktree (ADR-61)", () => {
     async () => {
       const port = await freePort();
       const { services, tasks } = setup({ web: DEV }, { tasks: { [TASK]: { repo: "web", port, config: TASK_DEV } } });
-      await services.start({ repo: "web", task: TASK, dependencies: false, waitMs: 20_000 });
+      await services.start({ repo: "web", task: TASK, lease: false, dependencies: false, waitMs: 20_000 });
 
       delete tasks[TASK];
 
