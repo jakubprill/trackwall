@@ -62,7 +62,7 @@ flowchart TB
   mr --> done(["End task: the worktree goes,<br/>the branch stays if you want"])
 ```
 
-Your own working copy is never touched: the agent has its own folder on its own branch, and it runs services on its own port, so you can keep working next to it. Nothing is pushed until you press "Push". See [Agent tasks](/features/tasks) and [Where agents work](/guide/where-agents-work).
+Your own working copy is never touched: the agent has its own folder on its own branch, and it runs services on its own port, so you can keep working next to it. The agent is told not to push: you push its branch with "Push". See [Agent tasks](/features/tasks) and [Where agents work](/guide/where-agents-work).
 
 ## The supervisor hands work to other agents
 
@@ -77,7 +77,7 @@ sequenceDiagram
   D-->>S: the repos involved<br/>and how they connect
   S->>D: propose_task: payments,<br/>notifications, admin-web
   D-->>You: three proposals to read,<br/>edit, start or reject
-  You->>D: Start task
+  You->>D: Start task, on each one
   D->>T: a task each, in its own worktree
   T->>D: report_result,<br/>verification verdict
   D->>S: "read your updates"
@@ -114,6 +114,7 @@ sequenceDiagram
   participant D as Daemon
   participant P as payments (dev)
   participant O as orders-api (dev)
+  participant A as An agent
   You->>D: Start with dependencies: orders-api
   D->>D: the graph: orders-api<br/>calls payments
   D->>P: mise run dev, as one process group
@@ -122,10 +123,10 @@ sequenceDiagram
   D->>O: mise run dev
   O-->>D: the port answers
   D-->>You: both ready, with their ports
-  You->>D: call_endpoint POST /orders
+  A->>D: call_endpoint POST /orders
   D->>O: the request
   O->>P: its own call
-  D-->>You: the answer, and the errors<br/>the services logged meanwhile
+  D-->>A: the answer, and the errors<br/>the services logged meanwhile
 ```
 
 Each service starts only after the services it calls are up, a dependency that cannot start is skipped with the reason, and "Stop with dependencies" stops only what this start brought up. An agent does the same with `start_service` and `call_endpoint`. See [Services](/features/services).

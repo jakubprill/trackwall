@@ -22,25 +22,25 @@ Trackwall runs coding agents on your computer, with your files and your tokens. 
 |---|---|
 | Read your repos, the graph, logs and the list of sessions and tasks | Start a task: it proposes one, and nothing starts until you press "Start task" |
 | Propose a task or the removal of a repo, and add ideas to the [plan](/features/plan) | Answer an approval, its own or another session's |
-| Run a repo's mise tasks and services in its own repo or task worktree | Run a command line through Trackwall: tools take a repo, a task or a service by name, and the daemon builds the command from your config |
+| Run its own repo's mise tasks, and start its service with the services it calls (a session in a repo or a task) | Run a command line through Trackwall: tools take a repo, a task or a service by name, and the daemon builds the command from your config |
 | Send messages to the tasks it proposed, up to five without you | Change Trackwall's settings, its connected agents or start at sign-in |
-| Report its task's result | Trust a changed mise config: only you do, after you read the changes |
+| Report its task's result | Trust a mise config a task changed: only you do, after you read the changes |
 
-- **The supervisor** plans, it does not change code: it cannot run shell commands or write files unless you turn that on yourself.
-- **An agent task** works in its own worktree, on its own branch, and is told not to push. You read its diff before anything leaves your computer, and its branch is pushed when you press "Push".
-- **A changed mise config** in a task's worktree stops every mise task there until you read the changed files and press "Trust this config", so an agent cannot quietly add a command that the next run would execute.
+- **The supervisor** plans, it does not change code: it cannot run shell commands or write files unless you turn that on yourself (see [Supervisor](/features/supervisor)).
+- **An agent task** works in its own worktree, on its own branch, and is told not to push. You read its diff, and you push its branch with "Push". Being told is an instruction, not a lock: see the gaps below.
+- **A changed mise config** in a task's worktree stops every mise task there until you read the changed files and press "Trust this config", so a task's agent cannot quietly add a command that the next run in its worktree would execute.
 - **Approvals** you answer from the tray press the same key you would press in the terminal, and only while the question you saw is still on the screen; a request asked after your click is not answered by it.
 
-## Secrets stay out of reach
+## Secrets stay out of the way
 
-- Variables and tokens for sessions come from your mise config, where secrets can stay encrypted on disk. A secret reaches Copilot CLI itself, but its shell and tools only when you list the secret in `agentSecrets`. See [Environment from mise](/features/mise-environment).
-- Values of secret variables are replaced with `***` before a log line is kept, so the logs view, the log files and the agents' log tools never see them.
+- Variables and tokens for sessions come from your mise config, where secrets can stay encrypted on disk. A secret reaches Copilot CLI itself, but by default not the commands it runs: its shell and tools get only the secrets you list in `agentSecrets`. This keeps a secret from slipping into a command or a log by accident; it does not stop an agent that goes looking for it (see the gaps below). See [Environment from mise](/features/mise-environment).
+- Values of variables with secret names (`TOKEN`, `PASSWORD`, `API_KEY` and the like), and values mise marks as secret, are replaced with `***` before a log line is kept, so the logs view, the log files and the agents' log tools do not see them.
 - Tools that tell an agent about a variable answer "set" or "missing", never the value.
-- Trackwall's own error journal is anonymized and never sent anywhere.
+- Trackwall's own error journal is anonymized as far as Trackwall can, and never sent anywhere.
 
 ## Your repos are read, not run
 
-Reading a repo for its card, the graph or code search runs nothing from it: Trackwall reads the files of the last commit straight from git, without building, without hooks and without the repo's programs, and with limits on size and time, so a strange repo cannot take over or stall Trackwall. A repo's code runs when you, or an agent you started, run one of its mise tasks, build it with the [Batch command](/features/batch-command) or work in it, and syncing runs what a `git pull` would (below).
+Reading a repo for its card, the graph or code search runs nothing from it: Trackwall reads the files of the last commit straight from git, without building, without hooks and without the repo's programs, and with limits on size and time, so a strange repo cannot take over Trackwall and can hold it up only briefly. A repo's code runs when you, or an agent you started, run one of its mise tasks, build it with the [Batch command](/features/batch-command) or work in it, and syncing runs what a `git pull` would (below).
 
 ## Gaps we know about
 
@@ -48,6 +48,8 @@ Being honest about these is part of the model:
 
 - **An agent runs as you.** Its shell can read whatever you can, including the daemon's token file, and with that it could call the daemon like the window does. Trackwall narrows what an agent gets on purpose (its own token, no daemon token in its files), but it does not sandbox it.
 - **"No approvals" means no approvals.** A task you start with the "No approvals" pill on runs every command without asking, a `git push` included. Use it for work you would let run unattended.
+- **A session's own repo config is trusted by its path.** mise trusts a config file by where it is, not by what it says. A session working in a repo's own folder (not a task) can edit the repo's trusted `mise.toml`, and the next mise task it runs through Trackwall runs the edited command.
+- **Hidden secrets can still be found.** An agent's shell runs as you, so it can ask mise for the environment itself or read your mise key; keeping secrets out of its commands is about accidents, not about a determined agent.
 - **Syncing behaves like `git pull`.** It runs the hooks and helpers a repo's local git config names, as your terminal would.
-- **Secrets a program finds by itself are not masked.** A value from a `.env` file or a password manager that a service prints reaches its log in plain text, as it reaches your terminal.
+- **Secrets a program finds by itself are not masked.** A value from a `.env` file, a password manager, or a plain mise `[env]` entry with an ordinary name that a service prints reaches its log in plain text, as it reaches your terminal.
 - **What the agent sends to its model** is Copilot CLI's business: Trackwall does not see or filter it.

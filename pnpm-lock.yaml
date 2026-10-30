@@ -60,6 +60,9 @@ importers:
       '@types/bun':
         specifier: 1.4.4
         version: 1.4.4
+      dompurify:
+        specifier: 3.4.17
+        version: 3.4.17
       mermaid:
         specifier: 11.17.2
         version: 11.17.2
