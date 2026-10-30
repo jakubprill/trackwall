@@ -25,8 +25,8 @@ export const SETTINGS_CATEGORIES = [
   {
     id: "app",
     label: "App",
-    description: "The desktop app on this computer.",
-    sections: ["start-at-sign-in", "remote-daemon", "updates", "home-scene"],
+    description: "The desktop app on this computer, and Trackwall in a browser tab.",
+    sections: ["start-at-sign-in", "remote-daemon", "browser-notifications", "updates", "home-scene"],
   },
   {
     id: "files",

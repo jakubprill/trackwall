@@ -122,7 +122,7 @@ Tokens for such servers come in through [Environment from mise](/features/mise-e
 
 ## Good to know
 
-- In the browser alone there is no tray, no system notifications and no [Start at sign-in](/features/start-at-sign-in); for those, [use the desktop app](#use-the-desktop-app).
+- In the browser alone there is no tray and no [Start at sign-in](/features/start-at-sign-in); for those, [use the desktop app](#use-the-desktop-app). The tab shows how many agents wait for you in its title and can show [notifications in the browser](/features/browser-notifications).
 - Links open in a new tab of your browser; when the browser blocks the new tab, allow pop-ups for the page.
 - "Open in VS Code" opens the repo, task worktree or file in VS Code on your computer, inside the running container through the Dev Containers extension: with the extensions and settings of your `devcontainer.json` when it sets `TRACKWALL_DEVCONTAINER_HOST_FOLDER` (see [Set up the container](#set-up-the-container)), attached to the container otherwise. It reuses the running container of that folder; if none is running, VS Code starts or builds it as when you open the folder yourself. The browser asks once whether to open VS Code. "Show in the file manager" is not there, since a folder of the container means nothing to your computer. With Podman instead of Docker, set `dev.containers.dockerPath` to `podman` in VS Code first.
 - The command from [Connect Copilot CLI](/guide/connect-copilot-cli) is a path inside the container, so it works for a Copilot CLI in the container, not on your computer.

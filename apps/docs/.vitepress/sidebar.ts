@@ -54,6 +54,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       { text: "Navigation and windows", link: "/features/navigation-and-windows" },
       { text: "trackwall:// links", link: "/features/links" },
       { text: "Start at sign-in", link: "/features/start-at-sign-in" },
+      { text: "Notifications in the browser", link: "/features/browser-notifications" },
       { text: "App updates", link: "/features/updates" },
       { text: "Config files", link: "/features/config-files" },
       { text: "Doctor", link: "/features/doctor" },
