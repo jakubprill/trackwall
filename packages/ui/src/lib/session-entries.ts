@@ -227,8 +227,8 @@ function selects(selection: Exclude<SessionSelection, undefined | { kind: "new" 
   return entry.kind === "proposals" && entry.proposals.some((p) => p.id === selection.id);
 }
 
-/** The tabs of a task's panel: its session terminal and its worktree changes. */
-export type TaskTab = "terminal" | "changes";
+/** The tabs of a task's panel: its session terminal, its worktree changes and its impact on other repos (ADR-147). */
+export type TaskTab = "terminal" | "changes" | "impact";
 
 /** The tab a selection opens a task's panel on; `undefined` leaves the panel's own choice. */
 export function selectedTaskTab(selection: SessionSelection): TaskTab | undefined {

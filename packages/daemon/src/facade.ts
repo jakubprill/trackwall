@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { SERVICE_RELEASE_MS, type StateDirSource } from "@trackwall/protocol";
+import { type ChangedEndpoints, SERVICE_RELEASE_MS, type StateDirSource } from "@trackwall/protocol";
 import { downloadVerified } from "./infra/download.ts";
 import { vscodeUrl } from "./infra/editor-url.ts";
 import { DomainError, messageOf } from "./infra/errors.ts";
@@ -87,6 +87,11 @@ export interface Facade {
    * It belongs to no module, because it concerns neither a repo nor the daemon's state.
    */
   openLink: (url: string) => void;
+  /**
+   * The endpoints a task's commits change and the repos they reach (ADR-145, ADR-147), for `get_changed_endpoints` and
+   * a task's Impact tab: the task from `agents`, its change and callers from `graph`.
+   */
+  taskChangedEndpoints: (task: string) => Promise<ChangedEndpoints>;
   /**
    * Daemon exit, before `procs.stopAll`: what a restart is to bring back stays as it is now, the sessions to resume
    * (ADR-95), the agent queues and the verifications (ADR-115), so what the stop of the groups changes does not reach it.
@@ -347,6 +352,10 @@ export function createFacade(o: FacadeOptions): Facade {
     javaNavigation,
     configFiles,
     openLink: o.openUrl,
+    taskChangedEndpoints: (id) => {
+      const { repo, worktree, base } = agents.task(id);
+      return graph.changedEndpoints(repo, worktree, base);
+    },
     keepForRestart: () => {
       agents.keepRunningSessionsForResume();
       verifications.keepForRestart();

@@ -109,6 +109,24 @@ const SHOTS: Record<string, (page: Page) => Promise<void>> = {
     await comment("publishEvent", "Publish only when the price really changed.", false);
     await settle(page, 500);
   },
+  "task-impact": async (page) => {
+    await page.keyboard.press("Control+3");
+    await page.getByText("pricing", { exact: true }).first().click();
+    await page.getByRole("tab", { name: "Impact" }).click();
+    await page.getByText("Reached repos").waitFor();
+    const reached = (repo: string) => page.getByRole("listitem").filter({ has: page.getByText(repo, { exact: true }) });
+    await reached("orders-api").getByRole("button", { name: "Hand off" }).click();
+    // Away from the list, so that no repo stays lit.
+    await page.mouse.move(0, 0);
+    await settle(page);
+  },
+  "overview-impact": async (page) => {
+    await page.setViewportSize({ width: 2400, height: 560 });
+    await page.keyboard.press("Control+4");
+    await page.getByLabel("Impact of").selectOption({ label: "pricing · Publish a price-changed event when a price changes" });
+    await page.getByText("Ring 1 calls an endpoint").waitFor();
+    await settle(page, 2000);
+  },
   overview: async (page) => {
     // The graph of twenty repos is wider than the other views.
     await page.setViewportSize({ width: 2400, height: 420 });

@@ -23,7 +23,7 @@ import { createMcpEndpoint, sessionMcpRequest } from "../src/mcp/endpoint.ts";
 import { mcpStdioCommand } from "../src/mcp/stdio-command.ts";
 import { runtimeInfo } from "../src/platform/runtime.ts";
 import { TURNS } from "./demo/turns.ts";
-import { createDemoWorkspace, DEMO_REPOS, writePricingTaskChanges } from "./demo/workspace.ts";
+import { commitPricingTaskContract, createDemoWorkspace, DEMO_REPOS, writePricingTaskChanges } from "./demo/workspace.ts";
 
 const VERSION = "demo";
 const dir = process.argv[2];
@@ -133,6 +133,7 @@ async function setTheScene(): Promise<void> {
     "Send the e-mail from the payment.succeeded event of that id only, and say in your summary which template you used.",
   );
   const pricing = await facade.agents.createTask("pricing", "Publish a price-changed event when a price changes");
+  commitPricingTaskContract(pricing.worktree);
   writePricingTaskChanges(pricing.worktree);
   await facade.agents.createTask("reviews", "Hide reviews from customers who have been deleted");
   for (const repo of DEMO_REPOS) await facade.mise.trust(repo);

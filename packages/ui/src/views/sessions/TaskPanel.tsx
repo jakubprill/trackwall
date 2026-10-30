@@ -18,13 +18,14 @@ import { SessionEnvironment } from "./SessionEnvironment.tsx";
 import { CopyIncludedFilesButton, ResumeButton, StopButton, TaskEditorButton } from "./TaskButtons.tsx";
 import { TaskChangesView } from "./TaskChangesView.tsx";
 import { scrollToSection, TaskDetails } from "./TaskDetails.tsx";
+import { TaskImpact } from "./TaskImpact.tsx";
 import { TaskNoticeStrip } from "./TaskNotices.tsx";
 import { TaskRemoval } from "./TaskRemoval.tsx";
 import { VerifyButton } from "./TaskVerification.tsx";
 
 /**
  * The selected task (ADR-31): title or prompt, branch, task port, its model when it has one (ADR-98), a mark when it runs without approvals (ADR-105), how its Java language server is doing (ADR-124) and session state in the header, the session terminal
- * and the worktree changes in tabs. A task from a proposal says who proposed it. A task without a running session can
+ * and the worktree changes in tabs, and the repos its change reaches in a third (ADR-147). A task from a proposal says who proposed it. A task without a running session can
  * be resumed or ended; the worktree always opens in VS Code, and the Verify button runs the task's tests (ADR-64).
  * What the task has to say above its terminal (`TaskDetails`: warnings, messages, summary, verification, merge
  * request, mise tasks) is folded into one strip of notices that "Details" unfolds (ADR-91), so the terminal keeps the
@@ -41,6 +42,7 @@ export function TaskPanel({
   onChanged,
   onRemoved,
   onOpenTask,
+  onShowImpact,
   initialTab = "terminal",
 }: {
   conn: Connection;
@@ -57,6 +59,8 @@ export function TaskPanel({
   onChanged: () => void;
   onRemoved: () => void;
   onOpenTask: (id: string) => void;
+  /** Opens the Overview graph with the task's impact lit (ADR-147). */
+  onShowImpact: (task: string) => void;
   /** The tab the panel opens on, "Changes" when a grid tile asked for them. */
   initialTab?: TaskTab;
 }) {
@@ -68,13 +72,17 @@ export function TaskPanel({
   const details = useTaskDetails({ conn, task, tasks, messages, runningLive, paused: confirmingRemoval });
   const [detailsOpen, setDetailsOpen] = useState(false);
   const detailsArea = useRef<HTMLElement>(null);
-  const shown: TaskTab = session ? tab : "changes";
+  const shown: TaskTab = session || tab !== "terminal" ? tab : "changes";
   const tabs = session
     ? ([
         { id: "terminal", label: "Terminal" },
         { id: "changes", label: "Changes" },
+        { id: "impact", label: "Impact" },
       ] as const)
-    : ([{ id: "changes", label: "Changes" }] as const);
+    : ([
+        { id: "changes", label: "Changes" },
+        { id: "impact", label: "Impact" },
+      ] as const);
 
   return (
     <>
@@ -158,6 +166,11 @@ export function TaskPanel({
       {shown === "changes" && (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <TaskChangesView conn={conn} task={task.id} paused={confirmingRemoval} review={review} />
+        </div>
+      )}
+      {shown === "impact" && (
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <TaskImpact conn={conn} task={task} paused={confirmingRemoval} onOpenTask={onOpenTask} onShowOnOverview={onShowImpact} />
         </div>
       )}
     </>

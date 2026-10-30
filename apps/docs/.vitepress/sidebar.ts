@@ -41,6 +41,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       { text: "Copilot CLI sessions", link: "/features/sessions" },
       { text: "Approvals outside the terminal", link: "/features/approvals" },
       { text: "Agent tasks", link: "/features/tasks" },
+      { text: "Impact of a task", link: "/features/impact" },
       { text: "Java navigation", link: "/features/java-navigation" },
       { text: "Main session and task proposals", link: "/features/main-session" },
       { text: "Session instructions", link: "/features/session-instructions" },

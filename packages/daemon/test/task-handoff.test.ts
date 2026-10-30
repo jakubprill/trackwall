@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
-import { agentsApi, GetChangedEndpointsResult, GetHandoffResult, ProposeTaskResult } from "@trackwall/protocol";
+import { agentsApi, GetChangedEndpointsResult, GetHandoffResult, graphApi, ProposeTaskResult } from "@trackwall/protocol";
 import { sessionDir } from "../src/modules/agents/session-launcher.ts";
 import { viewer, waitFor } from "./support/agents.ts";
 import { commitFiles, gitIn } from "./support/git-repo.ts";
@@ -70,7 +70,7 @@ describe.skipIf(process.versions.bun === undefined)(
       const childSession = runningSession(child.id);
 
       expect(instructionsOf(childSession)).toContain(
-        `- Your task was handed to you by the task \`${parent.id}\` in the repo \`payments\` (branch \`${parent.branch}\`): its session proposed your task, which the user approved, and you last read that branch at commit \`${parentHead}\`. This worktree was made from the default branch, not from that branch, so it does not have that change. Before you change code that builds on it, read what it changed with get_task_changes and task \`${parent.id}\``,
+        `- Your task was handed to you by the task \`${parent.id}\` in the repo \`payments\` (branch \`${parent.branch}\`): the user approved your task as the next step of its change, and you last read that branch at commit \`${parentHead}\`. This worktree was made from the default branch, not from that branch, so it does not have that change. Before you change code that builds on it, read what it changed with get_task_changes and task \`${parent.id}\``,
       );
       expect(instructionsOf(childSession)).toContain(
         `- A question about that change goes into your report_result: the session of task \`${parent.id}\` reads your result.`,
@@ -89,6 +89,7 @@ describe.skipIf(process.versions.bun === undefined)(
         endpoints: [],
         truncated: false,
         problems: [],
+        impact: [],
       });
 
       // The user ends the handing task; the subtask's next session is told it can no longer read it.
@@ -107,6 +108,45 @@ describe.skipIf(process.versions.bun === undefined)(
 
       for (const session of [resumed, main.id]) await daemon.facade.agents.stop(session);
       await daemon.post(agentsApi.removeTask, { task: child.id, keepBranch: false, discardChanges: true });
+    }, 60_000);
+
+    test("a task the user hands on from another task's impact is its subtask, told where the change is, and the Impact tab reads what the agent reads (ADR-147)", async () => {
+      const parent = await daemon.post(agentsApi.createTask, { repo: "payments", prompt: "add a refund endpoint", approvals: "ask" });
+      const parentSession = runningSession(parent.id);
+      commitFiles(parent.worktree, { "openapi.yaml": "paths:\n  /api/refunds:\n    post: {}\n" }, "Add the refund endpoint");
+      const parentHead = gitIn(parent.worktree, "rev-parse", "HEAD").trim();
+
+      const child = await daemon.post(agentsApi.createTask, {
+        repo: "orders-api",
+        prompt: "call the refund endpoint",
+        approvals: "ask",
+        handoffFrom: parent.id,
+      });
+      expect(child.proposedBy).toEqual({ session: null, supervisor: false, task: parent.id });
+      const childSession = runningSession(child.id);
+      expect(instructionsOf(childSession)).toContain(
+        `- Your task was handed to you by the task \`${parent.id}\` in the repo \`payments\` (branch \`${parent.branch}\`): the user approved your task as the next step of its change, and you last read that branch at commit \`${parentHead}\`.`,
+      );
+      // The tab and the tool give the same facts: the tool only adds the task it was asked about.
+      const fromTool = GetChangedEndpointsResult.parse(
+        (await (await clientOfSession(childSession)).callTool({ name: "get_changed_endpoints", arguments: { task: parent.id } }))
+          .structuredContent,
+      );
+      expect({ task: parent.id, ...(await daemon.post(graphApi.changedEndpoints, { task: parent.id })) }).toEqual(fromTool);
+      // A task that is not on the list hands nothing on, and no worktree is made for it.
+      const tasksBefore = daemon.facade.agents.sessions().tasks.length;
+      await expect(
+        daemon.post(agentsApi.createTask, {
+          repo: "orders-api",
+          prompt: "call the refund endpoint",
+          approvals: "ask",
+          handoffFrom: "00000000-0000-4000-8000-000000000000",
+        }),
+      ).rejects.toThrow("no task 00000000-0000-4000-8000-000000000000");
+      expect(daemon.facade.agents.sessions().tasks.length).toBe(tasksBefore);
+
+      for (const session of [childSession, parentSession]) await daemon.facade.agents.stop(session);
+      for (const task of [child.id, parent.id]) await daemon.post(agentsApi.removeTask, { task, keepBranch: false, discardChanges: true });
     }, 60_000);
 
     test("when the handing task's turn ends with new commits, the subtask is asked to read get_handoff, which lists them once (ADR-144)", async () => {

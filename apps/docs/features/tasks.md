@@ -76,4 +76,5 @@ Every task also gets a port of its own, shown in the task's header. Every mise t
 - The verdict is about the changes as they were when the run started; it does not change when the agent edits files afterwards. Trackwall keeps the last verification of each task, also when it restarts or updates; one that was still running then shows as cancelled, so press "Verify" again.
 - After running the tests in its worktree, the agent reads which tests failed and why from the reports your build tools write there, instead of scrolling the build log.
 - An agent can also propose a task for you to start: see [Main session and task proposals](/features/main-session).
+- The "Impact" tab shows which repos the endpoints the task's commits change reach, and hands each of them a task: see [Impact of a task](/features/impact).
 - When Trackwall runs in a [dev container](/guide/dev-container), "VS Code" opens the worktree in VS Code inside the container (with the Dev Containers extension), and the merge request form opens in a new tab of your browser.

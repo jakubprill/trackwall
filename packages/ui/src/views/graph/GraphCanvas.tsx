@@ -1,6 +1,7 @@
 import { countLabel, type GraphNode, type RepoGraph } from "@trackwall/protocol";
 import { useMemo } from "react";
 import { type EdgePair, edgePath, type GraphLayout, NODE_HEIGHT, NODE_WIDTH, type NodeBox, neighbourhood } from "@/lib/graph-layout";
+import { IMPACT_RING_STROKE, impactEdgeRing } from "@/lib/task-impact";
 import { cn } from "@/lib/utils";
 
 /** The margin around the drawing, so that glowing edges and dots at the border are not cut off. */
@@ -10,17 +11,21 @@ const NODE_TAGS = 2;
 
 /**
  * The connection graph (ADR-29): repos as HUD cards in columns, edges as SVG curves under them (from the repo that uses to
- * the one that is used), manual edges dashed. Selecting a repo highlights its neighbourhood and dims the rest.
+ * the one that is used), manual edges dashed. Selecting a repo highlights its neighbourhood and dims the rest; a task's
+ * impact (ADR-147) lights the repos it reaches in the colour of their ring and the edges between rings, and dims the rest.
  */
 export function GraphCanvas({
   graph,
   layout,
   selected,
+  impact,
   onSelect,
 }: {
   graph: RepoGraph;
   layout: GraphLayout;
   selected: string | undefined;
+  /** Each repo a task's change reaches with its ring, the task's repo at 0 (`impactRings`); `undefined` without a task. */
+  impact: ReadonlyMap<string, number> | undefined;
   onSelect: (repo: string) => void;
 }) {
   const near = useMemo(() => (selected === undefined ? undefined : neighbourhood(selected, layout.pairs)), [selected, layout]);
@@ -45,7 +50,7 @@ export function GraphCanvas({
           <svg className="pointer-events-none absolute inset-0 size-full" aria-hidden>
             <g transform={`translate(${PADDING} ${PADDING})`}>
               {layout.pairs.map((pair) => (
-                <Edge key={`${pair.from}>${pair.to}`} pair={pair} layout={layout} near={near} selected={selected} />
+                <Edge key={`${pair.from}>${pair.to}`} pair={pair} layout={layout} near={near} selected={selected} impact={impact} />
               ))}
             </g>
           </svg>
@@ -59,7 +64,8 @@ export function GraphCanvas({
                   node={node}
                   usedBy={incoming.get(box.repo) ?? 0}
                   selected={selected === box.repo}
-                  dimmed={near !== undefined && !near.has(box.repo)}
+                  ring={impact?.get(box.repo)}
+                  dimmed={near !== undefined ? !near.has(box.repo) : impact !== undefined && !impact.has(box.repo)}
                   onSelect={() => onSelect(box.repo)}
                 />
               )
@@ -97,17 +103,20 @@ function Edge({
   layout,
   near,
   selected,
+  impact,
 }: {
   pair: EdgePair;
   layout: GraphLayout;
   near: Set<string> | undefined;
   selected: string | undefined;
+  impact: ReadonlyMap<string, number> | undefined;
 }) {
   const from = layout.boxes.get(pair.from);
   const to = layout.boxes.get(pair.to);
   if (!from || !to) return null;
-  const active = selected !== undefined && (pair.from === selected || pair.to === selected);
-  const dimmed = near !== undefined && !active;
+  const ring = impactEdgeRing(pair, impact);
+  const active = selected !== undefined ? pair.from === selected || pair.to === selected : ring !== undefined;
+  const dimmed = (near !== undefined || impact !== undefined) && !active;
   // A dashed line when all edges of the pair are manual.
   const manualOnly = pair.edges.every((e) => e.source === "manual");
   return (
@@ -117,12 +126,25 @@ function Edge({
         fill="none"
         strokeWidth={active ? 1.75 : 1.25}
         strokeDasharray={manualOnly ? "6 4" : undefined}
-        className={active ? "stroke-primary" : "stroke-muted-foreground/45"}
+        className={
+          active
+            ? selected === undefined && ring !== undefined
+              ? IMPACT_RING_STROKE[ring]
+              : "stroke-primary"
+            : "stroke-muted-foreground/45"
+        }
       />
       <EdgeEnd box={to} active={active} />
     </g>
   );
 }
+
+const RING_BORDER = [
+  "border-primary shadow-glow-primary",
+  "border-destructive shadow-glow-destructive",
+  "border-warning shadow-glow-warning",
+  "border-warning/60",
+] as const;
 
 /** A dot at the repo that is used, like the nodes on curves in the inspiration: direction without arrowheads. */
 function EdgeEnd({ box, active }: { box: NodeBox; active: boolean }) {
@@ -134,6 +156,7 @@ function NodeCard({
   node,
   usedBy,
   selected,
+  ring,
   dimmed,
   onSelect,
 }: {
@@ -141,6 +164,8 @@ function NodeCard({
   node: GraphNode;
   usedBy: number;
   selected: boolean;
+  /** The repo's ring in a task's impact, 0 for the task's repo. */
+  ring: number | undefined;
   dimmed: boolean;
   onSelect: () => void;
 }) {
@@ -155,7 +180,8 @@ function NodeCard({
         "surface focus-visible:ring-ring/50 absolute flex flex-col justify-center gap-0.5 px-3 text-left transition-[opacity,border-color,box-shadow] outline-none focus-visible:ring-2",
         "hover:border-primary/50",
         selected && "border-primary shadow-glow-primary",
-        node.problem !== null && !selected && "border-warning/60",
+        !selected && ring !== undefined && RING_BORDER[ring],
+        node.problem !== null && !selected && ring === undefined && "border-warning/60",
         dimmed && "opacity-35",
       )}
     >

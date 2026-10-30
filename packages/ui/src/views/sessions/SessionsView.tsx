@@ -84,6 +84,7 @@ export function SessionsView({
   layout,
   onLayout,
   onShowSupervisor,
+  onShowImpact,
   tree,
   supervisor,
 }: {
@@ -97,6 +98,8 @@ export function SessionsView({
   onLayout: (layout: SessionLayout) => void;
   /** Opens the supervisor panel (ADR-58): the supervisor heading of the list leads there, not to a terminal here. */
   onShowSupervisor: () => void;
+  /** Opens the Overview graph with a task's impact lit (ADR-147). */
+  onShowImpact: (task: string) => void;
   /** The list rows and their tasks, without a task the user has just ended (`useSessionTree`). */
   tree: SessionTree;
   supervisor: SupervisorSummary;
@@ -221,6 +224,7 @@ export function SessionsView({
             onChanged={sessions.reload}
             onSessionClosed={sessionClosed}
             onTaskRemoved={taskRemoved}
+            onShowImpact={onShowImpact}
           />
         )}
       </section>
@@ -449,6 +453,7 @@ function SelectedEntry({
   onChanged,
   onSessionClosed,
   onTaskRemoved,
+  onShowImpact,
 }: {
   conn: Connection;
   entries: readonly SessionEntry[];
@@ -471,6 +476,7 @@ function SelectedEntry({
   onChanged: () => void;
   onSessionClosed: (entry: SessionEntry) => void;
   onTaskRemoved: (task: string) => void;
+  onShowImpact: (task: string) => void;
 }) {
   if (layout === "1")
     return (
@@ -490,6 +496,7 @@ function SelectedEntry({
           onChanged={onChanged}
           onSessionClosed={onSessionClosed}
           onTaskRemoved={onTaskRemoved}
+          onShowImpact={onShowImpact}
         />
       </>
     );
@@ -548,6 +555,7 @@ function EntryPanel({
   onChanged,
   onSessionClosed,
   onTaskRemoved,
+  onShowImpact,
 }: {
   conn: Connection;
   entry: SessionEntry;
@@ -565,6 +573,7 @@ function EntryPanel({
   onChanged: () => void;
   onSessionClosed: (entry: SessionEntry) => void;
   onTaskRemoved: (task: string) => void;
+  onShowImpact: (task: string) => void;
 }) {
   if (entry.kind === "proposals")
     return (
@@ -594,6 +603,7 @@ function EntryPanel({
         onChanged={onChanged}
         onRemoved={() => onTaskRemoved(entry.task.id)}
         onOpenTask={(id) => onSelect({ kind: "task", id })}
+        onShowImpact={onShowImpact}
         initialTab={taskTab}
       />
     );
