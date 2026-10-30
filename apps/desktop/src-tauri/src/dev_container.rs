@@ -72,9 +72,9 @@ fn check(dev: &DevContainer) -> Result<(), String> {
 }
 
 /// As the Dev Containers extension writes it into its label: Windows separators on Windows.
-fn normalize(folder: &str) -> String {
+fn normalize(folder: &str, windows: bool) -> String {
     let folder = folder.trim();
-    if cfg!(windows) {
+    if windows {
         folder.replace('/', "\\")
     } else {
         folder.to_owned()
@@ -160,11 +160,12 @@ impl Docker {
 
 fn read_in_background(pipe: Option<impl Read + Send + 'static>) -> std::thread::JoinHandle<String> {
     std::thread::spawn(move || {
-        let mut text = String::new();
+        // Bytes first: the cap can cut a character in two, which must not lose the whole output.
+        let mut bytes = Vec::new();
         if let Some(pipe) = pipe {
-            let _ = pipe.take(MAX_OUTPUT).read_to_string(&mut text);
+            let _ = pipe.take(MAX_OUTPUT).read_to_end(&mut bytes);
         }
-        text
+        String::from_utf8_lossy(&bytes).into_owned()
     })
 }
 
@@ -237,6 +238,8 @@ fn find_daemon(docker: &Docker, folder: &str, connect: Connect) -> Result<Remote
     Ok(remote)
 }
 
+const CANCELLED: &str = "Starting the dev container was cancelled.";
+
 struct Timing {
     timeout: Duration,
     poll: Duration,
@@ -255,20 +258,20 @@ fn start(
     docker
         .run(&["version", "--format", "{{.Server.Version}}"])
         .map_err(|e| format!("Docker does not answer ({e}). Start Docker Desktop or Rancher Desktop and try again."))?;
+    let was_cancelled = || if cancelled.load(Ordering::SeqCst) { Err(CANCELLED.to_owned()) } else { Ok(()) };
     match find_daemon(docker, &dev.folder, connect) {
-        Ok(remote) => return Ok(remote),
+        Ok(remote) => return was_cancelled().map(|()| remote),
         Err(Miss::Final(reason)) => return Err(reason),
         Err(Miss::NotYet(_)) => {}
     }
+    was_cancelled()?;
     open_editor(dev.editor_url())?;
     let deadline = Instant::now() + timing.timeout;
     loop {
         std::thread::sleep(timing.poll);
-        if cancelled.load(Ordering::SeqCst) {
-            return Err("Starting the dev container was cancelled.".into());
-        }
+        was_cancelled()?;
         match find_daemon(docker, &dev.folder, connect) {
-            Ok(remote) => return Ok(remote),
+            Ok(remote) => return was_cancelled().map(|()| remote),
             Err(Miss::Final(reason)) => return Err(reason),
             Err(Miss::NotYet(last)) if Instant::now() > deadline => {
                 return Err(format!(
@@ -293,6 +296,19 @@ impl DevContainerStart {
     pub fn cancel(&self) {
         self.cancelled.store(true, Ordering::SeqCst);
     }
+
+    fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::SeqCst)
+    }
+}
+
+/// Frees the start slot however the command ends, also when the window drops it halfway.
+struct Running<'a>(&'a AtomicBool);
+
+impl Drop for Running<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
 }
 
 /// The saved dev container, or `None` when the user has not set one.
@@ -305,7 +321,7 @@ pub fn dev_container(app: AppHandle) -> Option<DevContainer> {
 #[tauri::command]
 pub fn set_dev_container(app: AppHandle, dev: Option<DevContainer>) -> Result<(), String> {
     let file = json_file::config_file(&app, FILE).ok_or("the system gives the app no configuration directory")?;
-    let Some(dev) = dev.map(|d| DevContainer { folder: normalize(&d.folder), open: d.open.trim().to_owned() }) else {
+    let Some(dev) = dev.map(|d| DevContainer { folder: normalize(&d.folder, cfg!(windows)), open: d.open.trim().to_owned() }) else {
         return match std::fs::remove_file(&file) {
             Err(err) if err.kind() != std::io::ErrorKind::NotFound => Err(format!("{}: {err}", file.display())),
             _ => Ok(()),
@@ -329,6 +345,7 @@ pub async fn start_dev_container(
     if starting.running.swap(true, Ordering::SeqCst) {
         return Err("The dev container is already starting.".into());
     }
+    let _running = Running(&starting.running);
     starting.cancelled.store(false, Ordering::SeqCst);
     let cancelled = Arc::clone(&starting.cancelled);
     let timing = Timing { timeout: START_TIMEOUT, poll: POLL_INTERVAL };
@@ -336,9 +353,11 @@ pub async fn start_dev_container(
     let found =
         tauri::async_runtime::spawn_blocking(move || start(&Docker::system(), &dev, &open_editor, &connect_remote, &cancelled, timing))
             .await;
-    starting.running.store(false, Ordering::SeqCst);
     let remote = found.map_err(|e| e.to_string())??;
     remote_daemon::refuse_own_daemon(&state, &remote)?;
+    if starting.is_cancelled() {
+        return Err(CANCELLED.into());
+    }
     remote_daemon::switch_to(&app, &remote)
 }
 
@@ -391,8 +410,15 @@ mod tests {
         assert_eq!(parse_daemon_file("cat: no such file"), None);
     }
 
-    // A fake `docker` is a shell script, so these run on macOS and Linux; the rest of the module has no system branches
-    // but the Docker program's place and its console window.
+    #[test]
+    fn writes_the_folder_with_windows_separators_on_windows_only() {
+        assert_eq!(normalize(" C:/Users/me/Dev/ws ", true), r"C:\Users\me\Dev\ws");
+        assert_eq!(normalize("/Users/me/dev", false), "/Users/me/dev");
+    }
+
+    // A fake `docker` is a shell script, so these run on macOS and Linux. The system branches of the module are
+    // parameters tested above (separators, path case) and the Docker program's place and console window, which the
+    // manual CI run on Windows and macOS builds.
     #[cfg(unix)]
     mod with_a_fake_docker {
         use super::*;
@@ -523,7 +549,22 @@ mod tests {
 
             let err = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &cancelled, quick()).unwrap_err();
 
-            assert_eq!(err, "Starting the dev container was cancelled.");
+            assert_eq!(err, CANCELLED);
+        }
+
+        #[test]
+        fn does_not_connect_when_the_user_picked_another_daemon_during_the_look() {
+            let fake = fake("cancelled-late", true);
+            run_daemon(&fake);
+            let cancelled = AtomicBool::new(false);
+            let connect_then_cancel = |_: &RemoteDaemon| {
+                cancelled.store(true, Ordering::SeqCst);
+                Ok(())
+            };
+
+            let err = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &|_| Ok(()), &connect_then_cancel, &cancelled, quick());
+
+            assert_eq!(err, Err(CANCELLED.to_owned()));
         }
     }
 }
