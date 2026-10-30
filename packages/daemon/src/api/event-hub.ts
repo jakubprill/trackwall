@@ -9,12 +9,12 @@ import type { Facade } from "../facade.ts";
  * comparison does not lose a change a module would forget to notify about.
  */
 
-/** The same as the session cycle (`TICK_MS` in `agents`), from which new hook records come. */
+/** The same as the session cycle (`TICK_MS` in `listed-sessions.ts`), from which new hook records come. */
 const CHECK_MS = 200;
 
 /** The snapshot read of every topic; a topic from `DaemonEvent` missing here is a compile error. */
 const TOPICS: { [T in DaemonEventType]: (facade: Facade) => DaemonEventOf<T> } = {
-  "sessions.changed": (facade) => ({ type: "sessions.changed", payload: facade.agents.sessionsAsOfLastCycle() }),
+  "sessions.changed": (facade) => ({ type: "sessions.changed", payload: facade.agents.sessionsWithoutCycle() }),
   "mise.running.changed": (facade) => ({ type: "mise.running.changed", payload: facade.mise.running() }),
   "repos.changed": (facade) => ({ type: "repos.changed", payload: facade.repoWatch.state() }),
   "cards.warmup.changed": (facade) => ({ type: "cards.warmup.changed", payload: facade.cards.warmupProgress() }),

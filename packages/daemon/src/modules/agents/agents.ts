@@ -262,11 +262,12 @@ export class Agents {
   }
 
   /**
-   * The same list with the sessions as the last session cycle left them (`TICK_MS`), for the `/ws` events, which read
-   * it every cycle: reading every session again for them doubled the cycles while a window listened (ADR-36).
+   * The same list without a session cycle of its own (`ListedSessions.viewsWithoutCycle`, `TICK_MS` in
+   * `listed-sessions.ts`), for the `/ws` events, which read it every cycle: a cycle of their own doubled the cycles
+   * while a window listened (ADR-36).
    */
-  sessionsAsOfLastCycle(): SessionList {
-    return this.#list(this.#sessions.viewsAsOfLastCycle());
+  sessionsWithoutCycle(): SessionList {
+    return this.#list(this.#sessions.viewsWithoutCycle());
   }
 
   #list(sessions: Session[]): SessionList {

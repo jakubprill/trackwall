@@ -87,10 +87,12 @@ export class ListedSessions {
   }
 
   /**
-   * Sessions as the last cycle left them, newest first, without a cycle of their own: for a reader that comes every
-   * cycle anyway, such as the `/ws` events, where a cycle of its own would read every session twice as often.
+   * Sessions newest first without a cycle of their own, for a reader that comes every cycle anyway, such as the `/ws`
+   * events, where a cycle of its own would read every session twice as often. The process state and the dialog are
+   * read live; the session state is what the last cycle left, so an ended process can show its last state for up to
+   * one cycle.
    */
-  viewsAsOfLastCycle(): Session[] {
+  viewsWithoutCycle(): Session[] {
     return this.#all()
       .flatMap((s) => s.view() ?? [])
       .reverse();

@@ -8,7 +8,7 @@ import type { Session, Task, TaskProposal, WaitStatus } from "@trackwall/protoco
  * and reading a session is a read from memory.
  */
 
-/** The same as the session cycle (`TICK_MS` in `agents.ts`), which brings new hook records. */
+/** The same as the session cycle (`TICK_MS` in `listed-sessions.ts`), which brings new hook records. */
 const CHECK_MS = 200;
 
 /** States in which the wait goes on. */

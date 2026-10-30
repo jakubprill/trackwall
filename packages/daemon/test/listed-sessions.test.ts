@@ -94,13 +94,19 @@ describe("listed sessions", () => {
     list.close();
   });
 
-  test("the views as of the last cycle read no session again, while the views for the API run a cycle of each first", () => {
+  test("the views without a cycle read no session again, while the views for the API run a cycle of each first", () => {
     const { list } = makeList();
     let cycles = 0;
-    const session = { ...fakeSession("s1"), tick: () => ++cycles > 0 };
+    const session = {
+      ...fakeSession("s1"),
+      tick: () => {
+        cycles++;
+        return true;
+      },
+    };
     add(list, session);
 
-    expect(list.viewsAsOfLastCycle().map((s) => s.id)).toEqual(["s1"]);
+    expect(list.viewsWithoutCycle().map((s) => s.id)).toEqual(["s1"]);
     expect(cycles).toBe(0);
     expect(list.views().map((s) => s.id)).toEqual(["s1"]);
     expect(cycles).toBe(1);
