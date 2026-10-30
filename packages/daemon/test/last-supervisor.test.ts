@@ -51,6 +51,16 @@ describe("the newest supervisor whose conversation a start goes on with", () => 
     expect(existsSync(path)).toBe(false);
   });
 
+  test("a missing file is read once: every session cycle asks, and only the daemon writes the file", () => {
+    const path = newPath();
+    const file = new LastSupervisorFile(path, () => {});
+    expect(file.read()).toBeNull();
+
+    writeFileSync(path, JSON.stringify({ session: SUPERVISOR, hasConversation: true }));
+
+    expect(file.read()).toBeNull();
+  });
+
   test("an id that is not a UUID breaks the file, which is moved aside, and there is none", () => {
     const path = newPath();
     writeFileSync(path, JSON.stringify({ session: "../outside", hasConversation: true }));
