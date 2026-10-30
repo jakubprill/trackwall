@@ -209,6 +209,8 @@ export interface AgentsDeps {
   openEditor: (dir: string) => void;
   /** Whether a board item is on the board (ADR-133): a task or a proposal names only an existing one. */
   boardHas: (item: string) => Promise<boolean>;
+  /** A task has ended and its worktree is gone: what other modules keep of it (its logs, ADR-59) can go too. */
+  onTaskRemoved: (task: string) => void;
   log: (msg: string) => void;
 }
 
@@ -272,6 +274,11 @@ export class Agents {
       coordination: this.#coordination,
       trustNotices: this.#miseTrust,
     });
+  }
+
+  /** Whether `tasks.json` was read at daemon start; without it tasks may exist that the list does not show. */
+  taskListRead(): boolean {
+    return this.#tasks.taskListRead;
   }
 
   sessions(): SessionList {
@@ -748,6 +755,7 @@ export class Agents {
     this.#reviews.take(id);
     this.#miseTrust.forget({ task: id });
     this.#coordination.taskEnded(id);
+    this.#deps.onTaskRemoved(id);
   }
 
   /**

@@ -51,6 +51,7 @@ const TaskFileSchema = z.object({ tasks: z.array(StoredTask) });
 export class TaskFile {
   readonly #path: string;
   readonly #log: (msg: string) => void;
+  #taskListRead = false;
 
   constructor(path: string, log: (msg: string) => void) {
     this.#path = path;
@@ -62,7 +63,16 @@ export class TaskFile {
     const file = readStateFile(this.#path, TaskFileSchema, (problem, aside) =>
       this.#log(`${this.#path}: ${problem}; file moved to ${aside}, task worktrees were left on disk`),
     );
+    this.#taskListRead = file !== undefined;
     return file?.tasks ?? [];
+  }
+
+  /**
+   * Whether the last read found a valid file. Not after a broken file was moved aside, nor at the starts after that while
+   * no task was saved: its tasks may come back with it, so what they left on disk stays.
+   */
+  get taskListRead(): boolean {
+    return this.#taskListRead;
   }
 
   write(tasks: readonly StoredTask[]): void {

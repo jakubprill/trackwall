@@ -174,6 +174,11 @@ export class AgentTasks {
     return this.#tasks.map(view);
   }
 
+  /** Whether `tasks.json` was read at daemon start: without it the list may not be every task the user still wants. */
+  get taskListRead(): boolean {
+    return this.#deps.file.taskListRead;
+  }
+
   /** Whether a task can get jdtls now (ADR-99), read from `workspace.yaml` and the disk at every call. */
   javaNavigation(): JavaNavigationReadiness {
     return javaNavigationReadiness(() => this.#deps.repos.javaNavigation());

@@ -481,6 +481,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
       sessionMcpServer: () => ({ url: "http://127.0.0.1:9/mcp", headers: {} }),
       openEditor: () => {},
       boardHas: async () => true,
+      onTaskRemoved: () => {},
       log: () => {},
     });
     await expect(missing.start("shop")).rejects.toMatchObject({ code: "agent_unavailable" });

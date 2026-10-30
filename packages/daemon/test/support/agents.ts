@@ -73,6 +73,7 @@ export function makeAgents(
     sessionMcpServer: (sessionToken) => ({ url: "http://127.0.0.1:9/mcp", headers: { "x-trackwall-session-token": sessionToken } }),
     openEditor: (dir) => opened.push(dir),
     boardHas: async () => true,
+    onTaskRemoved: () => {},
     log: () => {},
   });
   return { home, procs, agents, opened };
