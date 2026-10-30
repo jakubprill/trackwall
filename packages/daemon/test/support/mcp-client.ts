@@ -7,16 +7,17 @@ import { sessionToken } from "./session-token.ts";
 /**
  * A real MCP client from the SDK (§10) connected over Streamable HTTP to the daemon on `port`. `fetch` goes through
  * `loopbackRequest`, because `fetch` in Bun routes 127.0.0.1 through `HTTP_PROXY` (AGENTS.md, Windows first). `headers`
- * adds headers to every request, e.g. the session token, which a Trackwall session's MCP entry carries.
+ * adds headers to every request, e.g. the session token, which a Trackwall session's MCP entry carries; `token: null`
+ * sends no daemon token.
  */
 export async function connectHttpClient(
   port: number,
-  token: string,
+  token: string | null,
   versionNegotiation?: VersionNegotiationOptions,
   headers: Record<string, string> = {},
 ): Promise<Client> {
   const transport = new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}${MCP_PATH}`), {
-    requestInit: { headers: { authorization: `Bearer ${token}`, ...headers } },
+    requestInit: { headers: { ...(token === null ? {} : { authorization: `Bearer ${token}` }), ...headers } },
     fetch: loopbackFetch(port),
   });
   const client = new Client({ name: "trackwall-test", version: "1" }, { versionNegotiation });
@@ -49,9 +50,9 @@ function loopbackFetch(port: number) {
 }
 
 /**
- * The MCP client of a Trackwall session's agent, as its Copilot CLI connects: the daemon token and the session token
- * from the session's MCP configuration under `home`.
+ * The MCP client of a Trackwall session's agent, as its Copilot CLI connects: only the session token from the session's
+ * MCP configuration under `home`, without the daemon token (ADR-138).
  */
-export function connectSessionClient(port: number, token: string, home: string, session: string): Promise<Client> {
-  return connectHttpClient(port, token, undefined, { [SESSION_TOKEN_HEADER]: sessionToken(home, session) });
+export function connectSessionClient(port: number, home: string, session: string): Promise<Client> {
+  return connectHttpClient(port, null, undefined, { [SESSION_TOKEN_HEADER]: sessionToken(home, session) });
 }

@@ -64,7 +64,7 @@ function errorText(result: Awaited<ReturnType<typeof verify>>): string {
 async function sessionClient(task: string): Promise<{ client: Client; session: string }> {
   const session = daemon.facade.agents.sessions().sessions.find((s) => s.task === task);
   if (!session) throw new Error("the task has no session");
-  const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, session.id);
+  const client = await connectSessionClient(daemon.api.port, daemon.home, session.id);
   clients.push(client);
   return { client, session: session.id };
 }
@@ -128,7 +128,7 @@ describe.skipIf(process.versions.bun === undefined)("verify_task (real worktree 
       );
 
       const supervisor = await daemon.facade.agents.startSupervisor("new", "terminal");
-      const asSupervisor = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, supervisor.id);
+      const asSupervisor = await connectSessionClient(daemon.api.port, daemon.home, supervisor.id);
       clients.push(asSupervisor);
       expect(errorText(await verify(asSupervisor, { repo: "warehouse", task: own.id }))).toBe(
         `bad_request: the supervisor runs no tests; read task ${own.id}'s verification with get_session, or ask its session to verify it`,

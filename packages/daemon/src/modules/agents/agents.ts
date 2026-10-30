@@ -144,12 +144,13 @@ export interface AgentsDeps {
   /** What mise sets for a session in its place (ADR-93); a refused place is its `problem`, not a failed start. */
   miseEnv: (place: { repo: string | null; task: string | null }) => Promise<SessionMiseEnv>;
   /**
-   * Where the session plugin's hook for an event POSTs its payload (ADR-88): the daemon's hook route with the daemon token
-   * and the session token, which `receiveHook` takes; the API's port is known only once it listens.
+   * Where the session plugin's hook for an event POSTs its payload (ADR-88): the daemon's hook route with the session
+   * token alone (ADR-138), which `authenticate` in `api/server.ts` resolves to the session `receiveHook` takes; the API's
+   * port is known only once it listens.
    */
   sessionHook: (event: CopilotHookEvent, sessionToken: string) => HttpEndpoint;
   /**
-   * The daemon's MCP server (§5.3) over HTTP with the daemon token and the session token (ADR-39, ADR-89): every
+   * The daemon's MCP server (§5.3) over HTTP with the session token alone (ADR-39, ADR-89, ADR-138): every
    * session gets the `trackwall` server through `--additional-mcp-config`, and the server knows from the token which
    * session is calling.
    */
@@ -297,20 +298,20 @@ export class Agents {
     this.#supervisor.assertNone();
   }
 
-  /** The session whose session token came with an MCP request; `undefined` for an unknown token. */
+  /** The session whose session token came with an MCP request or a hook; `undefined` for an unknown token. */
   callerSession(token: string): string | undefined {
     return this.#tokens.session(token);
   }
 
   /**
-   * A hook the plugin of the session with token `sessionToken` POSTed (ADR-88): its record goes to the session's
-   * `hooks.jsonl`, which the session reads as before, and the answer is the hook's output for Copilot CLI: what waits
-   * for the session at the end of a turn or with a tool's result (`LiveSession.hookOutput`, ADR-85), otherwise empty.
-   * A payload that is not a JSON object leaves no record, like a broken hook.
+   * A hook the plugin of session `id` POSTed (ADR-88), recognised by its session token (`callerSession`): its record
+   * goes to the session's `hooks.jsonl`, which the session reads as before, and the answer is the hook's output for
+   * Copilot CLI: what waits for the session at the end of a turn or with a tool's result (`LiveSession.hookOutput`,
+   * ADR-85), otherwise empty. A payload that is not a JSON object leaves no record, like a broken hook. A session closed
+   * while the hook's body arrived is refused like its token, before its removed directory is written to.
    */
-  receiveHook(sessionToken: string, event: string, payload: string): CopilotHookOutput {
-    const id = this.#tokens.session(sessionToken);
-    if (id === undefined) throw new DomainError("unauthorized", "unknown session token: this Trackwall session has ended");
+  receiveHook(id: string, event: string, payload: string): CopilotHookOutput {
+    if (!this.#tokens.holds(id)) throw new DomainError("unauthorized", "unknown session token: this Trackwall session has ended");
     const hook = CopilotHookEvent.safeParse(event);
     if (!hook.success) throw new DomainError("not_found", `no hook ${event}`);
     const record = appendHookRecord(sessionHooksFile(this.#deps.home, id), hook.data, payload);

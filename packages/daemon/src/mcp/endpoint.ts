@@ -7,12 +7,12 @@ import { TOOL_REGISTRATIONS, type ToolContext } from "./tools.ts";
 /**
  * The daemon's MCP server in the Streamable HTTP transport (§5.3, ADR-24), without MCP sessions: every request gets a fresh
  * `McpServer` with the same tools, because the facade holds the state, not the server. The SDK handles both revision 2026-07-28
- * and older clients with `initialize` (statelessly). `handle()` in `api/server.ts` checks the Host, Origin and daemon token
- * earlier, as for every route (AGENTS.md, Security); here only the session token (ADR-39), by which the
- * tools know which Trackwall session is calling.
+ * and older clients with `initialize` (statelessly). `handle()` in `api/server.ts` checks the Host, Origin and token
+ * earlier, as for every route (AGENTS.md, Security): the daemon token, or a Trackwall session's own token alone (ADR-138),
+ * by which the tools also know which session is calling (ADR-39).
  */
 
-/** The MCP server's path: the same port, `Host`/`Origin` protection and token as the API (§5.2). */
+/** The MCP server's path: the same port and `Host`/`Origin` protection as the API, the daemon token or a session token (§5.2). */
 export const MCP_PATH = "/mcp";
 
 /**
@@ -22,27 +22,24 @@ export const MCP_PATH = "/mcp";
  */
 export const SESSION_TOKEN_HEADER = "x-trackwall-session-token";
 
-/** `path` on a daemon whose API listens on `port`, as a Trackwall session reaches it: both tokens in headers. */
-export function sessionRequest(port: number, token: string, sessionToken: string, path: string): HttpEndpoint {
-  return {
-    url: `http://127.0.0.1:${port}${path}`,
-    headers: { authorization: `Bearer ${token}`, [SESSION_TOKEN_HEADER]: sessionToken },
-  };
+/**
+ * `path` on a daemon whose API listens on `port`, as a Trackwall session reaches it: only its session token, which opens
+ * nothing but the MCP server and the hooks (ADR-138), so the session's files never hold the daemon token.
+ */
+export function sessionRequest(port: number, sessionToken: string, path: string): HttpEndpoint {
+  return { url: `http://127.0.0.1:${port}${path}`, headers: { [SESSION_TOKEN_HEADER]: sessionToken } };
 }
 
 /** The MCP server of a daemon whose API listens on `port`, as a Trackwall session reaches it. */
-export function sessionMcpRequest(port: number, token: string, sessionToken: string): HttpEndpoint {
-  return sessionRequest(port, token, sessionToken, MCP_PATH);
+export function sessionMcpRequest(port: number, sessionToken: string): HttpEndpoint {
+  return sessionRequest(port, sessionToken, MCP_PATH);
 }
 
 /** MCP requests are small JSON-RPC objects; `initialize` with the client's capabilities fits with a large margin. */
 const MAX_REQUEST_BYTES = 256 * 1024;
 
 export interface McpEndpoint {
-  /**
-   * A request with the daemon token from session `caller` (`null`: an agent outside Trackwall), already recognised by the
-   * session token.
-   */
+  /** An authorised request from session `caller` (`null`: an agent outside Trackwall), already recognised by its session token. */
   handle: (req: IncomingMessage, res: ServerResponse, caller: string | null) => Promise<void>;
   close: () => Promise<void>;
 }

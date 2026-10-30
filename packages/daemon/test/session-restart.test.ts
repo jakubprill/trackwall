@@ -346,7 +346,7 @@ describe.skipIf(process.versions.bun === undefined)(
         [main.id, { repo: "shop", miseTask: "test" }],
         [first, { repo: "shop", task: task.id, miseTask: "test" }],
       ] as const) {
-        const client = await connectSessionClient(before.api.port, TOKEN, before.home, session);
+        const client = await connectSessionClient(before.api.port, before.home, session);
         expect(errorText(await client.callTool({ name: "run_mise_task", arguments: target }))).toStartWith("mise_unavailable:");
         await client.close();
       }

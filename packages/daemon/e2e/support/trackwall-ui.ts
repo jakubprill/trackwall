@@ -43,7 +43,7 @@ async function startTrackwall(options: Omit<SessionApiOptions, "uiDir"> = ONE_RE
     /** The tray panel (ADR-50): the same UI under `#tray-panel`, at the size of its window. */
     openTrayPanel: () => openTrayPanel(browser, origin, token),
     agentOf: async (session: string) => {
-      const client = await connectSessionClient(daemon.api.port, token, daemon.home, session);
+      const client = await connectSessionClient(daemon.api.port, daemon.home, session);
       clients.push(client);
       return client;
     },

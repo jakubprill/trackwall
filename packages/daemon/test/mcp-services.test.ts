@@ -89,7 +89,7 @@ describe.skipIf(process.versions.bun === undefined)("services from a Trackwall s
     "a session starts and stops only the service of its own repo",
     async () => {
       const session = await daemon.facade.agents.start("warehouse");
-      const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, session.id);
+      const client = await connectSessionClient(daemon.api.port, daemon.home, session.id);
       clients.push(client);
 
       expect(errorText(await call(client, "start_service", { repo: "shop" }))).toBe(
@@ -107,7 +107,7 @@ describe.skipIf(process.versions.bun === undefined)("services from a Trackwall s
       const other = await daemon.facade.agents.createTask("warehouse", "another task");
       const session = daemon.facade.agents.sessions().sessions.find((s) => s.task === own.id);
       if (!session) throw new Error("the task has no session");
-      const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, session.id);
+      const client = await connectSessionClient(daemon.api.port, daemon.home, session.id);
       clients.push(client);
 
       const { slice } = StartServiceResult.parse(
@@ -136,7 +136,7 @@ describe.skipIf(process.versions.bun === undefined)("services from a Trackwall s
       const task = await daemon.facade.agents.createTask("shop", "check the orders endpoint");
       const session = daemon.facade.agents.sessions().sessions.find((s) => s.task === task.id);
       if (!session) throw new Error("the task has no session");
-      const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, session.id);
+      const client = await connectSessionClient(daemon.api.port, daemon.home, session.id);
       clients.push(client);
 
       const { slice } = StartServiceResult.parse(

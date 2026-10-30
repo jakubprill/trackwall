@@ -72,11 +72,13 @@ describe("listed sessions", () => {
     const token = tokens.issue("s1");
     mkdirSync(sessionDir(home, "s1"), { recursive: true });
     add(list, session);
+    expect(tokens.holds("s1")).toBe(true);
 
     list.remove(session);
 
     expect(list.has("s1")).toBe(false);
     expect(tokens.session(token)).toBeUndefined();
+    expect(tokens.holds("s1")).toBe(false);
     expect(existsSync(sessionDir(home, "s1"))).toBe(false);
     expect(session.disposed).toBe(true);
     expect(() => list.get("s1")).toThrow(expect.objectContaining({ code: "not_found" }));

@@ -22,6 +22,12 @@ export class SessionTokens {
     return this.#sessions.get(tokenHash(token));
   }
 
+  /** Whether session `session` still has a token: a request recognised by it may outlive it while its body arrives. */
+  holds(session: string): boolean {
+    for (const owner of this.#sessions.values()) if (owner === session) return true;
+    return false;
+  }
+
   /** The token of session `session` stops working. */
   revoke(session: string): void {
     for (const [hash, owner] of this.#sessions) if (owner === session) this.#sessions.delete(hash);

@@ -63,7 +63,7 @@ describe.skipIf(process.versions.bun === undefined)("the board over MCP (ADR-133
 
     const session = sessionOf(task.id);
     await waitFor(daemon.facade.agents, session, (s) => s.state !== null, "sessionStart");
-    const agent = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, session);
+    const agent = await connectSessionClient(daemon.api.port, daemon.home, session);
     clients.push(agent);
     const { item: found } = BoardItemResult.parse(await call(agent, "create_item", { title: "Paging is missing in the DTO" }));
     expect(found).toMatchObject({ parent: item.id, column: "ideas", createdBy: { kind: "agent", task: task.id } });
