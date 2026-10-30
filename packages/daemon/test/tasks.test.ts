@@ -612,6 +612,51 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     60_000,
   );
 
+  test("copying the included files again gives an existing task the files of a line added to .worktreeinclude later, and leaves the files it has alone", async () => {
+    const dir = makeRepo({ ".gitignore": ".env\n*.local.toml\ncerts/\n", "README.md": "#\n" }, "shop");
+    writeFileSync(join(dir, ".env"), "API_TOKEN=local\n");
+    writeFileSync(join(dir, ".worktreeinclude"), ".env\n");
+    const { agents, procs } = makeAgents({ shop: dir });
+    cleanups.push(() => procs.stopAll());
+    const task = await agents.createTask("shop", "fix the login");
+    expect(task.included).toEqual({ files: [".env"], problems: [] });
+    writeFileSync(join(task.worktree, ".env"), "API_TOKEN=changed by the agent\n");
+
+    writeFileSync(join(dir, "mise.local.toml"), '[env]\nCLIENT_CERT = "{{config_root}}/certs/client.pem"\n');
+    mkdirSync(join(dir, "certs"));
+    writeFileSync(join(dir, "certs", "client.pem"), "-----BEGIN CERTIFICATE-----\n");
+    writeFileSync(join(dir, ".worktreeinclude"), ".env\nmise.local.toml\ncerts/\n");
+    const again = await agents.copyIncludedFilesAgain(task.id);
+
+    expect(again.included).toEqual({
+      files: ["certs/client.pem", "mise.local.toml"],
+      problems: [".env: the worktree has its own version of it, left as it is"],
+    });
+    expect(agents.task(task.id).included).toEqual(again.included);
+    expect(readFileSync(join(task.worktree, "certs", "client.pem"), "utf8")).toBe("-----BEGIN CERTIFICATE-----\n");
+    expect(readFileSync(join(task.worktree, ".env"), "utf8")).toBe("API_TOKEN=changed by the agent\n");
+    // The copied mise.local.toml comes from the root, so the task's mise config stays trusted.
+    expect(await agents.taskMiseConfig(task.id)).toMatchObject({ changes: [] });
+
+    expect((await agents.copyIncludedFilesAgain(task.id)).included).toEqual(again.included);
+  }, 60_000);
+
+  test("copying the included files again does not trust a mise file the agent changed", async () => {
+    const dir = makeRepo({ ".gitignore": "*.local.toml\n", "mise.toml": '[env]\nA = "1"\n' }, "shop");
+    const { agents, procs } = makeAgents({ shop: dir });
+    cleanups.push(() => procs.stopAll());
+    const task = await agents.createTask("shop", "fix the login");
+    writeFileSync(join(task.worktree, "mise.toml"), '[env]\nA = "2"\n');
+
+    writeFileSync(join(dir, "mise.local.toml"), '[env]\nB = "1"\n');
+    writeFileSync(join(dir, ".worktreeinclude"), "mise.local.toml\n");
+    await agents.copyIncludedFilesAgain(task.id);
+
+    expect((await agents.taskMiseConfig(task.id)).changes).toEqual([
+      { path: "mise.toml", change: "modified", content: '[env]\nA = "2"\n' },
+    ]);
+  }, 60_000);
+
   test("a repo root without .worktreeinclude copies nothing into a new task's worktree", async () => {
     const { dir } = cloneOnFeatureBranch();
     writeFileSync(join(dir, ".env"), "API_TOKEN=local\n");

@@ -285,6 +285,33 @@ export class AgentTasks {
     });
   }
 
+  /**
+   * Copies the files the repo root's `.worktreeinclude` names into the task's existing worktree again (ADR-61), for a
+   * line added after the task started; `included` then says what the worktree has now. The copied files come from the
+   * root, whose config the user trusted, so like at creation they join the trusted mise config (ADR-59); a file the
+   * agent changed does not.
+   */
+  copyIncludedFilesAgain(id: string): Promise<Task> {
+    if (this.#removing.has(id)) throw new DomainError("bad_request", "this task is being ended");
+    const task = this.#existingWorktree(id);
+    return this.#exclusive(id, async () => {
+      const included = await this.#copyIncludedFiles(task);
+      const trustedMiseConfig = await this.#trustingCopied(task, included.files);
+      const updated = { ...this.#get(id), included, trustedMiseConfig };
+      this.#save(this.#tasks.map((t) => (t.id === id ? updated : t)));
+      return view(updated);
+    });
+  }
+
+  /** The trusted mise config with the copied files among the worktree's mise files trusted as they are now. */
+  async #trustingCopied(task: KnownTask, copied: readonly string[]): Promise<MiseSnapshot | null> {
+    if (task.trustedMiseConfig === null) return null;
+    const current = await readMiseConfig(task.worktree);
+    const fromRoot = new Set(copied);
+    const trusted = Object.entries(current).filter(([path]) => fromRoot.has(path));
+    return { ...task.trustedMiseConfig, ...Object.fromEntries(trusted) };
+  }
+
   /** A task by identifier (`not_found` when it does not exist). */
   task(id: string): Task {
     return view(this.#get(id));

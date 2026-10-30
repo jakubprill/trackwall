@@ -604,6 +604,11 @@ export const agentsApi = {
   /** How the task's Java language server is doing (ADR-124); `null` for a task without Java navigation. */
   taskJavaNavigation: endpoint("task-java-navigation", TaskRequest, JavaNavigationStatus.nullable()),
   openTaskEditor: endpoint("open-task-editor", TaskRequest, Done),
+  /**
+   * Copies the files the repo root's `.worktreeinclude` names into the task's existing worktree again (ADR-61), with the
+   * same rules as at its start; a file the worktree already has stays as it is. Only from the UI, never from MCP.
+   */
+  copyIncludedFiles: endpoint("copy-included-files", TaskRequest, Task),
   /** The worktree's mise config against the trusted one (ADR-59). */
   taskMiseConfig: endpoint("task-mise-config", TaskRequest, TaskMiseConfig),
   /**

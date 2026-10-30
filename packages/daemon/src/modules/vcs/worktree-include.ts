@@ -1,5 +1,5 @@
 import { constants, existsSync } from "node:fs";
-import { copyFile, lstat, mkdir } from "node:fs/promises";
+import { copyFile, lstat, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type IncludedFiles, noIncludedFiles, WORKTREE_INCLUDE_FILE } from "@trackwall/protocol";
 import { messageOf } from "../../infra/errors.ts";
@@ -13,7 +13,9 @@ import { git } from "./git.ts";
  * commit's `.gitignore` and index, not the root's), so a file the worktree tracks is never overwritten and a copied
  * file never shows up as a change the agent could commit. Only regular files are copied, never over an existing file
  * and never through a linked directory: a link could point anywhere on the user's disk. Every file left out gets a
- * problem, so the user knows what the worktree lacks.
+ * problem, so the user knows what the worktree lacks. Copying again into a task's existing worktree (a line added to
+ * that file later) works the same: a file the worktree already has with the root's content counts as copied, and one
+ * with other content stays as it is, since the agent or the user may have changed it there.
  */
 
 /** A handful of config files; more means a pattern that matches a build or dependency directory. */
@@ -62,8 +64,24 @@ async function copyOne(repoDir: string, worktree: string, path: string, budget: 
   if (!info.isFile()) return "not a regular file (a link or a special file)";
   if (info.size > budget) return `the files together would be more than ${MAX_BYTES / 1024 / 1024} MB`;
   if (!(await realDirectories(worktree, parts.slice(0, -1)))) return "its directory in the worktree is a link or a file";
+  const existing = await sameAsInWorktree(repoDir, worktree, parts);
+  if (existing === "same") return { bytes: 0 };
+  if (existing === "other") return "the worktree has its own version of it, left as it is";
   await copyFile(join(repoDir, ...parts), join(worktree, ...parts), constants.COPYFILE_EXCL);
   return { bytes: info.size };
+}
+
+/** Whether the worktree already has the file: with the root's content, with other content (or not as a regular file), or not at all. */
+async function sameAsInWorktree(repoDir: string, worktree: string, parts: readonly string[]): Promise<"same" | "other" | "none"> {
+  const target = join(worktree, ...parts);
+  const info = await lstat(target).catch((err: NodeJS.ErrnoException) => {
+    if (err.code === "ENOENT") return null;
+    throw err;
+  });
+  if (info === null) return "none";
+  if (!info.isFile()) return "other";
+  const [inRoot, inWorktree] = await Promise.all([readFile(join(repoDir, ...parts)), readFile(target)]);
+  return inRoot.equals(inWorktree) ? "same" : "other";
 }
 
 /**

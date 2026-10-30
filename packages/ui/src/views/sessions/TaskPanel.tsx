@@ -15,7 +15,7 @@ import { useTaskDetails } from "@/lib/use-task-details";
 import { useTaskReview } from "@/lib/use-task-review";
 import { JavaNavigationMark } from "./JavaNavigationMark.tsx";
 import { SessionEnvironment } from "./SessionEnvironment.tsx";
-import { ResumeButton, StopButton, TaskEditorButton } from "./TaskButtons.tsx";
+import { CopyIncludedFilesButton, ResumeButton, StopButton, TaskEditorButton } from "./TaskButtons.tsx";
 import { TaskChangesView } from "./TaskChangesView.tsx";
 import { scrollToSection, TaskDetails } from "./TaskDetails.tsx";
 import { TaskNoticeStrip } from "./TaskNotices.tsx";
@@ -109,6 +109,7 @@ export function TaskPanel({
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <VerifyButton state={details.verification} disabled={confirmingRemoval} />
           <TaskEditorButton conn={conn} task={task} label="VS Code" />
+          <CopyIncludedFilesButton conn={conn} task={task} onCopied={onChanged} />
           {liveSession ? (
             <StopButton conn={conn} session={liveSession} onStopped={onChanged} />
           ) : (
