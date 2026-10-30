@@ -135,16 +135,15 @@ async function handle(req: IncomingMessage, res: ServerResponse, o: ApiOptions, 
   return fail(res, "not_found", `no route ${req.method} ${path}`);
 }
 
-/**
- * A route behind the token: the API, MCP and the session plugin's hooks (ADR-88). `run` gets the calling Trackwall
- * session, `null` for a caller with the daemon token and no session token; only a `sessionScoped` route, the two a
- * session uses, opens to a session token alone (ADR-138).
- */
+/** A route behind the token and how `authenticate` treats it. */
 interface ProtectedRoute {
+  /** A route a session uses, which its session token alone opens (ADR-138); the rest take only the daemon token. */
   sessionScoped: boolean;
+  /** Handles the request from the calling Trackwall session, `null` for the daemon token without a session token. */
   run: (session: string | null) => Promise<void> | void;
 }
 
+/** The routes behind the token: the API, MCP and the session plugin's hooks (ADR-88); `undefined` for any other path. */
 function protectedRoute(req: IncomingMessage, res: ServerResponse, path: string, o: ApiOptions): ProtectedRoute | undefined {
   if (path.startsWith("/api/")) return { sessionScoped: false, run: () => handleApi(req, res, path, o) };
   if (path === MCP_PATH) return { sessionScoped: true, run: (session) => o.mcp.handle(req, res, session) };

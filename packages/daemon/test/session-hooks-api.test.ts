@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { agentsApi } from "@trackwall/protocol";
 import { loopbackRequest } from "../src/infra/loopback.ts";
@@ -78,9 +78,16 @@ describe.skipIf(process.versions.bun === undefined)("session plugin hooks and th
     const noToken = await postHook("/hooks/agentStop", {}, payload);
     const daemonTokenOnly = await postHook("/hooks/agentStop", { authorization: `Bearer ${TOKEN}` }, payload);
     const unknownSession = await postHook("/hooks/agentStop", { "x-trackwall-session-token": "made-up" }, payload);
+    const unknownNextToDaemonToken = await postHook(
+      "/hooks/agentStop",
+      { authorization: `Bearer ${TOKEN}`, "x-trackwall-session-token": "made-up" },
+      payload,
+    );
     const unknownEvent = await postHook("/hooks/preToolUse", { "x-trackwall-session-token": sessionToken }, payload);
 
-    expect([noToken.status, daemonTokenOnly.status, unknownSession.status, unknownEvent.status]).toEqual([401, 401, 401, 404]);
+    expect([noToken.status, daemonTokenOnly.status, unknownSession.status, unknownNextToDaemonToken.status, unknownEvent.status]).toEqual([
+      401, 401, 401, 401, 404,
+    ]);
     expect(readFileSync(sessionHooksFile(daemon.home, session.id), "utf8")).toBe("");
     await daemon.post(agentsApi.stop, { session: session.id });
   }, 60_000);
@@ -113,5 +120,16 @@ describe.skipIf(process.versions.bun === undefined)("session plugin hooks and th
 
     expect([alone.status, withDaemonToken.status]).toEqual([401, 401]);
     expect(JSON.parse(alone.body).error.message).toBe("unknown session token: this Trackwall session has ended");
+  }, 60_000);
+
+  test("a hook of a session closed while its body arrived is refused and writes nothing", async () => {
+    const session = await daemon.post(agentsApi.start, { repo: "shop" });
+    await daemon.post(agentsApi.stop, { session: session.id });
+    await daemon.post(agentsApi.dismiss, { session: session.id });
+
+    expect(() => daemon.facade.agents.receiveHook(session.id, "agentStop", "{}")).toThrow(
+      expect.objectContaining({ code: "unauthorized" }),
+    );
+    expect(existsSync(sessionHooksFile(daemon.home, session.id))).toBe(false);
   }, 60_000);
 });

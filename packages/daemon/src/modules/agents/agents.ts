@@ -145,7 +145,8 @@ export interface AgentsDeps {
   miseEnv: (place: { repo: string | null; task: string | null }) => Promise<SessionMiseEnv>;
   /**
    * Where the session plugin's hook for an event POSTs its payload (ADR-88): the daemon's hook route with the session
-   * token alone (ADR-138), which `receiveHook` takes; the API's port is known only once it listens.
+   * token alone (ADR-138), which `authenticate` in `api/server.ts` resolves to the session `receiveHook` takes; the API's
+   * port is known only once it listens.
    */
   sessionHook: (event: CopilotHookEvent, sessionToken: string) => HttpEndpoint;
   /**
@@ -306,9 +307,11 @@ export class Agents {
    * A hook the plugin of session `id` POSTed (ADR-88), recognised by its session token (`callerSession`): its record
    * goes to the session's `hooks.jsonl`, which the session reads as before, and the answer is the hook's output for
    * Copilot CLI: what waits for the session at the end of a turn or with a tool's result (`LiveSession.hookOutput`,
-   * ADR-85), otherwise empty. A payload that is not a JSON object leaves no record, like a broken hook.
+   * ADR-85), otherwise empty. A payload that is not a JSON object leaves no record, like a broken hook. A session closed
+   * while the hook's body arrived is refused like its token, before its removed directory is written to.
    */
   receiveHook(id: string, event: string, payload: string): CopilotHookOutput {
+    if (!this.#tokens.holds(id)) throw new DomainError("unauthorized", "unknown session token: this Trackwall session has ended");
     const hook = CopilotHookEvent.safeParse(event);
     if (!hook.success) throw new DomainError("not_found", `no hook ${event}`);
     const record = appendHookRecord(sessionHooksFile(this.#deps.home, id), hook.data, payload);
