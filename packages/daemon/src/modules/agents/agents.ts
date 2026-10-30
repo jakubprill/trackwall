@@ -207,6 +207,8 @@ export interface AgentsDeps {
   sessionMcpServer: (sessionToken: string) => HttpEndpoint;
   /** Opens a directory in VS Code (a task's worktree). */
   openEditor: (dir: string) => void;
+  /** Whether a board item is on the board (ADR-133): a task or a proposal names only an existing one. */
+  boardHas: (item: string) => Promise<boolean>;
   log: (msg: string) => void;
 }
 
@@ -393,10 +395,12 @@ export class Agents {
   /** A task proposal from session `caller` (`null`: an agent outside Trackwall) in a repo from the projects folder (ADR-39). */
   async propose(
     caller: string | null,
-    proposal: Pick<TaskProposal, "repo" | "title" | "prompt" | "model" | "approvals">,
+    proposal: Pick<TaskProposal, "repo" | "title" | "prompt" | "model" | "approvals" | "item">,
   ): Promise<TaskProposal> {
     await this.#deps.repos.repoPath(proposal.repo);
-    return this.#proposals.add({ kind: "task", ...proposal, proposedBy: proposedByOf(caller === null ? null : this.session(caller)) });
+    await this.#assertOnBoard(proposal.item);
+    const proposedBy = proposedByOf(caller === null ? null : this.session(caller));
+    return this.#proposals.add({ kind: "task", ...proposal, proposedBy });
   }
 
   /** A proposal to remove a repo from the projects folder (ADR-83), from session `caller` like a task proposal. */
@@ -416,6 +420,7 @@ export class Agents {
         prompt: reason,
         model: null,
         approvals: "ask",
+        item: null,
         proposedBy: proposedByOf(session),
       },
       repoDir,
@@ -429,9 +434,9 @@ export class Agents {
    */
   async approveProposal(id: string, prompt: string, model: string | null, approvals: TaskApprovals): Promise<Task> {
     if (this.#proposals.get(id).kind !== "task") throw new DomainError("bad_request", `proposal ${id} is not a task`);
-    const { repo, title, proposedBy } = this.#proposals.take(id);
+    const { repo, title, proposedBy, item } = this.#proposals.take(id);
     try {
-      return await this.#tasks.create(repo, prompt, { id, title, proposedBy, model, approvals, javaNavigation: false });
+      return await this.#tasks.create(repo, prompt, { id, title, proposedBy, model, approvals, javaNavigation: false, item });
     } finally {
       this.#proposals.release(id, this.#tasks.find(id) === undefined);
     }
@@ -576,16 +581,33 @@ export class Agents {
 
   /**
    * A task the user typed; its agent asks before tools unless the user chose `auto` (ADR-105), runs on `model`, or
-   * Copilot CLI's default when it is `null` (ADR-98), and with `javaNavigation` gets the Java language server (ADR-99).
+   * Copilot CLI's default when it is `null` (ADR-98), with `javaNavigation` gets the Java language server (ADR-99), and
+   * works on board item `item` (ADR-133), which must be on the board (`not_found` otherwise).
    */
-  createTask(
+  async createTask(
     repo: string,
     prompt: string,
     approvals: TaskApprovals = "ask",
     model: string | null = null,
     javaNavigation = false,
+    item: string | null = null,
   ): Promise<Task> {
-    return this.#tasks.create(repo, prompt, { id: randomUUID(), title: null, proposedBy: null, model, approvals, javaNavigation });
+    await this.#assertOnBoard(item);
+    return this.#tasks.create(repo, prompt, { id: randomUUID(), title: null, proposedBy: null, model, approvals, javaNavigation, item });
+  }
+
+  /**
+   * Where session `caller`'s agent writes down what it finds (ADR-133): the task it works on, and that task's board item
+   * while the item is still on the board; both `null` for a session without a task.
+   */
+  async findingsPlace(caller: string | null): Promise<{ task: string | null; item: string | null }> {
+    const task = caller === null ? null : this.session(caller).task;
+    const item = task === null ? null : this.task(task).item;
+    return { task, item: item !== null && (await this.#deps.boardHas(item)) ? item : null };
+  }
+
+  async #assertOnBoard(item: string | null): Promise<void> {
+    if (item !== null && !(await this.#deps.boardHas(item))) throw new DomainError("not_found", `no board item ${item}`);
   }
 
   /** What the New session form offers on this computer: whether tasks can get Java navigation now, or why not (ADR-99). */

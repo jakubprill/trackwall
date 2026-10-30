@@ -18,7 +18,7 @@ Move between views with the keyboard, and spread Trackwall over several windows 
 
 ## How it works
 
-The bar at the left edge of the window switches views, as in VS Code: "Home", "Repos", "Sessions" and "Overview" at the top, "Settings" at the bottom. Hover over an icon to see the view's name and key.
+The bar at the left edge of the window switches views, as in VS Code: "Home", "Repos", "Sessions", "Overview" and "Plan" at the top, "Settings" at the bottom. Hover over an icon to see the view's name and key.
 
 "Settings" lists its categories on the left: "Workspace" (the projects folder, the task worktrees folder and the local config backup), "Repo hosts", "Agents" (connecting Copilot CLI and installing [Java navigation](/features/java-navigation)), "App" (start at sign-in, updates and how the Home scene looks), "Files" (every file Trackwall reads or writes, see [Config files](/features/config-files)) and "Diagnostics" (the doctor, the state of the daemon and Trackwall's own errors). Click a category to see its settings. In a narrow window the categories sit in a row above them.
 
@@ -30,14 +30,14 @@ A window opens on the monitor, at the size and position its predecessor had. Whe
 
 ## Use it
 
-1. Press Ctrl+1 … Ctrl+4 to switch views (⌘ on macOS).
+1. Press Ctrl+1 … Ctrl+5 to switch views (⌘ on macOS).
 2. Press Ctrl+Shift+3 to open "Sessions" in a new window, and drag it to your other monitor.
 
 ## Shortcuts
 
 | Keys (Windows) | Keys (macOS) | What happens |
 |---|---|---|
-| Ctrl+1, Ctrl+2, Ctrl+3, Ctrl+4 | ⌘1, ⌘2, ⌘3, ⌘4 | Home, Repos, Sessions, Overview. |
+| Ctrl+1, Ctrl+2, Ctrl+3, Ctrl+4, Ctrl+5 | ⌘1, ⌘2, ⌘3, ⌘4, ⌘5 | Home, Repos, Sessions, Overview, Plan. |
 | Ctrl+, | ⌘, | Settings. |
 | Ctrl+Shift+digit | ⌥⌘digit | Open that view in a new window. |
 | Ctrl+Shift+N | ⌘⇧N | Open the current view in a new window. |

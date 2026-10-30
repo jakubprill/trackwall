@@ -1,30 +1,26 @@
-import { agentsApi, type RunningMiseTask, type Session, TASK_PORT_ENV, type Task, type TaskMessage } from "@trackwall/protocol";
-import { Bot, GitBranch, Play, Plug, ShieldOff, Square, Trash2 } from "lucide-react";
+import { type RunningMiseTask, type Session, TASK_PORT_ENV, type Task, type TaskMessage } from "@trackwall/protocol";
+import { Bot, GitBranch, Plug, ShieldOff, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
-import { EditorButton } from "@/components/EditorButton";
 import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
 import { SessionTerminal } from "@/components/SessionTerminal";
 import { StatusLabel } from "@/components/StatusLabel";
 import { TabBar } from "@/components/TabBar";
 import { Button } from "@/components/ui/button";
-import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { relativeTime } from "@/lib/format";
-import { proposerLabel, taskName } from "@/lib/session-entries";
+import { proposerLabel, type TaskTab, taskName } from "@/lib/session-entries";
 import { isLive, sessionStateLabel } from "@/lib/session-state";
-import { useAction } from "@/lib/use-action";
 import { useTaskDetails } from "@/lib/use-task-details";
 import { useTaskReview } from "@/lib/use-task-review";
 import { JavaNavigationMark } from "./JavaNavigationMark.tsx";
 import { SessionEnvironment } from "./SessionEnvironment.tsx";
+import { ResumeButton, StopButton, TaskEditorButton } from "./TaskButtons.tsx";
 import { TaskChangesView } from "./TaskChangesView.tsx";
 import { scrollToSection, TaskDetails } from "./TaskDetails.tsx";
 import { TaskNoticeStrip } from "./TaskNotices.tsx";
 import { TaskRemoval } from "./TaskRemoval.tsx";
 import { VerifyButton } from "./TaskVerification.tsx";
-
-type TaskTab = "terminal" | "changes";
 
 /**
  * The selected task (ADR-31): title or prompt, branch, task port, its model when it has one (ADR-98), a mark when it runs without approvals (ADR-105), how its Java language server is doing (ADR-124) and session state in the header, the session terminal
@@ -45,6 +41,7 @@ export function TaskPanel({
   onChanged,
   onRemoved,
   onOpenTask,
+  initialTab = "terminal",
 }: {
   conn: Connection;
   task: Task;
@@ -60,27 +57,17 @@ export function TaskPanel({
   onChanged: () => void;
   onRemoved: () => void;
   onOpenTask: (id: string) => void;
+  /** The tab the panel opens on, "Changes" when a grid tile asked for them. */
+  initialTab?: TaskTab;
 }) {
   const liveSession = session && isLive(session) ? session : undefined;
-  const [tab, setTab] = useState<TaskTab>("terminal");
+  const [tab, setTab] = useState<TaskTab>(initialTab);
   const [removing, setRemoving] = useState(false);
   const review = useTaskReview(conn, task.id);
   const confirmingRemoval = removing && !liveSession;
   const details = useTaskDetails({ conn, task, tasks, messages, runningLive, paused: confirmingRemoval });
   const [detailsOpen, setDetailsOpen] = useState(false);
   const detailsArea = useRef<HTMLElement>(null);
-  const resume = useAction(
-    () => post(conn, agentsApi.resumeTask, { task: task.id }),
-    () => {
-      setTab("terminal");
-      onChanged();
-    },
-  );
-  const openEditor = useAction(
-    () => post(conn, agentsApi.openTaskEditor, { task: task.id }),
-    () => {},
-  );
-  const error = resume.error ?? openEditor.error;
   const shown: TaskTab = session ? tab : "changes";
   const tabs = session
     ? ([
@@ -119,17 +106,22 @@ export function TaskPanel({
             {taskSubtitle(task, sessions)}
           </span>
         </div>
-        {error && <span className="text-destructive max-w-xs truncate text-xs">{error}</span>}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <VerifyButton state={details.verification} disabled={confirmingRemoval} />
-          <EditorButton path={task.worktree} label="VS Code" onOpen={openEditor.run} disabled={openEditor.pending} />
+          <TaskEditorButton conn={conn} task={task} label="VS Code" />
           {liveSession ? (
             <StopButton conn={conn} session={liveSession} onStopped={onChanged} />
           ) : (
             <>
-              <Button variant="outline" size="sm" onClick={resume.run} disabled={resume.pending || removing}>
-                <Play /> Resume
-              </Button>
+              <ResumeButton
+                conn={conn}
+                task={task}
+                disabled={removing}
+                onResumed={() => {
+                  setTab("terminal");
+                  onChanged();
+                }}
+              />
               <Button variant="outline" size="sm" onClick={() => setRemoving(true)} disabled={removing}>
                 <Trash2 /> End task
               </Button>
@@ -175,19 +167,6 @@ export function TaskPanel({
 function taskSubtitle(task: Task, sessions: readonly Session[]): string {
   const name = taskName(task);
   return task.proposedBy ? `${name} · ${proposerLabel(task.proposedBy, sessions)}` : name;
-}
-
-/** Stopping the task's running session; the error shows next to the button. */
-function StopButton({ conn, session, onStopped }: { conn: Connection; session: Session; onStopped: () => void }) {
-  const stop = useAction(() => post(conn, agentsApi.stop, { session: session.id }), onStopped);
-  return (
-    <>
-      {stop.error && <span className="text-destructive max-w-xs truncate text-xs">{stop.error}</span>}
-      <Button variant="outline" size="sm" onClick={stop.run} disabled={stop.pending || session.run.kind === "stopping"}>
-        <Square /> Stop
-      </Button>
-    </>
-  );
 }
 
 /** What the task runs with beyond the defaults: its model (ADR-98) and running without approvals (ADR-105). */

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Done, type Endpoint } from "./api.ts";
+import { BoardItemId } from "./board.ts";
 import { WorkingTreeChanges } from "./changes.ts";
 import { SessionMessage, SessionView } from "./conversation.ts";
 import { RunState } from "./procs.ts";
@@ -288,6 +289,8 @@ export const Task = z.object({
   approvals: TaskApprovals,
   /** Whether its sessions get the Java language server for code navigation (ADR-99). */
   javaNavigation: z.boolean(),
+  /** The board item the task works on (ADR-133); `null` for a task started from no item. */
+  item: BoardItemId.nullable(),
   /** The last summary from the task session (`report_result`); `null` until it has reported one. */
   summary: z.object({ text: z.string(), reportedAt: z.string() }).nullable(),
   /** The task port (ADR-61): `TASK_PORT_ENV` in every mise task run in the worktree, and the port of the task's service. */
@@ -326,6 +329,8 @@ export const TaskProposal = z.object({
   model: TaskModel.nullable(),
   /** The approvals mode the proposer suggested (ADR-105), which the user may change before the start; `ask` for a folder action. */
   approvals: TaskApprovals,
+  /** The board item the proposed task works on (ADR-133), which the task keeps; `null` for none and for a folder action. */
+  item: BoardItemId.nullable(),
   proposedBy: ProposedBy,
   /** ISO 8601. */
   createdAt: z.string(),
@@ -562,7 +567,10 @@ export const agentsApi = {
   dismiss: endpoint("dismiss", SessionRequest, SessionList),
   /** What the New session form can offer before a start: whether Java navigation (ADR-99) is set up. */
   startOptions: endpoint("start-options", z.object({}).strict(), StartOptions),
-  /** Creates a worktree on a new branch from the default branch and starts Copilot CLI in it with the prompt (ADR-31). */
+  /**
+   * Creates a worktree on a new branch from the default branch and starts Copilot CLI in it with the prompt (ADR-31);
+   * with `item`, the task works on that board item (ADR-133), `not_found` when there is none.
+   */
   createTask: endpoint(
     "create-task",
     z
@@ -572,6 +580,7 @@ export const agentsApi = {
         approvals: TaskApprovals,
         model: TaskModel.nullable().default(null),
         javaNavigation: z.boolean().default(false),
+        item: BoardItemId.nullable().default(null),
       })
       .strict(),
     Task,

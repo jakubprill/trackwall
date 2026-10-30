@@ -18,6 +18,7 @@ const TOPICS: { [T in DaemonEventType]: (facade: Facade) => DaemonEventOf<T> } =
   "mise.running.changed": (facade) => ({ type: "mise.running.changed", payload: facade.mise.running() }),
   "repos.changed": (facade) => ({ type: "repos.changed", payload: facade.repoWatch.state() }),
   "cards.warmup.changed": (facade) => ({ type: "cards.warmup.changed", payload: facade.cards.warmupProgress() }),
+  "board.changed": (facade) => ({ type: "board.changed", payload: { revision: facade.board.revision() } }),
 };
 
 export interface EventListener {

@@ -28,46 +28,55 @@ export function TaskDetails({
   details,
   sessions,
   onOpenTask,
+  only,
 }: {
   conn: Connection;
   task: Task;
   details: Details;
   sessions: readonly Session[];
   onOpenTask: (id: string) => void;
+  /** One section alone, the others hidden rather than unmounted, so that they keep what the user did in them. */
+  only?: TaskSection;
 }) {
   return (
     <>
-      <Section id="included">
+      <Section id="included" only={only}>
         <TaskIncludedFiles included={task.included} />
       </Section>
-      <Section id="shared-files">
+      <Section id="shared-files" only={only}>
         <SharedFiles shared={details.sharedFiles} onOpenTask={onOpenTask} />
       </Section>
-      <Section id="mise-config">
+      <Section id="mise-config" only={only}>
         <TaskMiseConfig conn={conn} task={task.id} remote={details.miseConfig} />
       </Section>
-      <Section id="messages">
+      <Section id="messages" only={only}>
         <TaskMessages messages={details.messages} sessions={sessions} />
       </Section>
-      <Section id="summary">{task.summary && <TaskSummary summary={task.summary} />}</Section>
-      <Section id="verification">
+      <Section id="summary" only={only}>
+        {task.summary && <TaskSummary summary={task.summary} />}
+      </Section>
+      <Section id="verification" only={only}>
         <TaskVerification conn={conn} state={details.verification} />
       </Section>
-      <Section id="merge-request">
+      <Section id="merge-request" only={only}>
         <TaskMergeRequest conn={conn} task={task} verification={details.verification.verification} state={details.mergeRequest} />
       </Section>
-      <Section id="service">
+      <Section id="service" only={only}>
         <TaskService conn={conn} task={task} />
       </Section>
-      <Section id="mise-runs">
+      <Section id="mise-runs" only={only}>
         <TaskMiseRuns conn={conn} runs={details.miseRuns} />
       </Section>
     </>
   );
 }
 
-function Section({ id, children }: { id: TaskSection; children: ReactNode }) {
-  return <div {...{ [SECTION_ATTRIBUTE]: id }}>{children}</div>;
+function Section({ id, only, children }: { id: TaskSection; only: TaskSection | undefined; children: ReactNode }) {
+  return (
+    <div {...{ [SECTION_ATTRIBUTE]: id }} hidden={only !== undefined && only !== id}>
+      {children}
+    </div>
+  );
 }
 
 /** Brings a section into view inside its scrolling container, once it has rendered. */

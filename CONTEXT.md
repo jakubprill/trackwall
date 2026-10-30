@@ -16,12 +16,16 @@ _Avoid_: app (when only Tauri is meant)
 A daemon the desktop app connects to through a port forwarded to 127.0.0.1, typically in a dev container, instead of starting its own as a sidecar (ADR-130). The app neither starts nor stops it. Its opposite is the app's **own daemon**.
 _Avoid_: external daemon, server
 
+**Projects folder on this computer** (`host_folder.rs`, `hostProjectsFolder`, `host-projects-folder.json`; in the UI *projects folder on this computer*):
+Where this computer reaches the projects folder of a remote daemon, for example a Docker volume through `\\wsl.localhost\…`; the desktop app shows a repo of the container in Explorer through it (ADR-131).
+_Avoid_: host path, volume path
+
 **App update** (`updates.rs`, `UpdateCheck`; in the UI *update*):
 A newer version of Trackwall from GitHub Releases, installed by the shell after the user's click and followed by a restart (ADR-53). Its **update package** is the archive the updater downloads and checks against the signature: the release zip on Windows (`portable_update.rs`), `.app.tar.gz` on macOS; the **update manifest** is `latest.json` in the release.
 _Avoid_: upgrade, sync (that is the repo synchronization)
 
 **View** (`View`):
-A screen of the app in the UI (Home, Repos, Sessions, Overview, Settings), switched with the view bar (`ActivityBar`) at the left edge of the window or with a shortcut.
+A screen of the app in the UI (Home, Repos, Sessions, Overview, Plan, Settings), switched with the view bar (`ActivityBar`) at the left edge of the window or with a shortcut.
 _Avoid_: tab (for a whole screen)
 
 **Settings category** (`SettingsCategory`, `SETTINGS_CATEGORIES`; its sections `SettingsSection`):
@@ -323,8 +327,12 @@ The work of one agent on one repo: a prompt, a worktree, a `trackwall/<slug>` br
 _Avoid_: job; a bare *task* always means a task, a mise task is always a *mise task*
 
 **Task notice** (`TaskNotice`, `taskNotices`, "Task notices" in the UI):
-One short line for a section above a task's terminal: a warning (shared files, a changed mise config, files not copied) or what is there (messages, summary, verification, merge request, a running mise task). In the one-entry layout the notices are a strip of chips that "Details" unfolds; on a grid tile a badge opens them as an overlay, and a new warning lies over the terminal as a banner until opened or dismissed (ADR-91).
+One short line for a section above a task's terminal: a warning (shared files, a changed mise config, files not copied) or what is there (messages, summary, verification, merge request, a running mise task). In the one-entry layout the notices are a strip of chips that "Details" unfolds; on a grid tile the mise config and the verification have chips of their own in the header (`tileNotices`, `TaskNotice.chip`), a badge opens the rest as an overlay, and a new warning lies over the terminal as a banner until opened or dismissed (ADR-91).
 _Avoid_: alert, notification (that is the tray's), badge (that is only the tile's count)
+
+**Task menu** (`useTaskTileMenu`, "Task menu" in the UI):
+The ⋯ button in a task's grid tile header and what it opens over the terminal: the task's branch, port, model and start, and VS Code, Verify, Stop or Resume, "Changes" (the task alone on its changes) and "Details" (the task's notices). Only one overlay of a tile is open at a time (`useTileOverlay`).
+_Avoid_: context menu, actions
 
 **End task** (`removeTask`, "End task" in the UI):
 Removing a task's worktree, and optionally its branch. Only without a running session; what would be lost (uncommitted files, commits from a detached HEAD, a directory git no longer knows, and with the branch also the task's commits) the daemon lists in the `unsaved_changes` refusal, and it is lost only after confirmation. Files ignored by git are always lost.
@@ -555,6 +563,32 @@ A limit on a task's time and number of commits; when it is exceeded the daemon e
 
 **Summary** (`Task.summary`, MCP tool `report_result`):
 The result a task session reports with the `report_result` tool: what it did, what is left, what to check. It goes to the task's `summary` field (with the report time, in `tasks.json`), to the Sessions view and to the main session; a later one replaces the earlier (ADR-39). Eventually also to a PR proposal. Trackwall merges nothing by itself (ADR-9).
+
+## Plan
+
+**Board** (module `board`, `Board`, `boardApi`, topic `board.changed`; the "Plan" view in the UI):
+Everything the user keeps to do before it becomes a task: business projects, the items they are split into, and ideas. Files in `.trackwall/board` of the projects folder, one per board item (ADR-133). The board records the user's split; nothing starts from it by itself.
+_Avoid_: backlog, tracker, kanban (a possible view of the board, not the board)
+
+**Board item** (`BoardItem`, `BoardItemId`, MCP tools `list_items`, `get_item`, `create_item`, `update_item`; "item" in the UI and the tools):
+One entry of the board: a project or an item, with a title, a body (the plan and notes, Markdown), a parent, a board column, repos and a link to a ticket. Who wrote it is `createdBy`: the user or an agent with its task.
+_Avoid_: card (that is a repo card), ticket, issue (those are in the user's tracker, the item links to them), note
+
+**Project** (`BoardItemKind` `project`; "Project" in the UI):
+A root of the board for one business project; its items hang under it as a tree. Only the user creates one, and "Archive project" (column `done` or `dropped`) moves it under "Archived".
+_Avoid_: repo, workspace
+
+**Idea** (an item with `parent: null`; the "Inbox" in the UI):
+An item not filed under a project yet, written down so it is not lost: with Alt+N from any view (`IdeaCapture`), in the inbox, or by an agent outside a task. The inbox is the list of ideas.
+_Avoid_: draft, note
+
+**Board column** (`BoardColumn`: `ideas`, `ready`, `in_progress`, `review`, `done`, `dropped`; "Column" in the UI, `COLUMN_LABELS`):
+How far an item is: "Idea", "Ready", "In progress", "In review", "Done", "Dropped". An agent moves an item only between `ideas` and `ready`.
+_Avoid_: status (a repo's is `RepoStatus`), state (a session's)
+
+**Task item** (`Task.item`, `TaskProposal.item`):
+The board item a task was started for, with "Start task" on the item or by a task proposal that names it; `null` for a task without one. A task session's `create_item` without a parent goes under it.
+_Avoid_: parent (that is an item's place in the tree)
 
 ## Logs, events and audit
 

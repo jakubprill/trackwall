@@ -146,7 +146,7 @@ test("the View menu has the activity bar's views with their names and shortcuts,
     m[2],
     m[3],
   ]);
-  expect(ui.map((v) => v[0])).toEqual(["home", "repos", "sessions", "graph", "settings"]);
+  expect(ui.map((v) => v[0])).toEqual(["home", "repos", "sessions", "graph", "plan", "settings"]);
   expect(shell).toEqual(ui);
 });
 
@@ -242,4 +242,16 @@ test("the UI opens links and VS Code outside the window with the command the she
 test("the shell checks a remote daemon's token on the daemon info path of protocol", () => {
   const shell = /const DAEMON_INFO_PATH: &str = "([^"]+)";/.exec(read("apps/desktop/src-tauri/src/daemon.rs"))?.[1];
   expect(shell).toBe(DAEMON_INFO_PATH);
+});
+
+test("the UI keeps the projects folder on this computer and shows a repo there with the commands the shell defines", () => {
+  const shell = read("apps/desktop/src-tauri/src/host_folder.rs");
+  const ui = read("packages/ui/src/lib/host-folder.ts");
+  const commands = [...shell.matchAll(/#\[tauri::command\]\s*pub fn (\w+)/g)].map((m) => m[1]);
+  expect(commands).toEqual(["host_projects_folder", "set_host_projects_folder", "show_in_host_folder"]);
+  expect([...ui.matchAll(/_COMMAND = "([^"]+)";/g)].map((m) => m[1])).toEqual(commands);
+  expect(shell).toContain("path: Option<String>");
+  expect(shell).toContain("segments: Vec<String>");
+  expect(ui).toContain("invoke(SET_COMMAND, { path })");
+  expect(ui).toContain("invoke(SHOW_COMMAND, { segments })");
 });

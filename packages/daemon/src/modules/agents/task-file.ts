@@ -12,7 +12,7 @@ import { MAX_MISE_PATH } from "./task-mise-config.ts";
  * worktrees folder, the repo and the branch (`taskWorktree`), so neither of them is stored. The file can be edited by hand, and its fields go to git
  * (`branch -D`, `diff <base commit>`), so the schema allows only a task branch and a full commit hash (`CommitHash` in `Task`).
  * Fields added later (title, origin and summary, ADR-39; the trusted mise config, ADR-59; the port and the included
- * files, ADR-61; the task worktrees folder, ADR-84; the model, ADR-98; the approvals mode, ADR-105; Java navigation, ADR-99) have a default in the file, so tasks saved by an older version are not moved aside as an unreadable file.
+ * files, ADR-61; the task worktrees folder, ADR-84; the model, ADR-98; the approvals mode, ADR-105; Java navigation, ADR-99; the board item, ADR-133) have a default in the file, so tasks saved by an older version are not moved aside as an unreadable file.
  */
 
 export const StoredTask = Task.omit({ worktree: true }).extend({
@@ -22,6 +22,7 @@ export const StoredTask = Task.omit({ worktree: true }).extend({
   model: Task.shape.model.default(null),
   approvals: Task.shape.approvals.default("ask"),
   javaNavigation: Task.shape.javaNavigation.default(false),
+  item: Task.shape.item.default(null),
   summary: Task.shape.summary.default(null),
   /** `null` in a task saved by an older version: `AgentTasks` gives it a free port when it reads the file. */
   port: Task.shape.port.nullable().default(null),

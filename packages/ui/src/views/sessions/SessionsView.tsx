@@ -34,8 +34,10 @@ import {
   type SessionSelection,
   type StartedEntry,
   selectedProposal,
+  selectedTaskTab,
   selectionAfterClose,
   selectionAfterRemoval,
+  type TaskTab,
   type WaitingTarget,
 } from "@/lib/session-entries";
 import { gridPage, SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
@@ -207,6 +209,7 @@ export function SessionsView({
             entries={entries}
             current={current}
             focus={selectedProposal(selected)}
+            taskTab={selectedTaskTab(selected)}
             currentSelection={currentSelection}
             layout={layout}
             onLayout={onLayout}
@@ -434,6 +437,7 @@ function SelectedEntry({
   entries,
   current,
   focus,
+  taskTab,
   currentSelection,
   layout,
   onLayout,
@@ -451,6 +455,8 @@ function SelectedEntry({
   current: SessionEntry;
   /** The selected task proposal, to open first among the proposals of its session. */
   focus: string | undefined;
+  /** The tab the selected task's panel opens on. */
+  taskTab: TaskTab | undefined;
   currentSelection: () => SessionSelection;
   layout: SessionLayout;
   onLayout: (layout: SessionLayout) => void;
@@ -474,6 +480,7 @@ function SelectedEntry({
           conn={conn}
           entry={current}
           focus={focus}
+          taskTab={taskTab}
           currentSelection={currentSelection}
           sessions={sessions}
           tasks={tasks}
@@ -508,6 +515,10 @@ function SelectedEntry({
           onSelect(entrySelection(entry));
           onLayout("1");
         }}
+        onOpenChanges={(task) => {
+          onSelect({ kind: "task", id: task, tab: "changes" });
+          onLayout("1");
+        }}
         tasks={tasks}
         onChanged={onChanged}
         onNavigate={onSelect}
@@ -527,6 +538,7 @@ function EntryPanel({
   conn,
   entry,
   focus,
+  taskTab,
   currentSelection,
   sessions,
   tasks,
@@ -540,6 +552,7 @@ function EntryPanel({
   conn: Connection;
   entry: SessionEntry;
   focus: string | undefined;
+  taskTab: TaskTab | undefined;
   currentSelection: () => SessionSelection;
   sessions: readonly Session[];
   /** The tasks on the list, for the task panel's shared-files warning and the same-repo hint of proposals. */
@@ -581,6 +594,7 @@ function EntryPanel({
         onChanged={onChanged}
         onRemoved={() => onTaskRemoved(entry.task.id)}
         onOpenTask={(id) => onSelect({ kind: "task", id })}
+        initialTab={taskTab}
       />
     );
   return (

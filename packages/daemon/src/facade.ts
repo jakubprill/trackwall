@@ -17,6 +17,7 @@ import {
 } from "./modules/agents/agents.ts";
 import { resolveCopilot } from "./modules/agents/copilot-command.ts";
 import { Batch } from "./modules/batch/batch.ts";
+import { Board } from "./modules/board/board.ts";
 import { CardCache } from "./modules/cards/card-cache.ts";
 import { Cards } from "./modules/cards/cards.ts";
 import { ConfigFiles } from "./modules/config-files/config-files.ts";
@@ -64,6 +65,8 @@ export interface Facade {
   logs: Logs;
   agents: Agents;
   batch: Batch;
+  /** The user's board items in `.trackwall/board` of the projects folder (ADR-133). */
+  board: Board;
   services: Services;
   testReports: TestReports;
   verifications: Verifications;
@@ -201,6 +204,7 @@ export function createFacade(o: FacadeOptions): Facade {
   // A new repo or one whose HEAD moved gets its card in the background, so the next graph does not wait for it (ADR-63).
   const repoWatch = new RepoWatch({ repos: workspace, vcs, onHeadMoved: (repos) => cards.warmUp(repos), log: o.log });
   const localConfig = new LocalConfig({ repos: workspace, vcs, log: o.log, pushDir: join(o.home, LOCAL_CONFIG_PUSH_DIR) });
+  const board = new Board({ projectsDir: () => workspace.projectsDir() });
   const agents = new Agents({
     procs,
     repos: workspace,
@@ -214,6 +218,7 @@ export function createFacade(o: FacadeOptions): Facade {
     sessionHook: o.sessionHook,
     sessionMcpServer: o.sessionMcpServer,
     openEditor,
+    boardHas: (item) => board.has(item),
     log: o.log,
   });
   const mise: Mise = new Mise({
@@ -326,6 +331,7 @@ export function createFacade(o: FacadeOptions): Facade {
     procs,
     logs,
     batch,
+    board,
     agents,
     services,
     testReports,

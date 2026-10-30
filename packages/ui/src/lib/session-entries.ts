@@ -36,12 +36,13 @@ export type StartedEntry = Exclude<SessionEntry, ProposalsEntry>;
 /**
  * What the right side of the view shows: the new session form, the selected entry, and without a selection the first
  * entry. A single proposal (from the tray, a notification or a link) selects its group and opens there; `proposals`
- * selects a group by its proposer, which stays selected while its proposals turn into tasks one by one.
+ * selects a group by its proposer, which stays selected while its proposals turn into tasks one by one. A task can name
+ * the tab its panel opens on, for "Changes" from a grid tile.
  */
 export type SessionSelection =
   | { kind: "new" }
   | { kind: "session"; id: string }
-  | { kind: "task"; id: string }
+  | { kind: "task"; id: string; tab?: TaskTab }
   | { kind: "proposal"; id: string }
   | { kind: "proposals"; proposer: string | null }
   | undefined;
@@ -220,6 +221,14 @@ function selects(selection: Exclude<SessionSelection, undefined | { kind: "new" 
   if (selection.kind === "proposals") return entry.kind === "proposals" && entry.proposer === selection.proposer;
   if (entry.kind === "task") return entry.task.id === selection.id;
   return entry.kind === "proposals" && entry.proposals.some((p) => p.id === selection.id);
+}
+
+/** The tabs of a task's panel: its session terminal and its worktree changes. */
+export type TaskTab = "terminal" | "changes";
+
+/** The tab a selection opens a task's panel on; `undefined` leaves the panel's own choice. */
+export function selectedTaskTab(selection: SessionSelection): TaskTab | undefined {
+  return selection?.kind === "task" ? selection.tab : undefined;
 }
 
 /** The proposal a selection points at, to open first in its group; `undefined` for any other selection. */

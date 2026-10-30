@@ -47,6 +47,7 @@ function task(id: string, proposedBy: Task["proposedBy"]): Task {
     model: null,
     approvals: "ask",
     javaNavigation: false,
+    item: null,
     summary: null,
     port: 41000,
     included: { files: [], problems: [] },
@@ -62,6 +63,7 @@ function proposal(id: string, proposedBy: TaskProposal["proposedBy"]): TaskPropo
     prompt: "add refunds",
     model: null,
     approvals: "ask",
+    item: null,
     proposedBy,
     createdAt: "2026-10-25T10:10:00Z",
   };

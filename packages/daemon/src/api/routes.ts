@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import {
   agentsApi,
   batchApi,
+  boardApi,
   cardsApi,
   configFilesApi,
   dayStartApi,
@@ -119,6 +120,14 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(batchApi.start, (f, b) => f.batch.start(b)),
   route(batchApi.run, (f) => f.batch.run()),
   route(batchApi.cancel, (f) => f.batch.cancel()),
+  route(boardApi.board, (f) => f.board.board()),
+  route(boardApi.create, (f, b) => f.board.create(b, { kind: "user" })),
+  route(boardApi.update, (f, { item, ...change }) => f.board.update(item, change)),
+  route(boardApi.move, (f, b) => f.board.move(b.item, b.parent, b.before)),
+  route(boardApi.remove, async (f, b) => {
+    await f.board.remove(b.item);
+    return null;
+  }),
   route(dayStartApi.start, (f, b) => f.dayStart.start(b.view)),
   route(dayStartApi.run, (f) => f.dayStart.run()),
   route(verificationApi.start, (f, b) => f.verifications.start(b.task)),
@@ -141,7 +150,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(agentsApi.say, (f, b) => f.agents.say(b.session, b.text)),
   route(agentsApi.interrupt, (f, b) => f.agents.interrupt(b.session)),
   route(agentsApi.dismiss, (f, b) => f.agents.dismiss(b.session)),
-  route(agentsApi.createTask, (f, b) => f.agents.createTask(b.repo, b.prompt, b.approvals, b.model, b.javaNavigation)),
+  route(agentsApi.createTask, (f, b) => f.agents.createTask(b.repo, b.prompt, b.approvals, b.model, b.javaNavigation, b.item)),
   route(agentsApi.startOptions, (f) => f.agents.startOptions()),
   route(agentsApi.resumeTask, (f, b) => f.agents.resumeTask(b.task)),
   route(agentsApi.taskChanges, (f, b) => f.agents.taskChanges(b.task)),

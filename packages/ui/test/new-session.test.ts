@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Session } from "@trackwall/protocol";
-import { newSessionStart, sessionsInSameFolder } from "../src/lib/new-session.ts";
+import { firstListedRepo, formStart, newSessionForm, newSessionStart, sessionsInSameFolder } from "../src/lib/new-session.ts";
 
 function session(id: string, over: Partial<Session>): Session {
   return {
@@ -67,5 +67,43 @@ describe("the running sessions a new session without its own worktree would shar
 
   test("in the projects folder: the running free sessions, not the supervisor", () => {
     expect(sessionsInSameFolder(sessions, null).map((s) => s.id)).toEqual(["free"]);
+  });
+});
+
+describe("the repo a task for a board item starts in (ADR-133)", () => {
+  test("is the item's first repo the projects folder still has", () => {
+    expect(firstListedRepo(["gone", "orders-api", "billing"], [{ id: "billing" }, { id: "orders-api" }])).toBe("orders-api");
+  });
+
+  test("is none when no repo of the item is listed, or the list has not loaded", () => {
+    expect(firstListedRepo(["gone"], [{ id: "billing" }])).toBeUndefined();
+    expect(firstListedRepo(["orders-api"], undefined)).toBeUndefined();
+  });
+});
+
+describe("what the form started from a board item starts (ADR-133)", () => {
+  const form = newSessionForm({ item: "5b0c6a7e-0000-4000-8000-000000000001", repos: ["shop"], prompt: "Add the history endpoint" });
+
+  test("opens with the item's prompt, and the item goes on the task", () => {
+    expect(form).toEqual({
+      heading: "New task for this item",
+      item: "5b0c6a7e-0000-4000-8000-000000000001",
+      repos: ["shop"],
+      prompt: "Add the history endpoint",
+      sessions: false,
+    });
+  });
+
+  test("is only a task, also when the remembered choice for the repo is no worktree", () => {
+    expect(formStart(form, "shop", false, " Add the history endpoint ")).toEqual({
+      kind: "task",
+      repo: "shop",
+      prompt: "Add the history endpoint",
+    });
+    expect(formStart(form, "shop", false, "")).toEqual({ kind: "needs-prompt" });
+  });
+
+  test("is nothing in the projects folder, where only a session could run", () => {
+    expect(formStart(form, null, true, "Add the history endpoint")).toEqual({ kind: "needs-repo" });
   });
 });
