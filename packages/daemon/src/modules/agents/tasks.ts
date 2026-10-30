@@ -174,9 +174,9 @@ export class AgentTasks {
     return this.#tasks.map(view);
   }
 
-  /** Whether the stored task list was unreadable at daemon start (moved aside): the list is then not every known task. */
-  get storedListLost(): boolean {
-    return this.#deps.file.lost;
+  /** Whether `tasks.json` was read at daemon start: without it the list may not be every task the user still wants. */
+  get taskListRead(): boolean {
+    return this.#deps.file.taskListRead;
   }
 
   /** Whether a task can get jdtls now (ADR-99), read from `workspace.yaml` and the disk at every call. */

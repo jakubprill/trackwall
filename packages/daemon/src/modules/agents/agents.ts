@@ -276,9 +276,9 @@ export class Agents {
     });
   }
 
-  /** Whether the stored task list was unreadable at daemon start, so tasks may exist that the list does not show. */
-  taskListLost(): boolean {
-    return this.#tasks.storedListLost;
+  /** Whether `tasks.json` was read at daemon start; without it tasks may exist that the list does not show. */
+  taskListRead(): boolean {
+    return this.#tasks.taskListRead;
   }
 
   sessions(): SessionList {

@@ -44,13 +44,15 @@ describe.skipIf(process.versions.bun === undefined)("task logs across a daemon r
     expect(existsSync(left)).toBe(false);
   });
 
-  test("with an unreadable task list the next daemon keeps every task's logs, since the list may come back", async () => {
+  test("after an unreadable task list the next daemons keep every task's logs, since the list may come back", async () => {
     const before = await startDaemon();
     await stopDaemon(before);
     writeFileSync(join(before.home, "tasks.json"), "not json");
     const left = taskLog(before.home, "maybe-a-task");
+    const dirs = { home: before.home, projects: before.projects };
 
-    await startDaemon({ home: before.home, projects: before.projects });
+    await stopDaemon(await startDaemon(dirs));
+    await startDaemon(dirs);
 
     expect(existsSync(left)).toBe(true);
   });

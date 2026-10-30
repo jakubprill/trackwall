@@ -51,7 +51,7 @@ const TaskFileSchema = z.object({ tasks: z.array(StoredTask) });
 export class TaskFile {
   readonly #path: string;
   readonly #log: (msg: string) => void;
-  #lost = false;
+  #taskListRead = false;
 
   constructor(path: string, log: (msg: string) => void) {
     this.#path = path;
@@ -60,16 +60,19 @@ export class TaskFile {
 
   /** A missing file means no tasks. An unreadable file is moved aside (`tasks.json.broken-<time>`), and its tasks go to the log. */
   read(): StoredTask[] {
-    const file = readStateFile(this.#path, TaskFileSchema, (problem, aside) => {
-      this.#lost = true;
-      this.#log(`${this.#path}: ${problem}; file moved to ${aside}, task worktrees were left on disk`);
-    });
+    const file = readStateFile(this.#path, TaskFileSchema, (problem, aside) =>
+      this.#log(`${this.#path}: ${problem}; file moved to ${aside}, task worktrees were left on disk`),
+    );
+    this.#taskListRead = file !== undefined;
     return file?.tasks ?? [];
   }
 
-  /** Whether a read found the file unreadable: its tasks may still be wanted, so what they left on disk stays. */
-  get lost(): boolean {
-    return this.#lost;
+  /**
+   * Whether the last read found a valid file. Not after a broken file was moved aside, nor at the starts after that while
+   * no task was saved: its tasks may come back with it, so what they left on disk stays.
+   */
+  get taskListRead(): boolean {
+    return this.#taskListRead;
   }
 
   write(tasks: readonly StoredTask[]): void {
