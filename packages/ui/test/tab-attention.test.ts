@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import type { Session, SessionList, TaskProposal, TaskState } from "@trackwall/protocol";
-import { waitingInTab } from "../src/lib/session-state.ts";
 import { BURST_MS, sessionNotice, TabAttention, tabTitle } from "../src/lib/tab-attention.ts";
 
 const running = { kind: "running", runId: "r", startedAt: "2026-10-30T10:00:00Z", pid: 10 } as const;
@@ -52,15 +51,6 @@ describe("the tab title", () => {
   test("is the app's name when nothing waits and the count in front of it when something does", () => {
     expect(tabTitle(0)).toBe("Trackwall");
     expect(tabTitle(3)).toBe("(3) Trackwall");
-  });
-
-  test("counts sessions waiting for you, the supervisor among them, and every task proposal", () => {
-    const waiting = list(
-      [session("a", "Approval", true), session("b", "Working", false), session("s", "Input", true, { repo: null, supervisor: true })],
-      [proposal("p1"), proposal("p2")],
-    );
-    expect(waitingInTab(waiting)).toBe(4);
-    expect(waitingInTab(undefined)).toBe(0);
   });
 
   test("shows the count also at the first list and while the tab is in front", () => {

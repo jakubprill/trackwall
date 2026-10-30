@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Session } from "@trackwall/protocol";
+import type { Session, SessionList } from "@trackwall/protocol";
 import {
   entryId,
   nextWaiting,
@@ -9,7 +9,7 @@ import {
   SUPERVISOR_TARGET,
   type WaitingTarget,
 } from "../src/lib/session-entries.ts";
-import { agentsInTurn, closeCutsOffTurn, inTurn, sessionPlace, sessionStateLabel } from "../src/lib/session-state.ts";
+import { agentsInTurn, closeCutsOffTurn, inTurn, sessionPlace, sessionStateLabel, waitingInTab } from "../src/lib/session-state.ts";
 
 const running = { kind: "running", runId: "r", startedAt: "2026-10-23T10:00:00Z", pid: 10 } as const;
 
@@ -203,3 +203,16 @@ describe("Alt+J", () => {
 function entryIdOf(entry: WaitingTarget | undefined): string | undefined {
   return entry && entry.kind !== "supervisor" ? entryId(entry) : entry?.kind;
 }
+
+test("a browser tab's title counts sessions waiting for you, the supervisor among them, and every task proposal", () => {
+  const supervisor = { ...waiting("s", change("Input")), repo: null, supervisor: true };
+  const list = {
+    sessions: [waiting("a", change("Approval")), session("b", change("Working")), supervisor],
+    tasks: [],
+    proposals: [{ id: "p1" }, { id: "p2" }],
+    messages: [],
+    lastSupervisor: null,
+  } as unknown as SessionList;
+  expect(waitingInTab(list)).toBe(4);
+  expect(waitingInTab(undefined)).toBe(0);
+});
