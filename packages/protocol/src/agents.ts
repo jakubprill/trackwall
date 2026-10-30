@@ -132,6 +132,12 @@ export const ProposedBy = z.object({
    * Absent in task files from before ADR-58.
    */
   supervisor: z.boolean().default(false),
+  /**
+   * The task whose session proposed it (ADR-140): a task's later sessions, after a resume or a daemon restart, are its
+   * proposer too, since they go on with the same conversation in the same worktree. Absent in files from before ADR-140,
+   * whose work stays with the proposing session alone.
+   */
+  task: TaskId.nullable().default(null),
 });
 export type ProposedBy = z.infer<typeof ProposedBy>;
 

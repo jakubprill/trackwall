@@ -73,7 +73,7 @@ describe.skipIf(process.versions.bun === undefined)(
 
       expect(sent).toMatchObject({
         delivery: "queued",
-        message: { task: task.id, from: { session: main.id, supervisor: false }, text: MESSAGE, readAt: null },
+        message: { task: task.id, from: { session: main.id, supervisor: false, task: null }, text: MESSAGE, readAt: null },
       });
       expect((await call(outside, "send_message", { task: task.id, text: "Hi" })).content).toEqual([
         { type: "text", text: "bad_request: an agent outside Trackwall sends no messages; follow its tasks with wait_for_session" },
@@ -111,6 +111,61 @@ describe.skipIf(process.versions.bun === undefined)(
       await daemon.facade.agents.stop(main.id);
       await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
       expect(daemon.facade.agents.sessions().messages).toEqual([]);
+    }, 60_000);
+
+    test("a task that proposed a subtask keeps messaging it and hearing from it after the user stops and resumes it (ADR-140)", async () => {
+      const main = await mainSession();
+      const parentProposal = ProposeTaskResult.parse(
+        (await call(main.client, "propose_task", { repo: "shop", title: "Split the service", prompt: "split it" })).structuredContent,
+      ).proposal;
+      const parent = await daemon.post(agentsApi.approveProposal, {
+        proposal: parentProposal.id,
+        prompt: "split it",
+        model: null,
+        approvals: "ask",
+      });
+      const firstSession = taskSession(parent.id);
+      await waitFor(daemon.facade.agents, firstSession, (s) => s.state?.state === "Working", "the parent's prompt turn");
+      const firstClient = await clientOfSession(firstSession);
+      const childProposal = ProposeTaskResult.parse(
+        (await call(firstClient, "propose_task", { repo: "shop", title: "Move the DTOs", prompt: "move the DTOs" })).structuredContent,
+      ).proposal;
+      expect(childProposal.proposedBy).toEqual({ session: firstSession, supervisor: false, task: parent.id });
+      const child = await daemon.post(agentsApi.approveProposal, {
+        proposal: childProposal.id,
+        prompt: "move the DTOs",
+        model: null,
+        approvals: "ask",
+      });
+      const childSession = taskSession(child.id);
+      await waitFor(daemon.facade.agents, childSession, (s) => s.state?.state === "Working", "the child's prompt turn");
+
+      // The user stops the parent's session and resumes the task: a new session with a new id and a new session token.
+      await daemon.facade.agents.stop(firstSession);
+      await daemon.post(agentsApi.resumeTask, { task: parent.id });
+      const resumedSession = taskSession(parent.id);
+      expect(resumedSession).not.toBe(firstSession);
+      const resumedClient = await clientOfSession(resumedSession);
+
+      const sent = SendMessageResult.parse(
+        (await call(resumedClient, "send_message", { task: child.id, text: "Keep the package names." })).structuredContent,
+      );
+      expect(sent.message).toMatchObject({ task: child.id, from: { session: resumedSession, supervisor: false, task: parent.id } });
+      const childClient = await clientOfSession(childSession);
+      await call(childClient, "report_result", { summary: "Moved the DTOs." });
+      expect(GetUpdatesResult.parse((await call(resumedClient, "get_updates")).structuredContent).updates).toEqual([
+        { kind: "result_reported", task: child.id, session: childSession, summary: "Moved the DTOs.", at: expect.any(String) },
+      ]);
+      // The task's own session, the main session and the session of another task are still not its proposer.
+      for (const client of [childClient, main.client])
+        expect((await call(client, "send_message", { task: child.id, text: "Hi" })).content).toEqual([
+          { type: "text", text: `bad_request: task ${child.id} was proposed by another session; only its proposer sends it messages` },
+        ]);
+
+      main.window.attachment.detach();
+      for (const session of [resumedSession, childSession, main.id]) await daemon.facade.agents.stop(session);
+      for (const task of [child, parent])
+        await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
     }, 60_000);
 
     test("a rejection reaches the proposer with the user's reason, and the tools refuse who they are not for", async () => {

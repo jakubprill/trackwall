@@ -138,7 +138,7 @@ const proposals: SessionEntry = {
       repo: "billing",
       title: "Add refunds",
       prompt: "add refunds",
-      proposedBy: { session: null, supervisor: false },
+      proposedBy: { session: null, supervisor: false, task: null },
       model: null,
       approvals: "ask",
       item: null,

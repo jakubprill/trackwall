@@ -63,7 +63,7 @@ describe.skipIf(process.versions.bun === undefined)("removing a repo from the pr
       repo: "docs",
       title: "Remove docs from the projects folder",
       prompt: "The user no longer works on the docs repo",
-      proposedBy: { session: main.id, supervisor: false },
+      proposedBy: { session: main.id, supervisor: false, task: null },
     });
     expect(daemon.facade.agents.sessions().proposals).toEqual([proposal]);
 

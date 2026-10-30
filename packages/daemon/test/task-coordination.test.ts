@@ -2,8 +2,8 @@ import { describe, expect, setSystemTime, test } from "bun:test";
 import type { ProposedBy, Session, Task, TaskState, Verification } from "@trackwall/protocol";
 import { DomainError } from "../src/infra/errors.ts";
 import { inboxPrompt } from "../src/modules/agents/inbox-prompt.ts";
-import { proposedByOf, proposerKeyOf, SUPERVISOR as SUPERVISOR_WORK } from "../src/modules/agents/proposer.ts";
-import { type CoordinatedSession, TaskCoordination } from "../src/modules/agents/task-coordination.ts";
+import { proposedByOf, proposerKeyOf, SUPERVISOR as SUPERVISOR_WORK, taskOfProposerKey } from "../src/modules/agents/proposer.ts";
+import { type CoordinatedSession, StoredCoordination, TaskCoordination } from "../src/modules/agents/task-coordination.ts";
 import { TaskMessages } from "../src/modules/agents/task-messages.ts";
 import { TaskUpdates } from "../src/modules/agents/task-updates.ts";
 
@@ -11,8 +11,11 @@ const MAIN = "11111111-1111-4111-8111-111111111111";
 const SUPERVISOR = "22222222-2222-4222-8222-222222222222";
 const NEW_SUPERVISOR = "33333333-3333-4333-8333-333333333333";
 const TASK_SESSION = "44444444-4444-4444-8444-444444444444";
-const BY_MAIN: ProposedBy = { session: MAIN, supervisor: false };
-const BY_SUPERVISOR: ProposedBy = { session: SUPERVISOR, supervisor: true };
+/** The session of task `by-main` after the user resumed it: the same task, a new session id. */
+const RESUMED_TASK_SESSION = "66666666-6666-4666-8666-666666666666";
+const BY_MAIN: ProposedBy = { session: MAIN, supervisor: false, task: null };
+const BY_SUPERVISOR: ProposedBy = { session: SUPERVISOR, supervisor: true, task: null };
+const BY_TASK_SESSION: ProposedBy = { session: TASK_SESSION, supervisor: false, task: "by-main" };
 
 function task(id: string, proposedBy: ProposedBy | null): Task {
   return {
@@ -58,7 +61,8 @@ const RUNNING: Session["run"] = { kind: "running", runId: "r1", startedAt: "2026
 
 /**
  * Coordination on fakes of the rest of `agents`: tasks `by-main` (proposed by the main session), `by-supervisor` (by an
- * earlier supervisor) and `by-user` (typed in the UI); sessions MAIN, SUPERVISOR and the task session of `by-main`.
+ * earlier supervisor), `by-user` (typed in the UI) and `by-task` (by the first session of `by-main`); sessions MAIN,
+ * SUPERVISOR and the task session of `by-main`, whose resumed session RESUMED_TASK_SESSION is listed but not running.
  * Every `askToRead` is recorded by session.
  */
 function setup() {
@@ -66,13 +70,15 @@ function setup() {
     ["by-main", task("by-main", BY_MAIN)],
     ["by-supervisor", task("by-supervisor", BY_SUPERVISOR)],
     ["by-user", task("by-user", null)],
-    ["by-outside", task("by-outside", { session: null, supervisor: false })],
+    ["by-outside", task("by-outside", { session: null, supervisor: false, task: null })],
+    ["by-task", task("by-task", BY_TASK_SESSION)],
   ]);
   const sessions = new Map([
     [MAIN, view(MAIN, null, "Input")],
     [SUPERVISOR, view(SUPERVISOR, null, "Input")],
     [NEW_SUPERVISOR, view(NEW_SUPERVISOR, null, "Input")],
     [TASK_SESSION, view(TASK_SESSION, "by-main", "Working")],
+    [RESUMED_TASK_SESSION, view(RESUMED_TASK_SESSION, "by-main", "Input")],
   ]);
   const asked: string[] = [];
   const running = new Set([MAIN, TASK_SESSION, SUPERVISOR]);
@@ -101,13 +107,11 @@ function setup() {
       return proposerKeyOf(found);
     },
     runningOfTask: (id) => (id === "by-main" && running.has(TASK_SESSION) ? live(TASK_SESSION) : undefined),
-    runningProposer: (key) =>
-      key === SUPERVISOR_WORK
-        ? [SUPERVISOR, NEW_SUPERVISOR].filter((id) => running.has(id)).map(live)[0]
-        : running.has(key)
-          ? live(key)
-          : undefined,
-    hasProposer: (key) => key === SUPERVISOR_WORK || sessions.has(key),
+    runningProposer: (key) => [...sessions.values()].filter((s) => running.has(s.id) && proposerKeyOf(s) === key).map((s) => live(s.id))[0],
+    hasProposer: (key) => {
+      const proposingTask = taskOfProposerKey(key);
+      return key === SUPERVISOR_WORK || (proposingTask === null ? sessions.has(key) : tasks.has(proposingTask));
+    },
     changed: () => {},
     log: () => {},
   });
@@ -154,8 +158,21 @@ describe("messages to a task's session", () => {
     expect(coordination.send(NEW_SUPERVISOR, "by-supervisor", "Use the new DTO.").message.from).toEqual({
       session: NEW_SUPERVISOR,
       supervisor: true,
+      task: null,
     });
     expect(() => coordination.send(MAIN, "by-supervisor", "Hi")).toThrow("proposed by another session");
+  });
+
+  test("a task's work takes messages from whichever session of that task runs now, and from no other session (ADR-140)", () => {
+    const { coordination } = setup();
+
+    expect(coordination.send(RESUMED_TASK_SESSION, "by-task", "Keep the package names.").message.from).toEqual({
+      session: RESUMED_TASK_SESSION,
+      supervisor: false,
+      task: "by-main",
+    });
+    expect(() => coordination.send(MAIN, "by-task", "Hi")).toThrow("task by-task was proposed by another session");
+    expect(() => coordination.send(SUPERVISOR, "by-task", "Hi")).toThrow("task by-task was proposed by another session");
   });
 
   test("after five messages without the user the sixth is refused, until the user types into the sender's session", () => {
@@ -186,7 +203,7 @@ describe("messages to a task's session", () => {
       tenMillisecondsLater();
       coordination.userTyped({ id: TASK_SESSION, task: "by-main" });
       // The task's session closed and resumed in a new one: the user still took part in the task.
-      coordination.sessionClosed({ id: TASK_SESSION, supervisor: false });
+      coordination.sessionClosed({ id: TASK_SESSION, supervisor: false, task: "by-main" });
       tenMillisecondsLater();
       fill();
       tenMillisecondsLater();
@@ -255,7 +272,7 @@ describe("updates on delegated work", () => {
   test("work nobody in Trackwall proposed gives no updates, and an agent outside Trackwall cannot read any", () => {
     const { coordination, asked } = setup();
     coordination.sessionEvent({ id: TASK_SESSION, task: "by-user" }, { kind: "turn_ended" });
-    coordination.proposalRejected({ id: "p2", proposedBy: { session: null, supervisor: false } }, null);
+    coordination.proposalRejected({ id: "p2", proposedBy: { session: null, supervisor: false, task: null } }, null);
 
     expect(asked).toEqual([]);
     expect(() => coordination.takeUpdates(null)).toThrow(
@@ -278,7 +295,7 @@ describe("updates on delegated work", () => {
 
   test("a proposer the user has closed gets nothing queued", () => {
     const gone = "55555555-5555-4555-8555-555555555555";
-    const tasks = new Map([["by-gone", task("by-gone", { session: gone, supervisor: false })]]);
+    const tasks = new Map([["by-gone", task("by-gone", { session: gone, supervisor: false, task: null })]]);
     const coordination = new TaskCoordination({
       task: () => task("by-gone", null),
       findTask: (id) => tasks.get(id),
@@ -296,13 +313,33 @@ describe("updates on delegated work", () => {
     expect(coordination.unread({ id: gone, supervisor: false, task: null }).updates).toBe(0);
   });
 
+  test("a task's updates outlive its closed session and reach its next one, and go when the task ends (ADR-140)", () => {
+    const { coordination, asked, running, tasks } = setup();
+    running.delete(TASK_SESSION);
+    coordination.sessionClosed({ id: TASK_SESSION, supervisor: false, task: "by-main" });
+
+    coordination.proposalRejected({ id: "p1", proposedBy: BY_TASK_SESSION }, "Not now");
+    running.add(RESUMED_TASK_SESSION);
+    coordination.sessionEvent({ id: "77777777-7777-4777-8777-777777777777", task: "by-task" }, { kind: "turn_ended" });
+
+    expect(asked).toEqual([RESUMED_TASK_SESSION]);
+    expect(coordination.takeUpdates(RESUMED_TASK_SESSION).updates.map((u) => [u.kind, u.task])).toEqual([
+      ["proposal_rejected", "p1"],
+      ["turn_ended", "by-task"],
+    ]);
+    coordination.proposalRejected({ id: "p2", proposedBy: BY_TASK_SESSION }, null);
+    tasks.delete("by-main");
+    coordination.taskEnded("by-main");
+    expect(coordination.unread({ id: RESUMED_TASK_SESSION, supervisor: false, task: "by-main" }).updates).toBe(0);
+  });
+
   test("a closed main session's updates go with it, the supervisor's stay for the next supervisor", () => {
     const { coordination } = setup();
     coordination.proposalRejected({ id: "p1", proposedBy: BY_MAIN }, null);
     coordination.proposalRejected({ id: "p2", proposedBy: BY_SUPERVISOR }, null);
 
-    coordination.sessionClosed({ id: MAIN, supervisor: false });
-    coordination.sessionClosed({ id: SUPERVISOR, supervisor: true });
+    coordination.sessionClosed({ id: MAIN, supervisor: false, task: null });
+    coordination.sessionClosed({ id: SUPERVISOR, supervisor: true, task: null });
 
     expect(coordination.unread({ id: MAIN, supervisor: false, task: null }).updates).toBe(0);
     expect(coordination.takeUpdates(NEW_SUPERVISOR).updates.map((u) => u.task)).toEqual(["p2"]);
@@ -353,8 +390,16 @@ describe("the coordination across a daemon restart", () => {
     before.userTyped({ id: TASK_SESSION, task: ended });
     before.proposalRejected({ id: kept, proposedBy: BY_MAIN }, "Not now");
     before.proposalRejected({ id: ended, proposedBy: BY_SUPERVISOR }, null);
-    before.proposalRejected({ id: ended, proposedBy: { session: TASK_SESSION, supervisor: false } }, null);
-    const stored = before.stored();
+    before.proposalRejected({ id: ended, proposedBy: { session: TASK_SESSION, supervisor: false, task: null } }, null);
+    before.proposalRejected(
+      { id: "7a1b2c3d-4e5f-4a6b-8c7d-8e9f0a1b2c3d", proposedBy: { session: TASK_SESSION, supervisor: false, task: kept } },
+      null,
+    );
+    before.proposalRejected(
+      { id: "8b2c3d4e-5f6a-4b7c-9d8e-9f0a1b2c3d4e", proposedBy: { session: TASK_SESSION, supervisor: false, task: ended } },
+      null,
+    );
+    const stored = StoredCoordination.parse(JSON.parse(JSON.stringify(before.stored())));
     expect(Object.keys(stored.userInSession)).toEqual([MAIN, TASK_SESSION]);
 
     const { coordination: after } = setup();
@@ -366,6 +411,9 @@ describe("the coordination across a daemon restart", () => {
       { kind: "proposal_rejected", task: kept, session: null, reason: "Not now", at: expect.any(String) },
     ]);
     expect(after.takeUpdates(NEW_SUPERVISOR).updates.map((u) => u.task)).toEqual([ended]);
+    // A task's work waits for the task's next session, also across the restart, while the task is there (ADR-140).
+    expect(after.unread({ id: RESUMED_TASK_SESSION, supervisor: false, task: kept }).updates).toBe(1);
+    expect(after.unread({ id: RESUMED_TASK_SESSION, supervisor: false, task: ended }).updates).toBe(0);
     // When the user last typed counts on for the sessions and tasks still there.
     expect(after.stored()).toMatchObject({ userInSession: { [MAIN]: expect.any(Number) }, userInTask: { [kept]: expect.any(Number) } });
     expect(Object.keys(after.stored().userInSession)).toEqual([MAIN]);

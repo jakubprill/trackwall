@@ -1,6 +1,6 @@
-import { SessionId, TASK_UPDATES_KEPT, TaskUpdate } from "@trackwall/protocol";
+import { TASK_UPDATES_KEPT, TaskUpdate } from "@trackwall/protocol";
 import { z } from "zod";
-import { SUPERVISOR } from "./proposer.ts";
+import { ProposerKey } from "./proposer.ts";
 
 /**
  * Task updates (ADR-68): what happened to delegated work, queued per proposer key (`proposer.ts`) until the proposer
@@ -13,7 +13,7 @@ import { SUPERVISOR } from "./proposer.ts";
 /** What `agent-queues.json` keeps of the updates: the unread ones of each proposer key, and how many dropped out before them. */
 export const StoredUpdates = z.array(
   z.object({
-    proposer: z.union([z.literal(SUPERVISOR), SessionId]),
+    proposer: ProposerKey,
     updates: z.array(TaskUpdate).max(TASK_UPDATES_KEPT),
     dropped: z.number().int().nonnegative(),
   }),

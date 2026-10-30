@@ -9,7 +9,7 @@ const PROPOSAL = {
   model: null,
   approvals: "ask" as const,
   item: null,
-  proposedBy: { session: null, supervisor: false },
+  proposedBy: { session: null, supervisor: false, task: null },
 };
 
 describe("task proposals", () => {

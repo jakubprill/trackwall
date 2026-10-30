@@ -64,7 +64,7 @@ describe.skipIf(process.versions.bun === undefined)("main session over MCP (real
       repo: "shop",
       title: "Add a README",
       prompt: "Describe how to run it in the README",
-      proposedBy: { session: null, supervisor: false },
+      proposedBy: { session: null, supervisor: false, task: null },
     });
     expect(daemon.facade.agents.sessions().proposals).toEqual([proposed]);
 
@@ -92,7 +92,7 @@ describe.skipIf(process.versions.bun === undefined)("main session over MCP (real
     const { proposal } = ProposeTaskResult.parse(
       (await call(mainClient, "propose_task", { repo: "shop", title: "Fix login", prompt: "fix login" })).structuredContent,
     );
-    expect(proposal.proposedBy).toEqual({ session: main.id, supervisor: false });
+    expect(proposal.proposedBy).toEqual({ session: main.id, supervisor: false, task: null });
 
     const task = await daemon.post(agentsApi.approveProposal, {
       proposal: proposal.id,
@@ -104,7 +104,7 @@ describe.skipIf(process.versions.bun === undefined)("main session over MCP (real
       id: proposal.id,
       title: "Fix login",
       prompt: "fix login and add a test",
-      proposedBy: { session: main.id, supervisor: false },
+      proposedBy: { session: main.id, supervisor: false, task: null },
       summary: null,
     });
     expect(task.branch).toMatch(/^trackwall\/fix-login-[0-9a-f]{6}$/);
