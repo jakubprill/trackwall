@@ -7,6 +7,7 @@
 
 use crate::daemon;
 use crate::daemon_state::DaemonState;
+use crate::dev_container::DevContainerStart;
 use crate::{autostart, json_file};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -73,7 +74,13 @@ pub fn remote_daemon_port(state: tauri::State<'_, Arc<DaemonState>>) -> Option<u
 /// the token, so a wrong address leaves the app as it was, then saves it and restarts the app, which stops the app's own
 /// daemon.
 #[tauri::command]
-pub async fn use_remote_daemon(app: AppHandle, state: tauri::State<'_, Arc<DaemonState>>, address: String) -> Result<(), String> {
+pub async fn use_remote_daemon(
+    app: AppHandle,
+    state: tauri::State<'_, Arc<DaemonState>>,
+    starting: tauri::State<'_, DevContainerStart>,
+    address: String,
+) -> Result<(), String> {
+    starting.cancel();
     let remote = parse_address(&address)?;
     refuse_own_daemon(&state, &remote)?;
     let checked = remote.clone();
@@ -99,7 +106,8 @@ pub fn switch_to(app: &AppHandle, remote: &RemoteDaemon) -> Result<(), String> {
 
 /// Forgets the remote daemon and restarts the app, which then starts its own.
 #[tauri::command]
-pub fn use_own_daemon(app: AppHandle) -> Result<(), String> {
+pub fn use_own_daemon(app: AppHandle, starting: tauri::State<'_, DevContainerStart>) -> Result<(), String> {
+    starting.cancel();
     if let Some(path) = json_file::config_file(&app, FILE) {
         match std::fs::remove_file(&path) {
             Ok(()) => {}

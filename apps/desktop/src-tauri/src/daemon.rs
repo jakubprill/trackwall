@@ -237,9 +237,8 @@ fn spawn_sidecar(home: &Path, log_path: &Path) -> Result<Child, String> {
     {
         use std::os::windows::process::CommandExt;
         // Without a console window and in its own group, so that Ctrl+C in the `tauri dev` terminal does not kill the daemon.
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-        cmd.creation_flags(CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP);
+        cmd.creation_flags(crate::system_open::CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP);
     }
     #[cfg(unix)]
     {

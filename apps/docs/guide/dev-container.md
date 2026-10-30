@@ -96,21 +96,21 @@ In the app, links and "Open in VS Code" open on your computer as they do from th
 
 The app can do what you would otherwise do by hand: open the dev container, wait for Trackwall in it and connect with its current token. It also does that after Trackwall in the container restarted with a new token.
 
-1. Let the container start Trackwall by itself and tell where its state is. Add to `devcontainer.json`:
+1. After the steps of [Start Trackwall](#start-trackwall), let the container start Trackwall by itself and tell where its state is. Add to `devcontainer.json`:
 
    ```json
    "containerEnv": {
      "TRACKWALL_HOME": "/home/vscode/.trackwall"
    },
-   "postStartCommand": "nohup bash -c 'cd ~/trackwall && ~/.local/bin/mise exec -- bun packages/daemon/src/main.ts --port 7700 > /tmp/trackwall-daemon.log 2>&1 &' > /dev/null 2>&1"
+   "postStartCommand": "nohup bash -c 'cd ~ && ~/.local/bin/mise exec -- bun ~/trackwall/packages/daemon/src/main.ts --port 7700 > /tmp/trackwall-daemon.log 2>&1 &' > /dev/null 2>&1"
    ```
 
-   Keep the other keys of `containerEnv` from [Set up the container](#set-up-the-container). Run `mise trust ~/trackwall` once in a terminal of the container, so `mise exec` takes the tools from Trackwall's own configuration. Trackwall's output goes to `/tmp/trackwall-daemon.log` in the container.
+   Keep the other keys of `containerEnv` from [Set up the container](#set-up-the-container). `mise exec` runs Trackwall with the tools you installed in step 2. Trackwall's output goes to `/tmp/trackwall-daemon.log` in the container; look there when the app keeps waiting.
 2. Rebuild the container once ("Dev Containers: Rebuild Container" in VS Code).
-3. In the app, open Settings › App › Daemon in a container. Under the dev container, enter the folder on your computer that holds `.devcontainer` (the folder you open in a container yourself) and the folder VS Code opens inside it, `/workspaces` in the example, and click "Save". When Trackwall in the container sets `TRACKWALL_DEVCONTAINER_HOST_FOLDER`, the first field is already filled in.
+3. In the app, open Settings › App › Daemon in a container. Under the dev container, enter the folder on your computer that holds `.devcontainer` (the folder you open in a container yourself) and the folder VS Code opens inside it, `/workspaces` in the example, and click "Save". While the app is connected to Trackwall in a container that sets `TRACKWALL_DEVCONTAINER_HOST_FOLDER`, the first field is already filled in.
 4. Click "Start the dev container and connect".
 
-Docker Desktop or Rancher Desktop has to be running. If the container already runs with Trackwall in it, the app connects right away. Otherwise it opens VS Code on the dev container, as your own shortcut or "Reopen in Container" does; VS Code may ask once whether to open it. The first start builds the container and can take several minutes. Once Trackwall in the container answers on the forwarded port, the app restarts and connects. Keep the VS Code window open: it forwards the port. When Trackwall in the container restarts later, the app shows the same button again on the screen it shows when it cannot connect.
+Docker Desktop or Rancher Desktop has to be running. If the container already runs with Trackwall in it, the app connects right away; if Trackwall there is another version than the app, it says so at once. Otherwise it opens VS Code on the dev container, as your own shortcut or "Reopen in Container" does; VS Code may ask once whether to open it. The first start builds the container and can take several minutes. Once Trackwall in the container answers on the forwarded port, the app restarts and connects. Keep the VS Code window open: it forwards the port. When Trackwall in the container restarts later, the app shows the same button again on the screen it shows when it cannot connect.
 
 The app finds the container by the folder you entered and reads Trackwall's address and token from it with `docker`; nothing is sent anywhere else. A dev container opened from a folder inside WSL instead of Windows is not supported yet.
 

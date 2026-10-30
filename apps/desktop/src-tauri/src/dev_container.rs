@@ -3,7 +3,9 @@
 //! container to open. "Start" then opens VS Code on that dev container (`dev-container+`, the address the shortcut opens;
 //! the Dev Containers extension starts or builds the container, and forwards the daemon's port while its window is open),
 //! finds the running container by the label the extension gives it, reads the daemon's `daemon.json` in it through
-//! `docker exec`, checks the daemon like a pasted address (ADR-130) and switches the app to it.
+//! `docker exec`, checks the daemon like a pasted address (ADR-130) and switches the app to it. The port in `daemon.json`
+//! is the one inside the container, which the dev container guide forwards to the same number (`requireLocalPort`);
+//! another number fails the check rather than reaching something else.
 //!
 //! The token never leaves this computer: it goes from the container to the shell over Docker's own channel and is saved
 //! like a pasted one. Every command is built from constants and the saved folder, never from what the daemon or the
@@ -17,6 +19,7 @@ use serde::{Deserialize, Serialize};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tauri::AppHandle;
@@ -32,6 +35,9 @@ const READ_DAEMON_FILE: &str = r#"cat "${TRACKWALL_HOME:-$HOME/.trackwall}/daemo
 
 const DOCKER_TIMEOUT: Duration = Duration::from_secs(20);
 
+/// More than Docker prints for `ps` with many containers; a container cannot make the window hold more of `daemon.json`.
+const MAX_OUTPUT: u64 = 256 * 1024;
+
 /// The first start builds the image, which can take a while.
 const START_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const POLL_INTERVAL: Duration = Duration::from_secs(2);
@@ -43,12 +49,15 @@ pub struct DevContainer {
     pub open: String,
 }
 
-/// The folder as `open_outside` accepts it for a `dev-container+` address: a plain local path. The folder inside the
-/// container is a Linux path that the address carries as it is.
-fn check(dev: &DevContainer) -> Result<(), String> {
-    if !system_open::is_local_folder(&dev.folder) || dev.folder.contains('"') {
-        return Err("Enter the full path of a folder on this computer, such as C:\\Users\\me\\Dev\\workspace.".into());
+impl DevContainer {
+    fn editor_url(&self) -> String {
+        system_open::dev_container_url(&self.folder, &self.open)
     }
+}
+
+/// The folder inside the container is a Linux path the address carries as it is; the address as a whole must be one
+/// `open_outside` takes, which decides which folders of this computer a dev container may be opened from.
+fn check(dev: &DevContainer) -> Result<(), String> {
     let open_ok = dev.open.starts_with('/')
         && dev.open.len() <= 256
         && dev.open.chars().all(|c| c >= ' ' && !matches!(c, '\\' | '?' | '#' | '%'))
@@ -56,18 +65,25 @@ fn check(dev: &DevContainer) -> Result<(), String> {
     if !open_ok {
         return Err("Enter the folder to open inside the container as a Linux path, such as /workspaces.".into());
     }
+    if !system_open::opens(&dev.editor_url()) {
+        return Err("Enter the full path of a folder on this computer, such as C:\\Users\\me\\Dev\\workspace.".into());
+    }
     Ok(())
+}
+
+/// As the Dev Containers extension writes it into its label: Windows separators on Windows.
+fn normalize(folder: &str) -> String {
+    let folder = folder.trim();
+    if cfg!(windows) {
+        folder.replace('/', "\\")
+    } else {
+        folder.to_owned()
+    }
 }
 
 /// Saved only with a configuration in it, so a typo shows at once rather than as a container that never starts.
 fn has_configuration(folder: &Path) -> bool {
     folder.join(".devcontainer").join("devcontainer.json").is_file() || folder.join(".devcontainer.json").is_file()
-}
-
-/// The address the user's shortcut opens: the folder in hex, as `devContainerEditorUrl` in protocol builds it.
-fn editor_url(dev: &DevContainer) -> String {
-    let hex: String = dev.folder.bytes().map(|b| format!("{b:02x}")).collect();
-    format!("vscode://vscode-remote/dev-container+{hex}{}", dev.open)
 }
 
 fn load(app: &AppHandle) -> Option<DevContainer> {
@@ -79,9 +95,10 @@ fn load(app: &AppHandle) -> Option<DevContainer> {
 /// The Docker command line. A window started from Finder on macOS gets no shell `PATH`, so the usual places come first.
 struct Docker {
     program: PathBuf,
-    /// Arguments before Docker's own: the script of a fake `docker` run by `sh` in tests, which cannot fail with "text
-    /// file busy" the way running a script just written can while other tests start processes.
-    leading: Vec<PathBuf>,
+    /// The script of a fake `docker` run by `sh`, which cannot fail with "text file busy" the way running a script just
+    /// written can while other tests start processes.
+    #[cfg(test)]
+    script: Option<PathBuf>,
 }
 
 impl Docker {
@@ -91,27 +108,37 @@ impl Docker {
             vec![
                 PathBuf::from("/usr/local/bin/docker"),
                 PathBuf::from("/opt/homebrew/bin/docker"),
+                PathBuf::from("/Applications/Docker.app/Contents/Resources/bin/docker"),
                 home.join(".docker").join("bin").join("docker"),
                 home.join(".rd").join("bin").join("docker"),
+                home.join(".orbstack").join("bin").join("docker"),
             ]
         } else {
             Vec::new()
         };
         let program = candidates.into_iter().find(|p| p.is_file()).unwrap_or_else(|| PathBuf::from("docker"));
-        Docker { program, leading: Vec::new() }
+        Docker {
+            program,
+            #[cfg(test)]
+            script: None,
+        }
     }
 
-    /// The command's output, or why it failed; never waits longer than `DOCKER_TIMEOUT`.
+    /// The command's output, or why it failed; never waits longer than `DOCKER_TIMEOUT`. The output is read while the
+    /// command runs, so a long `docker ps` never fills the pipe and stalls it.
     fn run(&self, args: &[&str]) -> Result<String, String> {
         let mut cmd = Command::new(&self.program);
-        cmd.args(&self.leading).args(args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        #[cfg(test)]
+        cmd.args(&self.script);
+        cmd.args(args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
-            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-            cmd.creation_flags(CREATE_NO_WINDOW);
+            cmd.creation_flags(system_open::CREATE_NO_WINDOW);
         }
         let mut child = cmd.spawn().map_err(|e| format!("docker could not start: {e}"))?;
+        let stdout = read_in_background(child.stdout.take());
+        let stderr = read_in_background(child.stderr.take());
         let deadline = Instant::now() + DOCKER_TIMEOUT;
         let status = loop {
             if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
@@ -119,27 +146,30 @@ impl Docker {
             }
             if Instant::now() > deadline {
                 let _ = child.kill();
+                let _ = child.wait();
                 return Err(format!("docker {} did not answer within {} s", args[0], DOCKER_TIMEOUT.as_secs()));
             }
             std::thread::sleep(Duration::from_millis(50));
         };
         if !status.success() {
-            return Err(read_all(child.stderr.take()).trim().chars().take(300).collect());
+            return Err(stderr.join().unwrap_or_default().trim().chars().take(300).collect());
         }
-        Ok(read_all(child.stdout.take()))
+        Ok(stdout.join().unwrap_or_default())
     }
 }
 
-/// The few lines Docker prints fit the pipe, so they are read after it exits.
-fn read_all(pipe: Option<impl Read>) -> String {
-    let mut text = String::new();
-    if let Some(mut pipe) = pipe {
-        let _ = pipe.read_to_string(&mut text);
-    }
-    text
+fn read_in_background(pipe: Option<impl Read + Send + 'static>) -> std::thread::JoinHandle<String> {
+    std::thread::spawn(move || {
+        let mut text = String::new();
+        if let Some(pipe) = pipe {
+            let _ = pipe.take(MAX_OUTPUT).read_to_string(&mut text);
+        }
+        text
+    })
 }
 
-/// Windows compares paths without case, and the extension may write the drive letter in either case.
+/// Windows and the default disk of macOS compare paths without case, and the extension may write the drive letter in
+/// either case.
 fn same_folder(label: &str, folder: &str, ignore_case: bool) -> bool {
     let trim = |p: &str| p.trim_end_matches(['\\', '/']).to_owned();
     let (label, folder) = (trim(label), trim(folder));
@@ -170,14 +200,39 @@ fn parse_daemon_file(text: &str) -> Option<RemoteDaemon> {
     remote_daemon::is_token(&file.token).then_some(RemoteDaemon { port: file.port, token: file.token })
 }
 
+/// Why a look found no daemon to connect to: one that may still come (the container or the daemon is starting), or one
+/// waiting cannot fix (a daemon of another version).
+#[derive(Debug, PartialEq)]
+enum Miss {
+    NotYet(String),
+    Final(String),
+}
+
+/// The daemon at `remote` accepted, or why not; a daemon of another version is final.
+type Connect<'a> = &'a dyn Fn(&RemoteDaemon) -> Result<(), Miss>;
+
+fn connect_remote(remote: &RemoteDaemon) -> Result<(), Miss> {
+    match daemon::health(remote.port) {
+        Some(version) if version != daemon::VERSION => Err(Miss::Final(format!(
+            "Trackwall in the container is {version}, but this app is {}. Update the older one so both are the same version.",
+            daemon::VERSION
+        ))),
+        _ => daemon::connect_remote(remote).map(drop).map_err(Miss::NotYet),
+    }
+}
+
 /// One look: the container of the folder, the daemon in it, and that daemon accepted by `connect`.
-fn find_daemon(docker: &Docker, folder: &str, connect: &dyn Fn(&RemoteDaemon) -> Result<(), String>) -> Result<RemoteDaemon, String> {
+fn find_daemon(docker: &Docker, folder: &str, connect: Connect) -> Result<RemoteDaemon, Miss> {
     let label = format!("{{{{.ID}}}}\t{{{{.Label \"{FOLDER_LABEL}\"}}}}");
-    let ps = docker.run(&["ps", "--no-trunc", "--format", &label])?;
-    let id = container_in(&ps, folder, cfg!(windows)).ok_or_else(|| format!("No container opened from {folder} is running."))?;
-    let text =
-        docker.run(&["exec", &id, "sh", "-c", READ_DAEMON_FILE]).map_err(|e| format!("Trackwall's daemon.json in the container: {e}"))?;
-    let remote = parse_daemon_file(&text).ok_or("Trackwall's daemon.json in the container is not one Trackwall writes.")?;
+    let ps = docker.run(&["ps", "--no-trunc", "--format", &label]).map_err(Miss::NotYet)?;
+    let ignore_case = cfg!(any(windows, target_os = "macos"));
+    let id =
+        container_in(&ps, folder, ignore_case).ok_or_else(|| Miss::NotYet(format!("No container opened from {folder} is running.")))?;
+    let text = docker
+        .run(&["exec", &id, "sh", "-c", READ_DAEMON_FILE])
+        .map_err(|e| Miss::NotYet(format!("Trackwall's daemon.json in the container: {e}")))?;
+    let remote =
+        parse_daemon_file(&text).ok_or(Miss::NotYet("Trackwall's daemon.json in the container is not one Trackwall writes.".into()))?;
     connect(&remote)?;
     Ok(remote)
 }
@@ -188,34 +243,55 @@ struct Timing {
 }
 
 /// Connects to the daemon of an already running container, or opens VS Code on the dev container and waits until the
-/// daemon in it answers on the forwarded port.
+/// daemon in it answers on the forwarded port; `cancelled` ends the wait.
 fn start(
     docker: &Docker,
     dev: &DevContainer,
-    open_editor: impl FnOnce(String) -> Result<(), String>,
-    connect: &dyn Fn(&RemoteDaemon) -> Result<(), String>,
+    open_editor: &dyn Fn(String) -> Result<(), String>,
+    connect: Connect,
+    cancelled: &AtomicBool,
     timing: Timing,
 ) -> Result<RemoteDaemon, String> {
     docker
         .run(&["version", "--format", "{{.Server.Version}}"])
         .map_err(|e| format!("Docker does not answer ({e}). Start Docker Desktop or Rancher Desktop and try again."))?;
-    if let Ok(remote) = find_daemon(docker, &dev.folder, connect) {
-        return Ok(remote);
+    match find_daemon(docker, &dev.folder, connect) {
+        Ok(remote) => return Ok(remote),
+        Err(Miss::Final(reason)) => return Err(reason),
+        Err(Miss::NotYet(_)) => {}
     }
-    open_editor(editor_url(dev))?;
+    open_editor(dev.editor_url())?;
     let deadline = Instant::now() + timing.timeout;
     loop {
         std::thread::sleep(timing.poll);
+        if cancelled.load(Ordering::SeqCst) {
+            return Err("Starting the dev container was cancelled.".into());
+        }
         match find_daemon(docker, &dev.folder, connect) {
             Ok(remote) => return Ok(remote),
-            Err(last) if Instant::now() > deadline => {
+            Err(Miss::Final(reason)) => return Err(reason),
+            Err(Miss::NotYet(last)) if Instant::now() > deadline => {
                 return Err(format!(
                     "Trackwall did not answer from the container within {} minutes. Last: {last}",
                     timing.timeout.as_secs() / 60
                 ))
             }
-            Err(_) => {}
+            Err(Miss::NotYet(_)) => {}
         }
+    }
+}
+
+/// One start at a time, which choosing another daemon cancels, so a start finishing late never overrides the choice.
+#[derive(Default)]
+pub struct DevContainerStart {
+    running: AtomicBool,
+    cancelled: Arc<AtomicBool>,
+}
+
+impl DevContainerStart {
+    /// Ends a start in progress; called when the user picks a daemon some other way.
+    pub fn cancel(&self) {
+        self.cancelled.store(true, Ordering::SeqCst);
     }
 }
 
@@ -229,7 +305,7 @@ pub fn dev_container(app: AppHandle) -> Option<DevContainer> {
 #[tauri::command]
 pub fn set_dev_container(app: AppHandle, dev: Option<DevContainer>) -> Result<(), String> {
     let file = json_file::config_file(&app, FILE).ok_or("the system gives the app no configuration directory")?;
-    let Some(dev) = dev.map(|d| DevContainer { folder: d.folder.trim().to_owned(), open: d.open.trim().to_owned() }) else {
+    let Some(dev) = dev.map(|d| DevContainer { folder: normalize(&d.folder), open: d.open.trim().to_owned() }) else {
         return match std::fs::remove_file(&file) {
             Err(err) if err.kind() != std::io::ErrorKind::NotFound => Err(format!("{}: {err}", file.display())),
             _ => Ok(()),
@@ -244,13 +320,24 @@ pub fn set_dev_container(app: AppHandle, dev: Option<DevContainer>) -> Result<()
 
 /// Starts the dev container, or finds it running, and switches the app to the Trackwall daemon in it; the app restarts.
 #[tauri::command]
-pub async fn start_dev_container(app: AppHandle, state: tauri::State<'_, Arc<DaemonState>>) -> Result<(), String> {
+pub async fn start_dev_container(
+    app: AppHandle,
+    state: tauri::State<'_, Arc<DaemonState>>,
+    starting: tauri::State<'_, DevContainerStart>,
+) -> Result<(), String> {
     let dev = load(&app).ok_or("Set the dev container's folder first.")?;
+    if starting.running.swap(true, Ordering::SeqCst) {
+        return Err("The dev container is already starting.".into());
+    }
+    starting.cancelled.store(false, Ordering::SeqCst);
+    let cancelled = Arc::clone(&starting.cancelled);
     let timing = Timing { timeout: START_TIMEOUT, poll: POLL_INTERVAL };
-    let connect = |remote: &RemoteDaemon| daemon::connect_remote(remote).map(drop);
-    let remote = tauri::async_runtime::spawn_blocking(move || start(&Docker::system(), &dev, system_open::open_outside, &connect, timing))
-        .await
-        .map_err(|e| e.to_string())??;
+    let open_editor = |url: String| system_open::open_outside(url);
+    let found =
+        tauri::async_runtime::spawn_blocking(move || start(&Docker::system(), &dev, &open_editor, &connect_remote, &cancelled, timing))
+            .await;
+    starting.running.store(false, Ordering::SeqCst);
+    let remote = found.map_err(|e| e.to_string())??;
     remote_daemon::refuse_own_daemon(&state, &remote)?;
     remote_daemon::switch_to(&app, &remote)
 }
@@ -267,7 +354,7 @@ mod tests {
 
     #[test]
     fn opens_the_address_of_the_users_own_shortcut() {
-        let url = editor_url(&dev(r"C:\Dev\ws", "/workspaces"));
+        let url = dev(r"C:\Dev\ws", "/workspaces").editor_url();
         assert_eq!(url, "vscode://vscode-remote/dev-container+433a5c4465765c7773/workspaces");
     }
 
@@ -278,7 +365,7 @@ mod tests {
         for bad in [
             dev(r"\\wsl.localhost\rancher-desktop\home\me", "/workspaces"),
             dev("Dev", "/workspaces"),
-            dev(r#"C:\a"b"#, "/workspaces"),
+            dev(&format!(r"C:\{}", "a".repeat(1100)), "/workspaces"),
             dev(r"C:\Dev", "workspaces"),
             dev(r"C:\Dev", "/workspaces/../etc"),
             dev(r"C:\Dev", "/workspaces?x"),
@@ -305,11 +392,11 @@ mod tests {
     }
 
     // A fake `docker` is a shell script, so these run on macOS and Linux; the rest of the module has no system branches
-    // but the Docker program's place.
+    // but the Docker program's place and its console window.
     #[cfg(unix)]
     mod with_a_fake_docker {
         use super::*;
-        use std::cell::Cell;
+        use std::cell::{Cell, RefCell};
 
         struct Fake {
             dir: PathBuf,
@@ -329,12 +416,12 @@ mod tests {
             let d = dir.display();
             let version = if docker_up { "echo 27.0" } else { "echo 'Cannot connect to the Docker daemon' >&2; exit 1" };
             let script = format!(
-                "#!/bin/sh\ncase \"$1\" in\n  version) {version} ;;\n  ps) [ -f {d}/running ] && printf '%s\\t/home/me/dev\\n' {id} ;;\n  exec) [ \"$2\" = {id} ] && cat {d}/daemon.json ;;\nesac\n",
+                "case \"$1\" in\n  version) {version} ;;\n  ps) [ -f {d}/running ] && printf '%s\\t/home/me/dev\\n' {id} ;;\n  exec) [ \"$2\" = {id} ] && cat {d}/daemon.json ;;\nesac\n",
                 id = "c".repeat(64)
             );
             let script_path = dir.join("docker");
             std::fs::write(&script_path, script).expect("fake docker");
-            Fake { dir, docker: Docker { program: PathBuf::from("/bin/sh"), leading: vec![script_path] } }
+            Fake { dir, docker: Docker { program: PathBuf::from("/bin/sh"), script: Some(script_path) } }
         }
 
         fn run_daemon(fake: &Fake) {
@@ -346,24 +433,20 @@ mod tests {
             Timing { timeout: Duration::from_secs(5), poll: Duration::from_millis(20) }
         }
 
-        const ACCEPT: &dyn Fn(&RemoteDaemon) -> Result<(), String> = &|_| Ok(());
+        const ACCEPT: Connect = &|_| Ok(());
+        static GOING: AtomicBool = AtomicBool::new(false);
 
         #[test]
         fn connects_to_the_daemon_of_a_running_container_without_opening_vs_code() {
             let fake = fake("running", true);
             run_daemon(&fake);
             let opened = Cell::new(false);
+            let open = |_| {
+                opened.set(true);
+                Ok(())
+            };
 
-            let remote = start(
-                &fake.docker,
-                &dev("/home/me/dev", "/workspaces"),
-                |_| {
-                    opened.set(true);
-                    Ok(())
-                },
-                ACCEPT,
-                quick(),
-            );
+            let remote = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &GOING, quick());
 
             assert_eq!(remote, Ok(RemoteDaemon { port: 7700, token: TOKEN.into() }));
             assert!(!opened.get());
@@ -372,19 +455,14 @@ mod tests {
         #[test]
         fn opens_vs_code_on_the_dev_container_and_waits_for_its_daemon() {
             let fake = fake("stopped", true);
-            let opened = std::cell::RefCell::new(None);
+            let opened = RefCell::new(None);
+            let open = |url| {
+                run_daemon(&fake);
+                *opened.borrow_mut() = Some(url);
+                Ok(())
+            };
 
-            let remote = start(
-                &fake.docker,
-                &dev("/home/me/dev", "/workspaces"),
-                |url| {
-                    run_daemon(&fake);
-                    *opened.borrow_mut() = Some(url);
-                    Ok(())
-                },
-                ACCEPT,
-                quick(),
-            );
+            let remote = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &GOING, quick());
 
             assert_eq!(remote, Ok(RemoteDaemon { port: 7700, token: TOKEN.into() }));
             assert_eq!(opened.into_inner(), Some("vscode://vscode-remote/dev-container+2f686f6d652f6d652f646576/workspaces".into()));
@@ -394,20 +472,31 @@ mod tests {
         fn says_to_start_docker_first_and_opens_nothing_while_it_does_not_answer() {
             let fake = fake("no-docker", false);
             let opened = Cell::new(false);
+            let open = |_| {
+                opened.set(true);
+                Ok(())
+            };
 
-            let err = start(
-                &fake.docker,
-                &dev("/home/me/dev", "/workspaces"),
-                |_| {
-                    opened.set(true);
-                    Ok(())
-                },
-                ACCEPT,
-                quick(),
-            )
-            .unwrap_err();
+            let err = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &GOING, quick()).unwrap_err();
 
             assert!(err.starts_with("Docker does not answer (Cannot connect to the Docker daemon)"), "{err}");
+            assert!(!opened.get());
+        }
+
+        #[test]
+        fn stops_at_once_at_a_daemon_of_another_version_without_opening_vs_code() {
+            let fake = fake("other-version", true);
+            run_daemon(&fake);
+            let opened = Cell::new(false);
+            let open = |_| {
+                opened.set(true);
+                Ok(())
+            };
+            let other_version: Connect = &|_| Err(Miss::Final("Trackwall in the container is 0.1.0, but this app is 0.2.0.".into()));
+
+            let err = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &open, other_version, &GOING, quick()).unwrap_err();
+
+            assert_eq!(err, "Trackwall in the container is 0.1.0, but this app is 0.2.0.");
             assert!(!opened.get());
         }
 
@@ -415,12 +504,26 @@ mod tests {
         fn gives_up_with_the_last_reason_when_the_daemon_never_answers() {
             let fake = fake("no-answer", true);
             run_daemon(&fake);
-            let refuse: &dyn Fn(&RemoteDaemon) -> Result<(), String> = &|_| Err("No Trackwall daemon answers at 127.0.0.1:7700.".into());
+            let refuse: Connect = &|_| Err(Miss::NotYet("No Trackwall daemon answers at 127.0.0.1:7700.".into()));
             let timing = Timing { timeout: Duration::from_millis(100), poll: Duration::from_millis(20) };
 
-            let err = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), |_| Ok(()), refuse, timing).unwrap_err();
+            let err = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &|_| Ok(()), refuse, &GOING, timing).unwrap_err();
 
             assert!(err.ends_with("Last: No Trackwall daemon answers at 127.0.0.1:7700."), "{err}");
+        }
+
+        #[test]
+        fn stops_waiting_when_the_user_picks_another_daemon() {
+            let fake = fake("cancelled", true);
+            let cancelled = AtomicBool::new(false);
+            let open = |_| {
+                cancelled.store(true, Ordering::SeqCst);
+                Ok(())
+            };
+
+            let err = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &cancelled, quick()).unwrap_err();
+
+            assert_eq!(err, "Starting the dev container was cancelled.");
         }
     }
 }

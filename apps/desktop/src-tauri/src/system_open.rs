@@ -37,6 +37,22 @@ fn vscode_remote(path: &str) -> bool {
     decode_hex(hex).is_some_and(|folder| is_local_folder(&folder))
 }
 
+/// The address that opens `path` inside the dev container opened from `folder`: the folder in hex, as
+/// `devContainerEditorUrl` in protocol builds it and the user's own `code --folder-uri` shortcut opens.
+pub fn dev_container_url(folder: &str, path: &str) -> String {
+    let hex: String = folder.bytes().map(|b| format!("{b:02x}")).collect();
+    format!("vscode://vscode-remote/dev-container+{hex}{path}")
+}
+
+/// Whether `open_outside` takes the address.
+pub fn opens(url: &str) -> bool {
+    openable(url).is_some()
+}
+
+/// For a command the window starts in the background: no console window flashes up.
+#[cfg(windows)]
+pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 fn decode_hex(hex: &str) -> Option<String> {
     if hex.is_empty() || !hex.len().is_multiple_of(2) {
         return None;
@@ -46,7 +62,7 @@ fn decode_hex(hex: &str) -> Option<String> {
 }
 
 /// `C:\…` or `/…`, never `\\server\…`, `//server/…` or `\\?\…`.
-pub fn is_local_folder(folder: &str) -> bool {
+fn is_local_folder(folder: &str) -> bool {
     let bytes = folder.as_bytes();
     let drive = bytes.len() >= 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && matches!(bytes[2], b'\\' | b'/');
     let unix = folder.starts_with('/') && !folder.starts_with("//");
@@ -101,7 +117,6 @@ fn reveal_command(_folder: &Path) -> Result<Command, String> {
 #[cfg(windows)]
 fn command(url: &str) -> Command {
     use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     let mut cmd = Command::new("rundll32");
     cmd.arg("url.dll,FileProtocolHandler").arg(url).creation_flags(CREATE_NO_WINDOW);
     cmd
@@ -144,8 +159,7 @@ mod tests {
     }
 
     fn dev_container(folder: &str) -> String {
-        let hex: String = folder.bytes().map(|b| format!("{b:02x}")).collect();
-        format!("vscode://vscode-remote/dev-container+{hex}/workspaces/repo")
+        dev_container_url(folder, "/workspaces/repo")
     }
 
     #[test]

@@ -133,6 +133,7 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Arc::clone(&state))
         .manage(PanelState::default())
+        .manage(dev_container::DevContainerStart::default())
         .manage(WindowEffects::default())
         .manage(Windows::default())
         .manage(jump::PendingJump::default())
