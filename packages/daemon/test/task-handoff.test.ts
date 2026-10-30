@@ -127,12 +127,12 @@ describe.skipIf(process.versions.bun === undefined)(
       expect(instructionsOf(childSession)).toContain(
         `- Your task was handed to you by the task \`${parent.id}\` in the repo \`payments\` (branch \`${parent.branch}\`): the user approved your task as the next step of its change, and you last read that branch at commit \`${parentHead}\`.`,
       );
-      // The tab and the tool give the same facts: the tool only adds the task it was asked about.
+      // The tab and the tool give the same facts.
       const fromTool = GetChangedEndpointsResult.parse(
         (await (await clientOfSession(childSession)).callTool({ name: "get_changed_endpoints", arguments: { task: parent.id } }))
           .structuredContent,
       );
-      expect({ task: parent.id, ...(await daemon.post(graphApi.changedEndpoints, { task: parent.id })) }).toEqual(fromTool);
+      expect(await daemon.post(graphApi.changedEndpoints, { task: parent.id })).toEqual(fromTool);
       // A task that is not on the list hands nothing on, and no worktree is made for it.
       const tasksBefore = daemon.facade.agents.sessions().tasks.length;
       await expect(

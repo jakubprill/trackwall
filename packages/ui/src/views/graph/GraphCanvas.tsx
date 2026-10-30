@@ -1,7 +1,7 @@
 import { countLabel, type GraphNode, type RepoGraph } from "@trackwall/protocol";
 import { useMemo } from "react";
 import { type EdgePair, edgePath, type GraphLayout, NODE_HEIGHT, NODE_WIDTH, type NodeBox, neighbourhood } from "@/lib/graph-layout";
-import { IMPACT_RING_STROKE, impactEdgeRing } from "@/lib/task-impact";
+import { IMPACT_RING_BORDER, IMPACT_RING_STROKE, impactEdgeRing } from "@/lib/task-impact";
 import { cn } from "@/lib/utils";
 
 /** The margin around the drawing, so that glowing edges and dots at the border are not cut off. */
@@ -139,13 +139,6 @@ function Edge({
   );
 }
 
-const RING_BORDER = [
-  "border-primary shadow-glow-primary",
-  "border-destructive shadow-glow-destructive",
-  "border-warning shadow-glow-warning",
-  "border-warning/60",
-] as const;
-
 /** A dot at the repo that is used, like the nodes on curves in the inspiration: direction without arrowheads. */
 function EdgeEnd({ box, active }: { box: NodeBox; active: boolean }) {
   return <circle cx={box.x} cy={box.y + NODE_HEIGHT / 2} r={3} className={active ? "fill-primary" : "fill-muted-foreground"} />;
@@ -180,7 +173,7 @@ function NodeCard({
         "surface focus-visible:ring-ring/50 absolute flex flex-col justify-center gap-0.5 px-3 text-left transition-[opacity,border-color,box-shadow] outline-none focus-visible:ring-2",
         "hover:border-primary/50",
         selected && "border-primary shadow-glow-primary",
-        !selected && ring !== undefined && RING_BORDER[ring],
+        !selected && ring !== undefined && IMPACT_RING_BORDER[ring],
         node.problem !== null && !selected && ring === undefined && "border-warning/60",
         dimmed && "opacity-35",
       )}

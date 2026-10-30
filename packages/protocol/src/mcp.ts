@@ -36,13 +36,13 @@ import { RepoCardResult, TagName } from "./cards.ts";
 import { CODE_SEARCH_LINE_MAX_CHARS, CODE_SEARCH_MAX_MATCHES, CodePathspecs, CodeQuery, SearchCodeResult } from "./code-search.ts";
 import { DAY_REPORT_COMMITS, DayReport } from "./day-start.ts";
 import {
-  ChangedEndpoints,
   FindEndpointResult,
   MAX_CHANGED_ENDPOINTS,
   MAX_FOUND_ENDPOINTS,
   MAX_IMPACT_RINGS,
   MAX_SUBGRAPH_DEPTH,
   Subgraph,
+  TaskChangedEndpoints,
   WhoCallsResult,
 } from "./graph.ts";
 import { HttpMethod } from "./http.ts";
@@ -201,7 +201,7 @@ export type SendMessageResult = z.infer<typeof SendMessageResult>;
 export const GetMessagesResult = z.object({ messages: z.array(TaskMessage.omit({ readAt: true })) });
 export type GetMessagesResult = z.infer<typeof GetMessagesResult>;
 
-export const GetChangedEndpointsResult = ChangedEndpoints.extend({ task: TaskId });
+export const GetChangedEndpointsResult = TaskChangedEndpoints;
 export type GetChangedEndpointsResult = z.infer<typeof GetChangedEndpointsResult>;
 
 export const GetHandoffResult = z.object({ handoff: TaskHandoffState.nullable() });

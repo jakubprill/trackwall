@@ -73,16 +73,11 @@ export function TaskPanel({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const detailsArea = useRef<HTMLElement>(null);
   const shown: TaskTab = session || tab !== "terminal" ? tab : "changes";
-  const tabs = session
-    ? ([
-        { id: "terminal", label: "Terminal" },
-        { id: "changes", label: "Changes" },
-        { id: "impact", label: "Impact" },
-      ] as const)
-    : ([
-        { id: "changes", label: "Changes" },
-        { id: "impact", label: "Impact" },
-      ] as const);
+  const tabs = [
+    ...(session ? [{ id: "terminal", label: "Terminal" } as const] : []),
+    { id: "changes", label: "Changes" } as const,
+    { id: "impact", label: "Impact" } as const,
+  ];
 
   return (
     <>

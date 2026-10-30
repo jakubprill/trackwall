@@ -13,16 +13,13 @@ import { repoProblems } from "@/lib/graph-labels";
 import { layoutGraph } from "@/lib/graph-layout";
 import { GRAPH_PACE } from "@/lib/repo-watch";
 import { taskName } from "@/lib/session-entries";
-import { impactRings } from "@/lib/task-impact";
+import { IMPACT_POLL_MS, impactRings } from "@/lib/task-impact";
 import { useCardWarmup } from "@/lib/use-card-warmup";
 import { useRemote } from "@/lib/use-remote";
 import type { RepoWatchHandle } from "@/lib/use-repo-watch";
 import { GraphCanvas } from "./GraphCanvas.tsx";
 import { GraphImpactPanel } from "./GraphImpactPanel.tsx";
 import { GraphNodePanel, GraphSummaryPanel } from "./GraphNodePanel.tsx";
-
-/** As in a task's Impact tab: a new commit's card is read once, later reads are cache hits. */
-const IMPACT_POLL_MS = 10_000;
 
 /**
  * The "Overview" view (§4.6, ADR-29): the graph of connections between repos at full width and the details panel of the
@@ -49,14 +46,17 @@ export function GraphView({
   const graph = useRemote(load, repoWatch.options(GRAPH_PACE));
   const warmup = useCardWarmup(conn, warmupLive).data;
   const [selected, setSelected] = useState<string>();
-  const [impactTask, setImpactTask] = useState(initialImpactTask);
+  const [chosenTask, setImpactTask] = useState(initialImpactTask);
+  // An ended task has no impact to show: the view goes back to the plain graph rather than asking again every few seconds.
+  const tasks = sessions?.tasks ?? [];
+  const impactTask = sessions === undefined || tasks.some((t) => t.id === chosenTask) ? chosenTask : undefined;
   const loadImpact = useMemo(
     () => (impactTask === undefined ? undefined : () => post(conn, graphApi.changedEndpoints, { task: impactTask })),
     [conn, impactTask],
   );
-  // A new task clears the last one's impact until its own comes; polled like the task's Impact tab.
   const impact = useRemote(loadImpact, { pollMs: IMPACT_POLL_MS });
-  const changed = impactTask === undefined ? undefined : impact.data;
+  // The answer names its task, so the last task's impact does not show under the one just chosen.
+  const changed = impact.data?.task === impactTask ? impact.data : undefined;
   const rings = useMemo(() => changed && impactRings(changed), [changed]);
   const data = graph.data;
   const layout = useMemo(
@@ -75,7 +75,7 @@ export function GraphView({
       <section className="flex min-h-0 min-w-0 flex-col">
         <header className="flex items-center justify-between gap-3 px-4 pt-3 pb-2">
           <h2 className="hud-label">Overview {data && <span className="text-primary">{`// ${twoDigits(data.nodes.length)}`}</span>}</h2>
-          <ImpactPicker tasks={sessions?.tasks ?? []} task={impactTask} onChoose={setImpactTask} />
+          <ImpactPicker tasks={tasks} task={impactTask} onChoose={setImpactTask} />
           <Button variant="ghost" size="icon" onClick={graph.reload} aria-label="Refresh graph">
             <RefreshCw />
           </Button>

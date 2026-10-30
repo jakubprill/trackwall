@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ChangedEndpoint, ImpactedRepo } from "@trackwall/protocol";
 import {
+  contractChange,
   endpointsCalledBy,
   handoffPrompt,
   impactEdgeRing,
@@ -8,6 +9,7 @@ import {
   impactRings,
   impactSummary,
   RING_GAP,
+  reachText,
 } from "../src/lib/task-impact.ts";
 
 const caller = (repo: string, client: string, line: number) => ({
@@ -76,11 +78,38 @@ describe("a task's impact", () => {
     );
     expect(handoffPrompt(changed, "Add a note to order lines", web)).toBe(
       [
-        "shop-web calls orders-bff, which the task “Add a note to order lines” in orders-api may reach through its changed endpoints.",
+        "shop-web uses orders-bff, which the task “Add a note to order lines” in orders-api may reach through its changed endpoints.",
         "",
         "Check whether the change reaches shop-web, and update it if it does. Read that task's change with get_changed_endpoints and get_task_changes before you change code.",
       ].join("\n"),
     );
+  });
+
+  test("a repo of ring 1 that reaches the task's repo only by its address is asked to check, not told of calls it has none of", () => {
+    const proxy: ImpactedRepo = { repo: "orders-admin", ring: 1, uses: ["orders-api"], calls: [], through: null, sure: false };
+    expect(reachText({ endpoints: [getOrder] }, proxy)).toBe("uses orders-api");
+    expect(handoffPrompt({ repo: "orders-api", endpoints: [getOrder] }, "Add a note", proxy).split("\n")[0]).toBe(
+      "orders-admin uses orders-api, which the task “Add a note” in orders-api may reach through its changed endpoints.",
+    );
+  });
+
+  test("a reached repo says what it calls: in ring 1 the changed endpoints, further out the endpoints of the ring inside", () => {
+    expect(reachText({ endpoints: [getOrder] }, bff)).toBe("calls GET /api/orders/{id}");
+    const gateway = {
+      ...bff,
+      repo: "api-gateway",
+      ring: 2,
+      calls: [{ repo: "orders-bff", method: "GET" as const, path: "/shop/{id}", handler: null }],
+    };
+    expect(reachText({ endpoints: [getOrder] }, gateway)).toBe("calls GET /shop/{id} of orders-bff");
+  });
+
+  test("a contract shows its types once when they stay, before ⇒ after when they change, and nothing without a body", () => {
+    expect(contractChange(getOrder)).toBe("response OrderDto");
+    expect(contractChange({ before: getOrder.before, after: { handler: null, request: "OrderLine", response: "OrderDto" } })).toBe(
+      "response OrderDto ⇒ request OrderLine, response OrderDto",
+    );
+    expect(contractChange({ before: null, after: { handler: null, request: null, response: null } })).toBe("");
   });
 
   test("an Overview edge is lit when it calls from one ring into the ring inside it", () => {

@@ -734,7 +734,18 @@ test("the impact of a change goes from the callers of a changed endpoint to the 
       sure: false,
     },
   ]);
-  // An added endpoint has no callers yet, so it reaches nobody.
+  // An added endpoint has no callers yet, so it reaches nobody, not even a client without paths to the task's repo.
+  const admin = repo("orders-admin", card([], [client({ name: "orders.url", app: "orders" })]));
+  const withAdmin = buildGraphWithIndex([...cards, admin], { config: NO_CONFIG, file: CONFIG_FILE, problems: [] }).http;
+  expect(withCallers(withAdmin, "orders-api", [{ ...change, change: "added" }]).impact).toEqual([]);
+  expect(withCallers(withAdmin, "orders-api", [change]).impact.find((r) => r.repo === "orders-admin")).toEqual({
+    repo: "orders-admin",
+    ring: 1,
+    uses: ["orders-api"],
+    calls: [],
+    through: null,
+    sure: false,
+  });
   expect(withCallers(http, "orders-api", [{ ...change, change: "added" }]).impact).toEqual([]);
 });
 

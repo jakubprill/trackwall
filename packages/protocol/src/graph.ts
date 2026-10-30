@@ -347,8 +347,8 @@ export const ImpactedRepo = z.object({
    */
   through: z.array(EndpointRef).nullable(),
   /**
-   * `false` when every way here goes through a repo with `through: null` or a client without paths: it may be reached,
-   * or not.
+   * `false` when every way into its nearest ring goes through a repo with `through: null` or a client without paths:
+   * it may be reached, or not.
    */
   sure: z.boolean(),
 });
@@ -366,6 +366,10 @@ export const ChangedEndpoints = EndpointChanges.omit({ changes: true }).extend({
 });
 export type ChangedEndpoints = z.infer<typeof ChangedEndpoints>;
 
+/** `ChangedEndpoints` of the task asked about, which names it, so a late answer is not taken for another task's. */
+export const TaskChangedEndpoints = ChangedEndpoints.extend({ task: TaskId });
+export type TaskChangedEndpoints = z.infer<typeof TaskChangedEndpoints>;
+
 const endpoint = apiEndpoints("graph");
 
 export const graphApi = {
@@ -375,5 +379,5 @@ export const graphApi = {
    * The endpoints a task's commits change and the repos they reach (ADR-145, ADR-147), as `get_changed_endpoints` gives
    * them to an agent; `not_found` for an unknown or ended task.
    */
-  changedEndpoints: endpoint("changed-endpoints", z.object({ task: TaskId }).strict(), ChangedEndpoints),
+  changedEndpoints: endpoint("changed-endpoints", z.object({ task: TaskId }).strict(), TaskChangedEndpoints),
 };

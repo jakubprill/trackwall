@@ -1,7 +1,8 @@
 import type { ChangedEndpoints } from "@trackwall/protocol";
+import type { ReactNode } from "react";
+import { ImpactRingBadge } from "@/components/ImpactRingBadge";
 import { Badge } from "@/components/ui/badge";
 import { impactSummary } from "@/lib/task-impact";
-import { cn } from "@/lib/utils";
 
 /**
  * The side panel of the "Overview" view while it lights a task's impact (ADR-147): the summary, the task's repo and
@@ -15,16 +16,9 @@ export function GraphImpactPanel({ changed, onSelect }: { changed: ChangedEndpoi
         <p className="pt-1 text-sm">{impactSummary(changed)}</p>
       </header>
       <ul className="flex flex-col gap-1">
-        <RepoRow repo={changed.repo} label="changed" variant="default" onSelect={onSelect} />
+        <RepoRow repo={changed.repo} badge={<Badge>changed</Badge>} onSelect={onSelect} />
         {changed.impact.map((r) => (
-          <RepoRow
-            key={r.repo}
-            repo={r.repo}
-            label={`ring ${r.ring}${r.sure ? "" : " · maybe"}`}
-            variant={r.ring === 1 ? "destructive" : "outline"}
-            muted={r.ring > 1}
-            onSelect={onSelect}
-          />
+          <RepoRow key={r.repo} repo={r.repo} badge={<ImpactRingBadge reached={r} />} onSelect={onSelect} />
         ))}
       </ul>
       <p className="text-muted-foreground text-xs">
@@ -35,19 +29,7 @@ export function GraphImpactPanel({ changed, onSelect }: { changed: ChangedEndpoi
   );
 }
 
-function RepoRow({
-  repo,
-  label,
-  variant,
-  muted = false,
-  onSelect,
-}: {
-  repo: string;
-  label: string;
-  variant: "default" | "destructive" | "outline";
-  muted?: boolean;
-  onSelect: (repo: string) => void;
-}) {
+function RepoRow({ repo, badge, onSelect }: { repo: string; badge: ReactNode; onSelect: (repo: string) => void }) {
   return (
     <li>
       <button
@@ -55,9 +37,7 @@ function RepoRow({
         onClick={() => onSelect(repo)}
         className="hover:bg-accent/40 flex w-full min-w-0 items-center gap-2 rounded-sm px-2 py-1 text-left"
       >
-        <Badge variant={variant} className={cn(muted && "border-warning/40 text-warning")}>
-          {label}
-        </Badge>
+        {badge}
         <span className="truncate font-mono text-sm">{repo}</span>
       </button>
     </li>

@@ -6,8 +6,27 @@ import type { EdgePair } from "./graph-layout.ts";
  * sits in the drawing, what the summary says and the prompt a hand-off to a reached repo starts with. Without React.
  */
 
-/** The stroke of each ring, from the task's repo outwards: the accent, then state colours fading with the distance. */
+/**
+ * A task's impact is read again this often while it is shown: a new commit's card is read once and cached (ADR-25),
+ * so a later read is a HEAD and two cache hits, and ten seconds keeps up with the agent's commits.
+ */
+export const IMPACT_POLL_MS = 10_000;
+
+/**
+ * The look of each ring, from the task's repo outwards: the accent, then state colours fading with the distance; a
+ * stroke for the drawings' lines and a border with its glow for the Overview's repo cards.
+ */
 export const IMPACT_RING_STROKE = ["stroke-primary", "stroke-destructive", "stroke-warning", "stroke-warning/60"] as const;
+export const IMPACT_RING_BORDER = [
+  "border-primary shadow-glow-primary",
+  "border-destructive shadow-glow-destructive",
+  "border-warning shadow-glow-warning",
+  "border-warning/60",
+] as const;
+
+/** Why a repo is only maybe reached, for its tooltip. */
+export const MAYBE_REACHED =
+  "Maybe reached: it is reached only through a repo whose code Trackwall could not follow, or through a client that knows an address but no paths";
 
 /** How far a repo is from the change: 0 for the task's own repo, then its ring. */
 export function impactRings(changed: Pick<ChangedEndpoints, "repo" | "impact">): Map<string, number> {
@@ -39,7 +58,7 @@ export function endpointsCalledBy(endpoints: readonly ChangedEndpoint[], repo: s
 export function handoffPrompt(changed: Pick<ChangedEndpoints, "repo" | "endpoints">, taskName: string, reached: ImpactedRepo): string {
   const from = `the task “${taskName}” in ${changed.repo}`;
   const read = `Read that task's change with ${mcpTools.getChangedEndpoints.name} and ${mcpTools.getTaskChanges.name} before you change code.`;
-  if (reached.ring === 1) {
+  if (reached.ring === 1 && reached.calls.length > 0) {
     const lines = endpointsCalledBy(changed.endpoints, reached.repo).map(endpointLine);
     return [
       `The task “${taskName}” in ${changed.repo} changes endpoints that ${reached.repo} calls:`,
@@ -48,25 +67,40 @@ export function handoffPrompt(changed: Pick<ChangedEndpoints, "repo" | "endpoint
       `Update ${reached.repo} to the new contract. ${read}`,
     ].join("\n");
   }
-  const via =
-    reached.calls.length > 0 ? reached.calls.map((c) => `${c.method ?? "ANY"} ${c.path} of ${c.repo}`).join(", ") : reached.uses.join(", ");
   return [
-    `${reached.repo} calls ${via}, which ${from} may reach through its changed endpoints.`,
+    `${reached.repo} ${reachText(changed, reached)}, which ${from} may reach through its changed endpoints.`,
     "",
     `Check whether the change reaches ${reached.repo}, and update it if it does. ${read}`,
   ].join("\n");
 }
 
+/** What links a reached repo to the change, in a few words: the endpoints it calls, or the repos it uses by address. */
+export function reachText(changed: Pick<ChangedEndpoints, "endpoints">, reached: ImpactedRepo): string {
+  if (reached.calls.length === 0) return `uses ${reached.uses.join(", ")}`;
+  if (reached.ring === 1)
+    return `calls ${endpointsCalledBy(changed.endpoints, reached.repo)
+      .map((e) => `${e.method ?? "ANY"} ${e.path}`)
+      .join(", ")}`;
+  return `calls ${reached.calls.map((c) => `${c.method ?? "ANY"} ${c.path} of ${c.repo}`).join(", ")}`;
+}
+
+/** An endpoint's request and response types, before ⇒ after when they differ; `""` when neither side has a body. */
+export function contractChange({ before, after }: Pick<ChangedEndpoint, "before" | "after">): string {
+  const [b, a] = [before && contractSide(before), after && contractSide(after)];
+  if (b === a || b === null || a === null) return a || b || "";
+  return `${b || "no body"} ⇒ ${a || "no body"}`;
+}
+
+function contractSide({ request, response }: { request: string | null; response: string | null }): string {
+  return [request && `request ${request}`, response && `response ${response}`].filter((p) => p !== null).join(", ");
+}
+
 function endpointLine(e: ChangedEndpoint): string {
-  const contract = e.after === null ? "" : contractText(e.after);
+  const side = e.after && contractSide(e.after);
+  const contract = side ? ` (${side})` : "";
   const dtos = e.dtos.length > 0 ? `; DTOs changed: ${e.dtos.join(", ")}` : "";
   const calls = e.callers.map((c) => `${c.client} at ${c.evidence.path}:${c.evidence.line}`).join(", ");
   return `- ${e.change} ${e.method ?? "ANY"} ${e.path}${contract}${dtos}, called by ${calls}`;
-}
-
-function contractText({ request, response }: { request: string | null; response: string | null }): string {
-  const parts = [request && `request ${request}`, response && `response ${response}`].filter((p) => p !== null);
-  return parts.length === 0 ? "" : ` (${parts.join(", ")})`;
 }
 
 /**

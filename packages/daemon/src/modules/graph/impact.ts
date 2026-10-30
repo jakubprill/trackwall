@@ -11,6 +11,8 @@ import type { HttpIndex } from "./http-index.ts";
  * client with an address but no known paths (a frontend's proxy to its BFF), which may call any endpoint of its target.
  */
 export function impactOf(index: HttpIndex, calls: EndpointCalls, repo: string, changed: ReadonlySet<ProvidedEndpoint>): ImpactedRepo[] {
+  // Nothing removed or changed is nothing to reach, also for a client without paths to the task's repo.
+  if (changed.size === 0) return [];
   const repoOf = new Map(index.endpoints.map((e) => [e.endpoint, e.repo]));
   const reached = new Set([repo]);
   const impact: ImpactedRepo[] = [];

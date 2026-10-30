@@ -337,10 +337,16 @@ export function proposerLabel(proposedBy: ProposedBy, sessions: readonly Session
   return `proposed by ${proposerName(proposedBy, sessions)}`;
 }
 
+/** A task the user handed on from another task's impact (ADR-147): no session proposed it, the user did. */
+function handedOnBy(task: string, sessions: readonly Session[]): string {
+  const repo = latestSession(sessions, task)?.repo;
+  return repo ? `you, from the task in ${repo}` : "you, from a task that is no longer listed";
+}
+
 /** Who a proposal or a task message (ADR-68) came from, as the end of "proposed by …" or "from …". */
 export function proposerName(proposedBy: ProposedBy, sessions: readonly Session[]): string {
   if (proposedBy.supervisor) return "the supervisor";
-  if (proposedBy.session === null) return "an agent outside Trackwall";
+  if (proposedBy.session === null) return proposedBy.task === null ? "an agent outside Trackwall" : handedOnBy(proposedBy.task, sessions);
   // A task's work came from whichever of its sessions runs now (ADR-140), the newest one when the proposing one is gone.
   const session =
     sessions.find((s) => s.id === proposedBy.session) ?? (proposedBy.task === null ? undefined : latestSession(sessions, proposedBy.task));

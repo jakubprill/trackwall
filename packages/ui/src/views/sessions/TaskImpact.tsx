@@ -1,7 +1,8 @@
-import { agentsApi, type ChangedEndpoint, type ChangedEndpoints, graphApi, type ImpactedRepo, type Task } from "@trackwall/protocol";
+import { agentsApi, type ChangedEndpoint, type ChangedEndpoints, graphApi, type Task } from "@trackwall/protocol";
 import { Network, RefreshCw, Send, TriangleAlert } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
+import { ImpactRingBadge } from "@/components/ImpactRingBadge";
 import { Loading } from "@/components/Loading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,17 +10,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { taskName } from "@/lib/session-entries";
-import { endpointsCalledBy, handoffPrompt, impactPoints, impactSummary, RING_GAP } from "@/lib/task-impact";
+import { contractChange, handoffPrompt, IMPACT_POLL_MS, impactPoints, impactSummary, RING_GAP, reachText } from "@/lib/task-impact";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
 import { ImpactRings } from "./ImpactRings.tsx";
-
-/**
- * The cards of a new head are read once per commit and cached (ADR-25), so a read after that is a HEAD and two cache
- * hits: every ten seconds keeps the tab close to the agent's commits without a git process a second.
- */
-const POLL_MS = 10_000;
 
 /**
  * The task's "Impact" tab (ADR-147): the endpoints the task's commits change, the repos that call them and, ring by
@@ -42,7 +37,7 @@ export function TaskImpact({
   onShowOnOverview: (task: string) => void;
 }) {
   const load = useCallback(() => post(conn, graphApi.changedEndpoints, { task: task.id }), [conn, task.id]);
-  const changed = useRemote(paused ? undefined : load, { pollMs: POLL_MS });
+  const changed = useRemote(paused ? undefined : load, { pollMs: IMPACT_POLL_MS });
   const [selected, setSelected] = useState<string>();
   if (changed.error && !changed.data) return <ErrorWithRetry message={changed.error} onRetry={changed.reload} />;
   if (!changed.data) return <Loading text="Comparing the task's endpoints with its base…" />;
@@ -119,7 +114,7 @@ function EndpointList({ endpoints }: { endpoints: readonly ChangedEndpoint[] }) 
             </div>
             <p className="text-muted-foreground pt-1 font-mono text-2xs">
               {[
-                contractChange(e),
+                contractChange(e) || false,
                 e.dtos.length > 0 && `DTOs: ${e.dtos.join(", ")}`,
                 e.change !== "added" && `${e.callers.length === 0 ? "no" : e.callers.length} callers`,
               ]
@@ -131,15 +126,6 @@ function EndpointList({ endpoints }: { endpoints: readonly ChangedEndpoint[] }) 
       </ul>
     </section>
   );
-}
-
-/** The endpoint's request and response types, before ⇒ after when they differ. */
-function contractChange({ before, after }: ChangedEndpoint): string | false {
-  const side = (c: ChangedEndpoint["before"]) =>
-    c === null ? null : [c.request && `request ${c.request}`, c.response && `response ${c.response}`].filter(Boolean).join(", ");
-  const [b, a] = [side(before), side(after)];
-  if (b === a || b === null || a === null) return a || b || false;
-  return `${b || "no body"} ⇒ ${a || "no body"}`;
 }
 
 function ReachedRepos({
@@ -171,7 +157,7 @@ function ReachedRepos({
             onMouseLeave={() => onSelect(undefined)}
           >
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <RingBadge reached={reached} />
+              <ImpactRingBadge reached={reached} />
               <span className="truncate font-mono text-sm">{reached.repo}</span>
               <span className="text-muted-foreground min-w-0 flex-1 truncate text-xs">{reachText(changed, reached)}</span>
               {handingTo !== reached.repo && (
@@ -198,28 +184,6 @@ function ReachedRepos({
       </ul>
     </section>
   );
-}
-
-function RingBadge({ reached }: { reached: ImpactedRepo }) {
-  return (
-    <Badge
-      variant={reached.ring === 1 ? "destructive" : "outline"}
-      className={cn(reached.ring > 1 && "border-warning/40 text-warning", !reached.sure && "border-dashed")}
-      title={reached.sure ? undefined : "Only a repo whose card could not trace leads here, so the change may not reach it"}
-    >
-      {`ring ${reached.ring}${reached.sure ? "" : " · maybe"}`}
-    </Badge>
-  );
-}
-
-/** What links a reached repo to the change, in a few words. */
-function reachText(changed: ChangedEndpoints, reached: ImpactedRepo): string {
-  if (reached.ring === 1) {
-    const called = endpointsCalledBy(changed.endpoints, reached.repo);
-    return `calls ${called.map((e) => `${e.method ?? "ANY"} ${e.path}`).join(", ")}`;
-  }
-  if (reached.calls.length === 0) return `uses ${reached.uses.join(", ")}`;
-  return `calls ${reached.calls.map((c) => `${c.method ?? "ANY"} ${c.path} of ${c.repo}`).join(", ")}`;
 }
 
 /**
