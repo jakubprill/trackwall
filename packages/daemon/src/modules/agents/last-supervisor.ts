@@ -19,6 +19,9 @@ export const LastSupervisor = z.object({
 });
 export type LastSupervisor = z.infer<typeof LastSupervisor>;
 
+/** The newest supervisor in the state directory, which a start with `last` goes on with (ADR-96). */
+export const LAST_SUPERVISOR_FILE = "last-supervisor.json";
+
 export class LastSupervisorFile {
   readonly #path: string;
   readonly #log: (msg: string) => void;
