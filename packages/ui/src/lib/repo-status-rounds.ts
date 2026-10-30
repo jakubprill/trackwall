@@ -1,4 +1,4 @@
-import type { Repo } from "@trackwall/protocol";
+import type { Repo, StatusRead } from "@trackwall/protocol";
 import { type CallErrorCode, errorCode, errorMessage } from "./api.ts";
 
 /**
@@ -42,7 +42,8 @@ export interface RepoStatusError {
 
 /** What the rounds need from the view: the request, the repos to ask first, and a call when the list has changed. */
 export interface RepoStatusSource {
-  fetch: (ids: string[]) => Promise<Repo[]>;
+  /** `read` is `fresh` for a refresh the user asked for, `recent` for the periodic one (ADR-141). */
+  fetch: (ids: string[], read: StatusRead) => Promise<Repo[]>;
   first: () => readonly string[];
   changed: () => void;
 }
@@ -58,6 +59,8 @@ export class RepoStatusRounds {
   #entries: readonly Repo[] = [];
   #running = false;
   #again = false;
+  /** How the next round reads: `fresh` when any refresh since the last round started was the user's. */
+  #nextRead: StatusRead = "recent";
   #stopped = false;
   #error: RepoStatusError | undefined;
 
@@ -74,9 +77,10 @@ export class RepoStatusRounds {
     return this.#error;
   }
 
-  refresh(entries: readonly Repo[]): void {
+  refresh(entries: readonly Repo[], read: StatusRead): void {
     if (this.#stopped) return;
     this.#entries = entries;
+    if (read === "fresh") this.#nextRead = "fresh";
     this.#source.changed();
     if (this.#running) {
       this.#again = true;
@@ -94,17 +98,19 @@ export class RepoStatusRounds {
     this.#running = true;
     do {
       this.#again = false;
-      await this.#round(this.#entries);
+      const read = this.#nextRead;
+      this.#nextRead = "recent";
+      await this.#round(this.#entries, read);
     } while (this.#again && !this.#stopped);
     this.#running = false;
   }
 
-  async #round(entries: readonly Repo[]): Promise<void> {
+  async #round(entries: readonly Repo[], read: StatusRead): Promise<void> {
     const ids = entries.map((entry) => entry.id);
     const listed = new Set(ids);
     for (const id of this.#loaded.keys()) if (!listed.has(id)) this.#loaded.delete(id);
     for (const batch of repoBatches(ids, this.#source.first(), REPO_BATCH_SIZE)) {
-      if (!(await this.#load(batch))) return;
+      if (!(await this.#load(batch, read))) return;
     }
     if (this.#error && !this.#stopped) {
       this.#error = undefined;
@@ -113,9 +119,9 @@ export class RepoStatusRounds {
   }
 
   /** One batch; `false` ends the round. */
-  async #load(batch: string[]): Promise<boolean> {
+  async #load(batch: string[], read: StatusRead): Promise<boolean> {
     try {
-      const repos = await this.#source.fetch(batch);
+      const repos = await this.#source.fetch(batch, read);
       if (this.#stopped) return false;
       for (const repo of repos) this.#loaded.set(repo.id, repo);
       this.#error = undefined;

@@ -8,6 +8,7 @@ import type {
   HostedProject,
   RepoHost,
   RepoStatusOk,
+  StatusRead,
   SyncResult,
   TaskChanges,
   TreeEntry,
@@ -29,7 +30,7 @@ import { ConfigMemo } from "./config-memo.ts";
 import { checkGitProgram, type GitVersion, git, gitRead, gitVersion } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { useGitProgram } from "./git-program.ts";
-import { type GitState, GitStateReader } from "./git-state.ts";
+import { type GitState, GitStateReader, gitDirKey } from "./git-state.ts";
 import { grep, grepFiles } from "./grep.ts";
 import { readHeadCommit } from "./head-commit.ts";
 import { hostedProject } from "./hosted-project.ts";
@@ -49,6 +50,7 @@ import {
 } from "./parse.ts";
 import { pathKey } from "./path-key.ts";
 import { remoteAddress } from "./remote.ts";
+import { StatusMemo, type TimedStatus } from "./status-memo.ts";
 import { syncRepo } from "./sync.ts";
 import { addWorktree, defaultBase, deleteBranch, pendingWork, removeWorktree } from "./worktree.ts";
 import { workingTreeChanges, worktreeChanges } from "./worktree-changes.ts";
@@ -78,8 +80,10 @@ export class Vcs {
    */
   private readonly scratchDir: () => Promise<string>;
 
-  constructor(scratchDir: () => Promise<string>) {
+  /** `now` is the clock of the status memo (ADR-141), monotonic milliseconds; tests move it by hand. */
+  constructor(scratchDir: () => Promise<string>, now: () => number = () => performance.now()) {
     this.scratchDir = scratchDir;
+    this.statuses = new StatusMemo({ now, gitDirKey });
   }
 
   private async scratch(): Promise<string> {
@@ -100,6 +104,7 @@ export class Vcs {
   private readonly states = new GitStateReader();
   private readonly headCommits = new CommitMemo();
   private readonly configs = new ConfigMemo();
+  private readonly statuses: StatusMemo;
 
   /** `git --version` of the git the daemon runs (the doctor, ADR-101). */
   version(timeoutMs: number): Promise<GitVersion> {
@@ -129,14 +134,20 @@ export class Vcs {
   }
 
   /**
-   * One `git status` per call: the HEAD commit's author, date and subject come from `headCommits` by the hash status gives,
-   * so the repo list starts one process per repo (ADR-79), not two. A status of the same repo still waiting for a slot is
-   * joined, so two lists asked at once do not read a repo twice (ADR-111).
+   * At most one `git status` per call: the HEAD commit's author, date and subject come from `headCommits` by the hash status
+   * gives, so the repo list starts one process per repo (ADR-79), not two, and `recent` reuses a status while the repo's
+   * git directory is unchanged and the status is young for what it cost (ADR-141). A status of the same repo still waiting
+   * for a slot is joined, so two lists asked at once do not read a repo twice (ADR-111).
    */
-  async status(dir: string): Promise<RepoStatusOk> {
-    const { stdout } = await gitRead(dir, ["status", "--porcelain=v2", "--branch", "-z"]);
+  status(dir: string, how: StatusRead): Promise<RepoStatusOk> {
+    return this.statuses.get(dir, how, () => this.readStatus(dir));
+  }
+
+  private async readStatus(dir: string): Promise<TimedStatus> {
+    const { stdout, ranMs } = await gitRead(dir, ["status", "--porcelain=v2", "--branch", "-z"]);
     const { headOid, ...status } = parseStatus(stdout.toString("utf8"));
-    return { ...status, head: headOid === null ? null : await this.headCommits.get(headOid, () => this.newestCommit(dir, headOid)) };
+    const head = headOid === null ? null : await this.headCommits.get(headOid, () => this.newestCommit(dir, headOid));
+    return { status: { ...status, head }, ranMs };
   }
 
   private async newestCommit(dir: string, commit: string): Promise<Commit | null> {

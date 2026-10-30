@@ -85,7 +85,7 @@ describe("the local config store", () => {
     expect(storeLog()).toBe(
       "Trackwall|Back up orders: .worktreeinclude, mise.local.toml\n\norders/.worktreeinclude\norders/mise.local.toml",
     );
-    expect((await facade.workspace.list()).repos.map((r) => r.id)).toEqual(["orders"]);
+    expect((await facade.workspace.list("fresh")).repos.map((r) => r.id)).toEqual(["orders"]);
   });
 
   test("a backup builds its commit with a temporary index in the projects folder's scratch folder and leaves it empty", async () => {

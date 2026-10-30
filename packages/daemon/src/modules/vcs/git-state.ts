@@ -2,7 +2,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { fileKey } from "../../infra/file-key.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
-import { gitDirs, headRefName, optionalKey, statIfExists } from "./git-dir.ts";
+import { type GitDirs, gitDirs, headRefName, optionalKey, statIfExists } from "./git-dir.ts";
 
 /**
  * The state of a repo's HEAD and refs read from the files in its git directory, without a `git` process (§4.5, ADR-63):
@@ -59,7 +59,9 @@ export class GitStateReader {
       const previous = this.caches.get(repo);
       const cache: RepoCache = { headRef: previous?.headRef, refsDirs: new Map() };
       next.set(repo, cache);
-      const state = await readRepo(repo, cache, previous?.refsDirs ?? new Map()).catch(() => undefined);
+      const state = await gitDirs(repo)
+        .then((dirs) => dirs && readRepo(dirs, cache, previous?.refsDirs ?? new Map()))
+        .catch(() => undefined);
       return [repo, state] as const;
     });
     this.caches = next;
@@ -67,9 +69,19 @@ export class GitStateReader {
   }
 }
 
-async function readRepo(repo: string, cache: RepoCache, previousDirs: ReadonlyMap<string, RefsDir>): Promise<GitState | null> {
+/**
+ * What `git status` depends on in the git directory (ADR-141): HEAD and the refs as the repo watch reads them, and the
+ * index, which staging, a commit and a `git status` that refreshes stat data rewrite. `undefined` without a git directory
+ * or when a file cannot be read this time. Read afresh on every call, so it does not share the repo watch's memory.
+ */
+export async function gitDirKey(repo: string): Promise<string | undefined> {
   const dirs = await gitDirs(repo);
-  if (!dirs) return null;
+  if (!dirs) return undefined;
+  const [state, index] = await Promise.all([readRepo(dirs, { refsDirs: new Map() }, new Map()), statIfExists(join(dirs.gitDir, "index"))]);
+  return state ? `${state.head}\n${state.refs}\nindex ${optionalKey(index)}` : undefined;
+}
+
+async function readRepo(dirs: GitDirs, cache: RepoCache, previousDirs: ReadonlyMap<string, RefsDir>): Promise<GitState | null> {
   const headFile = join(dirs.gitDir, "HEAD");
   const head = await statIfExists(headFile);
   if (!head) return null;

@@ -51,7 +51,7 @@ describe("vcs on real git", () => {
       writeFileSync(join(dir, "README.md"), "# repo changed\n");
       writeFileSync(join(dir, "new.txt"), "x");
 
-      const status = await vcs.status(dir);
+      const status = await vcs.status(dir, "fresh");
 
       expect(status).toMatchObject({ kind: "ok", branch: "main", changes: 2, untracked: 1, upstream: null });
       expect(status.head).toMatchObject({ subject: "Add the app", author: "Test Author" });
@@ -104,7 +104,7 @@ describe("vcs on real git", () => {
     "the status of a repo without commits has an empty HEAD, the log is empty and the tree root is empty",
     async () => {
       const dir = makeRepo();
-      expect(await vcs.status(dir)).toMatchObject({ kind: "ok", branch: "main", head: null, changes: 0 });
+      expect(await vcs.status(dir, "fresh")).toMatchObject({ kind: "ok", branch: "main", head: null, changes: 0 });
       expect(await vcs.log(dir, 10)).toEqual([]);
       expect(await vcs.tree(dir, "")).toEqual([]);
       expect(await vcs.tree(dir, "src")).toBeUndefined();
@@ -161,7 +161,7 @@ describe("vcs on real git", () => {
       commitFiles(remote, { "c.txt": "3" }, "remote");
       gitIn(clone, "fetch", "-q");
 
-      expect((await vcs.status(clone)).upstream).toEqual({ name: "origin/main", ahead: 1, behind: 1 });
+      expect((await vcs.status(clone, "fresh")).upstream).toEqual({ name: "origin/main", ahead: 1, behind: 1 });
     },
     SLOW_TEST_TIMEOUT_MS,
   );
@@ -256,7 +256,7 @@ describe("vcs on real git", () => {
         "src/main/java/a/Plain.java": "class Plain {}\n",
       });
       writeFileSync(join(dir, "src", "main", "java", "a", "Plain.java"), "@RestController class Plain {}\n");
-      const head = (await vcs.status(dir)).head?.hash ?? "";
+      const head = (await vcs.status(dir, "fresh")).head?.hash ?? "";
 
       const found = await vcs.grepFiles(dir, head, "@(RestController|FeignClient)", ["*.java", "*.kt"], 1024 * 1024);
       expect(found).toEqual({ paths: ["src/main/java/a/Api.java", "src/main/kotlin/a/Client.kt"], truncated: false });
@@ -268,7 +268,7 @@ describe("vcs on real git", () => {
   test(
     "a missing repo directory is a git error with a message, not a spawn exception",
     async () => {
-      await expect(vcs.status(join(makeRepo(), "..", "does-not-exist"))).rejects.toThrow(/does-not-exist/);
+      await expect(vcs.status(join(makeRepo(), "..", "does-not-exist"), "fresh")).rejects.toThrow(/does-not-exist/);
     },
     SLOW_TEST_TIMEOUT_MS,
   );

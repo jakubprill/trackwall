@@ -288,6 +288,14 @@ const endpoint = apiEndpoints("workspace");
 
 const RepoRequest = z.object({ repo: RepoId }).strict();
 
+/**
+ * How a repo's status is read (ADR-141): `recent` lets the daemon give a status it read lately while the repo's git
+ * directory has not changed, as the views' periodic refresh does; `fresh` always runs `git status`, as a refresh the user
+ * asked for does.
+ */
+export const StatusRead = z.enum(["recent", "fresh"]);
+export type StatusRead = z.infer<typeof StatusRead>;
+
 export const workspaceApi = {
   list: endpoint("list", z.object({}).strict(), RepoList),
   /**
@@ -296,7 +304,11 @@ export const workspaceApi = {
    */
   entries: endpoint("entries", z.object({}).strict(), RepoList),
   /** The repos named, with status and remote, in the order asked; a repo no longer in the folder is left out (ADR-113). */
-  repos: endpoint("repos", z.object({ repos: z.array(RepoId).min(1).max(MAX_REPOS_PER_REQUEST) }).strict(), z.array(Repo)),
+  repos: endpoint(
+    "repos",
+    z.object({ repos: z.array(RepoId).min(1).max(MAX_REPOS_PER_REQUEST), read: StatusRead }).strict(),
+    z.array(Repo),
+  ),
   settings: endpoint("settings", z.object({}).strict(), WorkspaceSettings),
   /** `path` is the full path of an existing directory on the user's disk; saved in `workspace.yaml`. */
   setProjectsDir: endpoint("set-projects-dir", z.object({ path: z.string().min(1).max(4096) }).strict(), WorkspaceSettings),

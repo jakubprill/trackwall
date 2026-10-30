@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Repo } from "@trackwall/protocol";
+import type { Repo, StatusRead } from "@trackwall/protocol";
 import { RepoStatusRounds, repoBatches, withLoadedRepos } from "../src/lib/repo-status-rounds.ts";
 
 describe("lazy loading of the repo list (ADR-113)", () => {
@@ -49,12 +49,14 @@ const read = (id: string): Repo => ({ ...loading(id), status: { kind: "unavailab
 /** A `repos` request the test answers by hand, to see what is asked and when. */
 function scriptedSource(first: readonly string[] = []) {
   const asked: string[][] = [];
+  const reads: StatusRead[] = [];
   const answers: Array<{ ids: string[]; answer: (repos: Repo[]) => void; fail: (err: Error) => void }> = [];
   let changes = 0;
   const source = {
-    fetch: (ids: string[]) =>
+    fetch: (ids: string[], how: StatusRead) =>
       new Promise<Repo[]>((answer, fail) => {
         asked.push(ids);
+        reads.push(how);
         answers.push({ ids, answer, fail });
       }),
     first: () => first,
@@ -75,7 +77,7 @@ function scriptedSource(first: readonly string[] = []) {
     next.fail(new Error(message));
     await Bun.sleep(0);
   };
-  return { source, asked, answerNext, failNext, changes: () => changes };
+  return { source, asked, reads, answerNext, failNext, changes: () => changes };
 }
 
 const twentyRepos = Array.from({ length: 20 }, (_, i) => loading(`repo-${String(i).padStart(2, "0")}`));
@@ -85,7 +87,7 @@ describe("rounds of repo statuses (ADR-113)", () => {
     const { source, asked, answerNext } = scriptedSource(["repo-19"]);
     const rounds = new RepoStatusRounds(source);
 
-    rounds.refresh(twentyRepos);
+    rounds.refresh(twentyRepos, "recent");
     expect(rounds.repos).toEqual(twentyRepos);
     expect(asked).toEqual([["repo-19", "repo-00", "repo-01", "repo-02", "repo-03", "repo-04", "repo-05", "repo-06"]]);
 
@@ -99,9 +101,9 @@ describe("rounds of repo statuses (ADR-113)", () => {
     const { source, asked, answerNext } = scriptedSource();
     const rounds = new RepoStatusRounds(source);
 
-    rounds.refresh(twentyRepos);
-    rounds.refresh(twentyRepos);
-    rounds.refresh(twentyRepos);
+    rounds.refresh(twentyRepos, "recent");
+    rounds.refresh(twentyRepos, "recent");
+    rounds.refresh(twentyRepos, "recent");
     await answerNext();
     await answerNext();
     await answerNext();
@@ -114,12 +116,12 @@ describe("rounds of repo statuses (ADR-113)", () => {
     const { source, asked, answerNext, failNext } = scriptedSource();
     const rounds = new RepoStatusRounds(source);
 
-    rounds.refresh(twentyRepos);
+    rounds.refresh(twentyRepos, "recent");
     await failNext("The projects folder is not available.");
     expect(rounds.error?.message).toBe("The projects folder is not available.");
     expect(asked).toHaveLength(1);
 
-    rounds.refresh(twentyRepos);
+    rounds.refresh(twentyRepos, "recent");
     await answerNext();
     expect(rounds.error).toBeUndefined();
   });
@@ -127,10 +129,10 @@ describe("rounds of repo statuses (ADR-113)", () => {
   test("an error goes away with a list that has nothing to read, such as an emptied projects folder", async () => {
     const { source, failNext } = scriptedSource();
     const rounds = new RepoStatusRounds(source);
-    rounds.refresh(twentyRepos);
+    rounds.refresh(twentyRepos, "recent");
     await failNext("The projects folder is not available.");
 
-    rounds.refresh([]);
+    rounds.refresh([], "recent");
     await Bun.sleep(0);
 
     expect(rounds.error).toBeUndefined();
@@ -139,19 +141,19 @@ describe("rounds of repo statuses (ADR-113)", () => {
   test("a status shown stays through a refresh until its new one comes, and a repo gone from the list is dropped", async () => {
     const { source, answerNext } = scriptedSource();
     const rounds = new RepoStatusRounds(source);
-    rounds.refresh([loading("api"), loading("web")]);
+    rounds.refresh([loading("api"), loading("web")], "recent");
     await answerNext();
 
-    rounds.refresh([loading("api")]);
+    rounds.refresh([loading("api")], "recent");
     expect(rounds.repos).toEqual([read("api")]);
-    rounds.refresh([loading("api"), loading("web")]);
+    rounds.refresh([loading("api"), loading("web")], "recent");
     expect(rounds.repos).toEqual([read("api"), loading("web")]);
   });
 
   test("after stop an answer changes nothing and no further batch is asked", async () => {
     const { source, asked, answerNext, changes } = scriptedSource();
     const rounds = new RepoStatusRounds(source);
-    rounds.refresh(twentyRepos);
+    rounds.refresh(twentyRepos, "recent");
     const before = changes();
 
     rounds.stop();
@@ -159,5 +161,21 @@ describe("rounds of repo statuses (ADR-113)", () => {
 
     expect(changes()).toBe(before);
     expect(asked).toHaveLength(1);
+  });
+
+  test("a refresh the user asked for during a round makes the next round read git afresh, and the one after reuse again (ADR-141)", async () => {
+    const { source, reads, answerNext } = scriptedSource();
+    const rounds = new RepoStatusRounds(source);
+    const twoRepos = [loading("api"), loading("web")];
+
+    rounds.refresh(twoRepos, "recent");
+    rounds.refresh(twoRepos, "fresh");
+    rounds.refresh(twoRepos, "recent");
+    await answerNext();
+    await answerNext();
+    rounds.refresh(twoRepos, "recent");
+    await answerNext();
+
+    expect(reads).toEqual(["recent", "fresh", "recent"]);
   });
 });

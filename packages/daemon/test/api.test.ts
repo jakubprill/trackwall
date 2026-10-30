@@ -227,7 +227,7 @@ describe("api workspace", () => {
     ]);
 
     const repos = apiResult(z.array(Repo)).parse(
-      JSON.parse((await post(workspaceApi.repos.path, JSON.stringify({ repos: ["shop", "gone", "api"] }))).body),
+      JSON.parse((await post(workspaceApi.repos.path, JSON.stringify({ repos: ["shop", "gone", "api"], read: "fresh" }))).body),
     );
     expect(repos.ok && repos.data.map((r) => [r.id, r.status.kind])).toEqual([
       ["shop", "ok"],
@@ -236,9 +236,9 @@ describe("api workspace", () => {
   });
 
   test("repos refuses an empty request and one over the limit", async () => {
-    expect((await post(workspaceApi.repos.path, JSON.stringify({ repos: [] }))).status).toBe(400);
+    expect((await post(workspaceApi.repos.path, JSON.stringify({ repos: [], read: "fresh" }))).status).toBe(400);
     const tooMany = Array.from({ length: MAX_REPOS_PER_REQUEST + 1 }, (_, i) => `repo-${i}`);
-    expect((await post(workspaceApi.repos.path, JSON.stringify({ repos: tooMany }))).status).toBe(400);
+    expect((await post(workspaceApi.repos.path, JSON.stringify({ repos: tooMany, read: "fresh" }))).status).toBe(400);
   });
 
   test("open-folder opens the folder of a listed repo in the system, and an unknown repo is 404", async () => {

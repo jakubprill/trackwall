@@ -354,7 +354,7 @@ describe("sync of all repos", () => {
       makeRepo({ a: "1" }, "no-remote-repo", projects);
       gitIn(clone, "remote", "set-url", "origin", "git@gitlab.example.com:shop/Orders-API.git");
 
-      const { repos } = await workspace.list();
+      const { repos } = await workspace.list("fresh");
 
       expect(repos.map((r) => [r.id, r.remote])).toEqual([
         ["api", "gitlab.example.com/shop/Orders-API"],

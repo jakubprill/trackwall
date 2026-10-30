@@ -41,7 +41,7 @@ describe("workspace", () => {
       mkdirSync(join(projects, "notes"));
       writeFileSync(join(projects, "file.txt"), "x");
 
-      const { projectsDir, repos } = await workspace.list();
+      const { projectsDir, repos } = await workspace.list("fresh");
 
       expect(projectsDir).toBe(projects);
       expect(repos.map((r) => [r.id, r.path, r.status.kind])).toEqual([
@@ -62,7 +62,7 @@ describe("workspace", () => {
       mkdirSync(join(projects, "worktree"));
       writeFileSync(join(projects, "worktree", ".git"), "gitdir: /does/not/exist\n");
 
-      expect((await workspace.list()).repos.map((r) => r.id)).toEqual(["linked", "worktree"]);
+      expect((await workspace.list("fresh")).repos.map((r) => r.id)).toEqual(["linked", "worktree"]);
     },
     SLOW_TEST_TIMEOUT_MS,
   );
@@ -71,13 +71,13 @@ describe("workspace", () => {
     "a repo cloned or removed outside Trackwall appears and disappears on the next query",
     async () => {
       const { workspace, projects } = await workspaceWithProjectsDir();
-      expect((await workspace.list()).repos).toEqual([]);
+      expect((await workspace.list("fresh")).repos).toEqual([]);
 
       const dir = makeRepo({ a: "1" }, "api", projects);
-      expect((await workspace.list()).repos.map((r) => r.id)).toEqual(["api"]);
+      expect((await workspace.list("fresh")).repos.map((r) => r.id)).toEqual(["api"]);
 
       await removeFolder(dir);
-      expect((await workspace.list()).repos).toEqual([]);
+      expect((await workspace.list("fresh")).repos).toEqual([]);
       await expect(workspace.overview("api")).rejects.toMatchObject({ code: "not_found" });
     },
     SLOW_TEST_TIMEOUT_MS,
@@ -90,7 +90,7 @@ describe("workspace", () => {
       makeRepo({}, "Zażółć", projects);
       makeRepo({}, "zazolc", projects);
 
-      expect((await workspace.list()).repos.map((r) => [r.id, r.path])).toEqual([
+      expect((await workspace.list("fresh")).repos.map((r) => [r.id, r.path])).toEqual([
         ["zazolc", join(projects, "zazolc")],
         ["zazolc-2", join(projects, "Zażółć")],
       ]);
@@ -111,7 +111,7 @@ describe("workspace", () => {
         afterClone: async () => {},
       });
 
-      expect(await workspace.list()).toEqual({ projectsDir: null, repos: [] });
+      expect(await workspace.list("fresh")).toEqual({ projectsDir: null, repos: [] });
       expect(workspace.settings()).toEqual({
         projectsDir: null,
         worktreesDir: null,
@@ -197,7 +197,7 @@ describe("workspace", () => {
         { id: "api", path: join(projects, "api"), remote: null, status: { kind: "loading" } },
         { id: "web", path: join(projects, "web"), remote: null, status: { kind: "loading" } },
       ]);
-      const described = await workspace.repos(["web", "gone", "api", "web"]);
+      const described = await workspace.repos(["web", "gone", "api", "web"], "fresh");
       expect(described.map((r) => [r.id, r.status.kind])).toEqual([
         ["web", "ok"],
         ["api", "ok"],
@@ -250,7 +250,7 @@ describe("workspace", () => {
       const { workspace, projects } = await workspaceWithProjectsDir();
       await removeFolder(projects);
 
-      await expect(workspace.list()).rejects.toMatchObject({
+      await expect(workspace.list("fresh")).rejects.toMatchObject({
         code: "projects_dir_unavailable",
         message: expect.stringContaining(projects),
       });
@@ -264,7 +264,7 @@ describe("workspace", () => {
       const { workspace, projects } = await workspaceWithProjectsDir();
       mkdirSync(join(projects, "broken", ".git"), { recursive: true });
 
-      const [repo] = (await workspace.list()).repos;
+      const [repo] = (await workspace.list("fresh")).repos;
       expect(repo).toMatchObject({ id: "broken", status: { kind: "unavailable" } });
       await expect(workspace.tree("broken", "")).rejects.toMatchObject({ code: "repo_unavailable" });
     },
@@ -287,7 +287,7 @@ describe("workspace", () => {
       mkdirSync(join(outer, "Projects", "empty", ".git"), { recursive: true });
       await workspace.setProjectsDir(join(outer, "Projects"));
 
-      expect((await workspace.list()).repos).toMatchObject([{ id: "empty", status: { kind: "unavailable" } }]);
+      expect((await workspace.list("fresh")).repos).toMatchObject([{ id: "empty", status: { kind: "unavailable" } }]);
     },
     SLOW_TEST_TIMEOUT_MS,
   );
@@ -300,7 +300,7 @@ describe("workspace", () => {
       const { workspace, projects } = await workspaceWithProjectsDir();
       symlinkSync(join(outer, "target"), join(projects, "linked"), "junction");
 
-      expect((await workspace.list()).repos).toMatchObject([{ id: "linked", status: { kind: "unavailable" } }]);
+      expect((await workspace.list("fresh")).repos).toMatchObject([{ id: "linked", status: { kind: "unavailable" } }]);
     },
     SLOW_TEST_TIMEOUT_MS,
   );
@@ -323,7 +323,7 @@ describe("workspace", () => {
       const saved = Object.keys(isolated).map((name) => [name, process.env[name]] as const);
       Object.assign(process.env, isolated);
       try {
-        expect((await workspace.list()).repos).toMatchObject([{ id: "foreign", status: { kind: "unavailable" } }]);
+        expect((await workspace.list("fresh")).repos).toMatchObject([{ id: "foreign", status: { kind: "unavailable" } }]);
       } finally {
         for (const [name, value] of saved) {
           if (value === undefined) delete process.env[name];
@@ -352,7 +352,7 @@ describe("workspace", () => {
       gitIn(dir, "config", "log.showSignature", "true");
       gitIn(dir, "config", "gpg.program", program.replaceAll("\\", "/"));
 
-      expect((await workspace.list()).repos[0]?.status).toMatchObject({ kind: "ok", head: { subject: "signed" } });
+      expect((await workspace.list("fresh")).repos[0]?.status).toMatchObject({ kind: "ok", head: { subject: "signed" } });
       expect(existsSync(marker)).toBe(false);
     },
     SLOW_TEST_TIMEOUT_MS,
@@ -366,7 +366,7 @@ describe("workspace", () => {
       const marker = join(projects, "fsmonitor-ran");
       gitIn(dir, "config", "core.fsmonitor", `echo x > "${marker.replaceAll("\\", "/")}"`);
 
-      expect((await workspace.list()).repos[0]?.status.kind).toBe("ok");
+      expect((await workspace.list("fresh")).repos[0]?.status.kind).toBe("ok");
       expect(existsSync(marker)).toBe(false);
     },
     SLOW_TEST_TIMEOUT_MS,
@@ -436,7 +436,7 @@ describe("the task worktrees folder (ADR-84)", () => {
       // A task's worktree as `agents` makes it: `<folder>/<repo>/<branch>`, with a `.git` file.
       gitIn(join(projects, "web"), "worktree", "add", "-q", "-b", "trackwall/fix-1a2b3c", join(worktrees, "web", "fix-1a2b3c"));
 
-      expect((await workspace.list()).repos.map((r) => r.id)).toEqual(["web"]);
+      expect((await workspace.list("fresh")).repos.map((r) => r.id)).toEqual(["web"]);
     },
     SLOW_TEST_TIMEOUT_MS,
   );
@@ -484,7 +484,7 @@ describe("the task worktrees folder (ADR-84)", () => {
       mkdirSync(join(projects, "worktrees"));
 
       expect(await workspace.setWorktreesDir(join(projects, "worktrees"))).toMatchObject({ worktreesDir: join(projects, "worktrees") });
-      expect((await workspace.list()).repos.map((r) => r.id)).toEqual(["web"]);
+      expect((await workspace.list("fresh")).repos.map((r) => r.id)).toEqual(["web"]);
     },
     SLOW_TEST_TIMEOUT_MS,
   );

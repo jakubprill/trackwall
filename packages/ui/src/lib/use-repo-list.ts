@@ -21,11 +21,14 @@ export function useRepoList(conn: Connection, options: RemoteOptions<RepoList>):
   const first = useRef<readonly string[]>([]);
   const [rounds, setRounds] = useState<RepoStatusRounds>();
   const [shown, setShown] = useState<{ repos: Repo[]; error?: RepoStatusError }>();
+  // A reload is the user's (the refresh button, the end of a sync or a batch run), so its round runs git for every repo;
+  // the polls and repo events may reuse recent statuses (ADR-141).
+  const freshNext = useRef(false);
 
   useEffect(() => {
     setShown(undefined);
     const next: RepoStatusRounds = new RepoStatusRounds({
-      fetch: (ids) => post(conn, workspaceApi.repos, { repos: ids }),
+      fetch: (ids, read) => post(conn, workspaceApi.repos, { repos: ids, read }),
       first: () => first.current,
       changed: () => setShown({ repos: next.repos, error: next.error }),
     });
@@ -34,7 +37,9 @@ export function useRepoList(conn: Connection, options: RemoteOptions<RepoList>):
   }, [conn]);
 
   useEffect(() => {
-    if (rounds && entries.data) rounds.refresh(entries.data.repos);
+    if (!rounds || !entries.data) return;
+    rounds.refresh(entries.data.repos, freshNext.current ? "fresh" : "recent");
+    freshNext.current = false;
   }, [rounds, entries.data]);
 
   const data = useMemo(() => entries.data && { ...entries.data, repos: shown?.repos ?? entries.data.repos }, [entries.data, shown]);
@@ -43,5 +48,10 @@ export function useRepoList(conn: Connection, options: RemoteOptions<RepoList>):
   }, []);
   // The quick list's error first: without it the batches' error stands, with its code (a daemon that answered).
   const error = entries.error === undefined ? shown?.error : { message: entries.error, code: entries.errorCode };
-  return { ...entries, data, error: error?.message, errorCode: error?.code, showFirst };
+  const { reload: reloadEntries } = entries;
+  const reload = useCallback(() => {
+    freshNext.current = true;
+    reloadEntries();
+  }, [reloadEntries]);
+  return { ...entries, reload, data, error: error?.message, errorCode: error?.code, showFirst };
 }

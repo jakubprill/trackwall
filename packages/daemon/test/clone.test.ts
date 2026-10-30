@@ -92,7 +92,7 @@ describe("cloning from a repo host into the projects folder", () => {
     expect(await workspace.clone(GITLAB, "shop/orders/orders-bff")).toEqual(started);
 
     expect(await finished(workspace, "shop/orders/orders-bff")).toMatchObject({ state: "done" });
-    expect((await workspace.list()).repos.map((r) => r.id)).toEqual(["orders-bff"]);
+    expect((await workspace.list("fresh")).repos.map((r) => r.id)).toEqual(["orders-bff"]);
     await expect(workspace.clone(GITLAB, "shop/orders/orders-bff")).rejects.toMatchObject({
       code: "bad_request",
       message: "the projects folder already has orders-bff",
