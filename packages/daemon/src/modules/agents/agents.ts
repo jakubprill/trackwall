@@ -44,7 +44,7 @@ import { LAST_SUPERVISOR_FILE, LastSupervisorFile } from "./last-supervisor.ts";
 import { ListedSessions, resumableOf } from "./listed-sessions.ts";
 import { LiveSession, type SessionEvent, type SessionWindow } from "./live-session.ts";
 import { MiseTrustNotices, type TrustRecipient, trustRecipientOf } from "./mise-trust-notices.ts";
-import { proposedByOf, proposerKeyOf, proposerOf, SUPERVISOR, taskOfProposerKey } from "./proposer.ts";
+import { proposedByOf, proposerExists, proposerKeyOf, proposerKind, proposerOf } from "./proposer.ts";
 import { type ResumableSession, ResumableSessions, resumablePlace, type SessionLaunch, sessionLaunch } from "./resumable-sessions.ts";
 import type { SessionMiseEnv } from "./session-env.ts";
 import {
@@ -239,11 +239,9 @@ export class Agents {
       proposedBy: (id) => proposedByOf(this.session(id)),
       proposerKey: (id) => proposerKeyOf(this.session(id)),
       runningOfTask: (task) => this.#sessions.runningOfTask(task),
-      runningProposer: (proposer) => this.#sessions.runningWhere((s) => proposerKeyOf(s) === proposer),
-      hasProposer: (proposer) => {
-        const task = taskOfProposerKey(proposer);
-        return proposer === SUPERVISOR || (task === null ? this.#sessions.has(proposer) : this.#tasks.find(task) !== undefined);
-      },
+      runningProposer: (proposer) => this.#runningProposer(proposer),
+      hasProposer: (proposer) =>
+        proposerExists(proposer, { hasTask: (task) => this.#tasks.find(task) !== undefined, hasSession: (id) => this.#sessions.has(id) }),
       changed: () => this.#queues.follow(),
       log: deps.log,
     });
@@ -875,6 +873,13 @@ export class Agents {
     const started = await this.#launchAs(spec, { repo, supervisor: false, cwd, task: null });
     this.#askToReadLeft(left.session);
     return started;
+  }
+
+  /** The running session behind a proposer key: the running supervisor, a task's newest running session, or the session. */
+  #runningProposer(proposer: string): AgentSession | undefined {
+    const named = proposerKind(proposer);
+    if (named.kind === "task") return this.#sessions.runningOfTask(named.task);
+    return this.#sessions.runningWhere((s) => proposerKeyOf(s) === proposer);
   }
 
   /** A task's only session after resuming it, which closes its ended ones: running, or already ended when its agent exited at once. */

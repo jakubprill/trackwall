@@ -9,7 +9,7 @@ import { z } from "zod";
  */
 
 /** The proposer key of the supervisor's work; session ids are UUIDs, so it never names a session. */
-export const SUPERVISOR = "supervisor";
+const SUPERVISOR = "supervisor";
 
 const TASK_PREFIX = "task:";
 
@@ -18,9 +18,23 @@ export function taskProposerKey(task: string): string {
   return `${TASK_PREFIX}${task}`;
 }
 
-/** The task behind a proposer key, or `null` when the key names the supervisor or a session. */
-export function taskOfProposerKey(key: string): string | null {
-  return key.startsWith(TASK_PREFIX) ? key.slice(TASK_PREFIX.length) : null;
+/** What a proposer key names: the supervisor's work, a task's (any of its sessions'), or one session's. */
+export type ProposerKind = { kind: "supervisor" } | { kind: "task"; task: string } | { kind: "session"; session: string };
+
+export function proposerKind(key: string): ProposerKind {
+  if (key === SUPERVISOR) return { kind: "supervisor" };
+  if (key.startsWith(TASK_PREFIX)) return { kind: "task", task: key.slice(TASK_PREFIX.length) };
+  return { kind: "session", session: key };
+}
+
+/** Whether anyone is behind a proposer key: always the supervisor, a task while it is there, a session as `hasSession` says. */
+export function proposerExists(
+  key: string,
+  { hasTask, hasSession }: { hasTask: (task: string) => boolean; hasSession: (session: string) => boolean },
+): boolean {
+  const named = proposerKind(key);
+  if (named.kind === "supervisor") return true;
+  return named.kind === "task" ? hasTask(named.task) : hasSession(named.session);
 }
 
 /** A proposer key read back from a file: the supervisor, a task or a session. */

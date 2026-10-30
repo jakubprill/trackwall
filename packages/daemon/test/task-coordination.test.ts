@@ -2,7 +2,7 @@ import { describe, expect, setSystemTime, test } from "bun:test";
 import type { ProposedBy, Session, Task, TaskState, Verification } from "@trackwall/protocol";
 import { DomainError } from "../src/infra/errors.ts";
 import { inboxPrompt } from "../src/modules/agents/inbox-prompt.ts";
-import { proposedByOf, proposerKeyOf, SUPERVISOR as SUPERVISOR_WORK, taskOfProposerKey } from "../src/modules/agents/proposer.ts";
+import { proposedByOf, proposerExists, proposerKeyOf } from "../src/modules/agents/proposer.ts";
 import { type CoordinatedSession, StoredCoordination, TaskCoordination } from "../src/modules/agents/task-coordination.ts";
 import { TaskMessages } from "../src/modules/agents/task-messages.ts";
 import { TaskUpdates } from "../src/modules/agents/task-updates.ts";
@@ -108,10 +108,7 @@ function setup() {
     },
     runningOfTask: (id) => (id === "by-main" && running.has(TASK_SESSION) ? live(TASK_SESSION) : undefined),
     runningProposer: (key) => [...sessions.values()].filter((s) => running.has(s.id) && proposerKeyOf(s) === key).map((s) => live(s.id))[0],
-    hasProposer: (key) => {
-      const proposingTask = taskOfProposerKey(key);
-      return key === SUPERVISOR_WORK || (proposingTask === null ? sessions.has(key) : tasks.has(proposingTask));
-    },
+    hasProposer: (key) => proposerExists(key, { hasTask: (id) => tasks.has(id), hasSession: (id) => sessions.has(id) }),
     changed: () => {},
     log: () => {},
   });

@@ -135,7 +135,7 @@ export const ProposedBy = z.object({
   /**
    * The task whose session proposed it (ADR-140): a task's later sessions, after a resume or a daemon restart, are its
    * proposer too, since they go on with the same conversation in the same worktree. Absent in files from before ADR-140,
-   * whose work stays with the proposing session alone.
+   * whose work no task session reaches any more.
    */
   task: TaskId.nullable().default(null),
 });

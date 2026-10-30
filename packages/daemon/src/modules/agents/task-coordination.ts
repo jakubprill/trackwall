@@ -13,7 +13,7 @@ import {
 import { z } from "zod";
 import { DomainError } from "../../infra/errors.ts";
 import type { SessionEvent } from "./live-session.ts";
-import { proposerKeyOf, proposerOf, SUPERVISOR, taskOfProposerKey, taskProposerKey } from "./proposer.ts";
+import { proposerExists, proposerKeyOf, proposerKind, proposerOf, taskProposerKey } from "./proposer.ts";
 import { StoredMessages, TaskMessages } from "./task-messages.ts";
 import { StoredUpdates, TaskUpdates } from "./task-updates.ts";
 
@@ -103,10 +103,7 @@ export class TaskCoordination {
    */
   restore(stored: StoredCoordination, { hasTask, hasSession }: Restored): void {
     this.#messages.restore(stored.messages, hasTask);
-    this.#updates.restore(stored.updates, (proposer) => {
-      const task = taskOfProposerKey(proposer);
-      return proposer === SUPERVISOR || (task === null ? hasSession(proposer) : hasTask(task));
-    });
+    this.#updates.restore(stored.updates, (proposer) => proposerExists(proposer, { hasTask, hasSession }));
     this.#userInTask.clear();
     for (const [task, at] of Object.entries(stored.userInTask)) if (hasTask(task)) this.#userInTask.set(task, at);
     this.#userInSession.clear();
@@ -226,8 +223,7 @@ export class TaskCoordination {
    */
   sessionClosed(session: Pick<Session, "id" | "supervisor" | "task">): void {
     this.#userInSession.delete(session.id);
-    const proposer = proposerKeyOf(session);
-    if (proposer === session.id) this.#updates.forget(proposer);
+    if (proposerKind(proposerKeyOf(session)).kind === "session") this.#updates.forget(session.id);
   }
 
   /** An ended task: its messages and the updates on the work its sessions proposed go. */
