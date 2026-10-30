@@ -26,6 +26,7 @@ export interface WorkspaceKeyValues {
   repoHosts: RepoHost[];
   toolPermissions: ToolPermissionRules;
   agentSecrets: AgentSecrets;
+  sessionProfile: string | null;
   supervisor: SupervisorSettings;
   repoTags: RepoTagRules;
   dayStart: DayStartSettings | null;
@@ -44,6 +45,7 @@ export const workspaceKeyValue: { [K in WorkspaceKey]: (value: WorkspaceKeyValue
   repoHosts: (hosts) => (hosts.length === 0 ? "none" : hosts.map((h) => h.host).join(", ")),
   toolPermissions: (rules) => (rules.length === 0 ? "none" : countLabel(rules.length, { one: "rule", other: "rules" })),
   agentSecrets: (names) => (names.length === 0 ? "none" : names.join(", ")),
+  sessionProfile: (profile) => profile ?? "none",
   supervisor: (settings) => `changesCode: ${settings.changesCode}`,
   repoTags: (rules) => {
     const tags = Object.keys(rules);

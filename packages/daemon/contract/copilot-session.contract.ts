@@ -937,6 +937,7 @@ describe("a session's environment from mise with the real Copilot CLI (ADR-93)",
         variables: ["SHOP_DEPLOY_KEY", "SHOP_REGION"],
         secrets: ["SHOP_DEPLOY_KEY"],
         agentSecrets: [],
+        profile: null,
         problem: null,
       });
       expect(hidden.printed).toContain("key= region=eu-central");

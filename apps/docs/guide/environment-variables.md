@@ -51,6 +51,7 @@ A mise task that Trackwall runs, from the "mise tasks" tab, [Services](/features
 
 ## Good to know
 
+- With a [session profile](/features/mise-environment#use-another-model-provider), mise reads a session's place with `MISE_ENV` set to it, so the session gets the variables of `mise.<profile>.toml` too. The session does not get `MISE_ENV` itself, and mise tasks and services never use the profile.
 - Trackwall reads mise when a session starts: a change to a `mise.toml` reaches a session after you resume or start it again. A change to your own variables reaches sessions only after Trackwall restarts.
 - Variable names are matched the way your system matches them: on Windows `Path` and `PATH` are one variable, and Trackwall keeps your spelling.
 - Without `mise` on your `PATH`, sessions and mise tasks get your own environment only, with Trackwall's variables on top.

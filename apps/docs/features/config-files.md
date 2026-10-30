@@ -29,6 +29,7 @@ Under `workspace.yaml` a table lists its keys:
 | `repoHosts` | where the Repos view searches and clones from | "Settings > Repo hosts" |
 | `toolPermissions` | which tools sessions may use without asking you | by hand |
 | `agentSecrets` | the secrets from mise that the tools of sessions may read | by hand |
+| `sessionProfile` | the mise environment sessions start with, such as another model provider | "Settings > Agents" |
 | `localConfigRemote` | the only remote the local config store is pushed to | "Settings > Workspace" |
 | `supervisor` | whether the supervisor may change code itself | by hand |
 | `repoTags` | your own tags on repo cards | by hand |

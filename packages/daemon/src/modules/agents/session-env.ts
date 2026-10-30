@@ -16,6 +16,8 @@ export interface SessionMiseEnv {
   secretValues: string[];
   /** Why the session got less than its place gives; `null` when nothing is missing. */
   problem: string | null;
+  /** The session profile mise read the environment with (ADR-136); `null` without one. */
+  profile: string | null;
 }
 
 /** mise's age key in the user's own environment decrypts every secret, so the agent's tools never get it unasked. */
@@ -53,6 +55,7 @@ export function sessionMiseLaunch(mise: SessionMiseEnv, userEnv: NodeJS.ProcessE
       variables: Object.keys(vars).sort(),
       secrets,
       agentSecrets: secrets.filter((name) => agentSecrets.includes(name)),
+      profile: mise.profile,
       problem: problems.filter((line) => line !== null).join("\n") || null,
     },
   };

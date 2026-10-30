@@ -18,7 +18,7 @@ function session(o: { prompt?: () => string | undefined; firstMessage?: string; 
     cwd: "/projects",
     load: o.load,
     firstMessage: o.firstMessage,
-    environment: { variables: [], secrets: [], agentSecrets: [], problem: null },
+    environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
     run: () => run,
     prompt: o.prompt ?? (() => undefined),
     onUserText: () => {},

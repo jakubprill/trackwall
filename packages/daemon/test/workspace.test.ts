@@ -119,6 +119,8 @@ describe("workspace", () => {
         defaultWorktreesDir: null,
         gitProgram: null,
         gitProgramProblem: null,
+        sessionProfile: null,
+        sessionProfileProblem: null,
         configFile: file,
       });
       await expect(workspace.overview("api")).rejects.toMatchObject({ code: "not_found" });
@@ -215,6 +217,8 @@ describe("workspace", () => {
         defaultWorktreesDir: join(projects, ".trackwall", "worktrees"),
         gitProgram: null,
         gitProgramProblem: null,
+        sessionProfile: null,
+        sessionProfileProblem: null,
         configFile: file,
       });
       expect(readFileSync(file, "utf8")).toContain(`projectsDir: ${projects}`);

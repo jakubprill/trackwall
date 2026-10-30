@@ -189,6 +189,16 @@ export const JavaNavigationSettings = z
   .strict();
 export type JavaNavigationSettings = z.infer<typeof JavaNavigationSettings>;
 
+/**
+ * The name of a mise environment (`MISE_ENV`) that only sessions start with (ADR-136), e.g. `byok` for
+ * `mise.byok.toml` with another model provider for Copilot CLI. A plain name, so it can only choose config files that
+ * mise looks for anyway, never a path or a list.
+ */
+export const SessionProfile = z
+  .string()
+  .regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/, "a session profile is a name of up to 32 letters, digits, - and _, such as byok");
+export type SessionProfile = z.infer<typeof SessionProfile>;
+
 export const WorkspaceSettings = z.object({
   projectsDir: ProjectsDir,
   /** `worktreesDir` from `workspace.yaml` (ADR-84): where new task worktrees go; `null` for the default. */
@@ -201,6 +211,10 @@ export const WorkspaceSettings = z.object({
   gitProgram: z.string().nullable(),
   /** Why `gitProgram` in `workspace.yaml` cannot be read (`gitProgram` is then `null`); saving a program or the default fixes it. */
   gitProgramProblem: z.string().nullable(),
+  /** `sessionProfile` from `workspace.yaml` (ADR-136): the mise environment sessions start with; `null` for none. */
+  sessionProfile: z.string().nullable(),
+  /** Why `sessionProfile` in `workspace.yaml` cannot be read; sessions do not start until it is fixed or saved again. */
+  sessionProfileProblem: z.string().nullable(),
   /** The full path of `workspace.yaml`, so that the user knows which file to edit by hand. */
   configFile: z.string(),
 });
@@ -295,6 +309,11 @@ export const workspaceApi = {
    * `null` removes `gitProgram` from `workspace.yaml`, so the daemon uses git from `PATH` again (ADR-112).
    */
   setGitProgram: endpoint("set-git-program", z.object({ path: z.string().min(1).max(4096).nullable() }).strict(), WorkspaceSettings),
+  /**
+   * The mise environment new sessions start with (ADR-136); `null` removes `sessionProfile` from `workspace.yaml`. Only
+   * from the UI, never from MCP: an agent must not choose the model provider of sessions.
+   */
+  setSessionProfile: endpoint("set-session-profile", z.object({ profile: SessionProfile.nullable() }).strict(), WorkspaceSettings),
   overview: endpoint("overview", RepoRequest, RepoOverview),
   tree: endpoint("tree", z.object({ repo: RepoId, path: RepoPath }).strict(), z.array(TreeEntry)),
   file: endpoint(

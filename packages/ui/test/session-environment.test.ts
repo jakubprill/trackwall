@@ -15,6 +15,7 @@ describe("the environment a session got from mise", () => {
         variables: ["GITLAB_TOKEN", "JIRA_TOKEN", "MAVEN_OPTS"],
         secrets: ["GITLAB_TOKEN", "JIRA_TOKEN"],
         agentSecrets: ["JIRA_TOKEN"],
+        profile: null,
         problem: null,
       }),
     ).toEqual({
@@ -29,12 +30,27 @@ describe("the environment a session got from mise", () => {
   });
 
   test("shows nothing when mise gave the session nothing and nothing went wrong", () => {
-    expect(sessionEnvironmentLines({ variables: [], secrets: [], agentSecrets: [], problem: null })).toBeNull();
+    expect(sessionEnvironmentLines({ variables: [], secrets: [], agentSecrets: [], profile: null, problem: null })).toBeNull();
+  });
+
+  test("names the session profile the session started with, also when the profile gave no variable", () => {
+    expect(
+      sessionEnvironmentLines({
+        variables: ["COPILOT_PROVIDER_API_KEY", "COPILOT_PROVIDER_BASE_URL"],
+        secrets: ["COPILOT_PROVIDER_API_KEY"],
+        agentSecrets: [],
+        profile: "byok",
+        problem: null,
+      }),
+    ).toMatchObject({ summary: "2 variables from mise, profile byok", hidden: ["COPILOT_PROVIDER_API_KEY"] });
+    expect(sessionEnvironmentLines({ variables: [], secrets: [], agentSecrets: [], profile: "byok", problem: null })).toMatchObject({
+      summary: "0 variables from mise, profile byok",
+    });
   });
 
   test("shows why the session lacks mise's environment even when it got no variable", () => {
     expect(
-      sessionEnvironmentLines({ variables: [], secrets: [], agentSecrets: [], problem: "shop: mise.toml is not trusted" }),
+      sessionEnvironmentLines({ variables: [], secrets: [], agentSecrets: [], profile: null, problem: "shop: mise.toml is not trusted" }),
     ).toMatchObject({
       summary: "0 variables from mise",
       badgeLabel: "0 variables from mise, some are missing",

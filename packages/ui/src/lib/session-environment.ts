@@ -4,8 +4,8 @@ import type { Timers } from "./timers.ts";
 /**
  * What the session panel and a grid tile say about the environment a session got from mise (ADR-93): only names,
  * never values. The secrets the agent's tools get (`agentSecrets`) are listed apart from those Copilot CLI hides from
- * them and from the plain variables, so the user sees why a tool lacks a token. Null when mise gave the session
- * nothing and nothing went wrong.
+ * them and from the plain variables, so the user sees why a tool lacks a token, and the summary names the session
+ * profile it started with (ADR-136). Null when mise gave the session nothing, without a profile, and nothing went wrong.
  */
 export interface SessionEnvironmentLines {
   summary: string;
@@ -20,9 +20,10 @@ export interface SessionEnvironmentLines {
 }
 
 export function sessionEnvironmentLines(environment: SessionEnvironment): SessionEnvironmentLines | null {
-  const { variables, secrets, agentSecrets, problem } = environment;
-  if (variables.length === 0 && problem === null) return null;
-  const summary = `${countLabel(variables.length, { one: "variable", other: "variables" })} from mise`;
+  const { variables, secrets, agentSecrets, problem, profile } = environment;
+  if (variables.length === 0 && problem === null && profile === null) return null;
+  const counted = `${countLabel(variables.length, { one: "variable", other: "variables" })} from mise`;
+  const summary = profile === null ? counted : `${counted}, profile ${profile}`;
   return {
     summary,
     badgeLabel: problem === null ? summary : `${summary}, some are missing`,

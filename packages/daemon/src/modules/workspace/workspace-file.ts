@@ -8,6 +8,7 @@ import {
   type RepoHost,
   RepoHosts,
   RepoTagRules,
+  SessionProfile,
   SupervisorSettings,
   ToolPermissionRules,
   WorkspaceKey,
@@ -24,7 +25,7 @@ import { type WorkspaceKeyValues, workspaceKeyValue } from "./workspace-key-valu
 /**
  * `workspace.yaml` (§4.5, ADR-13): the workspace configuration, which the user can edit by hand and keep
  * in a private repo. Read on every use, so a manual edit works without restarting the daemon. A write changes
- * only one key (`projectsDir`, `worktreesDir`, `gitProgram`, `repoHosts`, `javaNavigation`, which the Java navigation install writes, or `localConfigRemote`, which "Push to this remote" for the local config store writes; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `supervisor` and `agentSecrets` only by hand) and keeps comments and the other keys,
+ * only one key (`projectsDir`, `worktreesDir`, `gitProgram`, `repoHosts`, `javaNavigation`, which the Java navigation install writes, or `localConfigRemote`, which "Push to this remote" for the local config store writes, or `sessionProfile`; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `supervisor` and `agentSecrets` only by hand) and keeps comments and the other keys,
  * including the `repos` list from version 0.2.0, which is no longer read (ADR-18): it is the user's file, so removing it is up to them.
  */
 
@@ -65,6 +66,8 @@ const Keys: { [K in WorkspaceKey]: z.ZodType<WorkspaceKeyValues[K], unknown> } =
   supervisor: SupervisorSettings.nullish().transform((settings) => settings ?? { changesCode: false }),
   // The secrets from mise that the tools of sessions get (ADR-93); only by hand, like `repoTags`.
   agentSecrets: AgentSecrets.nullish().transform((names) => names ?? []),
+  // The mise environment only sessions start with (ADR-136); set in Settings › Agents or by hand.
+  sessionProfile: SessionProfile.nullish().transform((profile) => profile ?? null),
   // The Java language server for tasks (ADR-99); by hand or by installing it in Settings › Agents (ADR-123).
   javaNavigation: JavaNavigationSettings.refine(
     (settings) => [settings.jdtls, settings.java, settings.lombok].every((path) => path === null || isFullPath(path)),
@@ -145,6 +148,11 @@ export class WorkspaceFile {
     return this.get("agentSecrets", Keys.agentSecrets);
   }
 
+  /** The mise environment only sessions start with (ADR-136); `null` for none. */
+  sessionProfile(): SessionProfile | null {
+    return this.get("sessionProfile", Keys.sessionProfile);
+  }
+
   /** The address the local config store may be pushed to (`localConfigRemote`, ADR-127); `null` keeps it unpushed. */
   localConfigRemote(): string | null {
     return this.get("localConfigRemote", Keys.localConfigRemote);
@@ -184,6 +192,11 @@ export class WorkspaceFile {
   /** `null` removes the key, like `setWorktreesDir`. */
   setGitProgram(path: string | null): void {
     this.set("gitProgram", path);
+  }
+
+  /** `null` removes the key: sessions start without a profile. */
+  setSessionProfile(profile: SessionProfile | null): void {
+    this.set("sessionProfile", profile);
   }
 
   /** Without a Lombok jar the key has no `lombok` line, rather than `lombok: null`. */
