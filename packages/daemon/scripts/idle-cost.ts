@@ -130,7 +130,7 @@ async function statusRound(name: string, ids: readonly string[]): Promise<void> 
   const processes = gitProcessesStarted();
   const cpu = process.cpuUsage();
   const started = performance.now();
-  await facade.workspace.repos(ids);
+  await facade.workspace.repos(ids, "recent");
   const used = process.cpuUsage(cpu);
   const childrenUsed = children === undefined ? undefined : (childCpuMs() ?? 0) - children;
   console.log(`\n${name}: ${(performance.now() - started).toFixed(0)} ms`);
@@ -181,7 +181,7 @@ try {
   // A round of repo statuses as the Home and Repos views fetch it every 30 s (`REPO_LIST_PACE`), after the views' first
   // list has read every repo (and remembered the remotes and HEAD commits), then the same round again at once, as another
   // view's would. Both may reuse a status git has had no reason to change (ADR-141); where git is fast, the first reads all.
-  const ids = (await facade.workspace.list()).repos.map((repo) => repo.id);
+  const ids = (await facade.workspace.list("recent")).repos.map((repo) => repo.id);
   await Bun.sleep(REFRESH_MS);
   await statusRound(`one round of repo statuses (${ids.length} repos), ${REFRESH_MS / 1000} s after the first list`, ids);
   await statusRound("the same round again at once", ids);

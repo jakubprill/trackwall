@@ -8,6 +8,7 @@ import type {
   HostedProject,
   RepoHost,
   RepoStatusOk,
+  StatusRead,
   SyncResult,
   TaskChanges,
   TreeEntry,
@@ -49,7 +50,7 @@ import {
 } from "./parse.ts";
 import { pathKey } from "./path-key.ts";
 import { remoteAddress } from "./remote.ts";
-import { StatusMemo, type StatusRead } from "./status-memo.ts";
+import { StatusMemo, type TimedStatus } from "./status-memo.ts";
 import { syncRepo } from "./sync.ts";
 import { addWorktree, defaultBase, deleteBranch, pendingWork, removeWorktree } from "./worktree.ts";
 import { workingTreeChanges, worktreeChanges } from "./worktree-changes.ts";
@@ -142,10 +143,11 @@ export class Vcs {
     return this.statuses.get(dir, how, () => this.readStatus(dir));
   }
 
-  private async readStatus(dir: string): Promise<RepoStatusOk> {
-    const { stdout } = await gitRead(dir, ["status", "--porcelain=v2", "--branch", "-z"]);
+  private async readStatus(dir: string): Promise<TimedStatus> {
+    const { stdout, ranMs } = await gitRead(dir, ["status", "--porcelain=v2", "--branch", "-z"]);
     const { headOid, ...status } = parseStatus(stdout.toString("utf8"));
-    return { ...status, head: headOid === null ? null : await this.headCommits.get(headOid, () => this.newestCommit(dir, headOid)) };
+    const head = headOid === null ? null : await this.headCommits.get(headOid, () => this.newestCommit(dir, headOid));
+    return { status: { ...status, head }, ranMs };
   }
 
   private async newestCommit(dir: string, commit: string): Promise<Commit | null> {

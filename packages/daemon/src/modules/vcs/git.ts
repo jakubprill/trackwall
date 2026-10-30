@@ -68,7 +68,7 @@ export type GitNetwork = { sshCommand: string | undefined };
  * each one towards its time limit.
  */
 const LOCAL_CALL_SLOTS = new Slots(process.platform === "win32" ? 4 : 6);
-const WAITING_READS = new WaitingCalls<RunOutput>(LOCAL_CALL_SLOTS);
+const WAITING_READS = new WaitingCalls<TimedOutput>(LOCAL_CALL_SLOTS);
 
 /**
  * A call that took longer than this, waiting for a slot included, gets a daemon log line (ADR-111), so a slow machine shows
@@ -91,11 +91,14 @@ export function git(repoDir: string, args: readonly string[], opts: GitOptions =
  * A short read with no options (`status`): an identical read still waiting for a slot is joined instead of queued again
  * (ADR-111). Without options, so that the key (the repo and the arguments) is the whole call.
  */
-export function gitRead(repoDir: string, args: readonly string[]): Promise<RunOutput> {
+export function gitRead(repoDir: string, args: readonly string[]): Promise<TimedOutput> {
   return runGit(repoDir, args, {}, true);
 }
 
-async function runGit(repoDir: string, args: readonly string[], opts: GitOptions, joinWaiting: boolean): Promise<RunOutput> {
+/** The output and how long the process ran, without the wait for a slot (the reuse of a status, ADR-141). */
+export type TimedOutput = RunOutput & { ranMs: number };
+
+async function runGit(repoDir: string, args: readonly string[], opts: GitOptions, joinWaiting: boolean): Promise<TimedOutput> {
   const ceiling = await ceilingFor(repoDir);
   const { maxBytes, stdin, okExitCodes } = opts;
   const config = (opts.config ?? []).flatMap((entry) => ["-c", entry]);
@@ -120,7 +123,7 @@ async function runGit(repoDir: string, args: readonly string[], opts: GitOptions
       },
       timeoutMs: opts.timeoutMs ?? TIMEOUT_MS,
     });
-    return { output, startedAt };
+    return { output: output.then((out) => ({ ...out, ranMs: performance.now() - startedAt })), startedAt };
   };
   // A long command (a worktree, a search) would hold a slot for minutes and the views would wait behind it again.
   const short = !opts.network && (opts.timeoutMs ?? TIMEOUT_MS) <= TIMEOUT_MS;

@@ -10,11 +10,16 @@ import { fileKey } from "../../infra/file-key.ts";
  * throws, so the caller can tell "not there" from "not readable this time".
  */
 
+export interface GitDirs {
+  gitDir: string;
+  commonDir: string;
+}
+
 /**
  * The git directory of the repo (with `HEAD`) and the common one (with `refs/` and `packed-refs`): both `.git` in a normal
  * clone; in a worktree `.git` is a file with `gitdir: <path>`, and that directory names the common one in `commondir`.
  */
-export async function gitDirs(repo: string): Promise<{ gitDir: string; commonDir: string } | null> {
+export async function gitDirs(repo: string): Promise<GitDirs | null> {
   const dotGit = join(repo, ".git");
   const info = await statIfExists(dotGit);
   if (!info) return null;

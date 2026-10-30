@@ -1,23 +1,35 @@
 import { describe, expect, test } from "bun:test";
 import type { RepoStatusOk } from "@trackwall/protocol";
-import { StatusMemo } from "../src/modules/vcs/status-memo.ts";
+import { StatusMemo, type TimedStatus } from "../src/modules/vcs/status-memo.ts";
 
 const CLEAN: RepoStatusOk = { kind: "ok", branch: "main", head: null, changes: 0, untracked: 0, upstream: null };
 const EDITED: RepoStatusOk = { ...CLEAN, changes: 1 };
 
-/** A memo whose clock and git directory key the test sets, and a read that takes `readMs` on that clock. */
+/** A memo whose clock and git directory key the test sets, and a `git status` that runs `readMs` on that clock. */
 function memoWithClock() {
   const clock = { ms: 0, key: "HEAD 1" as string | undefined, readMs: 0, reads: 0 };
   const memo = new StatusMemo({ now: () => clock.ms, gitDirKey: async () => clock.key });
   const read = (status: RepoStatusOk) => async () => {
     clock.reads++;
     clock.ms += clock.readMs;
-    return status;
+    return { status, ranMs: clock.readMs };
   };
   return { clock, memo, read };
 }
 
 describe("the status the repo lists reuse (ADR-141)", () => {
+  test("the reuse counts only the time git ran, not the wait for a slot before it", async () => {
+    const { clock, memo, read } = memoWithClock();
+    const waitedAndRan = async (): Promise<TimedStatus> => {
+      clock.ms += 3000 + 3000;
+      return { status: CLEAN, ranMs: 3000 };
+    };
+    await memo.get("/p/orders", "recent", waitedAndRan);
+
+    clock.ms = 61_000;
+    expect(await memo.get("/p/orders", "recent", read(EDITED))).toEqual(EDITED);
+  });
+
   test("a status that took 3 s is reused for twenty times that while the git directory is unchanged", async () => {
     const { clock, memo, read } = memoWithClock();
     clock.readMs = 3000;
@@ -78,7 +90,7 @@ describe("the status the repo lists reuse (ADR-141)", () => {
   test("a failed read forgets the repo's status, so the next list asks git again", async () => {
     const { memo, read } = memoWithClock();
     await memo.get("/p/orders", "recent", read(CLEAN));
-    const failing = async (): Promise<RepoStatusOk> => {
+    const failing = async (): Promise<TimedStatus> => {
       throw new Error("fatal: not a git repository");
     };
 
@@ -92,5 +104,18 @@ describe("the status the repo lists reuse (ADR-141)", () => {
 
     expect(await memo.get("/p/billing", "recent", read(EDITED))).toEqual(EDITED);
     expect(await memo.get("/p/orders", "recent", read(EDITED))).toEqual(CLEAN);
+  });
+
+  test("a read that started earlier and ended later does not replace a fresh read's newer status", async () => {
+    const { clock, memo, read } = memoWithClock();
+    let endSlowRead: (timed: TimedStatus) => void = () => {};
+    const slow = memo.get("/p/orders", "recent", () => new Promise<TimedStatus>((end) => (endSlowRead = end)));
+    await Bun.sleep(0);
+    clock.ms = 100;
+    await memo.get("/p/orders", "fresh", read(EDITED));
+    endSlowRead({ status: CLEAN, ranMs: 6000 });
+
+    expect(await slow).toEqual(CLEAN);
+    expect(await memo.get("/p/orders", "recent", read(CLEAN))).toEqual(EDITED);
   });
 });

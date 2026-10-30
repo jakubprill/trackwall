@@ -146,7 +146,7 @@ const runs: ToolRuns = {
       if (wanted.length > 0) throw err;
       return [];
     });
-    const [list, tagList] = await Promise.all([facade.workspace.list(), tags]);
+    const [list, tagList] = await Promise.all([facade.workspace.list("fresh"), tags]);
     const run = facade.workspace.syncRun();
     const repos = list.repos.map((repo) => agentRepo(repo, run, tagNames(tagList.find((t) => t.repo === repo.id))));
     return { projectsDir: list.projectsDir, repos: repos.filter((repo) => hasEveryTag(repo.tags, wanted)) };

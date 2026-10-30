@@ -23,7 +23,7 @@ Trackwall works with one projects folder: every git repo directly inside it is o
 
 The list shows every repo as soon as you open it. Each one says "loading" until git has read it, and the repo you selected and the ones at the top of the list come first, so you do not wait for the whole folder. If reading fails, the list says so and offers "Retry".
 
-The list and the repo header count your uncommitted work as "3 changed, 1 new". On a machine where starting git is slow, the list can show these counts up to about a minute late, so that it does not keep git busy; a commit, a checkout, a fetch or staging shows at once, and the repo you open always shows its current state. The "Changes" tab, or a click on the "Working tree" tile, shows those files with their diff; you commit or discard them in your editor.
+The list and the repo header count your uncommitted work as "3 changed, 1 new". On a machine where starting git is slow, the list can show these counts up to about a minute late, so that it does not keep git busy; a commit, a checkout, a fetch or staging shows at once, and the refresh button reads every repo anew. The "Changes" tab, or a click on the "Working tree" tile, shows those files with their diff; you commit or discard them in your editor.
 
 "In this repo", under the header, lists the repo's task proposals, the sessions running in it, its tasks and its running mise tasks, each with its state, whichever tab is open. Click one to go to it: a proposal, session or task opens in "Sessions", a mise task in the "mise tasks" tab, and a mise task running in a task opens that task.
 

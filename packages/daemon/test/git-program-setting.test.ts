@@ -53,7 +53,7 @@ describe("the Git program setting", () => {
       expect(settings.gitProgram).toBe(git);
       expect(readFileSync(file, "utf8")).toContain("gitProgram:");
       expect((await vcs.version(15_000)).chosen).toBe(git);
-      const [orders] = (await workspace.list()).repos;
+      const [orders] = (await workspace.list("fresh")).repos;
       expect(orders?.status.kind).toBe("ok");
 
       expect((await workspace.setGitProgram(null)).gitProgram).toBeNull();
@@ -97,7 +97,7 @@ describe("the Git program setting", () => {
       workspace.useGitProgramFromFile();
 
       expect(await vcs.version(15_000)).toMatchObject({ source: "fallback", chosen: missing, program: "git" });
-      const [orders] = (await workspace.list()).repos;
+      const [orders] = (await workspace.list("fresh")).repos;
       expect(orders?.status.kind).toBe("ok");
     },
     SLOW_TEST_TIMEOUT_MS,

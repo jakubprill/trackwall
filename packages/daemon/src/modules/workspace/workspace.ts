@@ -22,6 +22,7 @@ import {
   type SearchCodeResult,
   type Session,
   type SessionProfile,
+  type StatusRead,
   type SupervisorSettings,
   type SyncResult,
   type SyncRun,
@@ -79,7 +80,7 @@ interface WorkspaceVcs extends CodeSearchVcs {
   checkGitProgram(path: string): Promise<void>;
   useGitProgram(path: string | null): void;
   /** `recent` lets a list reuse a status git has not had reason to change (ADR-141); `fresh` always asks git. */
-  status(dir: string, how: "recent" | "fresh"): Promise<RepoStatusOk>;
+  status(dir: string, how: StatusRead): Promise<RepoStatusOk>;
   remote(dir: string): Promise<string | null>;
   sync(dir: string): Promise<SyncResult>;
   log(dir: string, limit: number): Promise<Commit[]>;
@@ -118,9 +119,9 @@ export class Workspace {
     this.deps = deps;
   }
 
-  async list(): Promise<RepoList> {
+  async list(how: StatusRead): Promise<RepoList> {
     const { projectsDir, entries } = await this.entries();
-    return { projectsDir, repos: await mapLimit(entries, STATUS_CONCURRENCY, (entry) => this.describe(entry, "recent")) };
+    return { projectsDir, repos: await mapLimit(entries, STATUS_CONCURRENCY, (entry) => this.describe(entry, how)) };
   }
 
   /** The list without git (ADR-113): only the folder is read, so it answers at once even where every git start is slow. */
@@ -133,11 +134,11 @@ export class Workspace {
    * The repos named, described like `list` does, in the order asked (ADR-113). A view asks for the repos it shows first and
    * the rest after; a repo removed from the folder meanwhile is left out, as the next `entries` will.
    */
-  async repos(ids: readonly string[]): Promise<Repo[]> {
+  async repos(ids: readonly string[], how: StatusRead): Promise<Repo[]> {
     const { entries } = await this.entries();
     const byId = new Map(entries.map((entry) => [entry.id, entry]));
     const asked = [...new Set(ids)].flatMap((id) => byId.get(id) ?? []);
-    return mapLimit(asked, STATUS_CONCURRENCY, (entry) => this.describe(entry, "recent"));
+    return mapLimit(asked, STATUS_CONCURRENCY, (entry) => this.describe(entry, how));
   }
 
   settings(): WorkspaceSettings {
@@ -522,8 +523,8 @@ export class Workspace {
     return entry;
   }
 
-  /** The lists, which views refresh every 30 s, may reuse a recent status (ADR-141); one repo asked for by itself is read anew. */
-  private async describe(entry: RepoEntry, how: "recent" | "fresh"): Promise<Repo> {
+  /** A periodic refresh may reuse a recent status (ADR-141); one repo asked for by itself is read anew. */
+  private async describe(entry: RepoEntry, how: StatusRead): Promise<Repo> {
     const [status, remote] = await Promise.all([
       this.deps.vcs.status(entry.path, how).catch((err: unknown): RepoStatus => ({ kind: "unavailable", message: messageOf(err) })),
       // A missing address is not a repo error: the repo state will say anyway when git cannot read it.
