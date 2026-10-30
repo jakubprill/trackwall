@@ -7,6 +7,7 @@ import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { FolderDrop } from "@/components/FolderDrop";
 import { IdeaCapture } from "@/components/IdeaCapture";
 import { Loading } from "@/components/Loading";
+import { NotificationOffer } from "@/components/NotificationOffer";
 import { RemoteDaemonSurface } from "@/components/RemoteDaemonSurface";
 import { SupervisorPanel } from "@/components/SupervisorPanel";
 import { UpdateBanner } from "@/components/UpdateBanner";
@@ -32,6 +33,7 @@ import { useJumpRequest } from "@/lib/use-jump-request";
 import { useRepoWatch } from "@/lib/use-repo-watch";
 import { useSessionTree } from "@/lib/use-session-tree";
 import { useSessions } from "@/lib/use-sessions";
+import { useTabAttention } from "@/lib/use-tab-attention";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { zoomStepOf, zoomWindow } from "@/lib/zoom-shortcut";
 import { GraphView } from "@/views/graph/GraphView";
@@ -170,6 +172,8 @@ export function App() {
     if (jump.kind !== "repo") return openInSessions(jump);
     openRepos(jump.id);
   });
+  // In a browser tab the page does what the shell does above: the count in the title and a notification (ADR-146).
+  useTabAttention(sessions.data, openInSessions);
   // Alt+J and Alt+0 from every view.
   useWindowShortcuts(
     (event) => {
@@ -202,6 +206,7 @@ export function App() {
         />
         <div className="flex min-w-0 flex-1 flex-col">
           {appUpdate && <UpdateBanner handle={appUpdate} />}
+          <NotificationOffer />
           {error && <ErrorBanner message={error} action={{ label: "Try again", onClick: retry }} />}
           {windowError && <ErrorBanner message={windowError} action={{ label: "Dismiss", onClick: () => setWindowError(undefined) }} />}
           {conn && dropped && (

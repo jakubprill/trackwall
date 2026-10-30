@@ -6,6 +6,7 @@ import type { LiveFeed } from "@/lib/daemon-events";
 import { SETTINGS_CATEGORIES, type SettingsCategory, type SettingsSection, settingsCategory } from "@/lib/settings-categories";
 import type { AppUpdateHandle } from "@/lib/use-app-update";
 import { cn } from "@/lib/utils";
+import { BrowserNotificationsSurface } from "./BrowserNotificationsSurface.tsx";
 import { ConfigFilesSurface } from "./ConfigFilesSurface.tsx";
 import { ConnectCopilotSurface } from "./ConnectCopilotSurface.tsx";
 import { DaemonSurface } from "./DaemonSurface.tsx";
@@ -90,6 +91,8 @@ function Section({ section, conn, update, warmupLive, onRetry, onSaved }: Settin
       return <StartAtSignInSurface />;
     case "remote-daemon":
       return <RemoteDaemonSurface />;
+    case "browser-notifications":
+      return <BrowserNotificationsSurface />;
     case "updates":
       return <UpdatesSurface handle={update} />;
     case "home-scene":

@@ -13,6 +13,8 @@ describe("a session in a repo, answered from the tray panel", () => {
     await typeInTerminal(page, "run the tests\r");
     await waitForTerminal(page, "Do you want to run this command?");
     await sessionRow(page, "shop").getByText("asking for approval").waitFor();
+    // A browser tab counts what waits for you in its title, where the tray would in the desktop app.
+    await page.waitForFunction(() => document.title === "(1) Trackwall");
 
     const panel = await trackwall().openTrayPanel();
     const waiting = panel.getByRole("list", { name: "Waiting for you" });
@@ -24,5 +26,6 @@ describe("a session in a repo, answered from the tray panel", () => {
     // and the session the user is looking at is idle, not waiting for them.
     await panel.getByText("Nothing is waiting for you.").waitFor();
     await sessionRow(page, "shop").getByText("idle", { exact: true }).waitFor();
+    await page.waitForFunction(() => document.title === "Trackwall");
   }, 60_000);
 });
