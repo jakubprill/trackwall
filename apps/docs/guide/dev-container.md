@@ -86,9 +86,33 @@ The desktop app can use Trackwall in the container instead of running its own, s
 2. Start Trackwall in the container and look up its address with the token, as in steps 5 and 6 above.
 3. In the app, open Settings › App › Daemon in a container, paste the address and click "Connect". When the app's own Trackwall did not start, the same field is on the screen it shows instead.
 
+Or let the app start the container and connect by itself, see [Start the container from the app](#start-the-container-from-the-app).
+
 The app restarts, stops its own Trackwall with its sessions, and from then on connects to the one in the container. It neither starts nor stops that one: quitting the app leaves it running. Trackwall in the container gets a new token every time it starts, so after it restarts the app says the token was not accepted and shows the field again (click "Try again" when a view reports the error first); paste the new address. "Use this app's own daemon" in the same place goes back.
 
 In the app, links and "Open in VS Code" open on your computer as they do from the browser. "Show in Explorer" comes back once the app knows where your computer sees the repos: in Settings › App › Daemon in a container, set "Projects folder on this computer" to the volume's folder, for example `\\wsl.localhost\rancher-desktop\var\lib\docker\volumes\workspace-repos\_data` with Rancher Desktop. To find it, run `wsl -l -v` for the name of the distribution and `docker volume inspect workspace-repos` for the folder of the volume (`Mountpoint`), and check that Explorer opens it. Files you save there from Windows can end up owned by `root` inside the container, so git in the container may not be able to change them; browse there, and edit inside the container. This works on Windows and macOS. The folder picker and dropping files on the window are not there, since paths on your computer mean nothing inside the container. The app and Trackwall in the container must be the same version: after the app updates itself, update the container too (see the last points below).
+
+### Start the container from the app
+
+The app can do what you would otherwise do by hand: open the dev container, wait for Trackwall in it and connect with its current token. It also does that after Trackwall in the container restarted with a new token.
+
+1. After the steps of [Start Trackwall](#start-trackwall), let the container start Trackwall by itself and tell where its state is. Add to `devcontainer.json`:
+
+   ```json
+   "containerEnv": {
+     "TRACKWALL_HOME": "/home/vscode/.trackwall"
+   },
+   "postStartCommand": "nohup bash -c 'cd ~ && ~/.local/bin/mise exec -- bun ~/trackwall/packages/daemon/src/main.ts --port 7700 > /tmp/trackwall-daemon.log 2>&1 &' > /dev/null 2>&1"
+   ```
+
+   Keep the other keys of `containerEnv` from [Set up the container](#set-up-the-container). `mise exec` runs Trackwall with the tools you installed in step 2. Trackwall's output goes to `/tmp/trackwall-daemon.log` in the container; look there when the app keeps waiting.
+2. Rebuild the container once ("Dev Containers: Rebuild Container" in VS Code).
+3. In the app, open Settings › App › Daemon in a container. Under the dev container, enter the folder on your computer that holds `.devcontainer` (the folder you open in a container yourself) and the folder VS Code opens inside it, `/workspaces` in the example, and click "Save". While the app is connected to Trackwall in a container that sets `TRACKWALL_DEVCONTAINER_HOST_FOLDER`, the first field is already filled in.
+4. Click "Start the dev container and connect".
+
+Docker Desktop or Rancher Desktop has to be running. If the container already runs with Trackwall in it, the app connects right away; if Trackwall there is another version than the app, it says so at once. Otherwise it opens VS Code on the dev container, as your own shortcut or "Reopen in Container" does; VS Code may ask once whether to open it. The first start builds the container and can take several minutes. Once Trackwall in the container answers on the forwarded port, the app restarts and connects. Keep the VS Code window open: it forwards the port. When Trackwall in the container restarts later, the app shows the same button again on the screen it shows when it cannot connect.
+
+The app finds the container by the folder you entered and reads Trackwall's address and token from it with `docker`; nothing is sent anywhere else. A dev container opened from a folder inside WSL instead of Windows is not supported yet.
 
 ## MCP servers on your computer
 
