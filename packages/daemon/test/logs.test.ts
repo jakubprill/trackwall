@@ -268,6 +268,16 @@ describe("secrets to mask", () => {
     ).toEqual(["ghp_123456789", "a-long-database-password", "sk_test_abcdefgh"]);
   });
 
+  test("every model provider setting of Copilot CLI is a secret, since a base URL can carry a key", () => {
+    expect(
+      secretValues({
+        COPILOT_PROVIDER_BASE_URL: "https://user:key@models.example.test/v1",
+        COPILOT_PROVIDER_TYPE: "openai",
+        COPILOT_MODEL: "some-model-name",
+      }),
+    ).toEqual(["https://user:key@models.example.test/v1"]);
+  });
+
   test("values the process gets elsewhere (mise [env], ADR-93) are secrets too, each line of a key on its own, without short ones", () => {
     expect(
       secretValues({ GH_TOKEN: "ghp_123456789" }, ["jira-key-from-age", "-----BEGIN KEY-----\nMIIEvQIBADANBgkqh\nend", "short"]),
