@@ -76,12 +76,13 @@ describe("commit search", () => {
 
       const result = await workspace.searchCommits({ ...QUERY, text: "price" });
 
-      expect(result.commits).toEqual([
+      // Newer git writes a UTC offset as Z, older git as +00:00, so dates are compared as instants.
+      expect(result.commits.map((c) => ({ ...c, date: Date.parse(c.date) }))).toEqual([
         {
           repo: "web",
           hash: gitIn(web, "rev-parse", "HEAD").trim(),
           author: "Bob",
-          date: "2026-10-21T12:00:00+02:00",
+          date: Date.parse("2026-10-21T12:00:00+02:00"),
           subject: "SHOP-34 Follow the rename",
           files: ["src/order.ts"],
           filesTruncated: false,
@@ -90,7 +91,7 @@ describe("commit search", () => {
           repo: "orders",
           hash: gitIn(orders, "rev-parse", "HEAD").trim(),
           author: "Ann",
-          date: "2026-10-20T08:00:00+00:00",
+          date: Date.parse("2026-10-20T08:00:00Z"),
           subject: "SHOP-34 Rename price to amount",
           // The README of the same commit does not contain the text.
           files: ["src/OrderDto.java"],
