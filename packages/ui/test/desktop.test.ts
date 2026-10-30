@@ -127,14 +127,28 @@ describe("the page's VS Code link", () => {
   const container = "de4cc610b398445a55cd4802f1b0dc38776d583533fd7283c9d76e5825fd5f81";
 
   test("a daemon in a container gets VS Code attached to it, opened by the page", () => {
-    expect(editorLinkFor({ desktop: false, container }, "/workspaces/shop")).toStartWith("vscode://vscode-remote/attached-container+");
+    expect(editorLinkFor({ desktop: false, container, devContainerFolder: null }, "/workspaces/shop")).toStartWith(
+      "vscode://vscode-remote/attached-container+",
+    );
+  });
+
+  test("a dev container that names its folder gets VS Code through its configuration instead", () => {
+    const place = { desktop: false, container, devContainerFolder: String.raw`C:\Users\me\Dev\work space` };
+    const hex = Buffer.from(String.raw`C:\Users\me\Dev\work space`, "utf8").toString("hex");
+    expect(editorLinkFor(place, "/workspaces/shop")).toBe(`vscode://vscode-remote/dev-container+${hex}/workspaces/shop`);
+  });
+
+  test("the dev container's folder is enough when the container's id is unknown", () => {
+    expect(editorLinkFor({ desktop: false, container: null, devContainerFolder: "/home/me/dev" }, "/workspaces/shop")).toStartWith(
+      "vscode://vscode-remote/dev-container+",
+    );
   });
 
   test("a daemon with a desktop opens VS Code itself, so the page builds no link", () => {
-    expect(editorLinkFor({ desktop: true, container: null }, "/home/me/Dev/shop")).toBeUndefined();
+    expect(editorLinkFor({ desktop: true, container: null, devContainerFolder: null }, "/home/me/Dev/shop")).toBeUndefined();
   });
 
   test("without a desktop or a known container nothing can open VS Code", () => {
-    expect(editorLinkFor({ desktop: false, container: null }, "/workspaces/shop")).toBeUndefined();
+    expect(editorLinkFor({ desktop: false, container: null, devContainerFolder: null }, "/workspaces/shop")).toBeUndefined();
   });
 });

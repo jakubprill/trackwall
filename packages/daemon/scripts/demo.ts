@@ -78,6 +78,7 @@ const api = await startApi({
     mcpStdioCommand: mcpStdioCommand(home),
     desktop: true,
     container: null,
+    devContainerFolder: null,
   }),
   onShutdown: () => void stop("POST /api/daemon/shutdown"),
   facade,
