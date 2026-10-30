@@ -46,7 +46,7 @@ export function GraphView({
   const graph = useRemote(load, repoWatch.options(GRAPH_PACE));
   const warmup = useCardWarmup(conn, warmupLive).data;
   const [selected, setSelected] = useState<string>();
-  const [chosenTask, setImpactTask] = useState(initialImpactTask);
+  const [chosenTask, setChosenTask] = useState(initialImpactTask);
   // An ended task has no impact to show: the view goes back to the plain graph rather than asking again every few seconds.
   const tasks = sessions?.tasks ?? [];
   const impactTask = sessions === undefined || tasks.some((t) => t.id === chosenTask) ? chosenTask : undefined;
@@ -75,7 +75,7 @@ export function GraphView({
       <section className="flex min-h-0 min-w-0 flex-col">
         <header className="flex items-center justify-between gap-3 px-4 pt-3 pb-2">
           <h2 className="hud-label">Overview {data && <span className="text-primary">{`// ${twoDigits(data.nodes.length)}`}</span>}</h2>
-          <ImpactPicker tasks={tasks} task={impactTask} onChoose={setImpactTask} />
+          <ImpactPicker tasks={tasks} task={impactTask} onChoose={setChosenTask} />
           <Button variant="ghost" size="icon" onClick={graph.reload} aria-label="Refresh graph">
             <RefreshCw />
           </Button>

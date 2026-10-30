@@ -342,9 +342,7 @@ describe("Sessions view entries", () => {
   test("a task the user handed on from another task's impact says it came from the user and that task (ADR-147)", () => {
     const sessions = [session("s1", "2026-10-23T12:00:00Z", "t1")];
     expect(proposerLabel({ session: null, supervisor: false, task: "t1" }, sessions)).toBe("proposed by you, from the task in shop");
-    expect(proposerLabel({ session: null, supervisor: false, task: "t9" }, sessions)).toBe(
-      "proposed by you, from a task that is no longer listed",
-    );
+    expect(proposerLabel({ session: null, supervisor: false, task: "t9" }, sessions)).toBe("proposed by you, from another task");
   });
 
   test("a task message names its sender the same way, the supervisor by its role", () => {

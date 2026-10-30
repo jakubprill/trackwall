@@ -114,7 +114,7 @@ function EndpointList({ endpoints }: { endpoints: readonly ChangedEndpoint[] }) 
             </div>
             <p className="text-muted-foreground pt-1 font-mono text-2xs">
               {[
-                contractChange(e) || false,
+                contractChange(e),
                 e.dtos.length > 0 && `DTOs: ${e.dtos.join(", ")}`,
                 e.change !== "added" && `${e.callers.length === 0 ? "no" : e.callers.length} callers`,
               ]

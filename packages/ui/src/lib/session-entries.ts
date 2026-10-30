@@ -337,10 +337,13 @@ export function proposerLabel(proposedBy: ProposedBy, sessions: readonly Session
   return `proposed by ${proposerName(proposedBy, sessions)}`;
 }
 
-/** A task the user handed on from another task's impact (ADR-147): no session proposed it, the user did. */
+/**
+ * A task the user handed on from another task's impact (ADR-147): no session proposed it, the user did. The repo of
+ * the handing task comes from its session; a task without one, or ended, is only "another task".
+ */
 function handedOnBy(task: string, sessions: readonly Session[]): string {
   const repo = latestSession(sessions, task)?.repo;
-  return repo ? `you, from the task in ${repo}` : "you, from a task that is no longer listed";
+  return repo ? `you, from the task in ${repo}` : "you, from another task";
 }
 
 /** Who a proposal or a task message (ADR-68) came from, as the end of "proposed by …" or "from …". */
