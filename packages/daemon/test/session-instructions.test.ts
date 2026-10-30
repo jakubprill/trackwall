@@ -171,7 +171,9 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     writeSessionInstructions(sessionDir, "0.5.12", { kind: "supervisor", changesCode: false });
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain("Each prompt you get ends with Trackwall's situation: every task with who started it and what its session does");
-    expect(text).toContain("answer what is going on, and what waits for the user, from it, and call get_session only for details it does not give");
+    expect(text).toContain(
+      "answer what is going on, and what waits for the user, from it, and call get_session only for details it does not give",
+    );
   });
 
   test("a supervisor the user lets change code is told so, and still hands repo changes to tasks (ADR-78)", () => {

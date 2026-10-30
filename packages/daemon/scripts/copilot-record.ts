@@ -20,7 +20,7 @@ import type { TaskStateChange } from "@trackwall/protocol";
 import { trackwallHome } from "../src/infra/home.ts";
 import { AsciicastWriter, parseAsciicast } from "../src/modules/agents/asciicast.ts";
 import { findCopilot } from "../src/modules/agents/copilot-command.ts";
-import { CopilotHookEvent, type CopilotHookRecord } from "../src/modules/agents/copilot-hook-record.ts";
+import { COPILOT_HOOK_EVENTS, CopilotHookEvent, type CopilotHookRecord } from "../src/modules/agents/copilot-hook-record.ts";
 import { type SessionKey, sessionKey } from "../src/modules/agents/copilot-keys.ts";
 import { writeCopilotPlugin } from "../src/modules/agents/copilot-plugin.ts";
 import { encodeMarker, replayCopilotRecording, type StatesLine } from "../src/modules/agents/copilot-recording.ts";
@@ -46,7 +46,7 @@ async function record(argv: string[]): Promise<number> {
   writeFileSync(hooksPath, "");
   const pluginDir = join(out, "plugin");
   const script = fileURLToPath(import.meta.url);
-  writeCopilotPlugin(pluginDir, (event) => ({
+  writeCopilotPlugin(pluginDir, COPILOT_HOOK_EVENTS, (event) => ({
     type: "command",
     exec: process.execPath,
     args: ["--no-env-file", script, "hook", event, hooksPath],

@@ -11,8 +11,7 @@ Talk to one agent above all your repos, pinned on the right of every view, that 
 
 - One place to describe what you want done across repos, visible next to Home, Repos, Sessions and every other view.
 - An agent that splits the work into task proposals, one per repo, and follows the agents that run them.
-- A supervisor that already knows what is going on: every message you send it comes with a short list of all tasks, proposals and sessions, also the ones you started yourself, and what each is doing.
-- A supervisor that wakes up when one of its tasks finishes a turn, reports or gets a verification verdict, and can send that task's agent a correction or an answer.
+- A supervisor that knows what is going on, also with the work you started yourself, wakes up when one of its tasks finishes a turn, reports or gets a verification verdict, and can send that task's agent a correction or an answer.
 - Everything it delegated, with its state, right under it: in its panel and at the top of "Sessions".
 - A bell on the panel when the supervisor, or a task proposal from it or from the work it delegated, is waiting for you.
 

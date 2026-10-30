@@ -12,7 +12,7 @@ import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { AcpSession } from "./acp-session.ts";
 import type { AgentSession } from "./agent-session.ts";
 import { resolveCopilot, toolPermissionArgs } from "./copilot-command.ts";
-import type { CopilotHookEvent } from "./copilot-hook-record.ts";
+import { COPILOT_HOOK_EVENTS, type CopilotHookEvent } from "./copilot-hook-record.ts";
 import { type LspServer, writeCopilotPlugin } from "./copilot-plugin.ts";
 import { LiveSession, type LiveSessionOptions, type SessionPty } from "./live-session.ts";
 import { withLoopbackNoProxy } from "./no-proxy.ts";
@@ -43,6 +43,11 @@ const HOOKS_FILENAME = "hooks.jsonl";
 const SESSIONS_DIR = "sessions";
 /** The session plugin in the session directory (`--plugin-dir`). */
 const PLUGIN_DIR = "plugin";
+/**
+ * The hooks of a session in the conversation view, where the protocol gives the state: only the prompt's, which carries
+ * the supervisor's situation (ADR-148), so a task's tool calls do not each POST their payload for nothing.
+ */
+const CONVERSATION_HOOK_EVENTS = ["userPromptSubmitted"] as const satisfies readonly CopilotHookEvent[];
 /** Without it Copilot CLI silently drops the session plugin's hooks, which POST to the daemon on `127.0.0.1` (ADR-88). */
 const LOOPBACK_HOOKS_ENV = { COPILOT_HOOK_ALLOW_LOCALHOST: "1" };
 
@@ -183,7 +188,10 @@ export class SessionLauncher {
   conversation({ id, load, firstMessage, args = [], ...place }: ConversationStart): Promise<StartedSession> {
     const { repo, supervisor, task, cwd } = place;
     return this.#start(id, place, (setup) => {
-      const instructionsDir = this.#writeSessionFiles(id, setup.role, setup.dir, setup.token);
+      const instructionsDir = this.#writeSessionFiles(id, setup.role, setup.dir, setup.token, {
+        events: CONVERSATION_HOOK_EVENTS,
+        lspServers: {},
+      });
       const session = new AcpSession({
         id,
         repo,
@@ -302,7 +310,7 @@ export class SessionLauncher {
   }: SessionFiles): PreparedSession {
     const supervisor = role.kind === "supervisor";
     const hooksFile = join(dir, HOOKS_FILENAME);
-    const instructionsDir = this.#writeSessionFiles(id, role, dir, token, lspServers);
+    const instructionsDir = this.#writeSessionFiles(id, role, dir, token, { events: COPILOT_HOOK_EVENTS, lspServers });
     const session = new LiveSession({
       id,
       repo,
@@ -323,14 +331,21 @@ export class SessionLauncher {
   }
 
   /**
-   * The session directory, which both views share: the MCP config, the session instructions, the session plugin (in a
-   * terminal with the task's language servers, ADR-99) and an empty `hooks.jsonl`; returns the instructions directory,
-   * `null` when it could not be written.
+   * The session directory, which both views share: the MCP config, the session instructions, the session plugin with
+   * the view's hooks and language servers (ADR-99) and an empty `hooks.jsonl`; returns the instructions directory, `null`
+   * when it could not be written.
    */
-  #writeSessionFiles(id: string, role: SessionRole, dir: string, token: string, lspServers: Record<string, LspServer> = {}): string | null {
+  #writeSessionFiles(
+    id: string,
+    role: SessionRole,
+    dir: string,
+    token: string,
+    plugin: { events: readonly CopilotHookEvent[]; lspServers: Record<string, LspServer> },
+  ): string | null {
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, HOOKS_FILENAME), "");
-    writeCopilotPlugin(join(dir, PLUGIN_DIR), (event) => ({ type: "http", ...this.#deps.sessionHook(event, token) }), lspServers);
+    const hook = (event: CopilotHookEvent) => ({ type: "http" as const, ...this.#deps.sessionHook(event, token) });
+    writeCopilotPlugin(join(dir, PLUGIN_DIR), plugin.events, hook, plugin.lspServers);
     // User-only: the server's headers carry the session token (§8).
     const mcpConfig = copilotHttpMcpServers(this.#deps.sessionMcpServer(token));
     writeFileSync(join(dir, MCP_CONFIG_FILE), JSON.stringify(mcpConfig, null, 2), { mode: 0o600 });

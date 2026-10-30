@@ -819,6 +819,8 @@ describe("the day start with the real Copilot CLI", () => {
 
       const [first, second, third] = model.requests().slice(-3);
       expect(first?.lastUserText).toContain(`Start my day. Trackwall has just synced every repo; call ${mcpTools.getDayReport.name}`);
+      // The day start's message, given with `--interactive`, carries the situation too (ADR-148).
+      expect(first?.lastUserText).toContain("<system_reminder>\nTrackwall's work under way as this prompt came");
       expect(first?.system).toContain("You are the supervisor");
       expect(first?.tools).toContain(copilotToolName(mcpTools.getDayReport.name));
       expect(first?.tools).toContain(`${USER_MCP_SERVER}-${USER_MCP_TOOL}`);
