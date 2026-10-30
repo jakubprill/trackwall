@@ -15,6 +15,8 @@ It is at a very early stage: expect missing features, rough edges and breaking c
 
 ## Read on
 
+- [Why Trackwall](/guide/why-trackwall): the problems of working across many repos, and how Trackwall helps with each.
+- [How Trackwall works](/guide/how-it-works) and [Key flows](/guide/key-flows): the parts and what happens between them, in diagrams.
 - [All features](/features/): every feature on one page, with a sentence each.
 - [Install](/guide/install) and [connect Copilot CLI](/guide/connect-copilot-cli) to get started.
 

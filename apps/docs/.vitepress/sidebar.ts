@@ -67,6 +67,7 @@ export const SIDEBAR: DefaultTheme.SidebarItem[] = [
     text: "Start",
     items: [
       { text: "What is Trackwall", link: "/guide/what-is-trackwall" },
+      { text: "Why Trackwall", link: "/guide/why-trackwall" },
       { text: "Install", link: "/guide/install" },
       { text: "Connect Copilot CLI", link: "/guide/connect-copilot-cli" },
       { text: "Run in a dev container", link: "/guide/dev-container" },
@@ -75,8 +76,12 @@ export const SIDEBAR: DefaultTheme.SidebarItem[] = [
   {
     text: "How it works",
     items: [
+      { text: "How Trackwall works", link: "/guide/how-it-works" },
+      { text: "Key flows", link: "/guide/key-flows" },
       { text: "Where agents work", link: "/guide/where-agents-work" },
+      { text: "Security model", link: "/guide/security-model" },
       { text: "Environment variables", link: "/guide/environment-variables" },
+      { text: "Limits today", link: "/guide/limits" },
     ],
   },
   { text: "All features", link: "/features/" },
