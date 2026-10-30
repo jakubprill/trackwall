@@ -326,7 +326,7 @@ export class SessionLauncher {
    */
   #writeSessionFiles(id: string, role: SessionRole, dir: string, token: string): string | null {
     mkdirSync(dir, { recursive: true });
-    // User-only: the server's headers carry the daemon token and the session token (§8).
+    // User-only: the server's headers carry the session token (§8).
     const mcpConfig = copilotHttpMcpServers(this.#deps.sessionMcpServer(token));
     writeFileSync(join(dir, MCP_CONFIG_FILE), JSON.stringify(mcpConfig, null, 2), { mode: 0o600 });
     const instructionsDir = writeSessionInstructions(dir, this.#deps.version, role);

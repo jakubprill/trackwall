@@ -49,7 +49,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     });
     expect(agents.callerSession(sessionToken)).toBe(started.id);
     expect(agents.callerSession("another token")).toBeUndefined();
-    // Both files carry the daemon token and the session token, so only the user reads them (§8; Windows has no mode bits).
+    // Both files carry the session token, so only the user reads them (§8; Windows has no mode bits).
     if (process.platform !== "win32") {
       expect(statSync(join(home, "sessions", started.id, "mcp-config.json")).mode & 0o777).toBe(0o600);
       expect(statSync(join(home, "sessions", started.id, "plugin", "hooks.json")).mode & 0o777).toBe(0o600);

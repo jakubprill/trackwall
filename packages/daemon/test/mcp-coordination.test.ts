@@ -35,7 +35,7 @@ afterAll(async () => {
 
 /** An MCP client as the session's Stdio bridge sees it: with the token from the file in the session directory. */
 async function clientOfSession(session: string): Promise<Client> {
-  const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, session);
+  const client = await connectSessionClient(daemon.api.port, daemon.home, session);
   clients.push(client);
   return client;
 }

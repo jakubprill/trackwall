@@ -22,7 +22,7 @@ afterAll(async () => {
 }, 30_000);
 
 async function clientOfSession(session: string): Promise<Client> {
-  const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, session);
+  const client = await connectSessionClient(daemon.api.port, daemon.home, session);
   clients.push(client);
   return client;
 }

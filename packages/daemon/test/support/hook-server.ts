@@ -1,7 +1,7 @@
 /**
  * The hook route for sessions of an `Agents` without the daemon API (`makeAgents`): one server on `127.0.0.1` for the
  * whole test process, which hands a POSTed hook to the `Agents` that started the session, through the API's own
- * `handleHook`. The daemon token is not checked here; `session-hooks-api.test.ts` checks it on the real API.
+ * `handleHook`. No token is checked here; `session-hooks-api.test.ts` checks them on the real API.
  */
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -30,6 +30,6 @@ const port = (server.address() as AddressInfo).port;
 export function hookServerFor(agents: () => Agents) {
   return (event: CopilotHookEvent, sessionToken: string) => {
     owners.set(sessionToken, agents());
-    return sessionHookRequest(port, "not-checked", event, sessionToken);
+    return sessionHookRequest(port, event, sessionToken);
   };
 }

@@ -21,8 +21,8 @@ function postHook(path: string, headers: Record<string, string>, payload: unknow
   return loopbackRequest(daemon.api.port, path, { method: "POST", headers, body: JSON.stringify(payload), timeoutMs: 10_000 });
 }
 
-describe.skipIf(process.versions.bun === undefined)("session plugin hooks over HTTP (ADR-88)", () => {
-  test("the plugin registers every hook as a POST to the daemon's hook route with the daemon token and the session token", async () => {
+describe.skipIf(process.versions.bun === undefined)("session plugin hooks and the session token over HTTP (ADR-88, ADR-138)", () => {
+  test("the plugin registers every hook as a POST to the daemon's hook route with the session token alone", async () => {
     const session = await daemon.post(agentsApi.start, { repo: "shop" });
     const sessionToken = tokenOf(daemon.home, session.id);
 
@@ -41,20 +41,20 @@ describe.skipIf(process.versions.bun === undefined)("session plugin hooks over H
       {
         type: "http",
         url: `http://127.0.0.1:${daemon.api.port}/hooks/agentStop`,
-        headers: { authorization: `Bearer ${TOKEN}`, "x-trackwall-session-token": sessionToken },
+        headers: { "x-trackwall-session-token": sessionToken },
         timeoutSec: 5,
       },
     ]);
     await daemon.post(agentsApi.stop, { session: session.id });
   }, 60_000);
 
-  test("a hook with both tokens appends its record to the session's hooks.jsonl and answers with an empty hook output", async () => {
+  test("a hook with the session token appends its record to the session's hooks.jsonl and answers with an empty hook output", async () => {
     const session = await daemon.post(agentsApi.start, { repo: "shop" });
     const sessionToken = tokenOf(daemon.home, session.id);
 
     const res = await postHook(
       "/hooks/agentStop",
-      { authorization: `Bearer ${TOKEN}`, "x-trackwall-session-token": sessionToken },
+      { "x-trackwall-session-token": sessionToken },
       { sessionId: "s1", timestamp: 1, cwd: "/repo", stopReason: "end_turn", transcriptPath: "/x/events.jsonl" },
     );
 
@@ -70,25 +70,39 @@ describe.skipIf(process.versions.bun === undefined)("session plugin hooks over H
     await daemon.post(agentsApi.stop, { session: session.id });
   }, 60_000);
 
-  test("a hook without the daemon token, with an unknown session token or for an unknown event is refused and leaves no record", async () => {
+  test("a hook without a session token, with an unknown one or for an unknown event is refused and leaves no record", async () => {
     const session = await daemon.post(agentsApi.start, { repo: "shop" });
     const sessionToken = tokenOf(daemon.home, session.id);
     const payload = { sessionId: "s1", timestamp: 1, stopReason: "end_turn" };
 
-    const noDaemonToken = await postHook("/hooks/agentStop", { "x-trackwall-session-token": sessionToken }, payload);
-    const unknownSession = await postHook(
-      "/hooks/agentStop",
-      { authorization: `Bearer ${TOKEN}`, "x-trackwall-session-token": "made-up" },
-      payload,
-    );
-    const unknownEvent = await postHook(
-      "/hooks/preToolUse",
-      { authorization: `Bearer ${TOKEN}`, "x-trackwall-session-token": sessionToken },
-      payload,
-    );
+    const noToken = await postHook("/hooks/agentStop", {}, payload);
+    const daemonTokenOnly = await postHook("/hooks/agentStop", { authorization: `Bearer ${TOKEN}` }, payload);
+    const unknownSession = await postHook("/hooks/agentStop", { "x-trackwall-session-token": "made-up" }, payload);
+    const unknownEvent = await postHook("/hooks/preToolUse", { "x-trackwall-session-token": sessionToken }, payload);
 
-    expect([noDaemonToken.status, unknownSession.status, unknownEvent.status]).toEqual([401, 401, 404]);
+    expect([noToken.status, daemonTokenOnly.status, unknownSession.status, unknownEvent.status]).toEqual([401, 401, 401, 404]);
     expect(readFileSync(sessionHooksFile(daemon.home, session.id), "utf8")).toBe("");
     await daemon.post(agentsApi.stop, { session: session.id });
+  }, 60_000);
+
+  test("a session token opens neither the API nor MCP once its session is closed, in a header or as the bearer", async () => {
+    const session = await daemon.post(agentsApi.start, { repo: "shop" });
+    const sessionToken = tokenOf(daemon.home, session.id);
+    const api = (headers: Record<string, string>) =>
+      loopbackRequest(daemon.api.port, agentsApi.sessions.path, { method: "POST", headers, body: "{}", timeoutMs: 10_000 });
+
+    const inHeader = await api({ "x-trackwall-session-token": sessionToken });
+    const asBearer = await api({ authorization: `Bearer ${sessionToken}` });
+    await daemon.post(agentsApi.stop, { session: session.id });
+    await daemon.post(agentsApi.dismiss, { session: session.id });
+    const closedOnMcp = await postHook("/mcp", { "x-trackwall-session-token": sessionToken }, {});
+    const closedWithDaemonToken = await postHook(
+      "/mcp",
+      { authorization: `Bearer ${TOKEN}`, "x-trackwall-session-token": sessionToken },
+      {},
+    );
+
+    expect([inHeader.status, asBearer.status, closedOnMcp.status, closedWithDaemonToken.status]).toEqual([401, 401, 401, 401]);
+    expect(JSON.parse(closedOnMcp.body).error.message).toContain("this Trackwall session has ended");
   }, 60_000);
 });

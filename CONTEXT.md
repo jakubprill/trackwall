@@ -88,7 +88,7 @@ The process an agent CLI starts as a local MCP server; it passes messages from s
 _Avoid_: proxy, thin client (without qualification)
 
 **Session token** (the `x-trackwall-session-token` header in the session's `mcp-config.json` and `hooks.json`, `callerSession`):
-A random token of every Trackwall session next to the daemon token, which its Copilot CLI sends to the MCP server and with its hooks (ADR-88, ADR-89); by it the daemon knows which session is calling and, for example, stores a summary only in that session's task (ADR-39, §8). An agent outside Trackwall does not have it.
+A random token of every Trackwall session, which its Copilot CLI sends to the MCP server and with its hooks (ADR-88, ADR-89) instead of the daemon token; it opens only those two (ADR-138), and by it the daemon knows which session is calling and, for example, stores a summary only in that session's task (ADR-39, §8). An agent outside Trackwall does not have it.
 _Avoid_: task token (an earlier plan; every session has a token, also in a repo root)
 
 ## Workspace and knowledge

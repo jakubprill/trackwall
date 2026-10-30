@@ -144,12 +144,12 @@ export interface AgentsDeps {
   /** What mise sets for a session in its place (ADR-93); a refused place is its `problem`, not a failed start. */
   miseEnv: (place: { repo: string | null; task: string | null }) => Promise<SessionMiseEnv>;
   /**
-   * Where the session plugin's hook for an event POSTs its payload (ADR-88): the daemon's hook route with the daemon token
-   * and the session token, which `receiveHook` takes; the API's port is known only once it listens.
+   * Where the session plugin's hook for an event POSTs its payload (ADR-88): the daemon's hook route with the session
+   * token alone (ADR-138), which `receiveHook` takes; the API's port is known only once it listens.
    */
   sessionHook: (event: CopilotHookEvent, sessionToken: string) => HttpEndpoint;
   /**
-   * The daemon's MCP server (§5.3) over HTTP with the daemon token and the session token (ADR-39, ADR-89): every
+   * The daemon's MCP server (§5.3) over HTTP with the session token alone (ADR-39, ADR-89, ADR-138): every
    * session gets the `trackwall` server through `--additional-mcp-config`, and the server knows from the token which
    * session is calling.
    */

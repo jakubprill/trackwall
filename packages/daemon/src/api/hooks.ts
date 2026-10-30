@@ -6,7 +6,7 @@ import { readBody } from "./body.ts";
 
 /**
  * The session plugin's hooks over HTTP (§5.2, ADR-88): Copilot CLI POSTs each hook's payload to `/hooks/<event>` with
- * the daemon token and the session token, waits for the answer and takes its body as the hook's output. A request
+ * the session token alone (ADR-138), waits for the answer and takes its body as the hook's output. A request
  * instead of a hook process, which an antivirus would scan at every event while the agent waits.
  */
 
@@ -16,11 +16,11 @@ export const HOOKS_PATH = "/hooks/";
 const MAX_HOOK_BYTES = 32 * 1024 * 1024;
 
 /** What the session plugin's hook for `event` sends, for a daemon whose API listens on `port`. */
-export function sessionHookRequest(port: number, token: string, event: CopilotHookEvent, sessionToken: string) {
-  return sessionRequest(port, token, sessionToken, `${HOOKS_PATH}${event}`);
+export function sessionHookRequest(port: number, event: CopilotHookEvent, sessionToken: string) {
+  return sessionRequest(port, sessionToken, `${HOOKS_PATH}${event}`);
 }
 
-/** `/hooks/<event>` with the daemon token already checked; the answer is the bare hook output, not an `ApiResult`. */
+/** `/hooks/<event>` with the token already checked (`handle()` in `server.ts`); the answer is the bare hook output, not an `ApiResult`. */
 export async function handleHook(
   req: IncomingMessage,
   res: ServerResponse,

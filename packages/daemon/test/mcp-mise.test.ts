@@ -155,7 +155,7 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
     "a session runs and stops mise tasks only of its own repo",
     async () => {
       const session = await daemon.facade.agents.start("warehouse");
-      const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, session.id);
+      const client = await connectSessionClient(daemon.api.port, daemon.home, session.id);
       clients.push(client);
 
       expect(errorText(await call(client, "run_mise_task", { repo: "shop", miseTask: "test" }))).toBe(
@@ -182,7 +182,7 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
       const sessions = daemon.facade.agents.sessions().sessions.filter((s) => s.task === own.id || s.task === other.id);
       const session = sessions.find((s) => s.task === own.id);
       if (!session) throw new Error("the task has no session");
-      const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, session.id);
+      const client = await connectSessionClient(daemon.api.port, daemon.home, session.id);
       clients.push(client);
 
       const started = MiseTaskRunResult.parse(
@@ -314,7 +314,7 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
       await waitFor(daemon.facade.agents, session.id, (s) => s.state?.reason === "hook agentStop", "the end of the turn");
       await untilInputBox(window, "empty");
       writeFileSync(join(task.worktree, "mise.toml"), '[tasks.test]\nrun = "anything"\n');
-      const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, session.id);
+      const client = await connectSessionClient(daemon.api.port, daemon.home, session.id);
       clients.push(client);
 
       expect(errorText(await call(client, "run_mise_task", { repo: "warehouse", task: task.id, miseTask: "test" }))).toStartWith(
@@ -360,7 +360,7 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
       await waitFor(agents, first.id, () => window.text().includes("--interactive="), "the screen image");
       window.attachment.detach();
       writeFileSync(join(task.worktree, "mise.toml"), '[tasks.test]\nrun = "anything"\n');
-      const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, first.id);
+      const client = await connectSessionClient(daemon.api.port, daemon.home, first.id);
       clients.push(client);
       expect(errorText(await call(client, "run_mise_task", { repo: "warehouse", task: task.id, miseTask: "test" }))).toStartWith(
         "mise_unavailable:",
@@ -397,7 +397,7 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
       const bystanderWindow = viewer(daemon.facade.agents, bystander.id);
       await untilInputBox(refusedWindow, "empty");
       await untilInputBox(bystanderWindow, "empty");
-      const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, refused.id);
+      const client = await connectSessionClient(daemon.api.port, daemon.home, refused.id);
       clients.push(client);
 
       expect(errorText(await call(client, "run_mise_task", { repo: "shop", miseTask: "test" }))).toStartWith(
@@ -425,7 +425,7 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
     "the supervisor runs and stops no mise tasks or services: it works in no repo and proposes a task instead",
     async () => {
       const supervisor = await daemon.facade.agents.startSupervisor("new", "terminal");
-      const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, supervisor.id);
+      const client = await connectSessionClient(daemon.api.port, daemon.home, supervisor.id);
       clients.push(client);
 
       expect(errorText(await call(client, "run_mise_task", { repo: "warehouse", miseTask: "test" }))).toBe(
@@ -450,7 +450,7 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
     "a free session runs no mise tasks of a repo either, and is named as a free session in the refusal (ADR-100)",
     async () => {
       const free = await daemon.facade.agents.start(null);
-      const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, free.id);
+      const client = await connectSessionClient(daemon.api.port, daemon.home, free.id);
       clients.push(client);
 
       expect(errorText(await call(client, "run_mise_task", { repo: "warehouse", miseTask: "test" }))).toBe(

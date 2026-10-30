@@ -54,7 +54,7 @@ describe.skipIf(process.versions.bun === undefined)("removing a repo from the pr
   test("a session proposes removing a repo, the user approves, the repo moves out of the list and the session hears about it", async () => {
     const main = await daemon.facade.agents.start("web");
     await waitFor(daemon.facade.agents, main.id, (s) => s.state !== null, "the first state");
-    const client = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, main.id);
+    const client = await connectSessionClient(daemon.api.port, daemon.home, main.id);
     clients.push(client);
 
     const proposal = await proposeRemoval(client, "docs", "The user no longer works on the docs repo");
@@ -85,7 +85,7 @@ describe.skipIf(process.versions.bun === undefined)("removing a repo from the pr
     const session = daemon.facade.agents.sessions().sessions.find((s) => s.task === task.id);
     if (!session) throw new Error("the task has no session");
     await waitFor(daemon.facade.agents, session.id, (s) => s.state !== null, "the task's first state");
-    const taskClient = await connectSessionClient(daemon.api.port, TOKEN, daemon.home, session.id);
+    const taskClient = await connectSessionClient(daemon.api.port, daemon.home, session.id);
     clients.push(taskClient);
     const fromTask = await taskClient.callTool({
       name: "propose_folder_action",

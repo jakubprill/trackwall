@@ -66,6 +66,6 @@ export function writeCopilotPlugin(
   };
   const hooks = Object.fromEntries(COPILOT_HOOK_EVENTS.map((event) => [event, [{ ...hook(event), timeoutSec: HOOK_TIMEOUT_SEC }]]));
   writeFileSync(join(dir, "plugin.json"), `${JSON.stringify(manifest, null, 2)}\n`);
-  // User-only like the session's `mcp-config.json`: an HTTP hook's headers carry the daemon token and the session token (§8).
+  // User-only like the session's `mcp-config.json`: an HTTP hook's headers carry the session token (§8).
   writeFileSync(join(dir, "hooks.json"), `${JSON.stringify({ version: 1, hooks }, null, 2)}\n`, { mode: 0o600 });
 }
