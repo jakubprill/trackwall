@@ -175,11 +175,11 @@ const runs: ToolRuns = {
     };
   },
   getRepoCard: (facade, { repo }) => facade.cards.card(repo),
-  tail: async (facade, { repo, task, miseTask, sinceSeq, limit }) => {
+  tail: async (facade, { repo, task, miseTask, ...page }) => {
     // The repo must exist (`not_found` as in get_repo); the log of a mise task that printed nothing is empty.
     await facade.workspace.repo(repo);
     const target = miseTarget(facade, repo, task);
-    return facade.logs.tail({ source: miseTaskLogSource(target.repo, target.task, miseTask), sinceSeq, limit });
+    return facade.logs.tail({ source: miseTaskLogSource(target.repo, target.task, miseTask), ...page });
   },
   getErrors: async (facade, { repo, task, ...query }) => {
     // The repo and the task must exist (`not_found` as in tail): a typo in an id must not look like "no errors". A

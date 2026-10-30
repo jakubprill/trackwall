@@ -10,6 +10,7 @@ import {
 } from "@trackwall/protocol";
 import { collectErrors } from "./log-errors.ts";
 import { LogFile, logFilePath, otherTaskLogDirs, removeLogDir, sourceParts, TASK_LOG_KIND, taskLogDir } from "./log-file.ts";
+import { atLeast, containsText } from "./log-filter.ts";
 import { logLevel } from "./log-level.ts";
 import { RunOutput } from "./run-output.ts";
 import { maskSecrets, secretValues } from "./secret-mask.ts";
@@ -93,9 +94,13 @@ export class Logs {
    * A source's records after the cursor, oldest first, at most `limit`. Without a cursor (or with a cursor from another daemon
    * run) the last `limit` records.
    */
-  tail({ source, sinceSeq, limit }: LogTailRequest): LogTail {
+  tail({ source, sinceSeq, limit, contains, minLevel }: LogTailRequest): LogTail {
     const log = this.sources.get(sourceKey(source));
-    const records = log?.records ?? [];
+    const all = log?.records ?? [];
+    const matches = containsText(contains);
+    const shown = atLeast(minLevel);
+    // The UI polls without a filter: no copy of the buffer then.
+    const records = contains === undefined && minLevel === undefined ? all : all.filter((r) => shown(r) && matches(r.msg));
     const fromOtherRun = this.fromOtherRun(sinceSeq);
     if (sinceSeq === undefined || fromOtherRun) return { records: records.slice(-limit), nextSeq: this.seq, dropped: fromOtherRun };
     const start = records.findIndex((r) => r.seq > sinceSeq);
@@ -110,7 +115,7 @@ export class Logs {
    * The cursor covers all sources at once because `seq` is global; a cursor from another daemon run gives errors as
    * without one.
    */
-  errors({ repo, task, miseTask, minLevel, sinceSeq, limit }: LogErrorsQuery): LogErrors {
+  errors({ repo, task, miseTask, minLevel, contains, sinceSeq, limit }: LogErrorsQuery): LogErrors {
     const sources = [...this.sources]
       .map(([key, log]) => ({ key, ...log }))
       .filter(
@@ -122,7 +127,11 @@ export class Logs {
     const fromOtherRun = this.fromOtherRun(sinceSeq);
     const cursor = fromOtherRun ? undefined : sinceSeq;
     const evicted = cursor !== undefined && sources.some((log) => cursor < log.evictedSeq);
-    return { ...collectErrors(sources, { minLevel, sinceSeq: cursor, limit }), nextSeq: this.seq, dropped: fromOtherRun || evicted };
+    return {
+      ...collectErrors(sources, { minLevel, contains, sinceSeq: cursor, limit }),
+      nextSeq: this.seq,
+      dropped: fromOtherRun || evicted,
+    };
   }
 
   /**
