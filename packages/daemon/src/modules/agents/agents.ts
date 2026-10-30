@@ -40,7 +40,7 @@ import { CopilotHookEvent } from "./copilot-hook-record.ts";
 import { appendHookRecord } from "./hook-tail.ts";
 import { inboxPrompt } from "./inbox-prompt.ts";
 import { javaNavigationState } from "./java-language-server.ts";
-import { LAST_SUPERVISOR_FILE, type LastSupervisor, LastSupervisorFile } from "./last-supervisor.ts";
+import { LAST_SUPERVISOR_FILE, LastSupervisorFile } from "./last-supervisor.ts";
 import { ListedSessions, resumableOf } from "./listed-sessions.ts";
 import { LiveSession, type SessionEvent, type SessionWindow } from "./live-session.ts";
 import { MiseTrustNotices, type TrustRecipient, trustRecipientOf } from "./mise-trust-notices.ts";
@@ -60,6 +60,7 @@ import {
 } from "./session-launcher.ts";
 import { SessionTokens } from "./session-tokens.ts";
 import { outcome, sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
+import { SupervisorSessions } from "./supervisor-sessions.ts";
 import { TaskCoordination } from "./task-coordination.ts";
 import { TaskFile } from "./task-file.ts";
 import { TaskProposals } from "./task-proposals.ts";
@@ -76,9 +77,9 @@ import type { ScreenViewer } from "./terminal-screen.ts";
  * exit stops them together with the other process groups. A session can belong to a task (ADR-31, `tasks.ts`): it then
  * runs in the task's worktree, and the task outlives the daemon. A session can also propose tasks, report the summary
  * of its task and wait for another session (ADR-39): the MCP server recognises it by its session token, and a task from
- * a proposal starts only after the user approves it. One session, the supervisor (ADR-58), runs in the projects folder
- * instead of a repo, above all the others. A task's proposer sends its session messages and hears about its work
- * through updates (ADR-68, `task-coordination.ts`).
+ * a proposal starts only after the user approves it. One session, the supervisor (ADR-58, `supervisor-sessions.ts`),
+ * runs in the projects folder instead of a repo, above all the others. A task's proposer sends its session messages and
+ * hears about its work through updates (ADR-68, `task-coordination.ts`).
  */
 
 export const TASKS_FILE = "tasks.json";
@@ -174,8 +175,7 @@ export class Agents {
   readonly #reviews = new TaskReviews(() => this.#queues.follow());
   readonly #miseTrust = new MiseTrustNotices(() => this.#queues.follow());
   readonly #coordination: TaskCoordination;
-  /** The supervisor start under way, so that two requests at once start one supervisor, not two (ADR-58). */
-  #supervisorStart: Promise<Session> | undefined;
+  readonly #supervisor: SupervisorSessions;
   readonly #resumable: ResumableSessions;
   /** The sessions the previous daemon left running, until `resumeLeftSessions` takes them (ADR-95). */
   #left: ResumableSession[] = [];
@@ -210,6 +210,13 @@ export class Agents {
       resumable: this.#resumable,
       lastSupervisor: this.#lastSupervisor,
       log: deps.log,
+    });
+    this.#supervisor = new SupervisorSessions({
+      sessions: this.#sessions,
+      lastSupervisor: this.#lastSupervisor,
+      projectsDir: () => deps.repos.projectsDir(),
+      launch: (spec, place) => this.#launchAs(spec, place),
+      close: (id) => this.#close(id),
     });
     this.#tasks = new AgentTasks({
       vcs: deps.vcs,
@@ -253,7 +260,7 @@ export class Agents {
     const tasks = this.#tasks.list();
     // A proposal being approved that is already a task is only a task: the UI and `list_sessions` see one object.
     const proposals = this.#proposals.list().filter((p) => !tasks.some((t) => t.id === p.id));
-    const lastSupervisor = this.#resumableSupervisor()?.session ?? null;
+    const lastSupervisor = this.#supervisor.resumable()?.session ?? null;
     return { sessions: this.#sessions.views(), tasks, proposals, messages: this.#coordination.messages(), lastSupervisor };
   }
 
@@ -275,76 +282,19 @@ export class Agents {
     return this.#launch({ id, repo, supervisor: false, cwd, task: null, args, promptOnStart: started, hasConversation: started });
   }
 
-  /**
-   * The supervisor (ADR-58): Copilot CLI in the projects folder, above the sessions of all repos. At most one runs at a
-   * time: while one is starting or runs, this returns it. A new one replaces the ended ones, which are closed once it
-   * has started, so a failed start keeps the last screen; the work they delegated stays, marked as the supervisor's
-   * (`ProposedBy.supervisor`). With `last` it goes on with the newest supervisor's conversation under its id (ADR-96);
-   * that start closes the ended supervisor first, since an id is listed once, so when it fails the last screen is gone.
-   * `view` is a terminal or the conversation view (ADR-107); the last conversation goes on in either.
-   */
-  async startSupervisor(conversation: SupervisorConversation, view: SessionView): Promise<Session> {
-    if (this.#supervisorStart) return this.#supervisorStart;
-    const running = this.#runningSupervisor();
-    if (running) return running;
-    const last = conversation === "last" ? this.#resumableSupervisor() : undefined;
-    return last === undefined ? this.#startNewSupervisor(null, view) : this.#startSupervisorAs(sessionLaunch(view, last));
+  /** The supervisor (ADR-58): `SupervisorSessions.start`. */
+  startSupervisor(conversation: SupervisorConversation, view: SessionView): Promise<Session> {
+    return this.#supervisor.start(conversation, view);
   }
 
-  /** The newest supervisor while Copilot CLI keeps its conversation, which a start with `last` goes on with (ADR-96). */
-  #resumableSupervisor(): LastSupervisor | undefined {
-    const last = this.#lastSupervisor.read();
-    return last?.hasConversation ? last : undefined;
+  /** The day start's supervisor (ADR-70): `SupervisorSessions.startWith`. */
+  startSupervisorWith(firstMessage: string, view: SessionView): Promise<Session> {
+    return this.#supervisor.startWith(firstMessage, view);
   }
 
-  /**
-   * A new supervisor with `firstMessage` as its first message (`--interactive`), so it works from the start: the day start
-   * (ADR-70). While a supervisor starts or runs, `bad_request`: the user stops it first, so no conversation ends without them.
-   */
-  async startSupervisorWith(firstMessage: string, view: SessionView): Promise<Session> {
-    this.assertNoSupervisor();
-    return this.#startNewSupervisor(firstMessage, view);
-  }
-
-  /** `bad_request` while a supervisor starts or runs (ADR-70). */
+  /** `SupervisorSessions.assertNone`. */
   assertNoSupervisor(): void {
-    if (this.#supervisorStart || this.#runningSupervisor())
-      throw new DomainError("bad_request", "the supervisor is running; stop it to start your day with a new one");
-  }
-
-  #runningSupervisor(): Session | undefined {
-    return this.#sessions.views().find((s) => isSupervisor(s) && s.run.kind !== "exited");
-  }
-
-  /**
-   * `firstMessage` is the first message (`--interactive`) of the new supervisor; `null` for none. In a terminal its id
-   * is also Copilot CLI's session id, so a restart can resume it (ADR-95); in the conversation view Copilot CLI picks
-   * the conversation's id (ADR-107).
-   */
-  #startNewSupervisor(firstMessage: string | null, view: SessionView): Promise<Session> {
-    const id = randomUUID();
-    if (view === "conversation") return this.#startSupervisorAs({ view, id, load: undefined, firstMessage: firstMessage ?? undefined });
-    const args = [`--session-id=${id}`, ...(firstMessage === null ? [] : [`--interactive=${firstMessage}`])];
-    const started = firstMessage !== null;
-    return this.#startSupervisorAs({ view, id, args, promptOnStart: started, hasConversation: started, conversation: id });
-  }
-
-  #startSupervisorAs(spec: SessionLaunch): Promise<Session> {
-    this.#supervisorStart = this.#replaceSupervisor(spec).finally(() => {
-      this.#supervisorStart = undefined;
-    });
-    return this.#supervisorStart;
-  }
-
-  async #replaceSupervisor(spec: SessionLaunch): Promise<Session> {
-    const ended = this.#sessions.views().filter(isSupervisor);
-    const cwd = await this.#deps.repos.projectsDir();
-    // The ended supervisor whose conversation this one goes on with under its id gives up its place before the start.
-    if (this.#sessions.has(spec.id)) this.#close(spec.id);
-    const started = await this.#launchAs(spec, { repo: null, supervisor: true, cwd, task: null });
-    // One of them may have been dismissed during the start; the start has still succeeded.
-    for (const old of ended) if (old.id !== spec.id && this.#sessions.has(old.id)) this.#close(old.id);
-    return started;
+    this.#supervisor.assertNone();
   }
 
   /** The session whose session token came with an MCP request; `undefined` for an unknown token. */
@@ -886,8 +836,7 @@ export class Agents {
     }
     const spec = sessionLaunch(left.view, left);
     if (left.supervisor) {
-      if (this.#supervisorStart || this.#runningSupervisor()) throw new Error("a supervisor already runs");
-      const started = await this.#startSupervisorAs(spec);
+      const started = await this.#supervisor.resume(spec);
       this.#askToReadLeft(left.session);
       return started;
     }
