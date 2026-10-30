@@ -83,6 +83,11 @@ type Key = WorkspaceKey;
 
 export class WorkspaceFile {
   readonly path: string;
+  /**
+   * The keys of the text last read: the repo watch asks for the projects folder every second, and parsing the YAML
+   * each time costs more than reading the file. Only for reading: `set` parses a document of its own to change.
+   */
+  #parsed: { text: string; config: Record<string, unknown> } | undefined;
 
   constructor(path: string) {
     this.path = path;
@@ -194,9 +199,7 @@ export class WorkspaceFile {
   }
 
   private get<T>(key: Key, schema: z.ZodType<T>): T {
-    // `load` guarantees a map or an empty document.
-    const config: Record<string, unknown> = this.load().toJS() ?? {};
-    const parsed = schema.safeParse(config[key] ?? null);
+    const parsed = schema.safeParse(this.config()[key] ?? null);
     if (!parsed.success) throw this.invalid(`${key}: ${z.prettifyError(parsed.error)}`);
     return parsed.data;
   }
@@ -209,19 +212,35 @@ export class WorkspaceFile {
     this.save(doc);
   }
 
+  /** The file's keys as plain values, parsed again only when its text changed. */
+  private config(): Record<string, unknown> {
+    const text = this.text();
+    if (this.#parsed?.text === text) return this.#parsed.config;
+    // `parse` guarantees a map or an empty document.
+    const config: Record<string, unknown> = this.parse(text).doc.toJS() ?? {};
+    this.#parsed = { text, config };
+    return config;
+  }
+
   private load(): Document {
     return this.read().doc;
   }
 
   /** The document with its line counter, for the line of a key. */
   private read(): { doc: Document; lines: LineCounter } {
-    let text: string;
+    return this.parse(this.text());
+  }
+
+  private text(): string {
     try {
-      text = readFileSync(this.path, "utf8");
+      return readFileSync(this.path, "utf8");
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-      text = "";
+      return "";
     }
+  }
+
+  private parse(text: string): { doc: Document; lines: LineCounter } {
     const lines = new LineCounter();
     const doc = parseDocument(text, { lineCounter: lines });
     if (doc.errors.length > 0) throw this.invalid(doc.errors.map((e) => e.message).join("; "));
