@@ -1,14 +1,5 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import {
-  type ContainerId,
-  containerEditorUrl,
-  DAEMON_INFO_PATH,
-  DaemonInfo,
-  type DevContainerFolder,
-  devContainerEditorUrl,
-  WebAddress,
-  workspaceApi,
-} from "@trackwall/protocol";
+import { containerEditorUrl, DAEMON_INFO_PATH, DaemonInfo, devContainerEditorUrl, WebAddress, workspaceApi } from "@trackwall/protocol";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { call, post } from "./api.ts";
 import type { Connection } from "./connection.ts";
@@ -20,12 +11,7 @@ import type { Connection } from "./connection.ts";
  * folder are hidden. The desktop app can use such a daemon too (ADR-130): it then opens web links and VS Code itself.
  * A desktop until the daemon says otherwise.
  */
-export interface DaemonPlace {
-  desktop: boolean;
-  container: ContainerId | null;
-  /** The folder on the user's computer the dev container was opened from, when it hands it over (ADR-121). */
-  devContainerFolder: DevContainerFolder | null;
-}
+export type DaemonPlace = Pick<DaemonInfo, "desktop" | "container" | "devContainerFolder">;
 
 const ON_A_DESKTOP: DaemonPlace = { desktop: true, container: null, devContainerFolder: null };
 
@@ -66,7 +52,7 @@ export function useDaemonPlace(conn: Connection | undefined): DaemonPlace {
     if (!conn) return;
     // Without an answer the page behaves as before: the daemon opens links and says no_desktop when it cannot.
     call(conn, DAEMON_INFO_PATH, DaemonInfo).then(
-      (info) => setPlace({ desktop: info.desktop, container: info.container, devContainerFolder: info.devContainerFolder }),
+      ({ desktop, container, devContainerFolder }) => setPlace({ desktop, container, devContainerFolder }),
       () => {},
     );
   }, [conn]);

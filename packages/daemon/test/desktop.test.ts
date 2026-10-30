@@ -108,6 +108,7 @@ describe("a daemon without a desktop", () => {
       openUrl: (url) => opened.push(url),
       desktop: false,
       container: "de4cc610b398445a55cd4802f1b0dc38776d583533fd7283c9d76e5825fd5f81",
+      devContainerFolder: String.raw`C:\Users\me\Dev\work space`,
     });
     gitIn(join(daemon.projects, "shop"), "remote", "add", "origin", "https://gitlab.example.com/shop/shop.git");
     daemon.facade.workspace.setRepoHosts([{ kind: "gitlab", host: "gitlab.example.com" }]);
@@ -126,11 +127,15 @@ describe("a daemon without a desktop", () => {
       timeoutMs: 10_000,
     });
 
-  test("says so in its info with its container, so the page opens web links and VS Code itself", async () => {
+  test("says so in its info with its container and dev container folder, so the page opens web links and VS Code itself", async () => {
     const res = await loopbackRequest(daemon.api.port, "/api/daemon/info", { token: TOKEN });
     expect(DaemonInfoResult.parse(JSON.parse(res.body))).toMatchObject({
       ok: true,
-      data: { desktop: false, container: "de4cc610b398445a55cd4802f1b0dc38776d583533fd7283c9d76e5825fd5f81" },
+      data: {
+        desktop: false,
+        container: "de4cc610b398445a55cd4802f1b0dc38776d583533fd7283c9d76e5825fd5f81",
+        devContainerFolder: String.raw`C:\Users\me\Dev\work space`,
+      },
     });
   });
 

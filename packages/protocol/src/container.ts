@@ -10,12 +10,13 @@ export type ContainerId = z.infer<typeof ContainerId>;
 /**
  * The folder on the user's computer that holds the dev container's `.devcontainer/` (ADR-121), as the dev container hands
  * it over in `TRACKWALL_DEVCONTAINER_HOST_FOLDER` (`${localWorkspaceFolder}`): a Windows path keeps its backslashes and
- * may hold spaces. No control characters, so the link built from it says only what the folder's name says.
+ * may hold spaces. No control characters, and short enough that the link built from it stays below the 2083 characters
+ * a Windows URL handler takes, even for a folder of non-ASCII names, which double in hex.
  */
 export const DevContainerFolder = z
   .string()
   .min(1)
-  .max(4096)
+  .max(1024)
   .refine((p) => [...p].every((c) => c >= " "), "dev container folder: no control characters");
 export type DevContainerFolder = z.infer<typeof DevContainerFolder>;
 

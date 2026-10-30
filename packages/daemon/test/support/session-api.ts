@@ -1,7 +1,7 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ApiEnvelope, type ContainerId, type Endpoint } from "@trackwall/protocol";
+import { ApiEnvelope, type ContainerId, type DevContainerFolder, type Endpoint } from "@trackwall/protocol";
 import type { z } from "zod";
 import { EventHub } from "../../src/api/event-hub.ts";
 import { sessionHookRequest } from "../../src/api/hooks.ts";
@@ -43,6 +43,8 @@ export interface SessionApiOptions {
   desktop?: boolean;
   /** The container the daemon reports it runs in (ADR-121); none by default. */
   container?: ContainerId;
+  /** The folder the dev container reports it was opened from (ADR-121); none by default. */
+  devContainerFolder?: DevContainerFolder;
 }
 
 interface CopilotUnderTest {
@@ -99,7 +101,7 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
       mcpStdioCommand: ["trackwall-daemon", "mcp-stdio"],
       desktop,
       container: options.container ?? null,
-      devContainerFolder: null,
+      devContainerFolder: options.devContainerFolder ?? null,
     }),
     onShutdown: () => {},
     facade,
