@@ -13,6 +13,10 @@ import { RepoId } from "./workspace.ts";
 export const LOG_BUFFER_RECORDS = 2000;
 /** The most records in one `tail` response. */
 export const LOG_TAIL_MAX = 1000;
+/** The longest text of a `contains` filter. */
+export const LOG_FILTER_MAX_CHARS = 200;
+/** Text a line contains, without regard to case: the filter of `tail` and `get_errors`. */
+export const LogTextFilter = z.string().min(1).max(LOG_FILTER_MAX_CHARS);
 
 /**
  * Where a record comes from: a repo's mise task run in the repo root, a mise task run in a task's worktree (ADR-59)
@@ -72,6 +76,10 @@ export const LogTailRequest = z
     /** Records with `seq` greater than the cursor, oldest first; without a cursor the last `limit` records of the source. */
     sinceSeq: z.number().int().nonnegative().optional(),
     limit: z.number().int().min(1).max(LOG_TAIL_MAX),
+    /** Only records whose text contains this, without regard to case; the cursor and `limit` count only those. */
+    contains: LogTextFilter.optional(),
+    /** Only records at this level or above. */
+    minLevel: LogLevel.optional(),
   })
   .strict();
 export type LogTailRequest = z.infer<typeof LogTailRequest>;
@@ -133,6 +141,8 @@ export const LogErrorsRequest = z
     /** Only the log of this mise task (in every repo or in `repo`, in repo roots and worktrees); without it `mise install` too. */
     miseTask: MiseTaskName.optional(),
     minLevel: LogErrorLevel,
+    /** Only errors with a line (any, also one cut from the response) that contains this, without regard to case. */
+    contains: LogTextFilter.optional(),
     /** Only errors whose first record has a `seq` greater than the cursor. */
     sinceSeq: z.number().int().nonnegative().optional(),
     limit: z.number().int().min(1).max(LOG_ERRORS_MAX),

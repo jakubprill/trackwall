@@ -1,5 +1,6 @@
 import { LOG_ERROR_LINES, type LogError, type LogErrorLevel, type LogRecord, type LogSource } from "@trackwall/protocol";
 import { type ErrorBlock, errorBlocks, STACK_FRAME } from "./error-blocks.ts";
+import { containsText } from "./log-filter.ts";
 import { shorten } from "./run-output.ts";
 
 /**
@@ -23,6 +24,8 @@ export interface SourceRecords {
 
 export interface ErrorsQuery {
   readonly minLevel: LogErrorLevel;
+  /** Only errors with a record that contains this, without regard to case. */
+  readonly contains: string | undefined;
   /** Skips errors whose first record has a `seq` not greater than the cursor. */
   readonly sinceSeq: number | undefined;
   readonly limit: number;
@@ -37,12 +40,14 @@ interface Occurrences {
 
 export function collectErrors(
   sources: readonly SourceRecords[],
-  { minLevel, sinceSeq, limit }: ErrorsQuery,
+  { minLevel, contains, sinceSeq, limit }: ErrorsQuery,
 ): { errors: LogError[]; truncated: boolean } {
   const found = new Map<string, Occurrences>();
+  const matches = containsText(contains);
   for (const { source, key, records } of sources) {
     for (const block of errorBlocks(records, minLevel)) {
       if (sinceSeq !== undefined && block.first.seq <= sinceSeq) continue;
+      if (!block.entries.some((entry) => matches(entry.record.msg))) continue;
       const id = `${key}\0${signature(block)}`;
       const seen = found.get(id);
       if (seen) {

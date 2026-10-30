@@ -273,6 +273,17 @@ describe("errors from the log", () => {
     expect(logs.errors({ ...ALL, minLevel: "warn" }).errors.map((e) => e.level)).toEqual(["error", "warn"]);
   });
 
+  test("contains keeps the errors with a line holding that text in any case, also a line left out of the response", () => {
+    const logs = newLogs();
+    const frames = Array.from({ length: 30 }, (_, i) => `\tat shop.Layer${i}.call(Layer${i}.java:1)`);
+    write("stdout", logs.open(DEV, "r1", {}), ["ERROR java.lang.IllegalStateException: no lines", ...frames].join("\n"));
+    write("stdout", logs.open(WEB, "r2", {}), "ERROR proxy failed for /api/orders");
+
+    expect(logs.errors({ ...ALL, contains: "/API/ORDERS" }).errors.map((e) => e.source)).toEqual([WEB]);
+    expect(logs.errors({ ...ALL, contains: "layer29.java" }).errors.map((e) => e.source)).toEqual([DEV]);
+    expect(logs.errors({ ...ALL, contains: "nowhere" }).errors).toEqual([]);
+  });
+
   test("repo and task filters, a cursor across all sources and a limit keeping the most recent", () => {
     const logs = newLogs();
     write("stdout", logs.open(DEV, "r1", {}), "ERROR orders dev 1");

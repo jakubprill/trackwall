@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
-import { agentsApi, GetRepoResult, ListRunningMiseTasksResult, LogTail, MiseTaskRunResult, miseApi } from "@trackwall/protocol";
+import { agentsApi, GetRepoResult, ListRunningMiseTasksResult, LogErrors, LogTail, MiseTaskRunResult, miseApi } from "@trackwall/protocol";
 import { z } from "zod";
 import { viewer, waitFor } from "./support/agents.ts";
 import { connectHttpClient, connectSessionClient } from "./support/mcp-client.ts";
@@ -243,6 +243,33 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
       if (!session) throw new Error("the task has no session");
       await waitFor(daemon.facade.agents, session.id, (state) => state.state !== null, "the first state");
       await daemon.facade.agents.stop(session.id);
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "tail and get_errors keep only the lines and errors that contain the text, and tail only records at minLevel or above",
+    async () => {
+      const task = await daemon.facade.agents.createTask("warehouse", "find the order error");
+      const prints = [
+        "INFO OrderService started",
+        "WARN slow query in StockService",
+        "ERROR java.lang.IllegalStateException: order 7 has no lines",
+        "\tat shop.OrderService.place(OrderService.java:42)",
+        "ERROR java.net.ConnectException: Connection refused",
+      ];
+      writeFileSync(join(task.worktree, "fake-mise.json"), JSON.stringify({ ...JSON.parse(MISE_CONFIG), prints: { test: prints } }));
+      await call(outside, "run_mise_task", { repo: "warehouse", task: task.id, miseTask: "test" });
+      await call(outside, "wait_for_mise_task", { repo: "warehouse", task: task.id, miseTask: "test", timeoutSeconds: 20 });
+      const where = { repo: "warehouse", task: task.id, miseTask: "test" };
+
+      const orders = LogTail.parse((await call(outside, "tail", { ...where, limit: 10, contains: "orderservice" })).structuredContent);
+      const warnings = LogTail.parse((await call(outside, "tail", { ...where, limit: 10, minLevel: "warn" })).structuredContent);
+      const errors = LogErrors.parse((await call(outside, "get_errors", { ...where, contains: "OrderService.java" })).structuredContent);
+
+      expect(orders.records.map((r) => r.msg)).toEqual(["INFO OrderService started", "\tat shop.OrderService.place(OrderService.java:42)"]);
+      expect(warnings.records.map((r) => r.level)).toEqual(["warn", "error", "error"]);
+      expect(errors.errors.map((e) => e.lines[0])).toEqual(["ERROR java.lang.IllegalStateException: order 7 has no lines"]);
     },
     TIMEOUT,
   );
