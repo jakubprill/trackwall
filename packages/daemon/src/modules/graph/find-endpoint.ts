@@ -1,7 +1,9 @@
 import {
+  type ConsumedHttp,
   type EndpointCaller,
   type FindEndpointResult,
   type FoundEndpoint,
+  type HttpCall,
   type HttpMethod,
   httpMethodMatches,
   MAX_FOUND_ENDPOINTS,
@@ -9,7 +11,7 @@ import {
 } from "@trackwall/protocol";
 import { EndpointCalls } from "./endpoint-calls.ts";
 import { MATCH_ORDER, matchEndpoint, parseEndpointQuery } from "./endpoint-query.ts";
-import { compare, push } from "./graph-join.ts";
+import { compare, push, strongerConfidence } from "./graph-join.ts";
 import type { HttpIndex } from "./http-index.ts";
 
 /**
@@ -61,10 +63,32 @@ export function callersByEndpoint(
   const callers = new Map<ProvidedEndpoint, EndpointCaller[]>();
   if (wanted.size === 0) return callers;
   for (const { repo, client } of index.clients)
-    for (const target of index.targets(repo, client))
-      for (const m of target.calls) {
-        if (!wanted.has(m.endpoint)) continue;
-        const caller: EndpointCaller = {
+    for (const [endpoint, caller] of clientCallers(index, calls, wanted, repo, client)) push(callers, endpoint, caller);
+  return callers;
+}
+
+/**
+ * One client's calls with the endpoints from `wanted` they reach. A client can reach a repo through two targets (a
+ * spec's title naming both its app and the repo, two apps of one name), so each call–endpoint pair comes once, with the
+ * surer confidence, as the client's `http` edge does (`EdgeSet`).
+ */
+function clientCallers(
+  index: HttpIndex,
+  calls: EndpointCalls,
+  wanted: ReadonlySet<ProvidedEndpoint>,
+  repo: string,
+  client: ConsumedHttp,
+): [ProvidedEndpoint, EndpointCaller][] {
+  const pairs = new Map<HttpCall, Map<ProvidedEndpoint, EndpointCaller>>();
+  for (const target of index.targets(repo, client))
+    for (const m of target.calls) {
+      if (!wanted.has(m.endpoint)) continue;
+      const ofCall = pairs.get(m.call) ?? new Map<ProvidedEndpoint, EndpointCaller>();
+      pairs.set(m.call, ofCall);
+      const known = ofCall.get(m.endpoint);
+      if (known) known.confidence = strongerConfidence(known.confidence, target.confidence);
+      else
+        ofCall.set(m.endpoint, {
           repo,
           via: client.via,
           client: client.name,
@@ -73,8 +97,7 @@ export function callersByEndpoint(
           confidence: target.confidence,
           evidence: m.call.evidence,
           from: calls.from(repo, client, m.call),
-        };
-        push(callers, m.endpoint, caller);
-      }
-  return callers;
+        });
+    }
+  return [...pairs.values()].flatMap((ofCall) => [...ofCall]);
 }
