@@ -81,15 +81,20 @@ describe("the supervisor (ADR-58)", () => {
   test("the supervisor is not an entry of the list; its work comes first, one level under its heading", () => {
     const data = list({
       sessions: [session("sup", null), session("s1", "shop")],
-      tasks: [task("t1", { session: "sup", supervisor: true }), task("t2", null)],
-      proposals: [proposal("p1", { session: "sup", supervisor: true })],
+      tasks: [task("t1", { session: "sup", supervisor: true, task: null }), task("t2", null)],
+      proposals: [proposal("p1", { session: "sup", supervisor: true, task: null })],
     });
     expect(shape(data)).toEqual(["proposals:sup @1 supervised", "t1 @1 supervised", "t2 @0", "s1 @0"]);
     expect(summary(data)).toMatchObject({ delegated: 2, waitingProposals: 1, sessionWaits: false, waits: true, listed: true });
   });
 
   test("the supervisor's work stays under its heading after the supervisor session that delegated it is gone", () => {
-    const data = list({ tasks: [task("t1", { session: "gone", supervisor: true }), task("t2", { session: "gone", supervisor: false })] });
+    const data = list({
+      tasks: [
+        task("t1", { session: "gone", supervisor: true, task: null }),
+        task("t2", { session: "gone", supervisor: false, task: null }),
+      ],
+    });
     expect(shape(data)).toEqual(["t1 @1 supervised", "t2 @0"]);
     expect(summary(data)).toMatchObject({ session: undefined, delegated: 1, waits: false, listed: true });
   });
@@ -97,8 +102,8 @@ describe("the supervisor (ADR-58)", () => {
   test("work a supervised task delegated further sits under that task, still under the supervisor", () => {
     const data = list({
       sessions: [{ ...session("ts1", "shop"), task: "t1" }],
-      tasks: [task("t1", { session: "sup", supervisor: true })],
-      proposals: [proposal("p1", { session: "ts1", supervisor: false })],
+      tasks: [task("t1", { session: "sup", supervisor: true, task: null })],
+      proposals: [proposal("p1", { session: "ts1", supervisor: false, task: null })],
     });
     expect(shape(data)).toEqual(["t1 @1 supervised", "proposals:ts1 @2 supervised"]);
     expect(summary(data)).toMatchObject({ delegated: 1, waitingProposals: 1 });
@@ -132,7 +137,10 @@ describe("the supervisor (ADR-58)", () => {
         { ...session("sup", null), needsAttention: true },
         { ...session("s1", "shop"), needsAttention: true },
       ],
-      proposals: [proposal("p1", { session: "sup", supervisor: true }), proposal("p2", { session: "s1", supervisor: false })],
+      proposals: [
+        proposal("p1", { session: "sup", supervisor: true, task: null }),
+        proposal("p2", { session: "s1", supervisor: false, task: null }),
+      ],
     });
     expect(attentionCount(data)).toBe(3);
     expect(summary(data)).toMatchObject({ waitingProposals: 1, sessionWaits: true, waits: true });
@@ -140,7 +148,7 @@ describe("the supervisor (ADR-58)", () => {
 
   test("the supervisor is named Supervisor, and its proposals say they come from it", () => {
     expect(sessionTitle({ ...session("sup", null), windowTitle: "Plan the refunds" })).toBe("Supervisor · Plan the refunds");
-    expect(proposerLabel({ session: "sup", supervisor: true }, [])).toBe("proposed by the supervisor");
+    expect(proposerLabel({ session: "sup", supervisor: true, task: null }, [])).toBe("proposed by the supervisor");
   });
 
   test("the panel is pinned until folded or widened, and storage that refuses access reads as pinned", () => {

@@ -67,7 +67,7 @@ describe("the /ws event source", () => {
         {
           id: "7c1e2d3a-0000-4000-8000-000000000000",
           task: "3f2a9c1e-0000-4000-8000-000000000000",
-          from: { session: null, supervisor: true },
+          from: { session: null, supervisor: true, task: null },
           text: "rebase on main",
           sentAt: STARTED_AT,
           readAt: null,

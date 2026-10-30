@@ -44,7 +44,7 @@ import { LAST_SUPERVISOR_FILE, LastSupervisorFile } from "./last-supervisor.ts";
 import { ListedSessions, resumableOf } from "./listed-sessions.ts";
 import { LiveSession, type SessionEvent, type SessionWindow } from "./live-session.ts";
 import { MiseTrustNotices, type TrustRecipient, trustRecipientOf } from "./mise-trust-notices.ts";
-import { proposedByOf, proposerKeyOf, proposerOf, SUPERVISOR } from "./proposer.ts";
+import { proposedByOf, proposerExists, proposerKeyOf, proposerKind, proposerOf } from "./proposer.ts";
 import { type ResumableSession, ResumableSessions, resumablePlace, type SessionLaunch, sessionLaunch } from "./resumable-sessions.ts";
 import type { SessionMiseEnv } from "./session-env.ts";
 import {
@@ -239,8 +239,9 @@ export class Agents {
       proposedBy: (id) => proposedByOf(this.session(id)),
       proposerKey: (id) => proposerKeyOf(this.session(id)),
       runningOfTask: (task) => this.#sessions.runningOfTask(task),
-      runningProposer: (proposer) => this.#sessions.runningWhere((s) => proposerKeyOf(s) === proposer),
-      hasProposer: (proposer) => proposer === SUPERVISOR || this.#sessions.has(proposer),
+      runningProposer: (proposer) => this.#runningProposer(proposer),
+      hasProposer: (proposer) =>
+        proposerExists(proposer, { hasTask: (task) => this.#tasks.find(task) !== undefined, hasSession: (id) => this.#sessions.has(id) }),
       changed: () => this.#queues.follow(),
       log: deps.log,
     });
@@ -833,7 +834,8 @@ export class Agents {
   sweepLeftovers(): void {
     this.#left = this.#resumable.read();
     const resumedUnderId = new Set(this.#left.filter((s) => s.task === null).map((s) => s.session));
-    // A task's session comes back under a new id, so what waited for its old id has nobody to reach, as when it closes.
+    // A task's session comes back under a new id; what waited for its task (messages, updates on its sessions' work,
+    // ADR-140) waits for the new one, what waited for its old id has nobody to reach, as when it closes.
     this.#queues.restore({
       hasTask: (task) => this.#tasks.find(task) !== undefined,
       hasSession: (id) => resumedUnderId.has(id),
@@ -863,7 +865,7 @@ export class Agents {
       } catch (err) {
         this.#deps.log(`resuming session ${session.session}: ${String(err)}`);
         // What waited for it has nobody to reach, as when the user closes a session (ADR-115).
-        if (session.task === null) this.#coordination.sessionClosed({ id: session.session, supervisor: session.supervisor });
+        if (session.task === null) this.#coordination.sessionClosed({ id: session.session, supervisor: session.supervisor, task: null });
       }
     }
   }
@@ -884,6 +886,13 @@ export class Agents {
     const started = await this.#launchAs(spec, { repo, supervisor: false, cwd, task: null });
     this.#askToReadLeft(left.session);
     return started;
+  }
+
+  /** The running session behind a proposer key: the running supervisor, a task's newest running session, or the session. */
+  #runningProposer(proposer: string): AgentSession | undefined {
+    const named = proposerKind(proposer);
+    if (named.kind === "task") return this.#sessions.runningOfTask(named.task);
+    return this.#sessions.runningWhere((s) => proposerKeyOf(s) === proposer);
   }
 
   /** A task's only session after resuming it, which closes its ended ones: running, or already ended when its agent exited at once. */

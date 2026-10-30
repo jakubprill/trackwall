@@ -385,7 +385,7 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
 
     renameSync(moved, dir);
     const task = await agents.approveProposal(proposal.id, proposal.prompt, null, "ask", "terminal");
-    expect(task).toMatchObject({ id: proposal.id, title: "Add logout", proposedBy: { session: null, supervisor: false } });
+    expect(task).toMatchObject({ id: proposal.id, title: "Add logout", proposedBy: { session: null, supervisor: false, task: null } });
     expect(agents.sessions().proposals).toEqual([]);
     await expect(agents.approveProposal(proposal.id, proposal.prompt, null, "ask", "terminal")).rejects.toMatchObject({
       code: "not_found",

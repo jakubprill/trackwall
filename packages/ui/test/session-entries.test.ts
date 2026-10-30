@@ -61,7 +61,7 @@ function proposal(id: string, createdAt: string, proposer: string | null = null)
     repo: "shop",
     title: "Add a test",
     prompt: "add a test",
-    proposedBy: { session: proposer, supervisor: false },
+    proposedBy: { session: proposer, supervisor: false, task: null },
     model: null,
     approvals: "ask",
     item: null,
@@ -70,7 +70,7 @@ function proposal(id: string, createdAt: string, proposer: string | null = null)
 }
 
 function delegated(id: string, createdAt: string, proposer: string): Task {
-  return { ...task(id, createdAt), title: "Add a test", proposedBy: { session: proposer, supervisor: false } };
+  return { ...task(id, createdAt), title: "Add a test", proposedBy: { session: proposer, supervisor: false, task: null } };
 }
 
 /** The entries of the rows, in display order, without depth. */
@@ -258,7 +258,7 @@ describe("Sessions view entries", () => {
   });
 
   test("a gone group of an agent outside Trackwall gives way to its task, not to a task typed in the form", () => {
-    const outside: Task = { ...task("p1", "2026-10-23T12:00:00Z"), proposedBy: { session: null, supervisor: false } };
+    const outside: Task = { ...task("p1", "2026-10-23T12:00:00Z"), proposedBy: { session: null, supervisor: false, task: null } };
     const entries = rowEntries({
       sessions: [],
       tasks: [task("t0", "2026-10-23T13:00:00Z"), outside],
@@ -291,6 +291,21 @@ describe("Sessions view entries", () => {
     expect(shape(list)).toEqual(["task t1 @0", "task t2 @1"]);
   });
 
+  test("a task delegated by a task's session stays under that task after the task was resumed in a new session (ADR-140)", () => {
+    const list = {
+      sessions: [session("s2", "2026-10-23T12:00:00Z", "t1")],
+      tasks: [
+        { ...delegated("t2", "2026-10-23T11:00:00Z", "s1"), proposedBy: { session: "s1", supervisor: false, task: "t1" } },
+        task("t1", "2026-10-23T09:00:00Z"),
+      ],
+      proposals: [],
+      messages: [],
+      lastSupervisor: null,
+    };
+    expect(shape(list)).toEqual(["task t1 @0", "task t2 @1"]);
+    expect(proposerLabel({ session: "s1", supervisor: false, task: "t1" }, list.sessions)).toBe("proposed by the session in shop");
+  });
+
   test("a task from a session no longer listed and a proposal from an agent outside Trackwall are at the top level", () => {
     const list = {
       sessions: [session("s1", "2026-10-23T10:00:00Z")],
@@ -317,20 +332,24 @@ describe("Sessions view entries", () => {
 
   test("a proposal says whether it came from a session in the list, from a closed session or from an agent outside Trackwall", () => {
     const sessions = [{ ...session("s1", "2026-10-23T12:00:00Z"), windowTitle: "Sprint plan" }];
-    expect(proposerLabel({ session: "s1", supervisor: false }, sessions)).toBe("proposed by the session in shop (Sprint plan)");
-    expect(proposerLabel({ session: "s9", supervisor: false }, sessions)).toBe("proposed by a session that is no longer listed");
-    expect(proposerLabel({ session: null, supervisor: false }, sessions)).toBe("proposed by an agent outside Trackwall");
+    expect(proposerLabel({ session: "s1", supervisor: false, task: null }, sessions)).toBe("proposed by the session in shop (Sprint plan)");
+    expect(proposerLabel({ session: "s9", supervisor: false, task: null }, sessions)).toBe(
+      "proposed by a session that is no longer listed",
+    );
+    expect(proposerLabel({ session: null, supervisor: false, task: null }, sessions)).toBe("proposed by an agent outside Trackwall");
   });
 
   test("a task message names its sender the same way, the supervisor by its role", () => {
     const sessions = [{ ...session("s1", "2026-10-23T12:00:00Z"), windowTitle: "Sprint plan" }];
-    expect(`from ${proposerName({ session: "s1", supervisor: false }, sessions)}`).toBe("from the session in shop (Sprint plan)");
-    expect(`from ${proposerName({ session: "s2", supervisor: true }, sessions)}`).toBe("from the supervisor");
+    expect(`from ${proposerName({ session: "s1", supervisor: false, task: null }, sessions)}`).toBe(
+      "from the session in shop (Sprint plan)",
+    );
+    expect(`from ${proposerName({ session: "s2", supervisor: true, task: null }, sessions)}`).toBe("from the supervisor");
   });
 
   test("a free session, which has no repo, is named as a free session (ADR-100)", () => {
     const sessions = [{ ...session("f1", "2026-10-27T12:00:00Z"), repo: null, windowTitle: "API compare" }];
-    expect(proposerLabel({ session: "f1", supervisor: false }, sessions)).toBe("proposed by a free session (API compare)");
+    expect(proposerLabel({ session: "f1", supervisor: false, task: null }, sessions)).toBe("proposed by a free session (API compare)");
   });
 });
 

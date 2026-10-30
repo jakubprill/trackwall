@@ -47,6 +47,7 @@ To steer a running task, the main session sends its agent a message: a correctio
 - A proposal from an agent outside Trackwall is marked "agent outside Trackwall" and listed at the top level, like a proposal from a session you have closed. Such an agent can propose tasks, but cannot report a task's summary, is not woken when its tasks move and cannot send them messages; it has to keep checking on them itself.
 - Prompts, titles, summaries and messages cannot contain invisible characters, so what you read is the whole text.
 - A session sends messages only to the tasks it proposed. A task you typed yourself, or one another session proposed, takes no messages from it.
+- A task can propose tasks of its own. They stay with it when you stop and resume it: its new session sends them messages, hears about them, and keeps them under it in the Sessions list.
 - Copilot CLI asks you to allow each message a session sends, as it does for any tool that changes something; choose "don't ask again" to let it steer its tasks on its own. Reading messages and news needs no approval.
 - After five messages to a task without you, the main session has to ask you before it sends more. Typing anything into the main session or the task, or sending the task a review, counts as you taking part.
 - A turn you drive yourself by typing in the task's terminal does not wake the main session, since you are handling it. Neither does a task asking for approval: that is for you, in the tray panel.

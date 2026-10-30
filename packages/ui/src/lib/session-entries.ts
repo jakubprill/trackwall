@@ -99,8 +99,9 @@ export interface SessionRow {
 export function sessionRows(list: SessionList): SessionRow[] {
   const entries = sessionEntries(list);
   const ids = new Set(entries.map(entryId));
-  // The entry that holds a session: the task for a task's session (also an older one), otherwise the session itself.
-  const holder = new Map(list.sessions.map((s) => [s.id, s.task ?? s.id]));
+  // The entry that holds a session: the task for a task's session (also an older one), otherwise the session itself; a
+  // task holds the work any of its sessions proposed (ADR-140).
+  const holder = new Map([...list.sessions.map((s) => [s.id, s.task ?? s.id] as const), ...list.tasks.map((t) => [t.id, t.id] as const)]);
   const children = new Map<string, SessionEntry[]>();
   const roots: SessionEntry[] = [];
   for (const entry of entries) {
@@ -145,11 +146,14 @@ function fromSupervisor(entry: SessionEntry): boolean {
   return entry.task.proposedBy?.supervisor === true;
 }
 
-/** The session that proposed a task or proposals; `null` for a session, a task from the form and an agent outside Trackwall. */
+/**
+ * The task or session that proposed a task or proposals (a task for any of its sessions' work, ADR-140); `null` for a
+ * session, a task from the form and an agent outside Trackwall.
+ */
 function entryProposer(entry: SessionEntry): string | null {
   if (entry.kind === "session") return null;
   if (entry.kind === "proposals") return entry.proposer;
-  return entry.task.proposedBy?.session ?? null;
+  return entry.task.proposedBy?.task ?? entry.task.proposedBy?.session ?? null;
 }
 
 /** A task's current session: `SessionList.sessions` goes from the newest. */
@@ -337,7 +341,9 @@ export function proposerLabel(proposedBy: ProposedBy, sessions: readonly Session
 export function proposerName(proposedBy: ProposedBy, sessions: readonly Session[]): string {
   if (proposedBy.supervisor) return "the supervisor";
   if (proposedBy.session === null) return "an agent outside Trackwall";
-  const session = sessions.find((s) => s.id === proposedBy.session);
+  // A task's work came from whichever of its sessions runs now (ADR-140), the newest one when the proposing one is gone.
+  const session =
+    sessions.find((s) => s.id === proposedBy.session) ?? (proposedBy.task === null ? undefined : latestSession(sessions, proposedBy.task));
   if (!session) return "a session that is no longer listed";
   const who = session.repo === null ? "a free session" : `the session in ${session.repo}`;
   return `${who}${session.windowTitle ? ` (${session.windowTitle})` : ""}`;
