@@ -20,6 +20,7 @@ import type { ConversationLaunch } from "./resumable-sessions.ts";
 import { type SessionMiseEnv, type SessionMiseLaunch, sessionMiseLaunch } from "./session-env.ts";
 import { type SessionRole, withInstructionsDir, writeSessionInstructions } from "./session-instructions.ts";
 import type { SessionTokens } from "./session-tokens.ts";
+import type { HandoffFacts } from "./task-handoff.ts";
 
 /**
  * How a session of either view starts (§4.4, ADR-26, ADR-107): Copilot CLI found on the user's `PATH`, the session
@@ -115,6 +116,8 @@ export interface SessionLauncherDeps {
   sessionMcpServer: (sessionToken: string) => HttpEndpoint;
   tokens: SessionTokens;
   callbacks: (session: { id: string; supervisor: boolean; task: string | null }) => SessionCallbacks;
+  /** What a session of the task is told about the task that handed it its work (ADR-143). */
+  handoff: (task: string) => HandoffFacts | null;
   log: (msg: string) => void;
 }
 
@@ -274,7 +277,8 @@ export class SessionLauncher {
   }
 
   #role(repo: string | null, supervisor: boolean, task: string | null): SessionRole {
-    if (repo !== null) return { kind: "repo", repo, task };
+    if (repo !== null && task !== null) return { kind: "task", repo, task, handoff: this.#deps.handoff(task) };
+    if (repo !== null) return { kind: "repo", repo };
     return supervisor ? { kind: "supervisor", changesCode: this.#deps.repos.supervisorSettings().changesCode } : { kind: "free" };
   }
 
