@@ -7,9 +7,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { copilotCli, PINNED_COPILOT_ENV } from "../../scripts/copilot-cli.ts";
-import { sessionHooksFile } from "../../src/modules/agents/agents.ts";
 import { CopilotHookRecord } from "../../src/modules/agents/copilot-hook-record.ts";
 import { jsonOf } from "../../src/modules/agents/json.ts";
+import { sessionHooksFile } from "../../src/modules/agents/session-launcher.ts";
 import { ONE_REPO, type SessionApiOptions, startSessionApi } from "../../test/support/session-api.ts";
 import { SCRIPTED_MODEL, type ScriptedModel } from "./scripted-model.ts";
 

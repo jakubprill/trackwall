@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { agentsApi } from "@trackwall/protocol";
 import { loopbackRequest } from "../src/infra/loopback.ts";
-import { sessionHooksFile } from "../src/modules/agents/agents.ts";
+import { sessionHooksFile } from "../src/modules/agents/session-launcher.ts";
 import { startSessionApi } from "./support/session-api.ts";
 import { sessionToken as tokenOf } from "./support/session-token.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";

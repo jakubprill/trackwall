@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { z } from "zod";
 import { SESSION_TOKEN_HEADER } from "../../src/mcp/endpoint.ts";
-import { sessionMcpConfigFile } from "../../src/modules/agents/agents.ts";
+import { sessionMcpConfigFile } from "../../src/modules/agents/session-launcher.ts";
 
 const McpConfig = z.object({
   mcpServers: z.object({ trackwall: z.object({ headers: z.object({ [SESSION_TOKEN_HEADER]: z.string() }) }) }),
