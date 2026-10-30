@@ -146,6 +146,7 @@ async function sessionShowing(
       typedText.count++;
     },
     onEvent: () => {},
+    onTurnOver: () => {},
   });
   sessions.push(session);
   const written: string[] = [];

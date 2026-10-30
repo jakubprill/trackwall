@@ -37,6 +37,7 @@ const {
   resumeTask,
   getMessages,
   getUpdates,
+  getHandoff,
   waitForSession,
   runMiseTask,
   stopMiseTask,
@@ -99,7 +100,8 @@ export const MCP_INSTRUCTIONS = [
     "may too, to wait inside a turn): with the task id it returns when the proposal is rejected or the task's session " +
     `needs someone, goes stale or exits; when it times out (still pending, starting or working), call it again. ${getSession.name} shows ` +
     `the task's changed files and ${getTaskChanges.name} their diff (narrow it with paths): review it before you tell the ` +
-    "user the work is done. Propose related tasks together, so the user can review them as one plan.",
+    "user the work is done. Propose related tasks together, so the user can review them as one plan. " +
+    `A task whose session proposed yours handed you its work: ${getHandoff.name} says where its branch is now and what changed since you last read it.`,
   `- Keep ideas and split work on the user's board: when the user asks you to note something for later, or you find work ` +
     `outside your task, write it with ${createItem.name} instead of leaving it in your answer. ${listItems.name} shows the ` +
     `business projects, the items split under them and the ideas in the inbox; ${getItem.name} reads one with its plan and ` +

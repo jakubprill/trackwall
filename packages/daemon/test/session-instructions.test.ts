@@ -85,7 +85,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     };
 
     expect(read(false)).toContain(
-      `- Your task was handed to you by the task \`5e7a1c3b-0000-4000-8000-000000000000\` in the repo \`payments\` (branch \`trackwall/retry-5e7a1c\`): its session proposed your task, and the user approved it when that branch was at commit \`${"c".repeat(40)}\`.`,
+      `- Your task was handed to you by the task \`5e7a1c3b-0000-4000-8000-000000000000\` in the repo \`payments\` (branch \`trackwall/retry-5e7a1c\`): its session proposed your task, which the user approved, and you last read that branch at commit \`${"c".repeat(40)}\`.`,
     );
     expect(read(false)).toContain("Build against the contract it changed (an endpoint, a field, a message), not a copy of its code.");
     expect(read(true)).toContain("which the user has ended since, so get_task_changes no longer reads it.");

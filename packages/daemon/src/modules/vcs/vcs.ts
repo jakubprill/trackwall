@@ -20,6 +20,7 @@ import { CommitMemo } from "./commit-memo.ts";
 import {
   type BranchTip,
   type CommitRange,
+  changedPathsBetween,
   commitsBetween,
   countBetween,
   isAncestor,
@@ -277,6 +278,11 @@ export class Vcs {
   /** The commits on `to` that `from` does not have: their number and the newest `limit`; `undefined` when `from` is unknown. */
   commitsBetween(dir: string, from: string, to: string, limit: number): Promise<CommitRange | undefined> {
     return commitsBetween(dir, from, to, limit);
+  }
+
+  /** The paths that differ between two commits, at most `max`; `undefined` when `from` is unknown. */
+  changedPathsBetween(dir: string, from: string, to: string, max: number): Promise<{ paths: string[]; truncated: boolean } | undefined> {
+    return changedPathsBetween(dir, from, to, max);
   }
 
   /** The newest `limit` commits of `commit`'s history, newest first. */

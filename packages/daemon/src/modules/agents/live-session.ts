@@ -135,6 +135,8 @@ export interface LiveSessionOptions {
   onPromptSent: () => void;
   /** Called synchronously, from whichever call read the change (hooks are read on every input and state read). */
   onEvent: (event: SessionEvent) => void;
+  /** Any turn ended, also one the user drove, which `onEvent` leaves out: the agent may have committed (ADR-144). */
+  onTurnOver: () => void;
 }
 
 export class LiveSession implements AgentSession {
@@ -152,6 +154,7 @@ export class LiveSession implements AgentSession {
   readonly #onUserText: () => void;
   readonly #onPromptSent: () => void;
   readonly #onEvent: (event: SessionEvent) => void;
+  readonly #onTurnOver: () => void;
   readonly #screen: TerminalScreen;
   readonly #state: CopilotSessionState;
   readonly #hooks: HookTail;
@@ -208,6 +211,7 @@ export class LiveSession implements AgentSession {
     this.#onUserText = o.onUserText;
     this.#onPromptSent = o.onPromptSent;
     this.#onEvent = o.onEvent;
+    this.#onTurnOver = o.onTurnOver;
     this.#hasConversation = o.hasConversation;
     this.#state = new CopilotSessionState({
       now: Date.now,
@@ -477,6 +481,7 @@ export class LiveSession implements AgentSession {
     this.#applyEarlyAnswer(record.event);
     // The end of a turn from its hook, not from the state: a question dialog and an Esc give `Input` mid-turn too.
     if (record.event !== "agentStop") return false;
+    this.#onTurnOver();
     const ended = !this.#userDrove;
     this.#userDrove = false;
     return ended;

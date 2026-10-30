@@ -9,6 +9,7 @@ const RUNNING: RunState = { runId: "r1", startedAt: "2026-10-28T08:00:00.000Z", 
 function session(o: { prompt?: () => string | undefined; firstMessage?: string; load?: string } = {}) {
   const written: { jsonrpc?: string; id?: number; method?: string; params?: unknown; result?: unknown }[] = [];
   const events: SessionEvent[] = [];
+  const turnsOver = { count: 0 };
   let run: RunState = RUNNING;
   const acp = new AcpSession({
     id: "s1",
@@ -24,6 +25,7 @@ function session(o: { prompt?: () => string | undefined; firstMessage?: string; 
     onUserText: () => {},
     onPromptSent: () => {},
     onEvent: (event) => events.push(event),
+    onTurnOver: () => turnsOver.count++,
     log: () => {},
   });
   acp.connect({ write: (line) => written.push(JSON.parse(line)) });
@@ -41,7 +43,7 @@ function session(o: { prompt?: () => string | undefined; firstMessage?: string; 
     answer("session/new", { sessionId: "c1" });
     await started;
   };
-  return { acp, written, events, send, answer, settle, ready, exit: (r: RunState) => (run = r) };
+  return { acp, written, events, turnsOver, send, answer, settle, ready, exit: (r: RunState) => (run = r) };
 }
 
 const EXITED: RunState = {
@@ -325,6 +327,20 @@ describe("a Copilot CLI session over ACP", () => {
 
     expect(s.events).toEqual([{ kind: "error" }]);
     expect(s.written.at(-1)).toMatchObject({ method: "session/prompt", params: { prompt: [{ text: "second" }] } });
+  });
+
+  test("every turn that is over counts, also one the user started and one that failed, since the agent may have committed in it", async () => {
+    const s = session();
+    await s.ready();
+    s.acp.say("first");
+    s.answer("session/prompt", { stopReason: "end_turn" });
+    await s.settle();
+    s.acp.say("second");
+    const prompt = s.written.findLast((m) => m.method === "session/prompt");
+    s.send({ id: prompt?.id, error: { code: -32603, message: "the model is overloaded" } });
+    await s.settle();
+
+    expect(s.turnsOver.count).toBe(2);
   });
 
   test("chunks of a streamed answer reach the views as one frame", async () => {

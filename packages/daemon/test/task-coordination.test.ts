@@ -451,18 +451,24 @@ describe("what the agent queues file hears about (ADR-115)", () => {
 
 describe("the prompt the daemon types for what waits", () => {
   test("names the tool of everything that waits, in one line, and nothing when nothing waits", () => {
-    expect(inboxPrompt({ reviewComments: 0, messages: 0, updates: 0, trustNotice: false })).toBeUndefined();
-    expect(inboxPrompt({ reviewComments: 2, messages: 0, updates: 0, trustNotice: false })).toBe(
+    expect(inboxPrompt({ reviewComments: 0, messages: 0, handoffMoved: false, updates: 0, trustNotice: false })).toBeUndefined();
+    expect(inboxPrompt({ reviewComments: 2, messages: 0, handoffMoved: false, updates: 0, trustNotice: false })).toBe(
       "The user sent a review of your changes in Trackwall: call get_review_comments (the trackwall MCP server) and address every comment.",
     );
-    expect(inboxPrompt({ reviewComments: 0, messages: 1, updates: 3, trustNotice: false })).toBe(
+    expect(inboxPrompt({ reviewComments: 0, messages: 1, handoffMoved: false, updates: 3, trustNotice: false })).toBe(
       "The session that proposed your task sent you a message in Trackwall: call get_messages (the trackwall MCP server) and follow it as an update of your task. " +
         "There is news about the work you delegated in Trackwall: call get_updates (the trackwall MCP server) and act on it.",
     );
   });
 
+  test("asks a task to read where the work it builds on is now when the handing task's branch moved (ADR-144)", () => {
+    expect(inboxPrompt({ reviewComments: 0, messages: 0, handoffMoved: true, updates: 0, trustNotice: false })).toBe(
+      "The task that handed you your work has new commits in Trackwall: call get_handoff (the trackwall MCP server) and check whether they change what you build on.",
+    );
+  });
+
   test("says that the user trusted the mise config that refused the agent's run, which needs no tool to read", () => {
-    expect(inboxPrompt({ reviewComments: 0, messages: 0, updates: 0, trustNotice: true })).toBe(
+    expect(inboxPrompt({ reviewComments: 0, messages: 0, handoffMoved: false, updates: 0, trustNotice: true })).toBe(
       "The user trusted the mise config that refused your last run_mise_task, verify_task or start_service in Trackwall: run it again if you still need it.",
     );
   });

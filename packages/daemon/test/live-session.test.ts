@@ -34,6 +34,7 @@ describe("a Copilot CLI session in the daemon", () => {
       onPromptSent: () => {},
       onUserText: () => {},
       onEvent: () => {},
+      onTurnOver: () => {},
     });
     sessions.push(session);
     session.connect({ write: (data) => written.push(data), resize: () => {} });
@@ -155,6 +156,7 @@ function runningSession(
       typedText.count++;
     },
     onEvent: (event) => events.push(event),
+    onTurnOver: () => {},
   });
   sessions.push(session);
   return { session, hooksFile, typedText, promptsSent, events };

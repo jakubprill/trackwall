@@ -280,6 +280,7 @@ const runs: ToolRuns = {
   getMessages: async (facade, _args, { caller }) => ({
     messages: facade.agents.takeMessages(caller).map(({ readAt: _, ...message }) => message),
   }),
+  getHandoff: async (facade, _args, { caller }) => ({ handoff: await facade.agents.readHandoff(caller) }),
   getUpdates: async (facade, _args, { caller }) => facade.agents.takeUpdates(caller),
   waitForSession: async (facade, { session, task, timeoutSeconds }, { caller, signal }) => {
     // The tool's schema lets through exactly one of them; the second check gives the type without a cast.
@@ -350,6 +351,7 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.sendMessage, runs.sendMessage),
   defineTool(mcpTools.resumeTask, runs.resumeTask),
   defineTool(mcpTools.getMessages, runs.getMessages),
+  defineTool(mcpTools.getHandoff, runs.getHandoff),
   defineTool(mcpTools.getUpdates, runs.getUpdates),
   defineTool(mcpTools.waitForSession, runs.waitForSession),
   defineTool(mcpTools.runMiseTask, runs.runMiseTask),

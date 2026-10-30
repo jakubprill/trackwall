@@ -88,6 +88,8 @@ export interface AcpSessionOptions {
   /** The daemon's prompt, read just before, went to the agent. */
   onPromptSent: () => void;
   onEvent: (event: SessionEvent) => void;
+  /** Any turn ended, also one the user drove, which `onEvent` leaves out: the agent may have committed (ADR-144). */
+  onTurnOver: () => void;
   log: (msg: string) => void;
 }
 
@@ -355,6 +357,7 @@ export class AcpSession implements AgentSession {
     this.#endTurn();
     if (this.#finished) return;
     this.#report("Input", `stop ${stopReason}`);
+    this.#o.onTurnOver();
     if (prompt.by === "daemon") this.#o.onEvent({ kind: "turn_ended" });
     this.#next();
   }
@@ -367,6 +370,8 @@ export class AcpSession implements AgentSession {
       `session ${this.id}: prompt failed: ${err instanceof AcpError ? `ACP error ${err.code}` : err instanceof Error ? err.name : "unknown"}`,
     );
     this.#report("Error", "prompt failed");
+    // The agent may have committed before the turn failed.
+    this.#o.onTurnOver();
     this.#o.onEvent({ kind: "error" });
     // What waits still goes: a failed turn (a model error) does not swallow the next message.
     this.#next();

@@ -23,6 +23,7 @@ import {
   type TaskApprovals,
   type TaskChanges,
   type TaskChangesSummary,
+  type TaskHandoffState,
   type TaskMessage,
   type TaskMiseConfig,
   type TaskProposal,
@@ -37,6 +38,7 @@ import { AgentQueuesFile } from "./agent-queues.ts";
 import type { AgentSession } from "./agent-session.ts";
 import type { CopilotHookOutput } from "./copilot-hook-output.ts";
 import { CopilotHookEvent } from "./copilot-hook-record.ts";
+import { HandoffWatch } from "./handoff-watch.ts";
 import { appendHookRecord } from "./hook-tail.ts";
 import { inboxPrompt } from "./inbox-prompt.ts";
 import { javaNavigationState } from "./java-language-server.ts";
@@ -175,6 +177,7 @@ export class Agents {
   readonly #proposals = new TaskProposals(() => this.#queues.follow());
   readonly #reviews = new TaskReviews(() => this.#queues.follow());
   readonly #miseTrust = new MiseTrustNotices(() => this.#queues.follow());
+  readonly #handoffs: HandoffWatch;
   readonly #coordination: TaskCoordination;
   readonly #supervisor: SupervisorSessions;
   readonly #resumable: ResumableSessions;
@@ -234,6 +237,7 @@ export class Agents {
         close: (id) => this.#close(id),
       },
     });
+    this.#handoffs = new HandoffWatch(this.#tasks, (task) => this.#sessions.runningOfTask(task)?.askToRead(), deps.log);
     this.#coordination = new TaskCoordination({
       task: (id) => this.task(id),
       findTask: (id) => this.findTask(id),
@@ -456,6 +460,7 @@ export class Agents {
     const reviewComments = session.task === null ? 0 : this.#reviews.unread(session.task);
     return inboxPrompt({
       reviewComments,
+      handoffMoved: session.task !== null && this.#handoffs.waiting(session.task),
       ...this.#coordination.unread(session),
       trustNotice: this.#miseTrust.waiting(trustRecipientOf(session)),
     });
@@ -481,6 +486,13 @@ export class Agents {
     const task = caller === null ? null : this.session(caller).task;
     if (task === null) throw new DomainError("bad_request", "only a session that runs a task in Trackwall gets messages");
     return this.#coordination.takeMessages(task);
+  }
+
+  /** Where the work session `caller`'s own task builds on is now (`get_handoff`, ADR-144), whose head now counts as read. */
+  async readHandoff(caller: string | null): Promise<TaskHandoffState | null> {
+    const task = caller === null ? null : this.session(caller).task;
+    if (task === null) throw new DomainError("bad_request", "only a session that runs a task in Trackwall has a handoff");
+    return this.#handoffs.read(task);
   }
 
   /** The unread updates on the work session `caller` delegated (`get_updates`), which now count as read. */
@@ -692,6 +704,7 @@ export class Agents {
     await this.#tasks.remove(id, keepBranch, discardChanges);
     this.#reviews.take(id);
     this.#miseTrust.forget({ task: id });
+    this.#handoffs.forget(id);
     this.#coordination.taskEnded(id);
     this.#deps.onTaskRemoved(id);
   }
@@ -731,6 +744,8 @@ export class Agents {
     // unread, and nothing is typed when nothing is. Not the updates of a new supervisor or main session: the user starts
     // those to talk, and the next update asks them anyway.
     if (session.task !== null) session.askToRead();
+    // A move of the handing branch before a daemon restart, or while the task had no session (ADR-144).
+    if (session.task !== null) void this.#handoffs.check(session.task);
     return this.#sessions.view(session);
   }
 
@@ -961,6 +976,9 @@ export class Agents {
       prompt: () => this.#inboxPrompt({ id, supervisor, task }),
       onUserText: () => this.#coordination.userTyped({ id, task }),
       onPromptSent: () => this.#miseTrust.promptSent(trustRecipientOf({ id, task })),
+      onTurnOver: () => {
+        if (task !== null) void this.#handoffs.turnOver(task);
+      },
       onEvent: (event: SessionEvent) => {
         if (event.kind === "turn_ended") this.#miseTrust.turnEnded(trustRecipientOf({ id, task }));
         // The session reads its hooks inside the user's key or another session's call: news for the proposer must not fail them.

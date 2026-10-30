@@ -53,6 +53,22 @@ export async function commitsBetween(dir: string, from: string, to: string, limi
   return { total, commits };
 }
 
+/** The paths that differ between two commits, at most `max` of them; `undefined` when `from` is not in the repo. */
+export async function changedPathsBetween(
+  dir: string,
+  from: string,
+  to: string,
+  max: number,
+): Promise<{ paths: string[]; truncated: boolean } | undefined> {
+  if ((await existingCommit(dir, from)) === undefined) return undefined;
+  const { stdout } = await git(dir, ["diff", "--name-only", "-z", "--no-renames", from, to, "--"]);
+  const paths = stdout
+    .toString("utf8")
+    .split("\0")
+    .filter((path) => path !== "");
+  return { paths: paths.slice(0, max), truncated: paths.length > max };
+}
+
 /** The newest `limit` commits of `commit`'s history, newest first. */
 export function newestCommits(dir: string, commit: string, limit: number): Promise<Commit[]> {
   return log(dir, [commit], limit);

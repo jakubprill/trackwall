@@ -118,6 +118,7 @@ describe("MCP server over Streamable HTTP", () => {
       "send_message",
       "resume_task",
       "get_messages",
+      "get_handoff",
       "get_updates",
       "wait_for_session",
       "run_mise_task",
