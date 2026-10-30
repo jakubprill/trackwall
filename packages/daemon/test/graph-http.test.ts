@@ -639,6 +639,21 @@ describe("clients from OpenAPI specs (ADR-129)", () => {
       ["orders-bff", "openapi", "Orders", "/api/orders/{id}", "high", null],
     ]);
   });
+
+  test("find_endpoint lists a call once when the spec's title names both the app and the repo serving it", () => {
+    // The repo serves one operation of three, too few to win by operations, so the title `Inventory API` names it twice.
+    const calls = ops(["GET", "/api/stock/{sku}", null], ["POST", "/api/reservations", null], ["GET", "/api/warehouses", null]);
+    const web = repo("web", card([], [spec({ name: "Inventory API", url: "https://gateway.example.com/", calls })]));
+    const inventory = repo("inventory", card([app("inventory"), endpoint("/api/stock/{sku}")], []));
+    const found = findEndpoints(
+      buildGraphWithIndex([web, inventory], { config: NO_CONFIG, file: CONFIG_FILE, problems: [] }).http,
+      "/api/stock/42",
+      "GET",
+    );
+    expect(found.endpoints[0]?.callers.map((c) => [c.repo, c.client, c.path, c.confidence])).toEqual([
+      ["web", "Inventory API", "/api/stock/{sku}", "high"],
+    ]);
+  });
 });
 
 test("more changed endpoints than the limit are cut and say so (ADR-145)", () => {

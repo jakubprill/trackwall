@@ -40,8 +40,7 @@ export class EdgeSet {
       this.edges.set(id, { ...edge, evidence: uniqueEvidence(edge.evidence) });
       return;
     }
-    const confidence =
-      CONFIDENCE_ORDER.indexOf(edge.confidence) > CONFIDENCE_ORDER.indexOf(existing.confidence) ? edge.confidence : existing.confidence;
+    const confidence = strongerConfidence(existing.confidence, edge.confidence);
     this.edges.set(id, { ...existing, confidence, evidence: uniqueEvidence([...existing.evidence, ...edge.evidence]) });
   }
 
@@ -63,6 +62,11 @@ function uniqueEvidence(evidence: readonly EdgeEvidence[]): EdgeEvidence[] {
       return true;
     })
     .slice(0, MAX_EVIDENCE);
+}
+
+/** The surer of two confidences. */
+export function strongerConfidence(a: EdgeConfidence, b: EdgeConfidence): EdgeConfidence {
+  return CONFIDENCE_ORDER.indexOf(b) > CONFIDENCE_ORDER.indexOf(a) ? b : a;
 }
 
 /** Appends a value to the list under a key, without copying the list. */
