@@ -63,6 +63,21 @@ Trackwall has no Linux download, so it runs from its source. In a terminal of th
 
 The token changes every time Trackwall starts, so look the address up again after a restart. Trackwall stops when its terminal or the container stops.
 
+## Bring your skills and plugins
+
+Copilot CLI in the container sees only what is in the container: the skills and plugins on your computer are not there. Sessions start fine without them, so it is easy to miss.
+
+- Plugins and skills in `~/.copilot` stay in the `workspace-copilot` volume. Install the plugins once in a terminal of the container, with `copilot plugin marketplace add` and `copilot plugin install` as on your computer.
+- Skills you keep in `~/.agents/skills` or `~/.claude/skills` need volumes of their own, or a rebuild of the container loses them. Add them to `mounts`, and their folders to the `chown` of `postCreateCommand`:
+
+  ```json
+  "source=workspace-agents,target=/home/vscode/.agents,type=volume",
+  "source=workspace-claude,target=/home/vscode/.claude,type=volume"
+  ```
+
+- Then install the skills inside the container (for example `npx skills add <source> -g`), or copy their folders in. A skill folder copied from Windows may have Windows line endings in its scripts; installing it again in the container avoids that.
+- To check, run `/skills` in a session: it lists the skills Copilot CLI found. Skills a repo keeps in its own folders come with the repo and need nothing.
+
 ## Use the desktop app
 
 The desktop app can use Trackwall in the container instead of running its own, so you keep the tray, system notifications when a session needs you, several windows, `trackwall://` links and [Start at sign-in](/features/start-at-sign-in).
