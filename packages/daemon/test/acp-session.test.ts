@@ -91,11 +91,14 @@ describe("a Copilot CLI session over ACP", () => {
     expect(s.events).toEqual([]);
   });
 
-  test("the first message goes as soon as the session is ready", async () => {
+  test("the first message goes as soon as the session is ready, and the end of its turn is reported, as the user did not write it", async () => {
     const s = session({ firstMessage: "Start my day." });
     await s.ready();
 
     expect(s.written.at(-1)).toMatchObject({ method: "session/prompt", params: { prompt: [{ text: "Start my day." }] } });
+    s.answer("session/prompt", { stopReason: "end_turn" });
+    await s.settle();
+    expect(s.events).toEqual([{ kind: "turn_ended" }]);
   });
 
   test("the daemon's prompt waits for the end of the turn, and the end of its own turn is reported", async () => {

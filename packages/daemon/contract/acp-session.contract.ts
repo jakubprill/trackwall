@@ -1,13 +1,13 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type ConversationEntry, MCP_SERVER_NAME, mcpTools, type Session } from "@trackwall/protocol";
 import { viewer, waitFor } from "../test/support/agents.ts";
 import { startRealCopilotDaemon } from "./support/real-copilot.ts";
 import { type ModelRequest, type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
 
-// The contract of the conversation view with the real Copilot CLI (ADR-107): `copilot --acp` as the daemon starts it,
-// with the session's MCP server, instructions and tool permissions, against the scripted model. The fake's ACP mode
+// The contract of the conversation view with the real Copilot CLI (ADR-107, for tasks ADR-137): `copilot --acp` as the
+// daemon starts it, with the session's MCP server, instructions and tool permissions, against the scripted model. The fake's ACP mode
 // (`test/fixtures/fake-copilot-acp.ts`) sends the same messages; a failure here means it is out of date too.
 
 let model: ScriptedModel;
@@ -203,5 +203,69 @@ describe("the supervisor in the conversation view with the real Copilot CLI", ()
     );
     window.attachment.detach();
     await agents.stop(supervisor.id);
+  });
+});
+
+/** A model other than the scripted model's default (`COPILOT_MODEL`), which only a task's `--model` asks for (ADR-98). */
+const TASK_MODEL = "trackwall-task-model";
+
+/** The task's only session. */
+function taskSessionOf(task: string): string {
+  const [session, ...more] = daemon.facade.agents.sessions().sessions.filter((s) => s.task === task);
+  if (session === undefined || more.length > 0) throw new Error(`task ${task} does not have exactly one session`);
+  return session.id;
+}
+
+const endOfTurn = (id: string) => waitFor(daemon.facade.agents, id, (s) => s.state?.reason === "stop end_turn", "end of turn", SESSION_MS);
+
+describe("a task in the conversation view with the real Copilot CLI (ADR-137)", () => {
+  test("the prompt is the first message in the task worktree on the task's model, and with auto approvals a shell command runs without asking", async () => {
+    const { agents } = daemon.facade;
+    model.reply((request) => shellCall(request, { bash: "touch made-by-task.txt", powershell: "New-Item made-by-task.txt" }), {
+      text: "Made the file.",
+    });
+
+    const task = await agents.createTask("shop", "make a file", { view: "conversation", approvals: "auto", model: TASK_MODEL });
+    const session = taskSessionOf(task.id);
+    await endOfTurn(session);
+
+    expect(agents.session(session)).toMatchObject({ view: "conversation", dialog: null });
+    expect(existsSync(join(task.worktree, "made-by-task.txt"))).toBe(true);
+    const [first] = model.requests().slice(-2);
+    expect(first?.lastUserText).toEndWith("make a file");
+    expect(first).toMatchObject({ model: TASK_MODEL });
+    // Copilot CLI names its working directory by the real path (macOS: /private/var/… for the temporary /var/…).
+    expect(first?.system).toContain(realpathSync.native(task.worktree));
+    await agents.stop(session);
+  });
+
+  test("Resume loads the task's conversation on the task's model, and a review goes as the next prompt", async () => {
+    const { agents } = daemon.facade;
+    model.reply({ text: "Starting on the login test." });
+    const task = await agents.createTask("shop", "add a login test", { view: "conversation", model: TASK_MODEL });
+    const first = taskSessionOf(task.id);
+    await endOfTurn(first);
+    await agents.stop(first);
+
+    await agents.resumeTask(task.id);
+    const resumed = taskSessionOf(task.id);
+    await inState(resumed, "Input");
+    const view = conversationOf(resumed);
+    expect(view.entries().map((e) => (e.kind === "tool" ? e.kind : `${e.kind}: ${e.text}`))).toEqual([
+      "user: add a login test",
+      "agent: Starting on the login test.",
+    ]);
+    view.detach();
+
+    model.reply({ text: "I will read the review." });
+    agents.sendReview(task.id, [{ path: "README.md", side: "new", line: 1, code: "# shop", text: "Say what shop is." }]);
+    await endOfTurn(resumed);
+
+    const last = model.requests().at(-1);
+    expect(last?.lastUserText).toContain("sent a review of your changes in Trackwall");
+    expect(last).toMatchObject({ model: TASK_MODEL });
+    // The conversation goes on: the model gets the first prompt again with the review.
+    expect(JSON.stringify(last)).toContain("add a login test");
+    await agents.stop(resumed);
   });
 });

@@ -20,6 +20,8 @@ const stored = {
   approvals: "ask" as const,
   javaNavigation: true,
   item: "7c4d1e2f-0000-4000-8000-000000000000",
+  view: "conversation" as const,
+  conversation: "c0ffee-1",
   summary: { text: "Fixed, test added.", reportedAt: "2026-10-24T10:00:00.000Z" },
   trustedMiseConfig: { "mise.toml": "b".repeat(64) },
   port: 41003,
@@ -48,6 +50,8 @@ describe("tasks.json", () => {
       approvals: _approvals,
       javaNavigation: _javaNavigation,
       item: _item,
+      view: _view,
+      conversation: _conversation,
       summary: ___,
       trustedMiseConfig: ____,
       port: _____,
@@ -65,6 +69,8 @@ describe("tasks.json", () => {
         approvals: "ask",
         javaNavigation: false,
         item: null,
+        view: "terminal",
+        conversation: null,
         summary: null,
         trustedMiseConfig: null,
         port: null,
@@ -121,6 +127,14 @@ describe("tasks.json", () => {
     writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
 
     expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, item: null }]);
+  });
+
+  test("a task saved before the conversation view comes back in a terminal, whose conversation is under the task's id", () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
+    const { view: _, conversation: __, ...old } = stored;
+    writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
+
+    expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, view: "terminal", conversation: null }]);
   });
 
   test("a task saved without approvals comes back without them", () => {

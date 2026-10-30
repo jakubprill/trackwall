@@ -453,7 +453,7 @@ describe("a task's model with the real Copilot CLI (ADR-98)", () => {
       item: null,
     });
     model.reply({ text: "Reviewing the login." });
-    const task = await agents.approveProposal(proposal.id, proposal.prompt, proposal.model, proposal.approvals);
+    const task = await agents.approveProposal(proposal.id, proposal.prompt, proposal.model, proposal.approvals, "terminal");
     const first = agents.sessions().sessions.find((s) => s.task === task.id);
     if (first === undefined) throw new Error("the task has no session");
     await endOfTurn(first.id);
@@ -486,7 +486,7 @@ describe("Java navigation of a task with the real Copilot CLI (ADR-99)", () => {
     writeFileSync(workspaceFile, `${workspace}\njavaNavigation: ${JSON.stringify({ jdtls, java: process.execPath })}\n`);
     try {
       model.reply({ text: "Looking for the callers." });
-      const task = await agents.createTask("shop", "find the callers of the login", "ask", null, true);
+      const task = await agents.createTask("shop", "find the callers of the login", { javaNavigation: true });
       const session = taskSessionOf(task.id);
       await endOfTurn(session);
       expect(model.requests().at(-1)?.tools).toContain("lsp");
@@ -546,7 +546,7 @@ describe("a task without approvals with the real Copilot CLI (ADR-105)", () => {
         (request) => shellCall(request, { bash: "rm README.md", powershell: "Remove-Item README.md" }),
         { text: "Created one file; removing the README was refused." },
       );
-      const task = await agents.createTask("shop", "create a file, then remove the README", "auto");
+      const task = await agents.createTask("shop", "create a file, then remove the README", { approvals: "auto" });
       const session = taskSessionOf(task.id);
       await endOfTurn(session);
 
@@ -711,7 +711,7 @@ describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
         approvals: "ask",
         item: null,
       });
-      const task = await agents.approveProposal(proposal.id, "add a login test", null, "ask");
+      const task = await agents.approveProposal(proposal.id, "add a login test", null, "ask", "terminal");
       const session = agents.sessions().sessions.find((s) => s.task === task.id);
       if (session === undefined) throw new Error("the task has no session");
       await turnsEnded(session.id, 1);

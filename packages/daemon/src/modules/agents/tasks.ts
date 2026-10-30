@@ -10,6 +10,7 @@ import {
   PATCH_MAX_BYTES,
   type ProposedBy,
   type Session,
+  type SessionView,
   TASK_SUMMARY_MAX_FILES,
   type Task,
   type TaskApprovals,
@@ -81,18 +82,20 @@ export interface TasksVcs {
   worktreeChanges(dir: string, base: string, maxPatchBytes: number, paths: readonly string[]): Promise<TaskChanges>;
 }
 
+/**
+ * A start of a task's session in its view (ADR-137), with the model and approvals arguments: in a terminal the
+ * arguments also carry the prompt (then `promptOnStart`) or a resume; in the conversation view the prompt is the first
+ * message of a new conversation, or the conversation to go on with is loaded.
+ */
+export type TaskLaunch = { repo: string; cwd: string; task: string; args: readonly string[] } & (
+  | { view: "terminal"; promptOnStart: boolean; lspServers: Record<string, LspServer> }
+  | { view: "conversation"; load: string | undefined; firstMessage: string | undefined }
+);
+
 /** Copilot CLI sessions from `Agents`, in which tasks run. */
 interface TaskSessions {
-  /** Copilot CLI in the task's worktree with the task's arguments (the prompt, then `promptOnStart`, or a resume). */
-  launch(spec: {
-    repo: string;
-    cwd: string;
-    task: string;
-    args: readonly string[];
-    promptOnStart: boolean;
-    hasConversation: boolean;
-    lspServers: Record<string, LspServer>;
-  }): Promise<Session>;
+  /** Copilot CLI in the task's worktree; resolves to Copilot CLI's id of the conversation in the conversation view. */
+  launch(spec: TaskLaunch): Promise<string | undefined>;
   /** The task's sessions, newest first. */
   of(task: string): Session[];
   /** Removes an ended session from the list. */
@@ -136,7 +139,12 @@ export interface TaskOrigin {
   javaNavigation: boolean;
   /** The board item the task works on (ADR-133); `null` for none. */
   item: string | null;
+  /** Whether the task's sessions show as a terminal or in the conversation view (ADR-137). */
+  view: SessionView;
 }
+
+/** What the user chooses for a task they start: everything of its origin but the identity a proposal gives it. */
+export type TaskOptions = Omit<TaskOrigin, "id" | "title" | "proposedBy">;
 
 /** A task from the file with the worktree that follows from it, and its port (one given when it was read, if it had none). */
 type KnownTask = StoredTask & TaskWork & { port: number };
@@ -205,8 +213,11 @@ export class AgentTasks {
   async #create(
     repo: string,
     prompt: string,
-    { id, title, proposedBy, model, approvals, javaNavigation, item }: TaskOrigin,
+    { id, title, proposedBy, model, approvals, javaNavigation, item, view: sessionView }: TaskOrigin,
   ): Promise<Task> {
+    // The jdtls of a task comes through the session plugin, which Copilot CLI does not load over ACP (ADR-137).
+    if (javaNavigation && sessionView === "conversation")
+      throw new DomainError("bad_request", "Java navigation needs a task in a terminal; the conversation view cannot give it yet");
     // Refused before the worktree exists: a task that asked for Java navigation would otherwise start without it.
     const javaProblem = javaNavigation ? this.javaNavigation().problem : null;
     if (javaProblem !== null) throw new DomainError("bad_request", `Java navigation cannot start: ${javaProblem}`);
@@ -229,6 +240,8 @@ export class AgentTasks {
       approvals,
       javaNavigation,
       item,
+      view: sessionView,
+      conversation: null,
       summary: null,
       trustedMiseConfig: null,
       port: freeTaskPort([...this.#tasks.map((t) => t.port), ...this.#creatingPorts]),
@@ -245,8 +258,7 @@ export class AgentTasks {
       // Saved before the session starts: the worktree is already on disk and must not disappear from the list if the daemon crashes.
       this.#save([task, ...this.#tasks]);
       try {
-        // `=` instead of a separate argument, so that a prompt starting with `-` is not a Copilot CLI option.
-        await this.#launch(task, [`--session-id=${id}`, `--interactive=${prompt}`], true);
+        await this.#launch(task, "new");
       } catch (err) {
         // A failed cleanup leaves the task on the list, so that the user can end it themselves.
         await this.#whileRemoving(id, () => this.#discard(task, false)).then(
@@ -259,13 +271,16 @@ export class AgentTasks {
     }).finally(() => this.#creatingPorts.delete(task.port));
   }
 
-  /** A new session for a task without a running session; Copilot CLI resumes the task's conversation, because it has the task's UUID. */
+  /**
+   * A new session for a task without a running session, which goes on with the task's conversation: in a terminal
+   * Copilot CLI keeps it under the task's UUID, in the conversation view under the id it chose (ADR-137).
+   */
   resume(id: string): Promise<Task> {
     const task = this.#get(id);
     return this.#exclusive(id, async () => {
       this.#refuseRunning(task, "resuming");
       this.#closeSessions(task);
-      await this.#launch(task, [`--resume=${id}`], false);
+      await this.#launch(task, "resume");
       return view(task);
     });
   }
@@ -482,20 +497,34 @@ export class AgentTasks {
     }
   }
 
-  async #launch(task: KnownTask, args: readonly string[], promptOnStart: boolean): Promise<void> {
+  /** The task's first session with its prompt (`new`), or one that goes on with its conversation (`resume`). */
+  async #launch(task: KnownTask, start: "new" | "resume"): Promise<void> {
     // The model and the approvals mode on every start, the first and each resume: Copilot CLI would otherwise resume
     // on its default model and ask again (ADR-98, ADR-105).
     const modelArgs = task.model === null ? [] : [`--model=${task.model}`];
-    // A task's conversation exists from its first message on, which a resume goes on with.
-    await this.#deps.sessions.launch({
-      repo: task.repo,
-      cwd: task.worktree,
-      task: task.id,
-      args: [...modelArgs, ...approvalArgs(task.approvals), ...args],
-      promptOnStart,
-      hasConversation: true,
-      lspServers: await this.#lspServers(task),
-    });
+    const place = { repo: task.repo, cwd: task.worktree, task: task.id, args: [...modelArgs, ...approvalArgs(task.approvals)] };
+    if (task.view === "terminal") {
+      // `=` instead of a separate argument, so that a prompt starting with `-` is not a Copilot CLI option.
+      const args = start === "new" ? [`--session-id=${task.id}`, `--interactive=${task.prompt}`] : [`--resume=${task.id}`];
+      const lspServers = await this.#lspServers(task);
+      await this.#deps.sessions.launch({
+        ...place,
+        view: "terminal",
+        args: [...place.args, ...args],
+        promptOnStart: start === "new",
+        lspServers,
+      });
+      return;
+    }
+    // Only a hand-edited `tasks.json` gets here with Java navigation, which `#create` refuses in this view.
+    if (task.javaNavigation) this.#deps.log(`task ${task.id} starts without Java navigation: it needs a terminal`);
+    // A task whose first start never learned its conversation's id starts the conversation again from the prompt.
+    const load = start === "resume" ? (task.conversation ?? undefined) : undefined;
+    const firstMessage = load === undefined ? task.prompt : undefined;
+    const conversation = await this.#deps.sessions.launch({ ...place, view: "conversation", load, firstMessage });
+    if (conversation === undefined || conversation === task.conversation) return;
+    // Saved at once: the next resume, even after a daemon crash, must load this conversation, not start another one.
+    this.#save(this.#tasks.map((t) => (t.id === task.id ? { ...t, conversation } : t)));
   }
 
   /**
@@ -580,7 +609,7 @@ function capFiles(files: ChangedFile[]): { files: ChangedFile[]; filesTruncated:
   return { files: files.slice(0, TASK_SUMMARY_MAX_FILES), filesTruncated: files.length > TASK_SUMMARY_MAX_FILES };
 }
 
-function view({ repoDir: _, trustedMiseConfig: __, worktreesDir: ___, ...task }: KnownTask): Task {
+function view({ repoDir: _, trustedMiseConfig: __, worktreesDir: ___, conversation: ____, ...task }: KnownTask): Task {
   return task;
 }
 
