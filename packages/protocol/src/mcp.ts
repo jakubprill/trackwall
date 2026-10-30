@@ -34,6 +34,7 @@ import {
 } from "./agents.ts";
 import { RepoCardResult, TagName } from "./cards.ts";
 import { CODE_SEARCH_LINE_MAX_CHARS, CODE_SEARCH_MAX_MATCHES, CodePathspecs, CodeQuery, SearchCodeResult } from "./code-search.ts";
+import { COMMIT_SEARCH_MAX_COMMITS, COMMIT_SEARCH_MAX_FILES, CommitQuery, SearchCommitsResult } from "./commit-search.ts";
 import { DAY_REPORT_COMMITS, DayReport } from "./day-start.ts";
 import {
   FindEndpointResult,
@@ -591,6 +592,44 @@ export const mcpTools = {
       })
       .strict(),
     result: SearchCodeResult,
+  },
+  searchCommits: {
+    name: "search_commits",
+    readOnly: true,
+    description:
+      "Search the commit history of many repos at once (git log from each repo's latest commit): who changed what and " +
+      "when. text finds the commits that change how many times it occurs, that is add or remove it (git's pickaxe -S; " +
+      "renaming a field shows in every repo that used the old name), message searches commit messages (e.g. an issue key), author the author name or e-mail; " +
+      "fixed strings by default, POSIX extended regular expressions with regex: true. Narrow with repos (ids), tags " +
+      "(every given tag), paths (git pathspecs) and since (YYYY-MM-DD). With no filter it lists the newest commits. " +
+      "Each commit has repo, hash, author, date, subject and the files it changed (with text, only the files where it " +
+      `changed; at most ${COMMIT_SEARCH_MAX_FILES}, filesTruncated says when there are more). Newest first across all ` +
+      "repos. searched lists the repos with the commit whose history was searched; failed the repos git could not " +
+      "search, with the reason; skipped the repos not searched because time ran out. truncated: true when commits may " +
+      "be missing (also per repo in searched); narrow the query.",
+    args: z
+      .object({
+        text: CommitQuery.shape.text.describe("text that the commits' changes add or remove, e.g. a field or endpoint name"),
+        message: CommitQuery.shape.message.describe("text in the commit message, e.g. an issue key"),
+        author: CommitQuery.shape.author.describe("text in the author's name or e-mail"),
+        regex: CommitQuery.shape.regex
+          .default(false)
+          .describe("text, message and author are POSIX extended regular expressions, default false"),
+        ignoreCase: CommitQuery.shape.ignoreCase.default(false).describe("case-insensitive, default false"),
+        repos: z.array(RepoId).min(1).max(200).optional().describe(`only these repos (ids from ${LIST_REPOS}); default all`),
+        tags: RepoTagsArg.optional().describe('only repos with every one of these tags, without #, e.g. ["java"]'),
+        paths: CommitQuery.shape.paths.default([]).describe('only commits that change these paths (git pathspecs), e.g. ["*.java"]'),
+        since: CommitQuery.shape.since.describe("only commits from this day on, YYYY-MM-DD"),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(COMMIT_SEARCH_MAX_COMMITS)
+          .default(50)
+          .describe(`maximum number of commits (up to ${COMMIT_SEARCH_MAX_COMMITS}), default 50`),
+      })
+      .strict(),
+    result: SearchCommitsResult,
   },
   listSessions: {
     name: LIST_SESSIONS,

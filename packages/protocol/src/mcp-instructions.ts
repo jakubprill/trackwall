@@ -18,6 +18,7 @@ const {
   getErrors,
   getTestResults,
   searchCode,
+  searchCommits,
   whoCalls,
   subgraphFor,
   findEndpoint,
@@ -66,6 +67,8 @@ export const MCP_INSTRUCTIONS = [
     "open the files it points to.",
   `- Find code across repos: ${searchCode.name} searches the latest commit of many repos at once, not uncommitted ` +
     "changes (narrow with tags, repos and paths); prefer it to walking directories one repo at a time.",
+  `- Find who changed something and when: ${searchCommits.name} searches the history of many repos at once for the ` +
+    "commits that add or remove a text (a field, an endpoint path), or by message, author, paths and date.",
   `- Before you change an endpoint, a DTO, a package or a config address, check whom it affects: ${findEndpoint.name} ` +
     `shows which endpoints of other repos call an endpoint and which it calls, ${whoCalls.name} which repos depend on a repo, ` +
     `${subgraphFor.name} its neighbourhood. In a task, after you commit, ${getChangedEndpoints.name} lists the endpoints ` +

@@ -34,6 +34,7 @@ The agent sees the same projects folder you see in Trackwall, through the tools 
 | `get_repo` | One repo's README, latest commits, mise tasks and tags. |
 | `get_repo_card` | The [repo card](/features/repo-card), with evidence. |
 | `search_code` | Text or a regular expression in all repos at once, narrowed by repo, tag or path, with line and context. |
+| `search_commits` | Who changed what and when, in the history of all repos at once: the commits that add or remove a text such as a field or an endpoint path, or by message (an issue key), author, path or date, newest first with the files they changed. |
 | `who_calls` | Who uses a repo, through packages and HTTP, with evidence. |
 | `subgraph_for` | The part of the connection graph around a repo, with its calls that lead to no repo. |
 | `find_endpoint` | An HTTP endpoint from code or an OpenAPI spec, by path, URL or words, with its types, the repos and endpoints that call it, and the endpoints it calls. |
