@@ -1,8 +1,9 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Agents, sessionHooksFile } from "../src/modules/agents/agents.ts";
+import { Agents } from "../src/modules/agents/agents.ts";
+import { sessionHooksFile } from "../src/modules/agents/session-launcher.ts";
 import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { isAlive } from "../src/platform/process-group.ts";
 import { makeAgents, viewer, waitFor } from "./support/agents.ts";
@@ -265,6 +266,22 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     const supervisor = await agents.startSupervisor("new", "conversation");
     expect(supervisor).toMatchObject({ supervisor: true, view: "conversation", run: { kind: "running" } });
     await agents.stop(supervisor.id);
+  }, 60_000);
+
+  test("a session whose repo folder is missing fails as repo_unavailable, is not listed, leaves no session directory, and starts once the folder exists", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
+    const repoDir = join(parent, "not-cloned-yet");
+    const { agents, procs, home } = makeAgents({ shop: repoDir });
+    cleanups.push(() => procs.stopAll());
+
+    await expect(agents.start("shop")).rejects.toMatchObject({ code: "repo_unavailable" });
+
+    expect(agents.sessions().sessions).toEqual([]);
+    expect(readdirSync(join(home, "sessions"))).toEqual([]);
+    mkdirSync(repoDir);
+    const started = await agents.start("shop");
+    expect(started).toMatchObject({ repo: "shop", run: { kind: "running" } });
+    await agents.stop(started.id);
   }, 60_000);
 
   test("a session in the repo root with a prompt gets it as its first message and works from the start (ADR-100)", async () => {
