@@ -23,6 +23,7 @@ import {
   type TaskApprovals,
   type TaskChanges,
   type TaskChangesSummary,
+  type TaskHandoffState,
   type TaskMessage,
   type TaskMiseConfig,
   type TaskProposal,
@@ -31,7 +32,7 @@ import {
   type ToolPermissions,
   type Verification,
 } from "@trackwall/protocol";
-import { DomainError } from "../../infra/errors.ts";
+import { DomainError, messageOf } from "../../infra/errors.ts";
 import { AcpSession, type ConversationViewer, type ConversationWindow } from "./acp-session.ts";
 import { AgentQueuesFile } from "./agent-queues.ts";
 import type { AgentSession } from "./agent-session.ts";
@@ -175,6 +176,8 @@ export class Agents {
   readonly #proposals = new TaskProposals(() => this.#queues.follow());
   readonly #reviews = new TaskReviews(() => this.#queues.follow());
   readonly #miseTrust = new MiseTrustNotices(() => this.#queues.follow());
+  /** Tasks whose handing task's branch moved since they last read it, until they call `get_handoff` (ADR-144); memory only, since git keeps the facts. */
+  readonly #handoffsMoved = new Set<string>();
   readonly #coordination: TaskCoordination;
   readonly #supervisor: SupervisorSessions;
   readonly #resumable: ResumableSessions;
@@ -456,6 +459,7 @@ export class Agents {
     const reviewComments = session.task === null ? 0 : this.#reviews.unread(session.task);
     return inboxPrompt({
       reviewComments,
+      handoffMoved: session.task !== null && this.#handoffsMoved.has(session.task),
       ...this.#coordination.unread(session),
       trustNotice: this.#miseTrust.waiting(trustRecipientOf(session)),
     });
@@ -481,6 +485,14 @@ export class Agents {
     const task = caller === null ? null : this.session(caller).task;
     if (task === null) throw new DomainError("bad_request", "only a session that runs a task in Trackwall gets messages");
     return this.#coordination.takeMessages(task);
+  }
+
+  /** Where the work session `caller`'s own task builds on is now (`get_handoff`, ADR-144), whose head now counts as read. */
+  async readHandoff(caller: string | null): Promise<TaskHandoffState | null> {
+    const task = caller === null ? null : this.session(caller).task;
+    if (task === null) throw new DomainError("bad_request", "only a session that runs a task in Trackwall has a handoff");
+    this.#handoffsMoved.delete(task);
+    return this.#tasks.readHandoff(task);
   }
 
   /** The unread updates on the work session `caller` delegated (`get_updates`), which now count as read. */
@@ -692,6 +704,7 @@ export class Agents {
     await this.#tasks.remove(id, keepBranch, discardChanges);
     this.#reviews.take(id);
     this.#miseTrust.forget({ task: id });
+    this.#handoffsMoved.delete(id);
     this.#coordination.taskEnded(id);
     this.#deps.onTaskRemoved(id);
   }
@@ -961,6 +974,9 @@ export class Agents {
       prompt: () => this.#inboxPrompt({ id, supervisor, task }),
       onUserText: () => this.#coordination.userTyped({ id, task }),
       onPromptSent: () => this.#miseTrust.promptSent(trustRecipientOf({ id, task })),
+      onTurnOver: () => {
+        if (task !== null) void this.#handoffMayHaveMoved(task);
+      },
       onEvent: (event: SessionEvent) => {
         if (event.kind === "turn_ended") this.#miseTrust.turnEnded(trustRecipientOf({ id, task }));
         // The session reads its hooks inside the user's key or another session's call: news for the proposer must not fail them.
@@ -971,6 +987,22 @@ export class Agents {
         }
       },
     };
+  }
+
+  /**
+   * Task `task`'s agent ended a turn, so its branch may have moved: each task it handed work to
+   * whose last read commit differs is asked to call `get_handoff` (ADR-144), now or when its session is resumed.
+   */
+  async #handoffMayHaveMoved(task: string): Promise<void> {
+    for (const subtask of this.#tasks.handedTo(task)) {
+      try {
+        if (this.#handoffsMoved.has(subtask) || !(await this.#tasks.handoffMoved(subtask))) continue;
+        this.#handoffsMoved.add(subtask);
+        this.#sessions.runningOfTask(subtask)?.askToRead();
+      } catch (err) {
+        this.#deps.log(`task ${subtask}: checking the branch of task ${task} that handed it its work: ${messageOf(err)}`);
+      }
+    }
   }
 
   /** The running session a trust notice is for: the newest one of its task, or the session itself. */

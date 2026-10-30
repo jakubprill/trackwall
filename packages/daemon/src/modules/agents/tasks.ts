@@ -16,6 +16,7 @@ import {
   type TaskApprovals,
   type TaskChanges,
   type TaskChangesSummary,
+  type TaskHandoffState,
   type TaskMiseConfig,
   type TaskSharedFiles,
 } from "@trackwall/protocol";
@@ -34,7 +35,7 @@ import {
 import { jdtlsStatus, readJdtlsLog } from "./jdtls-log.ts";
 import { TASK_BRANCH_PREFIX, taskSlug, taskWorktree } from "./task-branch.ts";
 import type { StoredTask, TaskFile } from "./task-file.ts";
-import type { HandoffFacts, TaskHandoff } from "./task-handoff.ts";
+import { type HandoffFacts, handoffState, type TaskHandoff } from "./task-handoff.ts";
 import { type MiseSnapshot, miseConfigChanges, miseConfigDigest, readMiseConfig, reviewMiseConfig } from "./task-mise-config.ts";
 import { freeTaskPort, withTaskPorts } from "./task-port.ts";
 
@@ -87,6 +88,8 @@ export interface TasksVcs {
   worktreeChanges(dir: string, base: string, maxPatchBytes: number, paths: readonly string[]): Promise<TaskChanges>;
   /** The commit HEAD is at; `null` without commits. */
   headCommit(dir: string): Promise<string | null>;
+  countBetween(dir: string, from: string, to: string): Promise<number | undefined>;
+  changedPathsBetween(dir: string, from: string, to: string, max: number): Promise<{ paths: string[]; truncated: boolean } | undefined>;
 }
 
 /**
@@ -355,6 +358,35 @@ export class AgentTasks {
     if (this.#tasks.some((t) => t.id === handoff.task)) return { ...handoff, ended: false };
     const { commit: _, ...ended } = handoff;
     return { ...ended, ended: true };
+  }
+
+  /** The tasks task `id` handed their work to (ADR-143), while they last. */
+  handedTo(id: string): string[] {
+    return this.#tasks.filter((t) => t.handoff?.task === id).map((t) => t.id);
+  }
+
+  /** Whether the branch of the task that handed task `id` its work is at another commit than the one `id` read last (ADR-144). */
+  async handoffMoved(id: string): Promise<boolean> {
+    const handoff = this.#tasks.find((t) => t.id === id)?.handoff;
+    const from = this.#tasks.find((t) => t.id === handoff?.task);
+    if (!handoff || !from) return false;
+    const head = await this.#deps.vcs.headCommit(from.worktree);
+    return head !== null && head !== handoff.commit;
+  }
+
+  /**
+   * Where the branch of the task that handed task `id` its work is now and what changed since `id` read it, whose head
+   * then counts as read (`get_handoff`, ADR-144); `null` when no task handed it its work.
+   */
+  async readHandoff(id: string): Promise<TaskHandoffState | null> {
+    const handoff = this.#get(id).handoff;
+    if (handoff === null) return null;
+    const from = this.#tasks.find((t) => t.id === handoff.task);
+    const state = await asRepoUnavailable(handoff.branch, handoffState(handoff, from?.worktree, this.#deps.vcs));
+    const { head } = state;
+    if (head !== null && head !== handoff.commit && this.#tasks.some((t) => t.id === id))
+      this.#save(this.#tasks.map((t) => (t.id === id && t.handoff !== null ? { ...t, handoff: { ...t.handoff, commit: head } } : t)));
+    return state;
   }
 
   /**

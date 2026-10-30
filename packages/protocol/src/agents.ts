@@ -452,6 +452,32 @@ export const AGENT_PATCH_MAX_BYTES = 200_000;
 export const AgentTaskChanges = TaskChanges.extend({ filesTruncated: TaskChangesSummary.shape.filesTruncated });
 export type AgentTaskChanges = z.infer<typeof AgentTaskChanges>;
 
+/** The most changed files `get_handoff` lists between the commit a task last read and the handing task's branch now. */
+export const HANDOFF_FILES_MAX = 100;
+
+/**
+ * The task that handed the calling task its work (ADR-143) and how its branch moved since the caller last read it
+ * (ADR-144), all from Trackwall's task list and git, never from an agent's text.
+ */
+export const TaskHandoffState = z.object({
+  /** The handing task, whose changes `get_task_changes` reads while it lasts. */
+  task: TaskId,
+  repo: RepoId,
+  branch: z.string(),
+  /** The user has ended the handing task: its worktree is gone, and only its branch may be left in the repo. */
+  ended: z.boolean(),
+  /** The commit of that branch the caller read last: when the user approved its task, then at each `get_handoff`. */
+  read: CommitHash,
+  /** The branch's commit now; `null` when the task ended or git could not read it. */
+  head: CommitHash.nullable(),
+  /** Commits `head` has that `read` does not; `null` when unknown (no `head`, or `read` is gone after a rewritten history). */
+  commits: z.number().int().nonnegative().nullable(),
+  /** Files that differ between `read` and `head`, at most `HANDOFF_FILES_MAX`; empty when `commits` is `null` or 0. */
+  files: z.array(z.string()).max(HANDOFF_FILES_MAX),
+  filesTruncated: z.boolean(),
+});
+export type TaskHandoffState = z.infer<typeof TaskHandoffState>;
+
 /**
  * Shared files of a task (ADR-44): files that both this task and another task of the same repo change, each compared
  * with its own base commit. The task merged second will likely get a conflict in them.

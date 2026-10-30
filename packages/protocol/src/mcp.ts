@@ -6,6 +6,7 @@ import {
   AgentTaskChanges,
   FOLDER_ACTION_REASON_MAX,
   FolderActionReason,
+  HANDOFF_FILES_MAX,
   JavaNavigationStatus,
   PromptDelivery,
   Session,
@@ -20,6 +21,7 @@ import {
   Task,
   TaskApprovals,
   TaskChangesSummary,
+  TaskHandoffState,
   TaskId,
   TaskMessage,
   TaskMessageText,
@@ -190,6 +192,9 @@ export type SendMessageResult = z.infer<typeof SendMessageResult>;
 export const GetMessagesResult = z.object({ messages: z.array(TaskMessage.omit({ readAt: true })) });
 export type GetMessagesResult = z.infer<typeof GetMessagesResult>;
 
+export const GetHandoffResult = z.object({ handoff: TaskHandoffState.nullable() });
+export type GetHandoffResult = z.infer<typeof GetHandoffResult>;
+
 export const GetUpdatesResult = z.object({
   /** Unread updates on the work the caller delegated, oldest first; empty when there are none. */
   updates: z.array(TaskUpdate),
@@ -317,6 +322,7 @@ const SEND_MESSAGE = "send_message";
 const RESUME_TASK = "resume_task";
 const GET_MESSAGES = "get_messages";
 const GET_UPDATES = "get_updates";
+const GET_HANDOFF = "get_handoff";
 const WAIT_FOR_SESSION = "wait_for_session";
 const RUN_MISE_TASK = "run_mise_task";
 const WAIT_FOR_MISE_TASK = "wait_for_mise_task";
@@ -788,6 +794,21 @@ export const mcpTools = {
       `The messages count as read once returned. ${TASK_MESSAGE_RULE} Say what you did about them in ${REPORT_RESULT}.`,
     args: z.object({}).strict(),
     result: GetMessagesResult,
+  },
+  getHandoff: {
+    name: GET_HANDOFF,
+    // Marking the head read changes only Trackwall's own bookkeeping; an approval would stall the agent it woke (ADR-68).
+    readOnly: true,
+    description:
+      "Where the work your task builds on is now: the task whose session proposed your task (task, repo, branch; ended once the " +
+      "user ended it), the commit of its branch you read last (read), where the branch is now (head), how many commits it " +
+      `gained since (commits) and which files they change (files, at most ${HANDOFF_FILES_MAX}). Once returned, head counts as ` +
+      "read. Only for a session that runs a task in Trackwall; handoff is null when no task handed you your work. Trackwall " +
+      "asks you to call it when that branch moves on. Read the changes themselves with " +
+      `${GET_TASK_CHANGES} and that task (narrow it with paths to the files listed here), and check whether they change ` +
+      `what you build on; a question about them goes into your ${REPORT_RESULT}.`,
+    args: z.object({}).strict(),
+    result: GetHandoffResult,
   },
   getUpdates: {
     name: GET_UPDATES,

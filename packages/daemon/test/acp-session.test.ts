@@ -24,6 +24,7 @@ function session(o: { prompt?: () => string | undefined; firstMessage?: string; 
     onUserText: () => {},
     onPromptSent: () => {},
     onEvent: (event) => events.push(event),
+    onTurnOver: () => {},
     log: () => {},
   });
   acp.connect({ write: (line) => written.push(JSON.parse(line)) });
