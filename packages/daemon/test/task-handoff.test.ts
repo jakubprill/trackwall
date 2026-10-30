@@ -85,6 +85,7 @@ describe.skipIf(process.versions.bun === undefined)(
         repo: "payments",
         base: parent.base,
         head: parentHead,
+        contractsCompared: true,
         endpoints: [],
         truncated: false,
         problems: [],
@@ -96,6 +97,10 @@ describe.skipIf(process.versions.bun === undefined)(
       await daemon.post(agentsApi.removeTask, { task: parent.id, keepBranch: true, discardChanges: true });
       await daemon.post(agentsApi.resumeTask, { task: child.id });
       const resumed = runningSession(child.id);
+      // An ended task has no commits to compare.
+      expect((await mainClient.callTool({ name: "get_changed_endpoints", arguments: { task: parent.id } })).content).toEqual([
+        { type: "text", text: `not_found: no task ${parent.id}` },
+      ]);
       expect(instructionsOf(resumed)).toContain(
         `- Your task was handed to you by the task \`${parent.id}\` in the repo \`payments\` (branch \`${parent.branch}\`), which the user has ended since, so get_task_changes no longer reads it.`,
       );

@@ -1,7 +1,6 @@
 import {
-  type CardProblem,
-  type ChangedEndpoint,
   type ChangedEndpoints,
+  type EndpointChanges,
   type FindEndpointResult,
   GraphConfig,
   type HttpMethod,
@@ -26,10 +25,7 @@ import { subgraph } from "./subgraph.ts";
 /** What `graph` needs from `cards`; wired in the facade. */
 interface GraphCards {
   all(): Promise<{ cards: GraphCardInput[]; tagRulesProblem: string | null }>;
-  endpointChanges(
-    dir: string,
-    base: string,
-  ): Promise<{ head: string; changes: Omit<ChangedEndpoint, "callers">[]; problems: CardProblem[] }>;
+  endpointChanges(repo: string, dir: string, base: string): Promise<EndpointChanges>;
 }
 
 /** What `graph` needs from `workspace`: the `graph` entries from `workspace.yaml`. */
@@ -69,8 +65,8 @@ export class Graph {
    * them (`get_changed_endpoints`, ADR-145).
    */
   async changedEndpoints(repo: string, dir: string, base: string): Promise<ChangedEndpoints> {
-    const [{ head, changes, problems }, { http }] = await Promise.all([this.deps.cards.endpointChanges(dir, base), this.current()]);
-    return { repo, base, head, ...withCallers(http, repo, changes), problems };
+    const [{ changes, ...read }, { http }] = await Promise.all([this.deps.cards.endpointChanges(repo, dir, base), this.current()]);
+    return { repo, base, ...read, ...withCallers(http, repo, changes) };
   }
 
   private async current(): Promise<{ graph: RepoGraph; http: HttpIndex }> {

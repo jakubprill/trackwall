@@ -1,6 +1,6 @@
 import {
-  type CardProblem,
   type CardWarmupProgress,
+  type EndpointChanges,
   MISE_CONFIG_FILE,
   type RepoCard,
   type RepoCardResult,
@@ -13,7 +13,7 @@ import { mapLimit } from "../../infra/map-limit.ts";
 import { CallReads, readCallFiles } from "./call-files.ts";
 import type { CardCache } from "./card-cache.ts";
 import { CardWarmup, type WarmupRepo } from "./card-warmup.ts";
-import { type EndpointChange, endpointChanges } from "./endpoint-changes.ts";
+import { endpointChanges } from "./endpoint-changes.ts";
 import { CALL_SOURCES, CARD_DOCUMENTS, CARD_SOURCES, extractCard, readsCardFile } from "./extract-card.ts";
 import { localMiseTasks } from "./local-mise.ts";
 import { readSnapshot, type SnapshotVcs } from "./read-snapshot.ts";
@@ -143,14 +143,22 @@ export class Cards {
   }
 
   /**
-   * The endpoints the commits of the worktree in `dir` change against commit `base` (ADR-145), from the cards of both
-   * commits, with the problems of the HEAD's card; uncommitted work is not in a card (ADR-14).
+   * The endpoints the commits of the worktree in `dir`, a worktree of repo `repo`, change against commit `base` (ADR-145),
+   * from the cards of both commits, with both cards' problems; uncommitted work is not in a card (ADR-14).
    */
-  async endpointChanges(dir: string, base: string): Promise<{ head: string; changes: EndpointChange[]; problems: CardProblem[] }> {
-    const head = await this.deps.vcs.headCommit(dir);
-    if (head === null) throw new DomainError("repo_unavailable", `${dir}: the worktree has no commit`);
-    const [before, after] = await Promise.all([this.cardAt(dir, base), this.cardAt(dir, head)]);
-    return { head, changes: endpointChanges(before, after), problems: after.problems };
+  async endpointChanges(repo: string, dir: string, base: string): Promise<EndpointChanges> {
+    try {
+      const head = await this.deps.vcs.headCommit(dir);
+      if (head === null) throw new Error("the worktree has no commit");
+      const [before, after] = await Promise.all([this.cardAt(dir, base), this.cardAt(dir, head)]);
+      const problems = [
+        ...before.problems.map((p) => ({ ...p, commit: "base" as const })),
+        ...after.problems.map((p) => ({ ...p, commit: "head" as const })),
+      ];
+      return { head, ...endpointChanges(before, after), problems };
+    } catch (err) {
+      throw new DomainError("repo_unavailable", `${repo}: ${messageOf(err)}`);
+    }
   }
 
   private async cardAt(dir: string, commit: string): Promise<RepoCard> {

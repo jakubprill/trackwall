@@ -674,11 +674,12 @@ export const mcpTools = {
       "The HTTP endpoints a task's commits add, remove or change against its base commit, and who calls them: each with " +
       "change (added, removed, changed), app, method and path, its contract before and after (handler, request and response " +
       "types), dtos: the DTOs reachable from its request or response whose fields or constants changed, and callers: the " +
-      `repos whose HTTP clients call it, as in find_endpoint. Only committed work counts (head is the commit read): commit ` +
+      `repos whose HTTP clients call it as the repo root has it, as in find_endpoint. Only committed work counts (head is the commit read): commit ` +
       `first. A changed path is a removed and an added endpoint. Use it before you propose the work that builds on your ` +
       `change, one proposal per caller repo, and to see what the task that handed you your work changed. At most ` +
-      `${MAX_CHANGED_ENDPOINTS} endpoints (truncated: true when there were more); problems: what the card could not read, ` +
-      "so a change there may be missing. not_found for an unknown or ended task.",
+      `${MAX_CHANGED_ENDPOINTS} endpoints (truncated: true when there were more). problems: what the card of the base or ` +
+      "head commit could not read, so a change there may be missing; contractsCompared: false when a card was not fully " +
+      "parsed, so only added and removed endpoints are listed. not_found for an unknown or ended task.",
     args: z.object({ task: TaskId.describe(`task id from ${LIST_SESSIONS} or ${GET_SESSION} (the task field)`) }).strict(),
     result: GetChangedEndpointsResult,
   },

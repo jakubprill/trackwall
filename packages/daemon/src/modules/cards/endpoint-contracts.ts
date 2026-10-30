@@ -97,29 +97,51 @@ export function responseType(returns: string | null): string | null {
 
 /** DTOs reachable from the endpoints' request and response types through field types, in discovery order. */
 function reachableDtos(endpoints: readonly ProvidedEndpoint[], syntax: SyntaxOfFiles, problems: CardProblem[]): Dto[] {
-  const queue = endpoints.flatMap((e) => [e.request, e.response]).flatMap((t) => (t === null ? [] : typeNames(t)));
-  const seen = new Set<string>();
   const dtos: Dto[] = [];
+  let full = false;
+  reachableTypes(endpoints.flatMap(contractTypeNames), (name) => {
+    const found = full ? undefined : syntax.declaration(name);
+    if (!found) return undefined;
+    if (dtos.length === MAX_DTOS) {
+      problems.push({ code: "truncated", path: "", message: `the repo has more than ${MAX_DTOS} DTOs; the card lists the first ones` });
+      full = true;
+      return undefined;
+    }
+    const dto = toDto(found.type, found.path, problems);
+    dtos.push(dto);
+    return dtoFieldTypeNames(dto);
+  });
+  return dtos;
+}
+
+/** The type names in an endpoint's request and response types, where the DTOs reachable from it start. */
+export function contractTypeNames(endpoint: ProvidedEndpoint): string[] {
+  return [endpoint.request, endpoint.response].flatMap((t) => (t === null ? [] : typeNames(t)));
+}
+
+/**
+ * The type names reachable from `roots` through `fieldTypes`, breadth-first, each asked once, in discovery order;
+ * `fieldTypes` gives `undefined` for a name that is not a DTO, which is left out.
+ */
+export function reachableTypes(roots: readonly string[], fieldTypes: (name: string) => readonly string[] | undefined): string[] {
+  const queue = [...roots];
+  const seen = new Set<string>();
+  const reached: string[] = [];
   for (let i = 0; i < queue.length; i++) {
     const name = queue[i] ?? "";
     if (seen.has(name)) continue;
     seen.add(name);
-    const found = syntax.declaration(name);
-    if (!found) continue;
-    if (dtos.length === MAX_DTOS) {
-      problems.push({ code: "truncated", path: "", message: `the repo has more than ${MAX_DTOS} DTOs; the card lists the first ones` });
-      break;
-    }
-    const dto = toDto(found.type, found.path, problems);
-    dtos.push(dto);
+    const next = fieldTypes(name);
+    if (next === undefined) continue;
+    reached.push(name);
     // No `push(...names)`: a field type with hundreds of thousands of arguments would exceed the call argument limit under Node.
-    for (const typeName of fieldTypeNames(dto)) queue.push(typeName);
+    for (const typeName of next) queue.push(typeName);
   }
-  return dtos;
+  return reached;
 }
 
 /** The names of a DTO's field types; an enum has no fields. */
-function fieldTypeNames(dto: Dto): string[] {
+export function dtoFieldTypeNames(dto: Dto): string[] {
   return dto.kind === "enum" ? [] : dto.fields.flatMap((f) => typeNames(f.type));
 }
 
@@ -144,7 +166,7 @@ function toDto(declared: TypeDeclaration, path: string, problems: CardProblem[])
  * Type names in type notation (`Map<String,List<Api.Line>>` → `Map`, `String`, `List`, `Line`): the last part of every
  * qualified name when it starts with a capital letter, because the earlier parts are a package or an outer type, not a DTO.
  */
-export function typeNames(type: string): string[] {
+function typeNames(type: string): string[] {
   return (type.match(/[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*/g) ?? []).map(simpleName).filter(isTypeName);
 }
 

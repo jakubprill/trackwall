@@ -2,12 +2,20 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ConsumedHttp, GraphConfig, ProvidedApp, ProvidedEndpoint, RepoCard } from "@trackwall/protocol";
+import {
+  type ConsumedHttp,
+  type GraphConfig,
+  MAX_CHANGED_ENDPOINTS,
+  type ProvidedApp,
+  type ProvidedEndpoint,
+  type RepoCard,
+} from "@trackwall/protocol";
 import { CardCache } from "../src/modules/cards/card-cache.ts";
 import { Cards } from "../src/modules/cards/cards.ts";
 import { extractCard } from "../src/modules/cards/extract-card.ts";
 import { loadSyntaxParsers } from "../src/modules/cards/syntax-tree.ts";
 import { buildGraph, buildGraphWithIndex } from "../src/modules/graph/build-graph.ts";
+import { withCallers } from "../src/modules/graph/changed-endpoints.ts";
 import { findEndpoints } from "../src/modules/graph/find-endpoint.ts";
 import { Graph } from "../src/modules/graph/graph.ts";
 import type { GraphCardInput } from "../src/modules/graph/graph-input.ts";
@@ -633,6 +641,22 @@ describe("clients from OpenAPI specs (ADR-129)", () => {
   });
 });
 
+test("more changed endpoints than the limit are cut and say so (ADR-145)", () => {
+  const { http } = buildGraphWithIndex([], { config: NO_CONFIG, file: CONFIG_FILE, problems: [] });
+  const changes = Array.from({ length: MAX_CHANGED_ENDPOINTS + 1 }, (_, i) => ({
+    change: "added" as const,
+    app: null,
+    method: "GET" as const,
+    path: `/api/generated/${i}`,
+    before: null,
+    after: { handler: null, request: null, response: null },
+    dtos: [],
+  }));
+  const { endpoints, truncated } = withCallers(http, "catalog", changes);
+  expect(endpoints).toHaveLength(MAX_CHANGED_ENDPOINTS);
+  expect(truncated).toBe(true);
+});
+
 describe("the graph and find_endpoint on real git", () => {
   // Several repos with commits and two card computations on real git take longer than the default 5 s on Windows in CI.
   const REAL_GIT_TIMEOUT = 30_000;
@@ -788,6 +812,7 @@ describe("the graph and find_endpoint on real git", () => {
 
       expect(changed.head).toBe(gitIn(worktree, "rev-parse", "HEAD").trim());
       expect(changed.truncated).toBe(false);
+      expect(changed.contractsCompared).toBe(true);
       expect(
         changed.endpoints.map((e) => [
           e.change,
