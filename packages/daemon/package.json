@@ -12,6 +12,7 @@
     "start:node": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/main.ts --ui",
     "build": "bun scripts/build.ts",
     "demo": "bun scripts/demo.ts",
+    "idle-cost": "bun scripts/idle-cost.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "bun test --timeout 30000",
     "test:contract": "bun scripts/contract.ts",
