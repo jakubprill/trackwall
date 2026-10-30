@@ -48,6 +48,7 @@ If a skill is missing from the environment, run that review through a separate s
 ## Language
 
 - **Everything in the repo is in English** (product since ADR-32, the rest since ADR-43): product texts (UI, tray and windows of the desktop shell, daemon messages and logs, validation messages, MCP tool descriptions and instructions, CLI messages), `README.md`, `SECURITY.md`, issue forms in `.github/ISSUE_TEMPLATE/`, `README.txt` in the portable build, release notes in `docs/release-notes/`, documentation in `docs/`, ADRs, this file, `CONTEXT.md`, comments, commit messages, PR titles and descriptions, test names and developer scripts (`scripts/` of the packages). Interface words come from `CONTEXT.md`.
+- **The documentation site gets a second language, Polish, as a translation** (ADR-142): its pages in `apps/docs` are written in English first, and once a page has a Polish version, a change to the English page updates the Polish one in the same PR. Nothing else is translated.
 - Identifiers, API error codes (`error.code`), event names and MCP tool names are in English, also inside Polish text that has not been migrated yet.
 - **The migration is staged** (ADR-43): Polish text that is still in the repo is translated in dedicated PRs, one document or one package at a time. Write new and rewritten text in English; do not translate untouched Polish text in passing, so that your PR does not conflict with a migration PR. History stays as it is: old commits, PR descriptions and `docs/release-notes/v0.2.0.md`.
 

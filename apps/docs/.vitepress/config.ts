@@ -2,6 +2,7 @@
 import { TRACKWALL_DOCS_URL } from "@trackwall/protocol";
 import { defineConfig } from "vitepress";
 import llmstxt, { copyOrDownloadAsMarkdownButtons } from "vitepress-plugin-llms";
+import { mermaidFence } from "./mermaid-fence.ts";
 import { FEATURE_LIST_PAGE, SIDEBAR } from "./sidebar.ts";
 
 const REPO_URL = "https://github.com/jakubprill/trackwall";
@@ -22,7 +23,7 @@ export default defineConfig({
   appearance: "dark",
   // Dates come from git; pages.yml checks out the full history.
   lastUpdated: true,
-  markdown: { config: (md) => md.use(copyOrDownloadAsMarkdownButtons) },
+  markdown: { config: (md) => md.use(copyOrDownloadAsMarkdownButtons).use(mermaidFence) },
   head: [["link", { rel: "icon", type: "image/svg+xml", href: `${BASE}logo.svg` }]],
   // llms.txt (an index of the pages) and llms-full.txt (every page in one file) for AI tools, plus a Markdown copy
   // of each page and a "Copy page" button under its title, so an agent reads the same text as a person

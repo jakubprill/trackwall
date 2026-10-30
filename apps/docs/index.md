@@ -10,6 +10,9 @@ hero:
       text: What Trackwall does
       link: /guide/what-is-trackwall
     - theme: alt
+      text: Why Trackwall
+      link: /guide/why-trackwall
+    - theme: alt
       text: All features
       link: /features/
     - theme: alt

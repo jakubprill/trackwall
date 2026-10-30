@@ -88,3 +88,21 @@
 .vp-doc .feature-list td:first-child {
   white-space: nowrap;
 }
+
+/* Mermaid diagrams (theme/mermaid-diagram.ts): centred, and as wide as the text at most. */
+.vp-doc .mermaid-diagram {
+  margin: 16px 0;
+  overflow-x: auto;
+  text-align: center;
+}
+
+/* A box's text is HTML inside the SVG; the page's paragraph spacing would push it out of the box Mermaid measured. */
+.vp-doc .mermaid-diagram p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.vp-doc .mermaid-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
