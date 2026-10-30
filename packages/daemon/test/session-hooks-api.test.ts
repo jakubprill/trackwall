@@ -85,24 +85,33 @@ describe.skipIf(process.versions.bun === undefined)("session plugin hooks and th
     await daemon.post(agentsApi.stop, { session: session.id });
   }, 60_000);
 
-  test("a session token opens neither the API nor MCP once its session is closed, in a header or as the bearer", async () => {
+  test("a session token does not open the API, in its header, as the bearer or through a path that leaves the hook route", async () => {
     const session = await daemon.post(agentsApi.start, { repo: "shop" });
     const sessionToken = tokenOf(daemon.home, session.id);
-    const api = (headers: Record<string, string>) =>
-      loopbackRequest(daemon.api.port, agentsApi.sessions.path, { method: "POST", headers, body: "{}", timeoutMs: 10_000 });
+    const post = (path: string, headers: Record<string, string>) =>
+      loopbackRequest(daemon.api.port, path, { method: "POST", headers, body: "{}", timeoutMs: 10_000 });
 
-    const inHeader = await api({ "x-trackwall-session-token": sessionToken });
-    const asBearer = await api({ authorization: `Bearer ${sessionToken}` });
+    const statuses = [
+      (await post(agentsApi.sessions.path, { "x-trackwall-session-token": sessionToken })).status,
+      (await post(agentsApi.sessions.path, { authorization: `Bearer ${sessionToken}` })).status,
+      (await post(`/hooks/../${agentsApi.sessions.path.slice(1)}`, { "x-trackwall-session-token": sessionToken })).status,
+      (await post(`/hooks/%2e%2e/${agentsApi.sessions.path.slice(1)}`, { "x-trackwall-session-token": sessionToken })).status,
+    ];
+
+    expect(statuses).toEqual([401, 401, 401, 401]);
+    await daemon.post(agentsApi.stop, { session: session.id });
+  }, 60_000);
+
+  test("the token of a closed session is refused on MCP, also next to the daemon token", async () => {
+    const session = await daemon.post(agentsApi.start, { repo: "shop" });
+    const sessionToken = tokenOf(daemon.home, session.id);
     await daemon.post(agentsApi.stop, { session: session.id });
     await daemon.post(agentsApi.dismiss, { session: session.id });
-    const closedOnMcp = await postHook("/mcp", { "x-trackwall-session-token": sessionToken }, {});
-    const closedWithDaemonToken = await postHook(
-      "/mcp",
-      { authorization: `Bearer ${TOKEN}`, "x-trackwall-session-token": sessionToken },
-      {},
-    );
 
-    expect([inHeader.status, asBearer.status, closedOnMcp.status, closedWithDaemonToken.status]).toEqual([401, 401, 401, 401]);
-    expect(JSON.parse(closedOnMcp.body).error.message).toContain("this Trackwall session has ended");
+    const alone = await postHook("/mcp", { "x-trackwall-session-token": sessionToken }, {});
+    const withDaemonToken = await postHook("/mcp", { authorization: `Bearer ${TOKEN}`, "x-trackwall-session-token": sessionToken }, {});
+
+    expect([alone.status, withDaemonToken.status]).toEqual([401, 401]);
+    expect(JSON.parse(alone.body).error.message).toBe("unknown session token: this Trackwall session has ended");
   }, 60_000);
 });

@@ -128,32 +128,46 @@ async function handle(req: IncomingMessage, res: ServerResponse, o: ApiOptions, 
   if (path === "/api/health" && req.method === "GET") return ok<Health>(res, { status: "ok", version: o.version });
   const route = protectedRoute(req, res, path, o);
   if (route) {
-    const refused = tokenRefusal(req, path, o);
-    return refused === undefined ? route() : fail(res, "unauthorized", refused);
+    const caller = authenticate(req, route.sessionScoped, o);
+    return "refused" in caller ? fail(res, "unauthorized", caller.refused) : route.run(caller.session);
   }
   if (o.uiDir && (req.method === "GET" || req.method === "HEAD")) return serveStatic(o.uiDir, path, res);
   return fail(res, "not_found", `no route ${req.method} ${path}`);
 }
 
-/** The handler of a route behind the token: the API, MCP and the session plugin's hooks (ADR-88). */
-function protectedRoute(req: IncomingMessage, res: ServerResponse, path: string, o: ApiOptions): (() => Promise<void> | void) | undefined {
-  if (path.startsWith("/api/")) return () => handleApi(req, res, path, o);
-  if (path === MCP_PATH) return () => handleMcp(req, res, o);
-  if (path.startsWith(HOOKS_PATH)) return () => handleHook(req, res, (...args) => o.facade.agents.receiveHook(...args));
+/**
+ * A route behind the token: the API, MCP and the session plugin's hooks (ADR-88). `run` gets the calling Trackwall
+ * session, `null` for a caller with the daemon token and no session token; only a `sessionScoped` route, the two a
+ * session uses, opens to a session token alone (ADR-138).
+ */
+interface ProtectedRoute {
+  sessionScoped: boolean;
+  run: (session: string | null) => Promise<void> | void;
+}
+
+function protectedRoute(req: IncomingMessage, res: ServerResponse, path: string, o: ApiOptions): ProtectedRoute | undefined {
+  if (path.startsWith("/api/")) return { sessionScoped: false, run: () => handleApi(req, res, path, o) };
+  if (path === MCP_PATH) return { sessionScoped: true, run: (session) => o.mcp.handle(req, res, session) };
+  if (path.startsWith(HOOKS_PATH)) {
+    return {
+      sessionScoped: true,
+      run: (session) => handleHook(req, res, path, session, (...args) => o.facade.agents.receiveHook(...args)),
+    };
+  }
   return undefined;
 }
 
 /**
- * Why a request to a protected route is refused, `undefined` when it may pass. The daemon token opens every route; a
- * session token the daemon issued opens only the two a session uses, MCP and the hooks (ADR-138), so the files of a
- * session, which its agent can read, hold no token for the API. Checked before a route reads the body.
+ * Who calls a protected route, once, before the route reads the body. The daemon token opens every route; on a
+ * session-scoped route a session token the daemon issued is enough and says which session calls (ADR-39), so the files
+ * of a session, which its agent can read, hold no token for the API (ADR-138). An unknown session token there is
+ * refused even with the daemon token, so an ended session does not look like an agent outside Trackwall.
  */
-function tokenRefusal(req: IncomingMessage, path: string, o: ApiOptions): string | undefined {
-  if (hasValidToken(req, o.token)) return undefined;
-  const sessionToken = req.headers[SESSION_TOKEN_HEADER];
-  const sessionRoute = path === MCP_PATH || path.startsWith(HOOKS_PATH);
-  if (!sessionRoute || typeof sessionToken !== "string") return "missing or invalid token";
-  return o.facade.agents.callerSession(sessionToken) === undefined ? UNKNOWN_SESSION_TOKEN : undefined;
+function authenticate(req: IncomingMessage, sessionScoped: boolean, o: ApiOptions): { session: string | null } | { refused: string } {
+  const sessionToken = sessionScoped ? req.headers[SESSION_TOKEN_HEADER] : undefined;
+  if (sessionToken === undefined) return hasValidToken(req, o.token) ? { session: null } : { refused: "missing or invalid token" };
+  const session = typeof sessionToken === "string" ? o.facade.agents.callerSession(sessionToken) : undefined;
+  return session === undefined ? { refused: "unknown session token: this Trackwall session has ended" } : { session };
 }
 
 /**
@@ -180,21 +194,6 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
   if (post) return ok(res, await post(o.facade, await readJson(req)));
   return fail(res, "not_found", `no route ${req.method} ${path}`);
 }
-
-/**
- * MCP: the session token header says which Trackwall session calls (ADR-39), and an unknown token is refused even with
- * the daemon token, so an ended session does not look like an agent outside Trackwall; without the header the caller
- * is such an agent, which `tokenRefusal` let in only with the daemon token.
- */
-function handleMcp(req: IncomingMessage, res: ServerResponse, o: ApiOptions): Promise<void> | void {
-  const token = req.headers[SESSION_TOKEN_HEADER];
-  if (token === undefined) return o.mcp.handle(req, res, null);
-  const caller = typeof token === "string" ? o.facade.agents.callerSession(token) : undefined;
-  if (caller === undefined) return fail(res, "unauthorized", UNKNOWN_SESSION_TOKEN);
-  return o.mcp.handle(req, res, caller);
-}
-
-const UNKNOWN_SESSION_TOKEN = "unknown session token: this Trackwall session has ended";
 
 function ok<T>(res: ServerResponse, data: T): void {
   send(res, 200, { ok: true, data } satisfies ApiResult<T>);

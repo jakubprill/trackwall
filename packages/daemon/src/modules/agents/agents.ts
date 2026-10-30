@@ -297,20 +297,18 @@ export class Agents {
     this.#supervisor.assertNone();
   }
 
-  /** The session whose session token came with an MCP request; `undefined` for an unknown token. */
+  /** The session whose session token came with an MCP request or a hook; `undefined` for an unknown token. */
   callerSession(token: string): string | undefined {
     return this.#tokens.session(token);
   }
 
   /**
-   * A hook the plugin of the session with token `sessionToken` POSTed (ADR-88): its record goes to the session's
-   * `hooks.jsonl`, which the session reads as before, and the answer is the hook's output for Copilot CLI: what waits
-   * for the session at the end of a turn or with a tool's result (`LiveSession.hookOutput`, ADR-85), otherwise empty.
-   * A payload that is not a JSON object leaves no record, like a broken hook.
+   * A hook the plugin of session `id` POSTed (ADR-88), recognised by its session token (`callerSession`): its record
+   * goes to the session's `hooks.jsonl`, which the session reads as before, and the answer is the hook's output for
+   * Copilot CLI: what waits for the session at the end of a turn or with a tool's result (`LiveSession.hookOutput`,
+   * ADR-85), otherwise empty. A payload that is not a JSON object leaves no record, like a broken hook.
    */
-  receiveHook(sessionToken: string, event: string, payload: string): CopilotHookOutput {
-    const id = this.#tokens.session(sessionToken);
-    if (id === undefined) throw new DomainError("unauthorized", "unknown session token: this Trackwall session has ended");
+  receiveHook(id: string, event: string, payload: string): CopilotHookOutput {
     const hook = CopilotHookEvent.safeParse(event);
     if (!hook.success) throw new DomainError("not_found", `no hook ${event}`);
     const record = appendHookRecord(sessionHooksFile(this.#deps.home, id), hook.data, payload);

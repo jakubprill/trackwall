@@ -12,7 +12,7 @@ import { TOOL_REGISTRATIONS, type ToolContext } from "./tools.ts";
  * by which the tools also know which session is calling (ADR-39).
  */
 
-/** The MCP server's path: the same port, `Host`/`Origin` protection and token as the API (§5.2). */
+/** The MCP server's path: the same port and `Host`/`Origin` protection as the API, the daemon token or a session token (§5.2). */
 export const MCP_PATH = "/mcp";
 
 /**

@@ -7,17 +7,22 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { handleHook, sessionHookRequest } from "../../src/api/hooks.ts";
 import type { CopilotHookEvent } from "../../src/facade.ts";
+import { SESSION_TOKEN_HEADER } from "../../src/mcp/endpoint.ts";
 import type { Agents } from "../../src/modules/agents/agents.ts";
 
 /** Session token → the `Agents` of its session. */
 const owners = new Map<string, Agents>();
 
 const server = createServer((req, res) => {
-  handleHook(req, res, (sessionToken, event, payload) => {
-    const owner = owners.get(sessionToken);
-    if (owner === undefined) throw new Error("no Agents started a session with this token");
-    return owner.receiveHook(sessionToken, event, payload);
-  }).catch(() => {
+  const sessionToken = req.headers[SESSION_TOKEN_HEADER];
+  const owner = typeof sessionToken === "string" ? owners.get(sessionToken) : undefined;
+  const session = typeof sessionToken === "string" ? owner?.callerSession(sessionToken) : undefined;
+  const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
+  if (owner === undefined || session === undefined) {
+    res.writeHead(401);
+    return void res.end();
+  }
+  handleHook(req, res, path, session, (...args) => owner.receiveHook(...args)).catch(() => {
     res.writeHead(500);
     res.end();
   });

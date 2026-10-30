@@ -74,10 +74,10 @@ _Avoid_: workspace (that is a separate term, see below)
 A thin CLI client of the daemon over HTTP on loopback. It has nothing to do with the `/ws` WebSocket.
 
 **Daemon token**:
-The secret from `~/.trackwall/daemon.json` with which the UI, `ws`, the shell and the stdio bridge authenticate to the API and the MCP server.
+The secret from `~/.trackwall/daemon.json` with which the UI, `ws`, the shell and the stdio bridge authenticate to the API and the MCP server; Trackwall sessions do not get it (ADR-138).
 
 **MCP server** (`/mcp`, `createMcpEndpoint`):
-The part of the daemon through which agents read its state with MCP tools; the same port and token as the API (§5.3, ADR-24).
+The part of the daemon through which agents read its state with MCP tools; the same port as the API, with the daemon token or a Trackwall session's own token (§5.3, ADR-24, ADR-138).
 
 **MCP tool** (`McpTool`, the `mcpTools` list in protocol, for example `list_repos`, `get_repo`, `tail`, `who_calls`, `find_endpoint`, `search_code`, `list_sessions`, `start_service`, `call_endpoint`):
 One call of the MCP server with an English name, input and result described by a schema from `packages/protocol/src/mcp.ts`; a mapping to the facade, without domain logic of its own.
