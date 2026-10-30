@@ -28,7 +28,13 @@ const file = daemonFilePath(home);
 const version = Bun.spawnSync([bin, "--version"]).stdout.toString().trim();
 console.log(`--version: ${version}`);
 
-const proc = Bun.spawn([bin], { env: { ...process.env, TRACKWALL_HOME: home }, stdout: "inherit", stderr: "inherit" });
+// The folder a dev container hands over (ADR-121), as a Windows path: the binary reports it as it is.
+const devContainerFolder = String.raw`C:\Users\me\Dev\work space`;
+const proc = Bun.spawn([bin], {
+  env: { ...process.env, TRACKWALL_HOME: home, TRACKWALL_DEVCONTAINER_HOST_FOLDER: devContainerFolder },
+  stdout: "inherit",
+  stderr: "inherit",
+});
 const deadline = Date.now() + 15_000;
 async function waitForDaemonFile() {
   for (;;) {
@@ -47,6 +53,7 @@ if (!health.ok || health.data.version !== version) throw new Error(`health: ${JS
 const info = DaemonInfoResult.parse(await get("/api/daemon/info"));
 if (!info.ok || info.data.runtime.name !== "bun") throw new Error(`info: ${JSON.stringify(info)}`);
 console.log(`info: ${info.data.platform}/${info.data.arch}, ${info.data.runtime.name} ${info.data.runtime.version}`);
+if (info.data.devContainerFolder !== devContainerFolder) throw new Error(`devContainerFolder: ${JSON.stringify(info.data)}`);
 // In a container (the `container` job of CI, ADR-128) the binary must see it: no desktop to open links on (ADR-120) and
 // the container's id for VS Code links into it (ADR-121).
 if (CONTAINER_MARKERS.some((marker) => existsSync(marker))) {

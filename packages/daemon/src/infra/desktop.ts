@@ -1,4 +1,4 @@
-import type { ContainerId } from "@trackwall/protocol";
+import { type ContainerId, DevContainerFolder } from "@trackwall/protocol";
 import { DomainError } from "./errors.ts";
 
 /**
@@ -34,6 +34,25 @@ export function ownContainer({ exists, read }: { exists: (path: string) => boole
   } catch {
     return null;
   }
+}
+
+/** Set by the dev container (`containerEnv` with `${localWorkspaceFolder}`) to the folder it was opened from (ADR-121). */
+const DEVCONTAINER_HOST_FOLDER_ENV = "TRACKWALL_DEVCONTAINER_HOST_FOLDER";
+
+/**
+ * The folder on the user's computer the dev container was opened from, for VS Code links through its `devcontainer.json`
+ * (ADR-121); `null` when the dev container does not hand it over. A value that is not a path is reported and ignored, so
+ * the links fall back to attaching to the container.
+ */
+export function devContainerFolder(
+  env: Readonly<Record<string, string | undefined>>,
+  log: (msg: string) => void,
+): DevContainerFolder | null {
+  const value = env[DEVCONTAINER_HOST_FOLDER_ENV];
+  if (value === undefined || value === "") return null;
+  const parsed = DevContainerFolder.safeParse(value);
+  if (!parsed.success) log(`${DEVCONTAINER_HOST_FOLDER_ENV} is not a folder path; VS Code links attach to the container instead`);
+  return parsed.success ? parsed.data : null;
 }
 
 export interface DesktopProbe {

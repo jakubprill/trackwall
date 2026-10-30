@@ -103,7 +103,7 @@ function Loaded({ remote, children }: { remote: RemoteHandle<RepoOverview>; chil
 
 /**
  * Opens the repo in VS Code or in the system's folder app (ADR-51); the daemon does it, so it works in the browser too,
- * except when the daemon has no desktop (ADR-120). In a container the page opens VS Code attached to it (ADR-121), and the
+ * except when the daemon has no desktop (ADR-120). In a container the page opens VS Code in it (ADR-121), and the
  * desktop app shows the folder through the projects folder on this computer, when the user has set it (ADR-131).
  */
 function RepoActions({ conn, repo, projectsDir }: { conn: Connection; repo: Repo; projectsDir: string | null | undefined }) {

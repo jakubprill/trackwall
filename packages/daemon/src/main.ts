@@ -9,7 +9,7 @@ import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
 import { createErrorJournal, createFacade, type Facade, HOSTING_CLIS } from "./facade.ts";
 import { type CommandLine, type DaemonArgs, MCP_STDIO_COMMAND, parseCommandLine, USAGE } from "./infra/args.ts";
-import { desktopOpeners, hasDesktop, ownContainer } from "./infra/desktop.ts";
+import { desktopOpeners, devContainerFolder, hasDesktop, ownContainer } from "./infra/desktop.ts";
 import { newToken, probeRunningDaemon, watchDaemonFile, withStartLock, writeDaemonFile } from "./infra/discovery.ts";
 import { watchEventLoopStalls } from "./infra/event-loop-stalls.ts";
 import { resolveTrackwallHome, trackwallHome } from "./infra/home.ts";
@@ -72,6 +72,7 @@ async function start(
   let stopWatching = () => {};
   const desktop = hasDesktop({ platform: process.platform, env: process.env, exists: existsSync });
   const container = ownContainer({ exists: existsSync, read: (path) => readFileSync(path, "utf8") });
+  const devContainer = devContainerFolder(process.env, log);
   // Sessions start only through the API, so their hooks and MCP server always have its port.
   const apiPort = () => {
     if (!api) throw new Error("a session started before the API listens");
@@ -128,6 +129,7 @@ async function start(
           mcpStdioCommand: mcpStdioCommand(home),
           desktop,
           container,
+          devContainerFolder: devContainer,
         }),
         onShutdown: () => void shutdown("POST /api/daemon/shutdown"),
         facade,
