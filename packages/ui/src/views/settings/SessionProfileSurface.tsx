@@ -42,6 +42,7 @@ export function SessionProfileSurface({ conn }: { conn: Connection }) {
             configFile={data.configFile}
             folder={false}
             save={(profile) => save(profile)}
+            resetLabel="No profile"
             reset={data.sessionProfile === null && !data.sessionProfileProblem ? undefined : () => save(null)}
           />
         )}

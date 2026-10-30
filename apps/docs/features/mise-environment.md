@@ -51,16 +51,16 @@ Copilot CLI can talk to another model provider instead of your GitHub account, f
    COPILOT_MODEL = "your-model"
    ```
 
-   Add the key with `mise set --age-encrypt --stdin -E byok COPILOT_PROVIDER_API_KEY` in the same folder, and trust the file with `mise trust`.
+   Add the key with `mise set --age-encrypt --stdin -E byok COPILOT_PROVIDER_API_KEY` in the same folder, and trust the file with `mise trust mise.byok.toml`.
 2. In "Settings > Agents > Session profile", type `byok` and click "Save".
-3. Start a session: the line under its header says "profile byok", and the key is among the secrets hidden from the agent's tools.
+3. Start a session: the line under its header says "profile byok". Every `COPILOT_PROVIDER_*` variable counts as a secret, so the key and the address are hidden from the agent's tools and masked in what Trackwall keeps.
 
-Sessions that were already running show "The environment from mise changed": **Restart to apply** moves them over. To go back to your GitHub account, click "Use default"; nothing needs a restart of Trackwall.
+Sessions that were already running show "The environment from mise changed": **Restart to apply** moves them over. To go back to your GitHub account, click "No profile"; nothing needs a restart of Trackwall.
 
 ## Good to know
 
 - It needs `mise` on your `PATH`. Without it sessions start with your own environment only.
-- A session profile is a plain name such as `byok`. mise reads `mise.<profile>.toml` wherever it reads `mise.toml`, so a repo's own `mise.byok.toml` applies to sessions in that repo too, once you trust it. A name in `workspace.yaml` that is not a plain name stops sessions from starting until you fix it.
+- If you start Trackwall with `MISE_ENV` set, sessions read that environment and then the profile, so the profile wins where both set a variable. A session profile is a plain name such as `byok`. mise reads `mise.<profile>.toml` wherever it reads `mise.toml`, so a repo's own `mise.byok.toml` applies to sessions in that repo too, once you trust it. A name in `workspace.yaml` that is not a plain name stops sessions from starting until you fix it.
 - Trackwall reads the environment when a session starts, since Copilot CLI cannot take a new one while it runs. When `mise.toml` or `agentSecrets` changes, a running session shows "The environment from mise changed" with the names that are new, changed or removed (never the values). **Restart to apply** stops the session and starts it again with the same conversation: a free session, a session in a repo, a task and the supervisor alike. The button waits while the agent is in the middle of a turn. Trackwall checks every 15 seconds while the panel is open.
 - Only the configs from where a session works up to the projects folder count. In a monorepo, a `mise.toml` or `mise.local.toml` in a package folder below the repo root does not reach the session, even though `mise env` in that folder shows its variables. Put what a session needs into the config at the repo root, and build paths with `{{config_root}}`, the folder of the file that sets them: `CLIENT_CERT = "{{config_root}}/packages/orders/certs/client.pem"`.
 - A config mise does not trust is never trusted for you: trust a repo's config in its [mise tasks](/features/mise-tasks) tab. A task's worktree uses its own config only while the agent has not changed it.

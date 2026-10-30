@@ -352,15 +352,25 @@ export class Mise {
    * a run; the worktree is never read when the root is refused, since its trust rests on the root's. A refused repo root
    * falls back to the projects folder, which is also the only place of the supervisor and a free session. Each refused
    * place is a line of the session's problem. Without mise there is nothing and no problem. With a session profile
-   * (ADR-136) mise reads every place with `MISE_ENV` set to it, which only sessions get: runs and services read mise
-   * without it, and Copilot CLI gets the variables mise sets, not `MISE_ENV` itself.
+   * (ADR-136) mise reads every place with the profile added to `MISE_ENV`, after any environment the daemon itself was
+   * started with, which only sessions get: runs and services read mise without it, and Copilot CLI gets the variables
+   * mise sets, with `MISE_ENV` as the user's environment has it.
    */
   async sessionEnv(place: SessionPlace): Promise<SessionMiseEnv> {
     const profile = this.deps.repos.sessionProfile();
     // A copy: the user's environment is shared with runs and services, which never get the profile.
     const env = { ...(await this.deps.env()) };
-    if (profile !== null) env[envKey(env, MISE_ENV)] = profile;
+    if (profile !== null) {
+      const key = envKey(env, MISE_ENV);
+      const inherited = env[key];
+      env[key] = inherited ? `${inherited},${profile}` : profile;
+    }
     return { ...(await this.sessionEnvIn(place, env)), profile };
+  }
+
+  /** The projects folder's environment as mise gives it without a session profile, for the view of the config files (ADR-108). */
+  async projectsEnv(): Promise<Omit<SessionMiseEnv, "profile">> {
+    return this.sessionEnvIn({ repo: null, task: null }, { ...(await this.deps.env()) });
   }
 
   private async sessionEnvIn({ repo, task }: SessionPlace, env: NodeJS.ProcessEnv): Promise<Omit<SessionMiseEnv, "profile">> {

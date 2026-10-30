@@ -437,10 +437,6 @@ export class Workspace {
     return session.supervisor ? supervisorToolPermissions(rules, this.supervisorSettings()) : sessionToolPermissions(rules, session.repo);
   }
 
-  /**
-   * The supervisor settings (`supervisor` in `workspace.yaml`, ADR-78); `invalid_config` for a bad key, so that a typo
-   * never lifts the supervisor's denial.
-   */
   /** The mise environment new sessions start with (ADR-136); `null` removes it. Takes effect at the next session start. */
   setSessionProfile(profile: SessionProfile | null): WorkspaceSettings {
     this.deps.file.setSessionProfile(profile);
@@ -455,6 +451,10 @@ export class Workspace {
     return this.deps.file.sessionProfile();
   }
 
+  /**
+   * The supervisor settings (`supervisor` in `workspace.yaml`, ADR-78); `invalid_config` for a bad key, so that a typo
+   * never lifts the supervisor's denial.
+   */
   supervisorSettings(): SupervisorSettings {
     return this.deps.file.supervisorSettings();
   }

@@ -253,7 +253,7 @@ describe.skipIf(process.versions.bun === undefined)(
       await agents.stop(started.id);
     }, 60_000);
 
-    test("a session profile chosen in Settings gives new sessions that mise environment, hides its key from the tools, and shows a running session a change to restart for", async () => {
+    test("a session profile chosen in Settings gives new sessions that mise environment, hides the provider's settings from the tools, and shows a running session a change to restart for", async () => {
       const { agents, workspace: settings } = daemon.facade;
       projectsMise({
         env: { SHOP_REGION: "projects-folder" },
@@ -282,12 +282,12 @@ describe.skipIf(process.versions.bun === undefined)(
         await waitFor(agents, started.id, () => window.text().includes("Env SHOP_REGION=byok"), "the profile's environment on the screen");
         expect(started.environment).toEqual({
           variables: ["COPILOT_PROVIDER_API_KEY", "COPILOT_PROVIDER_BASE_URL", "SHOP_REGION"],
-          secrets: ["COPILOT_PROVIDER_API_KEY"],
+          secrets: ["COPILOT_PROVIDER_API_KEY", "COPILOT_PROVIDER_BASE_URL"],
           agentSecrets: [],
           profile: "byok",
           problem: null,
         });
-        expect(window.text()).toContain("Argument: --secret-env-vars=COPILOT_PROVIDER_API_KEY");
+        expect(window.text()).toContain("Argument: --secret-env-vars=COPILOT_PROVIDER_API_KEY,COPILOT_PROVIDER_BASE_URL");
         window.attachment.detach();
         await agents.stop(started.id);
       } finally {

@@ -310,8 +310,8 @@ export const workspaceApi = {
    */
   setGitProgram: endpoint("set-git-program", z.object({ path: z.string().min(1).max(4096).nullable() }).strict(), WorkspaceSettings),
   /**
-   * The mise environment new sessions start with (ADR-136); `null` removes `sessionProfile` from `workspace.yaml`. Only
-   * from the UI, never from MCP: an agent must not choose the model provider of sessions.
+   * The mise environment new sessions start with (ADR-136); `null` removes `sessionProfile` from `workspace.yaml`. No MCP
+   * tool sets it: an agent must not choose the model provider of sessions.
    */
   setSessionProfile: endpoint("set-session-profile", z.object({ profile: SessionProfile.nullable() }).strict(), WorkspaceSettings),
   overview: endpoint("overview", RepoRequest, RepoOverview),

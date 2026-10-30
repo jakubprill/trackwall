@@ -187,7 +187,7 @@ export const SessionEnvironment = z.object({
    */
   agentSecrets: z.array(z.string()),
   /** The session profile it started with (`MISE_ENV`, ADR-136); `null` without one. */
-  profile: z.string().nullable().default(null),
+  profile: z.string().nullable(),
   /**
    * Why the session got less than its place gives, e.g. a mise config that is not trusted or an age key that is missing;
    * `null` when nothing is missing (also without mise).

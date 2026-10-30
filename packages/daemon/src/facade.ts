@@ -318,7 +318,7 @@ export function createFacade(o: FacadeOptions): Facade {
     copilotTrust: trustedFolders,
     trustedFolderOf,
     projectsMiseEnv: async () => {
-      const env = await mise.sessionEnv({ repo: null, task: null });
+      const env = await mise.projectsEnv();
       return { variables: Object.keys(env.vars), secrets: env.secretNames, problem: env.problem };
     },
     localConfigStore: () => localConfig.store(),

@@ -467,8 +467,9 @@ describe("the environment mise sets (ADR-93)", () => {
         COPILOT_PROVIDER_BASE_URL: "http://127.0.0.1:4000/v1",
         COPILOT_PROVIDER_API_KEY: "sk-local",
       },
-      secretNames: ["COPILOT_PROVIDER_API_KEY"],
-      secretValues: ["sk-local"],
+      // Every setting of Copilot CLI's provider is a secret: its address may carry a key too.
+      secretNames: ["COPILOT_PROVIDER_BASE_URL", "COPILOT_PROVIDER_API_KEY"],
+      secretValues: ["http://127.0.0.1:4000/v1", "sk-local"],
       profile: "byok",
       problem: null,
     });
@@ -480,6 +481,25 @@ describe("the environment mise sets (ADR-93)", () => {
       vars: { MAVEN_OPTS: "-Xmx2g", COPILOT_MODEL: "from-the-repo" },
       profile: null,
     });
+  });
+
+  test("a session profile comes after the mise environment the daemon was started with, and the config files view reads without it", async () => {
+    const { mise, useProfile, home } = setup({ tasks: [] });
+    writeFileSync(
+      join(home, "fake-mise.json"),
+      JSON.stringify({ tasks: [], env: { REGION: "plain" }, envByMiseEnv: { ci: { REGION: "ci", CI: "1" }, byok: { REGION: "byok" } } }),
+    );
+    useProfile("byok");
+    const before = process.env.MISE_ENV;
+    process.env.MISE_ENV = "ci";
+    try {
+      expect((await mise.sessionEnv({ repo: null, task: null })).vars).toEqual({ REGION: "byok", CI: "1" });
+      expect((await mise.projectsEnv()).vars).toEqual({ REGION: "ci", CI: "1" });
+      expect(process.env.MISE_ENV).toBe("ci");
+    } finally {
+      if (before === undefined) delete process.env.MISE_ENV;
+      else process.env.MISE_ENV = before;
+    }
   });
 
   test("a session in the projects folder gets its variables, and a missing age key there is the session's problem", async () => {
