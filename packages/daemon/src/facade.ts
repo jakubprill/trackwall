@@ -222,8 +222,9 @@ export function createFacade(o: FacadeOptions): Facade {
     onTaskRemoved: (task) => logs.removeTaskLogs(task),
     log: o.log,
   });
-  // Tasks ended while the daemon was not running left their logs behind (ADR-59).
-  logs.removeTaskLogsExcept(agents.sessions().tasks.map((t) => t.id));
+  // A removal that failed on a held file, or a crash before it, leaves an ended task's logs behind (ADR-59). An unreadable
+  // task list was moved aside and may come back, so then nothing is removed.
+  if (!agents.taskListLost()) logs.removeTaskLogsExcept(agents.sessions().tasks.map((t) => t.id));
   const mise: Mise = new Mise({
     procs,
     repos: workspace,

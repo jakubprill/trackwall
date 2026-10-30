@@ -1,5 +1,3 @@
-import { readdirSync, rmSync } from "node:fs";
-import { join } from "node:path";
 import {
   LOG_BUFFER_RECORDS,
   type LogErrors,
@@ -11,7 +9,7 @@ import {
   type LogTailRequest,
 } from "@trackwall/protocol";
 import { collectErrors } from "./log-errors.ts";
-import { fileName, LogFile, logFilePath, sourceParts, taskLogDir, taskLogsRoot } from "./log-file.ts";
+import { LogFile, logFilePath, otherTaskLogDirs, removeLogDir, sourceParts, TASK_LOG_KIND, taskLogDir } from "./log-file.ts";
 import { logLevel } from "./log-level.ts";
 import { RunOutput } from "./run-output.ts";
 import { maskSecrets, secretValues } from "./secret-mask.ts";
@@ -21,7 +19,7 @@ import { maskSecrets, secretValues } from "./secret-mask.ts";
  * Every source has a buffer of recent records in memory (for the UI and MCP, read from a cursor) and a JSONL file in the state
  * directory. A line is masked and cleaned of ANSI in `RunOutput` before it reaches the buffer or the file. The logs of a
  * task's worktree go with the task (ADR-59): its buffers and its directory when it ends, and at daemon start the
- * directories of tasks that ended while the daemon was not running.
+ * directories of tasks that are no longer known (a removal that failed on a held file, or a crash before it).
  */
 
 /** Writes to files in batches: a noisy process gives hundreds of lines per second. */
@@ -133,27 +131,28 @@ export class Logs {
    * cannot be removed (a file held open on Windows) is logged and removed at a later daemon start.
    */
   removeTaskLogs(task: string): void {
-    for (const [key, log] of this.sources) if (log.source.kind === "task-mise-task" && log.source.task === task) this.sources.delete(key);
+    for (const [key, log] of this.sources) if (log.source.kind === TASK_LOG_KIND && log.source.task === task) this.sources.delete(key);
     this.removeDir(taskLogDir(this.deps.dir, task));
   }
 
-  /** At daemon start: removes the log directories of tasks that are not in `tasks` (ADR-59), such as ones ended while it was down. */
+  /**
+   * At daemon start: removes the log directories of tasks that are not in `tasks` (ADR-59), left by a removal that failed
+   * or a crash before it. Best effort: a directory that cannot be listed is logged, and the daemon starts anyway.
+   */
   removeTaskLogsExcept(tasks: readonly string[]): void {
-    const root = taskLogsRoot(this.deps.dir);
-    const kept = new Set(tasks.map(fileName));
-    let names: string[];
+    let dirs: string[];
     try {
-      names = readdirSync(root);
+      dirs = otherTaskLogDirs(this.deps.dir, tasks);
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
-      throw err;
+      this.deps.log(`listing the task log directories: ${String(err)}; trying again at the next daemon start`);
+      return;
     }
-    for (const name of names) if (!kept.has(name)) this.removeDir(join(root, name));
+    for (const dir of dirs) this.removeDir(dir);
   }
 
   private removeDir(path: string): void {
     try {
-      rmSync(path, { recursive: true, force: true });
+      removeLogDir(path);
     } catch (err) {
       this.deps.log(`removing ${path}: ${String(err)}; trying again at the next daemon start`);
     }

@@ -425,6 +425,22 @@ describe("log file", () => {
 
     expect(existsSync(join(dir, "task-mise-task", "gone"))).toBe(false);
     expect(existsSync(join(dir, "task-mise-task", "kept"))).toBe(true);
-    expect(() => newLogs().logs.removeTaskLogsExcept([])).not.toThrow();
+  });
+
+  test("at daemon start without any task log directory nothing is removed and nothing fails", () => {
+    const { logs, messages } = newLogs();
+
+    logs.removeTaskLogsExcept([]);
+
+    expect(messages).toEqual([]);
+  });
+
+  test("at daemon start a task log directory that cannot be listed is logged instead of stopping the start", () => {
+    const { dir, logs, messages } = newLogs();
+    writeFileSync(join(dir, "task-mise-task"), "not a directory");
+
+    logs.removeTaskLogsExcept([]);
+
+    expect(messages).toEqual([expect.stringContaining("listing the task log directories")]);
   });
 });

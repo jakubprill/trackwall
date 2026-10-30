@@ -174,6 +174,11 @@ export class AgentTasks {
     return this.#tasks.map(view);
   }
 
+  /** Whether the stored task list was unreadable at daemon start (moved aside): the list is then not every known task. */
+  get storedListLost(): boolean {
+    return this.#deps.file.lost;
+  }
+
   /** Whether a task can get jdtls now (ADR-99), read from `workspace.yaml` and the disk at every call. */
   javaNavigation(): JavaNavigationReadiness {
     return javaNavigationReadiness(() => this.#deps.repos.javaNavigation());

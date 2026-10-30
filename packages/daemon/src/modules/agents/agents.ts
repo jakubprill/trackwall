@@ -276,6 +276,11 @@ export class Agents {
     });
   }
 
+  /** Whether the stored task list was unreadable at daemon start, so tasks may exist that the list does not show. */
+  taskListLost(): boolean {
+    return this.#tasks.storedListLost;
+  }
+
   sessions(): SessionList {
     const tasks = this.#tasks.list();
     // A proposal being approved that is already a task is only a task: the UI and `list_sessions` see one object.

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { appendFileSync, mkdirSync, renameSync, statSync } from "node:fs";
+import { appendFileSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { LogSource } from "@trackwall/protocol";
 
@@ -92,17 +92,37 @@ export function logFilePath(dir: string, source: LogSource): string {
   return `${join(dir, kind, ...encoded)}.jsonl`;
 }
 
-/** The directory of every log of a task's worktree (`logs/task-mise-task/<task>`), removed with the task (ADR-59). */
-export function taskLogDir(dir: string, task: string): string {
-  return join(dir, TASK_LOG_KIND, fileName(task));
-}
+/** The kind of the sources of a task's worktree, whose logs go with the task (ADR-59). */
+export const TASK_LOG_KIND = "task-mise-task" satisfies LogSource["kind"];
 
 /** The directory of the logs of task worktrees, one subdirectory per task. */
-export function taskLogsRoot(dir: string): string {
+function taskLogsRoot(dir: string): string {
   return join(dir, TASK_LOG_KIND);
 }
 
-const TASK_LOG_KIND = "task-mise-task" satisfies LogSource["kind"];
+/** The directory of every log of a task's worktree (`logs/task-mise-task/<task>`), as `sourceParts` lays it out. */
+export function taskLogDir(dir: string, task: string): string {
+  return join(taskLogsRoot(dir), fileName(task));
+}
+
+/** Removes a log directory with its files; a few retries get past a short lock (an antivirus scan on Windows). */
+export function removeLogDir(path: string): void {
+  rmSync(path, { recursive: true, force: true, maxRetries: 3 });
+}
+
+/** The task log directories on disk other than those of `tasks`; none when there is no such directory yet. */
+export function otherTaskLogDirs(dir: string, tasks: readonly string[]): string[] {
+  const root = taskLogsRoot(dir);
+  const kept = new Set(tasks.map(fileName));
+  let names: string[];
+  try {
+    names = readdirSync(root);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw err;
+  }
+  return names.filter((name) => !kept.has(name)).map((name) => join(root, name));
+}
 
 /** The kind and names of a source, from general to specific: the log directories and file, and the source key in memory. */
 export function sourceParts(source: LogSource): [string, ...string[]] {
@@ -110,7 +130,7 @@ export function sourceParts(source: LogSource): [string, ...string[]] {
     case "mise-task":
       return [source.kind, source.repo, source.miseTask];
     // Without the repo: the task id names it, and a shorter path keeps the file under 260 characters on Windows.
-    case "task-mise-task":
+    case TASK_LOG_KIND:
       return [source.kind, source.task, source.miseTask];
     case "mise-install":
       return [source.kind, source.repo];
