@@ -83,6 +83,13 @@ pnpm --filter @trackwall/docs screenshots task-review          # only the named 
 
 The screenshots need Chromium for Playwright once: `pnpm --filter @trackwall/docs exec playwright install chromium`.
 
+`idle-cost` measures how much the daemon does while nothing happens, as a number to compare before and after a change to its read cycles. It starts the demo's twenty repos and a session in each repo the demo's Copilot CLI stand-in plays, waits until they rest, and leaves them alone twice: first with nobody listening to the `/ws` events, then with one listener, as a window keeps. Last, it fetches one round of repo statuses, as the Home and Repos views do every 30 seconds. It prints the CPU time of the daemon process, how often the session screens were parsed and the session list was read, and on Linux the CPU of the round's git processes; the listener runs in the same process, so the second phase includes its share. It needs neither mise nor a model. On Windows the time of the status round shows what starting its git processes costs there, which a Linux run cannot show:
+
+```sh
+pnpm --filter @trackwall/daemon idle-cost        # 20 s per phase
+pnpm --filter @trackwall/daemon idle-cost 60     # 60 s per phase
+```
+
 The same daemon also runs under plain Node, without Bun (ADR-1): `pnpm --filter @trackwall/ui build`, then `pnpm --filter @trackwall/daemon start:node`.
 
 ## Portable build
