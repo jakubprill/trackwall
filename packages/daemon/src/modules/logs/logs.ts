@@ -96,9 +96,11 @@ export class Logs {
    */
   tail({ source, sinceSeq, limit, contains, minLevel }: LogTailRequest): LogTail {
     const log = this.sources.get(sourceKey(source));
+    const all = log?.records ?? [];
     const matches = containsText(contains);
     const shown = atLeast(minLevel);
-    const records = (log?.records ?? []).filter((r) => shown(r) && matches(r.msg));
+    // The UI polls without a filter: no copy of the buffer then.
+    const records = contains === undefined && minLevel === undefined ? all : all.filter((r) => shown(r) && matches(r.msg));
     const fromOtherRun = this.fromOtherRun(sinceSeq);
     if (sinceSeq === undefined || fromOtherRun) return { records: records.slice(-limit), nextSeq: this.seq, dropped: fromOtherRun };
     const start = records.findIndex((r) => r.seq > sinceSeq);

@@ -439,7 +439,7 @@ export const mcpTools = {
       `Only the latest records are kept (at most ${LOG_BUFFER_RECORDS} per mise task, since Trackwall started). Pass nextSeq as sinceSeq ` +
       "to get only errors that started after the previous call; dropped: true as in tail. To read the log of a mise task from an error on, " +
       "call tail with sinceSeq one less than the error's seq. contains keeps only errors with a line (also one left out of lines) " +
-      "that contains the text, e.g. an exception class or an endpoint path.",
+      "that contains the text, e.g. an exception class or an endpoint path; count then counts only the matching occurrences.",
     args: z
       .object({
         repo: RepoArg.optional(),

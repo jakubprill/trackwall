@@ -270,6 +270,8 @@ describe.skipIf(process.versions.bun === undefined)("mise tasks from a Trackwall
       expect(orders.records.map((r) => r.msg)).toEqual(["INFO OrderService started", "\tat shop.OrderService.place(OrderService.java:42)"]);
       expect(warnings.records.map((r) => r.level)).toEqual(["warn", "error", "error"]);
       expect(errors.errors.map((e) => e.lines[0])).toEqual(["ERROR java.lang.IllegalStateException: order 7 has no lines"]);
+      expect((await call(outside, "tail", { ...where, limit: 10, contains: "" })).isError).toBe(true);
+      expect((await call(outside, "get_errors", { ...where, contains: "x".repeat(201) })).isError).toBe(true);
     },
     TIMEOUT,
   );
