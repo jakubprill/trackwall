@@ -277,7 +277,8 @@ export class SessionLauncher {
   }
 
   #role(repo: string | null, supervisor: boolean, task: string | null): SessionRole {
-    if (repo !== null) return { kind: "repo", repo, task, handoff: task === null ? null : this.#deps.handoff(task) };
+    if (repo !== null && task !== null) return { kind: "task", repo, task, handoff: this.#deps.handoff(task) };
+    if (repo !== null) return { kind: "repo", repo };
     return supervisor ? { kind: "supervisor", changesCode: this.#deps.repos.supervisorSettings().changesCode } : { kind: "free" };
   }
 

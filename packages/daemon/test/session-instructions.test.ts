@@ -9,7 +9,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
   test("a task session's file applies to the whole session and carries its role and the MCP instruction", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
     const dir = writeSessionInstructions(sessionDir, "0.3.0", {
-      kind: "repo",
+      kind: "task",
       repo: "shop",
       task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427",
       handoff: null,
@@ -36,7 +36,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
   test("a task session follows its proposer's message over the task's prompt, and only the user's own text over a message", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
     writeSessionInstructions(sessionDir, "0.4.1", {
-      kind: "repo",
+      kind: "task",
       repo: "shop",
       task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427",
       handoff: null,
@@ -54,7 +54,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
   test("a task session proposes the work that builds on its change after committing it, to the repos that call what it changed (ADR-143)", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
     writeSessionInstructions(sessionDir, "0.5.13", {
-      kind: "repo",
+      kind: "task",
       repo: "payments",
       task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427",
       handoff: null,
@@ -76,10 +76,10 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     const read = (ended: boolean) => {
       const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
       writeSessionInstructions(sessionDir, "0.5.13", {
-        kind: "repo",
+        kind: "task",
         repo: "orders-api",
         task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427",
-        handoff: { ...handoff, ended },
+        handoff: ended ? { task: handoff.task, repo: handoff.repo, branch: handoff.branch, ended } : { ...handoff, ended },
       });
       return readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     };
@@ -93,11 +93,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
   });
 
   test("a main session and the supervisor get no messages, so not the rule for weighing them", () => {
-    const roles: SessionRole[] = [
-      { kind: "repo", repo: "shop", task: null, handoff: null },
-      { kind: "supervisor", changesCode: false },
-      { kind: "free" },
-    ];
+    const roles: SessionRole[] = [{ kind: "repo", repo: "shop" }, { kind: "supervisor", changesCode: false }, { kind: "free" }];
     for (const role of roles) {
       const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
       writeSessionInstructions(sessionDir, "0.4.1", role);
@@ -108,7 +104,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
 
   test("every session learns which Trackwall version started it and where the user sees it", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
-    writeSessionInstructions(sessionDir, "0.3.0", { kind: "repo", repo: "shop", task: null, handoff: null });
+    writeSessionInstructions(sessionDir, "0.3.0", { kind: "repo", repo: "shop" });
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain("Trackwall 0.3.0 started this Copilot CLI session");
     expect(text).toContain("The user sees this session in Trackwall's Sessions view");
@@ -116,7 +112,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
 
   test("a session in the repo root is a main session and does not get the task rules", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
-    writeSessionInstructions(sessionDir, "0.3.0", { kind: "repo", repo: "shop", task: null, handoff: null });
+    writeSessionInstructions(sessionDir, "0.3.0", { kind: "repo", repo: "shop" });
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain("You are a main session in the root of the repo `shop`");
     expect(text).not.toContain("Work only in this worktree");
@@ -198,7 +194,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
 
   test("a session directory with a comma in its path gets no file, because the variable splits on commas", () => {
     const sessionDir = join(mkdtempSync(join(tmpdir(), "trackwall-instructions-")), "a,b");
-    expect(writeSessionInstructions(sessionDir, "0.3.0", { kind: "repo", repo: "shop", task: null, handoff: null })).toBeNull();
+    expect(writeSessionInstructions(sessionDir, "0.3.0", { kind: "repo", repo: "shop" })).toBeNull();
     expect(existsSync(sessionDir)).toBe(false);
   });
 

@@ -18,4 +18,4 @@ export const TaskHandoff = z.object({
 export type TaskHandoff = z.infer<typeof TaskHandoff>;
 
 /** A handoff as a session start sees it: `ended` once the handing task is no longer on the list, so its changes cannot be read. */
-export type HandoffFacts = TaskHandoff & { ended: boolean };
+export type HandoffFacts = (TaskHandoff & { ended: false }) | (Omit<TaskHandoff, "commit"> & { ended: true });

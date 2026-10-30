@@ -21,12 +21,13 @@ const INSTRUCTIONS_FILE = "trackwall.instructions.md";
 /**
  * Who the session is: the supervisor in the projects folder (ADR-58), which may change code only with
  * `supervisor.changesCode` (ADR-78), a free session in the projects folder (ADR-100), or in a repo a main session in its
- * root (`task: null`) or a task session in the task's worktree, with the task that handed it its work (ADR-143).
+ * root, or a task session in the task's worktree, with the task that handed it its work (ADR-143).
  */
 export type SessionRole =
   | { kind: "supervisor"; changesCode: boolean }
   | { kind: "free" }
-  | { kind: "repo"; repo: string; task: string | null; handoff: HandoffFacts | null };
+  | { kind: "repo"; repo: string }
+  | { kind: "task"; repo: string; task: string; handoff: HandoffFacts | null };
 
 /**
  * Writes the instructions of a session started by Trackwall `version` to `<sessionDir>/instructions/` and returns that
@@ -74,7 +75,7 @@ function sessionInstructions(version: string, role: SessionRole): string {
 function sessionRole(role: SessionRole): string[] {
   if (role.kind === "supervisor") return supervisorRole(role.changesCode);
   if (role.kind === "free") return freeRole();
-  return role.task === null ? repoRole(role.repo) : taskRole(role.repo, role.task, role.handoff);
+  return role.kind === "repo" ? repoRole(role.repo) : taskRole(role.repo, role.task, role.handoff);
 }
 
 function supervisorRole(changesCode: boolean): string[] {
@@ -130,14 +131,15 @@ function taskRole(repo: string, task: string, handoff: HandoffFacts | null): str
 }
 
 /** Where the work a task builds on is (ADR-143), with facts from Trackwall's own list and git, not from the proposer's prompt. */
-function handoffLines({ task, repo, branch, commit, ended }: HandoffFacts): string[] {
+function handoffLines(handoff: HandoffFacts): string[] {
+  const { task, repo, branch } = handoff;
   const from = `the task \`${task}\` in the repo \`${repo}\` (branch \`${branch}\`)`;
-  if (ended)
+  if (handoff.ended)
     return [
       `- Your task was handed to you by ${from}, which the user has ended since, so ${mcpTools.getTaskChanges.name} no longer reads it. Its branch may still be in the repo; ask the user through ${mcpTools.reportResult.name} if your work needs it.`,
     ];
   return [
-    `- Your task was handed to you by ${from}: its session proposed your task, and the user approved it when that branch was at commit \`${commit}\`. That branch is not merged, so this worktree does not have its change. Before you change code that builds on it, read what it changed with ${mcpTools.getTaskChanges.name} and task \`${task}\` (its commits and uncommitted work; narrow it with paths to the API spec, controllers or messages). Build against the contract it changed (an endpoint, a field, a message), not a copy of its code.`,
+    `- Your task was handed to you by ${from}: its session proposed your task, and the user approved it when that branch was at commit \`${handoff.commit}\`. This worktree was made from the default branch, not from that branch, so it does not have that change. Before you change code that builds on it, read what it changed with ${mcpTools.getTaskChanges.name} and task \`${task}\` (its commits and uncommitted work as they are now; narrow it with paths to the files that define the contract). Build against the contract it changed (an endpoint, a field, a message), not a copy of its code.`,
     `- A question about that change goes into your ${mcpTools.reportResult.name}: the session of task \`${task}\` reads your result.`,
   ];
 }

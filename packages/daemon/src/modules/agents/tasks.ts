@@ -352,7 +352,9 @@ export class AgentTasks {
   handoff(id: string): HandoffFacts | null {
     const handoff = this.#tasks.find((t) => t.id === id)?.handoff ?? null;
     if (handoff === null) return null;
-    return { ...handoff, ended: !this.#tasks.some((t) => t.id === handoff.task) };
+    if (this.#tasks.some((t) => t.id === handoff.task)) return { ...handoff, ended: false };
+    const { commit: _, ...ended } = handoff;
+    return { ...ended, ended: true };
   }
 
   /**

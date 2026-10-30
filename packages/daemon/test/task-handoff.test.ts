@@ -70,7 +70,7 @@ describe.skipIf(process.versions.bun === undefined)(
       const childSession = runningSession(child.id);
 
       expect(instructionsOf(childSession)).toContain(
-        `- Your task was handed to you by the task \`${parent.id}\` in the repo \`payments\` (branch \`${parent.branch}\`): its session proposed your task, and the user approved it when that branch was at commit \`${parentHead}\`. That branch is not merged, so this worktree does not have its change. Before you change code that builds on it, read what it changed with get_task_changes and task \`${parent.id}\``,
+        `- Your task was handed to you by the task \`${parent.id}\` in the repo \`payments\` (branch \`${parent.branch}\`): its session proposed your task, and the user approved it when that branch was at commit \`${parentHead}\`. This worktree was made from the default branch, not from that branch, so it does not have that change. Before you change code that builds on it, read what it changed with get_task_changes and task \`${parent.id}\``,
       );
       expect(instructionsOf(childSession)).toContain(
         `- A question about that change goes into your report_result: the session of task \`${parent.id}\` reads your result.`,
