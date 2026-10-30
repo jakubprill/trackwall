@@ -1,10 +1,28 @@
 import { describe, expect, test } from "bun:test";
-import { javaNavigationMark, javaNavigationOffer, javaNavigationPollMs, javaNavigationSetup } from "../src/lib/java-navigation.ts";
+import {
+  javaNavigationInView,
+  javaNavigationMark,
+  javaNavigationOffer,
+  javaNavigationPollMs,
+  javaNavigationSetup,
+} from "../src/lib/java-navigation.ts";
 
 const JAVA = [{ name: "java", reason: "build file pom.xml" }];
 const TYPESCRIPT = [{ name: "typescript", reason: "typescript dependency in package.json" }];
 
 describe("Java navigation on the New session form", () => {
+  test("a task in the conversation view cannot have it yet, and the pill says how to get it back", () => {
+    expect(javaNavigationInView({ kind: "ready" }, "conversation")).toEqual({
+      kind: "unavailable",
+      reason: "Needs the terminal for now: turn Chat off to use it.",
+    });
+    expect(javaNavigationInView({ kind: "ready" }, "terminal")).toEqual({ kind: "ready" });
+    expect(javaNavigationInView({ kind: "hidden" }, "conversation")).toEqual({ kind: "hidden" });
+    // Turning Chat off would not set it up, so the reason it has stays.
+    const notSetUp = { kind: "unavailable" as const, reason: "Not set up yet: install it in Settings › Agents." };
+    expect(javaNavigationInView(notSetUp, "conversation")).toEqual(notSetUp);
+  });
+
   test("a repo tagged java gets it when the daemon can start the language server", () => {
     expect(javaNavigationOffer(JAVA, { problem: null })).toEqual({ kind: "ready" });
   });

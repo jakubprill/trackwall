@@ -1,4 +1,4 @@
-import { TASK_MODEL_MAX, type TaskApprovals } from "@trackwall/protocol";
+import { type SessionView, TASK_MODEL_MAX, type TaskApprovals } from "@trackwall/protocol";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { typedModel } from "@/lib/task-model";
@@ -7,8 +7,8 @@ import { cn } from "@/lib/utils";
 /**
  * The options of a new task or session as one row of pills under its prompt, on the New session form and on a task
  * proposal: each pill shows its state and a click changes it, its explanation is the pill's tooltip, and a pill is there
- * only where the option means something (a model and an approvals mode only for a task in its own worktree, Java
- * navigation only for a task in a repo tagged java). A pill the user cannot turn on yet stays visible with the reason
+ * only where the option means something (a model, an approvals mode and the conversation view only for a task in its
+ * own worktree, Java navigation only for a task in a repo tagged java). A pill the user cannot turn on yet stays visible with the reason
  * in its tooltip. An option
  * that gives up a safeguard (no worktree, no approvals) has a warning dot, and no approvals also its consequences under
  * the row, before the start.
@@ -19,6 +19,7 @@ export function StartOptions({
   approvals,
   model,
   javaNavigation,
+  view,
   disabled,
 }: {
   /** What the options belong to, named in every accessible name so that several proposals on one screen keep their controls apart. */
@@ -28,6 +29,8 @@ export function StartOptions({
   model?: { value: string; onChange: (value: string) => void };
   /** `unavailable` is why it cannot be turned on now; `null` when it can. */
   javaNavigation?: { value: boolean; onChange: (value: boolean) => void; unavailable: string | null };
+  /** Whether the task shows as a terminal or in the conversation view (ADR-137), still a preview. */
+  view?: { value: SessionView; onChange: (value: SessionView) => void };
   disabled: boolean;
 }) {
   return (
@@ -69,6 +72,18 @@ export function StartOptions({
             tooltip="The agent gets a Java language server for its own worktree: it finds definitions, usages and implementations instead of searching the text. The first start indexes the project, which takes a minute or more and up to 2 GB of memory."
           >
             Java navigation
+          </Pill>
+        )}
+        {view && (
+          <Pill
+            label={named("Chat (preview)", subject)}
+            on={view.value === "conversation"}
+            risky={false}
+            disabled={disabled}
+            onClick={() => view.onChange(view.value === "conversation" ? "terminal" : "conversation")}
+            tooltip="The task shows as a conversation in Trackwall instead of Copilot CLI's terminal: what you and the agent wrote, its tool calls and approvals, and a message box. Every resume opens it the same way."
+          >
+            Chat (preview)
           </Pill>
         )}
       </div>

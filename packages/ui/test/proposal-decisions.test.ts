@@ -47,9 +47,9 @@ describe("starting several task proposals", () => {
     const calls: string[] = [];
     const result = await startProposals(
       [
-        { id: "p1", prompt: "do p1", model: null, approvals: "ask" },
-        { id: "p2", prompt: "do p2", model: null, approvals: "ask" },
-        { id: "p3", prompt: "do p3, edited", model: "claude-opus-5.5", approvals: "ask" },
+        { id: "p1", prompt: "do p1", model: null, approvals: "ask", view: "terminal" },
+        { id: "p2", prompt: "do p2", model: null, approvals: "ask", view: "terminal" },
+        { id: "p3", prompt: "do p3, edited", model: "claude-opus-5.5", approvals: "ask", view: "terminal" },
       ],
       async ({ id, prompt }) => {
         calls.push(`${id}: ${prompt}`);
