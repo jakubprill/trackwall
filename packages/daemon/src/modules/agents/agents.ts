@@ -40,20 +40,19 @@ import { CopilotHookEvent } from "./copilot-hook-record.ts";
 import { appendHookRecord } from "./hook-tail.ts";
 import { inboxPrompt } from "./inbox-prompt.ts";
 import { javaNavigationState } from "./java-language-server.ts";
-import { type LastSupervisor, LastSupervisorFile } from "./last-supervisor.ts";
+import { LAST_SUPERVISOR_FILE, type LastSupervisor, LastSupervisorFile } from "./last-supervisor.ts";
+import { ListedSessions, resumableOf } from "./listed-sessions.ts";
 import { LiveSession, type SessionEvent, type SessionWindow } from "./live-session.ts";
 import { MiseTrustNotices, type TrustRecipient, trustRecipientOf } from "./mise-trust-notices.ts";
 import { proposedByOf, proposerKeyOf, proposerOf, SUPERVISOR } from "./proposer.ts";
 import { type ResumableSession, ResumableSessions, resumablePlace, type SessionLaunch, sessionLaunch } from "./resumable-sessions.ts";
 import type { SessionMiseEnv } from "./session-env.ts";
-import { SessionEnvironments } from "./session-env-change.ts";
 import {
   type LauncherProcs,
   type SessionCallbacks,
   SessionLauncher,
   type SessionPlace,
   type StartedSession,
-  sessionDir,
   sessionHooksFile,
   sessionOwner,
   sessionsDir,
@@ -69,24 +68,23 @@ import { AgentTasks, type TasksVcs } from "./tasks.ts";
 import type { ScreenViewer } from "./terminal-screen.ts";
 
 /**
- * The `agents` module (§4.4, ADR-26): Copilot CLI sessions started from the UI in a repo from the projects folder, several
- * at once. A session is Copilot CLI in a process group of the `procs` module, either in a PTY owned by the daemon with a
- * session plugin whose hooks report the state (ADR-17), or over ACP in the conversation view (ADR-107). The daemon builds
- * the command; only a repo identifier comes from outside (§1.2); how a session starts is `session-launcher.ts`. Sessions
- * live in daemon memory: the daemon's exit stops them together with the other process groups. A session can belong to a
- * task (ADR-31, `tasks.ts`): it then runs in the task's worktree, and the task outlives the daemon. A session can also
- * propose tasks, report the summary of its task and wait for another session (ADR-39): the MCP server recognises it by
- * its session token, and a task from a proposal starts only after the user approves it. One session, the supervisor
- * (ADR-58), runs in the projects folder instead of a repo, above all the others. A task's proposer sends its session
- * messages and hears about its work through updates (ADR-68, `task-coordination.ts`).
+ * The `agents` module (§4.4, ADR-26): Copilot CLI sessions started from the UI in a repo from the projects folder,
+ * several at once. A session is Copilot CLI in a process group of the `procs` module, either in a PTY owned by the
+ * daemon with a session plugin whose hooks report the state (ADR-17), or over ACP in the conversation view (ADR-107).
+ * The daemon builds the command; only a repo identifier comes from outside (§1.2); how a session starts is
+ * `session-launcher.ts`, and the list of sessions `listed-sessions.ts`. Sessions live in daemon memory: the daemon's
+ * exit stops them together with the other process groups. A session can belong to a task (ADR-31, `tasks.ts`): it then
+ * runs in the task's worktree, and the task outlives the daemon. A session can also propose tasks, report the summary
+ * of its task and wait for another session (ADR-39): the MCP server recognises it by its session token, and a task from
+ * a proposal starts only after the user approves it. One session, the supervisor (ADR-58), runs in the projects folder
+ * instead of a repo, above all the others. A task's proposer sends its session messages and hears about its work
+ * through updates (ADR-68, `task-coordination.ts`).
  */
 
-/** How often sessions read hook records and check for the end of the process. */
-const TICK_MS = 200;
 export const TASKS_FILE = "tasks.json";
 /** The sessions that run, for the next daemon to resume (ADR-95). */
 export const RESUMABLE_SESSIONS_FILE = "resumable-sessions.json";
-export const LAST_SUPERVISOR_FILE = "last-supervisor.json";
+export { LAST_SUPERVISOR_FILE } from "./last-supervisor.ts";
 /** Proposals, reviews, messages and updates that wait, for the next daemon (ADR-115). */
 export const AGENT_QUEUES_FILE = "agent-queues.json";
 /** Where task worktrees went before ADR-84; tasks from then keep them there until they end. */
@@ -169,7 +167,7 @@ export type WaitTarget = { session: string } | { task: string };
 
 export class Agents {
   readonly #deps: AgentsDeps;
-  readonly #sessions = new Map<string, AgentSession>();
+  readonly #sessions: ListedSessions;
   readonly #tokens = new SessionTokens();
   readonly #tasks: AgentTasks;
   readonly #proposals = new TaskProposals(() => this.#queues.follow());
@@ -178,14 +176,11 @@ export class Agents {
   readonly #coordination: TaskCoordination;
   /** The supervisor start under way, so that two requests at once start one supervisor, not two (ADR-58). */
   #supervisorStart: Promise<Session> | undefined;
-  #timer: NodeJS.Timeout | undefined;
   readonly #resumable: ResumableSessions;
   /** The sessions the previous daemon left running, until `resumeLeftSessions` takes them (ADR-95). */
   #left: ResumableSession[] = [];
   readonly #lastSupervisor: LastSupervisorFile;
   readonly #queues: AgentQueuesFile;
-  /** The environment each listed session started with, to tell when mise would give it another one (ADR-119). */
-  readonly #environments = new SessionEnvironments();
   /** The sessions a restart is stopping and starting again: a second restart of one would unlist the first one's new session. */
   readonly #restarting = new Set<string>();
   readonly #launcher: SessionLauncher;
@@ -208,6 +203,14 @@ export class Agents {
     });
     this.#resumable = new ResumableSessions(join(deps.home, RESUMABLE_SESSIONS_FILE), deps.log);
     this.#lastSupervisor = new LastSupervisorFile(join(deps.home, LAST_SUPERVISOR_FILE), deps.log);
+    this.#sessions = new ListedSessions({
+      state: (owner) => deps.procs.state(owner),
+      home: deps.home,
+      tokens: this.#tokens,
+      resumable: this.#resumable,
+      lastSupervisor: this.#lastSupervisor,
+      log: deps.log,
+    });
     this.#tasks = new AgentTasks({
       vcs: deps.vcs,
       repos: deps.repos,
@@ -218,7 +221,7 @@ export class Agents {
       log: deps.log,
       sessions: {
         launch: (spec) => this.#launch({ ...spec, supervisor: false }),
-        of: (task) => this.#views().filter((s) => s.task === task),
+        of: (task) => this.#sessions.views().filter((s) => s.task === task),
         close: (id) => this.#close(id),
       },
     });
@@ -227,8 +230,8 @@ export class Agents {
       findTask: (id) => this.findTask(id),
       proposedBy: (id) => proposedByOf(this.session(id)),
       proposerKey: (id) => proposerKeyOf(this.session(id)),
-      runningOfTask: (task) => this.#runningOfTask(task),
-      runningProposer: (proposer) => [...this.#sessions.values()].find((s) => proposerKeyOf(s) === proposer && this.#isRunning(s)),
+      runningOfTask: (task) => this.#sessions.runningOfTask(task),
+      runningProposer: (proposer) => this.#sessions.runningWhere((s) => proposerKeyOf(s) === proposer),
       hasProposer: (proposer) => proposer === SUPERVISOR || this.#sessions.has(proposer),
       changed: () => this.#queues.follow(),
       log: deps.log,
@@ -251,12 +254,12 @@ export class Agents {
     // A proposal being approved that is already a task is only a task: the UI and `list_sessions` see one object.
     const proposals = this.#proposals.list().filter((p) => !tasks.some((t) => t.id === p.id));
     const lastSupervisor = this.#resumableSupervisor()?.session ?? null;
-    return { sessions: this.#views(), tasks, proposals, messages: this.#coordination.messages(), lastSupervisor };
+    return { sessions: this.#sessions.views(), tasks, proposals, messages: this.#coordination.messages(), lastSupervisor };
   }
 
   /** One listed session (`not_found` when it does not exist or the user closed it). */
   session(id: string): Session {
-    return this.#view(this.#get(id));
+    return this.#sessions.view(this.#sessions.get(id));
   }
 
   /**
@@ -310,7 +313,7 @@ export class Agents {
   }
 
   #runningSupervisor(): Session | undefined {
-    return this.#views().find((s) => isSupervisor(s) && s.run.kind !== "exited");
+    return this.#sessions.views().find((s) => isSupervisor(s) && s.run.kind !== "exited");
   }
 
   /**
@@ -334,7 +337,7 @@ export class Agents {
   }
 
   async #replaceSupervisor(spec: SessionLaunch): Promise<Session> {
-    const ended = this.#views().filter(isSupervisor);
+    const ended = this.#sessions.views().filter(isSupervisor);
     const cwd = await this.#deps.repos.projectsDir();
     // The ended supervisor whose conversation this one goes on with under its id gives up its place before the start.
     if (this.#sessions.has(spec.id)) this.#close(spec.id);
@@ -361,7 +364,7 @@ export class Agents {
     const hook = CopilotHookEvent.safeParse(event);
     if (!hook.success) throw new DomainError("not_found", `no hook ${event}`);
     const record = appendHookRecord(sessionHooksFile(this.#deps.home, id), hook.data, payload);
-    return this.#sessions.get(id)?.hookOutput(record) ?? {};
+    return this.#sessions.find(id)?.hookOutput(record) ?? {};
   }
 
   /** A task proposal from session `caller` (`null`: an agent outside Trackwall) in a repo from the projects folder (ADR-39). */
@@ -444,7 +447,7 @@ export class Agents {
   }
 
   #assertNothingRunsIn(repo: string, repoDir: string): void {
-    const sessions = this.#views().filter((s) => s.repo === repo && s.task === null && s.run.kind !== "exited");
+    const sessions = this.#sessions.views().filter((s) => s.repo === repo && s.task === null && s.run.kind !== "exited");
     if (sessions.length > 0) throw new DomainError("bad_request", `stop the sessions in ${repo} first (${sessions.length} running)`);
     if (this.#tasks.creatingIn(repo)) throw new DomainError("bad_request", `a task of ${repo} is being created; wait for it, then end it`);
     const tasks = this.#tasks.list().filter((t) => t.repo === repo);
@@ -478,7 +481,7 @@ export class Agents {
     this.#tasks.task(id);
     const unread = this.#reviews.add(id, comments);
     this.#coordination.reviewed(id);
-    const running = this.#runningOfTask(id);
+    const running = this.#sessions.runningOfTask(id);
     return { unread, delivery: running ? running.askToRead() : "on_resume" };
   }
 
@@ -538,7 +541,7 @@ export class Agents {
     }
     const task = this.#tasks.find(target.task);
     if (task) {
-      const session = this.#views().find((s) => s.task === task.id) ?? null;
+      const session = this.#sessions.views().find((s) => s.task === task.id) ?? null;
       const status = session ? sessionWaitStatus(session) : this.#tasks.busy(task.id) ? "starting" : "no_session";
       return outcome(status, { task, session });
     }
@@ -673,7 +676,7 @@ export class Agents {
    * user trusts the config; any try drops what an earlier refusal waited for.
    */
   async runNeedingMiseTrust<T>(caller: string | null, target: MiseTarget, run: () => Promise<T>): Promise<T> {
-    const session = caller === null ? undefined : this.#sessions.get(caller);
+    const session = caller === null ? undefined : this.#sessions.find(caller);
     if (session === undefined) return run();
     const recipient = trustRecipientOf(session);
     this.#miseTrust.forget(recipient);
@@ -731,20 +734,18 @@ export class Agents {
 
   /** A started session joins the list. */
   #listed({ session, miseEnv, mise }: StartedSession): Session {
-    this.#sessions.set(session.id, session);
-    this.#environments.remember(session.id, miseEnv, mise);
+    this.#sessions.add({ session, miseEnv, mise });
     // A review or a message sent while the task had no running session (ADR-62, ADR-68); the prompt names only what is
     // unread, and nothing is typed when nothing is. Not the updates of a new supervisor or main session: the user starts
     // those to talk, and the next update asks them anyway.
     if (session.task !== null) session.askToRead();
-    this.#startTicking();
-    return this.#view(session);
+    return this.#sessions.view(session);
   }
 
   async stop(id: string): Promise<Session> {
-    const session = this.#get(id);
+    const session = this.#sessions.get(id);
     await this.#deps.procs.stop(sessionOwner(id));
-    return this.#view(session);
+    return this.#sessions.view(session);
   }
 
   /**
@@ -752,10 +753,10 @@ export class Agents {
    * `change: null` for none, and for an ended session, which starts with the new one anyway.
    */
   async environmentChange(id: string): Promise<EnvironmentCheck> {
-    const session = this.#get(id);
-    if (!this.#isRunning(session)) return { change: null };
+    const session = this.#sessions.get(id);
+    if (!this.#sessions.isRunning(session)) return { change: null };
     const { miseEnv, mise } = await this.#launcher.mise({ repo: session.repo, task: session.task });
-    return { change: this.#environments.changeSince(id, miseEnv, mise) };
+    return { change: this.#sessions.environmentChange(id, miseEnv, mise) };
   }
 
   /**
@@ -766,18 +767,18 @@ export class Agents {
    * Copilot CLI still keeps its conversation.
    */
   async restart(id: string): Promise<Session> {
-    const session = this.#get(id);
+    const session = this.#sessions.get(id);
     if (this.#restarting.has(id)) throw new DomainError("bad_request", "the session is already restarting");
-    if (!this.#isRunning(session)) throw new DomainError("bad_request", "the session has ended; start it again instead");
-    const { repo, supervisor, task } = session;
-    const left: ResumableSession = { session: id, repo, supervisor, task, view: session.sessionView, ...resumedAs(session) };
+    if (!this.#sessions.isRunning(session)) throw new DomainError("bad_request", "the session has ended; start it again instead");
+    const { supervisor, task } = session;
+    const left = resumableOf(session);
     this.#restarting.add(id);
     try {
       // What can refuse the start (a bad name in `agentSecrets`, Copilot CLI gone) refuses it before the stop, so the
       // session goes on as it was.
       await this.#launcher.inputs(session);
       // The user may have stopped or closed the session meanwhile: it is not started again behind their back.
-      if (this.#sessions.get(id) !== session || !this.#isRunning(session))
+      if (this.#sessions.find(id) !== session || !this.#sessions.isRunning(session))
         throw new DomainError("bad_request", "the session has ended; start it again instead");
       await this.#deps.procs.stop(sessionOwner(id));
       if (task === null && !supervisor) this.#unlist(session);
@@ -789,11 +790,11 @@ export class Agents {
 
   /** Answers a running session's approval from outside its terminal (ADR-66); see `LiveSession.answerDialog`. */
   answerDialog(id: string, dialog: string, answer: DialogAnswer): Session {
-    const session = this.#get(id);
+    const session = this.#sessions.get(id);
     // The state after the hooks already written, so that an approval just answered in the terminal is not answered again.
-    if (this.#fresh(session)?.run.kind !== "running") throw new DomainError("dialog_changed", "the session is no longer running");
+    if (!this.#sessions.isRunning(session)) throw new DomainError("dialog_changed", "the session is no longer running");
     session.answerDialog(dialog, answer);
-    return this.#view(session);
+    return this.#sessions.view(session);
   }
 
   /** Closes an ended session: it disappears from the list, and its files from the state directory. The session's task stays. */
@@ -804,7 +805,7 @@ export class Agents {
 
   /** A session terminal: first the screen image, then live output, and `onClosed` when the session disappears. */
   attach(id: string, viewer: ScreenViewer, onSnapshot: (snapshot: string) => void, onClosed: () => void): SessionWindow {
-    const session = this.#get(id);
+    const session = this.#sessions.get(id);
     if (!(session instanceof LiveSession)) throw new DomainError("bad_request", `session ${id} shows as a conversation, not a terminal`);
     return session.attach(viewer, onSnapshot, onClosed);
   }
@@ -817,20 +818,20 @@ export class Agents {
   /** A message from the user to a session in the conversation view (ADR-107). */
   say(id: string, text: string): Session {
     const session = this.#conversationOf(id);
-    if (!this.#isRunning(session)) throw new DomainError("bad_request", "the session is no longer running");
+    if (!this.#sessions.isRunning(session)) throw new DomainError("bad_request", "the session is no longer running");
     session.say(text);
-    return this.#view(session);
+    return this.#sessions.view(session);
   }
 
   /** Stops the turn of a session in the conversation view (ADR-107). */
   interrupt(id: string): Session {
     const session = this.#conversationOf(id);
     session.interrupt();
-    return this.#view(session);
+    return this.#sessions.view(session);
   }
 
   #conversationOf(id: string): AcpSession {
-    const session = this.#get(id);
+    const session = this.#sessions.get(id);
     if (!(session instanceof AcpSession)) throw new DomainError("bad_request", `session ${id} runs in a terminal, not as a conversation`);
     return session;
   }
@@ -898,7 +899,7 @@ export class Agents {
 
   /** A task's only session after resuming it, which closes its ended ones: running, or already ended when its agent exited at once. */
   #sessionOfTask(task: string): Session {
-    const session = this.#views().find((s) => s.task === task);
+    const session = this.#sessions.views().find((s) => s.task === task);
     if (!session) throw new Error(`task ${task} has no session after resuming`);
     return session;
   }
@@ -908,7 +909,7 @@ export class Agents {
    * (ADR-115), unlike a new one (`#listed`); a task's session is asked anyway.
    */
   #askToReadLeft(id: string): void {
-    const session = this.#sessions.get(id);
+    const session = this.#sessions.find(id);
     if (session !== undefined && this.#inboxPrompt(session) !== undefined) session.askToRead();
   }
 
@@ -929,22 +930,18 @@ export class Agents {
    * and the queues stay as they are now (ADR-115), with the user's latest typing in them.
    */
   keepRunningSessionsForResume(): void {
-    // The list of this moment, not of the last check: a session stopped or started since then counts as it is now.
-    this.#followLive([...this.#sessions.values()].filter((s) => this.#deps.procs.state(sessionOwner(s.id))?.kind === "running"));
-    this.#followLastSupervisor();
+    this.#sessions.keepRunningForResume();
     this.#queues.follow();
-    this.#resumable.stopFollowing();
     this.#queues.stopFollowing();
   }
 
   /** Daemon exit: `procs.stopAll` stops the processes, here only the observing ends. */
   close(): void {
-    clearInterval(this.#timer);
-    this.#timer = undefined;
+    this.#sessions.close();
   }
 
   #close(id: string): void {
-    const session = this.#get(id);
+    const session = this.#sessions.get(id);
     if (this.#deps.procs.state(sessionOwner(id))?.kind !== "exited") {
       throw new DomainError("bad_request", "the session is still running; stop it before closing");
     }
@@ -954,18 +951,9 @@ export class Agents {
 
   /** The session leaves the list with its files; what waits for it in the coordination stays for whoever comes under its id. */
   #unlist(session: AgentSession): void {
-    this.#sessions.delete(session.id);
-    this.#environments.forget(session.id);
-    this.#tokens.revoke(session.id);
+    this.#sessions.remove(session);
     // A task's notice stays for its next session, like its reviews and messages.
     if (session.task === null) this.#miseTrust.forget({ session: session.id });
-    session.dispose();
-    this.#removeDir(session.id);
-  }
-
-  /** Sessions, newest first. */
-  #views(): Session[] {
-    return [...this.#sessions.values()].flatMap((s) => this.#fresh(s) ?? []).reverse();
   }
 
   /** How a session of either view tells the daemon what it did. */
@@ -986,90 +974,10 @@ export class Agents {
     };
   }
 
-  #startTicking(): void {
-    this.#timer ??= setInterval(() => this.#tick(), TICK_MS);
-    this.#timer.unref();
-  }
-
-  #tick(): void {
-    const live: AgentSession[] = [];
-    for (const session of this.#sessions.values()) {
-      try {
-        if (session.tick()) live.push(session);
-      } catch (err) {
-        live.push(session);
-        this.#deps.log(`session ${session.id}: ${String(err)}`);
-      }
-    }
-    this.#followLive(live);
-    this.#followLastSupervisor();
-    if (live.length === 0) this.close();
-  }
-
-  /** The list of running sessions a restart resumes (ADR-95); a failed write is retried at the next tick. */
-  #followLive(live: readonly AgentSession[]): void {
-    this.#resumable.follow(
-      live.map((s) => ({ session: s.id, repo: s.repo, supervisor: s.supervisor, task: s.task, view: s.sessionView, ...resumedAs(s) })),
-    );
-  }
-
-  /** The newest listed supervisor, which a start with `last` goes on with (ADR-96); a failed write is retried at the next tick. */
-  #followLastSupervisor(): void {
-    const newest = [...this.#sessions.values()].findLast(isSupervisor);
-    if (newest === undefined) return;
-    try {
-      this.#lastSupervisor.follow({ session: newest.id, ...resumedAs(newest) });
-    } catch (err) {
-      this.#deps.log(`writing ${LAST_SUPERVISOR_FILE}: ${String(err)}`);
-    }
-  }
-
   /** The running session a trust notice is for: the newest one of its task, or the session itself. */
   #runningOf(recipient: TrustRecipient): AgentSession | undefined {
-    if ("task" in recipient) return this.#runningOfTask(recipient.task);
-    const session = this.#sessions.get(recipient.session);
-    return session !== undefined && this.#isRunning(session) ? session : undefined;
+    if ("task" in recipient) return this.#sessions.runningOfTask(recipient.task);
+    const session = this.#sessions.find(recipient.session);
+    return session !== undefined && this.#sessions.isRunning(session) ? session : undefined;
   }
-
-  /** The task's newest session while it runs. */
-  #runningOfTask(task: string): AgentSession | undefined {
-    return [...this.#sessions.values()].reverse().find((s) => s.task === task && this.#isRunning(s));
-  }
-
-  /** The state after the hooks already written, as `#fresh` reads it. */
-  #isRunning(session: AgentSession): boolean {
-    return this.#fresh(session)?.run.kind === "running";
-  }
-
-  #get(id: string): AgentSession {
-    const session = this.#sessions.get(id);
-    if (!session) throw new DomainError("not_found", `no session ${id}`);
-    return session;
-  }
-
-  /** The session's state after reading new hook records and the end of the process. */
-  #fresh(session: AgentSession): Session | undefined {
-    session.tick();
-    return session.view();
-  }
-
-  #view(session: AgentSession): Session {
-    const view = this.#fresh(session);
-    if (!view) throw new Error(`session ${session.id} has no process group`);
-    return view;
-  }
-
-  #removeDir(id: string): void {
-    try {
-      rmSync(sessionDir(this.#deps.home, id), { recursive: true, force: true });
-    } catch (err) {
-      this.#deps.log(`removing session files ${id}: ${String(err)}`);
-    }
-  }
-}
-
-/** How a restart or a start with `last` goes on with the session's conversation (ADR-95, ADR-96, ADR-107). */
-function resumedAs(session: AgentSession): { hasConversation: boolean; conversation?: string } {
-  const { hasConversation, conversation } = session;
-  return conversation === undefined || conversation === session.id ? { hasConversation } : { hasConversation, conversation };
 }
