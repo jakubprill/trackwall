@@ -1,4 +1,5 @@
 import {
+  type CardProblem,
   type CardWarmupProgress,
   MISE_CONFIG_FILE,
   type RepoCard,
@@ -12,6 +13,7 @@ import { mapLimit } from "../../infra/map-limit.ts";
 import { CallReads, readCallFiles } from "./call-files.ts";
 import type { CardCache } from "./card-cache.ts";
 import { CardWarmup, type WarmupRepo } from "./card-warmup.ts";
+import { type EndpointChange, endpointChanges } from "./endpoint-changes.ts";
 import { CALL_SOURCES, CARD_DOCUMENTS, CARD_SOURCES, extractCard, readsCardFile } from "./extract-card.ts";
 import { localMiseTasks } from "./local-mise.ts";
 import { readSnapshot, type SnapshotVcs } from "./read-snapshot.ts";
@@ -137,7 +139,21 @@ export class Cards {
   /** The card of the HEAD commit of the repo in directory `dir`; `null` in a repo without commits. */
   private async cardOf(dir: string): Promise<RepoCard | null> {
     const commit = await this.deps.vcs.headCommit(dir);
-    if (commit === null) return null;
+    return commit === null ? null : this.cardAt(dir, commit);
+  }
+
+  /**
+   * The endpoints the commits of the worktree in `dir` change against commit `base` (ADR-145), from the cards of both
+   * commits, with the problems of the HEAD's card; uncommitted work is not in a card (ADR-14).
+   */
+  async endpointChanges(dir: string, base: string): Promise<{ head: string; changes: EndpointChange[]; problems: CardProblem[] }> {
+    const head = await this.deps.vcs.headCommit(dir);
+    if (head === null) throw new DomainError("repo_unavailable", `${dir}: the worktree has no commit`);
+    const [before, after] = await Promise.all([this.cardAt(dir, base), this.cardAt(dir, head)]);
+    return { head, changes: endpointChanges(before, after), problems: after.problems };
+  }
+
+  private async cardAt(dir: string, commit: string): Promise<RepoCard> {
     return this.deps.cache.getOrCompute(commit, async () => {
       const known = { accepts: CALL_SOURCES, kept: (oid: string) => this.callReads.get(oid) };
       const snapshot = await readSnapshot(this.deps.vcs, dir, commit, readsCardFile, CARD_SOURCES, known, CARD_DOCUMENTS);

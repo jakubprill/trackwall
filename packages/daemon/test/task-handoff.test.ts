@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
-import { agentsApi, GetHandoffResult, ProposeTaskResult } from "@trackwall/protocol";
+import { agentsApi, GetChangedEndpointsResult, GetHandoffResult, ProposeTaskResult } from "@trackwall/protocol";
 import { sessionDir } from "../src/modules/agents/session-launcher.ts";
 import { viewer, waitFor } from "./support/agents.ts";
 import { commitFiles, gitIn } from "./support/git-repo.ts";
@@ -75,6 +75,20 @@ describe.skipIf(process.versions.bun === undefined)(
       expect(instructionsOf(childSession)).toContain(
         `- A question about that change goes into your report_result: the session of task \`${parent.id}\` reads your result.`,
       );
+      // The subtask reads which endpoints the handing task's commits changed: a repo without endpoints has none.
+      const changed = await (await clientOfSession(childSession)).callTool({
+        name: "get_changed_endpoints",
+        arguments: { task: parent.id },
+      });
+      expect(GetChangedEndpointsResult.parse(changed.structuredContent)).toEqual({
+        task: parent.id,
+        repo: "payments",
+        base: parent.base,
+        head: parentHead,
+        endpoints: [],
+        truncated: false,
+        problems: [],
+      });
 
       // The user ends the handing task; the subtask's next session is told it can no longer read it.
       await daemon.facade.agents.stop(childSession);

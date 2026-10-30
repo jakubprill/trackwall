@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { apiEndpoints } from "./api.ts";
-import { MechanismEvidence, TagName } from "./cards.ts";
+import { CardProblem, MechanismEvidence, TagName } from "./cards.ts";
 import { Evidence } from "./evidence.ts";
 import { EndpointSource, HttpClientVia, HttpMethod, OpenApiOperation } from "./http.ts";
-import { RepoId } from "./workspace.ts";
+import { CommitHash, RepoId } from "./workspace.ts";
 
 /**
  * Contract of the `graph` module (§4.6, ADR-29, ADR-30, ADR-116): the graph of connections between the repos of the projects folder.
@@ -257,6 +257,52 @@ export const FindEndpointResult = z.object({
   truncated: z.boolean(),
 });
 export type FindEndpointResult = z.infer<typeof FindEndpointResult>;
+
+/** At most this many changed endpoints in `get_changed_endpoints`; more is a generated API, not one change. */
+export const MAX_CHANGED_ENDPOINTS = 100;
+
+/** An endpoint's contract on one side of a change: its handler and its request and response types (ADR-38). */
+export const EndpointContract = z.object({
+  handler: z.string().nullable(),
+  request: z.string().nullable(),
+  response: z.string().nullable(),
+});
+export type EndpointContract = z.infer<typeof EndpointContract>;
+
+/**
+ * An endpoint a task's commits add, remove or change (ADR-145), known by its app, method and path: a changed path is a
+ * removed endpoint and an added one. `changed` is a request or response type that changed, or a DTO reachable from
+ * them whose fields or constants changed.
+ */
+export const ChangedEndpoint = z.object({
+  change: z.enum(["added", "removed", "changed"]),
+  app: z.string().nullable(),
+  method: HttpMethod.nullable(),
+  path: z.string(),
+  /** `null` for an added endpoint. */
+  before: EndpointContract.nullable(),
+  /** `null` for a removed endpoint. */
+  after: EndpointContract.nullable(),
+  /** The DTOs reachable from the endpoint's request or response whose fields or constants changed, added or went. */
+  dtos: z.array(z.string()),
+  /** The repos whose HTTP clients call the endpoint as the default branch has it, like in `find_endpoint`; `[]` for an added one. */
+  callers: z.array(EndpointCaller),
+});
+export type ChangedEndpoint = z.infer<typeof ChangedEndpoint>;
+
+/** The endpoints a task's commits change against its base commit (`get_changed_endpoints`, ADR-145). */
+export const ChangedEndpoints = z.object({
+  repo: RepoId,
+  base: CommitHash,
+  /** The commit of the task's HEAD the endpoints were read from; uncommitted work is not in it. */
+  head: CommitHash,
+  endpoints: z.array(ChangedEndpoint),
+  /** More changed than `MAX_CHANGED_ENDPOINTS`. */
+  truncated: z.boolean(),
+  /** What the card of the head commit could not read, so a change there may be missing. */
+  problems: z.array(CardProblem),
+});
+export type ChangedEndpoints = z.infer<typeof ChangedEndpoints>;
 
 const endpoint = apiEndpoints("graph");
 

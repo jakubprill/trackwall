@@ -144,7 +144,7 @@ function toDto(declared: TypeDeclaration, path: string, problems: CardProblem[])
  * Type names in type notation (`Map<String,List<Api.Line>>` → `Map`, `String`, `List`, `Line`): the last part of every
  * qualified name when it starts with a capital letter, because the earlier parts are a package or an outer type, not a DTO.
  */
-function typeNames(type: string): string[] {
+export function typeNames(type: string): string[] {
   return (type.match(/[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*/g) ?? []).map(simpleName).filter(isTypeName);
 }
 

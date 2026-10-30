@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ConsumedHttp, GraphConfig, ProvidedApp, ProvidedEndpoint, RepoCard } from "@trackwall/protocol";
@@ -14,7 +14,7 @@ import type { GraphCardInput } from "../src/modules/graph/graph-input.ts";
 import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
-import { commitFiles, makeRepo } from "./support/git-repo.ts";
+import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
 import { fakeHosting } from "./support/hosting.ts";
 import { NO_REACH, snapshotOf } from "./support/snapshot.ts";
 import { fixtureFiles } from "./support/spring-fixtures.ts";
@@ -761,6 +761,70 @@ describe("the graph and find_endpoint on real git", () => {
       expect(product?.callers.map((c) => [c.repo, c.via, c.client, c.path, c.from])).toEqual([
         ["back-office", "openapi", "Catalog", "/shop/catalog/v1/products/{id}", null],
       ]);
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
+    "a task's commits in its worktree give the endpoints they change, with the repos that call them as the default branch has them (ADR-145)",
+    async () => {
+      const { graph, projects, home } = await setup();
+      const repo = join(projects, "orders-api");
+      const base = gitIn(repo, "rev-parse", "HEAD").trim();
+      const worktree = join(home, "orders-api-task");
+      gitIn(repo, "worktree", "add", "-b", "trackwall/cancel-by-post", worktree, base);
+      const controller = "src/main/java/com/example/orders/api/OrdersController.java";
+      commitFiles(
+        worktree,
+        {
+          "src/main/java/com/example/orders/api/OrderLine.java":
+            "package com.example.orders.api;\n\n@lombok.Data\npublic class OrderLine {\n    private String sku;\n    private int quantity;\n    private String note;\n}\n",
+          [controller]: readFileSync(join(repo, controller), "utf8").replace("method = RequestMethod.PUT", "method = RequestMethod.POST"),
+        },
+        "Cancel by POST and add a note to order lines",
+      );
+
+      const changed = await graph.changedEndpoints("orders-api", worktree, base);
+
+      expect(changed.head).toBe(gitIn(worktree, "rev-parse", "HEAD").trim());
+      expect(changed.truncated).toBe(false);
+      expect(
+        changed.endpoints.map((e) => [
+          e.change,
+          `${e.method} ${e.path}`,
+          e.dtos,
+          e.callers.map((c) => `${c.repo} ${c.client} ${c.evidence.path}:${c.evidence.line}`),
+        ]),
+      ).toEqual([
+        [
+          "changed",
+          "GET /api/orders/{id}",
+          ["OrderLine"],
+          [
+            "legacy-reports OrdersReport src/main/java/com/example/reports/OrdersReport.java:17",
+            "orders-bff OrdersClient src/main/kotlin/com/example/bff/OrdersClient.kt:11",
+            "orders-bff OrdersClient src/main/kotlin/com/example/bff/OrdersClient.kt:11",
+          ],
+        ],
+        [
+          "changed",
+          "POST /api/orders",
+          ["OrderLine"],
+          [
+            "orders-bff OrdersClient src/main/kotlin/com/example/bff/OrdersClient.kt:14",
+            "orders-bff OrdersClient src/main/kotlin/com/example/bff/OrdersClient.kt:14",
+          ],
+        ],
+        // The default branch's PUT has a caller, which the task's POST breaks.
+        [
+          "removed",
+          "PUT /api/orders/{id}/cancel",
+          [],
+          ["legacy-reports OrdersReport src/main/java/com/example/reports/OrdersReport.java:21"],
+        ],
+        ["added", "POST /api/orders/{id}/cancel", [], []],
+      ]);
+      expect(changed.endpoints[0]?.before).toEqual({ handler: "OrdersController.get", request: null, response: "OrderDto" });
     },
     REAL_GIT_TIMEOUT,
   );

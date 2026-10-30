@@ -25,6 +25,7 @@ const {
   getSession,
   getDayReport,
   getTaskChanges,
+  getChangedEndpoints,
   proposeTask,
   proposeFolderAction,
   listItems,
@@ -67,7 +68,8 @@ export const MCP_INSTRUCTIONS = [
     "changes (narrow with tags, repos and paths); prefer it to walking directories one repo at a time.",
   `- Before you change an endpoint, a DTO, a package or a config address, check whom it affects: ${findEndpoint.name} ` +
     `shows which endpoints of other repos call an endpoint and which it calls, ${whoCalls.name} which repos depend on a repo, ` +
-    `${subgraphFor.name} its neighbourhood. ` +
+    `${subgraphFor.name} its neighbourhood. In a task, after you commit, ${getChangedEndpoints.name} lists the endpoints ` +
+    "your commits changed with the repos that call them. " +
     "Connections with low or medium confidence are hints: confirm them in the code. Name the affected repos in your result.",
   `- Look for an endpoint with ${findEndpoint.name} first: pass the path or URL as you have it, or words for what it does. ` +
     `When it finds nothing, the repo may build its routes in a way the cards do not read: ${searchCode.name} for a fixed ` +
@@ -101,7 +103,8 @@ export const MCP_INSTRUCTIONS = [
     `needs someone, goes stale or exits; when it times out (still pending, starting or working), call it again. ${getSession.name} shows ` +
     `the task's changed files and ${getTaskChanges.name} their diff (narrow it with paths): review it before you tell the ` +
     "user the work is done. Propose related tasks together, so the user can review them as one plan. " +
-    `A task whose session proposed yours handed you its work: ${getHandoff.name} says where its branch is now and what changed since you last read it.`,
+    `A task whose session proposed yours handed you its work: ${getHandoff.name} says where its branch is now and what changed since you last read it, and ` +
+    `${getChangedEndpoints.name} with its task which endpoints it changed.`,
   `- Keep ideas and split work on the user's board: when the user asks you to note something for later, or you find work ` +
     `outside your task, write it with ${createItem.name} instead of leaving it in your answer. ${listItems.name} shows the ` +
     `business projects, the items split under them and the ideas in the inbox; ${getItem.name} reads one with its plan and ` +
