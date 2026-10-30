@@ -57,6 +57,8 @@ export class SessionDialogs {
   #ids = 0;
   /** The dialog last read, for the screen revision it was read at: the screen is read once per change. */
   #read: { revision: number; kind: AgentDialog["kind"]; notice: string | undefined; found: ScreenDialog | undefined } | undefined;
+  /** The id last given, so that a dialog asked for every cycle is not hashed again while the screen and the ids hold. */
+  #lastId: { ids: number; found: ScreenDialog; id: string } | undefined;
   #answered: ScreenDialog | undefined;
   /** The texts of the wait's approval request hooks ("Use MCP tool: …"); `CopilotSessionState` counts the unanswered ones. */
   #requests: (string | undefined)[] = [];
@@ -83,7 +85,10 @@ export class SessionDialogs {
   onScreen(kind: AgentDialog["kind"]): AgentDialog | null {
     const found = this.#readScreen(kind);
     if (found === undefined || (kind === "approval" && sameDialog(found, this.#answered))) return null;
-    return { ...found, id: dialogId(this.#ids, found) };
+    const last = this.#lastId;
+    const id = last?.ids === this.#ids && last.found === found ? last.id : dialogId(this.#ids, found);
+    this.#lastId = { ids: this.#ids, found, id };
+    return { ...found, id };
   }
 
   /** Whether the screen shows an approval dialog, answered or not: a key typed into it is no text for the input box. */

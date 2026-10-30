@@ -1,8 +1,8 @@
 /**
  * How much the daemon does while nothing happens: the demo's twenty repos and a session in each repo of the demo turns,
  * left alone for a while, first with nobody listening to `/ws` events and then with one listener, as a window keeps.
- * Prints the CPU time of the daemon process and how often the hot reads ran in each phase, so a change to the read
- * cycles can be compared with a number instead of a guess.
+ * Prints the CPU time of the daemon process and how often the hot reads ran in each phase and how long they took, so a
+ * change to the read cycles can be compared with a number instead of a guess, and the cycles' share of the CPU time shows.
  *
  *   bun packages/daemon/scripts/idle-cost.ts [seconds per phase]
  *
@@ -22,6 +22,7 @@ import { removeFolder, removeIfPresent } from "../src/infra/remove-folder.ts";
 import { SHUTDOWN_SIGNALS, shutdownOnce, stopDaemon } from "../src/infra/shutdown.ts";
 import { userEnv } from "../src/infra/user-env.ts";
 import { createMcpEndpoint, sessionMcpRequest } from "../src/mcp/endpoint.ts";
+import { LiveSession } from "../src/modules/agents/live-session.ts";
 import { TerminalScreen } from "../src/modules/agents/terminal-screen.ts";
 import { TURNS } from "./demo/turns.ts";
 import { createDemoWorkspace } from "./demo/workspace.ts";
@@ -34,19 +35,25 @@ const projectsDir = join(home, "projects");
 createDemoWorkspace(projectsDir);
 writeFileSync(join(home, "workspace.yaml"), `projectsDir: ${JSON.stringify(projectsDir)}\n`);
 
-/** Counts calls of a method on a prototype, for the phase report. */
-const counts = new Map<string, number>();
+/** Counts calls of a method on a prototype and the time they took, for the phase report. */
+const counts = new Map<string, { calls: number; ms: number }>();
 function count<T extends object>(proto: T, name: keyof T & string, label: string): void {
   const original = proto[name];
   if (typeof original !== "function") throw new Error(`${label} is not a method`);
   Object.defineProperty(proto, name, {
     value(this: unknown, ...args: unknown[]) {
-      counts.set(label, (counts.get(label) ?? 0) + 1);
-      return original.apply(this, args);
+      const started = performance.now();
+      try {
+        return original.apply(this, args);
+      } finally {
+        const counted = counts.get(label) ?? { calls: 0, ms: 0 };
+        counts.set(label, { calls: counted.calls + 1, ms: counted.ms + performance.now() - started });
+      }
     },
   });
 }
 count(TerminalScreen.prototype, "lines", "screen lines() parses");
+count(LiveSession.prototype, "tick", "session cycles (LiveSession.tick)");
 
 const token = newToken();
 const facade = createFacade({
@@ -123,7 +130,7 @@ async function phase(name: string): Promise<void> {
   const cpuMs = (used.user + used.system) / 1000;
   console.log(`\n${name}: ${wall.toFixed(1)} s`);
   console.log(`  CPU ${cpuMs.toFixed(0)} ms = ${((cpuMs / (wall * 1000)) * 100).toFixed(2)} % of one core`);
-  for (const [label, n] of counts) console.log(`  ${label}: ${n} (${(n / wall).toFixed(1)}/s)`);
+  for (const [label, { calls, ms }] of counts) console.log(`  ${label}: ${calls} (${(calls / wall).toFixed(1)}/s), ${ms.toFixed(0)} ms`);
 }
 
 try {

@@ -55,6 +55,19 @@ describe("workspace.yaml", () => {
     );
   });
 
+  test("a key read again after the file changed by hand gives the new value, and a broken edit is an error at once", () => {
+    const path = tempFile();
+    const file = new WorkspaceFile(path);
+    writeFileSync(path, "projectsDir: /old\n");
+    expect(file.projectsDir()).toBe("/old");
+
+    writeFileSync(path, "projectsDir: /new\n");
+    expect(file.projectsDir()).toBe("/new");
+
+    writeFileSync(path, "projectsDir: [unclosed\n");
+    expect(() => file.projectsDir()).toThrow(expect.objectContaining({ code: "invalid_config" }));
+  });
+
   test("an invalid file gives invalid_config with the path and a description", () => {
     const path = tempFile();
     writeFileSync(path, "projectsDir: [\n");
