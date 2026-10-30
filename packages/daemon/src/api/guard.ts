@@ -24,7 +24,7 @@ export class OriginPolicy {
   }
 
   /**
-   * No `Origin` means a client outside a browser (Tauri in Rust, `ws`, curl) or a same-origin GET.
+   * No `Origin` means a client outside a browser (Tauri in Rust, the stdio bridge, curl) or a same-origin GET.
    * A page served by the daemon has an origin equal to its own address.
    */
   isAllowedOrigin(origin: string | undefined): boolean {

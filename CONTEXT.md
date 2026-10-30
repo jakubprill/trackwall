@@ -5,7 +5,7 @@ Terms that are easy to confuse. Code, UI, MCP tools and documentation use these 
 ## Application
 
 **Daemon** (`daemon`):
-The `trackwall-daemon` process, which holds all the state and all the logic. The only source of truth; the UI, the `ws` CLI and agents (through the MCP server in the daemon) are clients of its facade.
+The `trackwall-daemon` process, which holds all the state and all the logic. The only source of truth; the UI, the shell and agents (through the MCP server in the daemon) are clients of its facade.
 _Avoid_: backend, server (without qualification)
 
 **Shell** (`apps/desktop`):
@@ -74,11 +74,8 @@ _Avoid_: service (that is a workspace entity, see below), pnpm package
 A pnpm package from `pnpm-workspace.yaml` (`@trackwall/daemon`, `@trackwall/protocol`, `@trackwall/ui`, `@trackwall/desktop`).
 _Avoid_: workspace (that is a separate term, see below)
 
-**`ws`**:
-A thin CLI client of the daemon over HTTP on loopback. It has nothing to do with the `/ws` WebSocket.
-
 **Daemon token**:
-The secret from `~/.trackwall/daemon.json` with which the UI, `ws`, the shell and the stdio bridge authenticate to the API and the MCP server; Trackwall sessions do not get it (ADR-138).
+The secret from `~/.trackwall/daemon.json` with which the UI, the shell and the stdio bridge authenticate to the API and the MCP server; Trackwall sessions do not get it (ADR-138).
 
 **MCP server** (`/mcp`, `createMcpEndpoint`):
 The part of the daemon through which agents read its state with MCP tools; the same port as the API, with the daemon token or a Trackwall session's own token (§5.3, ADR-24, ADR-138).
@@ -642,17 +639,6 @@ The whole state of one event topic, the same value as the response of an HTTP ac
 
 **Masking**:
 Replacing secret values with `***` before a record is written to the buffer, the file and the last state lines. Today secrets are the values of process environment variables with secret names (`GH_TOKEN`, `DB_PASSWORD`…, §4.2).
-
-**Audit** (`AuditEntry`):
-A record of every MCP tool call: client, tool, arguments, time, result hash. Visible only in the UI.
-
-## Secrets
-
-**Secrets repo**:
-A repository with k8s `Secret` manifests, one `origin/<repo>` branch per workspace repo (ADR-10). Cloned outside the workspace.
-
-**Secret**:
-A key from `data` or `stringData` of a manifest, injected as an environment variable with the same name. A task session only sees whether it is set.
 
 ## 3D scene
 

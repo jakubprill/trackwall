@@ -71,7 +71,7 @@ The repo is meant to be published as open source (header of `docs/architecture.m
 - Scripts in the repo are in TypeScript (`bun <package>/scripts/...`), not bash or PowerShell, so that they behave the same on both systems. Exception: `run:` steps in GitHub Actions workflows.
 - Process state is observed, not assumed (§1.3): "stopped" only after checking that the whole group is dead and the port is free. `taskkill` and an exit code are not enough.
 - No symbolic links in the repo: on Windows git turns them into text files by default.
-- `fetch` in Bun routes `127.0.0.1` through `HTTP_PROXY`. In the daemon and its scripts, loopback calls use `loopbackRequest` from `packages/daemon/src/infra/loopback.ts`; when it is needed outside the daemon (the `ws` CLI), it moves to a separate Node/Bun-only package, not to `protocol`, which must run in the browser.
+- `fetch` in Bun routes `127.0.0.1` through `HTTP_PROXY`. In the daemon and its scripts, loopback calls use `loopbackRequest` from `packages/daemon/src/infra/loopback.ts`; when it is needed outside the daemon (a CLI, should one be built), it moves to a separate Node/Bun-only package, not to `protocol`, which must run in the browser.
 
 ## Code readable by agents and humans
 
