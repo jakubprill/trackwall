@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CardCache } from "../src/modules/cards/card-cache.ts";
@@ -24,10 +24,15 @@ const REPO_COUNT = 20;
 // Twenty repos made and their cards computed on real git take a while on Windows in CI.
 const REAL_GIT_TIMEOUT = 120_000;
 
+/** Longer than any reuse of a status (ADR-141): after it every list reads git again. */
+const PAST_ANY_REUSE_MS = 10 * 60_000;
+
 async function folderOfTwentyRepos() {
   const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
-  const vcs = new Vcs(systemTempFolder);
+  // The status memo's clock stands still unless a test moves it, so a read takes no time and is reused for the shortest window.
+  const clock = { ms: 0 };
+  const vcs = new Vcs(systemTempFolder, () => clock.ms);
   const workspace = new Workspace({
     file: new WorkspaceFile(join(home, "workspace.yaml")),
     vcs,
@@ -44,7 +49,10 @@ async function folderOfTwentyRepos() {
     return dir;
   });
   const cards = new Cards({ vcs, repos: workspace, cache: new CardCache(join(home, "cards"), () => {}), log: () => {} });
-  return { repos, workspace, cards, graph: new Graph({ cards, workspace }) };
+  const later = () => {
+    clock.ms += PAST_ANY_REUSE_MS;
+  };
+  return { repos, workspace, cards, graph: new Graph({ cards, workspace }), later };
 }
 
 async function gitProcessesOf(work: () => Promise<unknown>): Promise<number> {
@@ -57,9 +65,10 @@ describe("the git budget of a refresh with 20 repos", () => {
   test(
     "the repo list starts one git process per repo, and the tags and the graph from cached cards none",
     async () => {
-      const { workspace, cards, graph } = await folderOfTwentyRepos();
+      const { workspace, cards, graph, later } = await folderOfTwentyRepos();
       await workspace.list();
       await cards.tags();
+      later();
 
       expect(await gitProcessesOf(() => workspace.list())).toBe(REPO_COUNT);
       expect(await gitProcessesOf(() => cards.tags())).toBe(0);
@@ -71,9 +80,10 @@ describe("the git budget of a refresh with 20 repos", () => {
   test(
     "the quick list starts no git process, and repos asks git only for the repos named (ADR-113)",
     async () => {
-      const { repos, workspace } = await folderOfTwentyRepos();
+      const { repos, workspace, later } = await folderOfTwentyRepos();
       await workspace.list();
       const ids = (await workspace.entryList()).repos.map((r) => r.id);
+      later();
 
       expect(await gitProcessesOf(() => workspace.entryList())).toBe(0);
       expect(await gitProcessesOf(() => workspace.repos(ids.slice(0, 3)))).toBe(3);
@@ -85,8 +95,9 @@ describe("the git budget of a refresh with 20 repos", () => {
   test(
     "two repo lists asked at once share every git status that has not started yet",
     async () => {
-      const { workspace } = await folderOfTwentyRepos();
+      const { workspace, later } = await folderOfTwentyRepos();
       await workspace.list();
+      later();
 
       // A status that already started when the second list asks runs again (WaitingCalls). How many did depends on how fast
       // git is here; but the first batches of both lists ask before the slots can take them all, so some are always shared.
@@ -100,12 +111,13 @@ describe("the git budget of a refresh with 20 repos", () => {
   test(
     "after a commit in one repo only that repo costs more: its new HEAD commit in the list, its new card in the graph",
     async () => {
-      const { repos, workspace, cards, graph } = await folderOfTwentyRepos();
+      const { repos, workspace, cards, graph, later } = await folderOfTwentyRepos();
       await workspace.list();
       await graph.graph();
       const [changed] = repos;
       if (!changed) throw new Error("no repos");
       commitFiles(changed, { "NOTES.md": "notes" }, "add notes");
+      later();
 
       expect(await gitProcessesOf(() => workspace.list())).toBe(REPO_COUNT + 1);
       const graphProcesses = await gitProcessesOf(() => graph.graph());
@@ -121,14 +133,63 @@ describe("the git budget of a refresh with 20 repos", () => {
   test(
     "a remote address changed in the repo's config shows at the next refresh",
     async () => {
-      const { repos, workspace } = await folderOfTwentyRepos();
+      const { repos, workspace, later } = await folderOfTwentyRepos();
       await workspace.list();
       const [changed] = repos;
       if (!changed) throw new Error("no repos");
+      later();
       gitIn(changed, "remote", "set-url", "origin", "https://git.example.com/moved/orders-api.git");
 
       const listed = (await workspace.list()).repos.find((r) => r.path === changed);
       expect(listed?.remote).toBe("git.example.com/moved/orders-api");
+    },
+    REAL_GIT_TIMEOUT,
+  );
+});
+
+describe("statuses the lists reuse while git has no reason to see a change (ADR-141)", () => {
+  test(
+    "a list soon after another starts no git process, and a commit or staging in one repo reads only that repo again",
+    async () => {
+      const { repos, workspace } = await folderOfTwentyRepos();
+      await workspace.list();
+      const [committed, staged] = repos;
+      if (!committed || !staged) throw new Error("no repos");
+
+      expect(await gitProcessesOf(() => workspace.list())).toBe(0);
+      commitFiles(committed, { "NOTES.md": "notes" }, "add notes");
+      writeFileSync(join(staged, "STAGED.md"), "staged");
+      gitIn(staged, "add", "STAGED.md");
+      // The commit's repo: its status and its new HEAD commit; the staged repo: its status.
+      expect(await gitProcessesOf(() => workspace.list())).toBe(3);
+      const listed = (await workspace.list()).repos;
+      const statusOf = (dir: string) => listed.find((r) => r.path === dir)?.status;
+      expect(statusOf(committed)).toMatchObject({ kind: "ok", head: { subject: "add notes" } });
+      expect(statusOf(staged)).toMatchObject({ kind: "ok", changes: 1 });
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
+    "an edit in the working directory shows in the list once the reuse ends, and at once in the repo asked for by itself",
+    async () => {
+      const { repos, workspace, later } = await folderOfTwentyRepos();
+      const before = await workspace.list();
+      const [edited] = repos;
+      if (!edited) throw new Error("no repos");
+      const id = before.repos.find((r) => r.path === edited)?.id ?? "";
+      writeFileSync(join(edited, "NEW.md"), "new");
+      const statusOf = async () => (await workspace.list()).repos.find((r) => r.path === edited)?.status;
+
+      expect(await statusOf()).toMatchObject({ kind: "ok", changes: 0 });
+      expect(await gitProcessesOf(() => workspace.repo(id))).toBe(1);
+      expect((await workspace.repo(id)).status).toMatchObject({ kind: "ok", changes: 1, untracked: 1 });
+      expect(await statusOf()).toMatchObject({ kind: "ok", changes: 1 });
+
+      writeFileSync(join(edited, "OTHER.md"), "other");
+      expect(await statusOf()).toMatchObject({ kind: "ok", changes: 1 });
+      later();
+      expect(await statusOf()).toMatchObject({ kind: "ok", changes: 2 });
     },
     REAL_GIT_TIMEOUT,
   );

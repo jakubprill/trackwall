@@ -3,6 +3,7 @@
  * left alone for a while, first with nobody listening to `/ws` events and then with one listener, as a window keeps.
  * Prints the CPU time of the daemon process and how often the hot reads ran in each phase and how long they took, so a
  * change to the read cycles can be compared with a number instead of a guess, and the cycles' share of the CPU time shows.
+ * Last, rounds of repo statuses as the views refresh them, with the git processes each started (ADR-141).
  *
  *   bun packages/daemon/scripts/idle-cost.ts [seconds per phase]
  *
@@ -24,6 +25,7 @@ import { userEnv } from "../src/infra/user-env.ts";
 import { createMcpEndpoint, sessionMcpRequest } from "../src/mcp/endpoint.ts";
 import { LiveSession } from "../src/modules/agents/live-session.ts";
 import { TerminalScreen } from "../src/modules/agents/terminal-screen.ts";
+import { gitProcessesStarted } from "../src/modules/vcs/git.ts";
 import { TURNS } from "./demo/turns.ts";
 import { createDemoWorkspace } from "./demo/workspace.ts";
 
@@ -120,6 +122,23 @@ function childCpuMs(): number | undefined {
   return Number.isFinite(ticks) ? ticks * 10 : undefined;
 }
 
+/** The views' refresh of the repo list while repo events come (`REPO_LIST_PACE.live` in the UI). */
+const REFRESH_MS = 30_000;
+
+async function statusRound(name: string, ids: readonly string[]): Promise<void> {
+  const children = childCpuMs();
+  const processes = gitProcessesStarted();
+  const cpu = process.cpuUsage();
+  const started = performance.now();
+  await facade.workspace.repos(ids);
+  const used = process.cpuUsage(cpu);
+  const childrenUsed = children === undefined ? undefined : (childCpuMs() ?? 0) - children;
+  console.log(`\n${name}: ${(performance.now() - started).toFixed(0)} ms`);
+  console.log(`  git processes started: ${gitProcessesStarted() - processes}`);
+  console.log(`  daemon CPU ${((used.user + used.system) / 1000).toFixed(0)} ms`);
+  if (childrenUsed !== undefined) console.log(`  git processes CPU ${childrenUsed.toFixed(0)} ms`);
+}
+
 async function phase(name: string): Promise<void> {
   counts.clear();
   const cpu = process.cpuUsage();
@@ -159,17 +178,14 @@ try {
   console.log(`  /ws frames: ${frames}`);
   ws.close();
 
-  // One round of repo statuses as the Home and Repos views fetch it every 30 s (`REPO_LIST_PACE`): `git status` per repo.
+  // A round of repo statuses as the Home and Repos views fetch it every 30 s (`REPO_LIST_PACE`), after the views' first
+  // list has read every repo (and remembered the remotes and HEAD commits), then the same round again at once, as another
+  // view's would. Both may reuse a status git has had no reason to change (ADR-141); where git is fast, the first reads all.
   const ids = (await facade.workspace.list()).repos.map((repo) => repo.id);
-  const children = childCpuMs();
-  const roundCpu = process.cpuUsage();
-  const roundStart = performance.now();
-  await facade.workspace.repos(ids);
-  const roundUsed = process.cpuUsage(roundCpu);
-  const childrenUsed = children === undefined ? undefined : (childCpuMs() ?? 0) - children;
-  console.log(`\none round of repo statuses (${ids.length} repos): ${(performance.now() - roundStart).toFixed(0)} ms`);
-  console.log(`  daemon CPU ${((roundUsed.user + roundUsed.system) / 1000).toFixed(0)} ms`);
-  if (childrenUsed !== undefined) console.log(`  git processes CPU ${childrenUsed.toFixed(0)} ms`);
+  await Bun.sleep(REFRESH_MS);
+  await statusRound(`one round of repo statuses (${ids.length} repos), ${REFRESH_MS / 1000} s after the first list`, ids);
+  await statusRound("the same round again at once", ids);
+  await stop("done");
   await stop("done");
 } catch (err) {
   process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);

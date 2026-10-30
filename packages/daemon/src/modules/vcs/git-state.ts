@@ -67,6 +67,18 @@ export class GitStateReader {
   }
 }
 
+/**
+ * What `git status` depends on in the git directory (ADR-141): HEAD and the refs as the repo watch reads them, and the
+ * index, which staging, a commit and a `git status` that refreshes stat data rewrite. `undefined` without a git directory
+ * or when a file cannot be read this time. Read afresh on every call, so it does not share the repo watch's memory.
+ */
+export async function gitDirKey(repo: string): Promise<string | undefined> {
+  const dirs = await gitDirs(repo);
+  if (!dirs) return undefined;
+  const [state, index] = await Promise.all([readRepo(repo, { refsDirs: new Map() }, new Map()), statIfExists(join(dirs.gitDir, "index"))]);
+  return state ? `${state.head}\n${state.refs}\nindex ${optionalKey(index)}` : undefined;
+}
+
 async function readRepo(repo: string, cache: RepoCache, previousDirs: ReadonlyMap<string, RefsDir>): Promise<GitState | null> {
   const dirs = await gitDirs(repo);
   if (!dirs) return null;

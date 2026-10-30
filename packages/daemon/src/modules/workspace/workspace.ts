@@ -78,7 +78,8 @@ const SYNC_CONCURRENCY = 4;
 interface WorkspaceVcs extends CodeSearchVcs {
   checkGitProgram(path: string): Promise<void>;
   useGitProgram(path: string | null): void;
-  status(dir: string): Promise<RepoStatusOk>;
+  /** `recent` lets a list reuse a status git has not had reason to change (ADR-141); `fresh` always asks git. */
+  status(dir: string, how: "recent" | "fresh"): Promise<RepoStatusOk>;
   remote(dir: string): Promise<string | null>;
   sync(dir: string): Promise<SyncResult>;
   log(dir: string, limit: number): Promise<Commit[]>;
@@ -119,7 +120,7 @@ export class Workspace {
 
   async list(): Promise<RepoList> {
     const { projectsDir, entries } = await this.entries();
-    return { projectsDir, repos: await mapLimit(entries, STATUS_CONCURRENCY, (entry) => this.describe(entry)) };
+    return { projectsDir, repos: await mapLimit(entries, STATUS_CONCURRENCY, (entry) => this.describe(entry, "recent")) };
   }
 
   /** The list without git (ADR-113): only the folder is read, so it answers at once even where every git start is slow. */
@@ -136,7 +137,7 @@ export class Workspace {
     const { entries } = await this.entries();
     const byId = new Map(entries.map((entry) => [entry.id, entry]));
     const asked = [...new Set(ids)].flatMap((id) => byId.get(id) ?? []);
-    return mapLimit(asked, STATUS_CONCURRENCY, (entry) => this.describe(entry));
+    return mapLimit(asked, STATUS_CONCURRENCY, (entry) => this.describe(entry, "recent"));
   }
 
   settings(): WorkspaceSettings {
@@ -316,7 +317,7 @@ export class Workspace {
 
   /** One repo from the list with its state and remote repo address, without asking git about the other repos in the folder. */
   async repo(id: string): Promise<Repo> {
-    return this.describe(await this.entry(id));
+    return this.describe(await this.entry(id), "fresh");
   }
 
   async overview(id: string): Promise<RepoOverview> {
@@ -521,9 +522,10 @@ export class Workspace {
     return entry;
   }
 
-  private async describe(entry: RepoEntry): Promise<Repo> {
+  /** The lists, which views refresh every 30 s, may reuse a recent status (ADR-141); one repo asked for by itself is read anew. */
+  private async describe(entry: RepoEntry, how: "recent" | "fresh"): Promise<Repo> {
     const [status, remote] = await Promise.all([
-      this.deps.vcs.status(entry.path).catch((err: unknown): RepoStatus => ({ kind: "unavailable", message: messageOf(err) })),
+      this.deps.vcs.status(entry.path, how).catch((err: unknown): RepoStatus => ({ kind: "unavailable", message: messageOf(err) })),
       // A missing address is not a repo error: the repo state will say anyway when git cannot read it.
       this.deps.vcs.remote(entry.path).catch(() => null),
     ]);
