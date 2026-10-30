@@ -35,7 +35,15 @@ import {
 import { RepoCardResult, TagName } from "./cards.ts";
 import { CODE_SEARCH_LINE_MAX_CHARS, CODE_SEARCH_MAX_MATCHES, CodePathspecs, CodeQuery, SearchCodeResult } from "./code-search.ts";
 import { DAY_REPORT_COMMITS, DayReport } from "./day-start.ts";
-import { FindEndpointResult, MAX_FOUND_ENDPOINTS, MAX_SUBGRAPH_DEPTH, Subgraph, WhoCallsResult } from "./graph.ts";
+import {
+  ChangedEndpoints,
+  FindEndpointResult,
+  MAX_CHANGED_ENDPOINTS,
+  MAX_FOUND_ENDPOINTS,
+  MAX_SUBGRAPH_DEPTH,
+  Subgraph,
+  WhoCallsResult,
+} from "./graph.ts";
 import { HttpMethod } from "./http.ts";
 import { LOG_BUFFER_RECORDS, LOG_ERRORS_MAX, LOG_TAIL_MAX, LogErrorLevel, LogErrors, LogLevel, LogTail, LogTextFilter } from "./logs.ts";
 import { LIST_REPOS, RepoArg } from "./mcp-args.ts";
@@ -192,6 +200,9 @@ export type SendMessageResult = z.infer<typeof SendMessageResult>;
 export const GetMessagesResult = z.object({ messages: z.array(TaskMessage.omit({ readAt: true })) });
 export type GetMessagesResult = z.infer<typeof GetMessagesResult>;
 
+export const GetChangedEndpointsResult = ChangedEndpoints.extend({ task: TaskId });
+export type GetChangedEndpointsResult = z.infer<typeof GetChangedEndpointsResult>;
+
 export const GetHandoffResult = z.object({ handoff: TaskHandoffState.nullable() });
 export type GetHandoffResult = z.infer<typeof GetHandoffResult>;
 
@@ -314,6 +325,7 @@ const GET_REPO = "get_repo";
 const LIST_SESSIONS = "list_sessions";
 const GET_SESSION = "get_session";
 const GET_TASK_CHANGES = "get_task_changes";
+const GET_CHANGED_ENDPOINTS = "get_changed_endpoints";
 const PROPOSE_TASK = "propose_task";
 const PROPOSE_FOLDER_ACTION = "propose_folder_action";
 const REPORT_RESULT = "report_result";
@@ -654,6 +666,22 @@ export const mcpTools = {
       })
       .strict(),
     result: AgentTaskChanges,
+  },
+  getChangedEndpoints: {
+    name: GET_CHANGED_ENDPOINTS,
+    readOnly: true,
+    description:
+      "The HTTP endpoints a task's commits add, remove or change against its base commit, and who calls them: each with " +
+      "change (added, removed, changed), app, method and path, its contract before and after (handler, request and response " +
+      "types), dtos: the DTOs reachable from its request or response whose fields or constants changed, and callers: the " +
+      `repos whose HTTP clients call it as the repo root has it, as in find_endpoint. Only committed work counts (head is the commit read): commit ` +
+      `first. A changed path is a removed and an added endpoint. Use it before you propose the work that builds on your ` +
+      `change, one proposal per caller repo, and to see what the task that handed you your work changed. At most ` +
+      `${MAX_CHANGED_ENDPOINTS} endpoints (truncated: true when there were more). problems: what the card of the base or ` +
+      "head commit could not read, so a change there may be missing; contractsCompared: false when a card was not fully " +
+      "parsed, so only added and removed endpoints are listed. not_found for an unknown or ended task.",
+    args: z.object({ task: TaskId.describe(`task id from ${LIST_SESSIONS} or ${GET_SESSION} (the task field)`) }).strict(),
+    result: GetChangedEndpointsResult,
   },
   proposeTask: {
     name: PROPOSE_TASK,

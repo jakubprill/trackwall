@@ -53,7 +53,7 @@ export function findEndpoints(index: HttpIndex, query: string, method: HttpMetho
 }
 
 /** The calls of the clients of all repos assigned to endpoints from `wanted` through the clients' targets (`HttpIndex.targets`). */
-function callersByEndpoint(
+export function callersByEndpoint(
   index: HttpIndex,
   calls: EndpointCalls,
   wanted: ReadonlySet<ProvidedEndpoint>,

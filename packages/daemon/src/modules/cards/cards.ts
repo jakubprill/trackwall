@@ -1,5 +1,6 @@
 import {
   type CardWarmupProgress,
+  type EndpointChanges,
   MISE_CONFIG_FILE,
   type RepoCard,
   type RepoCardResult,
@@ -12,6 +13,7 @@ import { mapLimit } from "../../infra/map-limit.ts";
 import { CallReads, readCallFiles } from "./call-files.ts";
 import type { CardCache } from "./card-cache.ts";
 import { CardWarmup, type WarmupRepo } from "./card-warmup.ts";
+import { endpointChanges } from "./endpoint-changes.ts";
 import { CALL_SOURCES, CARD_DOCUMENTS, CARD_SOURCES, extractCard, readsCardFile } from "./extract-card.ts";
 import { localMiseTasks } from "./local-mise.ts";
 import { readSnapshot, type SnapshotVcs } from "./read-snapshot.ts";
@@ -137,7 +139,33 @@ export class Cards {
   /** The card of the HEAD commit of the repo in directory `dir`; `null` in a repo without commits. */
   private async cardOf(dir: string): Promise<RepoCard | null> {
     const commit = await this.deps.vcs.headCommit(dir);
-    if (commit === null) return null;
+    return commit === null ? null : this.cardAt(dir, commit);
+  }
+
+  /**
+   * The endpoints the commits of the worktree in `dir`, a worktree of repo `repo`, change against commit `base` (ADR-145),
+   * from the cards of both commits, with both cards' problems; uncommitted work is not in a card (ADR-14).
+   */
+  async endpointChanges(repo: string, dir: string, base: string): Promise<EndpointChanges> {
+    const { head, before, after } = await this.cardsOfWorktree(repo, dir, base).catch((err: unknown) => {
+      throw err instanceof DomainError ? err : new DomainError("repo_unavailable", `${repo}: ${messageOf(err)}`);
+    });
+    const problems = [
+      ...before.problems.map((p) => ({ ...p, commit: "base" as const })),
+      ...after.problems.map((p) => ({ ...p, commit: "head" as const })),
+    ];
+    return { head, ...endpointChanges(before, after), problems };
+  }
+
+  /** The cards of commit `base` and of the HEAD of the worktree in `dir`; git's failures as they come. */
+  private async cardsOfWorktree(repo: string, dir: string, base: string): Promise<{ head: string; before: RepoCard; after: RepoCard }> {
+    const head = await this.deps.vcs.headCommit(dir);
+    if (head === null) throw new DomainError("repo_unavailable", `${repo}: the task's worktree has no commit`);
+    const [before, after] = await Promise.all([this.cardAt(dir, base), this.cardAt(dir, head)]);
+    return { head, before, after };
+  }
+
+  private async cardAt(dir: string, commit: string): Promise<RepoCard> {
     return this.deps.cache.getOrCompute(commit, async () => {
       const known = { accepts: CALL_SOURCES, kept: (oid: string) => this.callReads.get(oid) };
       const snapshot = await readSnapshot(this.deps.vcs, dir, commit, readsCardFile, CARD_SOURCES, known, CARD_DOCUMENTS);

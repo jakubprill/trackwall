@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { apiEndpoints } from "./api.ts";
-import { MechanismEvidence, TagName } from "./cards.ts";
+import { CardProblem, MechanismEvidence, TagName } from "./cards.ts";
 import { Evidence } from "./evidence.ts";
 import { EndpointSource, HttpClientVia, HttpMethod, OpenApiOperation } from "./http.ts";
-import { RepoId } from "./workspace.ts";
+import { CommitHash, RepoId } from "./workspace.ts";
 
 /**
  * Contract of the `graph` module (§4.6, ADR-29, ADR-30, ADR-116): the graph of connections between the repos of the projects folder.
@@ -257,6 +257,75 @@ export const FindEndpointResult = z.object({
   truncated: z.boolean(),
 });
 export type FindEndpointResult = z.infer<typeof FindEndpointResult>;
+
+/** At most this many changed endpoints in `get_changed_endpoints`; more is a generated API, not one change. */
+export const MAX_CHANGED_ENDPOINTS = 100;
+
+/** An endpoint's contract on one side of a change: its handler and its request and response types (ADR-38). */
+export const EndpointContract = z.object({
+  handler: z.string().nullable(),
+  request: z.string().nullable(),
+  response: z.string().nullable(),
+});
+export type EndpointContract = z.infer<typeof EndpointContract>;
+
+/**
+ * An endpoint a task's commits add, remove or change (ADR-145), known by its app, method and path (and its handler when
+ * several endpoints share them): a changed path is a removed endpoint and an added one. `changed` is a request or
+ * response type that changed, or a DTO reachable from them whose fields or constants changed.
+ */
+export const EndpointChange = z.object({
+  change: z.enum(["added", "removed", "changed"]),
+  app: z.string().nullable(),
+  method: HttpMethod.nullable(),
+  path: z.string(),
+  /** `null` for an added endpoint. */
+  before: EndpointContract.nullable(),
+  /** `null` for a removed endpoint. */
+  after: EndpointContract.nullable(),
+  /** The DTOs reachable from the endpoint's request or response whose fields or constants changed, appeared or went. */
+  dtos: z.array(z.string()),
+});
+export type EndpointChange = z.infer<typeof EndpointChange>;
+
+export const ChangedEndpoint = EndpointChange.extend({
+  /**
+   * The repos whose HTTP clients call the endpoint as the repo root's HEAD has it (the graph, like in `find_endpoint`);
+   * `[]` for an added one.
+   */
+  callers: z.array(EndpointCaller),
+});
+export type ChangedEndpoint = z.infer<typeof ChangedEndpoint>;
+
+/** A problem of the card of the task's base or head commit. */
+export const ChangeCardProblem = CardProblem.extend({ commit: z.enum(["base", "head"]) });
+export type ChangeCardProblem = z.infer<typeof ChangeCardProblem>;
+
+/** What comparing the cards of a task's base and head gives (ADR-145), before the graph adds the callers. */
+export const EndpointChanges = z.object({
+  /** The commit of the task's HEAD the endpoints were read from; uncommitted work is not in it. */
+  head: CommitHash,
+  changes: z.array(EndpointChange),
+  /**
+   * `false` when a card lacks some request and response types or DTOs (a file not parsed, the DTO list cut): then
+   * contracts and DTOs are not compared, which would report endpoints as changed only because one card lacks them, and only added and
+   * removed endpoints are listed.
+   */
+  contractsCompared: z.boolean(),
+  /** What either card could not read, so a change there may be missing. */
+  problems: z.array(ChangeCardProblem),
+});
+export type EndpointChanges = z.infer<typeof EndpointChanges>;
+
+/** The endpoints a task's commits change against its base commit (`get_changed_endpoints`, ADR-145). */
+export const ChangedEndpoints = EndpointChanges.omit({ changes: true }).extend({
+  repo: RepoId,
+  base: CommitHash,
+  endpoints: z.array(ChangedEndpoint),
+  /** More changed than `MAX_CHANGED_ENDPOINTS`. */
+  truncated: z.boolean(),
+});
+export type ChangedEndpoints = z.infer<typeof ChangedEndpoints>;
 
 const endpoint = apiEndpoints("graph");
 

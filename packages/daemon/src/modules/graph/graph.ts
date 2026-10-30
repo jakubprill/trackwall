@@ -1,4 +1,6 @@
 import {
+  type ChangedEndpoints,
+  type EndpointChanges,
   type FindEndpointResult,
   GraphConfig,
   type HttpMethod,
@@ -8,6 +10,7 @@ import {
 } from "@trackwall/protocol";
 import { configOrProblem, DomainError } from "../../infra/errors.ts";
 import { buildGraphWithIndex } from "./build-graph.ts";
+import { withCallers } from "./changed-endpoints.ts";
 import { findEndpoints } from "./find-endpoint.ts";
 import type { GraphCardInput, GraphConfigInput } from "./graph-input.ts";
 import type { HttpIndex } from "./http-index.ts";
@@ -22,6 +25,7 @@ import { subgraph } from "./subgraph.ts";
 /** What `graph` needs from `cards`; wired in the facade. */
 interface GraphCards {
   all(): Promise<{ cards: GraphCardInput[]; tagRulesProblem: string | null }>;
+  endpointChanges(repo: string, dir: string, base: string): Promise<EndpointChanges>;
 }
 
 /** What `graph` needs from `workspace`: the `graph` entries from `workspace.yaml`. */
@@ -54,6 +58,15 @@ export class Graph {
   /** HTTP endpoints from the cards of all repos matching the query, with the repos that call them (ADR-30). */
   async findEndpoint(query: string, method: HttpMethod | undefined): Promise<FindEndpointResult> {
     return findEndpoints((await this.current()).http, query, method);
+  }
+
+  /**
+   * The endpoints the commits in `dir`, a worktree of repo `repo`, change against commit `base`, with the repos that call
+   * them (`get_changed_endpoints`, ADR-145).
+   */
+  async changedEndpoints(repo: string, dir: string, base: string): Promise<ChangedEndpoints> {
+    const [{ changes, ...read }, { http }] = await Promise.all([this.deps.cards.endpointChanges(repo, dir, base), this.current()]);
+    return { repo, base, ...read, ...withCallers(http, repo, changes) };
   }
 
   private async current(): Promise<{ graph: RepoGraph; http: HttpIndex }> {

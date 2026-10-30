@@ -61,7 +61,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     });
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain(
-      "When that work builds on your change (a caller of an endpoint you changed, a reader of a message or field you changed), commit your change first and then propose it, one proposal per repo: find_endpoint and who_calls name the repos that call what you changed.",
+      "When that work builds on your change (a caller of an endpoint you changed, a reader of a message or field you changed), commit your change first and then propose it, one proposal per repo: get_changed_endpoints with task `1b4e28ba-2fa1-11d2-883f-0016d3cca427` lists the endpoints your commits changed and the repos that call them, and find_endpoint and who_calls name the callers of anything else you changed.",
     );
     expect(text).not.toContain("Your task was handed to you by");
   });

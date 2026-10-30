@@ -400,7 +400,7 @@ The session that proposed a task: a main session, or for the supervisor's work w
 _Avoid_: parent, owner, manager
 
 **Handoff** (`TaskHandoff` in `task-handoff.ts`, `StoredTask.handoff`):
-What a task whose session proposed another task hands that task: the handing task, its repo and branch, and the commit its branch was at when the user approved the proposal, taken from Trackwall's task list and git. Every session of the proposed task is told where to read the work it builds on (ADR-143). When the handing task's branch moves, the proposed task is asked to call the MCP tool `get_handoff` (`TaskHandoffState`), which lists the commits and files since it last read (ADR-144).
+What a task whose session proposed another task hands that task: the handing task, its repo and branch, and the commit its branch was at when the user approved the proposal, taken from Trackwall's task list and git. Every session of the proposed task is told where to read the work it builds on (ADR-143). When the handing task's branch moves, the proposed task is asked to call the MCP tool `get_handoff` (`TaskHandoffState`), which lists the commits and files since it last read (ADR-144), and `get_changed_endpoints` with the handing task lists the endpoints its commits changed (ADR-145).
 _Avoid_: dependency, upstream, parent task
 
 **Task message** (`TaskMessage`, MCP tools `send_message` and `get_messages`; "Messages" in the task panel):

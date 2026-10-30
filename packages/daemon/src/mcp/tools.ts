@@ -232,6 +232,10 @@ const runs: ToolRuns = {
   },
   getDayReport: async (facade) => ({ report: facade.dayStart.report() }),
   getTaskChanges: (facade, { task, paths, maxPatchBytes }) => facade.agents.agentTaskChanges(task, maxPatchBytes, paths),
+  getChangedEndpoints: async (facade, { task }) => {
+    const { repo, worktree, base } = facade.agents.task(task);
+    return { task, ...(await facade.graph.changedEndpoints(repo, worktree, base)) };
+  },
   proposeTask: async (facade, { model, approvals, item, ...proposal }, { caller }) => {
     // Without a model the task runs on Copilot CLI's default (ADR-98); without a mode its agent asks (ADR-105).
     return {
@@ -340,6 +344,7 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.getSession, runs.getSession),
   defineTool(mcpTools.getDayReport, runs.getDayReport),
   defineTool(mcpTools.getTaskChanges, runs.getTaskChanges),
+  defineTool(mcpTools.getChangedEndpoints, runs.getChangedEndpoints),
   defineTool(mcpTools.proposeTask, runs.proposeTask),
   defineTool(mcpTools.proposeFolderAction, runs.proposeFolderAction),
   defineTool(mcpTools.listItems, runs.listItems),
