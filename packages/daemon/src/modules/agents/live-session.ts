@@ -10,7 +10,7 @@ import type {
 } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
 import type { AgentSession } from "./agent-session.ts";
-import { type CopilotHookOutput, hookOutputFor } from "./copilot-hook-output.ts";
+import { type CopilotHookOutput, hookOutputFor, situationOutput } from "./copilot-hook-output.ts";
 import type { CopilotHookEvent, CopilotHookRecord } from "./copilot-hook-record.ts";
 import { approvalRequest } from "./copilot-hooks.ts";
 import { answersDialog, ESCAPE, type SessionKey, sessionKey } from "./copilot-keys.ts";
@@ -129,6 +129,11 @@ export interface LiveSessionOptions {
    * when it is about to be typed; `undefined` when nothing waits any more.
    */
   prompt: () => string | undefined;
+  /**
+   * What the agent gets with every prompt it is given, read when the prompt comes (the supervisor's situation, ADR-148);
+   * `undefined` for nothing.
+   */
+  situation: () => string | undefined;
   /** The user put text into the session's input box (typed or pasted; not an answer to a dialog, not Esc). */
   onUserText: () => void;
   /** The daemon's prompt, read just before, went to the agent: typed, typed again or as a block (not as context, ADR-85). */
@@ -151,6 +156,7 @@ export class LiveSession implements AgentSession {
   readonly conversation: string;
   readonly #run: () => RunState | undefined;
   readonly #promptText: () => string | undefined;
+  readonly #situation: () => string | undefined;
   readonly #onUserText: () => void;
   readonly #onPromptSent: () => void;
   readonly #onEvent: (event: SessionEvent) => void;
@@ -208,6 +214,7 @@ export class LiveSession implements AgentSession {
     this.conversation = o.conversation ?? o.id;
     this.#run = o.run;
     this.#promptText = o.prompt;
+    this.#situation = o.situation;
     this.#onUserText = o.onUserText;
     this.#onPromptSent = o.onPromptSent;
     this.#onEvent = o.onEvent;
@@ -334,7 +341,8 @@ export class LiveSession implements AgentSession {
       if (blockedTurn && asked && this.#promptText() !== undefined) this.#promptAsked = true;
       if (turnEnded) this.#onEvent({ kind: "turn_ended" });
     }
-    return output;
+    // `hookOutputFor` gives a prompt's hook nothing, so the situation replaces nothing.
+    return record?.event === "userPromptSubmitted" ? situationOutput(this.#situation()) : output;
   }
 
   /**

@@ -4,7 +4,8 @@ import type { CopilotHookEvent } from "./copilot-hook-record.ts";
  * What the daemon answers a session hook with (ADR-85), the output types of Copilot CLI 1.0.103's SDK
  * (`copilot-sdk/types.d.ts`), checked on the real binary: `agentStop` with a block starts a new turn whose user message
  * is the reason, and `postToolUse` with additional context appends the text to the tool's result the agent reads next.
- * Any other hook, and these when nothing waits, get the empty output, which changes nothing.
+ * `userPromptSubmitted` with additional context gives the supervisor its situation (ADR-148, `situationOutput`). Any
+ * other hook, and these when nothing waits, get the empty output, which changes nothing.
  */
 export type CopilotHookOutput = Record<string, never> | { decision: "block"; reason: string } | { additionalContext: string };
 
@@ -33,4 +34,13 @@ export function hookOutputFor(input: HookOutputInput): CopilotHookOutput {
   if (event === "postToolUse") return prompt === input.contextGiven ? {} : { additionalContext: prompt };
   if (event === "agentStop" && !input.blockedTurn && !input.userDraft) return { decision: "block", reason: prompt };
   return {};
+}
+
+/**
+ * A prompt the agent got, the user's or the daemon's, with the situation (ADR-148) as the `userPromptSubmitted` hook's
+ * context, which Copilot CLI adds after the prompt as a system reminder, in a terminal and over ACP alike; nothing for
+ * a session without one.
+ */
+export function situationOutput(situation: string | undefined): CopilotHookOutput {
+  return situation === undefined ? {} : { additionalContext: situation };
 }

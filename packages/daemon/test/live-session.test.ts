@@ -31,6 +31,7 @@ describe("a Copilot CLI session in the daemon", () => {
       environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
       run: () => ({ kind: "running", runId: "r1", startedAt: "2026-10-24T12:00:00.000Z", pid: 1 }),
       prompt: () => undefined,
+      situation: () => undefined,
       onPromptSent: () => {},
       onUserText: () => {},
       onEvent: () => {},
@@ -123,6 +124,7 @@ describe("a Copilot CLI session in the daemon", () => {
 function runningSession(
   prompt: () => string | undefined = () => "read the review",
   run: () => RunState = () => ({ kind: "running", runId: "r2", startedAt: "2026-10-24T12:00:00.000Z", pid: 1 }),
+  situation: () => string | undefined = () => undefined,
 ): {
   session: LiveSession;
   hooksFile: string;
@@ -149,6 +151,7 @@ function runningSession(
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
     run,
     prompt,
+    situation,
     onPromptSent: () => {
       promptsSent.count++;
     },
@@ -547,14 +550,14 @@ describe("a prompt the daemon types into a session (a review, ADR-62, or a messa
   });
 });
 
-describe("what waits for a session, given to its agent through the hooks' output (ADR-85)", () => {
-  /** Appends a hook record, as the daemon does when the hook's POST comes, and returns the session's output for it. */
-  function hook(session: LiveSession, hooksFile: string, event: CopilotHookEvent, payload: CopilotHookRecord["payload"] = {}) {
-    const record: CopilotHookRecord = { event, receivedAt: 0, payload, omitted: [] };
-    appendFileSync(hooksFile, `${JSON.stringify(record)}\n`);
-    return session.hookOutput(record);
-  }
+/** Appends a hook record, as the daemon does when the hook's POST comes, and returns the session's output for it. */
+function hook(session: LiveSession, hooksFile: string, event: CopilotHookEvent, payload: CopilotHookRecord["payload"] = {}) {
+  const record: CopilotHookRecord = { event, receivedAt: 0, payload, omitted: [] };
+  appendFileSync(hooksFile, `${JSON.stringify(record)}\n`);
+  return session.hookOutput(record);
+}
 
+describe("what waits for a session, given to its agent through the hooks' output (ADR-85)", () => {
   /** A session in the middle of a turn with `prompt` asked for, and what the daemon types into it. */
   function workingSession(prompt: () => string | undefined = () => "read the review") {
     const running = runningSession(prompt);
@@ -676,6 +679,30 @@ describe("what waits for a session, given to its agent through the hooks' output
     session.askToRead();
 
     expect(session.hookOutput(undefined)).toEqual({});
+  });
+});
+
+describe("the supervisor's situation with every prompt (ADR-148)", () => {
+  test("every prompt the agent gets, the user's or the daemon's block, comes with the situation as it is then; no other hook does", () => {
+    let situation = '- task t1 "Add a signup test" in shop, started by the user: working';
+    const { session, hooksFile } = runningSession(
+      () => "read the updates",
+      undefined,
+      () => situation,
+    );
+
+    expect(hook(session, hooksFile, "userPromptSubmitted")).toEqual({ additionalContext: situation });
+    expect(hook(session, hooksFile, "postToolUse")).toEqual({});
+    session.askToRead();
+    expect(hook(session, hooksFile, "agentStop")).toEqual({ decision: "block", reason: "read the updates" });
+    situation = '- task t1 "Add a signup test" in shop, started by the user: waits for the user\'s approval';
+    expect(hook(session, hooksFile, "userPromptSubmitted")).toEqual({ additionalContext: situation });
+  });
+
+  test("a session without a situation gets the empty output for its prompt", () => {
+    const { session, hooksFile } = runningSession();
+
+    expect(hook(session, hooksFile, "userPromptSubmitted")).toEqual({});
   });
 });
 

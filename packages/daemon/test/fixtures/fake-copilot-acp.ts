@@ -3,7 +3,9 @@
  * JSON-RPC over newline-delimited JSON on stdin and stdout, with the messages Copilot CLI 1.0.105 sends
  * (`contract/acp-session.contract.ts` checks the daemon against the real one). Every prompt is a turn in which the
  * agent runs one shell command: a `tool_call`, its `session/request_permission` (none with `--allow-all-tools`), and
- * the command's result and an answer that repeats the prompt, or its refusal, which ends the turn. The first answer of a session also names the
+ * the command's result and an answer that repeats the prompt, or its refusal, which ends the turn. Like Copilot CLI it fires
+ * the session plugin's `userPromptSubmitted` hook with each prompt, and the answer also repeats the context the hook gave
+ * (ADR-148), which Copilot CLI gives the model and nobody sees. The first answer of a session also names the
  * MCP servers, instruction files and arguments it got, so that the tests see them. `session/cancel` ends the turn with
  * `cancelled`. Like Copilot CLI it keeps a conversation per id once it has had a prompt, which `session/load` replays
  * (one from the terminal mode with nothing to replay), and an id without one is error -32002.
@@ -40,7 +42,11 @@ export interface FakeAcpOptions {
   instructionFiles: readonly string[];
   args: readonly string[];
   allowAllTools: boolean;
+  /** Fires the session plugin's hooks of an event and returns their outputs (`pluginHooks`). */
+  fire: (event: string, payload: Record<string, unknown>) => Record<string, unknown>[];
 }
+
+const HookContext = z.object({ additionalContext: z.string() });
 
 export function serveAcp(o: FakeAcpOptions): void {
   let buffer = "";
@@ -74,6 +80,13 @@ export function serveAcp(o: FakeAcpOptions): void {
       return;
     }
     const text = blocks.map((b) => b.text ?? "").join("");
+    const context = o
+      .fire("userPromptSubmitted", { prompt: text, cwd: process.cwd() })
+      .flatMap((output) => {
+        const parsed = HookContext.safeParse(output);
+        return parsed.success ? [`\n\nPrompt context: ${parsed.data.additionalContext}`] : [];
+      })
+      .join("");
     let turn = { end: (_: string) => {}, cancelled: false };
     const ended = new Promise<string>((resolve) => {
       turn = { end: resolve, cancelled: false };
@@ -104,7 +117,7 @@ export function serveAcp(o: FakeAcpOptions): void {
         ? `\n\nMCP: ${o.mcpServers.join(", ")}\nInstructions: ${o.instructionFiles.join(", ")}\n${o.args.map((a) => `Argument: ${a}`).join("\n")}`
         : "";
       firstAnswer = false;
-      update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: `Thinking about: ${text}` } });
+      update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: `Thinking about: ${text}${context}` } });
       update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: about } });
       writeFileSync(conversationFile(sessionId), JSON.stringify(history));
       turn.end("end_turn");

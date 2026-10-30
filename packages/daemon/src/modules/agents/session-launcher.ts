@@ -41,6 +41,8 @@ const MCP_CONFIG_FILE = "mcp-config.json";
 /** The hook records of the hooks the session plugin POSTs to the daemon (ADR-88; `HookTail` reads them). */
 const HOOKS_FILENAME = "hooks.jsonl";
 const SESSIONS_DIR = "sessions";
+/** The session plugin in the session directory (`--plugin-dir`). */
+const PLUGIN_DIR = "plugin";
 /** Without it Copilot CLI silently drops the session plugin's hooks, which POST to the daemon on `127.0.0.1` (ADR-88). */
 const LOOPBACK_HOOKS_ENV = { COPILOT_HOOK_ALLOW_LOCALHOST: "1" };
 
@@ -102,7 +104,7 @@ interface LauncherRepos {
 }
 
 /** How a session of either view tells `Agents` what it did. */
-export type SessionCallbacks = Pick<LiveSessionOptions, "prompt" | "onUserText" | "onPromptSent" | "onEvent" | "onTurnOver">;
+export type SessionCallbacks = Pick<LiveSessionOptions, "prompt" | "situation" | "onUserText" | "onPromptSent" | "onEvent" | "onTurnOver">;
 
 export interface SessionLauncherDeps {
   procs: LauncherProcs;
@@ -158,7 +160,7 @@ export class SessionLauncher {
       const start = async () => {
         const { terminal } = await this.#deps.procs.startTerminal({
           owner: sessionOwner(id),
-          command: [setup.program, ...setup.prefix, "--plugin-dir", join(setup.dir, "plugin"), ...setup.args, ...args],
+          command: [setup.program, ...setup.prefix, "--plugin-dir", join(setup.dir, PLUGIN_DIR), ...setup.args, ...args],
           cwd: place.cwd,
           env: sessionEnv(setup.env, instructionsDir),
           secrets: setup.mise.secretValues,
@@ -173,9 +175,10 @@ export class SessionLauncher {
   }
 
   /**
-   * Copilot CLI over ACP (ADR-107) in `cwd`: the same MCP server, instructions, tool permissions and mise environment as
-   * in a terminal, without the session plugin, since the protocol itself says what the session does; `args` go after
-   * them (a task's model and approvals mode, ADR-137).
+   * Copilot CLI over ACP (ADR-107) in `cwd`: the same MCP server, instructions, tool permissions, mise environment and
+   * session plugin as in a terminal; the protocol itself says what the session does, and the plugin's hooks are there
+   * for what the daemon gives the agent with a prompt (the supervisor's situation, ADR-148). `args` go after them (a
+   * task's model and approvals mode, ADR-137).
    */
   conversation({ id, load, firstMessage, args = [], ...place }: ConversationStart): Promise<StartedSession> {
     const { repo, supervisor, task, cwd } = place;
@@ -197,7 +200,7 @@ export class SessionLauncher {
       const start = async () => {
         const { channel } = await this.#deps.procs.startChannel({
           owner: sessionOwner(id),
-          command: [setup.program, ...setup.prefix, "--acp", ...setup.args, ...args],
+          command: [setup.program, ...setup.prefix, "--acp", "--plugin-dir", join(setup.dir, PLUGIN_DIR), ...setup.args, ...args],
           cwd,
           env: sessionEnv(setup.env, instructionsDir),
           secrets: setup.mise.secretValues,
@@ -282,10 +285,7 @@ export class SessionLauncher {
     return supervisor ? { kind: "supervisor", changesCode: this.#deps.repos.supervisorSettings().changesCode } : { kind: "free" };
   }
 
-  /**
-   * The session directory with the session plugin, MCP config, session instructions and an empty
-   * `hooks.jsonl`, before Copilot CLI starts.
-   */
+  /** The session directory and the session in a terminal, before Copilot CLI starts. */
   #prepare({
     id,
     role,
@@ -302,9 +302,7 @@ export class SessionLauncher {
   }: SessionFiles): PreparedSession {
     const supervisor = role.kind === "supervisor";
     const hooksFile = join(dir, HOOKS_FILENAME);
-    const instructionsDir = this.#writeSessionFiles(id, role, dir, token);
-    writeFileSync(hooksFile, "");
-    writeCopilotPlugin(join(dir, "plugin"), (event) => ({ type: "http", ...this.#deps.sessionHook(event, token) }), lspServers);
+    const instructionsDir = this.#writeSessionFiles(id, role, dir, token, lspServers);
     const session = new LiveSession({
       id,
       repo,
@@ -325,11 +323,14 @@ export class SessionLauncher {
   }
 
   /**
-   * The session directory with the MCP config and session instructions, which both views share; returns the
-   * instructions directory, `null` when it could not be written.
+   * The session directory, which both views share: the MCP config, the session instructions, the session plugin (in a
+   * terminal with the task's language servers, ADR-99) and an empty `hooks.jsonl`; returns the instructions directory,
+   * `null` when it could not be written.
    */
-  #writeSessionFiles(id: string, role: SessionRole, dir: string, token: string): string | null {
+  #writeSessionFiles(id: string, role: SessionRole, dir: string, token: string, lspServers: Record<string, LspServer> = {}): string | null {
     mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, HOOKS_FILENAME), "");
+    writeCopilotPlugin(join(dir, PLUGIN_DIR), (event) => ({ type: "http", ...this.#deps.sessionHook(event, token) }), lspServers);
     // User-only: the server's headers carry the session token (§8).
     const mcpConfig = copilotHttpMcpServers(this.#deps.sessionMcpServer(token));
     writeFileSync(join(dir, MCP_CONFIG_FILE), JSON.stringify(mcpConfig, null, 2), { mode: 0o600 });

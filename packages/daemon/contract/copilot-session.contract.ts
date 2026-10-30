@@ -772,6 +772,27 @@ describe("the supervisor with the real Copilot CLI", () => {
   });
 });
 
+describe("the supervisor's situation with the real Copilot CLI (ADR-148)", () => {
+  test("the user's message reaches the supervisor's model with the situation from the userPromptSubmitted hook, which names the user's other sessions", async () => {
+    const { agents } = daemon.facade;
+    const main = await startSession();
+    const supervisor = await agents.startSupervisor("new", "terminal");
+    const window = openWindow(supervisor.id);
+    await untilLoaded(supervisor.id);
+    model.reply({ text: "One main session runs in shop." });
+
+    window.attachment.input("what is going on?\r");
+    await endOfTurn(supervisor.id);
+
+    // Copilot CLI puts the hook's context after the user's text, as a system reminder, not as the user's words.
+    const [message] = model.requests().at(-1)?.userTexts.slice(-1) ?? [];
+    expect(message).toContain("what is going on?\n\n<system_reminder>\nTrackwall's work under way as this prompt came");
+    expect(message).toContain(`\n- a main session in shop (session ${main.id}), started by the user: waits for the user\n`);
+    await agents.stop(supervisor.id);
+    await agents.stop(main.id);
+  });
+});
+
 describe("the day start with the real Copilot CLI", () => {
   test("the day start's first message reaches the new supervisor's model as its first prompt, next to the user's own MCP servers, and it reads the day report without an approval request", async () => {
     const { agents, dayStart } = daemon.facade;
@@ -1009,9 +1030,10 @@ describe("the supervisor's last conversation with the real Copilot CLI (ADR-96)"
       openWindow(resumed.id, daemon).attachment.input("what is the code word?\r");
       await waitFor(agents, resumed.id, (s) => s.state?.reason === "hook agentStop", "end of turn", SESSION_MS);
 
+      // Each message to the supervisor ends with its situation (ADR-148).
       const userTexts = model.requests().at(-1)?.userTexts ?? [];
-      expect(userTexts.some((t) => t.endsWith("remember the code word AMBER"))).toBe(true);
-      expect(userTexts.at(-1)).toEndWith("what is the code word?");
+      expect(userTexts.some((t) => t.includes("remember the code word AMBER\n\n<system_reminder>"))).toBe(true);
+      expect(userTexts.at(-1)).toContain("what is the code word?\n\n<system_reminder>");
     } finally {
       for (const window of windows.values()) window.attachment.detach();
       windows.clear();

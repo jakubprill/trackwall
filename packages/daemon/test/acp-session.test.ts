@@ -1,12 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import type { ConversationServerMessage, RunState } from "@trackwall/protocol";
 import { AcpSession } from "../src/modules/agents/acp-session.ts";
+import type { CopilotHookRecord } from "../src/modules/agents/copilot-hook-record.ts";
 import type { SessionEvent } from "../src/modules/agents/live-session.ts";
 
 const RUNNING: RunState = { runId: "r1", startedAt: "2026-10-28T08:00:00.000Z", kind: "running", pid: 1 };
 
 /** A session on an agent this test plays by hand: what the session wrote, and lines the agent sends back. */
-function session(o: { prompt?: () => string | undefined; firstMessage?: string; load?: string } = {}) {
+function session(
+  o: { prompt?: () => string | undefined; situation?: () => string | undefined; firstMessage?: string; load?: string } = {},
+) {
   const written: { jsonrpc?: string; id?: number; method?: string; params?: unknown; result?: unknown }[] = [];
   const events: SessionEvent[] = [];
   const turnsOver = { count: 0 };
@@ -22,6 +25,7 @@ function session(o: { prompt?: () => string | undefined; firstMessage?: string; 
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
     run: () => run,
     prompt: o.prompt ?? (() => undefined),
+    situation: o.situation ?? (() => undefined),
     onUserText: () => {},
     onPromptSent: () => {},
     onEvent: (event) => events.push(event),
@@ -91,6 +95,25 @@ describe("a Copilot CLI session over ACP", () => {
     expect(s.acp.view()?.state).toMatchObject({ state: "Input", reason: "stop end_turn" });
     // A turn the user drove is not news for a proposer.
     expect(s.events).toEqual([]);
+  });
+
+  test("a prompt's hook gets the situation as it is then, while the prompt itself and the conversation keep only what was said (ADR-148)", async () => {
+    let situation = '- task t1 "Add a signup test" in shop, started by the user: working';
+    const s = session({ situation: () => situation });
+    const promptHook: CopilotHookRecord = { event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] };
+    await s.ready();
+
+    s.acp.say("What is going on?");
+    expect(s.written.at(-1)).toMatchObject({ method: "session/prompt", params: { prompt: [{ type: "text", text: "What is going on?" }] } });
+    expect(s.acp.hookOutput(promptHook)).toEqual({ additionalContext: situation });
+    situation = '- task t1 "Add a signup test" in shop, started by the user: waits for the user\'s approval';
+    expect(s.acp.hookOutput(promptHook)).toEqual({ additionalContext: situation });
+    expect(s.acp.hookOutput({ ...promptHook, event: "postToolUse" })).toEqual({});
+    expect(s.acp.hookOutput(undefined)).toEqual({});
+
+    const frames: ConversationServerMessage[] = [];
+    s.acp.attachConversation({ send: (m) => frames.push(m), closed: () => {} });
+    expect(frames).toMatchObject([{ type: "entries", entries: [{ kind: "user", text: "What is going on?" }] }]);
   });
 
   test("the first message goes as soon as the session is ready, and the end of its turn is reported, as the user did not write it", async () => {

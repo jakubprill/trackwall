@@ -63,6 +63,7 @@ import {
 import { SessionTokens } from "./session-tokens.ts";
 import { outcome, sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
 import { SupervisorSessions } from "./supervisor-sessions.ts";
+import { supervisorSituation } from "./supervisor-situation.ts";
 import { TaskCoordination } from "./task-coordination.ts";
 import { TaskFile } from "./task-file.ts";
 import { TaskProposals } from "./task-proposals.ts";
@@ -978,6 +979,7 @@ export class Agents {
   #sessionCallbacks({ id, supervisor, task }: { id: string; supervisor: boolean; task: string | null }): SessionCallbacks {
     return {
       prompt: () => this.#inboxPrompt({ id, supervisor, task }),
+      situation: () => (supervisor ? supervisorSituation(this.sessionsWithoutCycle(), id) : undefined),
       onUserText: () => this.#coordination.userTyped({ id, task }),
       onPromptSent: () => this.#miseTrust.promptSent(trustRecipientOf({ id, task })),
       onTurnOver: () => {
