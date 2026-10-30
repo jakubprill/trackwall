@@ -269,3 +269,46 @@ describe("a task in the conversation view with the real Copilot CLI (ADR-137)", 
     await agents.stop(resumed);
   });
 });
+
+describe("secrets from mise in the conversation view with the real Copilot CLI (ADR-93, ADR-136)", () => {
+  test("--secret-env-vars keeps a secret out of the shell of a task in the conversation view, as in a terminal", async () => {
+    const secret = "provider-key-from-age-0123456789";
+    const withMise = await startRealCopilotDaemon(model, {
+      repos: {
+        shop: {
+          "README.md": "# shop\n",
+          "fake-mise.json": JSON.stringify({
+            tasks: [],
+            env: { SHOP_PROVIDER_KEY: secret, SHOP_REGION: "eu-central" },
+            redacted: ["SHOP_PROVIDER_KEY"],
+          }),
+        },
+      },
+      miseCommand: [process.execPath, join(import.meta.dir, "..", "test", "fixtures", "fake-mise.ts")],
+    });
+    try {
+      const { agents } = withMise.facade;
+      model.reply(
+        (request) =>
+          shellCall(request, {
+            bash: 'echo "key=$SHOP_PROVIDER_KEY region=$SHOP_REGION"',
+            powershell: 'Write-Output "key=$env:SHOP_PROVIDER_KEY region=$env:SHOP_REGION"',
+          }),
+        { text: "Printed them." },
+      );
+
+      const task = await agents.createTask("shop", "print the provider settings", { view: "conversation", approvals: "auto" });
+      const [session] = agents.sessions().sessions.filter((s) => s.task === task.id);
+      if (session === undefined) throw new Error("the task has no session");
+      await waitFor(agents, session.id, (s) => s.state?.reason === "stop end_turn", "end of turn", SESSION_MS);
+
+      expect(session.environment).toMatchObject({ secrets: ["SHOP_PROVIDER_KEY"], agentSecrets: [] });
+      const printed = model.requests().at(-1)?.toolResults.join("\n") ?? "";
+      expect(printed).toContain("key= region=eu-central");
+      expect(printed).not.toContain(secret);
+      await agents.stop(session.id);
+    } finally {
+      await withMise.stop();
+    }
+  });
+});

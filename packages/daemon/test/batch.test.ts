@@ -54,7 +54,7 @@ function setup(
   });
   const mise = new Mise({
     procs,
-    repos: { repoPath, projectsDir: async () => home },
+    repos: { repoPath, projectsDir: async () => home, sessionProfile: () => null },
     tasks: NO_TASKS,
     vcs: new Vcs(systemTempFolder),
     command: FAKE_MISE,

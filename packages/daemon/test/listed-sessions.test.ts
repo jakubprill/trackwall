@@ -16,7 +16,7 @@ afterEach(() => {
   for (const home of homes.splice(0)) rmSync(home, { recursive: true, force: true });
 });
 
-const MISE: SessionMiseEnv = { vars: { MAVEN_OPTS: "-Xmx2g" }, secretNames: [], secretValues: [], problem: null };
+const MISE: SessionMiseEnv = { vars: { MAVEN_OPTS: "-Xmx2g" }, secretNames: [], secretValues: [], profile: null, problem: null };
 
 /** A session of either view that only answers what the list asks; `running` is whether its process group runs. */
 function fakeSession(

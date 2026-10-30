@@ -517,7 +517,11 @@ _Avoid_: permission (without qualification), allowlist
 
 **Session environment** (`SessionEnvironment`, `Session.environment`, `Mise.sessionEnv`; in the UI *Environment from mise*):
 The variables mise sets where a session works (repo root, a task's worktree, or the projects folder), given to Copilot CLI over the user's environment; the session keeps only their names, and `problem` when mise refused its place (ADR-93).
-_Avoid_: env file, profile
+_Avoid_: env file, profile (a session profile is the mise environment below)
+
+**Session profile** (`sessionProfile` in `workspace.yaml`, `SessionProfile`, `SessionEnvironment.profile`, action `set-session-profile`; UI "Session profile" in Settings › Agents):
+The name of a mise environment (`MISE_ENV`) that only sessions are read with, e.g. `byok`, so mise adds `mise.byok.toml` to every config of the session's place, for another model provider of Copilot CLI (ADR-136). Runs and services never get it; a running session shows the change. Set in Settings or by hand, never by an MCP tool.
+_Avoid_: provider setting, MISE_ENV (that is mise's variable)
 
 **Secret from mise** (`secretNames`, `SessionEnvironment.secrets`):
 A variable of the session environment that mise redacts (`redact = true`, an age-encrypted value) or whose name looks like a secret; its value is masked, and the agent's tools do not get it unless it is in the agent secrets (ADR-93).

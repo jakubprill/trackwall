@@ -33,7 +33,7 @@ export function makeAgents(
   env: NodeJS.ProcessEnv = process.env,
   supervisor: SupervisorSettings = { changesCode: false },
   worktreesDir: () => string = () => join(home, "task-worktrees"),
-  miseEnv: AgentsDeps["miseEnv"] = async () => ({ vars: {}, secretNames: [], secretValues: [], problem: null }),
+  miseEnv: AgentsDeps["miseEnv"] = async () => ({ vars: {}, secretNames: [], secretValues: [], profile: null, problem: null }),
   javaNavigation: () => JavaNavigationSettings | null = () => null,
 ) {
   const procs = new ProcessGroups({

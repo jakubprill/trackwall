@@ -69,7 +69,7 @@ function setup(
   const env = async () => ({ ...process.env, FAKE_API_TOKEN: SECRET });
   const mise = new Mise({
     procs,
-    repos: { repoPath, projectsDir: async () => home },
+    repos: { repoPath, projectsDir: async () => home, sessionProfile: () => null },
     tasks: worktrees,
     vcs: new Vcs(systemTempFolder),
     command: FAKE_MISE,

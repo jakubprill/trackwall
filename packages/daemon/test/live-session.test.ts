@@ -28,7 +28,7 @@ describe("a Copilot CLI session in the daemon", () => {
       promptOnStart: false,
       hasConversation: false,
       program: "copilot",
-      environment: { variables: [], secrets: [], agentSecrets: [], problem: null },
+      environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
       run: () => ({ kind: "running", runId: "r1", startedAt: "2026-10-24T12:00:00.000Z", pid: 1 }),
       prompt: () => undefined,
       onPromptSent: () => {},
@@ -145,7 +145,7 @@ function runningSession(
     promptOnStart: false,
     hasConversation: false,
     program: "copilot",
-    environment: { variables: [], secrets: [], agentSecrets: [], problem: null },
+    environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
     run,
     prompt,
     onPromptSent: () => {

@@ -53,7 +53,9 @@ function setup(config: object, command: readonly string[] = FAKE_MISE) {
     log: () => {},
   });
   let present = true;
+  let profile: string | null = null;
   const repos = {
+    sessionProfile: () => profile,
     repoPath: async (id: string) => {
       if (id !== "web" || !present) throw new DomainError("not_found", `no repo ${id}`);
       return repoDir;
@@ -74,7 +76,11 @@ function setup(config: object, command: readonly string[] = FAKE_MISE) {
     env: async () => process.env,
     onTrusted: () => {},
   });
-  return { mise, home, repoDir, worktree, procs, logs, removeRepo, refuseWorktree };
+  /** The user chooses a session profile in Settings (ADR-136). */
+  const useProfile = (name: string | null) => {
+    profile = name;
+  };
+  return { mise, home, repoDir, worktree, procs, logs, removeRepo, refuseWorktree, useProfile };
 }
 
 function writeConfig(repoDir: string, config: object): void {
@@ -441,8 +447,59 @@ describe("the environment mise sets (ADR-93)", () => {
       vars: { JIRA_KEY: "k", GITLAB_TOKEN: "t", MAVEN_OPTS: "-Xmx2g" },
       secretNames: ["JIRA_KEY", "GITLAB_TOKEN"],
       secretValues: ["k", "t"],
+      profile: null,
       problem: null,
     });
+  });
+
+  test("with a session profile, a session gets the variables of that mise environment over the others, and without it again the plain ones", async () => {
+    const { mise, useProfile } = setup({
+      tasks: [],
+      env: { MAVEN_OPTS: "-Xmx2g", COPILOT_MODEL: "from-the-repo" },
+      envByMiseEnv: { byok: { COPILOT_PROVIDER_BASE_URL: "http://127.0.0.1:4000/v1", COPILOT_PROVIDER_API_KEY: "sk-local" } },
+    });
+    useProfile("byok");
+
+    expect(await mise.sessionEnv({ repo: "web", task: null })).toEqual({
+      vars: {
+        MAVEN_OPTS: "-Xmx2g",
+        COPILOT_MODEL: "from-the-repo",
+        COPILOT_PROVIDER_BASE_URL: "http://127.0.0.1:4000/v1",
+        COPILOT_PROVIDER_API_KEY: "sk-local",
+      },
+      // Every setting of Copilot CLI's provider is a secret: its address may carry a key too.
+      secretNames: ["COPILOT_PROVIDER_BASE_URL", "COPILOT_PROVIDER_API_KEY"],
+      secretValues: ["http://127.0.0.1:4000/v1", "sk-local"],
+      profile: "byok",
+      problem: null,
+    });
+    // The profile is only for sessions: the user's environment, which runs and services start with, stays without it.
+    expect(process.env.MISE_ENV).toBeUndefined();
+
+    useProfile(null);
+    expect(await mise.sessionEnv({ repo: "web", task: null })).toMatchObject({
+      vars: { MAVEN_OPTS: "-Xmx2g", COPILOT_MODEL: "from-the-repo" },
+      profile: null,
+    });
+  });
+
+  test("a session profile comes after the mise environment the daemon was started with, and the config files view reads without it", async () => {
+    const { mise, useProfile, home } = setup({ tasks: [] });
+    writeFileSync(
+      join(home, "fake-mise.json"),
+      JSON.stringify({ tasks: [], env: { REGION: "plain" }, envByMiseEnv: { ci: { REGION: "ci", CI: "1" }, byok: { REGION: "byok" } } }),
+    );
+    useProfile("byok");
+    const before = process.env.MISE_ENV;
+    process.env.MISE_ENV = "ci";
+    try {
+      expect((await mise.sessionEnv({ repo: null, task: null })).vars).toEqual({ REGION: "byok", CI: "1" });
+      expect((await mise.projectsEnv()).vars).toEqual({ REGION: "ci", CI: "1" });
+      expect(process.env.MISE_ENV).toBe("ci");
+    } finally {
+      if (before === undefined) delete process.env.MISE_ENV;
+      else process.env.MISE_ENV = before;
+    }
   });
 
   test("a session in the projects folder gets its variables, and a missing age key there is the session's problem", async () => {
@@ -452,6 +509,7 @@ describe("the environment mise sets (ADR-93)", () => {
       vars: { GITLAB_TOKEN: "t" },
       secretNames: ["GITLAB_TOKEN"],
       secretValues: ["t"],
+      profile: null,
       problem: null,
     });
 
@@ -463,6 +521,7 @@ describe("the environment mise sets (ADR-93)", () => {
       vars: {},
       secretNames: [],
       secretValues: [],
+      profile: null,
       problem:
         "the projects folder: mise ERROR [experimental] No age identities found for decryption\nThe session has no environment from mise.",
     });
@@ -479,6 +538,7 @@ describe("the environment mise sets (ADR-93)", () => {
       vars: { GITLAB_TOKEN: "root" },
       secretNames: ["GITLAB_TOKEN"],
       secretValues: ["root"],
+      profile: null,
       problem:
         "the task's worktree: the mise config in the worktree of task t changed (mise.toml)\nThe session has the environment of the root of web.",
     });
@@ -492,6 +552,7 @@ describe("the environment mise sets (ADR-93)", () => {
       vars: { SHOP_REGION: "eu" },
       secretNames: [],
       secretValues: [],
+      profile: null,
       problem:
         "the root of web: mise ERROR unexpected argument '--redacted' found\nThe session has the environment of the projects folder.",
     });
@@ -522,8 +583,20 @@ describe("the environment mise sets (ADR-93)", () => {
   test("without a mise program a session gets nothing and no problem", async () => {
     const { mise } = setup({ tasks: [] }, ["trackwall-no-such-mise"]);
 
-    expect(await mise.sessionEnv({ repo: "web", task: null })).toEqual({ vars: {}, secretNames: [], secretValues: [], problem: null });
-    expect(await mise.sessionEnv({ repo: null, task: null })).toEqual({ vars: {}, secretNames: [], secretValues: [], problem: null });
+    expect(await mise.sessionEnv({ repo: "web", task: null })).toEqual({
+      vars: {},
+      secretNames: [],
+      secretValues: [],
+      profile: null,
+      problem: null,
+    });
+    expect(await mise.sessionEnv({ repo: null, task: null })).toEqual({
+      vars: {},
+      secretNames: [],
+      secretValues: [],
+      profile: null,
+      problem: null,
+    });
   });
 });
 

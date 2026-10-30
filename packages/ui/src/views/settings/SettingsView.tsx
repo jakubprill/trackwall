@@ -16,6 +16,7 @@ import { JavaNavigationSurface } from "./JavaNavigationSurface.tsx";
 import { LocalConfigReposSurface } from "./LocalConfigReposSurface.tsx";
 import { LocalConfigStoreSurface } from "./LocalConfigStoreSurface.tsx";
 import { RepoHostsSurface } from "./RepoHostsSurface.tsx";
+import { SessionProfileSurface } from "./SessionProfileSurface.tsx";
 import { StartAtSignInSurface } from "./StartAtSignInSurface.tsx";
 import { UpdatesSurface } from "./UpdatesSurface.tsx";
 import { WorkspaceFolders } from "./WorkspaceFolders.tsx";
@@ -81,6 +82,8 @@ function Section({ section, conn, update, warmupLive, onRetry, onSaved }: Settin
       return <RepoHostsSurface conn={conn} />;
     case "copilot-cli":
       return <ConnectCopilotSurface conn={conn} onRetry={onRetry} />;
+    case "session-profile":
+      return <SessionProfileSurface conn={conn} />;
     case "java-navigation":
       return <JavaNavigationSurface conn={conn} />;
     case "start-at-sign-in":

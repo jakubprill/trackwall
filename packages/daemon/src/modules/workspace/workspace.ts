@@ -21,6 +21,7 @@ import {
   type RepoTagRules,
   type SearchCodeResult,
   type Session,
+  type SessionProfile,
   type SupervisorSettings,
   type SyncResult,
   type SyncRun,
@@ -143,6 +144,7 @@ export class Workspace {
     // A bad `worktreesDir` typed by hand must not take away the projects folder form, and saving a folder fixes it.
     const worktreesDir = configOrProblem(() => this.deps.file.worktreesDir(), null);
     const gitProgram = configOrProblem(() => this.deps.file.gitProgram(), null);
+    const sessionProfile = configOrProblem(() => this.deps.file.sessionProfile(), null);
     // What Settings shows is what runs: a hand edit of `gitProgram` applies when Settings reads it (ADR-112).
     this.deps.vcs.useGitProgram(gitProgram.value);
     return {
@@ -152,6 +154,8 @@ export class Workspace {
       defaultWorktreesDir: projectsDir === null ? null : defaultWorktreesDir(projectsDir),
       gitProgram: gitProgram.value,
       gitProgramProblem: gitProgram.problem,
+      sessionProfile: sessionProfile.value,
+      sessionProfileProblem: sessionProfile.problem,
       configFile: this.configFile(),
     };
   }
@@ -431,6 +435,20 @@ export class Workspace {
   toolPermissions(session: Pick<Session, "repo" | "supervisor">): ToolPermissions {
     const rules = this.deps.file.toolPermissionRules();
     return session.supervisor ? supervisorToolPermissions(rules, this.supervisorSettings()) : sessionToolPermissions(rules, session.repo);
+  }
+
+  /** The mise environment new sessions start with (ADR-136); `null` removes it. Takes effect at the next session start. */
+  setSessionProfile(profile: SessionProfile | null): WorkspaceSettings {
+    this.deps.file.setSessionProfile(profile);
+    return this.settings();
+  }
+
+  /**
+   * The mise environment only sessions start with (`sessionProfile`, ADR-136); `invalid_config` for a bad key, so that a
+   * typo never starts a session against another provider than the user meant.
+   */
+  sessionProfile(): SessionProfile | null {
+    return this.deps.file.sessionProfile();
   }
 
   /**

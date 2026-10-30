@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Session } from "@trackwall/protocol";
 import { viewer, waitFor } from "./support/agents.ts";
@@ -69,6 +69,7 @@ describe.skipIf(process.versions.bun === undefined)(
         variables: ["GITLAB_TOKEN", "JIRA_KEY", "SHOP_JAVA_OPTS", "SHOP_REGION"],
         secrets: ["GITLAB_TOKEN", "JIRA_KEY"],
         agentSecrets: ["JIRA_KEY"],
+        profile: null,
         problem: null,
       });
       window.attachment.detach();
@@ -250,6 +251,63 @@ describe.skipIf(process.versions.bun === undefined)(
       const listed = agents.sessions().sessions.filter((s) => s.id === started.id);
       expect(listed.map((s) => s.run.kind)).toEqual(["running"]);
       await agents.stop(started.id);
+    }, 60_000);
+
+    test("a session profile chosen in Settings gives new sessions that mise environment, hides the provider's settings from the tools, and shows a running session a change to restart for", async () => {
+      const { agents, workspace: settings } = daemon.facade;
+      projectsMise({
+        env: { SHOP_REGION: "projects-folder" },
+        envByMiseEnv: {
+          byok: { SHOP_REGION: "byok", COPILOT_PROVIDER_BASE_URL: "http://127.0.0.1:4000/v1", COPILOT_PROVIDER_API_KEY: "sk-local" },
+        },
+      });
+      workspace();
+      const before = await agents.start(null);
+      await waitFor(agents, before.id, (s) => s.run.kind === "running", "the session running");
+      expect(before.environment.profile).toBeNull();
+
+      try {
+        expect(settings.setSessionProfile("byok")).toMatchObject({ sessionProfile: "byok", sessionProfileProblem: null });
+        expect(readFileSync(join(daemon.home, "workspace.yaml"), "utf8")).toContain("sessionProfile: byok");
+        expect((await agents.environmentChange(before.id)).change).toEqual({
+          added: ["COPILOT_PROVIDER_API_KEY", "COPILOT_PROVIDER_BASE_URL"],
+          removed: [],
+          changed: ["SHOP_REGION"],
+          shared: [],
+          unshared: [],
+        });
+
+        const started = await agents.start(null);
+        const window = viewer(agents, started.id);
+        await waitFor(agents, started.id, () => window.text().includes("Env SHOP_REGION=byok"), "the profile's environment on the screen");
+        expect(started.environment).toEqual({
+          variables: ["COPILOT_PROVIDER_API_KEY", "COPILOT_PROVIDER_BASE_URL", "SHOP_REGION"],
+          secrets: ["COPILOT_PROVIDER_API_KEY", "COPILOT_PROVIDER_BASE_URL"],
+          agentSecrets: [],
+          profile: "byok",
+          problem: null,
+        });
+        expect(window.text()).toContain("Argument: --secret-env-vars=COPILOT_PROVIDER_API_KEY,COPILOT_PROVIDER_BASE_URL");
+        window.attachment.detach();
+        await agents.stop(started.id);
+      } finally {
+        settings.setSessionProfile(null);
+      }
+      expect(readFileSync(join(daemon.home, "workspace.yaml"), "utf8")).not.toContain("sessionProfile");
+      await agents.stop(before.id);
+    }, 60_000);
+
+    test("a session does not start while the session profile in workspace.yaml is not a plain name", async () => {
+      workspace("sessionProfile: ../secrets\n");
+      try {
+        await expect(daemon.facade.agents.start(null)).rejects.toMatchObject({ code: "invalid_config" });
+        expect(daemon.facade.workspace.settings()).toMatchObject({
+          sessionProfile: null,
+          sessionProfileProblem: expect.stringContaining("a session profile is a name"),
+        });
+      } finally {
+        workspace();
+      }
     }, 60_000);
 
     test("a restart that the configuration refuses leaves the session running as it was", async () => {

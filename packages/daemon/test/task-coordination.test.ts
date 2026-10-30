@@ -49,7 +49,7 @@ function view(id: string, taskId: string | null, state: TaskState | null, run: S
     needsAttention: false,
     task: taskId,
     dialog: null,
-    environment: { variables: [], secrets: [], agentSecrets: [], problem: null },
+    environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
     view: "terminal",
   };
 }

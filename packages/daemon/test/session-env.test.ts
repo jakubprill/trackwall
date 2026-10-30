@@ -18,7 +18,7 @@ describe("a session's environment from mise (ADR-93)", () => {
 
   test.skipIf(process.platform !== "win32")("on Windows Copilot CLI hides a secret under the user's spelling of its name", () => {
     const launch = sessionMiseLaunch(
-      { vars: { GITLAB_TOKEN: "glpat-value" }, secretNames: ["GITLAB_TOKEN"], secretValues: ["glpat-value"], problem: null },
+      { vars: { GITLAB_TOKEN: "glpat-value" }, secretNames: ["GITLAB_TOKEN"], secretValues: ["glpat-value"], profile: null, problem: null },
       { Gitlab_Token: "old" },
       [],
     );
@@ -33,6 +33,7 @@ describe("a session's environment from mise (ADR-93)", () => {
         vars: { MAVEN_OPTS: "-Xmx2g", JIRA_TOKEN: "jira-value", GITLAB_TOKEN: "glpat-value", DEPLOY_KEY: "deploy-value" },
         secretNames: ["JIRA_TOKEN", "GITLAB_TOKEN", "DEPLOY_KEY"],
         secretValues: ["jira-value", "glpat-value", "deploy-value"],
+        profile: null,
         problem: null,
       },
       { HOME: "/home/someone" },
@@ -56,6 +57,7 @@ describe("a session's environment from mise (ADR-93)", () => {
         vars: { MAVEN_OPTS: "-Xmx2g", GITLAB_TOKEN: "glpat-value", JIRA_TOKEN: "jira-value" },
         secretNames: ["JIRA_TOKEN", "GITLAB_TOKEN"],
         secretValues: ["jira-value", "glpat-value"],
+        profile: null,
         problem: null,
       },
       {},
@@ -66,6 +68,7 @@ describe("a session's environment from mise (ADR-93)", () => {
       variables: ["GITLAB_TOKEN", "JIRA_TOKEN", "MAVEN_OPTS"],
       secrets: ["GITLAB_TOKEN", "JIRA_TOKEN"],
       agentSecrets: ["JIRA_TOKEN"],
+      profile: null,
       problem: null,
     });
     expect(JSON.stringify(environment)).not.toContain("glpat-value");
@@ -73,7 +76,13 @@ describe("a session's environment from mise (ADR-93)", () => {
 
   test("a secret Copilot CLI's list cannot name is left out of the session, and the session says so", () => {
     const launch = sessionMiseLaunch(
-      { vars: { "ODD,NAME": "odd-value", REGION: "eu" }, secretNames: ["ODD,NAME"], secretValues: ["odd-value"], problem: null },
+      {
+        vars: { "ODD,NAME": "odd-value", REGION: "eu" },
+        secretNames: ["ODD,NAME"],
+        secretValues: ["odd-value"],
+        profile: null,
+        problem: null,
+      },
       {},
       [],
     );
@@ -84,7 +93,7 @@ describe("a session's environment from mise (ADR-93)", () => {
   });
 
   test("mise's age key in the user's environment is hidden from the session's tools unless agentSecrets names it", () => {
-    const mise = { vars: {}, secretNames: [], secretValues: [], problem: null };
+    const mise = { vars: {}, secretNames: [], secretValues: [], profile: null, problem: null };
 
     expect(sessionMiseLaunch(mise, { MISE_AGE_KEY: "AGE-SECRET-KEY-1" }, []).args).toEqual(["--secret-env-vars=MISE_AGE_KEY"]);
     expect(sessionMiseLaunch(mise, { MISE_AGE_KEY: "AGE-SECRET-KEY-1" }, ["MISE_AGE_KEY"]).args).toEqual([]);

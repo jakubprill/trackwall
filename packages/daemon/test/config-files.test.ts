@@ -56,7 +56,7 @@ describe("config files", () => {
       name: "workspace.yaml",
       path: workspaceFile,
       state: "present",
-      detail: "3 of 12 keys set in the file",
+      detail: "3 of 13 keys set in the file",
     });
     expect(entry("tasks-file")).toEqual({
       id: "tasks-file",
@@ -115,6 +115,7 @@ describe("config files", () => {
       ["repoHosts", "default", "none", null],
       ["toolPermissions", "default", "none", null],
       ["agentSecrets", "file", "GITLAB_TOKEN", 2],
+      ["sessionProfile", "default", "none", null],
       ["javaNavigation", "default", "not set", null],
       // The value without the user and token an HTTPS address may carry.
       ["localConfigRemote", "file", "https://backups.example.com/me/backups.git", 3],

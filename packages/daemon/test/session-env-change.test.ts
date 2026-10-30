@@ -4,7 +4,7 @@ import { SessionEnvironments } from "../src/modules/agents/session-env-change.ts
 
 /** What mise gives a place, and the launch a session there gets with `agentSecrets`. */
 function place(vars: Record<string, string>, secretNames: string[], agentSecrets: string[]) {
-  const mise = { vars, secretNames, secretValues: secretNames.map((name) => vars[name] ?? ""), problem: null };
+  const mise = { vars, secretNames, secretValues: secretNames.map((name) => vars[name] ?? ""), profile: null, problem: null };
   return [mise, sessionMiseLaunch(mise, {}, agentSecrets)] as const;
 }
 

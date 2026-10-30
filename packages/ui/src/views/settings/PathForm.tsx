@@ -9,7 +9,7 @@ import { pickFolder } from "@/lib/folder-picker";
 
 /**
  * A path setting saved as one key of `workspace.yaml`: the projects folder (ADR-18), the task worktrees folder (ADR-84) or
- * the git program (ADR-112).
+ * the git program (ADR-112); also the session profile (ADR-136), a name typed like a program's path.
  */
 export function PathForm({
   label,
@@ -19,6 +19,7 @@ export function PathForm({
   configFile,
   save,
   reset,
+  resetLabel = "Use default",
   folder = true,
 }: {
   label: string;
@@ -30,6 +31,8 @@ export function PathForm({
   save: (path: string) => Promise<void>;
   /** Back to the default; without it the setting has no default to go back to, or already uses it. */
   reset?: () => Promise<void>;
+  /** What going back to the default means for this setting. */
+  resetLabel?: string;
   /** A folder gets the system folder picker, unless the daemon has no desktop here (ADR-130); a program is typed or pasted. */
   folder?: boolean;
 }) {
@@ -89,7 +92,7 @@ export function PathForm({
         </Button>
         {reset && (
           <Button type="button" variant="ghost" size="sm" onClick={() => void run(reset)} disabled={busy}>
-            Use default
+            {resetLabel}
           </Button>
         )}
       </div>

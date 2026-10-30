@@ -10,6 +10,8 @@
 // `env --json` prints `env` (the variables of the config's `[env]`, as decrypted values) and `env --redacted --json` only those
 // named in `redacted`, as mise does for `redact = true` and age values (ADR-93); an untrusted config fails both like `tasks
 // ls`, and `envError` fails them with that mise error (e.g. a missing age key), `redactedError` only the `--redacted` one.
+// With `MISE_ENV` set (one name or several with commas), `env` also has the variables of `envByMiseEnv[name]` of each
+// name in turn over `env`, as mise reads `mise.<name>.toml` (ADR-136).
 import { spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { delimiter, dirname, join, sep } from "node:path";
@@ -25,6 +27,7 @@ const config = JSON.parse(readFileSync(configPath, "utf8")) as {
   writes?: Record<string, Record<string, string>>;
   env?: Record<string, string>;
   redacted?: string[];
+  envByMiseEnv?: Record<string, Record<string, string>>;
   envError?: string;
   redactedError?: string;
 };
@@ -65,7 +68,8 @@ if (args[0] === "tasks" && args[1] === "ls" && args[2] === "--json") {
     console.error("mise ERROR Run with --verbose or MISE_VERBOSE=1 for more information");
     process.exit(1);
   }
-  const env = config.env ?? {};
+  const names = (process.env.MISE_ENV ?? "").split(",").filter((name) => name !== "");
+  const env = Object.assign({}, config.env, ...names.map((name) => config.envByMiseEnv?.[name]));
   const redacted = config.redacted ?? [];
   const shown = args[1] === "--redacted" ? Object.fromEntries(Object.entries(env).filter(([name]) => redacted.includes(name))) : env;
   console.log(JSON.stringify(shown, null, 2));

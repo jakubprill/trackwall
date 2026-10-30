@@ -54,6 +54,8 @@ interface MiseProcs {
 interface MiseRepos {
   repoPath(id: string): Promise<string>;
   projectsDir(): Promise<string>;
+  /** The mise environment only sessions start with (ADR-136); `invalid_config` for a bad key. */
+  sessionProfile(): string | null;
 }
 
 /**
@@ -98,6 +100,8 @@ type TaskList = { kind: Exclude<MiseTasks["kind"], "ok">; message: string } | { 
 const UNTRUSTED = /not trusted/i;
 /** mise setting with directories whose configs it trusts, separated like `PATH` (`list_by_os_path_separator`). */
 const TRUSTED_PATHS_ENV = "MISE_TRUSTED_CONFIG_PATHS";
+/** mise's environment name, which adds `mise.<name>.toml` to every config it reads (a session profile, ADR-136). */
+const MISE_ENV = "MISE_ENV";
 /** mise setting with directories above which it looks for no config. */
 const CEILING_PATHS_ENV = "MISE_CEILING_PATHS";
 /** `mise install` of a JDK downloads about 200 MB. */
@@ -120,11 +124,12 @@ export interface SessionPlace {
 }
 
 /**
- * The environment mise sets for a session (ADR-93): the variables, the names of the secrets among them, and why the session
- * got less than its own place gives (`null` when nothing is missing).
+ * The environment mise sets for a session (ADR-93): the variables, the names of the secrets among them, why the session
+ * got less than its own place gives (`null` when nothing is missing), and the session profile it was read with (ADR-136).
  */
 export interface SessionMiseEnv extends MiseEnv {
   problem: string | null;
+  profile: string | null;
 }
 
 /** A place a session's environment can come from: where mise runs, or a `DomainError` when the place is refused. */
@@ -346,10 +351,29 @@ export class Mise {
    * worktree's instead while the root's config is trusted and the worktree's is the one the user trusted (ADR-59), as for
    * a run; the worktree is never read when the root is refused, since its trust rests on the root's. A refused repo root
    * falls back to the projects folder, which is also the only place of the supervisor and a free session. Each refused
-   * place is a line of the session's problem. Without mise there is nothing and no problem.
+   * place is a line of the session's problem. Without mise there is nothing and no problem. With a session profile
+   * (ADR-136) mise reads every place with the profile added to `MISE_ENV`, after any environment the daemon itself was
+   * started with, which only sessions get: runs and services read mise without it, and Copilot CLI gets the variables
+   * mise sets, with `MISE_ENV` as the user's environment has it.
    */
-  async sessionEnv({ repo, task }: SessionPlace): Promise<SessionMiseEnv> {
-    const env = await this.deps.env();
+  async sessionEnv(place: SessionPlace): Promise<SessionMiseEnv> {
+    const profile = this.deps.repos.sessionProfile();
+    // A copy: the user's environment is shared with runs and services, which never get the profile.
+    const env = { ...(await this.deps.env()) };
+    if (profile !== null) {
+      const key = envKey(env, MISE_ENV);
+      const inherited = env[key];
+      env[key] = inherited ? `${inherited},${profile}` : profile;
+    }
+    return { ...(await this.sessionEnvIn(place, env)), profile };
+  }
+
+  /** The projects folder's environment as mise gives it without a session profile, for the view of the config files (ADR-108). */
+  async projectsEnv(): Promise<Omit<SessionMiseEnv, "profile">> {
+    return this.sessionEnvIn({ repo: null, task: null }, { ...(await this.deps.env()) });
+  }
+
+  private async sessionEnvIn({ repo, task }: SessionPlace, env: NodeJS.ProcessEnv): Promise<Omit<SessionMiseEnv, "profile">> {
     const problems: string[] = [];
     if (repo !== null) {
       const inRepo = await this.repoSessionEnv(repo, task, env);
@@ -368,7 +392,7 @@ export class Mise {
     repo: string,
     task: string | null,
     env: NodeJS.ProcessEnv,
-  ): Promise<{ kind: "done"; env: SessionMiseEnv } | { kind: "refused"; problem: string }> {
+  ): Promise<{ kind: "done"; env: Omit<SessionMiseEnv, "profile"> } | { kind: "refused"; problem: string }> {
     const root: EnvPlace = { label: `the root of ${repo}`, where: async () => ({ dir: await this.deps.repos.repoPath(repo), env }) };
     const inRoot = await this.readPlace(root);
     if (inRoot.kind === "not_installed") return { kind: "done", env: { ...NO_MISE_ENV, problem: null } };
