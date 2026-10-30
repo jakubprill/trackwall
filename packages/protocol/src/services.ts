@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { TaskId } from "./agents.ts";
-import type { Endpoint } from "./api.ts";
+import { apiEndpoints } from "./api.ts";
 import { HttpMethod } from "./http.ts";
 import { LogError } from "./logs.ts";
 import { RunState } from "./procs.ts";
@@ -192,9 +192,7 @@ export const CallEndpointResult = z.object({
 });
 export type CallEndpointResult = z.infer<typeof CallEndpointResult>;
 
-function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
-  return { path: `/api/services/${action}`, request, data };
-}
+const endpoint = apiEndpoints("services");
 
 export const servicesApi = {
   /** Services the daemon started or watched since it started, in the order they were first started. */

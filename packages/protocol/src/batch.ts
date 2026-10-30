@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Endpoint } from "./api.ts";
+import { apiEndpoints } from "./api.ts";
 import { RepoId } from "./workspace.ts";
 
 /**
@@ -72,9 +72,7 @@ export const BatchRequest = z
   .strict();
 export type BatchRequest = z.infer<typeof BatchRequest>;
 
-function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
-  return { path: `/api/batch/${action}`, request, data };
-}
+const endpoint = apiEndpoints("batch");
 
 export const batchApi = {
   /** Starts the batch command in the background and returns it at once; while another runs, `bad_request`. Progress through `run`. */

@@ -2,19 +2,18 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as protocol from "@trackwall/protocol";
 import {
   apiResult,
   BatchRun,
   batchApi,
-  cardsApi,
   DaemonInfoResult,
+  type Endpoint,
   graphApi,
   HealthResult,
   LogTail,
-  localConfigApi,
   logsApi,
   MAX_REPOS_PER_REQUEST,
-  miseApi,
   Repo,
   RepoGraph,
   RepoList,
@@ -99,6 +98,10 @@ function modules() {
 const req = (path: string, opts: LoopbackOptions = {}) => loopbackRequest(api.port, path, opts);
 const authed = (path: string, opts: LoopbackOptions = {}) => req(path, { token: TOKEN, ...opts });
 
+function isEndpoint(value: unknown): value is Endpoint {
+  return typeof value === "object" && value !== null && "path" in value && typeof value.path === "string";
+}
+
 describe("api", () => {
   test("health is public and returns the version", async () => {
     const res = await req("/api/health");
@@ -182,16 +185,16 @@ describe("api", () => {
 describe("api workspace", () => {
   const post = (path: string, body: string) => authed(path, { method: "POST", headers: { "content-type": "application/json" }, body });
 
-  test("every action of the workspace, cards, graph, local config, mise and batch contracts has a route in the daemon", () => {
-    const endpoints = [
-      ...Object.values(workspaceApi),
-      ...Object.values(cardsApi),
-      ...Object.values(graphApi),
-      ...Object.values(localConfigApi),
-      ...Object.values(miseApi),
-      ...Object.values(batchApi),
-    ];
-    expect(endpoints.filter((endpoint) => !postRoutes.has(endpoint.path))).toEqual([]);
+  test("every action of every API contract in protocol has a route in the daemon, and every route is an action of a contract", () => {
+    // The contracts are the `<module>Api` objects protocol exports; a new one joins this test by its name alone.
+    const contracts = Object.entries(protocol).flatMap(([name, value]) => {
+      const endpoints = typeof value === "object" && value !== null ? Object.values(value) : [];
+      return name.endsWith("Api") && endpoints.every(isEndpoint) ? [{ name, endpoints }] : [];
+    });
+    expect(contracts.map(({ name }) => name)).toContain("workspaceApi");
+    const paths = contracts.flatMap(({ endpoints }) => endpoints.map((endpoint) => endpoint.path));
+    expect(paths.filter((path) => !postRoutes.has(path))).toEqual([]);
+    expect([...postRoutes.keys()].filter((path) => !paths.includes(path))).toEqual([]);
   });
 
   test("workspace routes require the token", async () => {
@@ -313,10 +316,6 @@ describe("api workspace", () => {
 describe("api logs", () => {
   const post = (path: string, body: unknown) =>
     authed(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-
-  test("every action of the mise and logs contracts has a route in the daemon", () => {
-    expect([...Object.values(miseApi), ...Object.values(logsApi)].filter((endpoint) => !postRoutes.has(endpoint.path))).toEqual([]);
-  });
 
   test("the log of a mise task that printed nothing is empty, and a source that does not match the schema is 400", async () => {
     const source = { kind: "mise-task", repo: "web", miseTask: "dev" };

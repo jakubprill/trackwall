@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Done, type Endpoint } from "./api.ts";
+import { apiEndpoints, Done } from "./api.ts";
 import { countLabel } from "./plural.ts";
 
 /**
@@ -340,9 +340,7 @@ export const ConfigFilesReport = z.object({
 });
 export type ConfigFilesReport = z.infer<typeof ConfigFilesReport>;
 
-function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
-  return { path: `/api/config-files/${action}`, request, data };
-}
+const endpoint = apiEndpoints("config-files");
 
 const EntryRequest = z.object({ id: ConfigEntryId }).strict();
 

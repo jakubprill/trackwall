@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { WORKTREE_INCLUDE_FILE } from "./agents.ts";
-import type { Endpoint } from "./api.ts";
+import { apiEndpoints } from "./api.ts";
 import { Commit, RepoId } from "./workspace.ts";
 
 /**
@@ -100,9 +100,7 @@ export function withoutUserInfo(url: string): string {
   return `${scheme}${authority.slice(authority.lastIndexOf("@") + 1)}${rest}`;
 }
 
-function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
-  return { path: `/api/local-config/${action}`, request, data };
-}
+const endpoint = apiEndpoints("local-config");
 
 const RepoRequest = z.object({ repo: RepoId }).strict();
 

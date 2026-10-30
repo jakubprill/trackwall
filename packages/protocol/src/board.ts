@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Done, type Endpoint } from "./api.ts";
+import { apiEndpoints, Done } from "./api.ts";
 import { ExternalLink, RepoId } from "./workspace.ts";
 
 /**
@@ -119,9 +119,7 @@ export type BoardRevision = z.infer<typeof BoardRevision>;
 
 const ItemRequest = z.object({ item: BoardItemId }).strict();
 
-function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
-  return { path: `/api/board/${action}`, request, data };
-}
+const endpoint = apiEndpoints("board");
 
 export const boardApi = {
   /** The whole board; `projects_dir_unavailable` or `bad_request` without a projects folder, like the repo list. */

@@ -64,3 +64,15 @@ export const Done = z.null();
 
 /** The response envelope without knowing `data`; the client checks `data` with the action's schema in a second step. */
 export const ApiEnvelope = apiResult(z.unknown());
+
+/**
+ * The actions of one module, `POST /api/<module>/<action>`: every contract file makes its endpoints with the function this
+ * returns, so the path of an action is spelled in one place and a test can check that the daemon routes every action.
+ */
+export function apiEndpoints(module: string) {
+  return <Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> => ({
+    path: `/api/${module}/${action}`,
+    request,
+    data,
+  });
+}

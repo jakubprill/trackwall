@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { TaskId } from "./agents.ts";
-import { Done, type Endpoint } from "./api.ts";
+import { apiEndpoints, Done } from "./api.ts";
 import { RepoHostKind } from "./repo-hosts.ts";
 import { WebAddress } from "./workspace.ts";
 
@@ -122,9 +122,7 @@ export interface MergeRequestForm {
   description: string;
 }
 
-function endpoint<Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> {
-  return { path: `/api/merge-requests/${action}`, request, data };
-}
+const endpoint = apiEndpoints("merge-requests");
 
 export const mergeRequestsApi = {
   /** The task branch against the main remote and the merge request from it; the repo host's answer is reused for a few seconds. */
