@@ -90,6 +90,14 @@ pnpm --filter @trackwall/daemon idle-cost        # 20 s per phase
 pnpm --filter @trackwall/daemon idle-cost 60     # 60 s per phase
 ```
 
+`exploration-cost` measures how much agents look around in the code before they change it, the number that decides whether a repo map tool for agents is worth building. It reads the event logs Copilot CLI keeps for every session in `<COPILOT_HOME>/session-state` (by default `~/.copilot`; Trackwall's own `hooks.jsonl` goes away when a session is closed), by default only of agent tasks (a `trackwall/` branch), and for each one counts, from its first prompt up to its first edit: tool calls that only read (`view`, `grep`, `glob`, `lsp`, and shell commands whose every program only reads, such as `rg`, `cat` or `git log`), calls of Trackwall's tools, sub-agents, other calls, model turns, input tokens and time; then the median, 75th percentile and maximum, and the tools used most. The time includes any wait for an approval, and an edit through the shell without a redirection (`sed -i`, `git apply`, a generator) is not seen as one, so such a session's look around runs on past its real first edit. It prints no prompt, command, repo or path, and a tool of another MCP server only as `other MCP`, since the server's name may be the user's company's, so the output can be shared. The log is Copilot CLI's undocumented format, so a line of another shape is skipped rather than failing the run:
+
+```sh
+pnpm --filter @trackwall/daemon exploration-cost                       # agent tasks
+pnpm --filter @trackwall/daemon exploration-cost --all --since 2026-10-01   # every session since a date
+pnpm --filter @trackwall/daemon exploration-cost --copilot-home <dir>  # another Copilot home
+```
+
 The same daemon also runs under plain Node, without Bun (ADR-1): `pnpm --filter @trackwall/ui build`, then `pnpm --filter @trackwall/daemon start:node`.
 
 ## Portable build

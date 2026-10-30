@@ -23,9 +23,14 @@ export type TrustedFolders =
   | { kind: "missing"; file: string }
   | { kind: "unreadable"; file: string; message: string };
 
-function copilotConfigFile(env: NodeJS.ProcessEnv): string {
+/** Copilot CLI's home: `COPILOT_HOME` (in any case on Windows) when set and not empty, otherwise `~/.copilot`. */
+export function copilotHome(env: NodeJS.ProcessEnv): string {
   const home = env[envKey(env, "COPILOT_HOME")];
-  return join(home ? home : join(homedir(), ".copilot"), "config.json");
+  return home ? home : join(homedir(), ".copilot");
+}
+
+function copilotConfigFile(env: NodeJS.ProcessEnv): string {
+  return join(copilotHome(env), "config.json");
 }
 
 export async function trustedFolders(env: NodeJS.ProcessEnv): Promise<TrustedFolders> {
