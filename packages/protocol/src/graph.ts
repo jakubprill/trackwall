@@ -307,8 +307,8 @@ export const EndpointChanges = z.object({
   head: CommitHash,
   changes: z.array(EndpointChange),
   /**
-   * `false` when a card was not fully parsed or was cut (`parse-incomplete` or `truncated` problems): then contracts and
-   * DTOs are not compared, which would report endpoints as changed only because one card lacks them, and only added and
+   * `false` when a card lacks some request and response types or DTOs (a file not parsed, the DTO list cut): then
+   * contracts and DTOs are not compared, which would report endpoints as changed only because one card lacks them, and only added and
    * removed endpoints are listed.
    */
   contractsCompared: z.boolean(),

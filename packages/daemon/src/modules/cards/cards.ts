@@ -147,18 +147,22 @@ export class Cards {
    * from the cards of both commits, with both cards' problems; uncommitted work is not in a card (ADR-14).
    */
   async endpointChanges(repo: string, dir: string, base: string): Promise<EndpointChanges> {
-    try {
-      const head = await this.deps.vcs.headCommit(dir);
-      if (head === null) throw new Error("the worktree has no commit");
-      const [before, after] = await Promise.all([this.cardAt(dir, base), this.cardAt(dir, head)]);
-      const problems = [
-        ...before.problems.map((p) => ({ ...p, commit: "base" as const })),
-        ...after.problems.map((p) => ({ ...p, commit: "head" as const })),
-      ];
-      return { head, ...endpointChanges(before, after), problems };
-    } catch (err) {
-      throw new DomainError("repo_unavailable", `${repo}: ${messageOf(err)}`);
-    }
+    const { head, before, after } = await this.cardsOfWorktree(repo, dir, base).catch((err: unknown) => {
+      throw err instanceof DomainError ? err : new DomainError("repo_unavailable", `${repo}: ${messageOf(err)}`);
+    });
+    const problems = [
+      ...before.problems.map((p) => ({ ...p, commit: "base" as const })),
+      ...after.problems.map((p) => ({ ...p, commit: "head" as const })),
+    ];
+    return { head, ...endpointChanges(before, after), problems };
+  }
+
+  /** The cards of commit `base` and of the HEAD of the worktree in `dir`; git's failures as they come. */
+  private async cardsOfWorktree(repo: string, dir: string, base: string): Promise<{ head: string; before: RepoCard; after: RepoCard }> {
+    const head = await this.deps.vcs.headCommit(dir);
+    if (head === null) throw new DomainError("repo_unavailable", `${repo}: the task's worktree has no commit`);
+    const [before, after] = await Promise.all([this.cardAt(dir, base), this.cardAt(dir, head)]);
+    return { head, before, after };
   }
 
   private async cardAt(dir: string, commit: string): Promise<RepoCard> {

@@ -1,4 +1,10 @@
-import { type ChangedEndpoint, type EndpointChange, MAX_CHANGED_ENDPOINTS, type ProvidedEndpoint } from "@trackwall/protocol";
+import {
+  type ChangedEndpoint,
+  type EndpointCaller,
+  type EndpointChange,
+  MAX_CHANGED_ENDPOINTS,
+  type ProvidedEndpoint,
+} from "@trackwall/protocol";
 import { EndpointCalls } from "./endpoint-calls.ts";
 import { callersByEndpoint } from "./find-endpoint.ts";
 import type { HttpIndex } from "./http-index.ts";
@@ -30,7 +36,18 @@ export function withCallers(
   const callers = callersByEndpoint(index, new EndpointCalls(index), new Set([...inGraph.values()].flat()));
   const endpoints = shown.map((change) => ({
     ...change,
-    callers: (inGraph.get(change) ?? []).flatMap((endpoint) => callers.get(endpoint) ?? []),
+    callers: distinct((inGraph.get(change) ?? []).flatMap((endpoint) => callers.get(endpoint) ?? [])),
   }));
   return { endpoints, truncated: changes.length > shown.length };
+}
+
+/** A call matches each endpoint that shares its place, so with several there it would be listed once per endpoint. */
+function distinct(callers: EndpointCaller[]): EndpointCaller[] {
+  const seen = new Set<string>();
+  return callers.filter((c) => {
+    const key = JSON.stringify([c.repo, c.client, c.method, c.path, c.evidence.path, c.evidence.line]);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }

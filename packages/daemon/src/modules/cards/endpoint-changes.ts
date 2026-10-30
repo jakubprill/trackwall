@@ -1,19 +1,16 @@
-import type { CardProblem, Dto, EndpointChange, EndpointChanges, EndpointContract, ProvidedEndpoint, RepoCard } from "@trackwall/protocol";
-import { contractTypeNames, dtoFieldTypeNames, reachableTypes } from "./endpoint-contracts.ts";
+import type { Dto, EndpointChange, EndpointChanges, EndpointContract, ProvidedEndpoint, RepoCard } from "@trackwall/protocol";
+import { contractTypeNames, dtoFieldTypeNames, leavesContractsIncomplete, reachableTypes } from "./endpoint-contracts.ts";
 
 /**
  * The endpoints that differ between two cards of one repo (§4.6, ADR-145): the card of a task's base commit and the one
  * of its HEAD. An endpoint is known by its app, method and path, and by its handler too when several endpoints share
  * them (mappings that differ only by `params` or `headers`). It changed when its request or response type did, or a DTO
- * reachable from them (ADR-38) did; that is compared only when both cards were fully parsed and not cut, since a card
- * without syntax trees has no types to compare. Callers come from the graph.
+ * reachable from them (ADR-38) did; that is compared only when neither card lacks types or DTOs
+ * (`leavesContractsIncomplete`), since a card without syntax trees has no types to compare. Callers come from the graph.
  */
 
-/** Problems that leave a card without some request and response types or DTOs. */
-const INCOMPLETE_CONTRACTS = new Set<CardProblem["code"]>(["parse-incomplete", "truncated"]);
-
 export function endpointChanges(before: RepoCard, after: RepoCard): Omit<EndpointChanges, "head" | "problems"> {
-  const contractsCompared = [before, after].every((card) => !card.problems.some((p) => INCOMPLETE_CONTRACTS.has(p.code)));
+  const contractsCompared = [before, after].every((card) => !card.problems.some(leavesContractsIncomplete));
   const shared = sharedPlaces([before, after]);
   const old = endpointsByKey(before, shared);
   const now = endpointsByKey(after, shared);

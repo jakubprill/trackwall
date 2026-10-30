@@ -108,9 +108,33 @@ describe("endpoints that differ between a task's base and its head (ADR-145)", (
 
   test("a card that was not fully parsed compares no contracts, only which endpoints came and went", () => {
     const unparsed = { ...card([endpoint("/api/payments/{id}", null), endpoint("/api/v2/refunds", null)], []) };
-    unparsed.problems = [{ code: "parse-incomplete", path: "", message: "Java and Kotlin parsers could not be loaded" }];
+    unparsed.problems = [
+      {
+        code: "parse-incomplete",
+        path: "",
+        message:
+          "Java and Kotlin parsers could not be loaded (no grammar); endpoints have no request and response types and the card has no DTOs",
+      },
+    ];
     const result = endpointChanges(card([endpoint("/api/payments/{id}", "Payment")], [payment]), unparsed);
     expect(result.contractsCompared).toBe(false);
     expect(result.changes.map((c) => `${c.change} ${c.path}`)).toEqual(["added /api/v2/refunds"]);
+  });
+
+  test("a card whose endpoint reach was not traced still compares contracts, since its types and DTOs are all there", () => {
+    const untraced = card([endpoint("/api/payments/{id}", "PaymentView")], []);
+    untraced.problems = [{ code: "parse-incomplete", path: "", message: "parsing took too long; endpoints have no reach" }];
+    const result = endpointChanges(card([endpoint("/api/payments/{id}", "Payment")], []), untraced);
+    expect(result.contractsCompared).toBe(true);
+    expect(result.changes.map((c) => `${c.change} ${c.path}`)).toEqual(["changed /api/payments/{id}"]);
+  });
+
+  test("a card whose DTO list was cut compares no contracts", () => {
+    const cut = card([endpoint("/api/payments/{id}", "Payment")], []);
+    cut.problems = [{ code: "truncated", path: "", message: "the repo has more than 500 DTOs; the card lists the first ones" }];
+    expect(endpointChanges(card([endpoint("/api/payments/{id}", "Payment")], [payment]), cut)).toEqual({
+      changes: [],
+      contractsCompared: false,
+    });
   });
 });

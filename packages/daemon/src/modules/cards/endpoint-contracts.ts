@@ -95,6 +95,16 @@ export function responseType(returns: string | null): string | null {
   return type === null || type === "" || NO_CONTENT.has(type) ? null : type;
 }
 
+/**
+ * Whether a card problem is one of this file's that leaves endpoints without some request and response types or DTOs:
+ * a file or all files not parsed, or the DTO list or a DTO cut. Recognised by the words of its message, so cards cached
+ * before anyone asked count too; a clipped type name is the same on every card and does not count.
+ */
+export function leavesContractsIncomplete(problem: CardProblem): boolean {
+  if (problem.code === "parse-incomplete") return problem.message.includes("request and response types");
+  return problem.code === "truncated" && /DTOs; the card lists|has more than \d+ (fields|constants)/.test(problem.message);
+}
+
 /** DTOs reachable from the endpoints' request and response types through field types, in discovery order. */
 function reachableDtos(endpoints: readonly ProvidedEndpoint[], syntax: SyntaxOfFiles, problems: CardProblem[]): Dto[] {
   const dtos: Dto[] = [];

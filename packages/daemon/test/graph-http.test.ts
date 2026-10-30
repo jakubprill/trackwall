@@ -828,18 +828,9 @@ describe("the graph and find_endpoint on real git", () => {
           [
             "legacy-reports OrdersReport src/main/java/com/example/reports/OrdersReport.java:17",
             "orders-bff OrdersClient src/main/kotlin/com/example/bff/OrdersClient.kt:11",
-            "orders-bff OrdersClient src/main/kotlin/com/example/bff/OrdersClient.kt:11",
           ],
         ],
-        [
-          "changed",
-          "POST /api/orders",
-          ["OrderLine"],
-          [
-            "orders-bff OrdersClient src/main/kotlin/com/example/bff/OrdersClient.kt:14",
-            "orders-bff OrdersClient src/main/kotlin/com/example/bff/OrdersClient.kt:14",
-          ],
-        ],
+        ["changed", "POST /api/orders", ["OrderLine"], ["orders-bff OrdersClient src/main/kotlin/com/example/bff/OrdersClient.kt:14"]],
         // The default branch's PUT has a caller, which the task's POST breaks.
         [
           "removed",
