@@ -1,11 +1,12 @@
+import { DevContainerForm } from "@/components/DevContainerForm";
 import { HostProjectsFolderForm } from "@/components/HostProjectsFolderForm";
 import { RemoteDaemonForm } from "@/components/RemoteDaemonForm";
 import { Surface } from "@/components/Surface";
 import { inDesktopShell } from "@/lib/app-window";
 
 /**
- * Whether the desktop app runs its own daemon or connects to one in a dev container (ADR-130), and where this computer
- * sees that daemon's projects folder (ADR-131).
+ * Whether the desktop app runs its own daemon or connects to one in a dev container (ADR-130), which it can start itself
+ * (ADR-139), and where this computer sees that daemon's projects folder (ADR-131).
  */
 export function RemoteDaemonSurface() {
   return (
@@ -13,6 +14,7 @@ export function RemoteDaemonSurface() {
       <div className="flex flex-col gap-3 p-4">
         {inDesktopShell() ? (
           <>
+            <DevContainerForm />
             <RemoteDaemonForm />
             <HostProjectsFolderForm />
           </>

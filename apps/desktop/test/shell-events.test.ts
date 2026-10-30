@@ -255,3 +255,16 @@ test("the UI keeps the projects folder on this computer and shows a repo there w
   expect(ui).toContain("invoke(SET_COMMAND, { path })");
   expect(ui).toContain("invoke(SHOW_COMMAND, { segments })");
 });
+
+test("the UI keeps and starts the dev container with the commands and fields the shell defines", () => {
+  const shell = read("apps/desktop/src-tauri/src/dev_container.rs");
+  const ui = read("packages/ui/src/lib/dev-container.ts");
+  const commands = [...shell.matchAll(/#\[tauri::command\]\s*pub (?:async )?fn (\w+)/g)].map((m) => m[1]);
+  expect(commands).toEqual(["dev_container", "set_dev_container", "start_dev_container"]);
+  expect([...ui.matchAll(/_COMMAND = "([^"]+)";/g)].map((m) => m[1])).toEqual(commands);
+  expect(shell).toContain("dev: Option<DevContainer>");
+  expect(ui).toContain("invoke(SET_COMMAND, { dev })");
+  const fields = [...(/pub struct DevContainer \{([^}]*)\}/.exec(shell)?.[1] ?? "").matchAll(/pub (\w+): String/g)].map((m) => m[1]);
+  expect(fields).toEqual(["folder", "open"]);
+  expect(ui).toContain("z.object({ folder: z.string(), open: z.string() })");
+});

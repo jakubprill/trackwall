@@ -58,11 +58,13 @@ describe("workspace.yaml", () => {
   test("a key read again after the file changed by hand gives the new value, and a broken edit is an error at once", () => {
     const path = tempFile();
     const file = new WorkspaceFile(path);
-    writeFileSync(path, "projectsDir: /old\n");
-    expect(file.projectsDir()).toBe("/old");
+    // Full paths of this system: on Windows `/old` has no drive and is not one.
+    const [oldDir, newDir] = [resolve("/old"), resolve("/new")];
+    writeFileSync(path, `projectsDir: ${JSON.stringify(oldDir)}\n`);
+    expect(file.projectsDir()).toBe(oldDir);
 
-    writeFileSync(path, "projectsDir: /new\n");
-    expect(file.projectsDir()).toBe("/new");
+    writeFileSync(path, `projectsDir: ${JSON.stringify(newDir)}\n`);
+    expect(file.projectsDir()).toBe(newDir);
 
     writeFileSync(path, "projectsDir: [unclosed\n");
     expect(() => file.projectsDir()).toThrow(expect.objectContaining({ code: "invalid_config" }));

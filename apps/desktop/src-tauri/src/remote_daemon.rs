@@ -7,6 +7,7 @@
 
 use crate::daemon;
 use crate::daemon_state::DaemonState;
+use crate::dev_container::DevContainerStart;
 use crate::{autostart, json_file};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -25,7 +26,7 @@ pub struct RemoteDaemon {
 
 /// The token goes into an HTTP header written by hand (`daemon.rs`), so only base64url characters pass: a line break
 /// would let a pasted address add headers of its own.
-fn is_token(token: &str) -> bool {
+pub fn is_token(token: &str) -> bool {
     !token.is_empty() && token.len() <= MAX_TOKEN_LEN && token.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
@@ -73,23 +74,40 @@ pub fn remote_daemon_port(state: tauri::State<'_, Arc<DaemonState>>) -> Option<u
 /// the token, so a wrong address leaves the app as it was, then saves it and restarts the app, which stops the app's own
 /// daemon.
 #[tauri::command]
-pub async fn use_remote_daemon(app: AppHandle, state: tauri::State<'_, Arc<DaemonState>>, address: String) -> Result<(), String> {
+pub async fn use_remote_daemon(
+    app: AppHandle,
+    state: tauri::State<'_, Arc<DaemonState>>,
+    starting: tauri::State<'_, DevContainerStart>,
+    address: String,
+) -> Result<(), String> {
     let remote = parse_address(&address)?;
-    // Its own daemon would pass the check, and the restart would then stop the daemon it was told to connect to.
+    refuse_own_daemon(&state, &remote)?;
+    let checked = remote.clone();
+    tauri::async_runtime::spawn_blocking(move || daemon::connect_remote(&checked)).await.map_err(|e| e.to_string())??;
+    starting.cancel();
+    switch_to(&app, &remote)
+}
+
+/// Its own daemon would pass the check, and the restart would then stop the daemon it was told to connect to.
+pub fn refuse_own_daemon(state: &DaemonState, remote: &RemoteDaemon) -> Result<(), String> {
     if state.remote().is_none() && state.ready().is_some_and(|own| own.port == remote.port) {
         return Err("That is the address of this app's own daemon. Paste the address of the daemon in the container.".into());
     }
-    let checked = remote.clone();
-    tauri::async_runtime::spawn_blocking(move || daemon::connect_remote(&checked)).await.map_err(|e| e.to_string())??;
-    let path = json_file::config_file(&app, FILE).ok_or("the system gives the app no configuration directory")?;
-    json_file::save_private(&path, &remote).map_err(|e| format!("{}: {e}", path.display()))?;
-    restart(&app);
+    Ok(())
+}
+
+/// Saves a remote daemon that `daemon::connect_remote` accepted and restarts the app to use it.
+pub fn switch_to(app: &AppHandle, remote: &RemoteDaemon) -> Result<(), String> {
+    let path = json_file::config_file(app, FILE).ok_or("the system gives the app no configuration directory")?;
+    json_file::save_private(&path, remote).map_err(|e| format!("{}: {e}", path.display()))?;
+    restart(app);
     Ok(())
 }
 
 /// Forgets the remote daemon and restarts the app, which then starts its own.
 #[tauri::command]
-pub fn use_own_daemon(app: AppHandle) -> Result<(), String> {
+pub fn use_own_daemon(app: AppHandle, starting: tauri::State<'_, DevContainerStart>) -> Result<(), String> {
+    starting.cancel();
     if let Some(path) = json_file::config_file(&app, FILE) {
         match std::fs::remove_file(&path) {
             Ok(()) => {}
