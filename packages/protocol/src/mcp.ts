@@ -911,7 +911,7 @@ export const mcpTools = {
     name: START_SERVICE,
     readOnly: false,
     destructive: true,
-    auditArgs: ["repo", "task", "dependencies"] as const,
+    auditArgs: ["repo", "task", "lease", "dependencies"] as const,
     description:
       `Start a repo's service (its mise task ${SERVICE_MISE_TASK}, in the repo root) together with the services it calls, ` +
       "found in the connection graph (http and manual connections, not packages, not low confidence), dependencies " +
@@ -926,7 +926,13 @@ export const mcpTools = {
       `one starts again, e.g. after you fixed it). At most ${MAX_SLICE_REPOS} repos. With task, the service runs from ` +
       `that task's worktree, so it runs the task's changes, on the task port (${TASK_PORT_ENV.join(" and ")} are set to it), next ` +
       "to the same service from the repo root; its dependencies still run from their repo roots, and the services that " +
-      "call it keep calling the one from the repo root. A session in Trackwall can start only its own repo (dependencies " +
+      "call it keep calling the one from the repo root. With task and lease: true, the task's service takes the port " +
+      "of the repo root's service instead (a lease): the root's service stops first, the task's runs on its port, so the " +
+      "services that call the repo, a frontend's dev server and the user's browser reach the task's changes, and later " +
+      "starts that need the repo take the task's service as it. The lease ends when the task's service stops or crashes, " +
+      "and the root's service then starts again if it was running. Refused when another task holds the port, when the " +
+      "task's service already runs on the task port (stop it first) or when the repo has no single known port. " +
+      "A session in Trackwall can start only its own repo (dependencies " +
       "come from the graph), a task session only from its own task's worktree or the repo root, and the supervisor none. " +
       "mise_unavailable when the repo's mise config is not trusted; a session in Trackwall refused for it is told when the user trusts it. " +
       `Then use ${CALL_ENDPOINT} with the same task; read logs with tail (miseTask ${SERVICE_MISE_TASK}, the same task) and ` +
@@ -935,6 +941,12 @@ export const mcpTools = {
       .object({
         repo: RepoArg,
         task: ServiceTaskArg.optional(),
+        lease: z
+          .boolean()
+          .default(false)
+          .describe(
+            "with task: run it on the repo root's port instead of the task port, stopping the root's service meanwhile (default false)",
+          ),
         dependencies: z.boolean().default(true).describe("also start the services it calls (default true)"),
         timeoutSeconds: WaitTimeoutArg,
       })

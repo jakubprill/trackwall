@@ -11,7 +11,8 @@ import { RepoId } from "./workspace.ts";
  * a readiness that the daemon observes. Starting a service also starts the services it calls (HTTP and manual edges
  * of the graph), dependencies first, and an endpoint call goes only to the port of a service the daemon started.
  * A service runs from the repo root or from a task's worktree on the task port (ADR-61); a repo can have one of each
- * at once. Each action is `POST /api/services/<action>`.
+ * at once. A task's service can also take the repo root's port on a lease (ADR-132), so whatever calls the repo reaches
+ * the task's changes. Each action is `POST /api/services/<action>`.
  */
 
 /** The mise task that runs a service; the same kind of convention as `setup` and `build` in the batch command (ADR-27). */
@@ -34,10 +35,10 @@ export const ServiceState = z.enum(["starting", "healthy", "unhealthy", "stoppin
 export type ServiceState = z.infer<typeof ServiceState>;
 
 /**
- * Where the port comes from: `server.port` on the repo card, the task port a task's service was given (ADR-61), or a
- * line of the service log (`Tomcat started on port 8081`).
+ * Where the port comes from: `server.port` on the repo card, the task port a task's service was given (ADR-61), the
+ * repo root's port a task's service took on a lease (ADR-132), or a line of the service log (`Tomcat started on port 8081`).
  */
-export const ServicePortSource = z.enum(["card", "task", "log"]);
+export const ServicePortSource = z.enum(["card", "task", "lease", "log"]);
 export type ServicePortSource = z.infer<typeof ServicePortSource>;
 
 /** The task whose worktree a service runs from (ADR-61); `null` for the repo root. */
@@ -46,6 +47,8 @@ const ServiceTask = TaskId.nullable();
 export const Service = z.object({
   repo: RepoId,
   task: ServiceTask,
+  /** A task's service on the repo root's port (ADR-132): what calls the repo reaches it while it runs. */
+  lease: z.boolean(),
   state: ServiceState,
   /** The port that answered (or the one waited for); `null` until one is known. */
   port: z.number().int().min(1).max(65535).nullable(),
@@ -101,6 +104,11 @@ export const StartServiceRequest = z
     repo: RepoId,
     /** The service from this task's worktree instead of the repo root; its dependencies still run from their roots. */
     task: ServiceTask,
+    /**
+     * With `task`: run it on the repo root's port instead of the task port (a lease, ADR-132). The root's service is
+     * stopped first and started again once the task's service has stopped; other slices then reach the task's service.
+     */
+    lease: z.boolean(),
     /** Also start the services it calls (graph edges `http` and `manual`, not `low` confidence), transitively. */
     dependencies: z.boolean(),
     /** How long to wait for the slice to settle before answering; the start goes on in the background. */

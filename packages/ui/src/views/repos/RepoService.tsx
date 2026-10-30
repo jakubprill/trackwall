@@ -6,7 +6,7 @@ import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { isServiceLive, memberLabel, serviceStateLabel } from "@/lib/service-state";
+import { isServiceLive, leaseHolder, memberLabel, serviceStateLabel } from "@/lib/service-state";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 
@@ -16,7 +16,8 @@ const POLL_IDLE_MS = 5000;
 
 /**
  * The repo's service (ADR-45): its mise task `dev` with readiness. "Start with dependencies" brings up the services
- * it calls from the graph first; the panel lists them with their live state.
+ * it calls from the graph first; the panel lists them with their live state. While a task's service holds the repo's
+ * port (ADR-132) the panel says so instead of offering a start, which the daemon would refuse.
  */
 export function RepoService({ conn, repo }: { conn: Connection; repo: string }) {
   const load = useCallback(() => post(conn, servicesApi.list, {}), [conn]);
@@ -26,8 +27,9 @@ export function RepoService({ conn, repo }: { conn: Connection; repo: string }) 
   const byRepo = new Map((remote.data ?? []).filter((s) => s.task === null).map((s) => [s.repo, s]));
   const service = byRepo.get(repo) ?? null;
   const live = isServiceLive(service);
+  const holder = leaseHolder(remote.data ?? [], repo);
   const start = useAction(
-    () => post(conn, servicesApi.start, { repo, task: null, dependencies: true, waitMs: 0 }),
+    () => post(conn, servicesApi.start, { repo, task: null, lease: false, dependencies: true, waitMs: 0 }),
     (started) => {
       setSlice(started);
       remote.reload();
@@ -48,7 +50,11 @@ export function RepoService({ conn, repo }: { conn: Connection; repo: string }) 
           <span className="min-w-0 flex-1 text-xs">
             <StatusLabel tone={state.tone} label={state.label} />
           </span>
-          {live ? (
+          {holder && !live ? (
+            <span className="text-muted-foreground text-xs">
+              Port {holder.port} runs a task's service on a lease; give it back in that task's panel
+            </span>
+          ) : live ? (
             <Button variant="outline" size="sm" onClick={stop.run} disabled={stop.pending}>
               <Square /> Stop with dependencies
             </Button>
