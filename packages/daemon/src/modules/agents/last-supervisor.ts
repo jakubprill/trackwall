@@ -35,7 +35,9 @@ export class LastSupervisorFile {
 
   /** The newest supervisor; a missing file means none, a broken one is moved aside and gives none. */
   read(): LastSupervisor | null {
-    this.#last ??=
+    // `undefined` until read: a missing file is read once, not at every call.
+    if (this.#last !== undefined) return this.#last;
+    this.#last =
       readStateFile(this.#path, LastSupervisor, (problem, aside) =>
         this.#log(`${this.#path}: ${problem}; file moved to ${aside}, no supervisor conversation is resumed`),
       ) ?? null;
