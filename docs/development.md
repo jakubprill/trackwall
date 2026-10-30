@@ -13,7 +13,7 @@ Repo layout, running from source and tools for people who develop Trackwall. Pro
 
 | Path | What it is |
 |---|---|
-| `packages/protocol` | types and zod schemas shared by the daemon, the UI and the CLI; the docs site takes its address from it |
+| `packages/protocol` | types and zod schemas shared by the daemon, the UI and the scene; the docs site takes its address from it |
 | `packages/daemon` | the daemon (Bun, Node-compatible code), built into a single binary; `src/modules/` are the modules from §4 of the architecture, `src/api/` and `src/mcp/` the transports, `src/platform/` system APIs, `src/infra/` the rest of the infrastructure; the root of `src/` holds only `main.ts` and `facade.ts`; `test/` the tests of `pnpm test` (Copilot CLI there is a fake), `contract/` the contract tests with the real Copilot CLI (ADR-67), `e2e/` the E2E tests of the UI in Chromium (ADR-71), `jvm/` the tests with real Java builds on the Spring Boot projects in `jvm/projects/` (ADR-72) |
 | `packages/ui` | React + Tailwind + shadcn/ui, Vite; `src/views/<view identifier>/` are the views from the bar on the left (`home`, `repos`, `sessions`, `graph` for Overview, `plan`, `settings`) and `tray-panel`, the page of the tray panel window (ADR-50), `src/components/` shared components, `src/lib/` logic without React and hooks; the root of `src/` holds only `main.tsx`, `App.tsx` and `index.css` |
 | `packages/scene` | the 3D dashboard scene on Pawn (`@pawnjs/core` from npm): view model, "Orbit" layout, models |

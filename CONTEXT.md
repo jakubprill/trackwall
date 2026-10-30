@@ -294,7 +294,7 @@ _Avoid_: dashboard (that is the 3D scene), repo overview (that is the README and
 ## Processes and services
 
 **Service** (`Service`, `ServiceId`):
-A repo with its mise task `dev` (`SERVICE_MISE_TASK`), its port and its readiness. Today one per repo, run from the repo root (ADR-45); later a repo may have several services.
+A repo with its mise task `dev` (`SERVICE_MISE_TASK`), its port and its readiness. One per repo root and per task worktree (ADR-45, ADR-61).
 _Avoid_: app, microservice (when the entity in Trackwall is meant)
 
 **Service state** (`ServiceState`):
@@ -324,7 +324,7 @@ A process group from `runtime.json` that the daemon no longer supervises (for ex
 ## Agents
 
 **Task** (`Task`, `TaskId`):
-The work of one agent on one repo: a prompt, a worktree, a `trackwall/<slug>` branch from the default branch, sessions and a summary; eventually also a budget and leases. Today (ADR-31) the Sessions view creates it from the form or from an approved task proposal (ADR-39), it is stored in `tasks.json`, and the task session can be stopped and resumed. A task does not point to a session; the session has `Session.task`. In code and the API `task` always means a task.
+The work of one agent on one repo: a prompt, a worktree, a `trackwall/<slug>` branch from the default branch, sessions and a summary. Today (ADR-31) the Sessions view creates it from the form or from an approved task proposal (ADR-39), it is stored in `tasks.json`, and the task session can be stopped and resumed. A task does not point to a session; the session has `Session.task`. In code and the API `task` always means a task.
 _Avoid_: job; a bare *task* always means a task, a mise task is always a *mise task*
 
 **Task notice** (`TaskNotice`, `taskNotices`, "Task notices" in the UI):
@@ -595,14 +595,14 @@ _Avoid_: status (a repo's is `RepoStatus`), state (a session's)
 The board item a task was started for, with "Start task" on the item or by a task proposal that names it; `null` for a task without one. A task session's `create_item` without a parent goes under it.
 _Avoid_: parent (that is an item's place in the tree)
 
-## Logs, events and audit
+## Logs and events
 
 **Record** (`LogRecord`):
-One line of process output after parsing: `seq`, time, run (`runId`), stream, level, content (without ANSI, with secrets masked), later optionally a trace identifier (`traceId` in TypeScript, `trace_id` in MCP tools).
+One line of process output after parsing: `seq`, time, run (`runId`), stream, level, content (without ANSI, with secrets masked).
 _Avoid_: entry, event
 
 **Source** (`LogSource`):
-Where a record comes from. Today a repo's mise task (`{ kind: "mise-task", repo, miseTask }`); a service, a task and the daemon itself will come as further kinds. A source has the records of all its runs.
+Where a record comes from. A mise task in a repo root (`{ kind: "mise-task", repo, miseTask }`), one in a task's worktree (`task-mise-task`, with the task) or `mise install` in a repo (`mise-install`). A source has the records of all its runs.
 
 **Log** (mise task log, `logs/tail` and the MCP tool `tail`, the "Log" button in the UI):
 The records of one source in `seq` order: the latest (up to 2000) in daemon memory, those newer than the last rotation in the JSONL file `logs/<kind>/<repo>/<mise task>.jsonl` in the state directory (the current file and one previous, 10 MB each, ADR-28). Do not confuse with the daemon log (the stderr of the `trackwall-daemon` process).
