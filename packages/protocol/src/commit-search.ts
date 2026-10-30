@@ -12,6 +12,13 @@ import { CommitHash, RepoId } from "./workspace.ts";
 export const COMMIT_SEARCH_MAX_COMMITS = 200;
 /** Most changed files listed per commit; a commit that touches more says so in `filesTruncated`. */
 export const COMMIT_SEARCH_MAX_FILES = 20;
+/** A subject longer than this (git joins the whole first paragraph of a message into it) is cut. */
+export const COMMIT_SEARCH_SUBJECT_MAX_CHARS = 500;
+/**
+ * Most characters of subjects and paths in one result; the result goes to the agent twice (text and
+ * `structuredContent`), as in code search.
+ */
+export const COMMIT_SEARCH_MAX_CHARS = 100_000;
 
 /** One line of text for git, like the pattern of code search: no newline or control character except tab. */
 const OneLine = CodeQuery.shape.pattern;
@@ -41,8 +48,9 @@ export const FoundCommit = z.object({
   repo: RepoId,
   hash: CommitHash,
   author: z.string(),
-  /** ISO 8601, author time. */
+  /** ISO 8601, committer time: the time git orders the history and `since` by. */
   date: z.string(),
+  /** Cut to `COMMIT_SEARCH_SUBJECT_MAX_CHARS`. */
   subject: z.string(),
   /**
    * The files the commit changed; with `text`, only those whose change adds or removes it, with `paths`, only those
@@ -69,9 +77,12 @@ export const CommitSearchFailure = z.object({
 });
 
 export const SearchCommitsResult = z.object({
-  /** Newest first (author date) across all repos. */
+  /** Newest first (committer date) across all repos. */
   commits: z.array(FoundCommit),
-  /** Not every matching commit may be in the result: more than the limit, git output cut, or repos skipped; narrow the query. */
+  /**
+   * Not every matching commit may be in the result: more than the limit or `COMMIT_SEARCH_MAX_CHARS`, git output cut,
+   * or repos skipped; narrow the query.
+   */
   truncated: z.boolean(),
   searched: z.array(CommitSearchRepo),
   failed: z.array(CommitSearchFailure),

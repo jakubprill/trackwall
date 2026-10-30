@@ -90,7 +90,7 @@ describe("commit search", () => {
           repo: "orders",
           hash: gitIn(orders, "rev-parse", "HEAD").trim(),
           author: "Ann",
-          date: "2026-10-20T08:00:00Z".replace("Z", "+00:00"),
+          date: "2026-10-20T08:00:00+00:00",
           subject: "SHOP-34 Rename price to amount",
           // The README of the same commit does not contain the text.
           files: ["src/OrderDto.java"],
@@ -204,16 +204,31 @@ describe("commit search", () => {
     expect(result).toEqual({ commits: [], truncated: true, searched: [], failed: [], skipped: ["r1", "r2"] });
   });
 
-  test("the git output of a merge commit, a commit with files and a file list cut to the limit are read apart", () => {
+  test(
+    "a long subject is cut to 500 characters, and separator bytes in a subject or a path do not split a commit",
+    async () => {
+      const { workspace, orders } = await workspaceWithHistory();
+      commitAt(orders, "2026-10-25T08:00:00Z", "Ann", `Odd \x1e\x1f ${"x".repeat(1000)}`, { "we\x1eird.txt": "price\n" });
+
+      const [newest] = (await workspace.searchCommits({ ...QUERY, text: "price" }, ["orders"])).commits;
+
+      expect(newest?.subject).toHaveLength(500);
+      expect(newest?.subject.startsWith("Odd \x1e\x1f x")).toBe(true);
+      expect(newest?.files).toEqual(["we\x1eird.txt"]);
+    },
+    REPOS_SETUP_MS,
+  );
+
+  test("the git output of a merge commit, a commit with files and one with an empty subject are read apart", () => {
     const out =
-      "\x1e" +
-      `${"a".repeat(40)}\x1fAnn\x1f2026-10-20T08:00:00+00:00\x1fMerge branch 'x'\0` +
-      "\x1e" +
-      `${"b".repeat(40)}\x1fBob\x1f2026-10-19T08:00:00+00:00\x1fTouch files\0\nsrc/a.ts\0src/b.ts\0`;
+      `\0${"a".repeat(40)}\0Ann\x002026-10-20T08:00:00+00:00\0Merge branch 'x'\0` +
+      `\0${"b".repeat(40)}\0Bob\x002026-10-19T08:00:00+00:00\0Touch files\0\nsrc/a.ts\0src/b.ts\0` +
+      `\0${"c".repeat(40)}\0Bob\x002026-10-18T08:00:00+00:00\0\0\nsrc/c.ts\0`;
 
     expect(parseLogSearch(out)).toEqual([
       { hash: "a".repeat(40), author: "Ann", date: "2026-10-20T08:00:00+00:00", subject: "Merge branch 'x'", files: [] },
       { hash: "b".repeat(40), author: "Bob", date: "2026-10-19T08:00:00+00:00", subject: "Touch files", files: ["src/a.ts", "src/b.ts"] },
+      { hash: "c".repeat(40), author: "Bob", date: "2026-10-18T08:00:00+00:00", subject: "", files: ["src/c.ts"] },
     ]);
   });
 });

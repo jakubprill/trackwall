@@ -1,5 +1,7 @@
 import {
+  COMMIT_SEARCH_MAX_CHARS,
   COMMIT_SEARCH_MAX_FILES,
+  COMMIT_SEARCH_SUBJECT_MAX_CHARS,
   type CommitQuery,
   type CommitSearchRepo,
   type FoundCommit,
@@ -69,26 +71,28 @@ export async function searchCommits(
   return joinOutcomes(outcomes, query.limit);
 }
 
-/** The commits of all repos newest first, within `limit`; a repo whose commits were cut is `truncated`. */
+/** The commits of all repos newest first, within `limit` and `COMMIT_SEARCH_MAX_CHARS`; a repo that lost commits is `truncated`. */
 function joinOutcomes(outcomes: readonly RepoOutcome[], limit: number): SearchCommitsResult {
-  const result: SearchCommitsResult = { commits: [], truncated: false, searched: [], failed: [], skipped: [] };
-  const all: FoundCommit[] = [];
-  for (const outcome of outcomes) {
-    if (outcome.kind === "failed") result.failed.push({ repo: outcome.repo, message: outcome.message });
-    if (outcome.kind === "skipped") result.skipped.push(outcome.repo);
-    if (outcome.kind === "ok") all.push(...outcome.commits);
-  }
+  const ok = outcomes.flatMap((o) => (o.kind === "ok" ? [o] : []));
   // ISO 8601 dates with different offsets do not sort as text, so by their instant.
-  all.sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
-  result.commits = all.slice(0, limit);
-  const cut = new Set(all.slice(limit).map((c) => c.repo));
-  for (const outcome of outcomes) {
-    if (outcome.kind !== "ok") continue;
-    const searched = { ...outcome.searched, truncated: outcome.searched.truncated || cut.has(outcome.searched.repo) };
-    result.searched.push(searched);
+  const all = ok.flatMap((o) => o.commits).sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
+  const commits: FoundCommit[] = [];
+  let chars = 0;
+  for (const commit of all) {
+    chars += commit.subject.length + commit.files.reduce((sum, f) => sum + f.length, 0);
+    if (commits.length >= limit || chars > COMMIT_SEARCH_MAX_CHARS) break;
+    commits.push(commit);
   }
-  result.truncated = result.skipped.length > 0 || result.searched.some((r) => r.truncated);
-  return result;
+  const cut = new Set(all.slice(commits.length).map((c) => c.repo));
+  const searched = ok.map((o) => ({ ...o.searched, truncated: o.searched.truncated || cut.has(o.searched.repo) }));
+  const skipped = outcomes.flatMap((o) => (o.kind === "skipped" ? [o.repo] : []));
+  return {
+    commits,
+    truncated: skipped.length > 0 || searched.some((r) => r.truncated),
+    searched,
+    failed: outcomes.flatMap((o) => (o.kind === "failed" ? [{ repo: o.repo, message: o.message }] : [])),
+    skipped,
+  };
 }
 
 async function searchRepo(entry: RepoEntry, vcs: CommitSearchVcs, query: CommitSearchQuery): Promise<RepoOutcome> {
@@ -108,7 +112,12 @@ async function searchRepo(entry: RepoEntry, vcs: CommitSearchVcs, query: CommitS
   }
 }
 
-function found(repo: string, commit: LoggedCommit): FoundCommit {
-  const { files, ...rest } = commit;
-  return { repo, ...rest, files: files.slice(0, COMMIT_SEARCH_MAX_FILES), filesTruncated: files.length > COMMIT_SEARCH_MAX_FILES };
+function found(repo: string, { files, subject, ...rest }: LoggedCommit): FoundCommit {
+  return {
+    repo,
+    ...rest,
+    subject: subject.slice(0, COMMIT_SEARCH_SUBJECT_MAX_CHARS),
+    files: files.slice(0, COMMIT_SEARCH_MAX_FILES),
+    filesTruncated: files.length > COMMIT_SEARCH_MAX_FILES,
+  };
 }

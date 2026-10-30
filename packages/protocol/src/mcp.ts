@@ -602,7 +602,7 @@ export const mcpTools = {
       "renaming a field shows in every repo that used the old name), message searches commit messages (e.g. an issue key), author the author name or e-mail; " +
       "fixed strings by default, POSIX extended regular expressions with regex: true. Narrow with repos (ids), tags " +
       "(every given tag), paths (git pathspecs) and since (YYYY-MM-DD). With no filter it lists the newest commits. " +
-      "Each commit has repo, hash, author, date, subject and the files it changed (with text, only the files where it " +
+      "Each commit has repo, hash, author, date (committer date), subject and the files it changed (with text, only the files where it " +
       `changed; at most ${COMMIT_SEARCH_MAX_FILES}, filesTruncated says when there are more). Newest first across all ` +
       "repos. searched lists the repos with the commit whose history was searched; failed the repos git could not " +
       "search, with the reason; skipped the repos not searched because time ran out. truncated: true when commits may " +
