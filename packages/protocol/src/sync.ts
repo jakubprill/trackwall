@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Sync of all repos in the projects folder (§4.5, §7 "`ws sync`", ADR-21): fetch and fast-forward of the default branch,
+ * Sync of all repos in the projects folder (§4.5, §7 "Sync", ADR-21): fetch and fast-forward of the default branch,
  * in the background, with a result per repo. Kept only in the daemon's memory, like clones.
  */
 

@@ -5,7 +5,7 @@ Terms that are easy to confuse. Code, UI, MCP tools and documentation use these 
 ## Application
 
 **Daemon** (`daemon`):
-The `trackwall-daemon` process, which holds all the state and all the logic. The only source of truth; the UI, the `ws` CLI and agents (through the MCP server in the daemon) are clients of its facade.
+The `trackwall-daemon` process, which holds all the state and all the logic. The only source of truth; the UI, the shell and agents (through the MCP server in the daemon) are clients of its facade.
 _Avoid_: backend, server (without qualification)
 
 **Shell** (`apps/desktop`):
@@ -74,11 +74,8 @@ _Avoid_: service (that is a workspace entity, see below), pnpm package
 A pnpm package from `pnpm-workspace.yaml` (`@trackwall/daemon`, `@trackwall/protocol`, `@trackwall/ui`, `@trackwall/desktop`).
 _Avoid_: workspace (that is a separate term, see below)
 
-**`ws`**:
-A thin CLI client of the daemon over HTTP on loopback. It has nothing to do with the `/ws` WebSocket.
-
 **Daemon token**:
-The secret from `~/.trackwall/daemon.json` with which the UI, `ws`, the shell and the stdio bridge authenticate to the API and the MCP server; Trackwall sessions do not get it (ADR-138).
+The secret from `~/.trackwall/daemon.json` with which the UI, the shell and the stdio bridge authenticate to the API and the MCP server; Trackwall sessions do not get it (ADR-138).
 
 **MCP server** (`/mcp`, `createMcpEndpoint`):
 The part of the daemon through which agents read its state with MCP tools; the same port as the API, with the daemon token or a Trackwall session's own token (§5.3, ADR-24, ADR-138).
@@ -297,7 +294,7 @@ _Avoid_: dashboard (that is the 3D scene), repo overview (that is the README and
 ## Processes and services
 
 **Service** (`Service`, `ServiceId`):
-A repo with its mise task `dev` (`SERVICE_MISE_TASK`), its port and its readiness. Today one per repo, run from the repo root (ADR-45); later a repo may have several services.
+A repo with its mise task `dev` (`SERVICE_MISE_TASK`), its port and its readiness. One per repo root and per task worktree (ADR-45, ADR-61).
 _Avoid_: app, microservice (when the entity in Trackwall is meant)
 
 **Service state** (`ServiceState`):
@@ -327,7 +324,7 @@ A process group from `runtime.json` that the daemon no longer supervises (for ex
 ## Agents
 
 **Task** (`Task`, `TaskId`):
-The work of one agent on one repo: a prompt, a worktree, a `trackwall/<slug>` branch from the default branch, sessions and a summary; eventually also a budget and leases. Today (ADR-31) the Sessions view creates it from the form or from an approved task proposal (ADR-39), it is stored in `tasks.json`, and the task session can be stopped and resumed. A task does not point to a session; the session has `Session.task`. In code and the API `task` always means a task.
+The work of one agent on one repo: a prompt, a worktree, a `trackwall/<slug>` branch from the default branch, sessions and a summary. Today (ADR-31) the Sessions view creates it from the form or from an approved task proposal (ADR-39), it is stored in `tasks.json`, and the task session can be stopped and resumed. A task does not point to a session; the session has `Session.task`. In code and the API `task` always means a task.
 _Avoid_: job; a bare *task* always means a task, a mise task is always a *mise task*
 
 **Task notice** (`TaskNotice`, `taskNotices`, "Task notices" in the UI):
@@ -598,14 +595,14 @@ _Avoid_: status (a repo's is `RepoStatus`), state (a session's)
 The board item a task was started for, with "Start task" on the item or by a task proposal that names it; `null` for a task without one. A task session's `create_item` without a parent goes under it.
 _Avoid_: parent (that is an item's place in the tree)
 
-## Logs, events and audit
+## Logs and events
 
 **Record** (`LogRecord`):
-One line of process output after parsing: `seq`, time, run (`runId`), stream, level, content (without ANSI, with secrets masked), later optionally a trace identifier (`traceId` in TypeScript, `trace_id` in MCP tools).
+One line of process output after parsing: `seq`, time, run (`runId`), stream, level, content (without ANSI, with secrets masked).
 _Avoid_: entry, event
 
 **Source** (`LogSource`):
-Where a record comes from. Today a repo's mise task (`{ kind: "mise-task", repo, miseTask }`); a service, a task and the daemon itself will come as further kinds. A source has the records of all its runs.
+Where a record comes from. A mise task in a repo root (`{ kind: "mise-task", repo, miseTask }`), one in a task's worktree (`task-mise-task`, with the task) or `mise install` in a repo (`mise-install`). A source has the records of all its runs.
 
 **Log** (mise task log, `logs/tail` and the MCP tool `tail`, the "Log" button in the UI):
 The records of one source in `seq` order: the latest (up to 2000) in daemon memory, those newer than the last rotation in the JSONL file `logs/<kind>/<repo>/<mise task>.jsonl` in the state directory (the current file and one previous, 10 MB each, ADR-28). Do not confuse with the daemon log (the stderr of the `trackwall-daemon` process).
@@ -642,17 +639,6 @@ The whole state of one event topic, the same value as the response of an HTTP ac
 
 **Masking**:
 Replacing secret values with `***` before a record is written to the buffer, the file and the last state lines. Today secrets are the values of process environment variables with secret names (`GH_TOKEN`, `DB_PASSWORD`…, §4.2).
-
-**Audit** (`AuditEntry`):
-A record of every MCP tool call: client, tool, arguments, time, result hash. Visible only in the UI.
-
-## Secrets
-
-**Secrets repo**:
-A repository with k8s `Secret` manifests, one `origin/<repo>` branch per workspace repo (ADR-10). Cloned outside the workspace.
-
-**Secret**:
-A key from `data` or `stringData` of a manifest, injected as an environment variable with the same name. A task session only sees whether it is set.
 
 ## 3D scene
 

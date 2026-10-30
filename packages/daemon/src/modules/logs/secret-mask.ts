@@ -4,7 +4,7 @@ import { isSecretName } from "../../infra/secret-name.ts";
  * Secret masking (§4.2, §8): values the daemon knows are replaced with `***` in a line before it reaches the buffer,
  * the JSONL file and the state's last lines. A secret is the value of a variable whose name looks like a secret in the
  * environment the daemon starts a process with, or a value the caller knows the process gets elsewhere (the redacted
- * variables of mise `[env]`, ADR-93); secrets injected by the `secrets` module will come in here.
+ * variables of mise `[env]`, ADR-93).
  */
 
 const MASK = "***";

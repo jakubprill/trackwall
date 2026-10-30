@@ -54,7 +54,7 @@ export interface ToolContext {
   facade: Facade;
   /**
    * A daemon log line about the call (tool, time, result), without arguments except for destructive tools (ADR-41);
-   * the `audit` table will come with SQLite.
+   * the daemon log is the only record of MCP calls (ADR-134).
    */
   log: (msg: string) => void;
 }
@@ -98,13 +98,12 @@ function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
       },
       async (args, extra) => {
         const started = Date.now();
-        // The calling session goes into the log, because a proposal and a summary write something on its behalf; the `audit` table
-        // will come with SQLite.
+        // The calling session goes into the log, because a proposal and a summary write something on its behalf.
         const label = ctx.caller === null ? tool.name : `${tool.name} (session ${ctx.caller})`;
         try {
           const parsed = parseArgs(tool.args, args);
-          // A destructive tool (it runs or stops repo code) logs its arguments before acting: until the `audit` table
-          // exists, this line says who ran what (ADR-41). Their arguments are identifiers, never free text.
+          // A destructive tool (it runs or stops repo code) logs its arguments before acting: this line
+          // says who ran what (ADR-41). Their arguments are identifiers, never free text.
           if (!tool.readOnly && tool.destructive) ctx.log(`${label}: ${JSON.stringify(auditView(parsed, tool.auditArgs))}`);
           const result = tool.result.parse(await run(ctx.facade, parsed, { caller: ctx.caller, signal: extra.mcpReq.signal }));
           ctx.log(`${label}: ok in ${Date.now() - started} ms`);
