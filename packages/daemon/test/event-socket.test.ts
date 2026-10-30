@@ -54,8 +54,9 @@ describe.skipIf(process.versions.bun === undefined)("daemon events over the /ws 
 
     await daemon.post(agentsApi.stop, { session: session.id });
     await until(
-      () => client.events.some((e) => sessionsIn(e).some((s) => s.id === session.id && s.run.kind === "exited")),
-      "end of the session",
+      () =>
+        client.events.some((e) => sessionsIn(e).some((s) => s.id === session.id && s.run.kind === "exited" && s.state?.state === "Done")),
+      "end of the session with its final state",
     );
     client.ws.close();
   }, 60_000);

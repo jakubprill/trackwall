@@ -23,7 +23,7 @@ function fakeFacade(state: {
   board?: () => number;
 }): Facade {
   return {
-    agents: { sessions: state.sessions },
+    agents: { sessionsWithoutCycle: state.sessions },
     mise: { running: state.running },
     repoWatch: { state: () => ({ startedAt: STARTED_AT, revision: state.revision?.() ?? 0 }) },
     cards: { warmupProgress: state.warmup ?? (() => IDLE_WARMUP) },
