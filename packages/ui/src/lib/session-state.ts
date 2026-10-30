@@ -112,3 +112,11 @@ function waitingCount(sessions: readonly Session[]): number {
 export function attentionCount(list: SessionList | undefined): number {
   return list ? waitingCount(list.sessions) + list.proposals.length : 0;
 }
+
+/**
+ * In a browser tab's title (ADR-146): like `attentionCount`, but with the supervisor, as on the desktop app's icon
+ * (`badge.rs`), since the title is all the user sees of a tab in the background.
+ */
+export function waitingInTab(list: SessionList | undefined): number {
+  return list ? list.sessions.filter((s) => s.needsAttention).length + list.proposals.length : 0;
+}

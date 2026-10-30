@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import type { TabNotice } from "./tab-attention.ts";
+import type { BrowserNotice } from "./tab-attention.ts";
 
 /**
  * Browser notifications of a Trackwall page in a browser tab (ADR-146): whether the browser lets the page show them,
@@ -12,7 +12,8 @@ function notificationAccess(): NotificationAccess {
   return typeof Notification === "undefined" ? "unsupported" : Notification.permission;
 }
 
-// One store for the page, so the offer above the views and the section in Settings change together.
+// The permission belongs to the page, not to a component, so it is one store at module level: the offer above the
+// views and the section in Settings change together, and the browser's change event is listened to once.
 const listeners = new Set<() => void>();
 const changed = () => {
   for (const listener of listeners) listener();
@@ -38,11 +39,9 @@ function subscribe(listener: () => void): () => void {
 }
 
 /** Call only from a click handler: a browser ignores or blocks a request the user did not start. */
-export async function askForNotifications(): Promise<NotificationAccess> {
-  if (notificationAccess() === "unsupported") return "unsupported";
-  await Notification.requestPermission();
-  changed();
-  return notificationAccess();
+export function askForNotifications(): void {
+  if (notificationAccess() === "unsupported") return;
+  Notification.requestPermission().then(changed, (err: unknown) => console.error("[notifications] the browser did not ask", err));
 }
 
 export function useNotificationAccess(): NotificationAccess {
@@ -50,7 +49,7 @@ export function useNotificationAccess(): NotificationAccess {
 }
 
 /** Shows the notice when the page may; clicking it closes it and hands its target on. */
-export function showBrowserNotification(notice: TabNotice, onClick: (target: TabNotice["target"]) => void): void {
+export function showBrowserNotification(notice: BrowserNotice, onClick: (target: BrowserNotice["target"]) => void): void {
   if (notificationAccess() !== "granted") return;
   try {
     const shown = new Notification(notice.title, { body: notice.body, tag: notice.tag, icon: "/favicon.png" });

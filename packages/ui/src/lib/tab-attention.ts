@@ -1,5 +1,5 @@
 import type { Session, SessionId, SessionList, TaskProposal, TaskState } from "@trackwall/protocol";
-import { STATE_LABELS, sessionPlace } from "./session-state.ts";
+import { STATE_LABELS, sessionPlace, waitingInTab } from "./session-state.ts";
 import type { Jump } from "./use-jump-request.ts";
 
 /**
@@ -13,57 +13,13 @@ import type { Jump } from "./use-jump-request.ts";
 /** The page's title without anything waiting (`<title>` in `index.html`). */
 const APP_TITLE = "Trackwall";
 
-/** Running sessions waiting for you, the supervisor among them, and proposals: the count on the shell's app icon (`badge.rs`). */
-export function waitingInTab(list: SessionList | undefined): number {
-  if (!list) return 0;
-  return list.sessions.filter((s) => s.run.kind === "running" && s.needsAttention).length + list.proposals.length;
-}
-
 /** "(3) Trackwall": the tab shows the count in front, where a narrow tab still shows it. */
 export function tabTitle(waiting: number): string {
   return waiting > 0 ? `(${waiting}) ${APP_TITLE}` : APP_TITLE;
 }
 
-/** The states of the running sessions and the ids of proposals and tasks at one list, to compare the next list with. */
-export interface AttentionSnapshot {
-  states: ReadonlyMap<SessionId, TaskState | null>;
-  /** A proposal being approved is already a task, and after a failed start it comes back as a proposal with the same id, which is not new. */
-  known: ReadonlySet<string>;
-}
-
-export function attentionSnapshot(list: SessionList): AttentionSnapshot {
-  const running = list.sessions.filter((s) => s.run.kind === "running");
-  return {
-    states: new Map(running.map((s) => [s.id, s.state?.state ?? null])),
-    known: new Set([...list.proposals.map((p) => p.id), ...list.tasks.map((t) => t.id)]),
-  };
-}
-
-/** What deserves a notification since the previous list. */
-export interface AttentionNews {
-  sessions: Session[];
-  proposals: TaskProposal[];
-}
-
-/**
- * Sessions that just finished working and wait (`Working` or `Stale` before), and proposals that were neither a
- * proposal nor a task before. At the first list (`undefined`) nothing is new, like a session already waiting when the
- * page opened: the title shows it, a notification would only repeat what the page shows on load.
- */
-export function attentionNews(previous: AttentionSnapshot | undefined, list: SessionList): AttentionNews {
-  if (!previous) return { sessions: [], proposals: [] };
-  const wasWorking = (s: Session) => {
-    const before = previous.states.get(s.id);
-    return before === "Working" || before === "Stale";
-  };
-  return {
-    sessions: list.sessions.filter((s) => s.run.kind === "running" && s.needsAttention && wasWorking(s)),
-    proposals: list.proposals.filter((p) => !previous.known.has(p.id)),
-  };
-}
-
 /** What one browser notification says, what clicking it opens, and the tag under which a newer one replaces it. */
-export interface TabNotice {
+export interface BrowserNotice {
   title: string;
   body: string;
   /** The browser shows one notification per tag, so a second tab of Trackwall or a later wait of the same session replaces it. */
@@ -73,16 +29,15 @@ export interface TabNotice {
 
 const TAG_PREFIX = "trackwall:";
 
-function sessionBody(state: TaskState | undefined): string {
-  if (state === "Approval" || state === "Plan") return `Copilot CLI is ${STATE_LABELS[state]}`;
-  return `Copilot CLI is ${STATE_LABELS.Input}`;
-}
+/** What a session waits for, in the words of the session states, as the shell's `session_notice` says it. */
+const WAITS_FOR: Partial<Record<TaskState, string>> = { Approval: STATE_LABELS.Approval, Plan: STATE_LABELS.Plan };
 
 /** "Session in orders-api: Copilot CLI is asking for approval", as the shell's notification says it. */
-export function sessionNotice(session: Session): TabNotice {
+export function sessionNotice(session: Session): BrowserNotice {
+  const state = session.state?.state;
   return {
     title: session.repo === null ? sessionPlace(session) : `Session in ${session.repo}`,
-    body: sessionBody(session.state?.state),
+    body: `Copilot CLI is ${(state && WAITS_FOR[state]) ?? STATE_LABELS.Input}`,
     tag: `${TAG_PREFIX}session:${session.id}`,
     target: { kind: "session", id: session.id },
   };
@@ -97,27 +52,66 @@ export function sessionNotice(session: Session): TabNotice {
  */
 export const BURST_MS = 30_000;
 
-export class ProposalBurst {
-  #burst: TaskProposal[] = [];
-  #lastAt = Number.NEGATIVE_INFINITY;
-  /** The tag of the burst's notification, from its first proposal, kept when that one is decided. */
-  #tag = "";
+interface Burst {
+  tag: string;
+  proposals: TaskProposal[];
+  lastAt: number;
+}
 
-  /** Takes the new proposals of a list and returns the notice of their burst, or `undefined` when none is new. */
-  add(proposals: readonly TaskProposal[], waiting: readonly TaskProposal[], now: number): TabNotice | undefined {
-    if (proposals.length === 0) return undefined;
-    const continues = now - this.#lastAt <= BURST_MS;
-    // A proposal decided since it came does not wait any more, so the notice no longer names it.
-    const kept = continues ? this.#burst.filter((p) => waiting.some((w) => w.id === p.id)) : [];
-    if (!continues) this.#tag = `${TAG_PREFIX}proposals:${proposals[0]?.id}`;
-    this.#burst = [...kept, ...proposals];
-    this.#lastAt = now;
-    return proposalsNotice(this.#burst, this.#tag);
+/** What the tab shows after a list: its title and the notifications to show now, none while the tab is in front. */
+interface TabUpdate {
+  title: string;
+  notices: BrowserNotice[];
+}
+
+/**
+ * The tab's side of the session list, one list after another, like the shell's `watch` loop. At the first list nothing
+ * is new, like a session already waiting when the page opened: the title shows it, a notification would only repeat
+ * what the page shows on load.
+ */
+export class TabAttention {
+  #states: ReadonlyMap<SessionId, TaskState | null> | undefined;
+  /** Proposal and task ids: a proposal being approved is a task, and after a failed start it comes back as a proposal with the same id, which is not new. */
+  #known: ReadonlySet<string> = new Set();
+  #burst: Burst | undefined;
+
+  next(list: SessionList, now: number, inFront: boolean): TabUpdate {
+    const sessions = this.#newlyWaiting(list);
+    const proposals = this.#states ? list.proposals.filter((p) => !this.#known.has(p.id)) : [];
+    this.#states = new Map(list.sessions.filter((s) => s.run.kind === "running").map((s) => [s.id, s.state?.state ?? null]));
+    this.#known = new Set([...list.proposals.map((p) => p.id), ...list.tasks.map((t) => t.id)]);
+    const title = tabTitle(waitingInTab(list));
+    // The user looking at the tab sees the count and the session; a notification on top would only be noise, and a
+    // later one of the same plan does not name the proposals seen here.
+    if (inFront) {
+      this.#burst = undefined;
+      return { title, notices: [] };
+    }
+    const burst = this.#addToBurst(proposals, list.proposals, now);
+    return { title, notices: [...sessions.map(sessionNotice), ...(burst ? [burst] : [])] };
+  }
+
+  /** Sessions that just finished working and wait: `Working` or `Stale` before. */
+  #newlyWaiting(list: SessionList): Session[] {
+    const before = this.#states;
+    if (!before) return [];
+    return list.sessions.filter((s) => s.needsAttention && (before.get(s.id) === "Working" || before.get(s.id) === "Stale"));
+  }
+
+  #addToBurst(fresh: readonly TaskProposal[], waiting: readonly TaskProposal[], now: number): BrowserNotice | undefined {
+    const [first] = fresh;
+    if (!first) return undefined;
+    const last = this.#burst && now - this.#burst.lastAt <= BURST_MS ? this.#burst : undefined;
+    // A proposal decided since it came does not wait any more, so the notice no longer names it; the plan keeps its tag.
+    const kept = last ? last.proposals.filter((p) => waiting.some((w) => w.id === p.id)) : [];
+    const burst = { tag: last?.tag ?? `${TAG_PREFIX}proposals:${first.id}`, proposals: [...kept, ...fresh], lastAt: now };
+    this.#burst = burst;
+    return proposalsNotice(burst);
   }
 }
 
 /** Clicking opens the first proposal, among the rest of its session's proposals in the Sessions view. */
-function proposalsNotice(proposals: readonly TaskProposal[], tag: string): TabNotice | undefined {
+function proposalsNotice({ tag, proposals }: Burst): BrowserNotice | undefined {
   const [first] = proposals;
   if (!first) return undefined;
   const one = proposals.length === 1;

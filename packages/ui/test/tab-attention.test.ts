@@ -1,26 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { Session, SessionList, TaskProposal, TaskState } from "@trackwall/protocol";
-import {
-  attentionNews,
-  attentionSnapshot,
-  BURST_MS,
-  ProposalBurst,
-  sessionNotice,
-  tabTitle,
-  waitingInTab,
-} from "../src/lib/tab-attention.ts";
+import { waitingInTab } from "../src/lib/session-state.ts";
+import { BURST_MS, sessionNotice, TabAttention, tabTitle } from "../src/lib/tab-attention.ts";
 
 const running = { kind: "running", runId: "r", startedAt: "2026-10-30T10:00:00Z", pid: 10 } as const;
-const exited: Session["run"] = {
-  kind: "exited",
-  runId: "r",
-  startedAt: "2026-10-30T10:00:00Z",
-  endedAt: "2026-10-30T10:05:00Z",
-  exitCode: 0,
-  signal: null,
-  stoppedByUser: false,
-  lastLines: [],
-};
 
 function session(id: string, state: TaskState | null, needsAttention: boolean, extra: Partial<Session> = {}): Session {
   return {
@@ -71,41 +54,63 @@ describe("the tab title", () => {
     expect(tabTitle(3)).toBe("(3) Trackwall");
   });
 
-  test("counts running sessions waiting for you, the supervisor among them, and every task proposal", () => {
+  test("counts sessions waiting for you, the supervisor among them, and every task proposal", () => {
     const waiting = list(
-      [
-        session("a", "Approval", true),
-        session("b", "Working", false),
-        session("s", "Input", true, { repo: null, supervisor: true }),
-        session("c", "Input", true, { run: exited }),
-      ],
+      [session("a", "Approval", true), session("b", "Working", false), session("s", "Input", true, { repo: null, supervisor: true })],
       [proposal("p1"), proposal("p2")],
     );
     expect(waitingInTab(waiting)).toBe(4);
     expect(waitingInTab(undefined)).toBe(0);
   });
+
+  test("shows the count also at the first list and while the tab is in front", () => {
+    const tab = new TabAttention();
+    expect(tab.next(list([session("a", "Approval", true)]), 0, true).title).toBe("(1) Trackwall");
+  });
 });
 
-describe("what is new since the previous list", () => {
-  test("nothing is new at the first list, also a session already waiting", () => {
-    expect(attentionNews(undefined, list([session("a", "Approval", true)], [proposal("p1")]))).toEqual({ sessions: [], proposals: [] });
+describe("the notifications after each list", () => {
+  test("none at the first list, also for a session already waiting and a proposal", () => {
+    const tab = new TabAttention();
+    expect(tab.next(list([session("a", "Approval", true)], [proposal("p1")]), 0, false).notices).toEqual([]);
   });
 
-  test("a session that was working and now waits for you is new, one that waited already or just started is not", () => {
-    const before = attentionSnapshot(list([session("a", "Working", false), session("b", "Input", true), session("c", null, false)]));
-    const now = list([session("a", "Approval", true), session("b", "Input", true), session("c", "Input", true)]);
-    expect(attentionNews(before, now).sessions.map((s) => s.id)).toEqual(["a"]);
+  test("a session that was working and now waits is announced, one that waited already or just started is not", () => {
+    const tab = new TabAttention();
+    tab.next(list([session("a", "Working", false), session("b", "Input", true), session("c", null, false)]), 0, false);
+    const { notices } = tab.next(
+      list([session("a", "Approval", true), session("b", "Input", true), session("c", "Input", true)]),
+      1,
+      false,
+    );
+    expect(notices.map((n) => n.target)).toEqual([{ kind: "session", id: "a" }]);
   });
 
-  test("a session that stopped responding and then waits is new", () => {
-    const before = attentionSnapshot(list([session("a", "Stale", false)]));
-    expect(attentionNews(before, list([session("a", "Input", true)])).sessions.map((s) => s.id)).toEqual(["a"]);
+  test("a session that stopped responding and then waits is announced", () => {
+    const tab = new TabAttention();
+    tab.next(list([session("a", "Stale", false)]), 0, false);
+    expect(tab.next(list([session("a", "Input", true)]), 1, false).notices).toHaveLength(1);
+  });
+
+  test("nothing is announced while the tab is in front, and the wait seen there is not announced later", () => {
+    const tab = new TabAttention();
+    tab.next(list([session("a", "Working", false)]), 0, false);
+    expect(tab.next(list([session("a", "Approval", true)]), 1, true).notices).toEqual([]);
+    expect(tab.next(list([session("a", "Approval", true)]), 2, false).notices).toEqual([]);
   });
 
   test("a proposal is new unless it was a proposal or a task before, so one that failed to start does not come again", () => {
-    const before = attentionSnapshot(list([], [proposal("p1")], ["t1"]));
-    const now = list([], [proposal("p1"), proposal("t1"), proposal("p2")]);
-    expect(attentionNews(before, now).proposals.map((p) => p.id)).toEqual(["p2"]);
+    const tab = new TabAttention();
+    tab.next(list([], [proposal("p1")], ["t1"]), 0, false);
+    const { notices } = tab.next(list([], [proposal("p1"), proposal("t1"), proposal("p2")]), 1, false);
+    expect(notices.map((n) => n.target)).toEqual([{ kind: "proposal", id: "p2" }]);
+  });
+
+  test("sessions come before the proposals", () => {
+    const tab = new TabAttention();
+    tab.next(list([session("a", "Working", false)]), 0, false);
+    const { notices } = tab.next(list([session("a", "Input", true)], [proposal("p1")]), 1, false);
+    expect(notices.map((n) => n.target.kind)).toEqual(["session", "proposal"]);
   });
 });
 
@@ -128,46 +133,56 @@ describe("a session's notification", () => {
 });
 
 describe("the notification of task proposals", () => {
+  /** A tab that has seen an empty list, so the next proposals are new. */
+  function tabAfterEmptyList(): TabAttention {
+    const tab = new TabAttention();
+    tab.next(list([]), 0, false);
+    return tab;
+  }
+
   test("names one proposal by its repo and title and opens it", () => {
-    const burst = new ProposalBurst();
-    expect(burst.add([proposal("p1", "billing")], [proposal("p1", "billing")], 0)).toEqual({
-      title: "Task proposal for billing",
-      body: "Fix p1",
-      tag: "trackwall:proposals:p1",
-      target: { kind: "proposal", id: "p1" },
-    });
+    const tab = tabAfterEmptyList();
+    expect(tab.next(list([], [proposal("p1", "billing")]), 1, false).notices).toEqual([
+      { title: "Task proposal for billing", body: "Fix p1", tag: "trackwall:proposals:p1", target: { kind: "proposal", id: "p1" } },
+    ]);
   });
 
   test("gathers the proposals of one plan under one tag, so each new one replaces the notification with all of them", () => {
-    const burst = new ProposalBurst();
+    const tab = tabAfterEmptyList();
     const p1 = proposal("p1", "billing");
     const p2 = proposal("p2", "orders");
-    burst.add([p1], [p1], 0);
-    expect(burst.add([p2], [p2, p1], 5_000)).toEqual({
-      title: "2 task proposals",
-      body: "billing: Fix p1\norders: Fix p2",
-      tag: "trackwall:proposals:p1",
-      target: { kind: "proposal", id: "p1" },
-    });
+    tab.next(list([], [p1]), 1, false);
+    expect(tab.next(list([], [p2, p1]), 5_000, false).notices).toEqual([
+      {
+        title: "2 task proposals",
+        body: "billing: Fix p1\norders: Fix p2",
+        tag: "trackwall:proposals:p1",
+        target: { kind: "proposal", id: "p1" },
+      },
+    ]);
   });
 
   test("leaves out a proposal of the plan decided in the meantime but keeps the plan's tag", () => {
-    const burst = new ProposalBurst();
-    burst.add([proposal("p1")], [proposal("p1")], 0);
-    const notice = burst.add([proposal("p2")], [proposal("p2")], 5_000);
+    const tab = tabAfterEmptyList();
+    tab.next(list([], [proposal("p1")]), 1, false);
+    const [notice] = tab.next(list([], [proposal("p2")], ["p1"]), 5_000, false).notices;
     expect(notice?.title).toBe("Task proposal for repo-p2");
     expect(notice?.tag).toBe("trackwall:proposals:p1");
   });
 
-  test("starts a new notification for proposals that come long after the last", () => {
-    const burst = new ProposalBurst();
-    burst.add([proposal("p1")], [proposal("p1")], 0);
-    const notice = burst.add([proposal("p2")], [proposal("p2"), proposal("p1")], BURST_MS + 1);
+  test("does not name proposals that came while the tab was in front", () => {
+    const tab = tabAfterEmptyList();
+    tab.next(list([], [proposal("p1")]), 1, true);
+    const [notice] = tab.next(list([], [proposal("p2"), proposal("p1")]), 5_000, false).notices;
     expect(notice?.title).toBe("Task proposal for repo-p2");
     expect(notice?.tag).toBe("trackwall:proposals:p2");
   });
 
-  test("shows nothing when no proposal is new", () => {
-    expect(new ProposalBurst().add([], [proposal("p1")], 0)).toBeUndefined();
+  test("starts a new notification for proposals that come long after the last", () => {
+    const tab = tabAfterEmptyList();
+    tab.next(list([], [proposal("p1")]), 1, false);
+    const [notice] = tab.next(list([], [proposal("p2"), proposal("p1")]), 1 + BURST_MS + 1, false).notices;
+    expect(notice?.title).toBe("Task proposal for repo-p2");
+    expect(notice?.tag).toBe("trackwall:proposals:p2");
   });
 });

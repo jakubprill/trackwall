@@ -1,7 +1,7 @@
 import { Surface } from "@/components/Surface";
-import { Button } from "@/components/ui/button";
+import { TurnOnNotificationsButton } from "@/components/TurnOnNotificationsButton";
 import { inDesktopShell } from "@/lib/app-window";
-import { askForNotifications, type NotificationAccess, useNotificationAccess } from "@/lib/browser-notifications";
+import { type NotificationAccess, useNotificationAccess } from "@/lib/browser-notifications";
 
 /** Browser notifications of Trackwall in a browser tab (ADR-146); the desktop app shows system notifications itself. */
 export function BrowserNotificationsSurface() {
@@ -29,9 +29,7 @@ function AccessState() {
   if (access !== "default") return <p className="text-sm">{ACCESS_TEXT[access]}</p>;
   return (
     <div>
-      <Button size="sm" onClick={() => void askForNotifications().catch(() => undefined)}>
-        Turn on notifications
-      </Button>
+      <TurnOnNotificationsButton />
     </div>
   );
 }

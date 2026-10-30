@@ -33,7 +33,8 @@ The first time you open Trackwall in a browser, a strip above the views offers "
 
 - Trackwall shows notifications only while its tab is open. Close the tab and nothing reaches you; a tab in the background or in a minimized window is enough.
 - "Not now" hides the strip in this browser. You can still turn notifications on in "Settings > App".
-- To turn notifications off, or on again after choosing "Block", change the notification permission for the page in your browser's site settings, then reload the tab.
+- To turn notifications off, or on again after choosing "Block", change the notification permission for the page in your browser's site settings. If "Settings > App" does not show the change, reload the tab.
 - A session or proposal that was already waiting when you opened the tab does not show a notification; the title counts it.
-- With two Trackwall tabs open, each wait shows one notification, not two.
+- With two Trackwall tabs open, each wait shows one notification, not two. A Trackwall tab in the background still shows it while you look at the other Trackwall tab.
+- Chrome on Android shows no notifications to Trackwall, even after you allow them; the title still counts.
 - Your system decides how notifications look and whether they make a sound. When "Do not disturb" or "Focus" is on, they go straight to the notification centre.
