@@ -36,13 +36,17 @@ A `.devcontainer/devcontainer.json` that keeps the repos, Trackwall's state, the
   "portsAttributes": {
     "7700": { "label": "Trackwall", "requireLocalPort": true, "onAutoForward": "silent" }
   },
-  "containerEnv": { "NO_PROXY": "127.0.0.1,localhost,host.docker.internal" },
+  "containerEnv": {
+    "NO_PROXY": "127.0.0.1,localhost,host.docker.internal",
+    "TRACKWALL_DEVCONTAINER_HOST_FOLDER": "${localWorkspaceFolder}"
+  },
   "postCreateCommand": "sudo chown -R vscode:vscode /workspaces /home/vscode/.trackwall /home/vscode/.copilot /home/vscode/.config/mise"
 }
 ```
 
 - A new volume belongs to `root`, so `postCreateCommand` hands the folders to the container's user.
 - `requireLocalPort` keeps the forwarded port at 7700 on your computer. Trackwall accepts a page only from `127.0.0.1:<port>` or `localhost:<port>` with the port it listens on, so a forward to another number does not load.
+- `TRACKWALL_DEVCONTAINER_HOST_FOLDER` tells Trackwall which folder on your computer the container was opened from, so "Open in VS Code" opens the same kind of window as opening that folder in a container yourself, with the extensions and settings of this `devcontainer.json`. Without it, VS Code attaches to the running container without them.
 - Behind a proxy, set `HTTPS_PROXY` and `HTTP_PROXY` in `containerEnv` too, and keep `NO_PROXY` as above. A proxy that replaces certificates also needs its certificate in the image.
 
 ## Start Trackwall
@@ -81,7 +85,7 @@ Tokens for such servers come in through [Environment from mise](/features/mise-e
 
 - In the browser alone there is no tray, no system notifications and no [Start at sign-in](/features/start-at-sign-in); for those, [use the desktop app](#use-the-desktop-app).
 - Links open in a new tab of your browser; when the browser blocks the new tab, allow pop-ups for the page.
-- "Open in VS Code" opens the repo, task worktree or file in VS Code on your computer, attached to the running container through the Dev Containers extension. The browser asks once whether to open VS Code. "Show in the file manager" is not there, since a folder of the container means nothing to your computer. With Podman instead of Docker, set `dev.containers.dockerPath` to `podman` in VS Code first.
+- "Open in VS Code" opens the repo, task worktree or file in VS Code on your computer, inside the running container through the Dev Containers extension: with the extensions and settings of your `devcontainer.json` when it sets `TRACKWALL_DEVCONTAINER_HOST_FOLDER` (see [Set up the container](#set-up-the-container)), attached to the container otherwise. It reuses the running container and never rebuilds it. The browser asks once whether to open VS Code. "Show in the file manager" is not there, since a folder of the container means nothing to your computer. With Podman instead of Docker, set `dev.containers.dockerPath` to `podman` in VS Code first.
 - The command from [Connect Copilot CLI](/guide/connect-copilot-cli) is a path inside the container, so it works for a Copilot CLI in the container, not on your computer.
 - Packages installed on Alpine do not work on Debian and the other way round. After switching the image, delete `node_modules` in `~/trackwall` and run the install and build of step 3 again.
 - To update, run `git pull` in `~/trackwall`, then the install and build of step 3, and start Trackwall again.

@@ -99,6 +99,7 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
       mcpStdioCommand: ["trackwall-daemon", "mcp-stdio"],
       desktop,
       container: options.container ?? null,
+      devContainerFolder: null,
     }),
     onShutdown: () => {},
     facade,

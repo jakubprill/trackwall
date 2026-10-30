@@ -60,6 +60,7 @@ beforeAll(async () => {
       mcpStdioCommand: ["trackwall-daemon", "mcp-stdio"],
       desktop: true,
       container: null,
+      devContainerFolder: null,
     }),
     onShutdown: () => {
       shutdowns++;

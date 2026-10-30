@@ -6,13 +6,17 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use tauri::Url;
 
-/// What a window may hand to the system: a web page (`WebAddress` in protocol) or VS Code attached to a container
-/// (`containerEditorUrl` in protocol). Never `file:` or another app's protocol, which could run a program.
+/// What a window may hand to the system: a web page (`WebAddress` in protocol) or VS Code in a container, attached to it
+/// or through its dev container's configuration (`containerEditorUrl` and `devContainerEditorUrl` in protocol). Never
+/// `file:` or another app's protocol, which could run a program.
 fn openable(url: &str) -> Option<Url> {
     let url = Url::parse(url).ok()?;
     let allowed = match url.scheme() {
         "http" | "https" => url.has_host(),
-        "vscode" => url.host_str() == Some("vscode-remote") && url.path().starts_with("/attached-container+"),
+        "vscode" => {
+            url.host_str() == Some("vscode-remote")
+                && ["/attached-container+", "/dev-container+"].iter().any(|kind| url.path().starts_with(kind))
+        }
         _ => false,
     };
     allowed.then_some(url)
@@ -84,10 +88,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn opens_web_pages_and_vs_code_attached_to_a_container() {
+    fn opens_web_pages_and_vs_code_in_a_container() {
         assert!(openable("https://gitlab.example.com/group/repo/-/merge_requests/new?x=1").is_some());
         assert!(openable("http://127.0.0.1:41000/").is_some());
         assert!(openable("vscode://vscode-remote/attached-container+7b22/workspaces/repo").is_some());
+        assert!(openable("vscode://vscode-remote/dev-container+433a5c4465765c77/workspaces/repo").is_some());
     }
 
     #[test]
@@ -98,6 +103,7 @@ mod tests {
             "ms-msdt:/id",
             "vscode://file/C:/repo",
             "vscode://ms-vscode.some-extension/run",
+            "vscode://vscode-remote/ssh-remote+host/repo",
             "mailto:someone@example.com",
             "not a url",
         ] {
