@@ -606,6 +606,11 @@ export class Agents {
     this.#tasks.openEditor(id);
   }
 
+  /** The files the repo root's `.worktreeinclude` names, copied into the task's existing worktree again (ADR-61). */
+  copyIncludedFilesAgain(id: string): Promise<Task> {
+    return this.#tasks.copyIncludedFilesAgain(id);
+  }
+
   /** The task worktree's mise config against the one the user trusted (ADR-59). */
   taskMiseConfig(id: string): Promise<TaskMiseConfig> {
     return this.#tasks.miseConfig(id);

@@ -5,7 +5,7 @@ import { FileInput, TriangleAlert } from "lucide-react";
 const SHOWN_FILES = 3;
 
 /**
- * The files the task's worktree got from the repo root when it was created (ADR-61): ignored files such as `.env`
+ * The files the task's worktree got from the repo root when it was created, or copied again later (ADR-61): ignored files such as `.env`
  * that the root's `.worktreeinclude` names, so the user knows which local config the agent works with, and what was
  * not copied. Hidden when the root names none.
  */

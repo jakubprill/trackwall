@@ -1,5 +1,5 @@
-import { agentsApi, type Session, type Task } from "@trackwall/protocol";
-import { Play, Square } from "lucide-react";
+import { agentsApi, type Session, type Task, WORKTREE_INCLUDE_FILE } from "@trackwall/protocol";
+import { FileInput, Play, Square } from "lucide-react";
 import { EditorButton } from "@/components/EditorButton";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
@@ -52,6 +52,28 @@ export function TaskEditorButton({ conn, task, label }: { conn: Connection; task
     <>
       {openEditor.error && <span className="text-destructive max-w-xs truncate text-xs">{openEditor.error}</span>}
       <EditorButton path={task.worktree} label={label} onOpen={openEditor.run} disabled={openEditor.pending} />
+    </>
+  );
+}
+
+/**
+ * Copying what the repo root's `.worktreeinclude` names into the task's worktree again (ADR-61), for a line added after
+ * the task started; the "Included files" section then lists what the worktree got. The error shows next to the button.
+ */
+export function CopyIncludedFilesButton({ conn, task, onCopied }: { conn: Connection; task: Task; onCopied: () => void }) {
+  const copy = useAction(() => post(conn, agentsApi.copyIncludedFilesAgain, { task: task.id }), onCopied);
+  return (
+    <>
+      {copy.error && <span className="text-destructive max-w-xs truncate text-xs">{copy.error}</span>}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={copy.run}
+        disabled={copy.pending}
+        title={`Copy the files the repo's ${WORKTREE_INCLUDE_FILE} names into the worktree again; files it already has stay as they are`}
+      >
+        <FileInput /> Copy included files
+      </Button>
     </>
   );
 }
