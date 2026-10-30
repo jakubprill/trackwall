@@ -37,6 +37,7 @@ import { readHeadCommit } from "./head-commit.ts";
 import { hostedProject } from "./hosted-project.ts";
 import { KeyedQueue } from "./keyed-queue.ts";
 import { excludeLocally, ignoredPaths, trackedPaths } from "./local-files.ts";
+import { searchLog } from "./log-search.ts";
 import {
   type CommitFile,
   type GitObject,
@@ -214,6 +215,8 @@ export class Vcs {
   // `git grep` over a commit's objects (`grep.ts`): source files for cards (ADR-30) and code search (ADR-40).
   readonly grepFiles = grepFiles;
   readonly grep = grep;
+  // `git log` over a commit's history for commit search (`log-search.ts`, ADR-149).
+  readonly searchLog = searchLog;
 
   // Task worktrees (ADR-31, `worktree.ts`, `worktree-changes.ts`). Reads go straight through; changes to the worktree
   // registry and branches go one after another within one repo.
