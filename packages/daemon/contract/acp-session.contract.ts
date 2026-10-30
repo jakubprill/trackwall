@@ -106,8 +106,8 @@ describe("the supervisor in the conversation view with the real Copilot CLI", ()
     expect(done.state?.reason).toBe("stop end_turn");
     expect(existsSync(join(daemon.projects, "made-by-acp.txt"))).toBe(true);
     const [first] = model.requests().slice(-2);
-    // Copilot CLI puts the date and time before the user's text.
-    expect(first?.lastUserText).toEndWith("make a file");
+    // Copilot CLI puts the date and time before the user's text, and the situation from the prompt's hook after it (ADR-148).
+    expect(first?.lastUserText).toContain("make a file\n\n<system_reminder>\nTrackwall's work under way as this prompt came");
     expect(first?.tools).toContain(`${MCP_SERVER_NAME}-${mcpTools.listRepos.name}`);
     expect(first?.system).toContain("You are the supervisor");
     await view.until((entries) => entries.at(-1)?.kind === "agent", "the answer");

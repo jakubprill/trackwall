@@ -141,6 +141,7 @@ async function sessionShowing(
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
     run: () => ({ kind: "running", runId: "r1", startedAt: "2026-10-25T12:00:00.000Z", pid: 1 }),
     prompt,
+    situation: () => undefined,
     onPromptSent: () => {},
     onUserText: () => {
       typedText.count++;

@@ -161,9 +161,19 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
       "Do not propose a task for such a request: to remove a repo, propose it with propose_folder_action; for anything else, tell the user what it takes.",
     );
     expect(text).toContain(
-      "Before you propose a task, read the tasks a supervisor proposed with list_sessions. A follow-up on the same topic in the same repo goes to that task with send_message while the user has not ended it",
+      "Before you propose a task, check the tasks in the situation. A follow-up on the same topic in the same repo goes to that task with send_message while the user has not ended it",
     );
     expect(text).toContain("a follow-up on a proposal still waiting for the user, or on a task the user started, goes to the user");
+  });
+
+  test("the supervisor is told that each prompt ends with the situation, which covers the work the user started too (ADR-148)", () => {
+    const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
+    writeSessionInstructions(sessionDir, "0.5.12", { kind: "supervisor", changesCode: false });
+    const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
+    expect(text).toContain("Each prompt you get ends with Trackwall's situation: every task with who started it and what its session does");
+    expect(text).toContain(
+      "answer what is going on, and what waits for the user, from it, and call get_session only for details it does not give",
+    );
   });
 
   test("a supervisor the user lets change code is told so, and still hands repo changes to tasks (ADR-78)", () => {

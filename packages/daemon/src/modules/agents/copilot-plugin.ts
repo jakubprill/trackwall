@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { HttpEndpoint } from "@trackwall/protocol";
-import { COPILOT_HOOK_EVENTS, type CopilotHookEvent } from "./copilot-hook-record.ts";
+import type { CopilotHookEvent } from "./copilot-hook-record.ts";
 
 /**
  * The session plugin (§4.4, ADR-17): a directory given to Copilot CLI through `--plugin-dir` that registers the hooks
@@ -49,11 +49,12 @@ type PluginHook = HookCommand | HttpHook;
 const HOOK_TIMEOUT_SEC = 5;
 
 /**
- * The plugin in `dir`; `lspServers`, when given, are the language servers of the session's `lsp` tool (ADR-99), which
- * Copilot CLI starts in the background in the session's working directory.
+ * The plugin in `dir` with a hook for each of `events`; `lspServers`, when given, are the language servers of the
+ * session's `lsp` tool (ADR-99), which Copilot CLI starts in the background in the session's working directory.
  */
 export function writeCopilotPlugin(
   dir: string,
+  events: readonly CopilotHookEvent[],
   hook: (event: CopilotHookEvent) => PluginHook,
   lspServers: Record<string, LspServer> = {},
 ): void {
@@ -64,7 +65,7 @@ export function writeCopilotPlugin(
     description: "Trackwall: task session state",
     ...(Object.keys(lspServers).length === 0 ? {} : { lspServers }),
   };
-  const hooks = Object.fromEntries(COPILOT_HOOK_EVENTS.map((event) => [event, [{ ...hook(event), timeoutSec: HOOK_TIMEOUT_SEC }]]));
+  const hooks = Object.fromEntries(events.map((event) => [event, [{ ...hook(event), timeoutSec: HOOK_TIMEOUT_SEC }]]));
   writeFileSync(join(dir, "plugin.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   // User-only like the session's `mcp-config.json`: an HTTP hook's headers carry the session token (§8).
   writeFileSync(join(dir, "hooks.json"), `${JSON.stringify({ version: 1, hooks }, null, 2)}\n`, { mode: 0o600 });

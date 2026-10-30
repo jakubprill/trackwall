@@ -24,7 +24,8 @@ import {
   SessionUpdateParams,
 } from "./acp-messages.ts";
 import type { AgentSession } from "./agent-session.ts";
-import type { CopilotHookOutput } from "./copilot-hook-output.ts";
+import { type CopilotHookOutput, situationOutput } from "./copilot-hook-output.ts";
+import type { CopilotHookRecord } from "./copilot-hook-record.ts";
 import type { SessionEvent } from "./live-session.ts";
 import { SessionAttention } from "./session-attention.ts";
 
@@ -83,6 +84,8 @@ export interface AcpSessionOptions {
   run: () => RunState | undefined;
   /** The daemon's prompt for what waits unread for this session (ADR-62, ADR-68); `undefined` when nothing waits. */
   prompt: () => string | undefined;
+  /** What the agent gets with every prompt, through the session plugin's hook (the supervisor's situation, ADR-148). */
+  situation: () => string | undefined;
   /** The user wrote to the session. */
   onUserText: () => void;
   /** The daemon's prompt, read just before, went to the agent. */
@@ -249,9 +252,12 @@ export class AcpSession implements AgentSession {
     return this.#promptAsked ? "queued" : "typed";
   }
 
-  /** Hooks give nothing to a session in the conversation view: what waits goes as the next prompt (ADR-107). */
-  hookOutput(): CopilotHookOutput {
-    return {};
+  /**
+   * What waits goes as the next prompt (ADR-107), so a hook gives only the supervisor's situation with each prompt
+   * (ADR-148), which as part of the prompt would show in a loaded conversation as the user's words.
+   */
+  hookOutput(record: CopilotHookRecord | undefined): CopilotHookOutput {
+    return record?.event === "userPromptSubmitted" ? situationOutput(this.#o.situation()) : {};
   }
 
   /** Answers the approval `id` names with an option's digit, or `stop`, which refuses it and ends the turn. */

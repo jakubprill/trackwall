@@ -444,6 +444,10 @@ _Avoid_: orchestrator, root session, supervising agent (that is an agent outside
 A Trackwall session in the projects folder that is not the supervisor (`Session.repo` is `null`, `Session.supervisor` is `false`): plain Copilot CLI the user talks to without a repo, any number at once (ADR-100). It may change files in any repo of the folder, without a review; to MCP it is a main session in no repo, so it proposes tasks but runs no mise task or service.
 _Avoid_: repo-less session, scratch session
 
+**Situation** (`supervisorSituation`, `situationOutput`; ADR-148):
+The short list of the work under way that the daemon gives the supervisor with every prompt: each task with who started it and what its newest session does, the proposals waiting for the user, and the user's other running sessions, as they are when the prompt comes. Facts from the daemon's session list, not the agent's own words; the details stay in `list_sessions` and `get_session`.
+_Avoid_: briefing (that is what the supervisor writes for the day start), status report, context (too general)
+
 **Supervisor panel** (`SupervisorPanel`):
 The column on the right of the main window, in every view, with the supervisor's terminal, its state and the work it delegated, or, while none runs, its start card (`SupervisorStart`): "Start my day", "Continue" (the last supervisor's conversation, while Copilot CLI keeps one, `SessionList.lastSupervisor`) and "New conversation", one of them first as the main choice, and "Show as" for a terminal or the conversation view (ADR-58, ADR-70, ADR-96, ADR-126). Pinned open, wide ("Widen": most of the window, for reading the supervisor), or folded to a strip that keeps a bell while the supervisor or a task proposal under it waits for you (`SupervisorLayout` in `supervisor-layout.ts`); Alt+0 unfolds it, a wide panel staying wide, and puts the keyboard in its terminal.
 _Avoid_: sidebar (that is the list on the left of a view), drawer

@@ -93,7 +93,7 @@ const toolEnv = (name: string) => (hiddenEnv.includes(name) ? "(hidden)" : (proc
 // `FAKE_COPILOT_ACP_EXIT` makes it end before the handshake, like a Copilot CLI that cannot start.
 if (process.argv.includes("--acp")) {
   if (process.env.FAKE_COPILOT_ACP_EXIT !== undefined) process.exit(3);
-  serveAcp({ mcpServers, instructionFiles, args: taskArgs, allowAllTools });
+  serveAcp({ mcpServers, instructionFiles, args: taskArgs, allowAllTools, fire: pluginHooks(process.argv, "s1") });
   await new Promise<never>(() => {});
 }
 
@@ -150,8 +150,12 @@ function replay(hooks: readonly ReferenceHook[], prompt = ""): HookOutputs {
     const extra = event === "agentStop" ? { stop_hook_active: blockedTurn } : {};
     const fired = fire(event, { ...Object.fromEntries(omitted.map((name) => [name, values[name] ?? ""])), ...payload, ...extra });
     for (const output of fired) {
-      const context = event === "postToolUse" ? ToolContext.safeParse(output) : undefined;
-      if (context?.success) process.stdout.write(`Tool result context: ${context.data.additionalContext}\r\n`);
+      const context = HookContext.safeParse(output);
+      if (!context.success) continue;
+      // Copilot CLI shows neither to the user; the fake prints them for the tests.
+      const text = context.data.additionalContext.replaceAll("\n", "\r\n");
+      if (event === "postToolUse") process.stdout.write(`Tool result context: ${text}\r\n`);
+      if (event === "userPromptSubmitted") process.stdout.write(`Prompt context: ${text}\r\n`);
     }
     outputs.push(...fired.map((output) => ({ event, output })));
   }
@@ -162,10 +166,11 @@ type HookOutputs = { event: string; output: Record<string, unknown> }[];
 
 /**
  * The hook outputs Copilot CLI acts on (ADR-85): an `agentStop` block starts a new turn with its reason as the user's
- * message, and `postToolUse` context goes to the model with the tool's result (the fake prints it when the hook answers).
+ * message, `postToolUse` context goes to the model with the tool's result, and `userPromptSubmitted` context with the
+ * prompt (ADR-148); the fake prints the context when the hook answers.
  */
 const AgentStopBlock = z.object({ decision: z.literal("block"), reason: z.string() });
-const ToolContext = z.object({ additionalContext: z.string() });
+const HookContext = z.object({ additionalContext: z.string() });
 
 /** The turn under way was started by an `agentStop` block, which its own `agentStop` says (`stop_hook_active`). */
 let blockedTurn = false;
