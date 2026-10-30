@@ -32,12 +32,13 @@ import {
   type ToolPermissions,
   type Verification,
 } from "@trackwall/protocol";
-import { DomainError, messageOf } from "../../infra/errors.ts";
+import { DomainError } from "../../infra/errors.ts";
 import { AcpSession, type ConversationViewer, type ConversationWindow } from "./acp-session.ts";
 import { AgentQueuesFile } from "./agent-queues.ts";
 import type { AgentSession } from "./agent-session.ts";
 import type { CopilotHookOutput } from "./copilot-hook-output.ts";
 import { CopilotHookEvent } from "./copilot-hook-record.ts";
+import { HandoffWatch } from "./handoff-watch.ts";
 import { appendHookRecord } from "./hook-tail.ts";
 import { inboxPrompt } from "./inbox-prompt.ts";
 import { javaNavigationState } from "./java-language-server.ts";
@@ -176,8 +177,7 @@ export class Agents {
   readonly #proposals = new TaskProposals(() => this.#queues.follow());
   readonly #reviews = new TaskReviews(() => this.#queues.follow());
   readonly #miseTrust = new MiseTrustNotices(() => this.#queues.follow());
-  /** Tasks whose handing task's branch moved since they last read it, until they call `get_handoff` (ADR-144); memory only, since git keeps the facts. */
-  readonly #handoffsMoved = new Set<string>();
+  readonly #handoffs: HandoffWatch;
   readonly #coordination: TaskCoordination;
   readonly #supervisor: SupervisorSessions;
   readonly #resumable: ResumableSessions;
@@ -237,6 +237,7 @@ export class Agents {
         close: (id) => this.#close(id),
       },
     });
+    this.#handoffs = new HandoffWatch(this.#tasks, (task) => this.#sessions.runningOfTask(task)?.askToRead(), deps.log);
     this.#coordination = new TaskCoordination({
       task: (id) => this.task(id),
       findTask: (id) => this.findTask(id),
@@ -459,7 +460,7 @@ export class Agents {
     const reviewComments = session.task === null ? 0 : this.#reviews.unread(session.task);
     return inboxPrompt({
       reviewComments,
-      handoffMoved: session.task !== null && this.#handoffsMoved.has(session.task),
+      handoffMoved: session.task !== null && this.#handoffs.waiting(session.task),
       ...this.#coordination.unread(session),
       trustNotice: this.#miseTrust.waiting(trustRecipientOf(session)),
     });
@@ -491,8 +492,7 @@ export class Agents {
   async readHandoff(caller: string | null): Promise<TaskHandoffState | null> {
     const task = caller === null ? null : this.session(caller).task;
     if (task === null) throw new DomainError("bad_request", "only a session that runs a task in Trackwall has a handoff");
-    this.#handoffsMoved.delete(task);
-    return this.#tasks.readHandoff(task);
+    return this.#handoffs.read(task);
   }
 
   /** The unread updates on the work session `caller` delegated (`get_updates`), which now count as read. */
@@ -704,7 +704,7 @@ export class Agents {
     await this.#tasks.remove(id, keepBranch, discardChanges);
     this.#reviews.take(id);
     this.#miseTrust.forget({ task: id });
-    this.#handoffsMoved.delete(id);
+    this.#handoffs.forget(id);
     this.#coordination.taskEnded(id);
     this.#deps.onTaskRemoved(id);
   }
@@ -744,6 +744,8 @@ export class Agents {
     // unread, and nothing is typed when nothing is. Not the updates of a new supervisor or main session: the user starts
     // those to talk, and the next update asks them anyway.
     if (session.task !== null) session.askToRead();
+    // A move of the handing branch before a daemon restart, or while the task had no session (ADR-144).
+    if (session.task !== null) void this.#handoffs.check(session.task);
     return this.#sessions.view(session);
   }
 
@@ -975,7 +977,7 @@ export class Agents {
       onUserText: () => this.#coordination.userTyped({ id, task }),
       onPromptSent: () => this.#miseTrust.promptSent(trustRecipientOf({ id, task })),
       onTurnOver: () => {
-        if (task !== null) void this.#handoffMayHaveMoved(task);
+        if (task !== null) void this.#handoffs.turnOver(task);
       },
       onEvent: (event: SessionEvent) => {
         if (event.kind === "turn_ended") this.#miseTrust.turnEnded(trustRecipientOf({ id, task }));
@@ -987,22 +989,6 @@ export class Agents {
         }
       },
     };
-  }
-
-  /**
-   * Task `task`'s agent ended a turn, so its branch may have moved: each task it handed work to
-   * whose last read commit differs is asked to call `get_handoff` (ADR-144), now or when its session is resumed.
-   */
-  async #handoffMayHaveMoved(task: string): Promise<void> {
-    for (const subtask of this.#tasks.handedTo(task)) {
-      try {
-        if (this.#handoffsMoved.has(subtask) || !(await this.#tasks.handoffMoved(subtask))) continue;
-        this.#handoffsMoved.add(subtask);
-        this.#sessions.runningOfTask(subtask)?.askToRead();
-      } catch (err) {
-        this.#deps.log(`task ${subtask}: checking the branch of task ${task} that handed it its work: ${messageOf(err)}`);
-      }
-    }
   }
 
   /** The running session a trust notice is for: the newest one of its task, or the session itself. */

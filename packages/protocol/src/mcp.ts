@@ -802,8 +802,8 @@ export const mcpTools = {
     description:
       "Where the work your task builds on is now: the task whose session proposed your task (task, repo, branch; ended once the " +
       "user ended it), the commit of its branch you read last (read), where the branch is now (head), how many commits it " +
-      `gained since (commits) and which files they change (files, at most ${HANDOFF_FILES_MAX}). Once returned, head counts as ` +
-      "read. Only for a session that runs a task in Trackwall; handoff is null when no task handed you your work. Trackwall " +
+      `gained since (commits) and which files they change (files, at most ${HANDOFF_FILES_MAX}); commits is null and files ` +
+      "empty when the commit you read is gone after a rewritten history. Once returned, head counts as read. Only for a session that runs a task in Trackwall; handoff is null when no task handed you your work. Trackwall " +
       "asks you to call it when that branch moves on. Read the changes themselves with " +
       `${GET_TASK_CHANGES} and that task (narrow it with paths to the files listed here), and check whether they change ` +
       `what you build on; a question about them goes into your ${REPORT_RESULT}.`,
