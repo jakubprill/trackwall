@@ -23,40 +23,55 @@ export interface Resolved {
 }
 
 export function resolvePlaceholders(text: string, get: (key: string) => PlaceholderSource | undefined): Resolved {
-  return new Resolver(get, () => false).resolve(text, 0);
+  return new Resolver(get, NO_SOURCES).resolve(text, 0);
 }
 
-/** An expansion that also says which keys came from outside the configuration and which had no value at all. */
+/** Keys an expansion treats apart from the configuration (ADR-153). */
+export interface ExpansionKeys {
+  /** Keys another property source sets before the files (the environment): they win over the files and their default. */
+  outside: (key: string) => boolean;
+  /** Keys whose value must not appear in the result (secrets): never expanded, nor is their placeholder's default. */
+  hidden: (key: string) => boolean;
+}
+
+const NO_SOURCES: ExpansionKeys = { outside: () => false, hidden: () => false };
+
+/** An expansion that also says which keys came from outside the configuration, took their default, or had no value at all. */
 export interface Expanded extends Resolved {
   /** Keys `outside` set, in the order met; each stays as `${key}` in the value. */
   outside: string[];
+  /** Keys without an entry or a value outside that took their placeholder's default. */
+  defaulted: string[];
   /** Keys without an entry, a default or a value outside; each stays as its `${…}` in the value. */
   missing: string[];
 }
 
 /**
  * Expanding as Spring does with another property source before the configuration files (the environment, ADR-153):
- * a key `outside` sets wins over the files and its default and stays as `${key}`, since its value is not read here.
+ * a key `outside` sets wins over the files and its default and stays as `${key}`, since its value is not read here,
+ * and a `hidden` key stays as `${key}` whatever sets it.
  */
-export function expandPlaceholders(
-  text: string,
-  get: (key: string) => PlaceholderSource | undefined,
-  outside: (key: string) => boolean,
-): Expanded {
-  const resolver = new Resolver(get, outside);
-  return { ...resolver.resolve(text, 0), outside: [...resolver.outside], missing: [...resolver.missing] };
+export function expandPlaceholders(text: string, get: (key: string) => PlaceholderSource | undefined, keys: ExpansionKeys): Expanded {
+  const resolver = new Resolver(get, keys);
+  return {
+    ...resolver.resolve(text, 0),
+    outside: [...resolver.outside],
+    defaulted: [...resolver.defaulted],
+    missing: [...resolver.missing],
+  };
 }
 
 class Resolver {
   private readonly get: (key: string) => PlaceholderSource | undefined;
-  private readonly isOutside: (key: string) => boolean;
+  private readonly keys: ExpansionKeys;
   private readonly memo = new Map<string, Resolved | undefined>();
   readonly outside = new Set<string>();
+  readonly defaulted = new Set<string>();
   readonly missing = new Set<string>();
 
-  constructor(get: (key: string) => PlaceholderSource | undefined, isOutside: (key: string) => boolean) {
+  constructor(get: (key: string) => PlaceholderSource | undefined, keys: ExpansionKeys) {
     this.get = get;
-    this.isOutside = isOutside;
+    this.keys = keys;
   }
 
   resolve(text: string, depth: number): Resolved {
@@ -83,13 +98,20 @@ class Resolver {
   private placeholder(inner: string, depth: number): Resolved | undefined {
     const colon = topLevelColon(inner);
     const key = colon < 0 ? inner : inner.slice(0, colon);
-    if (this.isOutside(key)) {
+    if (this.keys.outside(key)) {
       this.outside.add(key);
+      return { value: `\${${key}}`, source: undefined };
+    }
+    if (this.keys.hidden(key)) {
+      if (this.get(key) === undefined) (colon < 0 ? this.missing : this.defaulted).add(key);
       return { value: `\${${key}}`, source: undefined };
     }
     const fromKey = depth < MAX_DEPTH ? this.key(key, depth) : undefined;
     if (fromKey) return fromKey;
-    if (colon >= 0) return this.resolve(inner.slice(colon + 1), depth + 1);
+    if (colon >= 0) {
+      this.defaulted.add(key);
+      return this.resolve(inner.slice(colon + 1), depth + 1);
+    }
     this.missing.add(key);
     return undefined;
   }

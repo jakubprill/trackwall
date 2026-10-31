@@ -378,16 +378,16 @@ export class Mise {
   /**
    * The environment a run of `target` gets (ADR-153), for telling which variables are set: the user's, in a task's
    * worktree with the task port, and mise's `[env]` there, with the values of the secrets among them to mask. A place
-   * mise refuses or cannot read gives the rest, with mise's reason in `problem`.
+   * mise refuses or cannot read gives the rest, with mise's reason in `problem`. Unlike a session's place (`readPlace`),
+   * an environment whose redactions mise cannot give is still taken, as a run takes it: nothing of it is handed out,
+   * the variables are only looked up by name.
    */
   async runEnv(target: MiseTarget): Promise<RunEnv> {
     const env = await this.deps.env();
+    const place = target.task === null ? this.rootPlace(target.repo, env) : this.worktreePlace(target.task, target.repo, env);
     let where: { dir: string; env: NodeJS.ProcessEnv };
     try {
-      where =
-        target.task === null
-          ? { dir: await this.deps.repos.repoPath(target.repo), env }
-          : await this.worktreePlace(target.task, target.repo, env).where();
+      where = await place.where();
     } catch (err) {
       if (!(err instanceof DomainError)) throw err;
       return { env, secretValues: [], problem: err.message };
@@ -424,7 +424,7 @@ export class Mise {
     task: string | null,
     env: NodeJS.ProcessEnv,
   ): Promise<{ kind: "done"; env: Omit<SessionMiseEnv, "profile"> } | { kind: "refused"; problem: string }> {
-    const root: EnvPlace = { label: `the root of ${repo}`, where: async () => ({ dir: await this.deps.repos.repoPath(repo), env }) };
+    const root = this.rootPlace(repo, env);
     const inRoot = await this.readPlace(root);
     if (inRoot.kind === "not_installed") return { kind: "done", env: { ...NO_MISE_ENV, problem: null } };
     if (inRoot.kind === "error") return { kind: "refused", problem: `${root.label}: ${inRoot.message}` };
@@ -433,6 +433,10 @@ export class Mise {
     if (inWorktree.kind === "ok") return { kind: "done", env: { ...inWorktree.env, problem: null } };
     const message = inWorktree.kind === "error" ? inWorktree.message : "mise did not start there";
     return { kind: "done", env: { ...inRoot.env, problem: sessionProblem([`the task's worktree: ${message}`], root.label) } };
+  }
+
+  private rootPlace(repo: string, env: NodeJS.ProcessEnv): EnvPlace {
+    return { label: `the root of ${repo}`, where: async () => ({ dir: await this.deps.repos.repoPath(repo), env }) };
   }
 
   private worktreePlace(task: string, repo: string, env: NodeJS.ProcessEnv): EnvPlace {

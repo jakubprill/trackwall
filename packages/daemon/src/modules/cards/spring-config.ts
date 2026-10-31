@@ -167,7 +167,8 @@ function readConfigFile(path: string, text: string, out: ProblemSink): ConfigDoc
       return profiles === undefined ? [] : [{ profiles, entries }];
     });
   } catch (err) {
-    out.problems.push({ code: "file-invalid", path, message: messageOf(err) });
+    // A parser's message quotes the lines around the error, which may hold a secret: only its first line is kept.
+    out.problems.push({ code: "file-invalid", path, message: messageOf(err).split("\n")[0] ?? "" });
     return [];
   }
 }

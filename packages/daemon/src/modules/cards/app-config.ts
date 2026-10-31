@@ -4,7 +4,7 @@ import {
   type AppConfigModule,
   type AppConfigVariable,
   SPRING_DEFAULT_PROFILE,
-  withoutCredentials,
+  withoutCredentialsInText,
 } from "@trackwall/protocol";
 import { envKey } from "../../infra/env-key.ts";
 import { isSecretName } from "../../infra/secret-name.ts";
@@ -28,25 +28,22 @@ export interface AppConfigView {
   truncated: boolean;
 }
 
-/**
- * `withoutCredentials` keeps only the path of a longer address, which may still hold its user and password, so such a
- * value is hidden whole.
- */
-const MAX_ADDRESS_CHARS = 2048;
 /** Spring Boot's `random.*` values (`${random.uuid}`) come from neither the files nor the environment. */
 const RANDOM_KEY = /^random\./;
 
-/** The modules in `configs` in the profile's view, only keys starting with `key` (compared as Spring does) when given. */
-export function appConfigView(
-  configs: ReadonlyMap<string, ModuleConfig>,
-  request: { profile: string; key: string | undefined },
-  env: AppConfigEnv,
-): AppConfigView {
-  const prefix = request.key === undefined ? "" : normalizeKey(request.key);
+/** Which profile's view, and only keys starting with `key` (compared as Spring does) when given. */
+export interface AppConfigQuery {
+  profile: string;
+  key: string | undefined;
+}
+
+/** The modules in `configs` in the profile's view. */
+export function appConfigView(configs: ReadonlyMap<string, ModuleConfig>, query: AppConfigQuery, env: AppConfigEnv): AppConfigView {
+  const prefix = query.key === undefined ? "" : normalizeKey(query.key);
   let left = APP_CONFIG_MAX_ENTRIES;
   let truncated = false;
   const modules = [...configs.values()].map((config): AppConfigModule => {
-    const matching = config.entries(request.profile).filter((e) => normalizeKey(e.key).startsWith(prefix));
+    const matching = config.entries(query.profile).filter((e) => normalizeKey(e.key).startsWith(prefix));
     const kept = matching.slice(0, Math.max(left, 0));
     left -= kept.length;
     truncated ||= kept.length < matching.length;
@@ -56,32 +53,36 @@ export function appConfigView(
     };
     return {
       module: config.module,
-      app: shown("spring.application.name", request.profile),
+      app: shown("spring.application.name", query.profile),
       profiles: config.profiles,
+      profileFound: query.profile === SPRING_DEFAULT_PROFILE || config.profiles.includes(query.profile),
       activeProfiles: shown("spring.profiles.active", SPRING_DEFAULT_PROFILE),
-      entries: kept.map((e) => appConfigEntry(config, e, request.profile, env)),
+      entries: kept.map((e) => appConfigEntry(config, e, query.profile, env)),
     };
   });
   return { modules, truncated };
 }
 
+/**
+ * One entry. A secret key's value is never expanded into another value (`url: …;Password=${db.password}`), and a
+ * placeholder's default is not used for one (`${API_TOKEN:dev-token}`): both stay `${key}`.
+ */
 function appConfigEntry(config: ModuleConfig, entry: ConfigEntry, profile: string, env: AppConfigEnv): AppConfigEntry {
-  const expanded = expandPlaceholders(
-    entry.value,
-    (key) => config.entry(key, profile),
-    (key) => RANDOM_KEY.test(key) || setVariable(env.vars, key) !== undefined,
-  );
+  const expanded = expandPlaceholders(entry.value, (key) => config.entry(key, profile), {
+    outside: (key) => RANDOM_KEY.test(key) || setVariable(env.vars, key) !== undefined,
+    hidden: isSecretKey,
+  });
   const variables: AppConfigVariable[] = [
     ...expanded.outside.flatMap((key) => {
       const name = setVariable(env.vars, key);
       return name === undefined ? [] : [{ name, set: true }];
     }),
-    ...expanded.missing.map((key) => ({ name: variableName(key), set: false })),
+    ...[...expanded.defaulted, ...expanded.missing].map((key) => ({ name: variableName(key), set: false })),
   ];
   const secret = isSecretKey(entry.key);
   return {
     key: entry.key,
-    value: secret ? null : env.mask(withoutAddressCredentials(expanded.value)),
+    value: secret ? null : env.mask(withoutCredentialsInText(expanded.value)),
     secret,
     set: expanded.value.trim() !== "" && expanded.missing.length === 0,
     env: variables,
@@ -114,30 +115,15 @@ function setVariable(vars: NodeJS.ProcessEnv, key: string): string | undefined {
 }
 
 function variableNames(key: string): string[] {
-  const indexed = key.replace(/\[(\d+)\]/g, "_$1");
-  const spellings = [key, key.replace(/\./g, "_"), key.replace(/-/g, "_"), indexed.replace(/[.-]/g, "_")];
-  return [
-    ...new Set([...spellings, ...spellings.map((s) => s.toUpperCase()), indexed.replace(/-/g, "").replace(/\./g, "_").toUpperCase()]),
-  ];
+  const spellings = [key, key.replace(/\./g, "_"), key.replace(/-/g, "_"), key.replace(/[.-]/g, "_")];
+  const bound = variableName(key.replace(/-/g, ""));
+  return [...new Set([...spellings, ...spellings.map((s) => s.toUpperCase()), variableName(key), bound])];
 }
 
-/** The variable to set for a key no source sets: `DB_URL` as written, `orders.base-url` as `ORDERS_BASE_URL`. */
+/** The variable to set for a key no source sets: `DB_URL` as written, `orders.base-url` as `ORDERS_BASE_URL`, `[0]` as `_0`. */
 function variableName(key: string): string {
   return key
     .replace(/\[(\d+)\]/g, "_$1")
     .replace(/[.-]/g, "_")
     .toUpperCase();
-}
-
-/**
- * An address anywhere in a value without its user, password and query (`jdbc:postgresql://me:pw@db/orders?password=x`
- * → `jdbc:postgresql://***@db/orders`): `withoutCredentials` reads a one-word scheme, so the words before `://` are kept
- * as they are and the rest goes through it.
- */
-export function withoutAddressCredentials(value: string): string {
-  const at = value.indexOf("://");
-  if (at < 0) return value;
-  const head = value.slice(0, at);
-  if (value.length > MAX_ADDRESS_CHARS) return `${head}://***`;
-  return `${head}${withoutCredentials(`x${value.slice(at)}`).slice(1)}`;
 }

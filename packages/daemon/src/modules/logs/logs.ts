@@ -81,8 +81,14 @@ export class Logs {
   }
 
   /** Text from a process (an HTTP response of a service, ADR-45) masked the same way as its log lines. */
-  mask(text: string, env: NodeJS.ProcessEnv, known: readonly string[] = []): string {
-    return maskSecrets(text, secretValues(env, known));
+  mask(text: string, env: NodeJS.ProcessEnv): string {
+    return maskSecrets(text, secretValues(env));
+  }
+
+  /** Masking of many texts with the secrets of `env` and the `known` ones, found once. */
+  masker(env: NodeJS.ProcessEnv, known: readonly string[]): (text: string) => string {
+    const secrets = secretValues(env, known);
+    return (text) => maskSecrets(text, secrets);
   }
 
   /** Output only for the state's last lines, masked the same way, but without a log (the PTY screen of a task session). */

@@ -62,10 +62,10 @@ describe.skipIf(process.versions.bun === undefined)("get_app_config (real git wo
     expect(config.files).toEqual([APP, LOCAL]);
     expect(config.envProblem).toBeNull();
     const [module] = config.modules;
-    expect(module).toMatchObject({ module: "", app: "shop", profiles: ["local"], activeProfiles: null });
+    expect(module).toMatchObject({ module: "", app: "shop", profiles: ["local"], profileFound: true, activeProfiles: null });
     expect(module?.entries.map((e) => [e.key, e.value, e.secret, e.set, e.env, `${e.path}:${e.line}`])).toEqual([
       ["spring.application.name", "shop", false, true, [], `${APP}:3`],
-      ["spring.datasource.url", "jdbc:postgresql://***@localhost/shop", false, true, [], `${APP}:5`],
+      ["spring.datasource.url", "jdbc:postgresql://***@localhost/shop", false, true, [{ name: "SHOP_DB_URL", set: false }], `${APP}:5`],
       ["spring.datasource.password", null, true, true, [{ name: "SHOP_DB_PASSWORD", set: true }], `${APP}:6`],
       ["orders.base-url", `\${SHOP_ORDERS_URL}`, false, false, [{ name: "SHOP_ORDERS_URL", set: false }], `${APP}:8`],
       ["orders.api-key", null, true, true, [], `${LOCAL}:2`],

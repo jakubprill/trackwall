@@ -2,6 +2,7 @@ import { readdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import type { CardProblem } from "@trackwall/protocol";
 import { messageOf } from "../../infra/errors.ts";
+import { mapLimit } from "../../infra/map-limit.ts";
 import { isInside } from "../../infra/path-inside.ts";
 import { readRegularFile } from "../../infra/regular-file.ts";
 import { readsSpringConfigFile, springLoadOrder } from "./spring-config.ts";
@@ -35,31 +36,36 @@ const MAX_FILE_BYTES = 1024 * 1024;
 const MAX_FOLDERS = 200;
 const MAX_FILES = 500;
 const RESOURCES = "src/main/resources";
+/** Folders listed and files read at once: each is one system call, and on Windows the antivirus looks at every file. */
+const READ_CONCURRENCY = 8;
 
 export async function readWorkingConfig(vcs: WorkingConfigVcs, dir: string): Promise<WorkingConfig> {
   const problems: CardProblem[] = [];
   const tracked = await vcs.trackedFiles(dir, CONFIG_GLOBS, MAX_LIST_BYTES);
+  if (tracked.truncated)
+    problems.push({ code: "files-not-read", path: "", message: "git's list of configuration files was cut at its size limit" });
   const folders = [...new Set(tracked.paths.filter(readsSpringConfigFile).map(folderOf))].sort();
-  if (tracked.truncated || folders.length > MAX_FOLDERS)
+  if (folders.length > MAX_FOLDERS)
     problems.push({
       code: "files-not-read",
       path: "",
       message: `more resource folders than the limit of ${MAX_FOLDERS}; the rest were not read`,
     });
   const root = await realpath(dir);
-  const listed = (await Promise.all(folders.slice(0, MAX_FOLDERS).map((f) => configFilesIn(root, f, problems)))).flat();
-  const paths = listed.sort(springLoadOrder);
+  const listed = await mapLimit(folders.slice(0, MAX_FOLDERS), READ_CONCURRENCY, (f) => configFilesIn(root, f, problems));
+  const paths = listed.flat().sort(springLoadOrder);
   if (paths.length > MAX_FILES)
     problems.push({
       code: "files-not-read",
       path: "",
       message: `more configuration files than the limit of ${MAX_FILES}; the rest were not read`,
     });
-  const texts = new Map<string, string>();
-  for (const path of paths.slice(0, MAX_FILES)) {
-    const text = await readConfigFile(root, path, problems);
-    if (text !== undefined) texts.set(path, text);
-  }
+  const read = await mapLimit(
+    paths.slice(0, MAX_FILES),
+    READ_CONCURRENCY,
+    async (path) => [path, await readConfigFile(root, path, problems)] as const,
+  );
+  const texts = new Map(read.flatMap(([path, text]) => (text === undefined ? [] : [[path, text] as const])));
   return { paths: [...texts.keys()], text: (path) => texts.get(path), problems };
 }
 
@@ -76,7 +82,13 @@ async function configFilesIn(root: string, folder: string, problems: CardProblem
     problems.push({ code: "files-not-read", path: folder, message: "the folder leads outside the repo through a link" });
     return [];
   }
-  const names = await readdir(real).catch(() => []);
+  let names: string[];
+  try {
+    names = await readdir(real);
+  } catch (err) {
+    problems.push({ code: "files-not-read", path: folder, message: messageOf(err) });
+    return [];
+  }
   return names.map((name) => `${folder}/${name}`).filter(readsSpringConfigFile);
 }
 

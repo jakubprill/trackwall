@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { appConfigView, isSecretKey, withoutAddressCredentials } from "../src/modules/cards/app-config.ts";
+import { appConfigView, isSecretKey } from "../src/modules/cards/app-config.ts";
 import { expandPlaceholders } from "../src/modules/cards/placeholders.ts";
 import { readSpringConfigs } from "../src/modules/cards/spring-config.ts";
 
@@ -20,12 +20,30 @@ const APP = "src/main/resources/application.yml";
 
 describe("expanding placeholders against the environment", () => {
   test("a key the environment sets wins over its default and stays as its placeholder; a key without any value is missing", () => {
+    const expanded = expandPlaceholders(`jdbc:\${DB_HOST:localhost}/\${DB_NAME}?\${opts:x}`, () => undefined, {
+      outside: (key) => key === "DB_HOST",
+      hidden: () => false,
+    });
+    expect(expanded).toEqual({
+      value: `jdbc:\${DB_HOST}/\${DB_NAME}?x`,
+      source: undefined,
+      outside: ["DB_HOST"],
+      defaulted: ["opts"],
+      missing: ["DB_NAME"],
+    });
+  });
+
+  test("a hidden key is never expanded, from the files or from its default", () => {
+    const entry = { value: "plain-file-secret", path: "application.yml", line: 1 };
     const expanded = expandPlaceholders(
-      `jdbc:\${DB_HOST:localhost}/\${DB_NAME}?\${opts:x}`,
-      () => undefined,
-      (key) => key === "DB_HOST",
+      `Password=\${db.password};Token=\${API_TOKEN:dev-token}`,
+      (key) => (key === "db.password" ? entry : undefined),
+      {
+        outside: () => false,
+        hidden: (key) => key === "db.password" || key === "API_TOKEN",
+      },
     );
-    expect(expanded).toEqual({ value: `jdbc:\${DB_HOST}/\${DB_NAME}?x`, source: undefined, outside: ["DB_HOST"], missing: ["DB_NAME"] });
+    expect(expanded).toMatchObject({ value: `Password=\${db.password};Token=\${API_TOKEN}`, defaulted: ["API_TOKEN"], missing: [] });
   });
 });
 
@@ -38,13 +56,30 @@ describe("a Spring app's configuration for an agent", () => {
         value: null,
         secret: true,
         set: true,
-        env: [],
+        env: [{ name: "DB_PASSWORD", set: false }],
         overriddenBy: null,
         path: APP,
         line: 3,
       },
       { key: "api-key", value: null, secret: true, set: false, env: [], overriddenBy: null, path: APP, line: 4 },
     ]);
+  });
+
+  test("a secret's value does not reach another entry through a placeholder or a secret placeholder's default", () => {
+    const [shop] = view({
+      [APP]: `db.password: plain-file-secret\nconn: Server=x;Password=\${db.password}\nfoo: \${API_TOKEN:default-token-abc}\n`,
+    }).modules;
+    expect(shop?.entries.map((e) => [e.key, e.value, e.set])).toEqual([
+      ["db.password", null, true],
+      ["conn", `Server=x;Password=\${db.password}`, true],
+      ["foo", `\${API_TOKEN}`, true],
+    ]);
+    expect(JSON.stringify(shop)).not.toMatch(/plain-file-secret|default-token-abc/);
+  });
+
+  test("a variable a placeholder would read is named also when its default was taken", () => {
+    const [shop] = view({ [APP]: `orders.base-url: \${ORDERS_URL:http://localhost:8081}\n` }).modules;
+    expect(shop?.entries[0]).toMatchObject({ value: "http://localhost:8081", set: true, env: [{ name: "ORDERS_URL", set: false }] });
   });
 
   test("variables a value reads are named with whether the run has them, and the one Spring Boot binds to the key overrides it", () => {
@@ -72,12 +107,14 @@ describe("a Spring app's configuration for an agent", () => {
       "src/main/resources/application-local.yml": "server.port: 8081\n",
     };
     const local = view(files, {}, { profile: "local" }).modules[0];
-    expect(local).toMatchObject({ module: "", app: "shop", profiles: ["local"], activeProfiles: "local" });
+    expect(local).toMatchObject({ module: "", app: "shop", profiles: ["local"], profileFound: true, activeProfiles: "local" });
     expect(local?.entries.find((e) => e.key === "server.port")).toMatchObject({
       value: "8081",
       path: "src/main/resources/application-local.yml",
     });
-    expect(view(files, {}, { profile: "prod" }).modules[0]?.entries.find((e) => e.key === "server.port")?.value).toBe("8080");
+    const prod = view(files, {}, { profile: "prod" }).modules[0];
+    expect(prod?.profileFound).toBe(false);
+    expect(prod?.entries.find((e) => e.key === "server.port")?.value).toBe("8080");
   });
 
   test("a key filter compares as Spring does, and Spring Boot's random values are not missing variables", () => {
@@ -114,16 +151,5 @@ describe("which keys are secrets", () => {
     ["orders.path", false],
   ])("%s is a secret: %p", (key, secret) => {
     expect(isSecretKey(key)).toBe(secret);
-  });
-});
-
-describe("addresses in values", () => {
-  test.each([
-    ["http://me:pw@orders:8080/api?key=x", "http://***@orders:8080/api"],
-    ["jdbc:postgresql://db:5432/shop", "jdbc:postgresql://db:5432/shop"],
-    ["redis://:pw@cache:6379", "redis://***@cache:6379"],
-    ["no address here", "no address here"],
-  ])("%s becomes %s", (value, masked) => {
-    expect(withoutAddressCredentials(value)).toBe(masked);
   });
 });

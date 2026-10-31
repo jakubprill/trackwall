@@ -18,6 +18,7 @@ import {
 import { resolveCopilot } from "./modules/agents/copilot-command.ts";
 import { Batch } from "./modules/batch/batch.ts";
 import { Board } from "./modules/board/board.ts";
+import type { AppConfigQuery } from "./modules/cards/app-config.ts";
 import { CardCache } from "./modules/cards/card-cache.ts";
 import { Cards } from "./modules/cards/cards.ts";
 import { ConfigFiles } from "./modules/config-files/config-files.ts";
@@ -94,7 +95,7 @@ export interface Facade {
   taskChangedEndpoints: (task: string) => Promise<TaskChangedEndpoints>;
   /**
    * The Spring configuration of a repo root or a task's worktree in one profile's view (ADR-153), for `get_app_config`:
-   * the place from `workspace` or `agents`, the environment of a run there from `mise`, the files and the view from `cards`.
+   * the place from `workspace` or `agents`, the environment of a run there from `mise`, its masking from `logs`, the files and the view from `cards`.
    */
   appConfig: (request: AppConfigRequest) => Promise<AppConfig>;
   /**
@@ -105,10 +106,7 @@ export interface Facade {
 }
 
 /** Where to read the configuration (a task of `repo` when `task` is set), the profile, and an optional key prefix. */
-interface AppConfigRequest extends MiseTarget {
-  profile: string;
-  key: string | undefined;
-}
+type AppConfigRequest = MiseTarget & AppConfigQuery;
 
 export type { CopilotHookOutput } from "./modules/agents/copilot-hook-output.ts";
 export type { CopilotHookEvent } from "./modules/agents/copilot-hook-record.ts";
@@ -370,7 +368,7 @@ export function createFacade(o: FacadeOptions): Facade {
     appConfig: async ({ repo, task, profile, key }) => {
       const dir = task === null ? await workspace.repoPath(repo) : agents.taskOfRepo(task, repo).worktree;
       const run = await mise.runEnv({ repo, task });
-      const mask = (text: string) => logs.mask(text, run.env, run.secretValues);
+      const mask = logs.masker(run.env, run.secretValues);
       const read = await cards.appConfig(dir, { profile, key }, { vars: run.env, mask });
       return { repo, task, profile, ...read, envProblem: run.problem === null ? null : mask(run.problem) };
     },

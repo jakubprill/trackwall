@@ -196,7 +196,8 @@ export interface HttpUrl {
 
 /** Longer text is not an address from configuration, and the expressions below would not touch it anyway. */
 const MAX_URL_LENGTH = 2048;
-const SCHEME = /^[a-z][a-z0-9+.-]{0,20}:\/\//i;
+/** A scheme of up to four words, as JDBC writes it (`jdbc:postgresql://`). */
+const SCHEME = /^[a-z][a-z0-9+.-]{0,20}(?::[a-z][a-z0-9+.-]{0,20}){0,3}:\/\//i;
 const HTTP_SCHEMES = new Set(["http", "https", "ws", "wss", "lb"]);
 const HOST_PORT = /^(\[[^\]\s]{1,64}\]|[^:[\]\s]+)(?::(\d{1,5}))?$/;
 /**
@@ -266,6 +267,24 @@ export function withoutCredentials(url: string): string {
   // A part before the path that is not a host with a port is the rest of a password (with `?`, `#` or a space), so it does not reach the card.
   if (!HOST_PORT.test(withoutPlaceholders(parts.authority))) return `${parts.scheme}***`;
   return `${parts.scheme}${parts.userInfo ? "***@" : ""}${parts.authority}${maskPath(parts.path)}`;
+}
+
+/**
+ * An address inside free text: a scheme in the form `SCHEME` reads (so `withoutCredentials` always splits it) and what
+ * follows up to a space, comma, semicolon or quote.
+ */
+const ADDRESS_IN_TEXT = /[a-z][a-z0-9+.-]{0,20}(?::[a-z][a-z0-9+.-]{0,20}){0,3}:\/\/[^\s,;"']*/gi;
+/** Oracle's `user/password@host` (`jdbc:oracle:thin:scott/tiger@//db:1521/orders`), which has no `://` to find it by. */
+const SLASH_CREDENTIALS = /[^\s/@:=]+\/[^\s/@]+@/g;
+
+/**
+ * Every address in free text without its user, password and query, by `withoutCredentials`, and Oracle's
+ * `user/password@` as `***@`: a Spring configuration value (ADR-153) may hold several addresses or an address inside
+ * other words. A longer text than an address may be is hidden whole when it holds one.
+ */
+export function withoutCredentialsInText(text: string): string {
+  if (text.length > MAX_URL_LENGTH && (text.includes("://") || text.includes("@"))) return "***";
+  return text.replace(ADDRESS_IN_TEXT, (address) => withoutCredentials(address)).replace(SLASH_CREDENTIALS, "***@");
 }
 
 /** Text with `${…}` replaced by a single character: an unexpanded key (`localhost:${PORT}`) can stand in place of the host and port. */

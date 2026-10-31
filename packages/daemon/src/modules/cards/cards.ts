@@ -11,7 +11,7 @@ import {
 } from "@trackwall/protocol";
 import { configOrProblem, DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
-import { type AppConfigEnv, appConfigView } from "./app-config.ts";
+import { type AppConfigEnv, type AppConfigQuery, appConfigView } from "./app-config.ts";
 import { CallReads, readCallFiles } from "./call-files.ts";
 import type { CardCache } from "./card-cache.ts";
 import { CardWarmup, type WarmupRepo } from "./card-warmup.ts";
@@ -175,15 +175,13 @@ export class Cards {
    */
   async appConfig(
     dir: string,
-    request: { profile: string; key: string | undefined },
+    query: AppConfigQuery,
     env: AppConfigEnv,
   ): Promise<Pick<AppConfig, "files" | "modules" | "truncated" | "problems">> {
     const files = await readWorkingConfig(this.deps.vcs, dir);
-    const out = { problems: files.problems };
-    const view = appConfigView(readSpringConfigs(files, out), request, env);
-    // A parser's message quotes the lines around the error, which may hold a secret: only its first line is kept.
-    const problems = out.problems.map((p) => ({ ...p, message: env.mask(p.message.split("\n")[0] ?? "") }));
-    return { files: files.paths, ...view, problems };
+    const out = { problems: [...files.problems] };
+    const view = appConfigView(readSpringConfigs(files, out), query, env);
+    return { files: files.paths, ...view, problems: out.problems.map((p) => ({ ...p, message: env.mask(p.message) })) };
   }
 
   private async cardAt(dir: string, commit: string): Promise<RepoCard> {

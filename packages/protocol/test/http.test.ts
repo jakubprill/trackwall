@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { httpMethodMatches, httpPathMatches, httpUrlPath, joinHttpPath, parseHttpUrl, withoutCredentials } from "../src/http.ts";
+import {
+  httpMethodMatches,
+  httpPathMatches,
+  httpUrlPath,
+  joinHttpPath,
+  parseHttpUrl,
+  withoutCredentials,
+  withoutCredentialsInText,
+} from "../src/http.ts";
 
 describe("HTTP addresses and paths", () => {
   test("the path of an address loses the scheme, host, query and fragment, and a bare path only its query", () => {
@@ -36,6 +44,16 @@ describe("HTTP addresses and paths", () => {
       path: "/api",
     });
     expect(withoutCredentials("http://orders/api")).toBe("http://orders/api");
+  });
+
+  test.each([
+    ["jdbc:postgresql://shop:pw@db:5432/shop?password=pw", "jdbc:postgresql://***@db:5432/shop"],
+    ["a=http://u:p1@h/x, b=http://v:p2@h2/y", "a=http://***@h/x, b=http://***@h2/y"],
+    ["jdbc:oracle:thin:scott/tiger@//db:1521/orders", "jdbc:oracle:thin:***@//db:1521/orders"],
+    ["redis://:pw@cache:6379", "redis://***@cache:6379"],
+    ["no address here", "no address here"],
+  ])("every address in text loses its credentials: %s", (text, masked) => {
+    expect(withoutCredentialsInText(text)).toBe(masked);
   });
 
   test("a password with @, ? or # and a token in the path do not slip through the masking, and an IPv6 address has a host and port", () => {

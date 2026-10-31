@@ -37,7 +37,10 @@ export const AppConfigEntry = z.object({
   secret: z.boolean(),
   /** The value is not empty and no placeholder is left that neither the configuration, a default nor the environment sets. */
   set: z.boolean(),
-  /** The variables the value's placeholders read from the environment, also those with a default in the file. */
+  /**
+   * The variables the value's placeholders read from the environment: those set, and those not set, whose placeholder
+   * then took its default or stayed (`set: false` on the entry).
+   */
   env: z.array(AppConfigVariable),
   /** The environment variable Spring Boot binds to this key instead of the file's value (`SPRING_DATASOURCE_URL`); `null` without one. */
   overriddenBy: z.string().nullable(),
@@ -55,6 +58,8 @@ export const AppConfigModule = z.object({
   app: z.string().nullable(),
   /** The profiles the module's files name, besides `default`. */
   profiles: z.array(z.string()),
+  /** The files name the asked profile (or it is `default`); `false`: the view is the files without a profile alone. */
+  profileFound: z.boolean(),
   /** `spring.profiles.active` in the files without a profile; the environment or the run's arguments may choose others. */
   activeProfiles: z.string().nullable(),
   entries: z.array(AppConfigEntry),
@@ -65,7 +70,7 @@ export const AppConfig = z.object({
   repo: z.string(),
   /** The task whose worktree was read; `null` for the repo root. */
   task: z.string().nullable(),
-  /** The profile whose view is given; a module without that profile gives its configuration without a profile. */
+  /** The profile whose view is given; a module whose files do not name it gives its configuration without a profile (`profileFound`). */
   profile: z.string(),
   /** The configuration files read, relative to the read directory, with `/`, in the order Spring reads them. */
   files: z.array(z.string()),
