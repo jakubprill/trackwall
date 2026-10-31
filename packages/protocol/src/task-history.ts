@@ -82,6 +82,10 @@ export const TaskHistoryQuery = z.object({
   since: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "since: a date as YYYY-MM-DD")
+    .refine(
+      (d) => !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && new Date(`${d}T00:00:00Z`).toISOString().startsWith(d),
+      "since: no such day",
+    )
     .optional(),
   limit: z.number().int().min(1).max(TASK_HISTORY_MAX_RESULTS),
 });

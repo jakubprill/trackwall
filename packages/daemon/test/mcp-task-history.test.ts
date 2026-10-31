@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
 import { TaskHistoryResult } from "@trackwall/protocol";
+import { waitUntil } from "../src/platform/process-group.ts";
 import { gitIn } from "./support/git-repo.ts";
 import { connectHttpClient } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
@@ -38,6 +39,8 @@ describe.skipIf(process.versions.bun === undefined)("the task journal and search
     await agents.stop(session.id);
 
     await agents.removeTask(task.id, true, false);
+    // The record is written after the task has ended, without holding up the end.
+    expect(await waitUntil(() => existsSync(join(daemon.home, "task-journal.jsonl")), 5000)).toBe(true);
 
     const search = async (args: Record<string, unknown>) =>
       TaskHistoryResult.parse((await client.callTool({ name: "search_task_history", arguments: args })).structuredContent);
@@ -73,5 +76,27 @@ describe.skipIf(process.versions.bun === undefined)("the task journal and search
     expect((await search({ since: "2999-01-01" })).tasks).toEqual([]);
     const badDate = await client.callTool({ name: "search_task_history", arguments: { since: "yesterday" } });
     expect(badDate.isError).toBe(true);
+  }, 60_000);
+
+  test("a task whose worktree was removed by hand still leaves the commits of its branch", async () => {
+    const agents = daemon.facade.agents;
+    const task = await agents.createTask("shop", "Rename the cart");
+    writeFileSync(join(task.worktree, "src", "cart.ts"), "export const basket = [];\n");
+    gitIn(task.worktree, "commit", "-qam", "Rename the cart to basket");
+    const session = agents.sessions().sessions.find((s) => s.task === task.id);
+    if (!session) throw new Error("the task has no session");
+    await agents.stop(session.id);
+    rmSync(task.worktree, { recursive: true, force: true });
+
+    await agents.removeTask(task.id, false, true);
+    const journal = join(daemon.home, "task-journal.jsonl");
+    expect(await waitUntil(() => readFileSync(journal, "utf8").includes(task.id), 5000)).toBe(true);
+
+    const found = TaskHistoryResult.parse(
+      (await client.callTool({ name: "search_task_history", arguments: { text: "basket" } })).structuredContent,
+    );
+    expect(found.tasks).toMatchObject([
+      { task: task.id, branchKept: false, commits: [{ subject: "Rename the cart to basket" }], commitsTotal: 1, files: ["src/cart.ts"] },
+    ]);
   }, 60_000);
 });

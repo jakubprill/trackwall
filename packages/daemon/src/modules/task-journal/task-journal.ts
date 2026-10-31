@@ -6,21 +6,27 @@ import { messageOf } from "../../infra/errors.ts";
 /**
  * The task journal (§4.19, ADR-150): one JSON line per ended task in `task-journal.jsonl` of the state directory,
  * appended when the user ends a task, and searched by words for `search_task_history`. There is no index and no model:
- * a few thousand records are read and matched in milliseconds. The file keeps the newest `MAX_RECORDS`; a line that
+ * a few thousand records are read and matched in milliseconds. The file keeps the newest `TASK_JOURNAL_MAX_RECORDS`; a line that
  * does not parse (a hand edit, a cut write) is skipped, not fatal, so one bad line does not hide the rest.
  */
 
 export const TASK_JOURNAL_FILE = "task-journal.jsonl";
 
-/** The journal keeps this many records by default; the oldest go when a new one would pass it. */
-const MAX_RECORDS = 2000;
+/** The journal keeps this many records; the oldest go once it passes them by `TRIM_SLACK`. */
+export const TASK_JOURNAL_MAX_RECORDS = 2000;
+/** Records over the limit before the file is rewritten, so that a full journal is not rewritten at every end. */
+const TRIM_SLACK = 0.1;
 
 export interface TaskJournalDeps {
   /** `task-journal.jsonl` in the state directory. */
   file: string;
   log: (msg: string) => void;
-  /** `MAX_RECORDS` unless a test needs a small journal. */
-  maxRecords?: number;
+  maxRecords: number;
+  /**
+   * What replaces the values of the user's secrets in text, as in the logs (a prompt or a summary may hold one); asked
+   * at every record, because the user's environment can change while the daemon works.
+   */
+  masker: () => Promise<(text: string) => string>;
 }
 
 export class TaskJournal {
@@ -30,15 +36,35 @@ export class TaskJournal {
     this.#deps = deps;
   }
 
-  /** Adds the record of an ended task; a failed write goes to the log, because the task has ended either way. */
-  record(task: EndedTask): void {
+  /** The number of lines in the file, counted at the first record and followed after it. */
+  #count: number | null = null;
+
+  /**
+   * Adds the record of an ended task, with secrets masked in its texts; a failed write goes to the log, because the
+   * task has ended either way.
+   */
+  async record(task: EndedTask): Promise<void> {
     try {
-      const max = this.#deps.maxRecords ?? MAX_RECORDS;
-      const lines = this.#lines();
-      const line = JSON.stringify(task);
-      if (lines.length < max) appendFileSync(this.#deps.file, `${line}\n`);
-      else writeFileAtomic(this.#deps.file, `${[...lines.slice(lines.length - max + 1), line].join("\n")}\n`);
+      const mask = await this.#deps.masker();
+      const masked: EndedTask = {
+        ...task,
+        prompt: mask(task.prompt),
+        summary: task.summary === null ? null : mask(task.summary),
+        commits: task.commits.map((c) => ({ ...c, subject: mask(c.subject) })),
+      };
+      const line = JSON.stringify(masked);
+      this.#count ??= this.#lines().length;
+      const max = this.#deps.maxRecords;
+      if (this.#count < Math.floor(max * (1 + TRIM_SLACK))) {
+        appendFileSync(this.#deps.file, `${line}\n`);
+        this.#count++;
+        return;
+      }
+      const kept = [...this.#lines().slice(-(max - 1)), line];
+      writeFileAtomic(this.#deps.file, `${kept.join("\n")}\n`);
+      this.#count = kept.length;
     } catch (err) {
+      this.#count = null;
       this.#deps.log(`writing ended task ${task.task} to the task journal: ${messageOf(err)}`);
     }
   }

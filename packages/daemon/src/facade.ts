@@ -37,7 +37,7 @@ import { Mise } from "./modules/mise/mise.ts";
 import { ProcessGroups } from "./modules/procs/process-groups.ts";
 import { RuntimeFile } from "./modules/procs/runtime-file.ts";
 import { Services } from "./modules/services/services.ts";
-import { TASK_JOURNAL_FILE, TaskJournal } from "./modules/task-journal/task-journal.ts";
+import { TASK_JOURNAL_FILE, TASK_JOURNAL_MAX_RECORDS, TaskJournal } from "./modules/task-journal/task-journal.ts";
 import { TestReports } from "./modules/test-results/test-reports.ts";
 import { Hosting, type HostingClis } from "./modules/vcs/hosting.ts";
 import { systemTempFolder, Vcs } from "./modules/vcs/vcs.ts";
@@ -213,7 +213,15 @@ export function createFacade(o: FacadeOptions): Facade {
   const repoWatch = new RepoWatch({ repos: workspace, vcs, onHeadMoved: (repos) => cards.warmUp(repos), log: o.log });
   const localConfig = new LocalConfig({ repos: workspace, vcs, log: o.log, pushDir: join(o.home, LOCAL_CONFIG_PUSH_DIR) });
   const board = new Board({ projectsDir: () => workspace.projectsDir() });
-  const taskJournal = new TaskJournal({ file: join(o.home, TASK_JOURNAL_FILE), log: o.log });
+  const taskJournal = new TaskJournal({
+    file: join(o.home, TASK_JOURNAL_FILE),
+    log: o.log,
+    maxRecords: TASK_JOURNAL_MAX_RECORDS,
+    masker: async () => {
+      const env = await o.userEnv();
+      return (text) => logs.mask(text, env);
+    },
+  });
   const agents = new Agents({
     procs,
     repos: workspace,
@@ -231,8 +239,9 @@ export function createFacade(o: FacadeOptions): Facade {
     // `verifications` is made below; a task ends only after both exist.
     onTaskRemoved: (ended) => {
       logs.removeTaskLogs(ended.task);
-      const last = verifications.lastOfEnded(ended.task);
-      taskJournal.record({ ...ended, verification: last && { state: last.state, finishedAt: last.finishedAt } });
+      const last = verifications.take(ended.task);
+      // `record` logs its own failures, so ending the task does not wait for the write.
+      void taskJournal.record({ ...ended, verification: last && { state: last.state, finishedAt: last.finishedAt } });
     },
     log: o.log,
   });
