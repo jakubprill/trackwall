@@ -27,7 +27,8 @@ export interface BrowserNotice {
   target: Extract<Jump, { kind: "session" | "task" | "proposal" }>;
 }
 
-const TAG_PREFIX = "trackwall:";
+/** The start of every Trackwall notification tag: a newer notice under the same tag replaces the older one. */
+export const TAG_PREFIX = "trackwall:";
 
 /** What a session waits for, in the words of the session states, as the shell's `session_notice` says it. */
 const WAITS_FOR: Partial<Record<TaskState, string>> = { Approval: STATE_LABELS.Approval, Plan: STATE_LABELS.Plan };

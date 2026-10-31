@@ -133,13 +133,15 @@ function FoundMergeRequest({ conn, project, mergeRequest }: { conn: Connection; 
         // The logs stay on the repo host: the agent reads them with the user's MCP server for it (ADR-154).
         <div className="text-muted-foreground flex min-w-0 flex-wrap items-center gap-x-3 text-xs">
           <span>Failed:</span>
-          {failedJobs.map((job) => {
+          {failedJobs.map((job, i) => {
             const { url } = job;
+            // A check and a commit status on GitHub can share a name.
+            const key = `${i}:${job.name}`;
             return url === null ? (
-              <span key={job.name}>{job.name}</span>
+              <span key={key}>{job.name}</span>
             ) : (
               <Button
-                key={job.name}
+                key={key}
                 variant="ghost"
                 size="sm"
                 className="h-auto p-0 underline-offset-4 hover:underline"

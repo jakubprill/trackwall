@@ -7,7 +7,8 @@ import {
   type TaskMiseConfig,
   type Verification,
 } from "@trackwall/protocol";
-import { mergeRequestNumber, mergeRequestStateLabel, pipelineLabel } from "./merge-request.ts";
+import { mergeRequestNumber, mergeRequestStatus } from "./merge-request.ts";
+import type { StatusTone } from "./repo-status.ts";
 
 /**
  * The notices of a task: one short line for each section above its terminal (ADR-91), for the strip in the one-entry
@@ -149,29 +150,15 @@ function mergeRequestNotices(shown: boolean, found: TaskNoticeInput["foundMergeR
   if (!found) return [{ section: "merge-request", key: "merge-request", tone: "info", label: "Merge request" }];
   const { project, mergeRequest } = found;
   const number = mergeRequestNumber(project, mergeRequest.number);
-  const pipeline = mergeRequest.state === "open" ? mergeRequest.pipeline : null;
-  const tone: TaskNoticeTone = pipeline ? PIPELINE_TONE[pipeline.state] : mergeRequest.state === "merged" ? "passed" : "info";
-  const state = pipeline ? pipelineLabel(pipeline.state).label : mergeRequestStateLabel(mergeRequest.state).label;
-  return [
-    {
-      section: "merge-request",
-      key: "merge-request",
-      tone,
-      label: `${number} · ${state}`,
-      chip: `${number} ${pipeline?.state ?? mergeRequest.state}`,
-    },
-  ];
+  const status = mergeRequestStatus(mergeRequest);
+  // The chip's word is the bare state, short enough for a narrow tile's header.
+  const word = mergeRequest.state === "open" && mergeRequest.pipeline ? mergeRequest.pipeline.state : mergeRequest.state;
+  const tone = status.tone ? STATUS_NOTICE_TONE[status.tone] : "info";
+  return [{ section: "merge-request", key: "merge-request", tone, label: `${number} · ${status.label}`, chip: `${number} ${word}` }];
 }
 
-const PIPELINE_TONE: Record<NonNullable<MergeRequest["pipeline"]>["state"], TaskNoticeTone> = {
-  failed: "failed",
-  passed: "passed",
-  running: "running",
-  pending: "running",
-  manual: "info",
-  cancelled: "info",
-  skipped: "info",
-};
+/** The row's and the panel's tones as notice tones, so the chip and the row never disagree. */
+const STATUS_NOTICE_TONE: Record<StatusTone, TaskNoticeTone> = { ok: "passed", warning: "running", error: "failed" };
 
 /** A grid tile's header: the notices with a chip of their own, and the rest for the badge. */
 export function tileNotices(notices: readonly TaskNotice[]): { chips: TaskNotice[]; others: TaskNotice[] } {

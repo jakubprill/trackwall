@@ -272,6 +272,17 @@ describe.skipIf(process.versions.bun === undefined)("pushing a task branch (real
     expect(gitIn(bare, "log", "-1", "--format=%s", task.branch).trim()).toBe("Add an order note");
   }, 60_000);
 
+  test("after a push the watch reads the merge request again within a minute, not at the settled pace", async () => {
+    const task = await taskWithCommit("orders", "Add an order total");
+    await daemon.post(mergeRequestsApi.push, { task: task.id });
+    const asksForBranch = () => hosting.calls().filter((call) => (call.args[3] ?? "").includes(encodeURIComponent(task.branch))).length;
+    const before = asksForBranch();
+
+    await daemon.facade.mergeRequests.checkWatched(Date.now() + 61_000);
+
+    expect(asksForBranch()).toBe(before + 1);
+  }, 60_000);
+
   test("a remote on no known repo host is not pushed to, and gets no form", async () => {
     const task = await taskWithCommit("orders", "Unknown host");
     daemon.facade.workspace.setRepoHosts([]);

@@ -1,7 +1,7 @@
 import type { FollowedMergeRequest, TaskOutcome, VerificationState } from "@trackwall/protocol";
-import { mergeRequestNumber, mergeRequestStateLabel, pipelineLabel } from "./merge-request.ts";
+import { failedJobNames, mergeRequestNumber, mergeRequestStateLabel, mergeRequestStatus, pipelineLabel } from "./merge-request.ts";
 import type { StatusTone } from "./repo-status.ts";
-import type { BrowserNotice } from "./tab-attention.ts";
+import { type BrowserNotice, TAG_PREFIX } from "./tab-attention.ts";
 
 /**
  * What a task's work came to, at a glance (ADR-154): the marks on its row in the Sessions list, and the notification
@@ -34,40 +34,30 @@ export function outcomeMarks(outcome: TaskOutcome | undefined): OutcomeMark[] {
   if (mr)
     marks.push({
       key: "merge-request",
-      tone: mergeRequestTone(mr),
+      tone: mergeRequestStatus(mr).tone,
       label: mergeRequestNumber(mr.project, mr.number),
       title: mergeRequestTitle(mr),
     });
   return marks;
 }
 
-function mergeRequestTone(mr: FollowedMergeRequest): StatusTone | undefined {
-  if (mr.state !== "open" || !mr.pipeline) return mergeRequestStateLabel(mr.state).tone;
-  return pipelineLabel(mr.pipeline.state).tone;
-}
-
 /** `!12 Add a discount · open · pipeline failed: unit-tests, lint`. */
 function mergeRequestTitle(mr: FollowedMergeRequest): string {
   const parts = [`${mergeRequestNumber(mr.project, mr.number)} ${mr.title}`, mergeRequestStateLabel(mr.state).label];
-  if (mr.pipeline) parts.push(`${pipelineLabel(mr.pipeline.state).label}${failedJobsText(mr)}`);
+  const jobs = failedJobNames(mr);
+  if (mr.pipeline) parts.push(`${pipelineLabel(mr.pipeline.state).label}${jobs ? `: ${jobs}` : ""}`);
   return parts.join(" · ");
-}
-
-/** `: unit-tests, lint` after a failed pipeline that names its failed jobs; nothing otherwise. */
-function failedJobsText(mr: FollowedMergeRequest): string {
-  const jobs = mr.pipeline?.failedJobs ?? [];
-  return jobs.length > 0 ? `: ${jobs.map((j) => j.name).join(", ")}` : "";
 }
 
 /** "Pipeline failed in orders-api", as the shell's notification says it; clicking it opens the task. */
 function pipelineNotice(outcome: TaskOutcome & { mergeRequest: FollowedMergeRequest }): BrowserNotice {
   const mr = outcome.mergeRequest;
-  const jobs = mr.pipeline?.failedJobs ?? [];
-  const failed = jobs.length > 0 ? `\nFailed: ${jobs.map((j) => j.name).join(", ")}` : "";
+  const jobs = failedJobNames(mr);
+  const failed = jobs ? `\nFailed: ${jobs}` : "";
   return {
     title: `Pipeline failed in ${outcome.repo}`,
     body: `${mergeRequestNumber(mr.project, mr.number)} ${mr.title}${failed}`,
-    tag: `trackwall:pipeline:${outcome.task}`,
+    tag: `${TAG_PREFIX}pipeline:${outcome.task}`,
     target: { kind: "task", id: outcome.task },
   };
 }

@@ -3,6 +3,7 @@ import {
   type HostedProject,
   MERGE_REQUEST_DESCRIPTION_MAX,
   MERGE_REQUEST_TITLE_MAX,
+  type MergeRequest,
   type MergeRequestForm,
   type MergeRequestState,
   type PipelineState,
@@ -91,6 +92,17 @@ export function mergeRequestStateLabel(state: MergeRequestState): { tone?: Statu
     case "closed":
       return { label: "closed" };
   }
+}
+
+/** A merge request in one tone and label: its pipeline's while it is open, its own once merged or closed (ADR-154). */
+export function mergeRequestStatus(mergeRequest: MergeRequest): { tone?: StatusTone; label: string } {
+  const { state, pipeline } = mergeRequest;
+  return state === "open" && pipeline ? pipelineLabel(pipeline.state) : mergeRequestStateLabel(state);
+}
+
+/** `unit-tests, lint`: the jobs that failed the pipeline; empty when it names none. */
+export function failedJobNames(mergeRequest: MergeRequest): string {
+  return (mergeRequest.pipeline?.failedJobs ?? []).map((job) => job.name).join(", ");
 }
 
 export function pipelineLabel(state: PipelineState): { tone?: StatusTone; label: string } {
