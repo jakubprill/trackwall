@@ -23,6 +23,7 @@ describe("expanding placeholders against the environment", () => {
     const expanded = expandPlaceholders(`jdbc:\${DB_HOST:localhost}/\${DB_NAME}?\${opts:x}`, () => undefined, {
       outside: (key) => key === "DB_HOST",
       hidden: () => false,
+      budget: { left: 100 },
     });
     expect(expanded).toEqual({
       value: `jdbc:\${DB_HOST}/\${DB_NAME}?x`,
@@ -41,9 +42,21 @@ describe("expanding placeholders against the environment", () => {
       {
         outside: () => false,
         hidden: (key) => key === "db.password" || key === "API_TOKEN",
+        budget: { left: 100 },
       },
     );
     expect(expanded).toMatchObject({ value: `Password=\${db.password};Token=\${API_TOKEN}`, defaulted: ["API_TOKEN"], missing: [] });
+  });
+});
+
+describe("expanding with a budget", () => {
+  test("past the budget of placeholders they stay in the text, and the budget is shared by every expansion", () => {
+    const budget = { left: 2 };
+    const keys = { outside: () => false, hidden: () => false, budget };
+    const get = () => ({ value: "v", path: "application.yml", line: 1 });
+    expect(expandPlaceholders(`\${a}\${b}`, get, keys).value).toBe("vv");
+    expect(expandPlaceholders(`\${c}`, get, keys).value).toBe(`\${c}`);
+    expect(budget.left).toBeLessThan(0);
   });
 });
 
@@ -75,6 +88,40 @@ describe("a Spring app's configuration for an agent", () => {
       ["foo", `\${API_TOKEN}`, true],
     ]);
     expect(JSON.stringify(shop)).not.toMatch(/plain-file-secret|default-token-abc/);
+  });
+
+  test("a secret written into a value under an ordinary key hides the value: a JAAS line, a connection string, password=", () => {
+    const [shop] = view({
+      [APP]: [
+        `spring.kafka.properties.sasl.jaas.config: PlainLoginModule required username="u" password="kafkapw";`,
+        "spring.cloud.azure.servicebus.connection-string: Endpoint=sb://ns.example/;SharedAccessKeyName=Root;SharedAccessKey=abc=",
+        "app.legacy-dsn: host=db;user=shop;pwd=shoppw",
+        "encrypt.key: config-server-key",
+        "server.port: 8080",
+      ].join("\n"),
+    }).modules;
+    expect(shop?.entries.map((e) => [e.key, e.value, e.secret])).toEqual([
+      ["spring.kafka.properties.sasl.jaas.config", null, true],
+      ["spring.cloud.azure.servicebus.connection-string", null, true],
+      ["app.legacy-dsn", null, true],
+      ["encrypt.key", null, true],
+      ["server.port", "8080", false],
+    ]);
+  });
+
+  test("a value longer than 2000 characters is cut", () => {
+    const [shop] = view({ [APP]: `banner: ${"x".repeat(5000)}\n` }).modules;
+    expect(shop?.entries[0]?.value).toBe(`${"x".repeat(2000)}…`);
+  });
+
+  test("thousands of placeholders in every value stop at the budget instead of holding the daemon", () => {
+    const keys = Array.from({ length: 300 }, (_, i) => `e${i}: ""`).join("\n");
+    const fanOut = Array.from({ length: 300 }, (_, i) => `\${e${i}}`).join("");
+    const values = Array.from({ length: 200 }, (_, i) => `v${i}: ${fanOut}`).join("\n");
+    const started = performance.now();
+    const result = view({ [APP]: `${keys}\n${values}\n` });
+    expect(result.expansionCut).toBe(true);
+    expect(performance.now() - started).toBeLessThan(5000);
   });
 
   test("a variable a placeholder would read is named also when its default was taken", () => {
@@ -146,6 +193,8 @@ describe("which keys are secrets", () => {
     ["payments.apiKey", true],
     ["jwt.private-key", true],
     ["gitlab.token", true],
+    ["jwt.signingKey", true],
+    ["spring.kafka.consumer.key-deserializer", false],
     ["spring.datasource.url", false],
     ["server.port", false],
     ["orders.path", false],

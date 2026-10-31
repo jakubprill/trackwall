@@ -180,7 +180,9 @@ export class Cards {
   ): Promise<Pick<AppConfig, "files" | "modules" | "truncated" | "problems">> {
     const files = await readWorkingConfig(this.deps.vcs, dir);
     const out = { problems: [...files.problems] };
-    const view = appConfigView(readSpringConfigs(files, out), query, env);
+    const { expansionCut, ...view } = appConfigView(readSpringConfigs(files, out), query, env);
+    if (expansionCut)
+      out.problems.push({ code: "truncated", path: "", message: "too many placeholders to expand; the rest are left unexpanded" });
     return { files: files.paths, ...view, problems: out.problems.map((p) => ({ ...p, message: env.mask(p.message) })) };
   }
 

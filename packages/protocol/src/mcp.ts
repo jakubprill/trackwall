@@ -511,12 +511,15 @@ export const mcpTools = {
       "A Spring app's configuration as the files in a repo root, or with task in that task's worktree, give it now (also " +
       "uncommitted and git-ignored files such as application-local.yml): application* and bootstrap* (.yml, .yaml, " +
       "and .properties) from every module's src/main/resources, in one profile's view (profile, default: the files without a " +
-      "profile; profiles lists the ones each module has, activeProfiles its spring.profiles.active). Each entry has key, " +
+      "profile; profiles lists the ones each module has, profileFound false when it lacks the asked one, activeProfiles " +
+      "its spring.profiles.active). Each entry has key, " +
       `the value with \${…} expanded from the files and defaults, and its file and line. Secrets (keys such as password, ` +
-      "secret, token, api-key, credentials) never come with a value: secret is true and set says whether it has one. " +
+      "secret, token, api-key, credentials, a key ending in key) and values that hold one (password=…) never come with " +
+      "a value, nor through another key's placeholder: secret is true and set says whether it has one. " +
       "env names the environment variables a value's placeholders read, each with set (true when a run there gets it, " +
       "from your environment or mise [env]; never the value), and overriddenBy the variable Spring Boot takes instead of " +
-      "the file's value (SPRING_DATASOURCE_URL for spring.datasource.url). A placeholder the environment sets stays " +
+      "the file's value (SPRING_DATASOURCE_URL for spring.datasource.url); a variable not set whose placeholder took its default is listed too. " +
+      "A placeholder the environment sets stays " +
       `\${NAME}; an address loses its user, password and query. This is what the files say, not what a running app ` +
       "resolved: command-line arguments and other property sources are not read. key narrows to keys starting with it " +
       `(e.g. spring.datasource); at most ${APP_CONFIG_MAX_ENTRIES} entries.`,

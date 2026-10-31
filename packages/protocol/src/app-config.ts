@@ -30,10 +30,14 @@ export const AppConfigEntry = z.object({
   key: z.string(),
   /**
    * The value with `${…}` expanded from the profile's view and defaults; a placeholder the environment sets stays as
-   * `${NAME}`, an address loses its user, password and query, and a known secret is `***`. `null` for a secret.
+   * `${NAME}`, an address loses its user, password and query, a known secret is `***`, and a value over 2000 characters
+   * is cut with `…`. `null` for a secret.
    */
   value: z.string().nullable(),
-  /** The key names a secret (`password`, `client-secret`, `api-key`, `token`…): its value is not given. */
+  /**
+   * The key names a secret (`password`, `client-secret`, `api-key`, `token`, `jwt.key`, `sasl.jaas.config`…) or the
+   * value holds one (`password=…`, `SharedAccessKey=…`): its value is not given.
+   */
   secret: z.boolean(),
   /** The value is not empty and no placeholder is left that neither the configuration, a default nor the environment sets. */
   set: z.boolean(),

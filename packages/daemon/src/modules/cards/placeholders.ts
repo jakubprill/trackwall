@@ -26,15 +26,20 @@ export function resolvePlaceholders(text: string, get: (key: string) => Placehol
   return new Resolver(get, NO_SOURCES).resolve(text, 0);
 }
 
-/** Keys an expansion treats apart from the configuration (ADR-153). */
+/** Keys an expansion treats apart from the configuration, and how many placeholders it may still read (ADR-153). */
 export interface ExpansionKeys {
   /** Keys another property source sets before the files (the environment): they win over the files and their default. */
   outside: (key: string) => boolean;
   /** Keys whose value must not appear in the result (secrets): never expanded, nor is their placeholder's default. */
   hidden: (key: string) => boolean;
+  /**
+   * Placeholders left to read, shared by every expansion of one request: a repo can make each value read thousands, so
+   * past it a placeholder stays as it is in the text, and the caller says the result is cut.
+   */
+  budget: { left: number };
 }
 
-const NO_SOURCES: ExpansionKeys = { outside: () => false, hidden: () => false };
+const NO_SOURCES: ExpansionKeys = { outside: () => false, hidden: () => false, budget: { left: Number.POSITIVE_INFINITY } };
 
 /** An expansion that also says which keys came from outside the configuration, took their default, or had no value at all. */
 export interface Expanded extends Resolved {
@@ -98,6 +103,7 @@ class Resolver {
   private placeholder(inner: string, depth: number): Resolved | undefined {
     const colon = topLevelColon(inner);
     const key = colon < 0 ? inner : inner.slice(0, colon);
+    if (this.keys.budget.left-- <= 0) return undefined;
     if (this.keys.outside(key)) {
       this.outside.add(key);
       return { value: `\${${key}}`, source: undefined };

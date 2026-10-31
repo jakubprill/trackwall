@@ -1,4 +1,4 @@
-import { readdir, realpath } from "node:fs/promises";
+import { opendir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import type { CardProblem } from "@trackwall/protocol";
 import { messageOf } from "../../infra/errors.ts";
@@ -35,6 +35,10 @@ const MAX_FILE_BYTES = 1024 * 1024;
 /** Resource folders and files read at most: a monorepo has dozens of modules, each with a few profiles. */
 const MAX_FOLDERS = 200;
 const MAX_FILES = 500;
+/** All files of one request together: a repo's whole configuration is a few hundred KB. */
+const MAX_TOTAL_BYTES = 8 * 1024 * 1024;
+/** Names looked at in one resource folder: templates and static files may share it, millions are planted. */
+const MAX_FOLDER_NAMES = 10_000;
 const RESOURCES = "src/main/resources";
 /** Folders listed and files read at once: each is one system call, and on Windows the antivirus looks at every file. */
 const READ_CONCURRENCY = 8;
@@ -42,31 +46,32 @@ const READ_CONCURRENCY = 8;
 export async function readWorkingConfig(vcs: WorkingConfigVcs, dir: string): Promise<WorkingConfig> {
   const problems: CardProblem[] = [];
   const tracked = await vcs.trackedFiles(dir, CONFIG_GLOBS, MAX_LIST_BYTES);
-  if (tracked.truncated)
-    problems.push({ code: "files-not-read", path: "", message: "git's list of configuration files was cut at its size limit" });
+  if (tracked.truncated) problems.push(notRead("", "git's list of configuration files was cut at its size limit"));
   const folders = [...new Set(tracked.paths.filter(readsSpringConfigFile).map(folderOf))].sort();
   if (folders.length > MAX_FOLDERS)
-    problems.push({
-      code: "files-not-read",
-      path: "",
-      message: `more resource folders than the limit of ${MAX_FOLDERS}; the rest were not read`,
-    });
+    problems.push(notRead("", `more resource folders than the limit of ${MAX_FOLDERS}; the rest were not read`));
   const root = await realpath(dir);
   const listed = await mapLimit(folders.slice(0, MAX_FOLDERS), READ_CONCURRENCY, (f) => configFilesIn(root, f, problems));
-  const paths = listed.flat().sort(springLoadOrder);
-  if (paths.length > MAX_FILES)
-    problems.push({
-      code: "files-not-read",
-      path: "",
-      message: `more configuration files than the limit of ${MAX_FILES}; the rest were not read`,
-    });
-  const read = await mapLimit(
-    paths.slice(0, MAX_FILES),
-    READ_CONCURRENCY,
-    async (path) => [path, await readConfigFile(root, path, problems)] as const,
-  );
-  const texts = new Map(read.flatMap(([path, text]) => (text === undefined ? [] : [[path, text] as const])));
+  const files = listed.flat().sort((a, b) => springLoadOrder(a.path, b.path));
+  if (files.length > MAX_FILES)
+    problems.push(notRead("", `more configuration files than the limit of ${MAX_FILES}; the rest were not read`));
+  const budget = { left: MAX_TOTAL_BYTES };
+  const read = await mapLimit(files.slice(0, MAX_FILES), READ_CONCURRENCY, async (file) => {
+    const text = await readConfigFile(file, budget, problems);
+    return text === undefined ? [] : [[file.path, text] as const];
+  });
+  const texts = new Map(read.flat());
   return { paths: [...texts.keys()], text: (path) => texts.get(path), problems };
+}
+
+/** A configuration file: its path relative to the read directory, and where it is on disk, in its folder resolved inside the root. */
+interface ConfigFile {
+  path: string;
+  file: string;
+}
+
+function notRead(path: string, message: string): CardProblem {
+  return { code: "files-not-read", path, message };
 }
 
 /** `orders/src/main/resources` for `orders/src/main/resources/application.yml`. */
@@ -74,29 +79,48 @@ function folderOf(path: string): string {
   return path.slice(0, path.lastIndexOf(RESOURCES) + RESOURCES.length);
 }
 
-/** The configuration files in a resource folder on disk, also those git ignores; none when the folder is gone or leaves the root. */
-async function configFilesIn(root: string, folder: string, problems: CardProblem[]): Promise<string[]> {
+/**
+ * The configuration files in a resource folder on disk, also those git ignores, at most `MAX_FOLDER_NAMES` names looked
+ * at; none when the folder is gone or resolves outside the root. The files are opened in the resolved folder, so a
+ * link put in place of a parent folder after the check does not lead out of it.
+ */
+async function configFilesIn(root: string, folder: string, problems: CardProblem[]): Promise<ConfigFile[]> {
   const real = await realpath(join(root, ...folder.split("/"))).catch(() => undefined);
   if (real === undefined) return [];
   if (!isInside(root, real)) {
-    problems.push({ code: "files-not-read", path: folder, message: "the folder leads outside the repo through a link" });
+    problems.push(notRead(folder, "the folder leads outside the repo through a link"));
     return [];
   }
-  let names: string[];
+  const files: ConfigFile[] = [];
   try {
-    names = await readdir(real);
+    let seen = 0;
+    for await (const entry of await opendir(real)) {
+      if (++seen > MAX_FOLDER_NAMES) {
+        problems.push(notRead(folder, `more than ${MAX_FOLDER_NAMES} names in the folder; the rest were not looked at`));
+        break;
+      }
+      const path = `${folder}/${entry.name}`;
+      if (readsSpringConfigFile(path)) files.push({ path, file: join(real, entry.name) });
+    }
   } catch (err) {
-    problems.push({ code: "files-not-read", path: folder, message: messageOf(err) });
-    return [];
+    problems.push(notRead(folder, messageOf(err).replaceAll(real, folder)));
   }
-  return names.map((name) => `${folder}/${name}`).filter(readsSpringConfigFile);
+  return files;
 }
 
-async function readConfigFile(root: string, path: string, problems: CardProblem[]): Promise<string | undefined> {
+/** The file's text within the size limits; a problem without the folder's path on this computer when it cannot be read. */
+async function readConfigFile({ path, file }: ConfigFile, budget: { left: number }, problems: CardProblem[]): Promise<string | undefined> {
+  if (budget.left <= 0) {
+    problems.push(notRead(path, `the files read before it reached the limit of ${MAX_TOTAL_BYTES / 1024 / 1024} MB`));
+    return undefined;
+  }
   try {
-    return (await readRegularFile(join(root, ...path.split("/")), MAX_FILE_BYTES))?.toString("utf8");
+    const content = await readRegularFile(file, Math.min(MAX_FILE_BYTES, budget.left));
+    if (content === undefined) return undefined;
+    budget.left -= content.length;
+    return content.toString("utf8");
   } catch (err) {
-    problems.push({ code: "files-not-read", path, message: messageOf(err) });
+    problems.push(notRead(path, messageOf(err).replaceAll(file, path)));
     return undefined;
   }
 }

@@ -132,7 +132,10 @@ export interface SessionMiseEnv extends MiseEnv {
   profile: string | null;
 }
 
-/** The environment of a run: every variable, the values of its secrets, and why mise's `[env]` is not in it (`null` when it is or there is no mise). */
+/**
+ * The environment of a run: every variable, the values of its secrets, and why mise's `[env]` is not in it, in one line
+ * (`null` when it is or there is no mise).
+ */
 export interface RunEnv {
   env: NodeJS.ProcessEnv;
   secretValues: string[];
@@ -390,12 +393,12 @@ export class Mise {
       where = await place.where();
     } catch (err) {
       if (!(err instanceof DomainError)) throw err;
-      return { env, secretValues: [], problem: err.message };
+      return { env, secretValues: [], problem: reasonLine(err.message) };
     }
     const read = await readMiseEnv(this.deps.command, where.dir, where.env);
     if (read.kind === "not_installed") return { env: where.env, secretValues: [], problem: null };
-    if (read.kind === "error") return { env: where.env, secretValues: [], problem: read.message };
-    const problem = read.kind === "unredacted" ? read.message : null;
+    if (read.kind === "error") return { env: where.env, secretValues: [], problem: reasonLine(read.message) };
+    const problem = read.kind === "unredacted" ? reasonLine(read.message) : null;
     return { env: { ...where.env, ...read.env.vars }, secretValues: read.env.secretValues, problem };
   }
 
@@ -593,4 +596,16 @@ function withTaskPort(env: NodeJS.ProcessEnv, port: number): NodeJS.ProcessEnv {
 /** The owner of a repo's `mise install` group; a different prefix than mise tasks, because a mise task may be called `install`. */
 function installOwner(repo: string): string {
   return `mise-install:${repo}`;
+}
+
+/** Longer is not a reason but text mise echoed. */
+const REASON_MAX_CHARS = 300;
+
+/**
+ * mise's reason in one line: the further lines of its message may echo `[env]` content (a template that did not
+ * render), and `runEnv`'s reason goes to any agent (ADR-153).
+ */
+function reasonLine(message: string): string {
+  const line = message.split("\n")[0] ?? "";
+  return line.length > REASON_MAX_CHARS ? `${line.slice(0, REASON_MAX_CHARS)}…` : line;
 }
