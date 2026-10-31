@@ -632,6 +632,10 @@ _Avoid_: exception (only one kind of error), problem (that is the repo card and 
 Trackwall's own errors on this computer: the daemon's unexpected errors, the UI's and the desktop shell's, in `logs/errors.json` (ADR-94). Each is a **Trackwall error** (`TrackwallError`): source (`daemon`, `shell`, `ui`), area, kind, anonymized message, frames in Trackwall's code, count. Do not confuse with an error from logs (`LogError`), which comes from the output of the user's processes.
 _Avoid_: crash log, telemetry, bug report (nothing is sent)
 
+**MCP audit** (`McpAudit`, the `mcp-audit` module, `mcpAuditApi`; in the UI *MCP calls* in Settings › Agents and in a task's panel):
+Every MCP tool call the daemon answered, in `logs/mcp-calls.jsonl` (ADR-152). Each is an **MCP call** (`McpCall`): the tool, its effect (`read`, `write`, `destructive`), the **caller** (`McpCaller`: the session with its repo and task as they were at the call; `null` for an agent outside Trackwall), the identifier arguments the tool's contract names (`auditArgs`), the outcome and the duration. Free text an agent sends is never in it. Do not confuse with the daemon log, which also has a line per call.
+_Avoid_: access log, history (of a task, that is its handoff and summary), tool log
+
 **Doctor** (`Doctor`, the `doctor` module, `doctorApi`; in the UI *Doctor* in Settings):
 The checks of what Trackwall needs on this computer: the projects folder, every key of `workspace.yaml`, git, Copilot CLI and its trusted folders, mise, `gh` and `glab` signed in to the repo hosts (ADR-101). Each is a **doctor check** (`DoctorCheck`) with a state (`ok`, `warn`, `fail`), what was found and what to do. It only reads.
 _Avoid_: health check (that is `GET /api/health`), diagnostics, setup wizard

@@ -139,6 +139,7 @@ export function App() {
   const repoWatch = useRepoWatch(useMemo(() => events?.feed("repos.changed"), [events]));
   const warmupLive = useMemo(() => events?.feed("cards.warmup.changed"), [events]);
   const boardLive = useMemo(() => events?.feed("board.changed"), [events]);
+  const mcpCallsLive = useMemo(() => events?.feed("mcp.calls.changed"), [events]);
   const appUpdate = useAppUpdate(sessions.data && agentsInTurn(sessions.data.sessions));
   const tree = useSessionTree(sessions);
   const { rows } = tree;
@@ -296,6 +297,7 @@ export function App() {
                       initialCategory={settingsCategory ?? FIRST_SETTINGS_CATEGORY}
                       update={appUpdate}
                       warmupLive={warmupLive}
+                      mcpCallsLive={mcpCallsLive}
                       onRetry={retry}
                       onSaved={() => setView("repos")}
                     />

@@ -58,6 +58,7 @@ export const boardMcpTools = {
   listItems: {
     name: LIST_ITEMS,
     readOnly: true,
+    auditArgs: ["kind", "parent", "inbox", "column", "repo"] as const,
     description:
       "The user's board: business projects (kind project), the work split under them as a tree of items (kind item, " +
       "parent: the item or project above), and ideas in the inbox (items with no parent). Each comes with its column " +
@@ -79,6 +80,7 @@ export const boardMcpTools = {
   getItem: {
     name: GET_ITEM,
     readOnly: true,
+    auditArgs: ["item"] as const,
     description:
       "One board item with its whole body (Markdown: the plan, notes, acceptance criteria), the path from its project down " +
       "to it, the items right under it and the tasks started on it. Use it before you split an item or propose a task for it.",
@@ -89,6 +91,7 @@ export const boardMcpTools = {
     name: CREATE_ITEM,
     readOnly: false,
     destructive: false,
+    auditArgs: ["parent", "repos"] as const,
     description:
       "Write an idea or a piece of work on the user's board so it is not lost: when the user asks you to note something " +
       "for later, when you find work outside your task (a bug, a follow-up, a part that turns out bigger), or to split an " +
@@ -113,6 +116,7 @@ export const boardMcpTools = {
     name: UPDATE_ITEM,
     readOnly: false,
     destructive: false,
+    auditArgs: ["item", "column"] as const,
     description:
       "Change a board item's title, body, repos or link, or move it between ideas and ready, for example after the user " +
       "agreed on its plan with you. Only the fields given change. Projects, other columns, moving in the tree and removing " +

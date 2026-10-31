@@ -13,6 +13,7 @@ import {
   javaNavigationApi,
   localConfigApi,
   logsApi,
+  mcpAuditApi,
   mergeRequestsApi,
   miseApi,
   servicesApi,
@@ -103,6 +104,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     f.errorJournal.clear();
     return null;
   }),
+  route(mcpAuditApi.calls, (f, b) => f.mcpAudit.list(b.task)),
   route(localConfigApi.store, (f) => f.localConfig.store()),
   route(localConfigApi.repo, (f, b) => f.localConfig.repo(b.repo)),
   route(localConfigApi.repos, (f) => f.localConfig.repos()),
