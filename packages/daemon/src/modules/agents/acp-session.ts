@@ -398,10 +398,11 @@ export class AcpSession implements AgentSession {
     if (method !== "session/update") return;
     const parsed = SessionUpdateParams.safeParse(params);
     if (!parsed.success || parsed.data.sessionId !== this.#conversationId) return;
+    // Any update of the conversation is a step (ADR-151), also a thought or a plan the daemon does not show.
+    this.#lastStepAt = Date.now();
     const update = SessionUpdate.safeParse(parsed.data.update);
     // A kind the daemon does not show (available commands, usage, thoughts, plans).
     if (!update.success) return;
-    this.#lastStepAt = Date.now();
     if (update.data.sessionUpdate === "session_info_update") this.#windowTitle = update.data.title ?? this.#windowTitle;
     this.#broadcast(this.#conversation.apply(update.data));
   }

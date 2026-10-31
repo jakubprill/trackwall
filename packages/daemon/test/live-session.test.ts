@@ -897,6 +897,16 @@ describe("a session that may be stuck (ADR-151)", () => {
     expect(session.view()).toMatchObject({ state: { state: "Approval" }, stuck: null });
   });
 
+  test("is never one whose hooks have not reached the daemon, since its steps cannot be seen", () => {
+    at(0);
+    const { session } = runningSession();
+    session.output(new TextEncoder().encode("\u001b]9;4;3\u0007"));
+    expect(session.view()?.state).toMatchObject({ state: "Working", source: "osc" });
+
+    at(3 * STUCK_AFTER_MS);
+    expect(session.view()?.stuck).toBeNull();
+  });
+
   test("counts the user's key as a step, but not a mouse move the terminal reports", () => {
     at(0);
     const { session, hooksFile } = runningSession();

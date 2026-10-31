@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Session, SessionList, Task, TaskProposal } from "@trackwall/protocol";
-import { awayHeadline, awaySummary } from "../src/lib/away-summary.ts";
+import { absenceToClose, awayHeadline, awaySummary } from "../src/lib/away-summary.ts";
 
 const away = { from: "2026-10-31T09:00:00.000Z", to: "2026-10-31T11:10:00.000Z" };
 const now = new Date("2026-10-31T11:10:00.000Z");
@@ -134,7 +134,7 @@ describe("While you were away (ADR-151)", () => {
   });
 
   test("leaves out what changed before the absence, work that just goes on, and an end the user caused", () => {
-    const stopped = {
+    const stopped: Session["run"] = {
       kind: "exited",
       runId: "r",
       startedAt: "2026-10-31T08:00:00.000Z",
@@ -143,7 +143,7 @@ describe("While you were away (ADR-151)", () => {
       signal: "SIGTERM",
       stoppedByUser: true,
       lastLines: [],
-    } as const;
+    };
     const items = awaySummary(
       list({
         proposals: [{ ...proposal, createdAt: "2026-10-31T08:59:59.000Z" }],
@@ -161,7 +161,7 @@ describe("While you were away (ADR-151)", () => {
   });
 
   test("an error and a session that ended on its own while you were away are listed", () => {
-    const ended = {
+    const ended: Session["run"] = {
       kind: "exited",
       runId: "r",
       startedAt: "2026-10-31T08:00:00.000Z",
@@ -170,7 +170,7 @@ describe("While you were away (ADR-151)", () => {
       signal: null,
       stoppedByUser: false,
       lastLines: [],
-    } as const;
+    };
     const items = awaySummary(
       list({
         sessions: [
@@ -192,5 +192,13 @@ describe("While you were away (ADR-151)", () => {
         { from: away.from, to: "2026-10-31T09:20:00.000Z" },
       ),
     ).toBe("While you were away (20 min): 1 change, 1 needs you");
+  });
+});
+
+describe("an absence with nothing to show", () => {
+  test("is closed once the list has come, not before", () => {
+    expect(absenceToClose(list({}), away, [])).toBe(true);
+    expect(absenceToClose(undefined, away, [])).toBe(false);
+    expect(absenceToClose(list({ proposals: [proposal] }), away, awaySummary(list({ proposals: [proposal] }), away, now))).toBe(false);
   });
 });

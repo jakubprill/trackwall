@@ -2,7 +2,7 @@ import { countLabel, type Session, type SessionList, type Task } from "@trackwal
 import type { AwayPeriod } from "./away-presence.ts";
 import type { StatusTone } from "./repo-status.ts";
 import { latestSession, proposalName, type SessionSelection, taskName } from "./session-entries.ts";
-import { PROPOSAL_STATUS, STUCK_LABEL, sessionStateLabel, sessionTitle } from "./session-state.ts";
+import { PROPOSAL_STATUS, sessionStateLabel, sessionTitle } from "./session-state.ts";
 
 /**
  * "While you were away" (ADR-151): what changed in the session list since the user's absence began, read from the list
@@ -45,7 +45,7 @@ export function awaySummary(list: SessionList, away: AwayPeriod, now: Date): Awa
   // A task's sessions are its item; the supervisor is listed, and opening it opens its panel.
   const sessions = list.sessions.filter((s) => s.task === null).map((s) => sessionItem(s, since, now));
   const items = [...proposals, ...tasks, ...sessions].filter((item) => item !== undefined);
-  return items.sort((a, b) => Number(needsYou(b)) - Number(needsYou(a)) || b.at.localeCompare(a.at));
+  return items.sort((a, b) => Number(needsYou(b)) - Number(needsYou(a)) || Date.parse(b.at) - Date.parse(a.at));
 }
 
 type Since = (iso: string | undefined) => boolean;
@@ -78,12 +78,12 @@ function sessionItem(session: Session, since: Since, now: Date): AwayItem | unde
  * and neither is work that simply goes on.
  */
 function sessionFact(session: Session, since: Since, now: Date): { fact: AwayFact; at: string } | undefined {
-  if (session.stuck !== null) {
-    const minutes = Math.floor((now.getTime() - Date.parse(session.stuck.lastStepAt)) / 60_000);
-    return { fact: { tone: "warning", text: `${STUCK_LABEL}: no step for ${minutes} min` }, at: session.stuck.lastStepAt };
-  }
   const { run, state } = session;
   const { tone, label } = sessionStateLabel(session);
+  if (session.stuck !== null) {
+    const minutes = Math.floor((now.getTime() - Date.parse(session.stuck.lastStepAt)) / 60_000);
+    return { fact: { tone, text: `${label}: no step for ${minutes} min` }, at: session.stuck.lastStepAt };
+  }
   const fact = { tone, text: label };
   if (run.kind === "exited") return run.stoppedByUser || !since(run.endedAt) ? undefined : { fact, at: run.endedAt };
   if (state === null || !since(state.at)) return undefined;
@@ -116,4 +116,12 @@ function awayLength({ from, to }: AwayPeriod): string {
   const minutes = Math.floor((Date.parse(to) - Date.parse(from)) / 60_000);
   const hours = Math.floor(minutes / 60);
   return hours > 0 ? `${hours} h ${minutes % 60} min` : `${minutes} min`;
+}
+
+/**
+ * An absence with nothing to show once the list has come is closed at once: kept, it would make the next absence start
+ * there, days back. Before the list comes, nothing is known yet.
+ */
+export function absenceToClose(list: SessionList | undefined, away: AwayPeriod | undefined, items: readonly AwayItem[]): boolean {
+  return list !== undefined && away !== undefined && items.length === 0;
 }

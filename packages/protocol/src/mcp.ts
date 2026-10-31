@@ -866,7 +866,9 @@ export const mcpTools = {
       `Wait until a session or task needs someone: pass session (id from ${LIST_SESSIONS}) or task (id from ${PROPOSE_TASK} ` +
       `or ${LIST_SESSIONS}). Returns as soon as the status is proposal_rejected, stale (no response, or no step for a long time: ` +
       "session.stuck), needs_attention (the session finished its turn or asks the user for approval), exited or no_session, or after timeoutSeconds with " +
-      "proposal_pending, starting or working; then call it again. Waiting on a task follows its latest session. " +
+      "proposal_pending, starting or working; then call it again. On stale do not wait again at once: look at the session " +
+      `(${GET_SESSION}) and tell the user, since a session that may be stuck stays so until its agent takes a step. ` +
+      "Waiting on a task follows its latest session. " +
       `The result has the proposal, task (with its summary from ${REPORT_RESULT}) and session; ${GET_SESSION} gives the changed files. ` +
       "With proposal_rejected, rejectionReason is the user's reason when they gave one: use it before proposing again.",
     args: z

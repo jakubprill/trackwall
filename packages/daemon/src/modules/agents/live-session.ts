@@ -205,8 +205,11 @@ export class LiveSession implements AgentSession {
    * at once with that wait's, so their texts stay together (`SessionDialogs.requested`).
    */
   #requestsGoOn = false;
-  /** The agent's last step (a hook record) or the user's last key, for `SessionStuck` (ADR-151); the start before either. */
-  #lastStepAt = Date.now();
+  /**
+   * The agent's last step (a hook record) or the user's last key after one, for `SessionStuck` (ADR-151); `undefined`
+   * until the first hook, since without hooks the daemon cannot see the agent's steps.
+   */
+  #lastStepAt: number | undefined;
 
   constructor(o: LiveSessionOptions) {
     this.id = o.id;
@@ -271,7 +274,7 @@ export class LiveSession implements AgentSession {
     // After the key's own state change, so that the `Input` an Esc causes counts as seen.
     if (typedByUser(data)) {
       this.#attention.typed();
-      this.#lastStepAt = Date.now();
+      if (this.#lastStepAt !== undefined) this.#lastStepAt = Date.now();
     }
   }
 

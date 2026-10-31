@@ -4,6 +4,9 @@ import {
   AWAY_KEY,
   absenceAt,
   LAST_ACTIVE_KEY,
+  PRESENCE_WRITE_MS,
+  pointerMoved,
+  presenceSign,
   readAway,
   readLastActive,
   saveAway,
@@ -70,5 +73,40 @@ describe("the absence and the last sign in localStorage, which all windows of th
     expect(readAway(refusing)).toBeUndefined();
     expect(() => saveLastActive(refusing, NINE)).not.toThrow();
     expect(() => saveAway(refusing, undefined)).not.toThrow();
+  });
+});
+
+describe("one sign of the user in a window", () => {
+  const nothingStored = () => ({ lastActive: undefined, away: undefined });
+
+  test("soon after this window's last one reads no storage and writes at most every 30 seconds", () => {
+    const memory = { away: undefined, lastActive: NINE, written: NINE };
+    const reads: string[] = [];
+    const stored = () => {
+      reads.push("read");
+      return nothingStored();
+    };
+
+    expect(presenceSign(memory, NINE + PRESENCE_WRITE_MS - 1, stored)).toMatchObject({ opened: undefined, write: false });
+    expect(presenceSign(memory, NINE + PRESENCE_WRITE_MS, stored)).toMatchObject({ opened: undefined, write: true });
+    expect(reads).toEqual([]);
+  });
+
+  test("after a long gap here counts the newer sign another window stored, so using another window is not an absence", () => {
+    const memory = { away: undefined, lastActive: NINE, written: NINE };
+    const later = NINE + 2 * AWAY_AFTER_MS;
+
+    const other = presenceSign(memory, later, () => ({ lastActive: later - 60_000, away: undefined }));
+    expect(other).toMatchObject({ opened: undefined, write: true });
+
+    const none = presenceSign(memory, later, nothingStored);
+    expect(none.opened).toEqual({ from: "2026-10-31T09:00:00.000Z", to: "2026-10-31T09:30:00.000Z" });
+    expect(none.memory).toEqual({ away: none.opened, lastActive: later, written: later });
+  });
+
+  test("a pointer that stands still while the page moves under it is no sign", () => {
+    expect(pointerMoved(undefined, 10, 20)).toBe(true);
+    expect(pointerMoved({ x: 10, y: 20 }, 10, 20)).toBe(false);
+    expect(pointerMoved({ x: 10, y: 20 }, 11, 20)).toBe(true);
   });
 });

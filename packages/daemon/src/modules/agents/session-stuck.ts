@@ -15,8 +15,12 @@ export const STUCK_AFTER_MS = 15 * 60_000;
 /** States in the middle of a turn that the agent itself ends; `Approval` and `Plan` wait for the user, which is not hanging. */
 const BUSY_STATES: ReadonlySet<TaskStateChange["state"]> = new Set(["Working", "Stale"]);
 
-/** `null` unless the session is busy and its last step is `STUCK_AFTER_MS` or more before `now`. */
-export function sessionStuck(state: TaskStateChange | null, lastStepAt: number, now: number): SessionStuck | null {
-  if (state === null || !BUSY_STATES.has(state.state) || now - lastStepAt < STUCK_AFTER_MS) return null;
+/**
+ * `null` unless the session is busy and its last step is `STUCK_AFTER_MS` or more before `now`; also `null` without a
+ * step yet (`undefined`): a terminal session whose hooks do not reach the daemon has its state from the screen and
+ * would otherwise look stuck in every long turn.
+ */
+export function sessionStuck(state: TaskStateChange | null, lastStepAt: number | undefined, now: number): SessionStuck | null {
+  if (state === null || lastStepAt === undefined || !BUSY_STATES.has(state.state) || now - lastStepAt < STUCK_AFTER_MS) return null;
   return { lastStepAt: new Date(lastStepAt).toISOString() };
 }
