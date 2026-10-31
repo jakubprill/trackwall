@@ -34,6 +34,8 @@ export class McpAudit {
   readonly #file: RotatingJsonlFile;
   readonly #calls: McpCall[];
   #revision = 0;
+  /** A failed write and a full buffer are logged once, until the next write that works, so a locked file does not fill the daemon log. */
+  #writeFailing = false;
 
   constructor(deps: McpAuditDeps) {
     this.#deps = deps;
@@ -53,12 +55,14 @@ export class McpAudit {
     this.#calls.push(kept);
     if (this.#calls.length > MCP_AUDIT_MAX_CALLS) this.#calls.shift();
     this.#revision++;
-    if (!this.#file.append(JSON.stringify(kept)))
-      this.#deps.log("the MCP audit cannot write and its buffer is full; a call was not written");
+    // A full buffer (4 MB of calls not written) drops the line from disk only; the list in memory still has it.
+    this.#file.append(JSON.stringify(kept));
     try {
       this.#file.flush();
+      this.#writeFailing = false;
     } catch (err) {
-      this.#deps.log(`failed to write the MCP audit: ${messageOf(err)}`);
+      if (!this.#writeFailing) this.#deps.log(`failed to write the MCP audit, calls wait in memory until it can: ${messageOf(err)}`);
+      this.#writeFailing = true;
     }
   }
 

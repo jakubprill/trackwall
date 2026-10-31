@@ -92,18 +92,16 @@ describe("the MCP audit (ADR-152)", () => {
     const logs: string[] = [];
     const audit = new McpAudit({ dir, log: (msg) => logs.push(msg) });
     let recorded = 0;
-    while (statSync(join(dir, "mcp-calls.jsonl"), { throwIfNoEntry: false }) === undefined || recorded < 8000)
+    const file = join(dir, "mcp-calls.jsonl");
+    while ((statSync(file, { throwIfNoEntry: false })?.size ?? 0) <= 1024 * 1024 + 10_000)
       audit.record(call("get_repo", { args: { repo: `repo-${recorded++}` } }));
 
-    expect(statSync(join(dir, "mcp-calls.jsonl")).size).toBeGreaterThan(1024 * 1024);
     expect(logs.filter((l) => l.startsWith("failed to rotate the MCP audit"))).toHaveLength(1);
     expect(logs.filter((l) => l.startsWith("failed to write"))).toEqual([]);
-    expect(readFileSync(join(dir, "mcp-calls.jsonl"), "utf8")).toEndWith(
-      `"repo":"repo-${recorded - 1}"},"outcome":{"kind":"ok"},"durationMs":3}\n`,
-    );
+    expect(readFileSync(file, "utf8")).toEndWith(`"repo":"repo-${recorded - 1}"},"outcome":{"kind":"ok"},"durationMs":3}\n`);
   });
 
-  test("a call that cannot be written stays in the list and goes to the log, without an error for the agent", () => {
+  test("calls that cannot be written stay in the list and go to the log once, without an error for the agent", () => {
     const dir = newDir();
     // A file where the audit's folder should be: every write fails.
     const notADir = join(dir, "logs");
@@ -112,8 +110,10 @@ describe("the MCP audit (ADR-152)", () => {
     const audit = new McpAudit({ dir: notADir, log: (msg) => logs.push(msg) });
 
     expect(() => audit.record(call("list_repos"))).not.toThrow();
-    expect(audit.list().calls.map((c) => c.tool)).toEqual(["list_repos"]);
-    expect(logs.filter((l) => l.startsWith("failed to write the MCP audit:"))).toHaveLength(1);
+    audit.record(call("get_repo"));
+    expect(audit.list().calls.map((c) => c.tool)).toEqual(["get_repo", "list_repos"]);
+    // Once until a write works again, so a locked file does not add a line per call.
+    expect(logs.filter((l) => l.startsWith("failed to write the MCP audit"))).toHaveLength(1);
     expect(readFileSync(notADir, "utf8")).toBe("");
   });
 });

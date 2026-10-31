@@ -48,6 +48,7 @@ import {
 import { HttpMethod } from "./http.ts";
 import { LOG_BUFFER_RECORDS, LOG_ERRORS_MAX, LOG_TAIL_MAX, LogErrorLevel, LogErrors, LogLevel, LogTail, LogTextFilter } from "./logs.ts";
 import { LIST_REPOS, RepoArg } from "./mcp-args.ts";
+import type { McpCallEffect } from "./mcp-audit.ts";
 import { boardMcpTools, ItemArg, LIST_ITEMS } from "./mcp-board.ts";
 import { MiseTaskName, MiseTasks, RunningMiseTask } from "./mise.ts";
 import { RunState } from "./procs.ts";
@@ -316,6 +317,12 @@ type McpToolEffect = { readOnly: true } | { readOnly: false; destructive: false 
 
 export type McpTool<Args extends z.ZodObject = z.ZodObject, Result extends z.ZodObject = z.ZodObject> = McpToolBase<Args, Result> &
   McpToolEffect;
+
+/** A tool's effect from its contract; the daemon also builds the tool's MCP annotations from it (`readOnlyHint`, `destructiveHint`). */
+export function mcpToolEffect(tool: McpTool): McpCallEffect {
+  if (tool.readOnly) return "read";
+  return tool.destructive ? "destructive" : "write";
+}
 
 const GET_REPO = "get_repo";
 const LIST_SESSIONS = "list_sessions";

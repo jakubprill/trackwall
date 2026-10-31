@@ -9,24 +9,30 @@ import { RepoId } from "../src/workspace.ts";
 
 /**
  * The schemas an audited argument may have (ADR-152): identifiers the daemon checks, which cannot hold free text. A
- * string with any pattern is not enough (an endpoint's path has one and carries a query); it must be one of these.
+ * string with a pattern or a length limit is not enough (an endpoint's path has a pattern and carries a query); it
+ * must be one of these, recognised by its definition, which `.describe()` and `.optional()` keep.
  */
-const IDENTIFIERS = [RepoId, TaskId, SessionId, BoardItemId, TagName, MiseTaskName, TaskModel];
+const IDENTIFIERS: z.ZodType[] = [RepoId, TaskId, SessionId, BoardItemId, TagName, MiseTaskName, TaskModel];
 
-/** A schema as JSON Schema without its description, so `RepoArg` and `RepoId` compare equal. */
-function shapeOf(schema: z.ZodType): string {
-  const { description: _, $schema: _version, ...json } = z.toJSONSchema(schema, { io: "input" });
-  const items = json.type === "array" && typeof json.items === "object" && !Array.isArray(json.items) ? json.items : json;
-  const { description: _item, ...plain } = items;
-  return JSON.stringify(plain);
+/** The schema under `.optional()`, `.default()`, `.nullable()` and `z.array()`. */
+function inner(schema: z.ZodType): z.ZodType {
+  if (schema instanceof z.ZodOptional || schema instanceof z.ZodDefault || schema instanceof z.ZodNullable)
+    return inner(schema.unwrap() as z.ZodType);
+  if (schema instanceof z.ZodArray) return inner(schema.element as z.ZodType);
+  return schema;
 }
-
-const IDENTIFIER_SHAPES = new Set(IDENTIFIERS.map(shapeOf));
 
 function isIdentifier(schema: z.ZodType): boolean {
-  const shape = JSON.parse(shapeOf(schema));
-  return Boolean(shape.enum) || ["boolean", "integer", "number"].includes(shape.type) || IDENTIFIER_SHAPES.has(shapeOf(schema));
+  const value = inner(schema);
+  if (value instanceof z.ZodEnum || value instanceof z.ZodBoolean || value instanceof z.ZodNumber) return true;
+  return IDENTIFIERS.some((id) => id.def === value.def);
 }
+
+test("a plain string of a limited length, or one with a pattern of its own, does not count as an identifier", () => {
+  expect(isIdentifier(z.string().min(1).max(200))).toBe(false);
+  expect(isIdentifier(z.string().regex(/^\//))).toBe(false);
+  expect(isIdentifier(RepoId.optional().describe("the repo"))).toBe(true);
+});
 
 test("every MCP tool keeps in the audit only arguments that cannot carry free text", () => {
   const freeText = Object.values(mcpTools).flatMap((tool) =>

@@ -1,4 +1,4 @@
-import { isSupervisor, type McpCall, type McpCallEffect, type McpCaller } from "@trackwall/protocol";
+import { isFreeSession, isSupervisor, type McpCall, type McpCallEffect, type McpCaller } from "@trackwall/protocol";
 import { relativeTime } from "./format.ts";
 
 /** Which calls the MCP calls list shows (ADR-152): all, those that write or run something, or those that failed. */
@@ -43,8 +43,8 @@ export function mcpCallEntry(call: McpCall, now: Date) {
 export function callerLabel(caller: McpCaller | null): string {
   if (caller === null) return "Agent outside Trackwall";
   if (isSupervisor(caller)) return "Supervisor";
-  // In the projects folder and not the supervisor: a free session (`isFreeSession`, ADR-100).
-  if (caller.repo === null) return "Free session";
+  // `isFreeSession` is the rule; the `null` check only tells the compiler that a repo follows.
+  if (isFreeSession(caller) || caller.repo === null) return "Free session";
   return caller.task === null ? `Session in ${caller.repo}` : `Task in ${caller.repo}`;
 }
 

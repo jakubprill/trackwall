@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { Session, SessionId, TaskId } from "./agents.ts";
 import { apiEndpoints } from "./api.ts";
-import type { McpTool } from "./mcp.ts";
 
 /**
  * Contract of the `mcp-audit` module (ADR-152): every MCP tool call the daemon answered, with who called, the
@@ -27,12 +26,6 @@ export type McpCaller = z.infer<typeof McpCaller>;
 /** What the tool may do, from its contract: read Trackwall's state, write text for a human or an agent, or run or stop repo code. */
 export const McpCallEffect = z.enum(["read", "write", "destructive"]);
 export type McpCallEffect = z.infer<typeof McpCallEffect>;
-
-/** A tool's effect from its contract; the daemon also builds the tool's MCP annotations from it (`readOnlyHint`, `destructiveHint`). */
-export function mcpToolEffect(tool: McpTool): McpCallEffect {
-  if (tool.readOnly) return "read";
-  return tool.destructive ? "destructive" : "write";
-}
 
 export const McpCallOutcome = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("ok") }),
