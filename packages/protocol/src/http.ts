@@ -271,9 +271,10 @@ export function withoutCredentials(url: string): string {
 
 /**
  * An address inside free text: a scheme in the form `SCHEME` reads (so `withoutCredentials` always splits it) and what
- * follows up to a space, comma, semicolon or quote.
+ * follows up to a space, comma, semicolon or quote, but a user and password up to an `@` whole, since a password may
+ * hold those (`amqp://guest:gu,est@rabbit`).
  */
-const ADDRESS_IN_TEXT = /[a-z][a-z0-9+.-]{0,20}(?::[a-z][a-z0-9+.-]{0,20}){0,3}:\/\/[^\s,;"']*/gi;
+const ADDRESS_IN_TEXT = /[a-z][a-z0-9+.-]{0,20}(?::[a-z][a-z0-9+.-]{0,20}){0,3}:\/\/(?:[^\s/@]*@)?[^\s,;"']*/gi;
 /** Oracle's `user/password@host` (`jdbc:oracle:thin:scott/tiger@//db:1521/orders`), which has no `://` to find it by. */
 const SLASH_CREDENTIALS = /[^\s/@:=]+\/[^\s/@]+@/g;
 
@@ -284,7 +285,9 @@ const SLASH_CREDENTIALS = /[^\s/@:=]+\/[^\s/@]+@/g;
  */
 export function withoutCredentialsInText(text: string): string {
   if (text.length > MAX_URL_LENGTH && (text.includes("://") || text.includes("@"))) return "***";
-  return text.replace(ADDRESS_IN_TEXT, (address) => withoutCredentials(address)).replace(SLASH_CREDENTIALS, "***@");
+  const addresses = text.replace(ADDRESS_IN_TEXT, (address) => withoutCredentials(address));
+  // Without an `@` there is nothing to find, and the search is quadratic in a long run of name characters.
+  return addresses.includes("@") ? addresses.replace(SLASH_CREDENTIALS, "***@") : addresses;
 }
 
 /** Text with `${…}` replaced by a single character: an unexpanded key (`localhost:${PORT}`) can stand in place of the host and port. */

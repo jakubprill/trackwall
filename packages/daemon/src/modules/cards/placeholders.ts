@@ -133,6 +133,24 @@ class Resolver {
   }
 }
 
+/**
+ * The text with the default taken out of every `${key:default}` left in it, as `${key}`: an expansion that stopped at a
+ * limit gives back its text unexpanded, and a secret key's default must not show (ADR-153).
+ */
+export function withoutDefaults(text: string): string {
+  let out = "";
+  let i = 0;
+  for (let start = text.indexOf("${"); start >= 0; start = text.indexOf("${", i)) {
+    const end = closingBrace(text, start + 2);
+    if (end < 0) break;
+    const inner = text.slice(start + 2, end);
+    const colon = topLevelColon(inner);
+    out += `${text.slice(i, start)}\${${colon < 0 ? inner : inner.slice(0, colon)}}`;
+    i = end + 1;
+  }
+  return out + text.slice(i);
+}
+
 /** The index of the `}` closing a `${` opened before `from`; `-1` when there is none. */
 function closingBrace(text: string, from: number): number {
   let depth = 1;

@@ -114,12 +114,15 @@ async function readConfigFile({ path, file }: ConfigFile, budget: { left: number
     problems.push(notRead(path, `the files read before it reached the limit of ${MAX_TOTAL_BYTES / 1024 / 1024} MB`));
     return undefined;
   }
+  // Reserved before the read and the rest given back, so reads at once cannot pass the limit together.
+  const reserved = Math.min(MAX_FILE_BYTES, budget.left);
+  budget.left -= reserved;
   try {
-    const content = await readRegularFile(file, Math.min(MAX_FILE_BYTES, budget.left));
-    if (content === undefined) return undefined;
-    budget.left -= content.length;
-    return content.toString("utf8");
+    const content = await readRegularFile(file, reserved);
+    budget.left += reserved - (content?.length ?? 0);
+    return content?.toString("utf8");
   } catch (err) {
+    budget.left += reserved;
     problems.push(notRead(path, messageOf(err).replaceAll(file, path)));
     return undefined;
   }

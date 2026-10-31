@@ -51,6 +51,9 @@ describe("HTTP addresses and paths", () => {
     ["a=http://u:p1@h/x, b=http://v:p2@h2/y", "a=http://***@h/x, b=http://***@h2/y"],
     ["jdbc:oracle:thin:scott/tiger@//db:1521/orders", "jdbc:oracle:thin:***@//db:1521/orders"],
     ["redis://:pw@cache:6379", "redis://***@cache:6379"],
+    ["amqp://guest:gu,est@rabbit:5672", "amqp://***@rabbit:5672"],
+    ["postgres://app:p;w0rd@db/orders", "postgres://***@db/orders"],
+    ["postgres://app:s3cr'et@db/x", "postgres://***@db/x"],
     ["no address here", "no address here"],
   ])("every address in text loses its credentials: %s", (text, masked) => {
     expect(withoutCredentialsInText(text)).toBe(masked);

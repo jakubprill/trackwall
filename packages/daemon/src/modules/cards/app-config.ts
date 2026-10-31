@@ -7,7 +7,7 @@ import {
   withoutCredentialsInText,
 } from "@trackwall/protocol";
 import { isSecretName } from "../../infra/secret-name.ts";
-import { expandPlaceholders } from "./placeholders.ts";
+import { expandPlaceholders, withoutDefaults } from "./placeholders.ts";
 import { type ConfigEntry, type ModuleConfig, normalizeKey } from "./spring-config.ts";
 
 /**
@@ -42,7 +42,7 @@ const SECRET_KEY_END = /(^|_)(KEY|JAAS_CONFIG|CONNECTION_STRING)$/i;
  * `SharedAccessKey=…` and `AccountKey=…` in an Azure connection string; not `password=${…}`, which names another key.
  */
 const SECRET_IN_VALUE =
-  /(?:^|[^a-z])(?:password|passwd|pwd|secret|token|api[-_]?key|access[-_]?key|sharedaccesskey|accountkey)\s*[=:]\s*["']?[^\s"';,&$]/i;
+  /(?:^|[^a-z])(?:password|passwd|pwd|secret|token|api[-_]?key|access[-_]?key|sharedaccesskey|accountkey)\s*[=:]\s*["']?(?!\$\{)[^\s"';,&]/i;
 
 /** Which profile's view, and only keys starting with `key` (compared as Spring does) when given. */
 export interface AppConfigQuery {
@@ -107,12 +107,12 @@ class EntryReader {
       }),
       ...[...expanded.defaulted, ...expanded.missing].map((key) => ({ name: variableName(key), set: false })),
     ];
-    // An address's own password and query go first; a secret left anywhere else in the value hides it whole.
-    const shown = withoutCredentialsInText(expanded.value);
+    // A default left by an expansion that stopped at a limit may be a secret's; an address's own password and query go next; a secret left anywhere else in the value hides it whole.
+    const shown = withoutCredentialsInText(withoutDefaults(expanded.value));
     const secret = isSecretKey(entry.key) || SECRET_IN_VALUE.test(shown);
     return {
       key: entry.key,
-      value: secret ? null : this.env.mask(cut(shown)),
+      value: secret ? null : cut(this.env.mask(shown)),
       secret,
       set: expanded.value.trim() !== "" && expanded.missing.length === 0,
       env: variables,

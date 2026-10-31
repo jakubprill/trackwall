@@ -109,6 +109,16 @@ describe("a Spring app's configuration for an agent", () => {
     ]);
   });
 
+  test("a secret key's default does not show when an expansion stops at its length limit", () => {
+    const [shop] = view({ [APP]: `a: ${"x".repeat(4095)}\nv: \${a} Bearer \${jwt.key:s3cr3tDefault}\n` }).modules;
+    expect(JSON.stringify(shop)).not.toContain("s3cr3tDefault");
+  });
+
+  test("a literal password starting with $ hides the value, a placeholder after password= does not", () => {
+    const [shop] = view({ [APP]: `a: host=db;password=$up3rS3cret\nb: host=db;password=\${DB_PASS}\n` }).modules;
+    expect(shop?.entries.map((e) => e.value)).toEqual([null, `host=db;password=\${DB_PASS}`]);
+  });
+
   test("a value longer than 2000 characters is cut", () => {
     const [shop] = view({ [APP]: `banner: ${"x".repeat(5000)}\n` }).modules;
     expect(shop?.entries[0]?.value).toBe(`${"x".repeat(2000)}…`);
