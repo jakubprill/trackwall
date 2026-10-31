@@ -3,9 +3,11 @@ import { dirname, join } from "node:path";
 import {
   type AgentTaskChanges,
   type ChangedFile,
+  HANDED_TO_SUPERVISOR,
   type IncludedFiles,
   type JavaNavigationSettings,
   type JavaNavigationStatus,
+  mayHandToSupervisor,
   noIncludedFiles,
   PATCH_MAX_BYTES,
   type ProposedBy,
@@ -404,6 +406,23 @@ export class AgentTasks {
       return null;
     });
     return commit === null ? null : { task: from.id, repo: from.repo, branch: from.branch, commit };
+  }
+
+  /**
+   * The user hands a task they started to the supervisor (ADR-155): it becomes the supervisor's work, in `tasks.json` too,
+   * so it stays so after a restart; a task with a proposer already, or being ended, is `bad_request`.
+   */
+  handToSupervisor(id: string): Task {
+    if (this.#removing.has(id)) throw new DomainError("bad_request", "this task is being ended");
+    const task = this.#get(id);
+    if (!mayHandToSupervisor(task))
+      throw new DomainError(
+        "bad_request",
+        "only a task you started yourself can be handed to the supervisor; this one already reports to its proposer",
+      );
+    const handed = { ...task, proposedBy: HANDED_TO_SUPERVISOR };
+    this.#save(this.#tasks.map((t) => (t.id === id ? handed : t)));
+    return view(handed);
   }
 
   /** A summary from the task session (`report_result`, ADR-39); a later one replaces the earlier one and survives a daemon restart. */

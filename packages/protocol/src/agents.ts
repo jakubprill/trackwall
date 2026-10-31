@@ -126,8 +126,9 @@ export const TaskSummaryText = z.string().trim().min(1).max(TASK_SUMMARY_MAX);
  */
 export const ProposedBy = z.object({
   /**
-   * The proposing session: `null` for an agent outside Trackwall, and for a task the user handed on from another task's
-   * impact (ADR-147), which names that `task`.
+   * The proposing session: `null` for an agent outside Trackwall, for a task the user handed on from another task's
+   * impact (ADR-147), which names that `task`, and for a task the user handed to the supervisor (ADR-155), which has
+   * `supervisor: true`. A supervisor's own proposal always names its session, so that pair means the handover.
    */
   session: SessionId.nullable(),
   /**
@@ -227,6 +228,22 @@ export type EnvironmentChange = z.infer<typeof EnvironmentChange>;
 /** The answer of `environment-change`: `null` while the session's environment is the one it would get now. */
 export const EnvironmentCheck = z.object({ change: EnvironmentChange.nullable() });
 export type EnvironmentCheck = z.infer<typeof EnvironmentCheck>;
+
+/**
+ * The user handed a task they started to the supervisor (ADR-155, `hand-to-supervisor`): the task is the supervisor's
+ * work from then on, like one it proposed, with no proposing session.
+ */
+export const HANDED_TO_SUPERVISOR: Readonly<ProposedBy> = Object.freeze({ session: null, supervisor: true, task: null });
+
+/** A task the user handed to the supervisor (ADR-155): a supervisor's work that no supervisor session proposed. */
+export function handedToSupervisor(proposedBy: ProposedBy): boolean {
+  return proposedBy.supervisor && proposedBy.session === null;
+}
+
+/** Only a task the user started themselves can be handed to the supervisor (ADR-155): other work already has a proposer. */
+export function mayHandToSupervisor(task: Pick<Task, "proposedBy">): boolean {
+  return task.proposedBy === null;
+}
 
 export const Session = z.object({
   id: SessionId,
@@ -653,6 +670,12 @@ export const agentsApi = {
    * same rules as at its start; a file the worktree already has stays as it is. Only from the UI, never from MCP.
    */
   copyIncludedFilesAgain: endpoint("copy-included-files-again", TaskRequest, Task),
+  /**
+   * Hands a task the user started to the supervisor (ADR-155): from then on it is the supervisor's work, which hears of
+   * it through `get_updates` and may send it messages; `bad_request` for a task that already has a proposer. Only from
+   * the UI, never from MCP.
+   */
+  handToSupervisor: endpoint("hand-to-supervisor", TaskRequest, Task),
   /** The worktree's mise config against the trusted one (ADR-59). */
   taskMiseConfig: endpoint("task-mise-config", TaskRequest, TaskMiseConfig),
   /**
