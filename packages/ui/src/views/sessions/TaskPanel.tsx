@@ -19,6 +19,7 @@ import { CopyIncludedFilesButton, ResumeButton, StopButton, TaskEditorButton } f
 import { TaskChangesView } from "./TaskChangesView.tsx";
 import { scrollToSection, TaskDetails } from "./TaskDetails.tsx";
 import { TaskImpact } from "./TaskImpact.tsx";
+import { TaskMcpCalls } from "./TaskMcpCalls.tsx";
 import { TaskNoticeStrip } from "./TaskNotices.tsx";
 import { TaskRemoval } from "./TaskRemoval.tsx";
 import { VerifyButton } from "./TaskVerification.tsx";
@@ -77,6 +78,7 @@ export function TaskPanel({
     ...(session ? [{ id: "terminal", label: "Terminal" } as const] : []),
     { id: "changes", label: "Changes" } as const,
     { id: "impact", label: "Impact" } as const,
+    { id: "mcp-calls", label: "MCP calls" } as const,
   ];
 
   return (
@@ -166,6 +168,11 @@ export function TaskPanel({
       {shown === "impact" && (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <TaskImpact conn={conn} task={task} paused={confirmingRemoval} onOpenTask={onOpenTask} onShowOnOverview={onShowImpact} />
+        </div>
+      )}
+      {shown === "mcp-calls" && (
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <TaskMcpCalls conn={conn} task={task.id} />
         </div>
       )}
     </>

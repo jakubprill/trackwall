@@ -1,4 +1,4 @@
-import type { CardWarmupProgress } from "@trackwall/protocol";
+import type { CardWarmupProgress, McpAuditRevision } from "@trackwall/protocol";
 import { type ReactNode, useState } from "react";
 import { RemoteDaemonSurface } from "@/components/RemoteDaemonSurface";
 import type { Connection } from "@/lib/connection";
@@ -16,6 +16,7 @@ import { HomeSceneSurface } from "./HomeSceneSurface.tsx";
 import { JavaNavigationSurface } from "./JavaNavigationSurface.tsx";
 import { LocalConfigReposSurface } from "./LocalConfigReposSurface.tsx";
 import { LocalConfigStoreSurface } from "./LocalConfigStoreSurface.tsx";
+import { McpCallsSurface } from "./McpCallsSurface.tsx";
 import { RepoHostsSurface } from "./RepoHostsSurface.tsx";
 import { SessionProfileSurface } from "./SessionProfileSurface.tsx";
 import { StartAtSignInSurface } from "./StartAtSignInSurface.tsx";
@@ -26,6 +27,7 @@ type SettingsProps = {
   conn: Connection;
   update: AppUpdateHandle | undefined;
   warmupLive: LiveFeed<CardWarmupProgress> | undefined;
+  mcpCallsLive: LiveFeed<McpAuditRevision> | undefined;
   /** Reconnects to the daemon, for a read that failed because the daemon is gone. */
   onRetry: () => void;
   /** After the projects folder is saved, so that the app can show its repos. */
@@ -73,7 +75,15 @@ export function SettingsView({ initialCategory, ...props }: SettingsProps & { in
   );
 }
 
-function Section({ section, conn, update, warmupLive, onRetry, onSaved }: SettingsProps & { section: SettingsSection }): ReactNode {
+function Section({
+  section,
+  conn,
+  update,
+  warmupLive,
+  mcpCallsLive,
+  onRetry,
+  onSaved,
+}: SettingsProps & { section: SettingsSection }): ReactNode {
   switch (section) {
     case "folders":
       return <WorkspaceFolders conn={conn} onRetry={onRetry} onSaved={onSaved} />;
@@ -87,6 +97,8 @@ function Section({ section, conn, update, warmupLive, onRetry, onSaved }: Settin
       return <SessionProfileSurface conn={conn} />;
     case "java-navigation":
       return <JavaNavigationSurface conn={conn} />;
+    case "mcp-calls":
+      return <McpCallsSurface conn={conn} live={mcpCallsLive} />;
     case "start-at-sign-in":
       return <StartAtSignInSurface />;
     case "remote-daemon":

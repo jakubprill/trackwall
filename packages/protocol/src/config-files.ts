@@ -140,7 +140,7 @@ export const CONFIG_ENTRIES: Record<ConfigEntryId, ConfigEntryInfo> = {
     kind: "folder",
     writer: "trackwall",
     internal: true,
-    purpose: "The output of mise tasks and Trackwall's own errors.",
+    purpose: "The output of mise tasks, Trackwall's own errors and the MCP calls agents made.",
     docs: "trackwall-errors",
   },
   "local-config-push-repo": {

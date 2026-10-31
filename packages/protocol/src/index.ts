@@ -23,6 +23,7 @@ export * from "./links.ts";
 export * from "./local-config.ts";
 export * from "./logs.ts";
 export * from "./mcp.ts";
+export * from "./mcp-audit.ts";
 export * from "./mcp-board.ts";
 export * from "./mcp-instructions.ts";
 export * from "./merge-requests.ts";

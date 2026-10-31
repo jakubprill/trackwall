@@ -57,7 +57,7 @@ The agent sees the same projects folder you see in Trackwall, through the tools 
 
 ## Good to know
 
-- An agent in a session runs and stops only the mise tasks and the service of its own repo; every run is logged with the repo, mise task and session.
+- An agent in a session runs and stops only the mise tasks and the service of its own repo; every call is in [MCP calls](/features/mcp-calls) with the repo, mise task and agent that made it.
 - A task's agent runs mise tasks and the service in the repo root or in its own task's worktree, never in another task's, and in its worktree only with the mise configuration you have trusted (see [Agent tasks](/features/tasks)).
 - Agents get links in the form `trackwall://…` to point you at a repo, session or task: see [trackwall:// links](/features/links).
 - Calls that wait (`wait_for_mise_task`, `start_service`, `wait_for_session`) return after at most 55 seconds; the agent calls again to keep waiting.

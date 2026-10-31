@@ -21,6 +21,7 @@ function fakeFacade(state: {
   revision?: () => number;
   warmup?: () => CardWarmupProgress;
   board?: () => number;
+  mcpCalls?: () => number;
 }): Facade {
   return {
     agents: { sessionsWithoutCycle: state.sessions },
@@ -28,6 +29,7 @@ function fakeFacade(state: {
     repoWatch: { state: () => ({ startedAt: STARTED_AT, revision: state.revision?.() ?? 0 }) },
     cards: { warmupProgress: state.warmup ?? (() => IDLE_WARMUP) },
     board: { revision: state.board ?? (() => 0) },
+    mcpAudit: { revision: state.mcpCalls ?? (() => 0) },
   } as unknown as Facade;
 }
 
@@ -56,10 +58,11 @@ describe("the /ws event source", () => {
       { type: "repos.changed", payload: { startedAt: STARTED_AT, revision: 0 } },
       { type: "cards.warmup.changed", payload: IDLE_WARMUP },
       { type: "board.changed", payload: { revision: 0 } },
+      { type: "mcp.calls.changed", payload: { revision: 0 } },
     ]);
 
     await tick();
-    expect(client.events).toHaveLength(5);
+    expect(client.events).toHaveLength(6);
 
     sessions = {
       ...EMPTY,
@@ -75,7 +78,7 @@ describe("the /ws event source", () => {
       ],
     };
     await tick();
-    expect(client.events.slice(5)).toEqual([{ type: "sessions.changed", payload: sessions }]);
+    expect(client.events.slice(6)).toEqual([{ type: "sessions.changed", payload: sessions }]);
     unsubscribe();
   });
 
@@ -86,7 +89,7 @@ describe("the /ws event source", () => {
     const unsubscribeFirst = hub.subscribe(first.listener);
     const unsubscribeSecond = hub.subscribe(second.listener);
     expect(second.events).toEqual(first.events);
-    expect(first.events).toHaveLength(5);
+    expect(first.events).toHaveLength(6);
     unsubscribeFirst();
     unsubscribeSecond();
   });
@@ -118,17 +121,26 @@ describe("the /ws event source", () => {
       { type: "repos.changed", payload: { startedAt: STARTED_AT, revision: 0 } },
       { type: "cards.warmup.changed", payload: IDLE_WARMUP },
       { type: "board.changed", payload: { revision: 0 } },
+      { type: "mcp.calls.changed", payload: { revision: 0 } },
     ]);
     unsubscribe();
     unsubscribeLate();
   });
 
-  test("a new repo revision, the warm-up progress and a board change reach the listener as their own events", async () => {
+  test("a new repo revision, the warm-up progress, a board change and a new MCP call reach the listener as their own events", async () => {
     let revision = 0;
     let warmup = IDLE_WARMUP;
     let board = 0;
+    let mcpCalls = 0;
     const hub = new EventHub({
-      facade: fakeFacade({ sessions: () => EMPTY, running: () => [], revision: () => revision, warmup: () => warmup, board: () => board }),
+      facade: fakeFacade({
+        sessions: () => EMPTY,
+        running: () => [],
+        revision: () => revision,
+        warmup: () => warmup,
+        board: () => board,
+        mcpCalls: () => mcpCalls,
+      }),
       log: () => {},
     });
     const client = collect();
@@ -137,12 +149,14 @@ describe("the /ws event source", () => {
     revision = 1;
     warmup = { running: true, done: 3, total: 10 };
     board = 1;
+    mcpCalls = 1;
     await tick();
 
-    expect(client.events.slice(5)).toEqual([
+    expect(client.events.slice(6)).toEqual([
       { type: "repos.changed", payload: { startedAt: STARTED_AT, revision: 1 } },
       { type: "cards.warmup.changed", payload: { running: true, done: 3, total: 10 } },
       { type: "board.changed", payload: { revision: 1 } },
+      { type: "mcp.calls.changed", payload: { revision: 1 } },
     ]);
     unsubscribe();
   });

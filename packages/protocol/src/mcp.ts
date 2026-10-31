@@ -48,6 +48,7 @@ import {
 import { HttpMethod } from "./http.ts";
 import { LOG_BUFFER_RECORDS, LOG_ERRORS_MAX, LOG_TAIL_MAX, LogErrorLevel, LogErrors, LogLevel, LogTail, LogTextFilter } from "./logs.ts";
 import { LIST_REPOS, RepoArg } from "./mcp-args.ts";
+import type { McpCallEffect } from "./mcp-audit.ts";
 import { boardMcpTools, ItemArg, LIST_ITEMS } from "./mcp-board.ts";
 import { MiseTaskName, MiseTasks, RunningMiseTask } from "./mise.ts";
 import { RunState } from "./procs.ts";
@@ -298,6 +299,12 @@ interface McpToolBase<Args extends z.ZodObject, Result extends z.ZodObject> {
   description: string;
   args: Args;
   result: Result;
+  /**
+   * The arguments the MCP audit keeps (ADR-152) and a destructive tool's daemon log line gets before it acts (ADR-41):
+   * identifiers only. Listed explicitly for every tool, so a new tool cannot keep free text that may carry a secret (a
+   * prompt, headers, a body, a search pattern) by default.
+   */
+  auditArgs: readonly (keyof z.output<Args> & string)[];
 }
 
 /**
@@ -306,21 +313,16 @@ interface McpToolBase<Args extends z.ZodObject, Result extends z.ZodObject> {
  * text for a human cannot (ADR-39), running repo code or killing a process the user may need (a dev server, a
  * migration) can (ADR-41).
  */
-type McpToolEffect<Args extends z.ZodObject> =
-  | { readOnly: true }
-  | { readOnly: false; destructive: false }
-  | {
-      readOnly: false;
-      destructive: true;
-      /**
-       * The arguments the daemon log gets before the tool acts (ADR-41, until the `audit` table exists). Listed
-       * explicitly, so a new destructive tool cannot log free text that may carry a secret (headers, a body) by default.
-       */
-      auditArgs: readonly (keyof z.output<Args> & string)[];
-    };
+type McpToolEffect = { readOnly: true } | { readOnly: false; destructive: false } | { readOnly: false; destructive: true };
 
 export type McpTool<Args extends z.ZodObject = z.ZodObject, Result extends z.ZodObject = z.ZodObject> = McpToolBase<Args, Result> &
-  McpToolEffect<Args>;
+  McpToolEffect;
+
+/** A tool's effect from its contract; the daemon also builds the tool's MCP annotations from it (`readOnlyHint`, `destructiveHint`). */
+export function mcpToolEffect(tool: McpTool): McpCallEffect {
+  if (tool.readOnly) return "read";
+  return tool.destructive ? "destructive" : "write";
+}
 
 const GET_REPO = "get_repo";
 const LIST_SESSIONS = "list_sessions";
@@ -377,6 +379,7 @@ export const mcpTools = {
   listRepos: {
     name: LIST_REPOS,
     readOnly: true,
+    auditArgs: ["tags"] as const,
     description:
       "Repos in the user's projects folder: id, path, remote address (host/path), branch, latest commit, number of " +
       "local changes (untracked: how many of them are new), ahead/behind, the result of the latest sync since Trackwall started (lastSync: null when there " +
@@ -392,6 +395,7 @@ export const mcpTools = {
   getRepo: {
     name: GET_REPO,
     readOnly: true,
+    auditArgs: ["repo"] as const,
     description:
       `Details of one repo: the same as ${LIST_REPOS} (with tags; empty when the card cannot be built), the README from the latest commit (truncated), ` +
       "recent commits and mise tasks (name, description, run state, origin: repo for a file in the repo's git, local for a file of the repo git " +
@@ -402,6 +406,7 @@ export const mcpTools = {
   getRepoCard: {
     name: "get_repo_card",
     readOnly: true,
+    auditArgs: ["repo"] as const,
     description:
       "Repo card built from the build files, config and code in the latest commit, every fact with evidence (file and " +
       "line). provides: packages (kind package: Maven group:artifact coordinates, npm names), Spring Boot apps (kind app: " +
@@ -423,6 +428,7 @@ export const mcpTools = {
   tail: {
     name: TAIL,
     readOnly: true,
+    auditArgs: ["repo", "task", "miseTask"] as const,
     description:
       "Log of a repo's mise task, or with task of the same mise task in that task's worktree (stdout and stderr, oldest first): records with a seq number, run (runId), stream, " +
       "level from the line text (error, warn, info…) and text without colors, with secrets replaced by ***. Without " +
@@ -446,6 +452,7 @@ export const mcpTools = {
   getErrors: {
     name: GET_ERRORS,
     readOnly: true,
+    auditArgs: ["repo", "task", "miseTask", "minLevel"] as const,
     description:
       "Errors from the logs of mise tasks and mise install in all repos and task worktrees (or one repo, one task's worktree or one mise task), the most recent first: " +
       "a line with ERROR/FATAL (or WARN with minLevel warn), a compiler error (javac, tsc, kotlinc, Maven [ERROR], npm error) " +
@@ -481,6 +488,7 @@ export const mcpTools = {
   getTestResults: {
     name: GET_TEST_RESULTS,
     readOnly: true,
+    auditArgs: ["repo", "task"] as const,
     description:
       "Results of the latest test runs in a repo root, or with task in that task's worktree, read from the JUnit XML reports the " +
       "build left on disk: Maven target/surefire-reports and failsafe-reports, Gradle build/test-results, junit.xml of " +
@@ -506,6 +514,7 @@ export const mcpTools = {
   whoCalls: {
     name: "who_calls",
     readOnly: true,
+    auditArgs: ["repo"] as const,
     description:
       "Who uses a repo: connections in the graph pointing to this repo, each with a kind (depends-on: needs it to build; " +
       "calls: calls it at runtime) and a source (package: a repo uses a package built in this repo; http: a repo's HTTP " +
@@ -518,6 +527,7 @@ export const mcpTools = {
   subgraphFor: {
     name: "subgraph_for",
     readOnly: true,
+    auditArgs: ["repo", "depth"] as const,
     description:
       "Part of the connection graph around a repo: repos up to depth connections away in both directions (what it uses and " +
       "who uses it) and the connections between them (depends-on or calls; from packages, HTTP, manual), with evidence. A " +
@@ -535,6 +545,7 @@ export const mcpTools = {
   findEndpoint: {
     name: "find_endpoint",
     readOnly: true,
+    auditArgs: ["method"] as const,
     description:
       "HTTP endpoints from Spring controllers and OpenAPI specs in all repos matching the query: a path, also a concrete " +
       "one (/api/orders/42 finds /api/orders/{id}), a whole URL or METHOD /path, matched as the whole path or its end " +
@@ -562,6 +573,7 @@ export const mcpTools = {
   searchCode: {
     name: "search_code",
     readOnly: true,
+    auditArgs: ["repos", "tags"] as const,
     description:
       "Search code in many repos at once (git grep in each repo's latest commit, not in uncommitted changes): a fixed " +
       "string by default, a POSIX extended regular expression with regex: true (use [0-9] and [[:space:]], not \\d " +
@@ -595,6 +607,7 @@ export const mcpTools = {
   listSessions: {
     name: LIST_SESSIONS,
     readOnly: true,
+    auditArgs: ["repo"] as const,
     description:
       "Copilot CLI sessions that Trackwall runs (the Sessions view), newest first, and tasks. A session has an id, " +
       "repo (null for the supervisor, the one session in the projects folder above all repos), start time, process state (run: running, stopping, exited with exit code; the screen is not shared), the " +
@@ -611,6 +624,7 @@ export const mcpTools = {
   getSession: {
     name: GET_SESSION,
     readOnly: true,
+    auditArgs: ["session"] as const,
     description:
       `One session from ${LIST_SESSIONS}, its task (null in the repo root and for the supervisor) and, for a task, the changes in its ` +
       `worktree against the base commit: changed files with added and deleted lines (at most ${TASK_SUMMARY_MAX_FILES}, filesTruncated: ` +
@@ -627,6 +641,7 @@ export const mcpTools = {
   getDayReport: {
     name: "get_day_report",
     readOnly: true,
+    auditArgs: [] as const,
     description:
       "What changed since the user's previous day start, computed by Trackwall when the user pressed Start my day: it " +
       "synced every repo first. repos lists only the repos with something to say: commits new on the remote default " +
@@ -643,6 +658,7 @@ export const mcpTools = {
   getTaskChanges: {
     name: GET_TASK_CHANGES,
     readOnly: true,
+    auditArgs: ["task"] as const,
     description:
       "The changes of a task's worktree against its base commit with their diff: the task's commits and what its agent has not " +
       "committed yet, new files included and ignored files left out, so you can review what another session did before you report it. " +
@@ -671,6 +687,7 @@ export const mcpTools = {
   getChangedEndpoints: {
     name: GET_CHANGED_ENDPOINTS,
     readOnly: true,
+    auditArgs: ["task"] as const,
     description:
       "The HTTP endpoints a task's commits add, remove or change against its base commit, and who calls them: each with " +
       "change (added, removed, changed), app, method and path, its contract before and after (handler, request and response " +
@@ -692,6 +709,7 @@ export const mcpTools = {
     name: PROPOSE_TASK,
     readOnly: false,
     destructive: false,
+    auditArgs: ["repo", "model", "approvals", "item"] as const,
     description:
       "Propose a task for another agent: Trackwall shows it to the user in the Sessions view, and nothing runs until the " +
       "user approves it (the user may edit the prompt first, or reject it). An approved proposal becomes a task with the " +
@@ -732,6 +750,7 @@ export const mcpTools = {
     name: PROPOSE_FOLDER_ACTION,
     readOnly: false,
     destructive: false,
+    auditArgs: ["action", "repo"] as const,
     description:
       "Propose an action on the projects folder that a task cannot do, because a task works in a worktree of one repo. " +
       "Trackwall shows it to the user next to task proposals, and nothing happens until the user approves it (or " +
@@ -755,6 +774,7 @@ export const mcpTools = {
     name: REPORT_RESULT,
     readOnly: false,
     destructive: false,
+    auditArgs: [] as const,
     description:
       "Report the result of your task: what you did, what is left and what the user or the session that proposed the " +
       `task should check. Only for a session that runs a task in Trackwall; the summary is saved to your own task (shown in ${GET_SESSION}, ` +
@@ -768,6 +788,7 @@ export const mcpTools = {
     name: GET_REVIEW_COMMENTS,
     // Marking them read changes only Trackwall's own bookkeeping; an approval would stall the agent it asked (ADR-62).
     readOnly: true,
+    auditArgs: [] as const,
     description:
       "Read the review comments the user wrote on lines of your task's changes in Trackwall and has not given you yet. " +
       "Only for a session that runs a task in Trackwall; Trackwall asks you to call it when the user sends a review. Each " +
@@ -782,6 +803,7 @@ export const mcpTools = {
     name: SEND_MESSAGE,
     readOnly: false,
     destructive: false,
+    auditArgs: ["task"] as const,
     description:
       `Send a message to the session of a task you proposed with ${PROPOSE_TASK} (and the user approved): ${TASK_MESSAGE_USES}; ` +
       "the agent takes it as an update of " +
@@ -820,6 +842,7 @@ export const mcpTools = {
     name: GET_MESSAGES,
     // Marking them read changes only Trackwall's own bookkeeping; an approval would stall the agent it woke (ADR-68).
     readOnly: true,
+    auditArgs: [] as const,
     description:
       `Read the messages the session that proposed your task sent you with ${SEND_MESSAGE} and you have not read yet, ` +
       "oldest first. Only for a session that runs a task in Trackwall; Trackwall asks you to call it when a message " +
@@ -832,6 +855,7 @@ export const mcpTools = {
     name: GET_HANDOFF,
     // Marking the head read changes only Trackwall's own bookkeeping; an approval would stall the agent it woke (ADR-68).
     readOnly: true,
+    auditArgs: [] as const,
     description:
       "Where the work your task builds on is now: the task whose session proposed your task (task, repo, branch; ended once the " +
       "user ended it), the commit of its branch you read last (read), where the branch is now (head), how many commits it " +
@@ -847,6 +871,7 @@ export const mcpTools = {
     name: GET_UPDATES,
     // Marking them read changes only Trackwall's own bookkeeping; an approval would stall the agent it woke (ADR-68).
     readOnly: true,
+    auditArgs: [] as const,
     description:
       "Read what happened to the work you delegated since your last call, oldest first: for each task you proposed (the " +
       "supervisor: any supervisor proposed), turn_ended (its session finished a turn and waits; read its summary and " +
@@ -862,6 +887,7 @@ export const mcpTools = {
   waitForSession: {
     name: WAIT_FOR_SESSION,
     readOnly: true,
+    auditArgs: ["session", "task"] as const,
     description:
       `Wait until a session or task needs someone: pass session (id from ${LIST_SESSIONS}) or task (id from ${PROPOSE_TASK} ` +
       `or ${LIST_SESSIONS}). Returns as soon as the status is proposal_rejected, stale, needs_attention (the session ` +
@@ -917,6 +943,7 @@ export const mcpTools = {
   waitForMiseTask: {
     name: WAIT_FOR_MISE_TASK,
     readOnly: true,
+    auditArgs: ["repo", "task", "miseTask"] as const,
     description:
       `Wait until a repo's mise task started with ${RUN_MISE_TASK} (or in Trackwall) ends, with task the one in that task's worktree: returns run: exited with ` +
       "the exit code (exitCode, signal, stoppedByUser) as soon as the process group has ended, or after timeoutSeconds " +
@@ -928,6 +955,7 @@ export const mcpTools = {
   listRunningMiseTasks: {
     name: "list_running_mise_tasks",
     readOnly: true,
+    auditArgs: [] as const,
     description:
       "mise tasks running in all repos and task worktrees (also those being stopped) that Trackwall started since it started, from the " +
       `UI or with ${RUN_MISE_TASK}: repo, task (the task whose worktree it runs in, null in the repo root), mise task name and run (runId, start time, pid). Cheap: it does not ask mise.`,
@@ -1036,6 +1064,7 @@ export const mcpTools = {
   listServices: {
     name: "list_services",
     readOnly: true,
+    auditArgs: [] as const,
     description:
       `Services Trackwall started or watched since it started (with ${START_SERVICE}, the UI, or the mise task ` +
       `${SERVICE_MISE_TASK} run from the UI): repo, task (the task whose worktree it runs from, null for the repo root), state (starting, healthy, unhealthy, stopping, stopped, crashed), ` +

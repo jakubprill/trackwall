@@ -2,6 +2,7 @@ import { z } from "zod";
 import { SessionList } from "./agents.ts";
 import { BoardRevision } from "./board.ts";
 import { CardWarmupProgress } from "./cards.ts";
+import { McpAuditRevision } from "./mcp-audit.ts";
 import { RunningMiseTask } from "./mise.ts";
 import { RepoWatchState } from "./workspace.ts";
 
@@ -26,6 +27,8 @@ export const DaemonEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("cards.warmup.changed"), payload: CardWarmupProgress }),
   /** The board's revision (ADR-133): the client reads `board/board` again when it grows. */
   z.object({ type: z.literal("board.changed"), payload: BoardRevision }),
+  /** The MCP audit's revision (ADR-152): the client reads `mcp-audit/calls` again when it grows. */
+  z.object({ type: z.literal("mcp.calls.changed"), payload: McpAuditRevision }),
 ]);
 export type DaemonEvent = z.infer<typeof DaemonEvent>;
 export type DaemonEventType = DaemonEvent["type"];

@@ -6,8 +6,11 @@ import {
   childrenOf,
   compareSiblings,
   isSupervisor,
+  type McpCaller,
+  type McpCallOutcome,
   type McpTool,
   type MiseTarget,
+  mcpToolEffect,
   mcpTools,
   miseTaskLogSource,
   type Repo,
@@ -54,7 +57,7 @@ export interface ToolContext {
   facade: Facade;
   /**
    * A daemon log line about the call (tool, time, result), without arguments except for destructive tools (ADR-41);
-   * the daemon log is the only record of MCP calls (ADR-134).
+   * the record the person reads is the MCP audit (`facade.mcpAudit`, ADR-152).
    */
   log: (msg: string) => void;
 }
@@ -87,6 +90,7 @@ function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
   // through the tool's schema once more (the SDK already checks them before the call), which gives their exact type without a cast.
   const inputSchema: z.ZodObject = tool.args;
   const outputSchema: z.ZodObject = tool.result;
+  const effect = mcpToolEffect(tool);
   return (server, ctx) => {
     server.registerTool(
       tool.name,
@@ -94,23 +98,40 @@ function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
         description: tool.description,
         inputSchema,
         outputSchema,
-        annotations: { readOnlyHint: tool.readOnly, destructiveHint: !tool.readOnly && tool.destructive, openWorldHint: false },
+        annotations: { readOnlyHint: effect === "read", destructiveHint: effect === "destructive", openWorldHint: false },
       },
       async (args, extra) => {
         const started = Date.now();
         // The calling session goes into the log, because a proposal and a summary write something on its behalf.
         const label = ctx.caller === null ? tool.name : `${tool.name} (session ${ctx.caller})`;
+        // Read now, while the session the token named a moment ago is listed: a long call can outlive it (ADR-152).
+        const caller = auditCaller(ctx, ctx.caller);
+        // The SDK has checked the arguments against the tool's schema already, so what the audit keeps is known before the tool runs.
+        const audited = auditView(args, tool.auditArgs);
+        let outcome: McpCallOutcome = { kind: "ok" };
         try {
           const parsed = parseArgs(tool.args, args);
           // A destructive tool (it runs or stops repo code) logs its arguments before acting: this line
           // says who ran what (ADR-41). Their arguments are identifiers, never free text.
-          if (!tool.readOnly && tool.destructive) ctx.log(`${label}: ${JSON.stringify(auditView(parsed, tool.auditArgs))}`);
+          if (effect === "destructive") ctx.log(`${label}: ${JSON.stringify(audited)}`);
           const result = tool.result.parse(await run(ctx.facade, parsed, { caller: ctx.caller, signal: extra.mcpReq.signal }));
           ctx.log(`${label}: ok in ${Date.now() - started} ms`);
           return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };
         } catch (err) {
           ctx.log(`${label}: error in ${Date.now() - started} ms: ${String(err)}`);
-          return { content: [{ type: "text", text: toolErrorText(ctx.facade, tool.name, err) }], isError: true };
+          const failure = toolError(ctx.facade, tool.name, err);
+          outcome = { kind: "error", ...failure };
+          return { content: [{ type: "text", text: `${failure.code}: ${failure.message}` }], isError: true };
+        } finally {
+          ctx.facade.mcpAudit.record({
+            at: new Date(started).toISOString(),
+            tool: tool.name,
+            effect,
+            caller,
+            args: audited,
+            outcome,
+            durationMs: Date.now() - started,
+          });
         }
       },
     );
@@ -125,13 +146,14 @@ function parseArgs<T extends z.ZodType>(schema: T, args: unknown): z.output<T> {
 }
 
 /**
- * What the agent reads for a failed tool: an error a module raised on purpose with its code and message, as in the API
- * (§5.2), others without details. Those others are Trackwall's errors and go into the error journal (ADR-94).
+ * What the agent reads for a failed tool, as `<code>: <message>`: an error a module raised on purpose with its code and
+ * message, as in the API (§5.2), others without details. Those others are Trackwall's errors and go into the error
+ * journal (ADR-94).
  */
-function toolErrorText(facade: Facade, tool: string, err: unknown): string {
-  if (err instanceof DomainError) return `${err.code}: ${err.message}`;
+function toolError(facade: Facade, tool: string, err: unknown): { code: string; message: string } {
+  if (err instanceof DomainError) return { code: err.code, message: err.message };
   facade.errorJournal.recordDaemonError(`mcp:${tool}`, err);
-  return "internal: daemon error";
+  return { code: "internal", message: "daemon error" };
 }
 
 type ToolRuns = { [K in keyof typeof mcpTools]: (typeof mcpTools)[K] extends McpTool<infer A, infer R> ? ToolRun<A, R> : never };
@@ -367,9 +389,31 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.callEndpoint, runs.callEndpoint),
 ];
 
-/** The arguments a destructive tool logs: only the ones its contract names (the rest may be free text with secrets). */
-function auditView(args: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
-  return Object.fromEntries(keys.map((k) => [k, args[k]]));
+/**
+ * The arguments the audit keeps and a destructive tool logs: only the ones its contract names (the rest may be free text
+ * with secrets), and only those the call gave or that have a default.
+ */
+function auditView(args: Readonly<Record<string, unknown>>, keys: readonly string[]): Record<string, unknown> {
+  return Object.fromEntries(keys.filter((k) => args[k] !== undefined).map((k) => [k, args[k]]));
+}
+
+/**
+ * The calling session as it is when the call comes (ADR-152), so its entry still says where it worked once it is gone.
+ * The token named a listed session a moment ago; one that ended in between keeps only its id.
+ */
+function auditCaller(ctx: ToolContext, caller: string | null): McpCaller | null {
+  if (caller === null) return null;
+  try {
+    const { repo, task, supervisor } = ctx.facade.agents.session(caller);
+    return { session: caller, repo, task, supervisor };
+  } catch (err) {
+    // Anything but `not_found` is a daemon bug; the call goes on, and the bug goes to the log and the error journal.
+    if (!(err instanceof DomainError && err.code === "not_found")) {
+      ctx.log(`reading the caller of an MCP call: ${String(err)}`);
+      ctx.facade.errorJournal.recordDaemonError("mcp:audit-caller", err);
+    }
+    return { session: caller, repo: null, task: null, supervisor: false };
+  }
 }
 
 /** Tag filter of `list_repos` and `search_code`: the repo has every wanted tag. */

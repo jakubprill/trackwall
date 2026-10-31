@@ -32,6 +32,7 @@ import { JavaNavigation } from "./modules/java-navigation/java-navigation.ts";
 import { JDTLS_JAVA, JDTLS_RELEASE, type JdtlsRelease } from "./modules/java-navigation/jdtls-release.ts";
 import { LocalConfig } from "./modules/local-config/local-config.ts";
 import { Logs } from "./modules/logs/logs.ts";
+import { McpAudit } from "./modules/mcp-audit/mcp-audit.ts";
 import { MergeRequests } from "./modules/merge-requests/merge-requests.ts";
 import { Mise } from "./modules/mise/mise.ts";
 import { ProcessGroups } from "./modules/procs/process-groups.ts";
@@ -76,6 +77,8 @@ export interface Facade {
   dayStart: DayStart;
   /** Trackwall's own errors from the daemon, the shell and the UI, anonymized, on this computer only (ADR-94). */
   errorJournal: ErrorJournal;
+  /** Every MCP tool call the daemon answered, with its caller, identifier arguments and outcome, on this computer only (ADR-152). */
+  mcpAudit: McpAudit;
   /** Checks of what Trackwall needs on this computer, each with what to do when it fails (ADR-101). */
   doctor: Doctor;
   /** Installs jdtls and its Java for tasks' Java navigation, from Settings (ADR-123). */
@@ -268,6 +271,7 @@ export function createFacade(o: FacadeOptions): Facade {
     log: o.log,
   });
   const errorJournal = createErrorJournal({ ...o, workspace });
+  const mcpAudit = new McpAudit({ dir: join(o.home, LOGS_DIR), log: o.log });
   const javaNavigationReadiness = () => agents.startOptions().javaNavigation;
   const javaNavigation = new JavaNavigation({
     repos: workspace,
@@ -348,6 +352,7 @@ export function createFacade(o: FacadeOptions): Facade {
     mergeRequests,
     dayStart,
     errorJournal,
+    mcpAudit,
     doctor,
     javaNavigation,
     configFiles,
