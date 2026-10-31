@@ -24,6 +24,7 @@ function session(id: string, state: Session["state"], run: Session["run"] = runn
     state,
     windowTitle: null,
     needsAttention,
+    stuck: null,
     task: null,
     dialog: null,
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
@@ -48,6 +49,12 @@ describe("session state in one line", () => {
     expect(sessionStateLabel(waiting("a", change("Input")))).toEqual({ tone: "warning", label: "waiting for you" });
     expect(sessionStateLabel(waiting("a", change("Approval")))).toEqual({ tone: "warning", label: "asking for approval" });
     expect(sessionStateLabel(session("a", change("Working")))).toEqual({ tone: "ok", label: "working" });
+  });
+
+  test("a working session that may be stuck has a warning instead of working (ADR-151)", () => {
+    const stuck = { ...session("a", change("Working")), stuck: { lastStepAt: "2026-10-23T10:00:00.000Z" } };
+
+    expect(sessionStateLabel(stuck)).toEqual({ tone: "warning", label: "may be stuck" });
   });
 
   test("Input the user has already seen is shown as idle, without a warning", () => {

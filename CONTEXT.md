@@ -482,6 +482,14 @@ _Avoid_: read, acknowledged
 **Idle** (`isIdle`, `IDLE_LABEL`, dashboard state `idle`):
 A running session in `Input` the user has already seen (ADR-47): the agent waits for the next prompt, but no longer waits for you. Shown as "idle" in Sessions and in calm grey on the dashboard.
 
+**May be stuck** (`Session.stuck`, `SessionStuck`, `sessionStuck`, `STUCK_AFTER_MS`, `STUCK_LABEL`; "may be stuck" in the UI):
+A running session in the middle of a turn (`Working` or `Stale`) whose agent has taken no step for 15 minutes: no hook, ACP update or key from the user (ADR-151). A hint shown in place of the state, not a state of its own.
+_Avoid_: hung, frozen, stale (that is `Stale`, no output at all)
+
+**While you were away** (`AwaySummary`, `awaySummary`, `AwayItem`; an **absence** is `AwayPeriod`, opened by `absenceAt` after `AWAY_AFTER_MS`):
+The strip above the views after the user comes back to Trackwall from 15 minutes without a key, click, scroll or pointer move in any of its windows, listing what changed in the session list since then (ADR-151). The user dismisses it.
+_Avoid_: digest, notifications (those are the system's and the browser's), journal
+
 **Conversation view** (`SessionView` `"conversation"`, `ConversationView`, `AcpSession`, `ConversationEntry`; "conversation view" in the UI, and "Chat (preview)" on the control that turns it on):
 How a session shows when the daemon runs Copilot CLI over the Agent Client Protocol (`copilot --acp`) instead of in a terminal (ADR-107): a list of what the user and the agent said and the tools the agent called, its approval and a message box, all plain text in the page. The other `SessionView` is `"terminal"`, the session terminal. The supervisor starts in it when the user turns it on in the supervisor panel, and a task when the user picks it for the task (`Task.view`, ADR-137); a conversation goes on in either view.
 _Avoid_: chat outside the "Chat (preview)" control, transcript (that is Copilot CLI's own record)

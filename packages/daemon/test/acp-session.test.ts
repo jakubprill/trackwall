@@ -1,8 +1,9 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
 import type { ConversationServerMessage, RunState } from "@trackwall/protocol";
 import { AcpSession } from "../src/modules/agents/acp-session.ts";
 import type { CopilotHookRecord } from "../src/modules/agents/copilot-hook-record.ts";
 import type { SessionEvent } from "../src/modules/agents/live-session.ts";
+import { STUCK_AFTER_MS } from "../src/modules/agents/session-stuck.ts";
 
 const RUNNING: RunState = { runId: "r1", startedAt: "2026-10-28T08:00:00.000Z", kind: "running", pid: 1 };
 
@@ -399,5 +400,26 @@ describe("a Copilot CLI session over ACP", () => {
 
     expect(s.acp.view()?.state?.state).toBe("Input");
     expect(frames.at(-1)?.entries.at(-1)).toEqual({ id: "agent-2", kind: "agent", text: "Done." });
+  });
+});
+
+describe("a session over ACP that may be stuck (ADR-151)", () => {
+  afterEach(() => setSystemTime());
+
+  test("is one whose prompt has had no update for 15 minutes, until the agent's next update", async () => {
+    const start = Date.parse("2026-10-31T09:00:00.000Z");
+    const s = session();
+    await s.ready();
+    setSystemTime(new Date(start));
+    s.acp.say("Run the service");
+
+    setSystemTime(new Date(start + STUCK_AFTER_MS));
+    expect(s.acp.view()).toMatchObject({ state: { state: "Working" }, stuck: { lastStepAt: "2026-10-31T09:00:00.000Z" } });
+
+    s.send({
+      method: "session/update",
+      params: { sessionId: "c1", update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Still starting" } } },
+    });
+    expect(s.acp.view()?.stuck).toBeNull();
   });
 });

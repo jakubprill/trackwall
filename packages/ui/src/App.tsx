@@ -1,6 +1,7 @@
 import { FolderGit2, ListTree, Network, Orbit, Settings, SquareTerminal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityBar, type ActivityView } from "@/components/ActivityBar";
+import { AwaySummary } from "@/components/AwaySummary";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -210,6 +211,7 @@ export function App() {
         <div className="flex min-w-0 flex-1 flex-col">
           {appUpdate && <UpdateBanner handle={appUpdate} />}
           <NotificationOffer />
+          <AwaySummary list={sessions.data} onOpen={openInSessions} />
           {error && <ErrorBanner message={error} action={{ label: "Try again", onClick: retry }} />}
           {windowError && <ErrorBanner message={windowError} action={{ label: "Dismiss", onClick: () => setWindowError(undefined) }} />}
           {conn && dropped && (

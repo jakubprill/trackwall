@@ -13,6 +13,7 @@ function session(fields: Partial<Session> & Pick<Session, "id">): Session {
     state: null,
     windowTitle: null,
     needsAttention: false,
+    stuck: null,
     task: null,
     dialog: null,
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
@@ -125,6 +126,15 @@ describe("the supervisor's situation (ADR-148)", () => {
 
     expect(supervisorSituation({ sessions: [supervisor], tasks: [], proposals: [] }, SUPERVISOR)).toBe(
       `${HEADER}\n- nothing: no tasks, no proposals and no other running sessions`,
+    );
+  });
+
+  test("a working session that may be stuck says so, with the time of its last step (ADR-151)", () => {
+    const supervisor = session({ id: SUPERVISOR, repo: null, supervisor: true });
+    const stuck = session({ id: "s-main", repo: "web", state: state("Working"), stuck: { lastStepAt: "2026-10-30T08:40:00.000Z" } });
+
+    expect(supervisorSituation({ sessions: [supervisor, stuck], tasks: [], proposals: [] }, SUPERVISOR)).toBe(
+      `${HEADER}\n- a main session in web (session s-main), started by the user: may be stuck: no step since 2026-10-30T08:40:00.000Z`,
     );
   });
 

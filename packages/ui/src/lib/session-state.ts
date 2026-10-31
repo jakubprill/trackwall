@@ -21,6 +21,9 @@ export const STATE_LABELS = {
 /** The status of a task proposal wherever it shows (the Sessions list, “Needs you” on the dashboard): waiting for a decision. */
 export const PROPOSAL_STATUS = { tone: "warning", label: "waiting for your decision" } as const;
 
+/** No step of the agent for a long time in the middle of a turn (`Session.stuck`, ADR-151): a hint, not a certainty. */
+export const STUCK_LABEL = "may be stuck";
+
 /** `Input` the user has already seen (ADR-47): the agent is idle and no longer waits for you. */
 export const IDLE_LABEL = "idle";
 
@@ -69,6 +72,7 @@ export function sessionStateLabel(session: Session): { tone?: StatusTone; label:
       : { label: "finished" };
   }
   if (!state) return { label: "state unknown" };
+  if (session.stuck !== null) return { tone: "warning", label: STUCK_LABEL };
   return runningStateLabel(state, session.needsAttention, isIdle(session));
 }
 

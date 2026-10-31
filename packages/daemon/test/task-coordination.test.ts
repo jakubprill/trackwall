@@ -50,6 +50,7 @@ function view(id: string, taskId: string | null, state: TaskState | null, run: S
     state: state && { state, source: "hook", confidence: "high", reason: "hook", at: "2026-10-25T12:00:00.000Z" },
     windowTitle: null,
     needsAttention: false,
+    stuck: null,
     task: taskId,
     dialog: null,
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },

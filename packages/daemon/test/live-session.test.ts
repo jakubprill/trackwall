@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { RunState } from "@trackwall/protocol";
 import type { CopilotHookEvent, CopilotHookRecord } from "../src/modules/agents/copilot-hook-record.ts";
 import { LiveSession, type SessionEvent } from "../src/modules/agents/live-session.ts";
+import { STUCK_AFTER_MS } from "../src/modules/agents/session-stuck.ts";
 import { screenProcessed } from "./support/live-session.ts";
 
 const sessions: LiveSession[] = [];
@@ -853,5 +854,62 @@ describe("what the session's agent did, for its task's proposer (ADR-68)", () =>
     session.tick();
 
     expect(events).toEqual([{ kind: "error" }, { kind: "exited", exitCode: 1, stoppedByUser: false }]);
+  });
+});
+
+describe("a session that may be stuck (ADR-151)", () => {
+  const START = Date.parse("2026-10-31T09:00:00.000Z");
+  afterEach(() => setSystemTime());
+  const at = (ms: number) => setSystemTime(new Date(START + ms));
+  const hook = (hooksFile: string, event: CopilotHookEvent) =>
+    appendFileSync(hooksFile, `${JSON.stringify({ event, receivedAt: 0, payload: {}, omitted: [] })}\n`);
+
+  test("is one working for 15 minutes since its agent's last hook, although Copilot CLI keeps printing its spinner", () => {
+    at(0);
+    const { session, hooksFile } = runningSession();
+    hook(hooksFile, "userPromptSubmitted");
+    session.tick();
+
+    at(STUCK_AFTER_MS - 1);
+    session.output(new TextEncoder().encode("⠋ Running mvn verify (14m 59s)"));
+    expect(session.view()).toMatchObject({ state: { state: "Working" }, stuck: null });
+
+    at(STUCK_AFTER_MS);
+    expect(session.view()?.stuck).toEqual({ lastStepAt: "2026-10-31T09:00:00.000Z" });
+  });
+
+  test("is no longer stuck after the next hook, and one waiting for an approval is never stuck", () => {
+    at(0);
+    const { session, hooksFile } = runningSession();
+    hook(hooksFile, "userPromptSubmitted");
+    session.tick();
+    at(STUCK_AFTER_MS);
+    hook(hooksFile, "postToolUse");
+    session.tick();
+    expect(session.view()?.stuck).toBeNull();
+
+    appendFileSync(
+      hooksFile,
+      `${JSON.stringify({ event: "notification", receivedAt: 0, payload: { notification_type: "permission_prompt" }, omitted: [] })}\n`,
+    );
+    session.tick();
+    at(3 * STUCK_AFTER_MS);
+    expect(session.view()).toMatchObject({ state: { state: "Approval" }, stuck: null });
+  });
+
+  test("counts the user's key as a step, but not a mouse move the terminal reports", () => {
+    at(0);
+    const { session, hooksFile } = runningSession();
+    session.connect({ write: () => {}, resize: () => {} });
+    hook(hooksFile, "userPromptSubmitted");
+    session.tick();
+
+    at(10 * 60_000);
+    session.input("\u001b[<35;10;5M");
+    at(STUCK_AFTER_MS);
+    expect(session.view()?.stuck).toEqual({ lastStepAt: "2026-10-31T09:00:00.000Z" });
+
+    session.input("x");
+    expect(session.view()?.stuck).toBeNull();
   });
 });

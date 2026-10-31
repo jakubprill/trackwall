@@ -51,8 +51,9 @@ function taskStatus(session: Session | undefined): string {
   return sessionStatus(session);
 }
 
-/** What a running session does, in the words of `needsAttention` and its state (§4.4). */
+/** What a running session does, in the words of `needsAttention`, `stuck` (ADR-151) and its state (§4.4). */
 function sessionStatus(session: Session): string {
+  if (session.stuck !== null) return `may be stuck: no step since ${session.stuck.lastStepAt}`;
   const state = session.state?.state;
   if (state === "Approval") return "waits for the user's approval";
   if (state === "Plan") return "waits for the user to approve a plan";
