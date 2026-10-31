@@ -140,6 +140,14 @@ export class Verifications {
     return starting;
   }
 
+  /**
+   * The last verification of a task that has just ended, for its record in the task journal (ADR-150); `get` no longer
+   * shows it. `null` when there was none.
+   */
+  lastOfEnded(task: string): Verification | null {
+    return this.#byTask.get(task)?.verification ?? null;
+  }
+
   /** The task's last verification; `null` when there was none or the task has ended. */
   get(task: string): Verification | null {
     if (!this.#deps.tasks.findTask(task)) return null;

@@ -19,6 +19,7 @@ const {
   getTestResults,
   searchCode,
   searchCommits,
+  searchTaskHistory,
   whoCalls,
   subgraphFor,
   findEndpoint,
@@ -69,6 +70,8 @@ export const MCP_INSTRUCTIONS = [
     "changes (narrow with tags, repos and paths); prefer it to walking directories one repo at a time.",
   `- Find who changed something and when: ${searchCommits.name} searches the history of many repos at once for the ` +
     "commits that add or remove a text (a field, an endpoint path), or by message, author, paths and date.",
+  `- Learn from earlier work: ${searchTaskHistory.name} finds the tasks the user has ended by words, with their ` +
+    "summary, commits and files; look there before a change like one done before.",
   `- Before you change an endpoint, a DTO, a package or a config address, check whom it affects: ${findEndpoint.name} ` +
     `shows which endpoints of other repos call an endpoint and which it calls, ${whoCalls.name} which repos depend on a repo, ` +
     `${subgraphFor.name} its neighbourhood. In a task, after you commit, ${getChangedEndpoints.name} lists the endpoints ` +

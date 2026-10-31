@@ -195,6 +195,7 @@ const runs: ToolRuns = {
     facade.workspace.searchCode(query, await searchedRepos(facade, repos, tags)),
   searchCommits: async (facade, { repos, tags = [], ...query }) =>
     facade.workspace.searchCommits(query, await searchedRepos(facade, repos, tags)),
+  searchTaskHistory: async (facade, query) => facade.taskJournal.search(query),
   listSessions: async (facade, { repo }, { caller }) => {
     // The repo must exist (`not_found` as in get_repo): a typo in the id must not look like "no sessions".
     if (repo !== undefined) await facade.workspace.repo(repo);
@@ -333,6 +334,7 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.findEndpoint, runs.findEndpoint),
   defineTool(mcpTools.searchCode, runs.searchCode),
   defineTool(mcpTools.searchCommits, runs.searchCommits),
+  defineTool(mcpTools.searchTaskHistory, runs.searchTaskHistory),
   defineTool(mcpTools.listSessions, runs.listSessions),
   defineTool(mcpTools.getSession, runs.getSession),
   defineTool(mcpTools.getDayReport, runs.getDayReport),
