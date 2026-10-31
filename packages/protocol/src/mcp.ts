@@ -32,6 +32,7 @@ import {
   TaskTitle,
   visibleText,
 } from "./agents.ts";
+import { APP_CONFIG_KEY_MAX, APP_CONFIG_MAX_ENTRIES, APP_CONFIG_PROFILE_MAX, AppConfig, SPRING_DEFAULT_PROFILE } from "./app-config.ts";
 import { RepoCardResult, TagName } from "./cards.ts";
 import { CODE_SEARCH_LINE_MAX_CHARS, CODE_SEARCH_MAX_MATCHES, CodePathspecs, CodeQuery, SearchCodeResult } from "./code-search.ts";
 import { DAY_REPORT_COMMITS, DayReport } from "./day-start.ts";
@@ -502,6 +503,46 @@ export const mcpTools = {
       })
       .strict(),
     result: TestResults,
+  },
+  getAppConfig: {
+    name: "get_app_config",
+    readOnly: true,
+    description:
+      "A Spring app's configuration as the files in a repo root, or with task in that task's worktree, give it now (also " +
+      "uncommitted and git-ignored files such as application-local.yml): application* and bootstrap* (.yml, .yaml, " +
+      "and .properties) from every module's src/main/resources, in one profile's view (profile, default: the files without a " +
+      "profile; profiles lists the ones each module has, activeProfiles its spring.profiles.active). Each entry has key, " +
+      `the value with \${…} expanded from the files and defaults, and its file and line. Secrets (keys such as password, ` +
+      "secret, token, api-key, credentials) never come with a value: secret is true and set says whether it has one. " +
+      "env names the environment variables a value's placeholders read, each with set (true when a run there gets it, " +
+      "from your environment or mise [env]; never the value), and overriddenBy the variable Spring Boot takes instead of " +
+      "the file's value (SPRING_DATASOURCE_URL for spring.datasource.url). A placeholder the environment sets stays " +
+      `\${NAME}; an address loses its user, password and query. This is what the files say, not what a running app ` +
+      "resolved: command-line arguments and other property sources are not read. key narrows to keys starting with it " +
+      `(e.g. spring.datasource); at most ${APP_CONFIG_MAX_ENTRIES} entries.`,
+    args: z
+      .object({
+        repo: RepoArg,
+        task: TaskId.describe(
+          `id of a task of this repo (from ${LIST_SESSIONS}): the files in that task's worktree instead of the repo root`,
+        ).optional(),
+        profile: z
+          .string()
+          .max(APP_CONFIG_PROFILE_MAX)
+          .regex(/^[\w.-]+$/, "a Spring profile name: letters, digits, _, . and -")
+          .default(SPRING_DEFAULT_PROFILE)
+          .describe(
+            `the Spring profile to apply on top of the files without a profile, e.g. local; default: ${SPRING_DEFAULT_PROFILE}, the files without a profile`,
+          ),
+        key: z
+          .string()
+          .min(1)
+          .max(APP_CONFIG_KEY_MAX)
+          .optional()
+          .describe("only keys starting with this, compared as Spring does (ignoring case, - and _), e.g. spring.datasource"),
+      })
+      .strict(),
+    result: AppConfig,
   },
   whoCalls: {
     name: "who_calls",

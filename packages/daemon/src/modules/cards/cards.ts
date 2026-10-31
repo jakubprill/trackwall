@@ -1,4 +1,5 @@
 import {
+  type AppConfig,
   type CardWarmupProgress,
   type EndpointChanges,
   MISE_CONFIG_FILE,
@@ -10,6 +11,7 @@ import {
 } from "@trackwall/protocol";
 import { configOrProblem, DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
+import { type AppConfigEnv, appConfigView } from "./app-config.ts";
 import { CallReads, readCallFiles } from "./call-files.ts";
 import type { CardCache } from "./card-cache.ts";
 import { CardWarmup, type WarmupRepo } from "./card-warmup.ts";
@@ -17,8 +19,10 @@ import { endpointChanges } from "./endpoint-changes.ts";
 import { CALL_SOURCES, CARD_DOCUMENTS, CARD_SOURCES, extractCard, readsCardFile } from "./extract-card.ts";
 import { localMiseTasks } from "./local-mise.ts";
 import { readSnapshot, type SnapshotVcs } from "./read-snapshot.ts";
+import { readSpringConfigs } from "./spring-config.ts";
 import { CARD_PARSE_BUDGET_MS, loadSyntaxParsers, type SyntaxParsers, unavailableParsers, withParseBudget } from "./syntax-tree.ts";
 import { repoTags } from "./tags.ts";
+import { readWorkingConfig, type WorkingConfigVcs } from "./working-config.ts";
 
 /**
  * The `cards` module (§4, §4.6, ADR-25, ADR-30): the repo card from build, configuration and HTTP code files in the HEAD
@@ -27,7 +31,7 @@ import { repoTags } from "./tags.ts";
  */
 
 /** What `cards` needs from `vcs`; wired in the facade. */
-interface CardsVcs extends SnapshotVcs {
+interface CardsVcs extends SnapshotVcs, WorkingConfigVcs {
   headCommit(dir: string): Promise<string | null>;
   remote(dir: string): Promise<string | null>;
 }
@@ -163,6 +167,23 @@ export class Cards {
     if (head === null) throw new DomainError("repo_unavailable", `${repo}: the task's worktree has no commit`);
     const [before, after] = await Promise.all([this.cardAt(dir, base), this.cardAt(dir, head)]);
     return { head, before, after };
+  }
+
+  /**
+   * The Spring configuration in the working directory `dir` (a repo root or a task's worktree) in one profile's view,
+   * judged against the environment of a run there (ADR-153). Not cached: the files change without a commit.
+   */
+  async appConfig(
+    dir: string,
+    request: { profile: string; key: string | undefined },
+    env: AppConfigEnv,
+  ): Promise<Pick<AppConfig, "files" | "modules" | "truncated" | "problems">> {
+    const files = await readWorkingConfig(this.deps.vcs, dir);
+    const out = { problems: files.problems };
+    const view = appConfigView(readSpringConfigs(files, out), request, env);
+    // A parser's message quotes the lines around the error, which may hold a secret: only its first line is kept.
+    const problems = out.problems.map((p) => ({ ...p, message: env.mask(p.message.split("\n")[0] ?? "") }));
+    return { files: files.paths, ...view, problems };
   }
 
   private async cardAt(dir: string, commit: string): Promise<RepoCard> {

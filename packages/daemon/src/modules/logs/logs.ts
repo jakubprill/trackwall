@@ -81,8 +81,8 @@ export class Logs {
   }
 
   /** Text from a process (an HTTP response of a service, ADR-45) masked the same way as its log lines. */
-  mask(text: string, env: NodeJS.ProcessEnv): string {
-    return maskSecrets(text, secretValues(env));
+  mask(text: string, env: NodeJS.ProcessEnv, known: readonly string[] = []): string {
+    return maskSecrets(text, secretValues(env, known));
   }
 
   /** Output only for the state's last lines, masked the same way, but without a log (the PTY screen of a task session). */

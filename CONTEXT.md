@@ -245,6 +245,10 @@ A method and path that an HTTP client calls, with the line in the code, and for 
 **Profile** (Spring profile, `ConsumedHttp.profiles`):
 A name from `application-<profile>.yml` or `spring.config.activate.on-profile`; `default` is the configuration without a profile. A client with an address from configuration has a separate entry for every profile in which the address is different.
 
+**App configuration** (`AppConfig`, MCP tool `get_app_config`):
+One profile's view of a repo's Spring configuration files as they are on disk now, in the repo root or a task's worktree, with uncommitted and git-ignored files (ADR-153): every key with its expanded value, file and line, and the environment variables its placeholders read. A secret (a key such as `password`, `client-secret` or `api-key`) has no value in it, only whether it is set (`set`), and a variable only whether a run there has it. Unlike the card, it is not read from a commit.
+_Avoid_: app config dump, properties, env (the environment is only judged, never shown)
+
 **Required tool** (`ToolRequirement`):
 A tool and version from mise configuration or `.tool-versions` (source `mise`) or from a file that gives the version in its own way (`.nvmrc`, the Maven wrapper, `engines.node`; source `hint`).
 

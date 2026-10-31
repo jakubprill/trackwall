@@ -1,3 +1,4 @@
+import { SPRING_DEFAULT_PROFILE } from "@trackwall/protocol";
 import { isMap, isNode, isScalar, isSeq, LineCounter, type Node, type Pair, parseAllDocuments } from "yaml";
 import { messageOf } from "../../infra/errors.ts";
 import { type PlaceholderSource, type Resolved, resolvePlaceholders } from "./placeholders.ts";
@@ -11,8 +12,6 @@ import type { ProblemSink, RepoSnapshot } from "./snapshot.ts";
  * profile overridden by the profile's documents, and keys are compared as in Spring Boot (ignoring case, `-` and `_`).
  */
 
-/** The Spring profile of configuration without a profile; that is what Spring itself calls it. */
-export const DEFAULT_PROFILE = "default";
 /** A Spring configuration file in a module's resources: kind, profile from the name and extension. */
 const CONFIG_FILE = /(?:^|\/)src\/main\/resources\/(application|bootstrap)(?:-([^/]+?))?\.(ya?ml|properties)$/;
 /** How many entries to read from one file and how deep in YAML: more is not app configuration (§8). */
@@ -58,13 +57,23 @@ export class ModuleConfig {
     const all = [...new Set(docs.flatMap((d) => d.profiles ?? []))].sort();
     this.profiles = all.slice(0, MAX_PROFILES);
     this.skippedProfiles = all.length - this.profiles.length;
-    this.views.set(DEFAULT_PROFILE, merge(base));
+    this.views.set(SPRING_DEFAULT_PROFILE, merge(base));
     for (const p of this.profiles) this.views.set(p, merge([...base, ...docs.filter((d) => d.profiles?.includes(p))]));
   }
 
   /** The key's entry in the profile's view (without expanding). */
-  entry(key: string, profile: string = DEFAULT_PROFILE): ConfigEntry | undefined {
-    return this.views.get(profile)?.get(normalizeKey(key));
+  entry(key: string, profile: string = SPRING_DEFAULT_PROFILE): ConfigEntry | undefined {
+    return this.view(profile).get(normalizeKey(key));
+  }
+
+  /** The entries of the profile's view in file order. */
+  entries(profile: string = SPRING_DEFAULT_PROFILE): ConfigEntry[] {
+    return [...this.view(profile).values()];
+  }
+
+  /** A profile the files do not name adds nothing, as in Spring: its view is the one without a profile. */
+  private view(profile: string): Map<string, ConfigEntry> {
+    return this.views.get(profile) ?? this.views.get(SPRING_DEFAULT_PROFILE) ?? new Map();
   }
 
   /** The (normalised) keys of all views. */
@@ -82,7 +91,7 @@ export class ModuleConfig {
   }
 
   /** The text with `${…}` expanded in the profile's view. */
-  resolve(text: string, profile: string = DEFAULT_PROFILE): Resolved {
+  resolve(text: string, profile: string = SPRING_DEFAULT_PROFILE): Resolved {
     return resolvePlaceholders(text, (key) => this.entry(key, profile));
   }
 
@@ -105,9 +114,9 @@ export function normalizeKey(key: string): string {
 }
 
 /** The configuration of every module with Spring files; a module is the directory above `src/main/resources`. */
-export function readSpringConfigs(snapshot: RepoSnapshot, out: ProblemSink): Map<string, ModuleConfig> {
+export function readSpringConfigs(snapshot: Pick<RepoSnapshot, "paths" | "text">, out: ProblemSink): Map<string, ModuleConfig> {
   const byModule = new Map<string, ConfigDoc[]>();
-  for (const path of [...snapshot.paths.filter(readsSpringConfigFile)].sort(byLoadOrder)) {
+  for (const path of [...snapshot.paths.filter(readsSpringConfigFile)].sort(springLoadOrder)) {
     const text = snapshot.text(path);
     if (text === undefined) continue;
     const module = moduleOf(path);
@@ -139,7 +148,7 @@ export function moduleOf(path: string): string {
  * The order in which Spring reads files: every `bootstrap*` before every `application*`, within them a profile file
  * (`application-prod.yml`) after the file without a profile, also after its `on-profile` documents, and YAML before `.properties`.
  */
-function byLoadOrder(a: string, b: string): number {
+export function springLoadOrder(a: string, b: string): number {
   return rank(a) - rank(b) || (a < b ? -1 : a > b ? 1 : 0);
 }
 

@@ -1,7 +1,14 @@
-import { type ConsumedHttp, type HttpMethod, HttpMethod as HttpMethodSchema, lbAppName, withoutCredentials } from "@trackwall/protocol";
+import {
+  type ConsumedHttp,
+  type HttpMethod,
+  HttpMethod as HttpMethodSchema,
+  lbAppName,
+  SPRING_DEFAULT_PROFILE,
+  withoutCredentials,
+} from "@trackwall/protocol";
 import { annotationArgs, enumNames, type Lookup, stringValues } from "./java-expr.ts";
 import type { JavaAnnotation, JavaType } from "./java-source.ts";
-import { DEFAULT_PROFILE, type ModuleConfig } from "./spring-config.ts";
+import type { ModuleConfig } from "./spring-config.ts";
 
 /**
  * Shared by the Spring extractors (§4.6, ADR-30): the module with its configuration, reading mappings (`@*Mapping`,
@@ -91,7 +98,7 @@ export function urlVariants(module: SpringModule, text: string): UrlVariant[] {
     return { value: withoutCredentials(value), profiles: [profile], source: source ? { path: source.path, line: source.line } : null };
   };
   // A profile with the same value as `default` does not change it, so it is not listed.
-  const variants = [variant(DEFAULT_PROFILE)];
+  const variants = [variant(SPRING_DEFAULT_PROFILE)];
   for (const profile of module.config.profiles) {
     const next = variant(profile);
     if (next.value === variants[0]?.value) continue;

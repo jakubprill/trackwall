@@ -17,6 +17,7 @@ const {
   tail,
   getErrors,
   getTestResults,
+  getAppConfig,
   searchCode,
   whoCalls,
   subgraphFor,
@@ -76,7 +77,9 @@ export const MCP_INSTRUCTIONS = [
     "part of the path, then open the controller or the OpenAPI spec it finds.",
   `- Diagnose a failure: ${getErrors.name} gives the errors from the logs of all mise tasks with their stack traces and ` +
     `root cause; ${tail.name} reads the log of one mise task (${getRepo.name} lists them), from an error on with sinceSeq ` +
-    "one less than its seq. In both, pass nextSeq as sinceSeq to get only what is new.",
+    "one less than its seq. In both, pass nextSeq as sinceSeq to get only what is new. When a Spring app fails on its " +
+    `configuration (a missing property, a wrong URL, a datasource that does not connect), ${getAppConfig.name} gives what its ` +
+    "files set in a profile, with which secrets and environment variables are set, without their values.",
   `- Build, test or run a service: ${runMiseTask.name} runs a mise task listed by ${getRepo.name} in the repo root, ` +
     "or with task in that task's worktree, which has the task's changes (a task session passes its own task); " +
     `${waitForMiseTask.name} waits for its exit code and ${tail.name} gives its output, with the same task; ` +

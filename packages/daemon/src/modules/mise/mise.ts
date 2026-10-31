@@ -132,6 +132,13 @@ export interface SessionMiseEnv extends MiseEnv {
   profile: string | null;
 }
 
+/** The environment of a run: every variable, the values of its secrets, and why mise's `[env]` is not in it (`null` when it is or there is no mise). */
+export interface RunEnv {
+  env: NodeJS.ProcessEnv;
+  secretValues: string[];
+  problem: string | null;
+}
+
 /** A place a session's environment can come from: where mise runs, or a `DomainError` when the place is refused. */
 interface EnvPlace {
   label: string;
@@ -366,6 +373,30 @@ export class Mise {
       env[key] = inherited ? `${inherited},${profile}` : profile;
     }
     return { ...(await this.sessionEnvIn(place, env)), profile };
+  }
+
+  /**
+   * The environment a run of `target` gets (ADR-153), for telling which variables are set: the user's, in a task's
+   * worktree with the task port, and mise's `[env]` there, with the values of the secrets among them to mask. A place
+   * mise refuses or cannot read gives the rest, with mise's reason in `problem`.
+   */
+  async runEnv(target: MiseTarget): Promise<RunEnv> {
+    const env = await this.deps.env();
+    let where: { dir: string; env: NodeJS.ProcessEnv };
+    try {
+      where =
+        target.task === null
+          ? { dir: await this.deps.repos.repoPath(target.repo), env }
+          : await this.worktreePlace(target.task, target.repo, env).where();
+    } catch (err) {
+      if (!(err instanceof DomainError)) throw err;
+      return { env, secretValues: [], problem: err.message };
+    }
+    const read = await readMiseEnv(this.deps.command, where.dir, where.env);
+    if (read.kind === "not_installed") return { env: where.env, secretValues: [], problem: null };
+    if (read.kind === "error") return { env: where.env, secretValues: [], problem: read.message };
+    const problem = read.kind === "unredacted" ? read.message : null;
+    return { env: { ...where.env, ...read.env.vars }, secretValues: read.env.secretValues, problem };
   }
 
   /** The projects folder's environment as mise gives it without a session profile, for the view of the config files (ADR-108). */

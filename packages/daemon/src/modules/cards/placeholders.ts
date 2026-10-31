@@ -1,8 +1,9 @@
 /**
  * Expanding `${key}` and `${key:default}` the way Spring does (§4.6, ADR-30): the value from the profile's configuration
  * view, and without it the default after the colon (also nested, `${a:${b:c}}`). A key that is missing and has no
- * default (usually an environment variable, `${ORDERS_URL}`) stays in the text. The values come from the repo (§8): the
- * depth and length of the result are limited, and every key is resolved once per expansion.
+ * default (usually an environment variable, `${ORDERS_URL}`) stays in the text; `expandPlaceholders` also takes the
+ * keys the environment sets (ADR-153). The values come from the repo (§8): the depth and length of the result are
+ * limited, and every key is resolved once per expansion.
  */
 
 const MAX_DEPTH = 10;
@@ -22,15 +23,40 @@ export interface Resolved {
 }
 
 export function resolvePlaceholders(text: string, get: (key: string) => PlaceholderSource | undefined): Resolved {
-  return new Resolver(get).resolve(text, 0);
+  return new Resolver(get, () => false).resolve(text, 0);
+}
+
+/** An expansion that also says which keys came from outside the configuration and which had no value at all. */
+export interface Expanded extends Resolved {
+  /** Keys `outside` set, in the order met; each stays as `${key}` in the value. */
+  outside: string[];
+  /** Keys without an entry, a default or a value outside; each stays as its `${…}` in the value. */
+  missing: string[];
+}
+
+/**
+ * Expanding as Spring does with another property source before the configuration files (the environment, ADR-153):
+ * a key `outside` sets wins over the files and its default and stays as `${key}`, since its value is not read here.
+ */
+export function expandPlaceholders(
+  text: string,
+  get: (key: string) => PlaceholderSource | undefined,
+  outside: (key: string) => boolean,
+): Expanded {
+  const resolver = new Resolver(get, outside);
+  return { ...resolver.resolve(text, 0), outside: [...resolver.outside], missing: [...resolver.missing] };
 }
 
 class Resolver {
   private readonly get: (key: string) => PlaceholderSource | undefined;
+  private readonly isOutside: (key: string) => boolean;
   private readonly memo = new Map<string, Resolved | undefined>();
+  readonly outside = new Set<string>();
+  readonly missing = new Set<string>();
 
-  constructor(get: (key: string) => PlaceholderSource | undefined) {
+  constructor(get: (key: string) => PlaceholderSource | undefined, isOutside: (key: string) => boolean) {
     this.get = get;
+    this.isOutside = isOutside;
   }
 
   resolve(text: string, depth: number): Resolved {
@@ -57,9 +83,15 @@ class Resolver {
   private placeholder(inner: string, depth: number): Resolved | undefined {
     const colon = topLevelColon(inner);
     const key = colon < 0 ? inner : inner.slice(0, colon);
+    if (this.isOutside(key)) {
+      this.outside.add(key);
+      return { value: `\${${key}}`, source: undefined };
+    }
     const fromKey = depth < MAX_DEPTH ? this.key(key, depth) : undefined;
     if (fromKey) return fromKey;
-    return colon < 0 ? undefined : this.resolve(inner.slice(colon + 1), depth + 1);
+    if (colon >= 0) return this.resolve(inner.slice(colon + 1), depth + 1);
+    this.missing.add(key);
+    return undefined;
   }
 
   private key(key: string, depth: number): Resolved | undefined {
