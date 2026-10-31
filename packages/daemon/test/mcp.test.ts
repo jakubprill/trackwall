@@ -99,6 +99,7 @@ describe("MCP server over Streamable HTTP", () => {
       "tail",
       "get_errors",
       "get_test_results",
+      "get_app_config",
       "who_calls",
       "subgraph_for",
       "find_endpoint",

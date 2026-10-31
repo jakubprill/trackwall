@@ -85,6 +85,12 @@ export class Logs {
     return maskSecrets(text, secretValues(env));
   }
 
+  /** Masking of many texts with the secrets of `env` and the `known` ones, found once. */
+  masker(env: NodeJS.ProcessEnv, known: readonly string[]): (text: string) => string {
+    const secrets = secretValues(env, known);
+    return (text) => maskSecrets(text, secrets);
+  }
+
   /** Output only for the state's last lines, masked the same way, but without a log (the PTY screen of a task session). */
   lastLinesOnly(env: NodeJS.ProcessEnv, secrets: readonly string[] = []): RunOutput {
     return new RunOutput(secretValues(env, secrets), () => {});

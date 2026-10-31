@@ -188,6 +188,7 @@ const runs: ToolRuns = {
     return facade.logs.errors({ repo, task, ...query });
   },
   getTestResults: (facade, { repo, task, since }) => facade.testReports.results(miseTarget(facade, repo, task), since),
+  getAppConfig: (facade, { repo, task, profile, key }) => facade.appConfig({ ...miseTarget(facade, repo, task), profile, key }),
   whoCalls: (facade, { repo }) => facade.graph.whoCalls(repo),
   subgraphFor: (facade, { repo, depth }) => facade.graph.subgraph(repo, depth),
   findEndpoint: (facade, { query, method }) => facade.graph.findEndpoint(query, method),
@@ -333,6 +334,7 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.tail, runs.tail),
   defineTool(mcpTools.getErrors, runs.getErrors),
   defineTool(mcpTools.getTestResults, runs.getTestResults),
+  defineTool(mcpTools.getAppConfig, runs.getAppConfig),
   defineTool(mcpTools.whoCalls, runs.whoCalls),
   defineTool(mcpTools.subgraphFor, runs.subgraphFor),
   defineTool(mcpTools.findEndpoint, runs.findEndpoint),

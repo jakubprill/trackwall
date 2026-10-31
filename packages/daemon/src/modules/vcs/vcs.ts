@@ -317,6 +317,20 @@ export class Vcs {
   }
 
   /**
+   * The paths the index tracks that match the `globs` (git's `**` and `*`, relative to the root, with `/`), cut at
+   * `maxBytes` of output (`truncated`); for finding where in the working directory to read (ADR-153).
+   */
+  async trackedFiles(dir: string, globs: readonly string[], maxBytes: number): Promise<{ paths: string[]; truncated: boolean }> {
+    const { stdout, truncated } = await git(dir, ["ls-files", "-z", "--", ...globs.map((g) => `:(glob)${g}`)], { maxBytes });
+    const paths = stdout
+      .toString("utf8")
+      .split("\0")
+      .filter((path) => path !== "");
+    // The last record of cut output may be an incomplete path.
+    return { paths: truncated ? paths.slice(0, -1) : paths, truncated };
+  }
+
+  /**
    * All files of a commit with their sizes and blob ids, without directories and submodules; `truncated` when the list exceeded
    * `maxBytes` of output (a repo with hundreds of thousands of files) and is incomplete.
    */
