@@ -1,4 +1,4 @@
-import type { McpAuditRevision } from "@trackwall/protocol";
+import { MCP_AUDIT_MAX_CALLS, type McpAuditRevision } from "@trackwall/protocol";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { McpCallList } from "@/components/McpCallList";
@@ -16,8 +16,8 @@ export function McpCallsSurface({ conn, live }: { conn: Connection; live: LiveFe
       <div className="flex flex-col gap-3 p-4">
         <p className="text-muted-foreground text-sm">
           Every call an agent made to Trackwall's tools, newest first: which agent, the repo, task or mise task it named, and how the call
-          ended. Prompts, messages, request bodies and search text are not kept. The last 500 calls stay on this computer, also after a
-          restart.
+          ended. Prompts, messages, request bodies and search text are not kept. The last {MCP_AUDIT_MAX_CALLS} calls stay on this computer,
+          also after a restart.
         </p>
         {audit.error && <ErrorWithRetry message={audit.error} onRetry={audit.reload} />}
         {!calls && !audit.error && <Loading />}

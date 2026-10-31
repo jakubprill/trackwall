@@ -1,4 +1,4 @@
-import type { McpCall, McpCallEffect, McpCaller } from "@trackwall/protocol";
+import { isSupervisor, type McpCall, type McpCallEffect, type McpCaller } from "@trackwall/protocol";
 import { relativeTime } from "./format.ts";
 
 /** Which calls the MCP calls list shows (ADR-152): all, those that write or run something, or those that failed. */
@@ -34,8 +34,7 @@ export function mcpCallEntry(call: McpCall, now: Date) {
     effect: EFFECT_LABELS[call.effect],
     caller: callerLabel(call.caller),
     args: argsLabel(call.args),
-    failed: call.outcome.kind === "error",
-    outcome: call.outcome.kind === "ok" ? "ok" : `${call.outcome.code}: ${call.outcome.message}`,
+    error: call.outcome.kind === "ok" ? null : `${call.outcome.code}: ${call.outcome.message}`,
     when: `${relativeTime(call.at, now)} · ${call.durationMs} ms`,
   };
 }
@@ -43,14 +42,14 @@ export function mcpCallEntry(call: McpCall, now: Date) {
 /** Who called, as it was at the call: the session's place survives the session. */
 export function callerLabel(caller: McpCaller | null): string {
   if (caller === null) return "Agent outside Trackwall";
-  if (caller.supervisor) return "Supervisor";
+  if (isSupervisor(caller)) return "Supervisor";
+  // In the projects folder and not the supervisor: a free session (`isFreeSession`, ADR-100).
   if (caller.repo === null) return "Free session";
   return caller.task === null ? `Session in ${caller.repo}` : `Task in ${caller.repo}`;
 }
 
 /** `repo=shop task=3f2a9c1e`: the identifiers the call named, a UUID by its start; `null` when none were kept. */
 function argsLabel(args: McpCall["args"]): string | null {
-  if (args === null) return null;
   const parts = Object.entries(args).map(([key, value]) => `${key}=${valueLabel(value)}`);
   return parts.length > 0 ? parts.join(" ") : null;
 }

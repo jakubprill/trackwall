@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { appendFileSync, existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MCP_AUDIT_MAX_CALLS, type McpCall } from "@trackwall/protocol";
@@ -71,7 +71,7 @@ describe("the MCP audit (ADR-152)", () => {
   test("the file starts again at 1 MB, and the calls kept in memory survive a restart across both files", () => {
     const dir = newDir();
     const audit = new McpAudit({ dir, log: () => {} });
-    const previous = join(dir, "mcp-calls.prev.jsonl");
+    const previous = join(dir, "mcp-calls.1.jsonl");
     let recorded = 0;
     while (!existsSync(previous)) audit.record(call("get_repo", { args: { repo: `repo-${recorded++}` } }));
     // A few calls into the new file: the newest ones are in it, the rest of the kept ones in the previous file.
@@ -85,6 +85,24 @@ describe("the MCP audit (ADR-152)", () => {
     expect(restarted.at(-1)?.args).toEqual({ repo: `repo-${recorded - MCP_AUDIT_MAX_CALLS}` });
   });
 
+  test("a rotation that fails is reported once, and the calls keep going into the growing file", () => {
+    const dir = newDir();
+    // A folder with a file where the rotated file goes: renaming onto it fails, as a file held open on Windows does.
+    mkdirSync(join(dir, "mcp-calls.1.jsonl", "taken"), { recursive: true });
+    const logs: string[] = [];
+    const audit = new McpAudit({ dir, log: (msg) => logs.push(msg) });
+    let recorded = 0;
+    while (statSync(join(dir, "mcp-calls.jsonl"), { throwIfNoEntry: false }) === undefined || recorded < 8000)
+      audit.record(call("get_repo", { args: { repo: `repo-${recorded++}` } }));
+
+    expect(statSync(join(dir, "mcp-calls.jsonl")).size).toBeGreaterThan(1024 * 1024);
+    expect(logs.filter((l) => l.startsWith("failed to rotate the MCP audit"))).toHaveLength(1);
+    expect(logs.filter((l) => l.startsWith("failed to write"))).toEqual([]);
+    expect(readFileSync(join(dir, "mcp-calls.jsonl"), "utf8")).toEndWith(
+      `"repo":"repo-${recorded - 1}"},"outcome":{"kind":"ok"},"durationMs":3}\n`,
+    );
+  });
+
   test("a call that cannot be written stays in the list and goes to the log, without an error for the agent", () => {
     const dir = newDir();
     // A file where the audit's folder should be: every write fails.
@@ -95,8 +113,7 @@ describe("the MCP audit (ADR-152)", () => {
 
     expect(() => audit.record(call("list_repos"))).not.toThrow();
     expect(audit.list().calls.map((c) => c.tool)).toEqual(["list_repos"]);
-    expect(logs).toHaveLength(1);
-    expect(logs[0]).toStartWith("failed to write the MCP audit:");
+    expect(logs.filter((l) => l.startsWith("failed to write the MCP audit:"))).toHaveLength(1);
     expect(readFileSync(notADir, "utf8")).toBe("");
   });
 });

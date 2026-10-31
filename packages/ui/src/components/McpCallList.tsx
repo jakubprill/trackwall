@@ -41,7 +41,7 @@ export function McpCallList({ calls, showCaller }: { calls: readonly McpCall[]; 
                 <span className="text-muted-foreground ml-auto shrink-0 text-xs">{entry.when}</span>
               </span>
               {entry.args && <span className="text-muted-foreground font-mono text-xs break-all">{entry.args}</span>}
-              {entry.failed && <span className="text-destructive font-mono text-xs break-words">{entry.outcome}</span>}
+              {entry.error && <span className="text-destructive font-mono text-xs break-words">{entry.error}</span>}
             </li>
           );
         })}

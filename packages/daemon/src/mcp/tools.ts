@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/server";
+import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import {
   type AgentRepo,
   type AgentSession,
@@ -10,6 +10,7 @@ import {
   type McpCallOutcome,
   type McpTool,
   type MiseTarget,
+  mcpToolEffect,
   mcpTools,
   miseTaskLogSource,
   type Repo,
@@ -89,6 +90,7 @@ function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
   // through the tool's schema once more (the SDK already checks them before the call), which gives their exact type without a cast.
   const inputSchema: z.ZodObject = tool.args;
   const outputSchema: z.ZodObject = tool.result;
+  const effect = mcpToolEffect(tool);
   return (server, ctx) => {
     server.registerTool(
       tool.name,
@@ -96,39 +98,48 @@ function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
         description: tool.description,
         inputSchema,
         outputSchema,
-        annotations: { readOnlyHint: tool.readOnly, destructiveHint: !tool.readOnly && tool.destructive, openWorldHint: false },
+        annotations: { readOnlyHint: effect === "read", destructiveHint: effect === "destructive", openWorldHint: false },
       },
       async (args, extra) => {
         const started = Date.now();
         // The calling session goes into the log, because a proposal and a summary write something on its behalf.
         const label = ctx.caller === null ? tool.name : `${tool.name} (session ${ctx.caller})`;
-        let audited: Record<string, unknown> | null = null;
-        const audit = (outcome: McpCallOutcome) =>
-          ctx.facade.mcpAudit.record({
-            at: new Date(started).toISOString(),
-            tool: tool.name,
-            effect: tool.readOnly ? "read" : tool.destructive ? "destructive" : "write",
-            caller: auditCaller(ctx.facade, ctx.caller),
-            args: audited,
-            outcome,
-            durationMs: Date.now() - started,
-          });
-        try {
-          const parsed = parseArgs(tool.args, args);
-          audited = auditView(parsed, tool.auditArgs);
-          // A destructive tool (it runs or stops repo code) logs its arguments before acting: this line
-          // says who ran what (ADR-41). Their arguments are identifiers, never free text.
-          if (!tool.readOnly && tool.destructive) ctx.log(`${label}: ${JSON.stringify(audited)}`);
-          const result = tool.result.parse(await run(ctx.facade, parsed, { caller: ctx.caller, signal: extra.mcpReq.signal }));
-          ctx.log(`${label}: ok in ${Date.now() - started} ms`);
-          audit({ kind: "ok" });
-          return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };
-        } catch (err) {
-          ctx.log(`${label}: error in ${Date.now() - started} ms: ${String(err)}`);
-          const failure = toolError(ctx.facade, tool.name, err);
-          audit({ kind: "error", ...failure });
-          return { content: [{ type: "text", text: `${failure.code}: ${failure.message}` }], isError: true };
-        }
+        // Read now, while the session the token named a moment ago is listed: a long call can outlive it (ADR-152).
+        const caller = auditCaller(ctx.facade, ctx.caller);
+        // The SDK has checked the arguments against the tool's schema already, so what the audit keeps is known before the tool runs.
+        const audited = auditView(args, tool.auditArgs);
+        const answer = async (): Promise<{ outcome: McpCallOutcome; response: CallToolResult }> => {
+          try {
+            const parsed = parseArgs(tool.args, args);
+            // A destructive tool (it runs or stops repo code) logs its arguments before acting: this line
+            // says who ran what (ADR-41). Their arguments are identifiers, never free text.
+            if (effect === "destructive") ctx.log(`${label}: ${JSON.stringify(audited)}`);
+            const result = tool.result.parse(await run(ctx.facade, parsed, { caller: ctx.caller, signal: extra.mcpReq.signal }));
+            ctx.log(`${label}: ok in ${Date.now() - started} ms`);
+            return {
+              outcome: { kind: "ok" },
+              response: { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result },
+            };
+          } catch (err) {
+            ctx.log(`${label}: error in ${Date.now() - started} ms: ${String(err)}`);
+            const failure = toolError(ctx.facade, tool.name, err);
+            return {
+              outcome: { kind: "error", ...failure },
+              response: { content: [{ type: "text", text: `${failure.code}: ${failure.message}` }], isError: true },
+            };
+          }
+        };
+        const { outcome, response } = await answer();
+        ctx.facade.mcpAudit.record({
+          at: new Date(started).toISOString(),
+          tool: tool.name,
+          effect,
+          caller,
+          args: audited,
+          outcome,
+          durationMs: Date.now() - started,
+        });
+        return response;
       },
     );
   };
@@ -389,21 +400,22 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
  * The arguments the audit keeps and a destructive tool logs: only the ones its contract names (the rest may be free text
  * with secrets), and only those the call gave or that have a default.
  */
-function auditView(args: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
+function auditView(args: Readonly<Record<string, unknown>>, keys: readonly string[]): Record<string, unknown> {
   return Object.fromEntries(keys.filter((k) => args[k] !== undefined).map((k) => [k, args[k]]));
 }
 
 /**
- * The calling session as it is now (ADR-152), so its entry still says where it worked once it is gone. The token named
- * a listed session a moment ago; one that ended during the call keeps only its id.
+ * The calling session as it is when the call comes (ADR-152), so its entry still says where it worked once it is gone.
+ * The token named a listed session a moment ago; one that ended in between keeps only its id.
  */
 function auditCaller(facade: Facade, caller: string | null): McpCaller | null {
   if (caller === null) return null;
   try {
     const { repo, task, supervisor } = facade.agents.session(caller);
     return { session: caller, repo, task, supervisor };
-  } catch {
-    return { session: caller, repo: null, task: null, supervisor: false };
+  } catch (err) {
+    if (err instanceof DomainError && err.code === "not_found") return { session: caller, repo: null, task: null, supervisor: false };
+    throw err;
   }
 }
 

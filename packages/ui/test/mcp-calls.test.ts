@@ -31,8 +31,7 @@ describe("the MCP calls list (ADR-152)", () => {
       effect: "runs or stops code",
       caller: "Task in shop",
       args: "repo=shop task=3f2a9c1e miseTask=test",
-      failed: false,
-      outcome: "ok",
+      error: null,
       when: "5 min ago · 12 ms",
     });
   });
@@ -40,13 +39,11 @@ describe("the MCP calls list (ADR-152)", () => {
   test("a failed read shows the code and text the agent got, and a read has no effect label", () => {
     const entry = mcpCallEntry(FAILED, NOW);
     expect(entry.effect).toBeNull();
-    expect(entry.failed).toBe(true);
-    expect(entry.outcome).toBe('not_found: no repo "shpo" in the projects folder');
+    expect(entry.error).toBe('not_found: no repo "shpo" in the projects folder');
   });
 
   test("a call without kept arguments shows none, a list of repos is joined", () => {
     expect(mcpCallEntry({ ...READ, tool: "list_services", args: {} }, NOW).args).toBeNull();
-    expect(mcpCallEntry({ ...READ, args: null }, NOW).args).toBeNull();
     expect(mcpCallEntry({ ...READ, tool: "search_code", args: { repos: ["shop", "orders"] } }, NOW).args).toBe("repos=shop,orders");
   });
 

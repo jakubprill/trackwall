@@ -154,6 +154,7 @@
                       "!../../infra/errors.ts",
                       "!../../infra/atomic-write.ts",
                       "!../../infra/state-file.ts",
+                      "!../../infra/rotating-jsonl-file.ts",
                       "!../../infra/map-limit.ts",
                       "!../../infra/loopback.ts",
                       "!../../infra/env-key.ts",

@@ -8,8 +8,9 @@ import {
   type LogTail,
   type LogTailRequest,
 } from "@trackwall/protocol";
+import { RotatingJsonlFile } from "../../infra/rotating-jsonl-file.ts";
 import { collectErrors } from "./log-errors.ts";
-import { LogFile, logFilePath, otherTaskLogDirs, removeLogDir, sourceParts, TASK_LOG_KIND, taskLogDir } from "./log-file.ts";
+import { logFilePath, otherTaskLogDirs, removeLogDir, sourceParts, TASK_LOG_KIND, taskLogDir } from "./log-file.ts";
 import { atLeast, containsText } from "./log-filter.ts";
 import { logLevel } from "./log-level.ts";
 import { RunOutput } from "./run-output.ts";
@@ -43,7 +44,7 @@ interface SourceLog {
   chars: number;
   /** The `seq` of the last record that fell out of the buffer; an older cursor means something was lost. */
   evictedSeq: number;
-  readonly file: LogFile;
+  readonly file: RotatingJsonlFile;
   /** A file write error already reported in the daemon log; reported once, until the next successful write. */
   writeErrorReported: boolean;
   /** A full write buffer (records do not reach the file) already reported; also once, until the next successful write. */
@@ -219,7 +220,7 @@ export class Logs {
     let log = this.sources.get(key);
     if (!log) {
       const path = logFilePath(this.deps.dir, source);
-      const file = new LogFile(path, this.deps.maxFileBytes, (err) =>
+      const file = new RotatingJsonlFile(path, this.deps.maxFileBytes, (err) =>
         this.deps.log(`rotating ${path}: ${String(err)}; the file grows past the limit until the next successful rotation`),
       );
       log = { source, records: [], chars: 0, evictedSeq: 0, file, writeErrorReported: false, overflowReported: false };

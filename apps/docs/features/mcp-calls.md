@@ -19,9 +19,9 @@ See every call an agent made to Trackwall's tools, which agent made it, what it 
 
 Every call an agent makes to Trackwall's [MCP server](/features/mcp) is noted when it ends: the tool, when it came and how long it took, who called, and how it ended. A call that runs or stops code, such as `run_mise_task`, `start_service` or `call_endpoint`, is marked "runs or stops code"; one that only writes text, such as a task proposal or a message, "writes".
 
-Only names are kept from what the agent sent: the repo, the task, the session, the mise task, a board item, a method. Free text is never kept: not a task's prompt, a message, a search pattern, the path, headers or body of an endpoint call. So the list says that the agent called `/api` of `orders-bff`, never with what.
+Only names are kept from what the agent sent: the repo, the task, the session, the mise task, a board item, a method. Free text is never kept: not a task's prompt, a message, a search pattern, the path, headers or body of an endpoint call. So the list says that the agent sent a `POST` to `shop`, never to which path or with what.
 
-"MCP calls" in "Settings > Agents" shows the calls of every agent, newest first, as they come. The "MCP calls" tab in a task's panel shows only the calls of that task's sessions, also those of a session that has ended. "Changes" leaves out the calls that only read, and "Errors" shows only the failed ones.
+"MCP calls" in "Settings > Agents" shows the calls of every agent, newest first, as they come. The "MCP calls" tab in a task's panel shows only the calls of that task's sessions, also those of a session that has ended, and reads them again every few seconds. "Changes" leaves out the calls that only read, and "Errors" shows only the failed ones.
 
 ## Use it
 

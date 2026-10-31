@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { SessionId, TaskId } from "./agents.ts";
+import { Session, SessionId, TaskId } from "./agents.ts";
 import { apiEndpoints } from "./api.ts";
-import { RepoId } from "./workspace.ts";
+import type { McpTool } from "./mcp.ts";
 
 /**
  * Contract of the `mcp-audit` module (ADR-152): every MCP tool call the daemon answered, with who called, the
@@ -21,18 +21,18 @@ export const MCP_AUDIT_MAX_ERROR_CHARS = 300;
  * The Trackwall session that called, as it was at the call, so the entry still says where it worked after the session
  * is gone. `null` in `McpCall.caller` is an agent outside Trackwall, with the daemon token.
  */
-export const McpCaller = z.object({
-  session: SessionId,
-  /** `null`: the session works in the projects folder (the supervisor or a free session). */
-  repo: RepoId.nullable(),
-  task: TaskId.nullable(),
-  supervisor: z.boolean(),
-});
+export const McpCaller = Session.pick({ repo: true, task: true, supervisor: true }).extend({ session: SessionId });
 export type McpCaller = z.infer<typeof McpCaller>;
 
 /** What the tool may do, from its contract: read Trackwall's state, write text for a human or an agent, or run or stop repo code. */
 export const McpCallEffect = z.enum(["read", "write", "destructive"]);
 export type McpCallEffect = z.infer<typeof McpCallEffect>;
+
+/** A tool's effect from its contract; the daemon also builds the tool's MCP annotations from it (`readOnlyHint`, `destructiveHint`). */
+export function mcpToolEffect(tool: McpTool): McpCallEffect {
+  if (tool.readOnly) return "read";
+  return tool.destructive ? "destructive" : "write";
+}
 
 export const McpCallOutcome = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("ok") }),
@@ -43,13 +43,13 @@ export type McpCallOutcome = z.infer<typeof McpCallOutcome>;
 
 /** One answered tool call. */
 export const McpCall = z.object({
-  /** ISO 8601, when the call came. */
-  at: z.string(),
+  /** When the call came. */
+  at: z.iso.datetime(),
   tool: z.string(),
   effect: McpCallEffect,
   caller: McpCaller.nullable(),
-  /** The identifier arguments the tool's contract names, as the tool read them; `null` when they failed its schema. */
-  args: z.record(z.string(), z.unknown()).nullable(),
+  /** The identifier arguments the tool's contract names (`auditArgs`), those the call gave or that have a default. */
+  args: z.record(z.string(), z.unknown()),
   outcome: McpCallOutcome,
   durationMs: z.number().int().nonnegative(),
 });

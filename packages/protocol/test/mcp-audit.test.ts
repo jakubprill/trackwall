@@ -1,25 +1,37 @@
 import { expect, test } from "bun:test";
 import { z } from "zod";
+import { SessionId, TaskId, TaskModel } from "../src/agents.ts";
+import { BoardItemId } from "../src/board.ts";
+import { TagName } from "../src/cards.ts";
 import { mcpTools } from "../src/mcp.ts";
+import { MiseTaskName } from "../src/mise.ts";
+import { RepoId } from "../src/workspace.ts";
 
 /**
- * What an audited argument's schema may be (ADR-152): something that cannot hold free text. A string needs a pattern
- * or a format (a repo id, a task UUID); a mise task name is the one plain string, because it is a name from the repo's
- * trusted mise config that the tool checks against its list.
+ * The schemas an audited argument may have (ADR-152): identifiers the daemon checks, which cannot hold free text. A
+ * string with any pattern is not enough (an endpoint's path has one and carries a query); it must be one of these.
  */
-function identifierKind(schema: z.ZodType, name: string): string | null {
-  const json = z.toJSONSchema(schema, { io: "input" });
+const IDENTIFIERS = [RepoId, TaskId, SessionId, BoardItemId, TagName, MiseTaskName, TaskModel];
+
+/** A schema as JSON Schema without its description, so `RepoArg` and `RepoId` compare equal. */
+function shapeOf(schema: z.ZodType): string {
+  const { description: _, $schema: _version, ...json } = z.toJSONSchema(schema, { io: "input" });
   const items = json.type === "array" && typeof json.items === "object" && !Array.isArray(json.items) ? json.items : json;
-  if (items.enum || items.type === "boolean" || items.type === "integer" || items.type === "number") return "value";
-  if (items.type === "string" && (items.pattern || items.format)) return "identifier";
-  if (items.type === "string" && name === "miseTask") return "mise task name";
-  return null;
+  const { description: _item, ...plain } = items;
+  return JSON.stringify(plain);
+}
+
+const IDENTIFIER_SHAPES = new Set(IDENTIFIERS.map(shapeOf));
+
+function isIdentifier(schema: z.ZodType): boolean {
+  const shape = JSON.parse(shapeOf(schema));
+  return Boolean(shape.enum) || ["boolean", "integer", "number"].includes(shape.type) || IDENTIFIER_SHAPES.has(shapeOf(schema));
 }
 
 test("every MCP tool keeps in the audit only arguments that cannot carry free text", () => {
   const freeText = Object.values(mcpTools).flatMap((tool) =>
     tool.auditArgs
-      .filter((name) => identifierKind((tool.args.shape as Record<string, z.ZodType>)[name] as z.ZodType, name) === null)
+      .filter((name) => !isIdentifier((tool.args.shape as Record<string, z.ZodType>)[name] as z.ZodType))
       .map((name) => `${tool.name}.${name}`),
   );
   expect(freeText).toEqual([]);
