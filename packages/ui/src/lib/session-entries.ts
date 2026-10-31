@@ -1,5 +1,6 @@
 import {
   countLabel,
+  handedToSupervisor,
   isSupervisor,
   type ProposedBy,
   type Session,
@@ -217,7 +218,14 @@ export function selectionAfterRemoval(
  * batch that may be an earlier task). `undefined` when there is none.
  */
 function startedFrom(entries: readonly SessionEntry[], proposer: string | null): SessionEntry | undefined {
-  return entries.find((e) => e.kind === "task" && e.task.proposedBy !== null && e.task.proposedBy.session === proposer);
+  // A null proposer is an agent outside Trackwall, not a handover (ADR-147) or a task handed to the supervisor (ADR-155).
+  return entries.find(
+    (e) =>
+      e.kind === "task" &&
+      e.task.proposedBy !== null &&
+      e.task.proposedBy.session === proposer &&
+      (proposer !== null || (!e.task.proposedBy.supervisor && e.task.proposedBy.task === null)),
+  );
 }
 
 function selects(selection: Exclude<SessionSelection, undefined | { kind: "new" }>, entry: SessionEntry): boolean {
@@ -334,6 +342,7 @@ export function proposalsName(proposals: ProposalsEntry["proposals"]): string {
  * list, or an agent outside Trackwall (a supervising agent with the daemon token).
  */
 export function proposerLabel(proposedBy: ProposedBy, sessions: readonly Session[]): string {
+  if (handedToSupervisor(proposedBy)) return "handed to the supervisor";
   return `proposed by ${proposerName(proposedBy, sessions)}`;
 }
 

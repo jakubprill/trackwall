@@ -98,7 +98,7 @@ describe("the supervisor's situation (ADR-148)", () => {
             id: "t2",
             repo: "payments",
             prompt: "Retry a failed payment\nonce, then give up",
-            proposedBy: { session: null, supervisor: true, task: null },
+            proposedBy: { session: SUPERVISOR, supervisor: true, task: null },
             summary: { text: "Done.", reportedAt: "2026-10-30T09:05:00.000Z" },
           }),
         ],
@@ -117,6 +117,14 @@ describe("the supervisor's situation (ADR-148)", () => {
         "- a free session in the projects folder (session s-free), started by the user: working",
         '- task t2 "Retry a failed payment once, then give up" in payments, proposed by you: no session (resume_task goes on with it); reported a result at 2026-10-30T09:05:00.000Z',
       ].join("\n"),
+    );
+  });
+
+  test("a task the user handed to the supervisor says so (ADR-155)", () => {
+    const handed = task({ id: "t1", title: "Add a login test", proposedBy: { session: null, supervisor: true, task: null } });
+
+    expect(supervisorSituation({ sessions: [], tasks: [handed], proposals: [] }, SUPERVISOR).split("\n")[1]).toBe(
+      '- task t1 "Add a login test" in api, started by the user, who handed it to you: no session (resume_task goes on with it)',
     );
   });
 

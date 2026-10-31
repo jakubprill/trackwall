@@ -88,6 +88,15 @@ describe("the supervisor (ADR-58)", () => {
     expect(summary(data)).toMatchObject({ delegated: 2, waitingProposals: 1, sessionWaits: false, waits: true, listed: true });
   });
 
+  test("a task the user handed to the supervisor moves under its heading and says it was handed, not proposed (ADR-155)", () => {
+    const handed = task("t1", { session: null, supervisor: true, task: null });
+    const data = list({ sessions: [session("sup", null)], tasks: [handed, task("t2", null)] });
+
+    expect(shape(data)).toEqual(["t1 @1 supervised", "t2 @0"]);
+    expect(proposerLabel({ session: null, supervisor: true, task: null }, data.sessions)).toBe("handed to the supervisor");
+    expect(proposerLabel({ session: "sup", supervisor: true, task: null }, data.sessions)).toBe("proposed by the supervisor");
+  });
+
   test("the supervisor's work stays under its heading after the supervisor session that delegated it is gone", () => {
     const data = list({
       tasks: [

@@ -1,4 +1,4 @@
-import { type RunningMiseTask, type Session, TASK_PORT_ENV, type Task, type TaskMessage } from "@trackwall/protocol";
+import { mayHandToSupervisor, type RunningMiseTask, type Session, TASK_PORT_ENV, type Task, type TaskMessage } from "@trackwall/protocol";
 import { Bot, GitBranch, Plug, ShieldOff, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
@@ -15,7 +15,7 @@ import { useTaskDetails } from "@/lib/use-task-details";
 import { useTaskReview } from "@/lib/use-task-review";
 import { JavaNavigationMark } from "./JavaNavigationMark.tsx";
 import { SessionEnvironment } from "./SessionEnvironment.tsx";
-import { CopyIncludedFilesButton, ResumeButton, StopButton, TaskEditorButton } from "./TaskButtons.tsx";
+import { CopyIncludedFilesButton, HandToSupervisorButton, ResumeButton, StopButton, TaskEditorButton } from "./TaskButtons.tsx";
 import { TaskChangesView } from "./TaskChangesView.tsx";
 import { scrollToSection, TaskDetails } from "./TaskDetails.tsx";
 import { TaskImpact } from "./TaskImpact.tsx";
@@ -113,6 +113,9 @@ export function TaskPanel({
           <VerifyButton state={details.verification} disabled={confirmingRemoval} />
           <TaskEditorButton conn={conn} task={task} label="VS Code" />
           <CopyIncludedFilesButton conn={conn} task={task} onCopied={onChanged} />
+          {mayHandToSupervisor(task) && (
+            <HandToSupervisorButton conn={conn} task={task} disabled={confirmingRemoval} onHanded={onChanged} />
+          )}
           {liveSession ? (
             <StopButton conn={conn} session={liveSession} onStopped={onChanged} />
           ) : (

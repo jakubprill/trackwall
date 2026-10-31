@@ -160,6 +160,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(agentsApi.taskJavaNavigation, (f, b) => f.agents.taskJavaNavigation(b.task)),
   route(agentsApi.taskSharedFiles, async (f, b) => ({ shared: await f.agents.taskSharedFiles(b.task) })),
   route(agentsApi.copyIncludedFilesAgain, (f, b) => f.agents.copyIncludedFilesAgain(b.task)),
+  route(agentsApi.handToSupervisor, (f, b) => f.agents.handToSupervisor(b.task)),
   route(agentsApi.taskMiseConfig, (f, b) => f.agents.taskMiseConfig(b.task)),
   route(agentsApi.trustTaskMiseConfig, (f, b) => f.agents.trustTaskMiseConfig(b.task, b.digest)),
   route(agentsApi.openTaskEditor, (f, b) => {

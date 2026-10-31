@@ -1,5 +1,5 @@
 import { agentsApi, type Session, type Task, WORKTREE_INCLUDE_FILE } from "@trackwall/protocol";
-import { FileInput, Play, Square } from "lucide-react";
+import { FileInput, Forward, Play, Square } from "lucide-react";
 import { EditorButton } from "@/components/EditorButton";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
@@ -73,6 +73,40 @@ export function CopyIncludedFilesButton({ conn, task, onCopied }: { conn: Connec
         title={`Copy the files the repo's ${WORKTREE_INCLUDE_FILE} names into the worktree again; files it already has stay as they are`}
       >
         <FileInput /> Copy included files
+      </Button>
+    </>
+  );
+}
+
+/**
+ * Handing a task the user started to the supervisor (ADR-155): it then hears what the task does and may message its
+ * agent, as for a task it proposed. The error shows next to the button.
+ */
+export function HandToSupervisorButton({
+  conn,
+  task,
+  disabled,
+  onHanded,
+}: {
+  conn: Connection;
+  task: Task;
+  disabled: boolean;
+  onHanded: () => void;
+}) {
+  const hand = useAction(() => post(conn, agentsApi.handToSupervisor, { task: task.id }), onHanded);
+  return (
+    <>
+      {hand.error && <span className="text-destructive max-w-xs truncate text-xs">{hand.error}</span>}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={hand.run}
+        disabled={disabled || hand.pending}
+        // An icon only, so that the panel's buttons stay on one row on a small screen and leave the terminal its height.
+        aria-label="Hand to supervisor"
+        title="Hand to supervisor: it hears when this task finishes a turn, reports or fails, and may send its agent messages"
+      >
+        <Forward />
       </Button>
     </>
   );
