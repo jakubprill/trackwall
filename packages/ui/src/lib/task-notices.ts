@@ -1,4 +1,13 @@
-import { countLabel, type Task, type TaskMessage, type TaskMiseConfig, type Verification } from "@trackwall/protocol";
+import {
+  countLabel,
+  type HostedProject,
+  type MergeRequest,
+  type Task,
+  type TaskMessage,
+  type TaskMiseConfig,
+  type Verification,
+} from "@trackwall/protocol";
+import { mergeRequestNumber, mergeRequestStateLabel, pipelineLabel } from "./merge-request.ts";
 
 /**
  * The notices of a task: one short line for each section above its terminal (ADR-91), for the strip in the one-entry
@@ -28,7 +37,8 @@ export interface TaskNotice {
   label: string;
   /**
    * The text of a chip of its own in a grid tile's header, for what matters at a glance there: the mise config, whose
-   * tasks stop until the user trusts it, and a running, passed or failed verification. The rest counts on the badge.
+   * tasks stop until the user trusts it, a running, passed or failed verification, and the merge request with its
+   * pipeline (ADR-154). The rest counts on the badge.
    */
   chip?: string;
 }
@@ -43,6 +53,8 @@ export interface TaskNoticeInput {
   verification: Verification | null;
   /** Whether the merge request section shows (the task has a commit). */
   mergeRequest: boolean;
+  /** The merge request from the task branch, once the repo host named one. */
+  foundMergeRequest: { project: HostedProject; mergeRequest: MergeRequest } | null;
   /** The mise tasks running in the worktree that the panel lists. */
   miseRuns: readonly string[];
 }
@@ -62,7 +74,7 @@ export function taskNotices(input: TaskNoticeInput): TaskNotice[] {
     ...messageNotices(input.messages),
     ...(input.task.summary ? [{ section: "summary", key: "summary", tone: "info", label: "Summary" } as const] : []),
     ...verificationNotices(input.verification),
-    ...(input.mergeRequest ? [{ section: "merge-request", key: "merge-request", tone: "info", label: "Merge request" } as const] : []),
+    ...mergeRequestNotices(input.mergeRequest, input.foundMergeRequest),
     ...input.miseRuns.map(
       (name): TaskNotice => ({ section: "mise-runs", key: `mise-run:${name}`, tone: "running", label: `${name} running` }),
     ),
@@ -130,6 +142,36 @@ function verificationNotices(verification: Verification | null): TaskNotice[] {
 export function newWarnings(notices: readonly TaskNotice[], seen: ReadonlySet<string>): TaskNotice[] {
   return notices.filter((n) => n.tone === "warning" && !seen.has(n.key));
 }
+
+/** `!12 · pipeline failed` with the pipeline's tone while it is open, the merge request's state once merged or closed. */
+function mergeRequestNotices(shown: boolean, found: TaskNoticeInput["foundMergeRequest"]): TaskNotice[] {
+  if (!shown) return [];
+  if (!found) return [{ section: "merge-request", key: "merge-request", tone: "info", label: "Merge request" }];
+  const { project, mergeRequest } = found;
+  const number = mergeRequestNumber(project, mergeRequest.number);
+  const pipeline = mergeRequest.state === "open" ? mergeRequest.pipeline : null;
+  const tone: TaskNoticeTone = pipeline ? PIPELINE_TONE[pipeline.state] : mergeRequest.state === "merged" ? "passed" : "info";
+  const state = pipeline ? pipelineLabel(pipeline.state).label : mergeRequestStateLabel(mergeRequest.state).label;
+  return [
+    {
+      section: "merge-request",
+      key: "merge-request",
+      tone,
+      label: `${number} · ${state}`,
+      chip: `${number} ${pipeline?.state ?? mergeRequest.state}`,
+    },
+  ];
+}
+
+const PIPELINE_TONE: Record<NonNullable<MergeRequest["pipeline"]>["state"], TaskNoticeTone> = {
+  failed: "failed",
+  passed: "passed",
+  running: "running",
+  pending: "running",
+  manual: "info",
+  cancelled: "info",
+  skipped: "info",
+};
 
 /** A grid tile's header: the notices with a chip of their own, and the rest for the badge. */
 export function tileNotices(notices: readonly TaskNotice[]): { chips: TaskNotice[]; others: TaskNotice[] } {

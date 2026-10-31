@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { SERVICE_RELEASE_MS, type StateDirSource, type TaskChangedEndpoints } from "@trackwall/protocol";
+import { SERVICE_RELEASE_MS, type StateDirSource, type TaskChangedEndpoints, type TaskOutcome } from "@trackwall/protocol";
 import { downloadVerified } from "./infra/download.ts";
 import { vscodeUrl } from "./infra/editor-url.ts";
 import { DomainError, messageOf } from "./infra/errors.ts";
@@ -92,6 +92,11 @@ export interface Facade {
    * a task's Impact tab: the task from `agents`, its change and callers from `graph`.
    */
   taskChangedEndpoints: (task: string) => Promise<TaskChangedEndpoints>;
+  /**
+   * What every task's work came to (ADR-154): its last verification's verdict from `verification` and its merge request
+   * from `merge-requests`, for the Sessions list and the notification of a failed pipeline. A read from memory.
+   */
+  taskOutcomes: () => TaskOutcome[];
   /**
    * Daemon exit, before `procs.stopAll`: what a restart is to bring back stays as it is now, the sessions to resume
    * (ADR-95), the agent queues and the verifications (ADR-115), so what the stop of the groups changes does not reach it.
@@ -259,6 +264,8 @@ export function createFacade(o: FacadeOptions): Facade {
     hosting,
     repoHosts: () => workspace.repoHosts(),
     openUrl: o.openUrl,
+    onPipelineFailed: (task, mergeRequest) => agents.pipelineFailed(task.id, mergeRequest),
+    log: o.log,
   });
   const dayStart = new DayStart({
     workspace,
@@ -355,6 +362,14 @@ export function createFacade(o: FacadeOptions): Facade {
     taskChangedEndpoints: async (task) => {
       const { repo, worktree, base } = agents.task(task);
       return { task, ...(await graph.changedEndpoints(repo, worktree, base)) };
+    },
+    taskOutcomes: () => {
+      const followed = mergeRequests.followed();
+      return agents.tasks().flatMap((task) => {
+        const verification = verifications.get(task.id)?.state ?? null;
+        const mergeRequest = followed.get(task.id) ?? null;
+        return verification === null && mergeRequest === null ? [] : [{ task: task.id, repo: task.repo, verification, mergeRequest }];
+      });
     },
     keepForRestart: () => {
       agents.keepRunningSessionsForResume();

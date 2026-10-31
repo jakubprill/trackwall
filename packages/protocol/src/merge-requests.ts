@@ -28,10 +28,28 @@ export type MergeRequestState = z.infer<typeof MergeRequestState>;
 export const PipelineState = z.enum(["pending", "running", "passed", "failed", "cancelled", "skipped", "manual"]);
 export type PipelineState = z.infer<typeof PipelineState>;
 
+/** Most failed jobs a pipeline names; the pipeline's page has the rest. */
+export const PIPELINE_FAILED_JOBS_MAX = 10;
+
+/**
+ * A job of a failed pipeline that failed it: a GitLab job (not one allowed to fail) or a GitHub check or commit
+ * status. Its log stays on the repo host: an agent reads it with the user's own MCP server for the host (ADR-154).
+ */
+export const FailedJob = z.object({
+  name: z.string(),
+  /** The job's page on the repo host; `null` for a commit status that gave none. */
+  url: z.string().nullable(),
+});
+export type FailedJob = z.infer<typeof FailedJob>;
+
 export const Pipeline = z.object({
   state: PipelineState,
   /** The pipeline (GitLab) or the checks of the pull request (GitHub) on the repo host. */
   url: z.string(),
+  /** The commit it ran on: a new pipeline on a later commit that fails again is a new failure (ADR-154). */
+  commit: z.string(),
+  /** While `failed`, the jobs that failed it, at most `PIPELINE_FAILED_JOBS_MAX`; empty otherwise. */
+  failedJobs: z.array(FailedJob),
 });
 export type Pipeline = z.infer<typeof Pipeline>;
 
@@ -101,6 +119,21 @@ export const TaskMergeRequest = z.object({
   targetBranch: z.string().nullable(),
 });
 export type TaskMergeRequest = z.infer<typeof TaskMergeRequest>;
+
+/**
+ * A task's merge request as the daemon last read it while following it in the background (ADR-154), with the project
+ * it is in, so its number is written as the repo host writes it.
+ */
+export const FollowedMergeRequest = MergeRequest.extend({
+  project: HostedProject,
+  /**
+   * ISO 8601, when the daemon saw its pipeline fail, having seen it in another state or on another commit before;
+   * `null` otherwise. A pipeline already failed when the daemon first read it has none, so a restart does not announce
+   * old failures again. A new value is what the desktop shell and a browser tab notify about.
+   */
+  pipelineFailedAt: z.string().nullable(),
+});
+export type FollowedMergeRequest = z.infer<typeof FollowedMergeRequest>;
 
 const TaskRequest = z.object({ task: TaskId }).strict();
 

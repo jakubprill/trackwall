@@ -16,6 +16,7 @@ import {
   mergeRequestsApi,
   miseApi,
   servicesApi,
+  taskOutcomesApi,
   verificationApi,
   workspaceApi,
 } from "@trackwall/protocol";
@@ -82,6 +83,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(cardsApi.warmup, (f) => f.cards.warmupProgress()),
   route(graphApi.graph, (f) => f.graph.graph()),
   route(graphApi.changedEndpoints, (f, b) => f.taskChangedEndpoints(b.task)),
+  route(taskOutcomesApi.list, (f) => f.taskOutcomes()),
   route(doctorApi.run, (f) => f.doctor.run()),
   route(javaNavigationApi.state, (f) => f.javaNavigation.state()),
   route(javaNavigationApi.startInstall, (f) => f.javaNavigation.startInstall()),

@@ -9,6 +9,7 @@ import {
   isSupervisor,
   type JavaNavigationSettings,
   type JavaNavigationStatus,
+  type MergeRequest,
   type MiseTarget,
   type ReviewComment,
   type SendMessageResult,
@@ -506,6 +507,11 @@ export class Agents {
     this.#coordination.verificationFinished(verification);
   }
 
+  /** The pipeline of the merge request from a task's branch failed (ADR-154): the task's proposer hears of it. */
+  pipelineFailed(task: string, mergeRequest: MergeRequest): void {
+    this.#coordination.pipelineFailed(task, mergeRequest);
+  }
+
   /** Waits until a session or task needs someone, at most `timeoutMs`; a session cannot wait for itself. */
   waitFor(caller: string | null, target: WaitTarget, timeoutMs: number, signal: AbortSignal): Promise<WaitOutcome> {
     const first = this.#waitOutcome(target);
@@ -594,6 +600,11 @@ export class Agents {
   /** A task by identifier (`not_found` when it does not exist or the user ended it). */
   task(id: string): Task {
     return this.#tasks.task(id);
+  }
+
+  /** Every task until it ends. */
+  tasks(): Task[] {
+    return this.#tasks.list();
   }
 
   /** A task, or `undefined` when there is no such task (unknown or ended). */

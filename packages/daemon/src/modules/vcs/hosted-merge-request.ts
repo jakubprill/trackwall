@@ -1,9 +1,19 @@
-import type { HostedProject, MergeRequest, MergeRequestForm, Pipeline, PipelineState, RepoHostKind } from "@trackwall/protocol";
+import {
+  type FailedJob,
+  type HostedProject,
+  type MergeRequest,
+  type MergeRequestForm,
+  PIPELINE_FAILED_JOBS_MAX,
+  type Pipeline,
+  type PipelineState,
+  type RepoHostKind,
+} from "@trackwall/protocol";
 import { z } from "zod";
 
 /**
  * How GitHub and GitLab differ for a task's merge request (ADR-77): the address of the new merge request form with its
- * fields filled in, and the API paths and response fields of the merge request from a source branch and its pipeline.
+ * fields filled in, and the API paths and response fields of the merge request from a source branch and its pipeline
+ * with the jobs that failed it (ADR-154).
  * Only reads go through the API; the user creates the merge request in the form. Running `gh` and `glab` is in
  * `hosting.ts`, the rest are pure functions.
  */
@@ -36,7 +46,9 @@ const GitHubPull = z.object({
 
 const GitHubCheckRuns = z.object({
   total_count: z.number().int().nonnegative(),
-  check_runs: z.array(z.object({ status: z.string(), conclusion: z.string().nullable() })),
+  check_runs: z.array(
+    z.object({ name: z.string(), status: z.string(), conclusion: z.string().nullable(), html_url: z.string().nullable() }),
+  ),
 });
 type GitHubCheckRun = z.infer<typeof GitHubCheckRuns>["check_runs"][number];
 
@@ -47,6 +59,7 @@ const CHECK_RUNS_MAX_PAGES = 5;
 const GitHubCombinedStatus = z.object({
   state: z.string(),
   total_count: z.number().int().nonnegative(),
+  statuses: z.array(z.object({ context: z.string(), state: z.string(), target_url: z.string().nullable() })),
 });
 
 /** A check run that has not completed is `pending` until it runs; a completed one by its conclusion. */
@@ -100,23 +113,30 @@ const githubApi: MergeRequestHostApi = {
     if (!pull) return null;
     const commit = `repos/${project.path}/commits/${pull.head.sha}`;
     const [runs, status] = await Promise.all([checkRuns(api, commit), api(`${commit}/status`, GitHubCombinedStatus)]);
-    const states = [...runs, ...(status.total_count > 0 ? [statusState(status.state)] : [])];
+    const states = [...runs.states, ...(status.total_count > 0 ? [statusState(status.state)] : [])];
     const state = combinedState(states);
+    const failedJobs = [
+      ...runs.failed,
+      ...status.statuses.filter((s) => statusState(s.state) === "failed").map((s) => ({ name: s.context, url: s.target_url })),
+    ];
     return {
       number: pull.number,
       title: pull.title,
       url: pull.html_url,
       state: pull.merged_at !== null ? "merged" : pull.state,
-      pipeline: state === null ? null : { state, url: `${pull.html_url}/checks` },
+      pipeline:
+        state === null
+          ? null
+          : { state, url: `${pull.html_url}/checks`, commit: pull.head.sha, failedJobs: state === "failed" ? atMost(failedJobs) : [] },
     };
   },
 };
 
 /**
- * The states of every check run of a commit; a commit with more of them than the pages read gets `pending` for the rest,
- * so an unread failure never shows as a pass.
+ * The states of every check run of a commit, and the failed ones; a commit with more of them than the pages read gets
+ * `pending` for the rest, so an unread failure never shows as a pass.
  */
-async function checkRuns(api: HostApi, commit: string): Promise<PipelineState[]> {
+async function checkRuns(api: HostApi, commit: string): Promise<{ states: PipelineState[]; failed: FailedJob[] }> {
   const runs: GitHubCheckRun[] = [];
   let total = 0;
   for (let page = 1; page <= CHECK_RUNS_MAX_PAGES; page++) {
@@ -126,7 +146,13 @@ async function checkRuns(api: HostApi, commit: string): Promise<PipelineState[]>
     if (runs.length >= total || received.check_runs.length < CHECK_RUNS_PAGE) break;
   }
   const states = runs.map(checkRunState);
-  return runs.length < total ? [...states, "pending"] : states;
+  const failed = runs.filter((run) => checkRunState(run) === "failed").map((run) => ({ name: run.name, url: run.html_url }));
+  return { states: runs.length < total ? [...states, "pending"] : states, failed };
+}
+
+/** The first failed jobs a pipeline names; its page has the rest. */
+function atMost(jobs: FailedJob[]): FailedJob[] {
+  return jobs.slice(0, PIPELINE_FAILED_JOBS_MAX);
 }
 
 const GitLabMergeRequests = z.array(z.object({ iid: z.number().int().positive() }));
@@ -136,8 +162,11 @@ const GitLabMergeRequest = z.object({
   title: z.string(),
   web_url: z.string(),
   state: z.string(),
-  head_pipeline: z.object({ status: z.string(), web_url: z.string() }).nullish(),
+  head_pipeline: z.object({ id: z.number().int().positive(), sha: Sha, status: z.string(), web_url: z.string() }).nullish(),
 });
+
+/** A job of a pipeline; one allowed to fail does not fail the pipeline, so it is not one that failed it. */
+const GitLabJobs = z.array(z.object({ name: z.string(), web_url: z.string(), allow_failure: z.boolean() }));
 
 /** GitLab's pipeline statuses; one GitLab adds later counts as `pending` until it is known. */
 function gitlabPipelineState(status: string): PipelineState {
@@ -183,12 +212,28 @@ const gitlabApi: MergeRequestHostApi = {
     if (!found) return null;
     // The list leaves out the pipeline; one merge request carries it.
     const mr = await api(`${base}/${found.iid}`, GitLabMergeRequest);
-    const pipeline: Pipeline | null = mr.head_pipeline
-      ? { state: gitlabPipelineState(mr.head_pipeline.status), url: mr.head_pipeline.web_url }
-      : null;
+    const head = mr.head_pipeline;
+    let pipeline: Pipeline | null = null;
+    if (head) {
+      const state = gitlabPipelineState(head.status);
+      const failedJobs = state === "failed" ? await gitlabFailedJobs(api, project, head.id) : [];
+      pipeline = { state, url: head.web_url, commit: head.sha, failedJobs };
+    }
     return { number: mr.iid, title: mr.title, url: mr.web_url, state: gitlabState(mr.state), pipeline };
   },
 };
+
+/**
+ * The failed jobs of a GitLab pipeline that failed it. Jobs of a child pipeline are not listed: its trigger job is a
+ * bridge, so such a pipeline names fewer jobs or none, and its page shows them.
+ */
+async function gitlabFailedJobs(api: HostApi, project: HostedProject, pipeline: number): Promise<FailedJob[]> {
+  const jobs = await api(
+    `projects/${encodeURIComponent(project.path)}/pipelines/${pipeline}/jobs?scope[]=failed&per_page=${PIPELINE_FAILED_JOBS_MAX * 2}`,
+    GitLabJobs,
+  );
+  return atMost(jobs.filter((job) => !job.allow_failure).map((job) => ({ name: job.name, url: job.web_url })));
+}
 
 const MERGE_REQUEST_APIS: Record<RepoHostKind, MergeRequestHostApi> = { github: githubApi, gitlab: gitlabApi };
 

@@ -24,7 +24,7 @@ export interface BrowserNotice {
   body: string;
   /** The browser shows one notification per tag, so a second tab of Trackwall or a later wait of the same session replaces it. */
   tag: string;
-  target: Extract<Jump, { kind: "session" | "proposal" }>;
+  target: Extract<Jump, { kind: "session" | "task" | "proposal" }>;
 }
 
 const TAG_PREFIX = "trackwall:";

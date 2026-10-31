@@ -392,8 +392,16 @@ The request on the repo host to merge a task branch into the task's base branch,
 _Avoid_: pull request (except for GitHub's own pages), PR, MR in product texts
 
 **Pipeline** (`Pipeline`, `PipelineState`):
-What ran on a merge request's last commit, as one state: GitLab's pipeline, or GitHub's check runs and commit statuses summed up worst first (ADR-77).
+What ran on a merge request's last commit, as one state: GitLab's pipeline, or GitHub's check runs and commit statuses summed up worst first (ADR-77). A failed one names its **failed jobs** (`FailedJob`): GitLab's jobs that failed it, GitHub's failed checks and statuses, each with its page; their logs stay on the repo host (ADR-154).
 _Avoid_: CI, build (a build is a mise task), checks
+
+**Followed merge request** (`FollowedMergeRequest`, `MergeRequests.followed`, `checkWatched`):
+A task's merge request as the daemon last read it while following every task in the background (ADR-154), with its project and `pipelineFailedAt`, the moment the daemon saw its pipeline fail after seeing it otherwise. A new `pipelineFailedAt` is a failed pipeline to announce.
+_Avoid_: tracked, watched merge request (the watch is the reading, not the merge request)
+
+**Task outcome** (`TaskOutcome`, `taskOutcomesApi`, `/ws` topic `task-outcomes.changed`; the marks on a task's row in Sessions):
+What a task's work came to: the state of its last verification and its followed merge request (ADR-154). The Sessions list shows it on the task's row ("Verified", "Verify failed", `!12` in the pipeline's colour).
+_Avoid_: task status (that is the session's state), result (that is the summary from `report_result`)
 
 **Proposer** (`Task.proposedBy`, `proposerOf` in `proposer.ts`):
 The session that proposed a task: a main session, or for the supervisor's work whichever supervisor runs now. Only the proposer sends the task's session task messages (a session in Trackwall; an agent outside Trackwall sends none), and only it gets the task's task updates (ADR-68).
@@ -412,7 +420,7 @@ Text a task's proposer sends to the task's session: a correction, an answer, a c
 _Avoid_: note, comment (that is a review comment), chat
 
 **Task update** (`TaskUpdate`, MCP tool `get_updates`):
-What the daemon saw happen to delegated work, for the proposer: a turn that ended, an error, the end of the session, a reported result, a verification verdict, a rejected proposal. The daemon asks the proposer to read it, so the supervisor or a main session does not poll (ADR-68).
+What the daemon saw happen to delegated work, for the proposer: a turn that ended, an error, the end of the session, a reported result, a verification verdict, a failed pipeline (ADR-154), a rejected proposal. The daemon asks the proposer to read it, so the supervisor or a main session does not poll (ADR-68).
 _Avoid_: event (that is a `/ws` event), notification (that is a system notification), status
 
 **Agent queues** (`agent-queues.json`, `AgentQueues`, `agentQueuesFile`):

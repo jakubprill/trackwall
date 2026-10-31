@@ -141,6 +141,7 @@ async function start(
     // After the API: the first comparison hands every repo to the card warm-up, and its git processes must not delay the start.
     facade.repoWatch.start();
     facade.localConfig.start();
+    facade.mergeRequests.start();
     // After the API too: a resumed session's hooks and MCP server need its port (ADR-95).
     void facade.agents.resumeLeftSessions();
     const self = { pid: process.pid, port: api.port, token, startedAt, version: VERSION };

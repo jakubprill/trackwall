@@ -9,7 +9,10 @@ const BRANCH = "trackwall/add-a-discount-1a2b3c";
 const GITLAB_MRS = "projects/shop%2Fbackend%2Forders/merge_requests";
 const GITHUB_COMMIT = `repos/me/shop/commits/${SHA}`;
 
-const gitlabMr = (state: string, pipeline: { status: string; web_url: string } | null) => ({
+const gitlabPipeline = (status: string, web_url: string) => ({ id: 41, sha: SHA, status, web_url });
+const GITLAB_JOBS = "projects/shop%2Fbackend%2Forders/pipelines/41/jobs";
+
+const gitlabMr = (state: string, pipeline: ReturnType<typeof gitlabPipeline> | null) => ({
   iid: 12,
   title: "Add a discount",
   web_url: "https://gitlab.example.com/shop/backend/orders/-/merge_requests/12",
@@ -23,16 +26,21 @@ const githubPull = (state: "open" | "closed", mergedAt: string | null) => [
 
 const checkRuns = (...runs: [string, string | null][]) => ({
   total_count: runs.length,
-  check_runs: runs.map(([status, conclusion]) => ({ status, conclusion })),
+  check_runs: runs.map(([status, conclusion], i) => ({
+    name: `check ${i + 1}`,
+    status,
+    conclusion,
+    html_url: `https://github.com/me/shop/runs/${i + 1}`,
+  })),
 });
-const NO_STATUSES = { state: "pending", total_count: 0 };
+const NO_STATUSES = { state: "pending", total_count: 0, statuses: [] };
 
 describe("the merge request of a task branch on GitLab", () => {
   test("is found by its source branch, with the pipeline of its last commit", async () => {
     const { hosting, calls } = fakeHosting({
       apiResponses: {
         [GITLAB_MRS]: [{ iid: 12 }],
-        [`${GITLAB_MRS}/12`]: gitlabMr("opened", { status: "running", web_url: "https://gitlab.example.com/p/1" }),
+        [`${GITLAB_MRS}/12`]: gitlabMr("opened", gitlabPipeline("running", "https://gitlab.example.com/p/1")),
       },
     });
 
@@ -41,7 +49,7 @@ describe("the merge request of a task branch on GitLab", () => {
       title: "Add a discount",
       url: "https://gitlab.example.com/shop/backend/orders/-/merge_requests/12",
       state: "open",
-      pipeline: { state: "running", url: "https://gitlab.example.com/p/1" },
+      pipeline: { state: "running", url: "https://gitlab.example.com/p/1", commit: SHA, failedJobs: [] },
     });
     const [list, one] = calls();
     expect(list?.args.slice(0, 3)).toEqual(["api", "--hostname", "gitlab.example.com"]);
@@ -58,17 +66,54 @@ describe("the merge request of a task branch on GitLab", () => {
     expect(await merged.hosting.mergeRequest(GITLAB, BRANCH)).toMatchObject({ state: "merged", pipeline: null });
 
     const manual = fakeHosting({
-      apiResponses: { [GITLAB_MRS]: [{ iid: 12 }], [`${GITLAB_MRS}/12`]: gitlabMr("locked", { status: "manual", web_url: "u" }) },
+      apiResponses: { [GITLAB_MRS]: [{ iid: 12 }], [`${GITLAB_MRS}/12`]: gitlabMr("locked", gitlabPipeline("manual", "u")) },
     });
     expect(await manual.hosting.mergeRequest(GITLAB, BRANCH)).toMatchObject({ state: "open", pipeline: { state: "manual" } });
 
     const waiting = fakeHosting({
       apiResponses: {
         [GITLAB_MRS]: [{ iid: 12 }],
-        [`${GITLAB_MRS}/12`]: gitlabMr("closed", { status: "waiting_for_resource", web_url: "u" }),
+        [`${GITLAB_MRS}/12`]: gitlabMr("closed", gitlabPipeline("waiting_for_resource", "u")),
       },
     });
     expect(await waiting.hosting.mergeRequest(GITLAB, BRANCH)).toMatchObject({ state: "closed", pipeline: { state: "pending" } });
+  });
+
+  test("a failed pipeline names the jobs that failed it, leaving out those allowed to fail", async () => {
+    const { hosting, calls } = fakeHosting({
+      apiResponses: {
+        [GITLAB_MRS]: [{ iid: 12 }],
+        [`${GITLAB_MRS}/12`]: gitlabMr("opened", gitlabPipeline("failed", "https://gitlab.example.com/p/41")),
+        [GITLAB_JOBS]: [
+          { name: "unit-tests", web_url: "https://gitlab.example.com/j/1", allow_failure: false },
+          { name: "flaky-e2e", web_url: "https://gitlab.example.com/j/2", allow_failure: true },
+          { name: "lint", web_url: "https://gitlab.example.com/j/3", allow_failure: false },
+        ],
+      },
+    });
+
+    expect((await hosting.mergeRequest(GITLAB, BRANCH))?.pipeline).toEqual({
+      state: "failed",
+      url: "https://gitlab.example.com/p/41",
+      commit: SHA,
+      failedJobs: [
+        { name: "unit-tests", url: "https://gitlab.example.com/j/1" },
+        { name: "lint", url: "https://gitlab.example.com/j/3" },
+      ],
+    });
+    expect(calls()[2]?.args[3]).toBe(`${GITLAB_JOBS}?scope[]=failed&per_page=20`);
+  });
+
+  test("a pipeline that did not fail costs no call for its jobs", async () => {
+    const { hosting, calls } = fakeHosting({
+      apiResponses: {
+        [GITLAB_MRS]: [{ iid: 12 }],
+        [`${GITLAB_MRS}/12`]: gitlabMr("opened", gitlabPipeline("success", "u")),
+      },
+    });
+
+    expect((await hosting.mergeRequest(GITLAB, BRANCH))?.pipeline).toMatchObject({ state: "passed", failedJobs: [] });
+    expect(calls()).toHaveLength(2);
   });
 
   test("none when no merge request has the branch as its source", async () => {
@@ -108,7 +153,7 @@ describe("the pull request of a task branch on GitHub", () => {
       title: "Add a discount",
       url: "https://github.com/me/shop/pull/7",
       state: "open",
-      pipeline: { state: "running", url: "https://github.com/me/shop/pull/7/checks" },
+      pipeline: { state: "running", url: "https://github.com/me/shop/pull/7/checks", commit: SHA, failedJobs: [] },
     });
     expect(calls()[0]?.args[3]).toBe(
       "repos/me/shop/pulls?head=me%3Atrackwall%2Fadd-a-discount-1a2b3c&state=all&sort=updated&direction=desc&per_page=1",
@@ -123,16 +168,29 @@ describe("the pull request of a task branch on GitHub", () => {
         [`${GITHUB_COMMIT}/status`]: NO_STATUSES,
       },
     });
-    expect((await failedCheck.hosting.mergeRequest(GITHUB, BRANCH))?.pipeline?.state).toBe("failed");
+    expect((await failedCheck.hosting.mergeRequest(GITHUB, BRANCH))?.pipeline).toMatchObject({
+      state: "failed",
+      failedJobs: [{ name: "check 2", url: "https://github.com/me/shop/runs/2" }],
+    });
 
     const failedStatus = fakeHosting({
       apiResponses: {
         "repos/me/shop/pulls": githubPull("open", null),
         [`${GITHUB_COMMIT}/check-runs`]: checkRuns(["completed", "success"]),
-        [`${GITHUB_COMMIT}/status`]: { state: "error", total_count: 1 },
+        [`${GITHUB_COMMIT}/status`]: {
+          state: "error",
+          total_count: 2,
+          statuses: [
+            { context: "ci/jenkins", state: "error", target_url: null },
+            { context: "ci/sonar", state: "success", target_url: "https://sonar.example.com/1" },
+          ],
+        },
       },
     });
-    expect((await failedStatus.hosting.mergeRequest(GITHUB, BRANCH))?.pipeline?.state).toBe("failed");
+    expect((await failedStatus.hosting.mergeRequest(GITHUB, BRANCH))?.pipeline).toMatchObject({
+      state: "failed",
+      failedJobs: [{ name: "ci/jenkins", url: null }],
+    });
   });
 
   test("checks beyond the pages read count as pending, so an unread failure never shows as a pass", async () => {
@@ -141,7 +199,7 @@ describe("the pull request of a task branch on GitHub", () => {
         "repos/me/shop/pulls": githubPull("open", null),
         [`${GITHUB_COMMIT}/check-runs`]: {
           total_count: 900,
-          check_runs: Array.from({ length: 100 }, () => ({ status: "completed", conclusion: "success" })),
+          check_runs: Array.from({ length: 100 }, () => ({ name: "c", status: "completed", conclusion: "success", html_url: null })),
         },
         [`${GITHUB_COMMIT}/status`]: NO_STATUSES,
       },
@@ -167,7 +225,14 @@ describe("the pull request of a task branch on GitHub", () => {
       apiResponses: {
         "repos/me/shop/pulls": githubPull("closed", null),
         [`${GITHUB_COMMIT}/check-runs`]: checkRuns(["completed", "success"], ["completed", "neutral"], ["completed", "skipped"]),
-        [`${GITHUB_COMMIT}/status`]: { state: "success", total_count: 2 },
+        [`${GITHUB_COMMIT}/status`]: {
+          state: "success",
+          total_count: 2,
+          statuses: [
+            { context: "ci/a", state: "success", target_url: null },
+            { context: "ci/b", state: "success", target_url: null },
+          ],
+        },
       },
     });
 

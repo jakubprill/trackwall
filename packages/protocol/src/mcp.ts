@@ -851,7 +851,9 @@ export const mcpTools = {
       "Read what happened to the work you delegated since your last call, oldest first: for each task you proposed (the " +
       "supervisor: any supervisor proposed), turn_ended (its session finished a turn and waits; read its summary and " +
       `${GET_SESSION}), error, exited, result_reported (with the summary), verified (passed, failed or cancelled with ` +
-      "a message), proposal_rejected (with the user's reason), and repo_removed (the user approved your " +
+      "a message), pipeline_failed (the pipeline of the merge request from its branch failed: links to both and the jobs " +
+      "that failed it; read a job's log with your MCP server for the repo host, if you have one), proposal_rejected (with " +
+      "the user's reason), and repo_removed (the user approved your " +
       `${PROPOSE_FOLDER_ACTION}; movedTo is where the repo went). A turn the user drove themselves in the task's session ` +
       "is left out. Trackwall asks you to call it when an update arrives, so instead of polling, end your turn and wait. " +
       `Updates count as read once returned; at most ${TASK_UPDATES_KEPT} wait, and dropped counts older ones that fell out. ` +
