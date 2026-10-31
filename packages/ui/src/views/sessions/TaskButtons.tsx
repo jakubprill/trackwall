@@ -102,9 +102,11 @@ export function HandToSupervisorButton({
         size="sm"
         onClick={hand.run}
         disabled={disabled || hand.pending}
-        title="Let the supervisor follow this task: it hears when the task finishes a turn, reports or fails, and may send its agent messages"
+        // An icon only, so that the panel's buttons stay on one row on a small screen and leave the terminal its height.
+        aria-label="Hand to supervisor"
+        title="Hand to supervisor: it hears when this task finishes a turn, reports or fails, and may send its agent messages"
       >
-        <Forward /> Hand to supervisor
+        <Forward />
       </Button>
     </>
   );
