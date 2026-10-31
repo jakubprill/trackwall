@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { DAEMON_INFO_PATH, TaskState, TRACKWALL_LINK_KINDS, TRACKWALL_LINK_SCHEME } from "@trackwall/protocol";
+import { DAEMON_INFO_PATH, TaskState, TRACKWALL_LINK_KINDS, TRACKWALL_LINK_SCHEME, taskOutcomesApi } from "@trackwall/protocol";
 import { z } from "zod";
 import { parseFile, REPO } from "../scripts/lib.ts";
 
@@ -165,6 +165,17 @@ test("a notification says what a session waits for with the words of the UI's st
     expect(label).toBeDefined();
     expect(notification).toContain(`"Copilot CLI is ${label}"`);
   }
+});
+
+test("a failed pipeline comes from the task outcomes action and is announced in the same words in the shell and a browser tab", () => {
+  const daemon = read("apps/desktop/src-tauri/src/daemon.rs");
+  const notification = read("apps/desktop/src-tauri/src/notification.rs");
+  const ui = read("packages/ui/src/lib/task-outcomes.ts");
+  expect(daemon).toContain(`"${taskOutcomesApi.list.path}"`);
+  expect(notification).toContain('format!("Pipeline failed in {}", failed.repo)');
+  expect(ui).toContain("title: `Pipeline failed in $");
+  expect(notification).toContain('format!("\\nFailed: {}", failed.jobs.join(", "))');
+  expect(ui).toContain("`\\nFailed: $");
 });
 
 test("the tray panel window opens the page the UI renders the panel for and calls the shell's command", () => {

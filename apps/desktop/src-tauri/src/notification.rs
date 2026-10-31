@@ -1,5 +1,6 @@
 //! System notifications (ADR-50): a session that starts waiting for you and new task proposals show a notification
-//! while no Trackwall window has the focus, and clicking it opens that session or proposal like the tray menu does.
+//! while no Trackwall window has the focus, and clicking it opens that session or proposal like the tray menu does; so
+//! does the failed pipeline of a task's merge request (ADR-154), which opens the task.
 //!
 //! The official notification plugin cannot tell the shell about a click on the desktop, and on Windows it only shows
 //! toasts under an AppUserModelID that an installer registered, which the portable build does not have. So the shell
@@ -10,6 +11,7 @@
 
 use crate::attention::{News, Proposal, TaskState, Waiting};
 use crate::jump::{self, Jump};
+use crate::pipelines::FailedPipeline;
 use tauri::AppHandle;
 
 /// What one notification says and what clicking it opens.
@@ -54,6 +56,16 @@ fn proposals_notice(proposals: &[Proposal]) -> Option<Notice> {
     }
 }
 
+/// "Pipeline failed in orders-api", as a browser tab says it (`pipelineNotice` in the UI's `task-outcomes.ts`).
+fn pipeline_notice(failed: &FailedPipeline) -> Notice {
+    let jobs = if failed.jobs.is_empty() { String::new() } else { format!("\nFailed: {}", failed.jobs.join(", ")) };
+    Notice {
+        title: format!("Pipeline failed in {}", failed.repo),
+        body: format!("{} {}{jobs}", failed.number, failed.title),
+        target: Jump::Task(failed.task.clone()),
+    }
+}
+
 fn notices(news: &News) -> Vec<Notice> {
     news.sessions.iter().map(session_notice).chain(proposals_notice(&news.proposals)).collect()
 }
@@ -78,8 +90,17 @@ pub fn init(app: &AppHandle) {
 
 /// One notification for each session that started waiting, and one for the new proposals.
 pub fn show_news(app: &AppHandle, news: &News) {
+    show(app, notices(news));
+}
+
+/// One notification for each pipeline that failed.
+pub fn show_failed_pipelines(app: &AppHandle, failed: &[FailedPipeline]) {
+    show(app, failed.iter().map(pipeline_notice).collect());
+}
+
+fn show(app: &AppHandle, notices: Vec<Notice>) {
     let app_id = app_id(app);
-    for notice in notices(news) {
+    for notice in notices {
         let clicked = {
             let app = app.clone();
             let target = notice.target.clone();
@@ -274,6 +295,27 @@ mod tests {
                 target: Jump::Proposal("p1".into()),
             }]
         );
+    }
+
+    #[test]
+    fn a_failed_pipeline_notice_names_the_repo_the_merge_request_and_its_failed_jobs_and_opens_the_task() {
+        let failed = FailedPipeline {
+            task: "t1".into(),
+            repo: "orders-api".into(),
+            number: "!12".into(),
+            title: "Add a discount".into(),
+            jobs: vec!["unit-tests".into(), "lint".into()],
+            failed_at: "2026-10-31T08:00:00.000Z".into(),
+        };
+        assert_eq!(
+            pipeline_notice(&failed),
+            Notice {
+                title: "Pipeline failed in orders-api".into(),
+                body: "!12 Add a discount\nFailed: unit-tests, lint".into(),
+                target: Jump::Task("t1".into()),
+            }
+        );
+        assert_eq!(pipeline_notice(&FailedPipeline { jobs: Vec::new(), ..failed }).body, "!12 Add a discount");
     }
 
     /// Runs on `windows-latest` in CI: the registry value toasts depend on lands where Windows looks for it.

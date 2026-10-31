@@ -1,4 +1,5 @@
 import {
+  type MergeRequest,
   mcpTools,
   type ProposedBy,
   type SendMessageResult,
@@ -180,6 +181,22 @@ export class TaskCoordination {
     const { state, message } = verification;
     const session = this.#deps.runningOfTask(task.id)?.id ?? null;
     this.#notify(task.proposedBy, { kind: "verified", state, message, task: task.id, session, at: new Date().toISOString() });
+  }
+
+  /** A failed pipeline of the task branch's merge request goes to the task's proposer, with the jobs that failed it. */
+  pipelineFailed(id: string, mergeRequest: MergeRequest): void {
+    const task = this.#deps.findTask(id);
+    const pipeline = mergeRequest.pipeline;
+    if (!task || !pipeline) return;
+    this.#notify(task.proposedBy, {
+      kind: "pipeline_failed",
+      task: task.id,
+      session: this.#deps.runningOfTask(task.id)?.id ?? null,
+      mergeRequest: mergeRequest.url,
+      pipeline: pipeline.url,
+      failedJobs: pipeline.failedJobs,
+      at: new Date().toISOString(),
+    });
   }
 
   /** The user rejected a proposal: the reason goes to its proposer. */

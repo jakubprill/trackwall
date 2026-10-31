@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { mergeRequestsApi } from "@trackwall/protocol";
+import { mergeRequestsApi, taskOutcomesApi } from "@trackwall/protocol";
 import { gitIn } from "./support/git-repo.ts";
 import { fakeHostingClis } from "./support/hosting.ts";
 import { startSessionApi } from "./support/session-api.ts";
@@ -103,8 +103,9 @@ describe.skipIf(process.versions.bun === undefined)("a merge request from a task
           title: "Add a discount",
           web_url: "https://gitlab.example.com/shop/shop/-/merge_requests/3",
           state: "opened",
-          head_pipeline: { status: "failed", web_url: "https://gitlab.example.com/shop/shop/-/pipelines/9" },
+          head_pipeline: { id: 9, sha: "c".repeat(40), status: "failed", web_url: "https://gitlab.example.com/shop/shop/-/pipelines/9" },
         },
+        "projects/shop%2Fshop/pipelines/9/jobs": [],
       },
     });
     const other = await taskWithCommit("shop", "Another task");
@@ -117,7 +118,7 @@ describe.skipIf(process.versions.bun === undefined)("a merge request from a task
         title: "Add a discount",
         url: "https://gitlab.example.com/shop/shop/-/merge_requests/3",
         state: "open",
-        pipeline: { state: "failed", url: "https://gitlab.example.com/shop/shop/-/pipelines/9" },
+        pipeline: { state: "failed", url: "https://gitlab.example.com/shop/shop/-/pipelines/9", commit: "c".repeat(40), failedJobs: [] },
       },
     });
     await expect(daemon.post(mergeRequestsApi.openForm, { task: other.id, title: "Again", description: "" })).rejects.toThrow(
@@ -145,6 +146,118 @@ describe.skipIf(process.versions.bun === undefined)("a merge request from a task
   }, 60_000);
 });
 
+describe.skipIf(process.versions.bun === undefined)("following a task's merge request in the background (fake glab)", () => {
+  const MR_7 = `${GITLAB_MRS}/7`;
+  const JOBS = "projects/shop%2Fshop/pipelines/50/jobs";
+  const mr7 = (status: string, sha: string) => ({
+    [GITLAB_MRS]: [{ iid: 7 }],
+    [MR_7]: {
+      iid: 7,
+      title: "Speed up the cart",
+      web_url: "https://gitlab.example.com/shop/shop/-/merge_requests/7",
+      state: "opened",
+      head_pipeline: { id: 50, sha, status, web_url: "https://gitlab.example.com/shop/shop/-/pipelines/50" },
+    },
+    [JOBS]: [{ name: "unit-tests", web_url: "https://gitlab.example.com/shop/shop/-/jobs/501", allow_failure: false }],
+  });
+  /** A round of the watch as if `minutes` had passed: every task is due a read again, and the repo host's answers are no longer reused. */
+  const roundAfter = (minutes: number) => daemon.facade.mergeRequests.checkWatched(Date.now() + minutes * 60_000);
+  const outcomeOf = async (task: string) => (await daemon.post(taskOutcomesApi.list, {})).find((o) => o.task === task);
+
+  test("the outcome shows the merge request, and a pipeline that fails after running is marked failed once", async () => {
+    const task = await taskWithCommit("shop", "Speed up the cart");
+    gitIn(task.worktree, "update-ref", `refs/remotes/origin/${task.branch}`, "HEAD");
+    const sha = gitIn(task.worktree, "rev-parse", "HEAD").trim();
+    hosting.reconfigure({ apiResponses: mr7("running", sha) });
+
+    await roundAfter(1);
+    expect(await outcomeOf(task.id)).toEqual({
+      task: task.id,
+      repo: "shop",
+      verification: null,
+      mergeRequest: {
+        number: 7,
+        title: "Speed up the cart",
+        url: "https://gitlab.example.com/shop/shop/-/merge_requests/7",
+        state: "open",
+        pipeline: { state: "running", url: "https://gitlab.example.com/shop/shop/-/pipelines/50", commit: sha, failedJobs: [] },
+        project: { kind: "gitlab", host: "gitlab.example.com", path: "shop/shop" },
+        pipelineFailedAt: null,
+      },
+    });
+
+    hosting.reconfigure({ apiResponses: mr7("failed", sha) });
+    await roundAfter(2);
+    const failed = await outcomeOf(task.id);
+    expect(failed?.mergeRequest?.pipeline).toMatchObject({
+      state: "failed",
+      failedJobs: [{ name: "unit-tests", url: "https://gitlab.example.com/shop/shop/-/jobs/501" }],
+    });
+    expect(failed?.mergeRequest?.pipelineFailedAt).toEqual(expect.any(String));
+
+    // The same failure read again keeps its time, so nothing announces it twice.
+    await roundAfter(8);
+    expect((await outcomeOf(task.id))?.mergeRequest?.pipelineFailedAt).toBe(failed?.mergeRequest?.pipelineFailedAt ?? "");
+  }, 60_000);
+
+  test("the session that proposed the task hears that its pipeline failed, with the jobs that failed it", async () => {
+    const agents = daemon.facade.agents;
+    const main = await agents.start("shop");
+    const proposal = await agents.propose(main.id, {
+      repo: "shop",
+      title: "Cache prices",
+      prompt: "cache prices",
+      model: null,
+      approvals: "ask",
+      item: null,
+    });
+    const task = await agents.approveProposal(proposal.id, "cache prices", null, "ask", "terminal");
+    writeFileSync(join(task.worktree, "prices.ts"), "export const prices = new Map();\n");
+    gitIn(task.worktree, "add", "prices.ts");
+    gitIn(task.worktree, "commit", "-qm", "Cache prices");
+    gitIn(task.worktree, "update-ref", `refs/remotes/origin/${task.branch}`, "HEAD");
+    const sha = gitIn(task.worktree, "rev-parse", "HEAD").trim();
+    try {
+      hosting.reconfigure({ apiResponses: mr7("running", sha) });
+      await roundAfter(1);
+      hosting.reconfigure({ apiResponses: mr7("failed", sha) });
+      await roundAfter(2);
+
+      expect(agents.takeUpdates(main.id).updates.filter((u) => u.kind === "pipeline_failed")).toEqual([
+        {
+          kind: "pipeline_failed",
+          task: task.id,
+          session: expect.any(String),
+          mergeRequest: "https://gitlab.example.com/shop/shop/-/merge_requests/7",
+          pipeline: "https://gitlab.example.com/shop/shop/-/pipelines/50",
+          failedJobs: [{ name: "unit-tests", url: "https://gitlab.example.com/shop/shop/-/jobs/501" }],
+          at: expect.any(String),
+        },
+      ]);
+    } finally {
+      for (const session of agents.sessions().sessions) await agents.stop(session.id);
+    }
+  }, 60_000);
+
+  test("a pipeline already failed at the first read is not announced, and a task without a published branch asks the repo host nothing", async () => {
+    const failedBefore = await taskWithCommit("shop", "Failed before the daemon");
+    gitIn(failedBefore.worktree, "update-ref", `refs/remotes/origin/${failedBefore.branch}`, "HEAD");
+    const unpublished = await taskWithCommit("shop", "Not pushed yet");
+    hosting.reconfigure({ apiResponses: mr7("failed", gitIn(failedBefore.worktree, "rev-parse", "HEAD").trim()) });
+    const callsBefore = hosting.calls().length;
+
+    await roundAfter(1);
+
+    expect(await outcomeOf(failedBefore.id)).toMatchObject({ mergeRequest: { pipeline: { state: "failed" }, pipelineFailedAt: null } });
+    expect(await outcomeOf(unpublished.id)).toBeUndefined();
+    const branches = hosting
+      .calls()
+      .slice(callsBefore)
+      .map((call) => call.args[3] ?? "");
+    expect(branches.some((path) => path.includes(encodeURIComponent(unpublished.branch)))).toBe(false);
+  }, 60_000);
+});
+
 describe.skipIf(process.versions.bun === undefined)("pushing a task branch (real git, fake Copilot CLI)", () => {
   test("pushes the branch to the repo host it fetches from", async () => {
     const task = await taskWithCommit("orders", "Add an order note");
@@ -157,6 +270,17 @@ describe.skipIf(process.versions.bun === undefined)("pushing a task branch (real
       push: { remote: "origin", commits: 1, published: true, unpushed: 0, behind: 0 },
     });
     expect(gitIn(bare, "log", "-1", "--format=%s", task.branch).trim()).toBe("Add an order note");
+  }, 60_000);
+
+  test("after a push the watch reads the merge request again within a minute, not at the settled pace", async () => {
+    const task = await taskWithCommit("orders", "Add an order total");
+    await daemon.post(mergeRequestsApi.push, { task: task.id });
+    const asksForBranch = () => hosting.calls().filter((call) => (call.args[3] ?? "").includes(encodeURIComponent(task.branch))).length;
+    const before = asksForBranch();
+
+    await daemon.facade.mergeRequests.checkWatched(Date.now() + 61_000);
+
+    expect(asksForBranch()).toBe(before + 1);
   }, 60_000);
 
   test("a remote on no known repo host is not pushed to, and gets no form", async () => {

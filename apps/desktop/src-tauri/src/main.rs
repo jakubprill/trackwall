@@ -20,6 +20,7 @@ mod jump;
 mod link;
 mod lock;
 mod notification;
+mod pipelines;
 mod repaint;
 mod saved_windows;
 mod tray_panel;

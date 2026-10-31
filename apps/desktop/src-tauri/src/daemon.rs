@@ -200,6 +200,15 @@ pub fn sessions(conn: &Connection) -> Result<String, String> {
     Ok(body)
 }
 
+/// The body of the `POST /api/task-outcomes/list` reply (what each task's work came to, ADR-154).
+pub fn task_outcomes(conn: &Connection) -> Result<String, String> {
+    let (status, body) = http(conn.port, "POST", "/api/task-outcomes/list", Some(&conn.token))?;
+    if status != 200 {
+        return Err(format!("task outcomes returned {status}"));
+    }
+    Ok(body)
+}
+
 /// The sidecar path: next to `trackwall.exe` (portable zip) or in `Contents/MacOS` (.app bundle).
 fn sidecar_path() -> Result<PathBuf, String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;

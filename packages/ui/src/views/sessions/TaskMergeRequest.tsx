@@ -106,26 +106,54 @@ function FoundMergeRequest({ conn, project, mergeRequest }: { conn: Connection; 
     openLink(link.data).catch((err: unknown) => setLinkError(errorMessage(err)));
   };
   const { pipeline } = mergeRequest;
+  const failedJobs = pipeline?.failedJobs ?? [];
   return (
-    <div className="flex min-w-0 items-center gap-3 text-xs">
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-auto min-w-0 p-0 underline-offset-4 hover:underline"
-        onClick={() => open(mergeRequest.url)}
-        title={mergeRequest.url}
-      >
-        <span className="truncate">{`${mergeRequestNumber(project, mergeRequest.number)} ${mergeRequest.title}`}</span>
-      </Button>
-      <StatusLabel {...mergeRequestStateLabel(mergeRequest.state)} />
-      {pipeline ? (
-        <Button variant="ghost" size="sm" className="h-auto p-0" onClick={() => open(pipeline.url)} title={pipeline.url}>
-          <StatusLabel {...pipelineLabel(pipeline.state)} />
+    <div className="flex min-w-0 flex-col gap-1">
+      <div className="flex min-w-0 items-center gap-3 text-xs">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-auto min-w-0 p-0 underline-offset-4 hover:underline"
+          onClick={() => open(mergeRequest.url)}
+          title={mergeRequest.url}
+        >
+          <span className="truncate">{`${mergeRequestNumber(project, mergeRequest.number)} ${mergeRequest.title}`}</span>
         </Button>
-      ) : (
-        <span className="text-muted-foreground">no pipeline</span>
+        <StatusLabel {...mergeRequestStateLabel(mergeRequest.state)} />
+        {pipeline ? (
+          <Button variant="ghost" size="sm" className="h-auto p-0" onClick={() => open(pipeline.url)} title={pipeline.url}>
+            <StatusLabel {...pipelineLabel(pipeline.state)} />
+          </Button>
+        ) : (
+          <span className="text-muted-foreground">no pipeline</span>
+        )}
+        {linkError && <span className="text-destructive truncate">{linkError}</span>}
+      </div>
+      {failedJobs.length > 0 && (
+        // The logs stay on the repo host: the agent reads them with the user's MCP server for it (ADR-154).
+        <div className="text-muted-foreground flex min-w-0 flex-wrap items-center gap-x-3 text-xs">
+          <span>Failed:</span>
+          {failedJobs.map((job, i) => {
+            const { url } = job;
+            // A check and a commit status on GitHub can share a name.
+            const key = `${i}:${job.name}`;
+            return url === null ? (
+              <span key={key}>{job.name}</span>
+            ) : (
+              <Button
+                key={key}
+                variant="ghost"
+                size="sm"
+                className="h-auto p-0 underline-offset-4 hover:underline"
+                onClick={() => open(url)}
+                title={url}
+              >
+                {job.name}
+              </Button>
+            );
+          })}
+        </div>
       )}
-      {linkError && <span className="text-destructive truncate">{linkError}</span>}
     </div>
   );
 }

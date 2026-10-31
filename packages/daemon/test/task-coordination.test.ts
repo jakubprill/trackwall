@@ -266,6 +266,33 @@ describe("updates on delegated work", () => {
     ]);
   });
 
+  test("a failed pipeline goes to the proposer with the jobs that failed it; a task the user started tells nobody", () => {
+    const { coordination, asked } = setup();
+    const mergeRequest = (failedJobs: { name: string; url: string | null }[]) => ({
+      number: 12,
+      title: "Fix login",
+      url: "https://gitlab.example.com/shop/-/merge_requests/12",
+      state: "open" as const,
+      pipeline: { state: "failed" as const, url: "https://gitlab.example.com/shop/-/pipelines/41", commit: "b".repeat(40), failedJobs },
+    });
+
+    coordination.pipelineFailed("by-main", mergeRequest([{ name: "unit-tests", url: "https://gitlab.example.com/shop/-/jobs/7" }]));
+    coordination.pipelineFailed("by-user", mergeRequest([]));
+
+    expect(asked).toEqual([MAIN]);
+    expect(coordination.takeUpdates(MAIN).updates).toEqual([
+      {
+        kind: "pipeline_failed",
+        task: "by-main",
+        session: TASK_SESSION,
+        mergeRequest: "https://gitlab.example.com/shop/-/merge_requests/12",
+        pipeline: "https://gitlab.example.com/shop/-/pipelines/41",
+        failedJobs: [{ name: "unit-tests", url: "https://gitlab.example.com/shop/-/jobs/7" }],
+        at: expect.any(String),
+      },
+    ]);
+  });
+
   test("work nobody in Trackwall proposed gives no updates, and an agent outside Trackwall cannot read any", () => {
     const { coordination, asked } = setup();
     coordination.sessionEvent({ id: TASK_SESSION, task: "by-user" }, { kind: "turn_ended" });
