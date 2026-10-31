@@ -28,6 +28,7 @@ import { type CopilotHookOutput, situationOutput } from "./copilot-hook-output.t
 import type { CopilotHookRecord } from "./copilot-hook-record.ts";
 import type { SessionEvent } from "./live-session.ts";
 import { SessionAttention } from "./session-attention.ts";
+import { sessionStuck } from "./session-stuck.ts";
 
 /**
  * A Copilot CLI session in the conversation view (§4.4, ADR-107): `copilot --acp` on pipes of a `procs` group, with
@@ -124,6 +125,8 @@ export class AcpSession implements AgentSession {
   #conversationId: string | undefined;
   #hasConversation: boolean;
   #last: TaskStateChange | null = null;
+  /** The agent's last update or state change, for `SessionStuck` (ADR-151); the start before either. */
+  #lastStepAt = Date.now();
   #windowTitle: string | null = null;
   #ready = false;
   #turn: Prompt | undefined;
@@ -315,6 +318,7 @@ export class AcpSession implements AgentSession {
       state: this.#last,
       windowTitle: this.#windowTitle,
       needsAttention: running && this.#attention.waiting(this.#last?.state),
+      stuck: running ? sessionStuck(this.#last, this.#lastStepAt, Date.now()) : null,
       task: this.task,
       dialog: running ? (this.#approvals[0]?.dialog ?? null) : null,
       environment: this.environment,
@@ -394,6 +398,8 @@ export class AcpSession implements AgentSession {
     if (method !== "session/update") return;
     const parsed = SessionUpdateParams.safeParse(params);
     if (!parsed.success || parsed.data.sessionId !== this.#conversationId) return;
+    // Any update of the conversation is a step (ADR-151), also a thought or a plan the daemon does not show.
+    this.#lastStepAt = Date.now();
     const update = SessionUpdate.safeParse(parsed.data.update);
     // A kind the daemon does not show (available commands, usage, thoughts, plans).
     if (!update.success) return;
@@ -440,6 +446,7 @@ export class AcpSession implements AgentSession {
     // notification ahead of the answer's last chunk would show a finished turn without its answer.
     this.#flushNow();
     const previous = this.#last?.state;
+    this.#lastStepAt = Date.now();
     this.#last = { state, source, confidence: "exact", at: new Date().toISOString(), reason };
     this.#attention.changed(previous, state);
   }

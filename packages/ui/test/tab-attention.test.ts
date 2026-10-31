@@ -14,6 +14,7 @@ function session(id: string, state: TaskState | null, needsAttention: boolean, e
     state: state && { state, source: "hook", confidence: "high", at: "2026-10-30T10:01:00Z", reason: "hook" },
     windowTitle: null,
     needsAttention,
+    stuck: null,
     task: null,
     dialog: null,
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },

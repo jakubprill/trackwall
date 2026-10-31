@@ -39,6 +39,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       { text: "Start my day", link: "/features/start-my-day" },
       { text: "Plan", link: "/features/plan" },
       { text: "Copilot CLI sessions", link: "/features/sessions" },
+      { text: "While you were away", link: "/features/while-you-were-away" },
       { text: "Approvals outside the terminal", link: "/features/approvals" },
       { text: "Agent tasks", link: "/features/tasks" },
       { text: "Impact of a task", link: "/features/impact" },

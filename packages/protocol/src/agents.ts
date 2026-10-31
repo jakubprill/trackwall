@@ -228,6 +228,18 @@ export type EnvironmentChange = z.infer<typeof EnvironmentChange>;
 export const EnvironmentCheck = z.object({ change: EnvironmentChange.nullable() });
 export type EnvironmentCheck = z.infer<typeof EnvironmentCheck>;
 
+/**
+ * A session that may be stuck (ADR-151): it is in the middle of a turn (`Working`, or `Stale`) and no step of its agent
+ * came for a long time: no hook in a terminal (a finished tool, a prompt, a notification), no update over ACP, no key
+ * from the user. Copilot CLI keeps drawing its spinner while a command hangs, so the output alone does not tell; a
+ * command that never ends, a server started in the foreground or a shell waiting for input look like this.
+ */
+export const SessionStuck = z.object({
+  /** ISO 8601: the agent's last step. */
+  lastStepAt: z.iso.datetime(),
+});
+export type SessionStuck = z.infer<typeof SessionStuck>;
+
 export const Session = z.object({
   id: SessionId,
   /**
@@ -250,6 +262,8 @@ export const Session = z.object({
    * The daemon computes it so that the UI and the tray in the shell (Rust) read one rule instead of copies of it.
    */
   needsAttention: z.boolean(),
+  /** The session may be stuck (ADR-151); `null` while its agent takes steps, waits or has ended. */
+  stuck: SessionStuck.nullable(),
   /** The task in whose worktree the session runs; `null` for a session in the repo root. */
   task: TaskId.nullable(),
   /** The agent dialog on the screen while the session is in `Approval` (an approval) or in `Input` (a question); otherwise `null`. */
