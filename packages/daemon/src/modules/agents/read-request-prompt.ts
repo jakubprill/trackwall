@@ -32,7 +32,14 @@ export interface Unread {
 }
 
 /** The prompt for what waits, or `undefined` when nothing does. */
-export function inboxPrompt({ reviewComments, messages, handoffMoved, roundUndone, updates, trustNotice }: Unread): string | undefined {
+export function readRequestPrompt({
+  reviewComments,
+  messages,
+  handoffMoved,
+  roundUndone,
+  updates,
+  trustNotice,
+}: Unread): string | undefined {
   const parts = [
     // First: what the agent reads next may refer to the changes that are gone.
     roundUndone && ROUND_UNDONE,

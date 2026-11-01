@@ -112,6 +112,18 @@ Windows: the zip contains `trackwall.exe`, `trackwall-daemon.exe` and `ui/`. Unp
 
 macOS: the zip contains an unsigned `Trackwall.app`; open it the first time with right click > Open or `xattr -dr com.apple.quarantine Trackwall.app`.
 
+## Linux archive
+
+The daemon and its page for a Linux container, without the desktop app (ADR-163), on Linux or macOS:
+
+```sh
+pnpm --filter @trackwall/ui build
+pnpm --filter @trackwall/daemon build --target x86_64-unknown-linux-gnu   # or aarch64-unknown-linux-gnu
+bun apps/desktop/scripts/package-linux.ts x64                             # or arm64: out/trackwall-<version>-linux-<arch>.tar.gz
+```
+
+The archive holds a `trackwall` folder with `trackwall-daemon`, `ui/` and `README.txt`. The `container` job of CI packs the x64 one on every PR and runs the smoke test on it unpacked; the release builds both on their own architecture.
+
 The nightly CI run publishes the Windows and macOS archives as artifacts, and so does a manual run of CI with Windows or macOS ticked; a PR builds neither (ADR-128).
 
 ## Icons

@@ -5,8 +5,8 @@ import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
 import { MCP_SERVER_NAME, mcpTools, type Session, TASK_MESSAGE_RULE } from "@trackwall/protocol";
 import { windowTitleFromOsc } from "../src/modules/agents/copilot-osc.ts";
-import { inboxPrompt } from "../src/modules/agents/inbox-prompt.ts";
 import { OscParser } from "../src/modules/agents/osc-parser.ts";
+import { readRequestPrompt } from "../src/modules/agents/read-request-prompt.ts";
 import { viewer, waitFor } from "../test/support/agents.ts";
 import { REFERENCE_COLS, REFERENCE_ROWS } from "../test/support/copilot-reference.ts";
 import { untilInputBox } from "../test/support/screen-lines.ts";
@@ -729,7 +729,7 @@ describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
       await turnsEnded(main.id, 3);
 
       const requests = model.requests();
-      const updatesPrompt = inboxPrompt({
+      const updatesPrompt = readRequestPrompt({
         reviewComments: 0,
         messages: 0,
         handoffMoved: false,
@@ -737,7 +737,7 @@ describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
         updates: 1,
         trustNotice: false,
       });
-      const messagesPrompt = inboxPrompt({
+      const messagesPrompt = readRequestPrompt({
         reviewComments: 0,
         messages: 1,
         handoffMoved: false,
