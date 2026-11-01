@@ -36,6 +36,7 @@ function fakeSession(
     tick: () => run.kind === "running",
     view: () => ({ id, run }) as Session,
     askToRead: () => "typed",
+    deliverNow: () => {},
     hookOutput: () => ({}),
     answerDialog: () => {},
     dispose() {
