@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { RunState } from "@trackwall/protocol";
 import type { CopilotHookEvent, CopilotHookRecord } from "../src/modules/agents/copilot-hook-record.ts";
 import { LiveSession, type SessionEvent } from "../src/modules/agents/live-session.ts";
+import { STUCK_AFTER_MS } from "../src/modules/agents/session-stuck.ts";
 import { screenProcessed } from "./support/live-session.ts";
 
 const sessions: LiveSession[] = [];
@@ -853,5 +854,220 @@ describe("what the session's agent did, for its task's proposer (ADR-68)", () =>
     session.tick();
 
     expect(events).toEqual([{ kind: "error" }, { kind: "exited", exitCode: 1, stoppedByUser: false }]);
+  });
+});
+
+describe("what waits unread for a session, in the session list, and the user's Deliver now (ADR-159)", () => {
+  const promptSubmitted = `${JSON.stringify({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] })}\n`;
+
+  test("nothing unread is no read request", () => {
+    const { session } = runningSession(() => undefined);
+    session.tick();
+
+    expect(session.view()?.readRequest).toBeNull();
+  });
+
+  test("a prompt asked for during a turn is pending until the turn's end, then sent, and gone once the agent read it", async () => {
+    let waiting: string | undefined = "read the review";
+    const { session, hooksFile } = runningSession(() => waiting);
+    session.connect({ write: () => {}, resize: () => {} });
+    appendFileSync(hooksFile, promptSubmitted);
+    session.tick();
+    session.askToRead();
+    session.tick();
+    const since = session.view()?.readRequest?.since ?? "";
+
+    expect(session.view()?.readRequest).toEqual({ prompt: "read the review", since: expect.any(String), waitsFor: "pending" });
+    await endTurnAtBox(session, hooksFile);
+    expect(session.view()?.readRequest).toEqual({ prompt: "read the review", since, waitsFor: "sent" });
+    waiting = undefined;
+    session.tick();
+    expect(session.view()?.readRequest).toBeNull();
+  });
+
+  test("what a session found unread that nobody asked it to read is idle until Deliver now types it into the empty box", async () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    await endTurnAtBox(session, hooksFile);
+
+    expect(session.view()?.readRequest?.waitsFor).toBe("idle");
+    expect(written).toEqual([]);
+    session.deliverNow();
+    expect(written).toEqual(["read the review"]);
+    expect(session.view()?.readRequest?.waitsFor).toBe("sent");
+  });
+
+  test("a prompt asked for before the user's Esc is idle at the empty box the hooks do not trust, and Deliver now types it there", async () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    appendFileSync(hooksFile, promptSubmitted);
+    session.tick();
+    expect(session.askToRead()).toBe("queued");
+    session.input("\u001b");
+    await showScreen(session, PROMPT_BOX);
+
+    expect(session.view()?.readRequest?.waitsFor).toBe("idle");
+    expect(written).toEqual(["\u001b"]);
+    session.deliverNow();
+    expect(written).toEqual(["\u001b", "read the review"]);
+  });
+
+  test("Deliver now writes nothing while a typed prompt is sent, or into the user's text", async () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    await endTurnAtBox(session, hooksFile);
+    session.askToRead();
+    expect(session.view()?.readRequest?.waitsFor).toBe("sent");
+    session.deliverNow();
+    expect(written).toEqual(["read the review"]);
+
+    const other = runningSession();
+    const typed: string[] = [];
+    other.session.connect({ write: (data) => typed.push(data), resize: () => {} });
+    await endTurnAtBox(other.session, other.hooksFile);
+    other.session.input("also check the");
+    typed.length = 0;
+    other.session.askToRead();
+    await showScreen(other.session, "────\r\n❯ also check the\r\n────\r\n Interactive · / commands\r\n");
+    expect(other.session.view()?.readRequest?.waitsFor).toBe("user_text");
+    other.session.deliverNow();
+    expect(typed).toEqual([]);
+  });
+
+  test("a prompt the agent took counts as sent through its turn, so Deliver now and the hooks do not send it twice", async () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    await endTurnAtBox(session, hooksFile);
+    session.askToRead();
+    appendFileSync(hooksFile, promptSubmitted);
+    session.tick();
+
+    expect(session.view()?.readRequest?.waitsFor).toBe("sent");
+    session.deliverNow();
+    expect(written).toEqual(["read the review"]);
+    expect(session.hookOutput({ event: "postToolUse", receivedAt: 0, payload: {}, omitted: [] })).toEqual({});
+    endTurn(session, hooksFile);
+    expect(session.view()?.readRequest?.waitsFor).toBe("idle");
+  });
+
+  test("an empty box on the screen before the first hook is no idle box, since a starting prompt may still take it", async () => {
+    const { session } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    session.askToRead();
+    await showScreen(session, PROMPT_BOX);
+
+    expect(session.view()?.readRequest?.waitsFor).not.toBe("idle");
+  });
+
+  test("a typed prompt the daemon gave up on in the box waits as the box's text, and is not typed again", async () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    await endTurnAtBox(session, hooksFile);
+    session.askToRead();
+    const held = "────\r\n❯ read the review\r\n────\r\n Interactive · / commands\r\n";
+    await showScreen(session, held);
+    await new Promise((r) => setTimeout(r, 200));
+    later(6000, () => session.tick());
+    later(12_000, () => session.tick());
+    later(18_000, () => session.tick());
+    const given = ["read the review", "\r", "\r", "\r"];
+
+    expect(written).toEqual(given);
+    expect(session.view()?.readRequest?.waitsFor).toBe("user_text");
+    session.deliverNow();
+    later(24_000, () => session.tick());
+    expect(written).toEqual(given);
+  });
+
+  test("an ended session has no read request", () => {
+    const { session } = runningSession(
+      () => "read the review",
+      () => ({
+        kind: "exited",
+        runId: "r2",
+        startedAt: "2026-10-24T12:00:00.000Z",
+        endedAt: "2026-10-24T12:01:00.000Z",
+        exitCode: 0,
+        signal: null,
+        stoppedByUser: true,
+        lastLines: [],
+      }),
+    );
+    session.tick();
+
+    expect(session.view()?.readRequest).toBeNull();
+  });
+});
+
+describe("a session that may be stuck (ADR-151)", () => {
+  const START = Date.parse("2026-10-31T09:00:00.000Z");
+  afterEach(() => setSystemTime());
+  const at = (ms: number) => setSystemTime(new Date(START + ms));
+  const hook = (hooksFile: string, event: CopilotHookEvent) =>
+    appendFileSync(hooksFile, `${JSON.stringify({ event, receivedAt: 0, payload: {}, omitted: [] })}\n`);
+
+  test("is one working for 15 minutes since its agent's last hook, although Copilot CLI keeps printing its spinner", () => {
+    at(0);
+    const { session, hooksFile } = runningSession();
+    hook(hooksFile, "userPromptSubmitted");
+    session.tick();
+
+    at(STUCK_AFTER_MS - 1);
+    session.output(new TextEncoder().encode("⠋ Running mvn verify (14m 59s)"));
+    expect(session.view()).toMatchObject({ state: { state: "Working" }, stuck: null });
+
+    at(STUCK_AFTER_MS);
+    expect(session.view()?.stuck).toEqual({ lastStepAt: "2026-10-31T09:00:00.000Z" });
+  });
+
+  test("is no longer stuck after the next hook, and one waiting for an approval is never stuck", () => {
+    at(0);
+    const { session, hooksFile } = runningSession();
+    hook(hooksFile, "userPromptSubmitted");
+    session.tick();
+    at(STUCK_AFTER_MS);
+    hook(hooksFile, "postToolUse");
+    session.tick();
+    expect(session.view()?.stuck).toBeNull();
+
+    appendFileSync(
+      hooksFile,
+      `${JSON.stringify({ event: "notification", receivedAt: 0, payload: { notification_type: "permission_prompt" }, omitted: [] })}\n`,
+    );
+    session.tick();
+    at(3 * STUCK_AFTER_MS);
+    expect(session.view()).toMatchObject({ state: { state: "Approval" }, stuck: null });
+  });
+
+  test("is never one whose hooks have not reached the daemon, since its steps cannot be seen", () => {
+    at(0);
+    const { session } = runningSession();
+    session.output(new TextEncoder().encode("\u001b]9;4;3\u0007"));
+    expect(session.view()?.state).toMatchObject({ state: "Working", source: "osc" });
+
+    at(3 * STUCK_AFTER_MS);
+    expect(session.view()?.stuck).toBeNull();
+  });
+
+  test("counts the user's key as a step, but not a mouse move the terminal reports", () => {
+    at(0);
+    const { session, hooksFile } = runningSession();
+    session.connect({ write: () => {}, resize: () => {} });
+    hook(hooksFile, "userPromptSubmitted");
+    session.tick();
+
+    at(10 * 60_000);
+    session.input("\u001b[<35;10;5M");
+    at(STUCK_AFTER_MS);
+    expect(session.view()?.stuck).toEqual({ lastStepAt: "2026-10-31T09:00:00.000Z" });
+
+    session.input("x");
+    expect(session.view()?.stuck).toBeNull();
   });
 });

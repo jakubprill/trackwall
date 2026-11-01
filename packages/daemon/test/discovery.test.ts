@@ -1,11 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   daemonFilePath,
   lockHeldElsewhere,
   newToken,
+  probeRunningDaemon,
   readDaemonFile,
   removeDaemonFile,
   watchDaemonFile,
@@ -22,6 +25,18 @@ describe("discovery", () => {
     writeDaemonFile(home, file);
     expect(readDaemonFile(home)).toEqual(file);
     if (process.platform !== "win32") expect(statSync(daemonFilePath(home)).mode & 0o777).toBe(0o600);
+  });
+
+  test("an older daemon whose health has no instance id still counts as running, so a newer one asks for its restart", async () => {
+    const older = createServer((_req, res) => res.end(JSON.stringify({ ok: true, data: { status: "ok", version: "0.5.0" } })));
+    await new Promise<void>((resolve) => older.listen(0, "127.0.0.1", resolve));
+    try {
+      const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
+      writeDaemonFile(home, { ...file, port: (older.address() as AddressInfo).port });
+      expect((await probeRunningDaemon(home))?.version).toBe("0.5.0");
+    } finally {
+      older.close();
+    }
   });
 
   test("a damaged file means no daemon", () => {

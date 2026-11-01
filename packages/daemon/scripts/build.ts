@@ -16,6 +16,7 @@ const TARGETS = {
   "aarch64-apple-darwin": { bun: "bun-darwin-arm64", exe: false },
   "x86_64-apple-darwin": { bun: "bun-darwin-x64", exe: false },
   "x86_64-unknown-linux-gnu": { bun: "bun-linux-x64", exe: false },
+  "aarch64-unknown-linux-gnu": { bun: "bun-linux-arm64", exe: false },
 } as const;
 type Triple = keyof typeof TARGETS;
 
@@ -30,6 +31,7 @@ function hostTriple(): Triple {
     "darwin-arm64": "aarch64-apple-darwin",
     "darwin-x64": "x86_64-apple-darwin",
     "linux-x64": "x86_64-unknown-linux-gnu",
+    "linux-arm64": "aarch64-unknown-linux-gnu",
   };
   const triple = map[key];
   if (!triple) throw new Error(`unsupported platform ${key}`);

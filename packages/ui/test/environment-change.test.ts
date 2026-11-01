@@ -14,10 +14,12 @@ function session(state: "Working" | "Input" | null, run: Session["run"] = runnin
     state: state && { state, source: "hook", confidence: "high", at: "2026-10-29T08:01:00Z", reason: "hook" },
     windowTitle: null,
     needsAttention: false,
+    stuck: null,
     task: null,
     dialog: null,
     environment: { variables: ["GITLAB_TOKEN"], secrets: ["GITLAB_TOKEN"], agentSecrets: [], profile: null, problem: null },
     view: "terminal",
+    readRequest: null,
   };
 }
 

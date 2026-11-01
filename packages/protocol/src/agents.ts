@@ -245,6 +245,40 @@ export function mayHandToSupervisor(task: Pick<Task, "proposedBy">): boolean {
   return task.proposedBy === null;
 }
 
+/**
+ * Why a read request (ADR-159) has not been taken yet: `sent` it was typed or given through a hook and the agent has
+ * not read it; `pending` it goes in as soon as the agent can take it (with a tool's result, when its turn ends, once the
+ * input box is back); `user_text` there is text in the input box, the user's or a prompt given up on; `dialog` the agent
+ * asks something on the screen; `idle` nothing will send it until the next message or update, or the user's Deliver now.
+ */
+export const ReadRequestHold = z.enum(["sent", "pending", "user_text", "dialog", "idle"]);
+export type ReadRequestHold = z.infer<typeof ReadRequestHold>;
+
+/**
+ * The read request (ADR-159): the daemon's prompt asking a session's agent to read what waits unread for it (a review,
+ * task messages, task updates, a handoff, a trust notice), since when it has waited and what holds it back.
+ */
+export const ReadRequest = z.object({
+  /** The daemon's prompt, which names the tools with something unread. */
+  prompt: z.string(),
+  /** ISO 8601: since when something has waited unread without a break. */
+  since: z.string(),
+  waitsFor: ReadRequestHold,
+});
+export type ReadRequest = z.infer<typeof ReadRequest>;
+
+/**
+ * A session that may be stuck (ADR-151): it is in the middle of a turn (`Working`, or `Stale`) and no step of its agent
+ * came for a long time: no hook in a terminal (a finished tool, a prompt, a notification), no update over ACP, no key
+ * from the user. Copilot CLI keeps drawing its spinner while a command hangs, so the output alone does not tell; a
+ * command that never ends, a server started in the foreground or a shell waiting for input look like this.
+ */
+export const SessionStuck = z.object({
+  /** ISO 8601: the agent's last step. */
+  lastStepAt: z.iso.datetime(),
+});
+export type SessionStuck = z.infer<typeof SessionStuck>;
+
 export const Session = z.object({
   id: SessionId,
   /**
@@ -267,6 +301,8 @@ export const Session = z.object({
    * The daemon computes it so that the UI and the tray in the shell (Rust) read one rule instead of copies of it.
    */
   needsAttention: z.boolean(),
+  /** The session may be stuck (ADR-151); `null` while its agent takes steps, waits or has ended. */
+  stuck: SessionStuck.nullable(),
   /** The task in whose worktree the session runs; `null` for a session in the repo root. */
   task: TaskId.nullable(),
   /** The agent dialog on the screen while the session is in `Approval` (an approval) or in `Input` (a question); otherwise `null`. */
@@ -274,6 +310,8 @@ export const Session = z.object({
   environment: SessionEnvironment,
   /** Copilot CLI's own screen in a terminal, or Trackwall's conversation view over ACP (ADR-107). */
   view: SessionView,
+  /** The read request while something waits unread for the agent of a running session (ADR-159); `null` otherwise. */
+  readRequest: ReadRequest.nullable(),
 });
 export type Session = z.infer<typeof Session>;
 
@@ -610,6 +648,12 @@ export const agentsApi = {
    * waits, otherwise after its turn. A session in a terminal gets what the user types there instead (`bad_request`).
    */
   say: endpoint("say", SessionRequest.extend({ text: SessionMessage }), Session),
+  /**
+   * The user's Deliver now (ADR-159) for a read request nothing would send (`idle`): it goes to the agent as soon as the
+   * agent can take it, at once into an empty input box, also after an Esc. It never goes into text in the input box,
+   * into the middle of a turn or twice. An ended session is `bad_request`.
+   */
+  deliverReadRequest: endpoint("deliver-read-request", SessionRequest, Session),
   /** Stops the agent's turn in a session in the conversation view (ADR-107), as Esc does in the terminal. */
   interrupt: endpoint("interrupt", SessionRequest, Session),
   /**

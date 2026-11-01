@@ -20,6 +20,7 @@ import {
   type RepoStatusOk,
   type RepoTagRules,
   type SearchCodeResult,
+  type SearchCommitsResult,
   type Session,
   type SessionProfile,
   type StatusRead,
@@ -29,6 +30,7 @@ import {
   sameHost,
   type ToolPermissions,
   type TreeEntry,
+  type UnpushedWork,
   type WorkingTreeChanges,
   type WorkspaceKeysRead,
   type WorkspaceSettings,
@@ -39,6 +41,7 @@ import { moveOldTrackwallFolders, oldWorktreesDir, removeEmptyWorktreesDir } fro
 import { ensureTrackwallDir } from "../../infra/trackwall-dir.ts";
 import { CloneJobs } from "./clone-jobs.ts";
 import { type CodeSearchQuery, type CodeSearchVcs, searchCode } from "./code-search.ts";
+import { type CommitSearchQuery, type CommitSearchVcs, searchCommits } from "./commit-search.ts";
 import { describeDroppedFolder } from "./dropped-folder.ts";
 import { isFullPath, NOT_FULL_PROGRAM_PATH } from "./full-path.ts";
 import { dirKey, findRepos, projectsDirUnavailable, type RepoEntry, resolveFolderSetting, takenNames } from "./projects-dir.ts";
@@ -46,6 +49,7 @@ import { moveRepoOut } from "./repo-removal.ts";
 import { suggestedProjectsDir } from "./suggested-projects-dir.ts";
 import { SyncRuns } from "./sync-runs.ts";
 import { sessionToolPermissions, supervisorToolPermissions } from "./tool-permissions.ts";
+import { type RepoUnpushedRead, type UnpushedRead, unpushedWork } from "./unpushed-work.ts";
 import type { WorkspaceFile } from "./workspace-file.ts";
 import { checkWorktreesDir, defaultWorktreesDir } from "./worktrees-dir.ts";
 
@@ -76,7 +80,7 @@ const STATUS_CONCURRENCY = 8;
 const SYNC_CONCURRENCY = 4;
 
 /** What `workspace` needs from `vcs`; wired in the facade (§4: modules do not import each other). */
-interface WorkspaceVcs extends CodeSearchVcs {
+interface WorkspaceVcs extends CodeSearchVcs, CommitSearchVcs {
   checkGitProgram(path: string): Promise<void>;
   useGitProgram(path: string | null): void;
   /** `recent` lets a list reuse a status git has not had reason to change (ADR-141); `fresh` always asks git. */
@@ -87,6 +91,7 @@ interface WorkspaceVcs extends CodeSearchVcs {
   tree(dir: string, path: string): Promise<TreeEntry[] | undefined>;
   file(dir: string, path: string, maxBytes: number): Promise<FileContent | undefined>;
   changes(dir: string, maxPatchBytes: number): Promise<WorkingTreeChanges>;
+  unpushed(dir: string): Promise<RepoUnpushedRead>;
 }
 
 /** What `workspace` needs from the repo hosts of the `vcs` module (ADR-19). */
@@ -108,6 +113,8 @@ export interface WorkspaceDeps {
    * the repo go back in (ADR-114). A failure here is reported as the clone's, so the facade keeps its own to itself.
    */
   afterClone: (dir: string) => Promise<void>;
+  /** The daemon runs in a container, where the repos live in a volume (ADR-162). */
+  inContainer: boolean;
 }
 
 export class Workspace {
@@ -139,6 +146,19 @@ export class Workspace {
     const byId = new Map(entries.map((entry) => [entry.id, entry]));
     const asked = [...new Set(ids)].flatMap((id) => byId.get(id) ?? []);
     return mapLimit(asked, STATUS_CONCURRENCY, (entry) => this.describe(entry, how));
+  }
+
+  /** The work on no remote across the projects folder, read only in a container (ADR-162). */
+  async unpushedWork(): Promise<UnpushedWork> {
+    if (!this.deps.inContainer) return { inContainer: false, repos: [], unreadable: [] };
+    const { entries } = await this.entries();
+    const reads = await mapLimit(entries, STATUS_CONCURRENCY, (entry) =>
+      this.deps.vcs.unpushed(entry.path).then(
+        (work): UnpushedRead => ({ repo: entry.id, work }),
+        (error: unknown): UnpushedRead => ({ repo: entry.id, error }),
+      ),
+    );
+    return unpushedWork(reads);
   }
 
   settings(): WorkspaceSettings {
@@ -354,10 +374,20 @@ export class Workspace {
    * `not_found`, so that a typo does not look like "nothing found".
    */
   async searchCode(query: CodeSearchQuery, ids?: readonly string[]): Promise<SearchCodeResult> {
+    return searchCode(await this.chosenEntries(ids), this.deps.vcs, query);
+  }
+
+  /** The repos of a search: all of them, or those in `ids`, where an unknown id is `not_found` so a typo does not look like "nothing found". */
+  private async chosenEntries(ids?: readonly string[]): Promise<RepoEntry[]> {
     const { entries } = await this.entries();
     const unknown = ids?.find((id) => !entries.some((e) => e.id === id));
     if (unknown !== undefined) throw unknownRepo(unknown);
-    return searchCode(ids ? entries.filter((e) => ids.includes(e.id)) : entries, this.deps.vcs, query);
+    return ids ? entries.filter((e) => ids.includes(e.id)) : entries;
+  }
+
+  /** Commit search in the HEAD history of the listed repos (ADR-149), all of them or those in `ids`; an unknown id is `not_found`. */
+  async searchCommits(query: CommitSearchQuery, ids?: readonly string[]): Promise<SearchCommitsResult> {
+    return searchCommits(await this.chosenEntries(ids), this.deps.vcs, query);
   }
 
   /** The daemon does not know whether the system handled the address; the result only confirms it was accepted. */

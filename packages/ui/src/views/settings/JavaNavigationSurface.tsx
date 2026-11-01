@@ -18,12 +18,13 @@ const IDLE_POLL_MS = 30_000;
 const TONE_CLASS: Record<JavaNavigationSetupTone, string> = {
   muted: "text-muted-foreground",
   ok: "text-success",
+  warning: "text-warning",
   error: "text-destructive",
 };
 
 /**
- * Java navigation for tasks (ADR-99, ADR-123): one button installs the jdtls release Trackwall pins and the Java it runs on,
- * and saves their paths in `workspace.yaml`; the line under it says how far it got and whether tasks can get it.
+ * Java navigation for tasks (ADR-99, ADR-123, ADR-167): one button installs the jdtls release and Lombok jar Trackwall
+ * pins, the Java jdtls runs on and the Java versions the repos build with, and saves their paths in `workspace.yaml`; the line under it says how far it got and whether tasks can get it.
  */
 export function JavaNavigationSurface({ conn }: { conn: Connection }) {
   const load = useCallback(() => post(conn, javaNavigationApi.state, {}), [conn]);
@@ -47,8 +48,9 @@ function JavaNavigationSetup({ install, pending, onInstall }: { install: JavaNav
     <>
       <p className="text-muted-foreground text-sm">
         Gives agent tasks in Java repos a language server, so the agent finds definitions and usages instead of searching text. Install
-        downloads jdtls {install.jdtls} into your projects folder and Java {install.java} with mise, about 250 MB together. Install again
-        with no Java navigation tasks running.
+        downloads jdtls {install.jdtls} and Lombok {install.lombok} into your projects folder, and with mise Java {install.java} and the
+        Java versions your repos build with, about 250 MB plus some 300 MB for each such Java. Install again with no Java navigation tasks
+        running, also after adding a repo that builds with another Java.
       </p>
       <div className="flex items-center gap-3">
         <Button variant="outline" size="sm" disabled={pending || install.step !== null} onClick={onInstall}>

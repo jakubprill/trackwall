@@ -14,10 +14,12 @@ function session(id: string, repo: string, state: TaskState, more: Partial<Sessi
     state: { state, source: "hook", confidence: "exact", at: AT, reason: "hook agentStop" },
     windowTitle: null,
     needsAttention: state === "Approval",
+    stuck: null,
     task: null,
     dialog: null,
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
     view: "terminal",
+    readRequest: null,
     ...more,
   };
 }

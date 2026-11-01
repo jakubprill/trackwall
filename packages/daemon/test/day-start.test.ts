@@ -39,6 +39,7 @@ function setup(
   const yaml = join(home, "workspace.yaml");
   writeFileSync(yaml, `projectsDir: ${JSON.stringify(projects)}\n${o.workspaceYaml ?? ""}`);
   const workspace = new Workspace({
+    inContainer: false,
     file: new WorkspaceFile(yaml),
     vcs: new Vcs(systemTempFolder),
     hosting: fakeHosting().hosting,
@@ -115,10 +116,12 @@ function session(fields: Partial<Session>): Session {
     state: null,
     windowTitle: null,
     needsAttention: false,
+    stuck: null,
     task: null,
     dialog: null,
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
     view: "terminal",
+    readRequest: null,
     ...fields,
   };
 }

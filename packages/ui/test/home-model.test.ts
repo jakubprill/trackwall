@@ -27,10 +27,12 @@ function session(id: string, repoId: string, over: Partial<Session> = {}): Sessi
     state: { state: "Working", source: "hook", confidence: "high", at: "2026-10-24T10:01:00Z", reason: "hook" },
     windowTitle: null,
     needsAttention: false,
+    stuck: null,
     task: null,
     dialog: null,
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
     view: "terminal",
+    readRequest: null,
     ...over,
   };
 }

@@ -58,6 +58,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(workspaceApi.tree, (f, b) => f.workspace.tree(b.repo, b.path)),
   route(workspaceApi.file, (f, b) => f.workspace.file(b.repo, b.path)),
   route(workspaceApi.changes, (f, b) => f.workspace.changes(b.repo)),
+  route(workspaceApi.unpushedWork, (f) => f.workspace.unpushedWork()),
   route(workspaceApi.openLink, (f, b) => {
     f.openLink(b.url);
     return null;
@@ -150,6 +151,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(agentsApi.stop, (f, b) => f.agents.stop(b.session)),
   route(agentsApi.environmentChange, (f, b) => f.agents.environmentChange(b.session)),
   route(agentsApi.restart, (f, b) => f.agents.restart(b.session)),
+  route(agentsApi.deliverReadRequest, (f, b) => f.agents.deliverReadRequest(b.session)),
   route(agentsApi.answerDialog, (f, b) => f.agents.answerDialog(b.session, b.dialog, b.answer)),
   route(agentsApi.say, (f, b) => f.agents.say(b.session, b.text)),
   route(agentsApi.interrupt, (f, b) => f.agents.interrupt(b.session)),

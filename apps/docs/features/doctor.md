@@ -9,8 +9,9 @@ The doctor in Settings checks what Trackwall needs on your computer and says wha
 
 ## What you get
 
-- One list of what Trackwall relies on: your projects folder, your workspace settings file, Git, Copilot CLI, mise, Java navigation once you set it up, and gh or glab for your repo hosts.
+- One list of what Trackwall relies on: your projects folder, your workspace settings file, Git, Copilot CLI, the network your sessions use, mise, Java navigation once you set it up, and gh or glab for your repo hosts.
 - For each problem, the step that fixes it, such as the folder to add to Copilot CLI's trusted folders or the login command.
+- Behind a company proxy, the exact problem between your sessions and GitHub: a proxy that wants a login, or a company certificate Copilot CLI does not trust, with the value that fixes it.
 - A warning when your Copilot CLI is older than the version Trackwall is tested with.
 - A fresh check whenever you open "Settings > Diagnostics" or click "Check again".
 
@@ -24,15 +25,17 @@ The checks are:
 | --- | --- |
 | Projects folder | it is set and exists |
 | Projects folder storage | your projects folder is in the Linux file system; the line shows only on Linux, as a warning when the folder is a folder of your computer mounted into a container or WSL (such as `/mnt/c/...` or a Docker bind mount), where git and builds are slow; see [Run in a dev container](/guide/dev-container) |
+| Work only in this container | every commit, stash and changed file in your repos and task worktrees is pushed; the line shows only when Trackwall runs in a container, as a warning with how much is only there, since removing the container's volume deletes it; [Home](/features/home) lists the repos |
 | Workspace settings file | every key of `workspace.yaml` can be read; one that cannot is named with its line, and [Config files](/features/config-files) shows them all |
 | Git | `git --version` answers; with a "Git program" chosen in Settings the line names the git it runs, and it warns when the "Git program" from Settings did not answer and git from `PATH` is used instead |
 | Copilot CLI | Trackwall finds it the way it starts sessions, and it is not older than the version Trackwall is tested with |
 | Copilot CLI trusted folder | `trustedFolders` in Copilot CLI's `config.json` covers your projects folder, so Copilot CLI does not ask before working in each repo and task |
+| Network for sessions | `github.com` and `api.githubcopilot.com` answer through the proxy your sessions use (`HTTPS_PROXY`, `NO_PROXY`) with a certificate Copilot CLI trusts (its own list plus `NODE_EXTRA_CA_CERTS`); when your company's proxy replaces certificates and this computer already trusts its certificate, the line names the file to put in `NODE_EXTRA_CA_CERTS` |
 | mise | `mise --version` answers; repo tasks, services and task verification need it |
 | Java navigation | tasks can start the Java language server with the paths in your settings; shown only once you set up [Java navigation](/features/java-navigation) |
 | GitHub CLI (gh), GitLab CLI (glab) | it is signed in to every repo host of that kind in "Repo hosts"; shown only when you have such a host |
 
-The doctor only looks. It never changes a setting, installs anything or signs you in, and its results are not saved or sent anywhere.
+The doctor only looks. It never changes a setting, installs anything or signs you in, and its results are not saved or sent anywhere. The network check only opens a connection to GitHub and Copilot and closes it, without sending anything but the proxy's login when its address has one; a proxy is shown only as its host and port, never with the password its address may carry.
 
 ## Use it
 
@@ -44,5 +47,7 @@ The doctor only looks. It never changes a setting, installs anything or signs yo
 
 - After installing a program, restart Trackwall if the doctor still does not find it.
 - A check of gh or glab asks the repo host, so without a network or VPN it shows as not signed in.
+- Sessions start with the environment Trackwall started with, so after changing `HTTPS_PROXY` or `NODE_EXTRA_CA_CERTS` restart Trackwall and click "Check again". In a dev container, set them in `containerEnv`; see [Run in a dev container](/guide/dev-container).
+- Your own MCP servers and the certificates of Java builds are not checked.
 - Whether Copilot CLI itself is signed in is not checked; a session that cannot sign in says so in its terminal.
 - Errors of Trackwall itself are listed under [Trackwall errors](/features/trackwall-errors).

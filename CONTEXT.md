@@ -77,6 +77,9 @@ _Avoid_: workspace (that is a separate term, see below)
 **Daemon token**:
 The secret from `~/.trackwall/daemon.json` with which the UI, the shell and the stdio bridge authenticate to the API and the MCP server; Trackwall sessions do not get it (ADR-138).
 
+**Page address** (`daemonPageAddress`, `trackwall-daemon address`):
+The address of the daemon's page with the daemon token in its fragment, `http://127.0.0.1:<port>/#token=…`, which opens Trackwall in a browser; the page moves the token out of the address bar into its storage (ADR-161). The desktop app takes the same address for a remote daemon (ADR-130).
+
 **MCP server** (`/mcp`, `createMcpEndpoint`):
 The part of the daemon through which agents read its state with MCP tools; the same port as the API, with the daemon token or a Trackwall session's own token (§5.3, ADR-24, ADR-138).
 
@@ -163,6 +166,14 @@ _Avoid_: check, CI, validation (that is a schema at the point of entry)
 A fixed string or a regular expression in the files of the latest commit of many repos of the projects folder at once, through `git grep` (ADR-40); a match (`CodeMatch`) is a repo, path, line, column and context lines. It does not see uncommitted changes, just like browsing a repo.
 _Avoid_: grep (the tool underneath), index (there is none)
 
+**Commit search** (`searchCommits`, MCP tool `search_commits`, result `SearchCommitsResult`):
+The commits of the history of the latest commit of many repos at once that add or remove a text, or match a message, author, paths or date, through `git log` (ADR-149); a found commit (`FoundCommit`) is a repo, hash, author, date, subject and changed files. Newest first across all repos.
+_Avoid_: history search, blame (another git command), log (the process logs of `logs`)
+
+**Task journal** (`TaskJournal`, `task-journal.jsonl`, MCP tool `search_task_history`, record `EndedTask`):
+A record of every task the user has ended: its prompt, the session's last summary, the commits and files on its branch and its last verdict, taken when the task ends (ADR-150). Agents search it by words to learn how a similar change was done before.
+_Avoid_: task history (only in the tool name), archive, log (the process logs of `logs`)
+
 **Task worktrees folder** (`worktreesDir` in `workspace.yaml` and `tasks.json`):
 The folder new task worktrees go into (ADR-84): the user's setting, or by default `.trackwall/worktrees` in the projects folder, which the repo list skips. Never the projects folder itself, a folder inside one of its repos, or a folder of `.trackwall` other than `.trackwall/worktrees`. Each task keeps the folder it was created in, so changing the setting moves no existing worktree.
 
@@ -244,6 +255,10 @@ A method and path that an HTTP client calls, with the line in the code, and for 
 
 **Profile** (Spring profile, `ConsumedHttp.profiles`):
 A name from `application-<profile>.yml` or `spring.config.activate.on-profile`; `default` is the configuration without a profile. A client with an address from configuration has a separate entry for every profile in which the address is different.
+
+**App configuration** (`AppConfig`, MCP tool `get_app_config`):
+One profile's view of a repo's Spring configuration files as they are on disk now, in the repo root or a task's worktree, with uncommitted and git-ignored files (ADR-153): every key with its expanded value, file and line, and the environment variables its placeholders read. A secret (a key such as `password`, `client-secret` or `api-key`) has no value in it, only whether it is set (`set`), and a variable only whether a run there has it. Unlike the card, it is not read from a commit.
+_Avoid_: app config dump, properties, env (the environment is only judged, never shown)
 
 **Required tool** (`ToolRequirement`):
 A tool and version from mise configuration or `.tool-versions` (source `mise`) or from a file that gives the version in its own way (`.nvmrc`, the Maven wrapper, `engines.node`; source `hint`).
@@ -356,7 +371,7 @@ Whether a task's agent asks the user before tools: `ask` (the default) as every 
 _Avoid_: YOLO, autopilot (Copilot CLI's own modes, not what Trackwall passes), auto-approve
 
 **Java navigation** (`Task.javaNavigation`, `javaNavigation` in `workspace.yaml`, `JavaNavigationSettings`; "Java navigation" on the start pill):
-A Java language server (jdtls) a task's sessions get for Copilot CLI's `lsp` tool, started by Copilot CLI from the session plugin in the task's worktree with the task's own index. The user installs jdtls and its Java with "Install" in Settings › Agents, which writes their paths into `workspace.yaml` (ADR-123), or names their own there by hand (the install's progress and last error: `JavaNavigationInstall`; how a task's jdtls is doing, from its log: `JavaNavigationStatus`, ADR-124), then turns the pill on for a task in a repo tagged java (ADR-99).
+A Java language server (jdtls) a task's sessions get for Copilot CLI's `lsp` tool, started by Copilot CLI from the session plugin in the task's worktree with the task's own index. The user installs jdtls and its Java with "Install" in Settings › Agents, which writes their paths into `workspace.yaml` (ADR-123), or names their own there by hand (the install's progress and last error: `JavaNavigationInstall`; how a task's jdtls is doing, from its log: `JavaNavigationStatus`, ADR-124), then turns the pill on for a task in a repo tagged java (ADR-99). The install also gets the Java versions the repos build with, the **runtimes** (`JavaNavigationSettings.runtimes`, `JavaRuntime`), which jdtls may run Gradle on and Gradle takes toolchains from, and a Lombok jar (ADR-167).
 _Avoid_: LSP (the protocol, not the option), code intelligence, indexing
 
 **Task proposal** (`TaskProposal`, MCP tool `propose_task`, the `approve-proposal` and `reject-proposal` actions):
@@ -414,6 +429,10 @@ _Avoid_: note, comment (that is a review comment), chat
 **Task update** (`TaskUpdate`, MCP tool `get_updates`):
 What the daemon saw happen to delegated work, for the proposer: a turn that ended, an error, the end of the session, a reported result, a verification verdict, a rejected proposal. The daemon asks the proposer to read it, so the supervisor or a main session does not poll (ADR-68).
 _Avoid_: event (that is a `/ws` event), notification (that is a system notification), status
+
+**Read request** (`ReadRequest`, `Session.readRequest`, `readRequestPrompt`; "Unread by the agent" and "Deliver now" in the session panel, `deliver-read-request`):
+The daemon's one-line prompt that asks a session's agent to read what waits unread for it (a review, task messages, task updates, a handoff, a trust notice), with since when it has waited and what holds it back (`ReadRequestHold` in `waitsFor`): `sent` and not taken, `pending` until the session can take it, `user_text` in the input box, the agent's question (`dialog`), or `idle`, nothing until the user's Deliver now (ADR-159). The agent reads the content itself through the tools the prompt names.
+_Avoid_: inbox, notification, nudge
 
 **Agent queues** (`agent-queues.json`, `AgentQueues`, `agentQueuesFile`):
 Everything that waits in the `agents` module for the user or an agent: task proposals, unread review comments, task messages, task updates and mise trust notices. Kept in the state directory, so a daemon restart or an update does not lose them; the sessions that come back are asked to read what is unread (ADR-115).
@@ -485,6 +504,14 @@ _Avoid_: read, acknowledged
 
 **Idle** (`isIdle`, `IDLE_LABEL`, dashboard state `idle`):
 A running session in `Input` the user has already seen (ADR-47): the agent waits for the next prompt, but no longer waits for you. Shown as "idle" in Sessions and in calm grey on the dashboard.
+
+**May be stuck** (`Session.stuck`, `SessionStuck`, `sessionStuck`, `STUCK_AFTER_MS`, `STUCK_LABEL`; "may be stuck" in the UI):
+A running session in the middle of a turn (`Working` or `Stale`) whose agent has taken no step for 15 minutes: no hook, ACP update or key from the user, a key counting only once a hook has come (ADR-151). A hint shown in place of the state, not a state of its own.
+_Avoid_: hung, frozen, stale (that is `Stale`, no output at all)
+
+**While you were away** (`AwaySummary`, `awaySummary`, `AwayItem`; an **absence** is `AwayPeriod`, opened by `absenceAt` after `AWAY_AFTER_MS`):
+The strip above the views after the user comes back to Trackwall from 15 minutes without a key, click, scroll, pointer move or a window brought to the front in any of its windows, listing what changed in the session list since then (ADR-151). The user dismisses it.
+_Avoid_: digest, notifications (those are the system's and the browser's), journal
 
 **Conversation view** (`SessionView` `"conversation"`, `ConversationView`, `AcpSession`, `ConversationEntry`; "conversation view" in the UI, and "Chat (preview)" on the control that turns it on):
 How a session shows when the daemon runs Copilot CLI over the Agent Client Protocol (`copilot --acp`) instead of in a terminal (ADR-107): a list of what the user and the agent said and the tools the agent called, its approval and a message box, all plain text in the page. The other `SessionView` is `"terminal"`, the session terminal. The supervisor starts in it when the user turns it on in the supervisor panel, and a task when the user picks it for the task (`Task.view`, ADR-137); a conversation goes on in either view.
@@ -641,7 +668,7 @@ Every MCP tool call the daemon answered, in `logs/mcp-calls.jsonl` (ADR-152). Ea
 _Avoid_: access log, history (of a task, that is its handoff and summary), tool log
 
 **Doctor** (`Doctor`, the `doctor` module, `doctorApi`; in the UI *Doctor* in Settings):
-The checks of what Trackwall needs on this computer: the projects folder, every key of `workspace.yaml`, git, Copilot CLI and its trusted folders, mise, `gh` and `glab` signed in to the repo hosts (ADR-101). Each is a **doctor check** (`DoctorCheck`) with a state (`ok`, `warn`, `fail`), what was found and what to do. It only reads.
+The checks of what Trackwall needs on this computer: the projects folder, every key of `workspace.yaml`, git, Copilot CLI and its trusted folders, the network for sessions (proxy and certificates, ADR-166), mise, `gh` and `glab` signed in to the repo hosts (ADR-101). Each is a **doctor check** (`DoctorCheck`) with a state (`ok`, `warn`, `fail`), what was found and what to do. It only reads.
 _Avoid_: health check (that is `GET /api/health`), diagnostics, setup wizard
 
 **Config files** (`ConfigFiles`, the `config-files` module, `configFilesApi`; in the UI *Files* in Settings):
@@ -673,7 +700,11 @@ The dashboard's 3D scene on Pawn. It does not know the daemon API: it gets succe
 The first screen, the "Home" view (`HomeView`): the daemon state, sessions (especially those waiting for you), repos and the connections between them, in the "Orbit" layout (`orbitLayout`).
 
 **"Needs you" queue** (`NeedsYouPanel`):
-The left panel of the dashboard: sessions that are waiting for you or have an error, then task proposals waiting for a decision (ADR-39), then repos that are not clean. Those sessions and repos always have a label on the scene, and with the scene labels `all` every other repo has one too; proposals are not on the scene, and a click opens them in the Sessions view.
+The left panel of the dashboard: sessions that are waiting for you or have an error, then task proposals waiting for a decision (ADR-39), in a container the repos with unpushed work (ADR-162), then repos that are not clean. Those sessions and repos always have a label on the scene, and with the scene labels `all` every other repo has one too; proposals are not on the scene, and a click opens them in the Sessions view.
+
+**Unpushed work** (`UnpushedWork`, `unpushedWork`, `Vcs.unpushed`; in the UI *only in this container*):
+What of a repo is on no remote: commits no remote-tracking branch reaches (on local branches and on the detached HEAD of a worktree), stashes, and changed files in the repo's worktrees, task worktrees included. Read only when the daemon runs in a container, where removing the Docker volume deletes it (ADR-162).
+_Avoid_: unsaved work, local work (both also mean changes not yet committed).
 
 **Dashboard snapshot** (`HomeModel`):
 What the dashboard shows, computed by the UI from the daemon's responses and given to the scene whole on every change.

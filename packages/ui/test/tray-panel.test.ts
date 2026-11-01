@@ -14,10 +14,12 @@ function session(id: string, needsAttention: boolean, dialog: Session["dialog"] 
     state: null,
     windowTitle: null,
     needsAttention,
+    stuck: null,
     task: null,
     dialog,
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
     view: "terminal",
+    readRequest: null,
   };
 }
 

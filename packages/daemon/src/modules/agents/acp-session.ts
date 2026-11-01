@@ -3,6 +3,8 @@ import type {
   ConversationEntry,
   ConversationServerMessage,
   DialogAnswer,
+  ReadRequest,
+  ReadRequestHold,
   RunState,
   Session,
   SessionEnvironment,
@@ -27,7 +29,9 @@ import type { AgentSession } from "./agent-session.ts";
 import { type CopilotHookOutput, situationOutput } from "./copilot-hook-output.ts";
 import type { CopilotHookRecord } from "./copilot-hook-record.ts";
 import type { SessionEvent } from "./live-session.ts";
+import { ReadRequestClock } from "./read-request.ts";
 import { SessionAttention } from "./session-attention.ts";
+import { sessionStuck } from "./session-stuck.ts";
 
 /**
  * A Copilot CLI session in the conversation view (§4.4, ADR-107): `copilot --acp` on pipes of a `procs` group, with
@@ -124,6 +128,8 @@ export class AcpSession implements AgentSession {
   #conversationId: string | undefined;
   #hasConversation: boolean;
   #last: TaskStateChange | null = null;
+  /** The agent's last update or state change, for `SessionStuck` (ADR-151); the start before either. */
+  #lastStepAt = Date.now();
   #windowTitle: string | null = null;
   #ready = false;
   #turn: Prompt | undefined;
@@ -139,6 +145,7 @@ export class AcpSession implements AgentSession {
   readonly #queued: Prompt[] = [];
   #promptAsked = false;
   #finished = false;
+  readonly #readRequest = new ReadRequestClock();
 
   constructor(o: AcpSessionOptions) {
     this.id = o.id;
@@ -291,6 +298,7 @@ export class AcpSession implements AgentSession {
   /** The end of the process; returns whether the session is alive. */
   tick(): boolean {
     if (this.#finished) return false;
+    this.#readRequest.observe(this.#o.prompt());
     const run = this.#o.run();
     if (run?.kind !== "exited") return true;
     this.#finished = true;
@@ -315,11 +323,34 @@ export class AcpSession implements AgentSession {
       state: this.#last,
       windowTitle: this.#windowTitle,
       needsAttention: running && this.#attention.waiting(this.#last?.state),
+      stuck: running ? sessionStuck(this.#last, this.#lastStepAt, Date.now()) : null,
       task: this.task,
       dialog: running ? (this.#approvals[0]?.dialog ?? null) : null,
       environment: this.environment,
       view: "conversation",
+      readRequest: running ? this.#readRequestView() : null,
     };
+  }
+
+  /**
+   * What keeps the prompt about what waits unread out of the conversation (ADR-159): it goes as the next prompt once
+   * the session is ready and the turn under way ends; while the agent's own turn reads it, it counts as sent.
+   */
+  #readRequestView(): ReadRequest | null {
+    const prompt = this.#o.prompt();
+    if (prompt === undefined) return null;
+    return this.#readRequest.readRequest(prompt, this.#readRequestHold());
+  }
+
+  #readRequestHold(): ReadRequestHold {
+    if (this.#turn?.by === "daemon") return "sent";
+    if (this.#approvals.length > 0) return "dialog";
+    return this.#promptAsked ? "pending" : "idle";
+  }
+
+  /** The user's Deliver now (ADR-159): only where nothing else sends it (`idle`), so it never goes twice. */
+  deliverNow(): void {
+    if (this.#readRequestHold() === "idle") this.askToRead();
   }
 
   dispose(): void {
@@ -394,6 +425,8 @@ export class AcpSession implements AgentSession {
     if (method !== "session/update") return;
     const parsed = SessionUpdateParams.safeParse(params);
     if (!parsed.success || parsed.data.sessionId !== this.#conversationId) return;
+    // Any update of the conversation is a step (ADR-151), also a thought or a plan the daemon does not show.
+    this.#lastStepAt = Date.now();
     const update = SessionUpdate.safeParse(parsed.data.update);
     // A kind the daemon does not show (available commands, usage, thoughts, plans).
     if (!update.success) return;
@@ -440,6 +473,7 @@ export class AcpSession implements AgentSession {
     // notification ahead of the answer's last chunk would show a finished turn without its answer.
     this.#flushNow();
     const previous = this.#last?.state;
+    this.#lastStepAt = Date.now();
     this.#last = { state, source, confidence: "exact", at: new Date().toISOString(), reason };
     this.#attention.changed(previous, state);
   }

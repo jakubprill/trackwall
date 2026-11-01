@@ -24,10 +24,12 @@ function session(id: string, startedAt: string, task: string | null = null): Ses
     state: null,
     windowTitle: null,
     needsAttention: false,
+    stuck: null,
     task,
     dialog: null,
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
     view: "terminal",
+    readRequest: null,
   };
 }
 

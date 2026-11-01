@@ -12,6 +12,7 @@ import { makeRepo } from "./support/git-repo.ts";
 async function setup() {
   const projects = mkdtempSync(join(tmpdir(), "trackwall-dir-"));
   const facade = createFacade({
+    inContainer: false,
     home: mkdtempSync(join(tmpdir(), "trackwall-dir-home-")),
     homeFrom: "flag",
     openUrl: () => {},

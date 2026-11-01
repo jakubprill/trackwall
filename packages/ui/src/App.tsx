@@ -1,6 +1,7 @@
 import { FolderGit2, ListTree, Network, Orbit, Settings, SquareTerminal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityBar, type ActivityView } from "@/components/ActivityBar";
+import { AwaySummary } from "@/components/AwaySummary";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -8,6 +9,7 @@ import { FolderDrop } from "@/components/FolderDrop";
 import { IdeaCapture } from "@/components/IdeaCapture";
 import { Loading } from "@/components/Loading";
 import { NotificationOffer } from "@/components/NotificationOffer";
+import { PageTokenForm } from "@/components/PageTokenForm";
 import { RemoteDaemonSurface } from "@/components/RemoteDaemonSurface";
 import { SupervisorPanel } from "@/components/SupervisorPanel";
 import { UpdateBanner } from "@/components/UpdateBanner";
@@ -86,7 +88,7 @@ export function App() {
   const [sessionLayout, setSessionLayout] = useState<SessionLayout>(
     () => startFromLocation(window.location.search, START_PARAMS.sessionLayout, SESSION_LAYOUTS) ?? "1",
   );
-  const { conn, epoch, error, retry } = useConnection();
+  const { conn, epoch, error, retry, tokenRefused, connectWithAddress } = useConnection();
   const daemonPlace = useDaemonPlace(conn);
   // A folder dropped outside a session (ADR-51); `seq` mounts a new bar for every drop, also of the same folder. A drop
   // without a daemon connection is ignored, rather than answered whenever the connection comes back.
@@ -211,6 +213,7 @@ export function App() {
         <div className="flex min-w-0 flex-1 flex-col">
           {appUpdate && <UpdateBanner handle={appUpdate} />}
           <NotificationOffer />
+          <AwaySummary list={sessions.data} onOpen={openInSessions} />
           {error && <ErrorBanner message={error} action={{ label: "Try again", onClick: retry }} />}
           {windowError && <ErrorBanner message={windowError} action={{ label: "Dismiss", onClick: () => setWindowError(undefined) }} />}
           {conn && dropped && (
@@ -232,7 +235,7 @@ export function App() {
           )}
           <KeyboardElsewhere.Provider value={supervisorFocused}>
             <main className="hud-grid min-h-0 flex-1 overflow-y-auto">
-              <ConnectionState connected={conn !== undefined} error={error} />
+              <ConnectionState connected={conn !== undefined} error={error} tokenRefused={tokenRefused} connect={connectWithAddress} />
               {/* One view that throws keeps the view bar and the other views. The key mounts the view afresh, with a fresh boundary, on
                 a view change, a reconnect (`epoch`) and every opening of a repo or a Settings category (`visit`). */}
               <ErrorBoundary
@@ -328,10 +331,28 @@ export function App() {
 }
 
 /**
- * Waiting for the first connection, or, after an error (the banner above says which), the way to switch where the
- * desktop app's daemon runs (ADR-130): a remote daemon that restarted wants its new token.
+ * Waiting for the first connection; in a browser whose token the daemon refused, the field for its address (ADR-161);
+ * or, after an error (the banner above says which), the way to switch where the desktop app's daemon runs (ADR-130): a
+ * remote daemon that restarted wants its new token.
  */
-function ConnectionState({ connected, error }: { connected: boolean; error: string | undefined }) {
+function ConnectionState({
+  connected,
+  error,
+  tokenRefused,
+  connect,
+}: {
+  connected: boolean;
+  error: string | undefined;
+  tokenRefused: boolean;
+  connect: (address: string) => Promise<void>;
+}) {
+  if (tokenRefused) {
+    return (
+      <div className="max-w-3xl p-6">
+        <PageTokenForm connect={connect} />
+      </div>
+    );
+  }
   if (error === undefined) {
     if (connected) return null;
     return (
