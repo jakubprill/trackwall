@@ -15,6 +15,7 @@ use crate::daemon;
 use crate::daemon_state::DaemonState;
 use crate::jump::Jump;
 use crate::notification;
+use crate::pipelines::{parse_failed, PipelineFailures};
 use crate::windows::Windows;
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
@@ -318,9 +319,18 @@ pub fn watch(app: AppHandle, state: Arc<DaemonState>, tray_id: &'static str, tra
         let mut held = HeldProposals::default();
         let mut badge = Badge::default();
         let mut failures = Failures::default();
+        let mut pipelines = PipelineFailures::default();
         loop {
             std::thread::sleep(POLL);
-            let polled = state.ready().and_then(|conn| daemon::sessions(&conn).ok()).and_then(|body| parse_sessions(&body));
+            let conn = state.ready();
+            // A failed pipeline opens its task like a waiting session does; the tray and its badge stay about what waits.
+            if let Some(failed) = conn.as_ref().and_then(|conn| daemon::task_outcomes(conn).ok()).and_then(|body| parse_failed(&body)) {
+                let new = pipelines.after_poll(failed);
+                if !new.is_empty() && !any_window_focused(&app) {
+                    notification::show_failed_pipelines(&app, &new);
+                }
+            }
+            let polled = conn.and_then(|conn| daemon::sessions(&conn).ok()).and_then(|body| parse_sessions(&body));
             let gone = failures.after_poll(polled.is_some());
             let Some(now) = polled else {
                 if gone {

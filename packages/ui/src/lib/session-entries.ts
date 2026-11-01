@@ -235,8 +235,26 @@ function selects(selection: Exclude<SessionSelection, undefined | { kind: "new" 
   return entry.kind === "proposals" && entry.proposals.some((p) => p.id === selection.id);
 }
 
-/** The tabs of a task's panel: its session terminal, its worktree changes and its impact on other repos (ADR-147). */
-export type TaskTab = "terminal" | "changes" | "impact";
+/**
+ * The tabs of a task's panel: its session (the session terminal, or the conversation view, ADR-137), its worktree
+ * changes, its rounds (ADR-168), its impact on other repos (ADR-147) and its MCP calls.
+ */
+export type TaskTab = "session" | "changes" | "rounds" | "impact" | "mcp-calls";
+
+/**
+ * The tabs a task's panel shows: its session's tab only while it has a session, named "Chat" for a task in the
+ * conversation view (ADR-137), which has no terminal, and "Terminal" otherwise.
+ */
+export function taskTabs(session: Pick<Session, "view"> | undefined): readonly { id: TaskTab; label: string }[] {
+  const sessionTab = session ? [{ id: "session", label: session.view === "conversation" ? "Chat" : "Terminal" } as const] : [];
+  return [
+    ...sessionTab,
+    { id: "changes", label: "Changes" },
+    { id: "rounds", label: "Rounds" },
+    { id: "impact", label: "Impact" },
+    { id: "mcp-calls", label: "MCP calls" },
+  ];
+}
 
 /** The tab a selection opens a task's panel on; `undefined` leaves the panel's own choice. */
 export function selectedTaskTab(selection: SessionSelection): TaskTab | undefined {

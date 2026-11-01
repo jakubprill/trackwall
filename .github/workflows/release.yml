@@ -202,7 +202,6 @@ jobs:
         working-directory: dist
         env:
           TAG: ${{ github.ref_name }}
-          REPO: ${{ github.repository }}
         run: |
           version="${TAG#v}"
           win="trackwall-$version-windows-x64.zip"
@@ -219,7 +218,7 @@ jobs:
             exit 1
           fi
           # The Dev Container Feature (ADR-164) carries the SHA-256 of both Linux archives it installs.
-          bun ../apps/desktop/scripts/package-feature.ts . "$REPO"
+          bun ../apps/desktop/scripts/package-feature.ts .
           feature="devcontainer-feature-trackwall.tgz"
           sha256sum "$win" "$mac" "$mac_update" "$linux_x64" "$linux_arm64" "$feature" > SHA256SUMS.txt
           cat SHA256SUMS.txt

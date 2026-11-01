@@ -46,14 +46,20 @@ export const ToolEntry = z.object({
 export const ConversationEntry = z.discriminatedUnion("kind", [UserEntry, AgentEntry, ToolEntry]);
 export type ConversationEntry = z.infer<typeof ConversationEntry>;
 
+/** A message the user wrote during a turn, which goes to the agent as the next prompt once the turn ends. */
+export const WaitingMessage = z.object({ id: EntryId, text: EntryText });
+export type WaitingMessage = z.infer<typeof WaitingMessage>;
+
 /**
  * What the daemon sends on the conversation socket: `entries` that are new or changed, in order, after `reset` all of
- * them (the first frame, and after the conversation was loaded again).
+ * them (the first frame, and after the conversation was loaded again), and every frame the user's messages that wait
+ * for the turn to end, oldest first (none from a daemon before them).
  */
 export const ConversationServerMessage = z.object({
   type: z.literal("entries"),
   reset: z.boolean(),
   entries: z.array(ConversationEntry),
+  waiting: z.array(WaitingMessage).default([]),
 });
 export type ConversationServerMessage = z.infer<typeof ConversationServerMessage>;
 

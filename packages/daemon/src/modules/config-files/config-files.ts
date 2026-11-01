@@ -29,6 +29,7 @@ import { trackwallDir } from "../../infra/trackwall-dir.ts";
 type StateEntryId =
   | "workspace-file"
   | "tasks-file"
+  | "task-rounds-file"
   | "resumable-sessions-file"
   | "last-supervisor-file"
   | "agent-queues-file"
@@ -140,6 +141,7 @@ export class ConfigFiles {
       case "workspace-file":
         return workspaceFile(this.#deps.statePaths[id], ctx.keys);
       case "tasks-file":
+      case "task-rounds-file":
       case "resumable-sessions-file":
       case "last-supervisor-file":
       case "agent-queues-file":

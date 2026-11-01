@@ -16,7 +16,7 @@ import { ensureTrackwallDir } from "../../infra/trackwall-dir.ts";
 import { KNOWLEDGE_FILE_FORMAT, writeKnowledgeFile } from "./knowledge-file.ts";
 
 /**
- * Workspace knowledge (ADR-170, §4.21): short facts about the user's repos as files in `.trackwall/knowledge` of the
+ * Workspace knowledge (ADR-170, §4.22): short facts about the user's repos as files in `.trackwall/knowledge` of the
  * projects folder, beside the board, so they survive a rebuilt container and the user reads them in an editor. Every
  * session in an entry's repos reads it in its instructions, so an entry is text that steers later agents without anyone
  * reading it again: only content the user approved counts (`ApprovedFolder`), the user's own writes are approved as they

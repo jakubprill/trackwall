@@ -1,21 +1,11 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import {
-  closeSync,
-  existsSync,
-  linkSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-  writeSync,
-} from "node:fs";
+import { closeSync, mkdirSync, openSync, renameSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { CONTAINER_COMMAND, SUPERVISE_COMMAND } from "./args.ts";
+import { appendNote } from "./container-log.ts";
 import { isAlive, readDaemonFile } from "./discovery.ts";
+import { claimPidFile, pidFileHolder, releasePidFile } from "./pid-file.ts";
 import { selfCommand } from "./self-command.ts";
 
 /**
@@ -49,83 +39,20 @@ export function supervisorPidFile(home: string): string {
   return join(home, PID_FILE);
 }
 
-function readPid(file: string): number | undefined {
-  try {
-    const pid = Number(readFileSync(file, "utf8").trim());
-    return Number.isInteger(pid) && pid > 0 ? pid : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-/** Whether `pid` is a supervisor, recognised by its command line where `/proc` has it (a dev container always does). */
-function isSupervisor(pid: number): boolean {
-  if (!existsSync("/proc")) return isAlive(pid);
-  try {
-    // A PID from a previous container start can belong to any process now: only one running this subcommand counts.
-    const args = readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0");
-    return args.includes(SUPERVISE_COMMAND) && args.includes(CONTAINER_COMMAND);
-  } catch {
-    return false;
-  }
-}
+/** The supervisor's command line, by which its PID file's holder is recognised. */
+const SUPERVISOR_ARGS = [CONTAINER_COMMAND, SUPERVISE_COMMAND];
 
 /** The PID of the supervisor of this state directory when one is running. */
 export function runningSupervisor(home: string): number | undefined {
-  const pid = readPid(supervisorPidFile(home));
-  return pid !== undefined && isSupervisor(pid) ? pid : undefined;
+  return pidFileHolder(supervisorPidFile(home), SUPERVISOR_ARGS);
 }
 
-/**
- * Claims the state directory for this supervisor, or returns false when another live one holds it. The PID file appears
- * with its content at once (written aside, then linked into place, which fails when the file exists), so a reader never
- * sees it empty; a file left by a supervisor that is gone is removed only while it still names that one.
- */
 function claim(home: string): boolean {
-  mkdirSync(home, { recursive: true, mode: 0o700 });
-  const file = supervisorPidFile(home);
-  const aside = `${file}.${process.pid}`;
-  writeFileSync(aside, String(process.pid), { mode: 0o600 });
-  try {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        linkSync(aside, file);
-        return true;
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-      }
-      const holder = readPid(file);
-      if (holder !== undefined && isSupervisor(holder)) return false;
-      takeAwayStale(file, holder);
-    }
-    return false;
-  } finally {
-    rmSync(aside, { force: true });
-  }
-}
-
-/**
- * Moves a stale PID file out of the way; when what was moved names another PID than the stale one, a supervisor claimed
- * the file meanwhile, and it goes back (linked, so a file claimed again in the meantime is not overwritten).
- */
-function takeAwayStale(file: string, stale: number | undefined): void {
-  const moved = `${file}.stale.${process.pid}`;
-  try {
-    renameSync(file, moved);
-  } catch {
-    return; // gone already
-  }
-  try {
-    if (readPid(moved) !== stale) linkSync(moved, file);
-  } catch {
-    // claimed again meanwhile: that claim stands
-  } finally {
-    rmSync(moved, { force: true });
-  }
+  return claimPidFile(supervisorPidFile(home), SUPERVISOR_ARGS);
 }
 
 function release(home: string): void {
-  if (readPid(supervisorPidFile(home)) === process.pid) rmSync(supervisorPidFile(home), { force: true });
+  releasePidFile(supervisorPidFile(home));
 }
 
 function rotateLog(path: string): void {
@@ -133,15 +60,6 @@ function rotateLog(path: string): void {
     if (statSync(path).size > DAEMON_LOG_MAX_BYTES) renameSync(path, `${path}.1`);
   } catch {
     // no log yet
-  }
-}
-
-function appendNote(logPath: string, msg: string): void {
-  const fd = openSync(logPath, "a", 0o600);
-  try {
-    writeSync(fd, `[supervisor] ${new Date().toISOString()} ${msg}\n`);
-  } finally {
-    closeSync(fd);
   }
 }
 
@@ -210,7 +128,7 @@ export function afterExit(run: { code: number | null; ranMs: number; stopRequest
 export async function superviseDaemon(home: string, port: number): Promise<void> {
   const logPath = join(home, DAEMON_LOG);
   mkdirSync(join(home, "logs"), { recursive: true, mode: 0o700 });
-  const note = (msg: string) => appendNote(logPath, msg);
+  const note = (msg: string) => appendNote(logPath, "supervisor", msg);
   if (!claim(home)) {
     note(`another supervisor (pid ${runningSupervisor(home) ?? "?"}) already runs for ${home}`);
     return;

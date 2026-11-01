@@ -2,6 +2,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import type { ServerResponse } from "node:http";
 import { extname, join, relative, resolve, sep } from "node:path";
 import { isInside } from "../infra/path-inside.ts";
+import { TAB_CSP } from "./ui-csp.ts";
 
 const CONTENT_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -51,6 +52,9 @@ export function serveStatic(dir: string, urlPath: string, res: ServerResponse): 
     "content-type": type,
     "cache-control": immutable ? "public, max-age=31536000, immutable" : "no-cache",
     "x-content-type-options": "nosniff",
+    "content-security-policy": TAB_CSP,
+    // A link the page opens in a new tab (ADR-120) does not tell the site that a daemon runs on this port.
+    "referrer-policy": "no-referrer",
   });
   res.end(readFileSync(file));
 }

@@ -20,6 +20,7 @@ export const routineMcpTools = {
     name: PROPOSE_ROUTINE,
     readOnly: false,
     destructive: false,
+    auditArgs: ["name", "repo", "model", "approvals"] as const,
     description:
       "Save a routine: a task the user runs by hand again and again from New task in Trackwall's Sessions view, e.g. " +
       "fetch the new OpenAPI spec, regenerate the client, compile, and report what changed. Use it only when the user " +

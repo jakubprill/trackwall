@@ -12,7 +12,8 @@ See in the tab's title how many agents wait for you, and get a browser notificat
 - The number of sessions and task proposals waiting for you in front of the tab's title, as in "(2) Trackwall".
 - A notification from the browser when a session asks for approval, waits for its plan to be approved or finishes its turn.
 - One notification for a plan of task proposals, which grows as the agent proposes more.
-- A click on the notification brings the tab forward and opens that session or proposal in "Sessions".
+- A notification when the pipeline of a task's merge request fails, naming the failed jobs.
+- A click on the notification brings the tab forward and opens that session, proposal or task in "Sessions".
 
 ## How it works
 

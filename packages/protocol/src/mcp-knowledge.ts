@@ -32,6 +32,7 @@ export const knowledgeMcpTools = {
   listKnowledge: {
     name: LIST_KNOWLEDGE,
     readOnly: true,
+    auditArgs: ["repo", "kind"] as const,
     description:
       "Workspace knowledge the user approved: short facts about their repos that code and repo cards do not show (how-to: " +
       "how to build, run or test something; relation: a link between repos such as a queue or a shared database; " +
@@ -50,6 +51,8 @@ export const knowledgeMcpTools = {
     name: PROPOSE_KNOWLEDGE,
     readOnly: false,
     destructive: false,
+    // The entry's text and evidence are free text, so only its name, kind and repos.
+    auditArgs: ["name", "kind", "repos"] as const,
     description:
       "Propose a fact about the user's repos for later agents, when finding it cost you work they would repeat: a command " +
       "failed and another one worked, a test needed something the repo card did not say, two repos are linked in a way " +

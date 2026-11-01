@@ -9,6 +9,7 @@ import {
   type StateDirSource,
   type Task,
   type TaskChangedEndpoints,
+  type TaskOutcome,
 } from "@trackwall/protocol";
 import { downloadVerified } from "./infra/download.ts";
 import { vscodeUrl } from "./infra/editor-url.ts";
@@ -23,6 +24,7 @@ import {
   LAST_SUPERVISOR_FILE,
   LEGACY_WORKTREES_DIR,
   RESUMABLE_SESSIONS_FILE,
+  TASK_ROUNDS_FILE,
   TASKS_FILE,
 } from "./modules/agents/agents.ts";
 import { resolveCopilot } from "./modules/agents/copilot-command.ts";
@@ -46,6 +48,7 @@ import { JDTLS_JAVA, JDTLS_RELEASE, LOMBOK_RELEASE, type PinnedRelease } from ".
 import { Knowledge } from "./modules/knowledge/knowledge.ts";
 import { LocalConfig } from "./modules/local-config/local-config.ts";
 import { Logs } from "./modules/logs/logs.ts";
+import { McpAudit } from "./modules/mcp-audit/mcp-audit.ts";
 import { MergeRequests } from "./modules/merge-requests/merge-requests.ts";
 import { Mise } from "./modules/mise/mise.ts";
 import { ProcessGroups } from "./modules/procs/process-groups.ts";
@@ -98,6 +101,8 @@ export interface Facade {
   dayStart: DayStart;
   /** Trackwall's own errors from the daemon, the shell and the UI, anonymized, on this computer only (ADR-94). */
   errorJournal: ErrorJournal;
+  /** Every MCP tool call the daemon answered, with its caller, identifier arguments and outcome, on this computer only (ADR-152). */
+  mcpAudit: McpAudit;
   /** Checks of what Trackwall needs on this computer, each with what to do when it fails (ADR-101). */
   doctor: Doctor;
   /** Installs jdtls and its Java for tasks' Java navigation, from Settings (ADR-123). */
@@ -124,6 +129,11 @@ export interface Facade {
    * the place from `workspace` or `agents`, the environment of a run there from `mise`, its masking from `logs`, the files and the view from `cards`.
    */
   appConfig: (request: AppConfigRequest) => Promise<AppConfig>;
+  /**
+   * What every task's work came to (ADR-154): its last verification's verdict from `verification` and its merge request
+   * from `merge-requests`, for the Sessions list and the notification of a failed pipeline. A read from memory.
+   */
+  taskOutcomes: () => TaskOutcome[];
   /**
    * Daemon exit, before `procs.stopAll`: what a restart is to bring back stays as it is now, the sessions to resume
    * (ADR-95), the agent queues and the verifications (ADR-115), so what the stop of the groups changes does not reach it.
@@ -329,6 +339,8 @@ export function createFacade(o: FacadeOptions): Facade {
     hosting,
     repoHosts: () => workspace.repoHosts(),
     openUrl: o.openUrl,
+    onPipelineFailed: (task, mergeRequest) => agents.pipelineFailed(task.id, mergeRequest),
+    log: o.log,
   });
   const dayStart = new DayStart({
     workspace,
@@ -338,6 +350,7 @@ export function createFacade(o: FacadeOptions): Facade {
     log: o.log,
   });
   const errorJournal = createErrorJournal({ ...o, workspace });
+  const mcpAudit = new McpAudit({ dir: join(o.home, LOGS_DIR), log: o.log });
   const javaNavigationReadiness = () => agents.startOptions().javaNavigation;
   const javaNavigation = new JavaNavigation({
     repos: workspace,
@@ -380,6 +393,7 @@ export function createFacade(o: FacadeOptions): Facade {
     statePaths: {
       "workspace-file": workspace.configFile(),
       "tasks-file": join(o.home, TASKS_FILE),
+      "task-rounds-file": join(o.home, TASK_ROUNDS_FILE),
       "resumable-sessions-file": join(o.home, RESUMABLE_SESSIONS_FILE),
       "last-supervisor-file": join(o.home, LAST_SUPERVISOR_FILE),
       "agent-queues-file": join(o.home, AGENT_QUEUES_FILE),
@@ -429,6 +443,7 @@ export function createFacade(o: FacadeOptions): Facade {
     mergeRequests,
     dayStart,
     errorJournal,
+    mcpAudit,
     doctor,
     javaNavigation,
     configFiles,
@@ -447,6 +462,14 @@ export function createFacade(o: FacadeOptions): Facade {
       const mask = logs.masker(run.env, run.secretValues);
       const read = await cards.appConfig(dir, { profile, key }, { vars: run.env, mask });
       return { repo, task, profile, ...read, envProblem: run.problem === null ? null : mask(run.problem) };
+    },
+    taskOutcomes: () => {
+      const followed = mergeRequests.followed();
+      return agents.tasks().flatMap((task) => {
+        const verification = verifications.get(task.id)?.state ?? null;
+        const mergeRequest = followed.get(task.id) ?? null;
+        return verification === null && mergeRequest === null ? [] : [{ task: task.id, repo: task.repo, verification, mergeRequest }];
+      });
     },
     keepForRestart: () => {
       agents.keepRunningSessionsForResume();

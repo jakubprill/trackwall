@@ -24,6 +24,7 @@ import { z } from "zod";
 import { EventHub } from "../src/api/event-hub.ts";
 import { postRoutes } from "../src/api/routes.ts";
 import { type ApiServer, startApi } from "../src/api/server.ts";
+import { TAB_CSP } from "../src/api/ui-csp.ts";
 import { createFacade, HOSTING_CLIS } from "../src/facade.ts";
 import { type LoopbackOptions, loopbackRequest } from "../src/infra/loopback.ts";
 import { createMcpEndpoint } from "../src/mcp/endpoint.ts";
@@ -157,10 +158,13 @@ describe("api", () => {
     const index = await req("/");
     expect(index.body).toContain("trackwall");
     expect(index.headers["cache-control"]).toBe("no-cache");
+    expect(index.headers["content-security-policy"]).toBe(TAB_CSP);
+    expect(index.headers["referrer-policy"]).toBe("no-referrer");
     expect((await req("/tasks/123")).body).toContain("trackwall");
     const asset = await req("/assets/app.js");
     expect(asset.headers["content-type"]).toContain("javascript");
     expect(asset.headers["cache-control"]).toContain("immutable");
+    expect(asset.headers["content-security-policy"]).toBe(TAB_CSP);
     expect((await req("/assets/missing.js")).status).toBe(404);
     for (const path of [
       "/..%2ftrackwall-secret.txt",
