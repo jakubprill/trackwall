@@ -1,8 +1,9 @@
 /**
  * Expanding `${key}` and `${key:default}` the way Spring does (§4.6, ADR-30): the value from the profile's configuration
  * view, and without it the default after the colon (also nested, `${a:${b:c}}`). A key that is missing and has no
- * default (usually an environment variable, `${ORDERS_URL}`) stays in the text. The values come from the repo (§8): the
- * depth and length of the result are limited, and every key is resolved once per expansion.
+ * default (usually an environment variable, `${ORDERS_URL}`) stays in the text; `expandPlaceholders` also takes the
+ * keys the environment sets (ADR-153). The values come from the repo (§8): the depth and length of the result are
+ * limited, and every key is resolved once per expansion.
  */
 
 const MAX_DEPTH = 10;
@@ -22,15 +23,60 @@ export interface Resolved {
 }
 
 export function resolvePlaceholders(text: string, get: (key: string) => PlaceholderSource | undefined): Resolved {
-  return new Resolver(get).resolve(text, 0);
+  return new Resolver(get, NO_SOURCES).resolve(text, 0);
+}
+
+/** Keys an expansion treats apart from the configuration, and how many placeholders it may still read (ADR-153). */
+export interface ExpansionKeys {
+  /** Keys another property source sets before the files (the environment): they win over the files and their default. */
+  outside: (key: string) => boolean;
+  /** Keys whose value must not appear in the result (secrets): never expanded, nor is their placeholder's default. */
+  hidden: (key: string) => boolean;
+  /**
+   * Placeholders left to read, shared by every expansion of one request: a repo can make each value read thousands, so
+   * past it a placeholder stays as it is in the text, and the caller says the result is cut.
+   */
+  budget: { left: number };
+}
+
+const NO_SOURCES: ExpansionKeys = { outside: () => false, hidden: () => false, budget: { left: Number.POSITIVE_INFINITY } };
+
+/** An expansion that also says which keys came from outside the configuration, took their default, or had no value at all. */
+export interface Expanded extends Resolved {
+  /** Keys `outside` set, in the order met; each stays as `${key}` in the value. */
+  outside: string[];
+  /** Keys without an entry or a value outside that took their placeholder's default. */
+  defaulted: string[];
+  /** Keys without an entry, a default or a value outside; each stays as its `${…}` in the value. */
+  missing: string[];
+}
+
+/**
+ * Expanding as Spring does with another property source before the configuration files (the environment, ADR-153):
+ * a key `outside` sets wins over the files and its default and stays as `${key}`, since its value is not read here,
+ * and a `hidden` key stays as `${key}` whatever sets it.
+ */
+export function expandPlaceholders(text: string, get: (key: string) => PlaceholderSource | undefined, keys: ExpansionKeys): Expanded {
+  const resolver = new Resolver(get, keys);
+  return {
+    ...resolver.resolve(text, 0),
+    outside: [...resolver.outside],
+    defaulted: [...resolver.defaulted],
+    missing: [...resolver.missing],
+  };
 }
 
 class Resolver {
   private readonly get: (key: string) => PlaceholderSource | undefined;
+  private readonly keys: ExpansionKeys;
   private readonly memo = new Map<string, Resolved | undefined>();
+  readonly outside = new Set<string>();
+  readonly defaulted = new Set<string>();
+  readonly missing = new Set<string>();
 
-  constructor(get: (key: string) => PlaceholderSource | undefined) {
+  constructor(get: (key: string) => PlaceholderSource | undefined, keys: ExpansionKeys) {
     this.get = get;
+    this.keys = keys;
   }
 
   resolve(text: string, depth: number): Resolved {
@@ -57,9 +103,23 @@ class Resolver {
   private placeholder(inner: string, depth: number): Resolved | undefined {
     const colon = topLevelColon(inner);
     const key = colon < 0 ? inner : inner.slice(0, colon);
+    if (this.keys.budget.left-- <= 0) return undefined;
+    if (this.keys.outside(key)) {
+      this.outside.add(key);
+      return { value: `\${${key}}`, source: undefined };
+    }
+    if (this.keys.hidden(key)) {
+      if (this.get(key) === undefined) (colon < 0 ? this.missing : this.defaulted).add(key);
+      return { value: `\${${key}}`, source: undefined };
+    }
     const fromKey = depth < MAX_DEPTH ? this.key(key, depth) : undefined;
     if (fromKey) return fromKey;
-    return colon < 0 ? undefined : this.resolve(inner.slice(colon + 1), depth + 1);
+    if (colon >= 0) {
+      this.defaulted.add(key);
+      return this.resolve(inner.slice(colon + 1), depth + 1);
+    }
+    this.missing.add(key);
+    return undefined;
   }
 
   private key(key: string, depth: number): Resolved | undefined {
@@ -71,6 +131,24 @@ class Resolver {
     this.memo.set(key, resolved);
     return resolved;
   }
+}
+
+/**
+ * The text with the default taken out of every `${key:default}` left in it, as `${key}`: an expansion that stopped at a
+ * limit gives back its text unexpanded, and a secret key's default must not show (ADR-153).
+ */
+export function withoutDefaults(text: string): string {
+  let out = "";
+  let i = 0;
+  for (let start = text.indexOf("${"); start >= 0; start = text.indexOf("${", i)) {
+    const end = closingBrace(text, start + 2);
+    if (end < 0) break;
+    const inner = text.slice(start + 2, end);
+    const colon = topLevelColon(inner);
+    out += `${text.slice(i, start)}\${${colon < 0 ? inner : inner.slice(0, colon)}}`;
+    i = end + 1;
+  }
+  return out + text.slice(i);
 }
 
 /** The index of the `}` closing a `${` opened before `from`; `-1` when there is none. */

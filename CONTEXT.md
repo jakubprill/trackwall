@@ -166,6 +166,14 @@ _Avoid_: check, CI, validation (that is a schema at the point of entry)
 A fixed string or a regular expression in the files of the latest commit of many repos of the projects folder at once, through `git grep` (ADR-40); a match (`CodeMatch`) is a repo, path, line, column and context lines. It does not see uncommitted changes, just like browsing a repo.
 _Avoid_: grep (the tool underneath), index (there is none)
 
+**Commit search** (`searchCommits`, MCP tool `search_commits`, result `SearchCommitsResult`):
+The commits of the history of the latest commit of many repos at once that add or remove a text, or match a message, author, paths or date, through `git log` (ADR-149); a found commit (`FoundCommit`) is a repo, hash, author, date, subject and changed files. Newest first across all repos.
+_Avoid_: history search, blame (another git command), log (the process logs of `logs`)
+
+**Task journal** (`TaskJournal`, `task-journal.jsonl`, MCP tool `search_task_history`, record `EndedTask`):
+A record of every task the user has ended: its prompt, the session's last summary, the commits and files on its branch and its last verdict, taken when the task ends (ADR-150). Agents search it by words to learn how a similar change was done before.
+_Avoid_: task history (only in the tool name), archive, log (the process logs of `logs`)
+
 **Task worktrees folder** (`worktreesDir` in `workspace.yaml` and `tasks.json`):
 The folder new task worktrees go into (ADR-84): the user's setting, or by default `.trackwall/worktrees` in the projects folder, which the repo list skips. Never the projects folder itself, a folder inside one of its repos, or a folder of `.trackwall` other than `.trackwall/worktrees`. Each task keeps the folder it was created in, so changing the setting moves no existing worktree.
 
@@ -247,6 +255,10 @@ A method and path that an HTTP client calls, with the line in the code, and for 
 
 **Profile** (Spring profile, `ConsumedHttp.profiles`):
 A name from `application-<profile>.yml` or `spring.config.activate.on-profile`; `default` is the configuration without a profile. A client with an address from configuration has a separate entry for every profile in which the address is different.
+
+**App configuration** (`AppConfig`, MCP tool `get_app_config`):
+One profile's view of a repo's Spring configuration files as they are on disk now, in the repo root or a task's worktree, with uncommitted and git-ignored files (ADR-153): every key with its expanded value, file and line, and the environment variables its placeholders read. A secret (a key such as `password`, `client-secret` or `api-key`) has no value in it, only whether it is set (`set`), and a variable only whether a run there has it. Unlike the card, it is not read from a commit.
+_Avoid_: app config dump, properties, env (the environment is only judged, never shown)
 
 **Required tool** (`ToolRequirement`):
 A tool and version from mise configuration or `.tool-versions` (source `mise`) or from a file that gives the version in its own way (`.nvmrc`, the Maven wrapper, `engines.node`; source `hint`).
