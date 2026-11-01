@@ -30,7 +30,7 @@ import { RepoMiseTasks } from "./RepoMiseTasks.tsx";
 import { RepoStats } from "./RepoStats.tsx";
 
 /** Streamdown with Mermaid is a few MB, so it goes into a separate file loaded only with the first README. */
-const ReadmeMarkdown = lazy(() => import("./ReadmeMarkdown.tsx").then((m) => ({ default: m.ReadmeMarkdown })));
+const Markdown = lazy(() => import("@/components/Markdown").then((m) => ({ default: m.Markdown })));
 
 export function RepoDetail({
   conn,
@@ -147,7 +147,7 @@ function Readme({ conn, readme }: { conn: Connection; readme: RepoOverview["read
       {readme.format === "markdown" ? (
         <ReadmeFallback key={readme.text} text={readme.text}>
           <Suspense fallback={<Loading />}>
-            <ReadmeMarkdown conn={conn} text={readme.text} />
+            <Markdown conn={conn} text={readme.text} html className="p-4" />
           </Suspense>
         </ReadmeFallback>
       ) : (

@@ -10,11 +10,12 @@ import {
 import { SendHorizontal, Square } from "lucide-react";
 import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AgentDialogCard } from "@/components/AgentDialogCard";
+import { ConversationEntries } from "@/components/ConversationEntries";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { conversationStatus, sendsMessage, TOOL_STATUS, withEntries } from "@/lib/conversation";
+import { conversationStatus, sendsMessage, withEntries } from "@/lib/conversation";
 import { daemonSocket } from "@/lib/daemon-socket";
 import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
 import { inTurn, isLive } from "@/lib/session-state";
@@ -117,17 +118,16 @@ export function ConversationView({ conn, session, selected }: { conn: Connection
         ref={list}
         role="log"
         aria-label="Conversation"
-        className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3 text-sm"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto text-sm"
         onScroll={(e) => {
           const el = e.currentTarget;
           following.current = el.scrollHeight - el.scrollTop - el.clientHeight < FOLLOW_PX;
         }}
       >
-        {entries.length === 0 && waiting.length === 0 && <p className="text-muted-foreground">Write to the agent below.</p>}
-        {entries.map((entry) => (
-          <Entry key={entry.id} entry={entry} />
-        ))}
-        {live && waiting.map((message) => <Waiting key={message.id} text={message.text} />)}
+        {/* A column of reading width in the middle, so that a wide panel does not stretch lines across the screen. */}
+        <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-5 px-4 py-4">
+          <ConversationEntries conn={conn} entries={entries} waiting={live ? waiting : []} working={working && !session.dialog} />
+        </div>
       </div>
       {live && session.dialog && (
         <div className="border-t px-3 py-2">
@@ -142,40 +142,6 @@ export function ConversationView({ conn, session, selected }: { conn: Connection
       {live && <Composer conn={conn} session={id} working={working} focused={selected && !keyboardElsewhere} />}
     </div>
   );
-}
-
-/** A message the user wrote during a turn, which goes once the turn ends. */
-function Waiting({ text }: { text: string }) {
-  return (
-    <div className="flex flex-col items-end gap-1 self-end">
-      <p className="text-muted-foreground rounded-md border border-dashed px-3 py-2 break-words whitespace-pre-wrap">{text}</p>
-      <span className="text-muted-foreground text-xs">Waiting: sent when the agent's turn ends</span>
-    </div>
-  );
-}
-
-function Entry({ entry }: { entry: ConversationEntry }) {
-  switch (entry.kind) {
-    case "user":
-      return <p className="bg-muted self-end rounded-md px-3 py-2 break-words whitespace-pre-wrap">{entry.text}</p>;
-    case "agent":
-      return <p className="break-words whitespace-pre-wrap">{entry.text}</p>;
-    case "tool":
-      return (
-        <details className="rounded-md border px-3 py-1.5 text-xs">
-          <summary className="flex cursor-pointer items-center gap-2">
-            <span className="min-w-0 flex-1 truncate font-medium">{entry.title}</span>
-            <span className="text-muted-foreground">{entry.tool}</span>
-            <StatusLabel {...TOOL_STATUS[entry.status]} />
-          </summary>
-          {entry.detail.length > 0 && (
-            <pre className="bg-muted text-muted-foreground mt-1.5 max-h-64 overflow-auto rounded-sm px-2 py-1 font-mono break-all whitespace-pre-wrap">
-              {entry.detail.join("\n")}
-            </pre>
-          )}
-        </details>
-      );
-  }
 }
 
 /**
