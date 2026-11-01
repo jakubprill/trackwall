@@ -438,6 +438,10 @@ _Avoid_: note, comment (that is a review comment), chat
 What the daemon saw happen to delegated work, for the proposer: a turn that ended, an error, the end of the session, a reported result, a verification verdict, a rejected proposal. The daemon asks the proposer to read it, so the supervisor or a main session does not poll (ADR-68).
 _Avoid_: event (that is a `/ws` event), notification (that is a system notification), status
 
+**Read request** (`ReadRequest`, `Session.readRequest`, `readRequestPrompt`; "Unread by the agent" and "Deliver now" in the session panel, `deliver-read-request`):
+The daemon's one-line prompt that asks a session's agent to read what waits unread for it (a review, task messages, task updates, a handoff, a trust notice), with since when it has waited and what holds it back (`ReadRequestHold` in `waitsFor`): `sent` and not taken, `pending` until the session can take it, `user_text` in the input box, the agent's question (`dialog`), or `idle`, nothing until the user's Deliver now (ADR-159). The agent reads the content itself through the tools the prompt names.
+_Avoid_: inbox, notification, nudge
+
 **Agent queues** (`agent-queues.json`, `AgentQueues`, `agentQueuesFile`):
 Everything that waits in the `agents` module for the user or an agent: task proposals, unread review comments, task messages, task updates and mise trust notices. Kept in the state directory, so a daemon restart or an update does not lose them; the sessions that come back are asked to read what is unread (ADR-115).
 _Avoid_: inbox, mailbox, outbox
@@ -614,11 +618,23 @@ A session's output in the asciicast v2 format with markers for hook records, ses
 What the real Copilot CLI of the pinned version showed and sent in the contract tests, per system and anonymised: the hooks with their payloads, the window titles, the input box and the approval dialog. The fake Copilot CLI of the tests replays it, and the contract tests compare a live session with it, or take it anew with `TRACKWALL_RECORD=1` (`startRecorder`, ADR-67). A test fixture, not part of the product.
 _Avoid_: recording (that is `session.cast`), snapshot
 
+**Routine** (module `routines`, `Routine`, `RoutineEntry`, `routinesApi`, MCP tool `propose_routine`; "Routines" under the New task form):
+A task the user repeats, saved once by an agent at the user's request and run by hand with "Run", each run an ordinary task with the routine's title, repo, model and approvals mode. A file in `.trackwall/routines` of the projects folder; it runs only in the version the user approved ("Approve this version"), so any change waits for approval again (ADR-173).
+_Avoid_: recipe, template, playbook, job, automation (a routine does not start by itself)
+
+**Routine digest** (`RoutineDigest`):
+The SHA-256 of a routine file's bytes: what the user approved, and what an approval or a run names, so a file changed meanwhile is refused.
+_Avoid_: hash, version number
+
 **Budget**:
 A limit on a task's time and number of commits; when it is exceeded the daemon ends the session.
 
 **Summary** (`Task.summary`, MCP tool `report_result`):
-The result a task session reports with the `report_result` tool: what it did, what is left, what to check. It goes to the task's `summary` field (with the report time, in `tasks.json`), to the Sessions view and to the main session; a later one replaces the earlier (ADR-39). Eventually also to a PR proposal. Trackwall merges nothing by itself (ADR-9).
+The result a task session reports with the `report_result` tool: what it did, what is left, what to check. It goes to the task's `summary` field (with the report time, in `tasks.json`), to the Sessions view and to the main session; a later one replaces the earlier (ADR-39). It also fills the merge request draft (ADR-77). Trackwall merges nothing by itself (ADR-9).
+
+**Check steps** (`TaskSummary.checkSteps`, `report_result` argument `checkSteps`; UI "How to check"):
+Optional steps of a summary for checking the change by hand, each with what to do and what the user should see (ADR-169). Only a hint: the user may follow them or not, and nothing waits for them.
+_Avoid_: test plan, acceptance (those decide something; check steps decide nothing)
 
 ## Plan
 

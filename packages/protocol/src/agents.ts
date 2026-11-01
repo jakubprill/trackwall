@@ -5,6 +5,7 @@ import { WorkingTreeChanges } from "./changes.ts";
 import { SessionMessage, SessionView } from "./conversation.ts";
 import { RunState } from "./procs.ts";
 import { REVIEW_COMMENTS_MAX, ReviewComment } from "./review.ts";
+import { singleLine } from "./single-line.ts";
 import { TaskStateChange } from "./task-state.ts";
 import { CommitHash, RepoId } from "./workspace.ts";
 
@@ -68,13 +69,7 @@ export const REJECTION_REASON_MAX = 1000;
  * thread title. One line without control characters, because the UI shows it as text on a single line.
  */
 export const TASK_TITLE_MAX = 80;
-export const TaskTitle = z
-  .string()
-  .trim()
-  .min(1)
-  .max(TASK_TITLE_MAX)
-  // `refine` instead of `regex` for the same reason as in `visibleText`.
-  .refine((value) => !/\p{Cc}/u.test(value), { message: "the title must be a single line without control characters" });
+export const TaskTitle = singleLine(z.string().trim().min(1).max(TASK_TITLE_MAX), "the title");
 
 /**
  * Text from an agent that a person reads before a decision or that reaches another agent (a task proposal, a summary,
@@ -119,6 +114,19 @@ export type TaskApprovals = z.infer<typeof TaskApprovals>;
 /** A task summary from its session (`report_result`, ADR-39): what it did and what is left, for the session that delegated the task. */
 export const TASK_SUMMARY_MAX = 4000;
 export const TaskSummaryText = z.string().trim().min(1).max(TASK_SUMMARY_MAX);
+
+/**
+ * How to check the change by hand (ADR-169): short steps with what the user should see, such as "Open /orders and press
+ * Save: a toast says Saved". Only information next to the summary, never a gate: the user may follow them or not, and no
+ * state of the task waits for them. Kept as separate steps, so that a later automated check can run them one by one.
+ */
+export const TASK_CHECK_STEP_MAX = 300;
+export const TASK_CHECK_STEPS_MAX = 8;
+export const TaskCheckStep = singleLine(z.string().trim().min(1).max(TASK_CHECK_STEP_MAX), "a check step");
+
+/** The last summary from the task session (`report_result`, ADR-39) with its check steps (ADR-169), empty when it gave none. */
+export const TaskSummary = z.object({ text: z.string(), checkSteps: z.array(z.string()), reportedAt: z.string() });
+export type TaskSummary = z.infer<typeof TaskSummary>;
 
 /**
  * Who proposed the task (ADR-39): a Trackwall session by its session token, or `null` for an agent outside Trackwall
@@ -246,6 +254,28 @@ export function mayHandToSupervisor(task: Pick<Task, "proposedBy">): boolean {
 }
 
 /**
+ * Why a read request (ADR-159) has not been taken yet: `sent` it was typed or given through a hook and the agent has
+ * not read it; `pending` it goes in as soon as the agent can take it (with a tool's result, when its turn ends, once the
+ * input box is back); `user_text` there is text in the input box, the user's or a prompt given up on; `dialog` the agent
+ * asks something on the screen; `idle` nothing will send it until the next message or update, or the user's Deliver now.
+ */
+export const ReadRequestHold = z.enum(["sent", "pending", "user_text", "dialog", "idle"]);
+export type ReadRequestHold = z.infer<typeof ReadRequestHold>;
+
+/**
+ * The read request (ADR-159): the daemon's prompt asking a session's agent to read what waits unread for it (a review,
+ * task messages, task updates, a handoff, a trust notice), since when it has waited and what holds it back.
+ */
+export const ReadRequest = z.object({
+  /** The daemon's prompt, which names the tools with something unread. */
+  prompt: z.string(),
+  /** ISO 8601: since when something has waited unread without a break. */
+  since: z.string(),
+  waitsFor: ReadRequestHold,
+});
+export type ReadRequest = z.infer<typeof ReadRequest>;
+
+/**
  * A session that may be stuck (ADR-151): it is in the middle of a turn (`Working`, or `Stale`) and no step of its agent
  * came for a long time: no hook in a terminal (a finished tool, a prompt, a notification), no update over ACP, no key
  * from the user. Copilot CLI keeps drawing its spinner while a command hangs, so the output alone does not tell; a
@@ -288,6 +318,8 @@ export const Session = z.object({
   environment: SessionEnvironment,
   /** Copilot CLI's own screen in a terminal, or Trackwall's conversation view over ACP (ADR-107). */
   view: SessionView,
+  /** The read request while something waits unread for the agent of a running session (ADR-159); `null` otherwise. */
+  readRequest: ReadRequest.nullable(),
 });
 export type Session = z.infer<typeof Session>;
 
@@ -337,7 +369,7 @@ export const Task = z.object({
   /** Whether its sessions show as a terminal or in the conversation view (ADR-137). */
   view: SessionView,
   /** The last summary from the task session (`report_result`); `null` until it has reported one. */
-  summary: z.object({ text: z.string(), reportedAt: z.string() }).nullable(),
+  summary: TaskSummary.nullable(),
   /** The task port (ADR-61): `TASK_PORT_ENV` in every mise task run in the worktree, and the port of the task's service. */
   port: TaskPort,
   included: IncludedFiles,
@@ -624,6 +656,12 @@ export const agentsApi = {
    * waits, otherwise after its turn. A session in a terminal gets what the user types there instead (`bad_request`).
    */
   say: endpoint("say", SessionRequest.extend({ text: SessionMessage }), Session),
+  /**
+   * The user's Deliver now (ADR-159) for a read request nothing would send (`idle`): it goes to the agent as soon as the
+   * agent can take it, at once into an empty input box, also after an Esc. It never goes into text in the input box,
+   * into the middle of a turn or twice. An ended session is `bad_request`.
+   */
+  deliverReadRequest: endpoint("deliver-read-request", SessionRequest, Session),
   /** Stops the agent's turn in a session in the conversation view (ADR-107), as Esc does in the terminal. */
   interrupt: endpoint("interrupt", SessionRequest, Session),
   /**

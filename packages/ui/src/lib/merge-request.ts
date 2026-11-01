@@ -26,16 +26,23 @@ export type MergeRequestDraftText = Pick<MergeRequestForm, "title" | "descriptio
 
 /**
  * The draft of the form: the task's title (or the first line of its prompt) and the agent's summary (or the prompt)
- * with the verdict of the last verification, so the reviewer sees what the user saw.
+ * with its check steps (ADR-169) and the verdict of the last verification, so the reviewer sees what the user saw and
+ * can try the change the same way.
  */
 export function mergeRequestDraft(task: Task, verification: Verification | null): MergeRequestDraftText {
   const title = (task.title ?? task.prompt.split("\n", 1)[0] ?? "").trim();
   const body = (task.summary?.text ?? task.prompt).trim();
+  const checks = task.summary && task.summary.checkSteps.length > 0 ? `\n\n${checkStepsSection(task.summary.checkSteps)}` : "";
   const verdict = verification && verification.state !== "running" ? `\n\n${verificationLine(verification)}` : "";
   return {
     title: cut(title, MERGE_REQUEST_TITLE_MAX),
-    description: cut(`${body}${verdict}`, MERGE_REQUEST_DESCRIPTION_MAX),
+    description: cut(`${body}${checks}${verdict}`, MERGE_REQUEST_DESCRIPTION_MAX),
   };
+}
+
+/** `How to check:` and the steps as a numbered Markdown list, which GitLab and GitHub both render. */
+function checkStepsSection(steps: readonly string[]): string {
+  return ["How to check:", ...steps.map((step, index) => `${index + 1}. ${step}`)].join("\n");
 }
 
 /** `Verification in Trackwall: passed (mise task test, 128 tests · 3 skipped)`. */

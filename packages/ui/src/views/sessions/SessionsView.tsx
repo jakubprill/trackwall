@@ -12,6 +12,7 @@ import { useCallback, useRef } from "react";
 import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
+import { ReadRequestNotice } from "@/components/ReadRequestNotice";
 import { SessionScreen } from "@/components/SessionScreen";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +60,7 @@ import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { cn } from "@/lib/utils";
 import { NewSession } from "./NewSession.tsx";
 import { ProposalInbox } from "./ProposalInbox.tsx";
+import { RoutineList } from "./RoutineList.tsx";
 import { EndTaskButton, SessionCloseButton, SessionCloseConfirmation, TaskEnding } from "./SessionClose.tsx";
 import { SessionEnvironment } from "./SessionEnvironment.tsx";
 import { SessionGrid } from "./SessionGrid.tsx";
@@ -129,6 +131,10 @@ export function SessionsView({
     if (afterRemoval !== "keep") onSelect(afterRemoval);
     sessions.reload();
   };
+  const started = (selection: SessionSelection) => {
+    onSelect(selection);
+    sessions.reload();
+  };
   // Taken also with no entry at that position, so that the key never reaches a session terminal by accident.
   useWindowShortcuts(
     (event) => {
@@ -196,15 +202,15 @@ export function SessionsView({
           </div>
         )}
         {sessions.data && !current && (
-          <NewSession
-            conn={conn}
-            sessions={sessions.data.sessions}
-            onStarted={(selection) => {
-              onSelect(selection);
-              sessions.reload();
-            }}
-            onCancel={entries.length > 0 ? () => onSelect(undefined) : undefined}
-          />
+          <div className="min-h-0 overflow-y-auto">
+            <NewSession
+              conn={conn}
+              sessions={sessions.data.sessions}
+              onStarted={started}
+              onCancel={entries.length > 0 ? () => onSelect(undefined) : undefined}
+            />
+            <RoutineList conn={conn} onStarted={started} />
+          </div>
         )}
         {current && (
           <SelectedEntry
@@ -699,6 +705,7 @@ function SessionPanel({
       </header>
       <SessionEnvironment environment={session.environment} />
       <EnvironmentChangeNotice key={session.id} conn={conn} session={session} onRestarted={onChanged} />
+      <ReadRequestNotice key={`read-request-${session.id}`} conn={conn} session={session} onDelivered={onChanged} />
       <SessionScreen conn={conn} session={session} selected />
     </>
   );

@@ -15,6 +15,7 @@ import {
   logsApi,
   mergeRequestsApi,
   miseApi,
+  routinesApi,
   servicesApi,
   verificationApi,
   workspaceApi,
@@ -131,6 +132,13 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     await f.board.remove(b.item);
     return null;
   }),
+  route(routinesApi.list, (f) => f.routines.list()),
+  route(routinesApi.approve, (f, b) => f.routines.approve(b.name, b.digest)),
+  route(routinesApi.run, (f, b) => f.runRoutine(b.name, b.digest, b.view)),
+  route(routinesApi.remove, async (f, b) => {
+    await f.routines.remove(b.name);
+    return null;
+  }),
   route(dayStartApi.start, (f, b) => f.dayStart.start(b.view)),
   route(dayStartApi.run, (f) => f.dayStart.run()),
   route(verificationApi.start, (f, b) => f.verifications.start(b.task)),
@@ -149,6 +157,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(agentsApi.stop, (f, b) => f.agents.stop(b.session)),
   route(agentsApi.environmentChange, (f, b) => f.agents.environmentChange(b.session)),
   route(agentsApi.restart, (f, b) => f.agents.restart(b.session)),
+  route(agentsApi.deliverReadRequest, (f, b) => f.agents.deliverReadRequest(b.session)),
   route(agentsApi.answerDialog, (f, b) => f.agents.answerDialog(b.session, b.dialog, b.answer)),
   route(agentsApi.say, (f, b) => f.agents.say(b.session, b.text)),
   route(agentsApi.interrupt, (f, b) => f.agents.interrupt(b.session)),

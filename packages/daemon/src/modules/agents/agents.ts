@@ -41,13 +41,13 @@ import { CopilotHookEvent } from "./copilot-hook-record.ts";
 import type { EndedTaskFacts } from "./ended-task.ts";
 import { HandoffWatch } from "./handoff-watch.ts";
 import { appendHookRecord } from "./hook-tail.ts";
-import { inboxPrompt } from "./inbox-prompt.ts";
 import { javaNavigationState } from "./java-language-server.ts";
 import { LAST_SUPERVISOR_FILE, LastSupervisorFile } from "./last-supervisor.ts";
 import { ListedSessions, resumableOf } from "./listed-sessions.ts";
 import { LiveSession, type SessionEvent, type SessionWindow } from "./live-session.ts";
 import { MiseTrustNotices, type TrustRecipient, trustRecipientOf } from "./mise-trust-notices.ts";
 import { proposedByOf, proposerExists, proposerKeyOf, proposerKind, proposerOf } from "./proposer.ts";
+import { readRequestPrompt } from "./read-request-prompt.ts";
 import { type ResumableSession, ResumableSessions, resumablePlace, type SessionLaunch, sessionLaunch } from "./resumable-sessions.ts";
 import type { SessionMiseEnv } from "./session-env.ts";
 import {
@@ -438,11 +438,11 @@ export class Agents {
   }
 
   /** A summary from session `caller` for its own task (`report_result`); it goes to the task's proposer too (ADR-68). */
-  reportSummary(caller: string | null, text: string): Task {
+  reportSummary(caller: string | null, text: string, checkSteps: string[]): Task {
     const task = caller === null ? null : this.session(caller).task;
     if (caller === null || task === null)
       throw new DomainError("bad_request", "only a session that runs a task in Trackwall can report a result");
-    const reported = this.#tasks.setSummary(task, text);
+    const reported = this.#tasks.setSummary(task, text, checkSteps);
     this.#coordination.resultReported(reported, caller);
     return reported;
   }
@@ -461,9 +461,9 @@ export class Agents {
   }
 
   /** The prompt for what waits unread for a session: its task's review comments and messages, and its updates. */
-  #inboxPrompt(session: { id: string; supervisor: boolean; task: string | null }): string | undefined {
+  #readRequestPrompt(session: { id: string; supervisor: boolean; task: string | null }): string | undefined {
     const reviewComments = session.task === null ? 0 : this.#reviews.unread(session.task);
-    return inboxPrompt({
+    return readRequestPrompt({
       reviewComments,
       handoffMoved: session.task !== null && this.#handoffs.waiting(session.task),
       ...this.#coordination.unread(session),
@@ -542,18 +542,26 @@ export class Agents {
    * Copilot CLI's default when it is `null` (ADR-98), with `javaNavigation` gets the Java language server (ADR-99),
    * works on board item `item` (ADR-133), which must be on the board (`not_found` otherwise), and shows in `view`
    * (ADR-137). With `handoffFrom` the user hands it the work of that task (ADR-147): it becomes that task's subtask,
-   * which reads its change and reports to it as if its session had proposed it (ADR-140, ADR-143).
+   * which reads its change and reports to it as if its session had proposed it (ADR-140, ADR-143). A task run from a
+   * routine (ADR-173) has the routine's `title`; a typed one has none.
    */
   async createTask(
     repo: string,
     prompt: string,
-    { approvals = "ask", model = null, javaNavigation = false, item = null, view = "terminal" }: Partial<TaskOptions> = {},
+    {
+      approvals = "ask",
+      model = null,
+      javaNavigation = false,
+      item = null,
+      view = "terminal",
+      title = null,
+    }: Partial<TaskOptions> & { title?: string | null } = {},
     handoffFrom: string | null = null,
   ): Promise<Task> {
     await this.#assertOnBoard(item);
     // `task` throws `not_found` for a task that is not on the list, before a worktree exists.
     const proposedBy = handoffFrom === null ? null : { session: null, supervisor: false, task: this.task(handoffFrom).id };
-    const origin = { id: randomUUID(), title: null, proposedBy, model, approvals, javaNavigation, item, view };
+    const origin = { id: randomUUID(), title, proposedBy, model, approvals, javaNavigation, item, view };
     return this.#tasks.create(repo, prompt, origin);
   }
 
@@ -823,6 +831,14 @@ export class Agents {
     return this.#sessions.view(session);
   }
 
+  /** The user's Deliver now for what waits unread for a running session's agent (ADR-159). */
+  deliverReadRequest(id: string): Session {
+    const session = this.#sessions.get(id);
+    if (!this.#sessions.isRunning(session)) throw new DomainError("bad_request", "the session has ended");
+    session.deliverNow();
+    return this.#sessions.view(session);
+  }
+
   /** Closes an ended session: it disappears from the list, and its files from the state directory. The session's task stays. */
   dismiss(id: string): SessionList {
     this.#close(id);
@@ -943,7 +959,7 @@ export class Agents {
    */
   #askToReadLeft(id: string): void {
     const session = this.#sessions.find(id);
-    if (session !== undefined && this.#inboxPrompt(session) !== undefined) session.askToRead();
+    if (session !== undefined && this.#readRequestPrompt(session) !== undefined) session.askToRead();
   }
 
   /** A start in the view it names, in `place`. */
@@ -992,7 +1008,7 @@ export class Agents {
   /** How a session of either view tells the daemon what it did. */
   #sessionCallbacks({ id, supervisor, task }: { id: string; supervisor: boolean; task: string | null }): SessionCallbacks {
     return {
-      prompt: () => this.#inboxPrompt({ id, supervisor, task }),
+      prompt: () => this.#readRequestPrompt({ id, supervisor, task }),
       situation: () => (supervisor ? supervisorSituation(this.sessionsWithoutCycle(), id) : undefined),
       onUserText: () => this.#coordination.userTyped({ id, task }),
       onPromptSent: () => this.#miseTrust.promptSent(trustRecipientOf({ id, task })),

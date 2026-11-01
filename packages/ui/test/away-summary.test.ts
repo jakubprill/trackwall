@@ -21,6 +21,7 @@ function session(id: string, fields: Partial<Session> = {}): Session {
     dialog: null,
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
     view: "terminal",
+    readRequest: null,
     ...fields,
   };
 }
@@ -83,7 +84,7 @@ describe("While you were away (ADR-151)", () => {
           task("t-waiting"),
           task("t-done", {
             title: "Rename the price field",
-            summary: { text: "Renamed it.\nTests pass.", reportedAt: "2026-10-31T10:30:00.000Z" },
+            summary: { text: "Renamed it.\nTests pass.", checkSteps: [], reportedAt: "2026-10-31T10:30:00.000Z" },
           }),
         ],
         sessions: [

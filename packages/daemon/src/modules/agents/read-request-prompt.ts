@@ -27,7 +27,7 @@ export interface Unread {
 }
 
 /** The prompt for what waits, or `undefined` when nothing does. */
-export function inboxPrompt({ reviewComments, messages, handoffMoved, updates, trustNotice }: Unread): string | undefined {
+export function readRequestPrompt({ reviewComments, messages, handoffMoved, updates, trustNotice }: Unread): string | undefined {
   const parts = [
     reviewComments > 0 && REVIEW,
     messages > 0 && MESSAGES,

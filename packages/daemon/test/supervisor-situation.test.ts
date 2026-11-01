@@ -18,6 +18,7 @@ function session(fields: Partial<Session> & Pick<Session, "id">): Session {
     dialog: null,
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
     view: "terminal",
+    readRequest: null,
     ...fields,
   };
 }
@@ -100,7 +101,7 @@ describe("the supervisor's situation (ADR-148)", () => {
             repo: "payments",
             prompt: "Retry a failed payment\nonce, then give up",
             proposedBy: { session: SUPERVISOR, supervisor: true, task: null },
-            summary: { text: "Done.", reportedAt: "2026-10-30T09:05:00.000Z" },
+            summary: { text: "Done.", checkSteps: [], reportedAt: "2026-10-30T09:05:00.000Z" },
           }),
         ],
         proposals: [proposal],
