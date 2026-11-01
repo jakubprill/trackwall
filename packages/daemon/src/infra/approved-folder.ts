@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { ContentDigest } from "@trackwall/protocol";
 import { z } from "zod";
 import { writeFileAtomic } from "./atomic-write.ts";
 import { DomainError, messageOf } from "./errors.ts";
@@ -19,6 +20,8 @@ import { readStateFile } from "./state-file.ts";
 /** How one kind of file is named and read; `what` names it in messages ("routine"). */
 export interface ApprovedFolderFormat<T> {
   what: string;
+  /** A valid name, also the key of its approval: a hand-edited approvals file with another key is set aside. */
+  name: z.ZodString;
   extension: string;
   /** The name a file name gives, `undefined` for a file the folder does not read. */
   nameOfFile: (file: string) => string | undefined;
@@ -52,8 +55,7 @@ export interface FolderProblem {
 }
 
 const READ_AT_ONCE = 16;
-const StoredApprovals = z.object({ approved: z.record(z.string(), z.string()) });
-type StoredApprovals = z.infer<typeof StoredApprovals>;
+type StoredApprovals = { approved: Record<string, string> };
 
 export class ApprovedFolder<T> {
   readonly #deps: ApprovedFolderDeps<T>;
@@ -83,8 +85,7 @@ export class ApprovedFolder<T> {
       if ("problem" in one) problems.push({ file, message: one.problem });
       else files.push(one);
     }
-    if (names.length > maxFiles)
-      problems.push({ file: names[maxFiles]?.file ?? "", message: `the folder reads at most ${maxFiles} files` });
+    if (names.length > maxFiles) problems.push({ file: names[maxFiles]?.file ?? "", message: `the list reads at most ${maxFiles} files` });
     return { files, problems };
   }
 
@@ -147,7 +148,7 @@ export class ApprovedFolder<T> {
   #approvals(): StoredApprovals {
     const { approvalsFile, format, log } = this.#deps;
     return (
-      readStateFile(approvalsFile, StoredApprovals, (problem, aside) =>
+      readStateFile(approvalsFile, z.object({ approved: z.record(format.name, ContentDigest) }), (problem, aside) =>
         log(`${format.what} approvals were unreadable (${problem}), moved to ${aside}; every ${format.what} waits for approval again`),
       ) ?? { approved: {} }
     );

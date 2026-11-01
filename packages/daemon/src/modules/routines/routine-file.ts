@@ -39,6 +39,7 @@ export function readRoutineFile(name: RoutineName, text: string): { routine: Rou
 /** How the routines folder is read: a prompt of `TASK_PROMPT_MAX` characters in any script fits in 64 KB with its frontmatter. */
 export const ROUTINE_FILE_FORMAT: ApprovedFolderFormat<Routine> = {
   what: "routine",
+  name: RoutineName,
   extension: EXTENSION,
   nameOfFile: routineNameOfFile,
   read: (name, text) => {

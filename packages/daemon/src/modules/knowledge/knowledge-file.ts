@@ -39,6 +39,7 @@ export function readKnowledgeFile(name: KnowledgeName, text: string): { entry: K
 /** How the knowledge folder is read: an entry is two short texts, so 16 KB is plenty in any script. */
 export const KNOWLEDGE_FILE_FORMAT: ApprovedFolderFormat<KnowledgeEntry> = {
   what: "knowledge entry",
+  name: KnowledgeName,
   extension: EXTENSION,
   nameOfFile: knowledgeNameOfFile,
   read: (name, text) => {

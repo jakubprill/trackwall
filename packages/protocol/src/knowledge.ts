@@ -28,13 +28,24 @@ export type KnowledgeName = z.infer<typeof KnowledgeName>;
 export const KnowledgeKind = z.enum(["how-to", "relation", "exception", "pitfall"]);
 export type KnowledgeKind = z.infer<typeof KnowledgeKind>;
 
+/**
+ * Text the user reads in Plan exactly as a session reads it: no invisible characters (`visibleText`) and no control
+ * characters but line breaks and tabs, since a lone carriage return is a line break in the session's Markdown while the
+ * UI shows it as a space.
+ */
+function plainText(text: z.ZodString): z.ZodString {
+  return visibleText(text).refine((value) => !/[^\P{Cc}\n\t]/u.test(value), {
+    message: "the text must not contain control characters other than line breaks and tabs",
+  });
+}
+
 /** Short, because every session in the entry's repos reads it in its instructions. */
 export const KNOWLEDGE_TEXT_MAX = 500;
-export const KnowledgeText = visibleText(z.string().trim().min(1).max(KNOWLEDGE_TEXT_MAX));
+export const KnowledgeText = plainText(z.string().trim().min(1).max(KNOWLEDGE_TEXT_MAX));
 
-/** How the writer knows it (a command and its outcome, a file); shown to the user, not to sessions. */
+/** How the writer knows it (a command and its outcome, a file); shown to the user, not to sessions or `list_knowledge`. */
 export const KNOWLEDGE_EVIDENCE_MAX = 500;
-export const KnowledgeEvidence = visibleText(z.string().trim().max(KNOWLEDGE_EVIDENCE_MAX));
+export const KnowledgeEvidence = plainText(z.string().trim().max(KNOWLEDGE_EVIDENCE_MAX));
 
 /** The repos the entry is about; empty for the whole workspace. */
 export const KNOWLEDGE_REPOS_MAX = 20;
@@ -72,6 +83,16 @@ export const KnowledgeList = z.object({
   problems: z.array(KnowledgeProblem),
 });
 export type KnowledgeList = z.infer<typeof KnowledgeList>;
+
+/** An entry as agents read it, in their instructions and from `list_knowledge`: without the evidence, which is for the user. */
+export const AgentKnowledgeEntry = KnowledgeEntry.omit({ evidence: true });
+export type AgentKnowledgeEntry = z.infer<typeof AgentKnowledgeEntry>;
+
+/** The approved entries a session's instructions carry (ADR-170), and how many more about its place it can list. */
+export interface SessionKnowledge {
+  entries: readonly AgentKnowledgeEntry[];
+  more: number;
+}
 
 /** Whether an entry is about `repo`: one about no repo is about the whole workspace. */
 export function knowledgeIsAbout(entry: Pick<KnowledgeEntry, "repos">, repo: string): boolean {

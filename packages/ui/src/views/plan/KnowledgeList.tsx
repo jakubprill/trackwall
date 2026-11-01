@@ -61,7 +61,8 @@ function KnowledgeRow({ conn, entry, onChanged }: { conn: Connection; entry: Kno
         <span className="text-muted-foreground font-mono text-xs">
           {entry.repos.length === 0 ? "whole workspace" : entry.repos.join(", ")}
         </span>
-        {entry.writtenBy.kind === "agent" && <span className="text-muted-foreground text-xs">proposed by an agent</span>}
+        {/* Who wrote an entry is in its file, which anything can write, so it counts only once the user approved it. */}
+        {entry.approved && entry.writtenBy.kind === "agent" && <span className="text-muted-foreground text-xs">proposed by an agent</span>}
         {!entry.approved && <Badge>needs your approval</Badge>}
       </div>
       <p className="text-sm whitespace-pre-wrap">{entry.text}</p>

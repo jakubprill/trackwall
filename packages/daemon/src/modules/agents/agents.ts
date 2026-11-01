@@ -14,6 +14,7 @@ import {
   type SendMessageResult,
   type SendReviewResult,
   type Session,
+  type SessionKnowledge,
   type SessionList,
   type SessionView,
   type StartOptions,
@@ -50,7 +51,6 @@ import { proposedByOf, proposerExists, proposerKeyOf, proposerKind, proposerOf }
 import { readRequestPrompt } from "./read-request-prompt.ts";
 import { type ResumableSession, ResumableSessions, resumablePlace, type SessionLaunch, sessionLaunch } from "./resumable-sessions.ts";
 import type { SessionMiseEnv } from "./session-env.ts";
-import type { SessionKnowledge } from "./session-instructions.ts";
 import {
   type LauncherProcs,
   type SessionCallbacks,

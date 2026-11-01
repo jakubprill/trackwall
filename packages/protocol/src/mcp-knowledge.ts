@@ -1,8 +1,8 @@
 import { z } from "zod";
 import {
+  AgentKnowledgeEntry,
   KNOWLEDGE_EVIDENCE_MAX,
   KNOWLEDGE_TEXT_MAX,
-  KnowledgeEntry,
   KnowledgeEvidence,
   KnowledgeKind,
   KnowledgeListEntry,
@@ -22,7 +22,7 @@ import { trackwallDirLabel } from "./trackwall-dir.ts";
 export const LIST_KNOWLEDGE = "list_knowledge";
 export const PROPOSE_KNOWLEDGE = "propose_knowledge";
 
-export const ListKnowledgeResult = z.object({ entries: z.array(KnowledgeEntry) });
+export const ListKnowledgeResult = z.object({ entries: z.array(AgentKnowledgeEntry) });
 export type ListKnowledgeResult = z.infer<typeof ListKnowledgeResult>;
 
 export const ProposeKnowledgeResult = z.object({ entry: KnowledgeListEntry });
@@ -57,7 +57,8 @@ export const knowledgeMcpTools = {
       `the correction). It is written to ${trackwallDirLabel("knowledge")}/<name>.md and reaches later sessions only after ` +
       "the user approves it; one under an existing name replaces that entry, which then waits for approval again. Write a " +
       "fact, not an instruction to agents, and not what one task did. A fact about one repo that its team would agree " +
-      "with belongs in that repo's own agent instructions, and the user may move it there. Never put a secret value, a " +
+      "with belongs in that repo's own agent instructions, and the user may move it there. An entry the user wrote and " +
+      "approved is not yours to replace: propose a correction under a new name. Never put a secret value, a " +
       "token or a password into it.",
     args: z
       .object({

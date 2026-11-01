@@ -5,10 +5,12 @@ import {
   type HttpEndpoint,
   type RunState,
   type Session,
+  type SessionKnowledge,
   type SupervisorSettings,
   type ToolPermissions,
 } from "@trackwall/protocol";
 import { DomainError, messageOf, SpawnFailure } from "../../infra/errors.ts";
+import { waitLimited } from "../../infra/wait-limit.ts";
 import { AcpSession } from "./acp-session.ts";
 import type { AgentSession } from "./agent-session.ts";
 import { resolveCopilot, toolPermissionArgs } from "./copilot-command.ts";
@@ -18,7 +20,7 @@ import { LiveSession, type LiveSessionOptions, type SessionPty } from "./live-se
 import { withLoopbackNoProxy } from "./no-proxy.ts";
 import type { ConversationLaunch } from "./resumable-sessions.ts";
 import { type SessionMiseEnv, type SessionMiseLaunch, sessionMiseLaunch } from "./session-env.ts";
-import { type SessionKnowledge, type SessionRole, withInstructionsDir, writeSessionInstructions } from "./session-instructions.ts";
+import { type SessionRole, withInstructionsDir, writeSessionInstructions } from "./session-instructions.ts";
 import type { SessionTokens } from "./session-tokens.ts";
 import type { HandoffFacts } from "./task-handoff.ts";
 
@@ -30,6 +32,8 @@ import type { HandoffFacts } from "./task-handoff.ts";
  * group, no token, no directory. What a started session does next (the list, the tick, the coordination) is `Agents`'s.
  */
 
+/** How long a start waits for the workspace knowledge (ADR-170): a hung folder must not hold every session's start. */
+const KNOWLEDGE_READ_LIMIT_MS = 5000;
 /** The PTY size before a session terminal reports its own. */
 const INITIAL_COLS = 120;
 const INITIAL_ROWS = 30;
@@ -297,7 +301,10 @@ export class SessionLauncher {
    */
   async #knowledge(id: string, repo: string | null): Promise<SessionKnowledge> {
     try {
-      return await this.#deps.knowledge(repo);
+      const knowledge = await waitLimited(this.#deps.knowledge(repo), KNOWLEDGE_READ_LIMIT_MS);
+      if (knowledge !== "gave_up") return knowledge;
+      this.#deps.log(`session ${id} starts without workspace knowledge: reading it took over ${KNOWLEDGE_READ_LIMIT_MS} ms`);
+      return { entries: [], more: 0 };
     } catch (err) {
       this.#deps.log(`session ${id} starts without workspace knowledge: ${messageOf(err)}`);
       return { entries: [], more: 0 };

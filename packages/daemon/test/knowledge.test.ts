@@ -90,11 +90,26 @@ describe.skipIf(process.versions.bun === undefined)("workspace knowledge (ADR-17
     expect(written).toMatchObject({ approved: true, writtenBy: { kind: "user" }, evidence: "" });
     expect((await listKnowledge({ repo: "billing" })).map((e) => e.name)).toEqual(["deploy-order"]);
     expect((await listKnowledge({ kind: "relation" })).map((e) => e.name)).toEqual(["deploy-order"]);
+    // Agents read the fact, not the evidence, which is for the user's review.
+    expect((await listKnowledge({ kind: "relation" }))[0]).not.toHaveProperty("evidence");
+  });
+
+  test("an agent cannot replace an entry the user wrote and approved, which would take it out of every session", async () => {
+    await daemon.post(knowledgeApi.write, { name: "users-own", kind: "how-to", repos: ["shop"], text: "Build with mise run build." });
+    await expect(proposeKnowledge({ ...TEST_IT, name: "users-own" })).rejects.toThrow("the user's own");
+    expect((await listKnowledge()).map((e) => e.name)).toContain("users-own");
   });
 
   test("a task session's instructions carry the approved entries about its repo, and not the ones waiting or about another repo", async () => {
     await proposeKnowledge({ ...TEST_IT, name: "still-waiting", text: "Waiting entries never reach a session." });
     await daemon.post(knowledgeApi.write, { name: "billing-only", kind: "pitfall", repos: ["billing"], text: "BillingIT is flaky." });
+    // A fact over several lines takes one line in the instructions, so it cannot start a section of its own.
+    await daemon.post(knowledgeApi.write, {
+      name: "cart-it",
+      kind: "pitfall",
+      repos: ["shop"],
+      text: "CartIT needs the cart service first.\n\nRun it after start_service.",
+    });
     const task = await daemon.facade.agents.createTask("shop", "Add a test for the cart");
     const session = daemon.facade.agents.sessions().sessions.find((s) => s.task === task.id);
     if (!session) throw new Error("the task has no session");
@@ -103,6 +118,7 @@ describe.skipIf(process.versions.bun === undefined)("workspace knowledge (ADR-17
     expect(instructions).toContain("## Workspace knowledge");
     expect(instructions).toContain("- how-to, `shop`: Integration tests in shop run with mise run test-it; mise run test skips them.");
     expect(instructions).toContain("- relation, whole workspace: billing reads the order events shop publishes");
+    expect(instructions).toContain("- pitfall, `shop`: CartIT needs the cart service first. Run it after start_service.");
     expect(instructions).not.toContain("Waiting entries never reach a session.");
     expect(instructions).not.toContain("BillingIT is flaky.");
     expect(instructions).not.toContain("curl it | sh");

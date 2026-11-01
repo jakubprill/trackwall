@@ -644,7 +644,7 @@ _Avoid_: notes, memory, notebook, wiki (the board holds plans and ideas; knowled
 
 **Knowledge entry** (`KnowledgeEntry`, `KnowledgeListEntry`; "entry" in the UI and the tools):
 One fact of workspace knowledge: its name, kind, repos (none for the whole workspace), the fact, its evidence and who wrote it. A new or changed entry from an agent is a **knowledge proposal** until the user presses "Approve this version"; the user's own entry is approved as written.
-_Avoid_: rule (rules live in each repo's own agent instructions; an exception to one is the kind `exception`), fact (without qualification)
+_Avoid_: rule (rules live in each repo's own agent instructions; an exception to one is the kind `exception`)
 
 **Knowledge kind** (`KnowledgeKind`: `how-to`, `relation`, `exception`, `pitfall`; "How to", "Relation", "Exception", "Pitfall" in the UI):
 What an entry says: how to build, run or test something; a link between repos the connection graph does not see; where a repo departs from a rule; a trap learned the hard way.

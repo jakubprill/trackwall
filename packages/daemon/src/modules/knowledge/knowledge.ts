@@ -1,4 +1,5 @@
 import {
+  type AgentKnowledgeEntry,
   type BoardItemAuthor,
   type ContentDigest,
   type KnowledgeEntry,
@@ -7,6 +8,7 @@ import {
   type KnowledgeListEntry,
   type KnowledgeName,
   knowledgeIsAbout,
+  type SessionKnowledge,
 } from "@trackwall/protocol";
 import { type ApprovedFile, ApprovedFolder } from "../../infra/approved-folder.ts";
 import { DomainError } from "../../infra/errors.ts";
@@ -39,14 +41,8 @@ export interface KnowledgeDeps {
   log: (msg: string) => void;
 }
 
-/** An entry as it is written: everything but the time, which the write sets. */
+/** An entry as it is written: everything but its writer and time, which the write sets. */
 export type NewKnowledgeEntry = Omit<KnowledgeEntry, "updatedAt" | "writtenBy">;
-
-/** The approved entries a session's instructions carry, and how many more about its place it can list. */
-export interface SessionKnowledge {
-  entries: KnowledgeEntry[];
-  more: number;
-}
 
 export class Knowledge {
   readonly #folder: ApprovedFolder<KnowledgeEntry>;
@@ -65,12 +61,12 @@ export class Knowledge {
     return { entries: files.map(listEntry), problems };
   }
 
-  /** The approved entries about `repo` (all of them without one), by kind and name; what an agent may read. */
-  async approved(filter: { repo?: string; kind?: KnowledgeKind } = {}): Promise<KnowledgeEntry[]> {
+  /** The approved entries about `repo` (all of them without one), by name, without their evidence; what an agent may read. */
+  async approved(filter: { repo?: string; kind?: KnowledgeKind } = {}): Promise<AgentKnowledgeEntry[]> {
     const { files } = await this.#folder.list();
     return files
       .filter((f) => f.approved)
-      .map((f) => f.value)
+      .map(({ value: { evidence: _, ...entry } }) => entry)
       .filter(
         (e) => (filter.repo === undefined || knowledgeIsAbout(e, filter.repo)) && (filter.kind === undefined || e.kind === filter.kind),
       );
@@ -85,7 +81,7 @@ export class Knowledge {
     const all = await this.approved();
     const own = repo === null ? [] : all.filter((e) => e.repos.includes(repo));
     const shared = all.filter((e) => e.repos.length === 0);
-    const entries: KnowledgeEntry[] = [];
+    const entries: AgentKnowledgeEntry[] = [];
     let chars = 0;
     for (const entry of [...own, ...shared]) {
       if (chars + entry.text.length > SESSION_KNOWLEDGE_MAX_CHARS) break;
@@ -101,8 +97,16 @@ export class Knowledge {
     return this.#save(entry, { kind: "user" }, { approve: true });
   }
 
-  /** An agent's proposal (`propose_knowledge`): it waits for the user unless its bytes are the approved ones. */
+  /**
+   * An agent's proposal (`propose_knowledge`): it waits for the user unless its bytes are the approved ones. An entry the
+   * user wrote and approved is not an agent's to replace, since a proposal over it would take it out of every session
+   * until the user approves again; an agent's own approved entry it may correct.
+   */
   async propose(entry: NewKnowledgeEntry, task: string | null): Promise<KnowledgeListEntry> {
+    const { files } = await this.#folder.list();
+    const current = files.find((f) => f.name === entry.name);
+    if (current?.approved && current.value.writtenBy.kind === "user")
+      throw new DomainError("bad_request", `entry ${entry.name} is the user's own; propose your correction under a new name`);
     await this.#assertRoom(entry.name, { waiting: true });
     return this.#save(entry, { kind: "agent", task }, { approve: false });
   }

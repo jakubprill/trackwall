@@ -1,9 +1,9 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  type KnowledgeEntry,
   MCP_INSTRUCTIONS,
   mcpTools,
+  type SessionKnowledge,
   TASK_MESSAGE_RULE,
   TASK_MESSAGE_USES,
   TASK_PORT_ENV,
@@ -36,15 +36,6 @@ export type SessionRole =
   | { kind: "free" }
   | { kind: "repo"; repo: string }
   | { kind: "task"; repo: string; task: string; handoff: HandoffFacts | null };
-
-/**
- * The workspace knowledge a session gets (ADR-170): the entries the user approved about its place that fit, and how many
- * more it can list.
- */
-export interface SessionKnowledge {
-  entries: readonly KnowledgeEntry[];
-  more: number;
-}
 
 /**
  * Writes the instructions of a session started by Trackwall `version` to `<sessionDir>/instructions/` and returns that
@@ -177,7 +168,7 @@ function knowledgeSection({ entries, more }: SessionKnowledge): string[] {
   if (entries.length === 0 && more === 0) return [];
   const lines = entries.map(({ kind, repos, text }) => {
     const about = repos.length === 0 ? "whole workspace" : repos.map((r) => `\`${r}\``).join(", ");
-    return `- ${kind}, ${about}: ${text.replace(/\n+/g, " ")}`;
+    return `- ${kind}, ${about}: ${text.replace(/\s+/g, " ")}`;
   });
   return [
     "## Workspace knowledge",
