@@ -10,7 +10,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { apiResult, cardsApi, DaemonInfoResult, HealthResult, MCP_SERVER_NAME, workspaceApi } from "@trackwall/protocol";
 import { z } from "zod";
 import { CONTAINER_MARKERS } from "../src/infra/desktop.ts";
@@ -59,6 +59,14 @@ if (info.data.devContainerFolder !== devContainerFolder) throw new Error(`devCon
 if (CONTAINER_MARKERS.some((marker) => existsSync(marker))) {
   if (info.data.desktop || info.data.container === null) throw new Error(`in a container: ${JSON.stringify(info.data)}`);
   console.log(`container: ${info.data.container}, no desktop`);
+}
+
+// The Linux archive (ADR-163) carries the page in `ui/` next to the binary, which the daemon then serves itself.
+if (existsSync(join(dirname(bin), "ui", "index.html"))) {
+  const page = await loopbackRequest(port, "/");
+  if (page.status !== 200 || !page.body.includes('<div id="root"'))
+    throw new Error(`page from ui/: ${page.status} ${page.body.slice(0, 200)}`);
+  console.log("page served from ui/ next to the binary");
 }
 
 // The Stdio bridge from the command the UI shows for `copilot mcp add` (in the binary: the binary itself and `mcp-stdio`),
