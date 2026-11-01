@@ -25,6 +25,8 @@ const SavedToken = z.object({ token: z.string(), instance: z.string() });
 
 export async function resolveConnection(): Promise<Connection> {
   if (isTauri()) return invoke<Connection>("daemon_connection");
+  // Without a token there is nothing to guard and no need for the daemon yet: `vite dev` may start before it.
+  if (!hasToken(window.location, tokenStorage())) return { baseUrl: "" };
   const instance = await daemonInstance();
   return { baseUrl: "", token: takeTokenFromLocation(window.location, window.history, tokenStorage(), instance) };
 }
@@ -34,9 +36,16 @@ export async function retryConnection(): Promise<Connection | undefined> {
   return isTauri() ? invoke<Connection>("retry_daemon") : undefined;
 }
 
+/** `Health` of the daemon that served this page: the same version, so with `instance`. */
+const PageDaemonHealth = Health.required({ instance: true });
+
 /** The start of the daemon that answers this page's address, from the public `/api/health`, before any token is sent. */
 export async function daemonInstance(): Promise<string> {
-  return (await call({ baseUrl: "" }, HEALTH_PATH, Health)).instance;
+  return (await call({ baseUrl: "" }, HEALTH_PATH, PageDaemonHealth)).instance;
+}
+
+function hasToken(location: Location, storage: Storage): boolean {
+  return new URLSearchParams(location.hash.slice(1)).has("token") || storage.getItem(TOKEN_KEY) !== null;
 }
 
 /**
@@ -80,11 +89,19 @@ const NO_TOKEN = "The address has no token: paste the whole address, with #token
  * prints). Only the token is kept: the page goes on talking to the daemon that served it.
  */
 export function tokenFromAddress(address: string): string {
-  const url = URL.parse(address.trim());
-  const token = url && new URLSearchParams(url.hash.slice(1)).get("token");
+  const token = new URLSearchParams(fragmentOf(address.trim())).get("token");
   if (!token) throw new Error(NO_TOKEN);
   if (!TOKEN_CHARACTERS.test(token)) throw new Error("The token in the address has characters a daemon token never has.");
   return token;
+}
+
+/** The fragment of an address without `#`, empty when the text is no address (`URL.parse` is too new for some browsers). */
+function fragmentOf(address: string): string {
+  try {
+    return new URL(address).hash.slice(1);
+  } catch {
+    return "";
+  }
 }
 
 /** Keeps a token the daemon accepted for the next visit of this page, while the same start of the daemon runs. */

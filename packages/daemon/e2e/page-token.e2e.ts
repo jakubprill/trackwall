@@ -23,4 +23,14 @@ describe("the page's token in a browser (ADR-161)", () => {
     await tab.getByRole("button", { name: "Fold the supervisor panel" }).waitFor();
     expect(await tab.getByRole("textbox", { name: "Address of the daemon" }).count()).toBe(0);
   }, 60_000);
+
+  test("a token saved for another start of the daemon is forgotten without being sent, and the page asks for the address", async () => {
+    const { origin, address } = trackwall();
+    const page = await trackwall().openWithoutToken();
+    const token = address.split("#token=")[1];
+    await page.evaluate((saved) => localStorage.setItem("trackwall.token", saved), JSON.stringify({ token, instance: "an-earlier-start" }));
+    await page.goto(origin);
+    await page.getByRole("textbox", { name: "Address of the daemon" }).waitFor();
+    expect(await page.evaluate(() => localStorage.getItem("trackwall.token"))).toBeNull();
+  }, 60_000);
 });
