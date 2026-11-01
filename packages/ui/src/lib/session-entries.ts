@@ -146,14 +146,13 @@ function entryParent(entry: SessionEntry, holder: ReadonlyMap<string, string>, h
 
 /** The first listed part of each change (ADR-171): the entry its other parts sit under. */
 function changeHeads(tasks: readonly Task[]): Map<string, string> {
-  const first = new Map<string, Task>();
-  for (const task of tasks) {
-    const { change } = task;
+  const first = new Map<string, { task: string; position: number }>();
+  for (const { id, change } of tasks) {
     if (change === null) continue;
     const head = first.get(change.id);
-    if (head?.change == null || change.position < head.change.position) first.set(change.id, task);
+    if (head === undefined || change.position < head.position) first.set(change.id, { task: id, position: change.position });
   }
-  return new Map([...first].map(([change, task]) => [change, task.id]));
+  return new Map([...first].map(([change, head]) => [change, head.task]));
 }
 
 /** Entries under one parent with the parts of a change first, in their merge order, and the rest as they were. */

@@ -227,7 +227,7 @@ function taskSubtitle(task: Task, sessions: readonly Session[]): string {
 
 /**
  * What the task runs with beyond the defaults: its model (ADR-98), running without approvals (ADR-105), and its place
- * in a change (ADR-171), which is the place of its merge request in the merge order.
+ * in a change (ADR-171), whose parts the Sessions list shows in their merge order.
  */
 function TaskMarks({ task }: { task: Task }) {
   return (
@@ -235,10 +235,10 @@ function TaskMarks({ task }: { task: Task }) {
       {task.change !== null && (
         <span
           className="text-muted-foreground flex shrink-0 items-center gap-1 text-xs"
-          title="A part of a change across several repos: its merge request is merged in this place, after the parts before it"
+          title="A part of a change across several repos: the Sessions list shows its parts in the order to merge them"
         >
           <Layers className="size-3" aria-hidden />
-          Change, merge #{task.change.position + 1}
+          Part of a change
         </span>
       )}
       {task.model !== null && (

@@ -121,7 +121,9 @@ describe.skipIf(process.versions.bun === undefined)("a change across several rep
     await daemon.post(agentsApi.resumeTask, { task: orders.id });
     const resumed = instructionsOf(runningSession(orders.id));
     expect(resumed).toContain("part 1 of 2");
-    expect(resumed).toContain(`The part before yours, the task \`${payments.id}\` in the repo \`payments\`, was ended by the user`);
+    expect(resumed).toContain(
+      `The part before yours, the task \`${payments.id}\` in the repo \`payments\`, is no longer on Trackwall's list`,
+    );
 
     await endAll([orders, web]);
   }, 60_000);
@@ -139,7 +141,9 @@ describe.skipIf(process.versions.bun === undefined)("a change across several rep
     ]);
     expect(failed.map((f) => f.repo)).toEqual(["billing"]);
     // shop-web builds on payments, the part before it that started.
-    expect(instructionsOf(runningSession(tasks[1]?.id ?? ""))).toContain("the part before it, the task");
+    expect(instructionsOf(runningSession(tasks[1]?.id ?? ""))).toContain(
+      `the part before it, the task \`${tasks[0]?.id ?? ""}\` in the repo \`payments\``,
+    );
     await endAll(tasks);
 
     const before = daemon.facade.agents.sessions().tasks.length;

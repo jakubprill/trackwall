@@ -86,9 +86,12 @@ export function changeStart(start: NewSessionStart, added: readonly ChangePartDr
     : { kind: "change", title: text, prompt: start.prompt, parts: parts.slice(0, CHANGE_PARTS_MAX) };
 }
 
-/** Whether the form may add one more repo: a change has at most `CHANGE_PARTS_MAX` parts, the task's own repo among them. */
-export function mayAddPart(added: readonly ChangePartDraft[]): boolean {
-  return added.length + 1 < CHANGE_PARTS_MAX;
+/**
+ * Whether the form may add one more repo: a change has at most `CHANGE_PARTS_MAX` parts, the task's own repo among them,
+ * and each of the `others` repos once.
+ */
+export function mayAddPart(added: readonly ChangePartDraft[], others: number): boolean {
+  return added.length + 1 < CHANGE_PARTS_MAX && added.length < others;
 }
 
 /**

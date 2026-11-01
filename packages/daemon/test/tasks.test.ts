@@ -767,4 +767,36 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     expect(task.included).toEqual({ files: [], problems: [] });
     expect(existsSync(join(task.worktree, ".env"))).toBe(false);
   }, 60_000);
+
+  test("when no part of a change can start its session, the change fails with the first error and leaves no task or worktree (ADR-171)", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "trackwall-git-"));
+    const payments = makeRepo({ "README.md": "# payments\n" }, "payments", parent);
+    const orders = makeRepo({ "README.md": "# orders\n" }, "orders-api", parent);
+    // The fake Copilot CLI ends before the conversation view's handshake, so no session starts.
+    const env: NodeJS.ProcessEnv = { ...process.env, FAKE_COPILOT_ACP_EXIT: "1" };
+    const { agents, procs, home } = makeAgents({ payments, "orders-api": orders }, undefined, null, undefined, env);
+    cleanups.push(() => procs.stopAll());
+
+    const request = {
+      title: "Refund API",
+      prompt: "Add refunds",
+      parts: [
+        { repo: "payments", note: "" },
+        { repo: "orders-api", note: "" },
+      ],
+      approvals: "ask" as const,
+      model: null,
+      item: null,
+      view: "conversation" as const,
+    };
+    await expect(agents.createChange(request)).rejects.toThrow();
+
+    expect(agents.sessions().tasks).toEqual([]);
+    for (const repo of ["payments", "orders-api"]) {
+      const worktrees = join(home, "task-worktrees", repo);
+      expect(existsSync(worktrees) ? readdirSync(worktrees) : []).toEqual([]);
+    }
+    expect(gitIn(payments, "branch", "--list", "trackwall/*").trim()).toBe("");
+    expect(gitIn(orders, "branch", "--list", "trackwall/*").trim()).toBe("");
+  }, 60_000);
 });

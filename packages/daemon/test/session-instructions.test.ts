@@ -123,13 +123,13 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
 
   test("a part of a change knows its sibling parts in merge order and builds on the part before it (ADR-171)", () => {
     const parts = [
-      { task: "5e7a1c3b-0000-4000-8000-000000000000", repo: "payments", branch: "trackwall/refund-api-9d0c11", position: 0 },
-      { task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427", repo: "orders-api", branch: "trackwall/refund-api-9d0c11", position: 1 },
-      { task: "7f3e2d1c-0000-4000-8000-000000000000", repo: "shop-web", branch: "trackwall/refund-api-9d0c11", position: 2 },
+      { task: "5e7a1c3b-0000-4000-8000-000000000000", repo: "payments", branch: "trackwall/refund-api-9d0c11" },
+      { task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427", repo: "orders-api", branch: "trackwall/refund-api-9d0c11" },
+      { task: "7f3e2d1c-0000-4000-8000-000000000000", repo: "shop-web", branch: "trackwall/refund-api-9d0c11" },
     ];
     const read = (handoff: HandoffFacts | null) => {
       const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
-      const change = { position: 1, parts };
+      const change = { parts };
       writeSessionInstructions(
         sessionDir,
         "0.5.14",
@@ -149,12 +149,12 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     );
     expect(text).toContain("do not propose a task in a repo of this change");
     expect(text).toContain(
-      `- Your part builds on the part before it, the task \`5e7a1c3b-0000-4000-8000-000000000000\` in the repo \`payments\`: you last read its branch at commit \`${"c".repeat(40)}\`.`,
+      `- Your part builds on the part before it, the task \`5e7a1c3b-0000-4000-8000-000000000000\` in the repo \`payments\`, whose branch was at commit \`${"c".repeat(40)}\` when your session first started. It started together with yours, so it may have nothing new yet: work from the prompt, and do not wait for it.`,
     );
     // The part before did not propose this one, so the proposal's wording would mislead.
     expect(text).not.toContain("Your task was handed to you by");
     expect(read({ ...before, ended: true })).toContain(
-      "The part before yours, the task `5e7a1c3b-0000-4000-8000-000000000000` in the repo `payments`, was ended by the user",
+      "The part before yours, the task `5e7a1c3b-0000-4000-8000-000000000000` in the repo `payments`, is no longer on Trackwall's list",
     );
     expect(read(null)).not.toContain("builds on the part before it");
   });

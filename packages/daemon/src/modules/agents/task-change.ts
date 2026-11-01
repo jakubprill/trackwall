@@ -8,13 +8,9 @@ interface ChangePartFacts {
   task: string;
   repo: string;
   branch: string;
-  /** The part's place in the merge order, from 0; a part that was ended leaves a gap. */
-  position: number;
 }
 
 export interface ChangeFacts {
-  /** The session's own part. */
-  position: number;
-  /** Every listed part, the session's own too, in their order. */
+  /** Every listed part, the session's own too, in their merge order. */
   parts: ChangePartFacts[];
 }

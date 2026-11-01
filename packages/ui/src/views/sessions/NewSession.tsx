@@ -255,17 +255,22 @@ function useChangeForm(conn: Connection, onStarted: (selection: SessionSelection
   const [title, setTitle] = useState("");
   const [partly, setPartly] = useState<string>();
   const create = useAction(
-    (request: ChangeRequest) => post(conn, agentsApi.createChange, request),
+    (request: ChangeRequest) => {
+      setPartly(undefined);
+      return post(conn, agentsApi.createChange, request);
+    },
     ({ tasks, failed }) => {
       const first = tasks[0];
-      if (failed.length === 0 && first) onStarted({ kind: "task", id: first.id });
-      else
-        setPartly(
-          changeStartedPartly(
-            tasks.map((t) => t.repo),
-            failed,
-          ),
-        );
+      if (failed.length === 0 && first) return onStarted({ kind: "task", id: first.id });
+      // The started parts are tasks now, so the form forgets the change: a second press would start it again.
+      setParts([]);
+      setTitle("");
+      setPartly(
+        changeStartedPartly(
+          tasks.map((t) => t.repo),
+          failed,
+        ),
+      );
     },
   );
   return { parts, setParts, title, setTitle, partly, create };

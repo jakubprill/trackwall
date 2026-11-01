@@ -20,7 +20,7 @@ A change is a group of [agent tasks](/features/tasks), one per repo. Press "+" i
 
 "Create change in N repos" creates a worktree and a task in each repo, all on the branch `trackwall/<title>-<6 characters>`, and starts an agent in each one. Every agent gets the prompt of the whole change and the note for its own repo. It works only in its own repo, and it knows the other parts: their repos, their tasks and where it stands in the merge order. It reads what another part changed with the same tools an agent uses for work handed on from a task's [impact](/features/impact).
 
-Each part after the first builds on the part right before it. When that part's agent commits and ends its turn, Trackwall asks the next agent to read what changed, so it builds against the new contract. In "Sessions" the parts sit under the first part of the change, in the merge order, and the task panel of each part shows "Change, merge #N".
+Each part after the first builds on the part right before it. When that part's agent commits and ends its turn, Trackwall asks the next agent to read what changed, so it builds against the new contract. In "Sessions" the parts sit under the first part of the change, in the merge order, and the task panel of each part says "Part of a change".
 
 Every part is an ordinary task: you review, verify, push and open its merge request from its own panel, and end it on its own. Merge them in the order shown. Nothing waits for that order and nothing merges by itself.
 

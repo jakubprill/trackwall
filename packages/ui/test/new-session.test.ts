@@ -175,9 +175,11 @@ describe("a task with more repos is a change (ADR-171)", () => {
     expect(formChangeStart(form, null, true, "", added, "Refunds").firstPart).toBeNull();
   });
 
-  test("a change has at most six parts, the task's own repo among them", () => {
+  test("a change has at most six parts, the task's own repo among them, and each other repo once", () => {
     const added = (n: number) => Array.from({ length: n }, (_, i) => ({ repo: `repo-${i}`, note: "" }));
-    expect(mayAddPart(added(4))).toBe(true);
-    expect(mayAddPart(added(5))).toBe(false);
+    expect(mayAddPart(added(4), 20)).toBe(true);
+    expect(mayAddPart(added(5), 20)).toBe(false);
+    // With two other repos in the projects folder, a third row would have no repo left to pick.
+    expect(mayAddPart(added(2), 2)).toBe(false);
   });
 });

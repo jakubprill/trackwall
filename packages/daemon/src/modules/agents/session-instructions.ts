@@ -165,10 +165,11 @@ function changeLines(task: string, { parts }: ChangeFacts, handoff: HandoffFacts
   ];
   if (handoff === null) return lines;
   const from = `the task \`${handoff.task}\` in the repo \`${handoff.repo}\``;
-  if (handoff.ended) return [...lines, `- The part before yours, ${from}, was ended by the user, so its changes can no longer be read.`];
+  if (handoff.ended)
+    return [...lines, `- The part before yours, ${from}, is no longer on Trackwall's list, so its changes can no longer be read.`];
   return [
     ...lines,
-    `- Your part builds on the part before it, ${from}: you last read its branch at commit \`${handoff.commit}\`. This worktree was made from the default branch, so it does not have that work. Build against the contract it changes (an endpoint, a field, a message), not a copy of its code. When Trackwall asks you to call ${mcpTools.getHandoff.name}, and before you report, call it: it says where that branch is now and which files changed since you last read it.`,
+    `- Your part builds on the part before it, ${from}, whose branch was at commit \`${handoff.commit}\` when your session first started. It started together with yours, so it may have nothing new yet: work from the prompt, and do not wait for it. This worktree was made from the default branch, so it does not have that part's work; build against the contract it changes (an endpoint, a field, a message), not a copy of its code. When it commits, Trackwall asks you to call ${mcpTools.getHandoff.name}; call it then, and before you report: it says where that branch is now and which files changed since you last read it.`,
   ];
 }
 

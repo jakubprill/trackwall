@@ -41,7 +41,7 @@ import {
   type Verification,
   type WorkingTreeChanges,
 } from "@trackwall/protocol";
-import { DomainError, messageOf } from "../../infra/errors.ts";
+import { DomainError } from "../../infra/errors.ts";
 import { AcpSession, type ConversationViewer, type ConversationWindow } from "./acp-session.ts";
 import { AgentQueuesFile } from "./agent-queues.ts";
 import type { AgentSession } from "./agent-session.ts";
@@ -610,38 +610,11 @@ export class Agents {
     return this.#tasks.create(repo, prompt, origin);
   }
 
-  /**
-   * A change the user typed (ADR-171): a task per part, one after another in the parts' order, so each part's handoff
-   * is the part before it, already on the list (ADR-143). A part that cannot start is named in `failed` and the others go
-   * on; the user ends what started if they want none of it. When no part starts, the first part's error.
-   */
+  /** A change the user typed (ADR-171): a task per part, see `AgentTasks.createChange`; `item` must be on the board. */
   async createChange({ title, prompt, parts, approvals, model, item, view }: ChangeRequest): Promise<CreatedChange> {
     await this.#assertOnBoard(item);
-    const change = randomUUID();
-    const tasks: Task[] = [];
-    const failed: CreatedChange["failed"] = [];
-    let firstError: unknown;
-    const fail = (repo: string, err: unknown) => {
-      firstError ??= err;
-      failed.push({ repo, message: messageOf(err) });
-    };
-    // Every part is on the list before the first session starts, so each session's instructions name all its siblings.
-    const created: Task[] = [];
-    for (const [position, part] of parts.entries()) {
-      const origin = { id: randomUUID(), title, proposedBy: null, model, approvals, javaNavigation: false, item, view };
-      const partOrigin = { ...origin, change: { id: change, position } };
-      await this.#tasks.create(part.repo, changePartPrompt(prompt, part), partOrigin, "later").then(
-        (task) => created.push(task),
-        (err: unknown) => fail(part.repo, err),
-      );
-    }
-    for (const task of created)
-      await this.#tasks.launchCreated(task.id).then(
-        (started) => tasks.push(started),
-        (err: unknown) => fail(task.repo, err),
-      );
-    if (tasks.length === 0) throw firstError;
-    return { tasks, failed };
+    const prompts = parts.map((part) => ({ repo: part.repo, prompt: changePartPrompt(prompt, part) }));
+    return this.#tasks.createChange(prompts, { title, model, approvals, javaNavigation: false, item, view });
   }
 
   /**

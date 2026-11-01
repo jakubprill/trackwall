@@ -86,7 +86,7 @@ export function ChangeParts({
           </Button>
         </div>
       ))}
-      {mayAddPart(parts) && (
+      {mayAddPart(parts, others.length) && (
         <Button variant="ghost" className="w-fit" onClick={add} disabled={disabled}>
           <Plus /> Add a repo
         </Button>
