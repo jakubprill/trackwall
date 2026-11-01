@@ -13,7 +13,8 @@ import { UNPUSHED_NOTE, type UnpushedRow } from "@/lib/unpushed-work";
 
 /**
  * The queue on the left of the dashboard: first sessions that are waiting for you or ended with an error, then task
- * proposals (ADR-39), in a container the repos whose work is only there (ADR-162), then repos that are not clean. Sessions and repos are the same objects as the labels on the scene,
+ * proposals (ADR-39), in a container the repos whose work is only there (ADR-162), then repos that are not
+ * clean. Sessions and repos are the same objects as the labels on the scene,
  * so the dashboard also works without WebGL. Proposals are not on the scene, and the decision (with an edited prompt)
  * is made in the Sessions view, so a click on a proposal opens it there right away. Until the lists arrive it says it
  * is loading, rather than counts of zero.
@@ -97,10 +98,10 @@ export function NeedsYouPanel({
             Only in this container <span className="text-primary">{`// ${twoDigits(unpushed.length)}`}</span>
           </h2>
           <p className="text-muted-foreground px-4 pb-1 text-xs">{UNPUSHED_NOTE}</p>
-          <ul aria-label="Repos with work only in this container" className="px-2">
+          <ul aria-label="Repos with work only in this container" className="max-h-40 overflow-y-auto px-2">
             {unpushed.map((u) => (
               <Row key={u.repo} id={repoKey(u.repo)} selected={selected} onSelect={onSelect} onOpen={onOpen} title={u.repo}>
-                <span title={u.branches.length > 0 ? `Branches: ${u.branches.join(", ")}` : undefined}>
+                <span title={u.detail}>
                   <StatusLabel tone="warning" label={u.label} />
                 </span>
               </Row>

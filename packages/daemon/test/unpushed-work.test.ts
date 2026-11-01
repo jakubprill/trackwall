@@ -3,13 +3,14 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFacade } from "../src/facade.ts";
-import { parseUnpushedLog, parseWorktreeList } from "../src/modules/vcs/unpushed.ts";
+import { parseUnpushedLog } from "../src/modules/vcs/unpushed.ts";
+import { parseWorktreeList } from "../src/modules/vcs/worktree-list.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
 import { fakeHostingClis } from "./support/hosting.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
-/** A facade on a fresh state folder and projects folder, in a container or not (ADR-162). */
-async function facadeWith(inContainer: boolean) {
+/** A facade on a fresh state folder and, unless `withFolder` is false, projects folder, in a container or not (ADR-162). */
+async function facadeWith(inContainer: boolean, withFolder = true) {
   const home = mkdtempSync(join(tmpdir(), "trackwall-unpushed-home-"));
   const projects = mkdtempSync(join(tmpdir(), "trackwall-unpushed-projects-"));
   const facade = createFacade({
@@ -27,7 +28,7 @@ async function facadeWith(inContainer: boolean) {
     userEnv: async () => process.env,
     log: () => {},
   });
-  await facade.workspace.setProjectsDir(projects);
+  if (withFolder) await facade.workspace.setProjectsDir(projects);
   return { facade, projects };
 }
 
@@ -131,7 +132,8 @@ describe("unpushed work in a container (ADR-162)", () => {
 
       const work = await facade.workspace.unpushedWork();
 
-      expect(work.unreadable).toEqual(["broken"]);
+      expect(work.unreadable.map((u) => u.repo)).toEqual(["broken"]);
+      expect(work.unreadable[0]?.message).not.toBe("");
       expect(work.repos.map((r) => [r.repo, r.changes])).toEqual([["notes", 1]]);
     },
     SLOW_TEST_TIMEOUT_MS,
@@ -149,7 +151,7 @@ describe("unpushed work in a container (ADR-162)", () => {
   );
 
   test(
-    "the doctor warns with the totals in a container, says all is pushed when it is, and has no row outside one",
+    "the doctor warns with the totals in a container, says all is pushed when it is, and has no row outside one or without a projects folder",
     async () => {
       const inside = await facadeWith(true);
       const api = pushedRepo(inside.projects, "api");
@@ -168,6 +170,9 @@ describe("unpushed work in a container (ADR-162)", () => {
       expect(ahead?.summary).toBe("Only in this container: 1 commit, 1 changed file in 1 repo.");
       expect(ahead?.fix).toContain("removing the volume or resetting Docker deletes it");
 
+      const noFolder = await facadeWith(true, false);
+      expect((await noFolder.facade.doctor.run()).checks.map((c) => c.id)).not.toContain("unpushed-work");
+
       const outside = await facadeWith(false);
       makeRepo({ "a.md": "1" }, "notes", outside.projects);
       expect((await outside.facade.doctor.run()).checks.map((c) => c.id)).not.toContain("unpushed-work");
@@ -177,7 +182,7 @@ describe("unpushed work in a container (ADR-162)", () => {
 });
 
 describe("reading git's lists of worktrees and unpushed commits", () => {
-  test("a worktree list gives each path with its HEAD; a bare repo and a prunable worktree have nothing to read", () => {
+  test("a worktree list gives each path with its HEAD and branch; a bare repo and a prunable worktree have nothing to read", () => {
     const out = [
       "worktree /repos/api",
       "HEAD 1111111111111111111111111111111111111111",
@@ -192,18 +197,17 @@ describe("reading git's lists of worktrees and unpushed commits", () => {
       "branch refs/heads/old",
       "prunable gitdir file points to non-existent location",
       "",
-      "",
-    ].join("\0");
+    ].join("\n");
     expect(parseWorktreeList(out)).toEqual([
-      { path: "/repos/api", head: "1111111111111111111111111111111111111111", readable: true },
-      { path: "/tmp/task 1", head: "2222222222222222222222222222222222222222", readable: true },
-      { path: "/tmp/gone", head: "3333333333333333333333333333333333333333", readable: false },
+      { path: "/repos/api", head: "1111111111111111111111111111111111111111", branch: "refs/heads/main", readable: true },
+      { path: "/tmp/task 1", head: "2222222222222222222222222222222222222222", branch: null, readable: true },
+      { path: "/tmp/gone", head: "3333333333333333333333333333333333333333", branch: "refs/heads/old", readable: false },
     ]);
   });
 
   test("a repo without commits lists its worktree with no HEAD", () => {
-    expect(parseWorktreeList(["worktree /repos/new", `HEAD ${"0".repeat(40)}`, "branch refs/heads/main", "", ""].join("\0"))).toEqual([
-      { path: "/repos/new", head: null, readable: true },
+    expect(parseWorktreeList(["worktree /repos/new", `HEAD ${"0".repeat(40)}`, "branch refs/heads/main", ""].join("\n"))).toEqual([
+      { path: "/repos/new", head: null, branch: "refs/heads/main", readable: true },
     ]);
   });
 

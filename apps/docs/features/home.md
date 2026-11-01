@@ -14,8 +14,7 @@ See your whole environment in one 3D view, with everything that needs you in one
 - Trackwall, your sessions and your repos in one living picture.
 - A label beside every repo, with what is going on in it (changes, commits to pull, a problem or a running task), and on every session waiting for you or with an error.
 - Two looks to choose from: holograms, or lighter glowing orbs for a slow graphics card.
-- A "Needs you" queue with every waiting session, repo and task proposal.
-- When Trackwall runs in a container, the repos whose work is only there, so that removing the container's volume never takes it by surprise.
+- A "Needs you" queue with every waiting session, repo and task proposal, and in a container the work that is only there.
 - One click from anything in the picture to its view.
 
 ## How it works

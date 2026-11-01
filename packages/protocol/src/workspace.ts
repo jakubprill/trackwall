@@ -125,8 +125,8 @@ export const UnpushedWork = z.object({
   inContainer: z.boolean(),
   /** The repos with unpushed work, sorted by id; a repo with none is left out. */
   repos: z.array(UnpushedRepo),
-  /** The repos git could not read, so their work is unknown. */
-  unreadable: z.array(RepoId),
+  /** The repos git could not read, so their work is unknown, each with git's message. */
+  unreadable: z.array(z.object({ repo: RepoId, message: z.string() })),
 });
 export type UnpushedWork = z.infer<typeof UnpushedWork>;
 

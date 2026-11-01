@@ -17,6 +17,7 @@ import {
   Repo,
   RepoGraph,
   RepoList,
+  UnpushedWork,
   workspaceApi,
 } from "@trackwall/protocol";
 import { z } from "zod";
@@ -196,6 +197,11 @@ describe("api workspace", () => {
     const paths = contracts.flatMap(({ endpoints }) => endpoints.map((endpoint) => endpoint.path));
     expect(paths.filter((path) => !postRoutes.has(path))).toEqual([]);
     expect([...postRoutes.keys()].filter((path) => !paths.includes(path))).toEqual([]);
+  });
+
+  test("unpushed work answers outside a container without reading git (ADR-162)", async () => {
+    const answer = apiResult(UnpushedWork).parse(JSON.parse((await post(workspaceApi.unpushedWork.path, "")).body));
+    expect(answer.ok && answer.data).toEqual({ inContainer: false, repos: [], unreadable: [] });
   });
 
   test("workspace routes require the token", async () => {

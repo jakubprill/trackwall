@@ -47,7 +47,7 @@ import { moveRepoOut } from "./repo-removal.ts";
 import { suggestedProjectsDir } from "./suggested-projects-dir.ts";
 import { SyncRuns } from "./sync-runs.ts";
 import { sessionToolPermissions, supervisorToolPermissions } from "./tool-permissions.ts";
-import { type RepoUnpushedRead, unpushedWork } from "./unpushed-work.ts";
+import { type RepoUnpushedRead, type UnpushedRead, unpushedWork } from "./unpushed-work.ts";
 import type { WorkspaceFile } from "./workspace-file.ts";
 import { checkWorktreesDir, defaultWorktreesDir } from "./worktrees-dir.ts";
 
@@ -148,8 +148,15 @@ export class Workspace {
 
   /** The work on no remote across the projects folder, read only in a container (ADR-162). */
   async unpushedWork(): Promise<UnpushedWork> {
-    const entries = this.deps.inContainer ? (await this.entries()).entries : [];
-    return unpushedWork(this.deps.inContainer, entries, (dir) => this.deps.vcs.unpushed(dir));
+    if (!this.deps.inContainer) return { inContainer: false, repos: [], unreadable: [] };
+    const { entries } = await this.entries();
+    const reads = await mapLimit(entries, STATUS_CONCURRENCY, (entry) =>
+      this.deps.vcs.unpushed(entry.path).then(
+        (work): UnpushedRead => ({ repo: entry.id, work }),
+        (error: unknown): UnpushedRead => ({ repo: entry.id, error }),
+      ),
+    );
+    return unpushedWork(reads);
   }
 
   settings(): WorkspaceSettings {

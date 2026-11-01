@@ -91,7 +91,7 @@ export class Doctor {
     this.checks = {
       "projects-folder": (ctx) => this.projectsFolder(ctx),
       "projects-folder-storage": (ctx) => this.projectsFolderStorage(ctx),
-      "unpushed-work": () => this.unpushedWork(),
+      "unpushed-work": (ctx) => this.unpushedWork(ctx),
       "workspace-file": () => this.workspaceFile(),
       git: () => this.git(),
       "copilot-cli": (ctx) => this.copilotCli(ctx),
@@ -128,18 +128,22 @@ export class Doctor {
     return ok(dir);
   }
 
-  /** Only a projects folder on a folder of the user's computer mounted into Linux is worth a row: it works, slowly. */
-  /** Only in a container, where removing the Docker volume takes the work with it; elsewhere the repos are on the user's disk. */
-  private async unpushedWork(): Promise<Outcome> {
+  /**
+   * Only in a container, where removing the Docker volume takes the work with it; elsewhere the repos are on the user's
+   * disk. Without a projects folder there is nothing to read, and the projects folder check says so.
+   */
+  private async unpushedWork({ projectsDir }: CheckContext): Promise<Outcome> {
+    if (!projectsDir.ok || projectsDir.value === null) return null;
     const work = await this.deps.unpushedWork();
     if (!work.inContainer) return null;
-    const unknown = work.unreadable.length > 0 ? ` Git could not read ${work.unreadable.join(", ")}.` : "";
+    const unknown = work.unreadable.length > 0 ? ` Git could not read ${work.unreadable.map((u) => u.repo).join(", ")}.` : "";
     if (work.repos.length === 0)
       return unknown === "" ? ok("Everything in the projects folder is pushed.") : warn(unknown.trim(), READ_FIX);
     const repos = countLabel(work.repos.length, { one: "repo", other: "repos" });
     return warn(`Only in this container: ${unpushedSummary(unpushedTotal(work.repos))} in ${repos}.${unknown}`, UNPUSHED_FIX);
   }
 
+  /** Only a projects folder on a folder of the user's computer mounted into Linux is worth a row: it works, slowly. */
   private async projectsFolderStorage({ projectsDir }: CheckContext): Promise<Outcome> {
     if (!projectsDir.ok || projectsDir.value === null) return null;
     // A link such as `~/code` to `/mnt/c/...` on WSL is exactly the slow case; a folder that does not exist is the other check's.
