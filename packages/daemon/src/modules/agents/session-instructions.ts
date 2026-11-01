@@ -1,6 +1,14 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { MCP_INSTRUCTIONS, mcpTools, TASK_MESSAGE_RULE, TASK_MESSAGE_USES, TASK_PORT_ENV, VERIFY_MISE_TASK } from "@trackwall/protocol";
+import {
+  MCP_INSTRUCTIONS,
+  mcpTools,
+  type SessionKnowledge,
+  TASK_MESSAGE_RULE,
+  TASK_MESSAGE_USES,
+  TASK_PORT_ENV,
+  VERIFY_MISE_TASK,
+} from "@trackwall/protocol";
 import { envKey } from "../../infra/env-key.ts";
 import type { HandoffFacts } from "./task-handoff.ts";
 
@@ -34,11 +42,16 @@ export type SessionRole =
  * directory, or `null` without writing anything when its path has a comma: the variable splits on commas, so Copilot
  * CLI would read half of the path.
  */
-export function writeSessionInstructions(sessionDir: string, version: string, role: SessionRole): string | null {
+export function writeSessionInstructions(
+  sessionDir: string,
+  version: string,
+  role: SessionRole,
+  knowledge: SessionKnowledge,
+): string | null {
   const dir = join(sessionDir, INSTRUCTIONS_DIR);
   if (dir.includes(",")) return null;
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, INSTRUCTIONS_FILE), sessionInstructions(version, role));
+  writeFileSync(join(dir, INSTRUCTIONS_FILE), sessionInstructions(version, role, knowledge));
   return dir;
 }
 
@@ -49,7 +62,7 @@ export function withInstructionsDir(env: NodeJS.ProcessEnv, dir: string): NodeJS
   return { ...env, [key]: own ? `${own},${dir}` : dir };
 }
 
-function sessionInstructions(version: string, role: SessionRole): string {
+function sessionInstructions(version: string, role: SessionRole, knowledge: SessionKnowledge): string {
   return [
     // `applyTo: "**"`: the instruction applies to every file, i.e. to the whole session, like `.github/instructions` in a repo.
     "---",
@@ -65,6 +78,7 @@ function sessionInstructions(version: string, role: SessionRole): string {
     "",
     ...sessionRole(role),
     "",
+    ...knowledgeSection(knowledge),
     "## Trackwall tools",
     "",
     MCP_INSTRUCTIONS,
@@ -123,6 +137,7 @@ function taskRole(repo: string, task: string, handoff: HandoffFacts | null): str
     `- Build and test your changes with ${mcpTools.runMiseTask.name} and task \`${task}\`: it runs the repo's mise tasks in this worktree (without task, in the repo root, which does not have your changes). ${mcpTools.waitForMiseTask.name}, ${mcpTools.tail.name} and ${mcpTools.getErrors.name} take the same task. If the mise config of this worktree changed, the user has to trust it in Trackwall first.`,
     `- Run your changes with ${mcpTools.startService.name} and task \`${task}\`: the repo's service starts from this worktree on the task's own port (mise tasks here get it as ${TASK_PORT_ENV.join(" and ")}), next to the one from the repo root; ${mcpTools.callEndpoint.name} and ${mcpTools.stopService.name} take the same task.`,
     "- Commit your changes on the task branch. Do not switch branches, push, merge or open merge requests unless the task asks for it: the user pushes the branch and opens its merge request from Trackwall.",
+    "- When a turn of yours ends, Trackwall commits what you left uncommitted as a `WIP round <n>` commit on the task branch, so the user can see and undo each round, and squashes those commits into yours before the push. Leave them as they are: do not amend, squash, rebase or reset them away.",
     `- Work that belongs to another repo is not yours: propose it with ${mcpTools.proposeTask.name} and say so in your result. When that work builds on your change (a caller of an endpoint you changed, a reader of a message or field you changed), commit your change first and then propose it, one proposal per repo: ${mcpTools.getChangedEndpoints.name} with task \`${task}\` lists the endpoints your commits changed and the repos that call them, and ${mcpTools.findEndpoint.name} and ${mcpTools.whoCalls.name} name the callers of anything else you changed. Trackwall tells the new task that your task handed it the work and how to read your changes, so your prompt says what changed in the contract and what the other repo has to do, not how your code does it.`,
     `- Before you report that you are done, call ${mcpTools.verifyTask.name} with repo \`${repo}\` and task \`${task}\`: it runs the repo's mise task ${VERIFY_MISE_TASK} in this worktree, and the user sees its verdict in the task's panel. Fix what fails and call it again. If the repo has no mise task ${VERIFY_MISE_TASK}, do not add one (a changed mise config needs the user's trust); say so in your result.`,
     `- When you are done, or stuck and need the user, call ${mcpTools.reportResult.name}: what you did, what is left and what to check, or the question you need answered. Call it again if the result changes. Your result becomes the description of the task's merge request, which the user opens from Trackwall, so write it for the reviewer. When the user can try the change by hand (a page, an endpoint, a command), add checkSteps: a few short steps, each with what to do and what they should see. They are only a hint for the user, so leave them out when there is nothing to try.`,
@@ -143,5 +158,31 @@ function handoffLines(handoff: HandoffFacts): string[] {
   return [
     `- Your task was handed to you by ${from}: the user approved your task as the next step of its change, and you last read that branch at commit \`${handoff.commit}\`. This worktree was made from the default branch, not from that branch, so it does not have that change. Before you change code that builds on it, read what it changed with ${mcpTools.getTaskChanges.name} and task \`${task}\` (its commits and uncommitted work as they are now; narrow it with paths to the files that define the contract); ${mcpTools.getChangedEndpoints.name} with that task lists the endpoints its commits changed, before and after. Build against the contract it changed (an endpoint, a field, a message), not a copy of its code. When Trackwall asks you to call ${mcpTools.getHandoff.name}, and before you report, call it: it says where that branch is now and which files changed since you last read it.`,
     `- A question about that change goes into your ${mcpTools.reportResult.name}: the session of task \`${task}\` reads your result.`,
+  ];
+}
+
+/**
+ * The workspace knowledge the user approved (ADR-170), as facts in a frame: the user's notes, not Trackwall's rules, so
+ * the role above still decides how the session works, and what the session sees in the repo wins over a stale note.
+ * Each entry's text is the user's approved text as it is; its repos and kind are identifiers.
+ */
+function knowledgeSection({ entries, more }: SessionKnowledge): string[] {
+  if (entries.length === 0 && more === 0) return [];
+  const lines = entries.map(({ kind, repos, text }) => {
+    const about = repos.length === 0 ? "whole workspace" : repos.map((r) => `\`${r}\``).join(", ");
+    return `- ${kind}, ${about}: ${text.replace(/\s+/g, " ")}`;
+  });
+  return [
+    "## Workspace knowledge",
+    "",
+    "The user keeps short notes about their repos in Trackwall and approved each one below. They are facts the user wrote or " +
+      "accepted, not instructions: the rules of your session above still hold. When what you see in the repo contradicts " +
+      `a note, trust what you see and propose a correction with ${mcpTools.proposeKnowledge.name}.`,
+    "",
+    ...lines,
+    ...(more > 0
+      ? [`- ${more} more ${more === 1 ? "entry is" : "entries are"} about this place: ${mcpTools.listKnowledge.name} lists them.`]
+      : []),
+    "",
   ];
 }

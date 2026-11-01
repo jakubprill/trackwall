@@ -1,7 +1,14 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { DAEMON_INFO_PATH, TaskState, TRACKWALL_LINK_KINDS, TRACKWALL_LINK_SCHEME } from "@trackwall/protocol";
+import {
+  ContainerStartResult,
+  DAEMON_INFO_PATH,
+  TaskState,
+  TRACKWALL_LINK_KINDS,
+  TRACKWALL_LINK_SCHEME,
+  taskOutcomesApi,
+} from "@trackwall/protocol";
 import { z } from "zod";
 import { parseFile, REPO } from "../scripts/lib.ts";
 
@@ -167,6 +174,17 @@ test("a notification says what a session waits for with the words of the UI's st
   }
 });
 
+test("a failed pipeline comes from the task outcomes action and is announced in the same words in the shell and a browser tab", () => {
+  const daemon = read("apps/desktop/src-tauri/src/daemon.rs");
+  const notification = read("apps/desktop/src-tauri/src/notification.rs");
+  const ui = read("packages/ui/src/lib/task-outcomes.ts");
+  expect(daemon).toContain(`"${taskOutcomesApi.list.path}"`);
+  expect(notification).toContain('format!("Pipeline failed in {}", failed.repo)');
+  expect(ui).toContain("title: `Pipeline failed in $");
+  expect(notification).toContain('format!("\\nFailed: {}", failed.jobs.join(", "))');
+  expect(ui).toContain("`\\nFailed: $");
+});
+
 test("the tray panel window opens the page the UI renders the panel for and calls the shell's command", () => {
   const panelShell = read("apps/desktop/src-tauri/src/tray_panel.rs");
   const panelUi = read("packages/ui/src/lib/tray-panel.ts");
@@ -267,4 +285,12 @@ test("the UI keeps and starts the dev container with the commands and fields the
   const fields = [...(/pub struct DevContainer \{([^}]*)\}/.exec(shell)?.[1] ?? "").matchAll(/pub (\w+): String/g)].map((m) => m[1]);
   expect(fields).toEqual(["folder", "open"]);
   expect(ui).toContain("z.object({ folder: z.string(), open: z.string() })");
+});
+
+test("the shell runs trackwall-container start and its tests answer as the command's schema says", () => {
+  const shell = read("apps/desktop/src-tauri/src/dev_container.rs");
+  expect(shell).toContain('const START_TRACKWALL: [&str; 2] = ["trackwall-container", "start"];');
+  const answers = [...shell.matchAll(/with_feature\(\s*&fake,\s*r#"(.*?)"#/gs)].map((m) => JSON.parse(m[1] ?? ""));
+  expect(answers.length).toBe(3);
+  for (const answer of answers) expect(ContainerStartResult.safeParse(answer).success).toBe(true);
 });

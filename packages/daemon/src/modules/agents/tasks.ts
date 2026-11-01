@@ -325,6 +325,12 @@ export class AgentTasks {
     return task && view(task);
   }
 
+  /** What task rounds need of a task (ADR-168): its worktree with the repo root it came from; `undefined` when there is none. */
+  roundTask(id: string): (Task & { repoDir: string }) | undefined {
+    const task = this.#tasks.find((t) => t.id === id);
+    return task && { ...view(task), repoDir: task.repoDir };
+  }
+
   /** An action on the task is in progress (start, resume, end), e.g. the session of a new task is still starting. */
   busy(id: string): boolean {
     return this.#busy.has(id);

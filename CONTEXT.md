@@ -32,6 +32,10 @@ _Avoid_: image, devcontainer plugin
 The background process `trackwall-container start` leaves in a dev container: it starts the daemon and starts it again after a crash, and ends with it after a stop (ADR-164).
 _Avoid_: watchdog, daemon manager
 
+**Container update** (`container-update.ts`, `bin/current`; the command `trackwall-container update <version>`):
+Replacing Trackwall in a dev container with another release without rebuilding the container: the signed Linux archive goes into `bin/<version>/` of the state directory, `bin/current` names it, and the previous version comes back when the new one does not answer (ADR-165).
+_Avoid_: upgrade, self-update (the app's own update is *App update*)
+
 **App update** (`updates.rs`, `UpdateCheck`; in the UI *update*):
 A newer version of Trackwall from GitHub Releases, installed by the shell after the user's click and followed by a restart (ADR-53). Its **update package** is the archive the updater downloads and checks against the signature: the release zip on Windows (`portable_update.rs`), `.app.tar.gz` on macOS; the **update manifest** is `latest.json` in the release.
 _Avoid_: upgrade, sync (that is the repo synchronization)
@@ -350,6 +354,10 @@ A process group from `runtime.json` that the daemon no longer supervises (for ex
 The work of one agent on one repo: a prompt, a worktree, a `trackwall/<slug>` branch from the default branch, sessions and a summary. Today (ADR-31) the Sessions view creates it from the form or from an approved task proposal (ADR-39), it is stored in `tasks.json`, and the task session can be stopped and resumed. A task does not point to a session; the session has `Session.task`. In code and the API `task` always means a task.
 _Avoid_: job; a bare *task* always means a task, a mise task is always a *mise task*
 
+**Round** (`TaskRound`, `TaskRounds`, `taskRoundsApi`; "Rounds" tab and "Undo round" in the UI):
+One turn of a task's agent that changed the worktree, also a turn the user drove (ADR-168). When it ends, what the agent left uncommitted becomes the **round commit** (`TaskRound.roundCommit`, subject `WIP round <n>`) on the task branch; the round runs from the commit it started on (`from`) to HEAD after it (`to`). "Undo round" takes the newest round that stands back to its `from`, only when nothing else would be lost, and the push squashes the round commits into the agent's own commits first. Kept in `task-rounds.json`.
+_Avoid_: step, iteration, snapshot; a "status round" of the repo lists (`repo-status-rounds.ts`) is not a task round
+
 **Task notice** (`TaskNotice`, `taskNotices`, "Task notices" in the UI):
 One short line for a section above a task's terminal: a warning (shared files, a changed mise config, files not copied) or what is there (messages, summary, verification, merge request, a running mise task). In the one-entry layout the notices are a strip of chips that "Details" unfolds; on a grid tile the mise config and the verification have chips of their own in the header (`tileNotices`, `TaskNotice.chip`), a badge opens the rest as an overlay, and a new warning lies over the terminal as a banner until opened or dismissed (ADR-91).
 _Avoid_: alert, notification (that is the tray's), badge (that is only the tile's count)
@@ -415,8 +423,16 @@ The request on the repo host to merge a task branch into the task's base branch,
 _Avoid_: pull request (except for GitHub's own pages), PR, MR in product texts
 
 **Pipeline** (`Pipeline`, `PipelineState`):
-What ran on a merge request's last commit, as one state: GitLab's pipeline, or GitHub's check runs and commit statuses summed up worst first (ADR-77).
+What ran on a merge request's last commit, as one state: GitLab's pipeline, or GitHub's check runs and commit statuses summed up worst first (ADR-77). A failed one names its **failed jobs** (`FailedJob`): GitLab's jobs that failed it, GitHub's failed checks and statuses, each with its page; their logs stay on the repo host (ADR-154).
 _Avoid_: CI, build (a build is a mise task), checks
+
+**Followed merge request** (`FollowedMergeRequest`, `MergeRequests.followed`, `checkWatched`):
+A task's merge request as the daemon last read it while following every task in the background (ADR-154), with its project and `pipelineFailedAt`, the moment the daemon saw its pipeline fail after seeing it otherwise. A new `pipelineFailedAt` is a failed pipeline to announce.
+_Avoid_: tracked, watched merge request (the watch is the reading, not the merge request)
+
+**Task outcome** (`TaskOutcome`, `taskOutcomesApi`, `/ws` topic `task-outcomes.changed`; the marks on a task's row in Sessions):
+What a task's work came to: the state of its last verification and its followed merge request (ADR-154). The Sessions list shows it on the task's row ("Verified", "Verify failed", `!12` in the pipeline's colour).
+_Avoid_: task status (that is the session's state), result (that is the summary from `report_result`)
 
 **Proposer** (`Task.proposedBy`, `proposerOf` in `proposer.ts`):
 The session that proposed a task: a main session, or for the supervisor's work whichever supervisor runs now. Only the proposer sends the task's session task messages (a session in Trackwall; an agent outside Trackwall sends none), and only it gets the task's task updates (ADR-68).
@@ -435,7 +451,7 @@ Text a task's proposer sends to the task's session: a correction, an answer, a c
 _Avoid_: note, comment (that is a review comment), chat
 
 **Task update** (`TaskUpdate`, MCP tool `get_updates`):
-What the daemon saw happen to delegated work, for the proposer: a turn that ended, an error, the end of the session, a reported result, a verification verdict, a rejected proposal. The daemon asks the proposer to read it, so the supervisor or a main session does not poll (ADR-68).
+What the daemon saw happen to delegated work, for the proposer: a turn that ended, an error, the end of the session, a reported result, a verification verdict, a failed pipeline (ADR-154), a rejected proposal. The daemon asks the proposer to read it, so the supervisor or a main session does not poll (ADR-68).
 _Avoid_: event (that is a `/ws` event), notification (that is a system notification), status
 
 **Task question** (`TaskUpdate` of kind `question`, MCP tool `ask_proposer`):
@@ -455,7 +471,15 @@ A session or supervising agent that talks to the user and commissions work to ot
 _Avoid_: orchestrator, planner (ADR-9: a human splits goals)
 
 **mise task**:
-A named command from a repo's `mise.toml`: `setup`, `dev`, `test`, `build`, `lint`, `health`. In code always qualified (`miseTask`, `mise.run(...)`), never a bare `task`. Tasks stored in the commit (`DeclaredMiseTask` in `RepoCard.mise`, type `MiseSetup`: mise configuration files and the tasks from `[tasks]` and task directories) are computed by the repo card; a repo without them, and without mise tasks in its local config (ADR-86), has the `no-mise` tag (ADR-34), and a repo with mise tasks in its local config has the `local-mise` tag (`LOCAL_MISE_TAG`, ADR-110). Each mise task of a repo's list has an **origin** (`MiseTaskOrigin`; UI "repo", "local", "outside repo"): `repo` when a file git tracks defines it, `local` when a file in the repo git does not track does, `outside` when a mise config outside the repo does (the user's global one, a parent folder's); `source` names the file (ADR-110). The MCP tools for mise tasks have `mise` in the name and the `miseTask` argument (`run_mise_task`, `stop_mise_task`, `wait_for_mise_task`, `list_running_mise_tasks`, ADR-41).
+A named command from a repo's `mise.toml`: `setup`, `dev`, `test`, `build`, `lint`, `health`. In code always qualified (`miseTask`, `mise.run(...)`), never a bare `task`. Tasks stored in the commit (`DeclaredMiseTask` in `RepoCard.mise`, type `MiseSetup`: mise configuration files and the tasks from `[tasks]` and task directories) are computed by the repo card; a repo without them, and without mise tasks in its local config (ADR-86), has the `no-mise` tag (ADR-34), and a repo with mise tasks in its local config has the `local-mise` tag (`LOCAL_MISE_TAG`, ADR-110). Each mise task of a repo's list has an **origin** (`MiseTaskOrigin`; UI "repo", "local", "outside repo"): `repo` when a file git tracks defines it, `local` when a file in the repo git does not track does, `outside` when a mise config outside the repo does (the user's global one, a parent folder's), `convention` (UI "convention") when the convention tasks file does (ADR-157); `source` names the file (ADR-110). The MCP tools for mise tasks have `mise` in the name and the `miseTask` argument (`run_mise_task`, `stop_mise_task`, `wait_for_mise_task`, `list_running_mise_tasks`, ADR-41).
+
+**Convention tasks** (`CONVENTION_TASKS`, `mise/convention-tasks.ts`, actions `convention-tasks` and `write-convention-tasks`; UI "Add convention tasks"):
+The mise tasks `setup`, `build` and `test` for Maven, Gradle and npm projects in one file Trackwall writes into the projects folder on the user's click (`.config/mise/conf.d/trackwall-convention-tasks.toml`), which mise reads for every repo below; a repo's own mise task of the same name wins (ADR-157). Its state (`ConventionTasksState`) is `absent`, `current` or `changed`.
+_Avoid_: default tasks, template tasks
+
+**mise task arguments** (`arguments` of `run_mise_task` and `mise/start`, one `MiseRunArgument`; the mise task's `usage`):
+Values passed after the mise task's name in a run (`mise run test OrderServiceTest`), such as a test filter, only to a mise task whose usage spec declares them; each one word without characters a shell treats specially (ADR-158).
+_Avoid_: args (outside code), parameters, flags
 
 **Run** (`run`, `runId`, state: `RunState`):
 A one-off execution of a mise task from the UI or through `run_mise_task`, with its own process group and logs. State `running`, `stopping` or `exited` (exit code, signal, whether the user stopped it, the last output lines), always observed. It is neither a task nor a service.
@@ -526,8 +550,8 @@ The strip above the views after the user comes back to Trackwall from 15 minutes
 _Avoid_: digest, notifications (those are the system's and the browser's), journal
 
 **Conversation view** (`SessionView` `"conversation"`, `ConversationView`, `AcpSession`, `ConversationEntry`; "conversation view" in the UI, and "Chat (preview)" on the control that turns it on):
-How a session shows when the daemon runs Copilot CLI over the Agent Client Protocol (`copilot --acp`) instead of in a terminal (ADR-107): a list of what the user and the agent said and the tools the agent called, its approval and a message box, all plain text in the page. The other `SessionView` is `"terminal"`, the session terminal. The supervisor starts in it when the user turns it on in the supervisor panel, and a task when the user picks it for the task (`Task.view`, ADR-137); a conversation goes on in either view.
-_Avoid_: chat outside the "Chat (preview)" control, transcript (that is Copilot CLI's own record)
+How a session shows when the daemon runs Copilot CLI over the Agent Client Protocol (`copilot --acp`) instead of in a terminal (ADR-107): a list of what the user and the agent said and the tools the agent called, its approval and a message box, all plain text in the page. The other `SessionView` is `"terminal"`, the session terminal. The supervisor starts in it when the user turns it on in the supervisor panel, and a task when the user picks it for the task (`Task.view`, ADR-137); a conversation goes on in either view. A **waiting message** (`WaitingMessage`) is one the user wrote during a turn, shown at once with "Waiting" until the turn ends and it goes; not to be confused with "Waiting for you", which is the agent waiting for the user.
+_Avoid_: chat outside the "Chat (preview)" control and the "Chat" tab it gives a task's panel (named after that control, so the user finds what they turned on), transcript (that is Copilot CLI's own record)
 
 **Session terminal** (`SessionTerminal`):
 xterm.js in the Sessions view and the supervisor panel, connected over the WebSocket `/ws/pty/<session>` to the session's PTY. Several session terminals, also in different windows, can show the same session; the PTY takes the size of the last one that reported it, and a window that comes to the front reports the size of its terminals again (ADR-49).
@@ -600,7 +624,7 @@ A directory with `plugin.json` and `hooks.json` that the daemon gives Copilot CL
 _Avoid_: plugin (without qualification), hook configuration
 
 **Session instructions** (`writeSessionInstructions`, file `trackwall.instructions.md`):
-The instruction file in the session directory that the daemon gives Copilot CLI through `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`: the Trackwall version that started the session and where the user sees it, the session's role (the supervisor or a free session in the projects folder, a main session in the repo root, or a task session in its worktree with the task rules and `report_result` at the end) and the **MCP instruction** (`MCP_INSTRUCTIONS`, also the MCP server's `instructions`): when to reach for which Trackwall tool and where the documentation is (ADR-46). It changes neither the repo nor `~/.copilot`.
+The instruction file in the session directory that the daemon gives Copilot CLI through `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`: the Trackwall version that started the session and where the user sees it, the session's role (the supervisor or a free session in the projects folder, a main session in the repo root, or a task session in its worktree with the task rules and `report_result` at the end) the workspace knowledge the user approved about its place (ADR-170) and the **MCP instruction** (`MCP_INSTRUCTIONS`, also the MCP server's `instructions`): when to reach for which Trackwall tool and where the documentation is (ADR-46). It changes neither the repo nor `~/.copilot`.
 _Avoid_: system prompt (Copilot CLI builds it itself), repository instructions (those are files in the user's repo)
 
 **Hook record** (`CopilotHookRecord`):
@@ -626,8 +650,8 @@ _Avoid_: recording (that is `session.cast`), snapshot
 A task the user repeats, saved once by an agent at the user's request and run by hand with "Run", each run an ordinary task with the routine's title, repo, model and approvals mode. A file in `.trackwall/routines` of the projects folder; it runs only in the version the user approved ("Approve this version"), so any change waits for approval again (ADR-173).
 _Avoid_: recipe, template, playbook, job, automation (a routine does not start by itself)
 
-**Routine digest** (`RoutineDigest`):
-The SHA-256 of a routine file's bytes: what the user approved, and what an approval or a run names, so a file changed meanwhile is refused.
+**Routine digest** (`RoutineDigest`, an alias of `ContentDigest`):
+The SHA-256 of a routine file's bytes: what the user approved, and what an approval or a run names, so a file changed meanwhile is refused. Workspace knowledge entries are approved the same way (`ContentDigest`).
 _Avoid_: hash, version number
 
 **Budget**:
@@ -641,6 +665,17 @@ Optional steps of a summary for checking the change by hand, each with what to d
 _Avoid_: test plan, acceptance (those decide something; check steps decide nothing)
 
 ## Plan
+
+**Workspace knowledge** (module `knowledge`, `knowledgeApi`, MCP tools `list_knowledge` and `propose_knowledge`; "Workspace knowledge" in Plan):
+Short facts about the user's repos that agents read at the start of every session there, instead of finding them out again: files in `.trackwall/knowledge` of the projects folder, each counting only in the version the user approved (ADR-170). Agents propose entries; only the user approves them.
+_Avoid_: notes, memory, notebook, wiki (the board holds plans and ideas; knowledge holds facts about repos)
+
+**Knowledge entry** (`KnowledgeEntry`, `KnowledgeListEntry`; "entry" in the UI and the tools):
+One fact of workspace knowledge: its name, kind, repos (none for the whole workspace), the fact, its evidence and who wrote it. A new or changed entry from an agent is a **knowledge proposal** until the user presses "Approve this version"; the user's own entry is approved as written.
+_Avoid_: rule (rules live in each repo's own agent instructions; an exception to one is the kind `exception`)
+
+**Knowledge kind** (`KnowledgeKind`: `how-to`, `relation`, `exception`, `pitfall`; "How to", "Relation", "Exception", "Pitfall" in the UI):
+What an entry says: how to build, run or test something; a link between repos the connection graph does not see; where a repo departs from a rule; a trap learned the hard way.
 
 **Board** (module `board`, `Board`, `boardApi`, topic `board.changed`; the "Plan" view in the UI):
 Everything the user keeps to do before it becomes a task: business projects, the items they are split into, and ideas. Files in `.trackwall/board` of the projects folder, one per board item (ADR-133). The board records the user's split; nothing starts from it by itself.
@@ -686,6 +721,10 @@ _Avoid_: exception (only one kind of error), problem (that is the repo card and 
 **Error journal** (`ErrorJournal`, the `error-journal` module, `errorJournalApi`; in the UI *Trackwall errors* in Settings):
 Trackwall's own errors on this computer: the daemon's unexpected errors, the UI's and the desktop shell's, in `logs/errors.json` (ADR-94). Each is a **Trackwall error** (`TrackwallError`): source (`daemon`, `shell`, `ui`), area, kind, anonymized message, frames in Trackwall's code, count. Do not confuse with an error from logs (`LogError`), which comes from the output of the user's processes.
 _Avoid_: crash log, telemetry, bug report (nothing is sent)
+
+**MCP audit** (`McpAudit`, the `mcp-audit` module, `mcpAuditApi`; in the UI *MCP calls* in Settings › Agents and in a task's panel):
+Every MCP tool call the daemon answered, in `logs/mcp-calls.jsonl` (ADR-152). Each is an **MCP call** (`McpCall`): the tool, its effect (`read`, `write`, `destructive`), the **caller** (`McpCaller`: the session with its repo and task as they were at the call; `null` for an agent outside Trackwall), the identifier arguments the tool's contract names (`auditArgs`), the outcome and the duration. Free text an agent sends is never in it. Do not confuse with the daemon log, which also has a line per call.
+_Avoid_: access log, history (of a task, that is its handoff and summary), tool log
 
 **Doctor** (`Doctor`, the `doctor` module, `doctorApi`; in the UI *Doctor* in Settings):
 The checks of what Trackwall needs on this computer: the projects folder, every key of `workspace.yaml`, git, Copilot CLI and its trusted folders, the network for sessions (proxy and certificates, ADR-166), mise, `gh` and `glab` signed in to the repo hosts (ADR-101). Each is a **doctor check** (`DoctorCheck`) with a state (`ok`, `warn`, `fail`), what was found and what to do. It only reads.

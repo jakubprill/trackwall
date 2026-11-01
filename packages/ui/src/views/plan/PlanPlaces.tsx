@@ -1,5 +1,5 @@
 import { type BoardItem, boardApi, childrenOf } from "@trackwall/protocol";
-import { FolderKanban, Inbox } from "lucide-react";
+import { BookOpen, FolderKanban, Inbox } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { post } from "@/lib/api";
@@ -8,7 +8,10 @@ import type { Connection } from "@/lib/connection";
 import { useAction } from "@/lib/use-action";
 import { cn } from "@/lib/utils";
 
-/** The left column of Plan: the inbox with its count, the active business projects, a line for a new one, the archived. */
+/**
+ * The left column of Plan: the inbox with its count, the workspace knowledge (ADR-170), the active business projects, a
+ * line for a new one, the archived.
+ */
 export function PlanPlaces({
   conn,
   items,
@@ -35,7 +38,7 @@ export function PlanPlaces({
   const active = projects.filter((p) => !isArchived(p));
   const archived = projects.filter(isArchived);
   const isPlace = (candidate: PlanPlace) =>
-    candidate.kind === place.kind && (candidate.kind === "inbox" || (place.kind === "project" && place.id === candidate.id));
+    candidate.kind === place.kind && (candidate.kind !== "project" || (place.kind === "project" && place.id === candidate.id));
   const row = (key: string, target: PlanPlace, label: string, icon: ReactNode, count?: number) => (
     <li key={key}>
       <button
@@ -55,7 +58,10 @@ export function PlanPlaces({
   );
   return (
     <nav aria-label="Inbox and projects" className="flex min-h-0 flex-col gap-3 overflow-y-auto pb-3">
-      <ul>{row("inbox", { kind: "inbox" }, "Inbox", <Inbox className="size-4 shrink-0" />, childrenOf(items, null).length)}</ul>
+      <ul>
+        {row("inbox", { kind: "inbox" }, "Inbox", <Inbox className="size-4 shrink-0" />, childrenOf(items, null).length)}
+        {row("knowledge", { kind: "knowledge" }, "Workspace knowledge", <BookOpen className="size-4 shrink-0" />)}
+      </ul>
       <div className="flex flex-col gap-1">
         <h3 className="hud-label px-4">Projects</h3>
         <ul>{active.map((p) => row(p.id, { kind: "project", id: p.id }, p.title, <FolderKanban className="size-4 shrink-0" />))}</ul>

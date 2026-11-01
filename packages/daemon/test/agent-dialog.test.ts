@@ -148,6 +148,7 @@ async function sessionShowing(
     },
     onEvent: () => {},
     onTurnOver: () => {},
+    onTurnStart: () => {},
   });
   sessions.push(session);
   const written: string[] = [];

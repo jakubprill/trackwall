@@ -1,11 +1,13 @@
 import { type RoutineEntry, routinesApi, trackwallDirLabel } from "@trackwall/protocol";
-import { Check, GitBranch, Trash2 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { Check, GitBranch } from "lucide-react";
+import { useCallback } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
+import { RemoveForGood } from "@/components/RemoveForGood";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import { reloadOnRefusal } from "@/lib/reload-on-refusal";
 import type { SessionSelection } from "@/lib/session-entries";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
@@ -89,42 +91,9 @@ function RoutineRow({
             <Check /> Approve this version
           </Button>
         )}
-        <RoutineRemove conn={conn} name={routine.name} disabled={pending} onRemoved={onChanged} />
+        <RemoveForGood remove={() => post(conn, routinesApi.remove, { name: routine.name })} disabled={pending} onRemoved={onChanged} />
       </div>
       {error && <p className="text-destructive text-xs whitespace-pre-wrap">{error}</p>}
     </div>
-  );
-}
-
-/** A refusal (most often: the file changed since it was shown) reloads the list, so the version on disk shows to read. */
-async function reloadOnRefusal<T>(request: Promise<T>, reload: () => void): Promise<T> {
-  try {
-    return await request;
-  } catch (err) {
-    reload();
-    throw err;
-  }
-}
-
-/** Removing asks once more, since the file is gone for good. */
-function RoutineRemove({ conn, name, disabled, onRemoved }: { conn: Connection; name: string; disabled: boolean; onRemoved: () => void }) {
-  const [asking, setAsking] = useState(false);
-  const remove = useAction(() => post(conn, routinesApi.remove, { name }), onRemoved);
-  if (!asking)
-    return (
-      <Button variant="ghost" size="sm" disabled={disabled} onClick={() => setAsking(true)}>
-        <Trash2 /> Remove
-      </Button>
-    );
-  return (
-    <>
-      <Button variant="destructive" size="sm" disabled={disabled || remove.pending} onClick={() => remove.run()}>
-        Remove for good
-      </Button>
-      <Button variant="ghost" size="sm" onClick={() => setAsking(false)}>
-        Keep it
-      </Button>
-      {remove.error && <p className="text-destructive text-xs">{remove.error}</p>}
-    </>
   );
 }

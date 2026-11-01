@@ -11,12 +11,16 @@ import {
   errorJournalApi,
   graphApi,
   javaNavigationApi,
+  knowledgeApi,
   localConfigApi,
   logsApi,
+  mcpAuditApi,
   mergeRequestsApi,
   miseApi,
   routinesApi,
   servicesApi,
+  taskOutcomesApi,
+  taskRoundsApi,
   verificationApi,
   workspaceApi,
 } from "@trackwall/protocol";
@@ -84,6 +88,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(cardsApi.warmup, (f) => f.cards.warmupProgress()),
   route(graphApi.graph, (f) => f.graph.graph()),
   route(graphApi.changedEndpoints, (f, b) => f.taskChangedEndpoints(b.task)),
+  route(taskOutcomesApi.list, (f) => f.taskOutcomes()),
   route(doctorApi.run, (f) => f.doctor.run()),
   route(javaNavigationApi.state, (f) => f.javaNavigation.state()),
   route(javaNavigationApi.startInstall, (f) => f.javaNavigation.startInstall()),
@@ -105,6 +110,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     f.errorJournal.clear();
     return null;
   }),
+  route(mcpAuditApi.calls, (f, b) => f.mcpAudit.list(b.task)),
   route(localConfigApi.store, (f) => f.localConfig.store()),
   route(localConfigApi.repo, (f, b) => f.localConfig.repo(b.repo)),
   route(localConfigApi.repos, (f) => f.localConfig.repos()),
@@ -114,7 +120,9 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(localConfigApi.stopPushing, (f) => f.localConfig.stopPushing()),
   route(miseApi.tasks, (f, b) => f.mise.tasks(b.repo)),
   route(miseApi.running, (f) => f.mise.running()),
-  route(miseApi.start, (f, b) => f.mise.start({ repo: b.repo, task: b.task }, b.miseTask)),
+  route(miseApi.start, (f, b) => f.mise.start({ repo: b.repo, task: b.task }, b.miseTask, { args: b.arguments })),
+  route(miseApi.conventionTasks, (f) => f.mise.conventionTasks()),
+  route(miseApi.writeConventionTasks, (f) => f.mise.writeConventionTasks()),
   route(miseApi.stop, (f, b) => f.mise.stop({ repo: b.repo, task: b.task }, b.miseTask)),
   route(miseApi.trust, (f, b) => f.mise.trust(b.repo)),
   route(logsApi.tail, (f, b) => f.logs.tail(b)),
@@ -137,6 +145,13 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(routinesApi.run, (f, b) => f.runRoutine(b.name, b.digest, b.view)),
   route(routinesApi.remove, async (f, b) => {
     await f.routines.remove(b.name);
+    return null;
+  }),
+  route(knowledgeApi.list, (f) => f.knowledge.list()),
+  route(knowledgeApi.write, (f, b) => f.knowledge.write(b)),
+  route(knowledgeApi.approve, (f, b) => f.knowledge.approve(b.name, b.digest)),
+  route(knowledgeApi.remove, async (f, b) => {
+    await f.knowledge.remove(b.name);
     return null;
   }),
   route(dayStartApi.start, (f, b) => f.dayStart.start(b.view)),
@@ -167,6 +182,9 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(agentsApi.resumeTask, (f, b) => f.agents.resumeTask(b.task)),
   route(agentsApi.taskChanges, (f, b) => f.agents.taskChanges(b.task)),
   route(agentsApi.sendReview, (f, b) => f.agents.sendReview(b.task, b.comments)),
+  route(taskRoundsApi.rounds, (f, b) => f.agents.taskRounds(b.task)),
+  route(taskRoundsApi.roundChanges, (f, b) => f.agents.taskRoundChanges(b.task, b.round)),
+  route(taskRoundsApi.undoRound, (f, b) => f.agents.undoTaskRound(b.task, b.round)),
   route(agentsApi.taskJavaNavigation, (f, b) => f.agents.taskJavaNavigation(b.task)),
   route(agentsApi.sessionJavaNavigation, (f, b) => f.agents.sessionJavaNavigation(b.session)),
   route(agentsApi.taskSharedFiles, async (f, b) => ({ shared: await f.agents.taskSharedFiles(b.task) })),

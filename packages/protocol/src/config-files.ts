@@ -16,6 +16,7 @@ export type ConfigPlace = z.infer<typeof ConfigPlace>;
 export const ConfigEntryId = z.enum([
   "workspace-file",
   "tasks-file",
+  "task-rounds-file",
   "resumable-sessions-file",
   "last-supervisor-file",
   "agent-queues-file",
@@ -23,6 +24,7 @@ export const ConfigEntryId = z.enum([
   "task-journal-file",
   "day-start-file",
   "routine-approvals-file",
+  "knowledge-approvals-file",
   "cards-dir",
   "logs-dir",
   "local-config-push-repo",
@@ -35,6 +37,7 @@ export const ConfigEntryId = z.enum([
   "language-server-dir",
   "board-dir",
   "routines-dir",
+  "knowledge-dir",
   "copilot-config",
 ]);
 export type ConfigEntryId = z.infer<typeof ConfigEntryId>;
@@ -51,6 +54,7 @@ export type DocsPage =
   | "java-navigation"
   | "local-config"
   | "mise-environment"
+  | "knowledge"
   | "plan"
   | "repo-card"
   | "repos"
@@ -89,6 +93,14 @@ export const CONFIG_ENTRIES: Record<ConfigEntryId, ConfigEntryInfo> = {
     writer: "trackwall",
     internal: true,
     purpose: "Your agent tasks, so they come back after a restart.",
+    docs: "tasks",
+  },
+  "task-rounds-file": {
+    place: "state",
+    kind: "file",
+    writer: "trackwall",
+    internal: true,
+    purpose: "The rounds of each agent task and their commits, so a round can still be shown, undone and squashed after a restart.",
     docs: "tasks",
   },
   "resumable-sessions-file": {
@@ -148,6 +160,15 @@ export const CONFIG_ENTRIES: Record<ConfigEntryId, ConfigEntryInfo> = {
     purpose: "Which version of each routine you approved; a routine whose file changed since waits for your approval again.",
     docs: "routines",
   },
+  "knowledge-approvals-file": {
+    place: "state",
+    kind: "file",
+    writer: "trackwall",
+    internal: true,
+    purpose:
+      "Which version of each workspace knowledge entry you approved; an entry whose file changed since reaches no session until you approve it again.",
+    docs: "knowledge",
+  },
   "cards-dir": {
     place: "state",
     kind: "folder",
@@ -161,7 +182,7 @@ export const CONFIG_ENTRIES: Record<ConfigEntryId, ConfigEntryInfo> = {
     kind: "folder",
     writer: "trackwall",
     internal: true,
-    purpose: "The output of mise tasks and Trackwall's own errors.",
+    purpose: "The output of mise tasks, Trackwall's own errors and the MCP calls agents made.",
     docs: "trackwall-errors",
   },
   "local-config-push-repo": {
@@ -243,6 +264,14 @@ export const CONFIG_ENTRIES: Record<ConfigEntryId, ConfigEntryInfo> = {
     internal: false,
     purpose: "Your routines, tasks you run again and again, one Markdown file each, written by an agent at your request.",
     docs: "routines",
+  },
+  "knowledge-dir": {
+    place: "projects",
+    kind: "folder",
+    writer: "you",
+    internal: false,
+    purpose: "Workspace knowledge: short facts about your repos that agents read at the start of a session, one Markdown file each.",
+    docs: "knowledge",
   },
   "copilot-config": {
     place: "copilot",

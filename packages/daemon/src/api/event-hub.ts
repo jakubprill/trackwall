@@ -19,6 +19,8 @@ const TOPICS: { [T in DaemonEventType]: (facade: Facade) => DaemonEventOf<T> } =
   "repos.changed": (facade) => ({ type: "repos.changed", payload: facade.repoWatch.state() }),
   "cards.warmup.changed": (facade) => ({ type: "cards.warmup.changed", payload: facade.cards.warmupProgress() }),
   "board.changed": (facade) => ({ type: "board.changed", payload: { revision: facade.board.revision() } }),
+  "mcp.calls.changed": (facade) => ({ type: "mcp.calls.changed", payload: { revision: facade.mcpAudit.revision() } }),
+  "task-outcomes.changed": (facade) => ({ type: "task-outcomes.changed", payload: facade.taskOutcomes() }),
 };
 
 export interface EventListener {

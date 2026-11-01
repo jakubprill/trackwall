@@ -6,6 +6,7 @@ import {
   type SessionList,
   type Task,
   type TaskMessage,
+  type TaskOutcome,
 } from "@trackwall/protocol";
 import { BellRing, Crown, Lightbulb, Plus, Square, X } from "lucide-react";
 import { useCallback, useRef } from "react";
@@ -66,6 +67,7 @@ import { EndTaskButton, SessionCloseButton, SessionCloseConfirmation, TaskEnding
 import { SessionEnvironment } from "./SessionEnvironment.tsx";
 import { SessionGrid } from "./SessionGrid.tsx";
 import { TaskLine } from "./TaskLine.tsx";
+import { TaskOutcomeMarks } from "./TaskOutcomeMarks.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
 
 /**
@@ -90,6 +92,7 @@ export function SessionsView({
   onShowImpact,
   tree,
   supervisor,
+  outcomes,
 }: {
   conn: Connection;
   sessions: RemoteHandle<SessionList>;
@@ -106,6 +109,8 @@ export function SessionsView({
   /** The list rows and their tasks, without a task the user has just ended (`useSessionTree`). */
   tree: SessionTree;
   supervisor: SupervisorSummary;
+  /** What each task's work came to, by task (ADR-154), for the marks on its row. */
+  outcomes: ReadonlyMap<string, TaskOutcome>;
 }) {
   const list = sessions.data?.sessions ?? [];
   const { tasks, rows } = tree;
@@ -192,6 +197,7 @@ export function SessionsView({
               onSelect={() => onSelect(entrySelection(row.entry))}
               onSessionClosed={() => sessionClosed(row.entry)}
               onTaskRemoved={taskRemoved}
+              outcomes={outcomes}
             />
           ))}
         </nav>
@@ -254,6 +260,7 @@ function SessionListItem({
   onSelect,
   onSessionClosed,
   onTaskRemoved,
+  outcomes,
 }: {
   conn: Connection;
   row: SessionRow;
@@ -262,6 +269,7 @@ function SessionListItem({
   onSelect: () => void;
   onSessionClosed: () => void;
   onTaskRemoved: (task: string) => void;
+  outcomes: ReadonlyMap<string, TaskOutcome>;
 }) {
   const { entry, depth } = row;
   return (
@@ -278,6 +286,7 @@ function SessionListItem({
           onSelect={onSelect}
           onSessionClosed={onSessionClosed}
           onTaskRemoved={onTaskRemoved}
+          outcome={entry.kind === "task" ? outcomes.get(entry.task.id) : undefined}
         />
       )}
     </div>
@@ -297,6 +306,7 @@ function StartedListItem({
   onSelect,
   onSessionClosed,
   onTaskRemoved,
+  outcome,
 }: {
   conn: Connection;
   entry: StartedEntry;
@@ -307,6 +317,7 @@ function StartedListItem({
   onSelect: () => void;
   onSessionClosed: () => void;
   onTaskRemoved: (task: string) => void;
+  outcome: TaskOutcome | undefined;
 }) {
   const { session } = entry;
   const task = entry.kind === "task" ? entry.task : undefined;
@@ -331,6 +342,7 @@ function StartedListItem({
           <RowName name={task?.repo ?? (session && sessionPlace(session))} delegated={delegated} waits={session?.needsAttention === true} />
           {task && <TaskLine task={task} />}
           <span className="text-muted-foreground text-xs">{session ? <StatusLabel {...sessionStateLabel(session)} /> : "no session"}</span>
+          <TaskOutcomeMarks outcome={outcome} />
           {session?.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
         </span>
       </button>

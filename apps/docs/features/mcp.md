@@ -39,7 +39,7 @@ The agent sees the same projects folder you see in Trackwall, through the tools 
 | `who_calls` | Who uses a repo, through packages and HTTP, with evidence. |
 | `subgraph_for` | The part of the connection graph around a repo, with its calls that lead to no repo. |
 | `find_endpoint` | An HTTP endpoint from code or an OpenAPI spec, by path, URL or words, with its types, the repos and endpoints that call it, and the endpoints it calls. |
-| `run_mise_task`, `wait_for_mise_task`, `stop_mise_task`, `list_running_mise_tasks` | Run a repo's mise task, wait up to 55 s for it, stop it, list what runs. With `task`, in that task's worktree. |
+| `run_mise_task`, `wait_for_mise_task`, `stop_mise_task`, `list_running_mise_tasks` | Run a repo's mise task, wait up to 55 s for it, stop it, list what runs. With `task`, in that task's worktree. A task that declares arguments takes them, such as a test filter for `test`. |
 | `tail` | A mise task's log from a cursor, with secrets replaced by `***`; with `task`, the run in that task's worktree. `contains` keeps only lines with that text and `minLevel` only lines at that level or above. |
 | `get_errors` | Errors from the mise task logs, newest first: error lines, compiler errors, exceptions with stack traces, Spring and Gradle failure reports; repeats counted once. With `minLevel: warn`, warnings too. `contains` keeps only errors with a line holding that text, such as an exception class or an endpoint path. |
 | `get_test_results` | The results of the latest test run from the JUnit reports Maven, Gradle, jest or Vitest left in the repo, or with `task` in that task's worktree: totals, each report with its time, and the failed tests with their message and stack trace. |
@@ -51,6 +51,8 @@ The agent sees the same projects folder you see in Trackwall, through the tools 
 | `propose_task`, `wait_for_session`, `report_result` | Propose a task (for an item of your [plan](/features/plan) when given one), wait up to 55 s for a session or task to need someone (also when it [may be stuck](/features/while-you-were-away)), report a task's summary, with optional steps for checking the change by hand. |
 | `list_items`, `get_item`, `create_item`, `update_item` | Your [plan](/features/plan): list the inbox or a project's items, read one item with where it sits, its children and its tasks, write an idea or a smaller piece of work (from a task, under its task's item), and change an item's text, repos, link or move it between "Idea" and "Ready". Projects are yours alone. |
 | `propose_routine` | Save a [routine](/features/routines) you asked for; it runs only after you approve it. |
+| `list_knowledge` | Read the [workspace knowledge](/features/knowledge) you approved, for example about a repo the change reaches. |
+| `propose_knowledge` | Propose a fact about your repos, or a correction; it reaches later sessions only after you approve it. |
 | `propose_folder_action` | Propose removing a repo from the projects folder; nothing happens until you approve it, see the [supervisor](/features/supervisor). |
 | `get_review_comments` | The comments you sent on lines of a task's changes, for that task's agent; see [Agent tasks](/features/tasks). |
 | `send_message`, `get_messages` | A message from the session that proposed a task to that task's agent, and the agent reading it; see [Main session and task proposals](/features/main-session). |
@@ -62,7 +64,7 @@ The agent sees the same projects folder you see in Trackwall, through the tools 
 
 ## Good to know
 
-- An agent in a session runs and stops only the mise tasks and the service of its own repo; every run is logged with the repo, mise task and session.
+- An agent in a session runs and stops only the mise tasks and the service of its own repo; every call is in [MCP calls](/features/mcp-calls) with the repo, mise task and agent that made it.
 - A task's agent runs mise tasks and the service in the repo root or in its own task's worktree, never in another task's, and in its worktree only with the mise configuration you have trusted (see [Agent tasks](/features/tasks)).
 - Agents get links in the form `trackwall://…` to point you at a repo, session or task: see [trackwall:// links](/features/links).
 - `get_app_config` never gives the agent a secret or the value of an environment variable: a key named like a password, token or key, and a value with `password=` or similar inside, shows only whether it is set. A bare secret under an ordinary key name, such as `db.pw: hunter2`, is still shown, so keep secrets under names that say what they are.

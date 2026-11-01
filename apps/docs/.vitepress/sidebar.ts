@@ -43,11 +43,13 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       { text: "Approvals outside the terminal", link: "/features/approvals" },
       { text: "Agent tasks", link: "/features/tasks" },
       { text: "Routines", link: "/features/routines" },
+      { text: "Workspace knowledge", link: "/features/knowledge" },
       { text: "Impact of a task", link: "/features/impact" },
       { text: "Java navigation", link: "/features/java-navigation" },
       { text: "Main session and task proposals", link: "/features/main-session" },
       { text: "Session instructions", link: "/features/session-instructions" },
       { text: "MCP server", link: "/features/mcp" },
+      { text: "MCP calls", link: "/features/mcp-calls" },
     ],
   },
   {

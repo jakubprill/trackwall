@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import { RELEASE_VERSION } from "@trackwall/protocol";
 
 export interface DaemonArgs {
   port: number;
@@ -20,6 +21,9 @@ trackwall-daemon address [--home <dir>]
 trackwall-daemon container start [--port <n>] [--home <dir>]
                    in a dev container: make sure a daemon runs on the port (default 7700), restarted
                    after a crash, and print how it stands as JSON (trackwall-container start)
+trackwall-daemon container update <version> [--port <n>] [--home <dir>]
+                   in a dev container: download that release, check its signature, switch to it and go
+                   back if it does not start; prints JSON at once, the rest goes to logs/daemon.log
 
   --ui             open the UI in the default browser (mode without Tauri)
   --ui-dir <dir>   directory of the built UI (default: ./ui next to the binary)
@@ -84,9 +88,13 @@ const SUBCOMMANDS = [MCP_STDIO_COMMAND, ADDRESS_COMMAND] as const;
 export const CONTAINER_COMMAND = "container";
 /** The container supervisor's own subcommand, also how its process is recognised in `/proc/<pid>/cmdline`. */
 export const SUPERVISE_COMMAND = "supervise";
-/** `container start` is for people and the desktop app; `container supervise` only for `start` to run. */
+/** `container start` and `container update` are for people and the desktop app; the other two only for those to run. */
 export const CONTAINER_START = "start";
-const CONTAINER_ACTIONS = [CONTAINER_START, SUPERVISE_COMMAND] as const;
+export const CONTAINER_UPDATE = "update";
+/** The background process of an update (ADR-165), also how its process is recognised in `/proc/<pid>/cmdline`. */
+export const APPLY_UPDATE_COMMAND = "apply-update";
+const CONTAINER_ACTIONS = [CONTAINER_START, CONTAINER_UPDATE, SUPERVISE_COMMAND, APPLY_UPDATE_COMMAND] as const;
+const UPDATE_ACTIONS: readonly string[] = [CONTAINER_UPDATE, APPLY_UPDATE_COMMAND];
 /** The port VS Code forwards in the dev container guide. */
 const CONTAINER_DEFAULT_PORT = 7700;
 /** The command line: the daemon, or a subcommand of the running daemon, which has only the state directory to set. */
@@ -94,7 +102,16 @@ export type CommandLine =
   | { command: "daemon"; args: DaemonArgs }
   | { command: typeof MCP_STDIO_COMMAND; home?: string }
   | { command: typeof ADDRESS_COMMAND; home?: string }
-  | { command: typeof CONTAINER_COMMAND; action: (typeof CONTAINER_ACTIONS)[number]; port: number; home?: string };
+  | ContainerCommandLine;
+export type ContainerCommandLine =
+  | { command: typeof CONTAINER_COMMAND; action: typeof CONTAINER_START | typeof SUPERVISE_COMMAND; port: number; home?: string }
+  | {
+      command: typeof CONTAINER_COMMAND;
+      action: typeof CONTAINER_UPDATE | typeof APPLY_UPDATE_COMMAND;
+      target: string;
+      port: number;
+      home?: string;
+    };
 
 export function parseCommandLine(argv: string[]): CommandLine {
   if (argv[0] === CONTAINER_COMMAND) return parseContainerCommand(argv.slice(1));
@@ -109,16 +126,23 @@ export function parseCommandLine(argv: string[]): CommandLine {
   return { command, home: values.home };
 }
 
-function parseContainerCommand(argv: string[]): CommandLine {
+function parseContainerCommand(argv: string[]): ContainerCommandLine {
   const action = CONTAINER_ACTIONS.find((name) => name === argv[0]);
-  if (action === undefined) throw new Error(`${CONTAINER_COMMAND} expects ${CONTAINER_ACTIONS[0]}, got "${argv[0] ?? ""}"`);
-  const { values } = parseArgs({
+  if (action === undefined) {
+    throw new Error(`${CONTAINER_COMMAND} expects ${CONTAINER_START} or ${CONTAINER_UPDATE} <version>, got "${argv[0] ?? ""}"`);
+  }
+  const { values, positionals } = parseArgs({
     args: argv.slice(1),
     options: { home: { type: "string" }, port: { type: "string", default: String(CONTAINER_DEFAULT_PORT) } },
     strict: true,
-    allowPositionals: false,
+    allowPositionals: UPDATE_ACTIONS.includes(action),
   });
   const port = toInt(values.port, "--port");
   if (port < 1 || port > 65535) throw new Error("--port out of range 1-65535");
-  return { command: CONTAINER_COMMAND, action, port, home: values.home };
+  if (action === CONTAINER_START || action === SUPERVISE_COMMAND) return { command: CONTAINER_COMMAND, action, port, home: values.home };
+  const [target, ...rest] = positionals;
+  if (target === undefined || rest.length > 0 || !RELEASE_VERSION.test(target)) {
+    throw new Error(`${CONTAINER_UPDATE} expects one version such as 1.2.3, got "${positionals.join(" ")}"`);
+  }
+  return { command: CONTAINER_COMMAND, action, target, port, home: values.home };
 }

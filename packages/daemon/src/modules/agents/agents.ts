@@ -6,15 +6,18 @@ import {
   type DialogAnswer,
   type EnvironmentCheck,
   type HttpEndpoint,
+  inTurn,
   isSupervisor,
   type JavaNavigationSettings,
   type JavaNavigationStatus,
+  type MergeRequest,
   type MiseTarget,
   type PromptDelivery,
   type ReviewComment,
   type SendMessageResult,
   type SendReviewResult,
   type Session,
+  type SessionKnowledge,
   type SessionList,
   type SessionView,
   type StartOptions,
@@ -28,10 +31,12 @@ import {
   type TaskMessage,
   type TaskMiseConfig,
   type TaskProposal,
+  type TaskRounds,
   type TaskSharedFiles,
   type TaskUpdate,
   type ToolPermissions,
   type Verification,
+  type WorkingTreeChanges,
 } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
 import { AcpSession, type ConversationViewer, type ConversationWindow } from "./acp-session.ts";
@@ -80,6 +85,7 @@ import { TaskCoordination } from "./task-coordination.ts";
 import { TaskFile } from "./task-file.ts";
 import { TaskProposals } from "./task-proposals.ts";
 import { TaskReviews } from "./task-reviews.ts";
+import { type RoundsVcs, TASK_ROUNDS_FILE, TaskRoundList } from "./task-rounds.ts";
 import { AgentTasks, type TaskLaunch, type TaskOptions, type TasksVcs } from "./tasks.ts";
 import type { ScreenViewer } from "./terminal-screen.ts";
 
@@ -101,6 +107,7 @@ export const TASKS_FILE = "tasks.json";
 /** The sessions that run, for the next daemon to resume (ADR-95). */
 export const RESUMABLE_SESSIONS_FILE = "resumable-sessions.json";
 export { LAST_SUPERVISOR_FILE } from "./last-supervisor.ts";
+export { TASK_ROUNDS_FILE } from "./task-rounds.ts";
 /** Proposals, reviews, messages and updates that wait, for the next daemon (ADR-115). */
 export const AGENT_QUEUES_FILE = "agent-queues.json";
 /** Where task worktrees went before ADR-84; tasks from then keep them there until they end. */
@@ -148,8 +155,8 @@ interface AgentsRepos {
 export interface AgentsDeps {
   procs: AgentsProcs;
   repos: AgentsRepos;
-  /** Task worktrees and branches (ADR-31). */
-  vcs: TasksVcs;
+  /** Task worktrees and branches (ADR-31), and the round commits in them (ADR-168). */
+  vcs: TasksVcs & RoundsVcs;
   /**
    * The daemon's state directory; sessions keep their files in `sessions/<session>/` and tasks their list in `tasks.json`
    * (worktrees saved before ADR-84 are in `worktrees/<repo>/`, newer ones in the task worktrees folder of `workspace`).
@@ -182,6 +189,8 @@ export interface AgentsDeps {
   openEditor: (dir: string) => void;
   /** Whether a board item is on the board (ADR-133): a task or a proposal names only an existing one. */
   boardHas: (item: string) => Promise<boolean>;
+  /** The workspace knowledge the user approved for a session in `repo` (`null`: in the projects folder), ADR-170. */
+  knowledge: (repo: string | null) => Promise<SessionKnowledge>;
   /**
    * A task has ended and its worktree is gone: what other modules keep of it (its logs, ADR-59) can go too, and its
    * facts go to the task journal (ADR-150).
@@ -202,6 +211,7 @@ export class Agents {
   readonly #reviews = new TaskReviews(() => this.#queues.follow());
   readonly #miseTrust = new MiseTrustNotices(() => this.#queues.follow());
   readonly #handoffs: HandoffWatch;
+  readonly #rounds: TaskRoundList;
   readonly #coordination: TaskCoordination;
   readonly #supervisor: SupervisorSessions;
   readonly #resumable: ResumableSessions;
@@ -235,6 +245,7 @@ export class Agents {
       tokens: this.#tokens,
       callbacks: (session) => this.#sessionCallbacks(session),
       handoff: (task) => this.#tasks.handoff(task),
+      knowledge: deps.knowledge,
     });
     this.#resumable = new ResumableSessions(join(deps.home, RESUMABLE_SESSIONS_FILE), deps.log);
     this.#lastSupervisor = new LastSupervisorFile(join(deps.home, LAST_SUPERVISOR_FILE), deps.log);
@@ -267,6 +278,14 @@ export class Agents {
         of: (task) => this.#sessions.views().filter((s) => s.task === task),
         close: (id) => this.#close(id),
       },
+    });
+    this.#rounds = new TaskRoundList({
+      vcs: deps.vcs,
+      path: join(deps.home, TASK_ROUNDS_FILE),
+      task: (id) => this.#tasks.roundTask(id),
+      midTurn: (task) => inTurn(this.#sessions.runningOfTask(task)?.view()?.state?.state),
+      askToRead: (task) => this.#sessions.runningOfTask(task)?.askToRead(),
+      log: deps.log,
     });
     this.#handoffs = new HandoffWatch(this.#tasks, (task) => this.#sessions.runningOfTask(task)?.askToRead(), deps.log);
     this.#coordination = new TaskCoordination({
@@ -523,6 +542,7 @@ export class Agents {
     return readRequestPrompt({
       reviewComments,
       handoffMoved: session.task !== null && this.#handoffs.waiting(session.task),
+      roundUndone: session.task !== null && this.#rounds.undoneUntold(session.task),
       ...this.#coordination.unread(session),
       trustNotice: this.#miseTrust.waiting(trustRecipientOf(session)),
     });
@@ -572,6 +592,11 @@ export class Agents {
   /** A task's verification has its verdict (ADR-64), which goes to the task's proposer (ADR-68). */
   verificationFinished(verification: Verification): void {
     this.#coordination.verificationFinished(verification);
+  }
+
+  /** The pipeline of the merge request from a task's branch failed (ADR-154): the task's proposer hears of it. */
+  pipelineFailed(task: string, mergeRequest: MergeRequest): void {
+    this.#coordination.pipelineFailed(task, mergeRequest);
   }
 
   /** Waits until a session or task needs someone, at most `timeoutMs`; a session cannot wait for itself. */
@@ -672,6 +697,11 @@ export class Agents {
     return this.#tasks.task(id);
   }
 
+  /** Every task until it ends. */
+  tasks(): Task[] {
+    return this.#tasks.list();
+  }
+
   /** A task, or `undefined` when there is no such task (unknown or ended). */
   findTask(id: string): Task | undefined {
     return this.#tasks.find(id);
@@ -689,6 +719,26 @@ export class Agents {
 
   taskChanges(id: string): Promise<TaskChanges> {
     return this.#tasks.changes(id);
+  }
+
+  /** The task's rounds and whether its newest one can be undone now (ADR-168). */
+  taskRounds(id: string): Promise<TaskRounds> {
+    return this.#rounds.list(id);
+  }
+
+  /** One round's files and diff (ADR-168). */
+  taskRoundChanges(id: string, round: number): Promise<WorkingTreeChanges> {
+    return this.#rounds.changes(id, round);
+  }
+
+  /** The user undoes the task's newest standing round (ADR-168); its agent hears of it. Only from the UI. */
+  undoTaskRound(id: string, round: number): Promise<TaskRounds> {
+    return this.#rounds.undo(id, round);
+  }
+
+  /** The user's push of the task branch, with the round commits the remote does not have yet squashed (ADR-168). */
+  pushWithRoundsSquashed(id: string, push: (source: string | undefined) => Promise<void>): Promise<void> {
+    return this.#rounds.pushWithRoundsSquashed(id, push);
   }
 
   /** Other tasks of the same repo that change the same files (ADR-44). */
@@ -805,6 +855,7 @@ export class Agents {
     this.#reviews.take(id);
     this.#miseTrust.forget({ task: id });
     this.#handoffs.forget(id);
+    this.#rounds.forget(id);
     this.#coordination.taskEnded(id);
     this.#deps.onTaskRemoved(ended);
   }
@@ -1107,9 +1158,16 @@ export class Agents {
       prompt: () => this.#readRequestPrompt({ id, supervisor, task }),
       situation: () => (supervisor ? supervisorSituation(this.sessionsWithoutCycle(), id) : undefined),
       onUserText: () => this.#coordination.userTyped({ id, task }),
-      onPromptSent: () => this.#miseTrust.promptSent(trustRecipientOf({ id, task })),
+      onPromptSent: () => {
+        this.#miseTrust.promptSent(trustRecipientOf({ id, task }));
+        if (task !== null) this.#rounds.promptSent(task);
+      },
+      onTurnStart: () => {
+        if (task !== null) void this.#rounds.turnStarted(task);
+      },
       onTurnOver: () => {
-        if (task !== null) void this.#handoffs.turnOver(task);
+        // The round commit first: it moves the branch, which the tasks it handed work to then hear about (ADR-144).
+        if (task !== null) void this.#rounds.turnOver(task).then(() => this.#handoffs.turnOver(task));
       },
       onEvent: (event: SessionEvent) => {
         if (event.kind === "turn_ended") this.#miseTrust.turnEnded(trustRecipientOf({ id, task }));

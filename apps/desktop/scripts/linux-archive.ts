@@ -9,24 +9,13 @@
  *     trackwall/README.txt
  */
 
-/** The daemon's build target of each archive, named by the architecture Docker reports (`uname -m` gives the other spelling). */
-export const LINUX_ARCHIVES = {
+import type { LinuxArch } from "@trackwall/protocol";
+
+/** The daemon's build target of each archive. */
+export const LINUX_ARCHIVES: Record<LinuxArch, string> = {
   x64: "x86_64-unknown-linux-gnu",
   arm64: "aarch64-unknown-linux-gnu",
-} as const;
-export type LinuxArch = keyof typeof LINUX_ARCHIVES;
-export const LINUX_ARCHS = Object.keys(LINUX_ARCHIVES) as LinuxArch[];
-
-export function isLinuxArch(value: string): value is LinuxArch {
-  return Object.hasOwn(LINUX_ARCHIVES, value);
-}
-
-export function linuxArchiveName(version: string, arch: LinuxArch): string {
-  return `trackwall-${version}-linux-${arch}.tar.gz`;
-}
-
-/** The folder at the top of the archive. */
-export const LINUX_ARCHIVE_FOLDER = "trackwall";
+};
 
 export function linuxReadme(version: string): string {
   return [
