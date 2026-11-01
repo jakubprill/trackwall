@@ -47,7 +47,7 @@ A `.devcontainer/devcontainer.json` that keeps the repos, Trackwall's state, the
 - A new volume belongs to `root`, so `postCreateCommand` hands the folders to the container's user.
 - `requireLocalPort` keeps the forwarded port at 7700 on your computer. Trackwall accepts a page only from `127.0.0.1:<port>` or `localhost:<port>` with the port it listens on, so a forward to another number does not load.
 - `TRACKWALL_DEVCONTAINER_HOST_FOLDER` tells Trackwall which folder on your computer the container was opened from, so "Open in VS Code" opens the same kind of window as opening that folder in a container yourself, with the extensions and settings of this `devcontainer.json`. Without it, VS Code attaches to the running container without them. Use it when you open the container from a folder on Windows or macOS; from a folder inside WSL it may not open.
-- Behind a proxy, set `HTTPS_PROXY` and `HTTP_PROXY` in `containerEnv` too, and keep `NO_PROXY` as above. A proxy that replaces certificates also needs its certificate in the image.
+- Behind a proxy, set `HTTPS_PROXY` and `HTTP_PROXY` in `containerEnv` too, and keep `NO_PROXY` as above. A proxy that replaces certificates also needs its certificate in the image, and `NODE_EXTRA_CA_CERTS` pointing at it in `containerEnv`, because Copilot CLI does not read the system's certificates; the [doctor](/features/doctor) names the file when the image already has it.
 
 ## Start Trackwall
 
@@ -58,10 +58,10 @@ Trackwall has no Linux download, so it runs from its source. In a terminal of th
 3. Clone Trackwall outside the projects folder and build its page: `git clone https://github.com/jakubprill/trackwall.git ~/trackwall && cd ~/trackwall && pnpm install --frozen-lockfile && pnpm --filter @trackwall/ui build`.
 4. Point Trackwall at the repos: `echo "projectsDir: /workspaces" > ~/.trackwall/workspace.yaml`.
 5. Start it on the forwarded port: `bun packages/daemon/src/main.ts --port 7700`.
-6. In a second terminal, print the address with its token: `echo "http://127.0.0.1:7700/#token=$(sed -n 's/.*"token": *"\([^"]*\)".*/\1/p' ~/.trackwall/daemon.json)"`, and open it in the browser on your computer.
+6. In a second terminal, print the address with its token: `cd ~/trackwall && bun packages/daemon/src/main.ts address`, and open it in the browser on your computer.
 7. Sign in to Copilot CLI once: run `copilot`, type `/login` and follow the steps in your browser. The sign-in stays in the `workspace-copilot` volume.
 
-The token changes every time Trackwall starts, so look the address up again after a restart. Trackwall stops when its terminal or the container stops.
+The browser keeps the token for that address, so a bookmark of `http://127.0.0.1:7700` and a new tab open Trackwall without it. The token changes every time Trackwall starts: after a restart, open or reload the page, and it asks for the address; print it again as in step 6 and paste it there. Trackwall stops when its terminal or the container stops.
 
 ## Bring your skills and plugins
 

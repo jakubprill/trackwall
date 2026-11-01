@@ -41,6 +41,7 @@ import { AgentQueuesFile } from "./agent-queues.ts";
 import type { AgentSession } from "./agent-session.ts";
 import type { CopilotHookOutput } from "./copilot-hook-output.ts";
 import { CopilotHookEvent } from "./copilot-hook-record.ts";
+import type { EndedTaskFacts } from "./ended-task.ts";
 import { HandoffWatch } from "./handoff-watch.ts";
 import { appendHookRecord } from "./hook-tail.ts";
 import { inboxPrompt } from "./inbox-prompt.ts";
@@ -167,8 +168,11 @@ export interface AgentsDeps {
   openEditor: (dir: string) => void;
   /** Whether a board item is on the board (ADR-133): a task or a proposal names only an existing one. */
   boardHas: (item: string) => Promise<boolean>;
-  /** A task has ended and its worktree is gone: what other modules keep of it (its logs, ADR-59) can go too. */
-  onTaskRemoved: (task: string) => void;
+  /**
+   * A task has ended and its worktree is gone: what other modules keep of it (its logs, ADR-59) can go too, and its
+   * facts go to the task journal (ADR-150).
+   */
+  onTaskRemoved: (ended: EndedTaskFacts) => void;
   log: (msg: string) => void;
 }
 
@@ -751,13 +755,13 @@ export class Agents {
   }
 
   async removeTask(id: string, keepBranch: boolean, discardChanges: boolean): Promise<void> {
-    await this.#tasks.remove(id, keepBranch, discardChanges);
+    const ended = await this.#tasks.remove(id, keepBranch, discardChanges);
     this.#reviews.take(id);
     this.#miseTrust.forget({ task: id });
     this.#handoffs.forget(id);
     this.#rounds.forget(id);
     this.#coordination.taskEnded(id);
-    this.#deps.onTaskRemoved(id);
+    this.#deps.onTaskRemoved(ended);
   }
 
   /** A start in a terminal; a new id by default. */

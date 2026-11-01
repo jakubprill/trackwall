@@ -27,6 +27,8 @@ import { DayStart } from "./modules/day-start/day-start.ts";
 import { DayStartFile } from "./modules/day-start/day-start-file.ts";
 import { trustedFolderOf, trustedFolders } from "./modules/doctor/copilot-trust.ts";
 import { Doctor } from "./modules/doctor/doctor.ts";
+import { SYSTEM_CA_FILES } from "./modules/doctor/network-check.ts";
+import { probeTls, type TlsProbe } from "./modules/doctor/tls-probe.ts";
 import { ErrorJournal } from "./modules/error-journal/error-journal.ts";
 import type { ErrorJournalWorkspace } from "./modules/error-journal/known-values.ts";
 import { Graph } from "./modules/graph/graph.ts";
@@ -39,6 +41,7 @@ import { Mise } from "./modules/mise/mise.ts";
 import { ProcessGroups } from "./modules/procs/process-groups.ts";
 import { RuntimeFile } from "./modules/procs/runtime-file.ts";
 import { Services } from "./modules/services/services.ts";
+import { TASK_JOURNAL_FILE, TASK_JOURNAL_MAX_RECORDS, TaskJournal } from "./modules/task-journal/task-journal.ts";
 import { TestReports } from "./modules/test-results/test-reports.ts";
 import { Hosting, type HostingClis } from "./modules/vcs/hosting.ts";
 import { systemTempFolder, Vcs } from "./modules/vcs/vcs.ts";
@@ -72,6 +75,8 @@ export interface Facade {
   services: Services;
   testReports: TestReports;
   verifications: Verifications;
+  /** What ended tasks were and left, searched by `search_task_history` (ADR-150). */
+  taskJournal: TaskJournal;
   /** A finished task's push, its repo host's merge request form, and the merge request with its pipeline (ADR-77). */
   mergeRequests: MergeRequests;
   /** "Start my day": sync, the day report, and a new supervisor that reads it (ADR-70). */
@@ -154,6 +159,8 @@ export interface FacadeOptions {
   userEnv: () => Promise<NodeJS.ProcessEnv>;
   /** Only for tests, which point the Java navigation install at a local archive; the daemon leaves it out for the pinned release (ADR-123). */
   jdtlsRelease?: JdtlsRelease;
+  /** Only for tests, which keep the doctor's network check off the network; the daemon leaves it out for `probeTls` (ADR-166). */
+  tlsProbe?: TlsProbe;
   /** The folder the daemon serves the UI from: the error journal maps the UI's frames with its source maps (ADR-94). */
   uiDir?: string;
   log: (msg: string) => void;
@@ -220,6 +227,15 @@ export function createFacade(o: FacadeOptions): Facade {
   const repoWatch = new RepoWatch({ repos: workspace, vcs, onHeadMoved: (repos) => cards.warmUp(repos), log: o.log });
   const localConfig = new LocalConfig({ repos: workspace, vcs, log: o.log, pushDir: join(o.home, LOCAL_CONFIG_PUSH_DIR) });
   const board = new Board({ projectsDir: () => workspace.projectsDir() });
+  const taskJournal = new TaskJournal({
+    file: join(o.home, TASK_JOURNAL_FILE),
+    log: o.log,
+    maxRecords: TASK_JOURNAL_MAX_RECORDS,
+    masker: async () => {
+      const env = await o.userEnv();
+      return (text) => logs.mask(text, env);
+    },
+  });
   const agents = new Agents({
     procs,
     repos: workspace,
@@ -234,7 +250,13 @@ export function createFacade(o: FacadeOptions): Facade {
     sessionMcpServer: o.sessionMcpServer,
     openEditor,
     boardHas: (item) => board.has(item),
-    onTaskRemoved: (task) => logs.removeTaskLogs(task),
+    // `verifications` is made below; a task ends only after both exist.
+    onTaskRemoved: (ended) => {
+      logs.removeTaskLogs(ended.task);
+      const last = verifications.take(ended.task);
+      // `record` logs its own failures, so ending the task does not wait for the write.
+      void taskJournal.record({ ...ended, verification: last && { state: last.state, finishedAt: last.finishedAt } });
+    },
     log: o.log,
   });
   // A removal that failed on a held file, or a crash before it, leaves an ended task's logs behind (ADR-59). Without a
@@ -308,6 +330,8 @@ export function createFacade(o: FacadeOptions): Facade {
     workspaceFile: workspace.configFile(),
     workspaceKeys: () => workspace.workspaceKeys(),
     javaNavigation: javaNavigationReadiness,
+    probeTls: o.tlsProbe ?? probeTls,
+    systemCaFiles: SYSTEM_CA_FILES,
     now: () => new Date(),
   });
   const configFiles = new ConfigFiles({
@@ -320,6 +344,7 @@ export function createFacade(o: FacadeOptions): Facade {
       "last-supervisor-file": join(o.home, LAST_SUPERVISOR_FILE),
       "agent-queues-file": join(o.home, AGENT_QUEUES_FILE),
       "verifications-file": join(o.home, VERIFICATIONS_FILE),
+      "task-journal-file": join(o.home, TASK_JOURNAL_FILE),
       "day-start-file": join(o.home, DAY_START_FILE),
       "cards-dir": join(o.home, CARDS_DIR),
       "logs-dir": join(o.home, LOGS_DIR),
@@ -356,6 +381,7 @@ export function createFacade(o: FacadeOptions): Facade {
     services,
     testReports,
     verifications,
+    taskJournal,
     mergeRequests,
     dayStart,
     errorJournal,

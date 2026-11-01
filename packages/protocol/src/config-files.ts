@@ -21,6 +21,7 @@ export const ConfigEntryId = z.enum([
   "last-supervisor-file",
   "agent-queues-file",
   "verifications-file",
+  "task-journal-file",
   "day-start-file",
   "cards-dir",
   "logs-dir",
@@ -126,6 +127,15 @@ export const CONFIG_ENTRIES: Record<ConfigEntryId, ConfigEntryInfo> = {
     writer: "trackwall",
     internal: true,
     purpose: "The last verification of each task, so its verdict is still there after a restart.",
+    docs: "tasks",
+  },
+  "task-journal-file": {
+    place: "state",
+    kind: "file",
+    writer: "trackwall",
+    internal: true,
+    purpose:
+      "What each ended task was and left: its prompt, summary, commits, files and last verdict, which agents search for how a similar change was done.",
     docs: "tasks",
   },
   "day-start-file": {
