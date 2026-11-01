@@ -280,6 +280,7 @@ export class Agents {
       file: new TaskFile(join(deps.home, TASKS_FILE), deps.log),
       liveIn: (dir) => deps.procs.liveIn(dir),
       legacyWorktreesDir: join(deps.home, LEGACY_WORKTREES_DIR),
+      roundCommits: (task) => this.#rounds.roundCommits(task),
       openEditor: deps.openEditor,
       log: deps.log,
       javaNavigation: this.#javaNavigation,

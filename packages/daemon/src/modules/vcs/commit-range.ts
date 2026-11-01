@@ -45,6 +45,29 @@ export async function countBetween(dir: string, from: string, to: string): Promi
   return count(dir, [`^${from}`, to]);
 }
 
+/**
+ * The newest commit on `head`'s first-parent line that is not one of `skip`; `null` when every commit it looked at is.
+ * A task's round commits (ADR-168) sit on top of the agent's own, so this is the newest commit the agent made itself or
+ * the one its task started from (ADR-144).
+ */
+export async function newestCommitBesides(dir: string, head: string, skip: ReadonlySet<string>): Promise<string | null> {
+  if (!skip.has(head)) return head;
+  const { stdout } = await git(dir, ["rev-list", "--first-parent", `--max-count=${skip.size + 1}`, head, "--"]);
+  const commits = stdout
+    .toString("utf8")
+    .split("\n")
+    .map((line) => line.trim());
+  return commits.find((commit) => commit !== "" && !skip.has(commit)) ?? null;
+}
+
+/** Whether two commits hold the same files; `false` when `a` is not in the repo (gone after a rewrite and `gc`). */
+export async function sameTree(dir: string, a: string, b: string): Promise<boolean> {
+  // One process for both; git exits with 128 when it cannot name one of them, which leaves no two equal trees.
+  const { stdout } = await git(dir, ["rev-parse", `${a}^{tree}`, `${b}^{tree}`, "--"], { okExitCodes: [128] });
+  const [treeA, treeB] = stdout.toString("utf8").split("\n");
+  return treeA !== undefined && /^[0-9a-f]{40,64}$/.test(treeA) && treeA === treeB;
+}
+
 /** The commits `to` has that `from` does not, with the newest `limit` of them; `undefined` when `from` is not in the repo. */
 export async function commitsBetween(dir: string, from: string, to: string, limit: number): Promise<CommitRange | undefined> {
   if ((await existingCommit(dir, from)) === undefined) return undefined;

@@ -3,8 +3,8 @@ import { messageOf } from "../../infra/errors.ts";
 
 /**
  * Which tasks wait to hear that the branch of the task that handed them their work moved (§4.4, ADR-144): the handing
- * task's turn ends, or a subtask's session starts, and a subtask whose last read commit differs from that branch's head
- * is asked to call `get_handoff`, which clears the wait. Memory only: git keeps the facts, so a session start after a
+ * task's turn ends, or a subtask's session starts, and a subtask whose last read commit holds other files than that
+ * branch's newest commit besides its round commits (ADR-168) is asked to call `get_handoff`, which clears the wait. Memory only: git keeps the facts, so a session start after a
  * daemon restart finds the move again.
  */
 
@@ -12,7 +12,7 @@ import { messageOf } from "../../infra/errors.ts";
 export interface HandoffTasks {
   /** The tasks task `task` handed their work to. */
   handedTo(task: string): string[];
-  /** Whether the handing task's branch is at another commit than the one task `task` read last. */
+  /** Whether the handing task's branch, past its round commits, holds other files than the commit task `task` read last. */
   handoffMoved(task: string): Promise<boolean>;
   /** The handoff state of task `task`, whose head then counts as read. */
   readHandoff(task: string): Promise<TaskHandoffState | null>;
