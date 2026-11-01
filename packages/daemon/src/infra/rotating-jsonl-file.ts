@@ -2,7 +2,7 @@ import { appendFileSync, mkdirSync, renameSync, statSync } from "node:fs";
 import { dirname } from "node:path";
 
 /**
- * A JSONL file appended to with one rotation: the file of one log source (§4.2) and the MCP audit (§4.20). Writes are
+ * A JSONL file appended to with one rotation: the file of one log source (§4.2) and the MCP audit (§4.21). Writes are
  * buffered and appended in batches (`flush`), so that a noisy process does not write on every line. After the limit
  * the file becomes `<name>.1.jsonl` (the previous `.1` disappears), so it takes at most two limits. A failed write
  * (e.g. a file held by an antivirus) stays in the buffer until the next attempt.

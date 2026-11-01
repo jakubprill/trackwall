@@ -5,6 +5,7 @@ import { BoardItemId } from "../src/board.ts";
 import { TagName } from "../src/cards.ts";
 import { mcpTools } from "../src/mcp.ts";
 import { MiseTaskName } from "../src/mise.ts";
+import { RoutineName } from "../src/routines.ts";
 import { RepoId } from "../src/workspace.ts";
 
 /**
@@ -12,7 +13,7 @@ import { RepoId } from "../src/workspace.ts";
  * string with a pattern or a length limit is not enough (an endpoint's path has a pattern and carries a query); it
  * must be one of these, recognised by its definition, which `.describe()` and `.optional()` keep.
  */
-const IDENTIFIERS: z.ZodType[] = [RepoId, TaskId, SessionId, BoardItemId, TagName, MiseTaskName, TaskModel];
+const IDENTIFIERS: z.ZodType[] = [RepoId, TaskId, SessionId, BoardItemId, TagName, MiseTaskName, TaskModel, RoutineName];
 
 /** The schema under `.optional()`, `.default()`, `.nullable()` and `z.array()`. */
 function inner(schema: z.ZodType): z.ZodType {
