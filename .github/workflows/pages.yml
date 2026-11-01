@@ -1,6 +1,7 @@
 name: Documentation site
 
-# Publishes apps/docs on GitHub Pages (ADR-56) after a push to main that changes the site, its address or this file.
+# Publishes apps/docs on GitHub Pages (ADR-56), with the design gallery of apps/design under /design/ (ADR-176), after a push
+# to main that changes the site, the gallery, the site's address or this file.
 # ci.yml builds the same site on every PR, so a broken page is caught before the merge.
 # GitHub Pages must be on, with Source: GitHub Actions (a repo setting the owner makes).
 on:
@@ -8,6 +9,7 @@ on:
     branches: [main]
     paths:
       - apps/docs/**
+      - apps/design/**
       # The site's base path comes from the address agents get (TRACKWALL_DOCS_URL).
       - packages/protocol/src/docs-site.ts
       - .github/workflows/pages.yml
@@ -44,6 +46,10 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           bun-version: ${{ env.BUN_VERSION }}
       - run: pnpm --filter @trackwall/docs build
+      # The gallery is static pages that link each other relatively, so a copy is all it needs.
+      - run: |
+          mkdir -p apps/docs/dist/design
+          cp -r apps/design/index.html apps/design/tokens.css apps/design/mockups apps/docs/dist/design/
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: apps/docs/dist

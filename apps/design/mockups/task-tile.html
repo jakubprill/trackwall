@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Task tile in the grid</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<style>
+/* Layout: short proposal, then a working 6-tile grid (3×2) with the new tile header, menu and opaque cards. Dark only, like the app. */
+:root {
+  --bg: var(--background);
+  --fg: var(--foreground);
+  --card-glass: color-mix(in oklch, var(--overlay) 55%, transparent);
+  --danger: var(--destructive);
+  --term: oklch(0.12 0.008 240);
+  --sans: var(--font-sans);
+  --mono: var(--font-mono);
+}
+body { background: var(--bg); color: var(--fg); font-family: var(--sans); line-height: 1.5; }
+.wrap { max-width: 1280px; margin: 0 auto; padding-block: 28px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 24px; }
+h1 { font-size: 22px; margin: 0; text-wrap: balance; }
+h2 { font-size: 15px; margin: 0 0 8px; }
+.lede { color: var(--muted-foreground); max-width: 75ch; margin: 6px 0 0; }
+.label { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+.cols > div { min-width: 0; }
+ol, ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+code { font-family: var(--mono); font-size: 12px; color: var(--primary); }
+.q { border-left: 2px solid var(--warning); padding-left: 12px; }
+.toggle { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--muted-foreground); }
+.toggle button { background: none; border: 1px solid var(--border); color: var(--muted-foreground); border-radius: 999px; padding: 1px 10px; font: 12px var(--sans); cursor: pointer; }
+.toggle button[aria-pressed="true"] { color: var(--primary); border-color: var(--primary); }
+
+.scroller { overflow-x: auto; }
+.grid { width: 1180px; height: 600px; display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); grid-template-rows: repeat(2, minmax(0,1fr)); gap: 8px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.tile { position: relative; border: 1px solid var(--border); border-radius: 6px; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--term); }
+.tile.sel { box-shadow: 0 0 0 2px var(--primary); }
+.tile.wait { border-color: var(--warning); }
+.th { display: flex; align-items: center; gap: 6px; padding: 3px 6px; background: var(--overlay); border-bottom: 1px solid var(--border); font-size: 12px; min-width: 0; border-radius: 6px 6px 0 0; }
+.k { font-family: var(--mono); font-size: 10px; background: var(--secondary); color: var(--muted-foreground); border-radius: 3px; padding: 0 4px; flex-shrink: 0; }
+.tile.sel .k { background: var(--primary); color: var(--primary-foreground); }
+.repo { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 40px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.st { color: var(--muted-foreground); font-size: 11px; white-space: nowrap; }
+.task { color: var(--muted-foreground); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+.ib { background: none; border: 0; color: var(--muted-foreground); cursor: pointer; border-radius: 4px; height: 22px; min-width: 22px; display: inline-flex; align-items: center; justify-content: center; font: 13px var(--sans); flex-shrink: 0; }
+.ib:hover { background: var(--accent); color: var(--fg); }
+.ib:focus-visible, .act:focus-visible, .chip:focus-visible, .mi:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.chip { flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; font: 11px var(--sans); border-radius: 999px; padding: 0 7px; height: 20px; cursor: pointer; border: 1px solid var(--border); background: var(--secondary); color: var(--muted-foreground); white-space: nowrap; }
+.chip.warn { border-color: color-mix(in oklch, var(--warning) 55%, transparent); background: color-mix(in oklch, var(--warning) 14%, transparent); color: var(--warning); }
+.chip.ok { color: var(--success); }
+.tb { flex: 1; padding: 6px 8px; font: 11px/1.5 var(--mono); color: var(--muted-foreground); overflow: hidden; }
+.tb .p { color: var(--success); }
+.tb .hl { color: var(--fg); }
+
+/* cards over the terminal */
+.card { position: absolute; left: 4px; right: 4px; top: 30px; z-index: 10; max-height: calc(100% - 36px); overflow: auto; border-radius: 6px; border: 1px solid var(--border); box-shadow: 0 10px 30px oklch(0 0 0 / 50%); font-size: 12px; background: var(--overlay); }
+.glass .card { background: var(--card-glass); }
+.card header { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--border); font-weight: 600; }
+.card header .ib { margin-left: auto; }
+.card .body { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.card.warn header { color: var(--warning); }
+.file { font-family: var(--mono); font-size: 11px; color: var(--muted-foreground); }
+.row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.act { background: none; border: 1px solid var(--border); color: var(--fg); border-radius: 5px; padding: 2px 9px; font: 12px var(--sans); cursor: pointer; }
+.act.primary { border-color: var(--warning); color: var(--warning); }
+.act:hover { background: var(--accent); }
+.meta { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 11px; }
+.meta dt { color: var(--muted-foreground); }
+.meta dd { margin: 0; font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.menu { position: absolute; right: 4px; top: 28px; z-index: 15; width: 230px; background: var(--overlay); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 10px 30px oklch(0 0 0 / 50%); padding: 4px; font-size: 12px; }
+.glass .menu { background: var(--card-glass); }
+.menu .head { padding: 4px 8px 6px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.mi { display: flex; width: 100%; gap: 8px; align-items: center; background: none; border: 0; color: var(--fg); padding: 4px 8px; border-radius: 4px; font: 12px var(--sans); cursor: pointer; text-align: left; }
+.mi:hover { background: var(--accent); }
+.mi .sc { margin-left: auto; color: var(--muted-foreground); font: 10px var(--mono); }
+.sep { height: 1px; background: var(--border); margin: 4px 0; }
+.toast { position: absolute; left: 4px; right: 4px; top: 30px; z-index: 12; display: flex; gap: 8px; align-items: center; background: var(--overlay); border: 1px solid color-mix(in oklch, var(--warning) 55%, transparent); color: var(--warning); border-radius: 6px; padding: 4px 8px; font-size: 12px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="label">Trackwall · Sessions view · mockup · 2026-10-29</div>
+    <h1>A task tile among six sessions</h1>
+    <p class="lede">The tile header stays on one line. What needs your reaction gets its own yellow chip with a name in it, instead of a bare count of warnings. Other actions and information go into the ⋯ menu, so they take no room. Cards over the terminal are opaque.</p>
+  </header>
+
+  <section aria-label="Mockup">
+    <div class="toggle" style="margin-bottom:8px">
+      <span class="label">Card background</span>
+      <button id="opaque" aria-pressed="true">Opaque (new)</button>
+      <button id="glass" aria-pressed="false">As before, in a window with an effect</button>
+      <span>Click the chips, ⋯ and the buttons in the tiles. The grid has the size of a 1920 px screen with the list next to it.</span>
+    </div>
+    <div class="scroller"><div class="grid" id="grid"></div></div>
+  </section>
+
+  <section class="cols">
+    <div>
+      <h2>What changes</h2>
+      <ol>
+        <li><b>A “Trust mise” chip in the header</b> stays lit until the mise config is trusted. It does not vanish when the banner is closed. A click opens a small card: the changed files (foldable), “Trust this config” and “Open in VS Code”. No other task details.</li>
+        <li><b>Other warnings</b> (shared files, files not copied) stay under the ⚠ badge with a count, as before.</li>
+        <li><b>The ⋯ menu</b>: branch, port, model and age on top. Below: VS Code, Verify, Changes (opens the task alone, on its changes), Details, Stop or Resume.</li>
+        <li><b>Opaque cards.</b> A card used the panel background, which in a window with Mica/Acrylic is 55% opaque, so the terminal showed through the text. Cards over the terminal get a full background.</li>
+        <li><b>The Verify result</b> shows as a small chip (✓ or ✗), because it is short and important.</li>
+      </ol>
+    </div>
+    <div>
+      <h2>When the tile is narrow</h2>
+      <ul>
+        <li>First the task description hides (it stays in the tooltip), then the state text becomes a dot in the state colour.</li>
+        <li>The mise chip and ⚠ never hide. In a very narrow tile the chip shortens to “mise”.</li>
+        <li>Everything in the menu also has a shortcut in the single task view, so nothing is lost.</li>
+      </ul>
+      <h2 style="margin-top:16px">In code</h2>
+      <ul>
+        <li>UI only. The new chip uses the existing mise warning, and the trust card the existing <code>TaskMiseConfig</code>.</li>
+        <li>Unit tests for what goes into the header, and the grid E2E test where it touches it. A description on the Sessions page of the docs.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="q">
+    <h2>Decided</h2>
+    <p style="margin:0;color:var(--muted-foreground);font-size:13px">Always visible in the header: only “Trust mise”, ⚠ and the Verify result; VS Code is the first item of the menu. Built (<code>TaskTileNotices</code>, <code>lib/task-notices.ts</code>).</p>
+  </section>
+</div>
+
+<script>
+const tiles = [
+  { repo: "orders-api", task: "Add retry to payment client", state: "working", color: "var(--primary)", mise: true, branch: "task/payment-retry", port: 8113, model: "gpt-5", age: "12 min", verify: null },
+  { repo: "orders-api", task: "Fix flaky OrderMapperTest", state: "waiting for approval", color: "var(--warning)", wait: true, branch: "task/order-mapper", port: 8114, model: "default", age: "25 min", verify: "failed", warn: 1 },
+  { repo: "billing-service", task: "Move invoices to new schema", state: "idle", color: "var(--muted-foreground)", branch: "task/invoice-schema", port: 8115, model: "default", age: "1 h", verify: "passed" },
+  { repo: "web-shop", task: "Cart totals rounding", state: "asks a question", color: "var(--warning)", wait: true, mise: true, branch: "task/cart-rounding", port: 8116, model: "default", age: "8 min", verify: null },
+  { repo: "auth-gateway", task: "Log token refresh failures", state: "working", color: "var(--primary)", branch: "task/token-log", port: 8117, model: "default", age: "3 min", verify: null },
+  { repo: "billing-service", task: "Bump Spring Boot", state: "working", color: "var(--primary)", branch: "task/spring-boot", port: 8118, model: "default", age: "40 min", verify: null, warn: 1 },
+];
+let open = { tile: 0, what: "mise" }, selected = 0, trusted = new Set();
+
+const termText = (t) => t.wait && t.state.startsWith("waiting")
+  ? `<span class="p">●</span> Run shell command<br><span class="hl">./mvnw -q test -Dtest=OrderMapperTest</span><br><br>Do you want to run this command?<br><span class="hl">❯ 1. Yes</span><br>&nbsp; 2. Yes, and don't ask again<br>&nbsp; 3. No, tell Copilot what to do`
+  : t.state === "asks a question" ? `<span class="p">●</span> Which rounding mode should totals use?<br>&nbsp; HALF_UP keeps today's receipts.<br><br><span class="hl">❯</span> _`
+  : t.state === "idle" ? `<span class="p">●</span> Done. Schema moved, 14 tests pass.<br><br><span class="hl">❯</span> _`
+  : `<span class="p">●</span> Reading src/main/java/…/${t.repo.replace("-", "")}/Client.java<br><span class="p">●</span> Editing 2 files<br>&nbsp; + retry with backoff<br>&nbsp; + RetryPolicyTest`;
+
+function card(t, i) {
+  if (open.tile !== i) return "";
+  if (open.what === "mise") return `<div class="card warn" role="dialog" aria-label="mise config"><header>⚠ The agent changed the mise config<button class="ib" data-close aria-label="Close">✕</button></header><div class="body">
+    <details><summary class="file">changed mise.toml</summary><pre class="file" style="white-space:pre-wrap;margin:4px 0 0">[tasks.test]\nrun = "./mvnw -q test"\n[env]\nSPRING_PROFILES_ACTIVE = "local"</pre></details>
+    <span style="color:var(--muted-foreground);font-size:11px">mise tasks do not run in this worktree until you trust it. Read the files first.</span>
+    <div class="row"><button class="act primary" data-trust>Trust this config</button><button class="act">Open in VS Code</button></div></div></div>`;
+  if (open.what === "menu") return `<div class="menu" role="menu"><div class="head"><dl class="meta"><dt>branch</dt><dd>${t.branch}</dd><dt>port</dt><dd>${t.port}</dd><dt>model</dt><dd>${t.model}</dd><dt>started</dt><dd>${t.age} ago</dd></dl></div>
+    <button class="mi">VS Code</button><button class="mi">Verify${t.verify ? ` <span class="sc">${t.verify}</span>` : ""}</button><button class="mi">Changes <span class="sc">opens alone</span></button><button class="mi">Details</button><div class="sep"></div><button class="mi" style="color:var(--danger)">Stop</button></div>`;
+  if (open.what === "warn") return `<div class="card warn"><header>⚠ 1 warning<button class="ib" data-close aria-label="Close">✕</button></header><div class="body"><span>2 files also in “${t.repo === "orders-api" ? "Add retry to payment client" : "Move invoices to new schema"}”</span><span class="file">src/main/resources/application.yml<br>pom.xml</span><div class="row"><button class="act">Open that task</button></div></div></div>`;
+  if (open.what === "verify") return `<div class="card"><header>${t.verify === "passed" ? "✓ Verification passed" : "✗ Verification failed"}<button class="ib" data-close aria-label="Close">✕</button></header><div class="body"><span class="file">${t.verify === "passed" ? "mise run test · 1 min 12 s" : "mise run test · OrderMapperTest > maps discount FAILED"}</span><div class="row"><button class="act">Verify again</button><button class="act">Show log</button></div></div></div>`;
+  return "";
+}
+
+function render() {
+  const g = document.getElementById("grid"); g.innerHTML = "";
+  tiles.forEach((t, i) => {
+    const d = document.createElement("div");
+    d.className = "tile" + (i === selected ? " sel" : "") + (t.wait ? " wait" : "");
+    const mise = t.mise && !trusted.has(i) ? `<button class="chip warn" data-open="mise" title="The agent changed the mise config">⚠ Trust mise</button>` : "";
+    const warn = t.warn ? `<button class="chip warn" data-open="warn" aria-label="1 warning">⚠ 1</button>` : "";
+    const ver = t.verify ? `<button class="chip ${t.verify === "passed" ? "ok" : ""}" data-open="verify" style="${t.verify === "failed" ? "color:var(--danger)" : ""}" aria-label="Verification ${t.verify}">${t.verify === "passed" ? "✓" : "✗"} Verify</button>` : "";
+    d.innerHTML = `<div class="th"><span class="k">Alt ${i + 1}</span><span class="repo" title="${t.repo}">${t.repo}</span><span class="dot" style="background:${t.color}" title="${t.state}"></span><span class="task" title="${t.task}">${t.task}</span>${mise}${warn}${ver}<button class="ib" data-open="menu" aria-label="More">⋯</button><button class="ib" aria-label="Open alone">⤢</button><button class="ib" aria-label="Close">✕</button></div>
+      <div class="tb">${termText(t)}</div>${card(t, i)}`;
+    d.addEventListener("click", (e) => {
+      selected = i;
+      const b = e.target.closest("[data-open],[data-close],[data-trust]");
+      if (b?.dataset.open) open = open.tile === i && open.what === b.dataset.open ? { tile: -1 } : { tile: i, what: b.dataset.open };
+      else if (b?.hasAttribute("data-close")) open = { tile: -1 };
+      else if (b?.hasAttribute("data-trust")) { trusted.add(i); open = { tile: -1 }; }
+      else if (!e.target.closest(".card,.menu")) open = open.tile === i ? open : { tile: -1 };
+      render();
+    });
+    g.appendChild(d);
+  });
+}
+for (const [id, glass] of [["opaque", false], ["glass", true]]) document.getElementById(id).onclick = () => {
+  document.getElementById("grid").classList.toggle("glass", glass);
+  document.getElementById("opaque").setAttribute("aria-pressed", !glass);
+  document.getElementById("glass").setAttribute("aria-pressed", glass);
+};
+render();
+</script>
+</body>
+</html>

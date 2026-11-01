@@ -14,7 +14,8 @@
       "!**/*.json.tmp",
       "!apps/desktop/src-tauri/icons",
       "!pnpm-lock.yaml",
-      "!**/*.md"
+      "!**/*.md",
+      "!apps/design/mockups"
     ]
   },
   "formatter": {
