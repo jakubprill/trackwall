@@ -183,6 +183,16 @@ describe.skipIf(process.versions.bun === undefined)("pushing a task branch (real
       "Add the new state",
       "WIP round 1",
     ]);
+    // A push the remote refuses (a colleague's commit is on the branch there) leaves the branch with its round commits.
+    const before = gitIn(task.worktree, "rev-parse", "HEAD").trim();
+    const colleague = join(mkdtempSync(join(tmpdir(), "trackwall-colleague-")), "orders");
+    gitIn(daemon.projects, "clone", "-q", bare, colleague);
+    gitIn(colleague, "commit", "-q", "--allow-empty", "-m", "A colleague's commit");
+    gitIn(colleague, "push", "-q", "origin", `HEAD:refs/heads/${task.branch}`);
+    await expect(daemon.post(mergeRequestsApi.push, { task: task.id })).rejects.toThrow("rejected");
+    expect(gitIn(task.worktree, "rev-parse", "HEAD").trim()).toBe(before);
+    expect(gitIn(task.worktree, "status", "--porcelain")).toBe("");
+    gitIn(bare, "branch", "-q", "-D", task.branch);
 
     await daemon.post(mergeRequestsApi.push, { task: task.id });
 

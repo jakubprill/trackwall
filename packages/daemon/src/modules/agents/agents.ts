@@ -6,6 +6,7 @@ import {
   type DialogAnswer,
   type EnvironmentCheck,
   type HttpEndpoint,
+  inTurn,
   isSupervisor,
   type JavaNavigationSettings,
   type JavaNavigationStatus,
@@ -246,11 +247,8 @@ export class Agents {
     this.#rounds = new TaskRoundList({
       vcs: deps.vcs,
       path: join(deps.home, TASK_ROUNDS_FILE),
-      task: (id) => this.#tasks.find(id),
-      midTurn: (task) => {
-        const state = this.#sessions.runningOfTask(task)?.view()?.state?.state;
-        return state === "Working" || state === "Approval" || state === "Plan";
-      },
+      task: (id) => this.#tasks.roundTask(id),
+      midTurn: (task) => inTurn(this.#sessions.runningOfTask(task)?.view()?.state?.state),
       askToRead: (task) => this.#sessions.runningOfTask(task)?.askToRead(),
       log: deps.log,
     });
@@ -647,9 +645,9 @@ export class Agents {
     return this.#rounds.undo(id, round);
   }
 
-  /** The task's round commits the remote does not have yet are squashed, right before the user's push (ADR-168). */
-  squashRoundsForPush(id: string): Promise<void> {
-    return this.#rounds.squashForPush(id);
+  /** The user's push of the task branch, with the round commits the remote does not have yet squashed (ADR-168). */
+  pushWithRoundsSquashed(id: string, push: (source: string | undefined) => Promise<void>): Promise<void> {
+    return this.#rounds.pushWithRoundsSquashed(id, push);
   }
 
   /** Other tasks of the same repo that change the same files (ADR-44). */

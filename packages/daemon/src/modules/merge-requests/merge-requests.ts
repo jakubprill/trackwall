@@ -27,14 +27,15 @@ const LOOKUP_CACHE_MS = 15_000;
 interface MergeRequestTasks {
   task(id: string): Task;
   taskChangesSummary(id: string): Promise<{ commits: number; uncommitted: number }>;
-  squashRoundsForPush(id: string): Promise<void>;
+  /** Runs `push` with the task's round commits squashed (`source`, `undefined` for none) and moves the branch there after it. */
+  pushWithRoundsSquashed(id: string, push: (source: string | undefined) => Promise<void>): Promise<void>;
 }
 
 /** What the module needs from `vcs`: the main remote as a project on a repo host, the task branch against it, and its push. */
 interface MergeRequestVcs {
   hostedProject(dir: string, hosts: readonly RepoHost[]): Promise<HostedProject | null>;
   branchOnRemote(dir: string, branch: string, base: string): Promise<BranchOnRemote | null>;
-  pushBranch(dir: string, branch: string): Promise<void>;
+  pushBranch(dir: string, branch: string, source?: string): Promise<void>;
 }
 
 /** What the module needs from the repo hosts in `vcs`: the merge request from a branch, and the new merge request form. */
@@ -93,8 +94,9 @@ export class MergeRequests {
       // Only to a repo host the user named (or GitHub), the one the panel shows: never to a path or host the agent set.
       if (!project) throw unknownHost(task);
       // The round commits go only as part of the commit after them: the merge request shows the agent's commits.
-      await this.#deps.tasks.squashRoundsForPush(id);
-      await asRepoUnavailable(task, this.#deps.vcs.pushBranch(task.worktree, task.branch));
+      await this.#deps.tasks.pushWithRoundsSquashed(id, (source) =>
+        asRepoUnavailable(task, this.#deps.vcs.pushBranch(task.worktree, task.branch, source)),
+      );
     } finally {
       this.#pushing.delete(id);
       this.#lookups.delete(id);

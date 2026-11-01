@@ -53,33 +53,49 @@ type StoredRounds = z.infer<typeof StoredRounds>;
 
 const RoundsFile = z.object({ tasks: z.array(StoredRounds) });
 
-/** Where a task worktree is for a round (`RoundWorktree` in `vcs`). */
+// The types below repeat the shape of the types from `vcs` (`RoundPlace`, `RoundWorktree`, `SquashedRounds`), because a
+// module does not import a neighbouring module (§4); the compiler checks they match where the facade passes `Vcs`.
+
+/** A task worktree: its directory, the repo root it was made from, and the task branch. */
+interface RoundPlace {
+  worktree: string;
+  repoDir: string;
+  branch: string;
+}
+
+/** Where a task worktree is for a round. */
 interface RoundWorktree {
   head: string | null;
   onBranch: boolean;
   uncommitted: number;
-  operation: string | null;
+  blocker: string | null;
+}
+
+/** The squashed history, not on the branch yet. */
+interface SquashedRounds {
+  from: string;
+  to: string;
 }
 
 /** What rounds need from `vcs` (`round-commits.ts`); wired in the facade. */
 export interface RoundsVcs {
-  roundWorktree(dir: string, branch: string): Promise<RoundWorktree>;
-  commitRound(dir: string, message: string): Promise<string>;
+  roundWorktree(place: RoundPlace): Promise<RoundWorktree>;
+  commitRound(place: RoundPlace, message: string, keepOut: readonly string[]): Promise<string>;
   roundChanges(dir: string, from: string, to: string, maxPatchBytes: number): Promise<WorkingTreeChanges>;
-  resetRound(dir: string, to: string): Promise<void>;
-  squashRounds(dir: string, branch: string, base: string, roundCommits: ReadonlySet<string>, message: string): Promise<string | null>;
+  resetRound(place: RoundPlace, head: string, to: string): Promise<void>;
+  squashRounds(place: RoundPlace, base: string, roundCommits: ReadonlySet<string>, message: string): Promise<SquashedRounds | null>;
+  moveBranch(place: RoundPlace, squashed: SquashedRounds): Promise<void>;
   pushedTip(dir: string, branch: string): Promise<string | null>;
   isAncestor(dir: string, ancestor: string, commit: string): Promise<boolean>;
 }
 
-/** The task a round belongs to, as the task list has it. */
-export interface RoundTask {
+/** The task a round belongs to, as the task list has it, with the files copied into its worktree (ADR-61). */
+export interface RoundTask extends RoundPlace {
   id: string;
-  worktree: string;
-  branch: string;
   base: string;
   title: string | null;
   prompt: string;
+  included: { files: readonly string[] };
 }
 
 export interface TaskRoundListDeps {
@@ -87,7 +103,7 @@ export interface TaskRoundListDeps {
   path: string;
   /** The task, or `undefined` once it ended. */
   task: (id: string) => RoundTask | undefined;
-  /** The task's running session is in the middle of a turn (working, or asking for an approval or a plan). */
+  /** The task's running session is in the middle of a turn (`inTurn`). */
   midTurn: (task: string) => boolean;
   /** Asks the task's running session, if any, to read what waits for it. */
   askToRead: (task: string) => void;
@@ -116,7 +132,7 @@ export class TaskRoundList {
   turnStarted(task: string): Promise<void> {
     return this.#run(task, "reading the worktree at the start of a turn", async (work) => {
       const state = this.#stateOf(task);
-      const now = await this.#deps.vcs.roundWorktree(work.worktree, work.branch);
+      const now = await this.#deps.vcs.roundWorktree(work);
       const moved = state.head !== null && now.head !== state.head;
       this.#turns.set(task, { from: state.head ?? now.head, outside: moved || now.uncommitted > 0 });
     });
@@ -162,14 +178,14 @@ export class TaskRoundList {
 
   /** HEAD after the round commit of what the turn left uncommitted (`null` when it left nothing), or why there is none. */
   async #commitLeftovers(work: RoundTask, round: number): Promise<{ head: string; roundCommit: string | null } | { problem: string }> {
-    const now = await this.#deps.vcs.roundWorktree(work.worktree, work.branch);
+    const now = await this.#deps.vcs.roundWorktree(work);
     const problem = roundProblem(now);
     if (problem !== null) return { problem };
     if (now.head === null) return { problem: "the task branch has no commit" };
     if (now.uncommitted === 0) return { head: now.head, roundCommit: null };
     try {
-      const head = await this.#deps.vcs.commitRound(work.worktree, roundCommitMessage(round));
-      return { head, roundCommit: head };
+      const head = await this.#deps.vcs.commitRound(work, roundCommitMessage(round), work.included.files);
+      return { head, roundCommit: head === now.head ? null : head };
     } catch (err) {
       return { problem: `the round could not be committed: ${firstLine(messageOf(err))}` };
     }
@@ -201,7 +217,7 @@ export class TaskRoundList {
       if (blocked !== null) throw new DomainError("bad_request", blocked);
       const round = state.rounds.find((r) => r.number === number);
       if (round === undefined) throw new Error(`round ${number} of task ${task} is not kept`);
-      await this.#deps.vcs.resetRound(work.worktree, round.from).catch((err: unknown) => {
+      await this.#deps.vcs.resetRound(work, round.to, round.from).catch((err: unknown) => {
         throw new DomainError("repo_unavailable", `undoing round ${number}: ${messageOf(err)}`);
       });
       const undoneAt = new Date().toISOString();
@@ -219,25 +235,44 @@ export class TaskRoundList {
   }
 
   /**
-   * Squashes the task's round commits the remote does not have yet, right before the user's push (§4.12): `bad_request`
-   * when the history cannot be squashed (a merge commit), so nothing is pushed with round commits in it.
+   * Runs the user's push (§4.12) with the task's round commits the remote does not have yet squashed: `push` gets the
+   * squashed commit (`undefined` when there is none to squash), and only once it succeeded does the branch move there, so a
+   * failed push leaves the branch and its rounds as they were. Refused in the middle of a turn, when the agent may commit.
    */
-  squashForPush(task: string): Promise<void> {
+  pushWithRoundsSquashed(task: string, push: (source: string | undefined) => Promise<void>): Promise<void> {
     const work = this.#task(task);
     return this.#chain.run(task, async () => {
       const state = this.#stateOf(task);
-      if (state.roundCommits.length === 0) return;
-      const before = (await this.#deps.vcs.roundWorktree(work.worktree, work.branch)).head;
-      const head = await this.#deps.vcs
-        .squashRounds(work.worktree, work.branch, work.base, new Set(state.roundCommits), squashedSubject(work))
+      if (state.roundCommits.length === 0) return push(undefined);
+      if (this.#deps.midTurn(task))
+        throw new DomainError(
+          "bad_request",
+          "the agent is in the middle of a turn: push once it waits for you, so its round is in the push",
+        );
+      const squashed = await this.#deps.vcs
+        .squashRounds(work, work.base, new Set(state.roundCommits), squashedSubject(work))
         .catch((err: unknown) => {
-          throw new DomainError("bad_request", `the round commits cannot be squashed before the push: ${messageOf(err)}`);
+          throw new DomainError("repo_unavailable", `the round commits cannot be squashed before the push: ${messageOf(err)}`);
         });
-      if (head === null) return;
-      const moved = (commit: string | null) => (commit !== null && commit === before ? head : commit);
+      if (squashed === null) return push(undefined);
+      // The branch moves before the push, so a turn that starts during it builds on the squashed history, and back
+      // when the push fails, unless the agent committed meanwhile, which keeps the squashed history the push would take.
+      await this.#deps.vcs.moveBranch(work, squashed).catch((err: unknown) => {
+        throw new DomainError("repo_unavailable", `the task branch moved while its round commits were squashed: ${messageOf(err)}`);
+      });
+      try {
+        await push(squashed.to);
+      } catch (err) {
+        await this.#deps.vcs.moveBranch(work, { from: squashed.to, to: squashed.from }).catch((back: unknown) => {
+          this.#deps.log(`task ${task}: the branch stays squashed after the failed push: ${messageOf(back)}`);
+        });
+        throw err;
+      }
+      const moved = (commit: string | null) => (commit === squashed.from ? squashed.to : commit);
       const turn = this.#turns.get(task);
       if (turn !== undefined) this.#turns.set(task, { ...turn, from: moved(turn.from) });
-      this.#save(task, { ...state, head: moved(state.head), roundCommits: [], squashedThrough: state.next - 1 });
+      const now = this.#stateOf(task);
+      this.#save(task, { ...now, head: moved(now.head), roundCommits: [], squashedThrough: state.next - 1 });
     });
   }
 
@@ -281,7 +316,7 @@ export class TaskRoundList {
     if (round.outside)
       return `Round ${n} started with changes made outside the agent's rounds (by hand, or before Trackwall saw the turn start): undoing it would drop them too.`;
     const { vcs } = this.#deps;
-    const now = await vcs.roundWorktree(work.worktree, work.branch);
+    const now = await vcs.roundWorktree(work);
     const problem = roundProblem(now);
     if (problem !== null) return `Round ${n} cannot be undone now: ${problem}.`;
     if (now.head !== round.to || now.uncommitted > 0)
@@ -333,7 +368,7 @@ export class TaskRoundList {
 
 /** Why the worktree cannot take a round commit or an undo now; `null` when it can. */
 function roundProblem(now: RoundWorktree): string | null {
-  if (now.operation !== null) return `${now.operation} is in progress in the worktree`;
+  if (now.blocker !== null) return now.blocker;
   if (!now.onBranch) return "HEAD is not on the task branch";
   return null;
 }

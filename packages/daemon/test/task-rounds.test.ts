@@ -123,5 +123,12 @@ describe.skipIf(process.versions.bun === undefined)("task rounds (ADR-168; real 
     expect(second.blocked).toBe(
       "Round 2 started with changes made outside the agent's rounds (by hand, or before Trackwall saw the turn start): undoing it would drop them too.",
     );
+
+    // While the agent is in a turn again, here waiting for an approval, nothing is undone.
+    await waitFor(daemon.facade.agents, session, (s) => s.state?.state === "Input", "the end of the second turn");
+    await new Promise((r) => setTimeout(r, 1000));
+    terminal.attachment.input("once more\r");
+    await waitFor(daemon.facade.agents, session, (s) => s.state?.state === "Approval", "the third turn's approval");
+    expect((await rounds(task.id)).blocked).toBe("The agent is in the middle of a turn: undo once it waits for you.");
   }, 60_000);
 });

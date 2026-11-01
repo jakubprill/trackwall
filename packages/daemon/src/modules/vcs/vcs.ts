@@ -52,7 +52,17 @@ import {
 } from "./parse.ts";
 import { pathKey } from "./path-key.ts";
 import { remoteAddress } from "./remote.ts";
-import { commitRound, pushedTip, resetRound, roundChanges, roundWorktree, squashRounds } from "./round-commits.ts";
+import {
+  commitRound,
+  moveBranch,
+  pushedTip,
+  type RoundPlace,
+  resetRound,
+  roundChanges,
+  roundWorktree,
+  type SquashedRounds,
+  squashRounds,
+} from "./round-commits.ts";
 import { StatusMemo, type TimedStatus } from "./status-memo.ts";
 import { syncRepo } from "./sync.ts";
 import { addWorktree, defaultBase, deleteBranch, pendingWork, removeWorktree } from "./worktree.ts";
@@ -196,8 +206,8 @@ export class Vcs {
    * Pushes a task branch to the main remote (ADR-77), in the same queue as sync: a fetch and a push in one `.git` both
    * write the remote-tracking refs.
    */
-  async pushBranch(dir: string, branch: string): Promise<void> {
-    return this.syncing.run(await this.commonDir(dir), () => pushBranch(dir, branch));
+  async pushBranch(dir: string, branch: string, source?: string): Promise<void> {
+    return this.syncing.run(await this.commonDir(dir), () => pushBranch(dir, branch, source));
   }
 
   // Local config (ADR-86): what a repo tracks or ignores, ignoring in one clone, and the local config store's commits and push.
@@ -229,13 +239,24 @@ export class Vcs {
     return worktreeChanges(dir, base, maxPatchBytes, paths, await this.scratch());
   }
 
-  // Task rounds (ADR-168, `round-commits.ts`): the agents module runs them one after another per task.
+  // Task rounds (ADR-168, `round-commits.ts`): the agents module runs one task's steps one after another, and the writes
+  // to a worktree and its branch go in the repo's queue of worktree changes.
   readonly roundWorktree = roundWorktree;
-  readonly commitRound = commitRound;
   readonly roundChanges = roundChanges;
-  readonly resetRound = resetRound;
   readonly squashRounds = squashRounds;
   readonly pushedTip = pushedTip;
+
+  commitRound(place: RoundPlace, message: string, keepOut: readonly string[]): Promise<string> {
+    return this.serialWorktreeOp(place.repoDir, () => commitRound(place, message, keepOut));
+  }
+
+  resetRound(place: RoundPlace, head: string, to: string): Promise<void> {
+    return this.serialWorktreeOp(place.repoDir, () => resetRound(place, head, to));
+  }
+
+  moveBranch(place: RoundPlace, squashed: SquashedRounds): Promise<void> {
+    return this.serialWorktreeOp(place.repoDir, () => moveBranch(place, squashed));
+  }
 
   addWorktree(repoDir: string, path: string, branch: string, commit: string): Promise<void> {
     return this.serialWorktreeOp(repoDir, () => addWorktree(repoDir, path, branch, commit));
@@ -253,7 +274,7 @@ export class Vcs {
    * Worktree changes in one repo one after another: two simultaneous `worktree add` fight over locks in `.git`. Separate from
    * sync, because a fetch takes minutes and does not change the worktree registry or task branches.
    */
-  private async serialWorktreeOp(repoDir: string, job: () => Promise<void>): Promise<void> {
+  private async serialWorktreeOp<T>(repoDir: string, job: () => Promise<T>): Promise<T> {
     // A repo that no longer exists has no locks to guard (nor a `.git` to take the key from).
     if (!existsSync(repoDir)) return job();
     return this.worktreeOps.run(await this.commonDir(repoDir), job);
