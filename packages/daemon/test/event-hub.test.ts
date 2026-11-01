@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type CardWarmupProgress, DaemonEvent, type RunningMiseTask, type SessionList } from "@trackwall/protocol";
+import { type CardWarmupProgress, DaemonEvent, type RunningMiseTask, type SessionList, type TaskOutcome } from "@trackwall/protocol";
 import { EventHub } from "../src/api/event-hub.ts";
 import type { Facade } from "../src/facade.ts";
 
@@ -21,6 +21,7 @@ function fakeFacade(state: {
   revision?: () => number;
   warmup?: () => CardWarmupProgress;
   board?: () => number;
+  outcomes?: () => TaskOutcome[];
 }): Facade {
   return {
     agents: { sessionsWithoutCycle: state.sessions },
@@ -28,6 +29,7 @@ function fakeFacade(state: {
     repoWatch: { state: () => ({ startedAt: STARTED_AT, revision: state.revision?.() ?? 0 }) },
     cards: { warmupProgress: state.warmup ?? (() => IDLE_WARMUP) },
     board: { revision: state.board ?? (() => 0) },
+    taskOutcomes: state.outcomes ?? (() => []),
   } as unknown as Facade;
 }
 
@@ -56,10 +58,11 @@ describe("the /ws event source", () => {
       { type: "repos.changed", payload: { startedAt: STARTED_AT, revision: 0 } },
       { type: "cards.warmup.changed", payload: IDLE_WARMUP },
       { type: "board.changed", payload: { revision: 0 } },
+      { type: "task-outcomes.changed", payload: [] },
     ]);
 
     await tick();
-    expect(client.events).toHaveLength(5);
+    expect(client.events).toHaveLength(6);
 
     sessions = {
       ...EMPTY,
@@ -75,7 +78,7 @@ describe("the /ws event source", () => {
       ],
     };
     await tick();
-    expect(client.events.slice(5)).toEqual([{ type: "sessions.changed", payload: sessions }]);
+    expect(client.events.slice(6)).toEqual([{ type: "sessions.changed", payload: sessions }]);
     unsubscribe();
   });
 
@@ -86,7 +89,7 @@ describe("the /ws event source", () => {
     const unsubscribeFirst = hub.subscribe(first.listener);
     const unsubscribeSecond = hub.subscribe(second.listener);
     expect(second.events).toEqual(first.events);
-    expect(first.events).toHaveLength(5);
+    expect(first.events).toHaveLength(6);
     unsubscribeFirst();
     unsubscribeSecond();
   });
@@ -118,17 +121,26 @@ describe("the /ws event source", () => {
       { type: "repos.changed", payload: { startedAt: STARTED_AT, revision: 0 } },
       { type: "cards.warmup.changed", payload: IDLE_WARMUP },
       { type: "board.changed", payload: { revision: 0 } },
+      { type: "task-outcomes.changed", payload: [] },
     ]);
     unsubscribe();
     unsubscribeLate();
   });
 
-  test("a new repo revision, the warm-up progress and a board change reach the listener as their own events", async () => {
+  test("a new repo revision, the warm-up progress, a board change and a task outcome reach the listener as their own events", async () => {
     let revision = 0;
     let warmup = IDLE_WARMUP;
     let board = 0;
+    let outcomes: TaskOutcome[] = [];
     const hub = new EventHub({
-      facade: fakeFacade({ sessions: () => EMPTY, running: () => [], revision: () => revision, warmup: () => warmup, board: () => board }),
+      facade: fakeFacade({
+        sessions: () => EMPTY,
+        running: () => [],
+        revision: () => revision,
+        warmup: () => warmup,
+        board: () => board,
+        outcomes: () => outcomes,
+      }),
       log: () => {},
     });
     const client = collect();
@@ -137,12 +149,14 @@ describe("the /ws event source", () => {
     revision = 1;
     warmup = { running: true, done: 3, total: 10 };
     board = 1;
+    outcomes = [{ task: "3f2a9c1e-0000-4000-8000-000000000000", repo: "shop", verification: "passed", mergeRequest: null }];
     await tick();
 
-    expect(client.events.slice(5)).toEqual([
+    expect(client.events.slice(6)).toEqual([
       { type: "repos.changed", payload: { startedAt: STARTED_AT, revision: 1 } },
       { type: "cards.warmup.changed", payload: { running: true, done: 3, total: 10 } },
       { type: "board.changed", payload: { revision: 1 } },
+      { type: "task-outcomes.changed", payload: outcomes },
     ]);
     unsubscribe();
   });

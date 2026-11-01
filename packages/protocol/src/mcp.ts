@@ -999,7 +999,8 @@ export const mcpTools = {
       "Read what happened to the work you delegated since your last call, oldest first: for each task you proposed (the " +
       "supervisor: any supervisor proposed), turn_ended (its session finished a turn and waits; read its summary and " +
       `${GET_SESSION}), error, exited, result_reported (with the summary), verified (passed, failed or cancelled with ` +
-      "a message), proposal_rejected (with the user's reason), repo_removed (the user approved your " +
+      "a message), pipeline_failed (the pipeline of the merge request from its branch failed: links to both and the jobs " +
+      "that failed it; read a job's log with your MCP server for the repo host, if you have one), proposal_rejected (with the user's reason), repo_removed (the user approved your " +
       `${PROPOSE_FOLDER_ACTION}; movedTo is where the repo went), question (the task's agent asks you something with ` +
       `${ASK_PROPOSER}: answer it with ${SEND_MESSAGE}, or tell the user when it is theirs to decide), and, for the supervisor, handed_over (the user handed it ` +
       "a task they had started, which it follows and may message from now on). A turn the user drove themselves in the task's session " +
