@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync } from "node:fs";
+import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
@@ -14,7 +15,7 @@ import {
 import { APPLY_UPDATE_COMMAND, CONTAINER_COMMAND, CONTAINER_START } from "./args.ts";
 import { writeFileAtomic } from "./atomic-write.ts";
 import { runningSupervisor } from "./container-supervisor.ts";
-import { isAlive, probeRunningDaemon, readDaemonFile } from "./discovery.ts";
+import { isAlive, probeRunningDaemon } from "./discovery.ts";
 import { download } from "./download.ts";
 import { messageOf } from "./errors.ts";
 import { trustedFields, verifyMinisign } from "./minisign.ts";
@@ -82,41 +83,47 @@ function containerArch(): LinuxArch {
   return arch;
 }
 
-/** The answer of `trackwall-container update`: starts the background process unless there is nothing to do. */
-export async function containerUpdate(o: { home: string; port: number; version: string; target: string }): Promise<ContainerUpdateResult> {
-  const fail = (code: "update-running" | "update-failed", message: string): ContainerUpdateResult => ({
-    ok: false,
-    version: o.version,
-    error: { code, message },
-  });
+type UpdateRequest = { home: string; port: number; version: string; target: string };
+
+/** The answer of `trackwall-container update`, never an exception: starts the background process unless there is nothing to do. */
+export async function containerUpdate(o: UpdateRequest): Promise<ContainerUpdateResult> {
+  try {
+    return await startUpdate(o);
+  } catch (err) {
+    return { ok: false, version: o.version, error: { code: "update-failed", message: messageOf(err) } };
+  }
+}
+
+async function startUpdate(o: UpdateRequest): Promise<ContainerUpdateResult> {
   const running = await probeRunningDaemon(o.home);
   if (running?.version === o.target) return { ok: true, version: o.version, status: "current", target: o.target };
+  // The background process claims the lock itself; two calls in the same instant both answer `updating`, and the second
+  // process finds the lock taken and says so in the log (ADR-165).
   if (pidFileHolder(join(binDir(o.home), UPDATE_PID_FILE), UPDATE_ARGS) !== undefined) {
-    return fail("update-running", "another update is in progress; see logs/daemon.log");
+    return {
+      ok: false,
+      version: o.version,
+      error: { code: "update-running", message: "another update is in progress; see logs/daemon.log" },
+    };
   }
-  try {
-    containerArch();
-    mkdirSync(binDir(o.home), { recursive: true, mode: 0o700 });
-    const { exec, args } = selfCommand([CONTAINER_COMMAND, APPLY_UPDATE_COMMAND, o.target, "--port", String(o.port), "--home", o.home]);
-    await new Promise<void>((resolve, reject) => {
-      const child = spawn(exec, args, { cwd: homedir(), detached: true, stdio: "ignore" });
-      child.once("error", reject);
-      child.once("spawn", () => {
-        child.unref();
-        resolve();
-      });
+  containerArch();
+  mkdirSync(binDir(o.home), { recursive: true, mode: 0o700 });
+  const { exec, args } = selfCommand([...UPDATE_ARGS, o.target, "--port", String(o.port), "--home", o.home]);
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(exec, args, { cwd: homedir(), detached: true, stdio: "ignore" });
+    child.once("error", reject);
+    child.once("spawn", () => {
+      child.unref();
+      resolve();
     });
-  } catch (err) {
-    return fail("update-failed", err instanceof Error ? err.message : String(err));
-  }
+  });
   return { ok: true, version: o.version, status: "updating", target: o.target };
 }
 
-/** Downloads, checks and unpacks a version into `bin/<version>/`, unless it is there already. */
+/** Downloads, checks and unpacks a version into `bin/<version>/`; a folder already there is replaced, since nothing vouches for it. */
 async function fetchVersion(home: string, target: string, source: UpdateSource, note: (msg: string) => void): Promise<string> {
   const dest = join(binDir(home), target);
   const binary = join(dest, "trackwall-daemon");
-  if (existsSync(binary) && (await reportedVersion(binary)) === target) return binary;
   const work = join(binDir(home), `${target}.download`);
   rmSync(work, { recursive: true, force: true });
   mkdirSync(work, { recursive: true, mode: 0o700 });
@@ -165,17 +172,34 @@ async function waitUntil(check: () => Promise<boolean> | boolean, timeoutMs: num
   return check();
 }
 
-/** Stops the daemon and its supervisor gracefully: the supervisor passes the signal on, and ends once the daemon has. */
-async function stopRunning(home: string): Promise<void> {
+/**
+ * Stops the daemon and its supervisor gracefully: the supervisor passes the signal on, and ends once the daemon has. A
+ * daemon without a supervisor is signalled only when it answers for the state directory, so a stale `daemon.json` whose
+ * PID now belongs to another process is not. Stopped means both gone and the port free (§1.3).
+ */
+async function stopRunning(home: string, port: number): Promise<void> {
   const supervisor = runningSupervisor(home);
-  const daemon = readDaemonFile(home);
-  const pid = supervisor ?? (daemon !== undefined && isAlive(daemon.pid) ? daemon.pid : undefined);
-  if (pid !== undefined) process.kill(pid, "SIGTERM");
+  const daemon = (await probeRunningDaemon(home))?.file;
+  const pid = supervisor ?? daemon?.pid;
+  try {
+    if (pid !== undefined) process.kill(pid, "SIGTERM");
+  } catch (err) {
+    // Gone between the look and the signal: that is the stop asked for.
+    if ((err as NodeJS.ErrnoException).code !== "ESRCH") throw err;
+  }
   const stopped = await waitUntil(
-    () => runningSupervisor(home) === undefined && (daemon === undefined || !isAlive(daemon.pid)),
+    async () => runningSupervisor(home) === undefined && (daemon === undefined || !isAlive(daemon.pid)) && (await portFree(port)),
     STOP_TIMEOUT_MS,
   );
-  if (!stopped) throw new Error("the running daemon did not stop within a minute");
+  if (!stopped) throw new Error(`the running daemon did not stop and free port ${port} within a minute`);
+}
+
+function portFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = createServer();
+    server.once("error", () => resolve(false));
+    server.listen(port, "127.0.0.1", () => server.close(() => resolve(true)));
+  });
 }
 
 /** Starts `binary`'s supervised daemon and waits until it answers as `version`; a start that reports a failure ends the wait. */
@@ -241,26 +265,43 @@ async function switchVersion(o: ApplyUpdateOptions): Promise<UpdateOutcome> {
   let binary: string;
   try {
     binary = await fetchVersion(o.home, o.target, o.source, o.note);
-    o.note(`stopping ${o.self.version} to start ${o.target}`);
-    await stopRunning(o.home);
   } catch (err) {
     o.note(`the update to ${o.target} failed, ${o.self.version} stays: ${messageOf(err)}`);
     return "failed";
   }
+  // From the first signal on, every way out ends in a start: of the new version, or of this one.
+  o.note(`stopping ${o.self.version} to start ${o.target}`);
+  let started = false;
   try {
+    await stopRunning(o.home, o.port);
     setCurrent(o.home, o.target);
-    if (await startAndWait({ home: o.home, port: o.port, binary, prefix: [], version: o.target })) {
-      o.note(`updated to ${o.target}`);
-      prune(o.home, [o.target, previous]);
-      return "updated";
-    }
-    o.note(`${o.target} did not answer within a minute; going back to ${o.self.version}`);
+    started = await startAndWait({ home: o.home, port: o.port, binary, prefix: [], version: o.target });
+    if (!started) o.note(`${o.target} did not answer within a minute; going back to ${o.self.version}`);
   } catch (err) {
     o.note(`${o.target} did not start (${messageOf(err)}); going back to ${o.self.version}`);
   }
-  // Whatever the new version left running goes, and the version this process runs comes back.
-  await stopRunning(o.home).catch((err: unknown) => o.note(messageOf(err)));
-  setCurrent(o.home, previous);
+  if (!started) return rollBack(o, previous);
+  o.note(`updated to ${o.target}`);
+  try {
+    prune(o.home, [o.target, previous]);
+  } catch (err) {
+    o.note(`old versions in bin/ stay: ${messageOf(err)}`);
+  }
+  return "updated";
+}
+
+/** Whatever the new version left running goes, and the version this process runs comes back. */
+async function rollBack(o: ApplyUpdateOptions, previous: string | undefined): Promise<UpdateOutcome> {
+  try {
+    await stopRunning(o.home, o.port);
+  } catch (err) {
+    o.note(`what ${o.target} started may still be running: ${messageOf(err)}`);
+  }
+  try {
+    setCurrent(o.home, previous);
+  } catch (err) {
+    o.note(`bin/current could not go back to ${previous ?? "the Feature's version"}: ${messageOf(err)}`);
+  }
   const { exec, args } = o.self.command;
   const back = await startAndWait({ home: o.home, port: o.port, binary: exec, prefix: args, version: o.self.version }).catch(() => false);
   o.note(back ? `back on ${o.self.version}` : `${o.self.version} did not answer either; run trackwall-container start`);

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -7,7 +8,7 @@ import { pathToFileURL } from "node:url";
 import { linuxArchiveName, TRACKWALL_RELEASES_URL } from "@trackwall/protocol";
 import { parseCommandLine } from "../src/infra/args.ts";
 import { supervisorPidFile } from "../src/infra/container-supervisor.ts";
-import { applyUpdate, binDir, CURRENT_FILE, currentVersion } from "../src/infra/container-update.ts";
+import { applyUpdate, binDir, CURRENT_FILE, containerUpdate, currentVersion } from "../src/infra/container-update.ts";
 import { readDaemonFile } from "../src/infra/discovery.ts";
 import { trustedFields, verifyMinisign } from "../src/infra/minisign.ts";
 import { selfCommand } from "../src/infra/self-command.ts";
@@ -40,6 +41,17 @@ describe("checking a release signature (ADR-165)", () => {
       "the trusted comment does not match the signature",
     );
     expect(() => verifyMinisign({ pubkey: minisignKey().pubkey, signature, data })).toThrow("the signature was made with another key");
+  });
+
+  test("a signature over the file itself rather than its hash is refused, so the hash cannot pass for the file", () => {
+    const lines = Buffer.from(signature, "base64").toString().split("\n");
+    const sig = Buffer.from(lines[1] ?? "", "base64");
+    sig.write("Ed", 0, "latin1");
+    lines[1] = sig.toString("base64");
+    const hash = createHash("blake2b512").update(data).digest();
+    expect(() => verifyMinisign({ pubkey, signature: Buffer.from(lines.join("\n")).toString("base64"), data: hash })).toThrow(
+      'unsupported signature algorithm "Ed"',
+    );
   });
 
   test("the key compiled into the daemon is the one the app's updater trusts, and releases are where its updates are", () => {
@@ -146,6 +158,12 @@ describe.skipIf(process.platform === "win32")("trackwall-container update (ADR-1
       const now = readDaemonFile(home);
       expect(now?.pid).not.toBe(old.pid);
       expect(now?.port).toBe(port);
+      expect(await containerUpdate({ home, port, version: VERSION, target: VERSION })).toEqual({
+        ok: true,
+        version: VERSION,
+        status: "current",
+        target: VERSION,
+      });
     } finally {
       stopEverything(home);
     }

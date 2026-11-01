@@ -94,14 +94,16 @@ if [ "\$(/usr/bin/id -u)" = 0 ] && [ $USER_UID != 0 ]; then
 fi
 PATH="\${MISE_DATA_DIR:-\$HOME/.local/share/mise}/shims:\$HOME/.local/bin:\$PATH"
 export PATH
-# The version trackwall-container update made current (ADR-165), when bin/current names one that is there; otherwise
-# the Feature's own. Only this user's processes write bin/, and root never gets here.
+# The version trackwall-container update made current (ADR-165), when bin/current names a release version such as
+# 1.2.3 whose binary is there; otherwise the Feature's own. Only this user's processes write bin/, and root never gets
+# here. The state directory is TRACKWALL_HOME's or the default; a --home on the command line does not move bin/.
 bin='$DEST/trackwall-daemon'
 bin_dir="\${TRACKWALL_HOME:-\$HOME/.trackwall}/bin"
 current=\$(cat "\$bin_dir/current" 2>/dev/null || true)
 case "\$current" in
-'' | *[!0-9A-Za-z.-]* | .*) ;;
-*) if [ -x "\$bin_dir/\$current/trackwall-daemon" ]; then bin="\$bin_dir/\$current/trackwall-daemon"; fi ;;
+*[!0-9A-Za-z.-]* | *..* | *.-* | -*) ;;
+[0-9]*.[0-9]*.[0-9]*) if [ -x "\$bin_dir/\$current/trackwall-daemon" ]; then bin="\$bin_dir/\$current/trackwall-daemon"; fi ;;
+*) ;;
 esac
 # start and update on the Feature's port, which a --port of the caller's overrides; anything else, such as address, as it is.
 case "\${1:-}" in

@@ -2,8 +2,7 @@ import { createHash, createPublicKey, verify } from "node:crypto";
 
 /**
  * Checks a minisign signature as Tauri's signer writes it (ADR-53, ADR-165): the public key and the `.sig` file are each
- * base64 of a minisign text file. The signature is Ed25519 over the BLAKE2b-512 hash of the file ("ED") or over the file
- * itself ("Ed"), and a second, global signature covers the signature and its trusted comment, so the comment (the file
+ * base64 of a minisign text file. The signature is Ed25519 over the BLAKE2b-512 hash of the file ("ED"), and a second, global signature covers the signature and its trusted comment, so the comment (the file
  * name and version Tauri writes there) cannot be swapped either. Any doubt is an exception: the caller installs nothing.
  */
 
@@ -36,10 +35,13 @@ export function verifyMinisign(o: { pubkey: string; signature: string; data: Buf
     throw new Error("the signature is not in minisign format");
   }
   if (!sig.subarray(2, 10).equals(id)) throw new Error("the signature was made with another key");
+  // Only the prehashed "ED" that Tauri writes: the global signature does not cover these two bytes, so accepting "Ed"
+  // too would let anyone present the 64-byte hash of a signed file as a file that "checks out".
   const algorithm = sig.subarray(0, 2).toString("latin1");
-  if (algorithm !== "ED" && algorithm !== "Ed") throw new Error(`unknown signature algorithm ${JSON.stringify(algorithm)}`);
-  const signed = algorithm === "ED" ? createHash("blake2b512").update(o.data).digest() : o.data;
-  if (!verify(null, signed, key, sig.subarray(10))) throw new Error("the signature does not match the file");
+  if (algorithm !== "ED") throw new Error(`unsupported signature algorithm ${JSON.stringify(algorithm)}`);
+  if (!verify(null, createHash("blake2b512").update(o.data).digest(), key, sig.subarray(10))) {
+    throw new Error("the signature does not match the file");
+  }
   const comment = trusted.slice(TRUSTED_PREFIX.length);
   if (!verify(null, Buffer.concat([sig.subarray(10), Buffer.from(comment, "utf8")]), key, global)) {
     throw new Error("the trusted comment does not match the signature");

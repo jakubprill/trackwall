@@ -11,6 +11,7 @@ import { isUiDir } from "./api/static.ts";
 import { createErrorJournal, createFacade, type Facade, HOSTING_CLIS } from "./facade.ts";
 import {
   ADDRESS_COMMAND,
+  APPLY_UPDATE_COMMAND,
   CONTAINER_COMMAND,
   CONTAINER_START,
   CONTAINER_UPDATE,
@@ -19,6 +20,7 @@ import {
   type DaemonArgs,
   MCP_STDIO_COMMAND,
   parseCommandLine,
+  SUPERVISE_COMMAND,
   USAGE,
 } from "./infra/args.ts";
 import { appendNote } from "./infra/container-log.ts";
@@ -27,6 +29,7 @@ import { DAEMON_LOG, superviseDaemon } from "./infra/container-supervisor.ts";
 import { applyUpdate, containerUpdate } from "./infra/container-update.ts";
 import { CONTAINER_MARKERS, desktopOpeners, devContainerFolder, hasDesktop, ownContainer } from "./infra/desktop.ts";
 import { daemonPageAddress, newToken, probeRunningDaemon, watchDaemonFile, withStartLock, writeDaemonFile } from "./infra/discovery.ts";
+import { messageOf } from "./infra/errors.ts";
 import { watchEventLoopStalls } from "./infra/event-loop-stalls.ts";
 import { resolveTrackwallHome, trackwallHome } from "./infra/home.ts";
 import { selfCommand } from "./infra/self-command.ts";
@@ -221,7 +224,7 @@ try {
   const message = (err as Error).message;
   // The container command answers in JSON even here, so the desktop app can tell a wrong call from a failed start.
   if (process.argv[2] === CONTAINER_COMMAND) {
-    const result: ContainerStartResult = { ok: false, version: VERSION, error: { code: "bad-arguments", message } };
+    const result: ContainerStartResult | ContainerUpdateResult = { ok: false, version: VERSION, error: { code: "bad-arguments", message } };
     process.stdout.write(`${JSON.stringify(result)}\n`);
   }
   process.stderr.write(`${message}\n\n${USAGE}`);
@@ -272,8 +275,12 @@ async function printContainerStart(home: string, port: number): Promise<void> {
   const result: ContainerStartResult = await containerStart({ home, port, version: VERSION }).catch((err: unknown) => ({
     ok: false,
     version: VERSION,
-    error: { code: "start-failed", message: err instanceof Error ? err.message : String(err) },
+    error: { code: "start-failed", message: messageOf(err) },
   }));
+  printResult(result);
+}
+
+function printResult(result: ContainerStartResult | ContainerUpdateResult): void {
   process.stdout.write(`${JSON.stringify(result)}\n`);
   process.exitCode = result.ok ? 0 : 1;
 }
@@ -281,7 +288,7 @@ async function printContainerStart(home: string, port: number): Promise<void> {
 /** The supervisor has no terminal (`stdio: ignore`); a failure before its log exists ends it with code 1, which `start` sees. */
 function runSupervisor(home: string, port: number): void {
   superviseDaemon(home, port).catch((err: unknown) => {
-    process.stderr.write(`[supervisor] ${err instanceof Error ? err.message : String(err)}\n`);
+    process.stderr.write(`[supervisor] ${messageOf(err)}\n`);
     process.exitCode = 1;
   });
 }
@@ -293,32 +300,37 @@ function runContainerCommand(line: ContainerCommandLine): void {
       void printContainerStart(home, line.port);
       return;
     case CONTAINER_UPDATE:
-      void printContainerUpdate(home, line.port, line.target);
+      void containerUpdate({ home, port: line.port, version: VERSION, target: line.target }).then(printResult);
       return;
-    case "supervise":
+    case SUPERVISE_COMMAND:
       runSupervisor(home, line.port);
       return;
-    case "apply-update":
-      void applyUpdate({
-        home,
-        port: line.port,
-        target: line.target,
-        self: { version: VERSION, command: selfCommand([]) },
-        source: { url: releaseFileUrl, pubkey: UPDATE_PUBLIC_KEY },
-        note: (msg) => appendNote(join(home, DAEMON_LOG), "update", msg),
-      }).then((outcome) => {
-        process.exitCode = outcome === "updated" ? 0 : 1;
-      });
+    case APPLY_UPDATE_COMMAND:
+      runApplyUpdate(home, line.port, line.target);
       return;
   }
 }
 
-async function printContainerUpdate(home: string, port: number, target: string): Promise<void> {
-  const result: ContainerUpdateResult = await containerUpdate({ home, port, version: VERSION, target }).catch((err: unknown) => ({
-    ok: false,
-    version: VERSION,
-    error: { code: "update-failed", message: err instanceof Error ? err.message : String(err) },
-  }));
-  process.stdout.write(`${JSON.stringify(result)}\n`);
-  process.exitCode = result.ok ? 0 : 1;
+/** The update's background process has no terminal either: everything, a failure of its own included, goes to the log. */
+function runApplyUpdate(home: string, port: number, target: string): void {
+  const note = (msg: string) => appendNote(join(home, DAEMON_LOG), "update", msg);
+  applyUpdate({
+    home,
+    port,
+    target,
+    self: { version: VERSION, command: selfCommand([]) },
+    source: { url: releaseFileUrl, pubkey: UPDATE_PUBLIC_KEY },
+    note,
+  })
+    .then((outcome) => {
+      process.exitCode = outcome === "updated" ? 0 : 1;
+    })
+    .catch((err: unknown) => {
+      try {
+        note(`the update stopped: ${messageOf(err)}`);
+      } catch {
+        // the log cannot be written either; the exit code is all that is left
+      }
+      process.exitCode = 1;
+    });
 }
