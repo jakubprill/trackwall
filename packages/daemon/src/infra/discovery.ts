@@ -24,6 +24,14 @@ export function newToken(): string {
   return randomBytes(32).toString("base64url");
 }
 
+/**
+ * The address of the daemon's page with its token, which the page moves out of the address bar into storage (§5.2).
+ * The token goes in the fragment: it does not reach the server, logs or the Referer header.
+ */
+export function daemonPageAddress(file: Pick<DaemonFile, "port" | "token">): string {
+  return `http://127.0.0.1:${file.port}/#token=${file.token}`;
+}
+
 export function readDaemonFile(home: string): DaemonFile | undefined {
   try {
     const parsed = DaemonFile.safeParse(JSON.parse(readFileSync(daemonFilePath(home), "utf8")));
