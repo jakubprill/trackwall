@@ -622,7 +622,11 @@ _Avoid_: hash, version number
 A limit on a task's time and number of commits; when it is exceeded the daemon ends the session.
 
 **Summary** (`Task.summary`, MCP tool `report_result`):
-The result a task session reports with the `report_result` tool: what it did, what is left, what to check. It goes to the task's `summary` field (with the report time, in `tasks.json`), to the Sessions view and to the main session; a later one replaces the earlier (ADR-39). Eventually also to a PR proposal. Trackwall merges nothing by itself (ADR-9).
+The result a task session reports with the `report_result` tool: what it did, what is left, what to check. It goes to the task's `summary` field (with the report time, in `tasks.json`), to the Sessions view and to the main session; a later one replaces the earlier (ADR-39). It also fills the merge request draft (ADR-77). Trackwall merges nothing by itself (ADR-9).
+
+**Check steps** (`TaskSummary.checkSteps`, `report_result` argument `checkSteps`; UI "How to check"):
+Optional steps of a summary for checking the change by hand, each with what to do and what the user should see (ADR-169). Only a hint: the user may follow them or not, and nothing waits for them.
+_Avoid_: test plan, acceptance (those decide something; check steps decide nothing)
 
 ## Plan
 
