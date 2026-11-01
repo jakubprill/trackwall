@@ -8,7 +8,7 @@ import {
   type SupervisorSettings,
   type ToolPermissions,
 } from "@trackwall/protocol";
-import { DomainError, SpawnFailure } from "../../infra/errors.ts";
+import { DomainError, messageOf, SpawnFailure } from "../../infra/errors.ts";
 import { AcpSession } from "./acp-session.ts";
 import type { AgentSession } from "./agent-session.ts";
 import { resolveCopilot, toolPermissionArgs } from "./copilot-command.ts";
@@ -18,7 +18,7 @@ import { LiveSession, type LiveSessionOptions, type SessionPty } from "./live-se
 import { withLoopbackNoProxy } from "./no-proxy.ts";
 import type { ConversationLaunch } from "./resumable-sessions.ts";
 import { type SessionMiseEnv, type SessionMiseLaunch, sessionMiseLaunch } from "./session-env.ts";
-import { type SessionRole, withInstructionsDir, writeSessionInstructions } from "./session-instructions.ts";
+import { type SessionKnowledge, type SessionRole, withInstructionsDir, writeSessionInstructions } from "./session-instructions.ts";
 import type { SessionTokens } from "./session-tokens.ts";
 import type { HandoffFacts } from "./task-handoff.ts";
 
@@ -125,6 +125,8 @@ export interface SessionLauncherDeps {
   callbacks: (session: { id: string; supervisor: boolean; task: string | null }) => SessionCallbacks;
   /** What a session of the task is told about the task that handed it its work (ADR-143). */
   handoff: (task: string) => HandoffFacts | null;
+  /** The workspace knowledge the user approved for a session in `repo` (`null`: in the projects folder), ADR-170. */
+  knowledge: (repo: string | null) => Promise<SessionKnowledge>;
   log: (msg: string) => void;
 }
 
@@ -153,6 +155,7 @@ export class SessionLauncher {
         id,
         ...place,
         role: setup.role,
+        knowledge: setup.knowledge,
         dir: setup.dir,
         token: setup.token,
         promptOnStart,
@@ -188,7 +191,7 @@ export class SessionLauncher {
   conversation({ id, load, firstMessage, args = [], ...place }: ConversationStart): Promise<StartedSession> {
     const { repo, supervisor, task, cwd } = place;
     return this.#start(id, place, (setup) => {
-      const instructionsDir = this.#writeSessionFiles(id, setup.role, setup.dir, setup.token, {
+      const instructionsDir = this.#writeSessionFiles(id, setup.role, setup.knowledge, setup.dir, setup.token, {
         events: CONVERSATION_HOOK_EVENTS,
         lspServers: {},
       });
@@ -277,6 +280,7 @@ export class SessionLauncher {
       mise,
       miseEnv,
       role: this.#role(repo, supervisor, task),
+      knowledge: await this.#knowledge(id, repo),
       dir,
       token: this.#deps.tokens.issue(id),
     };
@@ -285,6 +289,19 @@ export class SessionLauncher {
   async #miseLaunch(place: { repo: string | null; task: string | null }, userEnv: NodeJS.ProcessEnv) {
     const miseEnv = await this.#deps.miseEnv(place);
     return { miseEnv, mise: sessionMiseLaunch(miseEnv, userEnv, this.#deps.repos.agentSecrets()) };
+  }
+
+  /**
+   * The knowledge a session starts with; one that cannot be read (no projects folder, a broken approvals file) starts
+   * the session without it rather than refusing it, since the session works without notes.
+   */
+  async #knowledge(id: string, repo: string | null): Promise<SessionKnowledge> {
+    try {
+      return await this.#deps.knowledge(repo);
+    } catch (err) {
+      this.#deps.log(`session ${id} starts without workspace knowledge: ${messageOf(err)}`);
+      return { entries: [], more: 0 };
+    }
   }
 
   #role(repo: string | null, supervisor: boolean, task: string | null): SessionRole {
@@ -297,6 +314,7 @@ export class SessionLauncher {
   #prepare({
     id,
     role,
+    knowledge,
     repo,
     task,
     dir,
@@ -310,7 +328,7 @@ export class SessionLauncher {
   }: SessionFiles): PreparedSession {
     const supervisor = role.kind === "supervisor";
     const hooksFile = join(dir, HOOKS_FILENAME);
-    const instructionsDir = this.#writeSessionFiles(id, role, dir, token, { events: COPILOT_HOOK_EVENTS, lspServers });
+    const instructionsDir = this.#writeSessionFiles(id, role, knowledge, dir, token, { events: COPILOT_HOOK_EVENTS, lspServers });
     const session = new LiveSession({
       id,
       repo,
@@ -338,6 +356,7 @@ export class SessionLauncher {
   #writeSessionFiles(
     id: string,
     role: SessionRole,
+    knowledge: SessionKnowledge,
     dir: string,
     token: string,
     plugin: { events: readonly CopilotHookEvent[]; lspServers: Record<string, LspServer> },
@@ -349,7 +368,7 @@ export class SessionLauncher {
     // User-only: the server's headers carry the session token (§8).
     const mcpConfig = copilotHttpMcpServers(this.#deps.sessionMcpServer(token));
     writeFileSync(join(dir, MCP_CONFIG_FILE), JSON.stringify(mcpConfig, null, 2), { mode: 0o600 });
-    const instructionsDir = writeSessionInstructions(dir, this.#deps.version, role);
+    const instructionsDir = writeSessionInstructions(dir, this.#deps.version, role, knowledge);
     if (instructionsDir === null)
       this.#deps.log(`session ${id} starts without Trackwall instructions: the session directory path has a comma`);
     return instructionsDir;
@@ -396,6 +415,7 @@ interface SessionSetup {
   mise: SessionMiseLaunch;
   miseEnv: SessionMiseEnv;
   role: SessionRole;
+  knowledge: SessionKnowledge;
   dir: string;
   token: string;
 }
@@ -404,6 +424,7 @@ interface SessionSetup {
 interface SessionFiles
   extends Pick<LiveSessionOptions, "id" | "repo" | "task" | "promptOnStart" | "hasConversation" | "program" | "environment"> {
   role: SessionRole;
+  knowledge: SessionKnowledge;
   dir: string;
   token: string;
   conversation: string | undefined;

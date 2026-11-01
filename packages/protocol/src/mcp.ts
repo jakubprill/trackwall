@@ -53,6 +53,7 @@ import { HttpMethod } from "./http.ts";
 import { LOG_BUFFER_RECORDS, LOG_ERRORS_MAX, LOG_TAIL_MAX, LogErrorLevel, LogErrors, LogLevel, LogTail, LogTextFilter } from "./logs.ts";
 import { GET_CHANGED_ENDPOINTS, GET_REPO, LIST_REPOS, PROPOSE_TASK, REPORT_RESULT, RepoArg, RUN_MISE_TASK } from "./mcp-args.ts";
 import { boardMcpTools, ItemArg, LIST_ITEMS } from "./mcp-board.ts";
+import { knowledgeMcpTools } from "./mcp-knowledge.ts";
 import { routineMcpTools } from "./mcp-routines.ts";
 import { MiseTaskName, MiseTasks, RunningMiseTask } from "./mise.ts";
 import { RunState } from "./procs.ts";
@@ -854,6 +855,7 @@ export const mcpTools = {
     result: ProposeTaskResult,
   },
   ...routineMcpTools,
+  ...knowledgeMcpTools,
   ...boardMcpTools,
   reportResult: {
     name: REPORT_RESULT,

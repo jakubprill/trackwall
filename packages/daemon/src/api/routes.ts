@@ -11,6 +11,7 @@ import {
   errorJournalApi,
   graphApi,
   javaNavigationApi,
+  knowledgeApi,
   localConfigApi,
   logsApi,
   mergeRequestsApi,
@@ -137,6 +138,13 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(routinesApi.run, (f, b) => f.runRoutine(b.name, b.digest, b.view)),
   route(routinesApi.remove, async (f, b) => {
     await f.routines.remove(b.name);
+    return null;
+  }),
+  route(knowledgeApi.list, (f) => f.knowledge.list()),
+  route(knowledgeApi.write, (f, b) => f.knowledge.write(b)),
+  route(knowledgeApi.approve, (f, b) => f.knowledge.approve(b.name, b.digest)),
+  route(knowledgeApi.remove, async (f, b) => {
+    await f.knowledge.remove(b.name);
     return null;
   }),
   route(dayStartApi.start, (f, b) => f.dayStart.start(b.view)),

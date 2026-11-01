@@ -36,6 +36,7 @@ type StateEntryId =
   | "task-journal-file"
   | "day-start-file"
   | "routine-approvals-file"
+  | "knowledge-approvals-file"
   | "cards-dir"
   | "logs-dir"
   | "local-config-push-repo"
@@ -146,6 +147,7 @@ export class ConfigFiles {
       case "task-journal-file":
       case "day-start-file":
       case "routine-approvals-file":
+      case "knowledge-approvals-file":
       case "cards-dir":
       case "logs-dir":
       case "local-config-push-repo":
@@ -167,6 +169,8 @@ export class ConfigFiles {
         return trackwallEntry(ctx.projectsDir, "board");
       case "routines-dir":
         return trackwallEntry(ctx.projectsDir, "routines");
+      case "knowledge-dir":
+        return trackwallEntry(ctx.projectsDir, "knowledge");
       case "copilot-config":
         return this.#copilotConfig(ctx);
     }

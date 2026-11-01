@@ -596,7 +596,7 @@ A directory with `plugin.json` and `hooks.json` that the daemon gives Copilot CL
 _Avoid_: plugin (without qualification), hook configuration
 
 **Session instructions** (`writeSessionInstructions`, file `trackwall.instructions.md`):
-The instruction file in the session directory that the daemon gives Copilot CLI through `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`: the Trackwall version that started the session and where the user sees it, the session's role (the supervisor or a free session in the projects folder, a main session in the repo root, or a task session in its worktree with the task rules and `report_result` at the end) and the **MCP instruction** (`MCP_INSTRUCTIONS`, also the MCP server's `instructions`): when to reach for which Trackwall tool and where the documentation is (ADR-46). It changes neither the repo nor `~/.copilot`.
+The instruction file in the session directory that the daemon gives Copilot CLI through `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`: the Trackwall version that started the session and where the user sees it, the session's role (the supervisor or a free session in the projects folder, a main session in the repo root, or a task session in its worktree with the task rules and `report_result` at the end) the workspace knowledge the user approved about its place (ADR-170) and the **MCP instruction** (`MCP_INSTRUCTIONS`, also the MCP server's `instructions`): when to reach for which Trackwall tool and where the documentation is (ADR-46). It changes neither the repo nor `~/.copilot`.
 _Avoid_: system prompt (Copilot CLI builds it itself), repository instructions (those are files in the user's repo)
 
 **Hook record** (`CopilotHookRecord`):
@@ -622,8 +622,8 @@ _Avoid_: recording (that is `session.cast`), snapshot
 A task the user repeats, saved once by an agent at the user's request and run by hand with "Run", each run an ordinary task with the routine's title, repo, model and approvals mode. A file in `.trackwall/routines` of the projects folder; it runs only in the version the user approved ("Approve this version"), so any change waits for approval again (ADR-173).
 _Avoid_: recipe, template, playbook, job, automation (a routine does not start by itself)
 
-**Routine digest** (`RoutineDigest`):
-The SHA-256 of a routine file's bytes: what the user approved, and what an approval or a run names, so a file changed meanwhile is refused.
+**Routine digest** (`RoutineDigest`, an alias of `ContentDigest`):
+The SHA-256 of a routine file's bytes: what the user approved, and what an approval or a run names, so a file changed meanwhile is refused. Workspace knowledge entries are approved the same way (`ContentDigest`).
 _Avoid_: hash, version number
 
 **Budget**:
@@ -637,6 +637,17 @@ Optional steps of a summary for checking the change by hand, each with what to d
 _Avoid_: test plan, acceptance (those decide something; check steps decide nothing)
 
 ## Plan
+
+**Workspace knowledge** (module `knowledge`, `knowledgeApi`, MCP tools `list_knowledge` and `propose_knowledge`; "Workspace knowledge" in Plan):
+Short facts about the user's repos that agents read at the start of every session there, instead of finding them out again: files in `.trackwall/knowledge` of the projects folder, each counting only in the version the user approved (ADR-170). Agents propose entries; only the user approves them.
+_Avoid_: notes, memory, notebook, wiki (the board holds plans and ideas; knowledge holds facts about repos)
+
+**Knowledge entry** (`KnowledgeEntry`, `KnowledgeListEntry`; "entry" in the UI and the tools):
+One fact of workspace knowledge: its name, kind, repos (none for the whole workspace), the fact, its evidence and who wrote it. A new or changed entry from an agent is a **knowledge proposal** until the user presses "Approve this version"; the user's own entry is approved as written.
+_Avoid_: rule (rules live in each repo's own agent instructions; an exception to one is the kind `exception`), fact (without qualification)
+
+**Knowledge kind** (`KnowledgeKind`: `how-to`, `relation`, `exception`, `pitfall`; "How to", "Relation", "Exception", "Pitfall" in the UI):
+What an entry says: how to build, run or test something; a link between repos the connection graph does not see; where a repo departs from a rule; a trap learned the hard way.
 
 **Board** (module `board`, `Board`, `boardApi`, topic `board.changed`; the "Plan" view in the UI):
 Everything the user keeps to do before it becomes a task: business projects, the items they are split into, and ideas. Files in `.trackwall/board` of the projects folder, one per board item (ADR-133). The board records the user's split; nothing starts from it by itself.

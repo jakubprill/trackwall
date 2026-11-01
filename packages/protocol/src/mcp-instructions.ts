@@ -32,6 +32,8 @@ const {
   proposeTask,
   proposeFolderAction,
   proposeRoutine,
+  listKnowledge,
+  proposeKnowledge,
   listItems,
   getItem,
   createItem,
@@ -60,7 +62,7 @@ export const MCP_INSTRUCTIONS = [
     "files and code into repo cards and a graph of connections between apps, runs mise tasks and Copilot CLI sessions. " +
     `Its tools give you that knowledge. ${runMiseTask.name} and ${stopMiseTask.name} start and stop mise tasks, ` +
     `${startService.name} and ${stopService.name} start and stop services, ` +
-    `${proposeTask.name}, ${proposeFolderAction.name}, ${proposeRoutine.name}, ${createItem.name}, ${updateItem.name} and ${reportResult.name} record text for the user, and no tool edits repo files or configuration directly.`,
+    `${proposeTask.name}, ${proposeFolderAction.name}, ${proposeRoutine.name}, ${proposeKnowledge.name}, ${createItem.name}, ${updateItem.name} and ${reportResult.name} record text for the user, and no tool edits repo files or configuration directly.`,
   "",
   "How to work with it:",
   `- Find repos: ${listRepos.name} (narrow it with tags such as java, bff or frontend) gives the repo ids the other tools ` +
@@ -124,6 +126,10 @@ export const MCP_INSTRUCTIONS = [
   `- Save work the user repeats as a routine: when the user asks for one (e.g. update an API client and check it ` +
     `compiles), look at the repo first, then ${proposeRoutine.name} writes it; the user approves it and runs it by hand ` +
     "from Trackwall, each run an ordinary task.",
+  `- Use what the user knows about their repos: your instructions may carry workspace knowledge the user approved (how ` +
+    `to run or test a repo, links between repos the graph does not show, exceptions, pitfalls); ${listKnowledge.name} ` +
+    `lists more, e.g. for a repo your change reaches. When finding a fact cost you work the next agent would repeat, or ` +
+    `an entry proved wrong, propose it with ${proposeKnowledge.name}; it counts once the user approves it.`,
   `- Change the projects folder itself, which no task can: ${proposeFolderAction.name} proposes removing a repo, and ` +
     "the user approves it in Trackwall.",
   `- Catch up after a break: ${getDayReport.name} says what changed since the user's previous day start (new commits ` +

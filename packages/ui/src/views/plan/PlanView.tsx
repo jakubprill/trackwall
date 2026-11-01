@@ -13,13 +13,15 @@ import type { SessionSelection } from "@/lib/session-entries";
 import { useBoard } from "@/lib/use-board";
 import { NewSession } from "@/views/sessions/NewSession";
 import { ItemPanel } from "./ItemPanel.tsx";
+import { KnowledgeList } from "./KnowledgeList.tsx";
 import { PlanOutline } from "./PlanOutline.tsx";
 import { PlanPlaces } from "./PlanPlaces.tsx";
 
 /**
  * The Plan view (ADR-133): the inbox of ideas and the business projects on the left, the selected one's items as an
  * outline in the middle, where the user splits the work, and the selected item on the right, with the tasks started on
- * it and "Start task". Nothing here starts work by itself.
+ * it and "Start task". Nothing here starts work by itself. The workspace knowledge (ADR-170) takes the middle when chosen
+ * on the left.
  */
 export function PlanView({
   conn,
@@ -79,7 +81,9 @@ export function PlanView({
             ))}
           </ul>
         )}
-        {startingItem ? (
+        {place.kind === "knowledge" ? (
+          <KnowledgeList conn={conn} />
+        ) : startingItem ? (
           <NewSession
             key={startingItem.id}
             conn={conn}
