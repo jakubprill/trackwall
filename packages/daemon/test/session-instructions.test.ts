@@ -29,7 +29,9 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
       "Before you report that you are done, call verify_task with repo `shop` and task `1b4e28ba-2fa1-11d2-883f-0016d3cca427`",
     );
     expect(text).toContain("If the repo has no mise task test, do not add one");
-    expect(text).toContain("When Trackwall asks you to call get_messages, the session that proposed your task has written to you");
+    expect(text).toContain(
+      "When Trackwall asks you to call get_messages, the session that proposed your task, or the supervisor the user handed it to, has written to you",
+    );
     expect(text).toContain(MCP_INSTRUCTIONS);
   });
 
@@ -163,7 +165,10 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     expect(text).toContain(
       "Before you propose a task, check the tasks in the situation. A follow-up on the same topic in the same repo goes to that task with send_message while the user has not ended it",
     );
-    expect(text).toContain("a follow-up on a proposal still waiting for the user, or on a task the user started, goes to the user");
+    expect(text).toContain(
+      "a follow-up on a proposal still waiting for the user, or on a task the user started and did not hand to you, goes to the user",
+    );
+    expect(text).toContain("You can message the tasks a supervisor proposed and the ones the user handed to you");
   });
 
   test("the supervisor is told that each prompt ends with the situation, which covers the work the user started too (ADR-148)", () => {

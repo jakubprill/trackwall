@@ -13,6 +13,7 @@ function session(fields: Partial<Session> & Pick<Session, "id">): Session {
     state: null,
     windowTitle: null,
     needsAttention: false,
+    stuck: null,
     task: null,
     dialog: null,
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
@@ -98,7 +99,7 @@ describe("the supervisor's situation (ADR-148)", () => {
             id: "t2",
             repo: "payments",
             prompt: "Retry a failed payment\nonce, then give up",
-            proposedBy: { session: null, supervisor: true, task: null },
+            proposedBy: { session: SUPERVISOR, supervisor: true, task: null },
             summary: { text: "Done.", reportedAt: "2026-10-30T09:05:00.000Z" },
           }),
         ],
@@ -120,11 +121,28 @@ describe("the supervisor's situation (ADR-148)", () => {
     );
   });
 
+  test("a task the user handed to the supervisor says so (ADR-155)", () => {
+    const handed = task({ id: "t1", title: "Add a login test", proposedBy: { session: null, supervisor: true, task: null } });
+
+    expect(supervisorSituation({ sessions: [], tasks: [handed], proposals: [] }, SUPERVISOR).split("\n")[1]).toBe(
+      '- task t1 "Add a login test" in api, started by the user, who handed it to you: no session (resume_task goes on with it)',
+    );
+  });
+
   test("says there is nothing when no task, proposal or other session runs", () => {
     const supervisor = session({ id: SUPERVISOR, repo: null, supervisor: true });
 
     expect(supervisorSituation({ sessions: [supervisor], tasks: [], proposals: [] }, SUPERVISOR)).toBe(
       `${HEADER}\n- nothing: no tasks, no proposals and no other running sessions`,
+    );
+  });
+
+  test("a working session that may be stuck says so, with the time of its last step (ADR-151)", () => {
+    const supervisor = session({ id: SUPERVISOR, repo: null, supervisor: true });
+    const stuck = session({ id: "s-main", repo: "web", state: state("Working"), stuck: { lastStepAt: "2026-10-30T08:40:00.000Z" } });
+
+    expect(supervisorSituation({ sessions: [supervisor, stuck], tasks: [], proposals: [] }, SUPERVISOR)).toBe(
+      `${HEADER}\n- a main session in web (session s-main), started by the user: may be stuck: no step since 2026-10-30T08:40:00.000Z`,
     );
   });
 

@@ -177,6 +177,22 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     expect(restarted.opened).toEqual([task.worktree]);
   }, 60_000);
 
+  test("a task the user handed to the supervisor stays the supervisor's after a daemon restart (ADR-155)", async () => {
+    const { dir } = cloneOnFeatureBranch();
+    const first = makeAgents({ shop: dir });
+    cleanups.push(() => first.procs.stopAll());
+    const task = await first.agents.createTask("shop", "fix the build");
+    await first.agents.stop(sessionOf(first.agents, task.id));
+
+    const handed = first.agents.handToSupervisor(task.id);
+
+    expect(handed.proposedBy).toEqual({ session: null, supervisor: true, task: null });
+    const restarted = makeAgents({ shop: dir }, first.home);
+    cleanups.push(() => restarted.procs.stopAll());
+    expect(restarted.agents.sessions().tasks.map((t) => t.proposedBy)).toEqual([{ session: null, supervisor: true, task: null }]);
+    expect(() => restarted.agents.handToSupervisor(task.id)).toThrow("only a task you started yourself");
+  }, 60_000);
+
   test("a new task's worktree goes into the task worktrees folder of the moment, and a changed folder does not move existing tasks", async () => {
     const { dir } = cloneOnFeatureBranch();
     const folders = mkdtempSync(join(tmpdir(), "trackwall-folders-"));
