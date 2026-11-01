@@ -1,14 +1,16 @@
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import type { ContainerStartResult } from "@trackwall/protocol";
-import { CONTAINER_COMMAND, runningSupervisor, SUPERVISE_COMMAND } from "./container-supervisor.ts";
-import { isAlive, probeRunningDaemon } from "./discovery.ts";
+import { CONTAINER_COMMAND, SUPERVISE_COMMAND } from "./args.ts";
+import { DAEMON_LOG, runningSupervisor } from "./container-supervisor.ts";
+import { isAlive, probeRunningDaemon, type RunningDaemon } from "./discovery.ts";
 import { selfCommand } from "./self-command.ts";
 
 /**
  * `trackwall-container start` (ADR-164): makes sure a daemon runs in the dev container and says how it stands, as one JSON
- * object. Safe to run any number of times: from the dev container's `postStartCommand`, from the desktop app through
- * `docker exec`, by hand. A daemon that answers is left as it is, whatever its version; a supervisor already starting one
+ * object. Safe to run any number of times: from the dev container's `postStartCommand`, by hand, and meant for the
+ * desktop app through `docker exec` (ADR-139). A daemon that answers is left as it is, whatever its version; a supervisor already starting one
  * is waited for; otherwise a new supervisor starts in the background and outlives this command.
  */
 
@@ -42,13 +44,13 @@ export async function containerStart(o: ContainerStartOptions): Promise<Containe
     const daemon = await probeRunningDaemon(o.home);
     if (daemon) return answering(o, daemon);
     if (!supervising()) {
-      return failed(o, `the daemon did not start; see ${o.home}/logs/daemon.log in the container`);
+      return failed(o, `the daemon did not start; see ${join(o.home, DAEMON_LOG)} in the container`);
     }
   }
-  return { ok: true, version: o.version, status: "starting", port: o.port, daemon: null };
+  return { ok: true, version: o.version, status: "starting", port: o.port };
 }
 
-function answering(o: ContainerStartOptions, running: NonNullable<Awaited<ReturnType<typeof probeRunningDaemon>>>): ContainerStartResult {
+function answering(o: ContainerStartOptions, running: RunningDaemon): ContainerStartResult {
   return {
     ok: true,
     version: o.version,

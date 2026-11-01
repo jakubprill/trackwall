@@ -11,6 +11,7 @@ import { isUiDir } from "./api/static.ts";
 import { createErrorJournal, createFacade, type Facade, HOSTING_CLIS } from "./facade.ts";
 import {
   ADDRESS_COMMAND,
+  CONTAINER_COMMAND,
   CONTAINER_START,
   type CommandLine,
   type DaemonArgs,
@@ -19,7 +20,7 @@ import {
   USAGE,
 } from "./infra/args.ts";
 import { containerStart } from "./infra/container-start.ts";
-import { CONTAINER_COMMAND, superviseDaemon } from "./infra/container-supervisor.ts";
+import { superviseDaemon } from "./infra/container-supervisor.ts";
 import { CONTAINER_MARKERS, desktopOpeners, devContainerFolder, hasDesktop, ownContainer } from "./infra/desktop.ts";
 import { daemonPageAddress, newToken, probeRunningDaemon, watchDaemonFile, withStartLock, writeDaemonFile } from "./infra/discovery.ts";
 import { watchEventLoopStalls } from "./infra/event-loop-stalls.ts";
@@ -227,7 +228,7 @@ if (commandLine.command === MCP_STDIO_COMMAND) {
 } else if (commandLine.command === CONTAINER_COMMAND) {
   const home = trackwallHome(commandLine.home);
   if (commandLine.action === CONTAINER_START) void printContainerStart(home, commandLine.port);
-  else void superviseDaemon(home, commandLine.port);
+  else runSupervisor(home, commandLine.port);
 } else if (commandLine.args.help) {
   process.stdout.write(USAGE);
 } else if (commandLine.args.version) {
@@ -264,7 +265,19 @@ async function printAddress(home: string): Promise<void> {
 
 /** One JSON object on stdout whatever happens, for the desktop app that runs it through `docker exec` (ADR-164). */
 async function printContainerStart(home: string, port: number): Promise<void> {
-  const result = await containerStart({ home, port, version: VERSION });
+  const result: ContainerStartResult = await containerStart({ home, port, version: VERSION }).catch((err: unknown) => ({
+    ok: false,
+    version: VERSION,
+    error: { code: "start-failed", message: err instanceof Error ? err.message : String(err) },
+  }));
   process.stdout.write(`${JSON.stringify(result)}\n`);
   process.exitCode = result.ok ? 0 : 1;
+}
+
+/** The supervisor has no terminal (`stdio: ignore`); a failure before its log exists ends it with code 1, which `start` sees. */
+function runSupervisor(home: string, port: number): void {
+  superviseDaemon(home, port).catch((err: unknown) => {
+    process.stderr.write(`[supervisor] ${err instanceof Error ? err.message : String(err)}\n`);
+    process.exitCode = 1;
+  });
 }

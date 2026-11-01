@@ -237,9 +237,14 @@ jobs:
           archive="$(ls "$PWD"/out/trackwall-*-linux-x64.tar.gz)"
           (cd "$feature" && PORT=7790 TRACKWALL_FEATURE_ARCHIVE="$archive" sh install.sh)
           export TRACKWALL_HOME="$RUNNER_TEMP/feature-home"
-          trackwall-container start | tee "$RUNNER_TEMP/start.json"
+          # A slow runner may answer "starting" first; a later call reports the same daemon as running.
+          for attempt in 1 2 3 4 5 6; do
+            trackwall-container start | tee "$RUNNER_TEMP/start.json"
+            if grep -q '"status":"running","port":7790' "$RUNNER_TEMP/start.json"; then break; fi
+            sleep 5
+          done
           grep -q '"status":"running","port":7790' "$RUNNER_TEMP/start.json"
-          trackwall-container start | grep -q '"status":"running","port":7790'
+          trackwall-container address | grep -q '^http://127.0.0.1:7790/#token='
       # The headless shell and the system libraries it needs (apt, as root in the container), and DejaVu Sans Mono, the
       # monospace font of the Linux runner: the terminal's rows follow the font, and a user's browser runs on their own
       # computer, not in the container, so the image's fonts are not what Trackwall is drawn with.

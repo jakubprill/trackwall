@@ -48,10 +48,10 @@ A `.devcontainer/devcontainer.json` that keeps the repos, Trackwall's state, the
 }
 ```
 
-- `features` adds Trackwall to your own image: replace `<version>` with the version of the desktop app you use, for example `0.6.0`. It installs Trackwall of that version, checked against the checksum the release wrote into it, and starts it every time the container starts.
+- `features` adds Trackwall to your own image: replace `<version>` with the version of the desktop app you use, for example `0.6.0`. It installs Trackwall of that version, checked against the checksum the release wrote into it, and starts it every time the container starts. The address with its version is what you trust: it is Trackwall's own release on GitHub.
 - A new volume belongs to `root`, so `postCreateCommand` hands the folders to the container's user.
 - `TRACKWALL_HOME` tells the desktop app where Trackwall keeps its state in the container.
-- `requireLocalPort` keeps the forwarded port at 7700 on your computer. Trackwall accepts a page only from `127.0.0.1:<port>` or `localhost:<port>` with the port it listens on, so a forward to another number does not load.
+- `requireLocalPort` keeps the forwarded port at 7700 on your computer. Keep VS Code's `remote.localPortHost` at its default, `localhost`: with `allInterfaces` other computers on your network reach the forwarded port. Trackwall accepts a page only from `127.0.0.1:<port>` or `localhost:<port>` with the port it listens on, so a forward to another number does not load.
 - `TRACKWALL_DEVCONTAINER_HOST_FOLDER` tells Trackwall which folder on your computer the container was opened from, so "Open in VS Code" opens the same kind of window as opening that folder in a container yourself, with the extensions and settings of this `devcontainer.json`. Without it, VS Code attaches to the running container without them. Use it when you open the container from a folder on Windows or macOS; from a folder inside WSL it may not open.
 - Behind a proxy, set `HTTPS_PROXY` and `HTTP_PROXY` in `containerEnv` too, and keep `NO_PROXY` as above. A proxy that replaces certificates also needs its certificate in the image, and `NODE_EXTRA_CA_CERTS` pointing at it in `containerEnv`, because Copilot CLI does not read the system's certificates; the [doctor](/features/doctor) names the file when the image already has it.
 
@@ -59,14 +59,14 @@ A `.devcontainer/devcontainer.json` that keeps the repos, Trackwall's state, the
 
 Rebuild the container ("Dev Containers: Rebuild Container" in VS Code). From then on Trackwall starts with the container, on port 7700, and starts again by itself if it crashes. Then, in a terminal of the container:
 
-1. Install mise and, with it, Copilot CLI: `curl https://mise.run | sh`, then `~/.local/bin/mise use -g node@22 npm:@github/copilot`. Trackwall finds tools installed with mise without further setup.
+1. Install [mise](https://mise.jdx.dev/getting-started.html) as its guide describes, then Copilot CLI with it: `mise use -g node@22 npm:@github/copilot`. Trackwall finds tools installed with mise without further setup.
 2. Point Trackwall at the repos: in Settings › Workspace choose `/workspaces`, or run `echo "projectsDir: /workspaces" > ~/.trackwall/workspace.yaml` before the first start.
 3. Print the address with its token: `trackwall-container address`, and open it in the browser on your computer.
 4. Sign in to Copilot CLI once: run `copilot`, type `/login` and follow the steps in your browser. The sign-in stays in the `workspace-copilot` volume.
 
 The browser keeps the token for that address, so a bookmark of `http://127.0.0.1:7700` and a new tab open Trackwall without it. The token changes every time Trackwall starts: after a restart, open or reload the page, and it asks for the address; print it again as in step 3 and paste it there. Trackwall's output goes to `~/.trackwall/logs/daemon.log` in the container; look there when it does not answer. It stops when the container stops, or when you stop it from the app.
 
-`trackwall-container start` is safe to run at any time: it starts Trackwall only when it does not run, and prints one line of JSON, for example `{"ok":true,"version":"0.6.0","status":"running","port":7700,"daemon":{"version":"0.6.0","pid":812}}`. `starting` means Trackwall is still coming up; an error says what failed. After crashing ten times in a row within a minute of each start, Trackwall is not started again until you run the command.
+`trackwall-container start` is safe to run at any time: it starts Trackwall only when it does not run, and prints one line of JSON, for example `{"ok":true,"version":"0.6.0","status":"running","port":7700,"daemon":{"version":"0.6.0","pid":812}}`. `starting` means Trackwall is still coming up; an error says what failed. After crashing ten times in a row within a minute of each start, Trackwall is not started again until you run the command. A Trackwall you started some other way in the container keeps running, but nothing starts it again after a crash; the log says so.
 
 The Feature's `port` option changes the port, for example `{ "port": "7701" }` in place of `{}`; forward the same number. Releases up to 0.5.13 have no Feature; use a newer one.
 

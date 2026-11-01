@@ -1,5 +1,4 @@
 import { parseArgs } from "node:util";
-import { CONTAINER_COMMAND, SUPERVISE_COMMAND } from "./container-supervisor.ts";
 
 export interface DaemonArgs {
   port: number;
@@ -81,7 +80,11 @@ export const MCP_STDIO_COMMAND = "mcp-stdio";
 /** The `trackwall-daemon` subcommand that prints the running daemon's page address with its token (ADR-161). */
 export const ADDRESS_COMMAND = "address";
 const SUBCOMMANDS = [MCP_STDIO_COMMAND, ADDRESS_COMMAND] as const;
-/** `container start` is for people and the desktop app; `container supervise` only for `start` to run (ADR-164). */
+/** The subcommand of `trackwall-daemon` behind `trackwall-container` in a dev container (ADR-164). */
+export const CONTAINER_COMMAND = "container";
+/** The container supervisor's own subcommand, also how its process is recognised in `/proc/<pid>/cmdline`. */
+export const SUPERVISE_COMMAND = "supervise";
+/** `container start` is for people and the desktop app; `container supervise` only for `start` to run. */
 export const CONTAINER_START = "start";
 const CONTAINER_ACTIONS = [CONTAINER_START, SUPERVISE_COMMAND] as const;
 /** The port VS Code forwards in the dev container guide. */

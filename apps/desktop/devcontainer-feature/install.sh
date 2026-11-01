@@ -29,6 +29,17 @@ case "$USER_NAME" in
 '' | -* | *[!A-Za-z0-9._-]*) fail "unexpected remote user name '$USER_NAME'" ;;
 esac
 id "$USER_NAME" > /dev/null 2>&1 || fail "no user '$USER_NAME' in the image"
+USER_UID="$(id -u "$USER_NAME")"
+USER_GID="$(id -g "$USER_NAME")"
+USER_HOME="$(getent passwd "$USER_NAME" | cut -d: -f6)"
+case "$USER_HOME" in
+/* ) ;;
+*) fail "no home folder for '$USER_NAME'" ;;
+esac
+case "$USER_HOME" in
+*[!A-Za-z0-9._/-]*) fail "unexpected home folder '$USER_HOME'" ;;
+esac
+[ -x /usr/bin/setpriv ] || fail "setpriv (util-linux) is missing in the image"
 
 case "$(uname -m)" in
 x86_64 | amd64) ARCH=x64 SHA256="$SHA256_X64" ;;
@@ -47,7 +58,7 @@ trap 'rm -rf "$TMP"' EXIT
 if [ -n "${TRACKWALL_FEATURE_ARCHIVE:-}" ]; then
   cp "$TRACKWALL_FEATURE_ARCHIVE" "$TMP/$ARCHIVE"
 elif command -v curl > /dev/null 2>&1; then
-  curl -fsSL --proto '=https' --tlsv1.2 -o "$TMP/$ARCHIVE" "$RELEASE_URL/$ARCHIVE"
+  curl -fsSL --proto '=https' --proto-redir '=https' --tlsv1.2 -o "$TMP/$ARCHIVE" "$RELEASE_URL/$ARCHIVE"
 elif command -v wget > /dev/null 2>&1; then
   wget -q --https-only -O "$TMP/$ARCHIVE" "$RELEASE_URL/$ARCHIVE"
 else
@@ -63,20 +74,25 @@ chmod -R u=rwX,go=rX "$DEST"
 chmod 755 "$DEST/trackwall-daemon"
 
 # Run as root (docker exec without --user), the command runs itself again as the remote user, so the daemon's state and
-# daemon.json are where the desktop app looks for them; TRACKWALL_HOME from containerEnv is kept. Tools installed with
-# mise (Copilot CLI, mise itself) are found without a login shell, which neither docker exec nor postStartCommand has.
+# daemon.json are where the desktop app looks for them; TRACKWALL_HOME from containerEnv is kept. As root it trusts
+# nothing from the caller's PATH, which may hold folders the remote user can write. Tools installed with mise (Copilot
+# CLI, mise itself) are found without a login shell, which neither docker exec nor postStartCommand has.
 cat > /usr/local/bin/trackwall-container << WRAPPER
 #!/bin/sh
 # Trackwall $VERSION in this dev container, written by the Trackwall Dev Container Feature.
 set -eu
-if [ "\$(id -u)" = 0 ] && [ '$USER_NAME' != root ]; then
-  exec su -s /bin/sh -c 'exec /usr/local/bin/trackwall-container "\$@"' -- '$USER_NAME' trackwall-container "\$@"
+if [ "\$(/usr/bin/id -u)" = 0 ] && [ $USER_UID != 0 ]; then
+  HOME='$USER_HOME' exec /usr/bin/setpriv --reuid=$USER_UID --regid=$USER_GID --init-groups -- /usr/local/bin/trackwall-container "\$@"
 fi
 PATH="\${MISE_DATA_DIR:-\$HOME/.local/share/mise}/shims:\$HOME/.local/bin:\$PATH"
 export PATH
-# start (and the container's other subcommands) on the Feature's port; anything else, such as address, as it is.
+# start on the Feature's port, which a --port of the caller's overrides; anything else, such as address, as it is.
 case "\${1:-}" in
-start) exec '$DEST/trackwall-daemon' container "\$@" --port $PORT ;;
+start)
+  shift
+  exec '$DEST/trackwall-daemon' container start --port $PORT "\$@"
+  ;;
+'') exec '$DEST/trackwall-daemon' --help ;;
 *) exec '$DEST/trackwall-daemon' "\$@" ;;
 esac
 WRAPPER
