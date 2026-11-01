@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
 import { agentsApi, ProposeRoutineResult, routinesApi } from "@trackwall/protocol";
+import { Routines } from "../src/modules/routines/routines.ts";
 import { connectHttpClient } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
@@ -98,7 +100,52 @@ describe.skipIf(process.versions.bun === undefined)("routines (ADR-173, real PTY
     expect(again.approved).toBe(false);
   });
 
+  // A link needs administrator rights or developer mode on Windows; the read refuses links on every system the same way.
+  test.skipIf(process.platform === "win32")(
+    "a link in place of a routine file is a problem and never runs, whatever it points to",
+    async () => {
+      const target = join(daemon.projects, "outside.md");
+      writeFileSync(target, readFileSync(routineFile("update-orders-client"), "utf8"));
+      symlinkSync(target, routineFile("linked"));
+      const list = await daemon.post(routinesApi.list, {});
+      expect(list.routines.map((r) => r.name)).not.toContain("linked");
+      expect(list.problems).toContainEqual({ file: "linked.md", message: expect.stringContaining("not a regular file") });
+    },
+  );
+
+  test("a prompt with characters the user cannot see is refused before anything is written", async () => {
+    await expect(proposeRoutine({ ...UPDATE_CLIENT, name: "hidden", prompt: "Compile.\u{E0049}\u{E0067}" })).rejects.toThrow(
+      "invisible characters",
+    );
+    const list = await daemon.post(routinesApi.list, {});
+    expect(list.routines.map((r) => r.name)).not.toContain("hidden");
+  });
+
+  test("unreadable approvals are moved aside, and every routine waits for approval again", async () => {
+    const proposed = await proposeRoutine({ ...UPDATE_CLIENT, name: "approvals-lost" });
+    await daemon.post(routinesApi.approve, { name: proposed.name, digest: proposed.digest });
+    writeFileSync(join(daemon.home, "routine-approvals.json"), "{ not json");
+    const { routines } = await daemon.post(routinesApi.list, {});
+    expect(routines.filter((r) => r.approved)).toEqual([]);
+  });
+
   test("an agent cannot save a routine for a repo that is not in the projects folder", async () => {
     await expect(proposeRoutine({ ...UPDATE_CLIENT, name: "elsewhere", repo: "no-such-repo" })).rejects.toThrow("no-such-repo");
+  });
+});
+
+describe("the routine limit (ADR-173)", () => {
+  test("an agent saving routines in a loop is refused at the limit, but may still replace one it saved", async () => {
+    const projects = mkdtempSync(join(tmpdir(), "trackwall-routines-"));
+    const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
+    const routines = new Routines({
+      projectsDir: async () => projects,
+      approvalsFile: join(home, "routine-approvals.json"),
+      log: () => {},
+    });
+    const routine = { title: "T", repo: "shop", model: null, approvals: "ask" as const, prompt: "p" };
+    for (let i = 0; i < 100; i++) await routines.save({ ...routine, name: `r${i}` });
+    await expect(routines.save({ ...routine, name: "one-more" })).rejects.toThrow("100 routines");
+    expect(await routines.save({ ...routine, name: "r7", prompt: "changed" })).toMatchObject({ name: "r7", approved: false });
   });
 });

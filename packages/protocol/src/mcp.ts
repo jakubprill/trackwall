@@ -851,8 +851,8 @@ export const mcpTools = {
       .strict(),
     result: ProposeTaskResult,
   },
-  ...boardMcpTools,
   ...routineMcpTools,
+  ...boardMcpTools,
   reportResult: {
     name: REPORT_RESULT,
     readOnly: false,

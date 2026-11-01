@@ -10,6 +10,8 @@ import type { SessionSelection } from "@/lib/session-entries";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 
+const ROUTINES_POLL_MS = 10_000;
+
 /**
  * Routines under the New task form (ADR-173): tasks the user runs by hand again and again, written by an agent with
  * `propose_routine`. A routine runs only in the version the user approved, so a new or changed one shows its prompt
@@ -17,7 +19,8 @@ import { useRemote } from "@/lib/use-remote";
  */
 export function RoutineList({ conn, onStarted }: { conn: Connection; onStarted: (selection: SessionSelection) => void }) {
   const load = useCallback(() => post(conn, routinesApi.list, {}), [conn]);
-  const list = useRemote(load);
+  // A routine an agent saves while the form is open shows within the poll.
+  const list = useRemote(load, { pollMs: ROUTINES_POLL_MS });
   if (list.error) return <ErrorWithRetry message={list.error} onRetry={list.reload} />;
   if (!list.data) return null;
   const { routines, problems } = list.data;
@@ -54,9 +57,9 @@ function RoutineRow({
   onStarted: (selection: SessionSelection) => void;
 }) {
   const seen = { name: routine.name, digest: routine.digest };
-  const approve = useAction(() => post(conn, routinesApi.approve, seen), onChanged);
+  const approve = useAction(() => reloadOnRefusal(post(conn, routinesApi.approve, seen), onChanged), onChanged);
   const run = useAction(
-    () => post(conn, routinesApi.run, seen),
+    () => reloadOnRefusal(post(conn, routinesApi.run, seen), onChanged),
     (task) => onStarted({ kind: "task", id: task.id }),
   );
   const pending = approve.pending || run.pending;
@@ -91,6 +94,16 @@ function RoutineRow({
       {error && <p className="text-destructive text-xs whitespace-pre-wrap">{error}</p>}
     </div>
   );
+}
+
+/** A refusal (most often: the file changed since it was shown) reloads the list, so the version on disk shows to read. */
+async function reloadOnRefusal<T>(request: Promise<T>, reload: () => void): Promise<T> {
+  try {
+    return await request;
+  } catch (err) {
+    reload();
+    throw err;
+  }
 }
 
 /** Removing asks once more, since the file is gone for good. */

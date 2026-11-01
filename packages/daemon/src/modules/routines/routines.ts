@@ -12,7 +12,7 @@ import { ensureTrackwallDir } from "../../infra/trackwall-dir.ts";
 import { readRoutineFile, routineFileName, routineNameOfFile, writeRoutineFile } from "./routine-file.ts";
 
 /**
- * Routines (ADR-173, §4.19): saved tasks the user runs by hand, as files in `.trackwall/routines` of the projects folder
+ * Routines (ADR-173, §4.20): saved tasks the user runs by hand, as files in `.trackwall/routines` of the projects folder
  * beside the board, so they survive a rebuilt container and the user reads them in an editor. A routine is a stored
  * prompt that later runs without the user reading it again, and anything with file tools in the projects folder can
  * write the folder, so the daemon runs only content the user approved: the approval is the SHA-256 of the file's bytes,
