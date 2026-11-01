@@ -17,6 +17,27 @@ export function withEntries(entries: readonly ConversationEntry[], message: Conv
   return next;
 }
 
+type UserEntry = Extract<ConversationEntry, { kind: "user" }>;
+type AgentStep = Exclude<ConversationEntry, { kind: "user" }>;
+
+/** What the view draws: each user message on its own, and the agent's answers and tool calls between two of them as one turn. */
+export type ConversationTurn = { kind: "user"; entry: UserEntry } | { kind: "agent"; id: string; steps: AgentStep[] };
+
+/** The entries as turns, so the agent's turn reads as one block under one name instead of loose lines. */
+export function conversationTurns(entries: readonly ConversationEntry[]): ConversationTurn[] {
+  const turns: ConversationTurn[] = [];
+  for (const entry of entries) {
+    if (entry.kind === "user") {
+      turns.push({ kind: "user", entry });
+      continue;
+    }
+    const last = turns.at(-1);
+    if (last?.kind === "agent") last.steps.push(entry);
+    else turns.push({ kind: "agent", id: entry.id, steps: [entry] });
+  }
+  return turns;
+}
+
 /** A tool call's state as `StatusLabel` shows it; one only asked for has no tone, since its approval says the rest. */
 export const TOOL_STATUS: Record<ToolCallStatus, { label: string; tone?: StatusTone }> = {
   pending: { label: "asked" },

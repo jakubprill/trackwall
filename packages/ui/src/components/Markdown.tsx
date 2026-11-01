@@ -8,17 +8,22 @@ import { Streamdown } from "streamdown";
 import { errorMessage } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { useOpenWebLink } from "@/lib/desktop";
+import { cn } from "@/lib/utils";
 
 /**
- * The README as formatted Markdown (ADR-35): ready-made Streamdown (GFM, raw HTML through sanitization, Mermaid diagrams
- * in `strict` mode). Loaded lazily, because Mermaid weighs a few MB. Content from the repo is untrusted, so nothing in it
- * navigates the window: the container catches every click on a link, also in a diagram's SVG, the daemon opens a web page
- * address in the system browser, and the rest is text. Images are replaced by their description.
+ * Untrusted Markdown, formatted with ready-made Streamdown (GFM, sanitized): a README (ADR-35), with raw HTML and Mermaid
+ * diagrams in `strict` mode, and an agent's answer in the conversation view (ADR-107), with neither, because a diagram's
+ * HTML labels and theme CSS can load addresses and an answer is what a prompt-injected agent writes. Loaded lazily,
+ * because Mermaid weighs a few MB. Nothing in the text navigates the window: the container catches every click on a
+ * link, also in a diagram's SVG, the daemon opens a web page address in the system browser, and the rest is text. Images
+ * are replaced by their description.
  */
-const plugins = { mermaid: createMermaidPlugin({ config: { theme: "dark" } }) };
+export type MarkdownSource = "readme" | "agent";
+const README_PLUGINS = { mermaid: createMermaidPlugin({ config: { theme: "dark" } }) };
+const AGENT_PLUGINS = {};
 /**
  * Our own plugins instead of Streamdown's defaults: sanitization with GitHub's schema with the `user-content-` prefix for
- * `id` and `name` (Streamdown strips it, and a README could then overwrite named elements of the window) and without
+ * `id` and `name` (Streamdown strips it, and the text could then overwrite named elements of the window) and without
  * `rehype-harden`, which without a base URL turns relative links and images into "[blocked]". `metastring` is the code
  * block options Streamdown carries over from the fence (for example `startLine=10`).
  */
@@ -26,7 +31,8 @@ const schema = {
   ...defaultSchema,
   attributes: { ...defaultSchema.attributes, code: [...(defaultSchema.attributes?.code ?? []), "metastring"] },
 };
-const rehypePlugins: ComponentProps<typeof Streamdown>["rehypePlugins"] = [rehypeRaw, [rehypeSanitize, schema]];
+const README_REHYPE: ComponentProps<typeof Streamdown>["rehypePlugins"] = [rehypeRaw, [rehypeSanitize, schema]];
+const AGENT_REHYPE: ComponentProps<typeof Streamdown>["rehypePlugins"] = [[rehypeSanitize, schema]];
 const controls = {
   code: { copy: true, download: false },
   table: { copy: true, download: false, fullscreen: true },
@@ -37,7 +43,23 @@ const mermaid = { errorComponent: MermaidError };
 /** The middle mouse button: the browser would open the link in a new WebView window instead of the system browser. */
 const MIDDLE_BUTTON = 1;
 
-export function ReadmeMarkdown({ conn, text }: { conn: Connection; text: string }) {
+/**
+ * `streaming` for text that is still growing (an answer chunk by chunk): Streamdown then closes an unfinished code block
+ * or emphasis instead of showing its marks.
+ */
+export function Markdown({
+  conn,
+  text,
+  source,
+  streaming = false,
+  className,
+}: {
+  conn: Connection;
+  text: string;
+  source: MarkdownSource;
+  streaming?: boolean;
+  className?: string;
+}) {
   const openLink = useOpenWebLink(conn);
   const [linkError, setLinkError] = useState<string>();
   const followLink = (e: MouseEvent<HTMLDivElement>) => {
@@ -53,12 +75,17 @@ export function ReadmeMarkdown({ conn, text }: { conn: Connection; text: string 
   };
 
   return (
-    <div className="flex flex-col gap-3 p-4 text-sm leading-relaxed" onClickCapture={followLink} onAuxClickCapture={followLink}>
+    <div
+      className={cn("flex flex-col gap-3 text-sm leading-relaxed", className)}
+      onClickCapture={followLink}
+      onAuxClickCapture={followLink}
+    >
       {linkError && <p className="text-destructive text-xs">Could not open the link: {linkError}</p>}
       <Streamdown
-        mode="static"
-        plugins={plugins}
-        rehypePlugins={rehypePlugins}
+        mode={streaming ? "streaming" : "static"}
+        isAnimating={streaming}
+        plugins={source === "readme" ? README_PLUGINS : AGENT_PLUGINS}
+        rehypePlugins={source === "readme" ? README_REHYPE : AGENT_REHYPE}
         controls={controls}
         mermaid={mermaid}
         components={components}

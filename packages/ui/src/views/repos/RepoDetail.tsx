@@ -1,8 +1,9 @@
 import { type Repo, type RepoOverview, type RunningMiseTask, type SessionList, workspaceApi } from "@trackwall/protocol";
 import { FolderOpen } from "lucide-react";
-import { lazy, type ReactNode, Suspense, useCallback, useContext, useState } from "react";
+import { type ReactNode, Suspense, useCallback, useContext, useState } from "react";
 import { EditorButton } from "@/components/EditorButton";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
+import { LazyMarkdown } from "@/components/LazyMarkdown";
 import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
 import { TabBar } from "@/components/TabBar";
@@ -28,9 +29,6 @@ import { RepoCommits } from "./RepoCommits.tsx";
 import { RepoFiles } from "./RepoFiles.tsx";
 import { RepoMiseTasks } from "./RepoMiseTasks.tsx";
 import { RepoStats } from "./RepoStats.tsx";
-
-/** Streamdown with Mermaid is a few MB, so it goes into a separate file loaded only with the first README. */
-const ReadmeMarkdown = lazy(() => import("./ReadmeMarkdown.tsx").then((m) => ({ default: m.ReadmeMarkdown })));
 
 export function RepoDetail({
   conn,
@@ -147,7 +145,7 @@ function Readme({ conn, readme }: { conn: Connection; readme: RepoOverview["read
       {readme.format === "markdown" ? (
         <ReadmeFallback key={readme.text} text={readme.text}>
           <Suspense fallback={<Loading />}>
-            <ReadmeMarkdown conn={conn} text={readme.text} />
+            <LazyMarkdown conn={conn} text={readme.text} source="readme" className="p-4" />
           </Suspense>
         </ReadmeFallback>
       ) : (
