@@ -122,6 +122,25 @@ describe("unpushed work in a container (ADR-162)", () => {
   );
 
   test(
+    "a linked worktree that sorts before its repo counts the changes of both, each once",
+    async () => {
+      const { facade, projects } = await facadeWith(true);
+      const repo = pushedRepo(projects, "shop");
+      gitIn(repo, "worktree", "add", "-q", "-b", "fix", join(projects, "a-shop-fix"), "main");
+      writeFileSync(join(projects, "a-shop-fix", "fix.txt"), "draft\n");
+      writeFileSync(join(repo, "one.txt"), "1\n");
+      writeFileSync(join(repo, "two.txt"), "2\n");
+
+      const work = await facade.workspace.unpushedWork();
+
+      expect(work.repos).toEqual([
+        { repo: "a-shop-fix", commits: 0, branches: [], noRemote: false, stashes: 0, changes: 3, changedWorktrees: 2 },
+      ]);
+    },
+    SLOW_TEST_TIMEOUT_MS,
+  );
+
+  test(
     "a folder git cannot read is named as unreadable, and the other repos are still counted",
     async () => {
       const { facade, projects } = await facadeWith(true);

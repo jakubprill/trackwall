@@ -36,15 +36,20 @@ export type WorktreeChanges = (dir: string) => Promise<number>;
 export async function readUnpushed(dir: string, changesIn: WorktreeChanges): Promise<RepoUnpushed> {
   const dirs = await gitDirs(dir);
   if (dirs === null) throw new Error(`${dir} has no git directory`);
-  const [main, ...others] = await listWorktrees(dir);
-  const heads = [main, ...others].flatMap((w) => (w?.head ? [w.head] : []));
+  const worktrees = await listWorktrees(dir);
+  const heads = worktrees.flatMap((w) => (w.head ? [w.head] : []));
+  // The entry's own worktree is read by the path it was asked for, which git lists resolved, so its status is the repo
+  // list's (ADR-141). It is not always first: git lists the main worktree first even from a linked one.
+  const own = await pathKey(dir);
+  const readable = await Promise.all(
+    worktrees.filter((w) => w.readable).map(async (w) => ((await pathKey(w.path)) === own ? dir : w.path)),
+  );
   const [commonDir, remotes, log, stashes, changes] = await Promise.all([
     pathKey(dirs.commonDir),
     gitText(dir, ["remote"]),
     gitText(dir, ["log", "-z", "--format=%D", "--decorate-refs=refs/heads/", "--branches", ...heads, "--not", "--remotes", "--"]),
     gitText(dir, ["stash", "list", "--format=%H"]),
-    // The repo's own worktree by the path it was asked for, which git lists resolved: so its status is the repo list's.
-    Promise.all([changesIn(dir), ...others.filter((w) => w.readable).map((w) => changesIn(w.path))]),
+    Promise.all(readable.map((path) => changesIn(path))),
   ]);
   const { commits, branches } = parseUnpushedLog(log);
   return {

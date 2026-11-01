@@ -13,11 +13,10 @@ import { UNPUSHED_NOTE, type UnpushedRow } from "@/lib/unpushed-work";
 
 /**
  * The queue on the left of the dashboard: first sessions that are waiting for you or ended with an error, then task
- * proposals (ADR-39), in a container the repos whose work is only there (ADR-162), then repos that are not
- * clean. Sessions and repos are the same objects as the labels on the scene,
- * so the dashboard also works without WebGL. Proposals are not on the scene, and the decision (with an edited prompt)
- * is made in the Sessions view, so a click on a proposal opens it there right away. Until the lists arrive it says it
- * is loading, rather than counts of zero.
+ * proposals (ADR-39), in a container the repos whose work is only there (ADR-162), then repos that are not clean.
+ * Sessions and repos are the same objects as the labels on the scene, so the dashboard also works without WebGL.
+ * Proposals are not on the scene, and the decision (with an edited prompt) is made in the Sessions view, so a click on a
+ * proposal opens it there right away. Until the lists arrive it says it is loading, rather than counts of zero.
  */
 export function NeedsYouPanel({
   loading,
