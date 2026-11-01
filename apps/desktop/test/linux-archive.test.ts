@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { LINUX_ARCHIVES, LINUX_ARCHS, linuxArchiveName, linuxReadme } from "../scripts/linux-archive.ts";
+import { LINUX_ARCHS, linuxArchiveName } from "@trackwall/protocol";
+import { LINUX_ARCHIVES, linuxReadme } from "../scripts/linux-archive.ts";
 
 const release = readFileSync(join(import.meta.dir, "..", "..", "..", ".github", "workflows", "release.yml"), "utf8");
 

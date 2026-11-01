@@ -32,6 +32,10 @@ _Avoid_: image, devcontainer plugin
 The background process `trackwall-container start` leaves in a dev container: it starts the daemon and starts it again after a crash, and ends with it after a stop (ADR-164).
 _Avoid_: watchdog, daemon manager
 
+**Container update** (`container-update.ts`, `bin/current`; the command `trackwall-container update <version>`):
+Replacing Trackwall in a dev container with another release without rebuilding the container: the signed Linux archive goes into `bin/<version>/` of the state directory, `bin/current` names it, and the previous version comes back when the new one does not answer (ADR-165).
+_Avoid_: upgrade, self-update (the app's own update is *App update*)
+
 **App update** (`updates.rs`, `UpdateCheck`; in the UI *update*):
 A newer version of Trackwall from GitHub Releases, installed by the shell after the user's click and followed by a restart (ADR-53). Its **update package** is the archive the updater downloads and checks against the signature: the release zip on Windows (`portable_update.rs`), `.app.tar.gz` on macOS; the **update manifest** is `latest.json` in the release.
 _Avoid_: upgrade, sync (that is the repo synchronization)

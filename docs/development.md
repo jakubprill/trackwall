@@ -127,7 +127,7 @@ The archive holds a `trackwall` folder with `trackwall-daemon`, `ui/` and `READM
 The Dev Container Feature that installs it (ADR-164) is packed from `apps/desktop/devcontainer-feature/` with the SHA-256 of the archives in a folder written in:
 
 ```sh
-bun apps/desktop/scripts/package-feature.ts out <owner/repo>   # out/devcontainer-feature-trackwall.tgz
+bun apps/desktop/scripts/package-feature.ts out   # out/devcontainer-feature-trackwall.tgz
 ```
 
 To try it in a Debian container as root, unpack it and run `PORT=7700 _REMOTE_USER=<user> TRACKWALL_FEATURE_ARCHIVE=<the archive> sh install.sh`, then `trackwall-container start`. The `container` job of CI does the same.
