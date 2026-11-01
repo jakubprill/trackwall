@@ -210,13 +210,15 @@ describe("commit search", () => {
     "a long subject is cut to 500 characters, and separator bytes in a subject or a path do not split a commit",
     async () => {
       const { workspace, orders } = await workspaceWithHistory();
-      commitAt(orders, "2026-10-25T08:00:00Z", "Ann", `Odd \x1e\x1f ${"x".repeat(1000)}`, { "we\x1eird.txt": "price\n" });
+      // Windows refuses control characters in file names, so there the path is an ordinary one.
+      const oddPath = process.platform === "win32" ? "weird.txt" : "we\x1eird.txt";
+      commitAt(orders, "2026-10-25T08:00:00Z", "Ann", `Odd \x1e\x1f ${"x".repeat(1000)}`, { [oddPath]: "price\n" });
 
       const [newest] = (await workspace.searchCommits({ ...QUERY, text: "price" }, ["orders"])).commits;
 
       expect(newest?.subject).toHaveLength(500);
       expect(newest?.subject.startsWith("Odd \x1e\x1f x")).toBe(true);
-      expect(newest?.files).toEqual(["we\x1eird.txt"]);
+      expect(newest?.files).toEqual([oddPath]);
     },
     REPOS_SETUP_MS,
   );

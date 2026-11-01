@@ -19,6 +19,7 @@ function session(id: string, repo: string, state: TaskState, more: Partial<Sessi
     dialog: null,
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
     view: "terminal",
+    readRequest: null,
     ...more,
   };
 }

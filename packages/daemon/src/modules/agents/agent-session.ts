@@ -22,6 +22,8 @@ export interface AgentSession {
   view(): Session | undefined;
   /** The daemon's prompt for what waits unread goes to the agent as soon as it can take it (ADR-62, ADR-68). */
   askToRead(): "typed" | "queued";
+  /** The user's Deliver now (ADR-159): the prompt is asked for again, even though nothing new arrived. */
+  deliverNow(): void;
   /** What a hook of the session answers (ADR-85; the supervisor's situation, ADR-148). */
   hookOutput(record: CopilotHookRecord | undefined): CopilotHookOutput;
   answerDialog(id: string, answer: DialogAnswer): void;

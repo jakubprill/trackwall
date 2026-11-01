@@ -430,6 +430,10 @@ _Avoid_: note, comment (that is a review comment), chat
 What the daemon saw happen to delegated work, for the proposer: a turn that ended, an error, the end of the session, a reported result, a verification verdict, a rejected proposal. The daemon asks the proposer to read it, so the supervisor or a main session does not poll (ADR-68).
 _Avoid_: event (that is a `/ws` event), notification (that is a system notification), status
 
+**Read request** (`ReadRequest`, `Session.readRequest`, `readRequestPrompt`; "Unread by the agent" and "Deliver now" in the session panel, `deliver-read-request`):
+The daemon's one-line prompt that asks a session's agent to read what waits unread for it (a review, task messages, task updates, a handoff, a trust notice), with since when it has waited and what holds it back (`ReadRequestHold` in `waitsFor`): `sent` and not taken, `pending` until the session can take it, `user_text` in the input box, the agent's question (`dialog`), or `idle`, nothing until the user's Deliver now (ADR-159). The agent reads the content itself through the tools the prompt names.
+_Avoid_: inbox, notification, nudge
+
 **Agent queues** (`agent-queues.json`, `AgentQueues`, `agentQueuesFile`):
 Everything that waits in the `agents` module for the user or an agent: task proposals, unread review comments, task messages, task updates and mise trust notices. Kept in the state directory, so a daemon restart or an update does not lose them; the sessions that come back are asked to read what is unread (ADR-115).
 _Avoid_: inbox, mailbox, outbox
