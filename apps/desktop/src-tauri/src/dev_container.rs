@@ -5,7 +5,8 @@
 //! finds the running container by the label the extension gives it, reads the daemon's `daemon.json` in it through
 //! `docker exec`, checks the daemon like a pasted address (ADR-130) and switches the app to it. The port in `daemon.json`
 //! is the one inside the container, which the dev container guide forwards to the same number (`requireLocalPort`);
-//! another number fails the check rather than reaching something else.
+//! another number fails the check rather than reaching something else. A running container whose daemon does not answer
+//! first gets `trackwall-container start` (the Trackwall Feature, ADR-164), once per start.
 //!
 //! The token never leaves this computer: it goes from the container to the shell over Docker's own channel and is saved
 //! like a pasted one. Every command is built from constants and the saved folder, never from what the daemon or the
@@ -32,6 +33,15 @@ const FOLDER_LABEL: &str = "devcontainer.local_folder";
 /// Reads `daemon.json` from the daemon's state directory: `TRACKWALL_HOME` from `containerEnv`, which `docker exec`
 /// sees as the daemon does, or the default under the home folder of the user `docker exec` runs as.
 const READ_DAEMON_FILE: &str = r#"cat "${TRACKWALL_HOME:-$HOME/.trackwall}/daemon.json""#;
+
+/// Starts the daemon of the Trackwall Dev Container Feature when it does not answer (ADR-164); idempotent, it prints one
+/// JSON object (`ContainerStartResult` in `protocol`) within `DOCKER_TIMEOUT`. Run without `--user`: as root it runs
+/// itself again as the remote user, whose `daemon.json` `READ_DAEMON_FILE` reads.
+const START_TRACKWALL: [&str; 2] = ["trackwall-container", "start"];
+
+/// What `docker exec` exits with when the command is not in the container: an image without the Feature, or a Feature
+/// whose binary is gone, which the start then treats the same way and waits out.
+const COMMAND_NOT_FOUND: i32 = 127;
 
 const DOCKER_TIMEOUT: Duration = Duration::from_secs(20);
 
@@ -124,9 +134,18 @@ impl Docker {
         }
     }
 
-    /// The command's output, or why it failed; never waits longer than `DOCKER_TIMEOUT`. The output is read while the
-    /// command runs, so a long `docker ps` never fills the pipe and stalls it.
+    /// The command's output, or why it failed; never waits longer than `DOCKER_TIMEOUT`.
     fn run(&self, args: &[&str]) -> Result<String, String> {
+        let exit = self.exit(args)?;
+        if exit.code != Some(0) {
+            return Err(short(&exit.stderr));
+        }
+        Ok(exit.stdout)
+    }
+
+    /// The command's exit code and output, whatever the code; never waits longer than `DOCKER_TIMEOUT`. The output is
+    /// read while the command runs, so a long `docker ps` never fills the pipe and stalls it.
+    fn exit(&self, args: &[&str]) -> Result<Exit, String> {
         let mut cmd = Command::new(&self.program);
         #[cfg(test)]
         cmd.args(&self.script);
@@ -151,11 +170,19 @@ impl Docker {
             }
             std::thread::sleep(Duration::from_millis(50));
         };
-        if !status.success() {
-            return Err(stderr.join().unwrap_or_default().trim().chars().take(300).collect());
-        }
-        Ok(stdout.join().unwrap_or_default())
+        Ok(Exit { code: status.code(), stdout: stdout.join().unwrap_or_default(), stderr: stderr.join().unwrap_or_default() })
     }
+}
+
+/// A reason from Docker or the container, cut to a line's length and without control characters, for the window to show.
+fn short(text: &str) -> String {
+    text.trim().chars().filter(|c| !c.is_control()).take(300).collect()
+}
+
+struct Exit {
+    code: Option<i32>,
+    stdout: String,
+    stderr: String,
 }
 
 fn read_in_background(pipe: Option<impl Read + Send + 'static>) -> std::thread::JoinHandle<String> {
@@ -222,15 +249,80 @@ fn connect_remote(remote: &RemoteDaemon) -> Result<(), Miss> {
     }
 }
 
-/// One look: the container of the folder, the daemon in it, and that daemon accepted by `connect`.
-fn find_daemon(docker: &Docker, folder: &str, connect: Connect) -> Result<RemoteDaemon, Miss> {
+/// The part of `ContainerStartResult` (protocol) the window acts on: whether it started, and why not.
+#[derive(Deserialize)]
+struct StartResult {
+    ok: bool,
+    error: Option<StartError>,
+}
+
+#[derive(Deserialize)]
+struct StartError {
+    code: StartErrorCode,
+    message: String,
+}
+
+/// The stable codes of `CONTAINER_START_ERRORS` (protocol); another code is not an answer of Trackwall's.
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum StartErrorCode {
+    BadArguments,
+    StartFailed,
+}
+
+impl StartErrorCode {
+    fn as_str(&self) -> &'static str {
+        match self {
+            StartErrorCode::BadArguments => "bad-arguments",
+            StartErrorCode::StartFailed => "start-failed",
+        }
+    }
+}
+
+/// What `trackwall-container start` answered: nothing to do when the image has no Feature (the daemon may still come from
+/// the user's own `postStartCommand`), a final miss when it could not start the daemon. Its message is shown, never run.
+fn read_start_result(exit: &Exit) -> Result<(), Miss> {
+    if exit.code == Some(COMMAND_NOT_FOUND) {
+        return Ok(());
+    }
+    let last_line = exit.stdout.lines().rev().find(|line| !line.trim().is_empty()).unwrap_or_default();
+    match serde_json::from_str::<StartResult>(last_line) {
+        Ok(StartResult { ok: true, .. }) => Ok(()),
+        Ok(StartResult { error: Some(StartError { code, message }), .. }) => {
+            Err(Miss::Final(format!("Trackwall in the container could not start ({}): {}", code.as_str(), short(&message))))
+        }
+        _ => Err(Miss::NotYet("trackwall-container start in the container did not answer as Trackwall does.".into())),
+    }
+}
+
+/// The running container opened from `folder`.
+fn running_container(docker: &Docker, folder: &str) -> Result<String, Miss> {
     let label = format!("{{{{.ID}}}}\t{{{{.Label \"{FOLDER_LABEL}\"}}}}");
     let ps = docker.run(&["ps", "--no-trunc", "--format", &label]).map_err(Miss::NotYet)?;
     let ignore_case = cfg!(any(windows, target_os = "macos"));
-    let id =
-        container_in(&ps, folder, ignore_case).ok_or_else(|| Miss::NotYet(format!("No container opened from {folder} is running.")))?;
+    container_in(&ps, folder, ignore_case).ok_or_else(|| Miss::NotYet(format!("No container opened from {folder} is running.")))
+}
+
+/// One look: the container of the folder, the daemon in it, and that daemon accepted by `connect`. With `try_start`, a
+/// running container whose daemon does not answer gets `trackwall-container start` before a second look; the polls after
+/// VS Code opened leave starting to the Feature's own `postStartCommand`.
+fn find_daemon(docker: &Docker, folder: &str, connect: Connect, try_start: bool) -> Result<RemoteDaemon, Miss> {
+    let id = running_container(docker, folder)?;
+    match daemon_in(docker, &id, connect) {
+        Err(Miss::NotYet(_)) if try_start => {
+            let mut args = vec!["exec", id.as_str()];
+            args.extend(START_TRACKWALL);
+            read_start_result(&docker.exit(&args).map_err(Miss::NotYet)?)?;
+            daemon_in(docker, &id, connect)
+        }
+        found => found,
+    }
+}
+
+/// The daemon of the container `id`, accepted by `connect`.
+fn daemon_in(docker: &Docker, id: &str, connect: Connect) -> Result<RemoteDaemon, Miss> {
     let text = docker
-        .run(&["exec", &id, "sh", "-c", READ_DAEMON_FILE])
+        .run(&["exec", id, "sh", "-c", READ_DAEMON_FILE])
         .map_err(|e| Miss::NotYet(format!("Trackwall's daemon.json in the container: {e}")))?;
     let remote =
         parse_daemon_file(&text).ok_or(Miss::NotYet("Trackwall's daemon.json in the container is not one Trackwall writes.".into()))?;
@@ -259,7 +351,7 @@ fn start(
         .run(&["version", "--format", "{{.Server.Version}}"])
         .map_err(|e| format!("Docker does not answer ({e}). Start Docker Desktop or Rancher Desktop and try again."))?;
     let was_cancelled = || if cancelled.load(Ordering::SeqCst) { Err(CANCELLED.to_owned()) } else { Ok(()) };
-    match find_daemon(docker, &dev.folder, connect) {
+    match find_daemon(docker, &dev.folder, connect, true) {
         Ok(remote) => return was_cancelled().map(|()| remote),
         Err(Miss::Final(reason)) => return Err(reason),
         Err(Miss::NotYet(_)) => {}
@@ -270,7 +362,7 @@ fn start(
     loop {
         std::thread::sleep(timing.poll);
         was_cancelled()?;
-        match find_daemon(docker, &dev.folder, connect) {
+        match find_daemon(docker, &dev.folder, connect, false) {
             Ok(remote) => return was_cancelled().map(|()| remote),
             Err(Miss::Final(reason)) => return Err(reason),
             Err(Miss::NotYet(last)) if Instant::now() > deadline => {
@@ -442,7 +534,7 @@ mod tests {
             let d = dir.display();
             let version = if docker_up { "echo 27.0" } else { "echo 'Cannot connect to the Docker daemon' >&2; exit 1" };
             let script = format!(
-                "case \"$1\" in\n  version) {version} ;;\n  ps) [ -f {d}/running ] && printf '%s\\t/home/me/dev\\n' {id} ;;\n  exec) [ \"$2\" = {id} ] && cat {d}/daemon.json ;;\nesac\n",
+                "case \"$1\" in\n  version) {version} ;;\n  ps) [ -f {d}/running ] && printf '%s\\t/home/me/dev\\n' {id} ;;\n  exec) [ \"$2\" = {id} ] || exit 1\n    if [ \"$3 $4\" = 'trackwall-container start' ]; then\n      echo >> {d}/started; [ -f {d}/feature ] || exit 127\n      cat {d}/feature; [ -f {d}/feature-starts ] && cp {d}/feature-starts {d}/daemon.json; exit $(cat {d}/feature-code)\n    fi\n    cat {d}/daemon.json ;;\nesac\n",
                 id = "c".repeat(64)
             );
             let script_path = dir.join("docker");
@@ -453,6 +545,21 @@ mod tests {
         fn run_daemon(fake: &Fake) {
             std::fs::write(fake.dir.join("running"), "").expect("running");
             std::fs::write(fake.dir.join("daemon.json"), format!(r#"{{"pid":1,"port":7700,"token":"{TOKEN}"}}"#)).expect("daemon.json");
+        }
+
+        /// The Trackwall Feature in the container: what `trackwall-container start` prints and exits with, and whether
+        /// it starts the daemon.
+        fn with_feature(fake: &Fake, output: &str, code: i32, starts_daemon: bool) {
+            std::fs::write(fake.dir.join("feature"), output).expect("feature");
+            std::fs::write(fake.dir.join("feature-code"), code.to_string()).expect("feature-code");
+            if starts_daemon {
+                std::fs::write(fake.dir.join("feature-starts"), format!(r#"{{"pid":1,"port":7700,"token":"{TOKEN}"}}"#))
+                    .expect("feature-starts");
+            }
+        }
+
+        fn starts(fake: &Fake) -> usize {
+            std::fs::read_to_string(fake.dir.join("started")).map(|s| s.lines().count()).unwrap_or(0)
         }
 
         fn quick() -> Timing {
@@ -565,6 +672,96 @@ mod tests {
             let err = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &|_| Ok(()), &connect_then_cancel, &cancelled, quick());
 
             assert_eq!(err, Err(CANCELLED.to_owned()));
+        }
+
+        #[test]
+        fn starts_trackwall_in_a_running_container_whose_daemon_does_not_answer_without_opening_vs_code() {
+            let fake = fake("feature-starts", true);
+            std::fs::write(fake.dir.join("running"), "").expect("running");
+            with_feature(
+                &fake,
+                r#"{"ok":true,"version":"0.6.0","status":"running","port":7700,"daemon":{"version":"0.6.0","pid":1}}"#,
+                0,
+                true,
+            );
+            let opened = Cell::new(false);
+            let open = |_| {
+                opened.set(true);
+                Ok(())
+            };
+
+            let remote = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &GOING, quick());
+
+            assert_eq!(remote, Ok(RemoteDaemon { port: 7700, token: TOKEN.into() }));
+            assert!(!opened.get());
+            assert_eq!(starts(&fake), 1);
+        }
+
+        #[test]
+        fn says_why_when_trackwall_in_the_container_could_not_start_and_opens_nothing() {
+            let fake = fake("feature-fails", true);
+            std::fs::write(fake.dir.join("running"), "").expect("running");
+            with_feature(
+                &fake,
+                r#"{"ok":false,"version":"0.6.0","error":{"code":"start-failed","message":"The daemon exited with code 3."}}"#,
+                1,
+                false,
+            );
+            let opened = Cell::new(false);
+            let open = |_| {
+                opened.set(true);
+                Ok(())
+            };
+
+            let err = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &GOING, quick());
+
+            assert_eq!(err, Err("Trackwall in the container could not start (start-failed): The daemon exited with code 3.".into()));
+            assert!(!opened.get());
+        }
+
+        #[test]
+        fn opens_vs_code_as_before_when_the_container_has_no_trackwall_feature() {
+            let fake = fake("no-feature", true);
+            std::fs::write(fake.dir.join("running"), "").expect("running");
+            let opened = Cell::new(false);
+            let open = |_| {
+                run_daemon(&fake);
+                opened.set(true);
+                Ok(())
+            };
+
+            let remote = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &GOING, quick());
+
+            assert_eq!(remote, Ok(RemoteDaemon { port: 7700, token: TOKEN.into() }));
+            assert!(opened.get());
+            assert_eq!(starts(&fake), 1);
+        }
+
+        #[test]
+        fn goes_on_waiting_when_trackwall_container_start_prints_something_else() {
+            let fake = fake("feature-garbled", true);
+            std::fs::write(fake.dir.join("running"), "").expect("running");
+            with_feature(&fake, "not json", 126, false);
+            let timing = Timing { timeout: Duration::from_millis(100), poll: Duration::from_millis(20) };
+
+            let err = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &|_| Ok(()), ACCEPT, &GOING, timing).unwrap_err();
+
+            assert!(err.contains("Last: Trackwall's daemon.json in the container"), "{err}");
+            assert_eq!(starts(&fake), 1);
+        }
+
+        #[test]
+        fn runs_trackwall_container_start_only_before_it_opens_vs_code() {
+            let fake = fake("feature-once", true);
+            std::fs::write(fake.dir.join("running"), "").expect("running");
+            with_feature(&fake, r#"{"ok":true,"version":"0.6.0","status":"starting","port":7700}"#, 0, true);
+            let refuse: Connect = &|_| Err(Miss::NotYet("No Trackwall daemon answers at 127.0.0.1:7700.".into()));
+            let timing = Timing { timeout: Duration::from_millis(200), poll: Duration::from_millis(20) };
+
+            let err = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &|_| Ok(()), refuse, &GOING, timing).unwrap_err();
+
+            assert!(err.ends_with("Last: No Trackwall daemon answers at 127.0.0.1:7700."), "{err}");
+            assert_eq!(starts(&fake), 1);
         }
     }
 }
