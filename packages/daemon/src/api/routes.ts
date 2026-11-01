@@ -152,7 +152,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     return null;
   }),
   route(agentsApi.sessions, (f) => f.agents.sessions()),
-  route(agentsApi.start, (f, b) => f.agents.start(b.repo, b.prompt)),
+  route(agentsApi.start, (f, { repo, prompt, ...options }) => f.agents.start(repo, prompt, options)),
   route(agentsApi.startSupervisor, (f, b) => f.agents.startSupervisor(b.conversation, b.view)),
   route(agentsApi.stop, (f, b) => f.agents.stop(b.session)),
   route(agentsApi.environmentChange, (f, b) => f.agents.environmentChange(b.session)),
@@ -168,6 +168,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(agentsApi.taskChanges, (f, b) => f.agents.taskChanges(b.task)),
   route(agentsApi.sendReview, (f, b) => f.agents.sendReview(b.task, b.comments)),
   route(agentsApi.taskJavaNavigation, (f, b) => f.agents.taskJavaNavigation(b.task)),
+  route(agentsApi.sessionJavaNavigation, (f, b) => f.agents.sessionJavaNavigation(b.session)),
   route(agentsApi.taskSharedFiles, async (f, b) => ({ shared: await f.agents.taskSharedFiles(b.task) })),
   route(agentsApi.copyIncludedFilesAgain, (f, b) => f.agents.copyIncludedFilesAgain(b.task)),
   route(agentsApi.handToSupervisor, (f, b) => f.agents.handToSupervisor(b.task)),

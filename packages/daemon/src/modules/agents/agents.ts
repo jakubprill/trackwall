@@ -43,13 +43,22 @@ import type { EndedTaskFacts } from "./ended-task.ts";
 import { HandoffWatch } from "./handoff-watch.ts";
 import { appendHookRecord } from "./hook-tail.ts";
 import { javaNavigationState } from "./java-language-server.ts";
+import { JavaNavigationServers } from "./java-navigation-servers.ts";
 import { LAST_SUPERVISOR_FILE, LastSupervisorFile } from "./last-supervisor.ts";
-import { ListedSessions, resumableOf } from "./listed-sessions.ts";
+import { ListedSessions } from "./listed-sessions.ts";
 import { LiveSession, type SessionEvent, type SessionWindow } from "./live-session.ts";
 import { MiseTrustNotices, type TrustRecipient, trustRecipientOf } from "./mise-trust-notices.ts";
 import { proposedByOf, proposerExists, proposerKeyOf, proposerKind, proposerOf } from "./proposer.ts";
 import { readRequestPrompt } from "./read-request-prompt.ts";
-import { type ResumableSession, ResumableSessions, resumablePlace, type SessionLaunch, sessionLaunch } from "./resumable-sessions.ts";
+import {
+  type MainSessionStart,
+  PLAIN_START,
+  type ResumableSession,
+  ResumableSessions,
+  resumablePlace,
+  type SessionLaunch,
+  sessionLaunch,
+} from "./resumable-sessions.ts";
 import type { SessionMiseEnv } from "./session-env.ts";
 import {
   type LauncherProcs,
@@ -194,9 +203,15 @@ export class Agents {
   /** The sessions a restart is stopping and starting again: a second restart of one would unlist the first one's new session. */
   readonly #restarting = new Set<string>();
   readonly #launcher: SessionLauncher;
+  readonly #javaNavigation: JavaNavigationServers;
 
   constructor(deps: AgentsDeps) {
     this.#deps = deps;
+    this.#javaNavigation = new JavaNavigationServers({
+      projectsDir: () => deps.repos.projectsDir(),
+      settings: () => deps.repos.javaNavigation(),
+      log: deps.log,
+    });
     this.#launcher = new SessionLauncher({
       procs: deps.procs,
       repos: deps.repos,
@@ -237,6 +252,7 @@ export class Agents {
       legacyWorktreesDir: join(deps.home, LEGACY_WORKTREES_DIR),
       openEditor: deps.openEditor,
       log: deps.log,
+      javaNavigation: this.#javaNavigation,
       sessions: {
         launch: (spec) => this.#launchTask(spec),
         of: (task) => this.#sessions.views().filter((s) => s.task === task),
@@ -297,15 +313,52 @@ export class Agents {
 
   /**
    * A main session in the root of `repo`, or with `repo: null` a free session in the projects folder (ADR-100), with
-   * `prompt` as its first message (`--interactive`) when there is one. Its id is also Copilot CLI's session id, so a
-   * restart can resume it (ADR-95).
+   * `prompt` as its first message (`--interactive`) when there is one. In a terminal its id is also Copilot CLI's
+   * session id, so a restart can resume it (ADR-95); in the conversation view Copilot CLI picks the conversation's id
+   * (ADR-107). It runs on `model` and, in a repo, with `javaNavigation` gets jdtls, on every start (ADR-175); it always
+   * asks for approvals, since nothing reviews what it changes in the working copy.
    */
-  async start(repo: string | null, prompt?: string): Promise<Session> {
+  async start(
+    repo: string | null,
+    prompt?: string,
+    { model = null, javaNavigation = false, view = "terminal" }: Partial<MainSessionStart> & { view?: SessionView } = {},
+  ): Promise<Session> {
+    if (javaNavigation) this.#assertJavaNavigation(repo, view);
     const id = randomUUID();
     const cwd = repo === null ? await this.#deps.repos.projectsDir() : await this.#deps.repos.repoPath(repo);
+    const place = { repo, supervisor: false, cwd, task: null };
+    const start = { model, javaNavigation };
+    if (view === "conversation") return this.#launchMain({ view, id, load: undefined, firstMessage: prompt }, place, start);
     const args = [`--session-id=${id}`, ...(prompt === undefined ? [] : [`--interactive=${prompt}`])];
     const started = prompt !== undefined;
-    return this.#launch({ id, repo, supervisor: false, cwd, task: null, args, promptOnStart: started, hasConversation: started });
+    const spec = { view, id, args, promptOnStart: started, hasConversation: started, conversation: id };
+    return this.#launchMain(spec, place, start);
+  }
+
+  /** Java navigation needs a repo, a terminal (ADR-137) and settings that can start jdtls now; refused before the start. */
+  #assertJavaNavigation(repo: string | null, view: SessionView): void {
+    if (repo === null) throw new DomainError("bad_request", "Java navigation needs a repo; a free session cannot get it");
+    if (view === "conversation")
+      throw new DomainError("bad_request", "Java navigation needs a session in a terminal; the conversation view cannot give it yet");
+    const { problem } = this.#javaNavigation.readiness();
+    if (problem !== null) throw new DomainError("bad_request", `Java navigation cannot start: ${problem}`);
+  }
+
+  /**
+   * A main or free session's start in either view with what it started with (ADR-175): the model on every start, and
+   * jdtls in a terminal under the session's id, so a restart starts it warm. A start whose settings broke since starts
+   * without jdtls and logs why.
+   */
+  async #launchMain(spec: SessionLaunch, place: SessionPlace, start: MainSessionStart): Promise<Session> {
+    // Before the session's own arguments, as a task's (ADR-98).
+    const modelArgs = start.model === null ? [] : [`--model=${start.model}`];
+    if (spec.view === "conversation") {
+      if (start.javaNavigation) this.#deps.log(`session ${spec.id} starts without Java navigation: it needs a terminal`);
+      this.#assertNotListed(spec.id);
+      return this.#listed(await this.#launcher.conversation({ ...spec, ...place, args: modelArgs }), start);
+    }
+    const lspServers = start.javaNavigation ? await this.#javaNavigation.servers(spec.id, place.cwd, `session ${spec.id}`) : {};
+    return this.#launch({ ...spec, ...place, args: [...modelArgs, ...spec.args], lspServers }, start);
   }
 
   /** The supervisor (ADR-58): `SupervisorSessions.start`. */
@@ -585,9 +638,9 @@ export class Agents {
     if (item !== null && !(await this.#deps.boardHas(item))) throw new DomainError("not_found", `no board item ${item}`);
   }
 
-  /** What the New session form offers on this computer: whether tasks can get Java navigation now, or why not (ADR-99). */
+  /** What the New session form offers on this computer: whether Java navigation can start now, or why not (ADR-99). */
   startOptions(): StartOptions {
-    return { javaNavigation: javaNavigationState(this.#tasks.javaNavigation()) };
+    return { javaNavigation: javaNavigationState(this.#javaNavigation.readiness()) };
   }
 
   resumeTask(id: string): Promise<Task> {
@@ -641,6 +694,15 @@ export class Agents {
   /** How the task's Java language server is doing (ADR-124); `null` for a task without Java navigation. */
   taskJavaNavigation(id: string): Promise<JavaNavigationStatus | null> {
     return this.#tasks.javaNavigationStatus(id);
+  }
+
+  /** How a session's jdtls is doing: its task's, or a main session's own (ADR-175); `null` without Java navigation. */
+  async sessionJavaNavigation(id: string): Promise<JavaNavigationStatus | null> {
+    const session = this.#sessions.get(id);
+    if (session.task !== null) return this.#tasks.javaNavigationStatus(session.task);
+    if (!this.#sessions.startOf(id).javaNavigation) return null;
+    const view = this.#sessions.view(session);
+    return this.#javaNavigation.status(id, view.run.kind === "exited" ? null : new Date(view.startedAt));
   }
 
   /** A task's changes without the diff, for an agent (the MCP tool `get_session`). */
@@ -742,10 +804,10 @@ export class Agents {
     this.#deps.onTaskRemoved(ended);
   }
 
-  /** A start in a terminal; a new id by default. */
-  async #launch({ id = randomUUID(), ...spec }: Omit<TerminalLaunch, "id"> & { id?: string }): Promise<Session> {
+  /** A start in a terminal; a new id by default, and for a main session what it started with (ADR-175). */
+  async #launch({ id = randomUUID(), ...spec }: Omit<TerminalLaunch, "id"> & { id?: string }, start = PLAIN_START): Promise<Session> {
     this.#assertNotListed(id);
-    return this.#listed(await this.#launcher.terminal({ id, ...spec }));
+    return this.#listed(await this.#launcher.terminal({ id, ...spec }), start);
   }
 
   /**
@@ -771,8 +833,8 @@ export class Agents {
   }
 
   /** A started session joins the list. */
-  #listed({ session, miseEnv, mise }: StartedSession): Session {
-    this.#sessions.add({ session, miseEnv, mise });
+  #listed({ session, miseEnv, mise }: StartedSession, start = PLAIN_START): Session {
+    this.#sessions.add({ session, miseEnv, mise }, start);
     // A review or a message sent while the task had no running session (ADR-62, ADR-68); the prompt names only what is
     // unread, and nothing is typed when nothing is. Not the updates of a new supervisor or main session: the user starts
     // those to talk, and the next update asks them anyway.
@@ -811,7 +873,7 @@ export class Agents {
     if (this.#restarting.has(id)) throw new DomainError("bad_request", "the session is already restarting");
     if (!this.#sessions.isRunning(session)) throw new DomainError("bad_request", "the session has ended; start it again instead");
     const { supervisor, task } = session;
-    const left = resumableOf(session);
+    const left = this.#sessions.resumable(session);
     this.#restarting.add(id);
     try {
       // What can refuse the start (a bad name in `agentSecrets`, Copilot CLI gone) refuses it before the stop, so the
@@ -921,8 +983,10 @@ export class Agents {
         this.#deps.log(`resumed session ${session.session} (${resumablePlace(session)})`);
       } catch (err) {
         this.#deps.log(`resuming session ${session.session}: ${String(err)}`);
-        // What waited for it has nobody to reach, as when the user closes a session (ADR-115).
+        // What waited for it has nobody to reach, as when the user closes a session (ADR-115); its jdtls index neither.
         if (session.task === null) this.#coordination.sessionClosed({ id: session.session, supervisor: session.supervisor, task: null });
+        if (session.task === null && session.javaNavigation)
+          await this.#javaNavigation.remove(session.session, `session ${session.session}`);
       }
     }
   }
@@ -940,7 +1004,8 @@ export class Agents {
       return started;
     }
     const cwd = repo === null ? await this.#deps.repos.projectsDir() : await this.#deps.repos.repoPath(repo);
-    const started = await this.#launchAs(spec, { repo, supervisor: false, cwd, task: null });
+    const { model, javaNavigation } = left;
+    const started = await this.#launchMain(spec, { repo, supervisor: false, cwd, task: null }, { model, javaNavigation });
     this.#askToReadLeft(left.session);
     return started;
   }
@@ -1000,8 +1065,11 @@ export class Agents {
     if (this.#deps.procs.state(sessionOwner(id))?.kind !== "exited") {
       throw new DomainError("bad_request", "the session is still running; stop it before closing");
     }
+    const { javaNavigation } = this.#sessions.startOf(id);
     this.#unlist(session);
     this.#coordination.sessionClosed(session);
+    // A main session's jdtls index lasts while the session does (ADR-175).
+    if (javaNavigation) void this.#javaNavigation.remove(id, `session ${id}`);
   }
 
   /** The session leaves the list with its files; what waits for it in the coordination stays for whoever comes under its id. */

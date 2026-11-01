@@ -10,7 +10,7 @@ import {
 import type { StatusTone } from "./repo-status.ts";
 
 /**
- * Whether the New session form offers Java navigation (ADR-99) for a task in a repo: only in a repo tagged `java`, and
+ * Whether the New session form offers Java navigation (ADR-99) for a task or session in a repo (ADR-175): only in a repo tagged `java`, and
  * there either ready or unavailable with the reason, so that the user sees the option and what it still needs.
  */
 export type JavaNavigationOffer = { kind: "hidden" } | { kind: "ready" } | { kind: "unavailable"; reason: string };
@@ -27,7 +27,7 @@ export function javaNavigationOffer(tags: readonly RepoTag[] | undefined, state:
 }
 
 /**
- * The offer for a task shown in `view`: Java navigation needs a terminal for now (ADR-137), so in the conversation view
+ * The offer for a task or session shown in `view`: Java navigation needs a terminal for now (ADR-137), so in the conversation view
  * an offer the repo has becomes unavailable, saying how to get it back.
  */
 export function javaNavigationInView(offer: JavaNavigationOffer, view: SessionView): JavaNavigationOffer {
@@ -56,7 +56,7 @@ export function javaNavigationSetup(install: JavaNavigationInstall): { line: str
       tone: "warning",
       button,
     };
-  return { line: "Ready: tasks in Java repos can get it on the New session form.", tone: "ok", button };
+  return { line: "Ready: tasks and sessions in Java repos can get it on the New session form.", tone: "ok", button };
 }
 
 /**

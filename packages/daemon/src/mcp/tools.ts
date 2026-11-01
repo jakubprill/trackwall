@@ -212,7 +212,10 @@ const runs: ToolRuns = {
   },
   getSession: async (facade, { session: id }) => {
     const session = agentSession(facade.agents.session(id));
-    if (session.task === null) return { session, task: null, changes: null, changesError: null, verification: null, javaNavigation: null };
+    if (session.task === null) {
+      const javaNavigation = await facade.agents.sessionJavaNavigation(id);
+      return { session, task: null, changes: null, changesError: null, verification: null, javaNavigation };
+    }
     const task = facade.agents.task(session.task);
     const verification = facade.verifications.get(task.id);
     // The session and the task exist even when the changes cannot be computed (worktree deleted by hand, ending in progress).

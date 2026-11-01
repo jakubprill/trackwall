@@ -67,7 +67,7 @@ describe("the Java navigation section of Settings", () => {
 
   test("says whether tasks can get it with the settings in place", () => {
     expect(javaNavigationSetup({ ...install, readiness: { problem: null } })).toEqual({
-      line: "Ready: tasks in Java repos can get it on the New session form.",
+      line: "Ready: tasks and sessions in Java repos can get it on the New session form.",
       tone: "ok",
       button: "Install again",
     });

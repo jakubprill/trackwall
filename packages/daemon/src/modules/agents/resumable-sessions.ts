@@ -1,4 +1,4 @@
-import { RepoId, SessionView, TaskId } from "@trackwall/protocol";
+import { RepoId, SessionView, TaskId, TaskModel } from "@trackwall/protocol";
 import { z } from "zod";
 import { FollowedStateFile } from "../../infra/state-file.ts";
 import { ConversationId } from "./acp-messages.ts";
@@ -32,10 +32,22 @@ export const ResumableSession = z.preprocess(
        * Copilot CLI picks the id itself (ADR-107).
        */
       conversation: ConversationId.optional(),
+      /** A main or free session's model (ADR-175); a task's is the task's. A file of a Trackwall before it has none. */
+      model: TaskModel.nullable().default(null),
+      /** A main session's Java navigation (ADR-175); a task's is the task's. */
+      javaNavigation: z.boolean().default(false),
     })
     .refine((s) => !s.supervisor || (s.repo === null && s.task === null), "the supervisor has no repo and no task"),
 );
 export type ResumableSession = z.infer<typeof ResumableSession>;
+
+/**
+ * What a main or free session started with that each of its starts repeats, the first, a restart and a daemon restart
+ * (ADR-175): its model and, in a repo, Java navigation. A task's sessions take both from the task, the supervisor has
+ * neither.
+ */
+export type MainSessionStart = Pick<ResumableSession, "model" | "javaNavigation">;
+export const PLAIN_START: MainSessionStart = { model: null, javaNavigation: false };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
