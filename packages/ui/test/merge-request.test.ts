@@ -28,6 +28,7 @@ const task = (fields: Partial<Task> = {}): Task => ({
   summary: null,
   port: 41000,
   included: { files: [], problems: [] },
+  change: null,
   ...fields,
 });
 

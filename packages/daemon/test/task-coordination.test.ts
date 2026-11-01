@@ -37,6 +37,7 @@ function task(id: string, proposedBy: ProposedBy | null): Task {
     summary: null,
     port: 41000,
     included: { files: [], problems: [] },
+    change: null,
   };
 }
 

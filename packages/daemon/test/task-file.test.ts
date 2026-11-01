@@ -24,6 +24,7 @@ const stored = {
   conversation: "c0ffee-1",
   summary: { text: "Fixed, test added.", checkSteps: [], reportedAt: "2026-10-24T10:00:00.000Z" },
   handoff: null,
+  change: null,
   trustedMiseConfig: { "mise.toml": "b".repeat(64) },
   port: 41003,
   included: { files: [".env", "config/application-local.yml"], problems: ["data.db is not a regular file (a link or a special file)"] },

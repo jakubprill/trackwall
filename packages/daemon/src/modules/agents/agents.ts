@@ -3,6 +3,9 @@ import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   type AgentTaskChanges,
+  type ChangeRequest,
+  type CreatedChange,
+  changePartPrompt,
   type DialogAnswer,
   type EnvironmentCheck,
   type HttpEndpoint,
@@ -38,7 +41,7 @@ import {
   type Verification,
   type WorkingTreeChanges,
 } from "@trackwall/protocol";
-import { DomainError } from "../../infra/errors.ts";
+import { DomainError, messageOf } from "../../infra/errors.ts";
 import { AcpSession, type ConversationViewer, type ConversationWindow } from "./acp-session.ts";
 import { AgentQueuesFile } from "./agent-queues.ts";
 import type { AgentSession } from "./agent-session.ts";
@@ -221,6 +224,7 @@ export class Agents {
       tokens: this.#tokens,
       callbacks: (session) => this.#sessionCallbacks(session),
       handoff: (task) => this.#tasks.handoff(task),
+      change: (task) => this.#tasks.change(task),
       knowledge: deps.knowledge,
     });
     this.#resumable = new ResumableSessions(join(deps.home, RESUMABLE_SESSIONS_FILE), deps.log);
@@ -406,7 +410,17 @@ export class Agents {
     if (this.#proposals.get(id).kind !== "task") throw new DomainError("bad_request", `proposal ${id} is not a task`);
     const { repo, title, proposedBy, item } = this.#proposals.take(id);
     try {
-      return await this.#tasks.create(repo, prompt, { id, title, proposedBy, model, approvals, javaNavigation: false, item, view });
+      return await this.#tasks.create(repo, prompt, {
+        id,
+        title,
+        proposedBy,
+        model,
+        approvals,
+        javaNavigation: false,
+        item,
+        view,
+        change: null,
+      });
     } finally {
       this.#proposals.release(id, this.#tasks.find(id) === undefined);
     }
@@ -592,8 +606,42 @@ export class Agents {
     await this.#assertOnBoard(item);
     // `task` throws `not_found` for a task that is not on the list, before a worktree exists.
     const proposedBy = handoffFrom === null ? null : { session: null, supervisor: false, task: this.task(handoffFrom).id };
-    const origin = { id: randomUUID(), title, proposedBy, model, approvals, javaNavigation, item, view };
+    const origin = { id: randomUUID(), title, proposedBy, model, approvals, javaNavigation, item, view, change: null };
     return this.#tasks.create(repo, prompt, origin);
+  }
+
+  /**
+   * A change the user typed (ADR-171): a task per part, one after another in the parts' order, so each part's handoff
+   * is the part before it, already on the list (ADR-143). A part that cannot start is named in `failed` and the others go
+   * on; the user ends what started if they want none of it. When no part starts, the first part's error.
+   */
+  async createChange({ title, prompt, parts, approvals, model, item, view }: ChangeRequest): Promise<CreatedChange> {
+    await this.#assertOnBoard(item);
+    const change = randomUUID();
+    const tasks: Task[] = [];
+    const failed: CreatedChange["failed"] = [];
+    let firstError: unknown;
+    const fail = (repo: string, err: unknown) => {
+      firstError ??= err;
+      failed.push({ repo, message: messageOf(err) });
+    };
+    // Every part is on the list before the first session starts, so each session's instructions name all its siblings.
+    const created: Task[] = [];
+    for (const [position, part] of parts.entries()) {
+      const origin = { id: randomUUID(), title, proposedBy: null, model, approvals, javaNavigation: false, item, view };
+      const partOrigin = { ...origin, change: { id: change, position } };
+      await this.#tasks.create(part.repo, changePartPrompt(prompt, part), partOrigin, "later").then(
+        (task) => created.push(task),
+        (err: unknown) => fail(part.repo, err),
+      );
+    }
+    for (const task of created)
+      await this.#tasks.launchCreated(task.id).then(
+        (started) => tasks.push(started),
+        (err: unknown) => fail(task.repo, err),
+      );
+    if (tasks.length === 0) throw firstError;
+    return { tasks, failed };
   }
 
   /**

@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import type { Session } from "@trackwall/protocol";
-import { firstListedRepo, formStart, newSessionForm, newSessionStart, sessionsInSameFolder } from "../src/lib/new-session.ts";
+import {
+  changeStart,
+  firstListedRepo,
+  formChangeStart,
+  formStart,
+  mayAddPart,
+  newSessionForm,
+  newSessionStart,
+  sessionsInSameFolder,
+} from "../src/lib/new-session.ts";
 
 function session(id: string, over: Partial<Session>): Session {
   return {
@@ -107,5 +116,68 @@ describe("what the form started from a board item starts (ADR-133)", () => {
 
   test("is nothing in the projects folder, where only a session could run", () => {
     expect(formStart(form, null, true, "Add the history endpoint")).toEqual({ kind: "needs-repo" });
+  });
+});
+
+describe("a task with more repos is a change (ADR-171)", () => {
+  const task = { kind: "task" as const, repo: "payments", prompt: "Add refunds" };
+
+  test("the task's repo is the first part, then the added repos in order with their notes trimmed, under the title", () => {
+    expect(
+      changeStart(
+        task,
+        [
+          { repo: "orders-api", note: " call POST /api/refunds " },
+          { repo: "shop-web", note: "" },
+        ],
+        " Refund API ",
+      ),
+    ).toEqual({
+      kind: "change",
+      title: "Refund API",
+      prompt: "Add refunds",
+      parts: [
+        { repo: "payments", note: "" },
+        { repo: "orders-api", note: "call POST /api/refunds" },
+        { repo: "shop-web", note: "" },
+      ],
+    });
+  });
+
+  test("the task's own repo, one added twice or one not chosen yet counts once or not at all, and a lone task stays a task", () => {
+    const added = [
+      { repo: "payments", note: "again" },
+      { repo: "", note: "" },
+      { repo: "orders-api", note: "" },
+      { repo: "orders-api", note: "twice" },
+    ];
+    const start = changeStart(task, added, "Refunds");
+    expect(start.kind === "change" && start.parts.map((p) => p.repo)).toEqual(["payments", "orders-api"]);
+    expect(changeStart(task, [{ repo: "payments", note: "" }], "Refunds")).toEqual(task);
+  });
+
+  test("a change needs a title, which names its branch", () => {
+    expect(changeStart(task, [{ repo: "orders-api", note: "" }], "  ")).toEqual({ kind: "needs-title" });
+  });
+
+  test("only a task in its own worktree takes more repos, not a session or the projects folder", () => {
+    const form = newSessionForm(undefined);
+    const added = [{ repo: "orders-api", note: "" }];
+    expect(formChangeStart(form, "payments", true, "Add refunds", added, "Refunds").firstPart).toBe("payments");
+    expect(formChangeStart(form, "payments", true, "", added, "Refunds")).toEqual({
+      start: { kind: "needs-prompt" },
+      firstPart: "payments",
+    });
+    expect(formChangeStart(form, "payments", false, "Add refunds", added, "Refunds")).toEqual({
+      start: { kind: "session", repo: "payments", prompt: "Add refunds" },
+      firstPart: null,
+    });
+    expect(formChangeStart(form, null, true, "", added, "Refunds").firstPart).toBeNull();
+  });
+
+  test("a change has at most six parts, the task's own repo among them", () => {
+    const added = (n: number) => Array.from({ length: n }, (_, i) => ({ repo: `repo-${i}`, note: "" }));
+    expect(mayAddPart(added(4))).toBe(true);
+    expect(mayAddPart(added(5))).toBe(false);
   });
 });

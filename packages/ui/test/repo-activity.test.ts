@@ -44,6 +44,7 @@ function task(id: string, repo: string, title: string): Task {
     summary: null,
     port: 41000,
     included: { files: [], problems: [] },
+    change: null,
   };
 }
 

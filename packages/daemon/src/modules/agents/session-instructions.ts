@@ -10,6 +10,7 @@ import {
   VERIFY_MISE_TASK,
 } from "@trackwall/protocol";
 import { envKey } from "../../infra/env-key.ts";
+import type { ChangeFacts } from "./task-change.ts";
 import type { HandoffFacts } from "./task-handoff.ts";
 
 /**
@@ -29,13 +30,14 @@ const INSTRUCTIONS_FILE = "trackwall.instructions.md";
 /**
  * Who the session is: the supervisor in the projects folder (ADR-58), which may change code only with
  * `supervisor.changesCode` (ADR-78), a free session in the projects folder (ADR-100), or in a repo a main session in its
- * root, or a task session in the task's worktree, with the task that handed it its work (ADR-143).
+ * root, or a task session in the task's worktree, with the task that handed it its work (ADR-143) and the change it is a
+ * part of (ADR-171).
  */
 export type SessionRole =
   | { kind: "supervisor"; changesCode: boolean }
   | { kind: "free" }
   | { kind: "repo"; repo: string }
-  | { kind: "task"; repo: string; task: string; handoff: HandoffFacts | null };
+  | { kind: "task"; repo: string; task: string; handoff: HandoffFacts | null; change: ChangeFacts | null };
 
 /**
  * Writes the instructions of a session started by Trackwall `version` to `<sessionDir>/instructions/` and returns that
@@ -89,7 +91,7 @@ function sessionInstructions(version: string, role: SessionRole, knowledge: Sess
 function sessionRole(role: SessionRole): string[] {
   if (role.kind === "supervisor") return supervisorRole(role.changesCode);
   if (role.kind === "free") return freeRole();
-  return role.kind === "repo" ? repoRole(role.repo) : taskRole(role.repo, role.task, role.handoff);
+  return role.kind === "repo" ? repoRole(role.repo) : taskRole(role);
 }
 
 function supervisorRole(changesCode: boolean): string[] {
@@ -130,7 +132,7 @@ function repoRole(repo: string): string[] {
   ];
 }
 
-function taskRole(repo: string, task: string, handoff: HandoffFacts | null): string[] {
+function taskRole({ repo, task, handoff, change }: Extract<SessionRole, { kind: "task" }>): string[] {
   return [
     `You run the task \`${task}\` in the repo \`${repo}\` (its id in Trackwall tools), in the task's own git worktree on its own branch. The user reviews the task's changes in Trackwall.`,
     "- Work only in this worktree: the repo root and other worktrees belong to the user and to other agents.",
@@ -143,7 +145,30 @@ function taskRole(repo: string, task: string, handoff: HandoffFacts | null): str
     `- When you are done, or stuck and need the user, call ${mcpTools.reportResult.name}: what you did, what is left and what to check, or the question you need answered. Call it again if the result changes. Your result becomes the description of the task's merge request, which the user opens from Trackwall, so write it for the reviewer. When the user can try the change by hand (a page, an endpoint, a command), add checkSteps: a few short steps, each with what to do and what they should see. They are only a hint for the user, so leave them out when there is nothing to try.`,
     `- When you need a decision from the session that proposed your task (or the supervisor the user handed it to) to go on, ask it with ${mcpTools.askProposer.name} and end your turn: its answer comes as a message. If no session answers your task (the user started it), the tool says so; then ask the user.`,
     `- When Trackwall asks you to call ${mcpTools.getMessages.name}, the session that proposed your task, or the supervisor the user handed it to, has written to you. ${TASK_MESSAGE_RULE}`,
-    ...(handoff === null ? [] : handoffLines(handoff)),
+    ...(change !== null ? changeLines(task, change, handoff) : handoff === null ? [] : handoffLines(handoff)),
+  ];
+}
+
+/**
+ * The change the task is a part of (ADR-171): its sibling parts from Trackwall's list, and the part right before it,
+ * whose work it builds on as a handoff (ADR-143), though that part did not propose it and does not read its result.
+ */
+function changeLines(task: string, { parts }: ChangeFacts, handoff: HandoffFacts | null): string[] {
+  const own = parts.findIndex((p) => p.task === task);
+  const ownPart = parts[own];
+  if (ownPart === undefined) return [];
+  const list = parts.map((p, i) => `  ${i + 1}. the repo \`${p.repo}\`, task \`${p.task}\`${i === own ? " (yours)" : ""}`);
+  const lines = [
+    `- Your task is part ${own + 1} of ${parts.length} of one change the user started across several repos: each part is a task in its own repo, all on the branch \`${ownPart.branch}\`, and their merge requests are to be merged in this order:`,
+    ...list,
+    `- Change only your part. What another part has to do is its task's work: do not propose a task in a repo of this change, and when your part needs something from another part, say so in your ${mcpTools.reportResult.name}, which the user reads next to the other parts. Read what another part changed with ${mcpTools.getTaskChanges.name} and its task, and ${mcpTools.getChangedEndpoints.name} with its task lists the endpoints its commits changed.`,
+  ];
+  if (handoff === null) return lines;
+  const from = `the task \`${handoff.task}\` in the repo \`${handoff.repo}\``;
+  if (handoff.ended) return [...lines, `- The part before yours, ${from}, was ended by the user, so its changes can no longer be read.`];
+  return [
+    ...lines,
+    `- Your part builds on the part before it, ${from}: you last read its branch at commit \`${handoff.commit}\`. This worktree was made from the default branch, so it does not have that work. Build against the contract it changes (an endpoint, a field, a message), not a copy of its code. When Trackwall asks you to call ${mcpTools.getHandoff.name}, and before you report, call it: it says where that branch is now and which files changed since you last read it.`,
   ];
 }
 

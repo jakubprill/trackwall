@@ -441,6 +441,10 @@ _Avoid_: parent, owner, manager
 **Handoff** (`TaskHandoff` in `task-handoff.ts`, `StoredTask.handoff`):
 What a task whose session proposed another task hands that task: the handing task, its repo and branch, and the commit its branch was at when the user approved the proposal, taken from Trackwall's task list and git. Every session of the proposed task is told where to read the work it builds on (ADR-143). When the handing task's branch moves, the proposed task is asked to call the MCP tool `get_handoff` (`TaskHandoffState`), which lists the commits and files since it last read (ADR-144), and `get_changed_endpoints` with the handing task lists the endpoints its commits changed (ADR-145). The user can also hand a task's work to a repo its change reaches, with "Hand off" in its Impact tab (`handoffFrom`, ADR-147).
 
+**Change** (`Task.change`, `TaskChange`, `ChangeId`; "change" in the UI):
+One piece of work across several repos that the user starts at once: one task per repo, its **parts**, all on one branch name from the change's title, each with its place in the **merge order** (`TaskChange.position`), the order their merge requests are to be merged. A change is no record of its own: it is the tasks that carry its id, and it ends with its last part. Each part's session knows its siblings, and builds on the part right before it as a handoff (ADR-171). The merge order is information; nothing waits for it or merges by it (ADR-9). Not a subtask: no part proposed another, so none reports to another.
+_Avoid_: multi-repo task, epic; and do not confuse it with a task's changes (its diff, `TaskChanges`), which every part has.
+
 **Impact** (`ImpactedRepo`, `impact` in `ChangedEndpoints`, `graph/impact.ts`; in the UI the task's *Impact* tab and *Impact of* in Overview):
 The repos a task's committed API change reaches, in rings: ring 1 calls a changed endpoint, ring 2 calls an endpoint of ring 1 that makes such a call, up to three rings; a repo reached only through code Trackwall could not follow, or through a client without paths, is *maybe* (`sure: false`) (ADR-147).
 _Avoid_: blast radius, ripple, consumers (for the whole set)

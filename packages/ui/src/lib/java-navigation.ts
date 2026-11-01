@@ -35,6 +35,11 @@ export function javaNavigationInView(offer: JavaNavigationOffer, view: SessionVi
   return { kind: "unavailable", reason: "Needs the terminal for now: turn Chat off to use it." };
 }
 
+/** Java navigation is a choice of a task on its own: the parts of a change (ADR-171) start without it. */
+export function javaNavigationInChange(offer: JavaNavigationOffer, change: boolean): JavaNavigationOffer {
+  return change ? { kind: "hidden" } : offer;
+}
+
 /** The tone of the install's state line in Settings › Agents. */
 export type JavaNavigationSetupTone = "muted" | "ok" | "warning" | "error";
 

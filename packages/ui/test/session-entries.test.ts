@@ -34,6 +34,8 @@ function session(id: string, startedAt: string, task: string | null = null): Ses
   };
 }
 
+const CHANGE = "9d0c1100-0000-4000-8000-000000000000";
+
 function task(id: string, createdAt: string): Task {
   return {
     id,
@@ -54,6 +56,7 @@ function task(id: string, createdAt: string): Task {
     summary: null,
     port: 41000,
     included: { files: [], problems: [] },
+    change: null,
   };
 }
 
@@ -318,6 +321,25 @@ describe("Sessions view entries", () => {
       lastSupervisor: null,
     };
     expect(shape(list)).toEqual(["proposals proposals:outside @0", "task t1 @0", "session s1 @0"]);
+  });
+
+  test("the parts of a change sit under its first part in merge order, and under the next one once the first is ended (ADR-171)", () => {
+    const part = (id: string, createdAt: string, position: number) => ({ ...task(id, createdAt), change: { id: CHANGE, position } });
+    // Started one after another, so the later parts are the newer ones.
+    const tasks = [
+      part("web", "2026-10-23T10:02:00Z", 2),
+      part("orders", "2026-10-23T10:01:00Z", 1),
+      task("other", "2026-10-23T10:01:30Z"),
+    ];
+    const list = (listed: Task[]) => ({ sessions: [], tasks: listed, proposals: [], messages: [], lastSupervisor: null });
+
+    expect(shape(list([...tasks, part("payments", "2026-10-23T10:00:00Z", 0)]))).toEqual([
+      "task other @0",
+      "task payments @0",
+      "task orders @1",
+      "task web @1",
+    ]);
+    expect(shape(list(tasks))).toEqual(["task other @0", "task orders @0", "task web @1"]);
   });
 
   test("tasks that delegate to each other stay on the list instead of looping it", () => {

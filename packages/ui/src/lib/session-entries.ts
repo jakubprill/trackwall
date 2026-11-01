@@ -81,7 +81,7 @@ function proposalGroups(proposals: readonly TaskProposal[]): ProposalsEntry[] {
  * A row of the Sessions list: an entry, its depth in the tree and the number of entries directly under it. A task or
  * proposal sits under the entry with the session that proposed it (the main session, `proposedBy`), so the work one
  * session delegated stays with it. When that session is no longer listed (closed, or after a daemon restart), the
- * entry is at the top level.
+ * entry is at the top level. The parts of a change (ADR-171) sit under its first listed part, in their merge order.
  */
 export interface SessionRow {
   entry: SessionEntry;
@@ -103,15 +103,16 @@ export function sessionRows(list: SessionList): SessionRow[] {
   // The entry that holds a session: the task for a task's session (also an older one), otherwise the session itself; a
   // task holds the work any of its sessions proposed (ADR-140).
   const holder = new Map([...list.sessions.map((s) => [s.id, s.task ?? s.id] as const), ...list.tasks.map((t) => [t.id, t.id] as const)]);
+  const heads = changeHeads(list.tasks);
   const children = new Map<string, SessionEntry[]>();
   const roots: SessionEntry[] = [];
   for (const entry of entries) {
-    const proposer = entryProposer(entry);
-    const parent = proposer === null ? undefined : holder.get(proposer);
+    const parent = entryParent(entry, holder, heads);
     if (parent !== undefined && parent !== entryId(entry) && ids.has(parent))
       children.set(parent, [...(children.get(parent) ?? []), entry]);
     else roots.push(entry);
   }
+  for (const [parent, list] of children) children.set(parent, inMergeOrder(list));
   const rows: SessionRow[] = [];
   const placed = new Set<string>();
   const place = (entry: SessionEntry, depth: number, supervised: boolean) => {
@@ -133,6 +134,32 @@ export function sessionRows(list: SessionList): SessionRow[] {
   for (const entry of roots.filter(fromSupervisor)) place(entry, 1, true);
   for (const entry of [...roots, ...entries]) place(entry, 0, false);
   return rows;
+}
+
+/** The entry an entry sits under: a change's part under its first part, other work under whoever holds its proposer. */
+function entryParent(entry: SessionEntry, holder: ReadonlyMap<string, string>, heads: ReadonlyMap<string, string>): string | undefined {
+  const change = entry.kind === "task" ? entry.task.change : null;
+  if (change !== null) return heads.get(change.id);
+  const proposer = entryProposer(entry);
+  return proposer === null ? undefined : holder.get(proposer);
+}
+
+/** The first listed part of each change (ADR-171): the entry its other parts sit under. */
+function changeHeads(tasks: readonly Task[]): Map<string, string> {
+  const first = new Map<string, Task>();
+  for (const task of tasks) {
+    const { change } = task;
+    if (change === null) continue;
+    const head = first.get(change.id);
+    if (head?.change == null || change.position < head.change.position) first.set(change.id, task);
+  }
+  return new Map([...first].map(([change, task]) => [change, task.id]));
+}
+
+/** Entries under one parent with the parts of a change first, in their merge order, and the rest as they were. */
+function inMergeOrder(entries: readonly SessionEntry[]): SessionEntry[] {
+  const rank = (e: SessionEntry) => (e.kind === "task" && e.task.change !== null ? e.task.change.position : Number.POSITIVE_INFINITY);
+  return [...entries].sort((a, b) => rank(a) - rank(b));
 }
 
 /** How much work an entry is for a count: a group counts each of its proposals. */
