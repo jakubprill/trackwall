@@ -70,6 +70,7 @@ The daemon alone with the UI in the browser, without Tauri:
 ```sh
 pnpm build
 bun packages/daemon/src/main.ts --ui
+bun packages/daemon/src/main.ts address   # the page address with the token, for a browser that --ui cannot open (a container)
 ```
 
 A daemon on a made-up shop of twenty repos, with sessions in every state, task proposals, agent tasks and running services, for demos and the screenshots of the documentation site. Copilot CLI is replaced by a stand-in (`packages/daemon/scripts/demo/copilot.ts`) that never calls a model; the services need `mise` and Node on PATH:
@@ -110,6 +111,18 @@ pnpm portable        # out/trackwall-<version>-windows-x64.zip or out/trackwall-
 Windows: the zip contains `trackwall.exe`, `trackwall-daemon.exe` and `ui/`. Unpacking it and running `trackwall.exe` is enough; state goes to `%USERPROFILE%\.trackwall`. Without WebView2, `trackwall.exe` shows a message, and `trackwall-daemon.exe --ui` opens Trackwall in the browser. The files are not signed, so SmartScreen shows a warning (signing with Azure Trusted Signing is planned before publication, §9 of the architecture).
 
 macOS: the zip contains an unsigned `Trackwall.app`; open it the first time with right click > Open or `xattr -dr com.apple.quarantine Trackwall.app`.
+
+## Linux archive
+
+The daemon and its page for a Linux container, without the desktop app (ADR-163), on Linux or macOS:
+
+```sh
+pnpm --filter @trackwall/ui build
+pnpm --filter @trackwall/daemon build --target x86_64-unknown-linux-gnu   # or aarch64-unknown-linux-gnu
+bun apps/desktop/scripts/package-linux.ts x64                             # or arm64: out/trackwall-<version>-linux-<arch>.tar.gz
+```
+
+The archive holds a `trackwall` folder with `trackwall-daemon`, `ui/` and `README.txt`. The `container` job of CI packs the x64 one on every PR and runs the smoke test on it unpacked; the release builds both on their own architecture.
 
 The nightly CI run publishes the Windows and macOS archives as artifacts, and so does a manual run of CI with Windows or macOS ticked; a PR builds neither (ADR-128).
 

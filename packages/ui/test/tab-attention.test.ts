@@ -19,6 +19,7 @@ function session(id: string, state: TaskState | null, needsAttention: boolean, e
     dialog: null,
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
     view: "terminal",
+    readRequest: null,
     ...extra,
   };
 }

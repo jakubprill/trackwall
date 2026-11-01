@@ -8,7 +8,7 @@ describe("protocol", () => {
   });
 
   test("HealthResult tells success from error by the ok field", () => {
-    expect(HealthResult.parse({ ok: true, data: { status: "ok", version: "0.1.0" } }).ok).toBe(true);
+    expect(HealthResult.parse({ ok: true, data: { status: "ok", version: "0.1.0", instance: "i" } }).ok).toBe(true);
     const err = HealthResult.parse({ ok: false, error: { code: "internal", message: "x" } });
     expect(err.ok).toBe(false);
   });

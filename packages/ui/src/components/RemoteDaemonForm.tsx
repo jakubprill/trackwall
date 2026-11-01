@@ -1,8 +1,8 @@
-import { type FormEvent, useCallback, useState } from "react";
+import { useCallback, useState } from "react";
+import { DaemonAddressForm } from "@/components/DaemonAddressForm";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { remoteDaemonPort, switchToOwnDaemon, switchToRemoteDaemon } from "@/lib/remote-daemon";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
@@ -28,35 +28,7 @@ const NEW_TOKEN = "Paste the address with the daemon's current token; the app re
 const RESTARTS = () => {};
 
 function ConnectRemote({ intro }: { intro: string }) {
-  const [address, setAddress] = useState("");
-  const connect = useAction(switchToRemoteDaemon, RESTARTS);
-
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    connect.run(address);
-  }
-
-  return (
-    <form className="flex flex-col gap-2" onSubmit={submit}>
-      <p className="text-muted-foreground text-sm">{intro}</p>
-      <div className="flex gap-2">
-        <Input
-          aria-label="Address of the daemon"
-          placeholder="http://127.0.0.1:7700/#token=…"
-          className="font-mono"
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
-          disabled={connect.pending}
-          spellCheck={false}
-          autoComplete="off"
-        />
-        <Button type="submit" variant="outline" disabled={connect.pending || address.trim() === ""}>
-          {connect.pending ? "Connecting…" : "Connect"}
-        </Button>
-      </div>
-      {connect.error && <p className="text-destructive text-xs break-words">{connect.error}</p>}
-    </form>
-  );
+  return <DaemonAddressForm intro={<p className="text-muted-foreground text-sm">{intro}</p>} connect={switchToRemoteDaemon} />;
 }
 
 function ConnectedRemote({ port }: { port: number }) {

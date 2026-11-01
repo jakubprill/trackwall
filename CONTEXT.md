@@ -77,6 +77,9 @@ _Avoid_: workspace (that is a separate term, see below)
 **Daemon token**:
 The secret from `~/.trackwall/daemon.json` with which the UI, the shell and the stdio bridge authenticate to the API and the MCP server; Trackwall sessions do not get it (ADR-138).
 
+**Page address** (`daemonPageAddress`, `trackwall-daemon address`):
+The address of the daemon's page with the daemon token in its fragment, `http://127.0.0.1:<port>/#token=…`, which opens Trackwall in a browser; the page moves the token out of the address bar into its storage (ADR-161). The desktop app takes the same address for a remote daemon (ADR-130).
+
 **MCP server** (`/mcp`, `createMcpEndpoint`):
 The part of the daemon through which agents read its state with MCP tools; the same port as the API, with the daemon token or a Trackwall session's own token (§5.3, ADR-24, ADR-138).
 
@@ -368,7 +371,7 @@ Whether a task's agent asks the user before tools: `ask` (the default) as every 
 _Avoid_: YOLO, autopilot (Copilot CLI's own modes, not what Trackwall passes), auto-approve
 
 **Java navigation** (`Task.javaNavigation`, `javaNavigation` in `workspace.yaml`, `JavaNavigationSettings`; "Java navigation" on the start pill):
-A Java language server (jdtls) a task's sessions get for Copilot CLI's `lsp` tool, started by Copilot CLI from the session plugin in the task's worktree with the task's own index. The user installs jdtls and its Java with "Install" in Settings › Agents, which writes their paths into `workspace.yaml` (ADR-123), or names their own there by hand (the install's progress and last error: `JavaNavigationInstall`; how a task's jdtls is doing, from its log: `JavaNavigationStatus`, ADR-124), then turns the pill on for a task in a repo tagged java (ADR-99).
+A Java language server (jdtls) a task's sessions get for Copilot CLI's `lsp` tool, started by Copilot CLI from the session plugin in the task's worktree with the task's own index. The user installs jdtls and its Java with "Install" in Settings › Agents, which writes their paths into `workspace.yaml` (ADR-123), or names their own there by hand (the install's progress and last error: `JavaNavigationInstall`; how a task's jdtls is doing, from its log: `JavaNavigationStatus`, ADR-124), then turns the pill on for a task in a repo tagged java (ADR-99). The install also gets the Java versions the repos build with, the **runtimes** (`JavaNavigationSettings.runtimes`, `JavaRuntime`), which jdtls may run Gradle on and Gradle takes toolchains from, and a Lombok jar (ADR-167).
 _Avoid_: LSP (the protocol, not the option), code intelligence, indexing
 
 **Task proposal** (`TaskProposal`, MCP tool `propose_task`, the `approve-proposal` and `reject-proposal` actions):
@@ -426,6 +429,10 @@ _Avoid_: note, comment (that is a review comment), chat
 **Task update** (`TaskUpdate`, MCP tool `get_updates`):
 What the daemon saw happen to delegated work, for the proposer: a turn that ended, an error, the end of the session, a reported result, a verification verdict, a rejected proposal. The daemon asks the proposer to read it, so the supervisor or a main session does not poll (ADR-68).
 _Avoid_: event (that is a `/ws` event), notification (that is a system notification), status
+
+**Read request** (`ReadRequest`, `Session.readRequest`, `readRequestPrompt`; "Unread by the agent" and "Deliver now" in the session panel, `deliver-read-request`):
+The daemon's one-line prompt that asks a session's agent to read what waits unread for it (a review, task messages, task updates, a handoff, a trust notice), with since when it has waited and what holds it back (`ReadRequestHold` in `waitsFor`): `sent` and not taken, `pending` until the session can take it, `user_text` in the input box, the agent's question (`dialog`), or `idle`, nothing until the user's Deliver now (ADR-159). The agent reads the content itself through the tools the prompt names.
+_Avoid_: inbox, notification, nudge
 
 **Agent queues** (`agent-queues.json`, `AgentQueues`, `agentQueuesFile`):
 Everything that waits in the `agents` module for the user or an agent: task proposals, unread review comments, task messages, task updates and mise trust notices. Kept in the state directory, so a daemon restart or an update does not lose them; the sessions that come back are asked to read what is unread (ADR-115).
@@ -661,7 +668,7 @@ Trackwall's own errors on this computer: the daemon's unexpected errors, the UI'
 _Avoid_: crash log, telemetry, bug report (nothing is sent)
 
 **Doctor** (`Doctor`, the `doctor` module, `doctorApi`; in the UI *Doctor* in Settings):
-The checks of what Trackwall needs on this computer: the projects folder, every key of `workspace.yaml`, git, Copilot CLI and its trusted folders, mise, `gh` and `glab` signed in to the repo hosts (ADR-101). Each is a **doctor check** (`DoctorCheck`) with a state (`ok`, `warn`, `fail`), what was found and what to do. It only reads.
+The checks of what Trackwall needs on this computer: the projects folder, every key of `workspace.yaml`, git, Copilot CLI and its trusted folders, the network for sessions (proxy and certificates, ADR-166), mise, `gh` and `glab` signed in to the repo hosts (ADR-101). Each is a **doctor check** (`DoctorCheck`) with a state (`ok`, `warn`, `fail`), what was found and what to do. It only reads.
 _Avoid_: health check (that is `GET /api/health`), diagnostics, setup wizard
 
 **Config files** (`ConfigFiles`, the `config-files` module, `configFilesApi`; in the UI *Files* in Settings):
@@ -693,7 +700,11 @@ The dashboard's 3D scene on Pawn. It does not know the daemon API: it gets succe
 The first screen, the "Home" view (`HomeView`): the daemon state, sessions (especially those waiting for you), repos and the connections between them, in the "Orbit" layout (`orbitLayout`).
 
 **"Needs you" queue** (`NeedsYouPanel`):
-The left panel of the dashboard: sessions that are waiting for you or have an error, then task proposals waiting for a decision (ADR-39), then repos that are not clean. Those sessions and repos always have a label on the scene, and with the scene labels `all` every other repo has one too; proposals are not on the scene, and a click opens them in the Sessions view.
+The left panel of the dashboard: sessions that are waiting for you or have an error, then task proposals waiting for a decision (ADR-39), in a container the repos with unpushed work (ADR-162), then repos that are not clean. Those sessions and repos always have a label on the scene, and with the scene labels `all` every other repo has one too; proposals are not on the scene, and a click opens them in the Sessions view.
+
+**Unpushed work** (`UnpushedWork`, `unpushedWork`, `Vcs.unpushed`; in the UI *only in this container*):
+What of a repo is on no remote: commits no remote-tracking branch reaches (on local branches and on the detached HEAD of a worktree), stashes, and changed files in the repo's worktrees, task worktrees included. Read only when the daemon runs in a container, where removing the Docker volume deletes it (ADR-162).
+_Avoid_: unsaved work, local work (both also mean changes not yet committed).
 
 **Dashboard snapshot** (`HomeModel`):
 What the dashboard shows, computed by the UI from the daemon's responses and given to the scene whole on every change.

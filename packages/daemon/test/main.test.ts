@@ -57,6 +57,27 @@ describe.each(RUNTIMES)("daemon process under %s", (name, runtime) => {
     }
   }, 20_000);
 
+  test("address prints the running daemon's page address with its token, and fails when none runs", async () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-e2e-"));
+    const env = { ...process.env, TRACKWALL_HOME: home };
+    const none = Bun.spawn([...runtime, MAIN, "address"], { env, stdout: "pipe", stderr: "pipe" });
+    expect(await none.exited).toBe(1);
+    expect(await new Response(none.stdout).text()).toBe("");
+    expect(await new Response(none.stderr).text()).toContain("no daemon is running");
+
+    const daemon = Bun.spawn([...runtime, MAIN], { env, stdout: "ignore", stderr: "pipe" });
+    try {
+      const file = await waitFor(() => readDaemonFile(home), daemon);
+      const address = Bun.spawn([...runtime, MAIN, "address"], { env, stdout: "pipe", stderr: "pipe" });
+      expect(await address.exited).toBe(0);
+      expect(await new Response(address.stdout).text()).toBe(`http://127.0.0.1:${file.port}/#token=${file.token}\n`);
+      await loopbackRequest(file.port, "/api/daemon/shutdown", { method: "POST", token: file.token });
+      expect(await daemon.exited).toBe(0);
+    } finally {
+      daemon.kill();
+    }
+  }, 20_000);
+
   test("simultaneous starts leave exactly one daemon", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-race-"));
     const env = { ...process.env, TRACKWALL_HOME: home };

@@ -16,10 +16,18 @@ export const DaemonFile = z.object({
 });
 export type DaemonFile = z.infer<typeof DaemonFile>;
 
+export const HEALTH_PATH = "/api/health";
+
 /** `GET /api/health`: public, without the token, only as much as discovering the daemon needs. */
 export const Health = z.object({
   status: z.literal("ok"),
   version: z.string(),
+  /**
+   * A random id of this start of the daemon, public like the rest: a page in a browser keeps its token together with it
+   * and sends the token only to the same start, never to whatever listens on the address later (ADR-161). Optional, so that
+   * a newer daemon or bridge still recognises an older running daemon, which has none, and asks for its restart.
+   */
+  instance: z.string().optional(),
 });
 export type Health = z.infer<typeof Health>;
 export const HealthResult = apiResult(Health);

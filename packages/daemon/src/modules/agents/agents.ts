@@ -41,13 +41,13 @@ import { CopilotHookEvent } from "./copilot-hook-record.ts";
 import type { EndedTaskFacts } from "./ended-task.ts";
 import { HandoffWatch } from "./handoff-watch.ts";
 import { appendHookRecord } from "./hook-tail.ts";
-import { inboxPrompt } from "./inbox-prompt.ts";
 import { javaNavigationState } from "./java-language-server.ts";
 import { LAST_SUPERVISOR_FILE, LastSupervisorFile } from "./last-supervisor.ts";
 import { ListedSessions, resumableOf } from "./listed-sessions.ts";
 import { LiveSession, type SessionEvent, type SessionWindow } from "./live-session.ts";
 import { MiseTrustNotices, type TrustRecipient, trustRecipientOf } from "./mise-trust-notices.ts";
 import { proposedByOf, proposerExists, proposerKeyOf, proposerKind, proposerOf } from "./proposer.ts";
+import { readRequestPrompt } from "./read-request-prompt.ts";
 import { type ResumableSession, ResumableSessions, resumablePlace, type SessionLaunch, sessionLaunch } from "./resumable-sessions.ts";
 import type { SessionMiseEnv } from "./session-env.ts";
 import {
@@ -461,9 +461,9 @@ export class Agents {
   }
 
   /** The prompt for what waits unread for a session: its task's review comments and messages, and its updates. */
-  #inboxPrompt(session: { id: string; supervisor: boolean; task: string | null }): string | undefined {
+  #readRequestPrompt(session: { id: string; supervisor: boolean; task: string | null }): string | undefined {
     const reviewComments = session.task === null ? 0 : this.#reviews.unread(session.task);
-    return inboxPrompt({
+    return readRequestPrompt({
       reviewComments,
       handoffMoved: session.task !== null && this.#handoffs.waiting(session.task),
       ...this.#coordination.unread(session),
@@ -823,6 +823,14 @@ export class Agents {
     return this.#sessions.view(session);
   }
 
+  /** The user's Deliver now for what waits unread for a running session's agent (ADR-159). */
+  deliverReadRequest(id: string): Session {
+    const session = this.#sessions.get(id);
+    if (!this.#sessions.isRunning(session)) throw new DomainError("bad_request", "the session has ended");
+    session.deliverNow();
+    return this.#sessions.view(session);
+  }
+
   /** Closes an ended session: it disappears from the list, and its files from the state directory. The session's task stays. */
   dismiss(id: string): SessionList {
     this.#close(id);
@@ -943,7 +951,7 @@ export class Agents {
    */
   #askToReadLeft(id: string): void {
     const session = this.#sessions.find(id);
-    if (session !== undefined && this.#inboxPrompt(session) !== undefined) session.askToRead();
+    if (session !== undefined && this.#readRequestPrompt(session) !== undefined) session.askToRead();
   }
 
   /** A start in the view it names, in `place`. */
@@ -992,7 +1000,7 @@ export class Agents {
   /** How a session of either view tells the daemon what it did. */
   #sessionCallbacks({ id, supervisor, task }: { id: string; supervisor: boolean; task: string | null }): SessionCallbacks {
     return {
-      prompt: () => this.#inboxPrompt({ id, supervisor, task }),
+      prompt: () => this.#readRequestPrompt({ id, supervisor, task }),
       situation: () => (supervisor ? supervisorSituation(this.sessionsWithoutCycle(), id) : undefined),
       onUserText: () => this.#coordination.userTyped({ id, task }),
       onPromptSent: () => this.#miseTrust.promptSent(trustRecipientOf({ id, task })),

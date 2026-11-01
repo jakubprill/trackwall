@@ -54,6 +54,7 @@ import { pathKey } from "./path-key.ts";
 import { remoteAddress } from "./remote.ts";
 import { StatusMemo, type TimedStatus } from "./status-memo.ts";
 import { syncRepo } from "./sync.ts";
+import { type RepoUnpushed, readUnpushed } from "./unpushed.ts";
 import { addWorktree, defaultBase, deleteBranch, pendingWork, removeWorktree } from "./worktree.ts";
 import { workingTreeChanges, worktreeChanges } from "./worktree-changes.ts";
 import { copyIncludedFiles } from "./worktree-include.ts";
@@ -143,6 +144,14 @@ export class Vcs {
    */
   status(dir: string, how: StatusRead): Promise<RepoStatusOk> {
     return this.statuses.get(dir, how, () => this.readStatus(dir));
+  }
+
+  /**
+   * The repo's work on no remote, across all its worktrees (ADR-162); each worktree's changes come from `status`, so a
+   * list refreshed often reuses them like the repo list.
+   */
+  unpushed(dir: string): Promise<RepoUnpushed> {
+    return readUnpushed(dir, async (worktree) => (await this.status(worktree, "recent")).changes);
   }
 
   private async readStatus(dir: string): Promise<TimedStatus> {

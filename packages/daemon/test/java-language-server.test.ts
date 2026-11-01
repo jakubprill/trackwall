@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DomainError } from "../src/infra/errors.ts";
+import { javaRuntimeOf } from "../src/infra/java-runtime.ts";
 import {
   javaLanguageServer,
   javaNavigationProblem,
@@ -24,7 +25,7 @@ function jdtlsFolder(): string {
 describe("the Java language server of a task (ADR-99)", () => {
   test("jdtls starts with java directly, on the launcher jar, with this system's configuration and the task's own data folder", () => {
     const jdtls = jdtlsFolder();
-    const settings = { jdtls, java: "/opt/jdk-25/bin/java", lombok: null };
+    const settings = { jdtls, java: "/opt/jdk-25/bin/java", lombok: null, runtimes: [] };
 
     const server = javaLanguageServer(settings, "/projects/.trackwall/lsp/task-1", false, "darwin", "arm64");
 
@@ -46,7 +47,7 @@ describe("the Java language server of a task (ADR-99)", () => {
 
   test("each system gets its own jdtls configuration folder", () => {
     const jdtls = jdtlsFolder();
-    const settings = { jdtls, java: "java", lombok: null };
+    const settings = { jdtls, java: "java", lombok: null, runtimes: [] };
     const configOf = (platform: NodeJS.Platform, arch: NodeJS.Architecture) =>
       javaLanguageServer(settings, "/data", false, platform, arch).args.find((arg) => arg.startsWith("-Dosgi.sharedConfiguration.area="));
 
@@ -58,7 +59,7 @@ describe("the Java language server of a task (ADR-99)", () => {
 
   test("Lombok, when set, is a Java agent before the launcher jar", () => {
     const jdtls = jdtlsFolder();
-    const server = javaLanguageServer({ jdtls, java: "java", lombok: "/opt/lombok.jar" }, "/data", false, "linux", "x64");
+    const server = javaLanguageServer({ jdtls, java: "java", lombok: "/opt/lombok.jar", runtimes: [] }, "/data", false, "linux", "x64");
 
     expect(server.args.indexOf("-javaagent:/opt/lombok.jar")).toBeLessThan(server.args.indexOf("-jar"));
   });
@@ -67,27 +68,30 @@ describe("the Java language server of a task (ADR-99)", () => {
     const jdtls = jdtlsFolder();
     const java = join(jdtls, "plugins", "org.eclipse.jdt.ls.core_1.50.0.jar");
 
-    expect(javaNavigationProblem({ jdtls, java: join(jdtls, "no-java"), lombok: null })).toBe(
+    expect(javaNavigationProblem({ jdtls, java: join(jdtls, "no-java"), lombok: null, runtimes: [] })).toBe(
       `no Java program at ${join(jdtls, "no-java")}`,
     );
-    expect(javaNavigationProblem({ jdtls, java, lombok: join(jdtls, "no-lombok.jar") })).toBe(
+    expect(javaNavigationProblem({ jdtls, java, lombok: join(jdtls, "no-lombok.jar"), runtimes: [] })).toBe(
       `no Lombok jar at ${join(jdtls, "no-lombok.jar")}`,
     );
-    expect(javaNavigationProblem({ jdtls: join(jdtls, "plugins"), java, lombok: null })).toBe(
+    expect(javaNavigationProblem({ jdtls: join(jdtls, "plugins"), java, lombok: null, runtimes: [] })).toBe(
       `no jdtls launcher jar in ${join(jdtls, "plugins", "plugins")}`,
     );
     const withoutConfigs = mkdtempSync(join(tmpdir(), "trackwall-jdtls-"));
     mkdirSync(join(withoutConfigs, "plugins"));
     writeFileSync(join(withoutConfigs, "plugins", "org.eclipse.equinox.launcher_1.7.0.jar"), "");
-    expect(javaNavigationProblem({ jdtls: withoutConfigs, java, lombok: null }, "win32", "x64")).toBe(
+    expect(javaNavigationProblem({ jdtls: withoutConfigs, java, lombok: null, runtimes: [] }, "win32", "x64")).toBe(
       `no jdtls configuration for this system at ${join(withoutConfigs, "config_win")}`,
     );
-    expect(javaNavigationProblem({ jdtls, java, lombok: null })).toBeNull();
+    expect(javaNavigationProblem({ jdtls, java, lombok: null, runtimes: [jdtls] })).toBe(
+      `no Java installation at ${jdtls} (no release file naming its JAVA_VERSION)`,
+    );
+    expect(javaNavigationProblem({ jdtls, java, lombok: null, runtimes: [] })).toBeNull();
   });
 
   test("readiness has the settings only when jdtls can start; a missing key or a bad one is a problem, and the form hears of a missing key as not set", () => {
     const jdtls = jdtlsFolder();
-    const settings = { jdtls, java: join(jdtls, "plugins", "org.eclipse.jdt.ls.core_1.50.0.jar"), lombok: null };
+    const settings = { jdtls, java: join(jdtls, "plugins", "org.eclipse.jdt.ls.core_1.50.0.jar"), lombok: null, runtimes: [] };
 
     expect(javaNavigationReadiness(() => settings)).toEqual({ settings, problem: null });
     const unset = javaNavigationReadiness(() => null);
@@ -116,9 +120,58 @@ describe("Maven before Gradle for jdtls's import (ADR-124)", () => {
   });
 
   test("Maven only is jdtls's setting java.import.gradle.enabled: false, sent in its initialize request", () => {
-    const settings = { jdtls: jdtlsFolder(), java: "java", lombok: null };
+    const settings = { jdtls: jdtlsFolder(), java: "java", lombok: null, runtimes: [] };
     expect(javaLanguageServer(settings, "/data", true).initializationOptions).toEqual({
       settings: { java: { import: { gradle: { enabled: false } } } },
+    });
+  });
+});
+
+/** A Java installation folder with the `release` file a JDK has at its root. */
+function javaHome(release: string): string {
+  const home = mkdtempSync(join(tmpdir(), "trackwall-jdk-"));
+  writeFileSync(join(home, "release"), release);
+  return home;
+}
+
+describe("the projects' own Java versions for jdtls (ADR-167)", () => {
+  test("a Java installation is named after the version in its release file, Java 8 in the old notation", () => {
+    const jdk17 = javaHome('IMPLEMENTOR="Eclipse Adoptium"\nJAVA_VERSION="17.0.12"\nJAVA_VERSION_DATE="2024-07-16"\n');
+    const jdk8 = javaHome('JAVA_VERSION="1.8.0_422"\n');
+    const noVersion = javaHome('IMPLEMENTOR="Eclipse Adoptium"\n');
+
+    expect(javaRuntimeOf(jdk17)).toEqual({ name: "JavaSE-17", path: jdk17 });
+    expect(javaRuntimeOf(jdk8)).toEqual({ name: "JavaSE-1.8", path: jdk8 });
+    expect(javaRuntimeOf(noVersion)).toBeNull();
+    expect(javaRuntimeOf(join(noVersion, "missing"))).toBeNull();
+  });
+
+  test("jdtls gets the runtimes, and Gradle gets their folders as toolchain locations", () => {
+    const jdk17 = javaHome('JAVA_VERSION="17.0.12"\n');
+    const jdk21 = javaHome('JAVA_VERSION="21.0.4"\n');
+    const settings = { jdtls: jdtlsFolder(), java: "java", lombok: null, runtimes: [jdk17, jdk21] };
+
+    expect(javaLanguageServer(settings, "/data", false).initializationOptions).toEqual({
+      settings: {
+        java: {
+          import: { gradle: { arguments: [`-Porg.gradle.java.installations.paths=${jdk17},${jdk21}`] } },
+          configuration: {
+            runtimes: [
+              { name: "JavaSE-17", path: jdk17 },
+              { name: "JavaSE-21", path: jdk21 },
+            ],
+          },
+        },
+      },
+    });
+  });
+
+  test("a project imported with Maven only gets the runtimes without Gradle's toolchain locations", () => {
+    const jdk17 = javaHome('JAVA_VERSION="17.0.12"\n');
+    const settings = { jdtls: jdtlsFolder(), java: "java", lombok: null, runtimes: [jdk17] };
+
+    expect(javaLanguageServer(settings, "/data", true).initializationOptions).toEqual({
+      settings: { java: { import: { gradle: { enabled: false } }, configuration: { runtimes: [{ name: "JavaSE-17", path: jdk17 }] } } },
     });
   });
 });

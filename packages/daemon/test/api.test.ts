@@ -17,6 +17,7 @@ import {
   Repo,
   RepoGraph,
   RepoList,
+  UnpushedWork,
   workspaceApi,
 } from "@trackwall/protocol";
 import { z } from "zod";
@@ -78,6 +79,7 @@ const openedFolders: string[] = [];
 /** A facade on an empty state directory, with the MCP server and events on it: what `main.ts` gives to `startApi`. */
 function modules() {
   const facade = createFacade({
+    inContainer: false,
     home: mkdtempSync(join(tmpdir(), "trackwall-home-")),
     homeFrom: "flag",
     openUrl: (url) => openedUrls.push(url),
@@ -103,10 +105,13 @@ function isEndpoint(value: unknown): value is Endpoint {
 }
 
 describe("api", () => {
-  test("health is public and returns the version", async () => {
-    const res = await req("/api/health");
-    expect(res.status).toBe(200);
-    expect(HealthResult.parse(JSON.parse(res.body))).toEqual({ ok: true, data: { status: "ok", version: "9.9.9" } });
+  test("health is public and returns the version and the same instance id of this start every time", async () => {
+    const first = await req("/api/health");
+    expect(first.status).toBe(200);
+    const health = HealthResult.parse(JSON.parse(first.body));
+    expect(health).toMatchObject({ ok: true, data: { status: "ok", version: "9.9.9" } });
+    expect(health.ok && health.data.instance).toMatch(/^[0-9a-f-]{36}$/);
+    expect(HealthResult.parse(JSON.parse((await req("/api/health")).body))).toEqual(health);
   });
 
   test("info requires the token", async () => {
@@ -195,6 +200,11 @@ describe("api workspace", () => {
     const paths = contracts.flatMap(({ endpoints }) => endpoints.map((endpoint) => endpoint.path));
     expect(paths.filter((path) => !postRoutes.has(path))).toEqual([]);
     expect([...postRoutes.keys()].filter((path) => !paths.includes(path))).toEqual([]);
+  });
+
+  test("unpushed work answers outside a container without reading git (ADR-162)", async () => {
+    const answer = apiResult(UnpushedWork).parse(JSON.parse((await post(workspaceApi.unpushedWork.path, "")).body));
+    expect(answer.ok && answer.data).toEqual({ inContainer: false, repos: [], unreadable: [] });
   });
 
   test("workspace routes require the token", async () => {

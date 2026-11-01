@@ -20,7 +20,7 @@ function jdtlsSettings(): JavaNavigationSettings {
   mkdirSync(join(jdtls, "plugins"));
   writeFileSync(join(jdtls, "plugins", "org.eclipse.equinox.launcher_1.7.100.jar"), "");
   for (const config of ["config_win", "config_mac", "config_mac_arm", "config_linux", "config_linux_arm"]) mkdirSync(join(jdtls, config));
-  return { jdtls, java: process.execPath, lombok: null };
+  return { jdtls, java: process.execPath, lombok: null, runtimes: [] };
 }
 
 /** Agents for repo `shop` in `dir` whose workspace has `javaNavigation` as `settings` returns it at that moment. */
