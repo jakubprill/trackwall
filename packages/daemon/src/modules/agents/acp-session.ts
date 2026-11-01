@@ -3,6 +3,7 @@ import type {
   ConversationEntry,
   ConversationServerMessage,
   DialogAnswer,
+  ReadRequestHold,
   RunState,
   Session,
   SessionEnvironment,
@@ -27,6 +28,7 @@ import type { AgentSession } from "./agent-session.ts";
 import { type CopilotHookOutput, situationOutput } from "./copilot-hook-output.ts";
 import type { CopilotHookRecord } from "./copilot-hook-record.ts";
 import type { SessionEvent } from "./live-session.ts";
+import { ReadRequestClock } from "./read-request.ts";
 import { SessionAttention } from "./session-attention.ts";
 
 /**
@@ -139,6 +141,7 @@ export class AcpSession implements AgentSession {
   readonly #queued: Prompt[] = [];
   #promptAsked = false;
   #finished = false;
+  readonly #readRequest = new ReadRequestClock();
 
   constructor(o: AcpSessionOptions) {
     this.id = o.id;
@@ -291,6 +294,7 @@ export class AcpSession implements AgentSession {
   /** The end of the process; returns whether the session is alive. */
   tick(): boolean {
     if (this.#finished) return false;
+    this.#readRequest.observe(this.#o.prompt());
     const run = this.#o.run();
     if (run?.kind !== "exited") return true;
     this.#finished = true;
@@ -319,7 +323,20 @@ export class AcpSession implements AgentSession {
       dialog: running ? (this.#approvals[0]?.dialog ?? null) : null,
       environment: this.environment,
       view: "conversation",
+      readRequest: this.#readRequest.readRequest(this.#o.prompt(), this.#readRequestHold(), running),
     };
+  }
+
+  /** What holds back the prompt about what waits unread (ADR-159): it goes as the next prompt once the turn ends. */
+  #readRequestHold(): ReadRequestHold {
+    if (this.#turn?.by === "daemon") return "sent";
+    if (this.#approvals.length > 0) return "dialog";
+    return this.#promptAsked ? "turn_end" : "deliver_now";
+  }
+
+  /** The user's Deliver now (ADR-159): the prompt is asked for again and goes as the next prompt. */
+  deliverNow(): void {
+    this.askToRead();
   }
 
   dispose(): void {

@@ -18,6 +18,7 @@ function session(state: "Working" | "Input" | null, run: Session["run"] = runnin
     dialog: null,
     environment: { variables: ["GITLAB_TOKEN"], secrets: ["GITLAB_TOKEN"], agentSecrets: [], profile: null, problem: null },
     view: "terminal",
+    readRequest: null,
   };
 }
 

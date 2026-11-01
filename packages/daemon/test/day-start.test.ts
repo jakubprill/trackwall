@@ -119,6 +119,7 @@ function session(fields: Partial<Session>): Session {
     dialog: null,
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
     view: "terminal",
+    readRequest: null,
     ...fields,
   };
 }

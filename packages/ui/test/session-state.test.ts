@@ -28,6 +28,7 @@ function session(id: string, state: Session["state"], run: Session["run"] = runn
     dialog: null,
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
     view: "terminal",
+    readRequest: null,
   };
 }
 

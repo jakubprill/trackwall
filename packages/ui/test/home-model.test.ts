@@ -31,6 +31,7 @@ function session(id: string, repoId: string, over: Partial<Session> = {}): Sessi
     dialog: null,
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
     view: "terminal",
+    readRequest: null,
     ...over,
   };
 }

@@ -855,3 +855,96 @@ describe("what the session's agent did, for its task's proposer (ADR-68)", () =>
     expect(events).toEqual([{ kind: "error" }, { kind: "exited", exitCode: 1, stoppedByUser: false }]);
   });
 });
+
+describe("what waits unread for a session, in the session list, and the user's Deliver now (ADR-159)", () => {
+  const promptSubmitted = `${JSON.stringify({ event: "userPromptSubmitted", receivedAt: 0, payload: {}, omitted: [] })}\n`;
+
+  test("nothing unread is no read request", () => {
+    const { session } = runningSession(() => undefined);
+    session.tick();
+
+    expect(session.view()?.readRequest).toBeNull();
+  });
+
+  test("a prompt asked for during a turn waits for the turn's end, then is sent, and is gone once the agent read it", async () => {
+    let waiting: string | undefined = "read the review";
+    const { session, hooksFile } = runningSession(() => waiting);
+    session.connect({ write: () => {}, resize: () => {} });
+    appendFileSync(hooksFile, promptSubmitted);
+    session.tick();
+    session.askToRead();
+    session.tick();
+    const since = session.view()?.readRequest?.since ?? "";
+
+    expect(session.view()?.readRequest).toEqual({ prompt: "read the review", since: expect.any(String), waitsFor: "turn_end" });
+    await endTurnAtBox(session, hooksFile);
+    expect(session.view()?.readRequest).toEqual({ prompt: "read the review", since, waitsFor: "sent" });
+    waiting = undefined;
+    session.tick();
+    expect(session.view()?.readRequest).toBeNull();
+  });
+
+  test("what a session found unread that nobody asked it to read waits for Deliver now, which types it into the empty box", async () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    await endTurnAtBox(session, hooksFile);
+
+    expect(session.view()?.readRequest?.waitsFor).toBe("deliver_now");
+    expect(written).toEqual([]);
+    session.deliverNow();
+    expect(written).toEqual(["read the review"]);
+    expect(session.view()?.readRequest?.waitsFor).toBe("sent");
+  });
+
+  test("the user's text waits the prompt out; Deliver now types it once the box on the screen is empty, never into the text", async () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    await endTurnAtBox(session, hooksFile);
+    session.input("also check the");
+    written.length = 0;
+    session.askToRead();
+    await showScreen(session, "────\r\n❯ also check the\r\n────\r\n Interactive · / commands\r\n");
+
+    expect(session.view()?.readRequest?.waitsFor).toBe("user_text");
+    session.deliverNow();
+    expect(written).toEqual([]);
+    await showScreen(session, PROMPT_BOX);
+    session.deliverNow();
+    expect(written).toEqual(["read the review"]);
+  });
+
+  test("a prompt typed and not taken gets Enter again at once on Deliver now", async () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    await endTurnAtBox(session, hooksFile);
+    session.askToRead();
+    await showScreen(session, "────\r\n❯ read the review\r\n────\r\n Interactive · / commands\r\n");
+    written.length = 0;
+
+    session.deliverNow();
+
+    expect(written).toEqual(["\r"]);
+  });
+
+  test("an ended session has no read request", () => {
+    const { session } = runningSession(
+      () => "read the review",
+      () => ({
+        kind: "exited",
+        runId: "r2",
+        startedAt: "2026-10-24T12:00:00.000Z",
+        endedAt: "2026-10-24T12:01:00.000Z",
+        exitCode: 0,
+        signal: null,
+        stoppedByUser: true,
+        lastLines: [],
+      }),
+    );
+    session.tick();
+
+    expect(session.view()?.readRequest).toBeNull();
+  });
+});

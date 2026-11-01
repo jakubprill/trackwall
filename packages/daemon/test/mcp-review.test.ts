@@ -60,6 +60,11 @@ describe.skipIf(process.versions.bun === undefined)("a review from the Changes t
     const sent = await daemon.post(agentsApi.sendReview, { task: task.id, comments: [README_COMMENT, LOGIN_COMMENT] });
 
     expect(sent).toEqual({ delivery: "queued", unread: 2 });
+    // The session list says what waits and why (ADR-159), and Deliver now does not type in the middle of the turn.
+    await waitFor(daemon.facade.agents, session, (s) => s.readRequest?.waitsFor === "turn_end", "the read request of the review");
+    expect(await daemon.post(agentsApi.deliverReadRequest, { session })).toMatchObject({
+      readRequest: { prompt: expect.stringContaining("call get_review_comments"), waitsFor: "turn_end" },
+    });
     const window = viewer(daemon.facade.agents, session);
     // The screen image reaches a new viewer asynchronously, so the check waits for it before looking for what is not there.
     await waitFor(daemon.facade.agents, session, () => window.text().includes("--interactive="), "the screen image");
@@ -77,9 +82,11 @@ describe.skipIf(process.versions.bun === undefined)("a review from the Changes t
     const client = await clientOfSession(session);
     expect(await reviewComments(client)).toEqual([README_COMMENT, LOGIN_COMMENT]);
     expect(await reviewComments(client)).toEqual([]);
+    expect((await daemon.post(agentsApi.sessions, {})).sessions.find((s) => s.id === session)?.readRequest).toBeNull();
     window.attachment.input("1");
     window.attachment.detach();
     await daemon.facade.agents.stop(session);
+    await expect(daemon.post(agentsApi.deliverReadRequest, { session })).rejects.toThrow("the session has ended");
     await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
   }, 60_000);
 

@@ -245,6 +245,29 @@ export function mayHandToSupervisor(task: Pick<Task, "proposedBy">): boolean {
   return task.proposedBy === null;
 }
 
+/**
+ * Why the daemon's prompt about what waits unread for a session's agent (ADR-62, ADR-68) has not been taken yet
+ * (ADR-159): `sent` it was typed or given through a hook and the agent has not taken it; `turn_end` the agent is in the
+ * middle of a turn and gets it with a tool's result or when the turn ends; `user_text` the user may have unsent text in
+ * the input box; `dialog` the agent asks something on the screen; `deliver_now` nothing will send it until the next
+ * message or update, or the user's Deliver now.
+ */
+export const ReadRequestHold = z.enum(["sent", "turn_end", "user_text", "dialog", "deliver_now"]);
+export type ReadRequestHold = z.infer<typeof ReadRequestHold>;
+
+/**
+ * The read request (ADR-159): the daemon's prompt asking a session's agent to read what waits unread for it (a review,
+ * task messages, task updates, a handoff, a trust notice), since when it has waited and what holds it back.
+ */
+export const ReadRequest = z.object({
+  /** The daemon's prompt, which names the tools with something unread. */
+  prompt: z.string(),
+  /** ISO 8601: since when something has waited unread without a break. */
+  since: z.string(),
+  waitsFor: ReadRequestHold,
+});
+export type ReadRequest = z.infer<typeof ReadRequest>;
+
 export const Session = z.object({
   id: SessionId,
   /**
@@ -274,6 +297,8 @@ export const Session = z.object({
   environment: SessionEnvironment,
   /** Copilot CLI's own screen in a terminal, or Trackwall's conversation view over ACP (ADR-107). */
   view: SessionView,
+  /** The read request while something waits unread for the agent of a running session (ADR-159); `null` otherwise. */
+  readRequest: ReadRequest.nullable(),
 });
 export type Session = z.infer<typeof Session>;
 
@@ -610,6 +635,12 @@ export const agentsApi = {
    * waits, otherwise after its turn. A session in a terminal gets what the user types there instead (`bad_request`).
    */
   say: endpoint("say", SessionRequest.extend({ text: SessionMessage }), Session),
+  /**
+   * The user's Deliver now (ADR-159): the read request goes to the agent as soon as it can
+   * take it, even when nothing new arrived since the daemon gave up or the session started. It never goes into the
+   * user's own text in the input box or in the middle of a turn. An ended session is `bad_request`.
+   */
+  deliverReadRequest: endpoint("deliver-read-request", SessionRequest, Session),
   /** Stops the agent's turn in a session in the conversation view (ADR-107), as Esc does in the terminal. */
   interrupt: endpoint("interrupt", SessionRequest, Session),
   /**

@@ -1,6 +1,7 @@
 import type {
   AgentDialog,
   DialogAnswer,
+  ReadRequestHold,
   RunState,
   Session,
   SessionEnvironment,
@@ -17,6 +18,7 @@ import { answersDialog, ESCAPE, type SessionKey, sessionKey } from "./copilot-ke
 import { promptBoxText } from "./copilot-prompt-box.ts";
 import { CopilotSessionState, RETYPE_AFTER_MS } from "./copilot-session-state.ts";
 import { HookTail } from "./hook-tail.ts";
+import { ReadRequestClock } from "./read-request.ts";
 import { SessionAttention } from "./session-attention.ts";
 import { SessionDialogs, selectsOption } from "./session-dialogs.ts";
 import { type ScreenViewer, TerminalScreen } from "./terminal-screen.ts";
@@ -193,6 +195,7 @@ export class LiveSession implements AgentSession {
   /** The user put text into the input box or pressed Esc since the last end of a turn: the next end is of their turn. */
   #userDrove = false;
   #submitTimer: NodeJS.Timeout | undefined;
+  readonly #readRequest = new ReadRequestClock();
   readonly #dialogs: SessionDialogs;
   /**
    * Approvals Copilot CLI drew before their hooks reached the daemon that the user already answered (ADR-71): when such
@@ -409,6 +412,7 @@ export class LiveSession implements AgentSession {
     // A prompt asked for goes into a box that just appeared before the box can say the session waits for you.
     this.#typePrompt();
     this.#readPromptBox();
+    this.#readRequest.observe(this.#promptText());
     const run = this.#run();
     if (run?.kind !== "exited") return true;
     // A stop by the user is an intended end, not a session error, even though the process ends with a signal.
@@ -438,7 +442,30 @@ export class LiveSession implements AgentSession {
       dialog: run.kind === "running" ? this.#dialog() : null,
       environment: this.environment,
       view: "terminal",
+      readRequest: this.#readRequest.readRequest(this.#promptText(), this.#readRequestHold(), run.kind === "running"),
     };
+  }
+
+  /** What holds back the prompt about what waits unread (ADR-159), from the same facts that decide its delivery. */
+  #readRequestHold(): ReadRequestHold {
+    if (this.#promptTyped) return "sent";
+    if (this.#dialog() !== null) return "dialog";
+    if (this.#userDraft) return "user_text";
+    return this.#promptAsked ? "turn_end" : "deliver_now";
+  }
+
+  /**
+   * The user's Deliver now (ADR-159): the prompt is asked for again, and a typed one not taken is looked after at once
+   * with its tries counted anew. A box the screen shows empty holds no draft, whatever the daemon guessed; text in the
+   * box still keeps the prompt out, so it never joins the user's words.
+   */
+  deliverNow(): void {
+    this.#readHooks();
+    if (this.#box() === "") this.#userDraft = false;
+    if (this.#promptTyped) this.#promptTyped = { ...this.#promptTyped, at: 0, retries: 0 };
+    else this.#promptAsked = true;
+    this.#followTypedPrompt();
+    this.#typePrompt();
   }
 
   /**
