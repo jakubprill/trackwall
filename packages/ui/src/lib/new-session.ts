@@ -1,4 +1,4 @@
-import { isFreeSession, type Session } from "@trackwall/protocol";
+import { CHANGE_PARTS_MAX, type ChangePart, isFreeSession, type Session } from "@trackwall/protocol";
 import { isLive } from "./session-state.ts";
 
 /**
@@ -9,6 +9,8 @@ import { isLive } from "./session-state.ts";
 
 export type NewSessionStart =
   | { kind: "task"; repo: string; prompt: string }
+  | { kind: "change"; title: string; prompt: string; parts: ChangePart[] }
+  | { kind: "needs-title" }
   | { kind: "session"; repo: string | null; prompt: string | undefined }
   | { kind: "needs-prompt" }
   | { kind: "needs-repo" };
@@ -60,4 +62,56 @@ export function sessionsInSameFolder(sessions: readonly Session[], repo: string 
 /** The first of a board item's repos that the projects folder has (ADR-133), where a task for the item starts. */
 export function firstListedRepo(repos: readonly string[], listed: readonly { id: string }[] | undefined): string | undefined {
   return repos.find((id) => listed?.some((r) => r.id === id));
+}
+
+/** A repo the user added to a task to make it a change (ADR-171), with what that repo has to do; the repo may be unchosen. */
+export interface ChangePartDraft {
+  repo: string;
+  note: string;
+}
+
+/**
+ * A task with other repos added is a change (ADR-171): the task's repo is its first part, then the added ones in the
+ * order the user put them, which is the order their merge requests are to be merged. The task's repo or one added twice
+ * counts once. A change needs a title, which names its branch in every repo.
+ */
+export function changeStart(start: NewSessionStart, added: readonly ChangePartDraft[], title: string): NewSessionStart {
+  if (start.kind !== "task") return start;
+  const parts: ChangePart[] = [{ repo: start.repo, note: "" }];
+  for (const { repo, note } of added) if (repo !== "" && !parts.some((p) => p.repo === repo)) parts.push({ repo, note: note.trim() });
+  if (parts.length === 1) return start;
+  const text = title.trim();
+  return text === ""
+    ? { kind: "needs-title" }
+    : { kind: "change", title: text, prompt: start.prompt, parts: parts.slice(0, CHANGE_PARTS_MAX) };
+}
+
+/**
+ * Whether the form may add one more repo: a change has at most `CHANGE_PARTS_MAX` parts, the task's own repo among them,
+ * and each of the `others` repos once.
+ */
+export function mayAddPart(added: readonly ChangePartDraft[], others: number): boolean {
+  return added.length + 1 < CHANGE_PARTS_MAX && added.length < others;
+}
+
+/**
+ * What the form starts with the repos the user added (`changeStart`), and the repo that is the change's first part, `null`
+ * where the form adds no repos: only a task in its own worktree becomes a change, not a session, nor a form waiting for a repo.
+ */
+export function formChangeStart(
+  form: NewSessionForm,
+  repo: string | null,
+  worktree: boolean,
+  prompt: string,
+  added: readonly ChangePartDraft[],
+  title: string,
+): { start: NewSessionStart; firstPart: string | null } {
+  const start = formStart(form, repo, worktree, prompt);
+  const firstPart = start.kind === "task" || start.kind === "needs-prompt" ? repo : null;
+  return { start: changeStart(start, firstPart === null ? [] : added, title), firstPart };
+}
+
+/** Whether the form starts a change, with or without its title yet. */
+export function startsChange(start: NewSessionStart): boolean {
+  return start.kind === "change" || start.kind === "needs-title";
 }

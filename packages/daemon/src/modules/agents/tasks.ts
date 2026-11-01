@@ -1,8 +1,10 @@
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import {
   type AgentTaskChanges,
   type ChangedFile,
+  type CreatedChange,
   HANDED_TO_SUPERVISOR,
   type IncludedFiles,
   type JavaNavigationStatus,
@@ -15,6 +17,7 @@ import {
   TASK_SUMMARY_MAX_FILES,
   type Task,
   type TaskApprovals,
+  type TaskChange,
   type TaskChanges,
   type TaskChangesSummary,
   type TaskHandoffState,
@@ -28,6 +31,7 @@ import type { LspServer } from "./copilot-plugin.ts";
 import { type EndedTaskFacts, type EndedTaskGit, endedTaskFacts } from "./ended-task.ts";
 import type { JavaNavigationServers } from "./java-navigation-servers.ts";
 import { TASK_BRANCH_PREFIX, taskSlug, taskWorktree } from "./task-branch.ts";
+import type { ChangeFacts } from "./task-change.ts";
 import type { StoredTask, TaskFile } from "./task-file.ts";
 import { type HandoffFacts, type HandoffGit, handoffState, type TaskHandoff } from "./task-handoff.ts";
 import { type MiseSnapshot, miseConfigChanges, miseConfigDigest, readMiseConfig, reviewMiseConfig } from "./task-mise-config.ts";
@@ -139,10 +143,15 @@ export interface TaskOrigin {
   item: string | null;
   /** Whether the task's sessions show as a terminal or in the conversation view (ADR-137). */
   view: SessionView;
+  /** The change the task is a part of (ADR-171), whose earlier parts are already on the list; `null` for a task on its own. */
+  change: TaskChange | null;
 }
 
-/** What the user chooses for a task they start: everything of its origin but the identity a proposal gives it. */
-export type TaskOptions = Omit<TaskOrigin, "id" | "title" | "proposedBy">;
+/** What every part of a change starts with (ADR-171): its identity, proposer and place come from the change. */
+export type ChangeOrigin = Omit<TaskOrigin, "id" | "proposedBy" | "change">;
+
+/** What the user chooses for a task they start: everything of its origin but the identity a proposal or a change gives it. */
+export type TaskOptions = Omit<TaskOrigin, "id" | "title" | "proposedBy" | "change">;
 
 /** A task from the file with the worktree that follows from it, and its port (one given when it was read, if it had none). */
 type KnownTask = StoredTask & TaskWork & { port: number };
@@ -159,6 +168,8 @@ export class AgentTasks {
   #tasks: KnownTask[];
   /** Tasks with an action in progress (start, resume, end); a second one at the same time is `bad_request`. */
   readonly #busy = new Set<string>();
+  /** Parts of a change made but not started yet (`createChange`, ADR-171): no other action may run on them meanwhile. */
+  readonly #held = new Set<string>();
   /** Ports of tasks being created, not on the list yet: two tasks created at once must not get the same one. */
   readonly #creatingPorts = new Set<number>();
   /** Repo to the number of its tasks being created: they are not on the list until their worktree is on disk. */
@@ -195,9 +206,43 @@ export class AgentTasks {
    * title names the branch, and without one the prompt.
    */
   async create(repo: string, prompt: string, origin: TaskOrigin): Promise<Task> {
+    return view(await this.#creating(repo, () => this.#create(repo, prompt, origin, "launch")));
+  }
+
+  /**
+   * A change (ADR-171): a task per part in the parts' order, all on one branch name. Every part's worktree is made before
+   * the first session starts, so each session's instructions name all its siblings; until its own session starts, a part
+   * is held, so no resume, end or handing over gets between. The sessions then start in order, and each part takes as its
+   * handoff the part right before it that is still on the list, since an earlier one whose session could not start is
+   * gone. A part that cannot be made or started is in `failed`, in the parts' order, and the others go on.
+   */
+  async createChange(parts: readonly { repo: string; prompt: string }[], origin: ChangeOrigin): Promise<CreatedChange> {
+    const change = randomUUID();
+    const failures: { position: number; repo: string; err: unknown }[] = [];
+    const held: { position: number; task: KnownTask }[] = [];
+    for (const [position, { repo, prompt }] of parts.entries()) {
+      const partOrigin = { ...origin, id: randomUUID(), proposedBy: null, change: { id: change, position } };
+      await this.#creating(repo, () => this.#create(repo, prompt, partOrigin, "hold")).then(
+        (task) => held.push({ position, task }),
+        (err: unknown) => failures.push({ position, repo, err }),
+      );
+    }
+    const tasks: Task[] = [];
+    for (const { position, task: part } of held)
+      await this.#launchHeld(part).then(
+        (task) => tasks.push(task),
+        (err: unknown) => failures.push({ position, repo: part.repo, err }),
+      );
+    failures.sort((a, b) => a.position - b.position);
+    if (tasks.length === 0 && failures[0]) throw failures[0].err;
+    return { tasks, failed: failures.map(({ repo, err }) => ({ repo, message: messageOf(err) })) };
+  }
+
+  /** A task of the repo is being created while `run` runs, so a repo removal waits for it (ADR-83). */
+  async #creating<T>(repo: string, run: () => Promise<T>): Promise<T> {
     this.#creatingIn.set(repo, (this.#creatingIn.get(repo) ?? 0) + 1);
     try {
-      return await this.#create(repo, prompt, origin);
+      return await run();
     } finally {
       this.#creatingIn.set(repo, (this.#creatingIn.get(repo) ?? 1) - 1);
     }
@@ -206,21 +251,24 @@ export class AgentTasks {
   async #create(
     repo: string,
     prompt: string,
-    { id, title, proposedBy, model, approvals, javaNavigation, item, view: sessionView }: TaskOrigin,
-  ): Promise<Task> {
+    { id, title, proposedBy, model, approvals, javaNavigation, item, view: sessionView, change }: TaskOrigin,
+    launch: "launch" | "hold",
+  ): Promise<KnownTask> {
     // Refused before the worktree exists: a task that asked for Java navigation would otherwise start without it.
     if (javaNavigation) this.#deps.javaNavigation.assertCanStart(sessionView, "a task");
     const repoDir = await this.#deps.repos.repoPath(repo);
     const base = await asRepoUnavailable(repo, this.#deps.vcs.defaultBase(repoDir));
     const worktreesDir = await this.#deps.repos.newTaskWorktreesDir();
-    const handoff = await this.#handoffFrom(proposedBy);
+    // A part of a change takes its handoff when its session starts (`#launchHeld`), once the parts before it started.
+    const handoff = change === null ? await this.#handoffFrom(this.#tasks.find((t) => t.id === proposedBy?.task)) : null;
     const task = this.#known({
       id,
       repo,
       repoDir,
       worktreesDir,
       prompt,
-      branch: `${TASK_BRANCH_PREFIX}${taskSlug(title ?? prompt, id)}`,
+      // The parts of a change share one branch name (ADR-171); each is in its own repo, so the worktrees do not collide.
+      branch: `${TASK_BRANCH_PREFIX}${taskSlug(title ?? prompt, change?.id ?? id)}`,
       baseBranch: base.branch,
       base: base.commit,
       createdAt: new Date().toISOString(),
@@ -234,6 +282,7 @@ export class AgentTasks {
       conversation: null,
       summary: null,
       handoff,
+      change,
       trustedMiseConfig: null,
       port: freeTaskPort([...this.#tasks.map((t) => t.port), ...this.#creatingPorts]),
       included: noIncludedFiles(),
@@ -249,18 +298,38 @@ export class AgentTasks {
       task.trustedMiseConfig = await this.#initialMiseConfig(task);
       // Saved before the session starts: the worktree is already on disk and must not disappear from the list if the daemon crashes.
       this.#save([task, ...this.#tasks]);
-      try {
-        await this.#launch(task, "new");
-      } catch (err) {
-        // A failed cleanup leaves the task on the list, so that the user can end it themselves.
-        await this.#whileRemoving(id, () => this.#discard(task, false)).then(
-          () => this.#save(this.#tasks.filter((t) => t.id !== id)),
-          (e: unknown) => this.#deps.log(`cleaning up task ${id}: ${messageOf(e)}`),
-        );
-        throw err;
-      }
-      return view(task);
+      if (launch === "launch") await this.#launchNew(task);
+      // Held before `#exclusive` lets go of it, so nothing acts on the part until `#launchHeld`.
+      else this.#held.add(id);
+      return task;
     }).finally(() => this.#creatingPorts.delete(task.port));
+  }
+
+  /** The first session of a part of a change that `createChange` held, with the part before it as its handoff (ADR-171). */
+  async #launchHeld(part: KnownTask): Promise<Task> {
+    this.#held.delete(part.id);
+    return this.#exclusive(part.id, async () => {
+      const before = part.change === null ? undefined : this.#partBefore(part.change);
+      const task = { ...this.#get(part.id), handoff: await this.#handoffFrom(before) };
+      this.#save(this.#tasks.map((t) => (t.id === task.id ? task : t)));
+      await this.#launchNew(task);
+      return view(task);
+    });
+  }
+
+  /** The first session of a new task; when it cannot start, the task is ended again, its worktree and branch with it. */
+  async #launchNew(task: KnownTask): Promise<void> {
+    const { id } = task;
+    try {
+      await this.#launch(task, "new");
+    } catch (err) {
+      // A failed cleanup leaves the task on the list, so that the user can end it themselves.
+      await this.#whileRemoving(id, () => this.#discard(task, false)).then(
+        () => this.#save(this.#tasks.filter((t) => t.id !== id)),
+        (e: unknown) => this.#deps.log(`cleaning up task ${id}: ${messageOf(e)}`),
+      );
+      throw err;
+    }
   }
 
   /**
@@ -333,7 +402,7 @@ export class AgentTasks {
 
   /** An action on the task is in progress (start, resume, end), e.g. the session of a new task is still starting. */
   busy(id: string): boolean {
-    return this.#busy.has(id);
+    return this.#busy.has(id) || this.#held.has(id);
   }
 
   /** What a session of task `id` is told about the task that handed it its work (ADR-143); `null` when no task did. */
@@ -343,6 +412,30 @@ export class AgentTasks {
     if (this.#tasks.some((t) => t.id === handoff.task)) return { ...handoff, ended: false };
     const { commit: _, ...ended } = handoff;
     return { ...ended, ended: true };
+  }
+
+  /**
+   * The part of `change` right before `change.position` among the listed parts (ADR-171): the one whose work the part
+   * builds on, as a handoff (ADR-143). An earlier part whose session could not start is no longer listed, so it is skipped.
+   */
+  #partBefore(change: TaskChange): KnownTask | undefined {
+    return this.#parts(change.id)
+      .filter((t) => t.change.position < change.position)
+      .at(-1);
+  }
+
+  /** The listed parts of change `id` in their order (ADR-171). */
+  #parts(id: string): (KnownTask & { change: TaskChange })[] {
+    return this.#tasks
+      .filter((t): t is KnownTask & { change: TaskChange } => t.change?.id === id)
+      .sort((a, b) => a.change.position - b.change.position);
+  }
+
+  /** What a session of task `id` is told about the change it is a part of (ADR-171); `null` for a task on its own. */
+  change(id: string): ChangeFacts | null {
+    const change = this.#tasks.find((t) => t.id === id)?.change ?? null;
+    if (change === null) return null;
+    return { parts: this.#parts(change.id).map(({ id: task, repo, branch }) => ({ task, repo, branch })) };
   }
 
   /** The tasks task `id` handed their work to (ADR-143), while they last. */
@@ -385,8 +478,7 @@ export class AgentTasks {
    * The handoff of a task a task's session proposed (ADR-143): that task, read from the list, and the commit its branch is
    * at as the user approves. A handing task already ended, or a HEAD git cannot read, leaves the new task without one.
    */
-  async #handoffFrom(proposedBy: ProposedBy | null): Promise<TaskHandoff | null> {
-    const from = this.#tasks.find((t) => t.id === proposedBy?.task);
+  async #handoffFrom(from: KnownTask | undefined): Promise<TaskHandoff | null> {
     if (from === undefined) return null;
     const commit = await this.#deps.vcs.headCommit(from.worktree).catch((err: unknown) => {
       this.#deps.log(`reading the HEAD of task ${from.id} for its subtask: ${messageOf(err)}`);
@@ -401,6 +493,7 @@ export class AgentTasks {
    */
   handToSupervisor(id: string): Task {
     if (this.#removing.has(id)) throw new DomainError("bad_request", "this task is being ended");
+    if (this.busy(id)) throw new DomainError("bad_request", "this task is still starting or busy; try again in a moment");
     const task = this.#get(id);
     if (!mayHandToSupervisor(task))
       throw new DomainError(
@@ -664,6 +757,7 @@ export class AgentTasks {
 
   async #exclusive<T>(id: string, run: () => Promise<T>): Promise<T> {
     if (this.#busy.has(id)) throw new DomainError("bad_request", "another action is already running on this task");
+    if (this.#held.has(id)) throw new DomainError("bad_request", "this task is a part of a change whose sessions are still starting");
     this.#busy.add(id);
     try {
       return await run();

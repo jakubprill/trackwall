@@ -1,5 +1,5 @@
 import { mayHandToSupervisor, type RunningMiseTask, type Session, TASK_PORT_ENV, type Task, type TaskMessage } from "@trackwall/protocol";
-import { Bot, GitBranch, Plug, ShieldOff, Trash2 } from "lucide-react";
+import { Bot, GitBranch, Layers, Plug, ShieldOff, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
 import { ReadRequestNotice } from "@/components/ReadRequestNotice";
@@ -225,10 +225,22 @@ function taskSubtitle(task: Task, sessions: readonly Session[]): string {
   return task.proposedBy ? `${name} · ${proposerLabel(task.proposedBy, sessions)}` : name;
 }
 
-/** What the task runs with beyond the defaults: its model (ADR-98) and running without approvals (ADR-105). */
+/**
+ * What the task runs with beyond the defaults: its model (ADR-98), running without approvals (ADR-105), and its place
+ * in a change (ADR-171), whose parts the Sessions list shows in their merge order.
+ */
 function TaskMarks({ task }: { task: Task }) {
   return (
     <>
+      {task.change !== null && (
+        <span
+          className="text-muted-foreground flex shrink-0 items-center gap-1 text-xs"
+          title="A part of a change across several repos: the Sessions list shows its parts in the order to merge them"
+        >
+          <Layers className="size-3" aria-hidden />
+          Part of a change
+        </span>
+      )}
       {task.model !== null && (
         <span className="text-muted-foreground flex shrink-0 items-center gap-1 font-mono text-xs" title="Copilot CLI model">
           <Bot className="size-3" aria-label="model" />

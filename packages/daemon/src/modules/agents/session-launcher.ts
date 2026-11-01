@@ -22,6 +22,7 @@ import type { ConversationLaunch } from "./resumable-sessions.ts";
 import { type SessionMiseEnv, type SessionMiseLaunch, sessionMiseLaunch } from "./session-env.ts";
 import { type SessionRole, withInstructionsDir, writeSessionInstructions } from "./session-instructions.ts";
 import type { SessionTokens } from "./session-tokens.ts";
+import type { ChangeFacts } from "./task-change.ts";
 import type { HandoffFacts } from "./task-handoff.ts";
 
 /**
@@ -132,6 +133,8 @@ export interface SessionLauncherDeps {
   callbacks: (session: { id: string; supervisor: boolean; task: string | null }) => SessionCallbacks;
   /** What a session of the task is told about the task that handed it its work (ADR-143). */
   handoff: (task: string) => HandoffFacts | null;
+  /** What a session of the task is told about the change it is a part of (ADR-171). */
+  change: (task: string) => ChangeFacts | null;
   /** The workspace knowledge the user approved for a session in `repo` (`null`: in the projects folder), ADR-170. */
   knowledge: (repo: string | null) => Promise<SessionKnowledge>;
   log: (msg: string) => void;
@@ -315,7 +318,8 @@ export class SessionLauncher {
   }
 
   #role(repo: string | null, supervisor: boolean, task: string | null): SessionRole {
-    if (repo !== null && task !== null) return { kind: "task", repo, task, handoff: this.#deps.handoff(task) };
+    if (repo !== null && task !== null)
+      return { kind: "task", repo, task, handoff: this.#deps.handoff(task), change: this.#deps.change(task) };
     if (repo !== null) return { kind: "repo", repo };
     return supervisor ? { kind: "supervisor", changesCode: this.#deps.repos.supervisorSettings().changesCode } : { kind: "free" };
   }

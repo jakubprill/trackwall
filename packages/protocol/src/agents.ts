@@ -72,6 +72,35 @@ export const TASK_TITLE_MAX = 80;
 export const TaskTitle = singleLine(z.string().trim().min(1).max(TASK_TITLE_MAX), "the title");
 
 /**
+ * A change (ADR-171): one piece of work across several repos, one task per repo, which the user starts at once. Its
+ * parts share one branch name, so their merge requests show together on the repo host, and each part's session knows
+ * the others from Trackwall's list. A change is no record of its own: it is the tasks that carry its id, and it ends
+ * when its last part does. `position` is the part's place in the order its merge requests are to be merged, which is
+ * only information for the user: nothing waits for it and nothing merges (ADR-9).
+ */
+export const CHANGE_PARTS_MAX = 6;
+export const ChangeId = z.uuid();
+export const TaskChange = z.object({
+  id: ChangeId,
+  position: z
+    .number()
+    .int()
+    .min(0)
+    .max(CHANGE_PARTS_MAX - 1),
+});
+export type TaskChange = z.infer<typeof TaskChange>;
+
+/** What one part of a change adds to the prompt of the whole: what its repo has to do, when the user said so. */
+export const CHANGE_PART_NOTE_MAX = 1000;
+export const ChangePart = z.object({ repo: RepoId, note: z.string().trim().max(CHANGE_PART_NOTE_MAX).default("") }).strict();
+export type ChangePart = z.infer<typeof ChangePart>;
+
+/** A part's prompt: the change's, then the part's note with its repo, so its session reads both in its first message. */
+export function changePartPrompt(prompt: string, { repo, note }: ChangePart): string {
+  return note === "" ? prompt : `${prompt}\n\nIn ${repo}: ${note}`;
+}
+
+/**
  * Text from an agent that a person reads before a decision or that reaches another agent (a task proposal, a summary,
  * ADR-39): without characters the UI does not show but a model reads (format characters, including the tags
  * U+E0000–E007F and text direction changes, private use and line separators; not unassigned ones, because what is
@@ -373,8 +402,17 @@ export const Task = z.object({
   /** The task port (ADR-61): `TASK_PORT_ENV` in every mise task run in the worktree, and the port of the task's service. */
   port: TaskPort,
   included: IncludedFiles,
+  /** The change the task is a part of (ADR-171); `null` for a task on its own. */
+  change: TaskChange.nullable(),
 });
 export type Task = z.infer<typeof Task>;
+
+/** Parts of a change were started one by one; the ones that could not start are named with why, the others run. */
+export const CreatedChange = z.object({
+  tasks: z.array(Task),
+  failed: z.array(z.object({ repo: RepoId, message: z.string() })),
+});
+export type CreatedChange = z.infer<typeof CreatedChange>;
 
 /**
  * What a proposal asks for (ADR-83): `task`, a task in the repo (`propose_task`), or an action on the projects folder
@@ -715,6 +753,35 @@ export const agentsApi = {
       .strict(),
     Task,
   ),
+  /**
+   * Starts a change (ADR-171): one task per repo, in the order of `parts`, which is the order their merge requests are to
+   * be merged; each with the change's prompt and its part's note, on one branch name from `title`. The options are the
+   * ones of `createTask` for every part; Java navigation is left to tasks on their own. A part that cannot start is in
+   * `failed` while the others run; when none can, the first one's error.
+   */
+  createChange: endpoint(
+    "create-change",
+    z
+      .object({
+        title: TaskTitle,
+        prompt: TaskPrompt,
+        parts: z
+          .array(ChangePart)
+          .min(2)
+          .max(CHANGE_PARTS_MAX)
+          .refine((parts) => new Set(parts.map((p) => p.repo)).size === parts.length, "a change has one part per repo"),
+        approvals: TaskApprovals,
+        model: TaskModel.nullable().default(null),
+        item: BoardItemId.nullable().default(null),
+        view: SessionView.default("terminal"),
+      })
+      .strict()
+      .refine(
+        ({ prompt, parts }) => parts.every((part) => changePartPrompt(prompt, part).length <= TASK_PROMPT_MAX),
+        `a part's prompt with its note is at most ${TASK_PROMPT_MAX} characters`,
+      ),
+    CreatedChange,
+  ),
   /** A new session for a task that has no running session, in the task's view: it goes on with the task's conversation. */
   resumeTask: endpoint("resume-task", TaskRequest, Task),
   taskChanges: endpoint("task-changes", TaskRequest, TaskChanges),
@@ -797,6 +864,9 @@ export const agentsApi = {
     Done,
   ),
 };
+
+/** What the user asks for when they start a change (ADR-171), with the defaults filled in. */
+export type ChangeRequest = z.infer<typeof agentsApi.createChange.request>;
 
 /**
  * Close codes of the terminal WebSocket from the application range (4000–4999), so that the terminal window can tell the

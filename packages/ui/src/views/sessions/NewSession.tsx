@@ -1,5 +1,6 @@
 import {
   agentsApi,
+  type ChangeRequest,
   cardsApi,
   countLabel,
   pluralNoun,
@@ -16,14 +17,24 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { type JavaNavigationOffer, javaNavigationInView, javaNavigationOffer } from "@/lib/java-navigation";
-import { type FromItem, firstListedRepo, formStart, type NewSessionStart, newSessionForm, sessionsInSameFolder } from "@/lib/new-session";
+import { type JavaNavigationOffer, javaNavigationInChange, javaNavigationInView, javaNavigationOffer } from "@/lib/java-navigation";
+import {
+  type ChangePartDraft,
+  type FromItem,
+  firstListedRepo,
+  formChangeStart,
+  type NewSessionStart,
+  newSessionForm,
+  sessionsInSameFolder,
+  startsChange,
+} from "@/lib/new-session";
 import { tagsByRepo } from "@/lib/repo-tags";
 import type { SessionSelection } from "@/lib/session-entries";
 import { readStartChoice, type StartChoice, saveStartChoice } from "@/lib/start-choices";
 import { typedModel } from "@/lib/task-model";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
+import { ChangeParts } from "./ChangeParts.tsx";
 import { StartOptions } from "./StartOptions.tsx";
 
 /** The place choice's value for the projects folder; a repo id is never empty. */
@@ -37,7 +48,8 @@ const PROJECTS_FOLDER = "";
  * terminal, with a Java language server (ADR-99, ADR-175); only a task, whose changes wait for review in its own worktree,
  * can run without asking for approvals (ADR-105). The options are a row of pills under the prompt (`StartOptions`); the worktree, the model, Java navigation and the view come back as the user last started from that
  * place, the approvals mode always starts at asking. Started from a board item (ADR-133), the form comes with the item's
- * repo and prompt, and the task works on the item.
+ * repo and prompt, and the task works on the item. A task with more repos added is a change (ADR-171): a task per repo
+ * on one branch name.
  */
 export function NewSession({
   conn,
@@ -67,8 +79,9 @@ export function NewSession({
   const choice = edited.get(chosen) ?? remembered;
   const choose = (next: Partial<StartChoice>) => setEdited(new Map(edited).set(chosen, { ...choice, ...next }));
   const model = typedModel(choice.model);
-  const start = formStart(form, repo, choice.worktree, prompt);
-  const java = javaNavigationInView(useJavaNavigationOffer(conn, repo), choice.view);
+  const change = useChangeForm(conn, onStarted, () => setPrompt(""));
+  const { start, firstPart } = formChangeStart(form, repo, choice.worktree, prompt, change.parts, change.title);
+  const java = javaNavigationInChange(javaNavigationInView(useJavaNavigationOffer(conn, repo), choice.view), startsChange(start));
   const javaNavigation = java.kind === "ready" && choice.javaNavigation;
   const { item } = form;
   const createTask = useAction(
@@ -81,13 +94,14 @@ export function NewSession({
       post(conn, agentsApi.start, { repo, prompt, model: model ?? null, javaNavigation, view: choice.view }),
     (session) => onStarted({ kind: "session", id: session.id }),
   );
-  const pending = createTask.pending || startSession.pending;
-  const error = createTask.error ?? startSession.error;
+  const pending = createTask.pending || startSession.pending || change.create.pending;
+  const error = createTask.error ?? startSession.error ?? change.create.error;
   const run = () => {
     // A model that is not an id is not remembered; the start waits for it to be fixed.
     if (model !== undefined) saveStartChoice(() => window.localStorage, chosen, choice);
     if (start.kind === "task") createTask.run(start.repo, start.prompt);
     if (start.kind === "session") startSession.run(start.repo, start.prompt);
+    if (start.kind === "change") change.create.run({ ...start, approvals, model: model ?? null, item, view: choice.view });
   };
 
   return (
@@ -119,6 +133,18 @@ export function NewSession({
             view={{ value: choice.view, onChange: (view: SessionView) => choose({ view }) }}
             disabled={pending}
           />
+          {firstPart !== null && (
+            <ChangeParts
+              repos={repos.data.repos}
+              repo={firstPart}
+              parts={change.parts}
+              title={change.title}
+              disabled={pending}
+              onParts={change.setParts}
+              onTitle={change.setTitle}
+              partly={change.partly}
+            />
+          )}
           <StartNote start={start} repo={repo} sessions={sessions} />
           <div className="flex flex-wrap items-center gap-2">
             <StartButton start={start} disabled={pending} invalidModel={model === undefined} onClick={run} />
@@ -188,6 +214,8 @@ function javaNavigationPill(offer: JavaNavigationOffer, value: boolean, onChange
 /** A line under the options: what a session gives up, or why a task for an item cannot start yet. */
 function StartNote({ start, repo, sessions }: { start: NewSessionStart; repo: string | null; sessions: readonly Session[] }) {
   if (start.kind === "session") return <WithoutWorktree repo={repo} sessions={sessions} />;
+  if (start.kind === "needs-title")
+    return <p className="text-muted-foreground text-xs">A change needs a title: it names the branch in every repo.</p>;
   if (start.kind === "needs-repo")
     return <p className="text-muted-foreground text-xs">A task for this item works in a repo: add one to the projects folder first.</p>;
   return null;
@@ -215,6 +243,43 @@ function WithoutWorktree({ repo, sessions }: { repo: string | null; sessions: re
   );
 }
 
+/**
+ * The repos the user added to make the task a change (ADR-171), its title, and starting it. Parts that did not start are
+ * said in the form, where the user can still read them, instead of opening the change.
+ */
+function useChangeForm(conn: Connection, onStarted: (selection: SessionSelection) => void, clearPrompt: () => void) {
+  const [parts, setParts] = useState<ChangePartDraft[]>([]);
+  const [title, setTitle] = useState("");
+  const [partly, setPartly] = useState<string>();
+  const create = useAction(
+    (request: ChangeRequest) => {
+      setPartly(undefined);
+      return post(conn, agentsApi.createChange, request);
+    },
+    ({ tasks, failed }) => {
+      const first = tasks[0];
+      if (failed.length === 0 && first) return onStarted({ kind: "task", id: first.id });
+      // The started parts are tasks now, so the form forgets the change: a second press would start them again.
+      setParts([]);
+      setTitle("");
+      clearPrompt();
+      setPartly(
+        changeStartedPartly(
+          tasks.map((t) => t.repo),
+          failed,
+        ),
+      );
+    },
+  );
+  return { parts, setParts, title, setTitle, partly, create };
+}
+
+/** What started of a change when some parts could not: the user finds the started ones in the list. */
+function changeStartedPartly(started: readonly string[], failed: readonly { repo: string; message: string }[]): string {
+  const lines = failed.map((f) => `${f.repo}: ${f.message}`);
+  return `Started in ${started.join(", ")}; these parts could not start:\n${lines.join("\n")}`;
+}
+
 /** "Start session" for a session, "Create task" for a task, which needs a prompt; both need a model id when a model is typed. */
 function StartButton({
   start,
@@ -232,8 +297,11 @@ function StartButton({
       <Play /> Start session
     </Button>
   ) : (
-    <Button onClick={onClick} disabled={disabled || invalidModel || start.kind === "needs-prompt" || start.kind === "needs-repo"}>
-      <GitBranch /> Create task
+    <Button
+      onClick={onClick}
+      disabled={disabled || invalidModel || start.kind === "needs-prompt" || start.kind === "needs-repo" || start.kind === "needs-title"}
+    >
+      <GitBranch /> {start.kind === "change" ? `Create change in ${start.parts.length} repos` : "Create task"}
     </Button>
   );
 }

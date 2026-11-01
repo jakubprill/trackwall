@@ -3,6 +3,9 @@ import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   type AgentTaskChanges,
+  type ChangeRequest,
+  type CreatedChange,
+  changePartPrompt,
   type DialogAnswer,
   type EnvironmentCheck,
   type HttpEndpoint,
@@ -251,6 +254,7 @@ export class Agents {
       tokens: this.#tokens,
       callbacks: (session) => this.#sessionCallbacks(session),
       handoff: (task) => this.#tasks.handoff(task),
+      change: (task) => this.#tasks.change(task),
       knowledge: deps.knowledge,
     });
     this.#resumable = new ResumableSessions(join(deps.home, RESUMABLE_SESSIONS_FILE), deps.log);
@@ -470,7 +474,17 @@ export class Agents {
     if (this.#proposals.get(id).kind !== "task") throw new DomainError("bad_request", `proposal ${id} is not a task`);
     const { repo, title, proposedBy, item } = this.#proposals.take(id);
     try {
-      return await this.#tasks.create(repo, prompt, { id, title, proposedBy, model, approvals, javaNavigation: false, item, view });
+      return await this.#tasks.create(repo, prompt, {
+        id,
+        title,
+        proposedBy,
+        model,
+        approvals,
+        javaNavigation: false,
+        item,
+        view,
+        change: null,
+      });
     } finally {
       this.#proposals.release(id, this.#tasks.find(id) === undefined);
     }
@@ -656,8 +670,15 @@ export class Agents {
     await this.#assertOnBoard(item);
     // `task` throws `not_found` for a task that is not on the list, before a worktree exists.
     const proposedBy = handoffFrom === null ? null : { session: null, supervisor: false, task: this.task(handoffFrom).id };
-    const origin = { id: randomUUID(), title, proposedBy, model, approvals, javaNavigation, item, view };
+    const origin = { id: randomUUID(), title, proposedBy, model, approvals, javaNavigation, item, view, change: null };
     return this.#tasks.create(repo, prompt, origin);
+  }
+
+  /** A change the user typed (ADR-171): a task per part, see `AgentTasks.createChange`; `item` must be on the board. */
+  async createChange({ title, prompt, parts, approvals, model, item, view }: ChangeRequest): Promise<CreatedChange> {
+    await this.#assertOnBoard(item);
+    const prompts = parts.map((part) => ({ repo: part.repo, prompt: changePartPrompt(prompt, part) }));
+    return this.#tasks.createChange(prompts, { title, model, approvals, javaNavigation: false, item, view });
   }
 
   /**

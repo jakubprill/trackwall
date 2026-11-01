@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MCP_INSTRUCTIONS, TASK_MESSAGE_RULE } from "@trackwall/protocol";
 import { type SessionRole, withInstructionsDir, writeSessionInstructions } from "../src/modules/agents/session-instructions.ts";
+import type { HandoffFacts } from "../src/modules/agents/task-handoff.ts";
 
 const NO_KNOWLEDGE = { entries: [], more: 0 };
 
@@ -18,6 +19,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
         repo: "shop",
         task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427",
         handoff: null,
+        change: null,
       },
       NO_KNOWLEDGE,
     );
@@ -52,6 +54,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
         repo: "shop",
         task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427",
         handoff: null,
+        change: null,
       },
       NO_KNOWLEDGE,
     );
@@ -75,6 +78,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
         repo: "payments",
         task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427",
         handoff: null,
+        change: null,
       },
       NO_KNOWLEDGE,
     );
@@ -102,6 +106,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
           repo: "orders-api",
           task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427",
           handoff: ended ? { task: handoff.task, repo: handoff.repo, branch: handoff.branch, ended } : { ...handoff, ended },
+          change: null,
         },
         NO_KNOWLEDGE,
       );
@@ -114,6 +119,44 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     expect(read(false)).toContain("Build against the contract it changed (an endpoint, a field, a message), not a copy of its code.");
     expect(read(true)).toContain("which the user has ended since, so get_task_changes no longer reads it.");
     expect(read(true)).not.toContain("read what it changed with get_task_changes");
+  });
+
+  test("a part of a change knows its sibling parts in merge order and builds on the part before it (ADR-171)", () => {
+    const parts = [
+      { task: "5e7a1c3b-0000-4000-8000-000000000000", repo: "payments", branch: "trackwall/refund-api-9d0c11" },
+      { task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427", repo: "orders-api", branch: "trackwall/refund-api-9d0c11" },
+      { task: "7f3e2d1c-0000-4000-8000-000000000000", repo: "shop-web", branch: "trackwall/refund-api-9d0c11" },
+    ];
+    const read = (handoff: HandoffFacts | null) => {
+      const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
+      const change = { parts };
+      writeSessionInstructions(
+        sessionDir,
+        "0.5.14",
+        { kind: "task", repo: "orders-api", task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427", handoff, change },
+        NO_KNOWLEDGE,
+      );
+      return readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
+    };
+    const before = { task: parts[0]?.task ?? "", repo: "payments", branch: "trackwall/refund-api-9d0c11" };
+
+    const text = read({ ...before, commit: "c".repeat(40), ended: false });
+    expect(text).toContain(
+      "- Your task is part 2 of 3 of one change the user started across several repos: each part is a task in its own repo, all on the branch `trackwall/refund-api-9d0c11`, and their merge requests are to be merged in this order:\n" +
+        "  1. the repo `payments`, task `5e7a1c3b-0000-4000-8000-000000000000`\n" +
+        "  2. the repo `orders-api`, task `1b4e28ba-2fa1-11d2-883f-0016d3cca427` (yours)\n" +
+        "  3. the repo `shop-web`, task `7f3e2d1c-0000-4000-8000-000000000000`\n",
+    );
+    expect(text).toContain("do not propose a task in a repo of this change");
+    expect(text).toContain(
+      `- Your part builds on the part before it, the task \`5e7a1c3b-0000-4000-8000-000000000000\` in the repo \`payments\`, whose branch was at commit \`${"c".repeat(40)}\` when your session first started. It started together with yours, so it may have nothing new yet: work from the prompt, and do not wait for it.`,
+    );
+    // The part before did not propose this one, so the proposal's wording would mislead.
+    expect(text).not.toContain("Your task was handed to you by");
+    expect(read({ ...before, ended: true })).toContain(
+      "The part before yours, the task `5e7a1c3b-0000-4000-8000-000000000000` in the repo `payments`, is no longer on Trackwall's list",
+    );
+    expect(read(null)).not.toContain("builds on the part before it");
   });
 
   test("a main session and the supervisor get no messages, so not the rule for weighing them", () => {
