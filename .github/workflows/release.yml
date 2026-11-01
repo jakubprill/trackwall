@@ -25,6 +25,9 @@ env:
 jobs:
   build:
     name: portable (${{ matrix.os }})
+    # The update signing key is a secret of this environment only, which takes only `v*` tags: a workflow pushed
+    # on any other ref never gets it (§8).
+    environment: release
     strategy:
       fail-fast: true
       matrix:
@@ -108,6 +111,9 @@ jobs:
   # signed with the update key, so that an update inside the container can check it.
   linux:
     name: Linux archive (${{ matrix.arch }})
+    # The update signing key is a secret of this environment only, which takes only `v*` tags: a workflow pushed
+    # on any other ref never gets it (§8).
+    environment: release
     strategy:
       fail-fast: true
       matrix:
