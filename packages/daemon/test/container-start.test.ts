@@ -41,16 +41,19 @@ function stopEverything(home: string) {
   const supervisor = existsSync(supervisorPidFile(home)) ? Number(readFileSync(supervisorPidFile(home), "utf8")) : undefined;
   for (const pid of [supervisor, file?.pid]) {
     try {
-      if (pid) process.kill(pid, "SIGKILL");
+      if (pid && pid !== process.pid) process.kill(pid, "SIGKILL");
     } catch {
       // already gone
     }
   }
 }
 
-// Dev containers are Linux; the supervisor's own session and its signals are POSIX, so Windows does not run these.
+// Dev containers are Linux, and the supervisor's PID file is recognised by `/proc`: elsewhere any live PID counts as the
+// holder, so the test of a stale PID file would take the test runner's own PID for a supervisor and kill it.
+const LINUX = process.platform === "linux";
+
 describe.each(RUNTIMES)("trackwall-container start under %s (ADR-164)", (_name, runtime) => {
-  test.skipIf(process.platform === "win32")(
+  test.skipIf(!LINUX)(
     "starts a supervised daemon on the port, answers the same on a second call, starts the daemon again after a crash, and stops with it",
     async () => {
       const home = mkdtempSync(join(tmpdir(), "trackwall-container-"));
@@ -84,7 +87,7 @@ describe.each(RUNTIMES)("trackwall-container start under %s (ADR-164)", (_name, 
     60_000,
   );
 
-  test.skipIf(process.platform === "win32")(
+  test.skipIf(!LINUX)(
     "two starts at once leave one supervisor and one daemon, and a PID file of another process does not stop a start",
     async () => {
       const home = mkdtempSync(join(tmpdir(), "trackwall-container-"));
@@ -109,7 +112,7 @@ describe.each(RUNTIMES)("trackwall-container start under %s (ADR-164)", (_name, 
     60_000,
   );
 
-  test.skipIf(process.platform === "win32")(
+  test.skipIf(!LINUX)(
     "a state directory the supervisor cannot use ends in start-failed, still as JSON",
     async () => {
       const parent = mkdtempSync(join(tmpdir(), "trackwall-container-"));

@@ -126,15 +126,15 @@ function stopEverything(home: string) {
   }
   for (const pid of pids) {
     try {
-      if (pid !== undefined) process.kill(pid, "SIGTERM");
+      if (pid !== undefined && pid !== process.pid) process.kill(pid, "SIGTERM");
     } catch {
       // gone already
     }
   }
 }
 
-// The update runs in a Linux dev container; the supervisor's signals are POSIX, so Windows does not run these.
-describe.skipIf(process.platform === "win32")("trackwall-container update (ADR-165)", () => {
+// The update runs in a Linux dev container, and its PID files are recognised by `/proc`, so only Linux runs these.
+describe.skipIf(process.platform !== "linux")("trackwall-container update (ADR-165)", () => {
   test("a signed version is unpacked into bin/, becomes current and runs in place of the old daemon", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-update-"));
     const port = await freePort();
