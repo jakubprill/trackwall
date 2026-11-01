@@ -58,10 +58,10 @@ Trackwall has no Linux download, so it runs from its source. In a terminal of th
 3. Clone Trackwall outside the projects folder and build its page: `git clone https://github.com/jakubprill/trackwall.git ~/trackwall && cd ~/trackwall && pnpm install --frozen-lockfile && pnpm --filter @trackwall/ui build`.
 4. Point Trackwall at the repos: `echo "projectsDir: /workspaces" > ~/.trackwall/workspace.yaml`.
 5. Start it on the forwarded port: `bun packages/daemon/src/main.ts --port 7700`.
-6. In a second terminal, print the address with its token: `echo "http://127.0.0.1:7700/#token=$(sed -n 's/.*"token": *"\([^"]*\)".*/\1/p' ~/.trackwall/daemon.json)"`, and open it in the browser on your computer.
+6. In a second terminal, print the address with its token: `cd ~/trackwall && bun packages/daemon/src/main.ts address`, and open it in the browser on your computer.
 7. Sign in to Copilot CLI once: run `copilot`, type `/login` and follow the steps in your browser. The sign-in stays in the `workspace-copilot` volume.
 
-The token changes every time Trackwall starts, so look the address up again after a restart. Trackwall stops when its terminal or the container stops.
+The browser keeps the token for that address, so a bookmark of `http://127.0.0.1:7700` and a new tab open Trackwall without it. The token changes every time Trackwall starts: after a restart, open or reload the page, and it asks for the address; print it again as in step 6 and paste it there. Trackwall stops when its terminal or the container stops.
 
 ## Bring your skills and plugins
 
