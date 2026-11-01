@@ -225,7 +225,7 @@ jobs:
           unpacked="$RUNNER_TEMP/linux-archive"
           mkdir -p "$unpacked"
           tar -xzf out/trackwall-*-linux-x64.tar.gz -C "$unpacked"
-          bun packages/daemon/scripts/smoke.ts "$unpacked/trackwall/trackwall-daemon"
+          bun packages/daemon/scripts/smoke.ts "$unpacked/trackwall/trackwall-daemon" --page
       # The headless shell and the system libraries it needs (apt, as root in the container), and DejaVu Sans Mono, the
       # monospace font of the Linux runner: the terminal's rows follow the font, and a user's browser runs on their own
       # computer, not in the container, so the image's fonts are not what Trackwall is drawn with.

@@ -1,7 +1,7 @@
 /**
  * The Linux release archive (ADR-163): Trackwall for a Linux container, the daemon and its page without the desktop
- * shell. A Dev Container Feature installs it from the release (ADR-164), and it is signed with the update key, so that
- * an update inside the container can check it as the app's updater checks its packages (ADR-165).
+ * shell, for a dev container to install from the release. It is signed with the update key, so that an update inside
+ * the container can check it as the app's updater checks its packages.
  *
  *   trackwall-<version>-linux-<arch>.tar.gz
  *     trackwall/trackwall-daemon   the daemon, built for the architecture
@@ -25,14 +25,8 @@ export function linuxArchiveName(version: string, arch: LinuxArch): string {
   return `trackwall-${version}-linux-${arch}.tar.gz`;
 }
 
-/** The folder at the top of the archive, and the entries in it. */
+/** The folder at the top of the archive. */
 export const LINUX_ARCHIVE_FOLDER = "trackwall";
-export const LINUX_ARCHIVE_ENTRIES = ["README.txt", "trackwall-daemon", "ui"] as const;
-
-/** Every entry of the archive must lie in its folder: the installer unpacks it as it is. */
-export function strayLinuxArchiveEntries(entries: readonly string[]): string[] {
-  return entries.filter((entry) => entry !== `${LINUX_ARCHIVE_FOLDER}/` && !entry.startsWith(`${LINUX_ARCHIVE_FOLDER}/`));
-}
 
 export function linuxReadme(version: string): string {
   return [

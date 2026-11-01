@@ -105,7 +105,7 @@ jobs:
           retention-days: 7
 
   # The daemon and its page for a Linux container (ADR-163), built and smoke-tested on each architecture's own runner, and
-  # signed with the update key, which the update in the container checks (ADR-165).
+  # signed with the update key, so that an update inside the container can check it.
   linux:
     name: Linux archive (${{ matrix.arch }})
     strategy:
@@ -152,7 +152,7 @@ jobs:
           unpacked="$RUNNER_TEMP/linux-archive"
           mkdir -p "$unpacked"
           tar -xzf "out/trackwall-${TAG#v}-linux-${{ matrix.arch }}.tar.gz" -C "$unpacked"
-          bun packages/daemon/scripts/smoke.ts "$unpacked/trackwall/trackwall-daemon"
+          bun packages/daemon/scripts/smoke.ts "$unpacked/trackwall/trackwall-daemon" --page
       # Only this step gets the key, as in the build job.
       - name: Sign the archive
         env:

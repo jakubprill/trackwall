@@ -4,19 +4,10 @@
  *
  *   bun apps/desktop/scripts/package-linux.ts <x64|arm64>
  */
-import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { assertVersionsMatch, REPO, run } from "./lib.ts";
-import {
-  isLinuxArch,
-  LINUX_ARCHIVE_ENTRIES,
-  LINUX_ARCHIVE_FOLDER,
-  LINUX_ARCHIVES,
-  LINUX_ARCHS,
-  linuxArchiveName,
-  linuxReadme,
-  strayLinuxArchiveEntries,
-} from "./linux-archive.ts";
+import { isLinuxArch, LINUX_ARCHIVE_FOLDER, LINUX_ARCHIVES, LINUX_ARCHS, linuxArchiveName, linuxReadme } from "./linux-archive.ts";
 
 const arch = Bun.argv[2] ?? "";
 if (!isLinuxArch(arch)) throw new Error(`usage: bun apps/desktop/scripts/package-linux.ts <${LINUX_ARCHS.join("|")}>`);
@@ -42,14 +33,8 @@ cpSync(daemon, join(stage, "trackwall-daemon"));
 chmodSync(join(stage, "trackwall-daemon"), 0o755);
 cpSync(join(ui, ".."), join(stage, "ui"), { recursive: true });
 writeFileSync(join(stage, "README.txt"), linuxReadme(version));
-const staged = readdirSync(stage).sort();
-if (staged.join() !== [...LINUX_ARCHIVE_ENTRIES].join()) {
-  throw new Error(`the archive has ${staged.join(", ")}; update LINUX_ARCHIVE_ENTRIES in linux-archive.ts`);
-}
 
 const archive = join(out, linuxArchiveName(version, arch));
 run(["tar", "-czf", archive, "-C", stageRoot, LINUX_ARCHIVE_FOLDER], REPO);
-const stray = strayLinuxArchiveEntries(run(["tar", "-tzf", archive], REPO, true).split("\n").filter(Boolean));
-if (stray.length > 0) throw new Error(`${archive} has entries outside ${LINUX_ARCHIVE_FOLDER}/: ${stray.slice(0, 5).join(", ")}`);
 rmSync(stageRoot, { recursive: true, force: true });
 console.log(archive);

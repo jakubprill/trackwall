@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { BUILD_ENTRIES, TAURI_DIR } from "../scripts/lib.ts";
-import { keyId, updateManifest } from "../scripts/update-manifest.ts";
+import { assertSignedWith, keyId, updateManifest } from "../scripts/update-manifest.ts";
 
 // A throwaway key pair made for this test with `tauri signer generate`; its private key is not kept anywhere.
 const PUBKEY =
@@ -52,6 +52,13 @@ describe("update manifest", () => {
     ).toThrow(
       `trackwall-0.3.1-macos-arm64.app.tar.gz is signed with key ${keyId(OTHER_KEY_SIG, "")}, but tauri.conf.json has key ${keyId(PUBKEY, "")}`,
     );
+  });
+
+  test("refuses a file outside the manifest, such as a Linux archive, signed with another key", () => {
+    expect(() => assertSignedWith(PUBKEY, "trackwall-0.3.1-linux-x64.tar.gz", OTHER_KEY_SIG)).toThrow(
+      `trackwall-0.3.1-linux-x64.tar.gz is signed with key ${keyId(OTHER_KEY_SIG, "")}`,
+    );
+    expect(() => assertSignedWith(PUBKEY, "trackwall-0.3.1-windows-x64.zip", WINDOWS_SIG)).not.toThrow();
   });
 
   test("the key id of a public key and of a signature made with it are the same", () => {

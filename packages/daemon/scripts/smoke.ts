@@ -3,7 +3,9 @@
  * (`mcp-stdio`), a repo card with an endpoint contract and a DTO (the tree-sitter parser embedded in the binary, ADR-37,
  * ADR-38), shutdown, daemon.json cleaned up.
  *
- *   bun scripts/smoke.ts <path to trackwall-daemon>
+ *   bun scripts/smoke.ts <path to trackwall-daemon> [--page]
+ *
+ * `--page` also asks for the page from `ui/` next to the binary, as the Linux release archive ships it (ADR-163).
  *
  * On Windows `.exe` is appended when it is missing, so the same command works on both systems.
  */
@@ -17,8 +19,9 @@ import { CONTAINER_MARKERS } from "../src/infra/desktop.ts";
 import { daemonFilePath, readDaemonFile } from "../src/infra/discovery.ts";
 import { loopbackRequest } from "../src/infra/loopback.ts";
 
-const arg = Bun.argv[2];
-if (!arg) throw new Error("usage: bun scripts/smoke.ts <path to trackwall-daemon>");
+const [arg, ...flags] = Bun.argv.slice(2);
+if (!arg || flags.some((flag) => flag !== "--page")) throw new Error("usage: bun scripts/smoke.ts <path to trackwall-daemon> [--page]");
+const withPage = flags.includes("--page");
 const given = resolve(arg);
 const bin = process.platform === "win32" && !given.toLowerCase().endsWith(".exe") ? `${given}.exe` : given;
 if (!existsSync(bin)) throw new Error(`no binary at ${bin}`);
@@ -62,7 +65,8 @@ if (CONTAINER_MARKERS.some((marker) => existsSync(marker))) {
 }
 
 // The Linux archive (ADR-163) carries the page in `ui/` next to the binary, which the daemon then serves itself.
-if (existsSync(join(dirname(bin), "ui", "index.html"))) {
+if (withPage) {
+  if (!existsSync(join(dirname(bin), "ui", "index.html"))) throw new Error(`--page: no ui/index.html next to ${bin}`);
   const page = await loopbackRequest(port, "/");
   if (page.status !== 200 || !page.body.includes('<div id="root"'))
     throw new Error(`page from ui/: ${page.status} ${page.body.slice(0, 200)}`);

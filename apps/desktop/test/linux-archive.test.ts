@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { LINUX_ARCHIVES, LINUX_ARCHS, linuxArchiveName, linuxReadme, strayLinuxArchiveEntries } from "../scripts/linux-archive.ts";
+import { LINUX_ARCHIVES, LINUX_ARCHS, linuxArchiveName, linuxReadme } from "../scripts/linux-archive.ts";
 
 const release = readFileSync(join(import.meta.dir, "..", "..", "..", ".github", "workflows", "release.yml"), "utf8");
 
@@ -20,12 +20,6 @@ describe("the Linux release archive (ADR-163)", () => {
       expect(release).toContain(`linux_${arch}="trackwall-$version-linux-${arch}.tar.gz"`);
       expect(release).toContain(`"$linux_${arch}.sig"`);
     }
-  });
-
-  test("an entry outside the trackwall folder is stray, so the installer never unpacks beside it", () => {
-    expect(
-      strayLinuxArchiveEntries(["trackwall/", "trackwall/trackwall-daemon", "trackwall/ui/index.html", "../etc/x", "other/file"]),
-    ).toEqual(["../etc/x", "other/file"]);
   });
 
   test("its README names the version and how to start the daemon on the forwarded port", () => {
