@@ -30,6 +30,8 @@ function fakeDeps(overrides: Partial<DoctorDeps>): DoctorDeps {
     workspaceFile: join(tmpdir(), "trackwall-doctor-no-such-workspace.yaml"),
     workspaceKeys: () => ({ keys: [], unknown: [] }),
     javaNavigation: () => null,
+    probeTls: async () => ({ kind: "ok" }),
+    systemCaFiles: [],
     now: () => NOW,
     ...overrides,
   };
@@ -65,6 +67,7 @@ function doctorFacade(o: Setup) {
     sessionMcpServer: () => ({ url: "http://127.0.0.1:9/mcp", headers: {} }),
     hostingClis: fakeHostingClis({ authErrors: o.authErrors }).clis,
     userEnv: async () => ({ ...process.env, COPILOT_HOME: copilotHome }),
+    tlsProbe: async () => ({ kind: "ok" }),
     log: () => {},
   });
   return { facade, home, projects, copilotHome };
@@ -84,6 +87,7 @@ describe("doctor", () => {
       ["git", "ok"],
       ["copilot-cli", "ok"],
       ["copilot-trusted-folder", "ok"],
+      ["network", "ok"],
       ["mise", "ok"],
       ["github-cli", "ok"],
     ]);
@@ -100,11 +104,12 @@ describe("doctor", () => {
       ["projects-folder", "fail"],
       ["git", "ok"],
       ["copilot-cli", "fail"],
+      ["network", "ok"],
       ["mise", "warn"],
     ]);
     expect(report.checks[0]?.summary).toBe("No projects folder is set.");
     expect(report.checks[2]?.summary).toBe("Copilot CLI (trackwall-test-no-copilot) not found in PATH.");
-    expect(report.checks[3]?.summary).toBe("mise: program trackwall-test-no-mise not found in PATH");
+    expect(report.checks[4]?.summary).toBe("mise: program trackwall-test-no-mise not found in PATH");
     expect(report.checks.every((c) => c.status === "ok" || (c.fix ?? "").length > 0)).toBe(true);
   });
 
@@ -225,6 +230,7 @@ describe("doctor", () => {
       ["projects-folder", "fail", "No projects folder is set."],
       ["git", "fail", "git: program git not found in PATH"],
       ["copilot-cli", "fail", "Copilot CLI: mise: broken install"],
+      ["network", "ok", expect.stringMatching(/^github\.com and api\.githubcopilot\.com answer /)],
       ["mise", "warn", "mise: mise: broken install"],
       ["github-cli", "fail", "workspace.yaml is invalid: repoHosts"],
       ["gitlab-cli", "fail", "workspace.yaml is invalid: repoHosts"],
