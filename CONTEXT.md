@@ -167,6 +167,10 @@ _Avoid_: grep (the tool underneath), index (there is none)
 The commits of the history of the latest commit of many repos at once that add or remove a text, or match a message, author, paths or date, through `git log` (ADR-149); a found commit (`FoundCommit`) is a repo, hash, author, date, subject and changed files. Newest first across all repos.
 _Avoid_: history search, blame (another git command), log (the process logs of `logs`)
 
+**Task journal** (`TaskJournal`, `task-journal.jsonl`, MCP tool `search_task_history`, record `EndedTask`):
+A record of every task the user has ended: its prompt, the session's last summary, the commits and files on its branch and its last verdict, taken when the task ends (ADR-150). Agents search it by words to learn how a similar change was done before.
+_Avoid_: task history (only in the tool name), archive, log (the process logs of `logs`)
+
 **Task worktrees folder** (`worktreesDir` in `workspace.yaml` and `tasks.json`):
 The folder new task worktrees go into (ADR-84): the user's setting, or by default `.trackwall/worktrees` in the projects folder, which the repo list skips. Never the projects folder itself, a folder inside one of its repos, or a folder of `.trackwall` other than `.trackwall/worktrees`. Each task keeps the folder it was created in, so changing the setting moves no existing worktree.
 
