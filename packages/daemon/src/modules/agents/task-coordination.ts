@@ -118,7 +118,10 @@ export class TaskCoordination {
   send(caller: string | null, id: string, text: string): SendMessageResult {
     const task = this.#deps.task(id);
     if (task.proposedBy === null)
-      throw new DomainError("bad_request", `the user started task ${id}, so no session sends it messages; tell the user instead`);
+      throw new DomainError(
+        "bad_request",
+        `the user started task ${id}, so no session sends it messages; tell the user instead, or ask them to hand it to the supervisor in its task panel`,
+      );
     // An agent outside Trackwall is not told apart from another one, so it is never a task's proposer here.
     if (caller === null)
       throw new DomainError(
@@ -202,6 +205,12 @@ export class TaskCoordination {
       movedTo,
       at: new Date().toISOString(),
     });
+  }
+
+  /** The user handed task `task` to the supervisor (ADR-155): the supervisor hears it at once, as its first update on it. */
+  taskHanded(task: Task): void {
+    const session = this.#deps.runningOfTask(task.id)?.id ?? null;
+    this.#notify(task.proposedBy, { kind: "handed_over", task: task.id, session, at: new Date().toISOString() });
   }
 
   /** The user put text into a session: it counts as taking part in the session's exchanges and its task's. */

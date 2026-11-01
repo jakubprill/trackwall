@@ -444,6 +444,10 @@ _Avoid_: orchestrator, root session, supervising agent (that is an agent outside
 A Trackwall session in the projects folder that is not the supervisor (`Session.repo` is `null`, `Session.supervisor` is `false`): plain Copilot CLI the user talks to without a repo, any number at once (ADR-100). It may change files in any repo of the folder, without a review; to MCP it is a main session in no repo, so it proposes tasks but runs no mise task or service.
 _Avoid_: repo-less session, scratch session
 
+**Hand to supervisor** (`handToSupervisor`, `hand-to-supervisor`, `HANDED_TO_SUPERVISOR`, `handedToSupervisor`, the task update `handed_over`; "Hand to supervisor" in the task panel; ADR-155):
+The user makes a task they started the supervisor's work: the supervisor then hears what the task does and may send it messages, as for a task it proposed. The task shows "handed to the supervisor" under the supervisor's heading.
+_Avoid_: assign, delegate (that is what the supervisor does with a proposal)
+
 **Situation** (`supervisorSituation`, `situationOutput`; ADR-148):
 The short list of the work under way that the daemon gives the supervisor with every prompt: each task with who started it and what its newest session does, the proposals waiting for the user, and the user's other running sessions, as they are when the prompt comes. Facts from the daemon's session list, not the agent's own words; the details stay in `list_sessions` and `get_session`.
 _Avoid_: briefing (that is what the supervisor writes for the day start), status report, context (too general)
