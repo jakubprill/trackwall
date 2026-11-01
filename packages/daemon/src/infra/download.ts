@@ -6,14 +6,26 @@ import { pipeline } from "node:stream/promises";
 
 /**
  * Downloads a file Trackwall pins in its code (the jdtls release, ADR-123) and accepts it only when its SHA-256 matches:
- * a changed file on the server, a proxy that rewrites it or a cut transfer all fail, and the file is deleted. `fetch`
- * follows redirects and, under Bun, the proxy from `HTTPS_PROXY`.
+ * a changed file on the server, a proxy that rewrites it or a cut transfer all fail, and the file is deleted.
  */
 export async function downloadVerified(
   url: string,
   file: string,
   o: { sha256: string; maxBytes: number; timeoutMs: number },
 ): Promise<void> {
+  const sha256 = await download(url, file, o);
+  if (sha256 !== o.sha256) {
+    await rm(file, { force: true });
+    throw new Error(`${url} has SHA-256 ${sha256}, not the expected ${o.sha256}`);
+  }
+}
+
+/**
+ * Downloads `url` into `file` within a size and a time limit and returns its SHA-256; a failed or cut transfer deletes the
+ * file. The caller checks what it got (a pinned hash, a signature, ADR-165). `fetch` follows redirects and, under Bun, the
+ * proxy from `HTTPS_PROXY`.
+ */
+export async function download(url: string, file: string, o: { maxBytes: number; timeoutMs: number }): Promise<string> {
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(o.timeoutMs) });
     if (!response.ok || response.body === null) throw new Error(`${url} answered ${response.status} ${response.statusText}`);
@@ -28,8 +40,7 @@ export async function downloadVerified(
       },
     });
     await pipeline(chunksOf(response.body), counted, createWriteStream(file));
-    const sha256 = hash.digest("hex");
-    if (sha256 !== o.sha256) throw new Error(`${url} has SHA-256 ${sha256}, not the expected ${o.sha256}`);
+    return hash.digest("hex");
   } catch (err) {
     await rm(file, { force: true });
     throw err;
