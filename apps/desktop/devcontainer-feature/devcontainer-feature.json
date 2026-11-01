@@ -1,0 +1,15 @@
+{
+  "id": "trackwall",
+  "version": "@VERSION@",
+  "name": "Trackwall",
+  "description": "Trackwall's daemon and its page in this container, started with the container and started again after a crash.",
+  "documentationURL": "@DOCS_URL@",
+  "options": {
+    "port": {
+      "type": "string",
+      "default": "7700",
+      "description": "The port Trackwall listens on, which the container forwards to the same number on your computer."
+    }
+  },
+  "postStartCommand": "trackwall-container start"
+}
