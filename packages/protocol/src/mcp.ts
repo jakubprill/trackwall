@@ -204,6 +204,13 @@ export type ResumeTaskResult = z.infer<typeof ResumeTaskResult>;
 export const SendMessageResult = z.object({ message: TaskMessage, delivery: PromptDelivery });
 export type SendMessageResult = z.infer<typeof SendMessageResult>;
 
+/**
+ * A task's question to its proposer (ADR-160), and when the proposer gets the prompt to read it: `typed` or `queued` as
+ * for a message, `on_resume` when no session of the proposer runs now and its next one reads it.
+ */
+export const AskProposerResult = z.object({ delivery: PromptDelivery });
+export type AskProposerResult = z.infer<typeof AskProposerResult>;
+
 /** The messages to the calling session's task that it had not read yet, oldest first (ADR-68); empty when there are none. */
 export const GetMessagesResult = z.object({ messages: z.array(TaskMessage.omit({ readAt: true })) });
 export type GetMessagesResult = z.infer<typeof GetMessagesResult>;
@@ -335,6 +342,7 @@ const GET_TASK_CHANGES = "get_task_changes";
 const PROPOSE_FOLDER_ACTION = "propose_folder_action";
 const GET_REVIEW_COMMENTS = "get_review_comments";
 const SEND_MESSAGE = "send_message";
+const ASK_PROPOSER = "ask_proposer";
 const RESUME_TASK = "resume_task";
 const GET_MESSAGES = "get_messages";
 const GET_UPDATES = "get_updates";
@@ -917,6 +925,25 @@ export const mcpTools = {
       .strict(),
     result: SendMessageResult,
   },
+  askProposer: {
+    name: ASK_PROPOSER,
+    readOnly: false,
+    destructive: false,
+    description:
+      "Ask the session that proposed your task (or the supervisor the user handed it to) a question you need answered " +
+      "to go on: a choice its prompt left open, or a conflict with what you found. Only for a session that runs a task " +
+      `in Trackwall. The proposer reads it with ${GET_UPDATES} and answers with ${SEND_MESSAGE}: end your turn after asking, ` +
+      `and Trackwall asks you to call ${GET_MESSAGES} when the answer arrives. bad_request when the user started your task ` +
+      "or its proposer is gone: then ask the user in your answer instead. Do not ask what you can find out yourself. " +
+      `At most ${TASK_MESSAGES_WITHOUT_USER} questions until the user takes part again (types into your session or sends ` +
+      `a review). Write it so it stands on its own, up to ${TASK_MESSAGE_MAX} characters.`,
+    args: z
+      .object({
+        question: visibleText(TaskMessageText).describe(`the question for your proposer, up to ${TASK_MESSAGE_MAX} characters`),
+      })
+      .strict(),
+    result: AskProposerResult,
+  },
   resumeTask: {
     name: RESUME_TASK,
     readOnly: false,
@@ -969,7 +996,8 @@ export const mcpTools = {
       "supervisor: any supervisor proposed), turn_ended (its session finished a turn and waits; read its summary and " +
       `${GET_SESSION}), error, exited, result_reported (with the summary), verified (passed, failed or cancelled with ` +
       "a message), proposal_rejected (with the user's reason), repo_removed (the user approved your " +
-      `${PROPOSE_FOLDER_ACTION}; movedTo is where the repo went), and, for the supervisor, handed_over (the user handed it ` +
+      `${PROPOSE_FOLDER_ACTION}; movedTo is where the repo went), question (the task's agent asks you something with ` +
+      `${ASK_PROPOSER}: answer it with ${SEND_MESSAGE}, or tell the user when it is theirs to decide), and, for the supervisor, handed_over (the user handed it ` +
       "a task they had started, which it follows and may message from now on). A turn the user drove themselves in the task's session " +
       "is left out. Trackwall asks you to call it when an update arrives, so instead of polling, end your turn and wait. " +
       `Updates count as read once returned; at most ${TASK_UPDATES_KEPT} wait, and dropped counts older ones that fell out. ` +

@@ -41,6 +41,7 @@ const {
   reportResult,
   getReviewComments,
   sendMessage,
+  askProposer,
   resumeTask,
   getMessages,
   getUpdates,
@@ -138,7 +139,8 @@ export const MCP_INSTRUCTIONS = [
   `- ${listSessions.name} shows the Copilot CLI sessions and tasks Trackwall runs (caller is your own session); a session ` +
     `that runs a task ends its work with ${reportResult.name}. When the user sends a review of its changes, Trackwall asks ` +
     `it to call ${getReviewComments.name}, which returns the comments to address; when the session that proposed the task ` +
-    `sends a message, Trackwall asks it to call ${getMessages.name}.`,
+    `sends a message, Trackwall asks it to call ${getMessages.name}. A task's session asks that proposer a question it needs answered ` +
+    `with ${askProposer.name}, which the proposer reads with ${getUpdates.name} and answers with ${sendMessage.name}.`,
   `- Point the user at a repo, session or task in your answer with a link: ${trackwallLink("repo", "<repo id>")}, ` +
     `${trackwallLink("session", "<session id>")} or ${trackwallLink("task", "<task id>")} (also for a task proposal) ` +
     "opens it in Trackwall when clicked. A link only shows it, it never runs anything.",
