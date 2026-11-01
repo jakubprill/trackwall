@@ -2,7 +2,7 @@
  * The Trackwall Dev Container Feature (ADR-164): its file name in a release and how the release's values go into its
  * two files (`package-feature.ts` packs them).
  */
-import type { LinuxArch } from "./linux-archive.ts";
+import type { LinuxArch } from "@trackwall/protocol";
 
 /** The Dev Containers specification takes a release file as a Feature only under this name. */
 export const FEATURE_ARCHIVE = "devcontainer-feature-trackwall.tgz";

@@ -6,8 +6,9 @@
  */
 import { chmodSync, cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { isLinuxArch, LINUX_ARCHIVE_FOLDER, LINUX_ARCHS, linuxArchiveName } from "@trackwall/protocol";
 import { assertVersionsMatch, REPO, run } from "./lib.ts";
-import { isLinuxArch, LINUX_ARCHIVE_FOLDER, LINUX_ARCHIVES, LINUX_ARCHS, linuxArchiveName, linuxReadme } from "./linux-archive.ts";
+import { LINUX_ARCHIVES, linuxReadme } from "./linux-archive.ts";
 
 const arch = Bun.argv[2] ?? "";
 if (!isLinuxArch(arch)) throw new Error(`usage: bun apps/desktop/scripts/package-linux.ts <${LINUX_ARCHS.join("|")}>`);
