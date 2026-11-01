@@ -30,7 +30,8 @@ const UpdateBase = z.object({
  * `pipeline_failed`: the pipeline of the merge request from the task branch failed (ADR-154), with the jobs that failed it,
  * whose logs the proposer or the task's agent reads with the user's own MCP server for the repo host;
  * `proposal_rejected`: the user rejected the proposal, with their reason when they gave one; `repo_removed`: the user
- * approved a proposal to remove a repo, which is now in `movedTo` (ADR-83; `task` is the proposal's id). A turn the user drove by
+ * approved a proposal to remove a repo, which is now in `movedTo` (ADR-83; `task` is the proposal's id); `handed_over`: the
+ * user handed the supervisor a task they had started (ADR-155). A turn the user drove by
  * typing into the task's session gives no `turn_ended`: the user is handling it.
  */
 export const TaskUpdate = z.discriminatedUnion("kind", [
@@ -54,5 +55,6 @@ export const TaskUpdate = z.discriminatedUnion("kind", [
   }),
   UpdateBase.extend({ kind: z.literal("proposal_rejected"), reason: z.string().nullable() }),
   UpdateBase.extend({ kind: z.literal("repo_removed"), repo: RepoId, movedTo: z.string() }),
+  UpdateBase.extend({ kind: z.literal("handed_over") }),
 ]);
 export type TaskUpdate = z.infer<typeof TaskUpdate>;

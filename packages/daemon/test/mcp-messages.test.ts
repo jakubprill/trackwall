@@ -48,7 +48,8 @@ async function mainSession() {
 }
 
 /** The fake's prompt line for a typed prompt: "Thinking about: <prompt>". */
-const TYPED_MESSAGE = "Thinking about: The session that proposed your task sent you a message in Trackwall: call get_messages";
+const TYPED_MESSAGE =
+  "Thinking about: The session that proposed your task, or the supervisor the user handed it to, sent you a message in Trackwall: call get_messages";
 const TYPED_UPDATES = "Thinking about: There is news about the work you delegated in Trackwall: call get_updates";
 const MESSAGE = "Keep the old endpoint.\nIt still has @Deprecated callers in orders-bff.";
 
@@ -168,6 +169,41 @@ describe.skipIf(process.versions.bun === undefined)(
         await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
     }, 60_000);
 
+    test("a task the user hands to the supervisor tells it at once, takes its messages from then on, and cannot be handed twice (ADR-155)", async () => {
+      const supervisor = await daemon.facade.agents.startSupervisor("new", "terminal");
+      await waitFor(daemon.facade.agents, supervisor.id, (s) => s.state?.state === "Input", "the supervisor's input box");
+      const client = await clientOfSession(supervisor.id);
+      const window = viewer(daemon.facade.agents, supervisor.id);
+      const typed = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "describe the repo", approvals: "ask" });
+      expect((await call(client, "send_message", { task: typed.id, text: "Hi" })).content).toEqual([
+        {
+          type: "text",
+          text: `bad_request: the user started task ${typed.id}, so no session sends it messages; tell the user instead, or ask them to hand it to the supervisor in its task panel`,
+        },
+      ]);
+
+      const handed = await daemon.post(agentsApi.handToSupervisor, { task: typed.id });
+
+      expect(handed.proposedBy).toEqual({ session: null, supervisor: true, task: null });
+      expect(daemon.facade.agents.task(typed.id).proposedBy).toEqual({ session: null, supervisor: true, task: null });
+      await waitFor(daemon.facade.agents, supervisor.id, () => window.unwrappedText().includes(TYPED_UPDATES), "the typed updates prompt");
+      expect(GetUpdatesResult.parse((await call(client, "get_updates")).structuredContent).updates).toEqual([
+        { kind: "handed_over", task: typed.id, session: taskSession(typed.id), at: expect.any(String) },
+      ]);
+      const sent = SendMessageResult.parse((await call(client, "send_message", { task: typed.id, text: MESSAGE })).structuredContent);
+      expect(sent.message.from).toMatchObject({ supervisor: true });
+      await expect(daemon.post(agentsApi.handToSupervisor, { task: typed.id })).rejects.toThrow(
+        "only a task you started yourself can be handed to the supervisor",
+      );
+
+      window.attachment.detach();
+      const typedSession = taskSession(typed.id);
+      await waitFor(daemon.facade.agents, typedSession, (s) => s.state !== null, "sessionStart");
+      await daemon.facade.agents.stop(typedSession);
+      await daemon.facade.agents.stop(supervisor.id);
+      await daemon.post(agentsApi.removeTask, { task: typed.id, keepBranch: false, discardChanges: true });
+    }, 60_000);
+
     test("a rejection reaches the proposer with the user's reason, and the tools refuse who they are not for", async () => {
       const main = await mainSession();
       const { proposal } = ProposeTaskResult.parse(
@@ -188,7 +224,10 @@ describe.skipIf(process.versions.bun === undefined)(
       ]);
       const typed = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "describe the repo", approvals: "ask" });
       expect((await call(main.client, "send_message", { task: typed.id, text: "Hi" })).content).toEqual([
-        { type: "text", text: `bad_request: the user started task ${typed.id}, so no session sends it messages; tell the user instead` },
+        {
+          type: "text",
+          text: `bad_request: the user started task ${typed.id}, so no session sends it messages; tell the user instead, or ask them to hand it to the supervisor in its task panel`,
+        },
       ]);
 
       main.window.attachment.detach();
