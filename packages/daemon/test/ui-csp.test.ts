@@ -8,15 +8,14 @@ const TAURI_CONF = join(import.meta.dir, "..", "..", "..", "apps", "desktop", "s
 const TauriConf = z.object({ app: z.object({ security: z.object({ csp: z.string() }) }) });
 
 describe("the UI's Content-Security-Policy", () => {
-  test("a browser tab gets the Tauri window's policy, so content from a repo is held to the same rules in both", () => {
-    const windowCsp = TauriConf.parse(JSON.parse(readFileSync(TAURI_CONF, "utf8"))).app.security.csp;
-    expect(WINDOW_CSP).toBe(windowCsp);
-    expect(TAB_CSP.startsWith(`${windowCsp};`)).toBe(true);
+  test("the daemon's copy of the Tauri window's policy is the one in tauri.conf.json", () => {
+    expect(WINDOW_CSP).toBe(TauriConf.parse(JSON.parse(readFileSync(TAURI_CONF, "utf8"))).app.security.csp);
   });
 
-  test("a tab refuses images from outside, code from strings and being put in a frame", () => {
-    expect(TAB_CSP).toContain("img-src 'self' data:;");
-    expect(TAB_CSP).not.toContain("unsafe-eval");
-    expect(TAB_CSP).toContain("frame-ancestors 'none'");
+  test("a browser tab gets the window's policy without Tauri's IPC, and refuses frames, forms and a base address", () => {
+    expect(TAB_CSP).toBe(
+      "default-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*; img-src 'self' data:; " +
+        "style-src 'self' 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    );
   });
 });
