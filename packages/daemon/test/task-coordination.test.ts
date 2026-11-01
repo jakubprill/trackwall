@@ -456,7 +456,7 @@ describe("the prompt the daemon types for what waits", () => {
       "The user sent a review of your changes in Trackwall: call get_review_comments (the trackwall MCP server) and address every comment.",
     );
     expect(inboxPrompt({ reviewComments: 0, messages: 1, handoffMoved: false, updates: 3, trustNotice: false })).toBe(
-      "The session that proposed your task sent you a message in Trackwall: call get_messages (the trackwall MCP server) and follow it as an update of your task. " +
+      "The session that proposed your task, or the supervisor the user handed it to, sent you a message in Trackwall: call get_messages (the trackwall MCP server) and follow it as an update of your task. " +
         "There is news about the work you delegated in Trackwall: call get_updates (the trackwall MCP server) and act on it.",
     );
   });
