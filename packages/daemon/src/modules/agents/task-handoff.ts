@@ -22,7 +22,11 @@ export type HandoffFacts = (TaskHandoff & { ended: false }) | (Omit<TaskHandoff,
 
 /** What a handoff reads from git in the handing task's worktree. */
 export interface HandoffGit {
-  headCommit(dir: string): Promise<string | null>;
+  /**
+   * Where the handing task's branch is as a handoff sees it: its newest commit that is not a round commit (ADR-168), since
+   * a round commit holds what a turn left unfinished, not the work the agent committed to hand on (ADR-144).
+   */
+  head(dir: string): Promise<string | null>;
   countBetween(dir: string, from: string, to: string): Promise<number | undefined>;
   changedPathsBetween(dir: string, from: string, to: string, max: number): Promise<{ paths: string[]; truncated: boolean } | undefined>;
 }
@@ -35,7 +39,7 @@ export async function handoffState(handoff: TaskHandoff, worktree: string | unde
   const { task, repo, branch, commit: read } = handoff;
   const unchanged = { files: [], filesTruncated: false };
   if (worktree === undefined) return { task, repo, branch, read, ended: true, head: null, commits: null, ...unchanged };
-  const head = await git.headCommit(worktree);
+  const head = await git.head(worktree);
   if (head === null || head === read)
     return { task, repo, branch, read, ended: false, head, commits: head === null ? null : 0, ...unchanged };
   const [commits, changed] = await Promise.all([

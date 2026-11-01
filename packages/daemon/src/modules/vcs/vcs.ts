@@ -25,8 +25,10 @@ import {
   commitsBetween,
   countBetween,
   isAncestor,
+  newestCommitBesides,
   newestCommits,
   remoteDefaultBranch,
+  sameTree,
 } from "./commit-range.ts";
 import { ConfigMemo } from "./config-memo.ts";
 import { checkGitProgram, type GitVersion, git, gitRead, gitVersion } from "./git.ts";
@@ -315,6 +317,20 @@ export class Vcs {
   /** How many commits `to` has that `from` does not; `undefined` when `from` is unknown. */
   countBetween(dir: string, from: string, to: string): Promise<number | undefined> {
     return countBetween(dir, from, to);
+  }
+
+  /**
+   * HEAD, or the newest commit below it on its first-parent line that is not one of `skip` (a task's round commits,
+   * ADR-168); `null` in a repo without commits.
+   */
+  async newestCommitBesides(dir: string, skip: ReadonlySet<string>): Promise<string | null> {
+    const head = await this.headCommit(dir);
+    return head === null ? null : newestCommitBesides(dir, head, skip);
+  }
+
+  /** Whether two commits hold the same files (`false` for an `a` the repo does not have). */
+  sameTree(dir: string, a: string, b: string): Promise<boolean> {
+    return sameTree(dir, a, b);
   }
 
   /** The commits on `to` that `from` does not have: their number and the newest `limit`; `undefined` when `from` is unknown. */

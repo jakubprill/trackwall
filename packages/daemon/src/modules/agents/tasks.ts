@@ -75,7 +75,11 @@ interface TaskPendingWork {
 }
 
 /** What tasks need from `vcs` (worktrees and branches, ADR-31); wired in the facade. */
-export interface TasksVcs extends HandoffGit, EndedTaskGit {
+export interface TasksVcs extends Omit<HandoffGit, "head">, EndedTaskGit {
+  /** HEAD, or the newest commit below it on its first-parent line that is not one of `skip`; `null` without commits. */
+  newestCommitBesides(dir: string, skip: ReadonlySet<string>): Promise<string | null>;
+  /** Whether two commits hold the same files (`false` for an `a` the repo does not have). */
+  sameTree(dir: string, a: string, b: string): Promise<boolean>;
   defaultBase(dir: string): Promise<TaskBase>;
   addWorktree(repoDir: string, path: string, branch: string, commit: string): Promise<void>;
   /** With the SHA-256 of each included file's content as the root had it (`sha256` by path). */
@@ -121,6 +125,8 @@ export interface AgentTasksDeps {
   liveIn: (dir: string) => boolean;
   /** `worktrees/` in the state directory, where tasks saved before ADR-84 (without `worktreesDir`) have their worktrees. */
   legacyWorktreesDir: string;
+  /** Task `task`'s round commits that the push has not squashed yet (ADR-168), which a handoff looks past (ADR-144). */
+  roundCommits: (task: string) => ReadonlySet<string>;
   openEditor: (dir: string) => void;
   log: (msg: string) => void;
 }
@@ -443,12 +449,18 @@ export class AgentTasks {
     return this.#tasks.filter((t) => t.handoff?.task === id).map((t) => t.id);
   }
 
-  /** Whether the branch of the task that handed task `id` its work is at another commit than the one `id` read last (ADR-144). */
+  /**
+   * Whether the branch of the task that handed task `id` its work holds other files than the commit `id` read last
+   * (ADR-144): round commits are looked past (ADR-168), and so is a commit with the same files, such as the squash of the
+   * rounds before the push.
+   */
   async handoffMoved(id: string): Promise<boolean> {
     const handing = this.#handing(id);
     if (handing === null || handing.worktree === undefined) return false;
-    const head = await this.#deps.vcs.headCommit(handing.worktree);
-    return head !== null && head !== handing.handoff.commit;
+    const { vcs } = this.#deps;
+    const head = await this.#handoffGit(handing.handoff.task).head(handing.worktree);
+    if (head === null || head === handing.handoff.commit) return false;
+    return !(await vcs.sameTree(handing.worktree, handing.handoff.commit, head));
   }
 
   /**
@@ -460,11 +472,21 @@ export class AgentTasks {
     const handing = this.#handing(id);
     if (handing === null) return null;
     const { handoff, worktree } = handing;
-    const state = await asRepoUnavailable(handoff.branch, handoffState(handoff, worktree, this.#deps.vcs));
+    const state = await asRepoUnavailable(handoff.branch, handoffState(handoff, worktree, this.#handoffGit(handoff.task)));
     const { head } = state;
     if (head !== null && head !== handoff.commit && this.#tasks.some((t) => t.id === id))
       this.#save(this.#tasks.map((t) => (t.id === id ? { ...t, handoff: { ...handoff, commit: head } } : t)));
     return state;
+  }
+
+  /** Git as the handoff from task `handing` reads it: its branch without the round commits on top (ADR-168). */
+  #handoffGit(handing: string): HandoffGit {
+    const { vcs, roundCommits } = this.#deps;
+    return {
+      head: (dir) => vcs.newestCommitBesides(dir, roundCommits(handing)),
+      countBetween: (dir, from, to) => vcs.countBetween(dir, from, to),
+      changedPathsBetween: (dir, from, to, max) => vcs.changedPathsBetween(dir, from, to, max),
+    };
   }
 
   /** Task `id`'s handoff and the handing task's worktree, `undefined` once that task ended; `null` without a handoff. */
@@ -480,10 +502,12 @@ export class AgentTasks {
    */
   async #handoffFrom(from: KnownTask | undefined): Promise<TaskHandoff | null> {
     if (from === undefined) return null;
-    const commit = await this.#deps.vcs.headCommit(from.worktree).catch((err: unknown) => {
-      this.#deps.log(`reading the HEAD of task ${from.id} for its subtask: ${messageOf(err)}`);
-      return null;
-    });
+    const commit = await this.#handoffGit(from.id)
+      .head(from.worktree)
+      .catch((err: unknown) => {
+        this.#deps.log(`reading the HEAD of task ${from.id} for its subtask: ${messageOf(err)}`);
+        return null;
+      });
     return commit === null ? null : { task: from.id, repo: from.repo, branch: from.branch, commit };
   }
 

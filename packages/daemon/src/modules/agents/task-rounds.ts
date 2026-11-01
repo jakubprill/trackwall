@@ -191,6 +191,11 @@ export class TaskRoundList {
     }
   }
 
+  /** The task's round commits that the push has not squashed yet. */
+  roundCommits(task: string): ReadonlySet<string> {
+    return new Set(this.#stateOf(task).roundCommits);
+  }
+
   /** The task's rounds and what "Undo round" would do now. */
   list(task: string): Promise<TaskRounds> {
     const work = this.#task(task);

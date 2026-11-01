@@ -73,3 +73,43 @@ describe("the commits between two day starts, on real git", () => {
     SLOW_TEST_TIMEOUT_MS,
   );
 });
+
+describe("the work a handoff sees on a task branch with round commits (ADR-144, ADR-168), on real git", () => {
+  test(
+    "the newest commit besides the round commits on top is the agent's own, and HEAD itself when it is not a round commit",
+    async () => {
+      const dir = makeRepo({ "a.txt": "a" });
+      const agents = head(dir);
+      commitFiles(dir, { "b.txt": "half done" }, "WIP round 1");
+      const round1 = head(dir);
+      commitFiles(dir, { "c.txt": "still half done" }, "WIP round 2");
+      const round2 = head(dir);
+
+      expect(await vcs.newestCommitBesides(dir, new Set([round1, round2]))).toBe(agents);
+      expect(await vcs.newestCommitBesides(dir, new Set([round1]))).toBe(round2);
+      expect(await vcs.newestCommitBesides(dir, new Set())).toBe(round2);
+      expect(await vcs.newestCommitBesides(makeRepo(), new Set())).toBeNull();
+    },
+    SLOW_TEST_TIMEOUT_MS,
+  );
+
+  test(
+    "two commits with the same files, such as rounds squashed into one, hold the same tree; other files or a missing commit do not",
+    async () => {
+      const dir = makeRepo({ "a.txt": "a" });
+      const base = head(dir);
+      commitFiles(dir, { "b.txt": "b" }, "WIP round 1");
+      commitFiles(dir, { "c.txt": "c" }, "WIP round 2");
+      const rounds = head(dir);
+      gitIn(dir, "reset", "-q", "--soft", base);
+      gitIn(dir, "commit", "-q", "-m", "Add b and c");
+      const squashed = head(dir);
+
+      expect(squashed).not.toBe(rounds);
+      expect(await vcs.sameTree(dir, rounds, squashed)).toBe(true);
+      expect(await vcs.sameTree(dir, base, squashed)).toBe(false);
+      expect(await vcs.sameTree(dir, MISSING, squashed)).toBe(false);
+    },
+    SLOW_TEST_TIMEOUT_MS,
+  );
+});
