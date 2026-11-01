@@ -128,6 +128,8 @@ export interface FacadeOptions {
   homeFrom: StateDirSource;
   openUrl: (url: string) => void;
   openFolder: (dir: string) => void;
+  /** The daemon runs in a container (`CONTAINER_MARKERS`), so the repos live in its volume (ADR-162). */
+  inContainer: boolean;
   /** The `mise` program with arguments before the command (`["mise"]` in the daemon). */
   miseCommand: readonly string[];
   /** The Copilot CLI program with arguments before the session's arguments (`["copilot"]` in the daemon, a fake in tests). */
@@ -193,6 +195,7 @@ export function createFacade(o: FacadeOptions): Facade {
         o.log(`restoring local config into ${dir} failed: ${messageOf(err)}`);
       }
     },
+    inContainer: o.inContainer,
   });
   workspace.useGitProgramFromFile();
   const logs = new Logs({ dir: join(o.home, LOGS_DIR), maxFileBytes: LOG_FILE_MAX_BYTES, log: o.log });
@@ -294,6 +297,7 @@ export function createFacade(o: FacadeOptions): Facade {
         throw err;
       }),
     repoHosts: () => workspace.repoHosts(),
+    unpushedWork: () => workspace.unpushedWork(),
     mountTable,
     workspaceFile: workspace.configFile(),
     workspaceKeys: () => workspace.workspaceKeys(),

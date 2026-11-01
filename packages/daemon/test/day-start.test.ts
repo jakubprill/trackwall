@@ -39,6 +39,7 @@ function setup(
   const yaml = join(home, "workspace.yaml");
   writeFileSync(yaml, `projectsDir: ${JSON.stringify(projects)}\n${o.workspaceYaml ?? ""}`);
   const workspace = new Workspace({
+    inContainer: false,
     file: new WorkspaceFile(yaml),
     vcs: new Vcs(systemTempFolder),
     hosting: fakeHosting().hosting,

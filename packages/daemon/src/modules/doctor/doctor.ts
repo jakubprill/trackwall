@@ -1,5 +1,6 @@
 import { realpath, stat } from "node:fs/promises";
 import {
+  countLabel,
   type DoctorCheck,
   DoctorCheckId,
   type DoctorReport,
@@ -8,6 +9,9 @@ import {
   type RepoHost,
   type RepoHostKind,
   TESTED_COPILOT_CLI_VERSION,
+  type UnpushedWork,
+  unpushedSummary,
+  unpushedTotal,
   type WorkspaceKeysRead,
   workspaceKeysSummary,
 } from "@trackwall/protocol";
@@ -24,6 +28,11 @@ import { compareVersions, versionIn } from "./version.ts";
 
 /** Every program a check runs gets this long: enough for a cold `gh auth status` over a VPN, short enough to wait for. */
 const CHECK_TIMEOUT_MS = 15_000;
+/** What to do about work that lives only in the container's volume (ADR-162). */
+const UNPUSHED_FIX =
+  "Push it, or keep the Docker volume with the repos: removing the volume or resetting Docker deletes it. Home lists the repos.";
+/** What to do about a repo git could not read in that check. */
+const READ_FIX = "Run git status in that repo in a terminal of the container to see why.";
 /** A program's error in a summary: its first line, cut. */
 const MAX_MESSAGE_CHARS = 200;
 
@@ -49,6 +58,8 @@ export interface DoctorDeps {
   /** `null` while the projects folder is not set; throws when the workspace settings cannot be read. */
   projectsDir: () => Promise<string | null>;
   repoHosts: () => RepoHost[];
+  /** The work in the projects folder on no remote, read only in a container (`workspace`, ADR-162). */
+  unpushedWork: () => Promise<UnpushedWork>;
   /** `/proc/self/mountinfo` on Linux, `null` elsewhere: where the projects folder's files live. */
   mountTable: () => Promise<string | null>;
   /** The full path of `workspace.yaml`. */
@@ -80,6 +91,7 @@ export class Doctor {
     this.checks = {
       "projects-folder": (ctx) => this.projectsFolder(ctx),
       "projects-folder-storage": (ctx) => this.projectsFolderStorage(ctx),
+      "unpushed-work": () => this.unpushedWork(),
       "workspace-file": () => this.workspaceFile(),
       git: () => this.git(),
       "copilot-cli": (ctx) => this.copilotCli(ctx),
@@ -117,6 +129,17 @@ export class Doctor {
   }
 
   /** Only a projects folder on a folder of the user's computer mounted into Linux is worth a row: it works, slowly. */
+  /** Only in a container, where removing the Docker volume takes the work with it; elsewhere the repos are on the user's disk. */
+  private async unpushedWork(): Promise<Outcome> {
+    const work = await this.deps.unpushedWork();
+    if (!work.inContainer) return null;
+    const unknown = work.unreadable.length > 0 ? ` Git could not read ${work.unreadable.join(", ")}.` : "";
+    if (work.repos.length === 0)
+      return unknown === "" ? ok("Everything in the projects folder is pushed.") : warn(unknown.trim(), READ_FIX);
+    const repos = countLabel(work.repos.length, { one: "repo", other: "repos" });
+    return warn(`Only in this container: ${unpushedSummary(unpushedTotal(work.repos))} in ${repos}.${unknown}`, UNPUSHED_FIX);
+  }
+
   private async projectsFolderStorage({ projectsDir }: CheckContext): Promise<Outcome> {
     if (!projectsDir.ok || projectsDir.value === null) return null;
     // A link such as `~/code` to `/mnt/c/...` on WSL is exactly the slow case; a folder that does not exist is the other check's.

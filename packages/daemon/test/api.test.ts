@@ -78,6 +78,7 @@ const openedFolders: string[] = [];
 /** A facade on an empty state directory, with the MCP server and events on it: what `main.ts` gives to `startApi`. */
 function modules() {
   const facade = createFacade({
+    inContainer: false,
     home: mkdtempSync(join(tmpdir(), "trackwall-home-")),
     homeFrom: "flag",
     openUrl: (url) => openedUrls.push(url),

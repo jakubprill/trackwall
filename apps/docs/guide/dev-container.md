@@ -128,4 +128,4 @@ Tokens for such servers come in through [Environment from mise](/features/mise-e
 - The command from [Connect Copilot CLI](/guide/connect-copilot-cli) is a path inside the container, so it works for a Copilot CLI in the container, not on your computer.
 - Packages installed on Alpine do not work on Debian and the other way round. After switching the image, delete `node_modules` in `~/trackwall` and run the install and build of step 3 again.
 - To update, run `git pull` in `~/trackwall`, then the install and build of step 3, and start Trackwall again.
-- Repos with changes you have not pushed live only in the `workspace-repos` volume. Removing the volume, or "Reset to factory defaults" in Docker Desktop, deletes them.
+- Repos with changes you have not pushed live only in the `workspace-repos` volume. Removing the volume, or "Reset to factory defaults" in Docker Desktop, deletes them. "Only in this container" on [Home](/features/home) and the [doctor](/features/doctor) list what is at stake.
