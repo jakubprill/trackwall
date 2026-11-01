@@ -406,6 +406,7 @@ describe("questions from a task to its proposer (ADR-160)", () => {
       coordination.reviewed("by-main");
       tenMillisecondsLater();
       for (let i = 11; i <= 15; i++) coordination.ask("by-main", TASK_SESSION, `Question ${i}`);
+      expect(() => coordination.ask("by-main", TASK_SESSION, "Question 16")).toThrow("asked its proposer 5 questions");
       tenMillisecondsLater();
       coordination.userTyped({ id: MAIN, task: null });
       tenMillisecondsLater();
