@@ -606,6 +606,14 @@ A session's output in the asciicast v2 format with markers for hook records, ses
 What the real Copilot CLI of the pinned version showed and sent in the contract tests, per system and anonymised: the hooks with their payloads, the window titles, the input box and the approval dialog. The fake Copilot CLI of the tests replays it, and the contract tests compare a live session with it, or take it anew with `TRACKWALL_RECORD=1` (`startRecorder`, ADR-67). A test fixture, not part of the product.
 _Avoid_: recording (that is `session.cast`), snapshot
 
+**Routine** (module `routines`, `Routine`, `RoutineEntry`, `routinesApi`, MCP tool `propose_routine`; "Routines" under the New task form):
+A task the user repeats, saved once by an agent at the user's request and run by hand with "Run", each run an ordinary task with the routine's title, repo, model and approvals mode. A file in `.trackwall/routines` of the projects folder; it runs only in the version the user approved ("Approve this version"), so any change waits for approval again (ADR-173).
+_Avoid_: recipe, template, playbook, job, automation (a routine does not start by itself)
+
+**Routine digest** (`RoutineDigest`):
+The SHA-256 of a routine file's bytes: what the user approved, and what an approval or a run names, so a file changed meanwhile is refused.
+_Avoid_: hash, version number
+
 **Budget**:
 A limit on a task's time and number of commits; when it is exceeded the daemon ends the session.
 

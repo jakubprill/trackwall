@@ -15,6 +15,7 @@ import {
   logsApi,
   mergeRequestsApi,
   miseApi,
+  routinesApi,
   servicesApi,
   verificationApi,
   workspaceApi,
@@ -128,6 +129,13 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(boardApi.move, (f, b) => f.board.move(b.item, b.parent, b.before)),
   route(boardApi.remove, async (f, b) => {
     await f.board.remove(b.item);
+    return null;
+  }),
+  route(routinesApi.list, (f) => f.routines.list()),
+  route(routinesApi.approve, (f, b) => f.routines.approve(b.name, b.digest)),
+  route(routinesApi.run, (f, b) => f.runRoutine(b.name, b.digest, b.view)),
+  route(routinesApi.remove, async (f, b) => {
+    await f.routines.remove(b.name);
     return null;
   }),
   route(dayStartApi.start, (f, b) => f.dayStart.start(b.view)),

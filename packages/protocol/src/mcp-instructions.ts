@@ -31,6 +31,7 @@ const {
   getChangedEndpoints,
   proposeTask,
   proposeFolderAction,
+  proposeRoutine,
   listItems,
   getItem,
   createItem,
@@ -59,7 +60,7 @@ export const MCP_INSTRUCTIONS = [
     "files and code into repo cards and a graph of connections between apps, runs mise tasks and Copilot CLI sessions. " +
     `Its tools give you that knowledge. ${runMiseTask.name} and ${stopMiseTask.name} start and stop mise tasks, ` +
     `${startService.name} and ${stopService.name} start and stop services, ` +
-    `${proposeTask.name}, ${proposeFolderAction.name}, ${createItem.name}, ${updateItem.name} and ${reportResult.name} record text for the user, and no tool edits repo files or configuration directly.`,
+    `${proposeTask.name}, ${proposeFolderAction.name}, ${proposeRoutine.name}, ${createItem.name}, ${updateItem.name} and ${reportResult.name} record text for the user, and no tool edits repo files or configuration directly.`,
   "",
   "How to work with it:",
   `- Find repos: ${listRepos.name} (narrow it with tags such as java, bff or frontend) gives the repo ids the other tools ` +
@@ -120,6 +121,9 @@ export const MCP_INSTRUCTIONS = [
     `tasks. To split an item, create the smaller ones under it (parent) or propose tasks for it with ${proposeTask.name} and ` +
     `its item; ${updateItem.name} changes an item's text or moves it between ideas and ready. Nothing on the board starts ` +
     "work: the user starts a task from an item or approves your proposal.",
+  `- Save work the user repeats as a routine: when the user asks for one (e.g. update an API client and check it ` +
+    `compiles), look at the repo first, then ${proposeRoutine.name} writes it; the user approves it and runs it by hand ` +
+    "from Trackwall, each run an ordinary task.",
   `- Change the projects folder itself, which no task can: ${proposeFolderAction.name} proposes removing a repo, and ` +
     "the user approves it in Trackwall.",
   `- Catch up after a break: ${getDayReport.name} says what changed since the user's previous day start (new commits ` +

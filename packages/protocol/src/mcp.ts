@@ -49,8 +49,9 @@ import {
 } from "./graph.ts";
 import { HttpMethod } from "./http.ts";
 import { LOG_BUFFER_RECORDS, LOG_ERRORS_MAX, LOG_TAIL_MAX, LogErrorLevel, LogErrors, LogLevel, LogTail, LogTextFilter } from "./logs.ts";
-import { LIST_REPOS, RepoArg } from "./mcp-args.ts";
+import { GET_CHANGED_ENDPOINTS, GET_REPO, LIST_REPOS, PROPOSE_TASK, REPORT_RESULT, RepoArg, RUN_MISE_TASK } from "./mcp-args.ts";
 import { boardMcpTools, ItemArg, LIST_ITEMS } from "./mcp-board.ts";
+import { routineMcpTools } from "./mcp-routines.ts";
 import { MiseTaskName, MiseTasks, RunningMiseTask } from "./mise.ts";
 import { RunState } from "./procs.ts";
 import { ReviewComment } from "./review.ts";
@@ -325,14 +326,10 @@ type McpToolEffect<Args extends z.ZodObject> =
 export type McpTool<Args extends z.ZodObject = z.ZodObject, Result extends z.ZodObject = z.ZodObject> = McpToolBase<Args, Result> &
   McpToolEffect<Args>;
 
-const GET_REPO = "get_repo";
 const LIST_SESSIONS = "list_sessions";
 const GET_SESSION = "get_session";
 const GET_TASK_CHANGES = "get_task_changes";
-const GET_CHANGED_ENDPOINTS = "get_changed_endpoints";
-const PROPOSE_TASK = "propose_task";
 const PROPOSE_FOLDER_ACTION = "propose_folder_action";
-const REPORT_RESULT = "report_result";
 const GET_REVIEW_COMMENTS = "get_review_comments";
 const SEND_MESSAGE = "send_message";
 const RESUME_TASK = "resume_task";
@@ -340,7 +337,6 @@ const GET_MESSAGES = "get_messages";
 const GET_UPDATES = "get_updates";
 const GET_HANDOFF = "get_handoff";
 const WAIT_FOR_SESSION = "wait_for_session";
-const RUN_MISE_TASK = "run_mise_task";
 const WAIT_FOR_MISE_TASK = "wait_for_mise_task";
 const TAIL = "tail";
 
@@ -856,6 +852,7 @@ export const mcpTools = {
     result: ProposeTaskResult,
   },
   ...boardMcpTools,
+  ...routineMcpTools,
   reportResult: {
     name: REPORT_RESULT,
     readOnly: false,

@@ -42,6 +42,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       { text: "While you were away", link: "/features/while-you-were-away" },
       { text: "Approvals outside the terminal", link: "/features/approvals" },
       { text: "Agent tasks", link: "/features/tasks" },
+      { text: "Routines", link: "/features/routines" },
       { text: "Impact of a task", link: "/features/impact" },
       { text: "Java navigation", link: "/features/java-navigation" },
       { text: "Main session and task proposals", link: "/features/main-session" },
