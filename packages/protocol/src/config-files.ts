@@ -23,6 +23,7 @@ export const ConfigEntryId = z.enum([
   "verifications-file",
   "task-journal-file",
   "day-start-file",
+  "routine-approvals-file",
   "cards-dir",
   "logs-dir",
   "local-config-push-repo",
@@ -34,6 +35,7 @@ export const ConfigEntryId = z.enum([
   "scratch-dir",
   "language-server-dir",
   "board-dir",
+  "routines-dir",
   "copilot-config",
 ]);
 export type ConfigEntryId = z.infer<typeof ConfigEntryId>;
@@ -53,6 +55,7 @@ export type DocsPage =
   | "plan"
   | "repo-card"
   | "repos"
+  | "routines"
   | "sessions"
   | "start-my-day"
   | "supervisor"
@@ -146,6 +149,14 @@ export const CONFIG_ENTRIES: Record<ConfigEntryId, ConfigEntryInfo> = {
     purpose: "When you last ran Start my day.",
     docs: "start-my-day",
   },
+  "routine-approvals-file": {
+    place: "state",
+    kind: "file",
+    writer: "trackwall",
+    internal: true,
+    purpose: "Which version of each routine you approved; a routine whose file changed since waits for your approval again.",
+    docs: "routines",
+  },
   "cards-dir": {
     place: "state",
     kind: "folder",
@@ -233,6 +244,14 @@ export const CONFIG_ENTRIES: Record<ConfigEntryId, ConfigEntryInfo> = {
     internal: false,
     purpose: "Your ideas, business projects and the work split under them, one Markdown file each, from the Plan view.",
     docs: "plan",
+  },
+  "routines-dir": {
+    place: "projects",
+    kind: "folder",
+    writer: "you",
+    internal: false,
+    purpose: "Your routines, tasks you run again and again, one Markdown file each, written by an agent at your request.",
+    docs: "routines",
   },
   "copilot-config": {
     place: "copilot",
