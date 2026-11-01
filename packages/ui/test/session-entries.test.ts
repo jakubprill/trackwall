@@ -11,6 +11,7 @@ import {
   selectionAfterClose,
   selectionAfterRemoval,
   sessionRows,
+  taskTabs,
 } from "../src/lib/session-entries.ts";
 import { attentionCount } from "../src/lib/session-state.ts";
 
@@ -372,5 +373,17 @@ describe("proposal kinds (ADR-83)", () => {
     const removal: TaskProposal = { ...proposal("p2", "2026-10-26T10:00:00Z"), kind: "remove_repo" };
     expect(proposalsName([task, { ...task, id: "p3" }])).toBe("2 task proposals");
     expect(proposalsName([task, removal])).toBe("2 proposals");
+  });
+});
+
+describe("the tabs of a task's panel (ADR-137)", () => {
+  test("a task in a terminal has a Terminal tab, one in the conversation view a Chat tab, and one without a session neither", () => {
+    expect(taskTabs({ view: "terminal" }).map((t) => t.label)).toEqual(["Terminal", "Changes", "Impact"]);
+    expect(taskTabs({ view: "conversation" })).toEqual([
+      { id: "terminal", label: "Chat" },
+      { id: "changes", label: "Changes" },
+      { id: "impact", label: "Impact" },
+    ]);
+    expect(taskTabs(undefined).map((t) => t.label)).toEqual(["Changes", "Impact"]);
   });
 });
