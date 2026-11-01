@@ -14,6 +14,7 @@ Trackwall runs coding agents on your computer, with your files and your tokens. 
 - The daemon listens only on `127.0.0.1`, so nothing else on the network can reach it.
 - Every request needs a token. The daemon makes a fresh one at each start and keeps it in a file only your user can read; the desktop app hands it to the window.
 - A request from a web page on another address is refused, even with the token, so a website you visit cannot talk to Trackwall through your browser.
+- A website cannot show Trackwall's page inside its own, so it cannot trick you into a click on an approval there.
 - A session gets its own token, which opens only the MCP server and its own hooks, never the rest of the daemon.
 
 ## You are the gate
@@ -42,6 +43,8 @@ Trackwall runs coding agents on your computer, with your files and your tokens. 
 ## Your repos are read, not run
 
 Reading a repo for its card, the graph or code search runs nothing from it: Trackwall reads the files of the last commit straight from git, without building, without hooks and without the repo's programs, and with limits on size and time, so a strange repo cannot take over Trackwall and can hold it up only briefly. A repo's code runs when you, or an agent you started, run one of its mise tasks, build it with the [Batch command](/features/batch-command) or work in it, and syncing runs what a `git pull` would (below).
+
+What Trackwall shows from a repo, such as a README with its diagrams, cannot load anything from the internet, in the desktop window and in a browser tab alike: an image becomes its description, so a README cannot tell anyone that you opened it.
 
 ## Gaps we know about
 
