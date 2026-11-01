@@ -20,6 +20,7 @@ import { CopyIncludedFilesButton, HandToSupervisorButton, ResumeButton, StopButt
 import { TaskChangesView } from "./TaskChangesView.tsx";
 import { scrollToSection, TaskDetails } from "./TaskDetails.tsx";
 import { TaskImpact } from "./TaskImpact.tsx";
+import { TaskMcpCalls } from "./TaskMcpCalls.tsx";
 import { TaskNoticeStrip } from "./TaskNotices.tsx";
 import { TaskRemoval } from "./TaskRemoval.tsx";
 import { TaskRounds } from "./TaskRounds.tsx";
@@ -80,6 +81,7 @@ export function TaskPanel({
     { id: "changes", label: "Changes" } as const,
     { id: "rounds", label: "Rounds" } as const,
     { id: "impact", label: "Impact" } as const,
+    { id: "mcp-calls", label: "MCP calls" } as const,
   ];
 
   return (
@@ -162,22 +164,64 @@ export function TaskPanel({
       <div className="px-4">
         <TabBar tabs={tabs} active={shown} onSelect={setTab} />
       </div>
-      {shown === "terminal" && session && (
-        <SessionTerminal key={session.id} conn={conn} session={session.id} live={liveSession !== undefined} selected />
-      )}
+      <TaskTabContent
+        shown={shown}
+        conn={conn}
+        task={task}
+        session={session}
+        live={liveSession !== undefined}
+        paused={confirmingRemoval}
+        review={review}
+        onOpenTask={onOpenTask}
+        onShowImpact={onShowImpact}
+      />
+    </>
+  );
+}
+
+/** The content of the open tab. */
+function TaskTabContent({
+  shown,
+  conn,
+  task,
+  session,
+  live,
+  paused,
+  review,
+  onOpenTask,
+  onShowImpact,
+}: {
+  shown: TaskTab;
+  conn: Connection;
+  task: Task;
+  session: Session | undefined;
+  live: boolean;
+  paused: boolean;
+  review: ReturnType<typeof useTaskReview>;
+  onOpenTask: (id: string) => void;
+  onShowImpact: (task: string) => void;
+}) {
+  return (
+    <>
+      {shown === "terminal" && session && <SessionTerminal key={session.id} conn={conn} session={session.id} live={live} selected />}
       {shown === "changes" && (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <TaskChangesView conn={conn} task={task.id} paused={confirmingRemoval} review={review} />
+          <TaskChangesView conn={conn} task={task.id} paused={paused} review={review} />
         </div>
       )}
       {shown === "rounds" && (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <TaskRounds conn={conn} task={task.id} paused={confirmingRemoval} />
+          <TaskRounds conn={conn} task={task.id} paused={paused} />
         </div>
       )}
       {shown === "impact" && (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <TaskImpact conn={conn} task={task} paused={confirmingRemoval} onOpenTask={onOpenTask} onShowOnOverview={onShowImpact} />
+          <TaskImpact conn={conn} task={task} paused={paused} onOpenTask={onOpenTask} onShowOnOverview={onShowImpact} />
+        </div>
+      )}
+      {shown === "mcp-calls" && (
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <TaskMcpCalls conn={conn} task={task.id} />
         </div>
       )}
     </>
