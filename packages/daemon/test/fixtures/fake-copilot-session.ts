@@ -235,10 +235,12 @@ function submit(line: string): void {
     replay(real.exit);
     process.exit(0);
   }
+  // The conversation is kept before the hooks go out: a test that stops the session once the daemon has heard the
+  // prompt's hook must find it to resume (on Windows the stop came while the fake still waited for the hook's answer).
+  keepConversation();
   // Copilot CLI starts the session's hooks only with the first prompt (ADR-69).
   replay(started ? [promptHook] : [startHook, promptHook], line);
   started = true;
-  keepConversation();
   const helper = spawn(process.execPath, ["-e", "setTimeout(() => {}, 600000)"], { stdio: "ignore" });
   process.stdout.write(`helper PID: ${helper.pid}\r\n`);
   for (const turnTitle of turnTitles) title(turnTitle.replaceAll(PROMPT_PLACEHOLDER, line));
