@@ -55,3 +55,29 @@ function linuxPath(path: string): string {
     .map(encodeURIComponent)
     .join("/");
 }
+
+/**
+ * What `trackwall-container start` prints (ADR-164): one JSON object on stdout, for a person in a terminal of the dev
+ * container and for the desktop app once it runs it through `docker exec` (ADR-139). `version` is the installed
+ * Trackwall's; `daemon` is the one that answers on the state directory, which after an update can be another version.
+ * `starting` means the daemon did not answer within the wait: the caller polls `/api/health` on `port`. The error codes
+ * are stable, so the app can tell what to show without reading the message.
+ */
+const CONTAINER_START_ERRORS = ["bad-arguments", "start-failed"] as const;
+const Port = z.number().int().min(1).max(65535);
+export const ContainerStartResult = z.union([
+  z.object({
+    ok: z.literal(true),
+    version: z.string(),
+    status: z.literal("running"),
+    port: Port,
+    daemon: z.object({ version: z.string(), pid: z.number().int() }),
+  }),
+  z.object({ ok: z.literal(true), version: z.string(), status: z.literal("starting"), port: Port }),
+  z.object({
+    ok: z.literal(false),
+    version: z.string(),
+    error: z.object({ code: z.enum(CONTAINER_START_ERRORS), message: z.string() }),
+  }),
+]);
+export type ContainerStartResult = z.infer<typeof ContainerStartResult>;
