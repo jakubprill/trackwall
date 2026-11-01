@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { join } from "node:path";
 import { agentsApi, type ConversationEntry } from "@trackwall/protocol";
 import { viewer, waitFor } from "./support/agents.ts";
 import { startSessionApi } from "./support/session-api.ts";
@@ -10,8 +11,12 @@ afterEach(async () => {
   for (const daemon of daemons.splice(0)) await daemon.stop();
 }, 30_000);
 
+const FAKE_MISE = [process.execPath, join(import.meta.dir, "fixtures", "fake-mise.ts")];
+/** Fake mise config (see `fixtures/fake-mise.ts`): `test` exits with code 1, so a verification fails. */
+const MISE_CONFIG = JSON.stringify({ tasks: [{ name: "test" }], exits: { test: 1 } });
+
 async function startDaemon() {
-  const daemon = await startSessionApi(TOKEN, { repos: { shop: { "README.md": "# shop\n" } }, miseCommand: ["mise"] });
+  const daemon = await startSessionApi(TOKEN, { repos: { shop: { "fake-mise.json": MISE_CONFIG } }, miseCommand: FAKE_MISE });
   daemons.push(daemon);
   return daemon;
 }
@@ -30,6 +35,23 @@ describe.skipIf(process.versions.bun === undefined)("the supervisor's situation 
     const screen = window.unwrappedText();
     expect(screen).toContain("Prompt context: Trackwall's work under way as this prompt came");
     expect(screen).toContain(`- a main session in shop (session ${main.id}), started by the user:`);
+  });
+
+  test("a task's failed verification reaches the supervisor with its next prompt (ADR-156)", async () => {
+    const daemon = await startDaemon();
+    const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "add a signup test", approvals: "ask" });
+    const verdict = await daemon.facade.verifications.verify(task.id, undefined, 30_000, new AbortController().signal);
+    expect(verdict.state).toBe("failed");
+    const supervisor = await daemon.post(agentsApi.startSupervisor, { conversation: "new", view: "terminal" });
+    const window = viewer(daemon.facade.agents, supervisor.id);
+    await waitFor(daemon.facade.agents, supervisor.id, () => window.text().includes("❯"), "the supervisor's input box");
+
+    window.attachment.input("is the signup test done?\r");
+
+    await waitFor(daemon.facade.agents, supervisor.id, () => window.unwrappedText().includes("Prompt context:"), "the prompt's context");
+    expect(window.unwrappedText()).toMatch(
+      new RegExp(`- task ${task.id} "add a signup test" in shop, started by the user: [^;]+; last verification failed`),
+    );
   });
 
   test("in the conversation view, the prompt's hook gives the situation with the user's task, and the conversation shows only the message", async () => {

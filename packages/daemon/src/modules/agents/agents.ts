@@ -30,6 +30,7 @@ import {
   type TaskHandoffState,
   type TaskMessage,
   type TaskMiseConfig,
+  type TaskOutcome,
   type TaskProposal,
   type TaskRounds,
   type TaskSharedFiles,
@@ -191,6 +192,11 @@ export interface AgentsDeps {
   boardHas: (item: string) => Promise<boolean>;
   /** The workspace knowledge the user approved for a session in `repo` (`null`: in the projects folder), ADR-170. */
   knowledge: (repo: string | null) => Promise<SessionKnowledge>;
+  /**
+   * What each task's work came to, its verification verdict and its merge request with the pipeline (ADR-154), which
+   * `verification` and `merge-requests` keep: the supervisor's situation tells it with each task (ADR-156).
+   */
+  taskOutcomes: () => readonly TaskOutcome[];
   /**
    * A task has ended and its worktree is gone: what other modules keep of it (its logs, ADR-59) can go too, and its
    * facts go to the task journal (ADR-150).
@@ -1156,7 +1162,7 @@ export class Agents {
   #sessionCallbacks({ id, supervisor, task }: { id: string; supervisor: boolean; task: string | null }): SessionCallbacks {
     return {
       prompt: () => this.#readRequestPrompt({ id, supervisor, task }),
-      situation: () => (supervisor ? supervisorSituation(this.sessionsWithoutCycle(), id) : undefined),
+      situation: () => (supervisor ? supervisorSituation(this.sessionsWithoutCycle(), id, this.#deps.taskOutcomes()) : undefined),
       onUserText: () => this.#coordination.userTyped({ id, task }),
       onPromptSent: () => {
         this.#miseTrust.promptSent(trustRecipientOf({ id, task }));
