@@ -96,11 +96,31 @@ function claim(home: string): boolean {
       }
       const holder = readPid(file);
       if (holder !== undefined && isSupervisor(holder)) return false;
-      if (readPid(file) === holder) rmSync(file, { force: true });
+      takeAwayStale(file, holder);
     }
     return false;
   } finally {
     rmSync(aside, { force: true });
+  }
+}
+
+/**
+ * Moves a stale PID file out of the way; when what was moved names another PID than the stale one, a supervisor claimed
+ * the file meanwhile, and it goes back (linked, so a file claimed again in the meantime is not overwritten).
+ */
+function takeAwayStale(file: string, stale: number | undefined): void {
+  const moved = `${file}.stale.${process.pid}`;
+  try {
+    renameSync(file, moved);
+  } catch {
+    return; // gone already
+  }
+  try {
+    if (readPid(moved) !== stale) linkSync(moved, file);
+  } catch {
+    // claimed again meanwhile: that claim stands
+  } finally {
+    rmSync(moved, { force: true });
   }
 }
 
@@ -145,13 +165,15 @@ function exitOf(child: ChildProcess): Promise<number | null> {
   });
 }
 
-/** A signal to the supervisor goes to the running daemon, whose graceful stop (code 0) then ends the supervisor. */
-function forwardSignals(home: string, daemon: () => ChildProcess | undefined): void {
+/** A signal to the supervisor goes to the running daemon and ends the supervisor once the daemon has ended. */
+function forwardSignals(home: string, daemon: () => ChildProcess | undefined, stop: { requested: boolean }): void {
   for (const signal of FORWARDED_SIGNALS) {
     process.on(signal, () => {
+      stop.requested = true;
       const running = daemon();
-      if (running?.exitCode === null) running.kill(signal);
-      else {
+      if (running !== undefined && running.exitCode === null && running.signalCode === null && running.pid !== undefined) {
+        running.kill(signal);
+      } else {
         release(home);
         process.exit(0);
       }
@@ -168,6 +190,23 @@ function finalExitNote(home: string, code: number, pid: number | undefined): str
   return `the daemon ended with code ${code}; not starting it again`;
 }
 
+/** What follows one run of the daemon: stop supervising (with why), or start it again after a wait. */
+export type AfterExit =
+  | { kind: "stop"; why: string }
+  | { kind: "final"; code: number }
+  | { kind: "restart"; crashes: number; delayMs: number };
+
+export function afterExit(run: { code: number | null; ranMs: number; stopRequested: boolean }, crashesBefore: number): AfterExit {
+  const ended = run.code === null ? "a signal" : `code ${run.code}`;
+  if (run.stopRequested) return { kind: "stop", why: `stopped by a signal; the daemon ended with ${ended}` };
+  if (run.code !== null && FINAL_EXIT_CODES.includes(run.code)) return { kind: "final", code: run.code };
+  const crashes = run.ranMs >= HEALTHY_RUN_MS ? 1 : crashesBefore + 1;
+  if (crashes >= MAX_CRASHES_IN_A_ROW) {
+    return { kind: "stop", why: `the daemon crashed ${crashes} times in a row; giving up, run trackwall-container start again` };
+  }
+  return { kind: "restart", crashes, delayMs: restartDelayMs(crashes) };
+}
+
 export async function superviseDaemon(home: string, port: number): Promise<void> {
   const logPath = join(home, DAEMON_LOG);
   mkdirSync(join(home, "logs"), { recursive: true, mode: 0o700 });
@@ -177,7 +216,8 @@ export async function superviseDaemon(home: string, port: number): Promise<void>
     return;
   }
   let daemon: ChildProcess | undefined;
-  forwardSignals(home, () => daemon);
+  const stop = { requested: false };
+  forwardSignals(home, () => daemon, stop);
   try {
     let crashes = 0;
     for (;;) {
@@ -185,18 +225,12 @@ export async function superviseDaemon(home: string, port: number): Promise<void>
       note(`starting the daemon on port ${port}`);
       daemon = startDaemon(home, port, logPath);
       const code = await exitOf(daemon);
-      if (code !== null && FINAL_EXIT_CODES.includes(code)) {
-        note(finalExitNote(home, code, daemon.pid));
-        return;
-      }
-      crashes = Date.now() - startedAt >= HEALTHY_RUN_MS ? 1 : crashes + 1;
-      if (crashes >= MAX_CRASHES_IN_A_ROW) {
-        note(`the daemon crashed ${crashes} times in a row; giving up, run trackwall-container start again`);
-        return;
-      }
-      const delay = restartDelayMs(crashes);
-      note(`the daemon ended with ${code === null ? "a signal" : `code ${code}`}; starting it again in ${delay / 1000} s`);
-      await new Promise((r) => setTimeout(r, delay));
+      const next = afterExit({ code, ranMs: Date.now() - startedAt, stopRequested: stop.requested }, crashes);
+      if (next.kind === "stop") return note(next.why);
+      if (next.kind === "final") return note(finalExitNote(home, next.code, daemon.pid));
+      crashes = next.crashes;
+      note(`the daemon ended with ${code === null ? "a signal" : `code ${code}`}; starting it again in ${next.delayMs / 1000} s`);
+      await new Promise((r) => setTimeout(r, next.delayMs));
     }
   } finally {
     release(home);

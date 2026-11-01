@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ContainerStartResult } from "@trackwall/protocol";
 import { parseCommandLine } from "../src/infra/args.ts";
-import { DAEMON_LOG, restartDelayMs, supervisorPidFile } from "../src/infra/container-supervisor.ts";
+import { afterExit, DAEMON_LOG, restartDelayMs, supervisorPidFile } from "../src/infra/container-supervisor.ts";
 import { readDaemonFile } from "../src/infra/discovery.ts";
 import { loopbackRequest } from "../src/infra/loopback.ts";
 import { RUNTIMES } from "./support/runtimes.ts";
@@ -138,5 +138,21 @@ describe("the container command's arguments and waits (ADR-164)", () => {
 
   test("the waits between restarts double from 1 s up to a minute", () => {
     expect([1, 2, 3, 4, 5, 6, 7, 8].map(restartDelayMs)).toEqual([1000, 2000, 4000, 8000, 16000, 32000, 60000, 60000]);
+  });
+
+  test("a crash is followed by a restart, a stop or another version ends the supervising, and so does a tenth crash in a row", () => {
+    expect(afterExit({ code: 1, ranMs: 500, stopRequested: false }, 0)).toEqual({ kind: "restart", crashes: 1, delayMs: 1000 });
+    expect(afterExit({ code: null, ranMs: 500, stopRequested: false }, 3)).toEqual({ kind: "restart", crashes: 4, delayMs: 8000 });
+    expect(afterExit({ code: 1, ranMs: 120_000, stopRequested: false }, 7)).toEqual({ kind: "restart", crashes: 1, delayMs: 1000 });
+    expect(afterExit({ code: 0, ranMs: 500, stopRequested: false }, 0)).toEqual({ kind: "final", code: 0 });
+    expect(afterExit({ code: 3, ranMs: 500, stopRequested: false }, 0)).toEqual({ kind: "final", code: 3 });
+    expect(afterExit({ code: null, ranMs: 500, stopRequested: true }, 0)).toMatchObject({
+      kind: "stop",
+      why: expect.stringContaining("stopped by a signal"),
+    });
+    expect(afterExit({ code: 1, ranMs: 500, stopRequested: false }, 9)).toMatchObject({
+      kind: "stop",
+      why: expect.stringContaining("crashed 10 times"),
+    });
   });
 });

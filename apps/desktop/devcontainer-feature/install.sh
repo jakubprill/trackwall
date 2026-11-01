@@ -39,7 +39,15 @@ esac
 case "$USER_HOME" in
 *[!A-Za-z0-9._/-]*) fail "unexpected home folder '$USER_HOME'" ;;
 esac
-[ -x /usr/bin/setpriv ] || fail "setpriv (util-linux) is missing in the image"
+# How the command switches from root to that user: setpriv, else runuser, by absolute path (both from util-linux, which
+# some releases split into several packages).
+if [ -x /usr/bin/setpriv ]; then
+  AS_USER="/usr/bin/setpriv --reuid=$USER_UID --regid=$USER_GID --init-groups --"
+elif [ -x /usr/sbin/runuser ]; then
+  AS_USER="/usr/sbin/runuser -u $USER_NAME --"
+elif [ "$USER_UID" != 0 ]; then
+  fail "neither setpriv nor runuser is in the image (apt-get install util-linux)"
+fi
 
 case "$(uname -m)" in
 x86_64 | amd64) ARCH=x64 SHA256="$SHA256_X64" ;;
@@ -82,7 +90,7 @@ cat > /usr/local/bin/trackwall-container << WRAPPER
 # Trackwall $VERSION in this dev container, written by the Trackwall Dev Container Feature.
 set -eu
 if [ "\$(/usr/bin/id -u)" = 0 ] && [ $USER_UID != 0 ]; then
-  HOME='$USER_HOME' exec /usr/bin/setpriv --reuid=$USER_UID --regid=$USER_GID --init-groups -- /usr/local/bin/trackwall-container "\$@"
+  HOME='$USER_HOME' exec ${AS_USER:-} /usr/local/bin/trackwall-container "\$@"
 fi
 PATH="\${MISE_DATA_DIR:-\$HOME/.local/share/mise}/shims:\$HOME/.local/bin:\$PATH"
 export PATH
