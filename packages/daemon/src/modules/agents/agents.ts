@@ -10,6 +10,7 @@ import {
   type JavaNavigationSettings,
   type JavaNavigationStatus,
   type MiseTarget,
+  type PromptDelivery,
   type ReviewComment,
   type SendMessageResult,
   type SendReviewResult,
@@ -439,11 +440,9 @@ export class Agents {
 
   /** A summary from session `caller` for its own task (`report_result`); it goes to the task's proposer too (ADR-68). */
   reportSummary(caller: string | null, text: string, checkSteps: string[]): Task {
-    const task = caller === null ? null : this.session(caller).task;
-    if (caller === null || task === null)
-      throw new DomainError("bad_request", "only a session that runs a task in Trackwall can report a result");
-    const reported = this.#tasks.setSummary(task, text, checkSteps);
-    this.#coordination.resultReported(reported, caller);
+    const own = this.#ownTask(caller, "can report a result");
+    const reported = this.#tasks.setSummary(own.task, text, checkSteps);
+    this.#coordination.resultReported(reported, own.session);
     return reported;
   }
 
@@ -473,9 +472,7 @@ export class Agents {
 
   /** The unread review comments of session `caller`'s own task (`get_review_comments`), which now count as read. */
   takeReviewComments(caller: string | null): ReviewComment[] {
-    const task = caller === null ? null : this.session(caller).task;
-    if (task === null) throw new DomainError("bad_request", "only a session that runs a task in Trackwall has review comments");
-    return this.#reviews.take(task);
+    return this.#reviews.take(this.#ownTask(caller, "has review comments").task);
   }
 
   /**
@@ -486,18 +483,27 @@ export class Agents {
     return this.#coordination.send(caller, task, text);
   }
 
+  /** A question from session `caller`'s own task to the task's proposer (`ask_proposer`, ADR-160). */
+  askProposer(caller: string | null, text: string): PromptDelivery {
+    const own = this.#ownTask(caller, "has a proposer to ask");
+    return this.#coordination.ask(own.task, own.session, text);
+  }
+
   /** The unread messages to session `caller`'s own task (`get_messages`), which now count as read. */
   takeMessages(caller: string | null): TaskMessage[] {
-    const task = caller === null ? null : this.session(caller).task;
-    if (task === null) throw new DomainError("bad_request", "only a session that runs a task in Trackwall gets messages");
-    return this.#coordination.takeMessages(task);
+    return this.#coordination.takeMessages(this.#ownTask(caller, "gets messages").task);
   }
 
   /** Where the work session `caller`'s own task builds on is now (`get_handoff`, ADR-144), whose head now counts as read. */
   async readHandoff(caller: string | null): Promise<TaskHandoffState | null> {
+    return this.#handoffs.read(this.#ownTask(caller, "has a handoff").task);
+  }
+
+  /** Session `caller` and the task it runs, for a tool only a task's session has: `bad_request` "only a session that runs a task in Trackwall <what>" otherwise. */
+  #ownTask(caller: string | null, what: string): { session: string; task: string } {
     const task = caller === null ? null : this.session(caller).task;
-    if (task === null) throw new DomainError("bad_request", "only a session that runs a task in Trackwall has a handoff");
-    return this.#handoffs.read(task);
+    if (caller === null || task === null) throw new DomainError("bad_request", `only a session that runs a task in Trackwall ${what}`);
+    return { session: caller, task };
   }
 
   /** The unread updates on the work session `caller` delegated (`get_updates`), which now count as read. */
