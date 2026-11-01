@@ -1,5 +1,6 @@
 import { realpath, stat } from "node:fs/promises";
 import {
+  countLabel,
   type DoctorCheck,
   DoctorCheckId,
   type DoctorReport,
@@ -8,22 +9,32 @@ import {
   type RepoHost,
   type RepoHostKind,
   TESTED_COPILOT_CLI_VERSION,
+  type UnpushedWork,
+  unpushedSummary,
+  unpushedTotal,
   type WorkspaceKeysRead,
   workspaceKeysSummary,
 } from "@trackwall/protocol";
 import { trustedFolderOf, trustedFolders } from "./copilot-trust.ts";
 import { folderStorage } from "./folder-storage.ts";
+import { networkOutcome } from "./network-check.ts";
+import type { TlsProbe } from "./tls-probe.ts";
 import { compareVersions, versionIn } from "./version.ts";
 
 /**
  * The doctor (§4.15, ADR-101): checks of what Trackwall needs on this computer, each with what to do when it fails, for the
  * person setting Trackwall up or wondering why a part of it does not work. It only reads and runs `--version` and
- * `auth status`; it changes nothing, and its report is not kept. A check that throws becomes a failed check, never a
+ * `auth status` and opens a TLS connection to GitHub and Copilot without sending anything but a proxy's login (ADR-166); it changes nothing, and its report is not kept. A check that throws becomes a failed check, never a
  * failed report.
  */
 
 /** Every program a check runs gets this long: enough for a cold `gh auth status` over a VPN, short enough to wait for. */
 const CHECK_TIMEOUT_MS = 15_000;
+/** What to do about work that lives only in the container's volume (ADR-162). */
+const UNPUSHED_FIX =
+  "Push it, or keep the Docker volume with the repos: removing the volume or resetting Docker deletes it. Home lists the repos.";
+/** What to do about a repo git could not read in that check. */
+const READ_FIX = "Run git status in that repo in a terminal of the container to see why.";
 /** A program's error in a summary: its first line, cut. */
 const MAX_MESSAGE_CHARS = 200;
 
@@ -49,6 +60,8 @@ export interface DoctorDeps {
   /** `null` while the projects folder is not set; throws when the workspace settings cannot be read. */
   projectsDir: () => Promise<string | null>;
   repoHosts: () => RepoHost[];
+  /** The work in the projects folder on no remote, read only in a container (`workspace`, ADR-162). */
+  unpushedWork: () => Promise<UnpushedWork>;
   /** `/proc/self/mountinfo` on Linux, `null` elsewhere: where the projects folder's files live. */
   mountTable: () => Promise<string | null>;
   /** The full path of `workspace.yaml`. */
@@ -57,6 +70,10 @@ export interface DoctorDeps {
   workspaceKeys: () => WorkspaceKeysRead;
   /** Whether tasks can get Java navigation (`agents`); `null` while `javaNavigation` is not in `workspace.yaml`. */
   javaNavigation: () => JavaNavigationState;
+  /** Opens a TLS connection as a session's Node.js would (`probeTls`, a fake in tests); the network check's only way out. */
+  probeTls: TlsProbe;
+  /** System certificate bundles the network check may name in its fix (`SYSTEM_CA_FILES`). */
+  systemCaFiles: readonly string[];
   now: () => Date;
 }
 
@@ -80,10 +97,12 @@ export class Doctor {
     this.checks = {
       "projects-folder": (ctx) => this.projectsFolder(ctx),
       "projects-folder-storage": (ctx) => this.projectsFolderStorage(ctx),
+      "unpushed-work": (ctx) => this.unpushedWork(ctx),
       "workspace-file": () => this.workspaceFile(),
       git: () => this.git(),
       "copilot-cli": (ctx) => this.copilotCli(ctx),
       "copilot-trusted-folder": (ctx) => this.copilotTrustedFolder(ctx),
+      network: ({ env }) => networkOutcome(env, { probe: this.deps.probeTls, systemCaFiles: this.deps.systemCaFiles }),
       mise: (ctx) => this.mise(ctx),
       "java-navigation": async () => this.javaNavigation(),
       "github-cli": () => this.hostCli("github"),
@@ -114,6 +133,21 @@ export class Doctor {
     );
     if (!isDir) return fail(`The projects folder ${dir} does not exist.`, 'Create it, or choose another folder in "Settings > Workspace".');
     return ok(dir);
+  }
+
+  /**
+   * Only in a container, where removing the Docker volume takes the work with it; elsewhere the repos are on the user's
+   * disk. Without a projects folder there is nothing to read, and the projects folder check says so.
+   */
+  private async unpushedWork({ projectsDir }: CheckContext): Promise<Outcome> {
+    if (!projectsDir.ok || projectsDir.value === null) return null;
+    const work = await this.deps.unpushedWork();
+    if (!work.inContainer) return null;
+    const unknown = work.unreadable.length > 0 ? ` Git could not read ${work.unreadable.map((u) => u.repo).join(", ")}.` : "";
+    if (work.repos.length === 0)
+      return unknown === "" ? ok("Everything in the projects folder is pushed.") : warn(unknown.trim(), READ_FIX);
+    const repos = countLabel(work.repos.length, { one: "repo", other: "repos" });
+    return warn(`Only in this container: ${unpushedSummary(unpushedTotal(work.repos))} in ${repos}.${unknown}`, UNPUSHED_FIX);
   }
 
   /** Only a projects folder on a folder of the user's computer mounted into Linux is worth a row: it works, slowly. */

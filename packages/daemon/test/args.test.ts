@@ -30,4 +30,10 @@ describe("arguments", () => {
     expect(() => parseCommandLine(["mcp-stdio", "--port", "1"])).toThrow();
     expect(parseCommandLine(["--port", "7"])).toMatchObject({ command: "daemon", args: { port: 7 } });
   });
+
+  test("address as the first argument prints the page address, with an optional --home and no daemon options", () => {
+    expect(parseCommandLine(["address"])).toEqual({ command: "address", home: undefined });
+    expect(parseCommandLine(["address", "--home", "/state"])).toEqual({ command: "address", home: "/state" });
+    expect(() => parseCommandLine(["address", "--port", "7700"])).toThrow();
+  });
 });

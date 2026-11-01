@@ -16,7 +16,7 @@ import { EventHub } from "../src/api/event-hub.ts";
 import { sessionHookRequest } from "../src/api/hooks.ts";
 import { startApi } from "../src/api/server.ts";
 import { createFacade, HOSTING_CLIS } from "../src/facade.ts";
-import { newToken, writeDaemonFile } from "../src/infra/discovery.ts";
+import { daemonPageAddress, newToken, writeDaemonFile } from "../src/infra/discovery.ts";
 import { SHUTDOWN_SIGNALS, shutdownOnce, stopDaemon } from "../src/infra/shutdown.ts";
 import { userEnv } from "../src/infra/user-env.ts";
 import { createMcpEndpoint, sessionMcpRequest } from "../src/mcp/endpoint.ts";
@@ -42,6 +42,7 @@ writeFileSync(join(home, "workspace.yaml"), `projectsDir: ${JSON.stringify(proje
 
 const log = (msg: string) => process.stderr.write(`[demo] ${msg}\n`);
 const facade = createFacade({
+  inContainer: false,
   home,
   homeFrom: "flag",
   openUrl: (url) => log(`open ${url}`),
@@ -158,4 +159,4 @@ try {
 // Written once the scene is set, so whoever waits for daemon.json finds the demo ready.
 writeDaemonFile(home, { pid: process.pid, port: api.port, token, startedAt, version: VERSION });
 log(`demo shop in ${projectsDir}`);
-log(`UI: http://127.0.0.1:${api.port}/#token=${token}`);
+log(`UI: ${daemonPageAddress({ port: api.port, token })}`);

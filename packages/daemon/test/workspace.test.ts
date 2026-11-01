@@ -19,6 +19,7 @@ async function workspaceWithProjectsDir() {
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
   const opened: string[] = [];
   const workspace = new Workspace({
+    inContainer: false,
     file: new WorkspaceFile(file),
     vcs: new Vcs(systemTempFolder),
     hosting: fakeHosting().hosting,
@@ -103,6 +104,7 @@ describe("workspace", () => {
     async () => {
       const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
       const workspace = new Workspace({
+        inContainer: false,
         file: new WorkspaceFile(file),
         vcs: new Vcs(systemTempFolder),
         hosting: fakeHosting().hosting,
@@ -134,6 +136,7 @@ describe("workspace", () => {
     mkdirSync(join(home, "Projects"));
     mkdirSync(join(home, "dev"));
     const workspace = new Workspace({
+      inContainer: false,
       file: new WorkspaceFile(join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml")),
       vcs: new Vcs(systemTempFolder),
       hosting: fakeHosting().hosting,
@@ -148,6 +151,7 @@ describe("workspace", () => {
   test("Visual Studio's source/repos is offered too, a file named Dev is not, and an empty home folder offers nothing", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
     const workspace = new Workspace({
+      inContainer: false,
       file: new WorkspaceFile(join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml")),
       vcs: new Vcs(systemTempFolder),
       hosting: fakeHosting().hosting,
@@ -167,6 +171,7 @@ describe("workspace", () => {
     const elsewhere = mkdtempSync(join(tmpdir(), "trackwall-elsewhere-"));
     symlinkSync(elsewhere, join(home, "Dev"), "junction");
     const workspace = new Workspace({
+      inContainer: false,
       file: new WorkspaceFile(join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml")),
       vcs: new Vcs(systemTempFolder),
       hosting: fakeHosting().hosting,
@@ -277,6 +282,7 @@ describe("workspace", () => {
       const outer = makeRepo({ "a.txt": "outer" }, "home");
       const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
       const workspace = new Workspace({
+        inContainer: false,
         file: new WorkspaceFile(file),
         vcs: new Vcs(systemTempFolder),
         hosting: fakeHosting().hosting,
@@ -548,6 +554,7 @@ describe("the task worktrees folder (ADR-84)", () => {
   test("without a projects folder there is no default folder for task worktrees", async () => {
     const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
     const workspace = new Workspace({
+      inContainer: false,
       file: new WorkspaceFile(file),
       vcs: new Vcs(systemTempFolder),
       hosting: fakeHosting().hosting,

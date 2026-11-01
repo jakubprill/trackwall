@@ -17,6 +17,7 @@ function setup() {
   const opened: string[] = [];
   const shown: string[] = [];
   const facade = createFacade({
+    inContainer: false,
     home,
     homeFrom: "env",
     openUrl: (url) => opened.push(url),

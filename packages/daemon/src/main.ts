@@ -8,9 +8,9 @@ import { sessionHookRequest } from "./api/hooks.ts";
 import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
 import { createErrorJournal, createFacade, type Facade, HOSTING_CLIS } from "./facade.ts";
-import { type CommandLine, type DaemonArgs, MCP_STDIO_COMMAND, parseCommandLine, USAGE } from "./infra/args.ts";
-import { desktopOpeners, devContainerFolder, hasDesktop, ownContainer } from "./infra/desktop.ts";
-import { newToken, probeRunningDaemon, watchDaemonFile, withStartLock, writeDaemonFile } from "./infra/discovery.ts";
+import { ADDRESS_COMMAND, type CommandLine, type DaemonArgs, MCP_STDIO_COMMAND, parseCommandLine, USAGE } from "./infra/args.ts";
+import { CONTAINER_MARKERS, desktopOpeners, devContainerFolder, hasDesktop, ownContainer } from "./infra/desktop.ts";
+import { daemonPageAddress, newToken, probeRunningDaemon, watchDaemonFile, withStartLock, writeDaemonFile } from "./infra/discovery.ts";
 import { watchEventLoopStalls } from "./infra/event-loop-stalls.ts";
 import { resolveTrackwallHome, trackwallHome } from "./infra/home.ts";
 import { SHUTDOWN_SIGNALS, shutdownOnce, stopDaemon } from "./infra/shutdown.ts";
@@ -94,6 +94,7 @@ async function start(
       homeFrom: resolveTrackwallHome(args.home).from,
       openUrl: openers.openUrl,
       openFolder: openers.openFolder,
+      inContainer: CONTAINER_MARKERS.some((marker) => existsSync(marker)),
       miseCommand: ["mise"],
       copilotCommand: ["copilot"],
       version: VERSION,
@@ -154,7 +155,7 @@ async function start(
       process.exit(EXIT_OTHER_VERSION_RUNNING);
     }
     log(`daemon ${VERSION} is already running (pid ${started.file.pid}, port ${started.file.port})`);
-    if (args.ui) openUi(desktop, uiUrl(started.file.port, started.file.token));
+    if (args.ui) openUi(desktop, daemonPageAddress(started.file));
     return;
   }
 
@@ -168,7 +169,7 @@ async function start(
   log(`trackwall-daemon ${VERSION} at http://127.0.0.1:${self.port} (pid ${process.pid}, ${runtimeInfo().name}, state in ${home})`);
   if (!uiDir) log("no built UI: the API works, but no page will be served (build packages/ui or pass --ui-dir)");
   if (args.ui) {
-    if (uiDir) openUi(desktop, uiUrl(self.port, self.token));
+    if (uiDir) openUi(desktop, daemonPageAddress(self));
     else log("--ui ignored because there is no UI to show");
   }
 }
@@ -188,12 +189,7 @@ function resolveUiDir(explicit: string | undefined): string | undefined {
 /** Without a desktop (ADR-120) there is no browser to open; the address is not logged, since it carries the token. */
 function openUi(desktop: boolean, url: string): void {
   if (desktop) openBrowser(url);
-  else log("--ui ignored: no desktop to open a browser on; open the address with the token from daemon.json");
-}
-
-/** The token in the URL fragment: it does not reach the server, logs or the Referer header. The UI removes it from the address bar. */
-function uiUrl(port: number, token: string): string {
-  return `http://127.0.0.1:${port}/#token=${token}`;
+  else log(`--ui ignored: no desktop to open a browser on; print the address with "trackwall-daemon ${ADDRESS_COMMAND}"`);
 }
 
 function log(msg: string): void {
@@ -209,6 +205,8 @@ try {
 }
 if (commandLine.command === MCP_STDIO_COMMAND) {
   runMcpStdio(trackwallHome(commandLine.home));
+} else if (commandLine.command === ADDRESS_COMMAND) {
+  void printAddress(trackwallHome(commandLine.home));
 } else if (commandLine.args.help) {
   process.stdout.write(USAGE);
 } else if (commandLine.args.version) {
@@ -227,4 +225,18 @@ function runMcpStdio(home: string): void {
     log(String(err));
     process.exitCode = 1;
   });
+}
+
+/**
+ * The page address of the daemon that answers for this state directory, for a browser on another computer's side of a
+ * forwarded port (a dev container, ADR-161). Only a daemon that answers: an old `daemon.json` would give a dead token.
+ */
+async function printAddress(home: string): Promise<void> {
+  const running = await probeRunningDaemon(home);
+  if (!running) {
+    process.stderr.write(`no daemon is running with the state directory ${home}\n`);
+    process.exitCode = 1;
+    return;
+  }
+  process.stdout.write(`${daemonPageAddress(running.file)}\n`);
 }

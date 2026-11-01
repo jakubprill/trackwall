@@ -70,6 +70,7 @@ The daemon alone with the UI in the browser, without Tauri:
 ```sh
 pnpm build
 bun packages/daemon/src/main.ts --ui
+bun packages/daemon/src/main.ts address   # the page address with the token, for a browser that --ui cannot open (a container)
 ```
 
 A daemon on a made-up shop of twenty repos, with sessions in every state, task proposals, agent tasks and running services, for demos and the screenshots of the documentation site. Copilot CLI is replaced by a stand-in (`packages/daemon/scripts/demo/copilot.ts`) that never calls a model; the services need `mise` and Node on PATH:
