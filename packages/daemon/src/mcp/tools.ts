@@ -24,7 +24,8 @@ import { itemSummaries, matchesItem } from "./board-items.ts";
  * The daemon's MCP tools (§5.3, ADR-24): each is a thin mapping onto the facade, so the agent sees the same state as the UI
  * (§1.1). None changes the configuration or a repo (§8), none answers in a session or stops one, and only `resume_task`
  * starts one: a new session of a task the user already approved, in its own worktree (ADR-90). Only
- * `propose_task` (a proposal, which only the user turns into a task in the UI), `report_result` (the summary of the
+ * `propose_task` (a proposal, which only the user turns into a task in the UI), `propose_routine` (a routine file,
+ * which runs only once the user approves its content in the UI, ADR-173), `report_result` (the summary of the
  * session's own task), ADR-39, and `create_item` and `update_item` (the user's board, from which nothing starts by
  * itself, ADR-133) write anything, `get_review_comments` marks the user's review comments read (ADR-62),
  * `send_message` queues text for the session of a task the caller proposed, and `get_messages` and `get_updates` mark
@@ -244,6 +245,11 @@ const runs: ToolRuns = {
   proposeFolderAction: async (facade, { repo, reason }, { caller }) => ({
     proposal: await facade.agents.proposeRepoRemoval(caller, repo, reason),
   }),
+  proposeRoutine: async (facade, { model, approvals, ...routine }) => {
+    // `repoPath` refuses a repo that is not in the projects folder before a file exists (`not_found`).
+    await facade.workspace.repoPath(routine.repo);
+    return { routine: await facade.routines.save({ ...routine, model: model ?? null, approvals: approvals ?? "ask" }) };
+  },
   listItems: async (facade, filter) => {
     const { items } = await facade.board.board();
     const { tasks } = facade.agents.sessions();
@@ -344,6 +350,7 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.getChangedEndpoints, runs.getChangedEndpoints),
   defineTool(mcpTools.proposeTask, runs.proposeTask),
   defineTool(mcpTools.proposeFolderAction, runs.proposeFolderAction),
+  defineTool(mcpTools.proposeRoutine, runs.proposeRoutine),
   defineTool(mcpTools.listItems, runs.listItems),
   defineTool(mcpTools.getItem, runs.getItem),
   defineTool(mcpTools.createItem, runs.createItem),
