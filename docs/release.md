@@ -9,10 +9,18 @@ The app installs an update only when its package is signed with the key whose pu
 ```sh
 mkdir -p ~/.tauri
 pnpm --dir apps/desktop exec tauri signer generate -w ~/.tauri/trackwall-updater.key
-gh secret set TAURI_SIGNING_PRIVATE_KEY -R jakubprill/trackwall < ~/.tauri/trackwall-updater.key
-gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD -R jakubprill/trackwall
+gh secret set TAURI_SIGNING_PRIVATE_KEY -R jakubprill/trackwall --env release < ~/.tauri/trackwall-updater.key
+gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD -R jakubprill/trackwall --env release
 cat ~/.tauri/trackwall-updater.key.pub
 ```
+
+The secrets belong to the `release` environment, never to the repo: a repo secret reaches every workflow run by a push to any branch, so anyone or any agent that can push a branch with its own workflow file could read the key. Set the environment up before the secrets (Settings > Environments > `release`):
+
+- **Deployment branches and tags**: "Selected branches and tags", with only the tag rule `v*`. A job of `release.yml` that runs for any other ref does not get the secrets.
+- **Required reviewers**: the owner. A release then waits for the owner's approval in the Actions tab before its signing jobs start.
+- **Allow administrators to bypass**: off.
+
+Protect the tags too (Settings > Rules > Rulesets > New tag ruleset, target `v*`, rules "Restrict creations", "Restrict updates" and "Restrict deletions", the owner in the bypass list), so that only the owner can push a release tag. Check that no repo secret named `TAURI_SIGNING_*` is left (Settings > Secrets and variables > Actions, section "Repository secrets").
 
 The last line prints the public key, which goes into `tauri.conf.json` through a PR. The private key and its password never go into the repo; keep a copy in a password manager. Without them no installed copy accepts another update. If the key is lost or leaked: create a new pair, put the new public key into `tauri.conf.json` and release a new version; installed copies trust only the old key, so they move to the new version by a manual install ("Installing on a new computer").
 
@@ -35,7 +43,7 @@ The last line prints the public key, which goes into `tauri.conf.json` through a
    A tag with a hyphen (for example `v0.3.0-rc.1`) creates a pre-release.
 6. When the release is out, start the previous version on Windows and macOS (from the first version with the updater, ADR-53) and click "Update and restart" (or "Settings > Updates > Check for updates"): the app restarts in the new version, and on Windows `%LOCALAPPDATA%\Programs\Trackwall\.update` is gone a minute later. This is the only check of the update from a real release.
 
-The workflow checks that the tag points to a commit on `main` and matches the version in `tauri.conf.json`, runs `pnpm test` on `windows-latest` and `macos-latest` (a tag does not require green CI on its commit) and builds in parallel with the same scripts as CI (`pnpm build:desktop`, the sidecar smoke test, `pnpm portable`), signs the update package of each system with the key from the repo secrets (the step fails without `TAURI_SIGNING_PRIVATE_KEY`), builds the Linux archives on an x64 and an arm64 runner, each smoke-tested as it unpacks and signed with the same key (`apps/desktop/scripts/package-linux.ts`), and publishes the release only after every build succeeds and every signature, the Linux archives' included, turns out to be made with the key in `tauri.conf.json`. The release contains:
+The workflow checks that the tag points to a commit on `main` and matches the version in `tauri.conf.json`, runs `pnpm test` on `windows-latest` and `macos-latest` (a tag does not require green CI on its commit) and builds in parallel with the same scripts as CI (`pnpm build:desktop`, the sidecar smoke test, `pnpm portable`), waits for the owner's approval of the `release` environment, signs the update package of each system with the key from that environment's secrets (the step fails without `TAURI_SIGNING_PRIVATE_KEY`), builds the Linux archives on an x64 and an arm64 runner, each smoke-tested as it unpacks and signed with the same key (`apps/desktop/scripts/package-linux.ts`), and publishes the release only after every build succeeds and every signature, the Linux archives' included, turns out to be made with the key in `tauri.conf.json`. The release contains:
 
 | File | Contents |
 |---|---|
