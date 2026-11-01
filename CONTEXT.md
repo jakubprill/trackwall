@@ -442,6 +442,10 @@ _Avoid_: note, comment (that is a review comment), chat
 What the daemon saw happen to delegated work, for the proposer: a turn that ended, an error, the end of the session, a reported result, a verification verdict, a rejected proposal. The daemon asks the proposer to read it, so the supervisor or a main session does not poll (ADR-68).
 _Avoid_: event (that is a `/ws` event), notification (that is a system notification), status
 
+**Task question** (`TaskUpdate` of kind `question`, MCP tool `ask_proposer`):
+A question a task's agent asks the task's proposer when it needs a decision to go on. It reaches the proposer as a task update, and the proposer answers with a task message. At most 5 until the user takes part again; a task the user started asks the user instead (ADR-160).
+_Avoid_: request (that is a read request), clarification
+
 **Read request** (`ReadRequest`, `Session.readRequest`, `readRequestPrompt`; "Unread by the agent" and "Deliver now" in the session panel, `deliver-read-request`):
 The daemon's one-line prompt that asks a session's agent to read what waits unread for it (a review, task messages, task updates, a handoff, a trust notice), with since when it has waited and what holds it back (`ReadRequestHold` in `waitsFor`): `sent` and not taken, `pending` until the session can take it, `user_text` in the input box, the agent's question (`dialog`), or `idle`, nothing until the user's Deliver now (ADR-159). The agent reads the content itself through the tools the prompt names.
 _Avoid_: inbox, notification, nudge
