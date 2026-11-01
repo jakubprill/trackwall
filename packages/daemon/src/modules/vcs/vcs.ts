@@ -14,6 +14,7 @@ import type {
   TreeEntry,
   WorkingTreeChanges,
 } from "@trackwall/protocol";
+import { KeyedQueue } from "../../infra/keyed-queue.ts";
 import { type BackupFile, backupRemote, commitBackups, ensureBackupRepo, pushBackups, storeHead } from "./backup-repo.ts";
 import { branchOnRemote, pushBranch } from "./branch-push.ts";
 import { CommitMemo } from "./commit-memo.ts";
@@ -35,7 +36,6 @@ import { type GitState, GitStateReader, gitDirKey } from "./git-state.ts";
 import { grep, grepFiles } from "./grep.ts";
 import { readHeadCommit } from "./head-commit.ts";
 import { hostedProject } from "./hosted-project.ts";
-import { KeyedQueue } from "./keyed-queue.ts";
 import { excludeLocally, ignoredPaths, trackedPaths } from "./local-files.ts";
 import { searchLog } from "./log-search.ts";
 import {
@@ -52,6 +52,7 @@ import {
 } from "./parse.ts";
 import { pathKey } from "./path-key.ts";
 import { remoteAddress } from "./remote.ts";
+import { commitRound, pushedTip, resetRound, roundChanges, roundWorktree, squashRounds } from "./round-commits.ts";
 import { StatusMemo, type TimedStatus } from "./status-memo.ts";
 import { syncRepo } from "./sync.ts";
 import { addWorktree, defaultBase, deleteBranch, pendingWork, removeWorktree } from "./worktree.ts";
@@ -227,6 +228,14 @@ export class Vcs {
   async worktreeChanges(dir: string, base: string, maxPatchBytes: number, paths: readonly string[]): Promise<TaskChanges> {
     return worktreeChanges(dir, base, maxPatchBytes, paths, await this.scratch());
   }
+
+  // Task rounds (ADR-168, `round-commits.ts`): the agents module runs them one after another per task.
+  readonly roundWorktree = roundWorktree;
+  readonly commitRound = commitRound;
+  readonly roundChanges = roundChanges;
+  readonly resetRound = resetRound;
+  readonly squashRounds = squashRounds;
+  readonly pushedTip = pushedTip;
 
   addWorktree(repoDir: string, path: string, branch: string, commit: string): Promise<void> {
     return this.serialWorktreeOp(repoDir, () => addWorktree(repoDir, path, branch, commit));

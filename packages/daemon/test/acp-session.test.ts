@@ -31,6 +31,7 @@ function session(
     onPromptSent: () => {},
     onEvent: (event) => events.push(event),
     onTurnOver: () => turnsOver.count++,
+    onTurnStart: () => {},
     log: () => {},
   });
   acp.connect({ write: (line) => written.push(JSON.parse(line)) });

@@ -23,10 +23,11 @@ import { DomainError, messageOf } from "../../infra/errors.ts";
 /** Repo host answers serve every panel and window for this long: the panel asks every half minute, and pipelines take minutes. */
 const LOOKUP_CACHE_MS = 15_000;
 
-/** What the module needs from `agents`: a task, and its commits and uncommitted files. */
+/** What the module needs from `agents`: a task, its commits and uncommitted files, and the squash of its round commits (ADR-168). */
 interface MergeRequestTasks {
   task(id: string): Task;
   taskChangesSummary(id: string): Promise<{ commits: number; uncommitted: number }>;
+  squashRoundsForPush(id: string): Promise<void>;
 }
 
 /** What the module needs from `vcs`: the main remote as a project on a repo host, the task branch against it, and its push. */
@@ -74,7 +75,10 @@ export class MergeRequests {
     return { task: id, push, project, lookup, targetBranch: task.baseBranch };
   }
 
-  /** Pushes the task branch at the user's request: never forced, refused while it has no commits or a remote on no known repo host. */
+  /**
+   * Pushes the task branch at the user's request, its round commits squashed first (ADR-168): never forced, refused while it
+   * has no commits or a remote on no known repo host.
+   */
   async push(id: string): Promise<TaskMergeRequest> {
     const task = this.#deps.tasks.task(id);
     if (this.#pushing.has(id)) throw new DomainError("bad_request", `branch ${task.branch} is already being pushed`);
@@ -88,6 +92,8 @@ export class MergeRequests {
         throw new DomainError("bad_request", `branch ${task.branch} has no commits yet; ask the agent to commit its changes`);
       // Only to a repo host the user named (or GitHub), the one the panel shows: never to a path or host the agent set.
       if (!project) throw unknownHost(task);
+      // The round commits go only as part of the commit after them: the merge request shows the agent's commits.
+      await this.#deps.tasks.squashRoundsForPush(id);
       await asRepoUnavailable(task, this.#deps.vcs.pushBranch(task.worktree, task.branch));
     } finally {
       this.#pushing.delete(id);

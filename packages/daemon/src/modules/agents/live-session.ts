@@ -143,6 +143,8 @@ export interface LiveSessionOptions {
   onEvent: (event: SessionEvent) => void;
   /** Any turn ended, also one the user drove, which `onEvent` leaves out: the agent may have committed (ADR-144). */
   onTurnOver: () => void;
+  /** Any turn started (hook `userPromptSubmitted`), also one the user drove: where the worktree is then starts a round (ADR-168). */
+  onTurnStart: () => void;
 }
 
 export class LiveSession implements AgentSession {
@@ -162,6 +164,7 @@ export class LiveSession implements AgentSession {
   readonly #onPromptSent: () => void;
   readonly #onEvent: (event: SessionEvent) => void;
   readonly #onTurnOver: () => void;
+  readonly #onTurnStart: () => void;
   readonly #screen: TerminalScreen;
   readonly #state: CopilotSessionState;
   readonly #hooks: HookTail;
@@ -225,6 +228,7 @@ export class LiveSession implements AgentSession {
     this.#onPromptSent = o.onPromptSent;
     this.#onEvent = o.onEvent;
     this.#onTurnOver = o.onTurnOver;
+    this.#onTurnStart = o.onTurnStart;
     this.#hasConversation = o.hasConversation;
     this.#state = new CopilotSessionState({
       now: Date.now,
@@ -491,6 +495,7 @@ export class LiveSession implements AgentSession {
     if (record.event === "userPromptSubmitted") {
       this.#userDraft = false;
       this.#hasConversation = true;
+      this.#onTurnStart();
     }
     if (record.event === "userPromptSubmitted" || record.event === "agentStop") this.#contextGiven = undefined;
     if (record.event !== "notification") this.#requestsGoOn = false;

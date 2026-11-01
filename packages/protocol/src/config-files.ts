@@ -16,6 +16,7 @@ export type ConfigPlace = z.infer<typeof ConfigPlace>;
 export const ConfigEntryId = z.enum([
   "workspace-file",
   "tasks-file",
+  "task-rounds-file",
   "resumable-sessions-file",
   "last-supervisor-file",
   "agent-queues-file",
@@ -85,6 +86,14 @@ export const CONFIG_ENTRIES: Record<ConfigEntryId, ConfigEntryInfo> = {
     writer: "trackwall",
     internal: true,
     purpose: "Your agent tasks, so they come back after a restart.",
+    docs: "tasks",
+  },
+  "task-rounds-file": {
+    place: "state",
+    kind: "file",
+    writer: "trackwall",
+    internal: true,
+    purpose: "The rounds of each agent task and their commits, so a round can still be shown, undone and squashed after a restart.",
     docs: "tasks",
   },
   "resumable-sessions-file": {
