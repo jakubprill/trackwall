@@ -231,7 +231,7 @@ jobs:
       # desktop app's docker exec runs, so the command switches to the image's remote user, vscode.
       - name: Dev Container Feature
         run: |
-          bun apps/desktop/scripts/package-feature.ts out "$GITHUB_REPOSITORY"
+          bun apps/desktop/scripts/package-feature.ts out
           feature="$RUNNER_TEMP/feature"
           mkdir -p "$feature"
           tar -xzf out/devcontainer-feature-trackwall.tgz -C "$feature"
@@ -246,6 +246,12 @@ jobs:
           grep -q '"status":"running","port":7790' "$RUNNER_TEMP/start.json"
           trackwall-container address | grep -q '^http://127.0.0.1:7790/#token='
           [ "$(stat -c %U /home/vscode/.trackwall/daemon.json)" = vscode ]
+          # update (ADR-165) to the version that runs has nothing to do; bin/current naming a version that is not there
+          # leaves the wrapper on the Feature's binary.
+          version="$(node -p "require('./packages/daemon/package.json').version")"
+          trackwall-container update "$version" | grep -q '"status":"current"'
+          runuser -u vscode -- sh -c 'mkdir -p ~/.trackwall/bin && echo 0.0.1 > ~/.trackwall/bin/current'
+          trackwall-container address | grep -q '^http://127.0.0.1:7790/#token='
       # The headless shell and the system libraries it needs (apt, as root in the container), and DejaVu Sans Mono, the
       # monospace font of the Linux runner: the terminal's rows follow the font, and a user's browser runs on their own
       # computer, not in the container, so the image's fonts are not what Trackwall is drawn with.

@@ -45,7 +45,7 @@ The workflow checks that the tag points to a commit on `main` and matches the ve
 | `trackwall-<version>-macos-arm64.app.tar.gz` | the same `Trackwall.app`, the macOS update package |
 | `trackwall-<version>-macos-arm64.app.tar.gz.sig` | its update signature |
 | `trackwall-<version>-linux-x64.tar.gz`, `trackwall-<version>-linux-arm64.tar.gz` | a `trackwall` folder with `trackwall-daemon`, `ui/` and `README.txt`, for a Linux container (no desktop app) |
-| `trackwall-<version>-linux-<arch>.tar.gz.sig` | its signature, made with the update key |
+| `trackwall-<version>-linux-<arch>.tar.gz.sig` | its signature, made with the update key; `trackwall-container update` downloads both from this address and checks the signature with the key of the version already installed (ADR-165), so the names and the key are a contract with every installed version |
 | `latest.json` | the update manifest: version, date, address and signature of the update package for each system |
 | `devcontainer-feature-trackwall.tgz` | the Dev Container Feature that installs the Linux archive of this release, with both archives' SHA-256 written in (ADR-164); a `devcontainer.json` names it by its address in the release |
 | `SHA256SUMS.txt` | SHA-256 sums of the five archives and the Feature |

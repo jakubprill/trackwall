@@ -133,7 +133,7 @@ describe.each(RUNTIMES)("trackwall-container start under %s (ADR-164)", (_name, 
 describe("the container command's arguments and waits (ADR-164)", () => {
   test("the port defaults to the one the dev container guide forwards", () => {
     expect(parseCommandLine(["container", "start"])).toEqual({ command: "container", action: "start", port: 7700, home: undefined });
-    expect(() => parseCommandLine(["container", "stop"])).toThrow('container expects start, got "stop"');
+    expect(() => parseCommandLine(["container", "stop"])).toThrow('container expects start or update <version>, got "stop"');
   });
 
   test("the waits between restarts double from 1 s up to a minute", () => {

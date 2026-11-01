@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { arch, platform } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ContainerStartResult } from "@trackwall/protocol";
+import { type ContainerStartResult, type ContainerUpdateResult, releaseFileUrl } from "@trackwall/protocol";
 import { EventHub } from "./api/event-hub.ts";
 import { sessionHookRequest } from "./api/hooks.ts";
 import { type ApiServer, startApi } from "./api/server.ts";
@@ -13,20 +13,26 @@ import {
   ADDRESS_COMMAND,
   CONTAINER_COMMAND,
   CONTAINER_START,
+  CONTAINER_UPDATE,
   type CommandLine,
+  type ContainerCommandLine,
   type DaemonArgs,
   MCP_STDIO_COMMAND,
   parseCommandLine,
   USAGE,
 } from "./infra/args.ts";
+import { appendNote } from "./infra/container-log.ts";
 import { containerStart } from "./infra/container-start.ts";
-import { superviseDaemon } from "./infra/container-supervisor.ts";
+import { DAEMON_LOG, superviseDaemon } from "./infra/container-supervisor.ts";
+import { applyUpdate, containerUpdate } from "./infra/container-update.ts";
 import { CONTAINER_MARKERS, desktopOpeners, devContainerFolder, hasDesktop, ownContainer } from "./infra/desktop.ts";
 import { daemonPageAddress, newToken, probeRunningDaemon, watchDaemonFile, withStartLock, writeDaemonFile } from "./infra/discovery.ts";
 import { watchEventLoopStalls } from "./infra/event-loop-stalls.ts";
 import { resolveTrackwallHome, trackwallHome } from "./infra/home.ts";
+import { selfCommand } from "./infra/self-command.ts";
 import { SHUTDOWN_SIGNALS, shutdownOnce, stopDaemon } from "./infra/shutdown.ts";
 import { openBrowser, openFolder } from "./infra/system-open.ts";
+import { UPDATE_PUBLIC_KEY } from "./infra/update-key.ts";
 import { userEnv } from "./infra/user-env.ts";
 import { VERSION } from "./infra/version.ts";
 import { createMcpEndpoint, sessionMcpRequest } from "./mcp/endpoint.ts";
@@ -226,9 +232,7 @@ if (commandLine.command === MCP_STDIO_COMMAND) {
 } else if (commandLine.command === ADDRESS_COMMAND) {
   void printAddress(trackwallHome(commandLine.home));
 } else if (commandLine.command === CONTAINER_COMMAND) {
-  const home = trackwallHome(commandLine.home);
-  if (commandLine.action === CONTAINER_START) void printContainerStart(home, commandLine.port);
-  else runSupervisor(home, commandLine.port);
+  runContainerCommand(commandLine);
 } else if (commandLine.args.help) {
   process.stdout.write(USAGE);
 } else if (commandLine.args.version) {
@@ -280,4 +284,41 @@ function runSupervisor(home: string, port: number): void {
     process.stderr.write(`[supervisor] ${err instanceof Error ? err.message : String(err)}\n`);
     process.exitCode = 1;
   });
+}
+
+function runContainerCommand(line: ContainerCommandLine): void {
+  const home = trackwallHome(line.home);
+  switch (line.action) {
+    case CONTAINER_START:
+      void printContainerStart(home, line.port);
+      return;
+    case CONTAINER_UPDATE:
+      void printContainerUpdate(home, line.port, line.target);
+      return;
+    case "supervise":
+      runSupervisor(home, line.port);
+      return;
+    case "apply-update":
+      void applyUpdate({
+        home,
+        port: line.port,
+        target: line.target,
+        self: { version: VERSION, command: selfCommand([]) },
+        source: { url: releaseFileUrl, pubkey: UPDATE_PUBLIC_KEY },
+        note: (msg) => appendNote(join(home, DAEMON_LOG), "update", msg),
+      }).then((outcome) => {
+        process.exitCode = outcome === "updated" ? 0 : 1;
+      });
+      return;
+  }
+}
+
+async function printContainerUpdate(home: string, port: number, target: string): Promise<void> {
+  const result: ContainerUpdateResult = await containerUpdate({ home, port, version: VERSION, target }).catch((err: unknown) => ({
+    ok: false,
+    version: VERSION,
+    error: { code: "update-failed", message: err instanceof Error ? err.message : String(err) },
+  }));
+  process.stdout.write(`${JSON.stringify(result)}\n`);
+  process.exitCode = result.ok ? 0 : 1;
 }
