@@ -56,6 +56,7 @@ function installFacade(o: { release?: Partial<JdtlsRelease>; miseError?: string 
   const projects = mkdtempSync(join(tmpdir(), "trackwall-java-install-projects-"));
   const installs = mkdtempSync(join(tmpdir(), "trackwall-java-install-mise-"));
   const facade = createFacade({
+    inContainer: false,
     home,
     homeFrom: "flag",
     openUrl: () => {},

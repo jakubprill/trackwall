@@ -14,6 +14,7 @@ async function setup() {
   const logged: string[] = [];
   const log = (msg: string) => logged.push(msg);
   const facade = createFacade({
+    inContainer: false,
     home: mkdtempSync(join(tmpdir(), "trackwall-old-folders-home-")),
     homeFrom: "flag",
     openUrl: () => {},

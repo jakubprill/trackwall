@@ -26,6 +26,7 @@ async function workspaceWithRepos() {
   mkdirSync(join(projects, "empty"));
   gitIn(join(projects, "empty"), "init", "-q");
   const workspace = new Workspace({
+    inContainer: false,
     file: new WorkspaceFile(join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml")),
     vcs: new Vcs(systemTempFolder),
     hosting: fakeHosting().hosting,
