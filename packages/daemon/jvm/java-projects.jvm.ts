@@ -19,6 +19,7 @@ import {
   VerifyTaskResult,
   WAIT_MAX_SECONDS,
 } from "@trackwall/protocol";
+import { makeRepo } from "../test/support/git-repo.ts";
 import { connectHttpClient, MCP_CALL_LIMIT_MS } from "../test/support/mcp-client.ts";
 import { startSessionApi } from "../test/support/session-api.ts";
 
@@ -36,6 +37,12 @@ const CHECKOUT_PORT = 18082;
 /** The first build downloads Spring Boot and the build plugins; a cold Windows runner takes minutes for that. */
 const BUILD_MS = 10 * 60_000;
 setDefaultTimeout(2 * BUILD_MS);
+
+/** The `[tools]` of each project's own mise config, without its mise tasks. */
+const TOOLS_ONLY = {
+  orders: '[tools]\njava = "temurin-21"\nmaven = "3.9.11"\n',
+  checkout: '[tools]\njava = "temurin-21"\ngradle = "8.14.3"\n',
+};
 
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
 let client: Client;
@@ -137,8 +144,8 @@ function cardSummary({ repo, card, tags }: RepoCardResult) {
 }
 
 /** A mise task run with `run_mise_task` and awaited with `wait_for_mise_task`, as an agent does: the run once it ended. */
-async function runToEnd(repo: string, miseTask: string): Promise<RunState> {
-  await call("run_mise_task", { repo, miseTask });
+async function runToEnd(repo: string, miseTask: string, args: string[] = []): Promise<RunState> {
+  await call("run_mise_task", { repo, miseTask, arguments: args });
   const wait = async () =>
     MiseTaskRunResult.parse(await call("wait_for_mise_task", { repo, miseTask, timeoutSeconds: WAIT_MAX_SECONDS })).run;
   return until(wait, (run) => run.kind === "exited");
@@ -360,5 +367,41 @@ describe("a Maven project and a Gradle project", () => {
     expect(report?.lines).toContain(
       "Parameter 0 of constructor in com.example.orders.Refunds required a bean of type 'com.example.orders.Refunds$PaymentGateway' that could not be found.",
     );
+  });
+
+  test("the convention tasks file gives a repo without mise tasks a test task, which runs only the tests its filter names", async () => {
+    // The last test, since the file and the two repos change the projects folder of the others: the same projects with
+    // tools but no mise tasks in their mise config.
+    makeRepo({ ...trackedFiles("orders"), "mise.toml": TOOLS_ONLY.orders }, "plain-orders", daemon.projects);
+    makeRepo({ ...trackedFiles("checkout"), "mise.toml": TOOLS_ONLY.checkout }, "plain-checkout", daemon.projects);
+    // What the user does once in the UI: write the convention tasks file into the projects folder, which also trusts it.
+    await daemon.facade.mise.writeConventionTasks();
+    for (const repo of ["plain-orders", "plain-checkout"]) {
+      await daemon.facade.mise.trust(repo);
+      expectExitCode(await daemon.facade.mise.installTools(repo, AbortSignal.timeout(BUILD_MS)), 0);
+    }
+    const listed = await daemon.facade.mise.tasks("plain-orders");
+    expect(listed.kind === "ok" && listed.tasks.map((t) => [t.name, t.origin, t.usage !== null])).toEqual([
+      ["build", "convention", false],
+      ["setup", "convention", false],
+      ["test", "convention", true],
+    ]);
+
+    const reports: Record<string, unknown> = {};
+    for (const [repo, filter] of [
+      ["plain-orders", "PricingTest#costsNothingWithoutItems"],
+      ["plain-checkout", "ShippingTest.addsTheFlatRate"],
+    ] as const) {
+      const run = await runToEnd(repo, "test", [filter]);
+      expectExitCode(run, 0);
+      const results = TestResults.parse(await call("get_test_results", { repo, since: run.startedAt }));
+      reports[repo] = results.totals;
+    }
+
+    // PricingTest has two tests: the filter ran one of them.
+    expect(reports).toMatchObject({
+      "plain-orders": { tests: 1, failures: 0, errors: 0 },
+      "plain-checkout": { tests: 1, failures: 0, errors: 0 },
+    });
   });
 });

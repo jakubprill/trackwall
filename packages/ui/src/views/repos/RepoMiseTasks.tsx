@@ -8,13 +8,16 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { Surface } from "@/components/Surface";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { relativeTime } from "@/lib/format";
+import { parseRunArguments } from "@/lib/mise-run-arguments";
 import { miseTaskOriginLabel } from "@/lib/mise-task-origin";
 import { isLive, runStateLabel, showsLastLines } from "@/lib/run-state";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
+import { ConventionTasks } from "./ConventionTasks.tsx";
 import { RepoLocalConfig } from "./RepoLocalConfig.tsx";
 import { RepoService } from "./RepoService.tsx";
 
@@ -65,10 +68,13 @@ function TaskPanel({ conn, repo, tasks, onChange }: { conn: Connection; repo: st
   );
   if (tasks.kind === "ok") {
     return tasks.tasks.length === 0 ? (
-      <p className="text-muted-foreground text-sm">
-        This repo has no mise tasks. Add them under [tasks] in mise.toml in the repo root, or in mise.local.toml to keep them out of git, to
-        run setup, dev or build from here.
-      </p>
+      <div className="flex flex-col gap-3">
+        <p className="text-muted-foreground text-sm">
+          This repo has no mise tasks. Add them under [tasks] in mise.toml in the repo root, or in mise.local.toml to keep them out of git,
+          to run setup, dev or build from here.
+        </p>
+        <ConventionTasks conn={conn} onWritten={onChange} />
+      </div>
     ) : (
       <div className="flex flex-col gap-4">
         {hasService(tasks.tasks) && <RepoService conn={conn} repo={repo} />}
@@ -127,10 +133,15 @@ function TaskRow({ conn, repo, task, onChange }: { conn: Connection; repo: strin
   const live = isLive(task.run);
   const state = runStateLabel(task.run);
   const [showLog, setShowLog] = useState(false);
+  const [argsText, setArgsText] = useState("");
   const origin = miseTaskOriginLabel(task);
+  const parsedArgs = parseRunArguments(argsText);
   // Also while `stopping`: after `stop_unconfirmed` the stop can be retried, and the daemon merges parallel requests into one.
   const action = useAction(
-    () => post(conn, live ? miseApi.stop : miseApi.start, { repo, miseTask: task.name }),
+    () =>
+      live
+        ? post(conn, miseApi.stop, { repo, miseTask: task.name })
+        : post(conn, miseApi.start, { repo, miseTask: task.name, arguments: parsedArgs.ok ? parsedArgs.args : [] }),
     () => {
       // Running opens the log: the user wants to see what the mise task does anyway.
       if (!live) setShowLog(true);
@@ -158,10 +169,23 @@ function TaskRow({ conn, repo, task, onChange }: { conn: Connection; repo: strin
         <Button variant="ghost" size="sm" onClick={() => setShowLog((v) => !v)} aria-pressed={showLog}>
           <ScrollText /> {showLog ? "Hide log" : "Log"}
         </Button>
-        <Button variant="outline" size="sm" onClick={action.run} disabled={action.pending}>
+        {task.usage !== null && !live && (
+          <Input
+            aria-label={`Arguments of ${task.name}`}
+            title={task.usage}
+            placeholder="arguments"
+            className="h-8 w-48 font-mono text-xs"
+            value={argsText}
+            onChange={(e) => setArgsText(e.target.value)}
+            spellCheck={false}
+            autoComplete="off"
+          />
+        )}
+        <Button variant="outline" size="sm" onClick={action.run} disabled={action.pending || (!live && !parsedArgs.ok)}>
           {live ? <Square /> : <Play />} {live ? "Stop" : "Run"}
         </Button>
       </div>
+      {!live && !parsedArgs.ok && <p className="text-destructive text-xs">{parsedArgs.error}</p>}
       {showLog && <MiseTaskLog conn={conn} source={miseTaskLogSource(repo, null, task.name)} />}
       {!showLog && showsLastLines(task.run) && (
         <pre className="text-muted-foreground overflow-x-auto font-mono text-xs whitespace-pre-wrap break-all">

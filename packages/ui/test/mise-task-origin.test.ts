@@ -24,6 +24,14 @@ describe("mise task origin", () => {
     );
   });
 
+  test("a mise task from the convention tasks file is labelled convention", () => {
+    expect(miseTaskOriginLabel({ origin: "convention", source: "/dev/.config/mise/conf.d/trackwall-convention-tasks.toml" })).toEqual({
+      label: "convention",
+      local: false,
+      title: "Trackwall's convention task, from /dev/.config/mise/conf.d/trackwall-convention-tasks.toml in the projects folder",
+    });
+  });
+
   test("a mise task whose origin is unknown gets no label", () => {
     expect(miseTaskOriginLabel({ origin: null, source: null })).toBeNull();
   });

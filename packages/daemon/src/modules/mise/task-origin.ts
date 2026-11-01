@@ -5,7 +5,7 @@ import { isInside } from "../../infra/path-inside.ts";
 
 /**
  * Where the mise tasks of a repo root are defined (§4.7, ADR-110), from the file `mise tasks ls` names as each one's
- * `source`: outside the repo, or in the repo and tracked by git or not. Paths are compared after resolving links on both
+ * `source`: the convention tasks file (ADR-157), elsewhere outside the repo, or in the repo and tracked by git or not. Paths are compared after resolving links on both
  * sides, as mise may report the canonical path (`/private/var` on macOS) of a repo opened through a link.
  */
 
@@ -27,14 +27,17 @@ export async function taskOrigins(
   dir: string,
   sources: readonly (string | null)[],
   vcs: TrackedPaths,
+  conventionFile: string,
 ): Promise<(source: string | null) => Origin> {
   const root = await realpath(dir).catch(() => dir);
+  const convention = await realpath(conventionFile).catch(() => null);
   const known = [...new Set(sources)].flatMap((source) => (source === null ? [] : [source]));
   const resolved = await Promise.all(known.map(async (source) => ({ source, path: await realpath(source).catch(() => null) })));
   const origins = new Map<string, Origin>();
   const inRepo = new Map<string, string>();
   for (const { source, path } of resolved) {
     if (path === null) origins.set(source, { source, origin: null });
+    else if (path === convention) origins.set(source, { source, origin: "convention" });
     else if (isInside(root, path)) inRepo.set(source, relative(root, path).split(sep).join("/"));
     else origins.set(source, { source, origin: "outside" });
   }
