@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Settings layout</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a design memo in the app's own dark HUD look; three mocks as framed app windows, a shared section library in <template>s. */
+:root {
+  --bg: var(--background);
+  --ink: var(--foreground);
+  --fill: var(--secondary);
+  --well: var(--muted-foreground);
+  --accent-ink: var(--primary-foreground);
+  --line: var(--border);
+  --line-strong: oklch(0.85 0.04 220 / 22%);
+  --grid: var(--grid-line);
+  --ok: var(--success);
+  --warn: var(--warning);
+  --bad: var(--destructive);
+  --sans: "IBM Plex Sans", var(--font-sans);
+  --mono: "JetBrains Mono", "Cascadia Mono", "SF Mono", ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 32px 32px;
+  color: var(--ink);
+  font: 15px/1.6 var(--sans);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 80px;
+}
+.page { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 56px; }
+.prose { max-width: 68ch; }
+h1, h2, h3 { text-wrap: balance; margin: 0; font-weight: 600; }
+h1 { font-size: 2rem; line-height: 1.2; }
+h2 { font-size: 1.35rem; }
+h3 { font-size: 1.05rem; }
+p { margin: 0; }
+.eyebrow, .hud { font: 500 11px/16px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted-foreground); }
+.lede { color: var(--muted-foreground); font-size: 1.05rem; }
+section.block { display: flex; flex-direction: column; gap: 16px; }
+code, .mono { font-family: var(--mono); font-size: 0.85em; }
+a { color: var(--primary); }
+strong { font-weight: 600; }
+
+/* Inventory table */
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: color-mix(in oklch, var(--overlay) 55%, transparent); }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 14px; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 500 11px/16px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted-foreground); }
+tr:last-child td { border-bottom: 0; }
+.kind { display: inline-block; font: 500 11px/18px var(--mono); padding: 0 6px; border-radius: 3px; border: 1px solid var(--line-strong); white-space: nowrap; }
+.kind.set { color: var(--primary); border-color: color-mix(in oklch, var(--primary) 40%, transparent); }
+.kind.state { color: var(--ok); border-color: color-mix(in oklch, var(--success) 40%, transparent); }
+.kind.diag { color: var(--warn); border-color: color-mix(in oklch, var(--warning) 40%, transparent); }
+.kind.yaml { color: var(--muted-foreground); }
+.tag-new { color: var(--warn); font: 500 11px var(--mono); }
+
+.callout { border-left: 2px solid var(--primary); padding: 4px 0 4px 16px; display: flex; flex-direction: column; gap: 8px; }
+.groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.group { border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; background: color-mix(in oklch, var(--overlay) 55%, transparent); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.group ul { margin: 0; padding-left: 18px; color: var(--muted-foreground); font-size: 14px; }
+.group li.new { color: var(--ink); }
+
+/* Variant header */
+.variant-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; }
+.badge-rec { font: 500 11px/20px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; padding: 0 8px; border-radius: 3px; background: var(--primary); color: var(--accent-ink); }
+.proscons { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px 32px; font-size: 14px; }
+.proscons ul { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.proscons .plus { color: var(--ok); }
+.proscons .minus { color: var(--bad); }
+
+/* ---------- Mock window (the app) ---------- */
+.window-scroll { overflow-x: auto; border-radius: 8px; }
+.window {
+  min-width: 860px; height: 620px; display: flex;
+  border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden;
+  background: var(--bg); font: 13px/1.5 var(--sans); color: var(--ink);
+  box-shadow: 0 20px 60px oklch(0 0 0 / 45%);
+}
+.activity { width: 48px; flex: none; border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0; background: color-mix(in oklch, var(--muted-foreground) 70%, transparent); }
+.activity .spacer { flex: 1; }
+.act { width: 32px; height: 32px; border-radius: 5px; display: grid; place-items: center; color: var(--muted-foreground); position: relative; }
+.act svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+.act.on { color: var(--primary); background: var(--fill); }
+.act.on::before { content: ""; position: absolute; left: -8px; top: 7px; bottom: 7px; width: 2px; background: var(--primary); box-shadow: 0 0 8px var(--primary); }
+.act .pip { position: absolute; top: 4px; right: 4px; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 6px var(--warn); }
+.act.gone { opacity: 0.25; text-decoration: line-through; }
+.main { flex: 1; min-width: 0; display: flex; }
+
+/* Shared app pieces */
+.m-surface { border: 1px solid var(--line); border-radius: 6px; background: color-mix(in oklch, var(--overlay) 55%, transparent); min-width: 0; overflow: hidden; }
+.m-surface > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 34px; padding: 6px 12px; border-bottom: 1px solid var(--line); }
+.m-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.m-desc { color: var(--muted-foreground); font-size: 12.5px; }
+.m-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.m-input { flex: 1; min-width: 160px; height: 28px; border: 1px solid oklch(0.85 0.04 220 / 18%); border-radius: 4px; background: var(--well); padding: 0 8px; font: 12px/26px var(--mono); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-input.ph { color: var(--muted-foreground); }
+.m-btn { height: 28px; padding: 0 10px; border-radius: 4px; border: 1px solid oklch(0.85 0.04 220 / 18%); background: transparent; color: var(--ink); font: 500 12px var(--sans); display: inline-flex; align-items: center; white-space: nowrap; }
+.m-btn.primary { background: var(--primary); color: var(--accent-ink); border-color: transparent; }
+.m-btn.ghost { border-color: transparent; color: var(--muted-foreground); }
+.m-btn.link { border: 0; padding: 0; height: auto; color: var(--primary); }
+.m-key { font: 11px var(--mono); color: var(--muted-foreground); }
+.m-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--muted-foreground); }
+.dot.ok { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+.dot.warn { background: var(--warn); box-shadow: 0 0 6px var(--warn); }
+.dot.bad { background: var(--bad); box-shadow: 0 0 6px var(--bad); }
+.m-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.m-list li { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 12.5px; min-width: 0; }
+.m-list li:last-child { border-bottom: 0; }
+.m-list .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-code { font: 11.5px/1.5 var(--mono); background: var(--well); border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; white-space: pre-wrap; word-break: break-all; }
+.m-dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 18px; margin: 0; font-size: 12.5px; }
+.m-dl dt { font: 500 10.5px/18px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted-foreground); }
+.m-dl dd { margin: 0; font-family: var(--mono); font-size: 12px; word-break: break-all; }
+.m-check { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.m-box { width: 14px; height: 14px; border-radius: 3px; background: var(--primary); display: grid; place-items: center; color: var(--accent-ink); font-size: 10px; font-weight: 700; }
+.m-box.off { background: transparent; border: 1px solid oklch(0.85 0.04 220 / 30%); }
+.m-err { font-size: 12.5px; display: flex; flex-direction: column; gap: 2px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.m-err:last-child { border-bottom: 0; padding-bottom: 0; }
+.m-err .msg { font: 11.5px var(--mono); }
+.m-err .where { font: 11px var(--mono); color: var(--muted-foreground); }
+.m-yaml { font: 10.5px var(--mono); color: var(--warn); }
+
+/* Variant A: settings nav + content */
+.a-nav { width: 196px; flex: none; border-right: 1px solid var(--line); padding: 14px 10px; display: flex; flex-direction: column; gap: 2px; background: color-mix(in oklch, var(--muted-foreground) 40%, transparent); }
+.a-nav .hud { padding: 0 8px 8px; }
+.a-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border-radius: 4px; border: 0; background: transparent; color: var(--muted-foreground); font: 13px var(--sans); text-align: left; cursor: pointer; }
+.a-item:hover { color: var(--ink); background: color-mix(in oklch, var(--secondary) 50%, transparent); }
+.a-item.on { color: var(--ink); background: var(--fill); }
+.a-item .count { margin-left: auto; font: 11px var(--mono); color: var(--muted-foreground); }
+.a-item:focus-visible, .c-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.a-content { flex: 1; min-width: 0; overflow-y: auto; padding: 18px 22px; }
+.a-content .stack { max-width: 560px; display: flex; flex-direction: column; gap: 14px; }
+.a-title { display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; }
+.a-title h4 { margin: 0; font-size: 17px; font-weight: 600; }
+
+/* Variant B: two columns, one scroll */
+.b-wrap { flex: 1; min-width: 0; overflow-y: auto; padding: 0 22px 22px; }
+.b-toc { position: sticky; top: 0; z-index: 1; display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 0; background: var(--bg); border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+.b-chip { font: 500 11px/22px var(--mono); letter-spacing: 0.06em; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: 11px; color: var(--muted-foreground); display: inline-flex; align-items: center; gap: 6px; }
+.b-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+.b-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.b-colhead { padding: 0 2px; }
+
+/* Variant C: overview list + detail */
+.c-list { width: 360px; flex: none; border-right: 1px solid var(--line); overflow-y: auto; padding: 14px 12px; display: flex; flex-direction: column; gap: 12px; }
+.c-health { display: flex; align-items: center; gap: 10px; border: 1px solid color-mix(in oklch, var(--warning) 35%, transparent); background: color-mix(in oklch, var(--warning) 8%, transparent); border-radius: 6px; padding: 8px 10px; font-size: 12.5px; }
+.c-group { display: flex; flex-direction: column; }
+.c-group .hud { padding: 0 8px 4px; }
+.c-row { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; column-gap: 10px; padding: 6px 8px; border-radius: 4px; border: 0; background: transparent; color: var(--ink); text-align: left; cursor: pointer; font: 13px var(--sans); width: 100%; }
+.c-row:hover { background: color-mix(in oklch, var(--secondary) 50%, transparent); }
+.c-row.on { background: var(--fill); }
+.c-row .name { grid-column: 1; }
+.c-row .val { grid-column: 1; font: 11px var(--mono); color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.c-row .dot { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+.c-detail { flex: 1; min-width: 0; overflow-y: auto; padding: 18px 22px; }
+.c-detail .stack { max-width: 520px; display: flex; flex-direction: column; gap: 14px; }
+
+.caption { font-size: 13px; color: var(--muted-foreground); }
+
+/* Comparison */
+.score { font-family: var(--mono); font-size: 13px; white-space: nowrap; }
+.good { color: var(--ok); } .mid { color: var(--warn); } .weak { color: var(--bad); }
+
+.decide { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.decide .group { gap: 8px; }
+.decide .q { font-weight: 600; }
+
+@media (prefers-reduced-motion: no-preference) { .a-item, .c-row { transition: background 120ms, color 120ms; } }
+@media (max-width: 560px) { h1 { font-size: 1.6rem; } }
+</style>
+
+<div class="page">
+
+<header class="prose" style="display:flex;flex-direction:column;gap:12px">
+  <span class="eyebrow">Trackwall · Settings · 2026-10-27</span>
+  <h1>A new Settings layout: three proposals</h1>
+  <p class="lede">Settings was one column of seven sections, with more on the way. Below: an inventory of what is there and what is coming, one grouping shared by all variants, and three mockups. The mockups are clickable where changing a category shows something.</p>
+</header>
+
+<section class="block">
+  <span class="eyebrow">Inventory</span>
+  <h2>What Settings has today and what is coming</h2>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Section</th><th>Kind</th><th>Where from</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Projects folder</td><td><span class="kind set">setting</span></td><td>Settings</td><td>Path form, <code>projectsDir</code></td></tr>
+      <tr><td>Task worktrees folder</td><td><span class="kind set">setting</span></td><td>Settings</td><td>Path with “Reset”, <code>worktreesDir</code></td></tr>
+      <tr><td>Local config store</td><td><span class="kind state">state</span></td><td>Settings</td><td>Nothing to set: folder, last copy, push</td></tr>
+      <tr><td>Repo hosts</td><td><span class="kind set">setting</span></td><td>Settings</td><td>List of GitLab/GitHub hosts</td></tr>
+      <tr><td>Start at sign-in</td><td><span class="kind set">setting</span></td><td>Settings</td><td>One checkbox</td></tr>
+      <tr><td>Updates</td><td><span class="kind state">state</span></td><td>Settings</td><td>Version and “Check for updates”</td></tr>
+      <tr><td>Trackwall errors</td><td><span class="kind diag">diagnostics</span></td><td>PR #158</td><td>List of errors, can be long</td></tr>
+      <tr><td>Doctor</td><td><span class="kind diag">diagnostics</span></td><td>ADR-101, being built</td><td>List of checks with result and “how to fix”</td></tr>
+      <tr><td>Daemon (version, PID, uptime)</td><td><span class="kind diag">diagnostics</span></td><td>separate Daemon view (Ctrl+9)</td><td>Read only</td></tr>
+      <tr><td>Copilot CLI (MCP connection)</td><td><span class="kind set">instructions</span></td><td>Daemon view</td><td>A command to copy, done once</td></tr>
+      <tr><td>Secrets from mise</td><td><span class="kind state">state</span></td><td>ADR-93, stage 1 without UI</td><td>At most “set / missing” for names, never values</td></tr>
+      <tr><td><code>supervisor.changesCode</code></td><td><span class="kind yaml">yaml only</span></td><td>ADR-78</td><td>Today only by hand in <code>workspace.yaml</code></td></tr>
+      <tr><td><code>toolPermissions</code></td><td><span class="kind yaml">yaml only</span></td><td>ADR-66</td><td>Allow/deny rules for sessions, only by hand</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="callout prose">
+    <p><strong>The problem is not only the length.</strong> The column mixes three different things: settings changed once a month, state you glance at (config backup, updates), and diagnostics you open when something does not work (errors, doctor). On top of that, half of the diagnostics live in a separate Daemon view. Splitting the column into tabs does not fix that; the groups come first.</p>
+  </div>
+</section>
+
+<section class="block">
+  <span class="eyebrow">Shared by every variant</span>
+  <h2>Five groups</h2>
+  <p class="prose">All three mockups use the same grouping. Items in bold are not in Settings today.</p>
+  <div class="groups">
+    <div class="group"><span class="hud">Workspace</span><ul><li>Projects folder</li><li>Task worktrees folder</li><li>Local config backup</li></ul></div>
+    <div class="group"><span class="hud">Repo hosts</span><ul><li>GitLab and GitHub</li></ul></div>
+    <div class="group"><span class="hud">Agents</span><ul><li class="new"><strong>Copilot CLI (from Daemon)</strong></li><li class="new"><strong>Secrets from mise</strong></li><li class="new"><strong>Supervisor, tool permissions</strong> (later)</li></ul></div>
+    <div class="group"><span class="hud">App</span><ul><li>Start at sign-in</li><li>Updates</li></ul></div>
+    <div class="group"><span class="hud">Diagnostics</span><ul><li class="new"><strong>Doctor</strong></li><li>Trackwall errors</li><li class="new"><strong>Daemon (from the Daemon view)</strong></li></ul></div>
+  </div>
+</section>
+
+<!-- ======================= Variant A ======================= -->
+<section class="block">
+  <div class="variant-head"><span class="eyebrow">Variant A</span><h2>Categories on the left</h2><span class="badge-rec">chosen</span></div>
+  <p class="prose">Like settings in VS Code or the operating system: a narrow list of categories, and on the right only the sections of the chosen category, as wide as today. A category with a problem (doctor, a new error) has a dot, and so does the Settings icon in the view bar. The Daemon view leaves the bar, because its content moves into Diagnostics and Agents.</p>
+  <div class="window-scroll">
+    <div class="window" id="win-a">
+      <div class="activity" data-activity></div>
+      <div class="main">
+        <nav class="a-nav" aria-label="Settings categories">
+          <span class="hud">Settings</span>
+          <button class="a-item" data-cat="workspace">Workspace</button>
+          <button class="a-item" data-cat="hosts">Repo hosts<span class="dot warn" style="margin-left:auto"></span></button>
+          <button class="a-item" data-cat="agents">Agents</button>
+          <button class="a-item" data-cat="app">App</button>
+          <button class="a-item" data-cat="diagnostics">Diagnostics<span class="dot warn" style="margin-left:auto"></span></button>
+        </nav>
+        <div class="a-content"><div class="stack" id="a-stack"></div></div>
+      </div>
+    </div>
+  </div>
+  <p class="caption">Click a category. In a narrow window (with the supervisor panel widened) the category list folds into a horizontal bar above the content.</p>
+  <div class="proscons">
+    <div><span class="plus hud">For</span><ul>
+      <li>A short screen: at most four sections at once, and a new feature is a new item in a category, not a longer column.</li>
+      <li>Diagnostics apart from settings, and the dot says where to look.</li>
+      <li>Every category can have its own address, so an error notification opens Diagnostics directly.</li>
+      <li>Least new code: the Surface components stay, navigation is added.</li>
+    </ul></div>
+    <div><span class="minus hud">Against</span><ul>
+      <li>One more click to see something in another category.</li>
+      <li>Repo hosts as a category with one section looks a bit empty (it could go into Workspace for four categories).</li>
+    </ul></div>
+  </div>
+</section>
+
+<!-- ======================= Variant B ======================= -->
+<section class="block">
+  <div class="variant-head"><span class="eyebrow">Variant B</span><h2>Two columns: settings and state</h2></div>
+  <p class="prose">Still one scrolling page, but in two columns: on the left what you set, on the right what you watch. A sticky bar of jumps to the groups on top. The smallest change of habits.</p>
+  <div class="window-scroll">
+    <div class="window" id="win-b">
+      <div class="activity" data-activity data-keep-daemon></div>
+      <div class="main">
+        <div class="b-wrap">
+          <div class="b-toc">
+            <span class="b-chip">Workspace</span><span class="b-chip">Repo hosts <span class="dot warn"></span></span><span class="b-chip">Agents</span><span class="b-chip">App</span><span class="b-chip">Diagnostics <span class="dot warn"></span></span>
+          </div>
+          <div class="b-cols">
+            <div class="b-col" id="b-left"><span class="hud b-colhead">Settings</span></div>
+            <div class="b-col" id="b-right"><span class="hud b-colhead">Status</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="caption">Scroll inside the window. The right column grows with the list of errors.</p>
+  <div class="proscons">
+    <div><span class="plus hud">For</span><ul>
+      <li>Everything is visible at once, no looking for a category.</li>
+      <li>The simplest change in code: a grid instead of a column.</li>
+    </ul></div>
+    <div><span class="minus hud">Against</span><ul>
+      <li>Postpones the problem instead of solving it: a few features later both columns are long again.</li>
+      <li>Next to the supervisor panel two columns do not fit, and it is back to one.</li>
+      <li>The list of errors and the doctor stretch the right column, and the columns have uneven heights.</li>
+    </ul></div>
+  </div>
+</section>
+
+<!-- ======================= Variant C ======================= -->
+<section class="block">
+  <div class="variant-head"><span class="eyebrow">Variant C</span><h2>Overview with state and a details panel</h2></div>
+  <p class="prose">On the left every item as a row: name, current value and a state dot. The doctor result on top. Clicking a row opens its form on the right. Settings becomes the “does everything work” screen along the way.</p>
+  <div class="window-scroll">
+    <div class="window" id="win-c">
+      <div class="activity" data-activity></div>
+      <div class="main">
+        <div class="c-list" id="c-list">
+          <div class="c-health"><span class="dot warn"></span><span><strong>2 things need attention.</strong> Doctor checked 9 things 3 min ago.</span></div>
+        </div>
+        <div class="c-detail"><div class="stack" id="c-stack"></div></div>
+      </div>
+    </div>
+  </div>
+  <p class="caption">Click a row.</p>
+  <div class="proscons">
+    <div><span class="plus hud">For</span><ul>
+      <li>All values on one screen, without opening anything.</li>
+      <li>The doctor is not a separate section: its result sits next to the item it is about.</li>
+    </ul></div>
+    <div><span class="minus hud">Against</span><ul>
+      <li>Every section needs a one-line summary and a state: a lot of new code and new fields in the API.</li>
+      <li>The widest: list and details do not fit next to the supervisor panel.</li>
+      <li>Three levels (group, row, panel) is a lot for a dozen items.</li>
+    </ul></div>
+  </div>
+</section>
+
+<section class="block">
+  <span class="eyebrow">Comparison</span>
+  <h2>How they compare</h2>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Criterion</th><th>A · categories</th><th>B · two columns</th><th>C · overview</th></tr></thead>
+    <tbody>
+      <tr><td>Screen length in a year</td><td class="score good">short</td><td class="score weak">long again</td><td class="score mid">long list</td></tr>
+      <tr><td>Shows what does not work</td><td class="score good">dot on the category</td><td class="score mid">needs scrolling</td><td class="score good">dot on the item</td></tr>
+      <tr><td>Window with the supervisor panel</td><td class="score good">bar above the content</td><td class="score weak">back to one column</td><td class="score weak">too tight</td></tr>
+      <tr><td>Link straight to the place</td><td class="score good">yes, to the category</td><td class="score mid">anchor</td><td class="score good">yes, to the item</td></tr>
+      <tr><td>Cost of the change</td><td class="score good">small</td><td class="score good">smallest</td><td class="score weak">large (summaries in the API)</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="block">
+  <span class="eyebrow">Recommendation</span>
+  <h2>A, with one idea from C</h2>
+  <div class="prose" style="display:flex;flex-direction:column;gap:12px">
+    <p>Variant A: categories on the left, five groups, a dot on a category with a problem and a dot on the Settings icon in the view bar. From variant C only this: the doctor shows a link like “Fix in Repo hosts” next to a result and opens the right category. A full list with the state of every item costs a lot and gives little for a dozen items.</p>
+    <p><strong>Against the “let us split it into tabs” intuition:</strong> horizontal tabs on top were rejected. Five categories fit, but tabs do not show state as clearly, and in a narrow window they turn into a scrolling bar anyway. A settings search is not worth it either: for a dozen items it is more code than use.</p>
+    <p><strong>A move that needed approval:</strong> removing the Daemon view from the bar (Ctrl+9 and the macOS menu). Its table goes to Diagnostics, and the Copilot CLI connection to Agents. The bar has one icon less, and all diagnostics are in one place.</p>
+    <p><strong>Not in this change:</strong> showing <code>supervisor.changesCode</code> and <code>toolPermissions</code> in the UI. Those are separate features with their own decisions (on purpose only in yaml today), so the mockup shows only where they would go.</p>
+  </div>
+</section>
+
+<section class="block">
+  <span class="eyebrow">Decided</span>
+  <div class="decide">
+    <div class="group"><span class="q">1. Which variant?</span><span class="caption">A, built (ADR-102).</span></div>
+    <div class="group"><span class="q">2. Move the Daemon view into Settings?</span><span class="caption">Yes; the Daemon view and Ctrl+9 were removed.</span></div>
+    <div class="group"><span class="q">3. Repo hosts on their own or in Workspace?</span><span class="caption">On their own, because cloning settings join them.</span></div>
+  </div>
+</section>
+
+</div>
+
+<!-- ======================= Section library (shared by the mocks) ======================= -->
+<template id="s-projects"><div class="m-surface"><header><span class="hud">Projects folder</span></header><div class="m-body">
+  <p class="m-desc">The Repos view shows every git repo directly inside this folder. A repo cloned into it appears in the list on its own.</p>
+  <div class="m-row"><span class="m-input">C:\Users\me\Dev</span><span class="m-btn primary">Save</span></div>
+  <span class="m-key">workspace.yaml · projectsDir</span>
+</div></div></template>
+
+<template id="s-worktrees"><div class="m-surface"><header><span class="hud">Task worktrees folder</span></header><div class="m-body">
+  <p class="m-desc">Each agent task works in its own git worktree in this folder. Keep it on the same fast disk as your repos.</p>
+  <div class="m-row"><span class="m-input ph">C:\Users\me\Dev\.trackwall-worktrees</span><span class="m-btn primary">Save</span></div>
+  <span class="m-key">Empty: new tasks use the default above.</span>
+</div></div></template>
+
+<template id="s-localconfig"><div class="m-surface"><header><span class="hud">Local config backup</span></header><div class="m-body">
+  <p class="m-desc">mise.local.toml and .worktreeinclude of each repo, backed up into a git repo in your projects folder.</p>
+  <span class="mono" style="font-size:11.5px">C:\Users\me\Dev\.trackwall-local</span>
+  <span class="m-status"><span class="dot ok"></span>Backed up 4 min ago · pushed to origin</span>
+</div></div></template>
+
+<template id="s-hosts"><div class="m-surface"><header><span class="hud">Repo hosts</span></header><div class="m-body">
+  <p class="m-desc">Repos searches these hosts and clones in one click, through the glab and gh CLIs you are signed in to.</p>
+  <ul class="m-list">
+    <li><span class="hud" style="width:56px">GitLab</span><span class="grow mono">gitlab.example.com</span><span class="m-status"><span class="dot warn"></span>glab not signed in</span></li>
+    <li><span class="hud" style="width:56px">GitHub</span><span class="grow mono">github.com</span><span class="m-status"><span class="dot ok"></span>gh ok</span></li>
+  </ul>
+  <div class="m-row"><span class="m-input ph">Host name, without https://</span><span class="m-btn">Add</span></div>
+</div></div></template>
+
+<template id="s-copilot"><div class="m-surface"><header><span class="hud">Copilot CLI</span><span class="m-status"><span class="dot ok"></span>connected</span></header><div class="m-body">
+  <p class="m-desc">Gives Copilot CLI outside Trackwall a map of your repos. Run this once, then restart Copilot CLI:</p>
+  <div class="m-code">copilot mcp add trackwall -- "C:\Users\me\AppData\Local\Programs\Trackwall\trackwall-daemon.exe" --mcp-stdio</div>
+</div></div></template>
+
+<template id="s-secrets"><div class="m-surface"><header><span class="hud">Secrets from mise</span></header><div class="m-body">
+  <p class="m-desc">Sessions and tasks get the environment of their folder from mise. Names marked secret are masked in logs and passed to Copilot CLI as secret. Values are never shown here.</p>
+  <ul class="m-list">
+    <li><span class="grow mono">GITLAB_TOKEN</span><span class="m-status"><span class="dot ok"></span>set</span></li>
+    <li><span class="grow mono">JIRA_TOKEN</span><span class="m-status"><span class="dot ok"></span>set</span></li>
+    <li><span class="grow mono">SONAR_TOKEN</span><span class="m-status"><span class="dot"></span>missing</span></li>
+  </ul>
+</div></div></template>
+
+<template id="s-supervisor"><div class="m-surface"><header><span class="hud">Supervisor</span><span class="m-yaml">today: workspace.yaml only</span></header><div class="m-body">
+  <label class="m-check"><span class="m-box off"></span>Let the supervisor change code itself</label>
+  <p class="m-desc">Off: it coordinates through tasks and reads files, but does not write or run shell commands.</p>
+</div></div></template>
+
+<template id="s-permissions"><div class="m-surface"><header><span class="hud">Tool permissions</span><span class="m-yaml">today: workspace.yaml only</span></header><div class="m-body">
+  <ul class="m-list">
+    <li><span class="grow mono">deny shell(git push)</span><span class="m-key">all sessions</span></li>
+    <li><span class="grow mono">allow shell(mvn:*)</span><span class="m-key">orders-*</span></li>
+  </ul>
+  <span class="m-btn link">Open workspace.yaml</span>
+</div></div></template>
+
+<template id="s-signin"><div class="m-surface"><header><span class="hud">Start at sign-in</span></header><div class="m-body">
+  <label class="m-check"><span class="m-box">✓</span>Start Trackwall when I sign in to Windows</label>
+</div></div></template>
+
+<template id="s-updates"><div class="m-surface"><header><span class="hud">Updates</span></header><div class="m-body">
+  <p style="font-size:12.5px">Trackwall 0.5.5 is the latest version.</p>
+  <div class="m-row"><span class="m-btn">Check for updates</span></div>
+</div></div></template>
+
+<template id="s-doctor"><div class="m-surface"><header><span class="hud">Doctor</span><span class="m-key">3 min ago</span></header><div class="m-body">
+  <ul class="m-list">
+    <li><span class="dot ok"></span><span class="grow">Copilot CLI 1.0.103, signed in</span></li>
+    <li><span class="dot ok"></span><span class="grow">git, mise and the projects folder</span></li>
+    <li><span class="dot warn"></span><span class="grow">glab is not signed in to gitlab.example.com</span><span class="m-btn link">Fix in Repo hosts</span></li>
+    <li><span class="dot warn"></span><span class="grow">SONAR_TOKEN is missing in mise</span><span class="m-btn link">Show in Agents</span></li>
+  </ul>
+  <div class="m-row"><span class="m-btn">Run again</span></div>
+</div></div></template>
+
+<template id="s-errors"><div class="m-surface"><header><span class="hud">Trackwall errors</span><span class="m-key">2</span></header><div class="m-body">
+  <div class="m-err"><span>Daemon · sync</span><span class="m-key">today 14:02 · 3 times</span><span class="msg">git fetch timed out after 30 s</span><span class="where">modules/sync/fetch.ts:88</span></div>
+  <div class="m-err"><span>Window · Sessions</span><span class="m-key">yesterday 18:40</span><span class="msg">Cannot read properties of undefined (reading 'taskId')</span><span class="where">views/sessions/TaskTile.tsx:41</span></div>
+  <div class="m-row"><span class="m-btn">Clear</span><span class="m-btn ghost">Refresh</span></div>
+</div></div></template>
+
+<template id="s-daemon"><div class="m-surface"><header><span class="hud">Daemon</span><span class="m-status"><span class="dot ok"></span>connected</span></header><div class="m-body">
+  <dl class="m-dl"><dt>Version</dt><dd>0.5.5</dd><dt>Runtime</dt><dd>bun 1.3.1</dd><dt>Platform</dt><dd>win32 / x64</dd><dt>Uptime</dt><dd>3 h 12 min</dd><dt>State</dt><dd>C:\Users\me\.trackwall</dd></dl>
+</div></div></template>
+
+<script>
+(function () {
+  "use strict";
+  var ICONS = {
+    home: '<circle cx="12" cy="12" r="3"/><ellipse cx="12" cy="12" rx="9" ry="4"/>',
+    repos: '<path d="M4 6h6l2 2h8v10H4z"/>',
+    sessions: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10l3 2-3 2M12 15h4"/>',
+    graph: '<circle cx="6" cy="6" r="2"/><circle cx="18" cy="8" r="2"/><circle cx="10" cy="18" r="2"/><path d="M8 7l8 1M7 8l2 8M16 10l-5 7"/>',
+    daemon: '<path d="M3 12h4l3-7 4 14 3-7h4"/>',
+    settings: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>'
+  };
+  function svg(name) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + ICONS[name] + "</svg>"; }
+
+  document.querySelectorAll("[data-activity]").forEach(function (bar) {
+    var keepDaemon = bar.hasAttribute("data-keep-daemon");
+    var html = ["home", "repos", "sessions", "graph"].map(function (n) { return '<span class="act">' + svg(n) + "</span>"; }).join("");
+    html += '<span class="spacer"></span>';
+    if (keepDaemon) html += '<span class="act">' + svg("daemon") + "</span>";
+    html += '<span class="act on">' + svg("settings") + '<span class="pip"></span></span>';
+    bar.innerHTML = html;
+  });
+
+  function section(id) {
+    var t = document.getElementById("s-" + id);
+    return t ? t.content.cloneNode(true) : document.createDocumentFragment();
+  }
+
+  // Variant A
+  var CATS = {
+    workspace: { title: "Workspace", desc: "Where your repos and task worktrees live.", items: ["projects", "worktrees", "localconfig"] },
+    hosts: { title: "Repo hosts", desc: "Hosts that Repos searches and clones from.", items: ["hosts"] },
+    agents: { title: "Agents", desc: "What Copilot CLI sessions get from Trackwall.", items: ["copilot", "secrets", "supervisor", "permissions"] },
+    app: { title: "App", desc: "The desktop app on this computer.", items: ["signin", "updates"] },
+    diagnostics: { title: "Diagnostics", desc: "When something does not work.", items: ["doctor", "errors", "daemon"] }
+  };
+  var aStack = document.getElementById("a-stack");
+  function showA(cat) {
+    var c = CATS[cat];
+    aStack.innerHTML = '<div class="a-title"><h4>' + c.title + '</h4><span class="m-desc">' + c.desc + "</span></div>";
+    c.items.forEach(function (id) { aStack.appendChild(section(id)); });
+    document.querySelectorAll("#win-a .a-item").forEach(function (b) {
+      var on = b.getAttribute("data-cat") === cat;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-current", on ? "page" : "false");
+    });
+  }
+  document.querySelectorAll("#win-a .a-item").forEach(function (b) {
+    b.addEventListener("click", function () { showA(b.getAttribute("data-cat")); });
+  });
+  showA("diagnostics");
+
+  // Variant B
+  var left = document.getElementById("b-left"), right = document.getElementById("b-right");
+  ["projects", "worktrees", "hosts", "copilot", "supervisor", "permissions", "signin"].forEach(function (id) { left.appendChild(section(id)); });
+  ["doctor", "updates", "localconfig", "secrets", "errors", "daemon"].forEach(function (id) { right.appendChild(section(id)); });
+
+  // Variant C
+  var ROWS = [
+    ["Workspace", [["projects", "Projects folder", "C:\\Users\\me\\Dev", "ok"], ["worktrees", "Task worktrees folder", "Default", "ok"], ["localconfig", "Local config backup", "4 min ago, pushed", "ok"]]],
+    ["Repo hosts", [["hosts", "Repo hosts", "gitlab.example.com, github.com", "warn"]]],
+    ["Agents", [["copilot", "Copilot CLI", "Connected", "ok"], ["secrets", "Secrets from mise", "2 of 3 set", "warn"], ["supervisor", "Supervisor", "Coordinates only", ""], ["permissions", "Tool permissions", "2 rules", ""]]],
+    ["App", [["signin", "Start at sign-in", "On", ""], ["updates", "Updates", "0.5.5, latest", "ok"]]],
+    ["Diagnostics", [["errors", "Trackwall errors", "2 errors, last today 14:02", "bad"], ["daemon", "Daemon", "bun 1.3.1, up 3 h", "ok"]]]
+  ];
+  var list = document.getElementById("c-list"), cStack = document.getElementById("c-stack");
+  ROWS.forEach(function (g) {
+    var group = document.createElement("div");
+    group.className = "c-group";
+    group.innerHTML = '<span class="hud">' + g[0] + "</span>";
+    g[1].forEach(function (r) {
+      var b = document.createElement("button");
+      b.className = "c-row";
+      b.setAttribute("data-id", r[0]);
+      b.innerHTML = '<span class="name">' + r[1] + '</span><span class="dot ' + r[3] + '"></span><span class="val">' + r[2] + "</span>";
+      b.addEventListener("click", function () { showC(r[0]); });
+      group.appendChild(b);
+    });
+    list.appendChild(group);
+  });
+  function showC(id) {
+    cStack.innerHTML = "";
+    cStack.appendChild(section(id));
+    if (id === "hosts" || id === "secrets") cStack.appendChild(section("doctor"));
+    list.querySelectorAll(".c-row").forEach(function (b) { b.classList.toggle("on", b.getAttribute("data-id") === id); });
+  }
+  showC("hosts");
+})();
+</script>
+</body>
+</html>

@@ -45,6 +45,7 @@ import type { ErrorJournalWorkspace } from "./modules/error-journal/known-values
 import { Graph } from "./modules/graph/graph.ts";
 import { JavaNavigation } from "./modules/java-navigation/java-navigation.ts";
 import { JDTLS_JAVA, JDTLS_RELEASE, LOMBOK_RELEASE, type PinnedRelease } from "./modules/java-navigation/pinned-releases.ts";
+import { Knowledge } from "./modules/knowledge/knowledge.ts";
 import { LocalConfig } from "./modules/local-config/local-config.ts";
 import { Logs } from "./modules/logs/logs.ts";
 import { McpAudit } from "./modules/mcp-audit/mcp-audit.ts";
@@ -87,6 +88,8 @@ export interface Facade {
   board: Board;
   /** Saved tasks the user runs by hand, in `.trackwall/routines` of the projects folder, with their approvals (ADR-173). */
   routines: Routines;
+  /** Short facts about the user's repos in `.trackwall/knowledge` of the projects folder, with their approvals (ADR-170). */
+  knowledge: Knowledge;
   services: Services;
   testReports: TestReports;
   verifications: Verifications;
@@ -152,6 +155,7 @@ const CARDS_DIR = "cards";
 const LOCAL_CONFIG_PUSH_DIR = "local-config-push";
 const DAY_START_FILE = "day-start.json";
 const ROUTINE_APPROVALS_FILE = "routine-approvals.json";
+const KNOWLEDGE_APPROVALS_FILE = "knowledge-approvals.json";
 const LOGS_DIR = "logs";
 /** The limit of one source JSONL file; with the previous file after rotation a source takes at most twice that. */
 const LOG_FILE_MAX_BYTES = 10 * 1024 * 1024;
@@ -265,6 +269,11 @@ export function createFacade(o: FacadeOptions): Facade {
     approvalsFile: join(o.home, ROUTINE_APPROVALS_FILE),
     log: o.log,
   });
+  const knowledge = new Knowledge({
+    projectsDir: () => workspace.projectsDir(),
+    approvalsFile: join(o.home, KNOWLEDGE_APPROVALS_FILE),
+    log: o.log,
+  });
   const taskJournal = new TaskJournal({
     file: join(o.home, TASK_JOURNAL_FILE),
     log: o.log,
@@ -288,7 +297,10 @@ export function createFacade(o: FacadeOptions): Facade {
     sessionMcpServer: o.sessionMcpServer,
     openEditor,
     boardHas: (item) => board.has(item),
-    // `verifications` is made below; a task ends only after both exist.
+    knowledge: (repo) => knowledge.forSession(repo),
+    // `verifications` and `mergeRequests` are made below: the outcomes are read only once a supervisor gets a prompt,
+    // and a task ends only after both exist.
+    taskOutcomes,
     onTaskRemoved: (ended) => {
       logs.removeTaskLogs(ended.task);
       const last = verifications.take(ended.task);
@@ -391,6 +403,7 @@ export function createFacade(o: FacadeOptions): Facade {
       "task-journal-file": join(o.home, TASK_JOURNAL_FILE),
       "day-start-file": join(o.home, DAY_START_FILE),
       "routine-approvals-file": join(o.home, ROUTINE_APPROVALS_FILE),
+      "knowledge-approvals-file": join(o.home, KNOWLEDGE_APPROVALS_FILE),
       "cards-dir": join(o.home, CARDS_DIR),
       "logs-dir": join(o.home, LOGS_DIR),
       "local-config-push-repo": join(o.home, LOCAL_CONFIG_PUSH_DIR),
@@ -411,6 +424,16 @@ export function createFacade(o: FacadeOptions): Facade {
     openEditor: (path) => o.openUrl(vscodeUrl(path)),
     openFolder: o.openFolder,
   });
+  /** The outcome of every task with a verification or a merge request (ADR-154), for the UI and the supervisor (ADR-156). */
+  function taskOutcomes(): TaskOutcome[] {
+    const followed = mergeRequests.followed();
+    return agents.tasks().flatMap((task) => {
+      const verification = verifications.get(task.id)?.state ?? null;
+      const mergeRequest = followed.get(task.id) ?? null;
+      return verification === null && mergeRequest === null ? [] : [{ task: task.id, repo: task.repo, verification, mergeRequest }];
+    });
+  }
+
   return {
     workspace,
     repoWatch,
@@ -423,6 +446,7 @@ export function createFacade(o: FacadeOptions): Facade {
     batch,
     board,
     routines,
+    knowledge,
     agents,
     services,
     testReports,
@@ -451,14 +475,7 @@ export function createFacade(o: FacadeOptions): Facade {
       const read = await cards.appConfig(dir, { profile, key }, { vars: run.env, mask });
       return { repo, task, profile, ...read, envProblem: run.problem === null ? null : mask(run.problem) };
     },
-    taskOutcomes: () => {
-      const followed = mergeRequests.followed();
-      return agents.tasks().flatMap((task) => {
-        const verification = verifications.get(task.id)?.state ?? null;
-        const mergeRequest = followed.get(task.id) ?? null;
-        return verification === null && mergeRequest === null ? [] : [{ task: task.id, repo: task.repo, verification, mergeRequest }];
-      });
-    },
+    taskOutcomes,
     keepForRestart: () => {
       agents.keepRunningSessionsForResume();
       verifications.keepForRestart();

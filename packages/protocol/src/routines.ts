@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { Task, TaskApprovals, TaskModel, TaskPrompt, TaskTitle, visibleText } from "./agents.ts";
 import { apiEndpoints, Done } from "./api.ts";
+import { ContentDigest, fileName } from "./approved-file.ts";
 import { SessionView } from "./conversation.ts";
 import { RepoId } from "./workspace.ts";
 
@@ -15,15 +16,11 @@ import { RepoId } from "./workspace.ts";
 
 /** The routine's name, also its file name without `.md`: lowercase words joined by `-`, e.g. `update-orders-client`. */
 export const ROUTINE_NAME_MAX = 60;
-export const RoutineName = z
-  .string()
-  .min(1)
-  .max(ROUTINE_NAME_MAX)
-  .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "a routine name is lowercase letters and digits in words joined by -");
+export const RoutineName = fileName(ROUTINE_NAME_MAX, "a routine name");
 export type RoutineName = z.infer<typeof RoutineName>;
 
 /** SHA-256 of a routine file's bytes, in hex: what the user approved, and what an approval or a run names. */
-export const RoutineDigest = z.string().regex(/^[0-9a-f]{64}$/, "a digest is 64 hex digits");
+export const RoutineDigest = ContentDigest;
 export type RoutineDigest = z.infer<typeof RoutineDigest>;
 
 /**

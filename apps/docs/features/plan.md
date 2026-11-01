@@ -16,7 +16,7 @@ Write ideas down before they slip away, split business projects into tasks and s
 
 ## How it works
 
-"Plan" has three columns. On the left are the "Inbox" with the ideas you have not filed yet, your active projects, and a line to add a project. In the middle is the selected place: the inbox's ideas, or a project's items as an outline. On the right is the selected item: its title, its plan and notes, a link to its ticket, its column ("Idea", "Ready", "In progress", "In review", "Done", "Dropped"), the repos it is about, and the tasks started on it.
+"Plan" has three columns. On the left are the "Inbox" with the ideas you have not filed yet, your [workspace knowledge](/features/knowledge), your active projects, and a line to add a project. In the middle is the selected place: the inbox's ideas, or a project's items as an outline. On the right is the selected item: its title, its plan and notes, a link to its ticket, its column ("Idea", "Ready", "In progress", "In review", "Done", "Dropped"), the repos it is about, and the tasks started on it.
 
 Press Alt+N anywhere in Trackwall to write an idea. Enter saves it into the inbox, and the keyboard goes back where it was. When you are ready to deal with an idea, select it and choose a project under "Filed in"; it becomes an item at the top of that project.
 

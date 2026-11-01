@@ -3,6 +3,7 @@ import { z } from "zod";
 import { SessionId, TaskId, TaskModel } from "../src/agents.ts";
 import { BoardItemId } from "../src/board.ts";
 import { TagName } from "../src/cards.ts";
+import { KnowledgeName } from "../src/knowledge.ts";
 import { mcpTools } from "../src/mcp.ts";
 import { MiseRunArgument, MiseTaskName } from "../src/mise.ts";
 import { RoutineName } from "../src/routines.ts";
@@ -15,7 +16,18 @@ import { RepoId } from "../src/workspace.ts";
  * argument (ADR-158) is one word without spaces, only for a task whose usage declares it, and already in the daemon log
  * line of `run_mise_task`; the audit keeps it as the log does.
  */
-const IDENTIFIERS: z.ZodType[] = [RepoId, TaskId, SessionId, BoardItemId, TagName, MiseTaskName, TaskModel, RoutineName, MiseRunArgument];
+const IDENTIFIERS: z.ZodType[] = [
+  RepoId,
+  TaskId,
+  SessionId,
+  BoardItemId,
+  TagName,
+  MiseTaskName,
+  TaskModel,
+  RoutineName,
+  KnowledgeName,
+  MiseRunArgument,
+];
 
 /** The schema under `.optional()`, `.default()`, `.nullable()` and `z.array()`. */
 function inner(schema: z.ZodType): z.ZodType {

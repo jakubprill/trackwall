@@ -54,6 +54,7 @@ import { LOG_BUFFER_RECORDS, LOG_ERRORS_MAX, LOG_TAIL_MAX, LogErrorLevel, LogErr
 import { GET_CHANGED_ENDPOINTS, GET_REPO, LIST_REPOS, PROPOSE_TASK, REPORT_RESULT, RepoArg, RUN_MISE_TASK } from "./mcp-args.ts";
 import type { McpCallEffect } from "./mcp-audit.ts";
 import { boardMcpTools, ItemArg, LIST_ITEMS } from "./mcp-board.ts";
+import { knowledgeMcpTools } from "./mcp-knowledge.ts";
 import { routineMcpTools } from "./mcp-routines.ts";
 import { MiseRunArguments, MiseTaskName, MiseTasks, RunningMiseTask } from "./mise.ts";
 import { RunState } from "./procs.ts";
@@ -752,7 +753,7 @@ export const mcpTools = {
       `itself; ${GET_TASK_CHANGES} adds the diff. changes: null with changesError when they cannot be computed ` +
       `(e.g. the worktree was deleted or the task is being ended). verification is the task's last ${VERIFY_TASK} result ` +
       "(passed, failed with the first failed tests and errors, running, cancelled), null before the first one. javaNavigation, " +
-      "for a task with Java navigation, says whether its lsp tool can answer: starting, importing (since), stalled (importing " +
+      "for a task or a session in a repo root with Java navigation, says whether its lsp tool can answer: starting, importing (since), stalled (importing " +
       "past the limit), ready, or failed with jdtls's first error (e.g. a Gradle import that needs a JDK that is missing); " +
       "lsp answers come back empty until ready.",
     args: z.object({ session: SessionId.describe(`session id from ${LIST_SESSIONS} (the id field)`) }).strict(),
@@ -890,6 +891,7 @@ export const mcpTools = {
     result: ProposeTaskResult,
   },
   ...routineMcpTools,
+  ...knowledgeMcpTools,
   ...boardMcpTools,
   reportResult: {
     name: REPORT_RESULT,

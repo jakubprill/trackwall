@@ -14,7 +14,8 @@
       "!**/*.json.tmp",
       "!apps/desktop/src-tauri/icons",
       "!pnpm-lock.yaml",
-      "!**/*.md"
+      "!**/*.md",
+      "!apps/design/mockups"
     ]
   },
   "formatter": {
@@ -167,6 +168,7 @@
                       "!../../infra/file-key.ts",
                       "!../../infra/regular-file.ts",
                       "!../../infra/frontmatter.ts",
+                      "!../../infra/approved-folder.ts",
                       "!../../infra/remove-folder.ts",
                       "!../../infra/run-program.ts",
                       "!../../infra/trackwall-dir.ts",

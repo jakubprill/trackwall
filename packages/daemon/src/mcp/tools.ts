@@ -28,7 +28,8 @@ import { itemSummaries, matchesItem } from "./board-items.ts";
  * (§1.1). None changes the configuration or a repo (§8), none answers in a session or stops one, and only `resume_task`
  * starts one: a new session of a task the user already approved, in its own worktree (ADR-90). Only
  * `propose_task` (a proposal, which only the user turns into a task in the UI), `propose_routine` (a routine file,
- * which runs only once the user approves its content in the UI, ADR-173), `report_result` (the summary of the
+ * which runs only once the user approves its content in the UI, ADR-173), `propose_knowledge` (an entry of workspace
+ * knowledge, which reaches sessions only once the user approves its content, ADR-170), `report_result` (the summary of the
  * session's own task), ADR-39, and `create_item` and `update_item` (the user's board, from which nothing starts by
  * itself, ADR-133) write anything, `get_review_comments` marks the user's review comments read (ADR-62),
  * `send_message` queues text for the session of a task the caller proposed, and `get_messages` and `get_updates` mark
@@ -234,7 +235,10 @@ const runs: ToolRuns = {
   },
   getSession: async (facade, { session: id }) => {
     const session = agentSession(facade.agents.session(id));
-    if (session.task === null) return { session, task: null, changes: null, changesError: null, verification: null, javaNavigation: null };
+    if (session.task === null) {
+      const javaNavigation = await facade.agents.sessionJavaNavigation(id);
+      return { session, task: null, changes: null, changesError: null, verification: null, javaNavigation };
+    }
     const task = facade.agents.task(session.task);
     const verification = facade.verifications.get(task.id);
     // The session and the task exist even when the changes cannot be computed (worktree deleted by hand, ending in progress).
@@ -271,6 +275,13 @@ const runs: ToolRuns = {
     // `repoPath` refuses a repo that is not in the projects folder before a file exists (`not_found`).
     await facade.workspace.repoPath(routine.repo);
     return { routine: await facade.routines.save({ ...routine, model: model ?? null, approvals: approvals ?? "ask" }) };
+  },
+  listKnowledge: async (facade, filter) => ({ entries: await facade.knowledge.approved(filter) }),
+  proposeKnowledge: async (facade, entry, { caller }) => {
+    // `repoPath` refuses a repo that is not in the projects folder before a file exists (`not_found`).
+    for (const repo of entry.repos) await facade.workspace.repoPath(repo);
+    const { task } = await facade.agents.findingsPlace(caller);
+    return { entry: await facade.knowledge.propose(entry, task) };
   },
   listItems: async (facade, filter) => {
     const { items } = await facade.board.board();
@@ -376,6 +387,8 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.proposeTask, runs.proposeTask),
   defineTool(mcpTools.proposeFolderAction, runs.proposeFolderAction),
   defineTool(mcpTools.proposeRoutine, runs.proposeRoutine),
+  defineTool(mcpTools.listKnowledge, runs.listKnowledge),
+  defineTool(mcpTools.proposeKnowledge, runs.proposeKnowledge),
   defineTool(mcpTools.listItems, runs.listItems),
   defineTool(mcpTools.getItem, runs.getItem),
   defineTool(mcpTools.createItem, runs.createItem),

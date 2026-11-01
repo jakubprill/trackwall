@@ -11,6 +11,8 @@ const MAIN = {
   task: null,
   hasConversation: true,
   view: "terminal" as const,
+  model: "claude-opus-5.5",
+  javaNavigation: true,
 };
 const SUPERVISOR = {
   session: "0b6c9e1a-7d2f-4c3b-8e5a-9f1d2c3b4a5e",
@@ -19,6 +21,8 @@ const SUPERVISOR = {
   task: null,
   hasConversation: false,
   view: "terminal" as const,
+  model: null,
+  javaNavigation: false,
 };
 
 function newPath(): string {
@@ -62,6 +66,13 @@ describe("the list of sessions a restart resumes", () => {
 
     expect(new ResumableSessions(path, (msg) => log.push(msg)).read()).toEqual([]);
     expect(log[0]).toContain("no session is resumed");
+  });
+
+  test("Java navigation without a repo breaks the file, so a hand edit never starts jdtls in the projects folder (ADR-175)", () => {
+    const path = newPath();
+    writeFileSync(path, JSON.stringify({ sessions: [{ ...SUPERVISOR, javaNavigation: true }] }));
+
+    expect(new ResumableSessions(path, () => {}).read()).toEqual([]);
   });
 
   test("without a file there is nothing to resume", () => {
@@ -130,5 +141,13 @@ describe("how a start goes on with a session's conversation", () => {
     writeFileSync(path, JSON.stringify({ sessions: [older] }));
 
     expect(new ResumableSessions(path, () => {}).read()).toEqual([MAIN]);
+  });
+
+  test("a file of a Trackwall before main sessions had start options resumes them on the default model, without Java navigation (ADR-175)", () => {
+    const path = newPath();
+    const { model: _, javaNavigation: __, ...older } = MAIN;
+    writeFileSync(path, JSON.stringify({ sessions: [older] }));
+
+    expect(new ResumableSessions(path, () => {}).read()).toEqual([{ ...MAIN, model: null, javaNavigation: false }]);
   });
 });

@@ -5,12 +5,13 @@ import {
   type JavaNavigationState,
   type JavaNavigationStatus,
   type RepoTag,
+  type Session,
   type SessionView,
 } from "@trackwall/protocol";
 import type { StatusTone } from "./repo-status.ts";
 
 /**
- * Whether the New session form offers Java navigation (ADR-99) for a task in a repo: only in a repo tagged `java`, and
+ * Whether the New session form offers Java navigation (ADR-99) for a task or session in a repo (ADR-175): only in a repo tagged `java`, and
  * there either ready or unavailable with the reason, so that the user sees the option and what it still needs.
  */
 export type JavaNavigationOffer = { kind: "hidden" } | { kind: "ready" } | { kind: "unavailable"; reason: string };
@@ -27,12 +28,20 @@ export function javaNavigationOffer(tags: readonly RepoTag[] | undefined, state:
 }
 
 /**
- * The offer for a task shown in `view`: Java navigation needs a terminal for now (ADR-137), so in the conversation view
+ * The offer for a task or session shown in `view`: Java navigation needs a terminal for now (ADR-137), so in the conversation view
  * an offer the repo has becomes unavailable, saying how to get it back.
  */
 export function javaNavigationInView(offer: JavaNavigationOffer, view: SessionView): JavaNavigationOffer {
   if (offer.kind !== "ready" || view === "terminal") return offer;
   return { kind: "unavailable", reason: "Needs the terminal for now: turn Chat off to use it." };
+}
+
+/**
+ * Whether a session's header asks the daemon how its jdtls is doing (ADR-175): a running main session in a repo, in a
+ * terminal, the only kind that can have one of its own; a task's session shows the task's in the task's header.
+ */
+export function asksSessionJavaNavigation(session: Session, running: boolean): boolean {
+  return running && session.repo !== null && session.task === null && session.view === "terminal";
 }
 
 /** The tone of the install's state line in Settings › Agents. */
@@ -56,7 +65,7 @@ export function javaNavigationSetup(install: JavaNavigationInstall): { line: str
       tone: "warning",
       button,
     };
-  return { line: "Ready: tasks in Java repos can get it on the New session form.", tone: "ok", button };
+  return { line: "Ready: tasks and sessions in Java repos can get it on the New session form.", tone: "ok", button };
 }
 
 /**

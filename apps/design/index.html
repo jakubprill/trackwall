@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Trackwall design gallery</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+/* The gallery page (ADR-176): the design tokens, then every mockup by view, with its state and a live preview. */
+body { line-height: 1.5; background-image: linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px); background-size: 24px 24px; }
+main { max-width: 1240px; margin: 0 auto; padding-block: 32px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 40px; }
+h1 { font-size: 26px; margin: 4px 0 8px; text-wrap: balance; }
+h2 { font-size: 18px; margin: 0 0 12px; }
+h3 { font-size: 15px; margin: 0; }
+p { margin: 0; color: var(--muted-foreground); max-width: 75ch; }
+a { color: var(--primary); }
+code { font-family: var(--font-mono); font-size: 12px; }
+.hud { font-family: var(--font-mono); font-size: 11px; letter-spacing: var(--tracking-hud); text-transform: uppercase; color: var(--muted-foreground); }
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.swatch { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--card); }
+.swatch i { display: block; height: 44px; border-bottom: 1px solid var(--border); }
+.swatch span { display: block; padding: 6px 8px; font-family: var(--font-mono); font-size: 11px; }
+.type { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+.type > div { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); padding: 12px; }
+.view { display: flex; flex-direction: column; gap: 12px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
+.card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); display: flex; flex-direction: column; min-width: 0; }
+.card:hover { border-color: color-mix(in oklch, var(--primary) 50%, transparent); }
+.preview { position: relative; height: 210px; overflow: hidden; border-bottom: 1px solid var(--border); background: var(--background); }
+.preview iframe { position: absolute; top: 0; left: 0; width: 1280px; height: 840px; border: 0; transform: scale(0.27); transform-origin: 0 0; pointer-events: none; }
+.preview a { position: absolute; inset: 0; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.meta { padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+.row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.state { font-family: var(--font-mono); font-size: 11px; border-radius: 999px; padding: 0 8px; border: 1px solid var(--border); }
+.state.built { color: var(--success); border-color: color-mix(in oklch, var(--success) 40%, transparent); }
+.state.proposed { color: var(--warning); border-color: color-mix(in oklch, var(--warning) 40%, transparent); }
+.state.rejected { color: var(--muted-foreground); }
+.variants { font-size: 13px; color: var(--muted-foreground); }
+.variants b { color: var(--foreground); font-weight: 600; }
+@media (max-width: 420px) { .cards { grid-template-columns: minmax(0, 1fr); } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="hud">Trackwall // design gallery</div>
+    <h1>Every mockup in one place</h1>
+    <p>The mockups made before building Trackwall's views, each in the app's own tokens, with the variants that were proposed and what was chosen. A mockup is a design record: it shows the proposal as it was decided, and the app may have moved on since. Open a card to click through the mockup.</p>
+  </header>
+
+  <section aria-labelledby="tokens">
+    <h2 id="tokens">Tokens</h2>
+    <p style="margin-bottom:12px">One dark theme (ADR-16). Cyan marks what is active; green, yellow and red speak only of state. The values are those of <code>packages/ui/src/index.css</code>.</p>
+    <div class="swatches">
+      <div class="swatch"><i style="background:var(--background)"></i><span>background</span></div>
+      <div class="swatch"><i style="background:var(--card)"></i><span>card</span></div>
+      <div class="swatch"><i style="background:var(--secondary)"></i><span>secondary</span></div>
+      <div class="swatch"><i style="background:var(--accent)"></i><span>accent</span></div>
+      <div class="swatch"><i style="background:var(--foreground)"></i><span>foreground</span></div>
+      <div class="swatch"><i style="background:var(--muted-foreground)"></i><span>muted-foreground</span></div>
+      <div class="swatch"><i style="background:var(--primary)"></i><span>primary</span></div>
+      <div class="swatch"><i style="background:var(--success)"></i><span>success</span></div>
+      <div class="swatch"><i style="background:var(--warning)"></i><span>warning</span></div>
+      <div class="swatch"><i style="background:var(--destructive)"></i><span>destructive</span></div>
+      <div class="swatch"><i style="background:var(--border)"></i><span>border</span></div>
+    </div>
+    <div class="type" style="margin-top:10px">
+      <div><div class="hud">font-sans</div><div style="font-size:18px">Sessions waiting for you</div></div>
+      <div><div class="hud">font-mono</div><div style="font-family:var(--font-mono)">mise run test · 42 passed</div></div>
+      <div><div class="hud">HUD label</div><div class="hud" style="color:var(--foreground)">Sessions // 03</div></div>
+    </div>
+  </section>
+
+  <section class="view" aria-labelledby="sessions">
+    <h2 id="sessions">Sessions</h2>
+    <div class="cards">
+      <article class="card">
+        <div class="preview"><iframe src="mockups/task-proposals.html" title="Task proposals" loading="lazy" tabindex="-1"></iframe><a href="mockups/task-proposals.html" tabindex="-1"><span class="sr">Open the Task proposals mockup</span></a></div>
+        <div class="meta">
+          <div class="row"><h3><a href="mockups/task-proposals.html">Task proposals</a></h3><span class="state built">built · ADR-55</span></div>
+          <p class="variants"><b>A</b> a proposal inbox in Sessions, chosen with two parts of <b>B</b> (actions on the grid tile, Alt+J through proposals); <b>C</b> a drawer next to the main session, left for later.</p>
+        </div>
+      </article>
+      <article class="card">
+        <div class="preview"><iframe src="mockups/task-notices.html" title="Task notices" loading="lazy" tabindex="-1"></iframe><a href="mockups/task-notices.html" tabindex="-1"><span class="sr">Open the Task notices mockup</span></a></div>
+        <div class="meta">
+          <div class="row"><h3><a href="mockups/task-notices.html">Task notices</a></h3><span class="state built">built · ADR-91</span></div>
+          <p class="variants">One strip of chips in the one-entry layout; a badge with an overlay and a banner on a grid tile.</p>
+        </div>
+      </article>
+      <article class="card">
+        <div class="preview"><iframe src="mockups/task-tile.html" title="Task tile in the grid" loading="lazy" tabindex="-1"></iframe><a href="mockups/task-tile.html" tabindex="-1"><span class="sr">Open the Task tile mockup</span></a></div>
+        <div class="meta">
+          <div class="row"><h3><a href="mockups/task-tile.html">Task tile in the grid</a></h3><span class="state built">built</span></div>
+          <p class="variants">A one-line header with a “Trust mise” chip, ⚠ and the Verify result; the rest in the ⋯ menu; opaque cards over the terminal.</p>
+        </div>
+      </article>
+      <article class="card">
+        <div class="preview"><iframe src="mockups/session-start-form.html" title="Session and task start form" loading="lazy" tabindex="-1"></iframe><a href="mockups/session-start-form.html" tabindex="-1"><span class="sr">Open the start form mockup</span></a></div>
+        <div class="meta">
+          <div class="row"><h3><a href="mockups/session-start-form.html">Session and task start form</a></h3><span class="state built">built</span></div>
+          <p class="variants">Pills instead of checkboxes, shown only where they make sense, with the risk and cost next to each.</p>
+        </div>
+      </article>
+      <article class="card">
+        <div class="preview"><iframe src="mockups/session-environment-tile.html" title="Session environment on a grid tile" loading="lazy" tabindex="-1"></iframe><a href="mockups/session-environment-tile.html" tabindex="-1"><span class="sr">Open the session environment mockup</span></a></div>
+        <div class="meta">
+          <div class="row"><h3><a href="mockups/session-environment-tile.html">Session environment on a grid tile</a></h3><span class="state built">built · ADR-93</span></div>
+          <p class="variants"><b>Chosen</b> a 🔑 chip with a card of variable names; <b>rejected</b> a browser tooltip, a bar under the header, the notice badge.</p>
+        </div>
+      </article>
+      <article class="card">
+        <div class="preview"><iframe src="mockups/session-grid-show-filter.html" title="Session grid: the Show filter" loading="lazy" tabindex="-1"></iframe><a href="mockups/session-grid-show-filter.html" tabindex="-1"><span class="sr">Open the Show filter mockup</span></a></div>
+        <div class="meta">
+          <div class="row"><h3><a href="mockups/session-grid-show-filter.html">Session grid: the Show filter</a></h3><span class="state proposed">proposed</span></div>
+          <p class="variants"><b>Recommended</b> All, Running and Waiting chips with a repo filter on the layout bar; <b>alternative</b> a separate “Open all tasks” button.</p>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section class="view" aria-labelledby="settings">
+    <h2 id="settings">Settings</h2>
+    <div class="cards">
+      <article class="card">
+        <div class="preview"><iframe src="mockups/settings-layout.html" title="Settings layout" loading="lazy" tabindex="-1"></iframe><a href="mockups/settings-layout.html" tabindex="-1"><span class="sr">Open the Settings layout mockup</span></a></div>
+        <div class="meta">
+          <div class="row"><h3><a href="mockups/settings-layout.html">Settings layout</a></h3><span class="state built">built · ADR-102</span></div>
+          <p class="variants"><b>A</b> categories on the left, chosen; <b>B</b> two columns of settings and state; <b>C</b> an overview with a details panel.</p>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section class="view" aria-labelledby="docs">
+    <h2 id="docs">Documentation site</h2>
+    <div class="cards">
+      <article class="card">
+        <div class="preview"><iframe src="mockups/documentation-site.html" title="Documentation site" loading="lazy" tabindex="-1"></iframe><a href="mockups/documentation-site.html" tabindex="-1"><span class="sr">Open the documentation site mockup</span></a></div>
+        <div class="meta">
+          <div class="row"><h3><a href="mockups/documentation-site.html">A feature page</a></h3><span class="state built">built · ADR-56</span></div>
+          <p class="variants">VitePress in three columns with the app's tokens; the HUD only in small labels and the screenshot frame.</p>
+        </div>
+      </article>
+    </div>
+  </section>
+</main>
+</body>
+</html>

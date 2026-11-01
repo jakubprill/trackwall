@@ -1,5 +1,5 @@
-import type { FollowedMergeRequest, TaskOutcome, VerificationState } from "@trackwall/protocol";
-import { failedJobNames, mergeRequestNumber, mergeRequestStateLabel, mergeRequestStatus, pipelineLabel } from "./merge-request.ts";
+import { type FollowedMergeRequest, mergeRequestNumber, type TaskOutcome, type VerificationState } from "@trackwall/protocol";
+import { failedJobNames, mergeRequestStateLabel, mergeRequestStatus, pipelineLabel } from "./merge-request.ts";
 import type { StatusTone } from "./repo-status.ts";
 import { type BrowserNotice, TAG_PREFIX } from "./tab-attention.ts";
 
