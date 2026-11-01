@@ -30,6 +30,7 @@ Trackwall runs coding agents on your computer, with your files and your tokens. 
 - **An agent task** works in its own worktree, on its own branch, and is told not to push. You read its diff, and you push its branch with "Push". Being told is an instruction, not a lock: see the gaps below.
 - **A changed mise config** in a task's worktree stops every mise task there until you read the changed files and press "Trust this config", so a task's agent cannot quietly add a command that the next run in its worktree would execute.
 - **Approvals** you answer from the tray press the same key you would press in the terminal, and only while the question you saw is still on the screen; a request asked after your click is not answered by it.
+- **What agents did** through Trackwall is on record: every tool call, with the agent that made it, the repo, task or mise task it named and how it ended, is in [MCP calls](/features/mcp-calls). Only names are kept, never a prompt, a message or a request body.
 
 ## Secrets stay out of the way
 
@@ -46,7 +47,7 @@ Reading a repo for its card, the graph or code search runs nothing from it: Trac
 
 Being honest about these is part of the model:
 
-- **An agent runs as you.** Its shell can read whatever you can, including the daemon's token file, and with that it could call the daemon like the window does. Trackwall narrows what an agent gets on purpose (its own token, no daemon token in its files), but it does not sandbox it.
+- **An agent runs as you.** Its shell can read whatever you can, including the daemon's token file, and with that it could call the daemon like the window does; its calls through that token show in [MCP calls](/features/mcp-calls) as an agent outside Trackwall, not as its session. Trackwall narrows what an agent gets on purpose (its own token, no daemon token in its files), but it does not sandbox it.
 - **"No approvals" means no approvals.** A task you start with the "No approvals" pill on runs every command without asking, a `git push` included. Use it for work you would let run unattended.
 - **A session's own repo config is trusted by its path.** mise trusts a config file by where it is, not by what it says. A session working in a repo's own folder (not a task) can edit the repo's trusted `mise.toml`, and the next mise task it runs through Trackwall runs the edited command.
 - **Hidden secrets can still be found.** An agent's shell runs as you, so it can ask mise for the environment itself or read your mise key; keeping secrets out of its commands is about accidents, not about a determined agent.
