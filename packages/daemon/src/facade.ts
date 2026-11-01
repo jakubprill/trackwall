@@ -286,10 +286,7 @@ export function createFacade(o: FacadeOptions): Facade {
     release: o.jdtlsRelease ?? JDTLS_RELEASE,
     lombok: o.lombokRelease ?? LOMBOK_RELEASE,
     java: JDTLS_JAVA,
-    projectJava: async () =>
-      (await cards.all()).cards.flatMap((c) =>
-        (c.kind === "ok" ? (c.card?.tools ?? []) : []).filter((t) => t.tool === "java").map((t) => t.version),
-      ),
+    cards: async () => (await cards.all()).cards.map((c) => (c.kind === "ok" ? c.card : null)),
     download: (url, file, sha256) => downloadVerified(url, file, { sha256, ...JDTLS_DOWNLOAD }),
     extract: async (archive, dir) => extractTarGz(archive, dir, { env: await o.userEnv(), timeoutMs: JDTLS_UNPACK_TIMEOUT_MS }),
     installTool: (spec, dir) => mise.installTool(spec, dir),

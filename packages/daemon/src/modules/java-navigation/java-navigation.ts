@@ -1,11 +1,11 @@
-import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, rename, stat } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import type { JavaNavigationInstall, JavaNavigationSettings, JavaNavigationState } from "@trackwall/protocol";
+import { dirname, join, relative } from "node:path";
+import type { JavaNavigationInstall, JavaNavigationSettings, JavaNavigationState, RepoCard } from "@trackwall/protocol";
 import { configOrProblem, messageOf } from "../../infra/errors.ts";
+import { javaRuntimeOf } from "../../infra/java-runtime.ts";
 import { removeFolder, removeIfPresent } from "../../infra/remove-folder.ts";
 import { ensureTrackwallDir } from "../../infra/trackwall-dir.ts";
-import { javaMajors } from "./java-majors.ts";
+import { cardJavaVersions, javaMajors } from "./java-majors.ts";
 import { javaProgramIn } from "./java-program.ts";
 import type { PinnedRelease } from "./pinned-releases.ts";
 
@@ -37,8 +37,8 @@ export interface JavaNavigationDeps {
   lombok: PinnedRelease;
   /** The Java version as mise names it (`temurin-25`). */
   java: string;
-  /** The Java versions the repos' cards name (`17`, `1.8`, `temurin-21`), any number of times (`cards`). */
-  projectJava: () => Promise<readonly string[]>;
+  /** The cards of the repos in the projects folder (`cards`), `null` for a repo without one; their Java versions are installed. */
+  cards: () => Promise<readonly (RepoCard | null)[]>;
   /** Downloads `url` into `file` and checks its SHA-256 (`downloadVerified`). */
   download: (url: string, file: string, sha256: string) => Promise<void>;
   /** Unpacks a `.tar.gz` into an existing folder (`extractTarGz`). */
@@ -106,8 +106,9 @@ export class JavaNavigation {
       this.#step = "Saving the settings";
       // A Lombok jar and runtimes the user named stay; a broken key is replaced by the installed paths.
       const previous = configOrProblem(() => this.#deps.repos.javaNavigation(), null).value;
-      const ownLombok = previous?.lombok && dirname(previous.lombok) !== dir ? previous.lombok : null;
-      const runtimes = [...new Set([...homes, ...(previous?.runtimes ?? []).filter((home) => existsSync(home))])];
+      // `relative`, not `!==`: on Windows the same folder may differ in case or separators.
+      const ownLombok = previous?.lombok && relative(dir, dirname(previous.lombok)) !== "" ? previous.lombok : null;
+      const runtimes = withRuntimesKept(homes, previous?.runtimes ?? []);
       this.#deps.repos.setJavaNavigation({ jdtls, java, lombok: ownLombok ?? installedLombok, runtimes });
       // Navigation works without them; only a project that needs one of these Java versions does not import.
       if (missing.length > 0) this.#warning = `mise could not install ${missing.join("; ")}`;
@@ -124,13 +125,14 @@ export class JavaNavigation {
   async #projectRuntimes(miseDir: string): Promise<{ homes: string[]; missing: string[] }> {
     const homes: string[] = [];
     const missing: string[] = [];
-    for (const major of javaMajors(await this.#deps.projectJava())) {
+    for (const major of javaMajors(cardJavaVersions(await this.#deps.cards()))) {
       this.#step = `Installing Java ${major} for your projects with mise`;
       try {
         // The folder `release` lies in: inside a macOS bundle that is `Contents/Home`, two levels above `bin/java`.
         homes.push(dirname(dirname(javaProgramIn(await this.#deps.installTool(`java@temurin-${major}`, miseDir)))));
       } catch (err) {
-        missing.push(`Java ${major}: ${messageOf(err)}`);
+        // mise's stderr may run to many lines; its first says what failed, and the line in Settings has room for little more.
+        missing.push(`Java ${major}: ${messageOf(err).split("\n")[0]}`);
       }
     }
     return { homes, missing };
@@ -179,6 +181,26 @@ export class JavaNavigation {
     return target;
   }
 }
+
+/**
+ * The runtimes to save: the folders just installed, then each earlier one that is still a Java installation of a
+ * version none of them has (a folder the person named, or a version no repo needs any more), one per version, so jdtls
+ * never gets two of one Java SE name and mise's patch updates do not pile up past the key's limit.
+ */
+function withRuntimesKept(installed: readonly string[], previous: readonly string[]): string[] {
+  const kept: string[] = [];
+  const names = new Set<string>();
+  for (const home of [...installed, ...previous]) {
+    const runtime = javaRuntimeOf(home);
+    if (runtime === null || names.has(runtime.name)) continue;
+    names.add(runtime.name);
+    kept.push(home);
+  }
+  return kept.slice(0, MAX_RUNTIMES);
+}
+
+/** As many runtimes as `javaNavigation.runtimes` takes. */
+const MAX_RUNTIMES = 20;
 
 async function removeStaleInstalls(dir: string): Promise<void> {
   for (const name of await readdir(dir)) {

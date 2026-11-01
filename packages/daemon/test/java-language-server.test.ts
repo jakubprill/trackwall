@@ -3,12 +3,12 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DomainError } from "../src/infra/errors.ts";
+import { javaRuntimeOf } from "../src/infra/java-runtime.ts";
 import {
   javaLanguageServer,
   javaNavigationProblem,
   javaNavigationReadiness,
   javaNavigationState,
-  javaRuntimeOf,
   mavenOnlyImport,
 } from "../src/modules/agents/java-language-server.ts";
 

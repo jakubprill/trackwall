@@ -176,6 +176,31 @@ describe("installing Java navigation from Settings (ADR-123)", () => {
     expect(facade.workspace.javaNavigation()?.runtimes).toEqual([join(installs, "java@temurin-17")]);
   });
 
+  test("installing again keeps one runtime per Java version, the installed one first, and replaces the Lombok jar it installed itself", async () => {
+    const { facade, projects, installs, lsp } = installFacade();
+    makeRepo({ "pom.xml": "<project><properties><java.version>17</java.version></properties></project>" }, "orders", projects);
+    await facade.workspace.setProjectsDir(projects);
+    facade.javaNavigation.startInstall();
+    await installed(facade);
+    const settings = facade.workspace.javaNavigation();
+    if (settings === null) throw new Error("the first install saved no settings");
+    const ownJdk17 = join(projects, "jdk-17");
+    const ownJdk11 = join(projects, "jdk-11");
+    mkdirSync(ownJdk17);
+    writeFileSync(join(ownJdk17, "release"), 'JAVA_VERSION="17.0.9"\n');
+    mkdirSync(ownJdk11);
+    writeFileSync(join(ownJdk11, "release"), 'JAVA_VERSION="11.0.21"\n');
+    facade.workspace.setJavaNavigation({ ...settings, runtimes: [...settings.runtimes, ownJdk17, ownJdk11, join(projects, "gone")] });
+
+    facade.javaNavigation.startInstall();
+    expect(await installed(facade)).toMatchObject({ error: null, readiness: { problem: null } });
+    expect(facade.workspace.javaNavigation()).toEqual({
+      ...settings,
+      lombok: join(lsp, "lombok-1.18.48.jar"),
+      runtimes: [join(installs, "java@temurin-17"), ownJdk11],
+    });
+  });
+
   test("an archive whose SHA-256 differs from the pinned one fails the install and leaves nothing behind", async () => {
     const { facade, projects, lsp } = installFacade({ release: { sha256: "0".repeat(64) } });
     await facade.workspace.setProjectsDir(projects);
@@ -194,6 +219,13 @@ describe("installing Java navigation from Settings (ADR-123)", () => {
     expect((await installed(facade)).error).toBe("mise ERROR temurin-25: HTTP 503 from api.adoptium.net");
     expect(existsSync(join(lsp, "jdtls-1.63.0", "plugins"))).toBe(true);
     expect(facade.workspace.javaNavigation()).toBeNull();
+  });
+
+  test("a runtime path with a comma is a bad key, since Gradle takes the runtimes as one comma-separated list", () => {
+    const { facade, projects } = installFacade();
+    const java = join(projects, "java");
+    facade.workspace.setJavaNavigation({ jdtls: projects, java, lombok: null, runtimes: [join(projects, "jdk,17")] });
+    expect(() => facade.workspace.javaNavigation()).toThrow("a runtimes path must not contain a comma");
   });
 
   test("without a projects folder the install says where to set it", async () => {

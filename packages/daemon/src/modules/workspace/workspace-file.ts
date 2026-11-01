@@ -73,6 +73,8 @@ const Keys: { [K in WorkspaceKey]: z.ZodType<WorkspaceKeyValues[K], unknown> } =
     (settings) => [settings.jdtls, settings.java, settings.lombok, ...settings.runtimes].every((path) => path === null || isFullPath(path)),
     "jdtls, java, lombok and runtimes must be full paths",
   )
+    // Gradle takes the runtimes as one comma-separated list of toolchain locations (ADR-167).
+    .refine((settings) => settings.runtimes.every((path) => !path.includes(",")), "a runtimes path must not contain a comma")
     .nullish()
     .transform((settings) => settings ?? null),
   // The only address the local config store is pushed to (ADR-127); set by "Push to this remote" in Settings or by hand.

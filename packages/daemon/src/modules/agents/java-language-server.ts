@@ -1,7 +1,8 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { JavaNavigationSettings, JavaNavigationState } from "@trackwall/protocol";
 import { configOrProblem } from "../../infra/errors.ts";
+import { type JavaRuntime, javaRuntimeOf } from "../../infra/java-runtime.ts";
 import type { LspServer } from "./copilot-plugin.ts";
 
 /**
@@ -63,27 +64,6 @@ export function mavenOnlyImport(worktree: string): boolean {
 }
 
 const GRADLE_BUILD_FILES = ["build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"];
-
-/**
- * A Java installation jdtls may use for a project (ADR-167): its folder and the name of the Java SE version it provides,
- * as jdtls's `java.configuration.runtimes` names them (`JavaSE-1.8`, `JavaSE-17`).
- */
-export interface JavaRuntime {
-  name: string;
-  path: string;
-}
-
-/**
- * The runtime in the Java installation folder `home`, from the `release` file every JDK has at its root since Java 8
- * (`JAVA_VERSION="17.0.12"`, `"1.8.0_422"`); `null` when there is none, so a wrong folder is a problem before a start.
- */
-export function javaRuntimeOf(home: string): JavaRuntime | null {
-  const release = join(home, "release");
-  if (!isFile(release)) return null;
-  const version = /^JAVA_VERSION="(?:1\.(?=\d))?(\d+)/m.exec(readFileSync(release, "utf8"))?.[1];
-  if (version === undefined) return null;
-  return { name: version === "8" ? "JavaSE-1.8" : `JavaSE-${version}`, path: home };
-}
 
 /**
  * jdtls's settings for the worktree, in the shape of VS Code's `java.*` settings, which Copilot CLI passes on in the
