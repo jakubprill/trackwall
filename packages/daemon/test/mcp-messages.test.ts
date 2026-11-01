@@ -1,6 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Client } from "@modelcontextprotocol/client";
-import { agentsApi, GetMessagesResult, GetUpdatesResult, ProposeTaskResult, SendMessageResult } from "@trackwall/protocol";
+import {
+  AskProposerResult,
+  agentsApi,
+  GetMessagesResult,
+  GetUpdatesResult,
+  ProposeTaskResult,
+  SendMessageResult,
+} from "@trackwall/protocol";
 import { viewer, waitFor } from "./support/agents.ts";
 import { connectHttpClient, connectSessionClient } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
@@ -202,6 +209,52 @@ describe.skipIf(process.versions.bun === undefined)(
       await daemon.facade.agents.stop(typedSession);
       await daemon.facade.agents.stop(supervisor.id);
       await daemon.post(agentsApi.removeTask, { task: typed.id, keepBranch: false, discardChanges: true });
+    }, 60_000);
+
+    test("a task asks its proposer a question, which the proposer reads as an update and answers with a message (ADR-160)", async () => {
+      const main = await mainSession();
+      const { proposal } = ProposeTaskResult.parse(
+        (await call(main.client, "propose_task", { repo: "shop", title: "Drop the v1 API", prompt: "drop the v1 API" })).structuredContent,
+      );
+      const task = await daemon.post(agentsApi.approveProposal, {
+        proposal: proposal.id,
+        prompt: "drop the v1 API",
+        model: null,
+        approvals: "ask",
+      });
+      const session = taskSession(task.id);
+      await waitFor(daemon.facade.agents, session, (s) => s.state?.state === "Working", "the task prompt's turn");
+      const taskClient = await clientOfSession(session);
+      const question = "orders-bff still calls GET /v1/orders. Keep it deprecated or remove it?";
+
+      const asked = AskProposerResult.parse((await call(taskClient, "ask_proposer", { question })).structuredContent);
+
+      expect(asked).toEqual({ delivery: "typed" });
+      await waitFor(daemon.facade.agents, main.id, () => main.window.unwrappedText().includes(TYPED_UPDATES), "the typed updates prompt");
+      expect(GetUpdatesResult.parse((await call(main.client, "get_updates")).structuredContent).updates).toEqual([
+        { kind: "question", text: question, task: task.id, session, at: expect.any(String) },
+      ]);
+      const answer = SendMessageResult.parse(
+        (await call(main.client, "send_message", { task: task.id, text: "Keep it deprecated until orders-bff moves." })).structuredContent,
+      );
+      expect(answer.message.text).toBe("Keep it deprecated until orders-bff moves.");
+      expect((await call(main.client, "ask_proposer", { question })).content).toEqual([
+        { type: "text", text: "bad_request: only a session that runs a task in Trackwall has a proposer to ask" },
+      ]);
+
+      const typed = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "describe the repo", approvals: "ask" });
+      const typedSession = taskSession(typed.id);
+      expect((await call(await clientOfSession(typedSession), "ask_proposer", { question: "Which port?" })).content).toEqual([
+        {
+          type: "text",
+          text: `bad_request: the user started task ${typed.id}, so no session answers its questions; ask the user in your answer instead`,
+        },
+      ]);
+
+      main.window.attachment.detach();
+      await waitFor(daemon.facade.agents, typedSession, (s) => s.state !== null, "sessionStart");
+      for (const id of [session, typedSession, main.id]) await daemon.facade.agents.stop(id);
+      for (const id of [task.id, typed.id]) await daemon.post(agentsApi.removeTask, { task: id, keepBranch: false, discardChanges: true });
     }, 60_000);
 
     test("a rejection reaches the proposer with the user's reason, and the tools refuse who they are not for", async () => {
