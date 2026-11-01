@@ -375,6 +375,93 @@ describe("updates on delegated work", () => {
   });
 });
 
+describe("questions from a task to its proposer (ADR-160)", () => {
+  test("the question goes to the proposer as an update, which its running session is asked to read", () => {
+    const { coordination, asked } = setup();
+
+    expect(coordination.ask("by-main", TASK_SESSION, "Keep the old endpoint or remove it?")).toBe("queued");
+
+    expect(asked).toEqual([MAIN]);
+    expect(coordination.takeUpdates(MAIN).updates).toEqual([
+      { kind: "question", text: "Keep the old endpoint or remove it?", task: "by-main", session: TASK_SESSION, at: expect.any(String) },
+    ]);
+  });
+
+  test("a question waits for the proposer's next session when none runs now", () => {
+    const { coordination, running } = setup();
+    running.delete(SUPERVISOR);
+
+    expect(coordination.ask("by-supervisor", TASK_SESSION, "Which port?")).toBe("on_resume");
+    expect(coordination.unread({ id: NEW_SUPERVISOR, supervisor: true, task: null }).updates).toBe(1);
+  });
+
+  test("a task handed to the supervisor asks the supervisor, and a task another task proposed asks that task's session", () => {
+    const { coordination, tasks, asked } = setup();
+    tasks.set("handed", task("handed", { session: null, supervisor: true, task: null }));
+
+    expect(coordination.ask("handed", TASK_SESSION, "Which port?")).toBe("queued");
+    expect(coordination.ask("by-task", TASK_SESSION, "Where do the DTOs go?")).toBe("queued");
+
+    expect(asked).toEqual([SUPERVISOR, TASK_SESSION]);
+    expect(coordination.takeUpdates(SUPERVISOR).updates.map((u) => u.task)).toEqual(["handed"]);
+    expect(coordination.takeUpdates(TASK_SESSION).updates.map((u) => u.task)).toEqual(["by-task"]);
+  });
+
+  test("a task the user started, or whose proposer nobody in Trackwall stands behind, is told to ask the user", () => {
+    const { coordination } = setup();
+
+    expect(() => coordination.ask("by-user", TASK_SESSION, "Which port?")).toThrow(
+      "the user started task by-user, so no session answers its questions; ask the user in your answer instead",
+    );
+    expect(() => coordination.ask("by-outside", TASK_SESSION, "Which port?")).toThrow(
+      "no session in Trackwall answers task by-outside now (its proposer was closed or is an agent outside Trackwall); ask the user in your answer instead",
+    );
+  });
+
+  test("after five questions without the user the sixth is refused, until the user takes part in the task or the proposer's session", () => {
+    const { coordination } = setup();
+    for (let i = 1; i <= 5; i++) coordination.ask("by-main", TASK_SESSION, `Question ${i}`);
+
+    expect(() => coordination.ask("by-main", TASK_SESSION, "Question 6")).toThrow(
+      "task by-main asked its proposer 5 questions since the user last took part; ask the user instead",
+    );
+    try {
+      tenMillisecondsLater();
+      coordination.userTyped({ id: TASK_SESSION, task: "by-main" });
+      tenMillisecondsLater();
+      expect(coordination.ask("by-main", TASK_SESSION, "Question 6")).toBe("queued");
+      for (let i = 7; i <= 10; i++) coordination.ask("by-main", TASK_SESSION, `Question ${i}`);
+      tenMillisecondsLater();
+      // A review of the task counts, and so does the user's text in the proposer's session that answers.
+      coordination.reviewed("by-main");
+      tenMillisecondsLater();
+      for (let i = 11; i <= 15; i++) coordination.ask("by-main", TASK_SESSION, `Question ${i}`);
+      expect(() => coordination.ask("by-main", TASK_SESSION, "Question 16")).toThrow("asked its proposer 5 questions");
+      tenMillisecondsLater();
+      coordination.userTyped({ id: MAIN, task: null });
+      tenMillisecondsLater();
+      expect(coordination.ask("by-main", TASK_SESSION, "Question 16")).toBe("queued");
+    } finally {
+      setSystemTime();
+    }
+  });
+
+  test("the questions asked count on after a daemon restart, and an ended task's go with it", () => {
+    const { coordination } = setup();
+    for (let i = 1; i <= 5; i++) coordination.ask("by-main", TASK_SESSION, `Question ${i}`);
+    coordination.ask("by-task", TASK_SESSION, "Where do the DTOs go?");
+    coordination.taskEnded("by-task");
+    const stored = coordination.stored();
+
+    const { coordination: after } = setup();
+    after.restore(stored, { hasTask: () => true, hasSession: () => true });
+
+    expect(Object.keys(stored.questions)).toEqual(["by-main"]);
+    expect(() => after.ask("by-main", TASK_SESSION, "Question 6")).toThrow("asked its proposer 5 questions");
+    expect(StoredCoordination.parse({ messages: [], updates: [], userInTask: {}, userInSession: {} }).questions).toEqual({});
+  });
+});
+
 describe("the kept messages and updates", () => {
   test("read messages make room for new ones; with 20 unread a new one is refused", () => {
     const messages = new TaskMessages(() => {});
