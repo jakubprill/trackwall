@@ -208,12 +208,8 @@ export class AgentTasks {
     prompt: string,
     { id, title, proposedBy, model, approvals, javaNavigation, item, view: sessionView }: TaskOrigin,
   ): Promise<Task> {
-    // The jdtls of a task comes through the session plugin, which Copilot CLI does not load over ACP (ADR-137).
-    if (javaNavigation && sessionView === "conversation")
-      throw new DomainError("bad_request", "Java navigation needs a task in a terminal; the conversation view cannot give it yet");
     // Refused before the worktree exists: a task that asked for Java navigation would otherwise start without it.
-    const javaProblem = javaNavigation ? this.#deps.javaNavigation.readiness().problem : null;
-    if (javaProblem !== null) throw new DomainError("bad_request", `Java navigation cannot start: ${javaProblem}`);
+    if (javaNavigation) this.#deps.javaNavigation.assertCanStart(sessionView, "a task");
     const repoDir = await this.#deps.repos.repoPath(repo);
     const base = await asRepoUnavailable(repo, this.#deps.vcs.defaultBase(repoDir));
     const worktreesDir = await this.#deps.repos.newTaskWorktreesDir();

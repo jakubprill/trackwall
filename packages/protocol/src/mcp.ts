@@ -729,7 +729,7 @@ export const mcpTools = {
       `itself; ${GET_TASK_CHANGES} adds the diff. changes: null with changesError when they cannot be computed ` +
       `(e.g. the worktree was deleted or the task is being ended). verification is the task's last ${VERIFY_TASK} result ` +
       "(passed, failed with the first failed tests and errors, running, cancelled), null before the first one. javaNavigation, " +
-      "for a task with Java navigation, says whether its lsp tool can answer: starting, importing (since), stalled (importing " +
+      "for a task or a session in a repo root with Java navigation, says whether its lsp tool can answer: starting, importing (since), stalled (importing " +
       "past the limit), ready, or failed with jdtls's first error (e.g. a Gradle import that needs a JDK that is missing); " +
       "lsp answers come back empty until ready.",
     args: z.object({ session: SessionId.describe(`session id from ${LIST_SESSIONS} (the id field)`) }).strict(),

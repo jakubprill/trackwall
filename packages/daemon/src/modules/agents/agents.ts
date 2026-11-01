@@ -39,6 +39,7 @@ import { AgentQueuesFile } from "./agent-queues.ts";
 import type { AgentSession } from "./agent-session.ts";
 import type { CopilotHookOutput } from "./copilot-hook-output.ts";
 import { CopilotHookEvent } from "./copilot-hook-record.ts";
+import type { LspServer } from "./copilot-plugin.ts";
 import type { EndedTaskFacts } from "./ended-task.ts";
 import { HandoffWatch } from "./handoff-watch.ts";
 import { appendHookRecord } from "./hook-tail.ts";
@@ -106,6 +107,14 @@ export const AGENT_QUEUES_FILE = "agent-queues.json";
 export const LEGACY_WORKTREES_DIR = "worktrees";
 
 /** What `agents` needs from `procs`; wired in the facade. */
+/** What `#launchAs` adds to a start for a main session (ADR-175); nothing for the supervisor. */
+interface MainLaunch {
+  start?: MainSessionStart;
+  /** Before the session's own arguments, as a task's model (ADR-98). */
+  args?: readonly string[];
+  lspServers?: Record<string, LspServer>;
+}
+
 interface AgentsProcs extends LauncherProcs {
   liveIn(dir: string): boolean;
 }
@@ -335,13 +344,10 @@ export class Agents {
     return this.#launchMain(spec, place, start);
   }
 
-  /** Java navigation needs a repo, a terminal (ADR-137) and settings that can start jdtls now; refused before the start. */
+  /** Java navigation needs a repo's build, besides what any start with it needs; refused before the start. */
   #assertJavaNavigation(repo: string | null, view: SessionView): void {
     if (repo === null) throw new DomainError("bad_request", "Java navigation needs a repo; a free session cannot get it");
-    if (view === "conversation")
-      throw new DomainError("bad_request", "Java navigation needs a session in a terminal; the conversation view cannot give it yet");
-    const { problem } = this.#javaNavigation.readiness();
-    if (problem !== null) throw new DomainError("bad_request", `Java navigation cannot start: ${problem}`);
+    this.#javaNavigation.assertCanStart(view, "a session");
   }
 
   /**
@@ -351,14 +357,13 @@ export class Agents {
    */
   async #launchMain(spec: SessionLaunch, place: SessionPlace, start: MainSessionStart): Promise<Session> {
     // Before the session's own arguments, as a task's (ADR-98).
-    const modelArgs = start.model === null ? [] : [`--model=${start.model}`];
-    if (spec.view === "conversation") {
-      if (start.javaNavigation) this.#deps.log(`session ${spec.id} starts without Java navigation: it needs a terminal`);
-      this.#assertNotListed(spec.id);
-      return this.#listed(await this.#launcher.conversation({ ...spec, ...place, args: modelArgs }), start);
-    }
-    const lspServers = start.javaNavigation ? await this.#javaNavigation.servers(spec.id, place.cwd, `session ${spec.id}`) : {};
-    return this.#launch({ ...spec, ...place, args: [...modelArgs, ...spec.args], lspServers }, start);
+    const args = start.model === null ? [] : [`--model=${start.model}`];
+    // Only a hand-edited `resumable-sessions.json` gets here with Java navigation in the conversation view.
+    if (spec.view === "conversation" && start.javaNavigation)
+      this.#deps.log(`session ${spec.id} starts without Java navigation: it needs a terminal`);
+    const wantsServer = spec.view === "terminal" && start.javaNavigation;
+    const lspServers = wantsServer ? await this.#javaNavigation.servers(spec.id, place.cwd, `session ${spec.id}`) : {};
+    return this.#launchAs(spec, place, { start, args, lspServers });
   }
 
   /** The supervisor (ADR-58): `SupervisorSessions.start`. */
@@ -884,7 +889,11 @@ export class Agents {
         throw new DomainError("bad_request", "the session has ended; start it again instead");
       await this.#deps.procs.stop(sessionOwner(id));
       if (task === null && !supervisor) this.#unlist(session);
-      return await this.#resumeLeft(left);
+      return await this.#resumeLeft(left).catch(async (err: unknown) => {
+        // Out of the list, it can never be closed, so its jdtls index goes now (ADR-175).
+        if (left.javaNavigation) await this.#javaNavigation.remove(id, `session ${id}`);
+        throw err;
+      });
     } finally {
       this.#restarting.delete(id);
     }
@@ -983,12 +992,18 @@ export class Agents {
         this.#deps.log(`resumed session ${session.session} (${resumablePlace(session)})`);
       } catch (err) {
         this.#deps.log(`resuming session ${session.session}: ${String(err)}`);
-        // What waited for it has nobody to reach, as when the user closes a session (ADR-115); its jdtls index neither.
-        if (session.task === null) this.#coordination.sessionClosed({ id: session.session, supervisor: session.supervisor, task: null });
-        if (session.task === null && session.javaNavigation)
-          await this.#javaNavigation.remove(session.session, `session ${session.session}`);
+        if (session.task === null) await this.#forgetLeftMain(session);
       }
     }
+  }
+
+  /**
+   * A supervisor, free or main session that did not start again and is out of the list: what waited for it has nobody
+   * to reach, as when the user closes a session (ADR-115), and its jdtls index nobody to use (ADR-175).
+   */
+  async #forgetLeftMain({ session: id, supervisor, javaNavigation }: ResumableSession): Promise<void> {
+    this.#coordination.sessionClosed({ id, supervisor, task: null });
+    if (javaNavigation) await this.#javaNavigation.remove(id, `session ${id}`);
   }
 
   async #resumeLeft(left: ResumableSession): Promise<Session> {
@@ -1033,11 +1048,18 @@ export class Agents {
     if (session !== undefined && this.#readRequestPrompt(session) !== undefined) session.askToRead();
   }
 
-  /** A start in the view it names, in `place`. */
-  async #launchAs(spec: SessionLaunch, place: SessionPlace): Promise<Session> {
-    if (spec.view === "terminal") return this.#launch({ ...spec, ...place });
+  /**
+   * A start in the view it names, in `place`; for a main session with what it started with (ADR-175): `args` go before
+   * the session's own, and `lspServers` only into a terminal's plugin.
+   */
+  async #launchAs(
+    spec: SessionLaunch,
+    place: SessionPlace,
+    { start = PLAIN_START, args = [], lspServers = {} }: MainLaunch = {},
+  ): Promise<Session> {
+    if (spec.view === "terminal") return this.#launch({ ...spec, ...place, args: [...args, ...spec.args], lspServers }, start);
     this.#assertNotListed(spec.id);
-    return this.#listed(await this.#launcher.conversation({ ...spec, ...place }));
+    return this.#listed(await this.#launcher.conversation({ ...spec, ...place, args }), start);
   }
 
   /** An id is listed once: a start under a listed id is a bug in the caller, caught before anything is issued for it. */

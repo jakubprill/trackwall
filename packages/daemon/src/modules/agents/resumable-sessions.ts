@@ -37,7 +37,9 @@ export const ResumableSession = z.preprocess(
       /** A main session's Java navigation (ADR-175); a task's is the task's. */
       javaNavigation: z.boolean().default(false),
     })
-    .refine((s) => !s.supervisor || (s.repo === null && s.task === null), "the supervisor has no repo and no task"),
+    .refine((s) => !s.supervisor || (s.repo === null && s.task === null), "the supervisor has no repo and no task")
+    // A hand edit must not start jdtls where no start could have (ADR-175): Java navigation needs a repo's build.
+    .refine((s) => !s.javaNavigation || (s.repo !== null && !s.supervisor), "Java navigation needs a session in a repo"),
 );
 export type ResumableSession = z.infer<typeof ResumableSession>;
 

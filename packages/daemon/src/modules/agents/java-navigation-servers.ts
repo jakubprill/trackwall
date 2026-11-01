@@ -1,7 +1,7 @@
-import { rmSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
-import type { JavaNavigationSettings, JavaNavigationStatus } from "@trackwall/protocol";
-import { messageOf } from "../../infra/errors.ts";
+import type { JavaNavigationSettings, JavaNavigationStatus, SessionView } from "@trackwall/protocol";
+import { DomainError, messageOf } from "../../infra/errors.ts";
 import { ensureTrackwallDir, trackwallDir } from "../../infra/trackwall-dir.ts";
 import type { LspServer } from "./copilot-plugin.ts";
 import {
@@ -39,6 +39,17 @@ export class JavaNavigationServers {
   }
 
   /**
+   * Refuses a start that asks for Java navigation it would not get, before anything is made for it: the conversation
+   * view, where Copilot CLI does not load the session plugin's servers (ADR-137), or settings with a problem.
+   */
+  assertCanStart(view: SessionView, who: string): void {
+    if (view === "conversation")
+      throw new DomainError("bad_request", `Java navigation needs ${who} in a terminal; the conversation view cannot give it yet`);
+    const { problem } = this.readiness();
+    if (problem !== null) throw new DomainError("bad_request", `Java navigation cannot start: ${problem}`);
+  }
+
+  /**
    * The `lspServers` of a start of `who` (owner `owner`, working in `cwd`). A start whose settings were removed or broke
    * since the owner asked for it starts without jdtls and logs why: the agent still works, only without the `lsp` tool.
    */
@@ -60,7 +71,7 @@ export class JavaNavigationServers {
   /** The index jdtls built for the owner; a failure only leaves files behind, so it is logged. */
   async remove(owner: string, who: string): Promise<void> {
     try {
-      rmSync(await this.#dataDir(owner), { recursive: true, force: true });
+      await rm(await this.#dataDir(owner), { recursive: true, force: true });
     } catch (err) {
       this.#deps.log(`removing the Java navigation data of ${who}: ${messageOf(err)}`);
     }

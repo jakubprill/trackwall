@@ -3,7 +3,7 @@ import { useCallback } from "react";
 import { StatusLabel } from "@/components/StatusLabel";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { javaNavigationMark, javaNavigationPollMs } from "@/lib/java-navigation";
+import { asksSessionJavaNavigation, javaNavigationMark, javaNavigationPollMs } from "@/lib/java-navigation";
 import { useRemote } from "@/lib/use-remote";
 
 /** How a running task's Java language server is doing (ADR-124), in the task's header; nothing for a task without it. */
@@ -18,8 +18,7 @@ export function JavaNavigationMark({ conn, task, running }: { conn: Connection; 
  */
 export function SessionJavaNavigationMark({ conn, session, running }: { conn: Connection; session: Session; running: boolean }) {
   const load = useCallback(() => post(conn, agentsApi.sessionJavaNavigation, { session: session.id }), [conn, session.id]);
-  const asks = running && session.repo !== null && session.task === null && session.view === "terminal";
-  return <JavaNavigationStatusMark load={asks ? load : undefined} />;
+  return <JavaNavigationStatusMark load={asksSessionJavaNavigation(session, running) ? load : undefined} />;
 }
 
 function JavaNavigationStatusMark({ load }: { load: (() => Promise<JavaNavigationStatus | null>) | undefined }) {

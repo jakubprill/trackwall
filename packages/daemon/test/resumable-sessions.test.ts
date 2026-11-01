@@ -68,6 +68,13 @@ describe("the list of sessions a restart resumes", () => {
     expect(log[0]).toContain("no session is resumed");
   });
 
+  test("Java navigation without a repo breaks the file, so a hand edit never starts jdtls in the projects folder (ADR-175)", () => {
+    const path = newPath();
+    writeFileSync(path, JSON.stringify({ sessions: [{ ...SUPERVISOR, javaNavigation: true }] }));
+
+    expect(new ResumableSessions(path, () => {}).read()).toEqual([]);
+  });
+
   test("without a file there is nothing to resume", () => {
     const path = newPath();
 
