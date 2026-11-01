@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { SERVICE_RELEASE_MS, type StateDirSource, type TaskChangedEndpoints } from "@trackwall/protocol";
+import { type AppConfig, type MiseTarget, SERVICE_RELEASE_MS, type StateDirSource, type TaskChangedEndpoints } from "@trackwall/protocol";
 import { downloadVerified } from "./infra/download.ts";
 import { vscodeUrl } from "./infra/editor-url.ts";
 import { DomainError, messageOf } from "./infra/errors.ts";
@@ -18,6 +18,7 @@ import {
 import { resolveCopilot } from "./modules/agents/copilot-command.ts";
 import { Batch } from "./modules/batch/batch.ts";
 import { Board } from "./modules/board/board.ts";
+import type { AppConfigQuery } from "./modules/cards/app-config.ts";
 import { CardCache } from "./modules/cards/card-cache.ts";
 import { Cards } from "./modules/cards/cards.ts";
 import { ConfigFiles } from "./modules/config-files/config-files.ts";
@@ -93,11 +94,19 @@ export interface Facade {
    */
   taskChangedEndpoints: (task: string) => Promise<TaskChangedEndpoints>;
   /**
+   * The Spring configuration of a repo root or a task's worktree in one profile's view (ADR-153), for `get_app_config`:
+   * the place from `workspace` or `agents`, the environment of a run there from `mise`, its masking from `logs`, the files and the view from `cards`.
+   */
+  appConfig: (request: AppConfigRequest) => Promise<AppConfig>;
+  /**
    * Daemon exit, before `procs.stopAll`: what a restart is to bring back stays as it is now, the sessions to resume
    * (ADR-95), the agent queues and the verifications (ADR-115), so what the stop of the groups changes does not reach it.
    */
   keepForRestart: () => void;
 }
+
+/** Where to read the configuration (a task of `repo` when `task` is set), the profile, and an optional key prefix. */
+type AppConfigRequest = MiseTarget & AppConfigQuery;
 
 export type { CopilotHookOutput } from "./modules/agents/copilot-hook-output.ts";
 export type { CopilotHookEvent } from "./modules/agents/copilot-hook-record.ts";
@@ -355,6 +364,13 @@ export function createFacade(o: FacadeOptions): Facade {
     taskChangedEndpoints: async (task) => {
       const { repo, worktree, base } = agents.task(task);
       return { task, ...(await graph.changedEndpoints(repo, worktree, base)) };
+    },
+    appConfig: async ({ repo, task, profile, key }) => {
+      const dir = task === null ? await workspace.repoPath(repo) : agents.taskOfRepo(task, repo).worktree;
+      const run = await mise.runEnv({ repo, task });
+      const mask = logs.masker(run.env, run.secretValues);
+      const read = await cards.appConfig(dir, { profile, key }, { vars: run.env, mask });
+      return { repo, task, profile, ...read, envProblem: run.problem === null ? null : mask(run.problem) };
     },
     keepForRestart: () => {
       agents.keepRunningSessionsForResume();

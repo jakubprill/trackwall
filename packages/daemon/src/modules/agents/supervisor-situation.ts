@@ -1,4 +1,12 @@
-import { isSupervisor, mcpTools, type ProposedBy, type Session, type SessionList, type Task } from "@trackwall/protocol";
+import {
+  handedToSupervisor,
+  isSupervisor,
+  mcpTools,
+  type ProposedBy,
+  type Session,
+  type SessionList,
+  type Task,
+} from "@trackwall/protocol";
 
 /**
  * The situation (ADR-148): a short picture of the work under way that the daemon gives the supervisor with every prompt
@@ -51,8 +59,9 @@ function taskStatus(session: Session | undefined): string {
   return sessionStatus(session);
 }
 
-/** What a running session does, in the words of `needsAttention` and its state (§4.4). */
+/** What a running session does, in the words of `needsAttention`, `stuck` (ADR-151) and its state (§4.4). */
 function sessionStatus(session: Session): string {
+  if (session.stuck !== null) return `may be stuck: no step since ${session.stuck.lastStepAt}`;
   const state = session.state?.state;
   if (state === "Approval") return "waits for the user's approval";
   if (state === "Plan") return "waits for the user to approve a plan";
@@ -67,6 +76,7 @@ function sessionStatus(session: Session): string {
 /** Who started the work, as the supervisor tells it apart: its own (any supervisor's), a task's, a session's or the user's. */
 function origin(proposedBy: ProposedBy | null): string {
   if (proposedBy === null) return "started by the user";
+  if (handedToSupervisor(proposedBy)) return "started by the user, who handed it to you";
   if (proposedBy.supervisor) return "proposed by you";
   if (proposedBy.task !== null) return `proposed from task ${proposedBy.task}`;
   if (proposedBy.session !== null) return `proposed by session ${proposedBy.session}`;
