@@ -67,7 +67,7 @@ describe("the merge request draft", () => {
       truncated: false,
     };
     const draft = mergeRequestDraft(
-      task({ summary: { text: "Added the discount and a test.\n", reportedAt: "2026-10-26T10:02:00Z" } }),
+      task({ summary: { text: "Added the discount and a test.\n", checkSteps: [], reportedAt: "2026-10-26T10:02:00Z" } }),
       verification("passed", tests),
     );
 
@@ -87,8 +87,29 @@ describe("the merge request draft", () => {
     );
   });
 
+  test("the agent's check steps follow the summary as a numbered list, before the verdict (ADR-169)", () => {
+    const draft = mergeRequestDraft(
+      task({
+        summary: {
+          text: "Added the discount.",
+          checkSteps: ["Open /cart with two items: the total shows -10%", "Remove an item: the discount stays"],
+          reportedAt: "2026-10-26T10:02:00Z",
+        },
+      }),
+      verification("passed"),
+    );
+
+    expect(draft.description).toBe(
+      "Added the discount.\n\nHow to check:\n1. Open /cart with two items: the total shows -10%\n2. Remove an item: the discount stays" +
+        "\n\nVerification in Trackwall: passed (mise task test)",
+    );
+  });
+
   test("a long summary is cut to what the form's address carries", () => {
-    const draft = mergeRequestDraft(task({ summary: { text: "x".repeat(10_000), reportedAt: "2026-10-26T10:02:00Z" } }), null);
+    const draft = mergeRequestDraft(
+      task({ summary: { text: "x".repeat(10_000), checkSteps: [], reportedAt: "2026-10-26T10:02:00Z" } }),
+      null,
+    );
 
     expect(draft.description).toHaveLength(MERGE_REQUEST_DESCRIPTION_MAX);
     expect(draft.description.endsWith("…")).toBe(true);
