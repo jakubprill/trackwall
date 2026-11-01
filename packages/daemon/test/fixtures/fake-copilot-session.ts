@@ -206,10 +206,14 @@ process.stdout.write("\x1b[?1003h\x1b[?1006h");
 process.stdout.write(`Welcome to the fake, MCP: ${mcpServers.join(", ")}\r\n`);
 process.stdout.write(`Instructions: ${instructionFiles.join(", ")}\r\n`);
 process.stdout.write(`LSP: ${lspServers.join(", ")}\r\n`);
-/** Half the session screen (`INITIAL_COLS` in `agents.ts`, 120 columns). */
-const CWD_LINE_CHARS = 60;
-// The directory in lines shorter than the screen: ConPTY on Windows wraps a longer line its own way, and the test joins the lines.
-process.stdout.write(`Directory:\r\n${process.cwd().replace(new RegExp(`.{${CWD_LINE_CHARS}}`, "g"), "$&\r\n")}\r\n`);
+/** Shorter than the session screen (`INITIAL_COLS` in `agents.ts`, 120 columns), with room for the input box's margin. */
+const SHORT_LINE_CHARS = 100;
+/**
+ * Text in lines shorter than the screen: ConPTY on Windows wraps a longer line its own way, and the tests join the lines
+ * (`unwrappedText`). Text that fits in one line stays as it is.
+ */
+const shortLines = (text: string) => text.replace(new RegExp(`.{${SHORT_LINE_CHARS}}(?=.)`, "g"), "$&\r\n");
+process.stdout.write(`Directory:\r\n${shortLines(process.cwd())}\r\n`);
 for (const arg of taskArgs) process.stdout.write(`Argument: ${arg}\r\n`);
 for (const name of shownEnv) process.stdout.write(`Env ${name}=${toolEnv(name)}\r\n`);
 draw(real.promptBox);
@@ -238,7 +242,7 @@ function submit(line: string): void {
   const helper = spawn(process.execPath, ["-e", "setTimeout(() => {}, 600000)"], { stdio: "ignore" });
   process.stdout.write(`helper PID: ${helper.pid}\r\n`);
   for (const turnTitle of turnTitles) title(turnTitle.replaceAll(PROMPT_PLACEHOLDER, line));
-  process.stdout.write(`Thinking about: ${line}\r\n`);
+  process.stdout.write(`${shortLines(`Thinking about: ${line}`)}\r\n`);
   const parallel = line === PARALLEL_TOOLS_PROMPT;
   if (allowAllTools) {
     endTurn(replay([...(parallel ? [firstToolDone] : []), ...real.approval.hooks.slice(asked)]));
