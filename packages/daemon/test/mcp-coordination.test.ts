@@ -132,9 +132,23 @@ describe.skipIf(process.versions.bun === undefined)("main session over MCP (real
       (await call(await clientOfSession(taskSession), "report_result", { summary: "Login fixed, test in login.test.ts." }))
         .structuredContent,
     );
-    expect(reported.task.summary).toEqual({ text: "Login fixed, test in login.test.ts.", reportedAt: expect.any(String) });
+    expect(reported.task.summary).toEqual({ text: "Login fixed, test in login.test.ts.", checkSteps: [], reportedAt: expect.any(String) });
     const detail = GetSessionResult.parse((await call(mainClient, "get_session", { session: taskSession })).structuredContent);
     expect(detail.task?.summary?.text).toBe("Login fixed, test in login.test.ts.");
+
+    // Check steps are a hint next to the summary (ADR-169); the proposer reads them in get_session, and a report without them clears them.
+    const steps = ["Open /login and sign in as demo: the dashboard opens", "Sign in with a wrong password: the form says Wrong password"];
+    await call(await clientOfSession(taskSession), "report_result", { summary: "Login fixed.", checkSteps: steps });
+    const withSteps = GetSessionResult.parse((await call(mainClient, "get_session", { session: taskSession })).structuredContent);
+    expect(withSteps.task?.summary).toMatchObject({ text: "Login fixed.", checkSteps: steps });
+    const hidden = await call(await clientOfSession(taskSession), "report_result", {
+      summary: "Login fixed.",
+      checkSteps: ["Open\u202e/login"],
+    });
+    expect(hidden.isError).toBe(true);
+    await call(await clientOfSession(taskSession), "report_result", { summary: "Login fixed, test in login.test.ts." });
+    const cleared = GetSessionResult.parse((await call(mainClient, "get_session", { session: taskSession })).structuredContent);
+    expect(cleared.task?.summary?.checkSteps).toEqual([]);
 
     await daemon.facade.agents.stop(taskSession);
     const exited = WaitForSessionResult.parse(

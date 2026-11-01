@@ -1,5 +1,15 @@
 import { join } from "node:path";
-import { type AppConfig, type MiseTarget, SERVICE_RELEASE_MS, type StateDirSource, type TaskChangedEndpoints } from "@trackwall/protocol";
+import {
+  type AppConfig,
+  type MiseTarget,
+  type RoutineDigest,
+  type RoutineName,
+  SERVICE_RELEASE_MS,
+  type SessionView,
+  type StateDirSource,
+  type Task,
+  type TaskChangedEndpoints,
+} from "@trackwall/protocol";
 import { downloadVerified } from "./infra/download.ts";
 import { vscodeUrl } from "./infra/editor-url.ts";
 import { DomainError, messageOf } from "./infra/errors.ts";
@@ -39,6 +49,7 @@ import { MergeRequests } from "./modules/merge-requests/merge-requests.ts";
 import { Mise } from "./modules/mise/mise.ts";
 import { ProcessGroups } from "./modules/procs/process-groups.ts";
 import { RuntimeFile } from "./modules/procs/runtime-file.ts";
+import { Routines } from "./modules/routines/routines.ts";
 import { Services } from "./modules/services/services.ts";
 import { TASK_JOURNAL_FILE, TASK_JOURNAL_MAX_RECORDS, TaskJournal } from "./modules/task-journal/task-journal.ts";
 import { TestReports } from "./modules/test-results/test-reports.ts";
@@ -71,6 +82,8 @@ export interface Facade {
   batch: Batch;
   /** The user's board items in `.trackwall/board` of the projects folder (ADR-133). */
   board: Board;
+  /** Saved tasks the user runs by hand, in `.trackwall/routines` of the projects folder, with their approvals (ADR-173). */
+  routines: Routines;
   services: Services;
   testReports: TestReports;
   verifications: Verifications;
@@ -99,6 +112,11 @@ export interface Facade {
    */
   taskChangedEndpoints: (task: string) => Promise<TaskChangedEndpoints>;
   /**
+   * A task from a routine the user approved in the version they saw (ADR-173): the routine from `routines`, the task
+   * from `agents`, with the routine's title, repo, model and approvals mode.
+   */
+  runRoutine: (name: RoutineName, digest: RoutineDigest, view: SessionView) => Promise<Task>;
+  /**
    * The Spring configuration of a repo root or a task's worktree in one profile's view (ADR-153), for `get_app_config`:
    * the place from `workspace` or `agents`, the environment of a run there from `mise`, its masking from `logs`, the files and the view from `cards`.
    */
@@ -123,6 +141,7 @@ const CARDS_DIR = "cards";
 /** The bare repo the local config store is pushed from (ADR-127). */
 const LOCAL_CONFIG_PUSH_DIR = "local-config-push";
 const DAY_START_FILE = "day-start.json";
+const ROUTINE_APPROVALS_FILE = "routine-approvals.json";
 const LOGS_DIR = "logs";
 /** The limit of one source JSONL file; with the previous file after rotation a source takes at most twice that. */
 const LOG_FILE_MAX_BYTES = 10 * 1024 * 1024;
@@ -231,6 +250,11 @@ export function createFacade(o: FacadeOptions): Facade {
   const repoWatch = new RepoWatch({ repos: workspace, vcs, onHeadMoved: (repos) => cards.warmUp(repos), log: o.log });
   const localConfig = new LocalConfig({ repos: workspace, vcs, log: o.log, pushDir: join(o.home, LOCAL_CONFIG_PUSH_DIR) });
   const board = new Board({ projectsDir: () => workspace.projectsDir() });
+  const routines = new Routines({
+    projectsDir: () => workspace.projectsDir(),
+    approvalsFile: join(o.home, ROUTINE_APPROVALS_FILE),
+    log: o.log,
+  });
   const taskJournal = new TaskJournal({
     file: join(o.home, TASK_JOURNAL_FILE),
     log: o.log,
@@ -352,6 +376,7 @@ export function createFacade(o: FacadeOptions): Facade {
       "verifications-file": join(o.home, VERIFICATIONS_FILE),
       "task-journal-file": join(o.home, TASK_JOURNAL_FILE),
       "day-start-file": join(o.home, DAY_START_FILE),
+      "routine-approvals-file": join(o.home, ROUTINE_APPROVALS_FILE),
       "cards-dir": join(o.home, CARDS_DIR),
       "logs-dir": join(o.home, LOGS_DIR),
       "local-config-push-repo": join(o.home, LOCAL_CONFIG_PUSH_DIR),
@@ -383,6 +408,7 @@ export function createFacade(o: FacadeOptions): Facade {
     logs,
     batch,
     board,
+    routines,
     agents,
     services,
     testReports,
@@ -398,6 +424,10 @@ export function createFacade(o: FacadeOptions): Facade {
     taskChangedEndpoints: async (task) => {
       const { repo, worktree, base } = agents.task(task);
       return { task, ...(await graph.changedEndpoints(repo, worktree, base)) };
+    },
+    runRoutine: async (name, digest, view) => {
+      const { repo, prompt, title, model, approvals } = await routines.approved(name, digest);
+      return agents.createTask(repo, prompt, { title, model, approvals, view });
     },
     appConfig: async ({ repo, task, profile, key }) => {
       const dir = task === null ? await workspace.repoPath(repo) : agents.taskOfRepo(task, repo).worktree;

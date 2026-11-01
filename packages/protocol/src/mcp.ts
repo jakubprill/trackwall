@@ -11,6 +11,7 @@ import {
   PromptDelivery,
   Session,
   SessionId,
+  TASK_CHECK_STEPS_MAX,
   TASK_MESSAGE_MAX,
   TASK_MESSAGES_WITHOUT_USER,
   TASK_PORT_ENV,
@@ -21,6 +22,7 @@ import {
   Task,
   TaskApprovals,
   TaskChangesSummary,
+  TaskCheckStep,
   TaskHandoffState,
   TaskId,
   TaskMessage,
@@ -49,8 +51,9 @@ import {
 } from "./graph.ts";
 import { HttpMethod } from "./http.ts";
 import { LOG_BUFFER_RECORDS, LOG_ERRORS_MAX, LOG_TAIL_MAX, LogErrorLevel, LogErrors, LogLevel, LogTail, LogTextFilter } from "./logs.ts";
-import { LIST_REPOS, RepoArg } from "./mcp-args.ts";
+import { GET_CHANGED_ENDPOINTS, GET_REPO, LIST_REPOS, PROPOSE_TASK, REPORT_RESULT, RepoArg, RUN_MISE_TASK } from "./mcp-args.ts";
 import { boardMcpTools, ItemArg, LIST_ITEMS } from "./mcp-board.ts";
+import { routineMcpTools } from "./mcp-routines.ts";
 import { MiseRunArguments, MiseTaskName, MiseTasks, RunningMiseTask } from "./mise.ts";
 import { RunState } from "./procs.ts";
 import { ReviewComment } from "./review.ts";
@@ -325,14 +328,10 @@ type McpToolEffect<Args extends z.ZodObject> =
 export type McpTool<Args extends z.ZodObject = z.ZodObject, Result extends z.ZodObject = z.ZodObject> = McpToolBase<Args, Result> &
   McpToolEffect<Args>;
 
-const GET_REPO = "get_repo";
 const LIST_SESSIONS = "list_sessions";
 const GET_SESSION = "get_session";
 const GET_TASK_CHANGES = "get_task_changes";
-const GET_CHANGED_ENDPOINTS = "get_changed_endpoints";
-const PROPOSE_TASK = "propose_task";
 const PROPOSE_FOLDER_ACTION = "propose_folder_action";
-const REPORT_RESULT = "report_result";
 const GET_REVIEW_COMMENTS = "get_review_comments";
 const SEND_MESSAGE = "send_message";
 const RESUME_TASK = "resume_task";
@@ -340,7 +339,6 @@ const GET_MESSAGES = "get_messages";
 const GET_UPDATES = "get_updates";
 const GET_HANDOFF = "get_handoff";
 const WAIT_FOR_SESSION = "wait_for_session";
-const RUN_MISE_TASK = "run_mise_task";
 const WAIT_FOR_MISE_TASK = "wait_for_mise_task";
 const TAIL = "tail";
 
@@ -861,6 +859,7 @@ export const mcpTools = {
       .strict(),
     result: ProposeTaskResult,
   },
+  ...routineMcpTools,
   ...boardMcpTools,
   reportResult: {
     name: REPORT_RESULT,
@@ -869,9 +868,20 @@ export const mcpTools = {
     description:
       "Report the result of your task: what you did, what is left and what the user or the session that proposed the " +
       `task should check. Only for a session that runs a task in Trackwall; the summary is saved to your own task (shown in ${GET_SESSION}, ` +
-      `${LIST_SESSIONS} and the Sessions view). Calling it again replaces the summary. Commit your changes on the task branch before reporting.`,
+      `${LIST_SESSIONS} and the Sessions view). Calling it again replaces the summary and its check steps. Commit your changes on the task branch before reporting.`,
     args: z
-      .object({ summary: visibleText(TaskSummaryText).describe(`the result in a few sentences, up to ${TASK_SUMMARY_MAX} characters`) })
+      .object({
+        summary: visibleText(TaskSummaryText).describe(`the result in a few sentences, up to ${TASK_SUMMARY_MAX} characters`),
+        checkSteps: z
+          .array(visibleText(TaskCheckStep))
+          .max(TASK_CHECK_STEPS_MAX)
+          .default([])
+          .describe(
+            `how the user can check the change by hand, when they can try it (a page, an endpoint, a command): up to ${TASK_CHECK_STEPS_MAX} ` +
+              'short steps in order, each with what to do and what they should see, such as "Open /orders and press Save: a toast says Saved". ' +
+              "Only a hint shown next to the summary; leave it out when there is nothing to try by hand.",
+          ),
+      })
       .strict(),
     result: ReportResultResult,
   },

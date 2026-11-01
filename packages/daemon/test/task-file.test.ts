@@ -22,7 +22,7 @@ const stored = {
   item: "7c4d1e2f-0000-4000-8000-000000000000",
   view: "conversation" as const,
   conversation: "c0ffee-1",
-  summary: { text: "Fixed, test added.", reportedAt: "2026-10-24T10:00:00.000Z" },
+  summary: { text: "Fixed, test added.", checkSteps: [], reportedAt: "2026-10-24T10:00:00.000Z" },
   handoff: null,
   trustedMiseConfig: { "mise.toml": "b".repeat(64) },
   port: 41003,
@@ -129,6 +129,16 @@ describe("tasks.json", () => {
     writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
 
     expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, item: null }]);
+  });
+
+  test("a summary saved before check steps comes back without steps, so the panel shows only its text (ADR-169)", () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
+    const old = { ...stored, summary: { text: "Fixed, test added.", reportedAt: "2026-10-24T10:00:00.000Z" } };
+    writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
+
+    expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([
+      { ...old, summary: { text: "Fixed, test added.", checkSteps: [], reportedAt: "2026-10-24T10:00:00.000Z" } },
+    ]);
   });
 
   test("a task saved before the conversation view comes back in a terminal, whose conversation is under the task's id", () => {
