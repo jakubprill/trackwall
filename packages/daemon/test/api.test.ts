@@ -105,10 +105,13 @@ function isEndpoint(value: unknown): value is Endpoint {
 }
 
 describe("api", () => {
-  test("health is public and returns the version", async () => {
-    const res = await req("/api/health");
-    expect(res.status).toBe(200);
-    expect(HealthResult.parse(JSON.parse(res.body))).toEqual({ ok: true, data: { status: "ok", version: "9.9.9" } });
+  test("health is public and returns the version and the same instance id of this start every time", async () => {
+    const first = await req("/api/health");
+    expect(first.status).toBe(200);
+    const health = HealthResult.parse(JSON.parse(first.body));
+    expect(health).toMatchObject({ ok: true, data: { status: "ok", version: "9.9.9" } });
+    expect(health.ok && health.data.instance).toMatch(/^[0-9a-f-]{36}$/);
+    expect(HealthResult.parse(JSON.parse((await req("/api/health")).body))).toEqual(health);
   });
 
   test("info requires the token", async () => {

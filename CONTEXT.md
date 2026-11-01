@@ -77,6 +77,9 @@ _Avoid_: workspace (that is a separate term, see below)
 **Daemon token**:
 The secret from `~/.trackwall/daemon.json` with which the UI, the shell and the stdio bridge authenticate to the API and the MCP server; Trackwall sessions do not get it (ADR-138).
 
+**Page address** (`daemonPageAddress`, `trackwall-daemon address`):
+The address of the daemon's page with the daemon token in its fragment, `http://127.0.0.1:<port>/#token=…`, which opens Trackwall in a browser; the page moves the token out of the address bar into its storage (ADR-161). The desktop app takes the same address for a remote daemon (ADR-130).
+
 **MCP server** (`/mcp`, `createMcpEndpoint`):
 The part of the daemon through which agents read its state with MCP tools; the same port as the API, with the daemon token or a Trackwall session's own token (§5.3, ADR-24, ADR-138).
 
