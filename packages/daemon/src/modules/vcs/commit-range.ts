@@ -62,10 +62,10 @@ export async function newestCommitBesides(dir: string, head: string, skip: Reado
 
 /** Whether two commits hold the same files; `false` when `a` is not in the repo (gone after a rewrite and `gc`). */
 export async function sameTree(dir: string, a: string, b: string): Promise<boolean> {
-  if ((await existingCommit(dir, a)) === undefined) return false;
-  const { stdout } = await git(dir, ["rev-parse", "--verify", `${a}^{tree}`]);
-  const { stdout: other } = await git(dir, ["rev-parse", "--verify", `${b}^{tree}`]);
-  return stdout.toString("utf8").trim() === other.toString("utf8").trim();
+  // One process for both; git exits with 128 when it cannot name one of them, which leaves no two equal trees.
+  const { stdout } = await git(dir, ["rev-parse", `${a}^{tree}`, `${b}^{tree}`, "--"], { okExitCodes: [128] });
+  const [treeA, treeB] = stdout.toString("utf8").split("\n");
+  return treeA !== undefined && /^[0-9a-f]{40,64}$/.test(treeA) && treeA === treeB;
 }
 
 /** The commits `to` has that `from` does not, with the newest `limit` of them; `undefined` when `from` is not in the repo. */
