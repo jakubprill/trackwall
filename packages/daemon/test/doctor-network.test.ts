@@ -72,7 +72,7 @@ afterAll(() => server.close());
 describe("TLS probe", () => {
   test("a certificate signed by an authority the probe is not given is untrusted, with the authority's name", async () => {
     const result = await probeTls({ host: "localhost", port: serverPort }, { proxy: null, ca: [], timeoutMs: 5_000 });
-    expect(result).toEqual({ kind: "untrusted", code: "SELF_SIGNED_CERT_IN_CHAIN", issuer: "Trackwall Test Inspection CA" });
+    expect(result).toEqual({ kind: "untrusted", code: "SELF_SIGNED_CERT_IN_CHAIN", issuer: "Trackwall Test Inspection CA", proxy: false });
   });
 
   test("with that authority among the given certificates the connection is ok", async () => {
@@ -176,6 +176,7 @@ describe.each(RUNTIMES)("TLS probe under %s", (_name, runtime) => {
         kind: "untrusted",
         code: "SELF_SIGNED_CERT_IN_CHAIN",
         issuer: "Trackwall Test Inspection CA",
+        proxy: false,
       });
       expect(await probeIn(runtime, { host: "localhost", port: serverPort, proxy: proxy.url, ca: [INSPECTION_CA] })).toEqual({
         kind: "ok",
@@ -253,7 +254,7 @@ describe("network check", () => {
     const { probe } = scriptedProbe((_host, ca) =>
       ca.includes(INSPECTION_CA)
         ? { kind: "ok" }
-        : { kind: "untrusted", code: "SELF_SIGNED_CERT_IN_CHAIN", issuer: "Example Inspection CA" },
+        : { kind: "untrusted", code: "SELF_SIGNED_CERT_IN_CHAIN", issuer: "Example Inspection CA", proxy: false },
     );
     expect(await networkOutcome({}, { probe, systemCaFiles: [join(dir, "missing.pem"), empty, bundle] })).toEqual({
       status: "fail",
@@ -263,8 +264,16 @@ describe("network check", () => {
     });
   });
 
+  test("an HTTPS proxy whose own certificate is not trusted is named instead of the host", async () => {
+    const { probe } = scriptedProbe(() => ({ kind: "untrusted", code: "SELF_SIGNED_CERT_IN_CHAIN", issuer: null, proxy: true }));
+    const outcome = await networkOutcome({ HTTPS_PROXY: "https://proxy.example.org:8443" }, { probe, systemCaFiles: [] });
+    expect(outcome.summary).toBe(
+      "The connection to the proxy proxy.example.org:8443 is signed by an authority, which Copilot CLI does not trust (SELF_SIGNED_CERT_IN_CHAIN).",
+    );
+  });
+
   test("an inspecting proxy nobody here trusts asks for its root certificate", async () => {
-    const { probe } = scriptedProbe(() => ({ kind: "untrusted", code: "UNABLE_TO_GET_ISSUER_CERT_LOCALLY", issuer: null }));
+    const { probe } = scriptedProbe(() => ({ kind: "untrusted", code: "UNABLE_TO_GET_ISSUER_CERT_LOCALLY", issuer: null, proxy: false }));
     const outcome = await networkOutcome({}, { probe, systemCaFiles: [] });
     expect(outcome.status).toBe("fail");
     expect(outcome.summary).toBe(
@@ -278,7 +287,7 @@ describe("network check", () => {
     const extra = join(dir, "company.pem");
     writeFileSync(extra, `subject=Example\n${INSPECTION_CA}\n`);
     const { probe } = scriptedProbe((_host, ca) =>
-      ca.includes(INSPECTION_CA) ? { kind: "ok" } : { kind: "untrusted", code: "X", issuer: null },
+      ca.includes(INSPECTION_CA) ? { kind: "ok" } : { kind: "untrusted", code: "X", issuer: null, proxy: false },
     );
     expect((await networkOutcome({ NODE_EXTRA_CA_CERTS: extra }, { probe, systemCaFiles: [] })).status).toBe("ok");
 
@@ -297,7 +306,7 @@ describe("network check", () => {
     const bundle = join(dir, "ca-certificates.crt");
     writeFileSync(bundle, `${INSPECTION_CA}\n`);
     const { probe } = scriptedProbe((_host, ca) =>
-      ca.includes(INSPECTION_CA) ? { kind: "ok" } : { kind: "untrusted", code: "X", issuer: null },
+      ca.includes(INSPECTION_CA) ? { kind: "ok" } : { kind: "untrusted", code: "X", issuer: null, proxy: false },
     );
     expect((await networkOutcome({ NODE_USE_SYSTEM_CA: "1" }, { probe, systemCaFiles: [bundle] })).status).toBe("ok");
     expect(
@@ -308,7 +317,10 @@ describe("network check", () => {
   test("with NODE_USE_SYSTEM_CA and no system bundle to read, as on Windows, an untrusted certificate is only a warning", async () => {
     const outcome = await networkOutcome(
       { NODE_USE_SYSTEM_CA: "1" },
-      { probe: async () => ({ kind: "untrusted", code: "SELF_SIGNED_CERT_IN_CHAIN", issuer: "Example Inspection CA" }), systemCaFiles: [] },
+      {
+        probe: async () => ({ kind: "untrusted", code: "SELF_SIGNED_CERT_IN_CHAIN", issuer: "Example Inspection CA", proxy: false }),
+        systemCaFiles: [],
+      },
     );
     expect(outcome.status).toBe("warn");
     expect(outcome.summary).toContain("the doctor cannot read them here");

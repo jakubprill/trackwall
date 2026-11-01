@@ -18,14 +18,13 @@ const HTTPS_PORT = 443;
 const PROBE_TIMEOUT_MS = 8_000;
 
 /**
- * The files Linux distributions keep the system's certificates in (Debian, Ubuntu and Alpine; Fedora and RHEL; openSUSE;
- * the last one also on Alpine and macOS, where it lacks the certificates added to the Keychain). Windows has none.
+ * The files Linux distributions keep the system's certificates in (Debian, Ubuntu and Alpine; Fedora and RHEL; openSUSE).
+ * Windows and macOS keep theirs in a store, not a file (macOS's `/etc/ssl/cert.pem` lacks the Keychain), so none is listed.
  */
 export const SYSTEM_CA_FILES = [
   "/etc/ssl/certs/ca-certificates.crt",
   "/etc/pki/tls/certs/ca-bundle.crt",
   "/etc/ssl/ca-bundle.pem",
-  "/etc/ssl/cert.pem",
 ] as const;
 
 /** A system bundle is about 200 KB; a file far larger is not one. */
@@ -58,8 +57,8 @@ export async function networkOutcome(env: NodeJS.ProcessEnv, deps: NetworkCheckD
   const { host, proxy, result } = failed;
   if (result.kind !== "untrusted") return unreachableOutcome(host, proxy, result);
   if (usesSystemCertificates(env) && system === null) return systemStoreUnknown(host, result);
-  const bundle = await workingSystemBundle(env, host, ca, deps, extra?.file ?? null);
-  return untrustedOutcome(host, result, bundle, extraNote);
+  const bundle = await workingSystemBundle(env, host, ca, deps, [extra?.file, system?.file]);
+  return untrustedOutcome(result.proxy && proxy !== null ? `the proxy ${shownProxy(proxy)}` : host, result, bundle, extraNote);
 }
 
 interface HostProbe {
@@ -123,11 +122,11 @@ async function workingSystemBundle(
   host: string,
   ca: readonly string[],
   deps: NetworkCheckDeps,
-  extraFile: string | null,
+  alreadyTrusted: readonly (string | undefined)[],
 ): Promise<string | null> {
   const tried = await Promise.all(
     deps.systemCaFiles
-      .filter((file) => file !== extraFile)
+      .filter((file) => !alreadyTrusted.includes(file))
       .map(async (file) => {
         const read = await pemCertificates(file);
         if (!("certs" in read)) return null;
@@ -150,13 +149,14 @@ function signerOf(result: Extract<TlsProbeResult, { kind: "untrusted" }>): strin
   return result.issuer ? `signed by "${result.issuer}"` : "signed by an authority";
 }
 
+/** `party` is the host, or the HTTPS proxy whose own certificate failed. */
 function untrustedOutcome(
-  host: string,
+  party: string,
   result: Extract<TlsProbeResult, { kind: "untrusted" }>,
   bundle: string | null,
   extraNote: string,
 ): Outcome {
-  const summary = `The connection to ${host} is ${signerOf(result)}, which Copilot CLI does not trust (${result.code}).${extraNote}`;
+  const summary = `The connection to ${party} is ${signerOf(result)}, which Copilot CLI does not trust (${result.code}).${extraNote}`;
   if (bundle !== null)
     return {
       status: "fail",

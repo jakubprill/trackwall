@@ -18,7 +18,7 @@ export type TlsProbeResult =
   /** The proxy answered `CONNECT` with another status than 200 (407: it wants a login). */
   | { kind: "proxy-refused"; status: number }
   /** The certificate of the host, or of an HTTPS proxy, is not one the given authorities sign, or not for that host. */
-  | { kind: "untrusted"; code: string; issuer: string | null }
+  | { kind: "untrusted"; code: string; issuer: string | null; proxy: boolean }
   | { kind: "error"; message: string };
 
 interface TlsProbeOptions {
@@ -149,7 +149,7 @@ function handshake(
       clearTimeout(timer);
       const result: TlsProbeResult = socket.authorized
         ? { kind: "ok" }
-        : { kind: "untrusted", code: String(socket.authorizationError), issuer: rootIssuer(socket.getPeerCertificate(true)) };
+        : { kind: "untrusted", code: String(socket.authorizationError), issuer: rootIssuer(socket.getPeerCertificate(true)), proxy: false };
       socket.destroy();
       resolve(result);
     });
@@ -179,14 +179,28 @@ function rootIssuer(cert: DetailedPeerCertificate | undefined): string | null {
   return (Array.isArray(name) ? name[0] : name) ?? null;
 }
 
-/** OpenSSL's names for a certificate it does not accept, and Node's for one issued to another host. */
-const CERTIFICATE_CODE = /CERT|SELF_SIGNED|UNABLE_TO_VERIFY/;
+/**
+ * OpenSSL's verify codes for a certificate it does not accept, and Node's for one issued to another host. Not the TLS
+ * alerts (`ERR_SSL_..._ALERT_BAD_CERTIFICATE`, a proxy wanting a client certificate), which no CA list fixes.
+ */
+const CERTIFICATE_CODES = new Set([
+  "UNABLE_TO_GET_ISSUER_CERT",
+  "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+  "SELF_SIGNED_CERT_IN_CHAIN",
+  "DEPTH_ZERO_SELF_SIGNED_CERT",
+  "CERT_HAS_EXPIRED",
+  "CERT_NOT_YET_VALID",
+  "CERT_UNTRUSTED",
+  "CERT_REVOKED",
+  "ERR_TLS_CERT_ALTNAME_INVALID",
+]);
 
 function classify(err: unknown, atProxy: boolean): TlsProbeResult {
   if (!(err instanceof Error)) return { kind: "error", message: String(err) };
   const { code = "", message } = err as NodeJS.ErrnoException;
   if (DNS_CODES.has(code)) return { kind: "dns", message };
-  if (CERTIFICATE_CODE.test(code)) return { kind: "untrusted", code, issuer: null };
+  if (CERTIFICATE_CODES.has(code)) return { kind: "untrusted", code, issuer: null, proxy: atProxy };
   if (UNREACHABLE_CODES.has(code) || atProxy) return { kind: "unreachable", message, proxy: atProxy };
   return { kind: "error", message };
 }
