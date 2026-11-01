@@ -30,14 +30,15 @@ export function outcome(status: WaitStatus, parts: Partial<Omit<WaitOutcome, "st
 }
 
 /**
- * The session's state for the waiter; a stopping session is still working until its group ends. An error (`Error`
+ * The session's state for the waiter; a stopping session is still working until its group ends, and one that may be
+ * stuck (ADR-151) is `stale` like one that does not respond. An error (`Error`
  * from the `errorOccurred` hook) also needs someone: it is unknown whether Copilot CLI sends an end of turn after it, and
  * without this the wait would return with `working` after every time limit.
  */
 export function sessionWaitStatus(session: Session): WaitStatus {
   if (session.run.kind === "exited") return "exited";
   if (session.needsAttention || session.state?.state === "Error") return "needs_attention";
-  return session.state?.state === "Stale" ? "stale" : "working";
+  return session.state?.state === "Stale" || session.stuck !== null ? "stale" : "working";
 }
 
 /** `read` every cycle, until the state stops being “in progress”, `timeoutMs` passes or the client cancels the call. */
