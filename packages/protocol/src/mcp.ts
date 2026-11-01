@@ -11,6 +11,7 @@ import {
   PromptDelivery,
   Session,
   SessionId,
+  TASK_CHECK_STEPS_MAX,
   TASK_MESSAGE_MAX,
   TASK_MESSAGES_WITHOUT_USER,
   TASK_PORT_ENV,
@@ -21,6 +22,7 @@ import {
   Task,
   TaskApprovals,
   TaskChangesSummary,
+  TaskCheckStep,
   TaskHandoffState,
   TaskId,
   TaskMessage,
@@ -841,9 +843,20 @@ export const mcpTools = {
     description:
       "Report the result of your task: what you did, what is left and what the user or the session that proposed the " +
       `task should check. Only for a session that runs a task in Trackwall; the summary is saved to your own task (shown in ${GET_SESSION}, ` +
-      `${LIST_SESSIONS} and the Sessions view). Calling it again replaces the summary. Commit your changes on the task branch before reporting.`,
+      `${LIST_SESSIONS} and the Sessions view). Calling it again replaces the summary and its check steps. Commit your changes on the task branch before reporting.`,
     args: z
-      .object({ summary: visibleText(TaskSummaryText).describe(`the result in a few sentences, up to ${TASK_SUMMARY_MAX} characters`) })
+      .object({
+        summary: visibleText(TaskSummaryText).describe(`the result in a few sentences, up to ${TASK_SUMMARY_MAX} characters`),
+        checkSteps: z
+          .array(visibleText(TaskCheckStep))
+          .max(TASK_CHECK_STEPS_MAX)
+          .default([])
+          .describe(
+            `how the user can check the change by hand, when they can try it (a page, an endpoint, a command): up to ${TASK_CHECK_STEPS_MAX} ` +
+              'short steps in order, each with what to do and what they should see, such as "Open /orders and press Save: a toast says Saved". ' +
+              "Only a hint shown next to the summary; leave it out when there is nothing to try by hand.",
+          ),
+      })
       .strict(),
     result: ReportResultResult,
   },

@@ -425,9 +425,12 @@ export class AgentTasks {
     return view(handed);
   }
 
-  /** A summary from the task session (`report_result`, ADR-39); a later one replaces the earlier one and survives a daemon restart. */
-  setSummary(id: string, text: string): Task {
-    const summarized = { ...this.#get(id), summary: { text, reportedAt: new Date().toISOString() } };
+  /**
+   * A summary from the task session (`report_result`, ADR-39) with its check steps (ADR-169); a later one replaces the
+   * earlier one, steps included, and survives a daemon restart.
+   */
+  setSummary(id: string, text: string, checkSteps: string[]): Task {
+    const summarized = { ...this.#get(id), summary: { text, checkSteps, reportedAt: new Date().toISOString() } };
     this.#save(this.#tasks.map((t) => (t.id === id ? summarized : t)));
     return view(summarized);
   }

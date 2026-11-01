@@ -267,7 +267,9 @@ const runs: ToolRuns = {
     return { item };
   },
   updateItem: async (facade, { item, ...change }) => ({ item: await facade.board.updateByAgent(item, change) }),
-  reportResult: async (facade, { summary }, { caller }) => ({ task: facade.agents.reportSummary(caller, summary) }),
+  reportResult: async (facade, { summary, checkSteps }, { caller }) => ({
+    task: facade.agents.reportSummary(caller, summary, checkSteps),
+  }),
   getReviewComments: async (facade, _args, { caller }) => ({ comments: facade.agents.takeReviewComments(caller) }),
   sendMessage: async (facade, { task, text }, { caller }) => facade.agents.sendMessage(caller, task, text),
   resumeTask: async (facade, { task }, { caller }) => {

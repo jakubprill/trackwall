@@ -5,6 +5,7 @@ import { WorkingTreeChanges } from "./changes.ts";
 import { SessionMessage, SessionView } from "./conversation.ts";
 import { RunState } from "./procs.ts";
 import { REVIEW_COMMENTS_MAX, ReviewComment } from "./review.ts";
+import { singleLine } from "./single-line.ts";
 import { TaskStateChange } from "./task-state.ts";
 import { CommitHash, RepoId } from "./workspace.ts";
 
@@ -68,13 +69,7 @@ export const REJECTION_REASON_MAX = 1000;
  * thread title. One line without control characters, because the UI shows it as text on a single line.
  */
 export const TASK_TITLE_MAX = 80;
-export const TaskTitle = z
-  .string()
-  .trim()
-  .min(1)
-  .max(TASK_TITLE_MAX)
-  // `refine` instead of `regex` for the same reason as in `visibleText`.
-  .refine((value) => !/\p{Cc}/u.test(value), { message: "the title must be a single line without control characters" });
+export const TaskTitle = singleLine(z.string().trim().min(1).max(TASK_TITLE_MAX), "the title");
 
 /**
  * Text from an agent that a person reads before a decision or that reaches another agent (a task proposal, a summary,
@@ -119,6 +114,19 @@ export type TaskApprovals = z.infer<typeof TaskApprovals>;
 /** A task summary from its session (`report_result`, ADR-39): what it did and what is left, for the session that delegated the task. */
 export const TASK_SUMMARY_MAX = 4000;
 export const TaskSummaryText = z.string().trim().min(1).max(TASK_SUMMARY_MAX);
+
+/**
+ * How to check the change by hand (ADR-169): short steps with what the user should see, such as "Open /orders and press
+ * Save: a toast says Saved". Only information next to the summary, never a gate: the user may follow them or not, and no
+ * state of the task waits for them. Kept as separate steps, so that a later automated check can run them one by one.
+ */
+export const TASK_CHECK_STEP_MAX = 300;
+export const TASK_CHECK_STEPS_MAX = 8;
+export const TaskCheckStep = singleLine(z.string().trim().min(1).max(TASK_CHECK_STEP_MAX), "a check step");
+
+/** The last summary from the task session (`report_result`, ADR-39) with its check steps (ADR-169), empty when it gave none. */
+export const TaskSummary = z.object({ text: z.string(), checkSteps: z.array(z.string()), reportedAt: z.string() });
+export type TaskSummary = z.infer<typeof TaskSummary>;
 
 /**
  * Who proposed the task (ADR-39): a Trackwall session by its session token, or `null` for an agent outside Trackwall
@@ -337,7 +345,7 @@ export const Task = z.object({
   /** Whether its sessions show as a terminal or in the conversation view (ADR-137). */
   view: SessionView,
   /** The last summary from the task session (`report_result`); `null` until it has reported one. */
-  summary: z.object({ text: z.string(), reportedAt: z.string() }).nullable(),
+  summary: TaskSummary.nullable(),
   /** The task port (ADR-61): `TASK_PORT_ENV` in every mise task run in the worktree, and the port of the task's service. */
   port: TaskPort,
   included: IncludedFiles,
