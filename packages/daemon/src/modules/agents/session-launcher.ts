@@ -109,7 +109,10 @@ interface LauncherRepos {
 }
 
 /** How a session of either view tells `Agents` what it did. */
-export type SessionCallbacks = Pick<LiveSessionOptions, "prompt" | "situation" | "onUserText" | "onPromptSent" | "onEvent" | "onTurnOver">;
+export type SessionCallbacks = Pick<
+  LiveSessionOptions,
+  "prompt" | "situation" | "onUserText" | "onPromptSent" | "onEvent" | "onTurnOver" | "onTurnStart"
+>;
 
 export interface SessionLauncherDeps {
   procs: LauncherProcs;

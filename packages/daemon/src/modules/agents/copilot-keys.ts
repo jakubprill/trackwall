@@ -1,4 +1,4 @@
-import type { TaskState } from "@trackwall/protocol";
+import { inTurn, type TaskState } from "@trackwall/protocol";
 import { z } from "zod";
 import type { KeyboardSignal } from "./task-state-tracker.ts";
 
@@ -28,11 +28,6 @@ const KEYS: ReadonlyMap<string, SessionKey> = new Map([
 /** States in which Copilot CLI shows a dialog with a choice, and Enter or a digit selects the answer. */
 const WAITING_FOR_ANSWER: ReadonlySet<TaskState> = new Set(["Approval", "Plan"]);
 const ANSWERS: ReadonlySet<SessionKey> = new Set(["enter", "choice"]);
-/**
- * States that Esc and Ctrl+C interrupt: Copilot CLI then ends the turn without an `agentStop` hook. `Stale` is `Working`
- * without output, so interrupting hung work also ends the turn.
- */
-const STOPPED_BY_ESCAPE: ReadonlySet<TaskState> = new Set(["Working", "Stale", "Approval", "Plan"]);
 
 /** Whether `key` selects an answer in a dialog (Enter or a digit), unlike Esc and Ctrl+C, which stop the turn. */
 export function answersDialog(key: SessionKey): boolean {
@@ -50,6 +45,7 @@ export function stateFromKey(key: SessionKey, current: TaskState | undefined): K
   // the option list does nothing; these are rare moments, so the confidence is only `medium`.
   if (ANSWERS.has(key))
     return WAITING_FOR_ANSWER.has(current) ? { state: "Working", source: "keyboard", confidence: "medium", reason } : undefined;
-  if (STOPPED_BY_ESCAPE.has(current)) return { state: "Input", source: "keyboard", confidence: "medium", reason };
+  // Esc and Ctrl+C interrupt a turn (`inTurn`): Copilot CLI then ends it without an `agentStop` hook.
+  if (inTurn(current)) return { state: "Input", source: "keyboard", confidence: "medium", reason };
   return undefined;
 }

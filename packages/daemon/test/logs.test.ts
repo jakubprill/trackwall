@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LOG_BUFFER_RECORDS, type LogLevel } from "@trackwall/protocol";
-import { fileName, LogFile, logFilePath, rotatedPath } from "../src/modules/logs/log-file.ts";
+import { RotatingJsonlFile, rotatedPath } from "../src/infra/rotating-jsonl-file.ts";
+import { fileName, logFilePath } from "../src/modules/logs/log-file.ts";
 import { logLevel } from "../src/modules/logs/log-level.ts";
 import { Logs } from "../src/modules/logs/logs.ts";
 import { RunOutput } from "../src/modules/logs/run-output.ts";
@@ -381,7 +382,7 @@ describe("log file", () => {
   test("a file past the limit becomes .1.jsonl, and a new one starts empty", () => {
     const dir = mkdtempSync(join(tmpdir(), "trackwall-logfile-"));
     const path = join(dir, "a", "dev.jsonl");
-    const file = new LogFile(path, 30, () => {});
+    const file = new RotatingJsonlFile(path, 30, () => {});
     file.append('{"n":1,"pad":"xxxxxxxxxx"}');
     file.flush();
     file.append('{"n":2}');
@@ -397,7 +398,7 @@ describe("log file", () => {
     // A non-empty directory in place of `.1.jsonl`: the rename fails, as on Windows with a file open elsewhere.
     mkdirSync(join(rotatedPath(path), "taken"), { recursive: true });
     const errors: unknown[] = [];
-    const file = new LogFile(path, 10, (err) => errors.push(err));
+    const file = new RotatingJsonlFile(path, 10, (err) => errors.push(err));
     for (const n of [1, 2, 3]) {
       file.append(`{"n":${n}}`);
       file.flush();
@@ -412,7 +413,7 @@ describe("log file", () => {
     mkdirSync(join(dir, "a"));
     const path = join(dir, "a", "dev.jsonl");
     writeFileSync(path, `${"x".repeat(25)}\n`);
-    const file = new LogFile(path, 30, () => {});
+    const file = new RotatingJsonlFile(path, 30, () => {});
     file.append('{"n":2}');
     file.flush();
 

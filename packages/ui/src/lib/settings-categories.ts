@@ -19,8 +19,8 @@ export const SETTINGS_CATEGORIES = [
   {
     id: "agents",
     label: "Agents",
-    description: "What Copilot CLI gets from Trackwall.",
-    sections: ["copilot-cli", "session-profile", "java-navigation"],
+    description: "What Copilot CLI gets from Trackwall, and what agents did with it.",
+    sections: ["copilot-cli", "session-profile", "java-navigation", "mcp-calls"],
   },
   {
     id: "app",

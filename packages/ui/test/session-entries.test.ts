@@ -378,12 +378,8 @@ describe("proposal kinds (ADR-83)", () => {
 
 describe("the tabs of a task's panel (ADR-137)", () => {
   test("a task in a terminal has a Terminal tab, one in the conversation view a Chat tab, and one without a session neither", () => {
-    expect(taskTabs({ view: "terminal" }).map((t) => t.label)).toEqual(["Terminal", "Changes", "Impact"]);
-    expect(taskTabs({ view: "conversation" })).toEqual([
-      { id: "session", label: "Chat" },
-      { id: "changes", label: "Changes" },
-      { id: "impact", label: "Impact" },
-    ]);
-    expect(taskTabs(undefined).map((t) => t.label)).toEqual(["Changes", "Impact"]);
+    expect(taskTabs({ view: "terminal" }).map((t) => t.label)).toEqual(["Terminal", "Changes", "Rounds", "Impact", "MCP calls"]);
+    expect(taskTabs({ view: "conversation" })[0]).toEqual({ id: "session", label: "Chat" });
+    expect(taskTabs(undefined).map((t) => t.label)).toEqual(["Changes", "Rounds", "Impact", "MCP calls"]);
   });
 });

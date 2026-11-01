@@ -51,7 +51,7 @@ import { planSlice, type SlicePlan } from "./slice-plan.ts";
 /** What `services` needs from `mise`: the task `dev` started from the current list, as the button in the UI does. */
 interface ServicesMise {
   tasks(repo: string): Promise<MiseTasks>;
-  start(target: MiseTarget, miseTask: string, port?: number): Promise<RunState>;
+  start(target: MiseTarget, miseTask: string, options?: { port?: number }): Promise<RunState>;
   stop(target: MiseTarget, miseTask: string): Promise<RunState>;
   run(target: MiseTarget, miseTask: string): RunState | undefined;
   running(): RunningMiseTask[];
@@ -322,7 +322,7 @@ export class Services {
     const leaseProblem = this.leaseProblem(target, lease);
     if (leaseProblem) return skipped(leaseProblem);
     try {
-      const run = await this.deps.mise.start(target, SERVICE_MISE_TASK, lease?.port);
+      const run = await this.deps.mise.start(target, SERVICE_MISE_TASK, { port: lease?.port });
       if (lease) lease.runId = run.runId;
       const watch = this.watch({ target, run, expectedPorts: expected.ports, expectedSource: expected.source, cursor });
       if (lease) void watch.groupEnded().then(() => this.runEnded(lease, run.runId, watch.released()));

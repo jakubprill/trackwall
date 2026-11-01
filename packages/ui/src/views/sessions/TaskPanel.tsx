@@ -20,13 +20,15 @@ import { CopyIncludedFilesButton, HandToSupervisorButton, ResumeButton, StopButt
 import { TaskChangesView } from "./TaskChangesView.tsx";
 import { scrollToSection, TaskDetails } from "./TaskDetails.tsx";
 import { TaskImpact } from "./TaskImpact.tsx";
+import { TaskMcpCalls } from "./TaskMcpCalls.tsx";
 import { TaskNoticeStrip } from "./TaskNotices.tsx";
 import { TaskRemoval } from "./TaskRemoval.tsx";
+import { TaskRounds } from "./TaskRounds.tsx";
 import { VerifyButton } from "./TaskVerification.tsx";
 
 /**
  * The selected task (ADR-31): title or prompt, branch, task port, its model when it has one (ADR-98), a mark when it runs without approvals (ADR-105), how its Java language server is doing (ADR-124) and session state in the header, the session terminal (or its conversation, for a task in the conversation view, ADR-137)
- * and the worktree changes in tabs, and the repos its change reaches in a third (ADR-147). A task from a proposal says who proposed it. A task without a running session can
+ * and the worktree changes in tabs, its rounds with "Undo round" in a third (ADR-168), and the repos its change reaches in a fourth (ADR-147). A task from a proposal says who proposed it. A task without a running session can
  * be resumed or ended; the worktree always opens in VS Code, and the Verify button runs the task's tests (ADR-64).
  * What the task has to say above its session (`TaskDetails`: warnings, messages, summary, verification, merge
  * request, mise tasks) is folded into one strip of notices that "Details" unfolds (ADR-91), so the session keeps the
@@ -156,15 +158,61 @@ export function TaskPanel({
       <div className="px-4">
         <TabBar tabs={tabs} active={shown} onSelect={setTab} />
       </div>
+      <TaskTabContent
+        shown={shown}
+        conn={conn}
+        task={task}
+        session={session}
+        paused={confirmingRemoval}
+        review={review}
+        onOpenTask={onOpenTask}
+        onShowImpact={onShowImpact}
+      />
+    </>
+  );
+}
+
+/** The content of the open tab. */
+function TaskTabContent({
+  shown,
+  conn,
+  task,
+  session,
+  paused,
+  review,
+  onOpenTask,
+  onShowImpact,
+}: {
+  shown: TaskTab;
+  conn: Connection;
+  task: Task;
+  session: Session | undefined;
+  paused: boolean;
+  review: ReturnType<typeof useTaskReview>;
+  onOpenTask: (id: string) => void;
+  onShowImpact: (task: string) => void;
+}) {
+  return (
+    <>
       {shown === "session" && session && <SessionScreen conn={conn} session={session} selected />}
       {shown === "changes" && (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <TaskChangesView conn={conn} task={task.id} paused={confirmingRemoval} review={review} />
+          <TaskChangesView conn={conn} task={task.id} paused={paused} review={review} />
+        </div>
+      )}
+      {shown === "rounds" && (
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <TaskRounds conn={conn} task={task.id} paused={paused} />
         </div>
       )}
       {shown === "impact" && (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <TaskImpact conn={conn} task={task} paused={confirmingRemoval} onOpenTask={onOpenTask} onShowOnOverview={onShowImpact} />
+          <TaskImpact conn={conn} task={task} paused={paused} onOpenTask={onOpenTask} onShowOnOverview={onShowImpact} />
+        </div>
+      )}
+      {shown === "mcp-calls" && (
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <TaskMcpCalls conn={conn} task={task.id} />
         </div>
       )}
     </>

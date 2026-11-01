@@ -39,7 +39,7 @@ The agent sees the same projects folder you see in Trackwall, through the tools 
 | `who_calls` | Who uses a repo, through packages and HTTP, with evidence. |
 | `subgraph_for` | The part of the connection graph around a repo, with its calls that lead to no repo. |
 | `find_endpoint` | An HTTP endpoint from code or an OpenAPI spec, by path, URL or words, with its types, the repos and endpoints that call it, and the endpoints it calls. |
-| `run_mise_task`, `wait_for_mise_task`, `stop_mise_task`, `list_running_mise_tasks` | Run a repo's mise task, wait up to 55 s for it, stop it, list what runs. With `task`, in that task's worktree. |
+| `run_mise_task`, `wait_for_mise_task`, `stop_mise_task`, `list_running_mise_tasks` | Run a repo's mise task, wait up to 55 s for it, stop it, list what runs. With `task`, in that task's worktree. A task that declares arguments takes them, such as a test filter for `test`. |
 | `tail` | A mise task's log from a cursor, with secrets replaced by `***`; with `task`, the run in that task's worktree. `contains` keeps only lines with that text and `minLevel` only lines at that level or above. |
 | `get_errors` | Errors from the mise task logs, newest first: error lines, compiler errors, exceptions with stack traces, Spring and Gradle failure reports; repeats counted once. With `minLevel: warn`, warnings too. `contains` keeps only errors with a line holding that text, such as an exception class or an endpoint path. |
 | `get_test_results` | The results of the latest test run from the JUnit reports Maven, Gradle, jest or Vitest left in the repo, or with `task` in that task's worktree: totals, each report with its time, and the failed tests with their message and stack trace. |
@@ -62,7 +62,7 @@ The agent sees the same projects folder you see in Trackwall, through the tools 
 
 ## Good to know
 
-- An agent in a session runs and stops only the mise tasks and the service of its own repo; every run is logged with the repo, mise task and session.
+- An agent in a session runs and stops only the mise tasks and the service of its own repo; every call is in [MCP calls](/features/mcp-calls) with the repo, mise task and agent that made it.
 - A task's agent runs mise tasks and the service in the repo root or in its own task's worktree, never in another task's, and in its worktree only with the mise configuration you have trusted (see [Agent tasks](/features/tasks)).
 - Agents get links in the form `trackwall://…` to point you at a repo, session or task: see [trackwall:// links](/features/links).
 - `get_app_config` never gives the agent a secret or the value of an environment variable: a key named like a password, token or key, and a value with `password=` or similar inside, shows only whether it is set. A bare secret under an ordinary key name, such as `db.pw: hunter2`, is still shown, so keep secrets under names that say what they are.

@@ -9,6 +9,7 @@ const quiet: TaskNoticeInput = {
   miseConfig: { neverTrusted: false, changes: [], digest: "d0" },
   verification: null,
   mergeRequest: false,
+  foundMergeRequest: null,
   miseRuns: [],
 };
 const verification = (state: Verification["state"]): Verification => ({
@@ -43,6 +44,7 @@ describe("taskNotices", () => {
       miseConfig: { neverTrusted: false, changes: [{ path: "mise.toml", change: "modified", content: "" }], digest: "d1" },
       verification: verification("failed"),
       mergeRequest: true,
+      foundMergeRequest: null,
       miseRuns: ["dev"],
     });
     expect(notices.map((n) => [n.section, n.tone, n.label])).toEqual([
@@ -126,6 +128,34 @@ describe("tileNotices", () => {
 
   test("mise that cannot run in the worktree keeps its chip, without asking for trust", () => {
     expect(tileNotices(taskNotices({ ...quiet, miseConfig: "unavailable" })).chips.map((n) => n.chip)).toEqual(["mise"]);
+  });
+
+  test("the merge request gets a chip with its number and its pipeline once the repo host named one", () => {
+    const project = { kind: "gitlab", host: "gitlab.example.com", path: "shop" } as const;
+    const mergeRequest = (state: "open" | "merged", pipeline: "failed" | "running" | null) => ({
+      number: 12,
+      title: "Add a discount",
+      url: "https://gitlab.example.com/shop/-/merge_requests/12",
+      state,
+      pipeline: pipeline && { state: pipeline, url: "u", commit: "a".repeat(40), failedJobs: [] },
+    });
+    const failed = tileNotices(
+      taskNotices({ ...quiet, mergeRequest: true, foundMergeRequest: { project, mergeRequest: mergeRequest("open", "failed") } }),
+    );
+    expect(failed.chips.map((n) => [n.chip, n.tone, n.label])).toEqual([["!12 failed", "failed", "!12 · pipeline failed"]]);
+    const running = taskNotices({
+      ...quiet,
+      mergeRequest: true,
+      foundMergeRequest: { project, mergeRequest: mergeRequest("open", "running") },
+    });
+    expect(running.map((n) => [n.chip, n.tone])).toEqual([["!12 running", "running"]]);
+    // Once merged, the last pipeline no longer matters.
+    const merged = taskNotices({
+      ...quiet,
+      mergeRequest: true,
+      foundMergeRequest: { project, mergeRequest: mergeRequest("merged", "failed") },
+    });
+    expect(merged.map((n) => [n.chip, n.tone, n.label])).toEqual([["!12 merged", "passed", "!12 · merged"]]);
   });
 
   test("a running verification has a chip, a cancelled one stays on the badge", () => {

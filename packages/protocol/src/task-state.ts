@@ -9,6 +9,16 @@ export const TaskState = z.enum(["Working", "Input", "Approval", "Plan", "Done",
 export type TaskState = z.infer<typeof TaskState>;
 
 /**
+ * States in the middle of a turn: the agent works (`Stale` is working without output) or a dialog of the turn waits.
+ * Esc interrupts them, and a round is not undone in them (ADR-168).
+ */
+const IN_TURN: ReadonlySet<TaskState> = new Set(["Working", "Stale", "Approval", "Plan"]);
+
+export function inTurn(state: TaskState | undefined): boolean {
+  return state !== undefined && IN_TURN.has(state);
+}
+
+/**
  * `hook`: an agent CLI hook; `osc`: a terminal sequence; `screen`: a screen pattern; `keyboard`: a key the person
  * answered with in the session terminal; `timeout`: no signal for longer than the threshold; `exit`: the end of the
  * session process, observed by the daemon; `acp`: the Agent Client Protocol of a session in the conversation view
