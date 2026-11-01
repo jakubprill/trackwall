@@ -517,6 +517,7 @@ export const mcpTools = {
   getAppConfig: {
     name: "get_app_config",
     readOnly: true,
+    auditArgs: ["repo", "task"] as const,
     description:
       "A Spring app's configuration as the files in a repo root, or with task in that task's worktree, give it now (also " +
       "uncommitted and git-ignored files such as application-local.yml): application* and bootstrap* (.yml, .yaml, " +
@@ -653,6 +654,7 @@ export const mcpTools = {
   searchCommits: {
     name: "search_commits",
     readOnly: true,
+    auditArgs: ["repos", "tags"] as const,
     description:
       "Search the commit history of many repos at once (git log from each repo's latest commit): who changed what and " +
       "when. text finds the commits that change how many times it occurs, that is add or remove it (git's pickaxe -S; " +
@@ -691,6 +693,7 @@ export const mcpTools = {
   searchTaskHistory: {
     name: "search_task_history",
     readOnly: true,
+    auditArgs: ["repos"] as const,
     description:
       "Search the tasks the user has ended (the task journal): how a similar change was done before, in this repo or " +
       "another one. text is words that must all appear, in any case, in a task's title, prompt, summary, branch, repo, " +
