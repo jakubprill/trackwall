@@ -23,6 +23,7 @@ async function workspaceWithGitLab(config: FakeHostingConfig = {}, afterClone = 
   const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
   const workspace = new Workspace({
+    inContainer: false,
     file: new WorkspaceFile(file),
     vcs: new Vcs(systemTempFolder),
     hosting: fakeHosting(config).hosting,
@@ -171,6 +172,7 @@ describe("cloning from a repo host into the projects folder", () => {
 
     const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
     const bare = new Workspace({
+      inContainer: false,
       file: new WorkspaceFile(file),
       vcs: new Vcs(systemTempFolder),
       hosting: fakeHosting().hosting,

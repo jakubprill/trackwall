@@ -1,5 +1,5 @@
-# Release from a vX.Y.Z tag: portable build on Windows and macOS, then one GitHub Release.
-# The release is created only once both builds pass, so it is never half-done.
+# Release from a vX.Y.Z tag: portable build on Windows and macOS and the Linux archives for a container (ADR-163), then
+# one GitHub Release. The release is created only once every build passes, so it is never half-done.
 # The update packages are signed and listed in `latest.json`, which the app's updater reads (ADR-53).
 # The build steps are the same as in the `desktop` job in ci.yml. Instructions: docs/release.md
 name: Release
@@ -104,10 +104,81 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # The daemon and its page for a Linux container (ADR-163), built and smoke-tested on each architecture's own runner, and
+  # signed with the update key, so that an update inside the container can check it.
+  linux:
+    name: Linux archive (${{ matrix.arch }})
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-latest
+            triple: x86_64-unknown-linux-gnu
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            triple: aarch64-unknown-linux-gnu
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Tag on main
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Tag $TAG points to a commit outside main"
+            exit 1
+          fi
+
+      - uses: ./.github/actions/setup
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: pnpm --filter @trackwall/ui build
+      - run: pnpm --filter @trackwall/daemon build --target ${{ matrix.triple }}
+      - run: bun apps/desktop/scripts/package-linux.ts ${{ matrix.arch }}
+      # The smoke test runs the binary as the archive unpacks it, with the page next to it.
+      - name: smoke test of the unpacked archive
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          unpacked="$RUNNER_TEMP/linux-archive"
+          mkdir -p "$unpacked"
+          tar -xzf "out/trackwall-${TAG#v}-linux-${{ matrix.arch }}.tar.gz" -C "$unpacked"
+          bun packages/daemon/scripts/smoke.ts "$unpacked/trackwall/trackwall-daemon" --page
+      # Only this step gets the key, as in the build job.
+      - name: Sign the archive
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::The TAURI_SIGNING_PRIVATE_KEY secret is not set, see docs/release.md"
+            exit 1
+          fi
+          pnpm --filter @trackwall/desktop exec tauri signer sign --app-version "${TAG#v}" \
+            "$GITHUB_WORKSPACE/out/trackwall-${TAG#v}-linux-${{ matrix.arch }}.tar.gz"
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: trackwall-Linux-${{ matrix.arch }}
+          path: |
+            out/*.tar.gz
+            out/*.sig
+          if-no-files-found: error
+          retention-days: 7
+
   # Checks the files and writes SHA256SUMS.txt and latest.json without write access: it runs `pnpm install` for the
   # script, and only the publish job below may change the repo.
   manifest:
-    needs: build
+    needs: [build, linux]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -136,7 +207,9 @@ jobs:
           win="trackwall-$version-windows-x64.zip"
           mac="trackwall-$version-macos-arm64.zip"
           mac_update="trackwall-$version-macos-arm64.app.tar.gz"
-          expected=("$win" "$mac" "$mac_update" "$win.sig" "$mac_update.sig")
+          linux_x64="trackwall-$version-linux-x64.tar.gz"
+          linux_arm64="trackwall-$version-linux-arm64.tar.gz"
+          expected=("$win" "$mac" "$mac_update" "$linux_x64" "$linux_arm64" "$win.sig" "$mac_update.sig" "$linux_x64.sig" "$linux_arm64.sig")
           for f in "${expected[@]}"; do
             [ -f "$f" ] || { echo "::error::Missing $f, found: $(ls)"; exit 1; }
           done
@@ -144,7 +217,7 @@ jobs:
             echo "::error::Expected only ${expected[*]}, found: $(ls)"
             exit 1
           fi
-          sha256sum "$win" "$mac" "$mac_update" > SHA256SUMS.txt
+          sha256sum "$win" "$mac" "$mac_update" "$linux_x64" "$linux_arm64" > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       # The manifest the app's updater reads from releases/latest/download/latest.json (ADR-53); the script refuses a
@@ -178,7 +251,7 @@ jobs:
           sparse-checkout: docs/release-notes
           persist-credentials: false
 
-      # The packages and signatures of both builds and the manifest job's two files.
+      # The packages and signatures of every build and the manifest job's two files.
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           pattern: trackwall-*

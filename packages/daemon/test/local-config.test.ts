@@ -18,6 +18,7 @@ import { fakeHostingClis } from "./support/hosting.ts";
 async function setup(projects = mkdtempSync(join(tmpdir(), "trackwall-projects-")), hostingClis = HOSTING_CLIS) {
   const logged: string[] = [];
   const facade = createFacade({
+    inContainer: false,
     home: mkdtempSync(join(tmpdir(), "trackwall-home-")),
     homeFrom: "flag",
     openUrl: () => {},
@@ -689,6 +690,7 @@ describe("the local config store", () => {
 
   test("without a projects folder there is no store and nothing to back up", async () => {
     const facade = createFacade({
+      inContainer: false,
       home: mkdtempSync(join(tmpdir(), "trackwall-home-")),
       homeFrom: "flag",
       openUrl: () => {},

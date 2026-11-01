@@ -59,6 +59,7 @@ beforeAll(async () => {
   gitIn(orders, "remote", "add", "origin", "git@gitlab.example.com:shop/orders-bff.git");
   home = mkdtempSync(join(tmpdir(), "trackwall-mcp-home-"));
   facade = createFacade({
+    inContainer: false,
     home,
     homeFrom: "flag",
     openUrl: () => {},
@@ -100,11 +101,13 @@ describe("MCP server over Streamable HTTP", () => {
       "tail",
       "get_errors",
       "get_test_results",
+      "get_app_config",
       "who_calls",
       "subgraph_for",
       "find_endpoint",
       "search_code",
       "search_commits",
+      "search_task_history",
       "list_sessions",
       "get_session",
       "get_day_report",

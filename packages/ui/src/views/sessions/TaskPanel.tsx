@@ -2,6 +2,7 @@ import { mayHandToSupervisor, type RunningMiseTask, type Session, TASK_PORT_ENV,
 import { Bot, GitBranch, Plug, ShieldOff, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
+import { ReadRequestNotice } from "@/components/ReadRequestNotice";
 import { SessionTerminal } from "@/components/SessionTerminal";
 import { StatusLabel } from "@/components/StatusLabel";
 import { TabBar } from "@/components/TabBar";
@@ -138,6 +139,7 @@ export function TaskPanel({
       </header>
       <SessionEnvironment environment={session?.environment} />
       <EnvironmentChangeNotice key={session?.id} conn={conn} session={session} onRestarted={onChanged} />
+      <ReadRequestNotice key={`read-request-${session?.id}`} conn={conn} session={session} onDelivered={onChanged} />
       {confirmingRemoval && <TaskRemoval conn={conn} task={task} onRemoved={onRemoved} onCancel={() => setRemoving(false)} />}
       <TaskNoticeStrip
         notices={details.notices}

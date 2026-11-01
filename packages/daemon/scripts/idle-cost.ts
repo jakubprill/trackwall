@@ -59,6 +59,7 @@ count(LiveSession.prototype, "tick", "session cycles (LiveSession.tick)");
 
 const token = newToken();
 const facade = createFacade({
+  inContainer: false,
   home,
   homeFrom: "flag",
   openUrl: () => {},

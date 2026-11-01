@@ -164,12 +164,12 @@ const SHOTS: Record<string, (page: Page) => Promise<void>> = {
 
 /**
  * The tray panel at the size of its window (`tauri.conf.json`), with the approvals of the demo's sessions. The page is
- * the same UI under `#tray-panel`; the first load takes the token from the address into the tab's storage.
+ * the same UI under `#tray-panel`; the first load takes the token from the address into the page's storage.
  */
 async function trayPanelShot(page: Page, url: string, origin: string): Promise<void> {
   await page.goto(url);
-  // The UI moves the token from the address into the tab's storage once it has loaded.
-  await page.waitForFunction(() => window.sessionStorage.length > 0);
+  // The UI moves the token from the address into the page's storage once it has loaded.
+  await page.waitForFunction(() => window.localStorage.getItem("trackwall.token") !== null);
   // Another query string, so the browser loads the page again instead of only changing the fragment.
   await page.goto(`${origin}/?panel#tray-panel`);
   await page.getByText("Do you want to run this command?").first().waitFor();

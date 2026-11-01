@@ -34,6 +34,7 @@ async function folderOfTwentyRepos() {
   const clock = { ms: 0 };
   const vcs = new Vcs(systemTempFolder, () => clock.ms);
   const workspace = new Workspace({
+    inContainer: false,
     file: new WorkspaceFile(join(home, "workspace.yaml")),
     vcs,
     hosting: fakeHosting().hosting,

@@ -36,6 +36,19 @@ async function startTrackwall(options: Omit<SessionApiOptions, "uiDir"> = ONE_RE
   const clients: Client[] = [];
   return {
     daemon,
+    origin,
+    /** The page address with the token, as `trackwall-daemon address` prints it. */
+    address: `${origin}/#token=${token}`,
+    /**
+     * The page in a browser without a token, as a bookmark opens it after the daemon restarted (ADR-161); in a context of
+     * its own, so that a second tab shares its storage.
+     */
+    openWithoutToken: async () => {
+      const context = await browser.newContext({ viewport: VIEWPORT, colorScheme: "dark" });
+      const page = await context.newPage();
+      await page.goto(origin);
+      return page;
+    },
     /** The main window as the Tauri shell opens it, on Home. */
     open: (viewport = VIEWPORT) => openMainWindow(browser, origin, token, viewport),
     /** The main window as the Tauri shell shows it: under the window's origin and CSP, connected through the shell. */

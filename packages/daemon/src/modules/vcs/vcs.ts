@@ -54,6 +54,7 @@ import { pathKey } from "./path-key.ts";
 import { remoteAddress } from "./remote.ts";
 import { StatusMemo, type TimedStatus } from "./status-memo.ts";
 import { syncRepo } from "./sync.ts";
+import { type RepoUnpushed, readUnpushed } from "./unpushed.ts";
 import { addWorktree, defaultBase, deleteBranch, pendingWork, removeWorktree } from "./worktree.ts";
 import { workingTreeChanges, worktreeChanges } from "./worktree-changes.ts";
 import { copyIncludedFiles } from "./worktree-include.ts";
@@ -143,6 +144,14 @@ export class Vcs {
    */
   status(dir: string, how: StatusRead): Promise<RepoStatusOk> {
     return this.statuses.get(dir, how, () => this.readStatus(dir));
+  }
+
+  /**
+   * The repo's work on no remote, across all its worktrees (ADR-162); each worktree's changes come from `status`, so a
+   * list refreshed often reuses them like the repo list.
+   */
+  unpushed(dir: string): Promise<RepoUnpushed> {
+    return readUnpushed(dir, async (worktree) => (await this.status(worktree, "recent")).changes);
   }
 
   private async readStatus(dir: string): Promise<TimedStatus> {
@@ -317,6 +326,20 @@ export class Vcs {
     if (fromFiles !== undefined) return fromFiles;
     const [head] = await this.objects(dir, ["HEAD"]);
     return head?.type === "commit" ? head.oid : null;
+  }
+
+  /**
+   * The paths the index tracks that match the `globs` (git's `**` and `*`, relative to the root, with `/`), cut at
+   * `maxBytes` of output (`truncated`); for finding where in the working directory to read (ADR-153).
+   */
+  async trackedFiles(dir: string, globs: readonly string[], maxBytes: number): Promise<{ paths: string[]; truncated: boolean }> {
+    const { stdout, truncated } = await git(dir, ["ls-files", "-z", "--", ...globs.map((g) => `:(glob)${g}`)], { maxBytes });
+    const paths = stdout
+      .toString("utf8")
+      .split("\0")
+      .filter((path) => path !== "");
+    // The last record of cut output may be an incomplete path.
+    return { paths: truncated ? paths.slice(0, -1) : paths, truncated };
   }
 
   /**

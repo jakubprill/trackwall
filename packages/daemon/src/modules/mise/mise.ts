@@ -132,6 +132,16 @@ export interface SessionMiseEnv extends MiseEnv {
   profile: string | null;
 }
 
+/**
+ * The environment of a run: every variable, the values of its secrets, and why mise's `[env]` is not in it, in one line
+ * (`null` when it is or there is no mise).
+ */
+export interface RunEnv {
+  env: NodeJS.ProcessEnv;
+  secretValues: string[];
+  problem: string | null;
+}
+
 /** A place a session's environment can come from: where mise runs, or a `DomainError` when the place is refused. */
 interface EnvPlace {
   label: string;
@@ -368,6 +378,30 @@ export class Mise {
     return { ...(await this.sessionEnvIn(place, env)), profile };
   }
 
+  /**
+   * The environment a run of `target` gets (ADR-153), for telling which variables are set: the user's, in a task's
+   * worktree with the task port, and mise's `[env]` there, with the values of the secrets among them to mask. A place
+   * mise refuses or cannot read gives the rest, with mise's reason in `problem`. Unlike a session's place (`readPlace`),
+   * an environment whose redactions mise cannot give is still taken, as a run takes it: nothing of it is handed out,
+   * the variables are only looked up by name.
+   */
+  async runEnv(target: MiseTarget): Promise<RunEnv> {
+    const env = await this.deps.env();
+    const place = target.task === null ? this.rootPlace(target.repo, env) : this.worktreePlace(target.task, target.repo, env);
+    let where: { dir: string; env: NodeJS.ProcessEnv };
+    try {
+      where = await place.where();
+    } catch (err) {
+      if (!(err instanceof DomainError)) throw err;
+      return { env, secretValues: [], problem: reasonLine(err.message) };
+    }
+    const read = await readMiseEnv(this.deps.command, where.dir, where.env);
+    if (read.kind === "not_installed") return { env: where.env, secretValues: [], problem: null };
+    if (read.kind === "error") return { env: where.env, secretValues: [], problem: reasonLine(read.message) };
+    const problem = read.kind === "unredacted" ? reasonLine(read.message) : null;
+    return { env: { ...where.env, ...read.env.vars }, secretValues: read.env.secretValues, problem };
+  }
+
   /** The projects folder's environment as mise gives it without a session profile, for the view of the config files (ADR-108). */
   async projectsEnv(): Promise<Omit<SessionMiseEnv, "profile">> {
     return this.sessionEnvIn({ repo: null, task: null }, { ...(await this.deps.env()) });
@@ -393,7 +427,7 @@ export class Mise {
     task: string | null,
     env: NodeJS.ProcessEnv,
   ): Promise<{ kind: "done"; env: Omit<SessionMiseEnv, "profile"> } | { kind: "refused"; problem: string }> {
-    const root: EnvPlace = { label: `the root of ${repo}`, where: async () => ({ dir: await this.deps.repos.repoPath(repo), env }) };
+    const root = this.rootPlace(repo, env);
     const inRoot = await this.readPlace(root);
     if (inRoot.kind === "not_installed") return { kind: "done", env: { ...NO_MISE_ENV, problem: null } };
     if (inRoot.kind === "error") return { kind: "refused", problem: `${root.label}: ${inRoot.message}` };
@@ -402,6 +436,10 @@ export class Mise {
     if (inWorktree.kind === "ok") return { kind: "done", env: { ...inWorktree.env, problem: null } };
     const message = inWorktree.kind === "error" ? inWorktree.message : "mise did not start there";
     return { kind: "done", env: { ...inRoot.env, problem: sessionProblem([`the task's worktree: ${message}`], root.label) } };
+  }
+
+  private rootPlace(repo: string, env: NodeJS.ProcessEnv): EnvPlace {
+    return { label: `the root of ${repo}`, where: async () => ({ dir: await this.deps.repos.repoPath(repo), env }) };
   }
 
   private worktreePlace(task: string, repo: string, env: NodeJS.ProcessEnv): EnvPlace {
@@ -558,4 +596,16 @@ function withTaskPort(env: NodeJS.ProcessEnv, port: number): NodeJS.ProcessEnv {
 /** The owner of a repo's `mise install` group; a different prefix than mise tasks, because a mise task may be called `install`. */
 function installOwner(repo: string): string {
   return `mise-install:${repo}`;
+}
+
+/** Longer is not a reason but text mise echoed. */
+const REASON_MAX_CHARS = 300;
+
+/**
+ * mise's reason in one line: the further lines of its message may echo `[env]` content (a template that did not
+ * render), and `runEnv`'s reason goes to any agent (ADR-153).
+ */
+function reasonLine(message: string): string {
+  const line = message.split("\n")[0] ?? "";
+  return line.length > REASON_MAX_CHARS ? `${line.slice(0, REASON_MAX_CHARS)}…` : line;
 }

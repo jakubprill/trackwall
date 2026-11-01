@@ -4,13 +4,15 @@
  *
  *   bun apps/desktop/scripts/update-manifest.ts <folder with the release files> <tag> <owner/repo>
  *
- * The release workflow runs it after both builds. It refuses a signature made with another key than the one in
- * `tauri.conf.json`, which installed copies would refuse only after the release is out.
+ * The release workflow runs it after every build. It refuses a signature made with another key than the one in
+ * `tauri.conf.json`, which installed copies would refuse only after the release is out; that covers the Linux archives
+ * too (ADR-163), which are not in the manifest but are checked with the same key.
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { parseFile, TAURI_DIR } from "./lib.ts";
+import { LINUX_ARCHS, linuxArchiveName } from "./linux-archive.ts";
 
 /**
  * The update package of each system, under the updater's target name (`{os}-{arch}`). On Windows it is the release zip
@@ -39,19 +41,24 @@ export interface ManifestInput {
 
 export function updateManifest({ tag, repo, pubkey, signatures, date }: ManifestInput) {
   const version = tag.replace(/^v/, "");
-  const expectedKey = keyId(pubkey, "public key");
   const platforms = Object.fromEntries(
     TARGETS.map((target) => {
       const file = UPDATE_PACKAGES[target](version);
       const signature = signatures[target].trim();
-      const signedWith = keyId(signature, `signature of ${file}`);
-      if (signedWith !== expectedKey) {
-        throw new Error(`${file} is signed with key ${signedWith}, but tauri.conf.json has key ${expectedKey} (docs/release.md)`);
-      }
+      assertSignedWith(pubkey, file, signature);
       return [target, { url: `https://github.com/${repo}/releases/download/${tag}/${file}`, signature }];
     }),
   );
   return { version, pub_date: date.toISOString(), platforms };
+}
+
+/** Throws unless `signature` (the contents of `file`'s `.sig`) was made with the key of `pubkey`. */
+export function assertSignedWith(pubkey: string, file: string, signature: string): void {
+  const expectedKey = keyId(pubkey, "public key");
+  const signedWith = keyId(signature.trim(), `signature of ${file}`);
+  if (signedWith !== expectedKey) {
+    throw new Error(`${file} is signed with key ${signedWith}, but tauri.conf.json has key ${expectedKey} (docs/release.md)`);
+  }
 }
 
 /**
@@ -74,6 +81,10 @@ function main([dist, tag, repo]: string[]) {
     TARGETS.map((target) => [target, readFileSync(join(dist, signatureFile(UPDATE_PACKAGES[target](version))), "utf8")]),
   ) as Record<Target, string>;
   const { pubkey } = parseFile(join(TAURI_DIR, "tauri.conf.json"), TauriConf, JSON.parse).plugins.updater;
+  for (const arch of LINUX_ARCHS) {
+    const file = linuxArchiveName(version, arch);
+    assertSignedWith(pubkey, file, readFileSync(join(dist, signatureFile(file)), "utf8"));
+  }
   const manifest = updateManifest({ tag, repo, pubkey, signatures, date: new Date() });
   writeFileSync(join(dist, MANIFEST_FILE), `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(JSON.stringify(manifest, null, 2));
