@@ -15,7 +15,7 @@ This page uses VS Code's Dev Containers extension. Any container works the same 
 
 - Docker (Docker Desktop on Windows or macOS) and VS Code with the Dev Containers extension.
 - Repos cloned into a Docker volume, not a folder of your computer mounted into the container: a mounted folder is as slow as before, and the [doctor](/features/doctor) warns about it.
-- A Linux image with git, curl and unzip. Debian or Ubuntu is the simplest. On Alpine, Bun also needs `libstdc++` and `libgcc` (`apk add libstdc++ libgcc`).
+- A Linux image with git and curl, on x86_64 or arm64. Debian or Ubuntu is the simplest; Alpine is not supported.
 
 ## Set up the container
 
@@ -32,36 +32,43 @@ A `.devcontainer/devcontainer.json` that keeps the repos, Trackwall's state, the
     "source=workspace-copilot,target=/home/vscode/.copilot,type=volume",
     "source=workspace-mise,target=/home/vscode/.config/mise,type=volume"
   ],
+  "features": {
+    "https://github.com/jakubprill/trackwall/releases/download/v<version>/devcontainer-feature-trackwall.tgz": {}
+  },
   "forwardPorts": [7700],
   "portsAttributes": {
     "7700": { "label": "Trackwall", "requireLocalPort": true, "onAutoForward": "silent" }
   },
   "containerEnv": {
     "NO_PROXY": "127.0.0.1,localhost,host.docker.internal",
+    "TRACKWALL_HOME": "/home/vscode/.trackwall",
     "TRACKWALL_DEVCONTAINER_HOST_FOLDER": "${localWorkspaceFolder}"
   },
   "postCreateCommand": "sudo chown -R vscode:vscode /workspaces /home/vscode/.trackwall /home/vscode/.copilot /home/vscode/.config/mise"
 }
 ```
 
+- `features` adds Trackwall to your own image: replace `<version>` with the version of the desktop app you use, for example `0.6.0`. It installs Trackwall of that version, checked against the checksum the release wrote into it, and starts it every time the container starts.
 - A new volume belongs to `root`, so `postCreateCommand` hands the folders to the container's user.
+- `TRACKWALL_HOME` tells the desktop app where Trackwall keeps its state in the container.
 - `requireLocalPort` keeps the forwarded port at 7700 on your computer. Trackwall accepts a page only from `127.0.0.1:<port>` or `localhost:<port>` with the port it listens on, so a forward to another number does not load.
 - `TRACKWALL_DEVCONTAINER_HOST_FOLDER` tells Trackwall which folder on your computer the container was opened from, so "Open in VS Code" opens the same kind of window as opening that folder in a container yourself, with the extensions and settings of this `devcontainer.json`. Without it, VS Code attaches to the running container without them. Use it when you open the container from a folder on Windows or macOS; from a folder inside WSL it may not open.
 - Behind a proxy, set `HTTPS_PROXY` and `HTTP_PROXY` in `containerEnv` too, and keep `NO_PROXY` as above. A proxy that replaces certificates also needs its certificate in the image, and `NODE_EXTRA_CA_CERTS` pointing at it in `containerEnv`, because Copilot CLI does not read the system's certificates; the [doctor](/features/doctor) names the file when the image already has it.
 
 ## Start Trackwall
 
-Trackwall has no Linux download, so it runs from its source. In a terminal of the container:
+Rebuild the container ("Dev Containers: Rebuild Container" in VS Code). From then on Trackwall starts with the container, on port 7700, and starts again by itself if it crashes. Then, in a terminal of the container:
 
-1. Install mise and turn it on in your shell: `curl https://mise.run | sh && echo 'eval "$(~/.local/bin/mise activate bash)"' >> ~/.bashrc`, then open a new terminal.
-2. Install the tools Trackwall needs and Copilot CLI: `mise use -g node@22 bun@1.4.4 pnpm@10.28.0 && npm install -g @github/copilot`.
-3. Clone Trackwall outside the projects folder and build its page: `git clone https://github.com/jakubprill/trackwall.git ~/trackwall && cd ~/trackwall && pnpm install --frozen-lockfile && pnpm --filter @trackwall/ui build`.
-4. Point Trackwall at the repos: `echo "projectsDir: /workspaces" > ~/.trackwall/workspace.yaml`.
-5. Start it on the forwarded port: `bun packages/daemon/src/main.ts --port 7700`.
-6. In a second terminal, print the address with its token: `cd ~/trackwall && bun packages/daemon/src/main.ts address`, and open it in the browser on your computer.
-7. Sign in to Copilot CLI once: run `copilot`, type `/login` and follow the steps in your browser. The sign-in stays in the `workspace-copilot` volume.
+1. Install mise and, with it, Copilot CLI: `curl https://mise.run | sh`, then `~/.local/bin/mise use -g node@22 npm:@github/copilot`. Trackwall finds tools installed with mise without further setup.
+2. Point Trackwall at the repos: in Settings › Workspace choose `/workspaces`, or run `echo "projectsDir: /workspaces" > ~/.trackwall/workspace.yaml` before the first start.
+3. Print the address with its token: `trackwall-container address`, and open it in the browser on your computer.
+4. Sign in to Copilot CLI once: run `copilot`, type `/login` and follow the steps in your browser. The sign-in stays in the `workspace-copilot` volume.
 
-The browser keeps the token for that address, so a bookmark of `http://127.0.0.1:7700` and a new tab open Trackwall without it. The token changes every time Trackwall starts: after a restart, open or reload the page, and it asks for the address; print it again as in step 6 and paste it there. Trackwall stops when its terminal or the container stops.
+The browser keeps the token for that address, so a bookmark of `http://127.0.0.1:7700` and a new tab open Trackwall without it. The token changes every time Trackwall starts: after a restart, open or reload the page, and it asks for the address; print it again as in step 3 and paste it there. Trackwall's output goes to `~/.trackwall/logs/daemon.log` in the container; look there when it does not answer. It stops when the container stops, or when you stop it from the app.
+
+`trackwall-container start` is safe to run at any time: it starts Trackwall only when it does not run, and prints one line of JSON, for example `{"ok":true,"version":"0.6.0","status":"running","port":7700,"daemon":{"version":"0.6.0","pid":812}}`. `starting` means Trackwall is still coming up; an error says what failed. After crashing ten times in a row within a minute of each start, Trackwall is not started again until you run the command.
+
+The Feature's `port` option changes the port, for example `{ "port": "7701" }` in place of `{}`; forward the same number. Releases up to 0.5.13 have no Feature; use a newer one.
 
 ## Bring your skills and plugins
 
@@ -83,7 +90,7 @@ Copilot CLI in the container sees only what is in the container: the skills and 
 The desktop app can use Trackwall in the container instead of running its own, so you keep the tray, system notifications when a session needs you, several windows, `trackwall://` links and [Start at sign-in](/features/start-at-sign-in).
 
 1. Install the desktop app on your computer, the same version as Trackwall in the container (see [Install](/guide/install)).
-2. Start Trackwall in the container and look up its address with the token, as in steps 5 and 6 above.
+2. Look up the address of Trackwall in the container with its token, as in step 3 above.
 3. In the app, open Settings › App › Daemon in a container, paste the address and click "Connect". When the app's own Trackwall did not start, the same field is on the screen it shows instead.
 
 Or let the app start the container and connect by itself, see [Start the container from the app](#start-the-container-from-the-app).
@@ -96,16 +103,7 @@ In the app, links and "Open in VS Code" open on your computer as they do from th
 
 The app can do what you would otherwise do by hand: open the dev container, wait for Trackwall in it and connect with its current token. It also does that after Trackwall in the container restarted with a new token.
 
-1. After the steps of [Start Trackwall](#start-trackwall), let the container start Trackwall by itself and tell where its state is. Add to `devcontainer.json`:
-
-   ```json
-   "containerEnv": {
-     "TRACKWALL_HOME": "/home/vscode/.trackwall"
-   },
-   "postStartCommand": "nohup bash -c 'cd ~ && ~/.local/bin/mise exec -- bun ~/trackwall/packages/daemon/src/main.ts --port 7700 > /tmp/trackwall-daemon.log 2>&1 &' > /dev/null 2>&1"
-   ```
-
-   Keep the other keys of `containerEnv` from [Set up the container](#set-up-the-container). `mise exec` runs Trackwall with the tools you installed in step 2. Trackwall's output goes to `/tmp/trackwall-daemon.log` in the container; look there when the app keeps waiting.
+1. Set up the container with the Trackwall Feature and `TRACKWALL_HOME`, as in [Set up the container](#set-up-the-container): the Feature starts Trackwall with the container, and `TRACKWALL_HOME` tells the app where its state is.
 2. Rebuild the container once ("Dev Containers: Rebuild Container" in VS Code).
 3. In the app, open Settings › App › Daemon in a container. Under the dev container, enter the folder on your computer that holds `.devcontainer` (the folder you open in a container yourself) and the folder VS Code opens inside it, `/workspaces` in the example, and click "Save". While the app is connected to Trackwall in a container that sets `TRACKWALL_DEVCONTAINER_HOST_FOLDER`, the first field is already filled in.
 4. Click "Start the dev container and connect".
@@ -126,6 +124,5 @@ Tokens for such servers come in through [Environment from mise](/features/mise-e
 - Links open in a new tab of your browser; when the browser blocks the new tab, allow pop-ups for the page.
 - "Open in VS Code" opens the repo, task worktree or file in VS Code on your computer, inside the running container through the Dev Containers extension: with the extensions and settings of your `devcontainer.json` when it sets `TRACKWALL_DEVCONTAINER_HOST_FOLDER` (see [Set up the container](#set-up-the-container)), attached to the container otherwise. It reuses the running container of that folder; if none is running, VS Code starts or builds it as when you open the folder yourself. The browser asks once whether to open VS Code. "Show in the file manager" is not there, since a folder of the container means nothing to your computer. With Podman instead of Docker, set `dev.containers.dockerPath` to `podman` in VS Code first.
 - The command from [Connect Copilot CLI](/guide/connect-copilot-cli) is a path inside the container, so it works for a Copilot CLI in the container, not on your computer.
-- Packages installed on Alpine do not work on Debian and the other way round. After switching the image, delete `node_modules` in `~/trackwall` and run the install and build of step 3 again.
-- To update, run `git pull` in `~/trackwall`, then the install and build of step 3, and start Trackwall again.
+- To update, change `<version>` in the Feature's address to the new version and rebuild the container. The volumes keep your repos, Trackwall's state and the sign-ins.
 - Repos with changes you have not pushed live only in the `workspace-repos` volume. Removing the volume, or "Reset to factory defaults" in Docker Desktop, deletes them. "Only in this container" on [Home](/features/home) and the [doctor](/features/doctor) list what is at stake.

@@ -159,7 +159,8 @@ export function watchDaemonFile(home: string, self: DaemonFile, onSuperseded: (b
   return () => clearInterval(timer);
 }
 
-function isAlive(pid: number): boolean {
+/** Whether a process with this PID exists (EPERM: it does, under another user). */
+export function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;

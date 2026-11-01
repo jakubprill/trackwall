@@ -3,12 +3,23 @@ import { existsSync, readFileSync } from "node:fs";
 import { arch, platform } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { ContainerStartResult } from "@trackwall/protocol";
 import { EventHub } from "./api/event-hub.ts";
 import { sessionHookRequest } from "./api/hooks.ts";
 import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
 import { createErrorJournal, createFacade, type Facade, HOSTING_CLIS } from "./facade.ts";
-import { ADDRESS_COMMAND, type CommandLine, type DaemonArgs, MCP_STDIO_COMMAND, parseCommandLine, USAGE } from "./infra/args.ts";
+import {
+  ADDRESS_COMMAND,
+  CONTAINER_START,
+  type CommandLine,
+  type DaemonArgs,
+  MCP_STDIO_COMMAND,
+  parseCommandLine,
+  USAGE,
+} from "./infra/args.ts";
+import { containerStart } from "./infra/container-start.ts";
+import { CONTAINER_COMMAND, superviseDaemon } from "./infra/container-supervisor.ts";
 import { CONTAINER_MARKERS, desktopOpeners, devContainerFolder, hasDesktop, ownContainer } from "./infra/desktop.ts";
 import { daemonPageAddress, newToken, probeRunningDaemon, watchDaemonFile, withStartLock, writeDaemonFile } from "./infra/discovery.ts";
 import { watchEventLoopStalls } from "./infra/event-loop-stalls.ts";
@@ -200,13 +211,23 @@ let commandLine: CommandLine;
 try {
   commandLine = parseCommandLine(process.argv.slice(2));
 } catch (err) {
-  process.stderr.write(`${(err as Error).message}\n\n${USAGE}`);
+  const message = (err as Error).message;
+  // The container command answers in JSON even here, so the desktop app can tell a wrong call from a failed start.
+  if (process.argv[2] === CONTAINER_COMMAND) {
+    const result: ContainerStartResult = { ok: false, version: VERSION, error: { code: "bad-arguments", message } };
+    process.stdout.write(`${JSON.stringify(result)}\n`);
+  }
+  process.stderr.write(`${message}\n\n${USAGE}`);
   process.exit(EXIT_USAGE);
 }
 if (commandLine.command === MCP_STDIO_COMMAND) {
   runMcpStdio(trackwallHome(commandLine.home));
 } else if (commandLine.command === ADDRESS_COMMAND) {
   void printAddress(trackwallHome(commandLine.home));
+} else if (commandLine.command === CONTAINER_COMMAND) {
+  const home = trackwallHome(commandLine.home);
+  if (commandLine.action === CONTAINER_START) void printContainerStart(home, commandLine.port);
+  else void superviseDaemon(home, commandLine.port);
 } else if (commandLine.args.help) {
   process.stdout.write(USAGE);
 } else if (commandLine.args.version) {
@@ -239,4 +260,11 @@ async function printAddress(home: string): Promise<void> {
     return;
   }
   process.stdout.write(`${daemonPageAddress(running.file)}\n`);
+}
+
+/** One JSON object on stdout whatever happens, for the desktop app that runs it through `docker exec` (ADR-164). */
+async function printContainerStart(home: string, port: number): Promise<void> {
+  const result = await containerStart({ home, port, version: VERSION });
+  process.stdout.write(`${JSON.stringify(result)}\n`);
+  process.exitCode = result.ok ? 0 : 1;
 }
