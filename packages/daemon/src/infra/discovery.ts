@@ -53,8 +53,11 @@ export function removeDaemonFile(home: string, pid: number): void {
   if (current?.pid === pid) rmSync(daemonFilePath(home), { force: true });
 }
 
+/** A daemon that answers for a state directory: its `daemon.json` and the version it reports. */
+export type RunningDaemon = { file: DaemonFile; version: string };
+
 /** The running daemon's version from `daemon.json`, or `undefined` when nobody answers. */
-export async function probeRunningDaemon(home: string, timeoutMs = 1500): Promise<{ file: DaemonFile; version: string } | undefined> {
+export async function probeRunningDaemon(home: string, timeoutMs = 1500): Promise<RunningDaemon | undefined> {
   const file = readDaemonFile(home);
   if (!file) return undefined;
   try {
@@ -159,7 +162,8 @@ export function watchDaemonFile(home: string, self: DaemonFile, onSuperseded: (b
   return () => clearInterval(timer);
 }
 
-function isAlive(pid: number): boolean {
+/** Whether a process with this PID exists (EPERM: it does, under another user). */
+export function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;

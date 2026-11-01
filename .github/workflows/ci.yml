@@ -226,6 +226,26 @@ jobs:
           mkdir -p "$unpacked"
           tar -xzf out/trackwall-*-linux-x64.tar.gz -C "$unpacked"
           bun packages/daemon/scripts/smoke.ts "$unpacked/trackwall/trackwall-daemon" --page
+      # The Dev Container Feature (ADR-164) installs that archive, checked against its SHA-256, and its postStartCommand
+      # starts a supervised daemon; the job runs as root, the way a Feature's install.sh runs in an image build and the
+      # desktop app's docker exec runs, so the command switches to the image's remote user, vscode.
+      - name: Dev Container Feature
+        run: |
+          bun apps/desktop/scripts/package-feature.ts out "$GITHUB_REPOSITORY"
+          feature="$RUNNER_TEMP/feature"
+          mkdir -p "$feature"
+          tar -xzf out/devcontainer-feature-trackwall.tgz -C "$feature"
+          archive="$(ls "$PWD"/out/trackwall-*-linux-x64.tar.gz)"
+          (cd "$feature" && PORT=7790 _REMOTE_USER=vscode TRACKWALL_FEATURE_ARCHIVE="$archive" sh install.sh)
+          # A slow runner may answer "starting" first; a later call reports the same daemon as running.
+          for attempt in 1 2 3 4 5 6; do
+            trackwall-container start | tee "$RUNNER_TEMP/start.json"
+            if grep -q '"status":"running","port":7790' "$RUNNER_TEMP/start.json"; then break; fi
+            sleep 5
+          done
+          grep -q '"status":"running","port":7790' "$RUNNER_TEMP/start.json"
+          trackwall-container address | grep -q '^http://127.0.0.1:7790/#token='
+          [ "$(stat -c %U /home/vscode/.trackwall/daemon.json)" = vscode ]
       # The headless shell and the system libraries it needs (apt, as root in the container), and DejaVu Sans Mono, the
       # monospace font of the Linux runner: the terminal's rows follow the font, and a user's browser runs on their own
       # computer, not in the container, so the image's fonts are not what Trackwall is drawn with.
