@@ -140,6 +140,18 @@ export class Verifications {
     return starting;
   }
 
+  /**
+   * The last verification of a task that has just ended, for its record in the task journal (ADR-150), and forgotten
+   * at once, in memory and in the file, as an ended task keeps none. `null` when there was none.
+   */
+  take(task: string): Verification | null {
+    const entry = this.#byTask.get(task);
+    if (!entry) return null;
+    this.#byTask.delete(task);
+    this.#follow();
+    return entry.verification;
+  }
+
   /** The task's last verification; `null` when there was none or the task has ended. */
   get(task: string): Verification | null {
     if (!this.#deps.tasks.findTask(task)) return null;
