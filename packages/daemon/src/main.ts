@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { arch, platform } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ContainerStartResult } from "@trackwall/protocol";
+import { type ContainerStartResult, type ContainerUpdateResult, releaseFileUrl } from "@trackwall/protocol";
 import { EventHub } from "./api/event-hub.ts";
 import { sessionHookRequest } from "./api/hooks.ts";
 import { type ApiServer, startApi } from "./api/server.ts";
@@ -11,22 +11,31 @@ import { isUiDir } from "./api/static.ts";
 import { createErrorJournal, createFacade, type Facade, HOSTING_CLIS } from "./facade.ts";
 import {
   ADDRESS_COMMAND,
+  APPLY_UPDATE_COMMAND,
   CONTAINER_COMMAND,
   CONTAINER_START,
+  CONTAINER_UPDATE,
   type CommandLine,
+  type ContainerCommandLine,
   type DaemonArgs,
   MCP_STDIO_COMMAND,
   parseCommandLine,
+  SUPERVISE_COMMAND,
   USAGE,
 } from "./infra/args.ts";
+import { appendNote } from "./infra/container-log.ts";
 import { containerStart } from "./infra/container-start.ts";
-import { superviseDaemon } from "./infra/container-supervisor.ts";
+import { DAEMON_LOG, superviseDaemon } from "./infra/container-supervisor.ts";
+import { applyUpdate, containerUpdate } from "./infra/container-update.ts";
 import { CONTAINER_MARKERS, desktopOpeners, devContainerFolder, hasDesktop, ownContainer } from "./infra/desktop.ts";
 import { daemonPageAddress, newToken, probeRunningDaemon, watchDaemonFile, withStartLock, writeDaemonFile } from "./infra/discovery.ts";
+import { messageOf } from "./infra/errors.ts";
 import { watchEventLoopStalls } from "./infra/event-loop-stalls.ts";
 import { resolveTrackwallHome, trackwallHome } from "./infra/home.ts";
+import { selfCommand } from "./infra/self-command.ts";
 import { SHUTDOWN_SIGNALS, shutdownOnce, stopDaemon } from "./infra/shutdown.ts";
 import { openBrowser, openFolder } from "./infra/system-open.ts";
+import { UPDATE_PUBLIC_KEY } from "./infra/update-key.ts";
 import { userEnv } from "./infra/user-env.ts";
 import { VERSION } from "./infra/version.ts";
 import { createMcpEndpoint, sessionMcpRequest } from "./mcp/endpoint.ts";
@@ -216,7 +225,7 @@ try {
   const message = (err as Error).message;
   // The container command answers in JSON even here, so the desktop app can tell a wrong call from a failed start.
   if (process.argv[2] === CONTAINER_COMMAND) {
-    const result: ContainerStartResult = { ok: false, version: VERSION, error: { code: "bad-arguments", message } };
+    const result: ContainerStartResult | ContainerUpdateResult = { ok: false, version: VERSION, error: { code: "bad-arguments", message } };
     process.stdout.write(`${JSON.stringify(result)}\n`);
   }
   process.stderr.write(`${message}\n\n${USAGE}`);
@@ -227,9 +236,7 @@ if (commandLine.command === MCP_STDIO_COMMAND) {
 } else if (commandLine.command === ADDRESS_COMMAND) {
   void printAddress(trackwallHome(commandLine.home));
 } else if (commandLine.command === CONTAINER_COMMAND) {
-  const home = trackwallHome(commandLine.home);
-  if (commandLine.action === CONTAINER_START) void printContainerStart(home, commandLine.port);
-  else runSupervisor(home, commandLine.port);
+  runContainerCommand(commandLine);
 } else if (commandLine.args.help) {
   process.stdout.write(USAGE);
 } else if (commandLine.args.version) {
@@ -269,8 +276,12 @@ async function printContainerStart(home: string, port: number): Promise<void> {
   const result: ContainerStartResult = await containerStart({ home, port, version: VERSION }).catch((err: unknown) => ({
     ok: false,
     version: VERSION,
-    error: { code: "start-failed", message: err instanceof Error ? err.message : String(err) },
+    error: { code: "start-failed", message: messageOf(err) },
   }));
+  printResult(result);
+}
+
+function printResult(result: ContainerStartResult | ContainerUpdateResult): void {
   process.stdout.write(`${JSON.stringify(result)}\n`);
   process.exitCode = result.ok ? 0 : 1;
 }
@@ -278,7 +289,49 @@ async function printContainerStart(home: string, port: number): Promise<void> {
 /** The supervisor has no terminal (`stdio: ignore`); a failure before its log exists ends it with code 1, which `start` sees. */
 function runSupervisor(home: string, port: number): void {
   superviseDaemon(home, port).catch((err: unknown) => {
-    process.stderr.write(`[supervisor] ${err instanceof Error ? err.message : String(err)}\n`);
+    process.stderr.write(`[supervisor] ${messageOf(err)}\n`);
     process.exitCode = 1;
   });
+}
+
+function runContainerCommand(line: ContainerCommandLine): void {
+  const home = trackwallHome(line.home);
+  switch (line.action) {
+    case CONTAINER_START:
+      void printContainerStart(home, line.port);
+      return;
+    case CONTAINER_UPDATE:
+      void containerUpdate({ home, port: line.port, version: VERSION, target: line.target }).then(printResult);
+      return;
+    case SUPERVISE_COMMAND:
+      runSupervisor(home, line.port);
+      return;
+    case APPLY_UPDATE_COMMAND:
+      runApplyUpdate(home, line.port, line.target);
+      return;
+  }
+}
+
+/** The update's background process has no terminal either: everything, a failure of its own included, goes to the log. */
+function runApplyUpdate(home: string, port: number, target: string): void {
+  const note = (msg: string) => appendNote(join(home, DAEMON_LOG), "update", msg);
+  applyUpdate({
+    home,
+    port,
+    target,
+    self: { version: VERSION, command: selfCommand([]) },
+    source: { url: releaseFileUrl, pubkey: UPDATE_PUBLIC_KEY },
+    note,
+  })
+    .then((outcome) => {
+      process.exitCode = outcome === "updated" ? 0 : 1;
+    })
+    .catch((err: unknown) => {
+      try {
+        note(`the update stopped: ${messageOf(err)}`);
+      } catch {
+        // the log cannot be written either; the exit code is all that is left
+      }
+      process.exitCode = 1;
+    });
 }

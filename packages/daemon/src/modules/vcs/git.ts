@@ -42,7 +42,7 @@ const REPO_SELECTING_ENV = [
   "GIT_PREFIX",
 ];
 
-type GitOptions = Pick<RunOptions, "maxBytes" | "stdin" | "okExitCodes"> & {
+export type GitOptions = Pick<RunOptions, "maxBytes" | "stdin" | "okExitCodes"> & {
   /** A longer limit than `TIMEOUT_MS` for commands that fetch data or change the working directory. */
   timeoutMs?: number;
   /**

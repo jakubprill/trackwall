@@ -14,6 +14,8 @@ const TOKEN = "t".repeat(43);
 const FAKE_MISE = [process.execPath, join(import.meta.dir, "fixtures", "fake-mise.ts")];
 /** Fake mise config (see `fixtures/fake-mise.ts`): `dev` runs until stopped, `test` exits with code 3. */
 const MISE_CONFIG = JSON.stringify({ tasks: [{ name: "dev" }, { name: "test" }], exits: { test: 3 } });
+/** A `test` that declares a test filter in its usage spec (ADR-158) and exits with 0. */
+const FILTERED_CONFIG = JSON.stringify({ tasks: [{ name: "test", usage: 'arg "[filter]"' }], exits: { test: 0 } });
 const TIMEOUT = 60_000;
 /** The fake's prompt line for the typed notice that the user trusted the mise config (ADR-92). */
 const TYPED_TRUST_NOTICE = "Thinking about: The user trusted the mise config that refused your last run_mise_task";
@@ -27,7 +29,12 @@ const clients: Client[] = [];
 
 beforeAll(async () => {
   daemon = await startSessionApi(TOKEN, {
-    repos: { shop: { "fake-mise.json": MISE_CONFIG }, warehouse: { "fake-mise.json": MISE_CONFIG }, billing: { "mise.toml": "" } },
+    repos: {
+      shop: { "fake-mise.json": MISE_CONFIG },
+      warehouse: { "fake-mise.json": MISE_CONFIG },
+      billing: { "mise.toml": "" },
+      orders: { "fake-mise.json": FILTERED_CONFIG },
+    },
     miseCommand: FAKE_MISE,
   });
   outside = await connectHttpClient(daemon.api.port, TOKEN);
@@ -50,6 +57,36 @@ function errorText(result: Awaited<ReturnType<typeof call>>): string {
   const [first] = z.array(z.object({ text: z.string() })).parse(result.content);
   return first?.text ?? "";
 }
+
+describe("mise task arguments over MCP (ADR-158)", () => {
+  test(
+    "get_repo shows a mise task's usage, and run_mise_task passes the arguments after the mise task's name",
+    async () => {
+      const repo = GetRepoResult.parse((await call(outside, "get_repo", { repo: "orders" })).structuredContent);
+      expect(repo.miseTasks.kind === "ok" && repo.miseTasks.tasks.map((t) => [t.name, t.usage])).toEqual([["test", 'arg "[filter]"']]);
+
+      await call(outside, "run_mise_task", { repo: "orders", miseTask: "test", arguments: ["PricingTest#costsNothing"] });
+      await call(outside, "wait_for_mise_task", { repo: "orders", miseTask: "test", timeoutSeconds: 20 });
+
+      expect(readFileSync(join(daemon.projects, "orders", "calls.log"), "utf8")).toBe("run test PricingTest#costsNothing\n");
+    },
+    TIMEOUT,
+  );
+
+  test("an argument with a character a shell treats specially is refused before anything runs", async () => {
+    const result = await call(outside, "run_mise_task", { repo: "shop", miseTask: "test", arguments: ["x; rm -rf ."] });
+
+    expect(errorText(result)).toContain("a mise task argument is 1 to 200 letters");
+  });
+
+  test("a mise task without a usage spec refuses arguments", async () => {
+    const result = await call(outside, "run_mise_task", { repo: "shop", miseTask: "test", arguments: ["PricingTest"] });
+
+    expect(errorText(result)).toBe(
+      'bad_request: mise task "test" in repo shop declares no arguments (no usage spec in its mise config), so it is run without any',
+    );
+  });
+});
 
 describe("mise tasks over MCP (real process groups, fake mise)", () => {
   test(

@@ -32,6 +32,10 @@ _Avoid_: image, devcontainer plugin
 The background process `trackwall-container start` leaves in a dev container: it starts the daemon and starts it again after a crash, and ends with it after a stop (ADR-164).
 _Avoid_: watchdog, daemon manager
 
+**Container update** (`container-update.ts`, `bin/current`; the command `trackwall-container update <version>`):
+Replacing Trackwall in a dev container with another release without rebuilding the container: the signed Linux archive goes into `bin/<version>/` of the state directory, `bin/current` names it, and the previous version comes back when the new one does not answer (ADR-165).
+_Avoid_: upgrade, self-update (the app's own update is *App update*)
+
 **App update** (`updates.rs`, `UpdateCheck`; in the UI *update*):
 A newer version of Trackwall from GitHub Releases, installed by the shell after the user's click and followed by a restart (ADR-53). Its **update package** is the archive the updater downloads and checks against the signature: the release zip on Windows (`portable_update.rs`), `.app.tar.gz` on macOS; the **update manifest** is `latest.json` in the release.
 _Avoid_: upgrade, sync (that is the repo synchronization)
@@ -350,6 +354,10 @@ A process group from `runtime.json` that the daemon no longer supervises (for ex
 The work of one agent on one repo: a prompt, a worktree, a `trackwall/<slug>` branch from the default branch, sessions and a summary. Today (ADR-31) the Sessions view creates it from the form or from an approved task proposal (ADR-39), it is stored in `tasks.json`, and the task session can be stopped and resumed. A task does not point to a session; the session has `Session.task`. In code and the API `task` always means a task.
 _Avoid_: job; a bare *task* always means a task, a mise task is always a *mise task*
 
+**Round** (`TaskRound`, `TaskRounds`, `taskRoundsApi`; "Rounds" tab and "Undo round" in the UI):
+One turn of a task's agent that changed the worktree, also a turn the user drove (ADR-168). When it ends, what the agent left uncommitted becomes the **round commit** (`TaskRound.roundCommit`, subject `WIP round <n>`) on the task branch; the round runs from the commit it started on (`from`) to HEAD after it (`to`). "Undo round" takes the newest round that stands back to its `from`, only when nothing else would be lost, and the push squashes the round commits into the agent's own commits first. Kept in `task-rounds.json`.
+_Avoid_: step, iteration, snapshot; a "status round" of the repo lists (`repo-status-rounds.ts`) is not a task round
+
 **Task notice** (`TaskNotice`, `taskNotices`, "Task notices" in the UI):
 One short line for a section above a task's terminal: a warning (shared files, a changed mise config, files not copied) or what is there (messages, summary, verification, merge request, a running mise task). In the one-entry layout the notices are a strip of chips that "Details" unfolds; on a grid tile the mise config and the verification have chips of their own in the header (`tileNotices`, `TaskNotice.chip`), a badge opens the rest as an overlay, and a new warning lies over the terminal as a banner until opened or dismissed (ADR-91).
 _Avoid_: alert, notification (that is the tray's), badge (that is only the tile's count)
@@ -463,7 +471,15 @@ A session or supervising agent that talks to the user and commissions work to ot
 _Avoid_: orchestrator, planner (ADR-9: a human splits goals)
 
 **mise task**:
-A named command from a repo's `mise.toml`: `setup`, `dev`, `test`, `build`, `lint`, `health`. In code always qualified (`miseTask`, `mise.run(...)`), never a bare `task`. Tasks stored in the commit (`DeclaredMiseTask` in `RepoCard.mise`, type `MiseSetup`: mise configuration files and the tasks from `[tasks]` and task directories) are computed by the repo card; a repo without them, and without mise tasks in its local config (ADR-86), has the `no-mise` tag (ADR-34), and a repo with mise tasks in its local config has the `local-mise` tag (`LOCAL_MISE_TAG`, ADR-110). Each mise task of a repo's list has an **origin** (`MiseTaskOrigin`; UI "repo", "local", "outside repo"): `repo` when a file git tracks defines it, `local` when a file in the repo git does not track does, `outside` when a mise config outside the repo does (the user's global one, a parent folder's); `source` names the file (ADR-110). The MCP tools for mise tasks have `mise` in the name and the `miseTask` argument (`run_mise_task`, `stop_mise_task`, `wait_for_mise_task`, `list_running_mise_tasks`, ADR-41).
+A named command from a repo's `mise.toml`: `setup`, `dev`, `test`, `build`, `lint`, `health`. In code always qualified (`miseTask`, `mise.run(...)`), never a bare `task`. Tasks stored in the commit (`DeclaredMiseTask` in `RepoCard.mise`, type `MiseSetup`: mise configuration files and the tasks from `[tasks]` and task directories) are computed by the repo card; a repo without them, and without mise tasks in its local config (ADR-86), has the `no-mise` tag (ADR-34), and a repo with mise tasks in its local config has the `local-mise` tag (`LOCAL_MISE_TAG`, ADR-110). Each mise task of a repo's list has an **origin** (`MiseTaskOrigin`; UI "repo", "local", "outside repo"): `repo` when a file git tracks defines it, `local` when a file in the repo git does not track does, `outside` when a mise config outside the repo does (the user's global one, a parent folder's), `convention` (UI "convention") when the convention tasks file does (ADR-157); `source` names the file (ADR-110). The MCP tools for mise tasks have `mise` in the name and the `miseTask` argument (`run_mise_task`, `stop_mise_task`, `wait_for_mise_task`, `list_running_mise_tasks`, ADR-41).
+
+**Convention tasks** (`CONVENTION_TASKS`, `mise/convention-tasks.ts`, actions `convention-tasks` and `write-convention-tasks`; UI "Add convention tasks"):
+The mise tasks `setup`, `build` and `test` for Maven, Gradle and npm projects in one file Trackwall writes into the projects folder on the user's click (`.config/mise/conf.d/trackwall-convention-tasks.toml`), which mise reads for every repo below; a repo's own mise task of the same name wins (ADR-157). Its state (`ConventionTasksState`) is `absent`, `current` or `changed`.
+_Avoid_: default tasks, template tasks
+
+**mise task arguments** (`arguments` of `run_mise_task` and `mise/start`, one `MiseRunArgument`; the mise task's `usage`):
+Values passed after the mise task's name in a run (`mise run test OrderServiceTest`), such as a test filter, only to a mise task whose usage spec declares them; each one word without characters a shell treats specially (ADR-158).
+_Avoid_: args (outside code), parameters, flags
 
 **Run** (`run`, `runId`, state: `RunState`):
 A one-off execution of a mise task from the UI or through `run_mise_task`, with its own process group and logs. State `running`, `stopping` or `exited` (exit code, signal, whether the user stopped it, the last output lines), always observed. It is neither a task nor a service.

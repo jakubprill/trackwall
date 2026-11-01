@@ -130,7 +130,7 @@ export async function workingTreeChanges(
  * A cut diff up to its last whole line: a newline byte is never inside a UTF-8 sequence, so the text has no half
  * character and no half line for a reader (the "Changes" tab, an agent) to take for the real content.
  */
-function wholeLines({ stdout, truncated }: RunOutput): Buffer {
+export function wholeLines({ stdout, truncated }: RunOutput): Buffer {
   return truncated ? stdout.subarray(0, stdout.lastIndexOf(NEWLINE) + 1) : stdout;
 }
 
