@@ -1,6 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { type ApiResult, DAEMON_INFO_PATH, type DaemonInfo, type ErrorCode, type Health } from "@trackwall/protocol";
+import { type ApiResult, DAEMON_INFO_PATH, type DaemonInfo, type ErrorCode, HEALTH_PATH, type Health } from "@trackwall/protocol";
 import type { Facade } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
 import { MCP_PATH, type McpEndpoint, SESSION_TOKEN_HEADER } from "../mcp/endpoint.ts";
@@ -63,9 +64,10 @@ const MAX_BODY_BYTES = 64 * 1024;
  */
 export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer> {
   let policy: OriginPolicy | undefined;
+  const instance = randomUUID();
   const server = createServer((req, res) => {
     if (!policy) return void res.destroy();
-    handle(req, res, options, policy).catch((err: unknown) => {
+    handle(req, res, options, policy, instance).catch((err: unknown) => {
       if (err instanceof DomainError && !res.headersSent) return fail(res, err.code, err.message);
       process.stderr.write(`[api] ${req.method} ${req.url}: ${String(err)}\n`);
       options.facade.errorJournal.recordDaemonError(journalArea(req.url), err);
@@ -102,7 +104,7 @@ export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer
   };
 }
 
-async function handle(req: IncomingMessage, res: ServerResponse, o: ApiOptions, policy: OriginPolicy): Promise<void> {
+async function handle(req: IncomingMessage, res: ServerResponse, o: ApiOptions, policy: OriginPolicy, instance: string): Promise<void> {
   const origin = req.headers.origin;
   if (!policy.isAllowedHost(req.headers.host) || !policy.isAllowedOrigin(origin)) {
     return fail(res, "forbidden_origin", "host or origin is not allowed");
@@ -125,7 +127,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, o: ApiOptions, 
   }
 
   // Only `GET /api/health` and the static UI files are public; the rest of the API, MCP and the hooks pass one token check.
-  if (path === "/api/health" && req.method === "GET") return ok<Health>(res, { status: "ok", version: o.version });
+  if (path === HEALTH_PATH && req.method === "GET") return ok<Health>(res, { status: "ok", version: o.version, instance });
   const route = protectedRoute(req, res, path, o);
   if (route) {
     const caller = authenticate(req, route.sessionScoped, o);

@@ -77,6 +77,9 @@ _Avoid_: workspace (that is a separate term, see below)
 **Daemon token**:
 The secret from `~/.trackwall/daemon.json` with which the UI, the shell and the stdio bridge authenticate to the API and the MCP server; Trackwall sessions do not get it (ADR-138).
 
+**Page address** (`daemonPageAddress`, `trackwall-daemon address`):
+The address of the daemon's page with the daemon token in its fragment, `http://127.0.0.1:<port>/#token=…`, which opens Trackwall in a browser; the page moves the token out of the address bar into its storage (ADR-161). The desktop app takes the same address for a remote daemon (ADR-130).
+
 **MCP server** (`/mcp`, `createMcpEndpoint`):
 The part of the daemon through which agents read its state with MCP tools; the same port as the API, with the daemon token or a Trackwall session's own token (§5.3, ADR-24, ADR-138).
 
@@ -166,6 +169,10 @@ _Avoid_: grep (the tool underneath), index (there is none)
 **Commit search** (`searchCommits`, MCP tool `search_commits`, result `SearchCommitsResult`):
 The commits of the history of the latest commit of many repos at once that add or remove a text, or match a message, author, paths or date, through `git log` (ADR-149); a found commit (`FoundCommit`) is a repo, hash, author, date, subject and changed files. Newest first across all repos.
 _Avoid_: history search, blame (another git command), log (the process logs of `logs`)
+
+**Task journal** (`TaskJournal`, `task-journal.jsonl`, MCP tool `search_task_history`, record `EndedTask`):
+A record of every task the user has ended: its prompt, the session's last summary, the commits and files on its branch and its last verdict, taken when the task ends (ADR-150). Agents search it by words to learn how a similar change was done before.
+_Avoid_: task history (only in the tool name), archive, log (the process logs of `logs`)
 
 **Task worktrees folder** (`worktreesDir` in `workspace.yaml` and `tasks.json`):
 The folder new task worktrees go into (ADR-84): the user's setting, or by default `.trackwall/worktrees` in the projects folder, which the repo list skips. Never the projects folder itself, a folder inside one of its repos, or a folder of `.trackwall` other than `.trackwall/worktrees`. Each task keeps the folder it was created in, so changing the setting moves no existing worktree.

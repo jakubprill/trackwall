@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { LogError, LogErrorsQuery, MiseTarget, RunState, TestFailure, TestResults, Verification } from "@trackwall/protocol";
@@ -293,6 +293,19 @@ describe("verification of a task", () => {
 
     tasks.delete(TASK);
     expect(verifications.get(TASK)).toBeNull();
+  });
+
+  test("take hands over an ended task's last verdict for the task journal and forgets it, in memory and in the file", async () => {
+    const file = join(homes, `verifications-take-${++daemons}.json`);
+    const { verifications, tasks, end } = setup({ file });
+    await verifications.start(TASK);
+    await end(0);
+    tasks.delete(TASK);
+
+    expect(verifications.take(TASK)).toMatchObject({ task: TASK, state: "passed" });
+
+    expect(verifications.take(TASK)).toBeNull();
+    expect(readFileSync(file, "utf8")).not.toContain(TASK);
   });
 
   test("a test the agent already runs in the worktree is joined, and only reports written since that run started count", async () => {
