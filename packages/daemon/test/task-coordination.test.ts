@@ -241,7 +241,10 @@ describe("updates on delegated work", () => {
 
   test("a result, a verdict and a rejection go to the proposer; the supervisor's to the supervisor running now", () => {
     const { coordination, tasks, asked, running } = setup();
-    const reported = { ...task("by-main", BY_MAIN), summary: { text: "Fixed and tested.", reportedAt: "2026-10-25T13:00:00.000Z" } };
+    const reported = {
+      ...task("by-main", BY_MAIN),
+      summary: { text: "Fixed and tested.", checkSteps: [], reportedAt: "2026-10-25T13:00:00.000Z" },
+    };
     tasks.set("by-main", reported);
     running.delete(SUPERVISOR);
     running.add(NEW_SUPERVISOR);

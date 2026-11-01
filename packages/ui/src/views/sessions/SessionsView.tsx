@@ -61,6 +61,7 @@ import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { cn } from "@/lib/utils";
 import { NewSession } from "./NewSession.tsx";
 import { ProposalInbox } from "./ProposalInbox.tsx";
+import { RoutineList } from "./RoutineList.tsx";
 import { EndTaskButton, SessionCloseButton, SessionCloseConfirmation, TaskEnding } from "./SessionClose.tsx";
 import { SessionEnvironment } from "./SessionEnvironment.tsx";
 import { SessionGrid } from "./SessionGrid.tsx";
@@ -135,6 +136,10 @@ export function SessionsView({
     if (afterRemoval !== "keep") onSelect(afterRemoval);
     sessions.reload();
   };
+  const started = (selection: SessionSelection) => {
+    onSelect(selection);
+    sessions.reload();
+  };
   // Taken also with no entry at that position, so that the key never reaches a session terminal by accident.
   useWindowShortcuts(
     (event) => {
@@ -203,15 +208,15 @@ export function SessionsView({
           </div>
         )}
         {sessions.data && !current && (
-          <NewSession
-            conn={conn}
-            sessions={sessions.data.sessions}
-            onStarted={(selection) => {
-              onSelect(selection);
-              sessions.reload();
-            }}
-            onCancel={entries.length > 0 ? () => onSelect(undefined) : undefined}
-          />
+          <div className="min-h-0 overflow-y-auto">
+            <NewSession
+              conn={conn}
+              sessions={sessions.data.sessions}
+              onStarted={started}
+              onCancel={entries.length > 0 ? () => onSelect(undefined) : undefined}
+            />
+            <RoutineList conn={conn} onStarted={started} />
+          </div>
         )}
         {current && (
           <SelectedEntry
