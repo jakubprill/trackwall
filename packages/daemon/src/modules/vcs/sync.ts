@@ -9,6 +9,7 @@ import {
 import { type GitNetwork, git, knownDefaultBranch, revParse } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { parseStatus } from "./parse.ts";
+import { listWorktrees } from "./worktree-list.ts";
 
 /**
  * Sync of one repo (§4.5, ADR-21): `git fetch` of the main remote, then a fast-forward of the local default branch
@@ -107,16 +108,9 @@ async function divergence(dir: string, localRef: string, remoteRef: string): Pro
   return { ahead: Number(m[1]), behind: Number(m[2]) };
 }
 
-/**
- * Whether the branch is checked out in some worktree; called when it is not in the current one, so it is about another worktree.
- * Lines instead of `-z`, which git has only since 2.36.
- */
+/** Whether the branch is checked out in some worktree; called when it is not in the current one, so it is about another worktree. */
 async function checkedOutInWorktree(dir: string, localRef: string): Promise<boolean> {
-  const { stdout } = await git(dir, ["worktree", "list", "--porcelain"]);
-  return stdout
-    .toString("utf8")
-    .split("\n")
-    .some((line) => line === `branch ${localRef}`);
+  return (await listWorktrees(dir)).some((w) => w.branch === localRef);
 }
 
 /**

@@ -36,11 +36,13 @@ import { DayStart } from "./modules/day-start/day-start.ts";
 import { DayStartFile } from "./modules/day-start/day-start-file.ts";
 import { trustedFolderOf, trustedFolders } from "./modules/doctor/copilot-trust.ts";
 import { Doctor } from "./modules/doctor/doctor.ts";
+import { SYSTEM_CA_FILES } from "./modules/doctor/network-check.ts";
+import { probeTls, type TlsProbe } from "./modules/doctor/tls-probe.ts";
 import { ErrorJournal } from "./modules/error-journal/error-journal.ts";
 import type { ErrorJournalWorkspace } from "./modules/error-journal/known-values.ts";
 import { Graph } from "./modules/graph/graph.ts";
 import { JavaNavigation } from "./modules/java-navigation/java-navigation.ts";
-import { JDTLS_JAVA, JDTLS_RELEASE, type JdtlsRelease } from "./modules/java-navigation/jdtls-release.ts";
+import { JDTLS_JAVA, JDTLS_RELEASE, LOMBOK_RELEASE, type PinnedRelease } from "./modules/java-navigation/pinned-releases.ts";
 import { LocalConfig } from "./modules/local-config/local-config.ts";
 import { Logs } from "./modules/logs/logs.ts";
 import { MergeRequests } from "./modules/merge-requests/merge-requests.ts";
@@ -159,6 +161,8 @@ export interface FacadeOptions {
   homeFrom: StateDirSource;
   openUrl: (url: string) => void;
   openFolder: (dir: string) => void;
+  /** The daemon runs in a container (`CONTAINER_MARKERS`), so the repos live in its volume (ADR-162). */
+  inContainer: boolean;
   /** The `mise` program with arguments before the command (`["mise"]` in the daemon). */
   miseCommand: readonly string[];
   /** The Copilot CLI program with arguments before the session's arguments (`["copilot"]` in the daemon, a fake in tests). */
@@ -174,7 +178,11 @@ export interface FacadeOptions {
   /** The environment of processes started for the user (`userEnv`). */
   userEnv: () => Promise<NodeJS.ProcessEnv>;
   /** Only for tests, which point the Java navigation install at a local archive; the daemon leaves it out for the pinned release (ADR-123). */
-  jdtlsRelease?: JdtlsRelease;
+  jdtlsRelease?: PinnedRelease;
+  /** Only for tests, like `jdtlsRelease`; the daemon leaves it out for the pinned Lombok jar (ADR-167). */
+  lombokRelease?: PinnedRelease;
+  /** Only for tests, which keep the doctor's network check off the network; the daemon leaves it out for `probeTls` (ADR-166). */
+  tlsProbe?: TlsProbe;
   /** The folder the daemon serves the UI from: the error journal maps the UI's frames with its source maps (ADR-94). */
   uiDir?: string;
   log: (msg: string) => void;
@@ -224,6 +232,7 @@ export function createFacade(o: FacadeOptions): Facade {
         o.log(`restoring local config into ${dir} failed: ${messageOf(err)}`);
       }
     },
+    inContainer: o.inContainer,
   });
   workspace.useGitProgramFromFile();
   const logs = new Logs({ dir: join(o.home, LOGS_DIR), maxFileBytes: LOG_FILE_MAX_BYTES, log: o.log });
@@ -324,7 +333,9 @@ export function createFacade(o: FacadeOptions): Facade {
     repos: workspace,
     readiness: javaNavigationReadiness,
     release: o.jdtlsRelease ?? JDTLS_RELEASE,
+    lombok: o.lombokRelease ?? LOMBOK_RELEASE,
     java: JDTLS_JAVA,
+    cards: async () => (await cards.all()).cards.map((c) => (c.kind === "ok" ? c.card : null)),
     download: (url, file, sha256) => downloadVerified(url, file, { sha256, ...JDTLS_DOWNLOAD }),
     extract: async (archive, dir) => extractTarGz(archive, dir, { env: await o.userEnv(), timeoutMs: JDTLS_UNPACK_TIMEOUT_MS }),
     installTool: (spec, dir) => mise.installTool(spec, dir),
@@ -345,10 +356,13 @@ export function createFacade(o: FacadeOptions): Facade {
         throw err;
       }),
     repoHosts: () => workspace.repoHosts(),
+    unpushedWork: () => workspace.unpushedWork(),
     mountTable,
     workspaceFile: workspace.configFile(),
     workspaceKeys: () => workspace.workspaceKeys(),
     javaNavigation: javaNavigationReadiness,
+    probeTls: o.tlsProbe ?? probeTls,
+    systemCaFiles: SYSTEM_CA_FILES,
     now: () => new Date(),
   });
   const configFiles = new ConfigFiles({

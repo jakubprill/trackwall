@@ -59,6 +59,7 @@ beforeAll(async () => {
   gitIn(orders, "remote", "add", "origin", "git@gitlab.example.com:shop/orders-bff.git");
   home = mkdtempSync(join(tmpdir(), "trackwall-mcp-home-"));
   facade = createFacade({
+    inContainer: false,
     home,
     homeFrom: "flag",
     openUrl: () => {},

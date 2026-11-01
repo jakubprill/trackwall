@@ -12,6 +12,7 @@ import { useCallback, useRef } from "react";
 import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
+import { ReadRequestNotice } from "@/components/ReadRequestNotice";
 import { SessionScreen } from "@/components/SessionScreen";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Badge } from "@/components/ui/badge";
@@ -704,6 +705,7 @@ function SessionPanel({
       </header>
       <SessionEnvironment environment={session.environment} />
       <EnvironmentChangeNotice key={session.id} conn={conn} session={session} onRestarted={onChanged} />
+      <ReadRequestNotice key={`read-request-${session.id}`} conn={conn} session={session} onDelivered={onChanged} />
       <SessionScreen conn={conn} session={session} selected />
     </>
   );
