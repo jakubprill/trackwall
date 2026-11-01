@@ -239,7 +239,7 @@ describe("a Copilot CLI session over ACP", () => {
     s.send({ id: 5, method: "fs/read_text_file", params: { path: "/etc/passwd" } });
     await s.settle();
 
-    expect(frames).toEqual([{ type: "entries", reset: true, entries: [] }]);
+    expect(frames).toEqual([{ type: "entries", reset: true, entries: [], waiting: [] }]);
     expect(s.written.at(-1)).toMatchObject({ id: 5, error: { code: -32603 } });
   });
 
@@ -390,6 +390,41 @@ describe("a Copilot CLI session over ACP", () => {
     expect(s.turnsOver.count).toBe(2);
   });
 
+  test("a message written during a turn reaches the views at once as waiting, and becomes the user's entry when the turn ends and it goes", async () => {
+    const s = session();
+    await s.ready();
+    const frames: ConversationServerMessage[] = [];
+    s.acp.attachConversation({ send: (m) => frames.push(m), closed: () => {} });
+    s.acp.say("Check the build");
+    s.acp.say("and the tests");
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect(frames.flatMap((f) => f.entries)).toEqual([{ id: "user-1", kind: "user", text: "Check the build" }]);
+    expect(frames.at(-1)?.waiting).toEqual([{ id: "waiting-2", text: "and the tests" }]);
+    const later: ConversationServerMessage[] = [];
+    s.acp.attachConversation({ send: (m) => later.push(m), closed: () => {} });
+    expect(later[0]?.waiting).toEqual([{ id: "waiting-2", text: "and the tests" }]);
+
+    s.answer("session/prompt", { stopReason: "end_turn" });
+    await s.settle();
+    await new Promise((r) => setTimeout(r, 100));
+    expect(s.written.at(-1)).toMatchObject({ method: "session/prompt", params: { prompt: [{ text: "and the tests" }] } });
+    expect(frames.at(-1)).toMatchObject({ entries: [{ kind: "user", text: "and the tests" }], waiting: [] });
+  });
+
+  test("a message the agent gets at once sends the views one frame, with nothing waiting", async () => {
+    const s = session();
+    await s.ready();
+    const frames: ConversationServerMessage[] = [];
+    s.acp.attachConversation({ send: (m) => frames.push(m), closed: () => {} });
+    s.acp.say("Check the build");
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect(frames.slice(1)).toEqual([
+      { type: "entries", reset: false, entries: [{ id: "user-1", kind: "user", text: "Check the build" }], waiting: [] },
+    ]);
+  });
+
   test("chunks of a streamed answer reach the views as one frame", async () => {
     const s = session();
     await s.ready();
@@ -403,8 +438,8 @@ describe("a Copilot CLI session over ACP", () => {
     await new Promise((r) => setTimeout(r, 100));
 
     expect(frames).toEqual([
-      { type: "entries", reset: true, entries: [] },
-      { type: "entries", reset: false, entries: [{ id: "agent-1", kind: "agent", text: "All tests pass." }] },
+      { type: "entries", reset: true, entries: [], waiting: [] },
+      { type: "entries", reset: false, entries: [{ id: "agent-1", kind: "agent", text: "All tests pass." }], waiting: [] },
     ]);
   });
 

@@ -1,9 +1,9 @@
-import type { ConversationEntry, ConversationServerMessage, SessionView, ToolCallStatus } from "@trackwall/protocol";
+import type { ConversationEntry, ConversationServerMessage, Session, SessionView, ToolCallStatus } from "@trackwall/protocol";
 import type { StatusTone } from "./repo-status.ts";
 
 /**
  * The conversation view of a session (ADR-107): the entries the daemon sends on the conversation socket, how a tool call
- * reads, what Enter in the message box does, and in which view the user starts the supervisor.
+ * reads, what the line above the message box says, what Enter in it does, and in which view the user starts the supervisor.
  */
 
 /** The entries after a frame: after `reset` only its entries, otherwise each one replaces the entry with its id or comes last. */
@@ -24,6 +24,31 @@ export const TOOL_STATUS: Record<ToolCallStatus, { label: string; tone?: StatusT
   completed: { label: "done", tone: "ok" },
   failed: { label: "failed", tone: "error" },
 };
+
+/**
+ * Whose turn it is, in the line above the message box of a running session: the conversation itself shows nothing
+ * while the agent thinks, so without it the user cannot tell a working agent from one waiting for them.
+ */
+export function conversationStatus(session: Pick<Session, "state" | "stuck">): { tone: StatusTone; label: string } {
+  switch (session.state?.state) {
+    case undefined:
+      return { tone: "warning", label: "Starting the session…" };
+    case "Working":
+      return session.stuck === null
+        ? { tone: "ok", label: "The agent is working…" }
+        : { tone: "warning", label: "The agent may be stuck: nothing new from it for a while" };
+    case "Approval":
+    case "Plan":
+      return { tone: "warning", label: "The agent asks for your approval" };
+    case "Error":
+      return { tone: "error", label: "The last turn failed; write to the agent to go on" };
+    case "Stale":
+      return { tone: "error", label: "The agent is not responding" };
+    case "Input":
+    case "Done":
+      return { tone: "ok", label: "Your turn: the agent waits for your message" };
+  }
+}
 
 /** Enter sends the message; Shift+Enter is a new line, and Enter while an input method composes a word belongs to it. */
 export function sendsMessage(event: Pick<KeyboardEvent, "key" | "shiftKey" | "isComposing">): boolean {
