@@ -24,6 +24,14 @@ _Avoid_: host path, volume path
 The folder on this computer with a dev container's configuration and the folder VS Code opens in it, saved by the desktop app; "Start" opens VS Code on it and connects to the remote daemon inside with the token read through `docker exec` (ADR-139).
 _Avoid_: devcontainer config, workspace (that is `workspace.yaml`)
 
+**Dev Container Feature** (`apps/desktop/devcontainer-feature/`, `devcontainer-feature-trackwall.tgz`; in the docs *the Trackwall Feature*):
+The add-on a `devcontainer.json` names by its release address: it installs the Linux archive of that release into the image and the `trackwall-container` command, whose `start` runs from the Feature's `postStartCommand` and from the desktop app (ADR-164).
+_Avoid_: image, devcontainer plugin
+
+**Container supervisor** (`container-supervisor.ts`, `container-supervisor.pid`):
+The background process `trackwall-container start` leaves in a dev container: it starts the daemon and starts it again after a crash, and ends with it after a stop (ADR-164).
+_Avoid_: watchdog, daemon manager
+
 **App update** (`updates.rs`, `UpdateCheck`; in the UI *update*):
 A newer version of Trackwall from GitHub Releases, installed by the shell after the user's click and followed by a restart (ADR-53). Its **update package** is the archive the updater downloads and checks against the signature: the release zip on Windows (`portable_update.rs`), `.app.tar.gz` on macOS; the **update manifest** is `latest.json` in the release.
 _Avoid_: upgrade, sync (that is the repo synchronization)
