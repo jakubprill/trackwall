@@ -191,15 +191,10 @@ const runs: ToolRuns = {
   whoCalls: (facade, { repo }) => facade.graph.whoCalls(repo),
   subgraphFor: (facade, { repo, depth }) => facade.graph.subgraph(repo, depth),
   findEndpoint: (facade, { query, method }) => facade.graph.findEndpoint(query, method),
-  searchCode: async (facade, { repos, tags = [], ...query }) => {
-    if (tags.length === 0) return facade.workspace.searchCode(query, repos);
-    // Cards cover every repo of the projects folder, so an id unknown to them stays: the workspace reports it as
-    // `not_found` instead of it silently dropping out.
-    const cards = await facade.cards.tags();
-    const tagged = cards.filter((entry) => hasEveryTag(tagNames(entry), tags)).map((entry) => entry.repo);
-    const isUnknown = (id: string) => !cards.some((entry) => entry.repo === id);
-    return facade.workspace.searchCode(query, repos ? repos.filter((id) => tagged.includes(id) || isUnknown(id)) : tagged);
-  },
+  searchCode: async (facade, { repos, tags = [], ...query }) =>
+    facade.workspace.searchCode(query, await searchedRepos(facade, repos, tags)),
+  searchCommits: async (facade, { repos, tags = [], ...query }) =>
+    facade.workspace.searchCommits(query, await searchedRepos(facade, repos, tags)),
   listSessions: async (facade, { repo }, { caller }) => {
     // The repo must exist (`not_found` as in get_repo): a typo in the id must not look like "no sessions".
     if (repo !== undefined) await facade.workspace.repo(repo);
@@ -337,6 +332,7 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.subgraphFor, runs.subgraphFor),
   defineTool(mcpTools.findEndpoint, runs.findEndpoint),
   defineTool(mcpTools.searchCode, runs.searchCode),
+  defineTool(mcpTools.searchCommits, runs.searchCommits),
   defineTool(mcpTools.listSessions, runs.listSessions),
   defineTool(mcpTools.getSession, runs.getSession),
   defineTool(mcpTools.getDayReport, runs.getDayReport),
@@ -372,7 +368,20 @@ function auditView(args: Record<string, unknown>, keys: readonly string[]): Reco
   return Object.fromEntries(keys.map((k) => [k, args[k]]));
 }
 
-/** Tag filter of `list_repos` and `search_code`: the repo has every wanted tag. */
+/**
+ * The repos a search across repos (`search_code`, `search_commits`) reads: `repos` narrowed to those with every tag.
+ * Cards cover every repo of the projects folder, so an id unknown to them stays: the workspace reports it as
+ * `not_found` instead of it silently dropping out.
+ */
+async function searchedRepos(facade: Facade, repos: string[] | undefined, tags: readonly string[]): Promise<string[] | undefined> {
+  if (tags.length === 0) return repos;
+  const cards = await facade.cards.tags();
+  const tagged = cards.filter((entry) => hasEveryTag(tagNames(entry), tags)).map((entry) => entry.repo);
+  const isUnknown = (id: string) => !cards.some((entry) => entry.repo === id);
+  return repos ? repos.filter((id) => tagged.includes(id) || isUnknown(id)) : tagged;
+}
+
+/** Tag filter of `list_repos`, `search_code` and `search_commits`: the repo has every wanted tag. */
 function hasEveryTag(tags: readonly string[], wanted: readonly string[]): boolean {
   return wanted.every((tag) => tags.includes(tag));
 }
