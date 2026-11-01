@@ -59,6 +59,7 @@ import type { SessionTree } from "@/lib/use-session-tree";
 import { useTaskEnding } from "@/lib/use-task-ending";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { cn } from "@/lib/utils";
+import { SessionJavaNavigationMark } from "./JavaNavigationMark.tsx";
 import { NewSession } from "./NewSession.tsx";
 import { ProposalInbox } from "./ProposalInbox.tsx";
 import { RoutineList } from "./RoutineList.tsx";
@@ -697,6 +698,7 @@ function SessionPanel({
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="flex min-w-0 items-center gap-3">
             <span className="truncate text-sm font-medium">{sessionPlace(session)}</span>
+            <SessionJavaNavigationMark conn={conn} session={session} running={live} />
             <span className="text-muted-foreground text-xs">
               <StatusLabel {...sessionStateLabel(session)} />
             </span>
