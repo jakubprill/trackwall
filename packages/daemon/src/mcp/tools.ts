@@ -301,6 +301,7 @@ const runs: ToolRuns = {
   }),
   getReviewComments: async (facade, _args, { caller }) => ({ comments: facade.agents.takeReviewComments(caller) }),
   sendMessage: async (facade, { task, text }, { caller }) => facade.agents.sendMessage(caller, task, text),
+  askProposer: async (facade, { question }, { caller }) => ({ delivery: facade.agents.askProposer(caller, question) }),
   resumeTask: async (facade, { task }, { caller }) => {
     const resumed = await facade.agents.resumeTaskFor(caller, task);
     return { task: resumed.task, session: agentSession(resumed.session) };
@@ -382,6 +383,7 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.reportResult, runs.reportResult),
   defineTool(mcpTools.getReviewComments, runs.getReviewComments),
   defineTool(mcpTools.sendMessage, runs.sendMessage),
+  defineTool(mcpTools.askProposer, runs.askProposer),
   defineTool(mcpTools.resumeTask, runs.resumeTask),
   defineTool(mcpTools.getMessages, runs.getMessages),
   defineTool(mcpTools.getHandoff, runs.getHandoff),
