@@ -274,6 +274,7 @@ describe("Graph on cards from real git", () => {
     const vcs = new Vcs(systemTempFolder);
     const file = new WorkspaceFile(join(home, "workspace.yaml"));
     const workspace = new Workspace({
+      inContainer: false,
       file,
       vcs,
       hosting: fakeHosting().hosting,

@@ -68,6 +68,7 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
   const desktop = options.desktop ?? true;
   const openers = desktopOpeners(desktop, { openUrl: options.openUrl ?? (() => {}), openFolder: () => {} });
   const facade = createFacade({
+    inContainer: false,
     home,
     homeFrom: "flag",
     openUrl: openers.openUrl,

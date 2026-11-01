@@ -692,7 +692,11 @@ The dashboard's 3D scene on Pawn. It does not know the daemon API: it gets succe
 The first screen, the "Home" view (`HomeView`): the daemon state, sessions (especially those waiting for you), repos and the connections between them, in the "Orbit" layout (`orbitLayout`).
 
 **"Needs you" queue** (`NeedsYouPanel`):
-The left panel of the dashboard: sessions that are waiting for you or have an error, then task proposals waiting for a decision (ADR-39), then repos that are not clean. Those sessions and repos always have a label on the scene, and with the scene labels `all` every other repo has one too; proposals are not on the scene, and a click opens them in the Sessions view.
+The left panel of the dashboard: sessions that are waiting for you or have an error, then task proposals waiting for a decision (ADR-39), in a container the repos with unpushed work (ADR-162), then repos that are not clean. Those sessions and repos always have a label on the scene, and with the scene labels `all` every other repo has one too; proposals are not on the scene, and a click opens them in the Sessions view.
+
+**Unpushed work** (`UnpushedWork`, `unpushedWork`, `Vcs.unpushed`; in the UI *only in this container*):
+What of a repo is on no remote: commits no remote-tracking branch reaches (on local branches and on the detached HEAD of a worktree), stashes, and changed files in the repo's worktrees, task worktrees included. Read only when the daemon runs in a container, where removing the Docker volume deletes it (ADR-162).
+_Avoid_: unsaved work, local work (both also mean changes not yet committed).
 
 **Dashboard snapshot** (`HomeModel`):
 What the dashboard shows, computed by the UI from the daemon's responses and given to the scene whole on every change.
