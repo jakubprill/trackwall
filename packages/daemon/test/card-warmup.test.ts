@@ -118,6 +118,7 @@ describe("the card warm-up", () => {
     const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
     const vcs = new Vcs(systemTempFolder);
     const workspace = new Workspace({
+      inContainer: false,
       file: new WorkspaceFile(join(home, "workspace.yaml")),
       vcs,
       hosting: fakeHosting().hosting,

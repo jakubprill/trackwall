@@ -773,6 +773,7 @@ describe("the graph and find_endpoint on real git", () => {
     const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
     const vcs = new Vcs(systemTempFolder);
     const workspace = new Workspace({
+      inContainer: false,
       file: new WorkspaceFile(join(home, "workspace.yaml")),
       vcs,
       hosting: fakeHosting().hosting,

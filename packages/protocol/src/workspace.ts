@@ -100,6 +100,36 @@ export const RepoList = z.object({
 });
 export type RepoList = z.infer<typeof RepoList>;
 
+/**
+ * Work in a repo that is on no remote (ADR-162): commits no remote-tracking branch reaches, stashes, and changed files in
+ * the repo's worktrees, task worktrees included. In a container it lives only in the volume with the repos.
+ */
+export const UnpushedRepo = z.object({
+  repo: RepoId,
+  /** Commits on local branches and detached worktree HEADs that no remote-tracking branch reaches. */
+  commits: z.number().int().nonnegative(),
+  /** The local branches with such commits, sorted. */
+  branches: z.array(z.string()),
+  /** The repo has no remote at all, so all its commits count. */
+  noRemote: z.boolean(),
+  stashes: z.number().int().nonnegative(),
+  /** Changed and untracked files across the repo's worktrees. */
+  changes: z.number().int().nonnegative(),
+  /** The worktrees with such files, the repo's own one included. */
+  changedWorktrees: z.number().int().nonnegative(),
+});
+export type UnpushedRepo = z.infer<typeof UnpushedRepo>;
+
+export const UnpushedWork = z.object({
+  /** The daemon runs in a container; outside one the daemon reads nothing and `repos` is empty. */
+  inContainer: z.boolean(),
+  /** The repos with unpushed work, sorted by id; a repo with none is left out. */
+  repos: z.array(UnpushedRepo),
+  /** The repos git could not read, so their work is unknown, each with git's message. */
+  unreadable: z.array(z.object({ repo: RepoId, message: z.string() })),
+});
+export type UnpushedWork = z.infer<typeof UnpushedWork>;
+
 /** How many repos one `repos` request may ask for: a few screens of the list, so one answer does not wait for the whole folder. */
 export const MAX_REPOS_PER_REQUEST = 50;
 
@@ -174,7 +204,8 @@ export type AgentSecrets = z.infer<typeof AgentSecrets>;
  * `javaNavigation` in `workspace.yaml` (ADR-99), by hand only: the Java language server a task's Copilot CLI session can
  * get for code navigation (the `lsp` tool): `jdtls`, the folder of an unpacked Eclipse JDT Language Server; `java`, the
  * Java program that runs it (the version jdtls needs, not the project's); `lombok`, the `lombok.jar` jdtls loads as an
- * agent for a project that uses Lombok. All full paths, which the daemon checks.
+ * agent for a project that uses Lombok; `runtimes`, the folders of the Java installations the projects build with
+ * (ADR-167), which jdtls may run Gradle on and Gradle may take a toolchain from. All full paths, which the daemon checks.
  */
 export const JavaNavigationSettings = z
   .object({
@@ -185,6 +216,11 @@ export const JavaNavigationSettings = z
       .min(1)
       .nullish()
       .transform((path) => path ?? null),
+    runtimes: z
+      .array(z.string().min(1))
+      .max(20)
+      .nullish()
+      .transform((paths) => paths ?? []),
   })
   .strict();
 export type JavaNavigationSettings = z.infer<typeof JavaNavigationSettings>;
@@ -338,6 +374,8 @@ export const workspaceApi = {
    * index stays untouched. In a repo without commits, against the empty tree.
    */
   changes: endpoint("changes", RepoRequest, WorkingTreeChanges),
+  /** The work in the projects folder's repos that is on no remote, read only when the daemon runs in a container (ADR-162). */
+  unpushedWork: endpoint("unpushed-work", z.object({}).strict(), UnpushedWork),
   /** Opens an address from the README in the default browser (ADR-35), instead of in the app window. */
   openLink: endpoint("open-link", z.object({ url: ExternalLink }).strict(), Done),
   /** Opens `vscode://` in the system; the daemon does not know whether anything handled the address. */

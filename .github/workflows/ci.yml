@@ -4,7 +4,7 @@ name: CI
 # where Trackwall is used day to day (a Linux container with the repos in a volume):
 # - lint, rustfmt, typecheck, tests and the documentation site build on Linux, plus the dependency audit;
 # - the contract tests with the real Copilot CLI on Linux (ADR-67);
-# - in a Debian container: the daemon built as a binary with its smoke test, and the E2E tests of the UI in Chromium (ADR-71);
+# - in a Debian container: the Linux release archive (ADR-163) with the smoke test of its daemon, and the E2E tests of the UI in Chromium (ADR-71);
 # - the aggregate `CI ok` job, the only check to require in main branch protection.
 # Windows and macOS join the tests, the contract tests, the E2E tests and the desktop build (Tauri, clippy, cargo test,
 # sidecar smoke test, portable) every night (nightly.yml calls this workflow with `windows` and `macos`), in a manual run
@@ -214,10 +214,18 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           bun-version: ${{ env.BUN_VERSION }}
-      - name: daemon binary for Linux
-        run: pnpm --filter @trackwall/daemon build
-      - name: smoke test of the binary
-        run: bun packages/daemon/scripts/smoke.ts packages/daemon/dist/trackwall-daemon-x86_64-unknown-linux-gnu
+      # The Linux release archive as release.yml packs it (ADR-163), smoke-tested as it unpacks, with the page next to it.
+      - name: Linux archive
+        run: |
+          pnpm --filter @trackwall/ui build
+          pnpm --filter @trackwall/daemon build --target x86_64-unknown-linux-gnu
+          bun apps/desktop/scripts/package-linux.ts x64
+      - name: smoke test of the unpacked archive
+        run: |
+          unpacked="$RUNNER_TEMP/linux-archive"
+          mkdir -p "$unpacked"
+          tar -xzf out/trackwall-*-linux-x64.tar.gz -C "$unpacked"
+          bun packages/daemon/scripts/smoke.ts "$unpacked/trackwall/trackwall-daemon" --page
       # The headless shell and the system libraries it needs (apt, as root in the container), and DejaVu Sans Mono, the
       # monospace font of the Linux runner: the terminal's rows follow the font, and a user's browser runs on their own
       # computer, not in the container, so the image's fonts are not what Trackwall is drawn with.

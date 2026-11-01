@@ -30,6 +30,7 @@ import {
   sameHost,
   type ToolPermissions,
   type TreeEntry,
+  type UnpushedWork,
   type WorkingTreeChanges,
   type WorkspaceKeysRead,
   type WorkspaceSettings,
@@ -48,6 +49,7 @@ import { moveRepoOut } from "./repo-removal.ts";
 import { suggestedProjectsDir } from "./suggested-projects-dir.ts";
 import { SyncRuns } from "./sync-runs.ts";
 import { sessionToolPermissions, supervisorToolPermissions } from "./tool-permissions.ts";
+import { type RepoUnpushedRead, type UnpushedRead, unpushedWork } from "./unpushed-work.ts";
 import type { WorkspaceFile } from "./workspace-file.ts";
 import { checkWorktreesDir, defaultWorktreesDir } from "./worktrees-dir.ts";
 
@@ -89,6 +91,7 @@ interface WorkspaceVcs extends CodeSearchVcs, CommitSearchVcs {
   tree(dir: string, path: string): Promise<TreeEntry[] | undefined>;
   file(dir: string, path: string, maxBytes: number): Promise<FileContent | undefined>;
   changes(dir: string, maxPatchBytes: number): Promise<WorkingTreeChanges>;
+  unpushed(dir: string): Promise<RepoUnpushedRead>;
 }
 
 /** What `workspace` needs from the repo hosts of the `vcs` module (ADR-19). */
@@ -110,6 +113,8 @@ export interface WorkspaceDeps {
    * the repo go back in (ADR-114). A failure here is reported as the clone's, so the facade keeps its own to itself.
    */
   afterClone: (dir: string) => Promise<void>;
+  /** The daemon runs in a container, where the repos live in a volume (ADR-162). */
+  inContainer: boolean;
 }
 
 export class Workspace {
@@ -141,6 +146,19 @@ export class Workspace {
     const byId = new Map(entries.map((entry) => [entry.id, entry]));
     const asked = [...new Set(ids)].flatMap((id) => byId.get(id) ?? []);
     return mapLimit(asked, STATUS_CONCURRENCY, (entry) => this.describe(entry, how));
+  }
+
+  /** The work on no remote across the projects folder, read only in a container (ADR-162). */
+  async unpushedWork(): Promise<UnpushedWork> {
+    if (!this.deps.inContainer) return { inContainer: false, repos: [], unreadable: [] };
+    const { entries } = await this.entries();
+    const reads = await mapLimit(entries, STATUS_CONCURRENCY, (entry) =>
+      this.deps.vcs.unpushed(entry.path).then(
+        (work): UnpushedRead => ({ repo: entry.id, work }),
+        (error: unknown): UnpushedRead => ({ repo: entry.id, error }),
+      ),
+    );
+    return unpushedWork(reads);
   }
 
   settings(): WorkspaceSettings {

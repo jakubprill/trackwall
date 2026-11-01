@@ -14,6 +14,9 @@ export interface DaemonArgs {
 export const USAGE = `trackwall-daemon [options]
 trackwall-daemon mcp-stdio [--home <dir>]
                    stdio bridge to the MCP server of the running daemon (for Copilot CLI)
+trackwall-daemon address [--home <dir>]
+                   print the running daemon's page address with its token (to open it in a browser;
+                   whoever sees the output can use the daemon until it restarts)
 
   --ui             open the UI in the default browser (mode without Tauri)
   --ui-dir <dir>   directory of the built UI (default: ./ui next to the binary)
@@ -71,16 +74,23 @@ function toInt(value: string | undefined, name: string): number {
 
 /** The `trackwall-daemon` subcommand that starts the Stdio bridge to `/mcp` (§5.3). */
 export const MCP_STDIO_COMMAND = "mcp-stdio";
-/** The command line: the daemon or the Stdio bridge (`mcp-stdio [--home <dir>]`), which has only the state directory to set. */
-export type CommandLine = { command: "daemon"; args: DaemonArgs } | { command: typeof MCP_STDIO_COMMAND; home?: string };
+/** The `trackwall-daemon` subcommand that prints the running daemon's page address with its token (ADR-161). */
+export const ADDRESS_COMMAND = "address";
+const SUBCOMMANDS = [MCP_STDIO_COMMAND, ADDRESS_COMMAND] as const;
+/** The command line: the daemon, or a subcommand of the running daemon, which has only the state directory to set. */
+export type CommandLine =
+  | { command: "daemon"; args: DaemonArgs }
+  | { command: typeof MCP_STDIO_COMMAND; home?: string }
+  | { command: typeof ADDRESS_COMMAND; home?: string };
 
 export function parseCommandLine(argv: string[]): CommandLine {
-  if (argv[0] !== MCP_STDIO_COMMAND) return { command: "daemon", args: parseDaemonArgs(argv) };
+  const command = SUBCOMMANDS.find((name) => name === argv[0]);
+  if (command === undefined) return { command: "daemon", args: parseDaemonArgs(argv) };
   const { values } = parseArgs({
     args: argv.slice(1),
     options: { home: { type: "string" } },
     strict: true,
     allowPositionals: false,
   });
-  return { command: MCP_STDIO_COMMAND, home: values.home };
+  return { command, home: values.home };
 }

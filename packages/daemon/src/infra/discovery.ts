@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { closeSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeSync } from "node:fs";
 import { join } from "node:path";
-import { DAEMON_FILE, DaemonFile, HealthResult } from "@trackwall/protocol";
+import { DAEMON_FILE, DaemonFile, HEALTH_PATH, HealthResult } from "@trackwall/protocol";
 import { writeFileAtomic } from "./atomic-write.ts";
 import { loopbackRequest } from "./loopback.ts";
 
@@ -22,6 +22,14 @@ export function daemonFilePath(home: string): string {
 
 export function newToken(): string {
   return randomBytes(32).toString("base64url");
+}
+
+/**
+ * The address of the daemon's page with its token, which the page moves out of the address bar into storage (§5.2).
+ * The token goes in the fragment: it does not reach the server, logs or the Referer header.
+ */
+export function daemonPageAddress(file: Pick<DaemonFile, "port" | "token">): string {
+  return `http://127.0.0.1:${file.port}/#token=${file.token}`;
 }
 
 export function readDaemonFile(home: string): DaemonFile | undefined {
@@ -50,7 +58,7 @@ export async function probeRunningDaemon(home: string, timeoutMs = 1500): Promis
   const file = readDaemonFile(home);
   if (!file) return undefined;
   try {
-    const res = await loopbackRequest(file.port, "/api/health", { timeoutMs });
+    const res = await loopbackRequest(file.port, HEALTH_PATH, { timeoutMs });
     const body = HealthResult.safeParse(JSON.parse(res.body));
     if (!body.success || !body.data.ok) return undefined;
     return { file, version: body.data.data.version };
