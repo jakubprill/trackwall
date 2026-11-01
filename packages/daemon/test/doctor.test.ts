@@ -140,7 +140,7 @@ describe("doctor", () => {
     await facade.workspace.setProjectsDir(projects);
     expect((await facade.doctor.run()).checks.some((c) => c.id === "java-navigation")).toBe(false);
     const java = join(projects, "jdk", "bin", "java");
-    facade.workspace.setJavaNavigation({ jdtls: join(projects, "jdtls"), java, lombok: null });
+    facade.workspace.setJavaNavigation({ jdtls: join(projects, "jdtls"), java, lombok: null, runtimes: [] });
     expect((await facade.doctor.run()).checks.find((c) => c.id === "java-navigation")).toEqual({
       id: "java-navigation",
       status: "fail",

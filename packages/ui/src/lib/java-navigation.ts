@@ -36,11 +36,12 @@ export function javaNavigationInView(offer: JavaNavigationOffer, view: SessionVi
 }
 
 /** The tone of the install's state line in Settings › Agents. */
-export type JavaNavigationSetupTone = "muted" | "ok" | "error";
+export type JavaNavigationSetupTone = "muted" | "ok" | "warning" | "error";
 
 /**
  * What the Java navigation section of Settings says (ADR-123): a running install's step, then whether tasks can get it
- * now, with the last install's error while they cannot (a fix by hand after a failed install makes it old news). The button installs, or installs again over settings that do not work.
+ * now, with the last install's error while they cannot (a fix by hand after a failed install makes it old news), and
+ * what an install that worked could not do (ADR-167). The button installs, or installs again over settings that do not work.
  */
 export function javaNavigationSetup(install: JavaNavigationInstall): { line: string; tone: JavaNavigationSetupTone; button: string } {
   const button = install.readiness === null ? "Install" : "Install again";
@@ -49,6 +50,12 @@ export function javaNavigationSetup(install: JavaNavigationInstall): { line: str
   if (install.error !== null && !ready) return { line: `The install failed: ${install.error}`, tone: "error", button };
   if (install.readiness === null) return { line: "Not set up yet.", tone: "muted", button };
   if (install.readiness.problem !== null) return { line: `Cannot start: ${install.readiness.problem}.`, tone: "error", button };
+  if (install.warning !== null)
+    return {
+      line: `Ready, but ${install.warning}. Projects that build with that Java will not import until its folder is in javaNavigation.runtimes in workspace.yaml.`,
+      tone: "warning",
+      button,
+    };
   return { line: "Ready: tasks in Java repos can get it on the New session form.", tone: "ok", button };
 }
 

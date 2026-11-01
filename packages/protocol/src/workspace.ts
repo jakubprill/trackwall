@@ -204,7 +204,8 @@ export type AgentSecrets = z.infer<typeof AgentSecrets>;
  * `javaNavigation` in `workspace.yaml` (ADR-99), by hand only: the Java language server a task's Copilot CLI session can
  * get for code navigation (the `lsp` tool): `jdtls`, the folder of an unpacked Eclipse JDT Language Server; `java`, the
  * Java program that runs it (the version jdtls needs, not the project's); `lombok`, the `lombok.jar` jdtls loads as an
- * agent for a project that uses Lombok. All full paths, which the daemon checks.
+ * agent for a project that uses Lombok; `runtimes`, the folders of the Java installations the projects build with
+ * (ADR-167), which jdtls may run Gradle on and Gradle may take a toolchain from. All full paths, which the daemon checks.
  */
 export const JavaNavigationSettings = z
   .object({
@@ -215,6 +216,11 @@ export const JavaNavigationSettings = z
       .min(1)
       .nullish()
       .transform((path) => path ?? null),
+    runtimes: z
+      .array(z.string().min(1))
+      .max(20)
+      .nullish()
+      .transform((paths) => paths ?? []),
   })
   .strict();
 export type JavaNavigationSettings = z.infer<typeof JavaNavigationSettings>;
