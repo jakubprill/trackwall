@@ -285,7 +285,9 @@ export function createFacade(o: FacadeOptions): Facade {
     sessionMcpServer: o.sessionMcpServer,
     openEditor,
     boardHas: (item) => board.has(item),
-    // `verifications` is made below; a task ends only after both exist.
+    // `verifications` and `mergeRequests` are made below: the outcomes are read only once a supervisor gets a prompt,
+    // and a task ends only after both exist.
+    taskOutcomes,
     onTaskRemoved: (ended) => {
       logs.removeTaskLogs(ended.task);
       const last = verifications.take(ended.task);
@@ -407,6 +409,16 @@ export function createFacade(o: FacadeOptions): Facade {
     openEditor: (path) => o.openUrl(vscodeUrl(path)),
     openFolder: o.openFolder,
   });
+  /** The outcome of every task with a verification or a merge request (ADR-154), for the UI and the supervisor (ADR-156). */
+  function taskOutcomes(): TaskOutcome[] {
+    const followed = mergeRequests.followed();
+    return agents.tasks().flatMap((task) => {
+      const verification = verifications.get(task.id)?.state ?? null;
+      const mergeRequest = followed.get(task.id) ?? null;
+      return verification === null && mergeRequest === null ? [] : [{ task: task.id, repo: task.repo, verification, mergeRequest }];
+    });
+  }
+
   return {
     workspace,
     repoWatch,
@@ -446,14 +458,7 @@ export function createFacade(o: FacadeOptions): Facade {
       const read = await cards.appConfig(dir, { profile, key }, { vars: run.env, mask });
       return { repo, task, profile, ...read, envProblem: run.problem === null ? null : mask(run.problem) };
     },
-    taskOutcomes: () => {
-      const followed = mergeRequests.followed();
-      return agents.tasks().flatMap((task) => {
-        const verification = verifications.get(task.id)?.state ?? null;
-        const mergeRequest = followed.get(task.id) ?? null;
-        return verification === null && mergeRequest === null ? [] : [{ task: task.id, repo: task.repo, verification, mergeRequest }];
-      });
-    },
+    taskOutcomes,
     keepForRestart: () => {
       agents.keepRunningSessionsForResume();
       verifications.keepForRestart();

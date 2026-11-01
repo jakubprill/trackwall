@@ -7,6 +7,7 @@ import {
   type MergeRequestForm,
   type MergeRequestState,
   type PipelineState,
+  pipelineStateText,
   type Task,
   type TaskBranchPush,
   type Verification,
@@ -80,11 +81,6 @@ export function canPush(push: TaskBranchPush): boolean {
   return push.commits > 0 && (!push.published || push.unpushed > 0);
 }
 
-/** `!12` on GitLab, `#12` on GitHub, as each host writes it. */
-export function mergeRequestNumber(project: HostedProject, number: number): string {
-  return `${project.kind === "gitlab" ? "!" : "#"}${number}`;
-}
-
 /** The name of the repo host in the form's button. */
 export function hostLabel(project: HostedProject): string {
   return project.kind === "gitlab" ? "GitLab" : "GitHub";
@@ -113,20 +109,22 @@ export function failedJobNames(mergeRequest: MergeRequest): string {
 }
 
 export function pipelineLabel(state: PipelineState): { tone?: StatusTone; label: string } {
+  const tone = pipelineTone(state);
+  return tone === undefined ? { label: pipelineStateText(state) } : { tone, label: pipelineStateText(state) };
+}
+
+function pipelineTone(state: PipelineState): StatusTone | undefined {
   switch (state) {
     case "passed":
-      return { tone: "ok", label: "pipeline passed" };
+      return "ok";
     case "failed":
-      return { tone: "error", label: "pipeline failed" };
+      return "error";
     case "running":
-      return { tone: "warning", label: "pipeline running" };
     case "pending":
-      return { tone: "warning", label: "pipeline pending" };
     case "manual":
-      return { tone: "warning", label: "pipeline waits for a manual job" };
+      return "warning";
     case "cancelled":
-      return { label: "pipeline cancelled" };
     case "skipped":
-      return { label: "pipeline skipped" };
+      return undefined;
   }
 }

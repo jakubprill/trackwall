@@ -175,7 +175,9 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
     writeSessionInstructions(sessionDir, "0.5.12", { kind: "supervisor", changesCode: false });
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
-    expect(text).toContain("Each prompt you get ends with Trackwall's situation: every task with who started it and what its session does");
+    expect(text).toContain(
+      "Each prompt you get ends with Trackwall's situation: every task with who started it, what its session does, its last verification and its merge request with the pipeline",
+    );
     expect(text).toContain(
       "answer what is going on, and what waits for the user, from it, and call get_session only for details it does not give",
     );

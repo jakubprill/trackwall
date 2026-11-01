@@ -4,6 +4,7 @@ import {
   MERGE_REQUEST_DESCRIPTION_MAX,
   MERGE_REQUEST_TITLE_MAX,
   type MergeRequest,
+  mergeRequestNumber,
   type TaskMergeRequest as State,
   type Task,
   type Verification,
@@ -23,7 +24,6 @@ import {
   hostLabel,
   type MergeRequestDraftText,
   mergeRequestDraft,
-  mergeRequestNumber,
   mergeRequestStateLabel,
   pipelineLabel,
 } from "@/lib/merge-request";

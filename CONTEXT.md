@@ -504,7 +504,7 @@ The user makes a task they started the supervisor's work: the supervisor then he
 _Avoid_: assign, delegate (that is what the supervisor does with a proposal)
 
 **Situation** (`supervisorSituation`, `situationOutput`; ADR-148):
-The short list of the work under way that the daemon gives the supervisor with every prompt: each task with who started it and what its newest session does, the proposals waiting for the user, and the user's other running sessions, as they are when the prompt comes. Facts from the daemon's session list, not the agent's own words; the details stay in `list_sessions` and `get_session`.
+The short list of the work under way that the daemon gives the supervisor with every prompt: each task with who started it, what its newest session does and what its work came to (its last verification and its merge request with the pipeline, ADR-156), the proposals waiting for the user, and the user's other running sessions, as they are when the prompt comes. Facts from the daemon's session list, not the agent's own words; the details stay in `list_sessions` and `get_session`.
 _Avoid_: briefing (that is what the supervisor writes for the day start), status report, context (too general)
 
 **Supervisor panel** (`SupervisorPanel`):

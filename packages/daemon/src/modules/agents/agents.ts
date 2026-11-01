@@ -29,6 +29,7 @@ import {
   type TaskHandoffState,
   type TaskMessage,
   type TaskMiseConfig,
+  type TaskOutcome,
   type TaskProposal,
   type TaskRounds,
   type TaskSharedFiles,
@@ -170,6 +171,11 @@ export interface AgentsDeps {
   openEditor: (dir: string) => void;
   /** Whether a board item is on the board (ADR-133): a task or a proposal names only an existing one. */
   boardHas: (item: string) => Promise<boolean>;
+  /**
+   * What each task's work came to, its verification verdict and its merge request with the pipeline (ADR-154), which
+   * `verification` and `merge-requests` keep: the supervisor's situation tells it with each task (ADR-156).
+   */
+  taskOutcomes: () => readonly TaskOutcome[];
   /**
    * A task has ended and its worktree is gone: what other modules keep of it (its logs, ADR-59) can go too, and its
    * facts go to the task journal (ADR-150).
@@ -1062,7 +1068,7 @@ export class Agents {
   #sessionCallbacks({ id, supervisor, task }: { id: string; supervisor: boolean; task: string | null }): SessionCallbacks {
     return {
       prompt: () => this.#readRequestPrompt({ id, supervisor, task }),
-      situation: () => (supervisor ? supervisorSituation(this.sessionsWithoutCycle(), id) : undefined),
+      situation: () => (supervisor ? supervisorSituation(this.sessionsWithoutCycle(), id, this.#deps.taskOutcomes()) : undefined),
       onUserText: () => this.#coordination.userTyped({ id, task }),
       onPromptSent: () => {
         this.#miseTrust.promptSent(trustRecipientOf({ id, task }));
