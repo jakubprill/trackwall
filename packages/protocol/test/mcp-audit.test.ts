@@ -4,16 +4,18 @@ import { SessionId, TaskId, TaskModel } from "../src/agents.ts";
 import { BoardItemId } from "../src/board.ts";
 import { TagName } from "../src/cards.ts";
 import { mcpTools } from "../src/mcp.ts";
-import { MiseTaskName } from "../src/mise.ts";
+import { MiseRunArgument, MiseTaskName } from "../src/mise.ts";
 import { RoutineName } from "../src/routines.ts";
 import { RepoId } from "../src/workspace.ts";
 
 /**
  * The schemas an audited argument may have (ADR-152): identifiers the daemon checks, which cannot hold free text. A
  * string with a pattern or a length limit is not enough (an endpoint's path has a pattern and carries a query); it
- * must be one of these, recognised by its definition, which `.describe()` and `.optional()` keep.
+ * must be one of these, recognised by its definition, which `.describe()` and `.optional()` keep. A mise task's run
+ * argument (ADR-158) is one word without spaces, only for a task whose usage declares it, and already in the daemon log
+ * line of `run_mise_task`; the audit keeps it as the log does.
  */
-const IDENTIFIERS: z.ZodType[] = [RepoId, TaskId, SessionId, BoardItemId, TagName, MiseTaskName, TaskModel, RoutineName];
+const IDENTIFIERS: z.ZodType[] = [RepoId, TaskId, SessionId, BoardItemId, TagName, MiseTaskName, TaskModel, RoutineName, MiseRunArgument];
 
 /** The schema under `.optional()`, `.default()`, `.nullable()` and `z.array()`. */
 function inner(schema: z.ZodType): z.ZodType {
