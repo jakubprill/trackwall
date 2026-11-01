@@ -17,6 +17,7 @@ import {
   miseApi,
   routinesApi,
   servicesApi,
+  taskRoundsApi,
   verificationApi,
   workspaceApi,
 } from "@trackwall/protocol";
@@ -169,6 +170,9 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(agentsApi.resumeTask, (f, b) => f.agents.resumeTask(b.task)),
   route(agentsApi.taskChanges, (f, b) => f.agents.taskChanges(b.task)),
   route(agentsApi.sendReview, (f, b) => f.agents.sendReview(b.task, b.comments)),
+  route(taskRoundsApi.rounds, (f, b) => f.agents.taskRounds(b.task)),
+  route(taskRoundsApi.roundChanges, (f, b) => f.agents.taskRoundChanges(b.task, b.round)),
+  route(taskRoundsApi.undoRound, (f, b) => f.agents.undoTaskRound(b.task, b.round)),
   route(agentsApi.taskJavaNavigation, (f, b) => f.agents.taskJavaNavigation(b.task)),
   route(agentsApi.taskSharedFiles, async (f, b) => ({ shared: await f.agents.taskSharedFiles(b.task) })),
   route(agentsApi.copyIncludedFilesAgain, (f, b) => f.agents.copyIncludedFilesAgain(b.task)),

@@ -23,6 +23,7 @@ import {
   LAST_SUPERVISOR_FILE,
   LEGACY_WORKTREES_DIR,
   RESUMABLE_SESSIONS_FILE,
+  TASK_ROUNDS_FILE,
   TASKS_FILE,
 } from "./modules/agents/agents.ts";
 import { resolveCopilot } from "./modules/agents/copilot-command.ts";
@@ -370,6 +371,7 @@ export function createFacade(o: FacadeOptions): Facade {
     statePaths: {
       "workspace-file": workspace.configFile(),
       "tasks-file": join(o.home, TASKS_FILE),
+      "task-rounds-file": join(o.home, TASK_ROUNDS_FILE),
       "resumable-sessions-file": join(o.home, RESUMABLE_SESSIONS_FILE),
       "last-supervisor-file": join(o.home, LAST_SUPERVISOR_FILE),
       "agent-queues-file": join(o.home, AGENT_QUEUES_FILE),

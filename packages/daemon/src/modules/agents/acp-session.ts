@@ -97,6 +97,8 @@ export interface AcpSessionOptions {
   onEvent: (event: SessionEvent) => void;
   /** Any turn ended, also one the user drove, which `onEvent` leaves out: the agent may have committed (ADR-144). */
   onTurnOver: () => void;
+  /** Any turn started, also one the user drove: where the worktree is then starts a round (ADR-168). */
+  onTurnStart: () => void;
   log: (msg: string) => void;
 }
 
@@ -382,6 +384,7 @@ export class AcpSession implements AgentSession {
     if (conversation === undefined) throw new Error(`session ${this.id} has no conversation yet`);
     this.#turn = prompt;
     this.#hasConversation = true;
+    this.#o.onTurnStart();
     this.#broadcast(this.#conversation.said(prompt.text));
     this.#report("Working", "prompt sent");
     connection.request("session/prompt", { sessionId: conversation, prompt: [{ type: "text", text: prompt.text }] }).then(
