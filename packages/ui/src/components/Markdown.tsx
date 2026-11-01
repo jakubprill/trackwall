@@ -11,12 +11,16 @@ import { useOpenWebLink } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
 
 /**
- * Untrusted Markdown, formatted: a README (ADR-35) and an agent's answer in the conversation view (ADR-107). Ready-made Streamdown (GFM, raw HTML through sanitization, Mermaid diagrams
- * in `strict` mode). Loaded lazily, because Mermaid weighs a few MB. Content from a repo or an agent is untrusted, so nothing in it
- * navigates the window: the container catches every click on a link, also in a diagram's SVG, the daemon opens a web page
- * address in the system browser, and the rest is text. Images are replaced by their description.
+ * Untrusted Markdown, formatted with ready-made Streamdown (GFM, sanitized): a README (ADR-35), with raw HTML and Mermaid
+ * diagrams in `strict` mode, and an agent's answer in the conversation view (ADR-107), with neither, because a diagram's
+ * HTML labels and theme CSS can load addresses and an answer is what a prompt-injected agent writes. Loaded lazily,
+ * because Mermaid weighs a few MB. Nothing in the text navigates the window: the container catches every click on a
+ * link, also in a diagram's SVG, the daemon opens a web page address in the system browser, and the rest is text. Images
+ * are replaced by their description.
  */
-const plugins = { mermaid: createMermaidPlugin({ config: { theme: "dark" } }) };
+export type MarkdownSource = "readme" | "agent";
+const README_PLUGINS = { mermaid: createMermaidPlugin({ config: { theme: "dark" } }) };
+const AGENT_PLUGINS = {};
 /**
  * Our own plugins instead of Streamdown's defaults: sanitization with GitHub's schema with the `user-content-` prefix for
  * `id` and `name` (Streamdown strips it, and the text could then overwrite named elements of the window) and without
@@ -27,9 +31,8 @@ const schema = {
   ...defaultSchema,
   attributes: { ...defaultSchema.attributes, code: [...(defaultSchema.attributes?.code ?? []), "metastring"] },
 };
-/** Raw HTML only where a format has it (a README); in an agent's answer an HTML tag stays out, sanitized either way. */
-const withHtml: ComponentProps<typeof Streamdown>["rehypePlugins"] = [rehypeRaw, [rehypeSanitize, schema]];
-const withoutHtml: ComponentProps<typeof Streamdown>["rehypePlugins"] = [[rehypeSanitize, schema]];
+const README_REHYPE: ComponentProps<typeof Streamdown>["rehypePlugins"] = [rehypeRaw, [rehypeSanitize, schema]];
+const AGENT_REHYPE: ComponentProps<typeof Streamdown>["rehypePlugins"] = [[rehypeSanitize, schema]];
 const controls = {
   code: { copy: true, download: false },
   table: { copy: true, download: false, fullscreen: true },
@@ -41,19 +44,19 @@ const mermaid = { errorComponent: MermaidError };
 const MIDDLE_BUTTON = 1;
 
 /**
- * `html` lets raw HTML in, sanitized, as GitHub shows a README. `streaming` for text that is still growing (an answer chunk by chunk): Streamdown then closes an unfinished code block
+ * `streaming` for text that is still growing (an answer chunk by chunk): Streamdown then closes an unfinished code block
  * or emphasis instead of showing its marks.
  */
 export function Markdown({
   conn,
   text,
-  html,
+  source,
   streaming = false,
   className,
 }: {
   conn: Connection;
   text: string;
-  html: boolean;
+  source: MarkdownSource;
   streaming?: boolean;
   className?: string;
 }) {
@@ -80,8 +83,9 @@ export function Markdown({
       {linkError && <p className="text-destructive text-xs">Could not open the link: {linkError}</p>}
       <Streamdown
         mode={streaming ? "streaming" : "static"}
-        plugins={plugins}
-        rehypePlugins={html ? withHtml : withoutHtml}
+        isAnimating={streaming}
+        plugins={source === "readme" ? README_PLUGINS : AGENT_PLUGINS}
+        rehypePlugins={source === "readme" ? README_REHYPE : AGENT_REHYPE}
         controls={controls}
         mermaid={mermaid}
         components={components}

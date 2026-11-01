@@ -14,8 +14,9 @@ import {
   User,
   Wrench,
 } from "lucide-react";
-import { lazy, type ReactNode, Suspense } from "react";
+import { type ReactNode, Suspense } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { LazyMarkdown } from "@/components/LazyMarkdown";
 import { StatusLabel } from "@/components/StatusLabel";
 import type { Connection } from "@/lib/connection";
 import { type ConversationTurn, conversationTurns, TOOL_STATUS } from "@/lib/conversation";
@@ -26,11 +27,8 @@ import { type ConversationTurn, conversationTurns, TOOL_STATUS } from "@/lib/con
  * messages, and dots while the agent works.
  */
 
-/** Streamdown is a few MB, so it loads with the first answer; until then, or if it fails, the answer is plain text. */
-const Markdown = lazy(() => import("@/components/Markdown").then((m) => ({ default: m.Markdown })));
-
 /** ACP's tool kinds as icons; any other kind is a wrench. */
-const TOOL_ICONS: Record<string, LucideIcon> = {
+const TOOL_ICONS: Partial<Record<string, LucideIcon>> = {
   read: FileText,
   edit: Pencil,
   execute: SquareTerminal,
@@ -136,12 +134,13 @@ function AgentTurn({
   );
 }
 
+/** Until Streamdown has loaded, or if it fails, the answer is plain text. */
 function Answer({ conn, text, streaming }: { conn: Connection; text: string; streaming: boolean }) {
   const plain = <PlainAnswer text={text} />;
   return (
     <ErrorBoundary fallback={() => plain}>
       <Suspense fallback={plain}>
-        <Markdown conn={conn} text={text} html={false} streaming={streaming} />
+        <LazyMarkdown conn={conn} text={text} source="agent" streaming={streaming} />
       </Suspense>
     </ErrorBoundary>
   );
