@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SessionId, TaskId, TaskSummaryText } from "./agents.ts";
+import { SessionId, TaskId, TaskMessageText, TaskSummaryText } from "./agents.ts";
 import { VerificationState } from "./verification.ts";
 import { RepoId } from "./workspace.ts";
 
@@ -28,7 +28,8 @@ const UpdateBase = z.object({
  * `result_reported`: it called `report_result`; `verified`: a verification of the task has a verdict;
  * `proposal_rejected`: the user rejected the proposal, with their reason when they gave one; `repo_removed`: the user
  * approved a proposal to remove a repo, which is now in `movedTo` (ADR-83; `task` is the proposal's id); `handed_over`: the
- * user handed the supervisor a task they had started (ADR-155). A turn the user drove by
+ * user handed the supervisor a task they had started (ADR-155); `question`: the task's agent asked its proposer something
+ * with `ask_proposer` (ADR-160), which the proposer answers with `send_message`. A turn the user drove by
  * typing into the task's session gives no `turn_ended`: the user is handling it.
  */
 export const TaskUpdate = z.discriminatedUnion("kind", [
@@ -45,5 +46,6 @@ export const TaskUpdate = z.discriminatedUnion("kind", [
   UpdateBase.extend({ kind: z.literal("proposal_rejected"), reason: z.string().nullable() }),
   UpdateBase.extend({ kind: z.literal("repo_removed"), repo: RepoId, movedTo: z.string() }),
   UpdateBase.extend({ kind: z.literal("handed_over") }),
+  UpdateBase.extend({ kind: z.literal("question"), text: TaskMessageText }),
 ]);
 export type TaskUpdate = z.infer<typeof TaskUpdate>;
