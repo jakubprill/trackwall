@@ -380,7 +380,7 @@ describe("the tabs of a task's panel (ADR-137)", () => {
   test("a task in a terminal has a Terminal tab, one in the conversation view a Chat tab, and one without a session neither", () => {
     expect(taskTabs({ view: "terminal" }).map((t) => t.label)).toEqual(["Terminal", "Changes", "Impact"]);
     expect(taskTabs({ view: "conversation" })).toEqual([
-      { id: "terminal", label: "Chat" },
+      { id: "session", label: "Chat" },
       { id: "changes", label: "Changes" },
       { id: "impact", label: "Impact" },
     ]);

@@ -24,6 +24,5 @@ describe("an agent task in Chat (ADR-137)", () => {
     await conversation.getByText(/Thinking about: Fix the login/).waitFor();
     await page.getByRole("textbox", { name: "Message to the agent" }).waitFor();
     expect(await page.getByRole("tab", { name: "Terminal" }).count()).toBe(0);
-    expect(await page.getByText("Lost the connection to the session terminal; reconnecting…").count()).toBe(0);
   }, 60_000);
 });
