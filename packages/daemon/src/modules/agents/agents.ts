@@ -639,6 +639,16 @@ export class Agents {
     this.#tasks.openEditor(id);
   }
 
+  /**
+   * The user hands a task they started to the supervisor (ADR-155): from then on its updates go to the supervisor, which
+   * may send it messages, and the supervisor is told at once.
+   */
+  handToSupervisor(id: string): Task {
+    const task = this.#tasks.handToSupervisor(id);
+    this.#coordination.taskHanded(task);
+    return task;
+  }
+
   /** The files the repo root's `.worktreeinclude` names, copied into the task's existing worktree again (ADR-61). */
   copyIncludedFilesAgain(id: string): Promise<Task> {
     return this.#tasks.copyIncludedFilesAgain(id);

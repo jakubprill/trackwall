@@ -55,7 +55,8 @@ async function stopSessionOf(task: string): Promise<void> {
 }
 
 /** The fake's prompt line for a typed prompt: "Thinking about: <prompt>". */
-const TYPED_MESSAGE = "Thinking about: The session that proposed your task sent you a message in Trackwall: call get_messages";
+const TYPED_MESSAGE =
+  "Thinking about: The session that proposed your task, or the supervisor the user handed it to, sent you a message in Trackwall: call get_messages";
 
 describe.skipIf(process.versions.bun === undefined)("resume_task (real PTY and git, fake Copilot CLI)", () => {
   test("the proposer resumes its task in the task's worktree, and the message that waited for it is typed there", async () => {

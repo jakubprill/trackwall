@@ -9,7 +9,7 @@ import { MCP_SERVER_NAME, mcpTools } from "@trackwall/protocol";
 
 const SERVER = `(the ${MCP_SERVER_NAME} MCP server)`;
 const REVIEW = `The user sent a review of your changes in Trackwall: call ${mcpTools.getReviewComments.name} ${SERVER} and address every comment.`;
-const MESSAGES = `The session that proposed your task sent you a message in Trackwall: call ${mcpTools.getMessages.name} ${SERVER} and follow it as an update of your task.`;
+const MESSAGES = `The session that proposed your task, or the supervisor the user handed it to, sent you a message in Trackwall: call ${mcpTools.getMessages.name} ${SERVER} and follow it as an update of your task.`;
 const HANDOFF = `The task that handed you your work has new commits in Trackwall: call ${mcpTools.getHandoff.name} ${SERVER} and check whether they change what you build on.`;
 const UPDATES = `There is news about the work you delegated in Trackwall: call ${mcpTools.getUpdates.name} ${SERVER} and act on it.`;
 /** The one part with nothing to read: that the user trusted a mise config is the whole news (ADR-92). */
