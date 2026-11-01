@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
+import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import { parseFile, TAURI_DIR } from "../scripts/lib.ts";
+import { parseFile, REPO, TAURI_DIR } from "../scripts/lib.ts";
 import { MANIFEST_FILE } from "../scripts/update-manifest.ts";
 
 /** The part of `tauri.conf.json` the updater reads (ADR-53). */
@@ -31,4 +32,26 @@ test("the updater refuses a package signed for another version than the manifest
 
 test("tauri build does not sign: CI has no signing key, release.yml signs the update packages itself", () => {
   expect(conf.bundle.createUpdaterArtifacts).toBeUndefined();
+});
+
+/** The jobs of a workflow file; a job's `environment` is a name or an object with one (pages.yml). */
+const Workflow = z.object({ jobs: z.record(z.string(), z.object({ environment: z.unknown().optional() }).passthrough()) });
+const SIGNING_SECRET = /secrets\.TAURI_SIGNING_/;
+const SIGNING_ENVIRONMENT = "release";
+
+test("only jobs of the release environment read the update signing key, so a workflow pushed on a branch cannot", () => {
+  const workflowsDir = join(REPO, ".github", "workflows");
+  for (const file of readdirSync(workflowsDir)) {
+    const workflow = parseFile(join(workflowsDir, file), Workflow, (text) => Bun.YAML.parse(text));
+    for (const [name, job] of Object.entries(workflow.jobs)) {
+      if (!SIGNING_SECRET.test(JSON.stringify(job))) continue;
+      expect({ file, name, environment: job.environment }).toEqual({ file, name, environment: SIGNING_ENVIRONMENT });
+    }
+  }
+  const release = parseFile(join(workflowsDir, "release.yml"), Workflow, (text) => Bun.YAML.parse(text));
+  expect(
+    Object.entries(release.jobs)
+      .filter(([, job]) => job.environment === SIGNING_ENVIRONMENT)
+      .map(([name]) => name),
+  ).toEqual(["build", "linux"]);
 });
