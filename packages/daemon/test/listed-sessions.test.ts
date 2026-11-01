@@ -133,7 +133,16 @@ describe("listed sessions", () => {
 
     const resumable = JSON.parse(readFileSync(join(home, "resumable-sessions.json"), "utf8"));
     expect(resumable.sessions).toEqual([
-      { session: "main", repo: "shop", supervisor: false, task: null, view: "terminal", hasConversation: true },
+      {
+        session: "main",
+        repo: "shop",
+        supervisor: false,
+        task: null,
+        view: "terminal",
+        hasConversation: true,
+        model: null,
+        javaNavigation: false,
+      },
     ]);
     list.close();
   });

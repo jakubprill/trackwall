@@ -74,6 +74,7 @@ export function makeAgents(
     openEditor: (dir) => opened.push(dir),
     boardHas: async () => true,
     taskOutcomes: () => [],
+    knowledge: async () => ({ entries: [], more: 0 }),
     onTaskRemoved: () => {},
     log: () => {},
   });

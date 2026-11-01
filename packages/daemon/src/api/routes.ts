@@ -11,8 +11,10 @@ import {
   errorJournalApi,
   graphApi,
   javaNavigationApi,
+  knowledgeApi,
   localConfigApi,
   logsApi,
+  mcpAuditApi,
   mergeRequestsApi,
   miseApi,
   routinesApi,
@@ -108,6 +110,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     f.errorJournal.clear();
     return null;
   }),
+  route(mcpAuditApi.calls, (f, b) => f.mcpAudit.list(b.task)),
   route(localConfigApi.store, (f) => f.localConfig.store()),
   route(localConfigApi.repo, (f, b) => f.localConfig.repo(b.repo)),
   route(localConfigApi.repos, (f) => f.localConfig.repos()),
@@ -144,6 +147,13 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     await f.routines.remove(b.name);
     return null;
   }),
+  route(knowledgeApi.list, (f) => f.knowledge.list()),
+  route(knowledgeApi.write, (f, b) => f.knowledge.write(b)),
+  route(knowledgeApi.approve, (f, b) => f.knowledge.approve(b.name, b.digest)),
+  route(knowledgeApi.remove, async (f, b) => {
+    await f.knowledge.remove(b.name);
+    return null;
+  }),
   route(dayStartApi.start, (f, b) => f.dayStart.start(b.view)),
   route(dayStartApi.run, (f) => f.dayStart.run()),
   route(verificationApi.start, (f, b) => f.verifications.start(b.task)),
@@ -157,7 +167,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     return null;
   }),
   route(agentsApi.sessions, (f) => f.agents.sessions()),
-  route(agentsApi.start, (f, b) => f.agents.start(b.repo, b.prompt)),
+  route(agentsApi.start, (f, { repo, prompt, ...options }) => f.agents.start(repo, prompt, options)),
   route(agentsApi.startSupervisor, (f, b) => f.agents.startSupervisor(b.conversation, b.view)),
   route(agentsApi.stop, (f, b) => f.agents.stop(b.session)),
   route(agentsApi.environmentChange, (f, b) => f.agents.environmentChange(b.session)),
@@ -176,6 +186,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(taskRoundsApi.roundChanges, (f, b) => f.agents.taskRoundChanges(b.task, b.round)),
   route(taskRoundsApi.undoRound, (f, b) => f.agents.undoTaskRound(b.task, b.round)),
   route(agentsApi.taskJavaNavigation, (f, b) => f.agents.taskJavaNavigation(b.task)),
+  route(agentsApi.sessionJavaNavigation, (f, b) => f.agents.sessionJavaNavigation(b.session)),
   route(agentsApi.taskSharedFiles, async (f, b) => ({ shared: await f.agents.taskSharedFiles(b.task) })),
   route(agentsApi.copyIncludedFilesAgain, (f, b) => f.agents.copyIncludedFilesAgain(b.task)),
   route(agentsApi.handToSupervisor, (f, b) => f.agents.handToSupervisor(b.task)),

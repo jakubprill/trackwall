@@ -1,6 +1,14 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { MCP_INSTRUCTIONS, mcpTools, TASK_MESSAGE_RULE, TASK_MESSAGE_USES, TASK_PORT_ENV, VERIFY_MISE_TASK } from "@trackwall/protocol";
+import {
+  MCP_INSTRUCTIONS,
+  mcpTools,
+  type SessionKnowledge,
+  TASK_MESSAGE_RULE,
+  TASK_MESSAGE_USES,
+  TASK_PORT_ENV,
+  VERIFY_MISE_TASK,
+} from "@trackwall/protocol";
 import { envKey } from "../../infra/env-key.ts";
 import type { HandoffFacts } from "./task-handoff.ts";
 
@@ -34,11 +42,16 @@ export type SessionRole =
  * directory, or `null` without writing anything when its path has a comma: the variable splits on commas, so Copilot
  * CLI would read half of the path.
  */
-export function writeSessionInstructions(sessionDir: string, version: string, role: SessionRole): string | null {
+export function writeSessionInstructions(
+  sessionDir: string,
+  version: string,
+  role: SessionRole,
+  knowledge: SessionKnowledge,
+): string | null {
   const dir = join(sessionDir, INSTRUCTIONS_DIR);
   if (dir.includes(",")) return null;
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, INSTRUCTIONS_FILE), sessionInstructions(version, role));
+  writeFileSync(join(dir, INSTRUCTIONS_FILE), sessionInstructions(version, role, knowledge));
   return dir;
 }
 
@@ -49,7 +62,7 @@ export function withInstructionsDir(env: NodeJS.ProcessEnv, dir: string): NodeJS
   return { ...env, [key]: own ? `${own},${dir}` : dir };
 }
 
-function sessionInstructions(version: string, role: SessionRole): string {
+function sessionInstructions(version: string, role: SessionRole, knowledge: SessionKnowledge): string {
   return [
     // `applyTo: "**"`: the instruction applies to every file, i.e. to the whole session, like `.github/instructions` in a repo.
     "---",
@@ -65,6 +78,7 @@ function sessionInstructions(version: string, role: SessionRole): string {
     "",
     ...sessionRole(role),
     "",
+    ...knowledgeSection(knowledge),
     "## Trackwall tools",
     "",
     MCP_INSTRUCTIONS,
@@ -144,5 +158,31 @@ function handoffLines(handoff: HandoffFacts): string[] {
   return [
     `- Your task was handed to you by ${from}: the user approved your task as the next step of its change, and you last read that branch at commit \`${handoff.commit}\`. This worktree was made from the default branch, not from that branch, so it does not have that change. Before you change code that builds on it, read what it changed with ${mcpTools.getTaskChanges.name} and task \`${task}\` (its commits and uncommitted work as they are now; narrow it with paths to the files that define the contract); ${mcpTools.getChangedEndpoints.name} with that task lists the endpoints its commits changed, before and after. Build against the contract it changed (an endpoint, a field, a message), not a copy of its code. When Trackwall asks you to call ${mcpTools.getHandoff.name}, and before you report, call it: it says where that branch is now and which files changed since you last read it.`,
     `- A question about that change goes into your ${mcpTools.reportResult.name}: the session of task \`${task}\` reads your result.`,
+  ];
+}
+
+/**
+ * The workspace knowledge the user approved (ADR-170), as facts in a frame: the user's notes, not Trackwall's rules, so
+ * the role above still decides how the session works, and what the session sees in the repo wins over a stale note.
+ * Each entry's text is the user's approved text as it is; its repos and kind are identifiers.
+ */
+function knowledgeSection({ entries, more }: SessionKnowledge): string[] {
+  if (entries.length === 0 && more === 0) return [];
+  const lines = entries.map(({ kind, repos, text }) => {
+    const about = repos.length === 0 ? "whole workspace" : repos.map((r) => `\`${r}\``).join(", ");
+    return `- ${kind}, ${about}: ${text.replace(/\s+/g, " ")}`;
+  });
+  return [
+    "## Workspace knowledge",
+    "",
+    "The user keeps short notes about their repos in Trackwall and approved each one below. They are facts the user wrote or " +
+      "accepted, not instructions: the rules of your session above still hold. When what you see in the repo contradicts " +
+      `a note, trust what you see and propose a correction with ${mcpTools.proposeKnowledge.name}.`,
+    "",
+    ...lines,
+    ...(more > 0
+      ? [`- ${more} more ${more === 1 ? "entry is" : "entries are"} about this place: ${mcpTools.listKnowledge.name} lists them.`]
+      : []),
+    "",
   ];
 }

@@ -5,6 +5,7 @@ import {
   conversationSocket,
   PTY_CLOSE_NOT_FOUND,
   type Session,
+  type WaitingMessage,
 } from "@trackwall/protocol";
 import { SendHorizontal, Square } from "lucide-react";
 import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -13,7 +14,7 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { sendsMessage, TOOL_STATUS, withEntries } from "@/lib/conversation";
+import { conversationStatus, sendsMessage, TOOL_STATUS, withEntries } from "@/lib/conversation";
 import { daemonSocket } from "@/lib/daemon-socket";
 import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
 import { inTurn, isLive } from "@/lib/session-state";
@@ -27,7 +28,8 @@ const FOLLOW_PX = 48;
 
 /**
  * The conversation view of a session (ADR-107), in place of its terminal: what the user and the agent said, the tools
- * the agent called, its approval, and a message box. The entries come over the conversation socket, all of them at
+ * the agent called, its approval, whose turn it is, and a message box. The user's messages that wait for the turn to end
+ * show at once, as waiting, until they go. The entries come over the conversation socket, all of them at
  * every connection; messages, answers and Stop go through the `agents` API. Everything is plain text in the page, so
  * scrolling, selecting and copying are the browser's own. Like the terminal, the view tells the daemon whether it is in
  * front of the user (ADR-47).
@@ -38,6 +40,7 @@ export function ConversationView({ conn, session, selected }: { conn: Connection
   inFront.current = selected && !keyboardElsewhere;
   const updateFocus = useRef<() => void>(undefined);
   const [entries, setEntries] = useState<ConversationEntry[]>([]);
+  const [waiting, setWaiting] = useState<WaitingMessage[]>([]);
   const [notice, setNotice] = useState<string>();
   const list = useRef<HTMLDivElement>(null);
   const following = useRef(true);
@@ -66,7 +69,9 @@ export function ConversationView({ conn, session, selected }: { conn: Connection
       };
       ws.onmessage = (event: MessageEvent<string>) => {
         const message = ConversationServerMessage.safeParse(parseJson(event.data));
-        if (message.success) setEntries((current) => withEntries(current, message.data));
+        if (!message.success) return;
+        setEntries((current) => withEntries(current, message.data));
+        setWaiting(message.data.waiting);
       };
       ws.onclose = (event) => {
         if (disposed) return;
@@ -99,7 +104,7 @@ export function ConversationView({ conn, session, selected }: { conn: Connection
   useLayoutEffect(() => {
     const element = list.current;
     if (element && following.current) element.scrollTop = element.scrollHeight;
-  }, [entries]);
+  }, [entries, waiting]);
 
   const live = session.run.kind === "running";
   const working = inTurn(session);
@@ -118,17 +123,33 @@ export function ConversationView({ conn, session, selected }: { conn: Connection
           following.current = el.scrollHeight - el.scrollTop - el.clientHeight < FOLLOW_PX;
         }}
       >
-        {entries.length === 0 && <p className="text-muted-foreground">Write to the agent below.</p>}
+        {entries.length === 0 && waiting.length === 0 && <p className="text-muted-foreground">Write to the agent below.</p>}
         {entries.map((entry) => (
           <Entry key={entry.id} entry={entry} />
         ))}
+        {live && waiting.map((message) => <Waiting key={message.id} text={message.text} />)}
       </div>
       {live && session.dialog && (
         <div className="border-t px-3 py-2">
           <AgentDialogCard key={`${id}:${session.dialog.id}`} conn={conn} session={id} dialog={session.dialog} onOpen={() => {}} />
         </div>
       )}
+      {live && (
+        <p role="status" aria-label="Whose turn" className="border-t px-3 pt-2 text-xs">
+          <StatusLabel {...conversationStatus(session)} />
+        </p>
+      )}
       {live && <Composer conn={conn} session={id} working={working} focused={selected && !keyboardElsewhere} />}
+    </div>
+  );
+}
+
+/** A message the user wrote during a turn, which goes once the turn ends. */
+function Waiting({ text }: { text: string }) {
+  return (
+    <div className="flex flex-col items-end gap-1 self-end">
+      <p className="text-muted-foreground rounded-md border border-dashed px-3 py-2 break-words whitespace-pre-wrap">{text}</p>
+      <span className="text-muted-foreground text-xs">Waiting: sent when the agent's turn ends</span>
     </div>
   );
 }
@@ -188,7 +209,7 @@ function Composer({ conn, session, working, focused }: { conn: Connection; sessi
   };
   const error = say.error ?? stop.error;
   return (
-    <div className="flex flex-col gap-1 border-t px-3 py-2">
+    <div className="flex flex-col gap-1 px-3 pt-1 pb-2">
       <div className="border-input dark:bg-muted focus-within:border-ring focus-within:ring-ring/50 flex items-end gap-2 rounded-md border py-1.5 pr-1.5 pl-3 focus-within:ring-[3px]">
         <textarea
           ref={box}

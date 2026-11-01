@@ -1,5 +1,6 @@
 import { Routine, RoutineName } from "@trackwall/protocol";
 import { z } from "zod";
+import type { ApprovedFolderFormat } from "../../infra/approved-folder.ts";
 import { readFrontmatter, writeFrontmatter } from "../../infra/frontmatter.ts";
 
 /**
@@ -11,10 +12,6 @@ import { readFrontmatter, writeFrontmatter } from "../../infra/frontmatter.ts";
 const EXTENSION = ".md";
 /** The frontmatter: the routine without its name (the file's) and prompt (the body). */
 const Frontmatter = Routine.omit({ name: true, prompt: true });
-
-export function routineFileName(name: RoutineName): string {
-  return `${name}${EXTENSION}`;
-}
 
 /** The routine's name from its file name; `undefined` for any other file, which the list does not read. */
 export function routineNameOfFile(file: string): RoutineName | undefined {
@@ -38,3 +35,17 @@ export function readRoutineFile(name: RoutineName, text: string): { routine: Rou
   if (!prompt.success) return { problem: `the prompt: ${z.prettifyError(prompt.error)}` };
   return { routine: { ...fields.data, name, prompt: prompt.data } };
 }
+
+/** How the routines folder is read: a prompt of `TASK_PROMPT_MAX` characters in any script fits in 64 KB with its frontmatter. */
+export const ROUTINE_FILE_FORMAT: ApprovedFolderFormat<Routine> = {
+  what: "routine",
+  name: RoutineName,
+  extension: EXTENSION,
+  nameOfFile: routineNameOfFile,
+  read: (name, text) => {
+    const file = readRoutineFile(name, text);
+    return "problem" in file ? file : { value: file.routine };
+  },
+  maxFileBytes: 64 * 1024,
+  maxFiles: 200,
+};
