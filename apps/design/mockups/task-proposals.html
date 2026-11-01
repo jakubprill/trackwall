@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Task proposals</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<style>
+/* Layout: one reading column of prose, with wide mock app screens (Trackwall HUD look, dark only, like the app). */
+:root {
+  --bg: var(--background);
+  --card-2: var(--secondary);
+  --fg: var(--foreground);
+  --primary-fg: var(--primary-foreground);
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-sans); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+main { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 48px; }
+.prose { max-width: 68ch; }
+h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 8px; text-wrap: balance; }
+h2 { font-size: 1.35rem; margin: 0 0 12px; text-wrap: balance; }
+h3 { font-size: 1.05rem; margin: 0 0 6px; }
+p { margin: 0 0 10px; }
+.lead { color: var(--muted-foreground); font-size: 1.05rem; }
+.hud { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted-foreground); }
+.hud b { color: var(--primary); font-weight: 400; }
+code { font-family: var(--font-mono); font-size: 0.86em; background: var(--card-2); padding: 1px 5px; border-radius: 3px; color: #cfe7f2; }
+section { display: flex; flex-direction: column; gap: 16px; }
+
+/* Problems */
+.problems { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.problem { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; min-width: 0; }
+.problem h3 { display: flex; gap: 8px; align-items: baseline; }
+.problem h3 span { font-family: var(--font-mono); color: var(--warning); font-size: 12px; }
+.problem p { color: var(--muted-foreground); font-size: 14px; margin: 0; }
+
+/* Variant blocks */
+.variant { border-top: 1px solid var(--border); padding-top: 24px; }
+.variant-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; }
+.tag { font-family: var(--font-mono); font-size: 12px; padding: 2px 8px; border-radius: 3px; border: 1px solid var(--border); color: var(--muted-foreground); }
+.tag.rec { color: var(--primary-fg); background: var(--primary); border-color: var(--primary); }
+.proscons { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.proscons div { min-width: 0; }
+.proscons ul { margin: 4px 0 0; padding-left: 18px; color: var(--muted-foreground); font-size: 14px; }
+.proscons li { margin-bottom: 4px; }
+.plus { color: var(--success); }
+.minus { color: var(--destructive); }
+
+/* Mock app window */
+.screen-wrap { overflow-x: auto; }
+.screen { min-width: 860px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  background-image: linear-gradient(rgba(190,215,235,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(190,215,235,.035) 1px, transparent 1px);
+  background-size: 24px 24px; font-size: 13px; }
+.titlebar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--border); background: var(--card); }
+.titlebar i { width: 9px; height: 9px; border-radius: 50%; background: var(--card-2); display: block; }
+.titlebar span { margin-left: 8px; color: var(--muted-foreground); font-size: 12px; }
+.app { display: grid; grid-template-columns: 44px 250px 1fr; min-height: 420px; }
+.app.home { grid-template-columns: 44px 270px 1fr; }
+.activity { border-right: 1px solid var(--border); background: var(--card); display: flex; flex-direction: column; align-items: center; gap: 10px; padding-top: 10px; }
+.activity span { width: 22px; height: 22px; border-radius: 4px; background: var(--card-2); position: relative; }
+.activity span.on { outline: 1px solid var(--primary); }
+.activity span em { position: absolute; top: -5px; right: -7px; font-style: normal; font-size: 9px; background: var(--warning); color: #2a1f00; border-radius: 6px; padding: 0 4px; font-family: var(--font-mono); }
+.side { border-right: 1px solid var(--border); background: var(--card); padding: 10px 8px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.side .hud { padding: 2px 8px 8px; }
+.row { display: flex; flex-direction: column; gap: 1px; padding: 6px 8px; border-radius: 4px; min-width: 0; }
+.row.active { background: var(--card-2); outline: 1px solid var(--border); }
+.row .t { display: flex; gap: 6px; align-items: center; font-weight: 600; font-size: 13px; }
+.row .s { color: var(--muted-foreground); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row.child { margin-left: 16px; border-left: 1px solid var(--border); border-radius: 0 4px 4px 0; }
+.st { font-family: var(--font-mono); font-size: 11px; display: inline-flex; align-items: center; gap: 5px; }
+.st::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 6px currentColor; }
+.st.w { color: var(--warning); } .st.ok { color: var(--success); } .st.p { color: var(--primary); } .st.m { color: var(--muted-foreground); }
+.badge { font-family: var(--font-mono); font-size: 10px; padding: 0 5px; border-radius: 3px; background: var(--card-2); color: var(--muted-foreground); border: 1px solid var(--border); }
+.badge.warn { color: var(--warning); border-color: rgba(240,194,90,.4); }
+.bulb { color: var(--warning); font-size: 12px; }
+.btn { font: inherit; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 4px; border: 1px solid var(--border); background: var(--card-2); color: var(--fg); cursor: pointer; white-space: nowrap; }
+.btn.primary { background: var(--primary); color: var(--primary-fg); border-color: var(--primary); font-weight: 600; }
+.btn.ghost { background: transparent; }
+.btn.danger { color: var(--destructive); background: transparent; }
+.btn:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn kbd { font-family: var(--font-mono); font-size: 10px; opacity: .7; }
+.pane { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.muted { color: var(--muted-foreground); }
+.small { font-size: 12px; }
+
+/* Variant A: inbox */
+.inbox-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }
+.prop { border: 1px solid var(--border); background: var(--card); border-radius: 6px; }
+.prop.open { border-color: rgba(111,211,239,.45); }
+.prop-top { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 8px 10px; }
+.prop-top input { accent-color: var(--primary); width: 15px; height: 15px; }
+.prop-title { min-width: 0; cursor: pointer; }
+.prop-title b { display: block; font-size: 13px; }
+.prop-title span { color: var(--muted-foreground); font-size: 12px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prop-body { padding: 0 10px 10px 35px; display: flex; flex-direction: column; gap: 8px; }
+.prop-body textarea { width: 100%; min-height: 96px; resize: vertical; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 8px; font: 12px/1.5 var(--font-mono); }
+.warnline { color: var(--warning); font-size: 12px; }
+.reject { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.reject input { flex: 1; min-width: 180px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 5px 8px; font: inherit; font-size: 12px; }
+.decided { padding: 8px 10px; font-size: 12px; color: var(--muted-foreground); display: flex; gap: 8px; align-items: center; }
+.toast { font-size: 12px; color: var(--success); min-height: 18px; }
+
+/* Variant B */
+.qrow { border-radius: 4px; padding: 6px 8px; display: flex; flex-direction: column; gap: 6px; }
+.qrow.exp { background: var(--card-2); outline: 1px solid var(--border); }
+.peek { font: 11.5px/1.5 var(--font-mono); color: #c9d3de; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; max-height: 92px; overflow: hidden; }
+.actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.scene { display: flex; align-items: center; justify-content: center; color: var(--muted-foreground); font-size: 12px; position: relative; }
+.scene::after { content: ""; position: absolute; inset: 40px; border: 1px dashed var(--border); border-radius: 50%; }
+.tray { width: 300px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; font-size: 13px; overflow: hidden; }
+.tray .hud { padding: 10px 12px 6px; }
+.tray .list { padding: 0 6px 6px; display: flex; flex-direction: column; gap: 2px; }
+.tray footer { border-top: 1px solid var(--border); padding: 8px; }
+.tray footer .btn { width: 100%; justify-content: center; }
+.grid-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px; }
+.tile { border: 1px solid var(--border); border-radius: 6px; background: var(--bg); display: flex; flex-direction: column; min-height: 190px; overflow: hidden; }
+.tile header { background: var(--card); border-bottom: 1px solid var(--border); padding: 4px 8px; display: flex; gap: 8px; align-items: center; font-size: 12px; }
+.tile .term { flex: 1; padding: 8px; font: 11px/1.5 var(--font-mono); color: #9fb1c2; }
+.tile.prop-tile { border-color: rgba(240,194,90,.45); }
+.tile .tbody { flex: 1; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.pos { font-family: var(--font-mono); font-size: 10px; background: var(--card-2); color: var(--muted-foreground); border-radius: 3px; padding: 0 4px; }
+.two { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: start; }
+
+/* Variant C */
+.split { display: grid; grid-template-columns: 1fr 320px; min-height: 420px; }
+.termpane { padding: 10px 12px; font: 11.5px/1.6 var(--font-mono); color: #a9b9c8; border-right: 1px solid var(--border); }
+.termpane .you { color: var(--primary); }
+.drawer { background: var(--card); padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.mini { border: 1px solid var(--border); border-radius: 5px; padding: 8px; display: flex; flex-direction: column; gap: 4px; background: var(--bg); }
+.mini b { font-size: 12.5px; }
+
+.rec-box { background: var(--card); border: 1px solid rgba(111,211,239,.4); border-radius: 8px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; }
+.rec-box ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.rec-box li { max-width: 75ch; }
+.note { color: var(--muted-foreground); font-size: 13px; }
+@media (max-width: 640px) { h1 { font-size: 1.5rem; } }
+@media (prefers-reduced-motion: no-preference) { .prop, .qrow { transition: border-color .15s, background .15s; } }
+</style>
+
+<main>
+  <header class="prose">
+    <p class="hud">Trackwall <b>//</b> mockup for a decision <b>//</b> 2026-10-25</p>
+    <h1>Approving tasks proposed by a main session</h1>
+    <p class="lead">A main session proposes tasks (<code>propose_task</code>, ADR-39), and you decide what starts. Below: what got in the way in this flow, three variants and the recommendation. The mockups use sample repos; UI texts are in English, as in the app.</p>
+  </header>
+
+  <section>
+    <h2>What was not intuitive</h2>
+    <div class="problems">
+      <div class="problem"><h3><span>1</span>One proposal at a time</h3><p>A main session usually proposes several tasks in one go, and each had to be clicked in the list, read and started on its own. You could not see them together, so it was hard to judge the plan as a whole.</p></div>
+      <div class="problem"><h3><span>2</span>Home and the tray only point elsewhere</h3><p>In “Needs you” and in the tray panel a proposal is a row that takes you to Sessions. A decision always meant switching views, even to reject quickly.</p></div>
+      <div class="problem"><h3><span>3</span>A dead tile in the grid</h3><p>In the terminal grid a proposal showed only “Open it alone to read its prompt, then start or reject it.” You had to leave the grid, decide and come back.</p></div>
+      <div class="problem"><h3><span>4</span>Counters disagree</h3><p>The view bar counted sessions and proposals, but “Next waiting” and Alt+J jumped only between sessions. The badge said 3, the button 1, and Alt+J never showed a proposal.</p></div>
+      <div class="problem"><h3><span>5</span>“Reject” without a reason</h3><p>Rejecting was one click next to “Start task”, with no undo and no reason. The main session got only <code>proposal_rejected</code>, so it did not know whether to propose differently or give up.</p></div>
+      <div class="problem"><h3><span>6</span>After a decision, no next step</h3><p>After a rejection the panel jumped to the first entry of the list, whatever it was. The warning about shared files (ADR-44) showed only on running tasks, not at the decision. Five proposals also meant five notifications.</p></div>
+    </div>
+  </section>
+
+  <!-- Variant A -->
+  <section class="variant">
+    <div class="variant-head"><h2>A. A proposal inbox in Sessions</h2><span class="tag rec">chosen, with two parts of B</span></div>
+    <p class="prose">Selecting any proposal opens one panel with all waiting proposals, grouped by the session that made them. Each is folded to its title and the first line of its prompt, and unfolds for editing. You tick which to start and start them together. Rejecting asks for a short reason, which goes back to the main session. The mockup is clickable.</p>
+    <div class="screen-wrap"><div class="screen" aria-label="Mockup of variant A">
+      <div class="titlebar"><i></i><i></i><i></i><span>Trackwall · Sessions</span></div>
+      <div class="app">
+        <div class="activity"><span></span><span></span><span class="on"><em id="a-badge">4</em></span><span></span></div>
+        <div class="side">
+          <div class="hud">Sessions <b>// 05</b></div>
+          <div class="row"><div class="t">orders-api <span class="badge">main · 3</span></div><div class="s">Plan the refund flow</div><span class="st ok">working</span></div>
+          <div class="row child active" id="a-row"><div class="t"><span class="bulb">●</span> 3 proposals</div><div class="s">billing, web-shop, orders-api</div><span class="st w">waiting for your decision</span></div>
+          <div class="row"><div class="t">notifications</div><div class="s">Fix flaky retry test</div><span class="st w">asking for approval</span></div>
+          <div class="row"><div class="t">web-shop</div><div class="s">copilot</div><span class="st m">idle</span></div>
+        </div>
+        <div class="pane">
+          <div class="inbox-head">
+            <div>
+              <div class="hud">Task proposals <b>// from the session in orders-api</b></div>
+              <div class="small muted">Plan the refund flow · proposed 2 min ago · nothing runs until you start it</div>
+            </div>
+            <div class="actions">
+              <button class="btn primary" id="a-start" type="button">Start 2 selected</button>
+              <button class="btn ghost" id="a-all" type="button">Select all</button>
+            </div>
+          </div>
+          <div id="a-list" style="display:flex;flex-direction:column;gap:8px"></div>
+          <div class="toast" id="a-toast" role="status"></div>
+          <div class="small muted">Each task gets a new branch from the default branch of its repo, in a separate worktree. Alt+J and “Next waiting” also go through proposals.</div>
+        </div>
+      </div>
+    </div></div>
+    <div class="proscons">
+      <div><span class="plus">For</span><ul><li>The main session's plan is visible as a whole, the decision in one place.</li><li>Fewest new places in the UI: mostly <code>ProposalPanel</code> and the list entry change.</li><li>You still read the prompt before the start, as ADR-39 requires.</li><li>The reason for a rejection returns to the main session through <code>wait_for_session</code>.</li></ul></div>
+      <div><span class="minus">Against</span><ul><li>Home and the tray still only point elsewhere (unless parts of B are added).</li><li>Starting several at once means several worktrees and sessions at the same time; noticeable on a slow Windows machine.</li><li>A protocol change: a reason in <code>reject-proposal</code> and in the wait result.</li></ul></div>
+    </div>
+  </section>
+
+  <!-- Variant B -->
+  <section class="variant">
+    <div class="variant-head"><h2>B. Decide where you are</h2><span class="tag">quick actions</span></div>
+    <p class="prose">No new panel: a proposal can be approved or rejected wherever it already shows. In “Needs you” the row unfolds with a preview of the prompt, the grid tile has a preview and buttons, and the tray panel has “Reject” and “Review” but not “Start”, because the prompt cannot be read properly there.</p>
+    <div class="screen-wrap"><div class="screen" aria-label="Mockup of variant B, dashboard">
+      <div class="titlebar"><i></i><i></i><i></i><span>Trackwall · Home</span></div>
+      <div class="app home">
+        <div class="activity"><span class="on"></span><span></span><span><em>4</em></span><span></span></div>
+        <div class="side">
+          <div class="hud">Needs you <b>// 01</b></div>
+          <div class="row"><div class="t">notifications</div><span class="st w">asking for approval</span></div>
+          <div class="hud" style="padding-top:12px"><span class="bulb">●</span> Proposals <b>// 03</b></div>
+          <div class="qrow exp">
+            <div class="row" style="padding:0"><div class="t">billing · Add refund endpoint</div><div class="s">proposed by the session in orders-api</div></div>
+            <div class="peek">Add POST /refunds to billing. Validate the amount against the original charge, store a Refund with status PENDING and publish RefundRequested…</div>
+            <div class="actions"><button class="btn primary" type="button">Start task</button><button class="btn" type="button">Edit in Sessions</button><button class="btn danger" type="button">Reject…</button></div>
+          </div>
+          <div class="qrow"><div class="row" style="padding:0"><div class="t">web-shop · Show refund status</div><span class="st w">waiting for your decision</span></div></div>
+          <div class="qrow"><div class="row" style="padding:0"><div class="t">orders-api · Call billing refunds</div><span class="st w">waiting for your decision</span></div></div>
+        </div>
+        <div class="scene">3D dashboard</div>
+      </div>
+    </div></div>
+    <div class="two">
+      <div class="screen-wrap"><div class="screen" style="min-width:560px" aria-label="Mockup of variant B, grid tile">
+        <div class="titlebar"><i></i><i></i><i></i><span>Sessions · grid 2×1</span></div>
+        <div class="grid-tiles">
+          <div class="tile"><header><span class="pos">⌥1</span><b>orders-api</b><span class="st ok">working</span></header><div class="term">● Proposing 3 tasks for the refund flow…<br>✓ propose_task billing<br>✓ propose_task web-shop<br>✓ propose_task orders-api<br>Waiting for the user's decision.</div></div>
+          <div class="tile prop-tile"><header><span class="pos">⌥2</span><b>billing</b><span class="bulb">●</span><span class="muted">Add refund endpoint</span></header>
+            <div class="tbody"><div class="peek">Add POST /refunds to billing. Validate the amount against the original charge, store a Refund with status PENDING…</div>
+            <div class="actions"><button class="btn primary" type="button">Start task</button><button class="btn" type="button">Open alone</button><button class="btn danger" type="button">Reject…</button></div></div></div>
+        </div>
+      </div></div>
+      <div class="tray" aria-label="Mockup of variant B, tray panel">
+        <div class="hud">Waiting for you <b>// 04</b></div>
+        <div class="list">
+          <div class="qrow"><div class="t" style="font-weight:600;font-size:13px">billing · Add refund endpoint</div><div class="actions"><button class="btn" type="button">Review</button><button class="btn danger" type="button">Reject</button></div></div>
+          <div class="qrow"><div class="t" style="font-weight:600;font-size:13px">web-shop · Show refund status</div><div class="actions"><button class="btn" type="button">Review</button><button class="btn danger" type="button">Reject</button></div></div>
+          <div class="qrow"><div class="row" style="padding:0"><div class="t">notifications</div><span class="st w">asking for approval</span></div></div>
+        </div>
+        <footer><button class="btn" type="button">Open Trackwall</button></footer>
+      </div>
+    </div>
+    <div class="proscons">
+      <div><span class="plus">For</span><ul><li>Fewest steps for a single, obvious proposal.</li><li>The grid has no dead tiles any more.</li><li>No daemon change, if the rejection reason is left out.</li></ul></div>
+      <div><span class="minus">Against</span><ul><li>Does not solve “five proposals at once”: you still click each.</li><li>The preview shortens the prompt, which tempts a “Start” without reading it all.</li><li>The same actions in three components; they must live in one place so they do not drift apart.</li></ul></div>
+    </div>
+  </section>
+
+  <!-- Variant C -->
+  <section class="variant">
+    <div class="variant-head"><h2>C. Proposals next to the main session</h2><span class="tag">conversation context</span></div>
+    <p class="prose">Proposals stop being separate entries in the list. The main session gets a “3 to approve” badge, and its panel has a drawer of proposals next to the terminal. You decide while seeing the conversation they came from, and can tell the session right away what to change.</p>
+    <div class="screen-wrap"><div class="screen" aria-label="Mockup of variant C">
+      <div class="titlebar"><i></i><i></i><i></i><span>Trackwall · Sessions</span></div>
+      <div class="app">
+        <div class="activity"><span></span><span></span><span class="on"><em>4</em></span><span></span></div>
+        <div class="side">
+          <div class="hud">Sessions <b>// 03</b></div>
+          <div class="row active"><div class="t">orders-api <span class="badge">main</span> <span class="badge warn">3 to approve</span></div><div class="s">Plan the refund flow</div><span class="st w">waiting for your decision</span></div>
+          <div class="row"><div class="t">notifications</div><div class="s">Fix flaky retry test</div><span class="st w">asking for approval</span></div>
+          <div class="row"><div class="t">web-shop</div><div class="s">copilot</div><span class="st m">idle</span></div>
+        </div>
+        <div class="split">
+          <div class="termpane">
+            <div class="you">&gt; Plan the refund flow across billing, orders-api and web-shop.</div>
+            <div>● The refund needs an endpoint in billing, a call from orders-api</div>
+            <div>&nbsp;&nbsp;and a status badge in web-shop. Proposing three tasks.</div>
+            <div>✓ propose_task billing "Add refund endpoint"</div>
+            <div>✓ propose_task web-shop "Show refund status"</div>
+            <div>✓ propose_task orders-api "Call billing refunds"</div>
+            <div>● Waiting for your decision (wait_for_session)…</div>
+            <div style="margin-top:12px" class="muted">&gt; _</div>
+          </div>
+          <div class="drawer">
+            <div class="hud">Proposals from this session <b>// 03</b></div>
+            <div class="mini"><b>billing · Add refund endpoint</b><span class="small muted">Add POST /refunds to billing. Validate the amount…</span><div class="actions"><button class="btn primary" type="button">Start</button><button class="btn" type="button">Edit</button><button class="btn danger" type="button">Reject…</button></div></div>
+            <div class="mini"><b>web-shop · Show refund status</b><span class="small muted">Show a refund badge on the order page…</span><div class="actions"><button class="btn primary" type="button">Start</button><button class="btn" type="button">Edit</button><button class="btn danger" type="button">Reject…</button></div></div>
+            <div class="mini"><b>orders-api · Call billing refunds</b><span class="small muted">Call POST /refunds from the cancel flow…</span><span class="warnline small">Same files as a running task: OrderService.java</span><div class="actions"><button class="btn primary" type="button">Start</button><button class="btn" type="button">Edit</button><button class="btn danger" type="button">Reject…</button></div></div>
+            <button class="btn primary" type="button" style="justify-content:center">Start all 3</button>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <div class="proscons">
+      <div><span class="plus">For</span><ul><li>The best context: you see why the session proposed it.</li><li>A shorter list: proposals take no entries or Alt+digit shortcuts.</li><li>A natural place for “Start all”.</li></ul></div>
+      <div><span class="minus">Against</span><ul><li>A proposal from an agent outside Trackwall has no session, so it needs a separate place anyway.</li><li>Tight next to the terminal on a smaller screen; fine on a 34" ultrawide.</li><li>The biggest change: list, tree, grid and shortcuts.</li></ul></div>
+    </div>
+  </section>
+
+  <section class="rec-box">
+    <h2>Recommendation: A, plus two parts of B</h2>
+    <ol>
+      <li><b>Proposal inbox (A):</b> all waiting proposals in one panel, grouped by the session that made them, with ticking and “Start N selected”. In the list one row “3 proposals” under the main session instead of three.</li>
+      <li><b>Reject with a reason:</b> “Reject…” opens a field for a short, optional reason, and the main session gets it in the result of <code>wait_for_session</code>, so it can propose differently.</li>
+      <li><b>After a decision, the next proposal,</b> not the first entry of the list; the shared files warning already at the decision.</li>
+      <li><b>From B:</b> a proposal tile in the grid with a preview and “Start” / “Reject…” buttons, and “Next waiting” and Alt+J going through proposals too, so the counters agree.</li>
+      <li><b>No “Start” in the tray or Home:</b> they keep pointing to the inbox, because a prompt from an agent has to be read before it runs. Notifications about several proposals from one session merge into one (“3 task proposals from orders-api”).</li>
+    </ol>
+    <p class="note">Decided and built as ADR-55. Variant C was left for later: it gives the best context, but changes the list and the grid.</p>
+  </section>
+</main>
+
+<script>
+(function () {
+  const proposals = [
+    { id: "p1", repo: "billing", title: "Add refund endpoint", prompt: "Add POST /refunds to billing. Validate the amount against the original charge, store a Refund with status PENDING and publish RefundRequested. Add tests for a partial refund and for an amount above the charge.", checked: true },
+    { id: "p2", repo: "web-shop", title: "Show refund status", prompt: "On the order page, show a badge with the refund status from GET /orders/{id}. Cover PENDING, DONE and FAILED in a component test.", checked: true },
+    { id: "p3", repo: "orders-api", title: "Call billing refunds", prompt: "When an order is cancelled after payment, call POST /refunds in billing and keep the refund id on the order.", checked: false, warn: "Same files as a running task: OrderService.java" },
+  ];
+  const list = document.getElementById("a-list");
+  const startBtn = document.getElementById("a-start");
+  const allBtn = document.getElementById("a-all");
+  const toast = document.getElementById("a-toast");
+  const badge = document.getElementById("a-badge");
+  let open = "p1";
+  let rejecting = null;
+
+  function pending() { return proposals.filter((p) => !p.decided); }
+
+  function render() {
+    list.replaceChildren();
+    for (const p of proposals) {
+      const box = document.createElement("div");
+      box.className = "prop" + (open === p.id && !p.decided ? " open" : "");
+      if (p.decided) {
+        box.innerHTML = `<div class="decided"><span class="st ${p.decided === "started" ? "ok" : "m"}">${p.decided === "started" ? "task started" : "rejected"}</span><span>${p.repo} · ${p.title}</span>${p.reason ? `<span class="muted">· “${p.reason}”</span>` : ""}</div>`;
+        list.append(box);
+        continue;
+      }
+      const top = document.createElement("div");
+      top.className = "prop-top";
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.id = "a-cb-" + p.id; cb.checked = p.checked;
+      cb.setAttribute("aria-label", "Select " + p.title);
+      cb.addEventListener("change", () => { p.checked = cb.checked; renderHead(); });
+      const title = document.createElement("div");
+      title.className = "prop-title"; title.tabIndex = 0;
+      title.innerHTML = `<b>${p.repo} · ${p.title}</b><span>${p.prompt}</span>`;
+      const toggle = () => { open = open === p.id ? null : p.id; rejecting = null; render(); };
+      title.addEventListener("click", toggle);
+      title.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+      const right = document.createElement("span");
+      right.innerHTML = p.warn ? '<span class="badge warn">shared files</span>' : '<span class="st w">waiting</span>';
+      top.append(cb, title, right);
+      box.append(top);
+      if (open === p.id) {
+        const body = document.createElement("div");
+        body.className = "prop-body";
+        const ta = document.createElement("textarea");
+        ta.id = "a-ta-" + p.id; ta.value = p.prompt; ta.setAttribute("aria-label", "Prompt for the agent");
+        ta.addEventListener("input", () => { p.prompt = ta.value; });
+        body.append(ta);
+        if (p.warn) { const w = document.createElement("div"); w.className = "warnline"; w.textContent = p.warn; body.append(w); }
+        const acts = document.createElement("div");
+        if (rejecting === p.id) {
+          acts.className = "reject";
+          acts.innerHTML = `<input id="a-reason" placeholder="Why? The main session gets this (optional)" aria-label="Reason for rejecting"><button class="btn danger" type="button">Reject</button><button class="btn ghost" type="button">Cancel</button>`;
+          const [inp, rej, cancel] = acts.children;
+          rej.addEventListener("click", () => decide([p], "rejected", inp.value.trim()));
+          cancel.addEventListener("click", () => { rejecting = null; render(); });
+          setTimeout(() => inp.focus(), 0);
+        } else {
+          acts.className = "actions";
+          acts.innerHTML = `<button class="btn primary" type="button">Start this task</button><button class="btn danger" type="button">Reject…</button>`;
+          acts.children[0].addEventListener("click", () => decide([p], "started"));
+          acts.children[1].addEventListener("click", () => { rejecting = p.id; render(); });
+        }
+        body.append(acts);
+        box.append(body);
+      }
+      list.append(box);
+    }
+    renderHead();
+  }
+
+  function renderHead() {
+    const sel = pending().filter((p) => p.checked);
+    startBtn.textContent = sel.length ? `Start ${sel.length} selected` : "Start selected";
+    startBtn.disabled = sel.length === 0;
+    allBtn.disabled = pending().length === 0;
+    badge.textContent = String(1 + pending().length);
+    const row = document.getElementById("a-row");
+    const n = pending().length;
+    row.querySelector(".t").innerHTML = `<span class="bulb">●</span> ${n ? n + (n === 1 ? " proposal" : " proposals") : "no proposals"}`;
+    row.querySelector(".st").textContent = n ? "waiting for your decision" : "all decided";
+  }
+
+  function decide(items, how, reason) {
+    for (const p of items) { p.decided = how; p.reason = reason || ""; }
+    rejecting = null;
+    const next = pending()[0];
+    open = next ? next.id : null;
+    toast.textContent = how === "started"
+      ? `Started ${items.length === 1 ? "1 task" : items.length + " tasks"}${next ? ". Next proposal opened." : "."}`
+      : `Rejected${reason ? " with a reason for the main session" : ""}${next ? ". Next proposal opened." : "."}`;
+    render();
+  }
+
+  startBtn.addEventListener("click", () => decide(pending().filter((p) => p.checked), "started"));
+  allBtn.addEventListener("click", () => { for (const p of pending()) p.checked = true; render(); });
+  render();
+})();
+</script>
+</body>
+</html>

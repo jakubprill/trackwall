@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Session environment on a grid tile</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<style>
+/* Layout: the app's own dark tokens; a 2×2 session grid as in Sessions, then the notes. Single dark theme on purpose (Trackwall is dark). */
+:root {
+  --bg: var(--background);
+  --fg: var(--foreground);
+  --muted-fg: var(--muted-foreground);
+  --primary-fg: var(--primary-foreground);
+  --term: oklch(0.12 0.006 260);
+  --sans: var(--font-sans);
+  --mono: var(--font-mono);
+}
+body { background: var(--bg); color: var(--fg); font-family: var(--sans); }
+.wrap { max-width: 1100px; margin: 0 auto; padding-block: 24px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 20px; }
+h1 { font-size: 20px; margin: 0; text-wrap: balance; }
+h2 { font-size: 15px; margin: 0 0 8px; }
+p, li { line-height: 1.55; color: var(--muted-fg); max-width: 72ch; }
+p strong, li strong { color: var(--fg); font-weight: 600; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+@media (max-width: 640px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.tile { position: relative; display: flex; flex-direction: column; min-width: 0; height: 250px; border: 1px solid var(--border); border-radius: 6px; overflow: visible; background: var(--term); }
+.tile.sel { box-shadow: 0 0 0 2px var(--primary); }
+.tile.att { border-color: var(--warning); }
+header { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 4px 8px; background: var(--overlay); border-bottom: 1px solid var(--border); border-radius: 6px 6px 0 0; font-size: 12px; }
+.num { font-family: var(--mono); font-size: 10px; padding: 0 4px; border-radius: 3px; background: var(--secondary); color: var(--muted-fg); }
+.sel .num { background: var(--primary); color: var(--primary-fg); }
+.name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.state { color: var(--muted-fg); white-space: nowrap; }
+.task { color: var(--muted-fg); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--border); background: var(--secondary); color: var(--muted-fg); font: inherit; font-size: 12px; cursor: pointer; flex-shrink: 0; }
+.chip:hover, .chip[aria-expanded="true"] { color: var(--fg); border-color: color-mix(in oklch, var(--primary) 50%, transparent); }
+.chip:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.chip.warn { color: var(--warning); border-color: color-mix(in oklch, var(--warning) 40%, transparent); background: color-mix(in oklch, var(--warning) 10%, transparent); }
+.chip svg { width: 12px; height: 12px; }
+.badge-notice { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border-radius: 999px; font-size: 12px; color: var(--warning); border: 1px solid color-mix(in oklch, var(--warning) 40%, transparent); background: color-mix(in oklch, var(--warning) 10%, transparent); flex-shrink: 0; }
+.icon { color: var(--muted-fg); width: 22px; text-align: center; flex-shrink: 0; }
+.body { flex: 1; min-height: 0; padding: 8px 10px; font-family: var(--mono); font-size: 11px; line-height: 1.5; color: oklch(0.8 0.01 230); overflow: hidden; white-space: pre; }
+.pop { position: absolute; right: 52px; top: 30px; z-index: 5; width: min(320px, calc(100% - 16px)); background: var(--overlay); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 10px 30px oklch(0 0 0 / 55%); font-size: 12px; display: flex; flex-direction: column; max-height: 210px; }
+.pop[hidden] { display: none; }
+.pop .head { padding: 6px 10px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; gap: 8px; }
+.pop .head span:last-child { color: var(--muted-fg); }
+.pop .scroll { overflow-y: auto; padding: 6px 10px 8px; display: flex; flex-direction: column; gap: 6px; }
+.grp-t { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted-fg); }
+.names { font-family: var(--mono); font-size: 11.5px; display: flex; flex-wrap: wrap; gap: 2px 10px; }
+.names.hid span { text-decoration: line-through; text-decoration-color: color-mix(in oklch, var(--muted-fg) 60%, transparent); color: var(--muted-fg); }
+.prob { display: flex; gap: 6px; color: var(--warning); align-items: flex-start; }
+.prob span { color: var(--muted-fg); }
+.foot { color: var(--muted-fg); font-size: 11px; border-top: 1px solid var(--border); padding: 5px 10px; }
+.cap { font-size: 12px; color: var(--muted-fg); margin-top: -10px; }
+.notes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+@media (max-width: 760px) { .notes { grid-template-columns: minmax(0, 1fr); } }
+.notes ul { margin: 0; padding-left: 18px; }
+.alt { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+@media (prefers-reduced-motion: no-preference) { .pop { animation: in .12s ease-out; } @keyframes in { from { opacity: .4; transform: translateY(-3px); } } }
+</style>
+
+<div class="wrap">
+  <div>
+    <h1>Variables from mise on a grid tile</h1>
+    <p>For the 2 / 4 / Auto layouts. Hover or click <strong>🔑 n</strong> in a tile header. Tile 2 has its card pinned open, so it shows without a mouse. Built as <code>SessionEnvironmentTile</code> (ADR-93).</p>
+  </div>
+
+  <div class="grid">
+    <div class="tile sel">
+      <header>
+        <span class="num">⌃1</span><span class="name">orders-service</span><span class="state">● working</span><span class="task">Add retry to payment client</span>
+        <button class="chip" data-pop="p1" aria-expanded="false" aria-label="Environment from mise: 9 variables" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg>9</button>
+        <span class="icon">⤢</span><span class="icon">✕</span>
+      </header>
+      <div class="pop" id="p1" hidden>
+        <div class="head"><span>9 variables from mise</span><span>orders-service</span></div>
+        <div class="scroll">
+          <div><div class="grp-t">The agent's tools get</div><div class="names"><span>GITLAB_TOKEN</span><span>JIRA_TOKEN</span></div></div>
+          <div><div class="grp-t">Hidden from the agent's tools</div><div class="names hid"><span>NPM_TOKEN</span></div></div>
+          <div><div class="grp-t">Other</div><div class="names"><span>JAVA_HOME</span><span>MAVEN_OPTS</span><span>SPRING_PROFILES_ACTIVE</span><span>DB_URL</span><span>KAFKA_BROKERS</span><span>LOG_LEVEL</span></div></div>
+        </div>
+        <div class="foot">Names only. Values are never shown.</div>
+      </div>
+      <div class="body">● Reading src/main/java/…/PaymentClient.java
+● Running mvn -q test -pl payment
+  ✓ 42 tests passed
+&gt; </div>
+    </div>
+
+    <div class="tile att">
+      <header>
+        <span class="num">⌃2</span><span class="name">billing-api</span><span class="state" style="color:var(--warning)">● waiting</span><span class="task">Fix invoice rounding</span>
+        <span class="badge-notice">⚠ 1</span>
+        <button class="chip warn" data-pop="p2" aria-expanded="true" aria-label="Environment from mise: 3 variables, something is missing" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg>3</button>
+        <span class="icon">⤢</span><span class="icon">✕</span>
+      </header>
+      <div class="pop" id="p2" data-pinned="true">
+        <div class="head"><span>3 variables from mise</span><span>billing-api</span></div>
+        <div class="scroll">
+          <div class="prob">⚠ <span>The repo's mise.toml is not trusted, so the session got only what the projects folder gives.</span></div>
+          <div><div class="grp-t">Hidden from the agent's tools</div><div class="names hid"><span>GITLAB_TOKEN</span></div></div>
+          <div><div class="grp-t">Other</div><div class="names"><span>JAVA_HOME</span><span>MAVEN_OPTS</span></div></div>
+        </div>
+        <div class="foot">Names only. Values are never shown.</div>
+      </div>
+      <div class="body">● The agent wants to run:
+  glab mr list --assignee=@me
+  [Allow] [Deny]</div>
+    </div>
+
+    <div class="tile">
+      <header>
+        <span class="num">⌃3</span><span class="name">Supervisor</span><span class="state">● idle</span><span class="task">projects folder</span>
+        <button class="chip" data-pop="p3" aria-expanded="false" aria-label="Environment from mise: 4 variables" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg>4</button>
+        <span class="icon">⤢</span><span class="icon">✕</span>
+      </header>
+      <div class="pop" id="p3" hidden>
+        <div class="head"><span>4 variables from mise</span><span>projects folder</span></div>
+        <div class="scroll">
+          <div><div class="grp-t">The agent's tools get</div><div class="names"><span>GITLAB_TOKEN</span><span>JIRA_TOKEN</span><span>CONFLUENCE_TOKEN</span></div></div>
+          <div><div class="grp-t">Other</div><div class="names"><span>JAVA_HOME</span></div></div>
+        </div>
+        <div class="foot">Names only. Values are never shown.</div>
+      </div>
+      <div class="body">&gt; </div>
+    </div>
+
+    <div class="tile">
+      <header>
+        <span class="num">⌃4</span><span class="name">docs-site</span><span class="state">● working</span><span class="task">Update the install page</span>
+        <span class="icon">⤢</span><span class="icon">✕</span>
+      </header>
+      <div class="body">● Editing apps/docs/install.md
+&gt; </div>
+    </div>
+  </div>
+  <p class="cap">Tile 4: mise gave nothing and nothing failed, so there is no chip and it takes no room.</p>
+
+  <div class="notes">
+    <div>
+      <h2>How it works</h2>
+      <ul>
+        <li><strong>A 🔑 n chip</strong> in the header, next to the task's notice badge. The number counts every variable from mise. Sessions without a task have it too (supervisor, free session, session in a repo).</li>
+        <li><strong>A yellow chip</strong> when the session got less than its place gives (an untrusted mise.toml, a missing age key). Then it shows at once, without hovering.</li>
+        <li><strong>Hovering</strong> shows the card after a moment, <strong>clicking</strong> pins it (also from the keyboard: Enter, Esc closes). The card lies over the terminal, so the terminal does not resize.</li>
+        <li>Three groups in the card: what the agent's tools get (<code>agentSecrets</code>), what is hidden from them (struck through), the rest. Names only, never values.</li>
+      </ul>
+    </div>
+    <div class="alt">
+      <h2>Rejected</h2>
+      <ul>
+        <li><strong>A browser tooltip (title) alone</strong>, as in the single session view: it shows late, cannot be scrolled or reached from the keyboard, and with 20 variables it is unreadable.</li>
+        <li><strong>A bar under the tile header</strong>: takes a terminal row in every tile, and in a grid of 4 every row counts.</li>
+        <li><strong>Folding it into the notice badge</strong>: that badge is only for tasks and mixes warnings with information you check on demand.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll(".chip").forEach((chip) => {
+  const pop = document.getElementById(chip.dataset.pop);
+  let timer;
+  const set = (open) => { pop.hidden = !open; chip.setAttribute("aria-expanded", String(open)); };
+  chip.addEventListener("mouseenter", () => { clearTimeout(timer); timer = setTimeout(() => set(true), 250); });
+  const leave = () => { clearTimeout(timer); timer = setTimeout(() => { if (!pop.dataset.pinned) set(false); }, 200); };
+  chip.addEventListener("mouseleave", leave);
+  pop.addEventListener("mouseenter", () => clearTimeout(timer));
+  pop.addEventListener("mouseleave", leave);
+  chip.addEventListener("click", () => {
+    if (pop.dataset.pinned) { delete pop.dataset.pinned; set(false); } else { pop.dataset.pinned = "true"; set(true); }
+  });
+  chip.addEventListener("keydown", (e) => { if (e.key === "Escape") { delete pop.dataset.pinned; set(false); } });
+});
+</script>
+</body>
+</html>
