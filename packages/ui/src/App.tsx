@@ -329,8 +329,9 @@ export function App() {
 }
 
 /**
- * Waiting for the first connection, or, after an error (the banner above says which), the way to switch where the
- * desktop app's daemon runs (ADR-130): a remote daemon that restarted wants its new token.
+ * Waiting for the first connection; in a browser whose token the daemon refused, the field for its address (ADR-161);
+ * or, after an error (the banner above says which), the way to switch where the desktop app's daemon runs (ADR-130): a
+ * remote daemon that restarted wants its new token.
  */
 function ConnectionState({
   connected,

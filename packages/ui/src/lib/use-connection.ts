@@ -4,6 +4,7 @@ import { call, errorCode, errorMessage } from "./api.ts";
 import { inDesktopShell } from "./app-window.ts";
 import {
   type Connection,
+  daemonInstance,
   forgetToken,
   resolveConnection,
   retryConnection,
@@ -73,8 +74,9 @@ export function useConnection(): ConnectionHandle {
 
   const connectWithAddress = useCallback(async (address: string) => {
     const next = { baseUrl: "", token: tokenFromAddress(address) };
+    const instance = await daemonInstance();
     if (await refusesToken(next)) throw new Error(NEW_TOKEN_REFUSED);
-    saveToken(tokenStorage(), next.token);
+    saveToken(tokenStorage(), next.token, instance);
     setTokenRefused(false);
     setConn(next);
   }, []);

@@ -15,7 +15,8 @@ export const USAGE = `trackwall-daemon [options]
 trackwall-daemon mcp-stdio [--home <dir>]
                    stdio bridge to the MCP server of the running daemon (for Copilot CLI)
 trackwall-daemon address [--home <dir>]
-                   print the running daemon's page address with its token (to open it in a browser)
+                   print the running daemon's page address with its token (to open it in a browser;
+                   whoever sees the output can use the daemon until it restarts)
 
   --ui             open the UI in the default browser (mode without Tauri)
   --ui-dir <dir>   directory of the built UI (default: ./ui next to the binary)

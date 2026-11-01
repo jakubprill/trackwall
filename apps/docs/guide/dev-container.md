@@ -61,7 +61,7 @@ Trackwall has no Linux download, so it runs from its source. In a terminal of th
 6. In a second terminal, print the address with its token: `cd ~/trackwall && bun packages/daemon/src/main.ts address`, and open it in the browser on your computer.
 7. Sign in to Copilot CLI once: run `copilot`, type `/login` and follow the steps in your browser. The sign-in stays in the `workspace-copilot` volume.
 
-The browser keeps the token for that address, so a bookmark of `http://127.0.0.1:7700` and a new tab open Trackwall without it. The token changes every time Trackwall starts: after a restart the page says it did not accept its token and asks for the address; print it again as in step 6 and paste it there. Trackwall stops when its terminal or the container stops.
+The browser keeps the token for that address, so a bookmark of `http://127.0.0.1:7700` and a new tab open Trackwall without it. The token changes every time Trackwall starts: after a restart, open or reload the page, and it asks for the address; print it again as in step 6 and paste it there. Trackwall stops when its terminal or the container stops.
 
 ## Bring your skills and plugins
 
