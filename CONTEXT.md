@@ -423,8 +423,16 @@ The request on the repo host to merge a task branch into the task's base branch,
 _Avoid_: pull request (except for GitHub's own pages), PR, MR in product texts
 
 **Pipeline** (`Pipeline`, `PipelineState`):
-What ran on a merge request's last commit, as one state: GitLab's pipeline, or GitHub's check runs and commit statuses summed up worst first (ADR-77).
+What ran on a merge request's last commit, as one state: GitLab's pipeline, or GitHub's check runs and commit statuses summed up worst first (ADR-77). A failed one names its **failed jobs** (`FailedJob`): GitLab's jobs that failed it, GitHub's failed checks and statuses, each with its page; their logs stay on the repo host (ADR-154).
 _Avoid_: CI, build (a build is a mise task), checks
+
+**Followed merge request** (`FollowedMergeRequest`, `MergeRequests.followed`, `checkWatched`):
+A task's merge request as the daemon last read it while following every task in the background (ADR-154), with its project and `pipelineFailedAt`, the moment the daemon saw its pipeline fail after seeing it otherwise. A new `pipelineFailedAt` is a failed pipeline to announce.
+_Avoid_: tracked, watched merge request (the watch is the reading, not the merge request)
+
+**Task outcome** (`TaskOutcome`, `taskOutcomesApi`, `/ws` topic `task-outcomes.changed`; the marks on a task's row in Sessions):
+What a task's work came to: the state of its last verification and its followed merge request (ADR-154). The Sessions list shows it on the task's row ("Verified", "Verify failed", `!12` in the pipeline's colour).
+_Avoid_: task status (that is the session's state), result (that is the summary from `report_result`)
 
 **Proposer** (`Task.proposedBy`, `proposerOf` in `proposer.ts`):
 The session that proposed a task: a main session, or for the supervisor's work whichever supervisor runs now. Only the proposer sends the task's session task messages (a session in Trackwall; an agent outside Trackwall sends none), and only it gets the task's task updates (ADR-68).
@@ -443,7 +451,7 @@ Text a task's proposer sends to the task's session: a correction, an answer, a c
 _Avoid_: note, comment (that is a review comment), chat
 
 **Task update** (`TaskUpdate`, MCP tool `get_updates`):
-What the daemon saw happen to delegated work, for the proposer: a turn that ended, an error, the end of the session, a reported result, a verification verdict, a rejected proposal. The daemon asks the proposer to read it, so the supervisor or a main session does not poll (ADR-68).
+What the daemon saw happen to delegated work, for the proposer: a turn that ended, an error, the end of the session, a reported result, a verification verdict, a failed pipeline (ADR-154), a rejected proposal. The daemon asks the proposer to read it, so the supervisor or a main session does not poll (ADR-68).
 _Avoid_: event (that is a `/ws` event), notification (that is a system notification), status
 
 **Task question** (`TaskUpdate` of kind `question`, MCP tool `ask_proposer`):
@@ -496,7 +504,7 @@ The user makes a task they started the supervisor's work: the supervisor then he
 _Avoid_: assign, delegate (that is what the supervisor does with a proposal)
 
 **Situation** (`supervisorSituation`, `situationOutput`; ADR-148):
-The short list of the work under way that the daemon gives the supervisor with every prompt: each task with who started it and what its newest session does, the proposals waiting for the user, and the user's other running sessions, as they are when the prompt comes. Facts from the daemon's session list, not the agent's own words; the details stay in `list_sessions` and `get_session`.
+The short list of the work under way that the daemon gives the supervisor with every prompt: each task with who started it, what its newest session does and what its work came to (its last verification and its merge request with the pipeline, ADR-156), the proposals waiting for the user, and the user's other running sessions, as they are when the prompt comes. Facts from the daemon's session list, not the agent's own words; the details stay in `list_sessions` and `get_session`.
 _Avoid_: briefing (that is what the supervisor writes for the day start), status report, context (too general)
 
 **Supervisor panel** (`SupervisorPanel`):
@@ -542,8 +550,8 @@ The strip above the views after the user comes back to Trackwall from 15 minutes
 _Avoid_: digest, notifications (those are the system's and the browser's), journal
 
 **Conversation view** (`SessionView` `"conversation"`, `ConversationView`, `AcpSession`, `ConversationEntry`; "conversation view" in the UI, and "Chat (preview)" on the control that turns it on):
-How a session shows when the daemon runs Copilot CLI over the Agent Client Protocol (`copilot --acp`) instead of in a terminal (ADR-107): a list of what the user and the agent said and the tools the agent called, its approval and a message box, all plain text in the page. The other `SessionView` is `"terminal"`, the session terminal. The supervisor starts in it when the user turns it on in the supervisor panel, and a task when the user picks it for the task (`Task.view`, ADR-137); a conversation goes on in either view.
-_Avoid_: chat outside the "Chat (preview)" control, transcript (that is Copilot CLI's own record)
+How a session shows when the daemon runs Copilot CLI over the Agent Client Protocol (`copilot --acp`) instead of in a terminal (ADR-107): a list of what the user and the agent said and the tools the agent called, its approval and a message box, all plain text in the page. The other `SessionView` is `"terminal"`, the session terminal. The supervisor starts in it when the user turns it on in the supervisor panel, and a task when the user picks it for the task (`Task.view`, ADR-137); a conversation goes on in either view. A **waiting message** (`WaitingMessage`) is one the user wrote during a turn, shown at once with "Waiting" until the turn ends and it goes; not to be confused with "Waiting for you", which is the agent waiting for the user.
+_Avoid_: chat outside the "Chat (preview)" control and the "Chat" tab it gives a task's panel (named after that control, so the user finds what they turned on), transcript (that is Copilot CLI's own record)
 
 **Session terminal** (`SessionTerminal`):
 xterm.js in the Sessions view and the supervisor panel, connected over the WebSocket `/ws/pty/<session>` to the session's PTY. Several session terminals, also in different windows, can show the same session; the PTY takes the size of the last one that reported it, and a window that comes to the front reports the size of its terminals again (ADR-49).
@@ -616,7 +624,7 @@ A directory with `plugin.json` and `hooks.json` that the daemon gives Copilot CL
 _Avoid_: plugin (without qualification), hook configuration
 
 **Session instructions** (`writeSessionInstructions`, file `trackwall.instructions.md`):
-The instruction file in the session directory that the daemon gives Copilot CLI through `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`: the Trackwall version that started the session and where the user sees it, the session's role (the supervisor or a free session in the projects folder, a main session in the repo root, or a task session in its worktree with the task rules and `report_result` at the end) and the **MCP instruction** (`MCP_INSTRUCTIONS`, also the MCP server's `instructions`): when to reach for which Trackwall tool and where the documentation is (ADR-46). It changes neither the repo nor `~/.copilot`.
+The instruction file in the session directory that the daemon gives Copilot CLI through `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`: the Trackwall version that started the session and where the user sees it, the session's role (the supervisor or a free session in the projects folder, a main session in the repo root, or a task session in its worktree with the task rules and `report_result` at the end) the workspace knowledge the user approved about its place (ADR-170) and the **MCP instruction** (`MCP_INSTRUCTIONS`, also the MCP server's `instructions`): when to reach for which Trackwall tool and where the documentation is (ADR-46). It changes neither the repo nor `~/.copilot`.
 _Avoid_: system prompt (Copilot CLI builds it itself), repository instructions (those are files in the user's repo)
 
 **Hook record** (`CopilotHookRecord`):
@@ -642,8 +650,8 @@ _Avoid_: recording (that is `session.cast`), snapshot
 A task the user repeats, saved once by an agent at the user's request and run by hand with "Run", each run an ordinary task with the routine's title, repo, model and approvals mode. A file in `.trackwall/routines` of the projects folder; it runs only in the version the user approved ("Approve this version"), so any change waits for approval again (ADR-173).
 _Avoid_: recipe, template, playbook, job, automation (a routine does not start by itself)
 
-**Routine digest** (`RoutineDigest`):
-The SHA-256 of a routine file's bytes: what the user approved, and what an approval or a run names, so a file changed meanwhile is refused.
+**Routine digest** (`RoutineDigest`, an alias of `ContentDigest`):
+The SHA-256 of a routine file's bytes: what the user approved, and what an approval or a run names, so a file changed meanwhile is refused. Workspace knowledge entries are approved the same way (`ContentDigest`).
 _Avoid_: hash, version number
 
 **Budget**:
@@ -657,6 +665,17 @@ Optional steps of a summary for checking the change by hand, each with what to d
 _Avoid_: test plan, acceptance (those decide something; check steps decide nothing)
 
 ## Plan
+
+**Workspace knowledge** (module `knowledge`, `knowledgeApi`, MCP tools `list_knowledge` and `propose_knowledge`; "Workspace knowledge" in Plan):
+Short facts about the user's repos that agents read at the start of every session there, instead of finding them out again: files in `.trackwall/knowledge` of the projects folder, each counting only in the version the user approved (ADR-170). Agents propose entries; only the user approves them.
+_Avoid_: notes, memory, notebook, wiki (the board holds plans and ideas; knowledge holds facts about repos)
+
+**Knowledge entry** (`KnowledgeEntry`, `KnowledgeListEntry`; "entry" in the UI and the tools):
+One fact of workspace knowledge: its name, kind, repos (none for the whole workspace), the fact, its evidence and who wrote it. A new or changed entry from an agent is a **knowledge proposal** until the user presses "Approve this version"; the user's own entry is approved as written.
+_Avoid_: rule (rules live in each repo's own agent instructions; an exception to one is the kind `exception`)
+
+**Knowledge kind** (`KnowledgeKind`: `how-to`, `relation`, `exception`, `pitfall`; "How to", "Relation", "Exception", "Pitfall" in the UI):
+What an entry says: how to build, run or test something; a link between repos the connection graph does not see; where a repo departs from a rule; a trap learned the hard way.
 
 **Board** (module `board`, `Board`, `boardApi`, topic `board.changed`; the "Plan" view in the UI):
 Everything the user keeps to do before it becomes a task: business projects, the items they are split into, and ideas. Files in `.trackwall/board` of the projects folder, one per board item (ADR-133). The board records the user's split; nothing starts from it by itself.
@@ -702,6 +721,10 @@ _Avoid_: exception (only one kind of error), problem (that is the repo card and 
 **Error journal** (`ErrorJournal`, the `error-journal` module, `errorJournalApi`; in the UI *Trackwall errors* in Settings):
 Trackwall's own errors on this computer: the daemon's unexpected errors, the UI's and the desktop shell's, in `logs/errors.json` (ADR-94). Each is a **Trackwall error** (`TrackwallError`): source (`daemon`, `shell`, `ui`), area, kind, anonymized message, frames in Trackwall's code, count. Do not confuse with an error from logs (`LogError`), which comes from the output of the user's processes.
 _Avoid_: crash log, telemetry, bug report (nothing is sent)
+
+**MCP audit** (`McpAudit`, the `mcp-audit` module, `mcpAuditApi`; in the UI *MCP calls* in Settings › Agents and in a task's panel):
+Every MCP tool call the daemon answered, in `logs/mcp-calls.jsonl` (ADR-152). Each is an **MCP call** (`McpCall`): the tool, its effect (`read`, `write`, `destructive`), the **caller** (`McpCaller`: the session with its repo and task as they were at the call; `null` for an agent outside Trackwall), the identifier arguments the tool's contract names (`auditArgs`), the outcome and the duration. Free text an agent sends is never in it. Do not confuse with the daemon log, which also has a line per call.
+_Avoid_: access log, history (of a task, that is its handoff and summary), tool log
 
 **Doctor** (`Doctor`, the `doctor` module, `doctorApi`; in the UI *Doctor* in Settings):
 The checks of what Trackwall needs on this computer: the projects folder, every key of `workspace.yaml`, git, Copilot CLI and its trusted folders, the network for sessions (proxy and certificates, ADR-166), mise, `gh` and `glab` signed in to the repo hosts (ADR-101). Each is a **doctor check** (`DoctorCheck`) with a state (`ok`, `warn`, `fail`), what was found and what to do. It only reads.

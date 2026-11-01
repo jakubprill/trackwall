@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import type { Session } from "@trackwall/protocol";
 import {
+  asksSessionJavaNavigation,
   javaNavigationInView,
   javaNavigationMark,
   javaNavigationOffer,
@@ -67,7 +69,7 @@ describe("the Java navigation section of Settings", () => {
 
   test("says whether tasks can get it with the settings in place", () => {
     expect(javaNavigationSetup({ ...install, readiness: { problem: null } })).toEqual({
-      line: "Ready: tasks in Java repos can get it on the New session form.",
+      line: "Ready: tasks and sessions in Java repos can get it on the New session form.",
       tone: "ok",
       button: "Install again",
     });
@@ -102,5 +104,35 @@ describe("the Java navigation mark of a running task", () => {
     });
     expect(javaNavigationMark({ kind: "ready" })).toMatchObject({ label: "Java ready", tone: "ok" });
     expect(javaNavigationPollMs({ kind: "ready" })).toBe(30_000);
+  });
+});
+
+describe("the Java navigation mark of a running session (ADR-175)", () => {
+  const main: Session = {
+    id: "s1",
+    repo: "shop",
+    supervisor: false,
+    startedAt: "2026-11-01T10:00:00Z",
+    run: { kind: "running", runId: "s1", startedAt: "2026-11-01T10:00:00Z", pid: 1 },
+    state: null,
+    windowTitle: null,
+    needsAttention: false,
+    stuck: null,
+    task: null,
+    dialog: null,
+    environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
+    view: "terminal",
+    readRequest: null,
+  };
+
+  test("a running main session in a terminal asks how its jdtls is doing", () => {
+    expect(asksSessionJavaNavigation(main, true)).toBe(true);
+  });
+
+  test("an ended one, a free session, a task's session and one in the conversation view do not ask", () => {
+    expect(asksSessionJavaNavigation(main, false)).toBe(false);
+    expect(asksSessionJavaNavigation({ ...main, repo: null }, true)).toBe(false);
+    expect(asksSessionJavaNavigation({ ...main, task: "t1" }, true)).toBe(false);
+    expect(asksSessionJavaNavigation({ ...main, view: "conversation" }, true)).toBe(false);
   });
 });

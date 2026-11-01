@@ -100,6 +100,17 @@ describe.skipIf(process.versions.bun === undefined)("sessions across a daemon re
     expect(after.facade.agents.task(task.id).approvals).toBe("auto");
   }, 60_000);
 
+  test("a main session started on a model keeps it in the next daemon (ADR-175)", async () => {
+    const before = await startDaemon();
+    const main = await before.facade.agents.start("shop", "explain the build", { model: "claude-opus-5.5" });
+    await waitFor(before.facade.agents, main.id, (s) => s.state !== null, "the main session's first turn");
+
+    await stopDaemon(before);
+    const after = await startDaemon({ home: before.home, projects: before.projects });
+
+    expect(await argumentOnScreen(after, main.id, "--resume=")).toContain("Argument: --model=claude-opus-5.5");
+  }, 60_000);
+
   test("a free session starts again as a free session, next to the supervisor, not in its place (ADR-100)", async () => {
     const before = await startDaemon();
     const { agents } = before.facade;

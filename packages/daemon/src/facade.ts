@@ -9,6 +9,7 @@ import {
   type StateDirSource,
   type Task,
   type TaskChangedEndpoints,
+  type TaskOutcome,
 } from "@trackwall/protocol";
 import { downloadVerified } from "./infra/download.ts";
 import { vscodeUrl } from "./infra/editor-url.ts";
@@ -44,8 +45,10 @@ import type { ErrorJournalWorkspace } from "./modules/error-journal/known-values
 import { Graph } from "./modules/graph/graph.ts";
 import { JavaNavigation } from "./modules/java-navigation/java-navigation.ts";
 import { JDTLS_JAVA, JDTLS_RELEASE, LOMBOK_RELEASE, type PinnedRelease } from "./modules/java-navigation/pinned-releases.ts";
+import { Knowledge } from "./modules/knowledge/knowledge.ts";
 import { LocalConfig } from "./modules/local-config/local-config.ts";
 import { Logs } from "./modules/logs/logs.ts";
+import { McpAudit } from "./modules/mcp-audit/mcp-audit.ts";
 import { MergeRequests } from "./modules/merge-requests/merge-requests.ts";
 import { Mise } from "./modules/mise/mise.ts";
 import { ProcessGroups } from "./modules/procs/process-groups.ts";
@@ -85,6 +88,8 @@ export interface Facade {
   board: Board;
   /** Saved tasks the user runs by hand, in `.trackwall/routines` of the projects folder, with their approvals (ADR-173). */
   routines: Routines;
+  /** Short facts about the user's repos in `.trackwall/knowledge` of the projects folder, with their approvals (ADR-170). */
+  knowledge: Knowledge;
   services: Services;
   testReports: TestReports;
   verifications: Verifications;
@@ -96,6 +101,8 @@ export interface Facade {
   dayStart: DayStart;
   /** Trackwall's own errors from the daemon, the shell and the UI, anonymized, on this computer only (ADR-94). */
   errorJournal: ErrorJournal;
+  /** Every MCP tool call the daemon answered, with its caller, identifier arguments and outcome, on this computer only (ADR-152). */
+  mcpAudit: McpAudit;
   /** Checks of what Trackwall needs on this computer, each with what to do when it fails (ADR-101). */
   doctor: Doctor;
   /** Installs jdtls and its Java for tasks' Java navigation, from Settings (ADR-123). */
@@ -123,6 +130,11 @@ export interface Facade {
    */
   appConfig: (request: AppConfigRequest) => Promise<AppConfig>;
   /**
+   * What every task's work came to (ADR-154): its last verification's verdict from `verification` and its merge request
+   * from `merge-requests`, for the Sessions list and the notification of a failed pipeline. A read from memory.
+   */
+  taskOutcomes: () => TaskOutcome[];
+  /**
    * Daemon exit, before `procs.stopAll`: what a restart is to bring back stays as it is now, the sessions to resume
    * (ADR-95), the agent queues and the verifications (ADR-115), so what the stop of the groups changes does not reach it.
    */
@@ -143,6 +155,7 @@ const CARDS_DIR = "cards";
 const LOCAL_CONFIG_PUSH_DIR = "local-config-push";
 const DAY_START_FILE = "day-start.json";
 const ROUTINE_APPROVALS_FILE = "routine-approvals.json";
+const KNOWLEDGE_APPROVALS_FILE = "knowledge-approvals.json";
 const LOGS_DIR = "logs";
 /** The limit of one source JSONL file; with the previous file after rotation a source takes at most twice that. */
 const LOG_FILE_MAX_BYTES = 10 * 1024 * 1024;
@@ -256,6 +269,11 @@ export function createFacade(o: FacadeOptions): Facade {
     approvalsFile: join(o.home, ROUTINE_APPROVALS_FILE),
     log: o.log,
   });
+  const knowledge = new Knowledge({
+    projectsDir: () => workspace.projectsDir(),
+    approvalsFile: join(o.home, KNOWLEDGE_APPROVALS_FILE),
+    log: o.log,
+  });
   const taskJournal = new TaskJournal({
     file: join(o.home, TASK_JOURNAL_FILE),
     log: o.log,
@@ -279,7 +297,10 @@ export function createFacade(o: FacadeOptions): Facade {
     sessionMcpServer: o.sessionMcpServer,
     openEditor,
     boardHas: (item) => board.has(item),
-    // `verifications` is made below; a task ends only after both exist.
+    knowledge: (repo) => knowledge.forSession(repo),
+    // `verifications` and `mergeRequests` are made below: the outcomes are read only once a supervisor gets a prompt,
+    // and a task ends only after both exist.
+    taskOutcomes,
     onTaskRemoved: (ended) => {
       logs.removeTaskLogs(ended.task);
       const last = verifications.take(ended.task);
@@ -320,6 +341,8 @@ export function createFacade(o: FacadeOptions): Facade {
     hosting,
     repoHosts: () => workspace.repoHosts(),
     openUrl: o.openUrl,
+    onPipelineFailed: (task, mergeRequest) => agents.pipelineFailed(task.id, mergeRequest),
+    log: o.log,
   });
   const dayStart = new DayStart({
     workspace,
@@ -329,6 +352,7 @@ export function createFacade(o: FacadeOptions): Facade {
     log: o.log,
   });
   const errorJournal = createErrorJournal({ ...o, workspace });
+  const mcpAudit = new McpAudit({ dir: join(o.home, LOGS_DIR), log: o.log });
   const javaNavigationReadiness = () => agents.startOptions().javaNavigation;
   const javaNavigation = new JavaNavigation({
     repos: workspace,
@@ -379,6 +403,7 @@ export function createFacade(o: FacadeOptions): Facade {
       "task-journal-file": join(o.home, TASK_JOURNAL_FILE),
       "day-start-file": join(o.home, DAY_START_FILE),
       "routine-approvals-file": join(o.home, ROUTINE_APPROVALS_FILE),
+      "knowledge-approvals-file": join(o.home, KNOWLEDGE_APPROVALS_FILE),
       "cards-dir": join(o.home, CARDS_DIR),
       "logs-dir": join(o.home, LOGS_DIR),
       "local-config-push-repo": join(o.home, LOCAL_CONFIG_PUSH_DIR),
@@ -399,6 +424,16 @@ export function createFacade(o: FacadeOptions): Facade {
     openEditor: (path) => o.openUrl(vscodeUrl(path)),
     openFolder: o.openFolder,
   });
+  /** The outcome of every task with a verification or a merge request (ADR-154), for the UI and the supervisor (ADR-156). */
+  function taskOutcomes(): TaskOutcome[] {
+    const followed = mergeRequests.followed();
+    return agents.tasks().flatMap((task) => {
+      const verification = verifications.get(task.id)?.state ?? null;
+      const mergeRequest = followed.get(task.id) ?? null;
+      return verification === null && mergeRequest === null ? [] : [{ task: task.id, repo: task.repo, verification, mergeRequest }];
+    });
+  }
+
   return {
     workspace,
     repoWatch,
@@ -411,6 +446,7 @@ export function createFacade(o: FacadeOptions): Facade {
     batch,
     board,
     routines,
+    knowledge,
     agents,
     services,
     testReports,
@@ -419,6 +455,7 @@ export function createFacade(o: FacadeOptions): Facade {
     mergeRequests,
     dayStart,
     errorJournal,
+    mcpAudit,
     doctor,
     javaNavigation,
     configFiles,
@@ -438,6 +475,7 @@ export function createFacade(o: FacadeOptions): Facade {
       const read = await cards.appConfig(dir, { profile, key }, { vars: run.env, mask });
       return { repo, task, profile, ...read, envProblem: run.problem === null ? null : mask(run.problem) };
     },
+    taskOutcomes,
     keepForRestart: () => {
       agents.keepRunningSessionsForResume();
       verifications.keepForRestart();

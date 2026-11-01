@@ -10,6 +10,7 @@ import type {
   SessionEnvironment,
   TaskState,
   TaskStateChange,
+  WaitingMessage,
 } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
 import { AcpConnection, AcpError } from "./acp-connection.ts";
@@ -103,7 +104,8 @@ export interface AcpSessionOptions {
 }
 
 /** A prompt on its way: who wrote it, so that the end of a turn the user drove is not reported to the proposer. */
-type Prompt = { text: string; by: "user" | "daemon" };
+/** A prompt to send; the user's carries the id its waiting bubble has until it goes (`WaitingMessage`). */
+type Prompt = { text: string; by: "daemon" } | { text: string; by: "user"; id: string };
 
 interface PendingApproval {
   dialog: AgentApproval;
@@ -145,6 +147,7 @@ export class AcpSession implements AgentSession {
   #pendingReset = false;
   #flush: ReturnType<typeof setTimeout> | undefined;
   readonly #queued: Prompt[] = [];
+  #waitingIds = 0;
   #promptAsked = false;
   #finished = false;
   readonly #readRequest = new ReadRequestClock();
@@ -236,8 +239,16 @@ export class AcpSession implements AgentSession {
     if (this.#finished) throw new DomainError("bad_request", "the session has ended");
     this.#attention.typed();
     this.#o.onUserText();
-    this.#queued.push({ text, by: "user" });
+    this.#waitingIds += 1;
+    this.#queued.push({ text, by: "user", id: `waiting-${this.#waitingIds}` });
     this.#next();
+    // A message that waits for the turn shows as waiting at once, not only when it goes (which sends its own frame).
+    if (this.#queued.length > 0) this.#scheduleFlush();
+  }
+
+  /** The user's messages waiting for the turn to end, oldest first. */
+  #waiting(): WaitingMessage[] {
+    return this.#queued.flatMap((p) => (p.by === "user" ? [{ id: p.id, text: p.text }] : []));
   }
 
   /** Stops the turn, as Esc does in the terminal: an approval waiting is refused, and the agent ends its turn. */
@@ -285,7 +296,7 @@ export class AcpSession implements AgentSession {
 
   /** A conversation view: all entries first, then the changed ones; `closed` when the session disappears. */
   attachConversation(viewer: ConversationViewer): ConversationWindow {
-    viewer.send({ type: "entries", reset: true, entries: [...this.#conversation.entries()] });
+    viewer.send({ type: "entries", reset: true, entries: [...this.#conversation.entries()], waiting: this.#waiting() });
     this.#viewers.add(viewer);
     const attention = this.#attention.window();
     return {
@@ -490,6 +501,10 @@ export class AcpSession implements AgentSession {
     } else {
       for (const entry of entries) this.#pending.set(entry.id, entry);
     }
+    this.#scheduleFlush();
+  }
+
+  #scheduleFlush(): void {
     this.#flush ??= setTimeout(() => this.#sendPending(), FLUSH_MS);
   }
 
@@ -506,7 +521,7 @@ export class AcpSession implements AgentSession {
     const entries = (reset ? this.#conversation.entries() : [...this.#pending.values()]).map((e) => structuredClone(e));
     this.#pending.clear();
     this.#pendingReset = false;
-    const message: ConversationServerMessage = { type: "entries", reset, entries };
+    const message: ConversationServerMessage = { type: "entries", reset, entries, waiting: this.#waiting() };
     for (const viewer of this.#viewers) viewer.send(message);
   }
 }

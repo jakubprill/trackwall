@@ -14,7 +14,8 @@ import {
  */
 
 /** What the left column selects: the inbox, or one project with its tree. */
-export type PlanPlace = { kind: "inbox" } | { kind: "project"; id: string };
+/** What the left column of Plan selects: the inbox, a business project, or the workspace knowledge (ADR-170). */
+export type PlanPlace = { kind: "inbox" } | { kind: "project"; id: string } | { kind: "knowledge" };
 
 /** A move as `board/move` takes it: under `parent`, before `before` (`null`: last). */
 export interface ItemMove {
