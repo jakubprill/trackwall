@@ -115,6 +115,7 @@ describe("MCP server over Streamable HTTP", () => {
       "get_changed_endpoints",
       "propose_task",
       "propose_folder_action",
+      "propose_routine",
       "list_items",
       "get_item",
       "create_item",
@@ -144,6 +145,7 @@ describe("MCP server over Streamable HTTP", () => {
     expect(writing).toEqual([
       "propose_task",
       "propose_folder_action",
+      "propose_routine",
       "create_item",
       "update_item",
       "report_result",

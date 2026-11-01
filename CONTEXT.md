@@ -24,6 +24,14 @@ _Avoid_: host path, volume path
 The folder on this computer with a dev container's configuration and the folder VS Code opens in it, saved by the desktop app; "Start" opens VS Code on it and connects to the remote daemon inside with the token read through `docker exec` (ADR-139).
 _Avoid_: devcontainer config, workspace (that is `workspace.yaml`)
 
+**Dev Container Feature** (`apps/desktop/devcontainer-feature/`, `devcontainer-feature-trackwall.tgz`; in the docs *the Trackwall Feature*):
+The add-on a `devcontainer.json` names by its release address: it installs the Linux archive of that release into the image and the `trackwall-container` command, whose `start` runs from the Feature's `postStartCommand` and from the desktop app (ADR-164).
+_Avoid_: image, devcontainer plugin
+
+**Container supervisor** (`container-supervisor.ts`, `container-supervisor.pid`):
+The background process `trackwall-container start` leaves in a dev container: it starts the daemon and starts it again after a crash, and ends with it after a stop (ADR-164).
+_Avoid_: watchdog, daemon manager
+
 **App update** (`updates.rs`, `UpdateCheck`; in the UI *update*):
 A newer version of Trackwall from GitHub Releases, installed by the shell after the user's click and followed by a restart (ADR-53). Its **update package** is the archive the updater downloads and checks against the signature: the release zip on Windows (`portable_update.rs`), `.app.tar.gz` on macOS; the **update manifest** is `latest.json` in the release.
 _Avoid_: upgrade, sync (that is the repo synchronization)
@@ -614,11 +622,23 @@ A session's output in the asciicast v2 format with markers for hook records, ses
 What the real Copilot CLI of the pinned version showed and sent in the contract tests, per system and anonymised: the hooks with their payloads, the window titles, the input box and the approval dialog. The fake Copilot CLI of the tests replays it, and the contract tests compare a live session with it, or take it anew with `TRACKWALL_RECORD=1` (`startRecorder`, ADR-67). A test fixture, not part of the product.
 _Avoid_: recording (that is `session.cast`), snapshot
 
+**Routine** (module `routines`, `Routine`, `RoutineEntry`, `routinesApi`, MCP tool `propose_routine`; "Routines" under the New task form):
+A task the user repeats, saved once by an agent at the user's request and run by hand with "Run", each run an ordinary task with the routine's title, repo, model and approvals mode. A file in `.trackwall/routines` of the projects folder; it runs only in the version the user approved ("Approve this version"), so any change waits for approval again (ADR-173).
+_Avoid_: recipe, template, playbook, job, automation (a routine does not start by itself)
+
+**Routine digest** (`RoutineDigest`):
+The SHA-256 of a routine file's bytes: what the user approved, and what an approval or a run names, so a file changed meanwhile is refused.
+_Avoid_: hash, version number
+
 **Budget**:
 A limit on a task's time and number of commits; when it is exceeded the daemon ends the session.
 
 **Summary** (`Task.summary`, MCP tool `report_result`):
-The result a task session reports with the `report_result` tool: what it did, what is left, what to check. It goes to the task's `summary` field (with the report time, in `tasks.json`), to the Sessions view and to the main session; a later one replaces the earlier (ADR-39). Eventually also to a PR proposal. Trackwall merges nothing by itself (ADR-9).
+The result a task session reports with the `report_result` tool: what it did, what is left, what to check. It goes to the task's `summary` field (with the report time, in `tasks.json`), to the Sessions view and to the main session; a later one replaces the earlier (ADR-39). It also fills the merge request draft (ADR-77). Trackwall merges nothing by itself (ADR-9).
+
+**Check steps** (`TaskSummary.checkSteps`, `report_result` argument `checkSteps`; UI "How to check"):
+Optional steps of a summary for checking the change by hand, each with what to do and what the user should see (ADR-169). Only a hint: the user may follow them or not, and nothing waits for them.
+_Avoid_: test plan, acceptance (those decide something; check steps decide nothing)
 
 ## Plan
 

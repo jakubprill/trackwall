@@ -439,9 +439,9 @@ export class Agents {
   }
 
   /** A summary from session `caller` for its own task (`report_result`); it goes to the task's proposer too (ADR-68). */
-  reportSummary(caller: string | null, text: string): Task {
+  reportSummary(caller: string | null, text: string, checkSteps: string[]): Task {
     const own = this.#ownTask(caller, "can report a result");
-    const reported = this.#tasks.setSummary(own.task, text);
+    const reported = this.#tasks.setSummary(own.task, text, checkSteps);
     this.#coordination.resultReported(reported, own.session);
     return reported;
   }
@@ -548,18 +548,26 @@ export class Agents {
    * Copilot CLI's default when it is `null` (ADR-98), with `javaNavigation` gets the Java language server (ADR-99),
    * works on board item `item` (ADR-133), which must be on the board (`not_found` otherwise), and shows in `view`
    * (ADR-137). With `handoffFrom` the user hands it the work of that task (ADR-147): it becomes that task's subtask,
-   * which reads its change and reports to it as if its session had proposed it (ADR-140, ADR-143).
+   * which reads its change and reports to it as if its session had proposed it (ADR-140, ADR-143). A task run from a
+   * routine (ADR-173) has the routine's `title`; a typed one has none.
    */
   async createTask(
     repo: string,
     prompt: string,
-    { approvals = "ask", model = null, javaNavigation = false, item = null, view = "terminal" }: Partial<TaskOptions> = {},
+    {
+      approvals = "ask",
+      model = null,
+      javaNavigation = false,
+      item = null,
+      view = "terminal",
+      title = null,
+    }: Partial<TaskOptions> & { title?: string | null } = {},
     handoffFrom: string | null = null,
   ): Promise<Task> {
     await this.#assertOnBoard(item);
     // `task` throws `not_found` for a task that is not on the list, before a worktree exists.
     const proposedBy = handoffFrom === null ? null : { session: null, supervisor: false, task: this.task(handoffFrom).id };
-    const origin = { id: randomUUID(), title: null, proposedBy, model, approvals, javaNavigation, item, view };
+    const origin = { id: randomUUID(), title, proposedBy, model, approvals, javaNavigation, item, view };
     return this.#tasks.create(repo, prompt, origin);
   }
 

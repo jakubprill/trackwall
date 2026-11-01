@@ -202,6 +202,7 @@ jobs:
         working-directory: dist
         env:
           TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
         run: |
           version="${TAG#v}"
           win="trackwall-$version-windows-x64.zip"
@@ -217,7 +218,10 @@ jobs:
             echo "::error::Expected only ${expected[*]}, found: $(ls)"
             exit 1
           fi
-          sha256sum "$win" "$mac" "$mac_update" "$linux_x64" "$linux_arm64" > SHA256SUMS.txt
+          # The Dev Container Feature (ADR-164) carries the SHA-256 of both Linux archives it installs.
+          bun ../apps/desktop/scripts/package-feature.ts . "$REPO"
+          feature="devcontainer-feature-trackwall.tgz"
+          sha256sum "$win" "$mac" "$mac_update" "$linux_x64" "$linux_arm64" "$feature" > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       # The manifest the app's updater reads from releases/latest/download/latest.json (ADR-53); the script refuses a
@@ -235,6 +239,7 @@ jobs:
           path: |
             dist/SHA256SUMS.txt
             dist/latest.json
+            dist/devcontainer-feature-trackwall.tgz
           if-no-files-found: error
           retention-days: 7
 
