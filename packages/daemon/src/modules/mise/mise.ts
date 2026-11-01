@@ -2,7 +2,9 @@ import { existsSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { delimiter } from "node:path";
 import {
+  type ConventionTasksState,
   type LogSource,
+  MiseRunArguments,
   type MiseTarget,
   type MiseTask,
   MiseTaskName,
@@ -17,6 +19,7 @@ import { z } from "zod";
 import { envKey } from "../../infra/env-key.ts";
 import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { waitLimited } from "../../infra/wait-limit.ts";
+import { conventionTasksPath, conventionTasksState, writeConventionTasks } from "./convention-tasks.ts";
 import { type MiseCliResult, miseFailure, runMiseCli } from "./mise-cli.ts";
 import { type MiseEnv, NO_MISE_ENV, readMiseEnv } from "./mise-env.ts";
 import { type TrackedPaths, taskOrigins } from "./task-origin.ts";
@@ -89,11 +92,12 @@ const ListedTask = z.object({
   description: z.string().nullish(),
   hide: z.boolean().optional(),
   source: z.string().nullish(),
+  usage: z.string().nullish(),
 });
 const ListedTasks = z.array(ListedTask);
 
 /** A mise task from `mise tasks ls`, still without a run state, and with the source as mise gave it, not yet its origin. */
-type ListedMiseTask = Pick<MiseTask, "name" | "description" | "source">;
+type ListedMiseTask = Pick<MiseTask, "name" | "description" | "source" | "usage">;
 type TaskList = { kind: Exclude<MiseTasks["kind"], "ok">; message: string } | { kind: "ok"; tasks: ListedMiseTask[] };
 
 /** A fragment of mise's message about an untrusted config (`Config files in … are not trusted`). */
@@ -177,6 +181,7 @@ export class Mise {
       dir,
       listed.tasks.map((t) => t.source),
       this.deps.vcs,
+      conventionTasksPath(await this.deps.repos.projectsDir()),
     );
     const tasks: MiseTask[] = listed.tasks.map((t) => ({
       ...t,
@@ -200,7 +205,7 @@ export class Mise {
   private liveOutside(target: MiseTarget, listed: readonly ListedMiseTask[]): MiseTask[] {
     return this.liveRuns(target)
       .filter(({ name }) => !listed.some((t) => t.name === name))
-      .map(({ name, run }) => ({ name, description: "", source: null, origin: null, run }));
+      .map(({ name, run }) => ({ name, description: "", source: null, origin: null, usage: null, run }));
   }
 
   /** mise tasks the daemon started in `target` whose group has not ended yet (also while stopping). */
@@ -213,15 +218,26 @@ export class Mise {
 
   /**
    * Starts a mise task from the current list. `port` replaces the task port of a run in a task worktree: the repo root's
-   * port a task's service takes on a lease (ADR-132).
+   * port a task's service takes on a lease (ADR-132). `args` go after the mise task's name (ADR-158), only to a mise task
+   * that declares its arguments in a usage spec, so mise checks them against it; a running mise task returns its run,
+   * whatever arguments it was started with.
    */
-  async start(target: MiseTarget, miseTask: string, port?: number): Promise<RunState> {
-    const place = await this.place(target, port);
-    if (!(await this.hasTask(place, miseTask))) throw new DomainError("not_found", `${where(target)} has no mise task "${miseTask}"`);
+  async start(target: MiseTarget, miseTask: string, options: { port?: number; args?: MiseRunArguments } = {}): Promise<RunState> {
+    const parsedArgs = MiseRunArguments.safeParse(options.args ?? []);
+    if (!parsedArgs.success) throw new DomainError("bad_request", z.prettifyError(parsedArgs.error));
+    const args = parsedArgs.data;
+    const place = await this.place(target, options.port);
+    const listed = await this.listedTask(place, miseTask);
+    if (!listed) throw new DomainError("not_found", `${where(target)} has no mise task "${miseTask}"`);
+    if (args.length > 0 && listed.usage === null)
+      throw new DomainError(
+        "bad_request",
+        `mise task "${miseTask}" in ${where(target)} declares no arguments (no usage spec in its mise config), so it is run without any`,
+      );
     const run = await this.launch(
       owner(target, miseTask),
       place,
-      ["run", miseTask],
+      ["run", miseTask, ...args],
       target.repo,
       miseTaskLogSource(target.repo, target.task, miseTask),
     );
@@ -237,7 +253,7 @@ export class Mise {
   async runToEnd(repo: string, miseTask: string, signal: AbortSignal): Promise<RunState | null> {
     const root: MiseTarget = { repo, task: null };
     const place = await this.place(root);
-    if (!(await this.hasTask(place, miseTask))) return null;
+    if (!(await this.listedTask(place, miseTask))) return null;
     this.remember(root, miseTask);
     return this.runGroupToEnd(owner(root, miseTask), place, ["run", miseTask], repo, miseTaskLogSource(repo, null, miseTask), signal);
   }
@@ -304,6 +320,26 @@ export class Mise {
     const tasks = await this.tasks(repo);
     if (tasks.kind === "ok") this.deps.onTrusted(repo);
     return tasks;
+  }
+
+  /** The convention tasks file in the projects folder (ADR-157). */
+  async conventionTasks(): Promise<ConventionTasksState> {
+    return conventionTasksState(await this.deps.repos.projectsDir());
+  }
+
+  /**
+   * Writes the convention tasks file when it is absent, and trusts it with `mise trust <file>` in the projects folder: the
+   * user's click is the consent, as for a repo's config (only from the UI). A file already there stays as it is: `bad_request`
+   * when it differs from this Trackwall's, and a current one is trusted again, which repairs a write whose trust failed.
+   */
+  async writeConventionTasks(): Promise<ConventionTasksState> {
+    const projects = await this.deps.repos.projectsDir();
+    const written = writeConventionTasks(projects);
+    const state = conventionTasksState(projects);
+    if (!written && state.state === "changed")
+      throw new DomainError("bad_request", `${state.path} is already there and differs from Trackwall's; Trackwall leaves it as it is`);
+    this.cliOutput(await runMiseCli(this.deps.command, ["trust", state.path], projects, await this.deps.env()));
+    return state;
   }
 
   /**
@@ -472,10 +508,10 @@ export class Mise {
     return read.kind === "unredacted" ? { kind: "error", message: read.message } : read;
   }
 
-  private async hasTask(place: RunPlace, miseTask: string): Promise<boolean> {
+  private async listedTask(place: RunPlace, miseTask: string): Promise<ListedMiseTask | undefined> {
     const listed = await this.list(place.dir, place.env);
     if (listed.kind !== "ok") throw new DomainError("mise_unavailable", listed.message);
-    return listed.tasks.some((t) => t.name === miseTask);
+    return listed.tasks.find((t) => t.name === miseTask);
   }
 
   /** A mise task started in this daemon run: the list shows it so it can be stopped, even when it vanishes from the config. */
@@ -561,8 +597,13 @@ export function parseTaskList(result: MiseCliResult): TaskList {
   if (!parsed.success) return { kind: "error", message: `unexpected mise tasks ls --json format: ${z.prettifyError(parsed.error)}` };
   const tasks = parsed.data
     .filter((t) => !t.hide && MiseTaskName.safeParse(t.name).success)
-    .map((t) => ({ name: t.name, description: t.description ?? "", source: t.source ?? null }));
+    .map((t) => ({ name: t.name, description: t.description ?? "", source: t.source ?? null, usage: usageSpec(t.usage) }));
   return { kind: "ok", tasks };
+}
+
+/** A usage spec that declares something; mise gives an empty string for a mise task without one. */
+function usageSpec(usage: string | null | undefined): string | null {
+  return usage === null || usage === undefined || usage.trim() === "" ? null : usage;
 }
 
 /**

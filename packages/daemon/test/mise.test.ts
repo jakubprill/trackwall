@@ -96,8 +96,8 @@ describe("mise", () => {
     expect(await mise.tasks("web")).toEqual({
       kind: "ok",
       tasks: [
-        { name: "dev", description: "development server", source: null, origin: null, run: null },
-        { name: "build:ui", description: "", source: null, origin: null, run: null },
+        { name: "dev", description: "development server", source: null, origin: null, usage: null, run: null },
+        { name: "build:ui", description: "", source: null, origin: null, usage: null, run: null },
       ],
     });
   });
@@ -167,7 +167,7 @@ describe("mise", () => {
     expect(before.kind !== "ok" && before.message).toContain("are not trusted");
     expect(before.kind !== "ok" && before.message).not.toContain("WARN");
 
-    expect(await mise.trust("web")).toEqual({ kind: "ok", tasks: [{ ...DEV, source: null, origin: null, run: null }] });
+    expect(await mise.trust("web")).toEqual({ kind: "ok", tasks: [{ ...DEV, source: null, origin: null, usage: null, run: null }] });
     expect(JSON.parse(readFileSync(join(repoDir, "fake-mise.json"), "utf8")).untrusted).toBe(false);
   });
 
@@ -601,7 +601,7 @@ describe("the environment mise sets (ADR-93)", () => {
 });
 
 describe("mise tasks ls --json", () => {
-  test("the format from a real mise (2026.10) gives the name, description and source file, and skips the other fields", () => {
+  test("the format from a real mise (2026.10) gives the name, description, source file and usage spec, and skips the other fields", () => {
     const stdout = JSON.stringify([
       {
         name: "dev",
@@ -610,12 +610,17 @@ describe("mise tasks ls --json", () => {
         source: "/repo/mise.toml",
         depends: ["setup"],
         hide: false,
+        usage: "",
         run: ["pnpm dev"],
       },
+      { name: "test", description: "Tests", source: "/repo/mise.toml", usage: 'arg "[filter]"', run: ["mvn test"] },
     ]);
     expect(parseTaskList({ kind: "exited", code: 0, stdout, stderr: "" })).toEqual({
       kind: "ok",
-      tasks: [{ name: "dev", description: "Daemon and Vite", source: "/repo/mise.toml" }],
+      tasks: [
+        { name: "dev", description: "Daemon and Vite", source: "/repo/mise.toml", usage: null },
+        { name: "test", description: "Tests", source: "/repo/mise.toml", usage: 'arg "[filter]"' },
+      ],
     });
   });
 
@@ -636,7 +641,102 @@ describe("mise tasks ls --json", () => {
     const stdout = JSON.stringify([{ name: "--help" }, { name: "lint" }]);
     expect(parseTaskList({ kind: "exited", code: 0, stdout, stderr: "" })).toEqual({
       kind: "ok",
-      tasks: [{ name: "lint", description: "", source: null }],
+      tasks: [{ name: "lint", description: "", source: null, usage: null }],
     });
+  });
+});
+
+describe("arguments of a mise task run (ADR-158)", () => {
+  const TEST_WITH_FILTER = { name: "test", usage: 'arg "[filter]"' };
+
+  test(
+    "a mise task with a usage spec gets the arguments after its name, and lists its usage",
+    async () => {
+      const { mise, repoDir } = setup({ tasks: [TEST_WITH_FILTER], exits: { test: 0 } });
+
+      await mise.start({ repo: "web", task: null }, "test", { args: ["OrderServiceTest#creates"] });
+      await mise.waitForEnd({ repo: "web", task: null }, "test", 20_000, new AbortController().signal);
+
+      expect(readFileSync(join(repoDir, "calls.log"), "utf8")).toBe("run test OrderServiceTest#creates\n");
+      const listed = await mise.tasks("web");
+      expect(listed.kind === "ok" && listed.tasks.map((t) => [t.name, t.usage])).toEqual([["test", 'arg "[filter]"']]);
+    },
+    TIMEOUT,
+  );
+
+  test("a mise task without a usage spec refuses arguments and runs nothing", async () => {
+    const { mise, repoDir } = setup({ tasks: [{ name: "test" }], exits: { test: 0 } });
+
+    await expect(mise.start({ repo: "web", task: null }, "test", { args: ["OrderServiceTest"] })).rejects.toMatchObject({
+      code: "bad_request",
+      message: 'mise task "test" in repo web declares no arguments (no usage spec in its mise config), so it is run without any',
+    });
+    expect(existsSync(join(repoDir, "calls.log"))).toBe(false);
+  });
+
+  test("an argument a shell would split or expand, or mise would take for an option, is refused before mise is asked", async () => {
+    const { mise, repoDir } = setup({ tasks: [TEST_WITH_FILTER], exits: { test: 0 } });
+
+    for (const arg of ["Order Test", "x;rm -rf .", "$(id)", "%PATH%", "a&b", "--help", "a:::b", ""]) {
+      await expect(mise.start({ repo: "web", task: null }, "test", { args: [arg] })).rejects.toThrow();
+    }
+    expect(existsSync(join(repoDir, "calls.log"))).toBe(false);
+  });
+});
+
+describe("the convention tasks file (ADR-157)", () => {
+  const conventionFile = (home: string) => join(home, ".config", "mise", "conf.d", "trackwall-convention-tasks.toml");
+
+  test("written into the projects folder when absent, then trusted there with mise trust and the file's path", async () => {
+    const { mise, home } = setup({ tasks: [] });
+    expect(await mise.conventionTasks()).toEqual({ state: "absent", path: conventionFile(home) });
+
+    expect(await mise.writeConventionTasks()).toEqual({ state: "current", path: conventionFile(home) });
+
+    expect(readFileSync(conventionFile(home), "utf8")).toContain("[tasks.test]");
+    expect(readFileSync(join(home, "calls.log"), "utf8")).toBe(`trust ${conventionFile(home)}\n`);
+  });
+
+  test("when mise cannot trust the file, writing it again trusts the file that is already there", async () => {
+    const { mise, home } = setup({ tasks: [] });
+    writeFileSync(join(home, "fake-mise.json"), JSON.stringify({ tasks: [], trustFileError: "cannot write the trust store" }));
+    await expect(mise.writeConventionTasks()).rejects.toMatchObject({ code: "mise_unavailable" });
+    expect(await mise.conventionTasks()).toEqual({ state: "current", path: conventionFile(home) });
+
+    writeFileSync(join(home, "fake-mise.json"), JSON.stringify({ tasks: [] }));
+    expect(await mise.writeConventionTasks()).toEqual({ state: "current", path: conventionFile(home) });
+
+    expect(readFileSync(join(home, "calls.log"), "utf8")).toBe(`trust ${conventionFile(home)}\ntrust ${conventionFile(home)}\n`);
+  });
+
+  test("a file the user changed is left as it is, and not trusted", async () => {
+    const { mise, home } = setup({ tasks: [] });
+    mkdirSync(join(home, ".config", "mise", "conf.d"), { recursive: true });
+    writeFileSync(conventionFile(home), '[tasks.test]\nrun = "make test"\n');
+
+    expect(await mise.conventionTasks()).toEqual({ state: "changed", path: conventionFile(home) });
+    await expect(mise.writeConventionTasks()).rejects.toMatchObject({ code: "bad_request" });
+
+    expect(readFileSync(conventionFile(home), "utf8")).toBe('[tasks.test]\nrun = "make test"\n');
+    expect(existsSync(join(home, "calls.log"))).toBe(false);
+  });
+
+  test("a mise task the file defines has the origin convention", async () => {
+    const { mise, home, repoDir } = setup({ tasks: [] });
+    await mise.writeConventionTasks();
+    writeFileSync(join(home, "global.toml"), '[tasks.notes]\nrun = "true"\n');
+    writeConfig(repoDir, {
+      tasks: [
+        { name: "test", source: conventionFile(home) },
+        { name: "notes", source: join(home, "global.toml") },
+      ],
+    });
+
+    const listed = await mise.tasks("web");
+
+    expect(listed.kind === "ok" && listed.tasks.map((t) => [t.name, t.origin])).toEqual([
+      ["test", "convention"],
+      ["notes", "outside"],
+    ]);
   });
 });

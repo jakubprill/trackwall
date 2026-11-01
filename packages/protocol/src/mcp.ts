@@ -54,7 +54,7 @@ import { LOG_BUFFER_RECORDS, LOG_ERRORS_MAX, LOG_TAIL_MAX, LogErrorLevel, LogErr
 import { GET_CHANGED_ENDPOINTS, GET_REPO, LIST_REPOS, PROPOSE_TASK, REPORT_RESULT, RepoArg, RUN_MISE_TASK } from "./mcp-args.ts";
 import { boardMcpTools, ItemArg, LIST_ITEMS } from "./mcp-board.ts";
 import { routineMcpTools } from "./mcp-routines.ts";
-import { MiseTaskName, MiseTasks, RunningMiseTask } from "./mise.ts";
+import { MiseRunArguments, MiseTaskName, MiseTasks, RunningMiseTask } from "./mise.ts";
 import { RunState } from "./procs.ts";
 import { ReviewComment } from "./review.ts";
 import {
@@ -372,6 +372,12 @@ const MiseTaskTaskArg = TaskId.describe(
 );
 /** Arguments of the tools that act on one mise task of a repo root or of a task worktree. */
 const MiseTaskArgs = z.object({ repo: RepoArg, task: MiseTaskTaskArg.optional(), miseTask: MiseTaskArg }).strict();
+/** `run_mise_task` also takes the run's arguments (ADR-158). */
+const RunMiseTaskArgs = MiseTaskArgs.extend({
+  arguments: MiseRunArguments.default([]).describe(
+    `arguments after the mise task's name (mise run <task> <arguments>), e.g. a test filter; only for a mise task whose usage (from ${GET_REPO}, miseTasks) declares them, and each one word of letters, digits and _ . , / = # * @ + - not starting with -`,
+  ),
+}).strict();
 /** A service from a task's worktree instead of the repo root (ADR-61). */
 const ServiceTaskArg = TaskId.describe(
   `id of a task of this repo (from ${LIST_SESSIONS}; a task session finds its own in its instructions): the service from that task's worktree, on the task port, instead of the repo root`,
@@ -1029,7 +1035,7 @@ export const mcpTools = {
     name: RUN_MISE_TASK,
     readOnly: false,
     destructive: true,
-    auditArgs: ["repo", "task", "miseTask"] as const,
+    auditArgs: ["repo", "task", "miseTask", "arguments"] as const,
     description:
       "Run a repo's mise task (mise run <task>) in the repo root in the user's projects folder, the same as the Run " +
       "button in Trackwall, or with task in that task's worktree, so it builds and tests the task's changes. Only tasks " +
@@ -1041,8 +1047,9 @@ export const mcpTools = {
       "also happens when its mise config (mise.toml, mise.local.toml, file tasks…) changed since the user trusted it: " +
       "the user trusts the changed config in the task's panel. A session in Trackwall can run only mise tasks of its own " +
       "repo, a task session only in its own task's worktree or the repo root, and the supervisor none. Long-running " +
-      "tasks (dev servers) keep running until stopped; stop them when you no longer need them.",
-    args: MiseTaskArgs,
+      "tasks (dev servers) keep running until stopped; stop them when you no longer need them. A mise task with a usage " +
+      "takes arguments, such as the test filter of the test task: run one test class while you work, the whole task before you finish.",
+    args: RunMiseTaskArgs,
     result: MiseTaskRunResult,
   },
   stopMiseTask: {
