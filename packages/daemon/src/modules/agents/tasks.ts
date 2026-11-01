@@ -235,19 +235,19 @@ export class AgentTasks {
   async createChange(parts: readonly { repo: string; prompt: string }[], origin: ChangeOrigin): Promise<CreatedChange> {
     const change = randomUUID();
     const failures: { position: number; repo: string; err: unknown }[] = [];
-    const held: KnownTask[] = [];
+    const held: { position: number; task: KnownTask }[] = [];
     for (const [position, { repo, prompt }] of parts.entries()) {
       const partOrigin = { ...origin, id: randomUUID(), proposedBy: null, change: { id: change, position } };
       await this.#creating(repo, () => this.#create(repo, prompt, partOrigin, "hold")).then(
-        (task) => held.push(task),
+        (task) => held.push({ position, task }),
         (err: unknown) => failures.push({ position, repo, err }),
       );
     }
     const tasks: Task[] = [];
-    for (const part of held)
+    for (const { position, task: part } of held)
       await this.#launchHeld(part).then(
         (task) => tasks.push(task),
-        (err: unknown) => failures.push({ position: part.change?.position ?? 0, repo: part.repo, err }),
+        (err: unknown) => failures.push({ position, repo: part.repo, err }),
       );
     failures.sort((a, b) => a.position - b.position);
     if (tasks.length === 0 && failures[0]) throw failures[0].err;
@@ -513,6 +513,7 @@ export class AgentTasks {
    */
   handToSupervisor(id: string): Task {
     if (this.#removing.has(id)) throw new DomainError("bad_request", "this task is being ended");
+    if (this.busy(id)) throw new DomainError("bad_request", "this task is still starting or busy; try again in a moment");
     const task = this.#get(id);
     if (!mayHandToSupervisor(task))
       throw new DomainError(

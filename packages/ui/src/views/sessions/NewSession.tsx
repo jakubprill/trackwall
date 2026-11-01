@@ -79,7 +79,7 @@ export function NewSession({
   const choice = edited.get(chosen) ?? remembered;
   const choose = (next: Partial<StartChoice>) => setEdited(new Map(edited).set(chosen, { ...choice, ...next }));
   const model = typedModel(choice.model);
-  const change = useChangeForm(conn, onStarted);
+  const change = useChangeForm(conn, onStarted, () => setPrompt(""));
   const { start, firstPart } = formChangeStart(form, repo, choice.worktree, prompt, change.parts, change.title);
   const java = javaNavigationInChange(javaNavigationInView(useJavaNavigationOffer(conn, repo), choice.view), startsChange(start));
   const javaNavigation = java.kind === "ready" && choice.javaNavigation;
@@ -250,7 +250,7 @@ function WithoutWorktree({ repo, sessions }: { repo: string | null; sessions: re
  * The repos the user added to make the task a change (ADR-171), its title, and starting it. Parts that did not start are
  * said in the form, where the user can still read them, instead of opening the change.
  */
-function useChangeForm(conn: Connection, onStarted: (selection: SessionSelection) => void) {
+function useChangeForm(conn: Connection, onStarted: (selection: SessionSelection) => void, clearPrompt: () => void) {
   const [parts, setParts] = useState<ChangePartDraft[]>([]);
   const [title, setTitle] = useState("");
   const [partly, setPartly] = useState<string>();
@@ -262,9 +262,10 @@ function useChangeForm(conn: Connection, onStarted: (selection: SessionSelection
     ({ tasks, failed }) => {
       const first = tasks[0];
       if (failed.length === 0 && first) return onStarted({ kind: "task", id: first.id });
-      // The started parts are tasks now, so the form forgets the change: a second press would start it again.
+      // The started parts are tasks now, so the form forgets the change: a second press would start them again.
       setParts([]);
       setTitle("");
+      clearPrompt();
       setPartly(
         changeStartedPartly(
           tasks.map((t) => t.repo),
