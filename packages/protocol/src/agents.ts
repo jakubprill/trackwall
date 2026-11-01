@@ -246,13 +246,12 @@ export function mayHandToSupervisor(task: Pick<Task, "proposedBy">): boolean {
 }
 
 /**
- * Why the daemon's prompt about what waits unread for a session's agent (ADR-62, ADR-68) has not been taken yet
- * (ADR-159): `sent` it was typed or given through a hook and the agent has not taken it; `turn_end` the agent is in the
- * middle of a turn and gets it with a tool's result or when the turn ends; `user_text` the user may have unsent text in
- * the input box; `dialog` the agent asks something on the screen; `deliver_now` nothing will send it until the next
- * message or update, or the user's Deliver now.
+ * Why a read request (ADR-159) has not been taken yet: `sent` it was typed or given through a hook and the agent has
+ * not read it; `pending` it goes in as soon as the agent can take it (with a tool's result, when its turn ends, once the
+ * input box is back); `user_text` there is text in the input box, the user's or a prompt given up on; `dialog` the agent
+ * asks something on the screen; `idle` nothing will send it until the next message or update, or the user's Deliver now.
  */
-export const ReadRequestHold = z.enum(["sent", "turn_end", "user_text", "dialog", "deliver_now"]);
+export const ReadRequestHold = z.enum(["sent", "pending", "user_text", "dialog", "idle"]);
 export type ReadRequestHold = z.infer<typeof ReadRequestHold>;
 
 /**
@@ -636,9 +635,9 @@ export const agentsApi = {
    */
   say: endpoint("say", SessionRequest.extend({ text: SessionMessage }), Session),
   /**
-   * The user's Deliver now (ADR-159): the read request goes to the agent as soon as it can
-   * take it, even when nothing new arrived since the daemon gave up or the session started. It never goes into the
-   * user's own text in the input box or in the middle of a turn. An ended session is `bad_request`.
+   * The user's Deliver now (ADR-159) for a read request nothing would send (`idle`): it goes to the agent as soon as the
+   * agent can take it, at once into an empty input box, also after an Esc. It never goes into text in the input box,
+   * into the middle of a turn or twice. An ended session is `bad_request`.
    */
   deliverReadRequest: endpoint("deliver-read-request", SessionRequest, Session),
   /** Stops the agent's turn in a session in the conversation view (ADR-107), as Esc does in the terminal. */

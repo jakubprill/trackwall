@@ -9,21 +9,18 @@ const request = (waitsFor: ReadRequest["waitsFor"]): ReadRequest => ({
 });
 
 describe("what the session panel says about what waits unread for the agent (ADR-159)", () => {
-  test("Deliver now is offered where it helps: a prompt not read, the user's text, or nothing that would send it", () => {
-    expect(readRequestHold(request("sent")).canDeliver).toBe(true);
-    expect(readRequestHold(request("user_text"))).toEqual({
-      text: "Waits for your text in the input box: send it or clear it",
-      canDeliver: true,
-    });
-    expect(readRequestHold(request("deliver_now")).canDeliver).toBe(true);
+  test("Deliver now is offered only where nothing would send the prompt", () => {
+    expect(readRequestHold(request("idle"))).toEqual({ text: "Nothing sends it until the next message", canDeliver: true });
   });
 
-  test("not in the middle of a turn or while the agent asks something, where the prompt goes in on its own", () => {
-    expect(readRequestHold(request("turn_end"))).toEqual({
-      text: "Goes to the agent with its next tool call or when its turn ends",
+  test("not where the daemon sends it on its own or would send it into the user's text", () => {
+    expect(readRequestHold(request("sent"))).toEqual({ text: "Sent to the agent, which has not read it yet", canDeliver: false });
+    expect(readRequestHold(request("pending"))).toEqual({ text: "Goes to the agent as soon as it can take it", canDeliver: false });
+    expect(readRequestHold(request("user_text"))).toEqual({
+      text: "Waits for the text in the input box: send it or clear it",
       canDeliver: false,
     });
-    expect(readRequestHold(request("dialog")).canDeliver).toBe(false);
+    expect(readRequestHold(request("dialog"))).toEqual({ text: "Waits until the agent's question is answered", canDeliver: false });
   });
 
   test("a session that no longer runs shows no read request", () => {

@@ -141,20 +141,24 @@ describe("a Copilot CLI session over ACP", () => {
     expect(s.events).toEqual([{ kind: "turn_ended" }]);
   });
 
-  test("what waits unread waits for the turn's end once asked for, is sent as the next prompt, and else waits for Deliver now (ADR-159)", async () => {
+  test("what waits unread is pending once asked for, sent as the next prompt, and else idle until Deliver now (ADR-159)", async () => {
     const s = session({ prompt: () => "Read your messages." });
     await s.ready();
     s.acp.tick();
-    expect(s.acp.view()?.readRequest?.waitsFor).toBe("deliver_now");
+    expect(s.acp.view()?.readRequest?.waitsFor).toBe("idle");
 
     s.acp.say("first");
     s.acp.deliverNow();
-    expect(s.acp.view()?.readRequest?.waitsFor).toBe("turn_end");
+    expect(s.acp.view()?.readRequest?.waitsFor).toBe("pending");
     s.answer("session/prompt", { stopReason: "end_turn" });
     await s.settle();
 
     expect(s.written.at(-1)).toMatchObject({ method: "session/prompt", params: { prompt: [{ text: "Read your messages." }] } });
     expect(s.acp.view()?.readRequest).toEqual({ prompt: "Read your messages.", since: expect.any(String), waitsFor: "sent" });
+    const prompts = s.written.filter((m) => m.method === "session/prompt").length;
+    s.acp.deliverNow();
+    expect(s.written.filter((m) => m.method === "session/prompt").length).toBe(prompts);
+    expect(s.acp.view()?.readRequest?.waitsFor).toBe("sent");
   });
 
   test("an approval request is the session's dialog until it is answered with the option's digit", async () => {

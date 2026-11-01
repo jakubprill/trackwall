@@ -61,9 +61,9 @@ describe.skipIf(process.versions.bun === undefined)("a review from the Changes t
 
     expect(sent).toEqual({ delivery: "queued", unread: 2 });
     // The session list says what waits and why (ADR-159), and Deliver now does not type in the middle of the turn.
-    await waitFor(daemon.facade.agents, session, (s) => s.readRequest?.waitsFor === "turn_end", "the read request of the review");
+    await waitFor(daemon.facade.agents, session, (s) => s.readRequest?.waitsFor === "pending", "the read request of the review");
     expect(await daemon.post(agentsApi.deliverReadRequest, { session })).toMatchObject({
-      readRequest: { prompt: expect.stringContaining("call get_review_comments"), waitsFor: "turn_end" },
+      readRequest: { prompt: expect.stringContaining("call get_review_comments"), waitsFor: "pending" },
     });
     const window = viewer(daemon.facade.agents, session);
     // The screen image reaches a new viewer asynchronously, so the check waits for it before looking for what is not there.

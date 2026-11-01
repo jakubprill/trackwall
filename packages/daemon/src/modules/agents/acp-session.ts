@@ -3,6 +3,7 @@ import type {
   ConversationEntry,
   ConversationServerMessage,
   DialogAnswer,
+  ReadRequest,
   ReadRequestHold,
   RunState,
   Session,
@@ -323,15 +324,24 @@ export class AcpSession implements AgentSession {
       dialog: running ? (this.#approvals[0]?.dialog ?? null) : null,
       environment: this.environment,
       view: "conversation",
-      readRequest: this.#readRequest.readRequest(this.#o.prompt(), this.#readRequestHold(), running),
+      readRequest: running ? this.#readRequestView() : null,
     };
   }
 
-  /** What holds back the prompt about what waits unread (ADR-159): it goes as the next prompt once the turn ends. */
+  /**
+   * What keeps the prompt about what waits unread out of the conversation (ADR-159): it goes as the next prompt once
+   * the session is ready and the turn under way ends; while the agent's own turn reads it, it counts as sent.
+   */
+  #readRequestView(): ReadRequest | null {
+    const prompt = this.#o.prompt();
+    if (prompt === undefined) return null;
+    return this.#readRequest.readRequest(prompt, this.#readRequestHold());
+  }
+
   #readRequestHold(): ReadRequestHold {
     if (this.#turn?.by === "daemon") return "sent";
     if (this.#approvals.length > 0) return "dialog";
-    return this.#promptAsked ? "turn_end" : "deliver_now";
+    return this.#promptAsked ? "pending" : "idle";
   }
 
   /** The user's Deliver now (ADR-159): the prompt is asked for again and goes as the next prompt. */

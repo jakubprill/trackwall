@@ -1,6 +1,7 @@
 import type {
   AgentDialog,
   DialogAnswer,
+  ReadRequest,
   ReadRequestHold,
   RunState,
   Session,
@@ -442,30 +443,46 @@ export class LiveSession implements AgentSession {
       dialog: run.kind === "running" ? this.#dialog() : null,
       environment: this.environment,
       view: "terminal",
-      readRequest: this.#readRequest.readRequest(this.#promptText(), this.#readRequestHold(), run.kind === "running"),
+      readRequest: run.kind === "running" ? this.#readRequestView() : null,
     };
   }
 
-  /** What holds back the prompt about what waits unread (ADR-159), from the same facts that decide its delivery. */
-  #readRequestHold(): ReadRequestHold {
-    if (this.#promptTyped) return "sent";
-    if (this.#dialog() !== null) return "dialog";
-    if (this.#userDraft) return "user_text";
-    return this.#promptAsked ? "turn_end" : "deliver_now";
+  #readRequestView(): ReadRequest | null {
+    const prompt = this.#promptText();
+    if (prompt === undefined) return null;
+    const hold = this.#deliveryHold();
+    return this.#readRequest.readRequest(prompt, hold === "now" ? "pending" : hold);
   }
 
   /**
-   * The user's Deliver now (ADR-159): the prompt is asked for again, and a typed one not taken is looked after at once
-   * with its tries counted anew. A box the screen shows empty holds no draft, whatever the daemon guessed; text in the
-   * box still keeps the prompt out, so it never joins the user's words.
+   * What keeps the asked-for prompt out of the session now (ADR-159), or `now` when it would go in; the one chain of
+   * rules for both `#typePrompt` and the read request the session list shows, so the two never disagree. Never in the
+   * middle of a turn, in an approval or a question dialog, or into text in the input box (the user's, or a prompt given
+   * up on). An empty box the hooks do not trust yet (after the user's Esc, which sends no `agentStop`) is `idle`: no
+   * turn will end to deliver it, and only the user's Deliver now types it.
+   */
+  #deliveryHold(): ReadRequestHold | "now" {
+    if (this.#promptTyped) return "sent";
+    if (!this.#promptAsked) return "idle";
+    if (this.#userDraft) return "user_text";
+    if (this.#dialog() !== null) return "dialog";
+    if (this.#last !== null && this.#last.state !== "Input") return "pending";
+    const box = this.#box();
+    if (box) return "user_text";
+    if (!this.#state.inPromptBox(() => this.#screen.lines())) return box === "" ? "idle" : "pending";
+    return "now";
+  }
+
+  /**
+   * The user's Deliver now (ADR-159): the prompt is asked for again and typed at once when the session waits in an empty
+   * input box, also one the hooks do not trust after an Esc. A prompt already sent is left to the read cycle's own tries,
+   * so it never goes in twice.
    */
   deliverNow(): void {
     this.#readHooks();
-    if (this.#box() === "") this.#userDraft = false;
-    if (this.#promptTyped) this.#promptTyped = { ...this.#promptTyped, at: 0, retries: 0 };
-    else this.#promptAsked = true;
-    this.#followTypedPrompt();
-    this.#typePrompt();
+    if (this.#promptTyped) return;
+    this.#promptAsked = true;
+    this.#typePrompt(true);
   }
 
   /**
@@ -554,16 +571,16 @@ export class LiveSession implements AgentSession {
     }
   }
 
-  /** The asked-for prompt goes into the PTY in an empty input box; Enter follows after `SUBMIT_DELAY_MS`. */
-  #typePrompt(): void {
+  /**
+   * The asked-for prompt goes into the PTY in an empty input box (`#deliveryHold`); Enter follows after
+   * `SUBMIT_DELAY_MS`. Decided once after a batch of hook records, so a turn that ended and started again in one read
+   * gets nothing. `deliverNow`: the user's Deliver now, which also types into an empty box the hooks do not trust.
+   */
+  #typePrompt(deliverNow = false): void {
     const terminal = this.#terminal;
-    // Decided once after a batch of hook records, so a turn that ended and started again in one read gets nothing.
-    if (!this.#promptAsked || this.#promptTyped || this.#finished || !terminal || this.#userDraft) return;
-    if (this.#last !== null && this.#last.state !== "Input") return;
-    if (!this.#state.inPromptBox(() => this.#screen.lines())) return;
-    // The hooks say the input box, but the screen still shows the agent's question (its hook lost or late, ADR-66): the
-    // prompt with Enter would answer it.
-    if (this.#dialog() !== null) return;
+    if (this.#finished || !terminal) return;
+    const hold = this.#deliveryHold();
+    if (hold !== "now" && !(deliverNow && hold === "idle")) return;
     this.#promptAsked = false;
     // Everything may have been read meanwhile (the agent called the tool on its own): then there is nothing to ask.
     const text = this.#promptText();

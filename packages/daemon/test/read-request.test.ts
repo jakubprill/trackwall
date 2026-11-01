@@ -6,22 +6,20 @@ describe("the clock of what waits unread for a session (ADR-159)", () => {
     const clock = new ReadRequestClock();
     clock.observe("read the review", Date.parse("2026-11-01T08:00:00.000Z"));
     clock.observe("read the review and the message", Date.parse("2026-11-01T08:00:05.000Z"));
-    expect(clock.readRequest("read the review and the message", "turn_end", true)).toEqual({
+    expect(clock.readRequest("read the review and the message", "pending", Date.parse("2026-11-01T08:00:07.000Z"))).toEqual({
       prompt: "read the review and the message",
       since: "2026-11-01T08:00:00.000Z",
-      waitsFor: "turn_end",
+      waitsFor: "pending",
     });
 
     clock.observe(undefined, Date.parse("2026-11-01T08:00:06.000Z"));
     clock.observe("read the updates", Date.parse("2026-11-01T08:01:00.000Z"));
-    expect(clock.readRequest("read the updates", "deliver_now", true)?.since).toBe("2026-11-01T08:01:00.000Z");
+    expect(clock.readRequest("read the updates", "idle", Date.parse("2026-11-01T08:01:30.000Z")).since).toBe("2026-11-01T08:01:00.000Z");
   });
 
-  test("nothing unread, or a session that no longer runs, is no read request", () => {
+  test("a prompt seen first between read cycles waits since it was seen", () => {
     const clock = new ReadRequestClock();
-    clock.observe("read the review", 0);
 
-    expect(clock.readRequest(undefined, "turn_end", true)).toBeNull();
-    expect(clock.readRequest("read the review", "turn_end", false)).toBeNull();
+    expect(clock.readRequest("read the review", "sent", Date.parse("2026-11-01T09:00:00.000Z")).since).toBe("2026-11-01T09:00:00.000Z");
   });
 });

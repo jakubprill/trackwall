@@ -866,7 +866,7 @@ describe("what waits unread for a session, in the session list, and the user's D
     expect(session.view()?.readRequest).toBeNull();
   });
 
-  test("a prompt asked for during a turn waits for the turn's end, then is sent, and is gone once the agent read it", async () => {
+  test("a prompt asked for during a turn is pending until the turn's end, then sent, and gone once the agent read it", async () => {
     let waiting: string | undefined = "read the review";
     const { session, hooksFile } = runningSession(() => waiting);
     session.connect({ write: () => {}, resize: () => {} });
@@ -876,7 +876,7 @@ describe("what waits unread for a session, in the session list, and the user's D
     session.tick();
     const since = session.view()?.readRequest?.since ?? "";
 
-    expect(session.view()?.readRequest).toEqual({ prompt: "read the review", since: expect.any(String), waitsFor: "turn_end" });
+    expect(session.view()?.readRequest).toEqual({ prompt: "read the review", since: expect.any(String), waitsFor: "pending" });
     await endTurnAtBox(session, hooksFile);
     expect(session.view()?.readRequest).toEqual({ prompt: "read the review", since, waitsFor: "sent" });
     waiting = undefined;
@@ -884,49 +884,77 @@ describe("what waits unread for a session, in the session list, and the user's D
     expect(session.view()?.readRequest).toBeNull();
   });
 
-  test("what a session found unread that nobody asked it to read waits for Deliver now, which types it into the empty box", async () => {
+  test("what a session found unread that nobody asked it to read is idle until Deliver now types it into the empty box", async () => {
     const { session, hooksFile } = runningSession();
     const written: string[] = [];
     session.connect({ write: (data) => written.push(data), resize: () => {} });
     await endTurnAtBox(session, hooksFile);
 
-    expect(session.view()?.readRequest?.waitsFor).toBe("deliver_now");
+    expect(session.view()?.readRequest?.waitsFor).toBe("idle");
     expect(written).toEqual([]);
     session.deliverNow();
     expect(written).toEqual(["read the review"]);
     expect(session.view()?.readRequest?.waitsFor).toBe("sent");
   });
 
-  test("the user's text waits the prompt out; Deliver now types it once the box on the screen is empty, never into the text", async () => {
+  test("a prompt asked for before the user's Esc is idle at the empty box the hooks do not trust, and Deliver now types it there", async () => {
     const { session, hooksFile } = runningSession();
     const written: string[] = [];
     session.connect({ write: (data) => written.push(data), resize: () => {} });
-    await endTurnAtBox(session, hooksFile);
-    session.input("also check the");
-    written.length = 0;
-    session.askToRead();
-    await showScreen(session, "────\r\n❯ also check the\r\n────\r\n Interactive · / commands\r\n");
-
-    expect(session.view()?.readRequest?.waitsFor).toBe("user_text");
-    session.deliverNow();
-    expect(written).toEqual([]);
+    appendFileSync(hooksFile, promptSubmitted);
+    session.tick();
+    expect(session.askToRead()).toBe("queued");
+    session.input("\u001b");
     await showScreen(session, PROMPT_BOX);
+
+    expect(session.view()?.readRequest?.waitsFor).toBe("idle");
+    expect(written).toEqual(["\u001b"]);
     session.deliverNow();
-    expect(written).toEqual(["read the review"]);
+    expect(written).toEqual(["\u001b", "read the review"]);
   });
 
-  test("a prompt typed and not taken gets Enter again at once on Deliver now", async () => {
+  test("Deliver now writes nothing while a typed prompt is sent, or into the user's text", async () => {
     const { session, hooksFile } = runningSession();
     const written: string[] = [];
     session.connect({ write: (data) => written.push(data), resize: () => {} });
     await endTurnAtBox(session, hooksFile);
     session.askToRead();
-    await showScreen(session, "────\r\n❯ read the review\r\n────\r\n Interactive · / commands\r\n");
-    written.length = 0;
-
+    expect(session.view()?.readRequest?.waitsFor).toBe("sent");
     session.deliverNow();
+    expect(written).toEqual(["read the review"]);
 
-    expect(written).toEqual(["\r"]);
+    const other = runningSession();
+    const typed: string[] = [];
+    other.session.connect({ write: (data) => typed.push(data), resize: () => {} });
+    await endTurnAtBox(other.session, other.hooksFile);
+    other.session.input("also check the");
+    typed.length = 0;
+    other.session.askToRead();
+    await showScreen(other.session, "────\r\n❯ also check the\r\n────\r\n Interactive · / commands\r\n");
+    expect(other.session.view()?.readRequest?.waitsFor).toBe("user_text");
+    other.session.deliverNow();
+    expect(typed).toEqual([]);
+  });
+
+  test("a typed prompt the daemon gave up on in the box waits as the box's text, and is not typed again", async () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    await endTurnAtBox(session, hooksFile);
+    session.askToRead();
+    const held = "────\r\n❯ read the review\r\n────\r\n Interactive · / commands\r\n";
+    await showScreen(session, held);
+    await new Promise((r) => setTimeout(r, 200));
+    later(6000, () => session.tick());
+    later(12_000, () => session.tick());
+    later(18_000, () => session.tick());
+    const given = ["read the review", "\r", "\r", "\r"];
+
+    expect(written).toEqual(given);
+    expect(session.view()?.readRequest?.waitsFor).toBe("user_text");
+    session.deliverNow();
+    later(24_000, () => session.tick());
+    expect(written).toEqual(given);
   });
 
   test("an ended session has no read request", () => {
