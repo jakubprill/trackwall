@@ -64,6 +64,7 @@ import {
   ServiceSlice,
 } from "./services.ts";
 import { SyncRepo } from "./sync.ts";
+import { TASK_HISTORY_MAX_COMMITS, TASK_HISTORY_MAX_RESULTS, TaskHistoryQuery, TaskHistoryResult } from "./task-history.ts";
 import { TASK_UPDATES_KEPT, TaskUpdate } from "./task-updates.ts";
 import { TEST_RESULTS_MAX_FAILURES, TestResults } from "./test-results.ts";
 import { trackwallDirLabel } from "./trackwall-dir.ts";
@@ -680,6 +681,27 @@ export const mcpTools = {
       })
       .strict(),
     result: SearchCommitsResult,
+  },
+  searchTaskHistory: {
+    name: "search_task_history",
+    readOnly: true,
+    description:
+      "Search the tasks the user has ended (the task journal): how a similar change was done before, in this repo or " +
+      "another one. text is words that must all appear, in any case, in a task's title, prompt, summary, branch, repo, " +
+      "commit subjects or changed files; leave it empty to list the newest. Narrow with repos (ids, also of repos no " +
+      "longer in the projects folder) and since (YYYY-MM-DD, when the task ended). Each task has its repo, prompt, " +
+      "the session's last summary, its branch with base and head commit (branchKept: the branch is still in the repo), " +
+      `the newest commits (up to ${TASK_HISTORY_MAX_COMMITS}, commitsTotal counts all), the changed files and the last ` +
+      "verification. Newest ended first; truncated: true when more matched than fit, narrow the query.",
+    args: z
+      .object({
+        text: TaskHistoryQuery.shape.text.default("").describe('words that must all appear, e.g. "retry payment"'),
+        repos: TaskHistoryQuery.shape.repos.default([]).describe(`only tasks of these repos (ids from ${LIST_REPOS})`),
+        since: TaskHistoryQuery.shape.since.describe("only tasks ended on this day or later, YYYY-MM-DD"),
+        limit: TaskHistoryQuery.shape.limit.default(10).describe(`maximum number of tasks (up to ${TASK_HISTORY_MAX_RESULTS}), default 10`),
+      })
+      .strict(),
+    result: TaskHistoryResult,
   },
   listSessions: {
     name: LIST_SESSIONS,
