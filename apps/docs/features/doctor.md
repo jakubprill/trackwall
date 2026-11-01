@@ -34,7 +34,7 @@ The checks are:
 | Java navigation | tasks can start the Java language server with the paths in your settings; shown only once you set up [Java navigation](/features/java-navigation) |
 | GitHub CLI (gh), GitLab CLI (glab) | it is signed in to every repo host of that kind in "Repo hosts"; shown only when you have such a host |
 
-The doctor only looks. It never changes a setting, installs anything or signs you in, and its results are not saved or sent anywhere. The network check only opens a connection to GitHub and Copilot and closes it, without sending anything; a proxy is shown only as its host and port, never with the password its address may carry.
+The doctor only looks. It never changes a setting, installs anything or signs you in, and its results are not saved or sent anywhere. The network check only opens a connection to GitHub and Copilot and closes it, without sending anything but the proxy's login when its address has one; a proxy is shown only as its host and port, never with the password its address may carry.
 
 ## Use it
 

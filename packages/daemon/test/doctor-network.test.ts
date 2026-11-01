@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { execFile } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { type AddressInfo, createServer as createNetServer, connect as netConnect, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
@@ -8,6 +9,9 @@ import { networkOutcome, SESSION_HOSTS } from "../src/modules/doctor/network-che
 import { proxyFor, shownProxy } from "../src/modules/doctor/proxy-env.ts";
 import { probeTls, type TlsProbe, type TlsProbeResult } from "../src/modules/doctor/tls-probe.ts";
 import { INSPECTION_CA, LOCALHOST_CERT, LOCALHOST_KEY } from "./fixtures/tls-certificates.ts";
+import { RUNTIMES } from "./support/runtimes.ts";
+
+const probeRunner = join(import.meta.dir, "fixtures", "tls-probe-runner.ts");
 
 /** A TLS server for `localhost` whose certificate the test inspection authority signed, like a company proxy's would be. */
 let server: Server;
@@ -18,8 +22,11 @@ interface ProxySeen {
   requests: string[];
 }
 
-/** An HTTP proxy that tunnels `CONNECT` to the test server, or answers every request with `status`. */
-async function startProxy(status = 200): Promise<{ url: string; seen: ProxySeen; close: () => void }> {
+/**
+ * An HTTP proxy that tunnels `CONNECT` to the test server whatever host it names, or answers every request with `status`,
+ * with text that is not HTTP (`"garbage"`), or by closing the connection (`"close"`).
+ */
+async function startProxy(answer: number | "garbage" | "close" = 200): Promise<{ url: string; seen: ProxySeen; close: () => void }> {
   const seen: ProxySeen = { requests: [] };
   const proxy = createNetServer((client: Socket) => {
     let head = "";
@@ -28,7 +35,9 @@ async function startProxy(status = 200): Promise<{ url: string; seen: ProxySeen;
       if (!head.includes("\r\n\r\n")) return;
       client.off("data", onData);
       seen.requests.push(head);
-      if (status !== 200) return client.end(`HTTP/1.1 ${status} No\r\nContent-Length: 0\r\n\r\n`);
+      if (answer === "close") return client.destroy();
+      if (answer === "garbage") return client.end("SSH-2.0-OpenSSH_9.6\r\n\r\n");
+      if (answer !== 200) return client.end(`HTTP/1.1 ${answer} No\r\nContent-Length: 0\r\n\r\n`);
       const upstream = netConnect({ host: "127.0.0.1", port: serverPort }, () => {
         client.write("HTTP/1.1 200 Connection established\r\n\r\n");
         client.pipe(upstream).pipe(client);
@@ -106,9 +115,80 @@ describe("TLS probe", () => {
     expect(result).toMatchObject({ kind: "unreachable", proxy: true });
   });
 
+  test("a malformed escape in the proxy's user name is sent as written instead of failing the daemon", async () => {
+    const proxy = await startProxy();
+    try {
+      const result = await probeTls(
+        { host: "localhost", port: serverPort },
+        { proxy: new URL(proxy.url.replace("//", "//us%zz:pw@")), ca: [INSPECTION_CA], timeoutMs: 5_000 },
+      );
+      expect(result).toEqual({ kind: "ok" });
+      expect(proxy.seen.requests[0]).toContain(`Proxy-Authorization: Basic ${Buffer.from("us%zz:pw").toString("base64")}\r\n`);
+    } finally {
+      proxy.close();
+    }
+  });
+
+  test.each(["close", "garbage"] as const)("a proxy that answers CONNECT with %s is unreachable as a proxy", async (answer) => {
+    const proxy = await startProxy(answer);
+    try {
+      const result = await probeTls({ host: "localhost", port: serverPort }, { proxy: new URL(proxy.url), ca: [], timeoutMs: 5_000 });
+      expect(result).toMatchObject({ kind: "unreachable", proxy: true });
+    } finally {
+      proxy.close();
+    }
+  });
+
+  test("a certificate issued to another host is untrusted, even from a trusted authority", async () => {
+    const proxy = await startProxy();
+    try {
+      const result = await probeTls(
+        { host: "trackwall-test.example.org", port: 443 },
+        { proxy: new URL(proxy.url), ca: [INSPECTION_CA], timeoutMs: 5_000 },
+      );
+      expect(result).toMatchObject({ kind: "untrusted", code: "ERR_TLS_CERT_ALTNAME_INVALID" });
+    } finally {
+      proxy.close();
+    }
+  });
+
   test("a host whose name cannot be found is a DNS failure", async () => {
     const result = await probeTls({ host: "trackwall-test.invalid", port: 443 }, { proxy: null, ca: [], timeoutMs: 5_000 });
     expect(result.kind).toBe("dns");
+  });
+});
+
+/** The probe's result from a process of `runtime`, which is where Bun's and Node's TLS sockets differ. */
+function probeIn(runtime: string[], probe: { host: string; port: number; proxy: string | null; ca: string[] }): Promise<unknown> {
+  const [command = "", ...args] = runtime;
+  return new Promise((resolve, reject) => {
+    execFile(command, [...args, probeRunner, JSON.stringify(probe)], { timeout: 20_000 }, (err, stdout) =>
+      err ? reject(err) : resolve(JSON.parse(stdout)),
+    );
+  });
+}
+
+describe.each(RUNTIMES)("TLS probe under %s", (_name, runtime) => {
+  test("an authority it is not given is untrusted and named, and through a proxy with that authority it is ok", async () => {
+    const proxy = await startProxy();
+    try {
+      expect(await probeIn(runtime, { host: "localhost", port: serverPort, proxy: null, ca: [] })).toEqual({
+        kind: "untrusted",
+        code: "SELF_SIGNED_CERT_IN_CHAIN",
+        issuer: "Trackwall Test Inspection CA",
+      });
+      expect(await probeIn(runtime, { host: "localhost", port: serverPort, proxy: proxy.url, ca: [INSPECTION_CA] })).toEqual({
+        kind: "ok",
+      });
+      expect(
+        await probeIn(runtime, { host: "trackwall-test.example.org", port: 443, proxy: proxy.url, ca: [INSPECTION_CA] }),
+      ).toMatchObject({
+        kind: "untrusted",
+        code: "ERR_TLS_CERT_ALTNAME_INVALID",
+      });
+    } finally {
+      proxy.close();
+    }
   });
 });
 
@@ -210,6 +290,28 @@ describe("network check", () => {
       summary: `github.com and api.githubcopilot.com answer directly. NODE_EXTRA_CA_CERTS: ${notPem} holds no PEM certificate.`,
       fix: "Correct NODE_EXTRA_CA_CERTS in the environment Trackwall starts with (a user variable on Windows, the container's environment in a dev container), then restart Trackwall.",
     });
+  });
+
+  test("with NODE_USE_SYSTEM_CA the system bundle is trusted from the start, as Node.js 22.15 and newer do", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "trackwall-doctor-system-ca-"));
+    const bundle = join(dir, "ca-certificates.crt");
+    writeFileSync(bundle, `${INSPECTION_CA}\n`);
+    const { probe } = scriptedProbe((_host, ca) =>
+      ca.includes(INSPECTION_CA) ? { kind: "ok" } : { kind: "untrusted", code: "X", issuer: null },
+    );
+    expect((await networkOutcome({ NODE_USE_SYSTEM_CA: "1" }, { probe, systemCaFiles: [bundle] })).status).toBe("ok");
+    expect(
+      (await networkOutcome({ NODE_OPTIONS: "--max-old-space-size=4096 --use-system-ca" }, { probe, systemCaFiles: [bundle] })).status,
+    ).toBe("ok");
+  });
+
+  test("with NODE_USE_SYSTEM_CA and no system bundle to read, as on Windows, an untrusted certificate is only a warning", async () => {
+    const outcome = await networkOutcome(
+      { NODE_USE_SYSTEM_CA: "1" },
+      { probe: async () => ({ kind: "untrusted", code: "SELF_SIGNED_CERT_IN_CHAIN", issuer: "Example Inspection CA" }), systemCaFiles: [] },
+    );
+    expect(outcome.status).toBe("warn");
+    expect(outcome.summary).toContain("the doctor cannot read them here");
   });
 
   test.each([

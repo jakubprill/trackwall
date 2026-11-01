@@ -20,7 +20,7 @@ import { compareVersions, versionIn } from "./version.ts";
 /**
  * The doctor (§4.15, ADR-101): checks of what Trackwall needs on this computer, each with what to do when it fails, for the
  * person setting Trackwall up or wondering why a part of it does not work. It only reads and runs `--version` and
- * `auth status` and opens a TLS connection to GitHub and Copilot without sending anything (ADR-166); it changes nothing, and its report is not kept. A check that throws becomes a failed check, never a
+ * `auth status` and opens a TLS connection to GitHub and Copilot without sending anything but a proxy's login (ADR-166); it changes nothing, and its report is not kept. A check that throws becomes a failed check, never a
  * failed report.
  */
 

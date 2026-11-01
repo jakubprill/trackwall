@@ -17,7 +17,7 @@ export type TlsProbeResult =
   | { kind: "unreachable"; message: string; proxy: boolean }
   /** The proxy answered `CONNECT` with another status than 200 (407: it wants a login). */
   | { kind: "proxy-refused"; status: number }
-  /** The handshake worked, but the certificate is not one the given authorities sign, or not for this host. */
+  /** The certificate of the host, or of an HTTPS proxy, is not one the given authorities sign, or not for that host. */
   | { kind: "untrusted"; code: string; issuer: string | null }
   | { kind: "error"; message: string };
 
@@ -40,7 +40,7 @@ export const probeTls: TlsProbe = async (target, o) => {
   let tunnel: Socket | null = null;
   try {
     if (o.proxy !== null) {
-      const opened = await openTunnel(o.proxy, target, o.timeoutMs);
+      const opened = await openTunnel(o.proxy, target, o.ca, o.timeoutMs);
       if ("kind" in opened) return opened;
       tunnel = opened.socket;
     }
@@ -53,11 +53,20 @@ export const probeTls: TlsProbe = async (target, o) => {
 };
 
 /** The socket of a tunnel the proxy opened to the target, or why it did not. */
-function openTunnel(proxy: URL, target: { host: string; port: number }, timeoutMs: number): Promise<{ socket: Socket } | TlsProbeResult> {
+function openTunnel(
+  proxy: URL,
+  target: { host: string; port: number },
+  ca: readonly string[],
+  timeoutMs: number,
+): Promise<{ socket: Socket } | TlsProbeResult> {
+  // Written before connecting, so that nothing in it can throw inside a socket's listener, where it would crash the daemon.
+  const request = connectRequest(proxy, target);
   return new Promise((resolve, reject) => {
     const host = proxy.hostname.replace(/^\[|\]$/g, "");
     const port = proxyPort(proxy);
-    const socket: Socket = proxy.protocol === "https:" ? tlsConnect({ host, port, ...serverName(host) }) : netConnect({ host, port });
+    // An HTTPS proxy's own certificate is checked against the same authorities as the host's, as Node's proxy agent does.
+    const socket: Socket =
+      proxy.protocol === "https:" ? tlsConnect({ host, port, ...serverName(host), ca: [...ca] }) : netConnect({ host, port });
     const timer = setTimeout(
       () => socket.destroy(Object.assign(new Error("the proxy did not answer in time"), { code: "ETIMEDOUT" })),
       timeoutMs,
@@ -77,12 +86,7 @@ function openTunnel(proxy: URL, target: { host: string; port: number }, timeoutM
         resolve(result);
       }
     };
-    socket.once(proxy.protocol === "https:" ? "secureConnect" : "connect", () => {
-      const authority = `${target.host}:${target.port}`;
-      const login = proxyLogin(proxy);
-      const lines = [`CONNECT ${authority} HTTP/1.1`, `Host: ${authority}`, ...(login ? [`Proxy-Authorization: ${login}`] : [])];
-      socket.write(`${lines.join("\r\n")}\r\n\r\n`);
-    });
+    socket.once(proxy.protocol === "https:" ? "secureConnect" : "connect", () => socket.write(request));
     socket.on("data", (chunk: Buffer) => {
       answer = Buffer.concat([answer, chunk]);
       const end = answer.indexOf("\r\n\r\n");
@@ -92,18 +96,35 @@ function openTunnel(proxy: URL, target: { host: string; port: number }, timeoutM
       }
       const status = /^HTTP\/1\.[01] (\d{3})/.exec(answer.subarray(0, end).toString("latin1"))?.[1];
       if (status === undefined) return done(new Error("the proxy's answer to CONNECT is not HTTP"));
-      done(status === "200" ? { socket } : { kind: "proxy-refused", status: Number(status) });
+      // Any 2xx opens the tunnel (RFC 9110, CONNECT).
+      done(status.startsWith("2") ? { socket } : { kind: "proxy-refused", status: Number(status) });
     });
     socket.once("error", (err) => done(err));
     socket.once("close", () => done(new Error("the proxy closed the connection")));
   });
 }
 
+function connectRequest(proxy: URL, target: { host: string; port: number }): string {
+  const authority = `${target.host}:${target.port}`;
+  const login = proxyLogin(proxy);
+  const lines = [`CONNECT ${authority} HTTP/1.1`, `Host: ${authority}`, ...(login ? [`Proxy-Authorization: ${login}`] : [])];
+  return `${lines.join("\r\n")}\r\n\r\n`;
+}
+
 /** `Basic` with the user and password of the proxy's address, as Node's proxy agents send them; `null` without a user. */
 function proxyLogin(proxy: URL): string | null {
   if (proxy.username === "") return null;
-  const user = `${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`;
+  const user = `${decoded(proxy.username)}:${decoded(proxy.password)}`;
   return `Basic ${Buffer.from(user, "utf8").toString("base64")}`;
+}
+
+/** A part of an address with its `%` escapes decoded; one that is not a valid escape (`%zz`) stays as written. */
+function decoded(part: string): string {
+  try {
+    return decodeURIComponent(part);
+  } catch {
+    return part;
+  }
 }
 
 function handshake(
@@ -158,10 +179,14 @@ function rootIssuer(cert: DetailedPeerCertificate | undefined): string | null {
   return (Array.isArray(name) ? name[0] : name) ?? null;
 }
 
+/** OpenSSL's names for a certificate it does not accept, and Node's for one issued to another host. */
+const CERTIFICATE_CODE = /CERT|SELF_SIGNED|UNABLE_TO_VERIFY/;
+
 function classify(err: unknown, atProxy: boolean): TlsProbeResult {
-  const { code, message } = err as NodeJS.ErrnoException;
-  if (code !== undefined && DNS_CODES.has(code)) return { kind: "dns", message };
-  if (code !== undefined && UNREACHABLE_CODES.has(code)) return { kind: "unreachable", message, proxy: atProxy };
-  if (atProxy) return { kind: "unreachable", message, proxy: true };
-  return { kind: "error", message: err instanceof Error ? err.message : String(err) };
+  if (!(err instanceof Error)) return { kind: "error", message: String(err) };
+  const { code = "", message } = err as NodeJS.ErrnoException;
+  if (DNS_CODES.has(code)) return { kind: "dns", message };
+  if (CERTIFICATE_CODE.test(code)) return { kind: "untrusted", code, issuer: null };
+  if (UNREACHABLE_CODES.has(code) || atProxy) return { kind: "unreachable", message, proxy: atProxy };
+  return { kind: "error", message };
 }
