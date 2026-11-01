@@ -16,6 +16,7 @@ async function setup() {
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
   const remotes = mkdtempSync(join(tmpdir(), "trackwall-remotes-"));
   const workspace = new Workspace({
+    inContainer: false,
     file: new WorkspaceFile(file),
     vcs: new Vcs(systemTempFolder),
     hosting: fakeHosting().hosting,
@@ -333,6 +334,7 @@ describe("sync of all repos", () => {
       await finished(workspace);
 
       const empty = new Workspace({
+        inContainer: false,
         file: new WorkspaceFile(join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml")),
         vcs: new Vcs(systemTempFolder),
         hosting: fakeHosting().hosting,

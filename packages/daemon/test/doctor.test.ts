@@ -26,6 +26,7 @@ function fakeDeps(overrides: Partial<DoctorDeps>): DoctorDeps {
     projectsDir: async () => null,
     repoHosts: () => [],
     mountTable: async () => null,
+    unpushedWork: async () => ({ inContainer: false, repos: [], unreadable: [] }),
     workspaceFile: join(tmpdir(), "trackwall-doctor-no-such-workspace.yaml"),
     workspaceKeys: () => ({ keys: [], unknown: [] }),
     javaNavigation: () => null,
@@ -54,6 +55,7 @@ function doctorFacade(o: Setup) {
   if (o.copilotConfig !== null)
     writeFileSync(join(copilotHome, "config.json"), o.copilotConfig.replace("<projects>", JSON.stringify(projects).slice(1, -1)));
   const facade = createFacade({
+    inContainer: false,
     home,
     homeFrom: "flag",
     openUrl: () => {},
@@ -138,7 +140,7 @@ describe("doctor", () => {
     await facade.workspace.setProjectsDir(projects);
     expect((await facade.doctor.run()).checks.some((c) => c.id === "java-navigation")).toBe(false);
     const java = join(projects, "jdk", "bin", "java");
-    facade.workspace.setJavaNavigation({ jdtls: join(projects, "jdtls"), java, lombok: null });
+    facade.workspace.setJavaNavigation({ jdtls: join(projects, "jdtls"), java, lombok: null, runtimes: [] });
     expect((await facade.doctor.run()).checks.find((c) => c.id === "java-navigation")).toEqual({
       id: "java-navigation",
       status: "fail",

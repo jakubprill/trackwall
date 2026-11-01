@@ -4,6 +4,7 @@ import { git, knownDefaultBranch, revParse, symbolicRef } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { parseStatus } from "./parse.ts";
 import { pathKey } from "./path-key.ts";
+import { listWorktrees } from "./worktree-list.ts";
 
 /**
  * Agent task worktrees (§4.4, ADR-31): the task branch in a separate working directory (in the task worktrees folder, ADR-84),
@@ -84,13 +85,8 @@ export async function removeWorktree(repoDir: string, path: string): Promise<voi
 
 /** Whether `path` is a worktree of the repo according to `git worktree list`. */
 async function isRegistered(repoDir: string, path: string): Promise<boolean> {
-  const { stdout } = await git(repoDir, ["worktree", "list", "--porcelain"]);
   const target = await pathKey(path);
-  const listed = stdout
-    .toString("utf8")
-    .split("\n")
-    .filter((line) => line.startsWith("worktree "));
-  for (const line of listed) if ((await pathKey(line.slice("worktree ".length))) === target) return true;
+  for (const worktree of await listWorktrees(repoDir)) if ((await pathKey(worktree.path)) === target) return true;
   return false;
 }
 

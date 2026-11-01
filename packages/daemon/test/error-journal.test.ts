@@ -23,6 +23,7 @@ let mcp: Client;
 
 function newFacade(): Facade {
   return createFacade({
+    inContainer: false,
     home,
     homeFrom: "flag",
     openUrl: () => {},

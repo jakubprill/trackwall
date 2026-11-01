@@ -23,6 +23,7 @@ test(
     createDemoWorkspace(projects);
     const vcs = new Vcs(systemTempFolder);
     const workspace = new Workspace({
+      inContainer: false,
       file: new WorkspaceFile(join(home, "workspace.yaml")),
       vcs,
       hosting: fakeHosting().hosting,

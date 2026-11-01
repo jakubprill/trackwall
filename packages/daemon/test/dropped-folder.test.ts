@@ -12,6 +12,7 @@ import { fakeHosting } from "./support/hosting.ts";
 function newWorkspace() {
   const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
   return new Workspace({
+    inContainer: false,
     file: new WorkspaceFile(file),
     vcs: new Vcs(systemTempFolder),
     hosting: fakeHosting().hosting,
@@ -91,6 +92,7 @@ describe("dropped folder", () => {
     const projects = tempDir("trackwall-projects-");
     writeFileSync(join(dir, "workspace.yaml"), `projectsDir: ${JSON.stringify(projects + sep)}\n`);
     const workspace = new Workspace({
+      inContainer: false,
       file: new WorkspaceFile(join(dir, "workspace.yaml")),
       vcs: new Vcs(systemTempFolder),
       hosting: fakeHosting().hosting,

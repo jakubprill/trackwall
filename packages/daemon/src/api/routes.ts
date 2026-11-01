@@ -58,6 +58,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(workspaceApi.tree, (f, b) => f.workspace.tree(b.repo, b.path)),
   route(workspaceApi.file, (f, b) => f.workspace.file(b.repo, b.path)),
   route(workspaceApi.changes, (f, b) => f.workspace.changes(b.repo)),
+  route(workspaceApi.unpushedWork, (f) => f.workspace.unpushedWork()),
   route(workspaceApi.openLink, (f, b) => {
     f.openLink(b.url);
     return null;

@@ -9,7 +9,7 @@ import { type ApiServer, startApi } from "./api/server.ts";
 import { isUiDir } from "./api/static.ts";
 import { createErrorJournal, createFacade, type Facade, HOSTING_CLIS } from "./facade.ts";
 import { ADDRESS_COMMAND, type CommandLine, type DaemonArgs, MCP_STDIO_COMMAND, parseCommandLine, USAGE } from "./infra/args.ts";
-import { desktopOpeners, devContainerFolder, hasDesktop, ownContainer } from "./infra/desktop.ts";
+import { CONTAINER_MARKERS, desktopOpeners, devContainerFolder, hasDesktop, ownContainer } from "./infra/desktop.ts";
 import { daemonPageAddress, newToken, probeRunningDaemon, watchDaemonFile, withStartLock, writeDaemonFile } from "./infra/discovery.ts";
 import { watchEventLoopStalls } from "./infra/event-loop-stalls.ts";
 import { resolveTrackwallHome, trackwallHome } from "./infra/home.ts";
@@ -94,6 +94,7 @@ async function start(
       homeFrom: resolveTrackwallHome(args.home).from,
       openUrl: openers.openUrl,
       openFolder: openers.openFolder,
+      inContainer: CONTAINER_MARKERS.some((marker) => existsSync(marker)),
       miseCommand: ["mise"],
       copilotCommand: ["copilot"],
       version: VERSION,

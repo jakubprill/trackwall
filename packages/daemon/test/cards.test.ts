@@ -17,6 +17,7 @@ async function setup(vcs: Vcs = new Vcs(systemTempFolder)) {
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
   const file = new WorkspaceFile(join(home, "workspace.yaml"));
   const workspace = new Workspace({
+    inContainer: false,
     file,
     vcs,
     hosting: fakeHosting().hosting,

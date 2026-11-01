@@ -26,6 +26,7 @@ async function workspaceWithRepo() {
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
   const vcs = new Vcs(systemTempFolder);
   const workspace = new Workspace({
+    inContainer: false,
     file: new WorkspaceFile(file),
     vcs,
     hosting: fakeHosting().hosting,

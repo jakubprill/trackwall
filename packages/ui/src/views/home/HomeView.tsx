@@ -12,10 +12,12 @@ import { listNeedsSettings } from "@/lib/repo-status";
 import { GRAPH_PACE, REPO_LIST_PACE } from "@/lib/repo-watch";
 import type { SessionSelection } from "@/lib/session-entries";
 import type { SettingsCategory } from "@/lib/settings-categories";
+import { unpushedRows } from "@/lib/unpushed-work";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { useRepoList } from "@/lib/use-repo-list";
 import type { RepoWatchHandle } from "@/lib/use-repo-watch";
 import { useRunningMiseTasks } from "@/lib/use-running-mise-tasks";
+import { useUnpushedWork } from "@/lib/use-unpushed-work";
 import { HomeDetails } from "./HomeDetails.tsx";
 import { HomeHoverCard } from "./HomeHoverCard.tsx";
 import { NeedsYouPanel } from "./NeedsYouPanel.tsx";
@@ -63,6 +65,8 @@ export function HomeView({
     repoWatch.options(GRAPH_PACE),
   );
   const running = useRunningMiseTasks(conn, runningLive);
+  const unpushed = useUnpushedWork(conn, repoWatch.options(REPO_LIST_PACE));
+  const unpushedList = useMemo(() => unpushedRows(unpushed.data), [unpushed.data]);
   const [selected, setSelected] = useState<HomeKey | null>(null);
   const [hovered, setHovered] = useState<HomeKey | null>(null);
   const [unavailable, setUnavailable] = useState<string>();
@@ -130,6 +134,7 @@ export function HomeView({
         model={model}
         sessions={lookup.sessions}
         proposals={sessions.data?.proposals ?? []}
+        unpushed={unpushedList}
         selected={current}
         onSelect={setSelected}
         onOpen={open}

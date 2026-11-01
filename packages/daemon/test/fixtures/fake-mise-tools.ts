@@ -1,7 +1,9 @@
 // A fake `mise` for installing one tool outside a repo (ADR-123): `install <tool>@<version>` makes
-// `<FAKE_MISE_INSTALLS>/<tool>@<version>/bin/java` (`java.exe` on Windows) and appends `MISE_CEILING_PATHS` and the working
+// `<FAKE_MISE_INSTALLS>/<tool>@<version>/bin/java` (`java.exe` on Windows) with a JDK's `release` file naming the
+// version's major (`temurin-17` is `JAVA_VERSION="17.0.0"`) and appends `MISE_CEILING_PATHS` and the working
 // directory to `<FAKE_MISE_INSTALLS>/calls.log`; `where <tool>@<version>` prints that folder once it is installed and fails
-// like mise otherwise. With `FAKE_MISE_INSTALL_ERROR` set, `install` prints it as mise's error and ends with code 1.
+// like mise otherwise. With `FAKE_MISE_INSTALL_ERROR` set, `install` prints it as mise's error and ends with code 1, for
+// every tool, or only for `<tool>@<version>` when it starts with that and a colon (`java@temurin-8: no build`).
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -14,13 +16,14 @@ const dir = join(installs, spec);
 if (command === "install") {
   appendFileSync(join(installs, "calls.log"), `${JSON.stringify({ ceiling: process.env.MISE_CEILING_PATHS, cwd: process.cwd() })}\n`);
   const error = process.env.FAKE_MISE_INSTALL_ERROR;
-  if (error !== undefined) {
+  if (error !== undefined && (!/^\S+@\S+: /.test(error) || error.startsWith(`${spec}: `))) {
     console.error(`mise ERROR ${error}`);
     console.error("mise ERROR Run with --verbose or MISE_VERBOSE=1 for more information");
     process.exit(1);
   }
   mkdirSync(join(dir, "bin"), { recursive: true });
   writeFileSync(join(dir, "bin", process.platform === "win32" ? "java.exe" : "java"), "");
+  writeFileSync(join(dir, "release"), `JAVA_VERSION="${/(\d+)$/.exec(spec)?.[1] ?? "0"}.0.0"\n`);
 } else if (command === "where") {
   if (!existsSync(dir)) {
     console.error(`mise ERROR ${spec} is not installed`);
