@@ -21,6 +21,7 @@ import {
   mcpTools,
   RepoCardResult,
   SearchCodeResult,
+  SearchCommitsResult,
   Subgraph,
   WhoCallsResult,
   workspaceApi,
@@ -103,6 +104,7 @@ describe("MCP server over Streamable HTTP", () => {
       "subgraph_for",
       "find_endpoint",
       "search_code",
+      "search_commits",
       "list_sessions",
       "get_session",
       "get_day_report",
@@ -293,6 +295,23 @@ describe("MCP server over Streamable HTTP", () => {
     // A newline would make git search for every line of the pattern separately.
     const multiline = await client.callTool({ name: "search_code", arguments: { pattern: "BFF\nfor" } });
     expect(multiline.isError).toBe(true);
+    await client.close();
+  });
+
+  test("search_commits finds commits by message in the history of every repo, and the tag filter and an unknown repo work as in search_code", async () => {
+    const client = await connectHttpClient(api.port, TOKEN);
+    const search = async (args: Record<string, unknown>) =>
+      SearchCommitsResult.parse((await client.callTool({ name: "search_commits", arguments: args })).structuredContent);
+
+    const found = await search({ message: "first" });
+    expect(found.commits.map((c) => [c.repo, c.hash, c.subject, c.files])).toEqual([
+      ["orders-bff", gitIn(orders, "rev-parse", "HEAD").trim(), "first commit", ["README.md", "pom.xml", "src/app.ts"]],
+    ]);
+    expect((await search({ text: "x", tags: ["frontend"] })).searched).toEqual([]);
+    const unknown = await client.callTool({ name: "search_commits", arguments: { repos: ["missing"] } });
+    expect(unknown.content).toEqual([{ type: "text", text: 'not_found: no repo "missing" in the projects folder' }]);
+    const badDate = await client.callTool({ name: "search_commits", arguments: { since: "last week" } });
+    expect(badDate.isError).toBe(true);
     await client.close();
   });
 

@@ -163,6 +163,10 @@ _Avoid_: check, CI, validation (that is a schema at the point of entry)
 A fixed string or a regular expression in the files of the latest commit of many repos of the projects folder at once, through `git grep` (ADR-40); a match (`CodeMatch`) is a repo, path, line, column and context lines. It does not see uncommitted changes, just like browsing a repo.
 _Avoid_: grep (the tool underneath), index (there is none)
 
+**Commit search** (`searchCommits`, MCP tool `search_commits`, result `SearchCommitsResult`):
+The commits of the history of the latest commit of many repos at once that add or remove a text, or match a message, author, paths or date, through `git log` (ADR-149); a found commit (`FoundCommit`) is a repo, hash, author, date, subject and changed files. Newest first across all repos.
+_Avoid_: history search, blame (another git command), log (the process logs of `logs`)
+
 **Task worktrees folder** (`worktreesDir` in `workspace.yaml` and `tasks.json`):
 The folder new task worktrees go into (ADR-84): the user's setting, or by default `.trackwall/worktrees` in the projects folder, which the repo list skips. Never the projects folder itself, a folder inside one of its repos, or a folder of `.trackwall` other than `.trackwall/worktrees`. Each task keeps the folder it was created in, so changing the setting moves no existing worktree.
 
