@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type CardWarmupProgress, DaemonEvent, type RunningMiseTask, type SessionList } from "@trackwall/protocol";
+import { type CardWarmupProgress, DaemonEvent, type RunningMiseTask, type SessionList, type TaskOutcome } from "@trackwall/protocol";
 import { EventHub } from "../src/api/event-hub.ts";
 import type { Facade } from "../src/facade.ts";
 
@@ -22,6 +22,7 @@ function fakeFacade(state: {
   warmup?: () => CardWarmupProgress;
   board?: () => number;
   mcpCalls?: () => number;
+  outcomes?: () => TaskOutcome[];
 }): Facade {
   return {
     agents: { sessionsWithoutCycle: state.sessions },
@@ -30,6 +31,7 @@ function fakeFacade(state: {
     cards: { warmupProgress: state.warmup ?? (() => IDLE_WARMUP) },
     board: { revision: state.board ?? (() => 0) },
     mcpAudit: { revision: state.mcpCalls ?? (() => 0) },
+    taskOutcomes: state.outcomes ?? (() => []),
   } as unknown as Facade;
 }
 
@@ -59,6 +61,7 @@ describe("the /ws event source", () => {
       { type: "cards.warmup.changed", payload: IDLE_WARMUP },
       { type: "board.changed", payload: { revision: 0 } },
       { type: "mcp.calls.changed", payload: { revision: 0 } },
+      { type: "task-outcomes.changed", payload: [] },
     ]);
 
     await tick();
@@ -122,15 +125,17 @@ describe("the /ws event source", () => {
       { type: "cards.warmup.changed", payload: IDLE_WARMUP },
       { type: "board.changed", payload: { revision: 0 } },
       { type: "mcp.calls.changed", payload: { revision: 0 } },
+      { type: "task-outcomes.changed", payload: [] },
     ]);
     unsubscribe();
     unsubscribeLate();
   });
 
-  test("a new repo revision, the warm-up progress, a board change and a new MCP call reach the listener as their own events", async () => {
+  test("a new repo revision, the warm-up progress, a board change, a task outcome and a new MCP call reach the listener as their own events", async () => {
     let revision = 0;
     let warmup = IDLE_WARMUP;
     let board = 0;
+    let outcomes: TaskOutcome[] = [];
     let mcpCalls = 0;
     const hub = new EventHub({
       facade: fakeFacade({
@@ -140,6 +145,7 @@ describe("the /ws event source", () => {
         warmup: () => warmup,
         board: () => board,
         mcpCalls: () => mcpCalls,
+        outcomes: () => outcomes,
       }),
       log: () => {},
     });
@@ -150,6 +156,7 @@ describe("the /ws event source", () => {
     warmup = { running: true, done: 3, total: 10 };
     board = 1;
     mcpCalls = 1;
+    outcomes = [{ task: "3f2a9c1e-0000-4000-8000-000000000000", repo: "shop", verification: "passed", mergeRequest: null }];
     await tick();
 
     expect(client.events.slice(6)).toEqual([
@@ -157,6 +164,7 @@ describe("the /ws event source", () => {
       { type: "cards.warmup.changed", payload: { running: true, done: 3, total: 10 } },
       { type: "board.changed", payload: { revision: 1 } },
       { type: "mcp.calls.changed", payload: { revision: 1 } },
+      { type: "task-outcomes.changed", payload: outcomes },
     ]);
     unsubscribe();
   });

@@ -36,6 +36,7 @@ import { useRepoWatch } from "@/lib/use-repo-watch";
 import { useSessionTree } from "@/lib/use-session-tree";
 import { useSessions } from "@/lib/use-sessions";
 import { useTabAttention } from "@/lib/use-tab-attention";
+import { useTaskOutcomes } from "@/lib/use-task-outcomes";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { zoomStepOf, zoomWindow } from "@/lib/zoom-shortcut";
 import { GraphView } from "@/views/graph/GraphView";
@@ -142,6 +143,7 @@ export function App() {
   const warmupLive = useMemo(() => events?.feed("cards.warmup.changed"), [events]);
   const boardLive = useMemo(() => events?.feed("board.changed"), [events]);
   const mcpCallsLive = useMemo(() => events?.feed("mcp.calls.changed"), [events]);
+  const outcomes = useTaskOutcomes(conn, events);
   const appUpdate = useAppUpdate(sessions.data && agentsInTurn(sessions.data.sessions));
   const tree = useSessionTree(sessions);
   const { rows } = tree;
@@ -179,7 +181,7 @@ export function App() {
     openRepos(jump.id);
   });
   // In a browser tab the page does what the shell does above: the count in the title and a notification (ADR-146).
-  useTabAttention(sessions.data, openInSessions);
+  useTabAttention(sessions.data, outcomes.list, openInSessions);
   // Alt+J and Alt+0 from every view.
   useWindowShortcuts(
     (event) => {
@@ -277,6 +279,7 @@ export function App() {
                     onShowImpact={showImpact}
                     tree={tree}
                     supervisor={supervisor}
+                    outcomes={outcomes.byTask}
                     layout={sessionLayout}
                     onLayout={setSessionLayout}
                   />

@@ -58,6 +58,8 @@ export function useTaskDetails({
   // A run the verification section shows with its log and Cancel is left out of the mise tasks, so it is not listed twice.
   const miseRuns = (running.data ?? []).filter((r) => r.task === id && r.miseTask !== verification.runningMiseTask);
   const mergeRequestShown = (mergeRequest.state?.push?.commits ?? 0) > 0;
+  const { project, lookup } = mergeRequest.state ?? {};
+  const foundMergeRequest = project && lookup?.kind === "found" ? { project, mergeRequest: lookup.mergeRequest } : null;
   const notices = !task
     ? []
     : taskNotices({
@@ -67,6 +69,7 @@ export function useTaskDetails({
         miseConfig: shownMiseConfig(miseConfig),
         verification: verification.verification,
         mergeRequest: mergeRequestShown,
+        foundMergeRequest,
         miseRuns: miseRuns.map((r) => r.miseTask),
       });
   return {

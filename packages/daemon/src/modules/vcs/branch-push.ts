@@ -32,9 +32,10 @@ export async function branchOnRemote(dir: string, branch: string, base: string):
  * Pushes `branch` to the main remote. Refused unless every address git would push to (`pushurl`s, or every `url` without
  * one, after `pushInsteadOf`) is the address it fetches from, over HTTPS or SSH: the user approved the repo host the panel
  * names, and a local path, `ext::` or `git://` would let configuration run a program or reach a repo the agent wrote.
- * Git updates the remote-tracking branch itself, so the next read sees the push.
+ * Git updates the remote-tracking branch itself, so the next read sees the push. `source` is the commit to push in place
+ * of the branch's own, the task's squashed history (ADR-168), which the caller moves the branch to after the push.
  */
-export async function pushBranch(dir: string, branch: string): Promise<void> {
+export async function pushBranch(dir: string, branch: string, source?: string): Promise<void> {
   const config = await readConfig(dir);
   const remote = mainRemote(config);
   if (!remote) throw new Error("the repo has neither an origin remote nor a single other remote");
@@ -53,7 +54,7 @@ export async function pushBranch(dir: string, branch: string): Promise<void> {
     );
   const ref = `refs/heads/${branch}`;
   await withoutHooks((hooksPath) =>
-    git(dir, ["push", "--no-follow-tags", "--no-recurse-submodules", "--", remote.name, `${ref}:${ref}`], {
+    git(dir, ["push", "--no-follow-tags", "--no-recurse-submodules", "--", remote.name, `${source ?? ref}:${ref}`], {
       timeoutMs: PUSH_TIMEOUT_MS,
       network: { sshCommand: config.sshCommand },
       config: [hooksPath, `remote.${remote.name}.receivepack=git-receive-pack`, "push.gpgSign=false"],

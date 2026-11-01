@@ -236,7 +236,7 @@ function selects(selection: Exclude<SessionSelection, undefined | { kind: "new" 
 }
 
 /** The tabs of a task's panel: its session terminal, its worktree changes and its impact on other repos (ADR-147). */
-export type TaskTab = "terminal" | "changes" | "impact" | "mcp-calls";
+export type TaskTab = "terminal" | "changes" | "rounds" | "impact" | "mcp-calls";
 
 /** The tab a selection opens a task's panel on; `undefined` leaves the panel's own choice. */
 export function selectedTaskTab(selection: SessionSelection): TaskTab | undefined {

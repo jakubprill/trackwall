@@ -318,9 +318,9 @@ const runs: ToolRuns = {
     const outcome = await facade.agents.waitFor(caller, target, timeoutSeconds * 1000, signal);
     return { ...outcome, session: outcome.session && agentSession(outcome.session) };
   },
-  runMiseTask: async (facade, { repo, task, miseTask }, { caller }) => {
+  runMiseTask: async (facade, { repo, task, miseTask, arguments: args }, { caller }) => {
     const target = callerTarget(facade, caller, repo, task, MISE_TASK_ACTION);
-    return { run: await facade.agents.runNeedingMiseTrust(caller, target, () => facade.mise.start(target, miseTask)) };
+    return { run: await facade.agents.runNeedingMiseTrust(caller, target, () => facade.mise.start(target, miseTask, { args })) };
   },
   stopMiseTask: async (facade, { repo, task, miseTask }, { caller }) => ({
     run: await facade.mise.stop(callerTarget(facade, caller, repo, task, MISE_TASK_ACTION), miseTask),

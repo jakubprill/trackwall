@@ -22,6 +22,8 @@ export function miseTaskOriginLabel(task: Pick<MiseTask, "origin" | "source">): 
       return { label: "local", local: true, title: `Defined in ${file}, which git does not keep: only this clone has it` };
     case "outside":
       return { label: "outside repo", local: false, title: `Defined in ${file}, outside the repo` };
+    case "convention":
+      return { label: "convention", local: false, title: `Trackwall's convention task, from ${file} in the projects folder` };
     case null:
       return null;
   }

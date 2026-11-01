@@ -42,9 +42,10 @@ export function miseTargetKey({ repo, task }: MiseTarget): string {
 /**
  * Where a mise task is defined (ADR-110): `repo` in a file the repo's git tracks, `local` in a file of the repo git does
  * not track (`mise.local.toml`, a `mise.toml` kept out of git, a file mise task nobody committed), `outside` in a mise
- * config outside the repo (the user's global config, a parent folder's).
+ * config outside the repo (the user's global config, a parent folder's), `convention` in the convention tasks file Trackwall
+ * wrote into the projects folder (ADR-157).
  */
-export const MiseTaskOrigin = z.enum(["repo", "local", "outside"]);
+export const MiseTaskOrigin = z.enum(["repo", "local", "outside", "convention"]);
 export type MiseTaskOrigin = z.infer<typeof MiseTaskOrigin>;
 
 export const MiseTask = z.object({
@@ -57,6 +58,11 @@ export const MiseTask = z.object({
   source: z.string().nullable(),
   /** Where `source` is; `null` when it is unknown. */
   origin: MiseTaskOrigin.nullable(),
+  /**
+   * The mise task's usage spec (its `usage` field or `#USAGE` lines) as mise gives it, which declares the arguments a run
+   * may pass (ADR-158); `null` when the mise task declares none, and then a run takes no arguments.
+   */
+  usage: z.string().nullable(),
   /** The last run since the daemon started; `null` when the mise task was not run. */
   run: RunState.nullable(),
 });
@@ -88,6 +94,39 @@ export type MiseTasks = z.infer<typeof MiseTasks>;
 export const RunningMiseTask = z.object({ repo: RepoId, task: TaskId.nullable(), miseTask: MiseTaskName, run: RunState });
 export type RunningMiseTask = z.infer<typeof RunningMiseTask>;
 
+/**
+ * One argument of a mise task run (ADR-158), such as a test filter: `mise run <task> <argument>…`, for a mise task that
+ * declares its arguments in a usage spec. The characters are those of class, method, file and module names and test
+ * patterns, and nothing a shell or `cmd.exe` treats specially (no space, quote, `$`, `%`, `&`, `|`, `;`, `<`, `>`, `^`,
+ * `!`, parentheses or backslash), so a value a task's script quotes stays one word. Unquoted it does not: `sh` expands a `*`
+ * to file names and `cmd.exe` splits a batch file's arguments at `,` and `=`, which a script that uses the value unquoted
+ * takes on itself; the convention tasks quote it (ADR-157).
+ * No leading `-`, so mise never takes it for an option, and no `:`, so never for its `:::` task separator.
+ */
+export const MiseRunArgument = z
+  .string()
+  .regex(
+    /^[A-Za-z0-9_.,/=#*@+][A-Za-z0-9_.,/=#*@+-]{0,199}$/,
+    "a mise task argument is 1 to 200 letters, digits or _ . , / = # * @ + -, and does not start with -",
+  );
+
+/** At most 8 arguments of one run (ADR-158). */
+export const MiseRunArguments = z.array(MiseRunArgument).max(8);
+export type MiseRunArguments = z.infer<typeof MiseRunArguments>;
+
+/**
+ * The convention tasks file (ADR-157): mise tasks `setup`, `build` and `test` for Maven, Gradle and npm projects that
+ * Trackwall writes into the projects folder, where mise reads it for every repo below; a repo's own mise task of the same
+ * name wins. `absent`: no file; `current`: the file is the one this Trackwall writes; `changed`: the file differs (the
+ * user edited it, or an older Trackwall wrote it), and Trackwall leaves it as it is.
+ */
+export const ConventionTasksState = z.object({
+  state: z.enum(["absent", "current", "changed"]),
+  /** The file's full path. */
+  path: z.string(),
+});
+export type ConventionTasksState = z.infer<typeof ConventionTasksState>;
+
 const endpoint = apiEndpoints("mise");
 
 /** `task`: a mise task in that task's worktree (ADR-59); the repo root without it. */
@@ -99,11 +138,19 @@ export const miseApi = {
   running: endpoint("running", z.object({}).strict(), z.array(RunningMiseTask)),
   /**
    * Starts a mise task in a process group (`mise run <task>` in the repo root, or in the worktree of `task`, ADR-59);
-   * a task already running returns its state.
+   * a task already running returns its state. `arguments` go after the mise task's name, only for a mise task with a
+   * usage spec (ADR-158).
    */
-  start: endpoint("start", MiseTaskRequest, RunState),
+  start: endpoint("start", MiseTaskRequest.extend({ arguments: MiseRunArguments.default([]) }).strict(), RunState),
   /** Returns after confirming that no process of the group is alive; a mise task that already ended returns its state. */
   stop: endpoint("stop", MiseTaskRequest, RunState),
   /** `mise trust` in the repo root: the user's consent to the repo's mise config. Only from the UI, never from MCP (§8). */
   trust: endpoint("trust", z.object({ repo: RepoId }).strict(), MiseTasks),
+  /** The state of the convention tasks file in the projects folder (ADR-157). */
+  conventionTasks: endpoint("convention-tasks", z.object({}).strict(), ConventionTasksState),
+  /**
+   * Writes the convention tasks file when it is absent and trusts it (`mise trust <file>`): the user's consent. Only from
+   * the UI, never from MCP. A file that is already there is left as it is (`bad_request` when it differs).
+   */
+  writeConventionTasks: endpoint("write-convention-tasks", z.object({}).strict(), ConventionTasksState),
 };
