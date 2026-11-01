@@ -27,6 +27,7 @@ import { mapLimit } from "../../infra/map-limit.ts";
 import { ensureTrackwallDir, trackwallDir } from "../../infra/trackwall-dir.ts";
 import { approvalArgs } from "./copilot-command.ts";
 import type { LspServer } from "./copilot-plugin.ts";
+import { type EndedTaskFacts, type EndedTaskGit, endedTaskFacts } from "./ended-task.ts";
 import {
   JAVA_LSP_SERVER,
   type JavaNavigationReadiness,
@@ -79,7 +80,7 @@ interface TaskPendingWork {
 }
 
 /** What tasks need from `vcs` (worktrees and branches, ADR-31); wired in the facade. */
-export interface TasksVcs extends HandoffGit {
+export interface TasksVcs extends HandoffGit, EndedTaskGit {
   defaultBase(dir: string): Promise<TaskBase>;
   addWorktree(repoDir: string, path: string, branch: string, commit: string): Promise<void>;
   /** With the SHA-256 of each included file's content as the root had it (`sha256` by path). */
@@ -542,9 +543,10 @@ export class AgentTasks {
   /**
    * Ending a task: removes the worktree, and without `keepBranch` also the branch. Uncommitted files and commits outside
    * the branch, and when removing the branch also the task's commits, are lost only with `discardChanges`; otherwise
-   * `unsaved_changes` with what would be lost.
+   * `unsaved_changes` with what would be lost. Returns the facts of the ended task for the task journal (ADR-150),
+   * read from its worktree before it goes.
    */
-  remove(id: string, keepBranch: boolean, discardChanges: boolean): Promise<void> {
+  remove(id: string, keepBranch: boolean, discardChanges: boolean): Promise<EndedTaskFacts> {
     const task = this.#get(id);
     return this.#exclusive(id, async () => {
       this.#refuseRunning(task, "ending it");
@@ -553,13 +555,16 @@ export class AgentTasks {
           "bad_request",
           `a process started by Trackwall still runs in the worktree of task ${task.branch}; stop it before ending the task`,
         );
-      await this.#whileRemoving(id, async () => {
+      const facts = await this.#whileRemoving(id, async () => {
         if (!discardChanges) await this.#refuseLoss(task, keepBranch);
+        const ended = await endedTaskFacts(task, keepBranch, new Date(), this.#deps.vcs, this.#deps.log);
         await this.#discard(task, keepBranch);
+        return ended;
       });
       this.#closeSessions(task);
       this.#save(this.#tasks.filter((t) => t.id !== id));
       if (task.javaNavigation) await this.#removeLanguageServerData(task);
+      return facts;
     });
   }
 
@@ -573,11 +578,11 @@ export class AgentTasks {
   }
 
   /** A `job` that deletes the worktree only once git has stopped reading it; a new change computation meanwhile refuses. */
-  async #whileRemoving(id: string, job: () => Promise<void>): Promise<void> {
+  async #whileRemoving<T>(id: string, job: () => Promise<T>): Promise<T> {
     this.#removing.add(id);
     try {
       await Promise.allSettled(this.#reading.get(id) ?? []);
-      await job();
+      return await job();
     } finally {
       this.#removing.delete(id);
     }

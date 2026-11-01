@@ -77,6 +77,9 @@ _Avoid_: workspace (that is a separate term, see below)
 **Daemon token**:
 The secret from `~/.trackwall/daemon.json` with which the UI, the shell and the stdio bridge authenticate to the API and the MCP server; Trackwall sessions do not get it (ADR-138).
 
+**Page address** (`daemonPageAddress`, `trackwall-daemon address`):
+The address of the daemon's page with the daemon token in its fragment, `http://127.0.0.1:<port>/#token=…`, which opens Trackwall in a browser; the page moves the token out of the address bar into its storage (ADR-161). The desktop app takes the same address for a remote daemon (ADR-130).
+
 **MCP server** (`/mcp`, `createMcpEndpoint`):
 The part of the daemon through which agents read its state with MCP tools; the same port as the API, with the daemon token or a Trackwall session's own token (§5.3, ADR-24, ADR-138).
 
@@ -163,6 +166,14 @@ _Avoid_: check, CI, validation (that is a schema at the point of entry)
 A fixed string or a regular expression in the files of the latest commit of many repos of the projects folder at once, through `git grep` (ADR-40); a match (`CodeMatch`) is a repo, path, line, column and context lines. It does not see uncommitted changes, just like browsing a repo.
 _Avoid_: grep (the tool underneath), index (there is none)
 
+**Commit search** (`searchCommits`, MCP tool `search_commits`, result `SearchCommitsResult`):
+The commits of the history of the latest commit of many repos at once that add or remove a text, or match a message, author, paths or date, through `git log` (ADR-149); a found commit (`FoundCommit`) is a repo, hash, author, date, subject and changed files. Newest first across all repos.
+_Avoid_: history search, blame (another git command), log (the process logs of `logs`)
+
+**Task journal** (`TaskJournal`, `task-journal.jsonl`, MCP tool `search_task_history`, record `EndedTask`):
+A record of every task the user has ended: its prompt, the session's last summary, the commits and files on its branch and its last verdict, taken when the task ends (ADR-150). Agents search it by words to learn how a similar change was done before.
+_Avoid_: task history (only in the tool name), archive, log (the process logs of `logs`)
+
 **Task worktrees folder** (`worktreesDir` in `workspace.yaml` and `tasks.json`):
 The folder new task worktrees go into (ADR-84): the user's setting, or by default `.trackwall/worktrees` in the projects folder, which the repo list skips. Never the projects folder itself, a folder inside one of its repos, or a folder of `.trackwall` other than `.trackwall/worktrees`. Each task keeps the folder it was created in, so changing the setting moves no existing worktree.
 
@@ -244,6 +255,10 @@ A method and path that an HTTP client calls, with the line in the code, and for 
 
 **Profile** (Spring profile, `ConsumedHttp.profiles`):
 A name from `application-<profile>.yml` or `spring.config.activate.on-profile`; `default` is the configuration without a profile. A client with an address from configuration has a separate entry for every profile in which the address is different.
+
+**App configuration** (`AppConfig`, MCP tool `get_app_config`):
+One profile's view of a repo's Spring configuration files as they are on disk now, in the repo root or a task's worktree, with uncommitted and git-ignored files (ADR-153): every key with its expanded value, file and line, and the environment variables its placeholders read. A secret (a key such as `password`, `client-secret` or `api-key`) has no value in it, only whether it is set (`set`), and a variable only whether a run there has it. Unlike the card, it is not read from a commit.
+_Avoid_: app config dump, properties, env (the environment is only judged, never shown)
 
 **Required tool** (`ToolRequirement`):
 A tool and version from mise configuration or `.tool-versions` (source `mise`) or from a file that gives the version in its own way (`.nvmrc`, the Maven wrapper, `engines.node`; source `hint`).
@@ -489,6 +504,14 @@ _Avoid_: read, acknowledged
 
 **Idle** (`isIdle`, `IDLE_LABEL`, dashboard state `idle`):
 A running session in `Input` the user has already seen (ADR-47): the agent waits for the next prompt, but no longer waits for you. Shown as "idle" in Sessions and in calm grey on the dashboard.
+
+**May be stuck** (`Session.stuck`, `SessionStuck`, `sessionStuck`, `STUCK_AFTER_MS`, `STUCK_LABEL`; "may be stuck" in the UI):
+A running session in the middle of a turn (`Working` or `Stale`) whose agent has taken no step for 15 minutes: no hook, ACP update or key from the user, a key counting only once a hook has come (ADR-151). A hint shown in place of the state, not a state of its own.
+_Avoid_: hung, frozen, stale (that is `Stale`, no output at all)
+
+**While you were away** (`AwaySummary`, `awaySummary`, `AwayItem`; an **absence** is `AwayPeriod`, opened by `absenceAt` after `AWAY_AFTER_MS`):
+The strip above the views after the user comes back to Trackwall from 15 minutes without a key, click, scroll, pointer move or a window brought to the front in any of its windows, listing what changed in the session list since then (ADR-151). The user dismisses it.
+_Avoid_: digest, notifications (those are the system's and the browser's), journal
 
 **Conversation view** (`SessionView` `"conversation"`, `ConversationView`, `AcpSession`, `ConversationEntry`; "conversation view" in the UI, and "Chat (preview)" on the control that turns it on):
 How a session shows when the daemon runs Copilot CLI over the Agent Client Protocol (`copilot --acp`) instead of in a terminal (ADR-107): a list of what the user and the agent said and the tools the agent called, its approval and a message box, all plain text in the page. The other `SessionView` is `"terminal"`, the session terminal. The supervisor starts in it when the user turns it on in the supervisor panel, and a task when the user picks it for the task (`Task.view`, ADR-137); a conversation goes on in either view.

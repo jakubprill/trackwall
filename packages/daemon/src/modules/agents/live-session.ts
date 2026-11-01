@@ -22,6 +22,7 @@ import { HookTail } from "./hook-tail.ts";
 import { ReadRequestClock } from "./read-request.ts";
 import { SessionAttention } from "./session-attention.ts";
 import { SessionDialogs, selectsOption } from "./session-dialogs.ts";
+import { sessionStuck } from "./session-stuck.ts";
 import { type ScreenViewer, TerminalScreen } from "./terminal-screen.ts";
 
 /**
@@ -213,6 +214,11 @@ export class LiveSession implements AgentSession {
    * at once with that wait's, so their texts stay together (`SessionDialogs.requested`).
    */
   #requestsGoOn = false;
+  /**
+   * The agent's last step (a hook record) or the user's last key after one, for `SessionStuck` (ADR-151); `undefined`
+   * until the first hook, since without hooks the daemon cannot see the agent's steps.
+   */
+  #lastStepAt: number | undefined;
 
   constructor(o: LiveSessionOptions) {
     this.id = o.id;
@@ -279,7 +285,10 @@ export class LiveSession implements AgentSession {
     }
     if (key && this.#keyChangesState(key, data)) this.#report(this.#state.key(key));
     // After the key's own state change, so that the `Input` an Esc causes counts as seen.
-    if (typedByUser(data)) this.#attention.typed();
+    if (typedByUser(data)) {
+      this.#attention.typed();
+      if (this.#lastStepAt !== undefined) this.#lastStepAt = Date.now();
+    }
   }
 
   /** The agent works on its turn, where an approval may be on the screen before its hook (ADR-71). */
@@ -448,6 +457,7 @@ export class LiveSession implements AgentSession {
       state: this.#last,
       windowTitle: this.#state.windowTitle ?? null,
       needsAttention: run.kind === "running" && this.#attention.waiting(this.#last?.state),
+      stuck: run.kind === "running" ? sessionStuck(this.#last, this.#lastStepAt, Date.now()) : null,
       task: this.task,
       dialog: run.kind === "running" ? this.#dialog() : null,
       environment: this.environment,
@@ -531,6 +541,7 @@ export class LiveSession implements AgentSession {
 
   /** Applies one hook record; true when it ended a turn the user did not drive. */
   #readHook(record: CopilotHookRecord): boolean {
+    this.#lastStepAt = Date.now();
     if (record.event === "userPromptSubmitted") {
       this.#userDraft = false;
       this.#hasConversation = true;

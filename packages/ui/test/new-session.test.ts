@@ -12,6 +12,7 @@ function session(id: string, over: Partial<Session>): Session {
     state: null,
     windowTitle: null,
     needsAttention: false,
+    stuck: null,
     task: null,
     dialog: null,
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
