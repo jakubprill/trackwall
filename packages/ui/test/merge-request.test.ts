@@ -1,13 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { MERGE_REQUEST_DESCRIPTION_MAX, type Task, type TaskBranchPush, type Verification } from "@trackwall/protocol";
-import {
-  branchPushLabel,
-  canPush,
-  mergeRequestDraft,
-  mergeRequestNumber,
-  mergeRequestStateLabel,
-  pipelineLabel,
-} from "../src/lib/merge-request.ts";
+import { branchPushLabel, canPush, mergeRequestDraft, mergeRequestStateLabel, pipelineLabel } from "../src/lib/merge-request.ts";
 
 const task = (fields: Partial<Task> = {}): Task => ({
   id: "t1",
@@ -133,11 +126,6 @@ describe("the task branch against the remote", () => {
 });
 
 describe("the merge request and its pipeline", () => {
-  test("are numbered as each repo host writes them", () => {
-    expect(mergeRequestNumber({ kind: "gitlab", host: "gitlab.example.com", path: "shop/shop" }, 12)).toBe("!12");
-    expect(mergeRequestNumber({ kind: "github", host: "github.com", path: "me/shop" }, 7)).toBe("#7");
-  });
-
   test("a merge and a passed pipeline are good, a failed pipeline is an error, and a closed one has no tone", () => {
     expect(mergeRequestStateLabel("merged")).toEqual({ tone: "ok", label: "merged" });
     expect(mergeRequestStateLabel("closed")).toEqual({ label: "closed" });

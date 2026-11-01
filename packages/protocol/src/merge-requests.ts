@@ -74,6 +74,16 @@ export const HostedProject = z.object({
 });
 export type HostedProject = z.infer<typeof HostedProject>;
 
+/** A pipeline's state in words, the same in the UI and in the supervisor's situation (ADR-156). */
+export function pipelineStateText(state: PipelineState): string {
+  return state === "manual" ? "pipeline waits for a manual job" : `pipeline ${state}`;
+}
+
+/** `!12` on GitLab, `#12` on GitHub, as each host writes it: in the UI and in the supervisor's situation (ADR-156). */
+export function mergeRequestNumber(project: HostedProject, number: number): string {
+  return `${project.kind === "gitlab" ? "!" : "#"}${number}`;
+}
+
 /**
  * The task branch against the main remote, as the last push or fetch left it: Trackwall does not ask the server on
  * every read, so a push by someone else shows only after the next sync or push.

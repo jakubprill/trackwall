@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Session and task start form</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<style>
+/* Layout: the mockup column (the form as in the app) and a narrow column of notes; on a phone one under the other. */
+:root {
+  --bg: var(--background);
+  --fg: var(--foreground);
+  --fill: var(--secondary);
+  --primary-fg: var(--primary-foreground);
+  --warn: var(--warning);
+  --danger: var(--destructive);
+  --ok: var(--success);
+  --line: var(--border);
+  --line-strong: oklch(0.85 0.04 220 / 26%);
+  --grid: var(--grid-line);
+  --sans: var(--font-sans);
+  --mono: var(--font-mono);
+  --r: 6px;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 28px; }
+@media (max-width: 860px) { .page { grid-template-columns: minmax(0, 1fr); } }
+h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; text-wrap: balance; }
+.lede { color: var(--muted-foreground); margin: 0 0 20px; max-width: 65ch; }
+.label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground); }
+.panel { background: color-mix(in oklch, var(--overlay) 55%, transparent); border: 1px solid var(--line); border-radius: var(--r); padding: 20px; display: flex; flex-direction: column; gap: 14px; backdrop-filter: blur(6px); }
+.stack { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+select, textarea {
+  font: inherit; color: var(--fg); background: var(--overlay); border: 1px solid var(--line-strong); border-radius: var(--r);
+}
+select { height: 34px; padding: 0 10px; min-width: 0; max-width: 100%; }
+textarea { width: 100%; padding: 10px 12px; resize: vertical; min-height: 96px; }
+select:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.tag { font-family: var(--mono); font-size: 11px; padding: 2px 7px; border-radius: 99px; border: 1px solid var(--line-strong); color: var(--muted-foreground); }
+.hint { color: var(--muted-foreground); font-size: 12px; }
+kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; }
+
+/* pills */
+.pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.pill {
+  position: relative; display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border-radius: 99px;
+  font: inherit; font-size: 13px; color: var(--muted-foreground); background: transparent; border: 1px dashed var(--line-strong); cursor: pointer;
+}
+.pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line-strong); }
+.pill[aria-pressed="true"] { color: var(--fg); background: color-mix(in oklch, var(--accent) 60%, transparent); border: 1px solid color-mix(in oklch, var(--primary) 45%, transparent); }
+.pill[aria-pressed="true"] .dot { background: var(--primary); box-shadow: 0 0 6px var(--primary); }
+.pill.risky[aria-pressed="true"] { border-color: color-mix(in oklch, var(--warning) 55%, transparent); }
+.pill.risky[aria-pressed="true"] .dot { background: var(--warn); box-shadow: 0 0 6px var(--warn); }
+.pill:disabled { cursor: not-allowed; opacity: 0.55; }
+.pill .cost { font-family: var(--mono); font-size: 11px; color: var(--muted-foreground); }
+.pill:hover:not(:disabled) { border-color: var(--primary); }
+.tip { position: relative; display: inline-flex; }
+.tip .q { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line-strong); color: var(--muted-foreground); font-size: 11px; display: grid; place-items: center; margin-left: -4px; cursor: help; background: var(--bg); }
+.tip .bubble {
+  position: absolute; z-index: 5; bottom: calc(100% + 8px); left: -10px; width: min(300px, 80vw); padding: 10px 12px; font-size: 12px;
+  background: oklch(0.22 0.016 240); border: 1px solid var(--line-strong); border-radius: var(--r); color: var(--fg); display: none;
+}
+.tip:hover .bubble, .tip:focus-within .bubble { display: block; }
+.menu { position: absolute; z-index: 6; top: calc(100% + 6px); left: 0; min-width: 200px; background: oklch(0.22 0.016 240); border: 1px solid var(--line-strong); border-radius: var(--r); padding: 4px; display: flex; flex-direction: column; }
+.menu button { text-align: left; font: inherit; font-size: 13px; color: var(--fg); background: none; border: 0; padding: 6px 10px; border-radius: 4px; cursor: pointer; }
+.menu button:hover { background: var(--fill); }
+.menu .sub { font-family: var(--mono); font-size: 11px; color: var(--muted-foreground); }
+
+.notice { font-size: 12px; padding: 8px 10px; border-radius: var(--r); border: 1px solid; }
+.notice.warn { color: var(--warn); border-color: color-mix(in oklch, var(--warning) 35%, transparent); background: color-mix(in oklch, var(--warning) 6%, transparent); }
+.notice.info { color: var(--muted-foreground); border-color: var(--line); }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.btn { font: inherit; font-weight: 600; height: 34px; padding: 0 16px; border-radius: var(--r); border: 0; background: var(--primary); color: var(--primary-fg); cursor: pointer; }
+.btn.ghost { background: none; color: var(--muted-foreground); font-weight: 400; }
+.cmd { font-family: var(--mono); font-size: 11.5px; color: var(--muted-foreground); background: oklch(0.12 0.005 285); border: 1px solid var(--line); border-radius: var(--r); padding: 8px 10px; overflow-x: auto; white-space: pre; }
+.cmd b { color: var(--primary); font-weight: 400; }
+
+/* proposal card */
+.proposal { border-left: 2px solid var(--primary); }
+.proposal .from { display: flex; align-items: center; gap: 8px; }
+.proposal p { margin: 0; max-width: 65ch; }
+
+/* notes */
+aside { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.note { border-top: 1px solid var(--line); padding-top: 12px; }
+.note h3 { margin: 0 0 4px; font-size: 13px; font-weight: 600; }
+.note p, .note li { margin: 0; color: var(--muted-foreground); font-size: 13px; }
+.note ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.before { font-size: 12px; color: var(--muted-foreground); }
+.before .old { margin-top: 6px; border: 1px dashed var(--line-strong); border-radius: var(--r); padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.before .old span { display: block; height: 8px; border-radius: 3px; background: var(--fill); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="page">
+  <div class="stack">
+    <div>
+      <div class="label">Mockup · reviewed before the code · 2026-10-29</div>
+      <h1>A new start form for sessions and tasks</h1>
+      <p class="lede">Click the pills, change the repo in the list and see how the form adapts. Built in <code>StartOptions</code> of the Sessions view.</p>
+    </div>
+
+    <section class="panel" aria-label="New task or session">
+      <div class="label">New task or session</div>
+      <div class="row">
+        <select id="place" aria-label="Where the agent works">
+          <option value="orders-bff">orders-bff</option>
+          <option value="checkout">checkout</option>
+          <option value="web-shop">web-shop</option>
+          <option value="__folder">No repo: the projects folder</option>
+        </select>
+        <span id="tags" class="row"></span>
+      </div>
+      <textarea id="prompt" aria-label="Prompt for the agent">Add validation of the delivery date to POST /orders, with a test</textarea>
+
+      <div class="pills" id="pills"></div>
+      <div id="notices" class="stack" style="gap:8px"></div>
+
+      <div class="actions">
+        <button class="btn" id="go">Create task</button>
+        <button class="btn ghost">Cancel</button>
+        <span class="hint"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> starts</span>
+      </div>
+      <div class="hint" id="remember">Options as last time in orders-bff.</div>
+      <div class="cmd" id="cmd" aria-label="What Trackwall starts"></div>
+    </section>
+
+    <section class="panel proposal" aria-label="Task proposal">
+      <div class="from"><span class="label">Proposal from the supervisor</span><span class="tag">checkout</span><span class="tag">java</span></div>
+      <p>Review the change in OrdersClient after the new delivery date field; check every caller of OrderDto.</p>
+      <div class="pills" id="ppills"></div>
+      <div class="actions">
+        <button class="btn">Start task</button>
+        <button class="btn ghost">Dismiss</button>
+      </div>
+    </section>
+  </div>
+
+  <aside>
+    <div class="before">
+      <div class="label">Before</div>
+      <div class="old"><span style="width:60%"></span><span style="width:100%;height:40px"></span><span style="width:45%"></span><span style="width:92%"></span><span style="width:88%"></span><span style="width:70%"></span></div>
+      <p>Repo list, prompt, a worktree checkbox, an approvals checkbox and three paragraphs of description. A model only on a proposal.</p>
+    </div>
+    <div class="note">
+      <h3>1. Two things on top</h3>
+      <p>Where and what. Repo tags next to the list, because the pills depend on them.</p>
+    </div>
+    <div class="note">
+      <h3>2. Pills instead of checkboxes</h3>
+      <ul>
+        <li>Each shows its state, a click changes it.</li>
+        <li>A pill appears only when it makes sense: “Java navigation” for the <code>java</code> tag, approvals only with a worktree, almost nothing in the projects folder.</li>
+        <li>A yellow dot means an option with a risk (no approvals, no worktree).</li>
+        <li>The cost next to the pill (RAM, time) instead of a paragraph.</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h3>3. Descriptions behind “?”</h3>
+      <p>Only warnings stay, when something is at risk: two sessions in one working copy, the jdtls limit.</p>
+    </div>
+    <div class="note">
+      <h3>4. Defaults</h3>
+      <p>From Settings, then the last choice in this repo. Usually only the prompt and Ctrl+Enter.</p>
+    </div>
+    <div class="note">
+      <h3>5. Command preview</h3>
+      <p>The grey line at the bottom says what Trackwall actually starts. Open: keep it in the product, or only in a developer mode.</p>
+    </div>
+    <div class="note">
+      <h3>6. Supervisor proposal</h3>
+      <p>The same pills, filled in by the supervisor in <code>propose_task</code>; you change them before the start.</p>
+    </div>
+  </aside>
+</div>
+
+<script>
+const REPOS = {
+  "orders-bff": { tags: ["java", "bff", "backend"], others: 0 },
+  "checkout": { tags: ["java", "backend"], others: 1 },
+  "web-shop": { tags: ["frontend", "typescript"], others: 0 },
+  "__folder": { tags: [], others: 0 },
+};
+const MODELS = [
+  { id: null, label: "Default", sub: "as in Copilot CLI" },
+  { id: "claude-sonnet-4.5", label: "claude-sonnet-4.5", sub: "" },
+  { id: "claude-opus-4.5", label: "claude-opus-4.5", sub: "for a careful review" },
+  { id: "gpt-5", label: "gpt-5", sub: "" },
+];
+const JAVA_RUNNING = 2, JAVA_LIMIT = 3;
+const state = { place: "orders-bff", worktree: true, autoApprove: false, model: null, java: true, menu: false };
+const proposal = { worktree: true, autoApprove: false, model: "claude-opus-4.5", java: true, menu: false };
+const $ = (id) => document.getElementById(id);
+
+function tip(text) {
+  return `<span class="tip"><span class="q" tabindex="0" aria-label="About this option">?</span><span class="bubble">${text}</span></span>`;
+}
+function pill({ key, on, label, cost = "", risky = false, disabled = false, help, extra = "" }) {
+  return `<span class="tip-wrap row" style="gap:0;position:relative">
+    <button class="pill${risky ? " risky" : ""}" data-key="${key}" aria-pressed="${on}" ${disabled ? "disabled" : ""}>
+      <span class="dot"></span>${label}${cost ? ` <span class="cost">${cost}</span>` : ""}
+    </button>${help ? tip(help) : ""}${extra}</span>`;
+}
+function pillsFor(s, place, scope) {
+  const repo = REPOS[place];
+  const folder = place === "__folder";
+  const java = repo.tags.includes("java");
+  const out = [];
+  if (!folder) out.push(pill({ key: "worktree", on: s.worktree, risky: !s.worktree, label: s.worktree ? "Own worktree" : "In the repo's working copy",
+    help: "A new branch in a separate folder. The Changes tab, review, Verify and a merge request work only here. Off: the agent changes your working copy, where your editor is." }));
+  if (!folder && s.worktree) out.push(pill({ key: "autoApprove", on: s.autoApprove, risky: s.autoApprove, label: s.autoApprove ? "No approvals" : "Asks for approvals",
+    help: "No approvals: every tool runs without asking for the whole task, resumes included. Deny rules from workspace.yaml still apply." }));
+  const m = MODELS.find((x) => x.id === s.model);
+  const menu = s.menu ? `<div class="menu" role="menu">${MODELS.map((x) => `<button role="menuitem" data-model="${x.id ?? ""}" data-scope="${scope}">${x.label}${x.sub ? ` <span class="sub">${x.sub}</span>` : ""}</button>`).join("")}</div>` : "";
+  out.push(pill({ key: "model", on: s.model !== null, label: `Model: ${m.label} ▾`, help: "Passed as --model at every start and resume. /model in the terminal changes it until the next resume.", extra: menu }));
+  if (!folder && java) {
+    const full = JAVA_RUNNING >= JAVA_LIMIT;
+    out.push(pill({ key: "java", on: s.java && !full, disabled: full, label: "Java navigation", cost: `~1 GB · ${JAVA_RUNNING}/${JAVA_LIMIT} running`,
+      help: "Starts the Java language server (jdtls) for this session, so the agent finds definitions, usages, implementations and callers by type, not by text. First start in a worktree 30–60 s; the agent can work meanwhile." }));
+  }
+  return out.join("");
+}
+function render() {
+  const repo = REPOS[state.place];
+  const folder = state.place === "__folder";
+  $("tags").innerHTML = repo.tags.map((t) => `<span class="tag">${t}</span>`).join("");
+  $("pills").innerHTML = pillsFor(state, state.place, "form");
+  $("ppills").innerHTML = pillsFor(proposal, "checkout", "proposal");
+  const task = !folder && state.worktree;
+  $("go").textContent = task ? "Create task" : "Start session";
+  $("remember").textContent = folder ? "A free session works in the projects folder and can change any repo in it." : `Options as last time in ${state.place}.`;
+  const n = [];
+  if (!folder && !state.worktree && repo.others > 0) n.push(`<div class="notice warn">1 session already works in ${state.place}: two agents in one working copy change each other's files and branch.</div>`);
+  if (!folder && repo.tags.includes("java") && state.java && JAVA_RUNNING + 1 >= JAVA_LIMIT) n.push(`<div class="notice info">This is the last Java navigation slot (${JAVA_LIMIT} at once, set in Settings).</div>`);
+  $("notices").innerHTML = n.join("");
+  const flags = [];
+  if (task) flags.push("--session-id=&lt;task&gt;");
+  flags.push("--interactive=&lt;prompt&gt;");
+  if (task && state.autoApprove) flags.push("<b>--allow-all-tools</b>");
+  if (state.model) flags.push(`<b>--model=${state.model}</b>`);
+  flags.push("--plugin-dir=&lt;session plugin&gt;");
+  const where = folder ? "projects folder" : task ? `worktree of ${state.place}` : state.place;
+  const javaOn = !folder && repo.tags.includes("java") && state.java;
+  $("cmd").innerHTML = `copilot ${flags.join(" ")}\n# in: ${where}${javaOn ? "\n# session plugin: <b>lspServers.java</b> → jdtls, index in .trackwall-lsp/" + state.place + (task ? "-&lt;task&gt;" : "") : ""}`;
+}
+function toggle(s, key) {
+  if (key === "model") { s.menu = !s.menu; return; }
+  s[key] = !s[key];
+  s.menu = false;
+}
+document.addEventListener("click", (e) => {
+  const item = e.target.closest("[data-model]");
+  if (item) {
+    const s = item.dataset.scope === "proposal" ? proposal : state;
+    s.model = item.dataset.model || null; s.menu = false; render(); return;
+  }
+  const b = e.target.closest(".pill");
+  if (b) { toggle(b.closest("#ppills") ? proposal : state, b.dataset.key); render(); return; }
+  if (state.menu || proposal.menu) { state.menu = proposal.menu = false; render(); }
+});
+$("place").addEventListener("change", (e) => { state.place = e.target.value; state.menu = false; render(); });
+render();
+</script>
+</body>
+</html>

@@ -1,13 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import {
   type AgentTaskChanges,
   type ChangedFile,
   type CreatedChange,
   HANDED_TO_SUPERVISOR,
   type IncludedFiles,
-  type JavaNavigationSettings,
   type JavaNavigationStatus,
   mayHandToSupervisor,
   noIncludedFiles,
@@ -27,18 +26,10 @@ import {
 } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
-import { ensureTrackwallDir, trackwallDir } from "../../infra/trackwall-dir.ts";
 import { approvalArgs } from "./copilot-command.ts";
 import type { LspServer } from "./copilot-plugin.ts";
 import { type EndedTaskFacts, type EndedTaskGit, endedTaskFacts } from "./ended-task.ts";
-import {
-  JAVA_LSP_SERVER,
-  type JavaNavigationReadiness,
-  javaLanguageServer,
-  javaNavigationReadiness,
-  mavenOnlyImport,
-} from "./java-language-server.ts";
-import { jdtlsStatus, readJdtlsLog } from "./jdtls-log.ts";
+import type { JavaNavigationServers } from "./java-navigation-servers.ts";
 import { TASK_BRANCH_PREFIX, taskSlug, taskWorktree } from "./task-branch.ts";
 import type { ChangeFacts } from "./task-change.ts";
 import type { StoredTask, TaskFile } from "./task-file.ts";
@@ -121,11 +112,9 @@ export interface AgentTasksDeps {
     repoPath(id: string): Promise<string>;
     /** The task worktrees folder for a new task (ADR-84), made when it is the default one in `.trackwall` (ADR-125). */
     newTaskWorktreesDir(): Promise<string>;
-    /** The projects folder, which holds the tasks' language server data (ADR-99). */
-    projectsDir(): Promise<string>;
-    /** `javaNavigation` from `workspace.yaml` (ADR-99); `null` without the key. */
-    javaNavigation(): JavaNavigationSettings | null;
   };
+  /** The tasks' jdtls (ADR-99), shared with main sessions (ADR-175). */
+  javaNavigation: JavaNavigationServers;
   sessions: TaskSessions;
   file: TaskFile;
   /** Some process group still works in this directory (`procs.liveIn`): a mise task in the worktree locks its files on Windows. */
@@ -207,11 +196,6 @@ export class AgentTasks {
     return this.#deps.file.taskListRead;
   }
 
-  /** Whether a task can get jdtls now (ADR-99), read from `workspace.yaml` and the disk at every call. */
-  javaNavigation(): JavaNavigationReadiness {
-    return javaNavigationReadiness(() => this.#deps.repos.javaNavigation());
-  }
-
   /** A task of the repo is being created, so its worktree may be half made (a repo removal waits for it, ADR-83). */
   creatingIn(repo: string): boolean {
     return (this.#creatingIn.get(repo) ?? 0) > 0;
@@ -270,12 +254,8 @@ export class AgentTasks {
     { id, title, proposedBy, model, approvals, javaNavigation, item, view: sessionView, change }: TaskOrigin,
     launch: "launch" | "hold",
   ): Promise<KnownTask> {
-    // The jdtls of a task comes through the session plugin, which Copilot CLI does not load over ACP (ADR-137).
-    if (javaNavigation && sessionView === "conversation")
-      throw new DomainError("bad_request", "Java navigation needs a task in a terminal; the conversation view cannot give it yet");
     // Refused before the worktree exists: a task that asked for Java navigation would otherwise start without it.
-    const javaProblem = javaNavigation ? this.javaNavigation().problem : null;
-    if (javaProblem !== null) throw new DomainError("bad_request", `Java navigation cannot start: ${javaProblem}`);
+    if (javaNavigation) this.#deps.javaNavigation.assertCanStart(sessionView, "a task");
     const repoDir = await this.#deps.repos.repoPath(repo);
     const base = await asRepoUnavailable(repo, this.#deps.vcs.defaultBase(repoDir));
     const worktreesDir = await this.#deps.repos.newTaskWorktreesDir();
@@ -665,18 +645,9 @@ export class AgentTasks {
       });
       this.#closeSessions(task);
       this.#save(this.#tasks.filter((t) => t.id !== id));
-      if (task.javaNavigation) await this.#removeLanguageServerData(task);
+      if (task.javaNavigation) await this.#deps.javaNavigation.remove(task.id, `task ${task.id}`);
       return facts;
     });
-  }
-
-  /** The index jdtls built for the task; a failure only leaves files behind, so it is logged. */
-  async #removeLanguageServerData(task: KnownTask): Promise<void> {
-    try {
-      rmSync(await this.#languageServerData(task), { recursive: true, force: true });
-    } catch (err) {
-      this.#deps.log(`removing the Java navigation data of task ${task.id}: ${messageOf(err)}`);
-    }
   }
 
   /** A `job` that deletes the worktree only once git has stopped reading it; a new change computation meanwhile refuses. */
@@ -758,20 +729,10 @@ export class AgentTasks {
     this.#save(this.#tasks.map((t) => (t.id === task.id ? { ...t, conversation } : t)));
   }
 
-  /**
-   * jdtls for a task with Java navigation (ADR-99). A resume whose settings were removed or broke since starts without
-   * it and logs why: the agent still works, only without the `lsp` tool.
-   */
+  /** jdtls for a task with Java navigation (ADR-99), on every start. */
   async #lspServers(task: KnownTask): Promise<Record<string, LspServer>> {
     if (!task.javaNavigation) return {};
-    const { settings, problem } = this.javaNavigation();
-    if (settings === null) {
-      this.#deps.log(`task ${task.id} starts without Java navigation: ${problem}`);
-      return {};
-    }
-    await ensureTrackwallDir(await this.#deps.repos.projectsDir(), "lsp");
-    const data = await this.#languageServerData(task);
-    return { [JAVA_LSP_SERVER]: javaLanguageServer(settings, data, mavenOnlyImport(task.worktree)) };
+    return this.#deps.javaNavigation.servers(task.id, task.worktree, `task ${task.id}`);
   }
 
   /** How the task's jdtls is doing (ADR-124), from its log; `null` for a task without Java navigation. */
@@ -780,12 +741,7 @@ export class AgentTasks {
     if (!task.javaNavigation) return null;
     const running = this.#deps.sessions.of(task.id).find((s) => s.run.kind !== "exited");
     const startedAt = running === undefined ? null : new Date(running.startedAt);
-    return jdtlsStatus(await readJdtlsLog(await this.#languageServerData(task)), new Date(), startedAt);
-  }
-
-  /** The task's jdtls data folder in the projects folder. */
-  async #languageServerData(task: KnownTask): Promise<string> {
-    return join(trackwallDir(await this.#deps.repos.projectsDir(), "lsp"), task.id);
+    return this.#deps.javaNavigation.status(task.id, startedAt);
   }
 
   /** A running session writes in the worktree and holds its files (on Windows it blocks deletion), so stop it first. */

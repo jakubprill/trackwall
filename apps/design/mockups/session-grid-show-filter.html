@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Session grid: the Show filter</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<style>
+/* Layout: proposal text on top, then a working mock of the Sessions view (list left, layout bar + grid right). Dark only, like the app. */
+:root {
+  --bg: var(--background);
+  --fg: var(--foreground);
+  --term: oklch(0.12 0.008 240);
+  --sans: var(--font-sans);
+  --mono: var(--font-mono);
+}
+body { background: var(--bg); color: var(--fg); font-family: var(--sans); line-height: 1.5; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 28px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 28px; }
+h1 { font-size: 22px; margin: 0; text-wrap: balance; }
+h2 { font-size: 15px; margin: 0 0 8px; text-wrap: balance; }
+.lede { color: var(--muted-foreground); max-width: 70ch; margin: 6px 0 0; }
+.label { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+.cols > div { min-width: 0; }
+ol, ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+code { font-family: var(--mono); font-size: 12px; color: var(--primary); }
+.q { border-left: 2px solid var(--warning); padding-left: 12px; }
+
+/* mock */
+.app { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; display: grid; grid-template-columns: 250px 1fr; height: 560px; background: var(--bg); }
+@media (max-width: 760px) { .app { grid-template-columns: 1fr; height: auto; } .list { max-height: 260px; } .grid { min-height: 520px; } }
+.list { background: var(--overlay); border-right: 1px solid var(--border); overflow-y: auto; padding: 10px 8px; display: flex; flex-direction: column; gap: 2px; }
+.row { display: flex; gap: 10px; padding: 7px 8px; border-radius: 6px; border: 1px solid transparent; cursor: pointer; background: none; color: inherit; text-align: left; font: inherit; width: 100%; }
+.row:hover { background: var(--accent); }
+.row.sel { background: var(--accent); border-color: color-mix(in oklch, var(--primary) 25%, transparent); }
+.row.out { opacity: .38; }
+.row:focus-visible, .chip:focus-visible, .seg button:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.pos { width: 22px; flex-shrink: 0; text-align: right; font-family: var(--mono); font-size: 10px; color: var(--muted-foreground); padding-top: 2px; }
+.rname { font-size: 13px; font-weight: 600; }
+.rsub { font-size: 11px; color: var(--muted-foreground); }
+.right { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; border-bottom: 1px solid var(--border); padding: 6px 12px; }
+.seg { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.seg button { background: none; border: 0; color: var(--muted-foreground); font: 12px var(--mono); padding: 2px 10px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--primary); }
+.chip { background: none; border: 1px solid var(--border); color: var(--muted-foreground); font: 12px var(--sans); padding: 1px 9px; border-radius: 999px; cursor: pointer; }
+.chip[aria-pressed="true"] { border-color: var(--primary); color: var(--primary); background: color-mix(in oklch, var(--primary) 10%, transparent); }
+.chip .n { font-family: var(--mono); font-size: 11px; margin-left: 4px; opacity: .8; }
+.chip.warn[aria-pressed="true"] { border-color: var(--warning); color: var(--warning); background: color-mix(in oklch, var(--warning) 10%, transparent); }
+select.chip { appearance: auto; }
+.sum { font-size: 12px; color: var(--muted-foreground); }
+.grid { flex: 1; display: grid; gap: 8px; padding: 8px; min-height: 0; }
+.tile { border: 1px solid var(--border); border-radius: 6px; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; background: var(--term); }
+.tile.sel { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+.tile.wait { border-color: var(--warning); }
+.tile.stale { opacity: .55; }
+.th { display: flex; align-items: center; gap: 8px; padding: 4px 8px; background: var(--overlay); border-bottom: 1px solid var(--border); font-size: 12px; min-width: 0; }
+.th b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.th .st { color: var(--muted-foreground); font-size: 11px; white-space: nowrap; }
+.th .st.w { color: var(--warning); }
+.th .tag { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--muted-foreground); border: 1px solid var(--border); padding: 0 6px; border-radius: 4px; white-space: nowrap; }
+.tb { flex: 1; padding: 6px 8px; font: 11px/1.45 var(--mono); color: var(--muted-foreground); overflow: hidden; }
+.tb .p { color: var(--success); }
+.empty { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; color: var(--muted-foreground); font-size: 13px; }
+.note { font-size: 12px; color: var(--muted-foreground); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 12px; color: var(--muted-foreground); }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="label">Trackwall · Sessions view · proposal · 2026-10-29</div>
+    <h1>Every task in the grid with one click</h1>
+    <p class="lede">The grid in the Auto layout already shows the whole list (up to 9 tiles a page). The trouble is that it shows everything at once: ended tasks without a session, proposals, sessions in repos. So instead of a separate “open all” button, a <b>Show</b> filter on the layout bar says what goes into the grid.</p>
+  </header>
+
+  <section aria-label="Mockup">
+    <div class="label" style="margin-bottom:8px">Clickable mockup (sample data)</div>
+    <div class="app">
+      <nav class="list" id="list" aria-label="Lista sesji"></nav>
+      <div class="right">
+        <div class="bar">
+          <span class="label">Layout</span>
+          <div class="seg" id="layout"></div>
+          <span class="label">Show</span>
+          <div id="filters" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+          <span class="sum" id="sum"></span>
+        </div>
+        <div class="grid" id="grid"></div>
+      </div>
+    </div>
+    <div class="legend" style="margin-top:8px">
+      <span>Click a dimmed row in the list: the filter goes back to All.</span>
+      <span>In “Waiting”, click a tile to “answer” it: it stays dimmed until the filter changes.</span>
+    </div>
+  </section>
+
+  <section class="cols">
+    <div>
+      <h2>How it works</h2>
+      <ol>
+        <li><b>All</b> is today's behaviour, unchanged.</li>
+        <li><b>Running</b> is everything with a live Copilot session: tasks and sessions in repos. This is “open every running task”. Ended tasks without a session and proposals drop out.</li>
+        <li><b>Waiting</b> is only what waits for you (an approval, a question, a proposal). The number on the chip says how many.</li>
+        <li><b>Repo ▾</b> narrows to one repo, together with the chosen state filter (for example Running in <code>orders-api</code>).</li>
+        <li>Choosing a filter switches to Auto if the layout was 1, so it really is one click. The filter is remembered with the layout.</li>
+        <li>The list on the left stays full, and entries outside the filter are dimmed. Numbers and Alt+digit still point at the position in the list, and tiles show the same number.</li>
+      </ol>
+    </div>
+    <div>
+      <h2>Details</h2>
+      <ul>
+        <li>Selecting an entry outside the filter (a click or Alt+digit) resets the filter to All, so the selected entry is always visible.</li>
+        <li>In “Waiting” a tile that stopped waiting does not vanish at once; it dims until the filter changes. Otherwise terminals would jump and resize while you type.</li>
+        <li>An empty filter shows a message (“Nothing is waiting for you”) instead of an empty grid.</li>
+        <li>In code: a pure function in <code>lib/session-grid.ts</code> with tests, chips on the layout bar, a description on the Sessions page of the docs. No daemon change.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="q">
+    <h2>Open question</h2>
+    <p class="note" style="margin:0">Is the filter enough, or a separate “Open all tasks” button that shows only agent tasks (no sessions in repos)? Recommended: the filter, because “Running” does the same, and “Waiting” and the repo come almost for free. Not built yet.</p>
+  </section>
+</div>
+
+<script>
+const entries = [
+  { name: "orders-api", sub: "Add retry to payment client", kind: "task", state: "working", repo: "orders-api" },
+  { name: "orders-api", sub: "Fix flaky OrderMapperTest", kind: "task", state: "approval", repo: "orders-api" },
+  { name: "billing-service", sub: "Move invoices to new schema", kind: "task", state: "idle", repo: "billing-service" },
+  { name: "2 task proposals", sub: "orders-api, web-shop", kind: "proposals", state: "decide", repo: "orders-api" },
+  { name: "web-shop", sub: "session in repo", kind: "session", state: "working", repo: "web-shop" },
+  { name: "billing-service", sub: "Bump Spring Boot", kind: "task", state: "ended", repo: "billing-service" },
+  { name: "web-shop", sub: "Cart totals rounding", kind: "task", state: "question", repo: "web-shop" },
+  { name: "auth-gateway", sub: "Log token refresh failures", kind: "task", state: "working", repo: "auth-gateway" },
+];
+const LABEL = { working: "working", approval: "waiting for approval", idle: "idle", decide: "waiting for your decision", ended: "no session", question: "asks a question" };
+const waits = (e) => ["approval", "decide", "question"].includes(e.state);
+const live = (e) => e.kind !== "proposals" && e.state !== "ended";
+let layout = "auto", show = "all", repo = "", selected = 0, sticky = new Set(), answered = new Set();
+
+function matches(e, i) {
+  if (repo && e.repo !== repo) return false;
+  if (show === "running") return live(e);
+  if (show === "waiting") return (waits(e) && !answered.has(i)) || sticky.has(i);
+  return true;
+}
+function visible() { return entries.map((e, i) => ({ e, i })).filter(({ e, i }) => matches(e, i)); }
+function setShow(v) { show = v; sticky = new Set(); answered = new Set(); if (layout === "1") layout = "auto"; if (show === "waiting") entries.forEach((e, i) => { if (waits(e)) sticky.add(i); }); render(); }
+
+function render() {
+  const vis = visible();
+  if (layout !== "1" && !vis.some((v) => v.i === selected) && vis.length) selected = vis[0].i;
+  const list = document.getElementById("list"); list.innerHTML = "";
+  entries.forEach((e, i) => {
+    const b = document.createElement("button");
+    b.className = "row" + (i === selected ? " sel" : "") + (layout !== "1" && !matches(e, i) ? " out" : "");
+    b.innerHTML = `<span class="pos">${String(i + 1).padStart(2, "0")}</span><span><div class="rname">${e.name}${waits(e) && !answered.has(i) ? ' <span style="color:var(--warning)">●</span>' : ""}</div><div class="rsub">${e.sub}</div><div class="rsub">${LABEL[e.state]}</div></span>`;
+    b.onclick = () => { selected = i; if (!matches(e, i)) { show = "all"; repo = ""; sticky = new Set(); } render(); };
+    list.appendChild(b);
+  });
+  const lay = document.getElementById("layout"); lay.innerHTML = "";
+  ["1", "2", "4", "auto"].forEach((l) => { const b = document.createElement("button"); b.textContent = l === "auto" ? "Auto" : l; b.setAttribute("aria-pressed", l === layout); b.onclick = () => { layout = l; render(); }; lay.appendChild(b); });
+  const f = document.getElementById("filters"); f.innerHTML = "";
+  const count = (fn) => entries.filter((e) => (!repo || e.repo === repo) && fn(e)).length;
+  [["all", "All", entries.filter((e) => !repo || e.repo === repo).length], ["running", "Running", count(live)], ["waiting", "Waiting", count((e) => waits(e))]].forEach(([v, t, n]) => {
+    const b = document.createElement("button"); b.className = "chip" + (v === "waiting" ? " warn" : ""); b.setAttribute("aria-pressed", layout !== "1" && show === v);
+    b.innerHTML = `${t}<span class="n">${n}</span>`; b.onclick = () => setShow(v); f.appendChild(b);
+  });
+  const s = document.createElement("select"); s.className = "chip"; s.setAttribute("aria-label", "Repo");
+  s.innerHTML = `<option value="">All repos</option>` + [...new Set(entries.map((e) => e.repo))].map((r) => `<option ${r === repo ? "selected" : ""}>${r}</option>`).join("");
+  s.onchange = () => { repo = s.value; if (layout === "1") layout = "auto"; render(); }; f.appendChild(s);
+  const grid = document.getElementById("grid"); grid.innerHTML = "";
+  const tiles = layout === "1" ? entries.filter((_, i) => i === selected).map((e) => ({ e, i: selected })) : vis.slice(0, layout === "auto" ? 9 : Number(layout));
+  const n = Math.max(tiles.length, 1), cols = n <= 1 ? 1 : n <= 4 ? 2 : 3, rows = Math.ceil(n / cols);
+  grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0,1fr))`; grid.style.gridTemplateRows = `repeat(${rows}, minmax(0,1fr))`;
+  document.getElementById("sum").textContent = layout === "1" ? "" : `${vis.length} of ${entries.length} in the grid`;
+  if (!tiles.length) { grid.innerHTML = `<div class="empty">${show === "waiting" ? "Nothing is waiting for you." : "Nothing matches this filter."}</div>`; return; }
+  tiles.forEach(({ e, i }) => {
+    const d = document.createElement("div");
+    const stale = show === "waiting" && answered.has(i);
+    d.className = "tile" + (i === selected ? " sel" : "") + (waits(e) && !answered.has(i) ? " wait" : "") + (stale ? " stale" : "");
+    const st = stale ? "answered, stays until you change the filter" : LABEL[e.state];
+    const body = e.kind === "proposals" ? "Start task · Reject…<br>2 prompts to decide on" : e.state === "ended" ? "No session. Open the full panel." : `<span class="p">❯</span> ${e.sub}<br>${e.state === "approval" ? "Allow this tool? [y/n]" : e.state === "question" ? "Which rounding mode should I use?" : "Reading src/main/java/…"}`;
+    d.innerHTML = `<div class="th"><span class="pos" style="width:auto">${String(i + 1).padStart(2, "0")}</span><b>${e.name}</b><span class="st ${waits(e) && !stale ? "w" : ""}">${st}</span><span class="tag">${e.kind}</span></div><div class="tb">${body}</div>`;
+    d.onclick = () => { selected = i; if (show === "waiting" && waits(e)) answered.add(i); render(); };
+    grid.appendChild(d);
+  });
+}
+render();
+</script>
+</body>
+</html>

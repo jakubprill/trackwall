@@ -2,12 +2,13 @@ import {
   countLabel,
   type HostedProject,
   type MergeRequest,
+  mergeRequestNumber,
   type Task,
   type TaskMessage,
   type TaskMiseConfig,
   type Verification,
 } from "@trackwall/protocol";
-import { mergeRequestNumber, mergeRequestStatus } from "./merge-request.ts";
+import { mergeRequestStatus } from "./merge-request.ts";
 import type { StatusTone } from "./repo-status.ts";
 
 /**

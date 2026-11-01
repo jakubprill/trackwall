@@ -508,7 +508,7 @@ The user makes a task they started the supervisor's work: the supervisor then he
 _Avoid_: assign, delegate (that is what the supervisor does with a proposal)
 
 **Situation** (`supervisorSituation`, `situationOutput`; ADR-148):
-The short list of the work under way that the daemon gives the supervisor with every prompt: each task with who started it and what its newest session does, the proposals waiting for the user, and the user's other running sessions, as they are when the prompt comes. Facts from the daemon's session list, not the agent's own words; the details stay in `list_sessions` and `get_session`.
+The short list of the work under way that the daemon gives the supervisor with every prompt: each task with who started it, what its newest session does and what its work came to (its last verification and its merge request with the pipeline, ADR-156), the proposals waiting for the user, and the user's other running sessions, as they are when the prompt comes. Facts from the daemon's session list, not the agent's own words; the details stay in `list_sessions` and `get_session`.
 _Avoid_: briefing (that is what the supervisor writes for the day start), status report, context (too general)
 
 **Supervisor panel** (`SupervisorPanel`):
@@ -554,7 +554,7 @@ The strip above the views after the user comes back to Trackwall from 15 minutes
 _Avoid_: digest, notifications (those are the system's and the browser's), journal
 
 **Conversation view** (`SessionView` `"conversation"`, `ConversationView`, `AcpSession`, `ConversationEntry`; "conversation view" in the UI, and "Chat (preview)" on the control that turns it on):
-How a session shows when the daemon runs Copilot CLI over the Agent Client Protocol (`copilot --acp`) instead of in a terminal (ADR-107): a list of what the user and the agent said and the tools the agent called, its approval and a message box, all plain text in the page. The other `SessionView` is `"terminal"`, the session terminal. The supervisor starts in it when the user turns it on in the supervisor panel, and a task when the user picks it for the task (`Task.view`, ADR-137); a conversation goes on in either view. A **waiting message** (`WaitingMessage`) is one the user wrote during a turn, shown at once with "Waiting" until the turn ends and it goes; not to be confused with "Waiting for you", which is the agent waiting for the user.
+How a session shows when the daemon runs Copilot CLI over the Agent Client Protocol (`copilot --acp`) instead of in a terminal (ADR-107): a list of what the user and the agent said and the tools the agent called, its approval and a message box, in the page as text (the agent's answers as sanitized Markdown without HTML or diagrams). The other `SessionView` is `"terminal"`, the session terminal. The supervisor starts in it when the user turns it on in the supervisor panel, and a task when the user picks it for the task (`Task.view`, ADR-137); a conversation goes on in either view. A **waiting message** (`WaitingMessage`) is one the user wrote during a turn, shown at once with "Waiting" until the turn ends and it goes; not to be confused with "Waiting for you", which is the agent waiting for the user.
 _Avoid_: chat outside the "Chat (preview)" control and the "Chat" tab it gives a task's panel (named after that control, so the user finds what they turned on), transcript (that is Copilot CLI's own record)
 
 **Session terminal** (`SessionTerminal`):

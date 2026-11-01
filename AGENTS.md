@@ -43,6 +43,7 @@ If a skill is missing from the environment, run that review through a separate s
 - **Decisions go to §12 as ADRs.** A new ADR has a number, a date, a one-sentence decision, the reasoning and what would reverse it. A spike result or a clarification is appended to the existing ADR (like the spike findings in ADR-1). A reversed decision is not deleted: a new ADR, and the old one gets the note "superseded by ADR-N".
 - **A new domain term goes into `CONTEXT.md`** together with its identifier in code. From then on that one word is used in code, UI, MCP tools and documentation.
 - A change to commands, required tools or repo layout updates `docs/development.md` (and the "Commands" section below if it concerns the Definition of done). A new or changed feature updates its page in `apps/docs/features/`; a new feature gets a new page from `apps/docs/TEMPLATE.md` and an entry in `apps/docs/.vitepress/sidebar.ts` (ADR-56). Those pages are for people using Trackwall: what they see and do, in plain words, without ADRs, module names or history; the why stays in `docs/architecture.md`. A change to the release process updates `docs/release.md`.
+- **A UI mockup goes into the design gallery** (`apps/design`, ADR-176), not into a separate page outside the repo: a page in `mockups/` that links `../tokens.css`, takes the app's colours and fonts from the token names without redefining any (a one-off shade, such as a terminal background, is its own custom property), in English, with sample data only, and a card in `index.html` under its view with its state and variants. When the change is built or a variant is chosen, the card's state says so in the same PR.
 - `README.md` is deliberately short (ADR-32): what Trackwall is, that it is an early version, where the releases are and a link to the installation instructions. Do not add feature descriptions or instructions to it.
 
 ## Language
@@ -99,6 +100,7 @@ The repo is meant to be published as open source (header of `docs/architecture.m
   - the test `apps/docs/test/pages.test.ts`: every feature page follows `apps/docs/TEMPLATE.md` (frontmatter, title and lede, sections), is in the sidebar under its title, the home page cards repeat the page descriptions, and no page of the site cites an ADR or links into `docs/`;
   - the test `apps/docs/test/theme.test.ts`: the documentation site's dark theme, fonts and logo are copies of the app's tokens and icon (ADR-16, ADR-56);
   - the test `packages/ui/test/design-tokens.test.ts`: UI components without raw colours or arbitrary appearance values, only tokens from `index.css` (ADR-16);
+  - the test `apps/design/test/gallery.test.ts`: the design gallery's tokens equal the app's, the index and the mockups list each other, and no mockup redefines a token or is left in Polish (ADR-176);
   - daemon compatibility with Node (ADR-1): `erasableSyntaxOnly` in the `tsconfig.json` of the daemon and `protocol`, `useImportExtensions` in Biome for their `src` (also in `packages/scene/src`), the ban on Bun APIs in the daemon outside `platform/`, and daemon process tests under Bun and under Node.
 
   No tool guards `as` casts on external data, so the review does.

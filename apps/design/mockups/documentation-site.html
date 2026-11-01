@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Documentation site</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<style>
+/* Layout: VitePress-style three columns (nav · article · outline); app tokens from packages/ui/src/index.css (ADR-16), the HUD only in small labels and the screenshot frame. */
+:root {
+  --bg: var(--background);
+  --surface: var(--overlay);
+  --surface-2: var(--muted);
+  --fg: var(--foreground);
+  --accent-soft: color-mix(in oklch, var(--primary) 12%, transparent);
+  --note-bg: color-mix(in oklch, var(--warning) 10%, transparent);
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-sans); font-size: 15px; line-height: 1.65; }
+a { color: var(--primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.hud { font-family: var(--font-mono); font-size: 11px; letter-spacing: var(--tracking-hud); text-transform: uppercase; color: var(--muted-foreground); }
+code, kbd { font-family: var(--font-mono); font-size: 0.86em; }
+code { background: var(--surface-2); border: 1px solid var(--border); padding: 1px 5px; border-radius: 4px; }
+kbd { border: 1px solid var(--border); border-bottom-width: 2px; padding: 0 5px; border-radius: 4px; background: var(--surface); white-space: nowrap; }
+
+.note-strip { padding-block: 8px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); background: var(--note-bg); border-bottom: 1px solid var(--border); font-size: 13px; }
+
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: color-mix(in oklch, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border);
+  padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 600; color: var(--fg); }
+.brand small { font-weight: 400; color: var(--muted-foreground); }
+.search { flex: 1; max-width: 300px; min-width: 140px; display: flex; justify-content: space-between; align-items: center; gap: 8px; border: 1px solid var(--border); background: var(--surface-2); border-radius: var(--radius); padding: 4px 10px; color: var(--muted-foreground); font-size: 13px; }
+.topnav { display: flex; gap: 18px; margin-left: auto; font-size: 14px; }
+.topnav a { color: var(--muted-foreground); }
+.topnav a[aria-current] { color: var(--fg); }
+
+.shell { display: grid; grid-template-columns: 240px minmax(0, 1fr) 200px; gap: 40px; max-width: 1280px; margin: 0 auto;
+  padding-block: 32px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+nav.side { font-size: 14px; display: flex; flex-direction: column; gap: 22px; position: sticky; top: 72px; align-self: start; }
+nav.side ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; }
+nav.side li a { display: block; padding: 4px 10px; color: var(--muted-foreground); border-left: 1px solid var(--border); }
+nav.side li a[aria-current] { color: var(--fg); border-left: 2px solid var(--primary); padding-left: 9px; background: linear-gradient(90deg, var(--accent-soft), transparent); }
+
+article { min-width: 0; max-width: 720px; }
+.eyebrow { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.since { font-family: var(--font-mono); font-size: 11px; color: var(--success); border: 1px solid color-mix(in oklch, var(--success) 40%, transparent); border-radius: 999px; padding: 0 8px; }
+h1 { font-size: 34px; line-height: 1.15; margin: 10px 0 12px; letter-spacing: -0.01em; text-wrap: balance; font-weight: 650; }
+h2 { font-size: 21px; margin: 44px 0 10px; padding-top: 20px; border-top: 1px solid var(--border); text-wrap: balance; font-weight: 600; }
+.lede { font-size: 17px; color: var(--muted-foreground); margin: 0 0 28px; }
+p { margin: 0 0 14px; }
+
+figure { margin: 0 0 8px; }
+.shot { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--background);
+  background-image: linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 24px 24px; color: var(--foreground); font-size: 12px; display: grid; grid-template-columns: 44px 190px minmax(0, 1fr); min-height: 280px; box-shadow: 0 20px 50px -30px oklch(0 0 0 / 60%); }
+.shot .bar { border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; gap: 12px; padding-top: 14px; }
+.shot .bar i { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--muted-foreground); display: block; }
+.shot .bar i.on { border-color: var(--primary); box-shadow: 0 0 8px color-mix(in oklch, var(--primary) 60%, transparent); }
+.shot .list { border-right: 1px solid var(--border); padding: 12px 10px; display: flex; flex-direction: column; gap: 6px; }
+.shot .s { padding: 6px 8px; border-radius: 5px; border: 1px solid transparent; display: flex; flex-direction: column; }
+.shot .s b { font-weight: 600; }
+.shot .s span { color: var(--muted-foreground); font-size: 11px; }
+.shot .s.sel { border-color: color-mix(in oklch, var(--primary) 50%, transparent); background: color-mix(in oklch, var(--accent) 60%, transparent); }
+.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+.shot .term { padding: 12px 14px; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.7; color: oklch(0.85 0.02 230); min-width: 0; overflow: hidden; }
+.shot .term .k { color: var(--primary); }
+.shot .term .w { color: var(--warning); }
+figcaption { font-size: 13px; color: var(--muted-foreground); margin-top: 8px; }
+
+ol.steps { padding-left: 22px; margin: 0 0 14px; display: flex; flex-direction: column; gap: 6px; }
+ol.steps li::marker { font-family: var(--font-mono); color: var(--primary); }
+
+.tablewrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 14px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { background: var(--surface-2); font-weight: 600; }
+tr:last-child td { border-bottom: 0; }
+
+.tip { border: 1px solid var(--border); border-left: 2px solid var(--warning); background: var(--surface-2); border-radius: var(--radius); padding: 12px 14px; margin: 0 0 14px; font-size: 14px; }
+.tip .hud { color: var(--warning); display: block; margin-bottom: 4px; }
+
+.related { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 8px; }
+.related a { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; color: var(--fg); background: var(--surface); }
+.related a:hover { border-color: var(--primary); text-decoration: none; }
+.related a span { color: var(--muted-foreground); font-size: 13px; }
+
+.pager { display: flex; justify-content: space-between; gap: 12px; margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--border); flex-wrap: wrap; font-size: 14px; }
+.meta { font-size: 13px; color: var(--muted-foreground); margin-top: 18px; }
+
+aside.toc { font-size: 13px; position: sticky; top: 72px; align-self: start; }
+aside.toc ul { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 5px; }
+aside.toc a { color: var(--muted-foreground); }
+aside.toc a.on { color: var(--primary); }
+
+@media (max-width: 1100px) { .shell { grid-template-columns: 220px minmax(0, 1fr); } aside.toc { display: none; } }
+@media (max-width: 760px) {
+  .shell { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  nav.side { position: static; display: none; }
+  .topnav { display: none; }
+  .shot { grid-template-columns: 34px minmax(0, 1fr); }
+  .shot .list { display: none; }
+  h1 { font-size: 28px; }
+}
+</style>
+
+<div class="note-strip">Direction mockup: one feature page in VitePress with the Trackwall tokens. Built as the documentation site (ADR-56). The links do nothing.</div>
+
+<header class="top">
+  <a class="brand" href="#">
+    <svg width="22" height="22" viewBox="100 100 312 312" aria-hidden="true">
+      <g stroke="currentColor" stroke-opacity="0.45" stroke-width="16" stroke-linecap="round"><line x1="216" y1="216" x2="160" y2="160"/><line x1="296" y1="216" x2="352" y2="160"/><line x1="216" y1="296" x2="160" y2="352"/><line x1="296" y1="296" x2="352" y2="352"/></g>
+      <circle cx="150" cy="150" r="30" fill="currentColor"/><circle cx="150" cy="362" r="30" fill="currentColor"/><circle cx="362" cy="362" r="30" fill="currentColor"/>
+      <circle cx="362" cy="150" r="30" fill="var(--primary)"/><circle cx="256" cy="256" r="52" fill="var(--bg)" stroke="var(--primary)" stroke-width="28"/>
+    </svg>
+    Trackwall <small>docs</small>
+  </a>
+  <div class="search">Search <kbd>Ctrl K</kbd></div>
+  <nav class="topnav" aria-label="Main">
+    <a href="#">Guide</a>
+    <a href="#" aria-current="page">Features</a>
+    <a href="#">MCP tools</a>
+    <a href="#">Releases</a>
+    <a href="#">GitHub</a>
+  </nav>
+</header>
+
+<div class="shell">
+  <nav class="side" aria-label="Features">
+    <div>
+      <div class="hud">Start</div>
+      <ul><li><a href="#">What is Trackwall</a></li><li><a href="#">Install</a></li><li><a href="#">Connect Copilot CLI</a></li></ul>
+    </div>
+    <div>
+      <div class="hud">Views</div>
+      <ul>
+        <li><a href="#">Home dashboard</a></li>
+        <li><a href="#">Repos</a></li>
+        <li><a href="#">mise tasks and services</a></li>
+        <li><a href="#">Repo card and tags</a></li>
+        <li><a href="#">Connection graph</a></li>
+        <li><a href="#" aria-current="page">Copilot CLI sessions</a></li>
+        <li><a href="#">Agent tasks and proposals</a></li>
+      </ul>
+    </div>
+    <div>
+      <div class="hud">Everywhere</div>
+      <ul><li><a href="#">Windows and shortcuts</a></li><li><a href="#">Tray and notifications</a></li><li><a href="#">trackwall:// links</a></li></ul>
+    </div>
+  </nav>
+
+  <article>
+    <div class="eyebrow"><span class="hud">Features // Sessions · Ctrl+3</span><span class="since">since 0.2.0</span></div>
+    <h1>Copilot CLI sessions</h1>
+    <p class="lede">Run several Copilot CLI agents at once, each in its own repo, and see at a glance which one is waiting for you.</p>
+
+    <figure>
+      <div class="shot" role="img" aria-label="The Sessions view with three sessions, one waiting for approval">
+        <div class="bar"><i></i><i></i><i class="on"></i><i></i></div>
+        <div class="list">
+          <span class="hud" style="color:var(--muted-foreground)">Sessions // 03</span>
+          <div class="s sel"><b><span class="dot" style="background:var(--warning)"></span>orders-api</b><span>asking for approval</span></div>
+          <div class="s"><b><span class="dot" style="background:var(--primary)"></span>shop-web</b><span>working · fix cart total</span></div>
+          <div class="s"><b><span class="dot" style="background:oklch(0.55 0.02 240)"></span>billing-lib</b><span>idle</span></div>
+        </div>
+        <div class="term">
+          <div><span class="k">●</span> Reading src/main/java/…/OrderController.java</div>
+          <div><span class="k">●</span> Running <span class="k">get_errors</span> (Trackwall MCP)</div>
+          <div>&nbsp;</div>
+          <div class="w">Allow Copilot to run: mise run test?</div>
+          <div>&nbsp;&nbsp;1. Yes&nbsp;&nbsp;&nbsp;2. Yes, for this session&nbsp;&nbsp;&nbsp;3. No</div>
+        </div>
+      </div>
+      <figcaption>The Sessions view: the selected session asks for approval, the bar on the left counts sessions waiting for you.</figcaption>
+    </figure>
+
+    <h2 id="what">What it does</h2>
+    <p>Each session runs in a terminal owned by the daemon, so it keeps working after you close the window. Trackwall reads the session state from Copilot CLI hooks: <em>working</em>, <em>waiting for you</em>, <em>asking for approval</em> or <em>idle</em>. Every session has the Trackwall MCP server connected, so the agent can read repo cards, logs and the connection graph.</p>
+
+    <h2 id="start">Start a session</h2>
+    <ol class="steps">
+      <li>Open <strong>Sessions</strong> with <kbd>Ctrl</kbd>+<kbd>3</kbd> (<kbd>⌘</kbd>+<kbd>3</kbd> on macOS).</li>
+      <li>Choose a repo from the projects folder.</li>
+      <li>Type into the terminal as in any Copilot CLI session.</li>
+    </ol>
+    <div class="tip"><span class="hud">Needs</span>Copilot CLI on <code>PATH</code> (<code>copilot</code>) and the daemon running under Bun, as in the release build. Under Node there are no sessions.</div>
+
+    <h2 id="shortcuts">Shortcuts</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Keys</th><th>What happens</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>Alt</kbd>+<kbd>1</kbd>…<kbd>9</kbd></td><td>Selects the session at that position in the list.</td></tr>
+          <tr><td><kbd>Alt</kbd>+<kbd>J</kbd></td><td>Jumps to the next session waiting for you, from any view.</td></tr>
+          <tr><td><kbd>Win</kbd>+<kbd>Alt</kbd>+<kbd>J</kbd></td><td>Brings Trackwall to the front from any app and opens that session.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 id="related">Related</h2>
+    <div class="related">
+      <a href="#">Agent tasks and proposals<span>Hand work to another agent in its own worktree</span></a>
+      <a href="#">MCP: list_sessions, get_session<span>What a session sees of the others</span></a>
+      <a href="#">ADR-26, ADR-47<span>Why sessions work this way</span></a>
+    </div>
+
+    <div class="pager"><a href="#">← Connection graph</a><a href="#">Agent tasks and proposals →</a></div>
+    <div class="meta">Edit this page on GitHub · Last updated 25 Oct 2026</div>
+  </article>
+
+  <aside class="toc">
+    <div class="hud">On this page</div>
+    <ul>
+      <li><a class="on" href="#what">What it does</a></li>
+      <li><a href="#start">Start a session</a></li>
+      <li><a href="#shortcuts">Shortcuts</a></li>
+      <li><a href="#related">Related</a></li>
+    </ul>
+  </aside>
+</div>
+</body>
+</html>

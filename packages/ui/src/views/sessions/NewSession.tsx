@@ -44,9 +44,9 @@ const PROJECTS_FOLDER = "";
  * A new task or session (ADR-100): a repo from the projects folder, or the projects folder itself, and a prompt for the
  * agent. In a repo with its own worktree it becomes a task (ADR-31); without one a main session in the repo's working
  * copy (ADR-26), and in the projects folder a free session, both with the prompt as their first message when there is one.
- * Only a task, which works in its own worktree, can run on a chosen model (ADR-98) and without asking for approvals
- * (ADR-105), in the conversation view (ADR-137), and, in a repo tagged java and a terminal, with a Java language server (ADR-99). The options are a row of pills under the
- * prompt (`StartOptions`); the worktree, the model, Java navigation and the view come back as the user last started from that
+ * Every one can run on a chosen model (ADR-98), in the conversation view (ADR-137), and, in a repo tagged java and a
+ * terminal, with a Java language server (ADR-99, ADR-175); only a task, whose changes wait for review in its own worktree,
+ * can run without asking for approvals (ADR-105). The options are a row of pills under the prompt (`StartOptions`); the worktree, the model, Java navigation and the view come back as the user last started from that
  * place, the approvals mode always starts at asking. Started from a board item (ADR-133), the form comes with the item's
  * repo and prompt, and the task works on the item. A task with more repos added is a change (ADR-171): a task per repo
  * on one branch name.
@@ -90,13 +90,14 @@ export function NewSession({
     (task) => onStarted({ kind: "task", id: task.id }),
   );
   const startSession = useAction(
-    (repo: string | null, prompt: string | undefined) => post(conn, agentsApi.start, { repo, prompt }),
+    (repo: string | null, prompt: string | undefined) =>
+      post(conn, agentsApi.start, { repo, prompt, model: model ?? null, javaNavigation, view: choice.view }),
     (session) => onStarted({ kind: "session", id: session.id }),
   );
   const pending = createTask.pending || startSession.pending || change.create.pending;
   const error = createTask.error ?? startSession.error ?? change.create.error;
   const run = () => {
-    // A model that is not an id is not remembered: a task waits for it to be fixed, a session does not use it.
+    // A model that is not an id is not remembered; the start waits for it to be fixed.
     if (model !== undefined) saveStartChoice(() => window.localStorage, chosen, choice);
     if (start.kind === "task") createTask.run(start.repo, start.prompt);
     if (start.kind === "session") startSession.run(start.repo, start.prompt);
@@ -126,14 +127,10 @@ export function NewSession({
             worktree={
               repo === null || !form.sessions ? undefined : { value: choice.worktree, onChange: (worktree) => choose({ worktree }) }
             }
-            {...(start.kind === "session"
-              ? {}
-              : {
-                  approvals: { value: approvals, onChange: setApprovals },
-                  model: { value: choice.model, onChange: (text: string) => choose({ model: text }) },
-                  javaNavigation: javaNavigationPill(java, choice.javaNavigation, (on) => choose({ javaNavigation: on })),
-                  view: { value: choice.view, onChange: (view: SessionView) => choose({ view }) },
-                })}
+            approvals={start.kind === "session" ? undefined : { value: approvals, onChange: setApprovals }}
+            model={{ value: choice.model, onChange: (text: string) => choose({ model: text }) }}
+            javaNavigation={javaNavigationPill(java, choice.javaNavigation, (on) => choose({ javaNavigation: on }))}
+            view={{ value: choice.view, onChange: (view: SessionView) => choose({ view }) }}
             disabled={pending}
           />
           {firstPart !== null && (
@@ -198,7 +195,7 @@ function PlaceSelect({
   );
 }
 
-/** Java navigation for a task in `repo` (ADR-99), from the repo's tags and the daemon's settings. */
+/** Java navigation for a task or session in `repo` (ADR-99, ADR-175), from the repo's tags and the daemon's settings. */
 function useJavaNavigationOffer(conn: Connection, repo: string | null): JavaNavigationOffer {
   const loadTags = useCallback(() => post(conn, cardsApi.tags, {}), [conn]);
   const tags = useRemote(loadTags);
@@ -208,7 +205,7 @@ function useJavaNavigationOffer(conn: Connection, repo: string | null): JavaNavi
   return javaNavigationOffer(repo === null ? undefined : tagsByRepo(tags.data).get(repo), options.data?.javaNavigation);
 }
 
-/** The Java navigation pill of a task, or none where the offer is hidden. */
+/** The Java navigation pill, or none where the offer is hidden (also in the projects folder, which has no tags). */
 function javaNavigationPill(offer: JavaNavigationOffer, value: boolean, onChange: (value: boolean) => void) {
   if (offer.kind === "hidden") return undefined;
   return { value, onChange, unavailable: offer.kind === "unavailable" ? offer.reason : null };
@@ -283,7 +280,7 @@ function changeStartedPartly(started: readonly string[], failed: readonly { repo
   return `Started in ${started.join(", ")}; these parts could not start:\n${lines.join("\n")}`;
 }
 
-/** "Start session" for a session, "Create task" for a task, which needs a prompt and, when a model is typed, a model id. */
+/** "Start session" for a session, "Create task" for a task, which needs a prompt; both need a model id when a model is typed. */
 function StartButton({
   start,
   disabled,
@@ -296,7 +293,7 @@ function StartButton({
   onClick: () => void;
 }) {
   return start.kind === "session" ? (
-    <Button onClick={onClick} disabled={disabled}>
+    <Button onClick={onClick} disabled={disabled || invalidModel}>
       <Play /> Start session
     </Button>
   ) : (

@@ -663,9 +663,24 @@ export const agentsApi = {
   sessions: endpoint("sessions", z.object({}).strict(), SessionList),
   /**
    * Starts Copilot CLI with the session plugin (ADR-17) in the repo root, or with `repo: null` a free session in the
-   * projects folder (ADR-100); with `prompt` as its first message, so it works from the start.
+   * projects folder (ADR-100); with `prompt` as its first message, so it works from the start. Like a task's, it runs
+   * on `model` (Copilot CLI's default when `null`, ADR-98) and shows in `view` (ADR-137), and in a repo with
+   * `javaNavigation` it gets the Java language server (ADR-99), which needs a repo and a terminal (`bad_request`),
+   * on every start and restart (ADR-175). It always asks for approvals: only a task in its own worktree runs without.
    */
-  start: endpoint("start", z.object({ repo: RepoId.nullable(), prompt: TaskPrompt.optional() }).strict(), Session),
+  start: endpoint(
+    "start",
+    z
+      .object({
+        repo: RepoId.nullable(),
+        prompt: TaskPrompt.optional(),
+        model: TaskModel.nullable().default(null),
+        javaNavigation: z.boolean().default(false),
+        view: SessionView.default("terminal"),
+      })
+      .strict(),
+    Session,
+  ),
   /**
    * Starts the supervisor (ADR-58): Copilot CLI in the projects folder, above the sessions of all repos. There is at
    * most one running at a time, so while one runs this returns it instead of starting another. Otherwise `conversation`
@@ -783,6 +798,11 @@ export const agentsApi = {
   taskSharedFiles: endpoint("task-shared-files", TaskRequest, SharedFilesList),
   /** How the task's Java language server is doing (ADR-124); `null` for a task without Java navigation. */
   taskJavaNavigation: endpoint("task-java-navigation", TaskRequest, JavaNavigationStatus.nullable()),
+  /**
+   * How the Java language server of a session is doing (ADR-124): its task's, or a main session's own (ADR-175);
+   * `null` for a session without Java navigation.
+   */
+  sessionJavaNavigation: endpoint("session-java-navigation", SessionRequest, JavaNavigationStatus.nullable()),
   openTaskEditor: endpoint("open-task-editor", TaskRequest, Done),
   /**
    * Copies the files the repo root's `.worktreeinclude` names into the task's existing worktree again (ADR-61), with the

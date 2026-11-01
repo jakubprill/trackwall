@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { conversationStatus, readSupervisorView, saveSupervisorView, sendsMessage, withEntries } from "../src/lib/conversation.ts";
+import type { ConversationEntry } from "@trackwall/protocol";
+import {
+  conversationStatus,
+  conversationTurns,
+  readSupervisorView,
+  saveSupervisorView,
+  sendsMessage,
+  withEntries,
+} from "../src/lib/conversation.ts";
 
 describe("the conversation view", () => {
   test("a frame adds new entries at the end and replaces the ones with its ids, and a reset starts over", () => {
@@ -72,5 +80,29 @@ describe("whose turn it is in the conversation view", () => {
       tone: "ok",
       label: "Your turn: the agent waits for your message",
     });
+  });
+});
+
+describe("turns of the conversation view", () => {
+  test("each user message is a turn, and the agent's answers and tool calls between two of them are one turn named by its first entry", () => {
+    const run: ConversationEntry = { id: "tool-1", kind: "tool", title: "Run tests", tool: "execute", status: "completed", detail: [] };
+    expect(
+      conversationTurns([
+        { id: "user-1", kind: "user", text: "Check the build" },
+        { id: "agent-1", kind: "agent", text: "Running the tests." },
+        run,
+        { id: "agent-2", kind: "agent", text: "Green." },
+        { id: "user-2", kind: "user", text: "Thanks" },
+      ]),
+    ).toEqual([
+      { kind: "user", entry: { id: "user-1", kind: "user", text: "Check the build" } },
+      {
+        kind: "agent",
+        id: "agent-1",
+        steps: [{ id: "agent-1", kind: "agent", text: "Running the tests." }, run, { id: "agent-2", kind: "agent", text: "Green." }],
+      },
+      { kind: "user", entry: { id: "user-2", kind: "user", text: "Thanks" } },
+    ]);
+    expect(conversationTurns([])).toEqual([]);
   });
 });
