@@ -9,7 +9,7 @@ Every Copilot CLI session you start in Trackwall knows from its first message wh
 
 ## What you get
 
-- Agents that know they run in Trackwall, and in which version, without you explaining it.
+- Agents that know they run in Trackwall, and in which version, without you explaining it, and start with your approved [workspace knowledge](/features/knowledge).
 - Agents that reach for the right Trackwall tool first, like the repo card instead of reading build files.
 - A clear role for each session: the [supervisor](/features/supervisor) coordinates, a session in a repo hands larger work over, a task session stays in its worktree.
 - Agents that look up a Trackwall feature in this documentation instead of guessing.
@@ -20,6 +20,8 @@ Every Copilot CLI session you start in Trackwall knows from its first message wh
 When you start a session in "Sessions", Trackwall gives Copilot CLI a short instruction file before the agent reads your first message. It says that Trackwall started the session, which Trackwall version that is, and that you watch the session in "Sessions" and hear from Trackwall when the agent ends its turn or asks for approval.
 
 The file then gives the session its role. The [supervisor](/features/supervisor) plans work across your repos and hands every piece over as a task proposal instead of changing code itself; it is told it sits in the supervisor panel rather than in "Sessions". A session in a repo works in your own working copy and hands larger or parallel work over as a [task proposal](/features/main-session). A free session in the projects folder is told the repos are your own working copies, that what it changes there gets no review, and to change only what you ask for. A session of an [agent task](/features/tasks) works only in the task's worktree, does not push, verifies its task before it is done and finishes with a summary for you.
+
+Then come the [workspace knowledge](/features/knowledge) entries you approved about the session's repo and your whole workspace, as your notes rather than rules, so the agent starts with what earlier agents had to find out.
 
 Last comes the guide to the [MCP server](/features/mcp): what each tool is for and in which order to use them, how to point you at a repo, session or task with a [trackwall:// link](/features/links), and the address of this documentation with its `llms.txt` index for AI tools. A session you start yourself outside Trackwall gets this guide only as described in [Connect Copilot CLI](/guide/connect-copilot-cli).
 

@@ -17,6 +17,7 @@ import {
   type SendMessageResult,
   type SendReviewResult,
   type Session,
+  type SessionKnowledge,
   type SessionList,
   type SessionView,
   type StartOptions,
@@ -170,6 +171,8 @@ export interface AgentsDeps {
   openEditor: (dir: string) => void;
   /** Whether a board item is on the board (ADR-133): a task or a proposal names only an existing one. */
   boardHas: (item: string) => Promise<boolean>;
+  /** The workspace knowledge the user approved for a session in `repo` (`null`: in the projects folder), ADR-170. */
+  knowledge: (repo: string | null) => Promise<SessionKnowledge>;
   /**
    * A task has ended and its worktree is gone: what other modules keep of it (its logs, ADR-59) can go too, and its
    * facts go to the task journal (ADR-150).
@@ -218,6 +221,7 @@ export class Agents {
       tokens: this.#tokens,
       callbacks: (session) => this.#sessionCallbacks(session),
       handoff: (task) => this.#tasks.handoff(task),
+      knowledge: deps.knowledge,
     });
     this.#resumable = new ResumableSessions(join(deps.home, RESUMABLE_SESSIONS_FILE), deps.log);
     this.#lastSupervisor = new LastSupervisorFile(join(deps.home, LAST_SUPERVISOR_FILE), deps.log);

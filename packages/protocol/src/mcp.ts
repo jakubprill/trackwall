@@ -54,6 +54,7 @@ import { LOG_BUFFER_RECORDS, LOG_ERRORS_MAX, LOG_TAIL_MAX, LogErrorLevel, LogErr
 import { GET_CHANGED_ENDPOINTS, GET_REPO, LIST_REPOS, PROPOSE_TASK, REPORT_RESULT, RepoArg, RUN_MISE_TASK } from "./mcp-args.ts";
 import type { McpCallEffect } from "./mcp-audit.ts";
 import { boardMcpTools, ItemArg, LIST_ITEMS } from "./mcp-board.ts";
+import { knowledgeMcpTools } from "./mcp-knowledge.ts";
 import { routineMcpTools } from "./mcp-routines.ts";
 import { MiseRunArguments, MiseTaskName, MiseTasks, RunningMiseTask } from "./mise.ts";
 import { RunState } from "./procs.ts";
@@ -890,6 +891,7 @@ export const mcpTools = {
     result: ProposeTaskResult,
   },
   ...routineMcpTools,
+  ...knowledgeMcpTools,
   ...boardMcpTools,
   reportResult: {
     name: REPORT_RESULT,
