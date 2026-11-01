@@ -10,9 +10,9 @@
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { LINUX_ARCHS, linuxArchiveName } from "@trackwall/protocol";
 import { z } from "zod";
 import { parseFile, TAURI_DIR } from "./lib.ts";
-import { LINUX_ARCHS, linuxArchiveName } from "./linux-archive.ts";
 
 /**
  * The update package of each system, under the updater's target name (`{os}-{arch}`). On Windows it is the release zip

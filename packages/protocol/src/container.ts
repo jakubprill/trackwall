@@ -81,3 +81,19 @@ export const ContainerStartResult = z.union([
   }),
 ]);
 export type ContainerStartResult = z.infer<typeof ContainerStartResult>;
+
+/**
+ * What `trackwall-container update <version>` prints (ADR-165), in the same way: `updating` means the background process
+ * has started (the caller polls `/api/health` until the daemon reports `target`, and `logs/daemon.log` tells the rest),
+ * `current` that the daemon already runs `target`.
+ */
+const CONTAINER_UPDATE_ERRORS = ["bad-arguments", "update-running", "update-failed"] as const;
+export const ContainerUpdateResult = z.union([
+  z.object({ ok: z.literal(true), version: z.string(), status: z.enum(["updating", "current"]), target: z.string() }),
+  z.object({
+    ok: z.literal(false),
+    version: z.string(),
+    error: z.object({ code: z.enum(CONTAINER_UPDATE_ERRORS), message: z.string() }),
+  }),
+]);
+export type ContainerUpdateResult = z.infer<typeof ContainerUpdateResult>;
