@@ -157,8 +157,11 @@ describe("a Copilot CLI session over ACP", () => {
     expect(s.acp.view()?.readRequest).toEqual({ prompt: "Read your messages.", since: expect.any(String), waitsFor: "sent" });
     const prompts = s.written.filter((m) => m.method === "session/prompt").length;
     s.acp.deliverNow();
-    expect(s.written.filter((m) => m.method === "session/prompt").length).toBe(prompts);
     expect(s.acp.view()?.readRequest?.waitsFor).toBe("sent");
+    s.answer("session/prompt", { stopReason: "end_turn" });
+    await s.settle();
+    expect(s.written.filter((m) => m.method === "session/prompt").length).toBe(prompts);
+    expect(s.acp.view()?.readRequest?.waitsFor).toBe("idle");
   });
 
   test("an approval request is the session's dialog until it is answered with the option's digit", async () => {

@@ -344,9 +344,9 @@ export class AcpSession implements AgentSession {
     return this.#promptAsked ? "pending" : "idle";
   }
 
-  /** The user's Deliver now (ADR-159): the prompt is asked for again and goes as the next prompt. */
+  /** The user's Deliver now (ADR-159): only where nothing else sends it (`idle`), so it never goes twice. */
   deliverNow(): void {
-    this.askToRead();
+    if (this.#readRequestHold() === "idle") this.askToRead();
   }
 
   dispose(): void {

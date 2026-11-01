@@ -936,6 +936,33 @@ describe("what waits unread for a session, in the session list, and the user's D
     expect(typed).toEqual([]);
   });
 
+  test("a prompt the agent took counts as sent through its turn, so Deliver now and the hooks do not send it twice", async () => {
+    const { session, hooksFile } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    await endTurnAtBox(session, hooksFile);
+    session.askToRead();
+    appendFileSync(hooksFile, promptSubmitted);
+    session.tick();
+
+    expect(session.view()?.readRequest?.waitsFor).toBe("sent");
+    session.deliverNow();
+    expect(written).toEqual(["read the review"]);
+    expect(session.hookOutput({ event: "postToolUse", receivedAt: 0, payload: {}, omitted: [] })).toEqual({});
+    endTurn(session, hooksFile);
+    expect(session.view()?.readRequest?.waitsFor).toBe("idle");
+  });
+
+  test("an empty box on the screen before the first hook is no idle box, since a starting prompt may still take it", async () => {
+    const { session } = runningSession();
+    const written: string[] = [];
+    session.connect({ write: (data) => written.push(data), resize: () => {} });
+    session.askToRead();
+    await showScreen(session, PROMPT_BOX);
+
+    expect(session.view()?.readRequest?.waitsFor).not.toBe("idle");
+  });
+
   test("a typed prompt the daemon gave up on in the box waits as the box's text, and is not typed again", async () => {
     const { session, hooksFile } = runningSession();
     const written: string[] = [];

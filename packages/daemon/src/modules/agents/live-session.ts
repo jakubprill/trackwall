@@ -195,6 +195,11 @@ export class LiveSession implements AgentSession {
   #boxRead: { revision: number; text: string | undefined } | undefined;
   /** The user put text into the input box or pressed Esc since the last end of a turn: the next end is of their turn. */
   #userDrove = false;
+  /**
+   * The turn under way was started by the daemon's prompt, typed or as a block, and neither ended nor taken over by the
+   * user's text or Esc: what waits unread counts as sent until it ends (ADR-159), so Deliver now does not send it again.
+   */
+  #daemonTurn = false;
   #submitTimer: NodeJS.Timeout | undefined;
   readonly #readRequest = new ReadRequestClock();
   readonly #dialogs: SessionDialogs;
@@ -265,9 +270,13 @@ export class LiveSession implements AgentSession {
       this.#userDraft = true;
       this.#userTextAt = Date.now();
       this.#userDrove = true;
+      this.#daemonTurn = false;
       this.#onUserText();
     }
-    if (data === ESCAPE) this.#userDrove = true;
+    if (data === ESCAPE) {
+      this.#userDrove = true;
+      this.#daemonTurn = false;
+    }
     if (key && this.#keyChangesState(key, data)) this.#report(this.#state.key(key));
     // After the key's own state change, so that the `Input` an Esc causes counts as seen.
     if (typedByUser(data)) this.#attention.typed();
@@ -462,25 +471,26 @@ export class LiveSession implements AgentSession {
    * turn will end to deliver it, and only the user's Deliver now types it.
    */
   #deliveryHold(): ReadRequestHold | "now" {
-    if (this.#promptTyped) return "sent";
+    if (this.#promptTyped || this.#daemonTurn) return "sent";
     if (!this.#promptAsked) return "idle";
     if (this.#userDraft) return "user_text";
     if (this.#dialog() !== null) return "dialog";
     if (this.#last !== null && this.#last.state !== "Input") return "pending";
     const box = this.#box();
     if (box) return "user_text";
-    if (!this.#state.inPromptBox(() => this.#screen.lines())) return box === "" ? "idle" : "pending";
+    // Before the first hook an empty box may still take a starting prompt, so only a session with a state is idle there.
+    if (!this.#state.inPromptBox(() => this.#screen.lines())) return box === "" && this.#last !== null ? "idle" : "pending";
     return "now";
   }
 
   /**
    * The user's Deliver now (ADR-159): the prompt is asked for again and typed at once when the session waits in an empty
-   * input box, also one the hooks do not trust after an Esc. A prompt already sent is left to the read cycle's own tries,
-   * so it never goes in twice.
+   * input box, also one the hooks do not trust after an Esc. A prompt already sent, or taken into the daemon's turn, is
+   * left to the read cycle's own tries and that turn, so it never goes in twice.
    */
   deliverNow(): void {
     this.#readHooks();
-    if (this.#promptTyped) return;
+    if (this.#deliveryHold() === "sent") return;
     this.#promptAsked = true;
     this.#typePrompt(true);
   }
@@ -534,6 +544,7 @@ export class LiveSession implements AgentSession {
     // The end of a turn from its hook, not from the state: a question dialog and an Esc give `Input` mid-turn too.
     if (record.event !== "agentStop") return false;
     this.#onTurnOver();
+    this.#daemonTurn = false;
     const ended = !this.#userDrove;
     this.#userDrove = false;
     return ended;
@@ -567,7 +578,10 @@ export class LiveSession implements AgentSession {
       this.#last = change;
       if (change.state === "Error" && !wasError && !this.#finished) this.#onEvent({ kind: "error" });
       // Copilot CLI took the typed prompt: the turn it started is the session's, and the next prompt is a new one.
-      if (change.state !== "Input") this.#promptTyped = undefined;
+      if (change.state !== "Input") {
+        if (this.#promptTyped) this.#daemonTurn = true;
+        this.#promptTyped = undefined;
+      }
     }
   }
 
