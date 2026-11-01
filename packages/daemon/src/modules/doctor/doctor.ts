@@ -13,12 +13,14 @@ import {
 } from "@trackwall/protocol";
 import { trustedFolderOf, trustedFolders } from "./copilot-trust.ts";
 import { folderStorage } from "./folder-storage.ts";
+import { networkOutcome } from "./network-check.ts";
+import type { TlsProbe } from "./tls-probe.ts";
 import { compareVersions, versionIn } from "./version.ts";
 
 /**
  * The doctor (§4.15, ADR-101): checks of what Trackwall needs on this computer, each with what to do when it fails, for the
  * person setting Trackwall up or wondering why a part of it does not work. It only reads and runs `--version` and
- * `auth status`; it changes nothing, and its report is not kept. A check that throws becomes a failed check, never a
+ * `auth status` and opens a TLS connection to GitHub and Copilot without sending anything but a proxy's login (ADR-166); it changes nothing, and its report is not kept. A check that throws becomes a failed check, never a
  * failed report.
  */
 
@@ -57,6 +59,10 @@ export interface DoctorDeps {
   workspaceKeys: () => WorkspaceKeysRead;
   /** Whether tasks can get Java navigation (`agents`); `null` while `javaNavigation` is not in `workspace.yaml`. */
   javaNavigation: () => JavaNavigationState;
+  /** Opens a TLS connection as a session's Node.js would (`probeTls`, a fake in tests); the network check's only way out. */
+  probeTls: TlsProbe;
+  /** System certificate bundles the network check may name in its fix (`SYSTEM_CA_FILES`). */
+  systemCaFiles: readonly string[];
   now: () => Date;
 }
 
@@ -84,6 +90,7 @@ export class Doctor {
       git: () => this.git(),
       "copilot-cli": (ctx) => this.copilotCli(ctx),
       "copilot-trusted-folder": (ctx) => this.copilotTrustedFolder(ctx),
+      network: ({ env }) => networkOutcome(env, { probe: this.deps.probeTls, systemCaFiles: this.deps.systemCaFiles }),
       mise: (ctx) => this.mise(ctx),
       "java-navigation": async () => this.javaNavigation(),
       "github-cli": () => this.hostCli("github"),
