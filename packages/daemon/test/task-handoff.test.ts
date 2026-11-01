@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
-import { agentsApi, GetChangedEndpointsResult, GetHandoffResult, graphApi, ProposeTaskResult } from "@trackwall/protocol";
+import { agentsApi, GetChangedEndpointsResult, GetHandoffResult, graphApi, ProposeTaskResult, taskRoundsApi } from "@trackwall/protocol";
 import { sessionDir } from "../src/modules/agents/session-launcher.ts";
 import { viewer, waitFor } from "./support/agents.ts";
 import { commitFiles, gitIn } from "./support/git-repo.ts";
@@ -19,6 +19,9 @@ beforeAll(async () => {
     repos: { payments: { "README.md": "# payments\n" }, "orders-api": { "README.md": "# orders-api\n" } },
     miseCommand: ["mise"],
   });
+  // Round commits (ADR-168) carry the user's own identity, which git takes from the repo's config here.
+  gitIn(join(daemon.projects, "payments"), "config", "user.name", "Repo User");
+  gitIn(join(daemon.projects, "payments"), "config", "user.email", "user@example.com");
 }, SLOW_TEST_TIMEOUT_MS);
 
 afterAll(async () => {
@@ -49,6 +52,15 @@ function runningSession(task: string): string {
 
 function instructionsOf(session: string): string {
   return readFileSync(join(sessionDir(daemon.home, session), "instructions", "trackwall.instructions.md"), "utf8");
+}
+
+/** Waits until `check` holds, up to 20 s. */
+async function eventually(check: () => Promise<boolean>, what: string): Promise<void> {
+  const until = Date.now() + 20_000;
+  while (!(await check())) {
+    if (Date.now() > until) throw new Error(`gave up waiting for: ${what}`);
+    await new Promise((r) => setTimeout(r, 50));
+  }
 }
 
 describe.skipIf(process.versions.bun === undefined)(
@@ -221,6 +233,67 @@ describe.skipIf(process.versions.bun === undefined)(
 
       parentWindow.attachment.detach();
       childWindow.attachment.detach();
+      for (const session of [childSession, parentSession, main.id]) await daemon.facade.agents.stop(session);
+      for (const task of [child, parent])
+        await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
+    }, 60_000);
+
+    test("a round commit of what the handing task's turn left unfinished is no new work to read; the agent's own commit on top is (ADR-144, ADR-168)", async () => {
+      const main = await daemon.facade.agents.start("payments");
+      await waitFor(daemon.facade.agents, main.id, (s) => s.state?.state === "Input", "sessionStart");
+      const parent = await approve(
+        (await proposeTask(await clientOfSession(main.id), "payments", "Cancel payments")).id,
+        "cancel payments",
+      );
+      const parentSession = runningSession(parent.id);
+      const read = gitIn(parent.worktree, "rev-parse", "HEAD").trim();
+      const child = await approve(
+        (await proposeTask(await clientOfSession(parentSession), "orders-api", "Cancel through payments")).id,
+        "cancel through payments",
+      );
+      const childSession = runningSession(child.id);
+      const childClient = await clientOfSession(childSession);
+      const getHandoff = async () =>
+        GetHandoffResult.parse((await childClient.callTool({ name: "get_handoff", arguments: {} })).structuredContent).handoff;
+      const parentWindow = viewer(daemon.facade.agents, parentSession);
+      const parentTurn = async (what: string) => {
+        parentWindow.attachment.input("go on\r");
+        await waitFor(daemon.facade.agents, parentSession, (s) => s.state?.state === "Approval", `the parent's approval in ${what}`);
+        parentWindow.attachment.input("1");
+      };
+      const rounds = async () => (await daemon.post(taskRoundsApi.rounds, { task: parent.id })).rounds;
+      const childReadRequest = () => daemon.facade.agents.sessions().sessions.find((s) => s.id === childSession)?.readRequest ?? null;
+
+      // The handing task's turn ends with a half-done contract left uncommitted: Trackwall commits it as a round.
+      writeFileSync(join(parent.worktree, "openapi.yaml"), "paths:\n  /api/cancellations: {}\n");
+      await parentTurn("the first turn");
+      await eventually(async () => (await rounds()).length === 1, "round 1");
+      const roundCommit = gitIn(parent.worktree, "rev-parse", "HEAD").trim();
+      expect(roundCommit).not.toBe(read);
+      // The subtask is not asked to read, and get_handoff still sees the commit it read.
+      await new Promise((r) => setTimeout(r, 500));
+      expect(childReadRequest()).toBeNull();
+      expect(await getHandoff()).toMatchObject({ read, head: read, commits: 0, files: [] });
+
+      // The agent commits its finished contract on top of the round; the next turn's end asks the subtask to read it.
+      commitFiles(parent.worktree, { "openapi.yaml": "paths:\n  /api/cancellations:\n    post: {}\n" }, "Add cancellations");
+      const head = gitIn(parent.worktree, "rev-parse", "HEAD").trim();
+      await waitFor(daemon.facade.agents, parentSession, (s) => s.state?.state === "Input", "the end of the parent's first turn");
+      await parentTurn("the second turn");
+      await eventually(async () => childReadRequest() !== null, "the subtask's read request");
+      expect(await getHandoff()).toEqual({
+        task: parent.id,
+        repo: "payments",
+        branch: parent.branch,
+        ended: false,
+        read,
+        head,
+        commits: 2,
+        files: ["openapi.yaml"],
+        filesTruncated: false,
+      });
+
+      parentWindow.attachment.detach();
       for (const session of [childSession, parentSession, main.id]) await daemon.facade.agents.stop(session);
       for (const task of [child, parent])
         await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });

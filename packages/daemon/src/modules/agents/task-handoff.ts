@@ -22,20 +22,26 @@ export type HandoffFacts = (TaskHandoff & { ended: false }) | (Omit<TaskHandoff,
 
 /** What a handoff reads from git in the handing task's worktree. */
 export interface HandoffGit {
-  headCommit(dir: string): Promise<string | null>;
   countBetween(dir: string, from: string, to: string): Promise<number | undefined>;
   changedPathsBetween(dir: string, from: string, to: string, max: number): Promise<{ paths: string[]; truncated: boolean } | undefined>;
 }
 
 /**
- * Where the handing task's branch is now against the commit the subtask read last (`get_handoff`, ADR-144); `worktree`
- * is the handing task's, `undefined` once it ended.
+ * The handing task's worktree and where its branch is as a handoff sees it: its newest commit that is not a round commit
+ * (ADR-168), since a round commit holds what a turn left unfinished, not the work the agent committed to hand on
+ * (ADR-144); `undefined` once that task ended.
  */
-export async function handoffState(handoff: TaskHandoff, worktree: string | undefined, git: HandoffGit): Promise<TaskHandoffState> {
+export interface HandingBranch {
+  worktree: string;
+  head: string | null;
+}
+
+/** Where the handing task's branch is now against the commit the subtask read last (`get_handoff`, ADR-144). */
+export async function handoffState(handoff: TaskHandoff, handing: HandingBranch | undefined, git: HandoffGit): Promise<TaskHandoffState> {
   const { task, repo, branch, commit: read } = handoff;
   const unchanged = { files: [], filesTruncated: false };
-  if (worktree === undefined) return { task, repo, branch, read, ended: true, head: null, commits: null, ...unchanged };
-  const head = await git.headCommit(worktree);
+  if (handing === undefined) return { task, repo, branch, read, ended: true, head: null, commits: null, ...unchanged };
+  const { worktree, head } = handing;
   if (head === null || head === read)
     return { task, repo, branch, read, ended: false, head, commits: head === null ? null : 0, ...unchanged };
   const [commits, changed] = await Promise.all([
