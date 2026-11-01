@@ -53,7 +53,7 @@ The agent sees the same projects folder you see in Trackwall, through the tools 
 | `propose_folder_action` | Propose removing a repo from the projects folder; nothing happens until you approve it, see the [supervisor](/features/supervisor). |
 | `get_review_comments` | The comments you sent on lines of a task's changes, for that task's agent; see [Agent tasks](/features/tasks). |
 | `send_message`, `get_messages` | A message from the session that proposed a task to that task's agent, and the agent reading it; see [Main session and task proposals](/features/main-session). |
-| `ask_proposer` | A question from a task's agent to the session that proposed the task, which answers with `send_message`; a task you started asks you instead. |
+| `ask_proposer` | A question from a task's agent to the session that proposed the task, which answers with `send_message`; a task you started yourself asks you instead, unless you handed it to the supervisor. |
 | `get_handoff` | For a task another task handed its work: where that task's branch is now and which files its new commits change since the agent last looked; see [Main session and task proposals](/features/main-session). |
 | `resume_task` | Continue a task whose session no longer runs, in its own worktree and conversation, the same as "Resume". The supervisor resumes any task, another session only the tasks it proposed. |
 | `get_day_report` | The report of your last [day start](/features/start-my-day): new commits on each repo's main branch since the one before, repos the sync could not update, and open tasks with how far behind they are. |

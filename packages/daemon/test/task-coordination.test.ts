@@ -365,6 +365,18 @@ describe("questions from a task to its proposer (ADR-160)", () => {
     expect(coordination.unread({ id: NEW_SUPERVISOR, supervisor: true, task: null }).updates).toBe(1);
   });
 
+  test("a task handed to the supervisor asks the supervisor, and a task another task proposed asks that task's session", () => {
+    const { coordination, tasks, asked } = setup();
+    tasks.set("handed", task("handed", { session: null, supervisor: true, task: null }));
+
+    expect(coordination.ask("handed", TASK_SESSION, "Which port?")).toBe("queued");
+    expect(coordination.ask("by-task", TASK_SESSION, "Where do the DTOs go?")).toBe("queued");
+
+    expect(asked).toEqual([SUPERVISOR, TASK_SESSION]);
+    expect(coordination.takeUpdates(SUPERVISOR).updates.map((u) => u.task)).toEqual(["handed"]);
+    expect(coordination.takeUpdates(TASK_SESSION).updates.map((u) => u.task)).toEqual(["by-task"]);
+  });
+
   test("a task the user started, or whose proposer nobody in Trackwall stands behind, is told to ask the user", () => {
     const { coordination } = setup();
 
@@ -376,7 +388,7 @@ describe("questions from a task to its proposer (ADR-160)", () => {
     );
   });
 
-  test("after five questions without the user the sixth is refused, until the user takes part in the task", () => {
+  test("after five questions without the user the sixth is refused, until the user takes part in the task or the proposer's session", () => {
     const { coordination } = setup();
     for (let i = 1; i <= 5; i++) coordination.ask("by-main", TASK_SESSION, `Question ${i}`);
 
@@ -388,6 +400,16 @@ describe("questions from a task to its proposer (ADR-160)", () => {
       coordination.userTyped({ id: TASK_SESSION, task: "by-main" });
       tenMillisecondsLater();
       expect(coordination.ask("by-main", TASK_SESSION, "Question 6")).toBe("queued");
+      for (let i = 7; i <= 10; i++) coordination.ask("by-main", TASK_SESSION, `Question ${i}`);
+      tenMillisecondsLater();
+      // A review of the task counts, and so does the user's text in the proposer's session that answers.
+      coordination.reviewed("by-main");
+      tenMillisecondsLater();
+      for (let i = 11; i <= 15; i++) coordination.ask("by-main", TASK_SESSION, `Question ${i}`);
+      tenMillisecondsLater();
+      coordination.userTyped({ id: MAIN, task: null });
+      tenMillisecondsLater();
+      expect(coordination.ask("by-main", TASK_SESSION, "Question 16")).toBe("queued");
     } finally {
       setSystemTime();
     }

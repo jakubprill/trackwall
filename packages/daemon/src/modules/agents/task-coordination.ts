@@ -159,13 +159,15 @@ export class TaskCoordination {
         "bad_request",
         `the user started task ${task.id}, so no session answers its questions; ask the user in your answer instead`,
       );
-    const proposer = proposerOf(task.proposedBy);
-    if (proposer === null || !this.#deps.hasProposer(proposer))
+    const proposer = this.#proposerKey(task.proposedBy);
+    if (proposer === null)
       throw new DomainError(
         "bad_request",
         `no session in Trackwall answers task ${task.id} now (its proposer was closed or is an agent outside Trackwall); ask the user in your answer instead`,
       );
-    const since = this.#userInTask.get(task.id) ?? 0;
+    // The user taking part in the task or in the proposer's session that answers it, as for messages down.
+    const answering = this.#deps.runningProposer(proposer)?.id;
+    const since = Math.max(this.#userInTask.get(task.id) ?? 0, answering === undefined ? 0 : (this.#userInSession.get(answering) ?? 0));
     const asked = (this.#questions.get(task.id) ?? []).filter((at) => at > since);
     if (asked.length >= TASK_MESSAGES_WITHOUT_USER)
       throw new DomainError(
@@ -174,7 +176,7 @@ export class TaskCoordination {
       );
     this.#questions.set(task.id, [...asked, Date.now()]);
     this.#deps.log(`question from task ${task.id} to its proposer (${text.length} characters)`);
-    return this.#notify(task.proposedBy, { kind: "question", text, task: task.id, session, at: new Date().toISOString() }) ?? "on_resume";
+    return this.#queue(proposer, { kind: "question", text, task: task.id, session, at: new Date().toISOString() });
   }
 
   /** The unread messages of task `task`, which now count as read (`get_messages`). */
@@ -288,14 +290,21 @@ export class TaskCoordination {
     return Math.max(this.#userInSession.get(caller) ?? 0, this.#userInTask.get(task) ?? 0);
   }
 
-  /**
-   * Queues an update for a proposer still on the list, and asks its running session to read it: how that session gets
-   * the prompt, or `undefined` when none runs now (its next session reads it) or nobody is behind the proposer.
-   */
-  #notify(proposedBy: ProposedBy | null, update: TaskUpdate): "typed" | "queued" | undefined {
+  /** Queues an update for a proposer still on the list, and asks its running session to read it. */
+  #notify(proposedBy: ProposedBy | null, update: TaskUpdate): void {
+    const proposer = this.#proposerKey(proposedBy);
+    if (proposer !== null) this.#queue(proposer, update);
+  }
+
+  /** The proposer key of `proposedBy` while someone stands behind it, else `null`. */
+  #proposerKey(proposedBy: ProposedBy | null): string | null {
     const proposer = proposerOf(proposedBy);
-    if (proposer === null || !this.#deps.hasProposer(proposer)) return undefined;
+    return proposer !== null && this.#deps.hasProposer(proposer) ? proposer : null;
+  }
+
+  /** Queues an update for `proposer` and asks its running session to read it; `on_resume` when none runs now. */
+  #queue(proposer: string, update: TaskUpdate): PromptDelivery {
     this.#updates.add(proposer, update);
-    return this.#deps.runningProposer(proposer)?.askToRead();
+    return this.#deps.runningProposer(proposer)?.askToRead() ?? "on_resume";
   }
 }
