@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { JavaNavigationSettings, JavaNavigationState } from "@trackwall/protocol";
 import { configOrProblem } from "../../infra/errors.ts";
@@ -45,6 +45,8 @@ const NOT_SET = "javaNavigation is not set in workspace.yaml";
 export function javaNavigationProblem(settings: JavaNavigationSettings, platform = process.platform, arch = process.arch): string | null {
   if (!isFile(settings.java)) return `no Java program at ${settings.java}`;
   if (settings.lombok !== null && !isFile(settings.lombok)) return `no Lombok jar at ${settings.lombok}`;
+  const runtime = settings.runtimes.find((home) => javaRuntimeOf(home) === null);
+  if (runtime !== undefined) return `no Java installation at ${runtime} (no release file naming its JAVA_VERSION)`;
   if (launcherJar(settings.jdtls) === null) return `no jdtls launcher jar in ${join(settings.jdtls, "plugins")}`;
   const config = join(settings.jdtls, configFolder(platform, arch));
   if (!isDirectory(config)) return `no jdtls configuration for this system at ${config}`;
@@ -62,8 +64,46 @@ export function mavenOnlyImport(worktree: string): boolean {
 
 const GRADLE_BUILD_FILES = ["build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"];
 
-/** jdtls's settings for an import with Maven only, in the shape of VS Code's `java.*` settings. */
-const MAVEN_ONLY = { settings: { java: { import: { gradle: { enabled: false } } } } };
+/**
+ * A Java installation jdtls may use for a project (ADR-167): its folder and the name of the Java SE version it provides,
+ * as jdtls's `java.configuration.runtimes` names them (`JavaSE-1.8`, `JavaSE-17`).
+ */
+export interface JavaRuntime {
+  name: string;
+  path: string;
+}
+
+/**
+ * The runtime in the Java installation folder `home`, from the `release` file every JDK has at its root since Java 8
+ * (`JAVA_VERSION="17.0.12"`, `"1.8.0_422"`); `null` when there is none, so a wrong folder is a problem before a start.
+ */
+export function javaRuntimeOf(home: string): JavaRuntime | null {
+  const release = join(home, "release");
+  if (!isFile(release)) return null;
+  const version = /^JAVA_VERSION="(?:1\.(?=\d))?(\d+)/m.exec(readFileSync(release, "utf8"))?.[1];
+  if (version === undefined) return null;
+  return { name: version === "8" ? "JavaSE-1.8" : `JavaSE-${version}`, path: home };
+}
+
+/**
+ * jdtls's settings for the worktree, in the shape of VS Code's `java.*` settings, which Copilot CLI passes on in the
+ * `initialize` request; `null` when jdtls's defaults do. Maven only (ADR-124) turns Gradle's import off. The runtimes
+ * (ADR-167) let jdtls run an older Gradle on a Java it supports instead of the Java jdtls runs on, and Gradle find the
+ * toolchain a build asks for, which it does not look for where mise installs it.
+ */
+function jdtlsSettings(mavenOnly: boolean, runtimes: readonly JavaRuntime[]): Record<string, unknown> | null {
+  if (!mavenOnly && runtimes.length === 0) return null;
+  const toolchains = `-Porg.gradle.java.installations.paths=${runtimes.map((runtime) => runtime.path).join(",")}`;
+  const gradle = mavenOnly ? { enabled: false } : { arguments: [toolchains] };
+  return {
+    settings: {
+      java: {
+        import: { gradle },
+        ...(runtimes.length === 0 ? {} : { configuration: { runtimes } }),
+      },
+    },
+  };
+}
 
 /** The jdtls entry for a session whose data folder is `dataDir`, for settings `javaNavigationProblem` found no problem in. */
 export function javaLanguageServer(
@@ -75,6 +115,8 @@ export function javaLanguageServer(
 ): LspServer {
   const launcher = launcherJar(settings.jdtls);
   if (launcher === null) throw new Error(`no jdtls launcher jar in ${join(settings.jdtls, "plugins")}`);
+  const runtimes = settings.runtimes.flatMap((home) => javaRuntimeOf(home) ?? []);
+  const initializationOptions = jdtlsSettings(mavenOnly, runtimes);
   return {
     command: settings.java,
     args: [
@@ -101,7 +143,7 @@ export function javaLanguageServer(
       join(dataDir, "workspace"),
     ],
     fileExtensions: { ".java": "java" },
-    ...(mavenOnly ? { initializationOptions: MAVEN_ONLY } : {}),
+    ...(initializationOptions === null ? {} : { initializationOptions }),
   };
 }
 

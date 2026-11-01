@@ -9,7 +9,8 @@ import { join } from "node:path";
 import type { JavaNavigationInstall } from "@trackwall/protocol";
 import { createFacade, type Facade } from "../src/facade.ts";
 import { tarProgram } from "../src/infra/tar.ts";
-import type { JdtlsRelease } from "../src/modules/java-navigation/jdtls-release.ts";
+import type { PinnedRelease } from "../src/modules/java-navigation/pinned-releases.ts";
+import { makeRepo } from "./support/git-repo.ts";
 import { fakeHostingClis } from "./support/hosting.ts";
 
 const fakeMise = join(import.meta.dir, "fixtures", "fake-mise-tools.ts");
@@ -40,18 +41,22 @@ function jdtlsArchive(): Buffer {
 
 const archive = jdtlsArchive();
 const sha256 = createHash("sha256").update(archive).digest("hex");
+const lombokJar = Buffer.from("a Lombok jar");
 let downloads = 0;
 const server = createServer((req, res) => {
+  if (req.url === "/lombok.jar") return void res.writeHead(200, { "content-type": "application/java-archive" }).end(lombokJar);
   if (req.url !== "/jdtls.tar.gz") return void res.writeHead(404).end();
   downloads++;
   res.writeHead(200, { "content-type": "application/gzip" }).end(archive);
 });
 await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/jdtls.tar.gz`;
+const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+const url = `${origin}/jdtls.tar.gz`;
+const lombokRelease = { version: "1.18.48", url: `${origin}/lombok.jar`, sha256: createHash("sha256").update(lombokJar).digest("hex") };
 afterAll(() => server.close());
 
 /** A facade whose install downloads the local archive and installs Java with the fake mise. */
-function installFacade(o: { release?: Partial<JdtlsRelease>; miseError?: string } = {}) {
+function installFacade(o: { release?: Partial<PinnedRelease>; miseError?: string } = {}) {
   const home = mkdtempSync(join(tmpdir(), "trackwall-java-install-home-"));
   const projects = mkdtempSync(join(tmpdir(), "trackwall-java-install-projects-"));
   const installs = mkdtempSync(join(tmpdir(), "trackwall-java-install-mise-"));
@@ -72,6 +77,7 @@ function installFacade(o: { release?: Partial<JdtlsRelease>; miseError?: string 
       ...(o.miseError === undefined ? {} : { FAKE_MISE_INSTALL_ERROR: o.miseError }),
     }),
     jdtlsRelease: { version: "1.63.0", url, sha256, ...o.release },
+    lombokRelease,
     log: () => {},
   });
   return { facade, projects, installs, lsp: join(projects, ".trackwall", "lsp") };
@@ -90,26 +96,30 @@ async function installed(facade: Facade): Promise<JavaNavigationInstall> {
 const javaName = process.platform === "win32" ? "java.exe" : "java";
 
 describe("installing Java navigation from Settings (ADR-123)", () => {
-  test("downloads jdtls into the projects folder, installs Java with mise and saves both paths, so tasks can get it", async () => {
+  test("downloads jdtls and Lombok into the projects folder, installs Java with mise and saves the paths, so tasks can get it", async () => {
     const { facade, projects, installs, lsp } = installFacade();
     await facade.workspace.setProjectsDir(projects);
     expect(facade.javaNavigation.state()).toEqual({
       jdtls: "1.63.0",
       java: "temurin-25",
+      lombok: "1.18.48",
       step: null,
       error: null,
+      warning: null,
       readiness: null,
     });
     expect(facade.javaNavigation.startInstall().step).toBe("Starting");
-    expect(await installed(facade)).toMatchObject({ step: null, error: null, readiness: { problem: null } });
+    expect(await installed(facade)).toMatchObject({ step: null, error: null, warning: null, readiness: { problem: null } });
     const jdtls = join(lsp, "jdtls-1.63.0");
     expect(facade.workspace.javaNavigation()).toEqual({
       jdtls,
       java: join(installs, "java@temurin-25", "bin", javaName),
-      lombok: null,
+      lombok: join(lsp, "lombok-1.18.48.jar"),
+      runtimes: [],
     });
     expect(readdirSync(join(jdtls, "plugins"))).toEqual(["org.eclipse.equinox.launcher_1.8.0.v20260804-1928.jar"]);
-    expect(readdirSync(lsp)).toEqual(["jdtls-1.63.0"]);
+    expect(readFileSync(join(lsp, "lombok-1.18.48.jar"), "utf8")).toBe("a Lombok jar");
+    expect(readdirSync(lsp).sort()).toEqual(["jdtls-1.63.0", "lombok-1.18.48.jar"]);
     // mise runs in an empty folder of the install's own and looks for no config above it, so no mise config takes part.
     const mise = JSON.parse(readFileSync(join(installs, "calls.log"), "utf8"));
     expect(mise.ceiling).toBe(mise.cwd);
@@ -134,7 +144,7 @@ describe("installing Java navigation from Settings (ADR-123)", () => {
     expect(await installed(facade)).toMatchObject({ error: null, readiness: { problem: null } });
     expect(downloads).toBe(before + 1);
     expect(existsSync(planted)).toBe(false);
-    expect(readdirSync(lsp)).toEqual(["jdtls-1.63.0"]);
+    expect(readdirSync(lsp).sort()).toEqual(["jdtls-1.63.0", "lombok-1.18.48.jar"]);
     expect(facade.workspace.javaNavigation()).toEqual({ ...settings, lombok });
   });
 
@@ -144,7 +154,26 @@ describe("installing Java navigation from Settings (ADR-123)", () => {
     mkdirSync(join(lsp, ".install-left"), { recursive: true });
     facade.javaNavigation.startInstall();
     await installed(facade);
-    expect(readdirSync(lsp)).toEqual(["jdtls-1.63.0"]);
+    expect(readdirSync(lsp).sort()).toEqual(["jdtls-1.63.0", "lombok-1.18.48.jar"]);
+  });
+
+  test("installs with mise the Java versions the repos build with, gives them to jdtls and names those mise could not install", async () => {
+    const { facade, projects, installs } = installFacade({ miseError: "java@temurin-8: no Temurin 8 build for this system" });
+    makeRepo(
+      { "pom.xml": "<project><artifactId>orders</artifactId><properties><java.version>17</java.version></properties></project>" },
+      "orders",
+      projects,
+    );
+    makeRepo({ "build.gradle": "java {\n  toolchain {\n    languageVersion = JavaLanguageVersion.of(8)\n  }\n}\n" }, "legacy", projects);
+    await facade.workspace.setProjectsDir(projects);
+    facade.javaNavigation.startInstall();
+    const install = await installed(facade);
+    expect(install).toMatchObject({
+      error: null,
+      warning: "mise could not install Java 8: mise ERROR java@temurin-8: no Temurin 8 build for this system",
+      readiness: { problem: null },
+    });
+    expect(facade.workspace.javaNavigation()?.runtimes).toEqual([join(installs, "java@temurin-17")]);
   });
 
   test("an archive whose SHA-256 differs from the pinned one fails the install and leaves nothing behind", async () => {

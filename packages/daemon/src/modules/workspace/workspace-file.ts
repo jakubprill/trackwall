@@ -70,8 +70,8 @@ const Keys: { [K in WorkspaceKey]: z.ZodType<WorkspaceKeyValues[K], unknown> } =
   sessionProfile: SessionProfile.nullish().transform((profile) => profile ?? null),
   // The Java language server for tasks (ADR-99); by hand or by installing it in Settings › Agents (ADR-123).
   javaNavigation: JavaNavigationSettings.refine(
-    (settings) => [settings.jdtls, settings.java, settings.lombok].every((path) => path === null || isFullPath(path)),
-    "jdtls, java and lombok must be full paths",
+    (settings) => [settings.jdtls, settings.java, settings.lombok, ...settings.runtimes].every((path) => path === null || isFullPath(path)),
+    "jdtls, java, lombok and runtimes must be full paths",
   )
     .nullish()
     .transform((settings) => settings ?? null),
@@ -199,10 +199,10 @@ export class WorkspaceFile {
     this.set("sessionProfile", profile);
   }
 
-  /** Without a Lombok jar the key has no `lombok` line, rather than `lombok: null`. */
+  /** Without a Lombok jar or runtimes the key has no `lombok` or `runtimes` line, rather than `lombok: null` or `runtimes: []`. */
   setJavaNavigation(settings: JavaNavigationSettings): void {
-    const { lombok, ...paths } = settings;
-    this.set("javaNavigation", lombok === null ? paths : settings);
+    const { lombok, runtimes, ...paths } = settings;
+    this.set("javaNavigation", { ...paths, ...(lombok === null ? {} : { lombok }), ...(runtimes.length === 0 ? {} : { runtimes }) });
   }
 
   setLocalConfigRemote(url: string | null): void {
