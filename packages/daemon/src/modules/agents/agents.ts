@@ -10,6 +10,7 @@ import {
   type JavaNavigationSettings,
   type JavaNavigationStatus,
   type MiseTarget,
+  type PromptDelivery,
   type ReviewComment,
   type SendMessageResult,
   type SendReviewResult,
@@ -484,6 +485,14 @@ export class Agents {
    */
   sendMessage(caller: string | null, task: string, text: string): SendMessageResult {
     return this.#coordination.send(caller, task, text);
+  }
+
+  /** A question from session `caller`'s own task to the task's proposer (`ask_proposer`, ADR-160). */
+  askProposer(caller: string | null, text: string): PromptDelivery {
+    const task = caller === null ? null : this.session(caller).task;
+    if (caller === null || task === null)
+      throw new DomainError("bad_request", "only a session that runs a task in Trackwall has a proposer to ask");
+    return this.#coordination.ask(task, caller, text);
   }
 
   /** The unread messages to session `caller`'s own task (`get_messages`), which now count as read. */

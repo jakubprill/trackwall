@@ -1,9 +1,11 @@
 import {
   mcpTools,
+  type PromptDelivery,
   type ProposedBy,
   type SendMessageResult,
   type Session,
   SessionId,
+  TASK_MESSAGES_WITHOUT_USER,
   type Task,
   TaskId,
   type TaskMessage,
@@ -33,6 +35,8 @@ export const StoredCoordination = z.object({
   updates: StoredUpdates,
   userInTask: z.record(TaskId, EpochMs),
   userInSession: z.record(SessionId, EpochMs),
+  /** When each task last asked its proposer (ADR-160), for the limit without the user; absent in files of older daemons. */
+  questions: z.record(TaskId, z.array(EpochMs)).default({}),
 });
 export type StoredCoordination = z.infer<typeof StoredCoordination>;
 
@@ -81,6 +85,8 @@ export class TaskCoordination {
   readonly #userInTask = new Map<string, number>();
   /** When the user last put text into a session (session id → milliseconds since the epoch). */
   readonly #userInSession = new Map<string, number>();
+  /** When each task asked its proposer since the user last took part in it (milliseconds since the epoch, ADR-160). */
+  readonly #questions = new Map<string, number[]>();
 
   constructor(deps: CoordinationDeps) {
     this.#deps = deps;
@@ -94,6 +100,7 @@ export class TaskCoordination {
       updates: this.#updates.stored(),
       userInTask: Object.fromEntries(this.#userInTask),
       userInSession: Object.fromEntries(this.#userInSession),
+      questions: Object.fromEntries(this.#questions),
     };
   }
 
@@ -108,6 +115,8 @@ export class TaskCoordination {
     for (const [task, at] of Object.entries(stored.userInTask)) if (hasTask(task)) this.#userInTask.set(task, at);
     this.#userInSession.clear();
     for (const [session, at] of Object.entries(stored.userInSession)) if (hasSession(session)) this.#userInSession.set(session, at);
+    this.#questions.clear();
+    for (const [task, at] of Object.entries(stored.questions)) if (hasTask(task)) this.#questions.set(task, at);
   }
 
   /**
@@ -135,6 +144,37 @@ export class TaskCoordination {
     this.#deps.log(`message ${message.id} to task ${id} (${text.length} characters)`);
     const running = this.#deps.runningOfTask(id);
     return { message, delivery: running ? running.askToRead() : "on_resume" };
+  }
+
+  /**
+   * A question from session `session` of task `task` to the task's proposer (`ask_proposer`, ADR-160), which reads it
+   * with `get_updates` and answers with `send_message`. Refused for a task the user started (no proposer: the user is
+   * asked in the session instead), for a proposer no longer on the list, and after `TASK_MESSAGES_WITHOUT_USER`
+   * questions since the user last took part in the task, so a task does not keep its proposer busy without the user.
+   */
+  ask(id: string, session: string, text: string): PromptDelivery {
+    const task = this.#deps.task(id);
+    if (task.proposedBy === null)
+      throw new DomainError(
+        "bad_request",
+        `the user started task ${task.id}, so no session answers its questions; ask the user in your answer instead`,
+      );
+    const proposer = proposerOf(task.proposedBy);
+    if (proposer === null || !this.#deps.hasProposer(proposer))
+      throw new DomainError(
+        "bad_request",
+        `no session in Trackwall answers task ${task.id} now (its proposer was closed or is an agent outside Trackwall); ask the user in your answer instead`,
+      );
+    const since = this.#userInTask.get(task.id) ?? 0;
+    const asked = (this.#questions.get(task.id) ?? []).filter((at) => at > since);
+    if (asked.length >= TASK_MESSAGES_WITHOUT_USER)
+      throw new DomainError(
+        "bad_request",
+        `task ${task.id} asked its proposer ${TASK_MESSAGES_WITHOUT_USER} questions since the user last took part; ask the user instead`,
+      );
+    this.#questions.set(task.id, [...asked, Date.now()]);
+    this.#deps.log(`question from task ${task.id} to its proposer (${text.length} characters)`);
+    return this.#notify(task.proposedBy, { kind: "question", text, task: task.id, session, at: new Date().toISOString() }) ?? "on_resume";
   }
 
   /** The unread messages of task `task`, which now count as read (`get_messages`). */
@@ -240,6 +280,7 @@ export class TaskCoordination {
     this.#messages.drop(id);
     this.#updates.forget(taskProposerKey(id));
     this.#userInTask.delete(id);
+    this.#questions.delete(id);
   }
 
   /** When the user last took part in task `task`'s exchange with session `caller`: in either, or 0 when never. */
@@ -247,11 +288,14 @@ export class TaskCoordination {
     return Math.max(this.#userInSession.get(caller) ?? 0, this.#userInTask.get(task) ?? 0);
   }
 
-  /** Queues an update for a proposer still on the list, and asks its running session to read it. */
-  #notify(proposedBy: ProposedBy | null, update: TaskUpdate): void {
+  /**
+   * Queues an update for a proposer still on the list, and asks its running session to read it: how that session gets
+   * the prompt, or `undefined` when none runs now (its next session reads it) or nobody is behind the proposer.
+   */
+  #notify(proposedBy: ProposedBy | null, update: TaskUpdate): "typed" | "queued" | undefined {
     const proposer = proposerOf(proposedBy);
-    if (proposer === null || !this.#deps.hasProposer(proposer)) return;
+    if (proposer === null || !this.#deps.hasProposer(proposer)) return undefined;
     this.#updates.add(proposer, update);
-    this.#deps.runningProposer(proposer)?.askToRead();
+    return this.#deps.runningProposer(proposer)?.askToRead();
   }
 }
