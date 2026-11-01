@@ -4,7 +4,8 @@ import { apiEndpoints } from "./api.ts";
 
 /**
  * Contract of the `java-navigation` module (ADR-123): Trackwall installs the Java language server for tasks' Java
- * navigation (ADR-99) itself, a pinned jdtls release and the Java it runs on, and saves their paths as `javaNavigation`
+ * navigation (ADR-99) itself, a pinned jdtls release, the Java it runs on, a pinned Lombok jar and the Java versions the
+ * projects build with (ADR-167), and saves their paths as `javaNavigation`
  * in `workspace.yaml`. Every action is `POST /api/java-navigation/<action>`.
  */
 
@@ -14,10 +15,17 @@ export const JavaNavigationInstall = z.object({
   jdtls: z.string(),
   /** The Java it installs through mise (`temurin-25`). */
   java: z.string(),
+  /** The Lombok version it downloads next to jdtls (`1.18.48`, ADR-167). */
+  lombok: z.string(),
   /** What the running install does now, in a few words; `null` when none runs. The UI asks again until it is `null`. */
   step: z.string().nullable(),
   /** Why the last install failed; `null` after one that worked, and while none has run since the daemon started. */
   error: z.string().nullable(),
+  /**
+   * What the last install that worked could not do: the Java versions of projects mise could not install (ADR-167), with
+   * its messages. Tasks get Java navigation anyway; only a project that builds with one of them does not import.
+   */
+  warning: z.string().nullable(),
   /** Whether tasks can get Java navigation now, as the New session form sees it (`start-options`). */
   readiness: JavaNavigationState,
 });

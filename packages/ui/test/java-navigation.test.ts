@@ -46,7 +46,7 @@ describe("Java navigation on the New session form", () => {
 });
 
 describe("the Java navigation section of Settings", () => {
-  const install = { jdtls: "1.63.0", java: "temurin-25", step: null, error: null, readiness: null };
+  const install = { jdtls: "1.63.0", java: "temurin-25", lombok: "1.18.48", step: null, error: null, warning: null, readiness: null };
 
   test("says what is missing and offers to install", () => {
     expect(javaNavigationSetup(install)).toEqual({ line: "Not set up yet.", tone: "muted", button: "Install" });
@@ -74,6 +74,14 @@ describe("the Java navigation section of Settings", () => {
     expect(javaNavigationSetup({ ...install, readiness: { problem: "no Java program at /x/java" } }).line).toBe(
       "Cannot start: no Java program at /x/java.",
     );
+  });
+
+  test("names the projects' Java versions an install that worked could not install", () => {
+    expect(javaNavigationSetup({ ...install, warning: "mise could not install Java 8: no build", readiness: { problem: null } })).toEqual({
+      line: "Ready, but mise could not install Java 8: no build. Projects that build with that Java will not import until its folder is in javaNavigation.runtimes in workspace.yaml.",
+      tone: "warning",
+      button: "Install again",
+    });
   });
 });
 
