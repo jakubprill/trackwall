@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { apiEndpoints, Done } from "./api.ts";
+import { singleLine } from "./single-line.ts";
 import { ExternalLink, RepoId } from "./workspace.ts";
 
 /**
@@ -33,13 +34,7 @@ export type AgentBoardColumn = z.infer<typeof AgentBoardColumn>;
 
 export const BOARD_ITEM_TITLE_MAX = 120;
 /** One line without control characters, like a task title: the tree and the inbox show it on a single line. */
-export const BoardItemTitle = z
-  .string()
-  .trim()
-  .min(1)
-  .max(BOARD_ITEM_TITLE_MAX)
-  // `refine` instead of `regex`, as in `TaskTitle`.
-  .refine((value) => !/\p{Cc}/u.test(value), { message: "the title must be a single line without control characters" });
+export const BoardItemTitle = singleLine(z.string().trim().min(1).max(BOARD_ITEM_TITLE_MAX), "the title");
 
 /** Markdown: the plan, notes, acceptance criteria. Longer than a task prompt; "Start task" offers its start. */
 export const BOARD_ITEM_BODY_MAX = 20_000;

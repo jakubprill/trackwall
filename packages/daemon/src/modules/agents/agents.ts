@@ -452,11 +452,11 @@ export class Agents {
   }
 
   /** A summary from session `caller` for its own task (`report_result`); it goes to the task's proposer too (ADR-68). */
-  reportSummary(caller: string | null, text: string): Task {
+  reportSummary(caller: string | null, text: string, checkSteps: string[]): Task {
     const task = caller === null ? null : this.session(caller).task;
     if (caller === null || task === null)
       throw new DomainError("bad_request", "only a session that runs a task in Trackwall can report a result");
-    const reported = this.#tasks.setSummary(task, text);
+    const reported = this.#tasks.setSummary(task, text, checkSteps);
     this.#coordination.resultReported(reported, caller);
     return reported;
   }
