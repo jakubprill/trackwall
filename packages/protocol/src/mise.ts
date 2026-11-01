@@ -98,7 +98,9 @@ export type RunningMiseTask = z.infer<typeof RunningMiseTask>;
  * One argument of a mise task run (ADR-158), such as a test filter: `mise run <task> <argument>…`, for a mise task that
  * declares its arguments in a usage spec. The characters are those of class, method, file and module names and test
  * patterns, and nothing a shell or `cmd.exe` treats specially (no space, quote, `$`, `%`, `&`, `|`, `;`, `<`, `>`, `^`,
- * `!`, parentheses or backslash), so a value pasted into a task's script stays one word whatever the script does with it.
+ * `!`, parentheses or backslash), so a value a task's script quotes stays one word. Unquoted it does not: `sh` expands a `*`
+ * to file names and `cmd.exe` splits a batch file's arguments at `,` and `=`, which a script that uses the value unquoted
+ * takes on itself; the convention tasks quote it (ADR-157).
  * No leading `-`, so mise never takes it for an option, and no `:`, so never for its `:::` task separator.
  */
 export const MiseRunArgument = z

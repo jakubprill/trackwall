@@ -8,10 +8,12 @@ import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 
 /**
- * The convention tasks file (ADR-157) offered to a repo without mise tasks: `setup`, `build` and `test` for Maven, Gradle
- * and npm, written into the projects folder for every repo there on the user's click, which also trusts it.
+ * The convention tasks file (ADR-157): `setup`, `build` and `test` for Maven, Gradle and npm, written into the projects
+ * folder for every repo there on the user's click, which also trusts it. `offer`: for a repo missing one of them, shown
+ * while the file is absent, or a line when it differs from Trackwall's. `repair`: for a repo mise refuses as untrusted,
+ * shown while the file is Trackwall's, since a failed trust of the file makes mise refuse every repo below it.
  */
-export function ConventionTasks({ conn, onWritten }: { conn: Connection; onWritten: () => void }) {
+export function ConventionTasks({ conn, mode, onWritten }: { conn: Connection; mode: "offer" | "repair"; onWritten: () => void }) {
   const load = useCallback(() => post(conn, miseApi.conventionTasks, {}), [conn]);
   const state = useRemote(load);
   const write = useAction(
@@ -21,17 +23,17 @@ export function ConventionTasks({ conn, onWritten }: { conn: Connection; onWritt
       onWritten();
     },
   );
-  if (!state.data) return null;
-  if (state.data.state === "changed") {
-    return (
+  if (!state.data || state.data.state !== (mode === "offer" ? "absent" : "current")) {
+    return mode === "offer" && state.data?.state === "changed" ? (
       <p className="text-muted-foreground text-xs break-all">
-        The convention tasks file {state.data.path} has been changed by hand, so Trackwall leaves it as it is.
+        The convention tasks file {state.data.path} differs from what this Trackwall writes, so Trackwall leaves it as it is.
       </p>
-    );
+    ) : null;
   }
   return (
     <div className="flex flex-col items-start gap-2">
       <p className="text-sm">
+        {mode === "repair" && "If mise refuses the convention tasks file in the projects folder, trust it here. "}
         Trackwall can add convention tasks for every repo in the projects folder that has none of its own: setup, build and test for Maven,
         Gradle and npm projects, so Verify and agents can build and test this repo. test takes a test filter. A repo's own mise task of the
         same name always wins.

@@ -73,12 +73,13 @@ function TaskPanel({ conn, repo, tasks, onChange }: { conn: Connection; repo: st
           This repo has no mise tasks. Add them under [tasks] in mise.toml in the repo root, or in mise.local.toml to keep them out of git,
           to run setup, dev or build from here.
         </p>
-        <ConventionTasks conn={conn} onWritten={onChange} />
+        <ConventionTasks conn={conn} mode="offer" onWritten={onChange} />
       </div>
     ) : (
       <div className="flex flex-col gap-4">
         {hasService(tasks.tasks) && <RepoService conn={conn} repo={repo} />}
         {rows(tasks.tasks, "mise tasks")}
+        {lacksConventionTask(tasks.tasks) && <ConventionTasks conn={conn} mode="offer" onWritten={onChange} />}
       </div>
     );
   }
@@ -88,6 +89,13 @@ function TaskPanel({ conn, repo, tasks, onChange }: { conn: Connection; repo: st
       {tasks.running.length > 0 && rows(tasks.running, "Still running")}
     </div>
   );
+}
+
+/** The mise tasks the convention tasks file gives (ADR-157), which Verify and the Batch command run. */
+const CONVENTION_TASK_NAMES = ["setup", "build", "test"];
+
+function lacksConventionTask(tasks: readonly MiseTask[]): boolean {
+  return CONVENTION_TASK_NAMES.some((name) => !tasks.some((t) => t.name === name));
 }
 
 function NoList({
@@ -108,7 +116,13 @@ function NoList({
       </p>
     );
   }
-  if (tasks.kind === "untrusted") return <Untrusted conn={conn} repo={repo} message={tasks.message} onTrusted={onChange} />;
+  if (tasks.kind === "untrusted")
+    return (
+      <div className="flex flex-col gap-4">
+        <Untrusted conn={conn} repo={repo} message={tasks.message} onTrusted={onChange} />
+        <ConventionTasks conn={conn} mode="repair" onWritten={onChange} />
+      </div>
+    );
   return <ErrorWithRetry message={`mise: ${tasks.message}`} onRetry={onChange} />;
 }
 
@@ -138,10 +152,12 @@ function TaskRow({ conn, repo, task, onChange }: { conn: Connection; repo: strin
   const parsedArgs = parseRunArguments(argsText);
   // Also while `stopping`: after `stop_unconfirmed` the stop can be retried, and the daemon merges parallel requests into one.
   const action = useAction(
-    () =>
-      live
-        ? post(conn, miseApi.stop, { repo, miseTask: task.name })
-        : post(conn, miseApi.start, { repo, miseTask: task.name, arguments: parsedArgs.ok ? parsedArgs.args : [] }),
+    () => {
+      if (live) return post(conn, miseApi.stop, { repo, miseTask: task.name });
+      // The button is disabled meanwhile; a run never goes without the arguments the user typed.
+      if (!parsedArgs.ok) throw new Error(parsedArgs.error);
+      return post(conn, miseApi.start, { repo, miseTask: task.name, arguments: parsedArgs.args });
+    },
     () => {
       // Running opens the log: the user wants to see what the mise task does anyway.
       if (!live) setShowLog(true);

@@ -31,7 +31,7 @@ mise asks you to trust a repo's configuration before it runs its tasks. When it 
 
 ### Convention tasks
 
-Verify, the [Batch command](/features/batch-command) and agents build and test a repo with its mise tasks `setup`, `build` and `test`. When a repo has no mise tasks, its tab offers to add convention tasks. One click writes one file into your projects folder, `.config/mise/conf.d/trackwall-convention-tasks.toml`, and trusts it. mise reads that file for every repo in the folder, so each repo without its own `setup`, `build` or `test` gets:
+Verify, the [Batch command](/features/batch-command) and agents build and test a repo with its mise tasks `setup`, `build` and `test`. When a repo lacks `setup`, `build` or `test`, its tab offers to add convention tasks. One click writes one file into your projects folder, `.config/mise/conf.d/trackwall-convention-tasks.toml`, and trusts it. mise reads that file for every repo in the folder, so each repo without its own `setup`, `build` or `test` gets:
 
 - `setup`: `npm ci` for an npm project. Maven and Gradle download their dependencies in `build` and `test`.
 - `build`: `mvn package` without tests, `gradle assemble` or `npm run build`.
@@ -39,7 +39,7 @@ Verify, the [Batch command](/features/batch-command) and agents build and test a
 
 Each task uses the repo's Maven or Gradle wrapper when there is one. A task fails with a message in a repo with no `pom.xml`, `build.gradle`, `build.gradle.kts` or `package.json`, so Verify never passes a repo it could not test. A repo's own task of the same name always wins, and so does a task in your projects folder's own `mise.toml`. There is no convention `dev`, because a service needs its own port.
 
-You can edit the file. Once it differs from what Trackwall writes, Trackwall leaves it as it is.
+If mise ever refuses the file as untrusted, every repo's tab says so and offers to trust it again. You can edit the file. Once it differs from what Trackwall writes, Trackwall leaves it as it is.
 
 ## Use it
 

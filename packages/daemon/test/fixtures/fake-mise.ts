@@ -4,7 +4,8 @@
 // and, when the mise task is in `exits`, ends at once with that code, and otherwise starts a process tree from `process-tree.ts`
 // (PIDs in `<repo>/pids`) that runs until stopped. `install` ends with the code `installExit` (0 by default).
 // `run` (with its arguments), `install` and `trust <file>` append to `calls.log` in the working directory, so that the test
-// sees the order. Without `fake-mise.json` in the working directory there are no mise tasks. A mise task in `servers` runs
+// sees the order; `trustFileError` fails `trust <file>` with that mise error. Without `fake-mise.json` in the working
+// directory there are no mise tasks. A mise task in `servers` runs
 // `fake-service.ts` with that config instead (the `services` tests, ADR-45). A config in a directory listed in
 // `MISE_TRUSTED_CONFIG_PATHS` counts as trusted (task worktrees, ADR-59). A mise task in `exits` first prints its lines in
 // `prints` and writes its files in `writes` (path relative to the working directory -> content), e.g. a JUnit report (ADR-64).
@@ -31,6 +32,7 @@ const config = (existsSync(configPath) ? JSON.parse(readFileSync(configPath, "ut
   envByMiseEnv?: Record<string, Record<string, string>>;
   envError?: string;
   redactedError?: string;
+  trustFileError?: string;
 };
 const args = process.argv.slice(2);
 const calls = join(process.cwd(), "calls.log");
@@ -76,6 +78,10 @@ if (args[0] === "tasks" && args[1] === "ls" && args[2] === "--json") {
   console.log(JSON.stringify(shown, null, 2));
 } else if (args[0] === "trust" && args[1] !== undefined) {
   appendFileSync(calls, `trust ${args[1]}\n`);
+  if (config.trustFileError !== undefined) {
+    console.error(`mise ERROR ${config.trustFileError}`);
+    process.exit(1);
+  }
   console.error(`mise trusted ${args[1]}`);
 } else if (args[0] === "trust") {
   writeFileSync(configPath, JSON.stringify({ ...config, untrusted: false }));

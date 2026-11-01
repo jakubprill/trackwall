@@ -697,6 +697,18 @@ describe("the convention tasks file (ADR-157)", () => {
     expect(readFileSync(join(home, "calls.log"), "utf8")).toBe(`trust ${conventionFile(home)}\n`);
   });
 
+  test("when mise cannot trust the file, writing it again trusts the file that is already there", async () => {
+    const { mise, home } = setup({ tasks: [] });
+    writeFileSync(join(home, "fake-mise.json"), JSON.stringify({ tasks: [], trustFileError: "cannot write the trust store" }));
+    await expect(mise.writeConventionTasks()).rejects.toMatchObject({ code: "mise_unavailable" });
+    expect(await mise.conventionTasks()).toEqual({ state: "current", path: conventionFile(home) });
+
+    writeFileSync(join(home, "fake-mise.json"), JSON.stringify({ tasks: [] }));
+    expect(await mise.writeConventionTasks()).toEqual({ state: "current", path: conventionFile(home) });
+
+    expect(readFileSync(join(home, "calls.log"), "utf8")).toBe(`trust ${conventionFile(home)}\ntrust ${conventionFile(home)}\n`);
+  });
+
   test("a file the user changed is left as it is, and not trusted", async () => {
     const { mise, home } = setup({ tasks: [] });
     mkdirSync(join(home, ".config", "mise", "conf.d"), { recursive: true });

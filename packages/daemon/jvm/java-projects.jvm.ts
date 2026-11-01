@@ -19,6 +19,7 @@ import {
   VerifyTaskResult,
   WAIT_MAX_SECONDS,
 } from "@trackwall/protocol";
+import { parse, stringify } from "smol-toml";
 import { makeRepo } from "../test/support/git-repo.ts";
 import { connectHttpClient, MCP_CALL_LIMIT_MS } from "../test/support/mcp-client.ts";
 import { startSessionApi } from "../test/support/session-api.ts";
@@ -38,11 +39,11 @@ const CHECKOUT_PORT = 18082;
 const BUILD_MS = 10 * 60_000;
 setDefaultTimeout(2 * BUILD_MS);
 
-/** The `[tools]` of each project's own mise config, without its mise tasks. */
-const TOOLS_ONLY = {
-  orders: '[tools]\njava = "temurin-21"\nmaven = "3.9.11"\n',
-  checkout: '[tools]\njava = "temurin-21"\ngradle = "8.14.3"\n',
-};
+/** A project's own mise config with its `[tools]` only, without its mise tasks. */
+function toolsOnly(project: string): string {
+  const config = parse(readFileSync(join(PROJECTS, project, "mise.toml"), "utf8"));
+  return stringify({ tools: config.tools });
+}
 
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
 let client: Client;
@@ -372,8 +373,8 @@ describe("a Maven project and a Gradle project", () => {
   test("the convention tasks file gives a repo without mise tasks a test task, which runs only the tests its filter names", async () => {
     // The last test, since the file and the two repos change the projects folder of the others: the same projects with
     // tools but no mise tasks in their mise config.
-    makeRepo({ ...trackedFiles("orders"), "mise.toml": TOOLS_ONLY.orders }, "plain-orders", daemon.projects);
-    makeRepo({ ...trackedFiles("checkout"), "mise.toml": TOOLS_ONLY.checkout }, "plain-checkout", daemon.projects);
+    makeRepo({ ...trackedFiles("orders"), "mise.toml": toolsOnly("orders") }, "plain-orders", daemon.projects);
+    makeRepo({ ...trackedFiles("checkout"), "mise.toml": toolsOnly("checkout") }, "plain-checkout", daemon.projects);
     // What the user does once in the UI: write the convention tasks file into the projects folder, which also trusts it.
     await daemon.facade.mise.writeConventionTasks();
     for (const repo of ["plain-orders", "plain-checkout"]) {
@@ -398,8 +399,14 @@ describe("a Maven project and a Gradle project", () => {
       reports[repo] = results.totals;
     }
 
+    // Without the filter the same task runs every test, also on Windows, where cmd.exe sees no usage_filter.
+    const all = await runToEnd("plain-orders", "test");
+    expectExitCode(all, 0);
+    reports.all = TestResults.parse(await call("get_test_results", { repo: "plain-orders", since: all.startedAt })).totals;
+
     // PricingTest has two tests: the filter ran one of them.
     expect(reports).toMatchObject({
+      all: { tests: 2, failures: 0, errors: 0 },
       "plain-orders": { tests: 1, failures: 0, errors: 0 },
       "plain-checkout": { tests: 1, failures: 0, errors: 0 },
     });

@@ -25,7 +25,8 @@ const NO_BUILD = "no pom.xml, build.gradle, build.gradle.kts or package.json her
 /**
  * The file as this Trackwall writes it. POSIX `sh` scripts in `run` (macOS, Linux, the container) and one-line `cmd.exe`
  * scripts in `run_windows`, mise's default shells there (without variables set inside a line, which `cmd.exe` expands
- * before running it). The test filter reaches the scripts only as the `usage_filter`
+ * before running it). On Windows a filter counts only when `usage_filter` is defined and not empty: outside a batch file
+ * `cmd.exe` leaves an undefined `%usage_filter%` as it is. The test filter reaches the scripts only as the `usage_filter`
  * variable, quoted, never through a template, so even a value typed by hand in a terminal stays one argument.
  */
 export const CONVENTION_TASKS = `# Convention tasks written by Trackwall (ADR-157): setup, build and test for Maven, Gradle and npm projects,
@@ -71,7 +72,7 @@ elif [ -f package.json ]; then
 else echo "${NO_BUILD}" >&2; exit 1
 fi
 '''
-run_windows = 'if exist pom.xml (if exist mvnw.cmd (if defined usage_filter (call mvnw.cmd --batch-mode test "-Dtest=%usage_filter%" -Dsurefire.failIfNoSpecifiedTests=false) else (call mvnw.cmd --batch-mode test)) else (if defined usage_filter (call mvn --batch-mode test "-Dtest=%usage_filter%" -Dsurefire.failIfNoSpecifiedTests=false) else (call mvn --batch-mode test))) else if exist build.gradle* (if exist gradlew.bat (if defined usage_filter (call gradlew.bat test --tests "%usage_filter%") else (call gradlew.bat test)) else (if defined usage_filter (call gradle test --tests "%usage_filter%") else (call gradle test))) else if exist package.json (if defined usage_filter (call npm test -- "%usage_filter%") else (call npm test)) else (echo ${NO_BUILD} 1>&2 & exit 1)'
+run_windows = 'if exist pom.xml (if exist mvnw.cmd (if defined usage_filter (if not "%usage_filter%"=="" (call mvnw.cmd --batch-mode test "-Dtest=%usage_filter%" -Dsurefire.failIfNoSpecifiedTests=false) else (call mvnw.cmd --batch-mode test)) else (call mvnw.cmd --batch-mode test)) else (if defined usage_filter (if not "%usage_filter%"=="" (call mvn --batch-mode test "-Dtest=%usage_filter%" -Dsurefire.failIfNoSpecifiedTests=false) else (call mvn --batch-mode test)) else (call mvn --batch-mode test))) else if exist build.gradle* (if exist gradlew.bat (if defined usage_filter (if not "%usage_filter%"=="" (call gradlew.bat test --tests "%usage_filter%") else (call gradlew.bat test)) else (call gradlew.bat test)) else (if defined usage_filter (if not "%usage_filter%"=="" (call gradle test --tests "%usage_filter%") else (call gradle test)) else (call gradle test))) else if exist package.json (if defined usage_filter (if not "%usage_filter%"=="" (call npm test -- "%usage_filter%") else (call npm test)) else (call npm test)) else (echo ${NO_BUILD} 1>&2 & exit 1)'
 `;
 
 /** The state of the file in the projects folder: compared as text with what this Trackwall writes. */
@@ -90,6 +91,10 @@ export function writeConventionTasks(projectsDir: string): boolean {
   return true;
 }
 
+/**
+ * The file as text, following a link: unlike a repo's local config (ADR-86), it lies in the projects folder, whose writer
+ * could write the file itself, so a planted link gives nothing more (§8).
+ */
 function readText(path: string): string | null {
   try {
     return readFileSync(path, "utf8");

@@ -213,7 +213,9 @@ export class Mise {
    * whatever arguments it was started with.
    */
   async start(target: MiseTarget, miseTask: string, options: { port?: number; args?: MiseRunArguments } = {}): Promise<RunState> {
-    const args = MiseRunArguments.parse(options.args ?? []);
+    const parsedArgs = MiseRunArguments.safeParse(options.args ?? []);
+    if (!parsedArgs.success) throw new DomainError("bad_request", z.prettifyError(parsedArgs.error));
+    const args = parsedArgs.data;
     const place = await this.place(target, options.port);
     const listed = await this.listedTask(place, miseTask);
     if (!listed) throw new DomainError("not_found", `${where(target)} has no mise task "${miseTask}"`);

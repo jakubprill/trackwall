@@ -37,7 +37,7 @@ export async function taskOrigins(
   const inRepo = new Map<string, string>();
   for (const { source, path } of resolved) {
     if (path === null) origins.set(source, { source, origin: null });
-    else if (path === convention) origins.set(source, { source, origin: "convention" });
+    else if (convention !== null && relative(convention, path) === "") origins.set(source, { source, origin: "convention" });
     else if (isInside(root, path)) inRepo.set(source, relative(root, path).split(sep).join("/"));
     else origins.set(source, { source, origin: "outside" });
   }
