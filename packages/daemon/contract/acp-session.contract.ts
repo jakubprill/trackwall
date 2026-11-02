@@ -289,7 +289,9 @@ describe("a task in Copilot CLI's sandbox in the conversation view with the real
       const session = taskSessionOf(task.id);
       await endOfTurn(session);
 
-      expect(existsSync(join(task.worktree, "inside.txt"))).toBe(true);
+      // What the sandbox answered goes back to the model; a refusal there says what the system is missing.
+      const answers = model.requests().slice(-3).flatMap((r) => r.toolResults);
+      expect({ inside: existsSync(join(task.worktree, "inside.txt")), answers }).toMatchObject({ inside: true });
       // The repo's whole git directory is granted for the worktree's commits, hooks and config with it: a gap in §8,
       // pinned here so that a change in Copilot CLI shows.
       expect(probe.escapes()).toEqual(["the repo's git hooks", "the repo's git config"]);
