@@ -322,22 +322,30 @@ export const ReadRequest = z.object({
 });
 export type ReadRequest = z.infer<typeof ReadRequest>;
 
-/** The longest text an agent can ask to copy (ADR-180): far more than a command or an answer, well under what the shell copies. */
-export const COPY_TEXT_MAX = 100_000;
 /**
- * Text to copy: no control characters but line breaks and tabs, so that a paste into a terminal cannot carry an escape
- * sequence (one that ends a bracketed paste would run the rest as typed keys), and nothing the panel would not show
- * (`visibleText`), so the user copies what they read.
+ * The longest text an agent can ask to copy (ADR-180): more than a command or a snippet needs. The text travels in every
+ * session list the UI gets, because Copy must write the clipboard inside the click, so it is kept small.
  */
-export const CopyText = visibleText(
-  z
-    .string()
-    .min(1)
-    .max(COPY_TEXT_MAX)
-    .refine((value) => !/[^\P{Cc}\n\r\t]/u.test(value), {
-      message: "the text must not contain control characters other than line breaks and tabs",
-    }),
-);
+export const COPY_TEXT_MAX = 10_000;
+
+/**
+ * Whether text may go to the user's clipboard from an agent (ADR-180), by `copy_to_clipboard` or by OSC 52 in a session
+ * terminal: no control characters but line breaks and tabs, so that a paste into a terminal cannot carry an escape
+ * sequence (one that ends a bracketed paste would run the rest as typed keys), and no invisible characters (format,
+ * private use, line separators, as in `visibleText`), so the user pastes what they read.
+ */
+export function copyableText(text: string): boolean {
+  return !/[^\P{Cc}\n\r\t]|[\p{Cf}\p{Co}\u2028\u2029]/u.test(text);
+}
+
+export const CopyText = z
+  .string()
+  .min(1)
+  .max(COPY_TEXT_MAX)
+  // `refine` instead of `regex`, as in `visibleText`: the pattern would go into the MCP tool's JSON Schema.
+  .refine(copyableText, {
+    message: "the text must not contain control characters other than line breaks and tabs, nor invisible characters",
+  });
 export const CopyRequestId = z.string().min(1).max(64);
 
 /**

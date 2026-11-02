@@ -365,7 +365,7 @@ describe("a session of the real Copilot CLI", () => {
     expect(agents.sessions().sessions.find((s) => s.id === id)?.run.kind).toBe("running");
   });
 
-  // The session terminal copies it on Enter when the input box holds a command (`entersCommand` in
+  // The session terminal copies it on Enter when the input box holds /copy (`entersCopyCommand` in
   // packages/ui/src/lib/terminal-copy.ts, ADR-180); in a container Copilot CLI's own copy fails without a display.
   test("/copy shows in the input box when Enter comes, and sends the last answer as OSC 52 to the clipboard target", async () => {
     const { agents } = daemon.facade;

@@ -150,7 +150,7 @@ export function TaskPanel({
       <SessionEnvironment environment={session?.environment} />
       <EnvironmentChangeNotice key={session?.id} conn={conn} session={session} onRestarted={onChanged} />
       <ReadRequestNotice key={`read-request-${session?.id}`} conn={conn} session={session} onDelivered={onChanged} />
-      <CopyRequestNotice key={`copy-request-${session?.id}`} conn={conn} session={session} onCleared={onChanged} />
+      {session && <CopyRequestNotice key={session.id} conn={conn} session={session} onCleared={onChanged} />}
       {confirmingRemoval && <TaskRemoval conn={conn} task={task} onRemoved={onRemoved} onCancel={() => setRemoving(false)} />}
       <TaskNoticeStrip
         notices={details.notices}

@@ -1,13 +1,13 @@
 /**
- * Copilot CLI's input box, read from a session's screen (§4.4, ADR-69), in the daemon to tell a session waiting for
- * input and in the session terminal of the UI to tell what Enter sends (`entersCommand` in `packages/ui/src/lib/terminal-copy.ts`). Copilot CLI 1.0.103 sends
+ * Copilot CLI's input box, read from a session's screen (§4.4, ADR-69, ADR-180): what it holds, for the daemon and the
+ * session terminal alike. Copilot CLI 1.0.103 sends
  * no hook until the first prompt: `sessionStart` comes together with it. So a new session that is ready for input is
  * told only by its screen: at the bottom the input box (a line starting with `❯` between two rules across the whole
  * width) and under it the footer with hints (`Interactive · Manual Approval · / commands …`, shortened in a narrow
  * terminal). While Copilot CLI is still loading, and while it works, the footer is a status line instead, an animated
  * bullet (● ◉ ◎ ○) and a word (`Loading: …`, `Working · …`), and the input box may already be drawn, so the footer
- * decides. Screens of the real binary are the fixtures in `packages/daemon/test/fixtures/copilot/`; the contract tests check this
- * reading on the pinned version.
+ * decides. The daemon's tests read screens of the real binary; the contract tests check this reading on the pinned
+ * version.
  */
 
 const RULE = /^─+$/;

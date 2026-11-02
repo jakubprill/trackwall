@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   asksProgramToCopy,
   copiesSelection,
-  entersCommand,
+  entersCopyCommand,
   keepsSelection,
   osc52Text,
   ProgramCopy,
@@ -70,6 +70,13 @@ describe("copying what Copilot CLI selected itself (OSC 52)", () => {
     expect(osc52Text(`c;${Buffer.from([0xff, 0xfe]).toString("base64")}`)).toBeUndefined();
   });
 
+  test("text with an escape sequence or an invisible character copies nothing, as for copy_to_clipboard", () => {
+    // ESC [ 2 0 1 ~ ends a bracketed paste in a terminal, and the rest of the paste would run as typed keys.
+    expect(osc52Text(`c;${Buffer.from("ls\u001b[201~rm -rf ~").toString("base64")}`)).toBeUndefined();
+    expect(osc52Text(`c;${Buffer.from(`ls${String.fromCodePoint(0x202e)}rm`).toString("base64")}`)).toBeUndefined();
+    expect(osc52Text(`c;${Buffer.from("cd orders\r\n\tmvn verify").toString("base64")}`)).toBe("cd orders\r\n\tmvn verify");
+  });
+
   test("a trailing semicolon after the payload does not lose the copy", () => {
     expect(osc52Text(`c;${Buffer.from("text").toString("base64")};`)).toBe("text");
   });
@@ -97,26 +104,29 @@ describe("copying what Copilot CLI selected itself (OSC 52)", () => {
   });
 });
 
-describe("Enter on a Copilot CLI command such as /copy", () => {
+describe("Enter on Copilot CLI's /copy", () => {
   const enter = { type: "keydown", key: "Enter", ctrlKey: false, altKey: false, metaKey: false };
   const rule = "─".repeat(40);
   const footer = " Interactive · Manual Approval · /help show help";
   // The bottom of Copilot CLI 1.0.103's screen: the input box between two rules, then the footer.
   const box = (text: string) => () => [" ● Here is the answer", rule, `❯ ${text}`, rule, footer];
 
-  test("asks the program to copy when the input box holds a command", () => {
-    expect(entersCommand(enter, box("/copy"))).toBe(true);
+  test("asks the program to copy when the input box holds /copy", () => {
+    expect(entersCopyCommand(enter, box("/copy"))).toBe(true);
   });
 
   test("with the command menu open, the box shows the command Enter picks, so typing /co counts too", () => {
     const menu = () => ["┃ ❯ /copy                 Copy the last response to the clipboard", rule, "❯ /copy", rule, footer];
-    expect(entersCommand(enter, menu)).toBe(true);
+    expect(entersCopyCommand(enter, menu)).toBe(true);
   });
 
-  test("a prompt that is not a command, an empty box and a screen without the box do not ask", () => {
-    expect(entersCommand(enter, box("copy this to the clipboard"))).toBe(false);
-    expect(entersCommand(enter, box(""))).toBe(false);
-    expect(entersCommand(enter, () => [" ● Working · 3s"])).toBe(false);
+  test("another command, a prompt, an empty box and a screen without the box do not ask", () => {
+    // Other commands print repo or session content, whose OSC 52 must not fill the clipboard.
+    expect(entersCopyCommand(enter, box("/collect-debug-logs"))).toBe(false);
+    expect(entersCopyCommand(enter, box("/diff"))).toBe(false);
+    expect(entersCopyCommand(enter, box("copy this to the clipboard"))).toBe(false);
+    expect(entersCopyCommand(enter, box(""))).toBe(false);
+    expect(entersCopyCommand(enter, () => [" ● Working · 3s"])).toBe(false);
   });
 
   test("other keys, Enter with a modifier and the key going up do not ask, and only Enter reads the screen", () => {
@@ -125,9 +135,9 @@ describe("Enter on a Copilot CLI command such as /copy", () => {
       read++;
       return box("/copy")();
     };
-    expect(entersCommand({ ...enter, key: "a" }, counted)).toBe(false);
-    expect(entersCommand({ ...enter, ctrlKey: true }, counted)).toBe(false);
-    expect(entersCommand({ ...enter, type: "keyup" }, counted)).toBe(false);
+    expect(entersCopyCommand({ ...enter, key: "a" }, counted)).toBe(false);
+    expect(entersCopyCommand({ ...enter, ctrlKey: true }, counted)).toBe(false);
+    expect(entersCopyCommand({ ...enter, type: "keyup" }, counted)).toBe(false);
     expect(read).toBe(0);
   });
 });

@@ -732,7 +732,7 @@ function SessionPanel({
       <SessionEnvironment environment={session.environment} />
       <EnvironmentChangeNotice key={session.id} conn={conn} session={session} onRestarted={onChanged} />
       <ReadRequestNotice key={`read-request-${session.id}`} conn={conn} session={session} onDelivered={onChanged} />
-      <CopyRequestNotice key={`copy-request-${session.id}`} conn={conn} session={session} onCleared={onChanged} />
+      <CopyRequestNotice key={session.id} conn={conn} session={session} onCleared={onChanged} />
       <SessionScreen conn={conn} session={session} selected />
     </>
   );

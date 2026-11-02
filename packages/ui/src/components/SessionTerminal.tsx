@@ -20,7 +20,7 @@ import { IS_MAC } from "@/lib/platform";
 import {
   asksProgramToCopy,
   copiesSelection,
-  entersCommand,
+  entersCopyCommand,
   keepsSelection,
   osc52Text,
   ProgramCopy,
@@ -54,14 +54,14 @@ const RESET = "\x1bc";
  * the terminal (ADR-51) are pasted as their paths, as if the user typed them. Keys typed before the first connection
  * opens wait for it (`InputBeforeOpen`). Text the program copies (OSC 52, how Copilot CLI copies its own selection) goes
  * to the clipboard only as the answer to the user's Ctrl+C or right click in this terminal (`asksProgramToCopy`) or to
- * Enter on a Copilot CLI command such as `/copy` (`entersCommand`).
+ * Enter on Copilot CLI's `/copy` (`entersCopyCommand`).
  * Until the daemon's screen image comes, the terminal shows the screen it had when it last closed in this window, and
  * says it is connecting (ADR-117): where the daemon answers late, the frame would otherwise stay black for seconds.
  */
-/** The lines the terminal shows now, top to bottom, as text. */
-function visibleLines(terminal: Terminal): string[] {
+/** The screen the program draws, top to bottom, as text: from `baseY`, not from where the user has scrolled back to. */
+function screenLines(terminal: Terminal): string[] {
   const buffer = terminal.buffer.active;
-  return Array.from({ length: terminal.rows }, (_, row) => buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? "");
+  return Array.from({ length: terminal.rows }, (_, row) => buffer.getLine(buffer.baseY + row)?.translateToString(true) ?? "");
 }
 
 export function SessionTerminal({
@@ -205,7 +205,7 @@ export function SessionTerminal({
       else if (taken === "dropped") setNotice(KEYS_DROPPED);
     });
     terminal.attachCustomKeyEventHandler((event) => {
-      if (asksProgramToCopy({ kind: "key", key: event }, selection()) || entersCommand(event, () => visibleLines(terminal)))
+      if (asksProgramToCopy({ kind: "key", key: event }, selection()) || entersCopyCommand(event, () => screenLines(terminal)))
         programCopy.asked(performance.now());
       // `false` without `preventDefault`: xterm.js leaves the key alone and the browser pastes into its text area.
       if (pastesClipboard(event, { mac: IS_MAC })) return false;

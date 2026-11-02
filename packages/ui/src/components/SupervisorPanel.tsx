@@ -170,7 +170,7 @@ function SupervisorBody({
       />
       <EnvironmentChangeNotice key={session?.id} conn={conn} session={session} onRestarted={onChanged} />
       <ReadRequestNotice key={`read-request-${session?.id}`} conn={conn} session={session} onDelivered={onChanged} />
-      <CopyRequestNotice key={`copy-request-${session?.id}`} conn={conn} session={session} onCleared={onChanged} />
+      {session && <CopyRequestNotice key={session.id} conn={conn} session={session} onCleared={onChanged} />}
       {!running && (
         <SupervisorStart conn={conn} supervisor={supervisor} day={day} lastStart={lastStart} onStart={onStart} onChanged={onChanged} />
       )}
