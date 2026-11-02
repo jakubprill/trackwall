@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { promptBoxOnScreen, promptBoxText } from "../src/modules/agents/copilot-prompt-box.ts";
+import { promptBoxOnScreen, promptBoxText } from "@trackwall/protocol";
 import { CopilotSessionState, RETYPE_AFTER_MS } from "../src/modules/agents/copilot-session-state.ts";
 
 /** Screens of Copilot CLI 1.0.103 taken from the real binary in the daemon's emulator (the repo path replaced). */

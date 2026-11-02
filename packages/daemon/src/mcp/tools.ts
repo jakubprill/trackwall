@@ -322,6 +322,10 @@ const runs: ToolRuns = {
   getReviewComments: async (facade, _args, { caller }) => ({ comments: facade.agents.takeReviewComments(caller) }),
   sendMessage: async (facade, { task, text }, { caller }) => facade.agents.sendMessage(caller, task, text),
   askProposer: async (facade, { question }, { caller }) => ({ delivery: facade.agents.askProposer(caller, question) }),
+  copyToClipboard: async (facade, { text }, { caller }) => {
+    facade.agents.askToCopy(caller, text);
+    return { waitsFor: "user_click" as const };
+  },
   resumeTask: async (facade, { task }, { caller }) => {
     const resumed = await facade.agents.resumeTaskFor(caller, task);
     return { task: resumed.task, session: agentSession(resumed.session) };
@@ -407,6 +411,7 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.getReviewComments, runs.getReviewComments),
   defineTool(mcpTools.sendMessage, runs.sendMessage),
   defineTool(mcpTools.askProposer, runs.askProposer),
+  defineTool(mcpTools.copyToClipboard, runs.copyToClipboard),
   defineTool(mcpTools.resumeTask, runs.resumeTask),
   defineTool(mcpTools.getMessages, runs.getMessages),
   defineTool(mcpTools.getHandoff, runs.getHandoff),
@@ -532,7 +537,7 @@ function miseTarget(facade: Facade, repo: string, task: string | undefined): Mis
  * A session without the last screen lines of an ended group and without its agent dialog, which is read from the screen:
  * one session's screen does not reach another (§8, ADR-36, ADR-66).
  */
-function agentSession({ run, dialog: _dialog, ...session }: Session): AgentSession {
+function agentSession({ run, dialog: _dialog, copyRequest: _copyRequest, ...session }: Session): AgentSession {
   if (run.kind !== "exited") return { ...session, run };
   const { lastLines: _, ...exited } = run;
   return { ...session, run: exited };

@@ -11,6 +11,7 @@ import {
 } from "@trackwall/protocol";
 import { BellRing, Crown, Lightbulb, Plus, Square, X } from "lucide-react";
 import { useCallback, useRef } from "react";
+import { CopyRequestNotice } from "@/components/CopyRequestNotice";
 import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
@@ -731,6 +732,7 @@ function SessionPanel({
       <SessionEnvironment environment={session.environment} />
       <EnvironmentChangeNotice key={session.id} conn={conn} session={session} onRestarted={onChanged} />
       <ReadRequestNotice key={`read-request-${session.id}`} conn={conn} session={session} onDelivered={onChanged} />
+      <CopyRequestNotice key={`copy-request-${session.id}`} conn={conn} session={session} onCleared={onChanged} />
       <SessionScreen conn={conn} session={session} selected />
     </>
   );

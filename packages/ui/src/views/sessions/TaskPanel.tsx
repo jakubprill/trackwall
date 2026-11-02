@@ -9,6 +9,7 @@ import {
 } from "@trackwall/protocol";
 import { Bot, GitBranch, Layers, Plug, ShieldOff, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
+import { CopyRequestNotice } from "@/components/CopyRequestNotice";
 import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
 import { ReadRequestNotice } from "@/components/ReadRequestNotice";
 import { SessionScreen } from "@/components/SessionScreen";
@@ -149,6 +150,7 @@ export function TaskPanel({
       <SessionEnvironment environment={session?.environment} />
       <EnvironmentChangeNotice key={session?.id} conn={conn} session={session} onRestarted={onChanged} />
       <ReadRequestNotice key={`read-request-${session?.id}`} conn={conn} session={session} onDelivered={onChanged} />
+      <CopyRequestNotice key={`copy-request-${session?.id}`} conn={conn} session={session} onCleared={onChanged} />
       {confirmingRemoval && <TaskRemoval conn={conn} task={task} onRemoved={onRemoved} onCancel={() => setRemoving(false)} />}
       <TaskNoticeStrip
         notices={details.notices}

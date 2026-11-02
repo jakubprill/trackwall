@@ -322,6 +322,37 @@ export const ReadRequest = z.object({
 });
 export type ReadRequest = z.infer<typeof ReadRequest>;
 
+/** The longest text an agent can ask to copy (ADR-180): far more than a command or an answer, well under what the shell copies. */
+export const COPY_TEXT_MAX = 100_000;
+/**
+ * Text to copy: no control characters but line breaks and tabs, so that a paste into a terminal cannot carry an escape
+ * sequence (one that ends a bracketed paste would run the rest as typed keys), and nothing the panel would not show
+ * (`visibleText`), so the user copies what they read.
+ */
+export const CopyText = visibleText(
+  z
+    .string()
+    .min(1)
+    .max(COPY_TEXT_MAX)
+    .refine((value) => !/[^\P{Cc}\n\r\t]/u.test(value), {
+      message: "the text must not contain control characters other than line breaks and tabs",
+    }),
+);
+export const CopyRequestId = z.string().min(1).max(64);
+
+/**
+ * A copy request (ADR-180): text a session's agent asked to put on the user's clipboard with `copy_to_clipboard`. The
+ * clipboard changes only when the user clicks Copy in the session's panel, so an agent never swaps what the user pastes
+ * on its own, and a daemon in a container, which has no clipboard of the user's, needs no access to the host for it.
+ */
+export const CopyRequest = z.object({
+  id: CopyRequestId,
+  text: CopyText,
+  /** ISO 8601: when the agent asked. */
+  at: z.iso.datetime(),
+});
+export type CopyRequest = z.infer<typeof CopyRequest>;
+
 /**
  * A session that may be stuck (ADR-151): it is in the middle of a turn (`Working`, or `Stale`) and no step of its agent
  * came for a long time: no hook in a terminal (a finished tool, a prompt, a notification), no update over ACP, no key
@@ -367,6 +398,8 @@ export const Session = z.object({
   view: SessionView,
   /** The read request while something waits unread for the agent of a running session (ADR-159); `null` otherwise. */
   readRequest: ReadRequest.nullable(),
+  /** The agent's latest copy request in a running session (ADR-180), until the user copies or dismisses it; `null` otherwise. */
+  copyRequest: CopyRequest.nullable(),
 });
 export type Session = z.infer<typeof Session>;
 
@@ -750,6 +783,11 @@ export const agentsApi = {
    * into the middle of a turn or twice. An ended session is `bad_request`.
    */
   deliverReadRequest: endpoint("deliver-read-request", SessionRequest, Session),
+  /**
+   * The user copied or dismissed the session's copy request `request` (ADR-180), so it leaves the panel; the UI writes
+   * the clipboard itself, in the click. A newer request of the agent stays, and a request already gone is no error.
+   */
+  clearCopyRequest: endpoint("clear-copy-request", SessionRequest.extend({ request: CopyRequestId }), Session),
   /** Stops the agent's turn in a session in the conversation view (ADR-107), as Esc does in the terminal. */
   interrupt: endpoint("interrupt", SessionRequest, Session),
   /**

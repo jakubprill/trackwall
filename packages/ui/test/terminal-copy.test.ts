@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { asksProgramToCopy, copiesSelection, keepsSelection, osc52Text, ProgramCopy, pastesClipboard } from "../src/lib/terminal-copy.ts";
+import {
+  asksProgramToCopy,
+  copiesSelection,
+  entersCommand,
+  keepsSelection,
+  osc52Text,
+  ProgramCopy,
+  pastesClipboard,
+} from "../src/lib/terminal-copy.ts";
 
 const ctrlC = { type: "keydown", key: "c", ctrlKey: true, altKey: false, metaKey: false };
 const ctrlV = { ...ctrlC, key: "v" };
@@ -86,5 +94,40 @@ describe("copying what Copilot CLI selected itself (OSC 52)", () => {
     expect(copy.take(10_006)).toBe(false);
     copy.asked(20_000);
     expect(copy.take(21_001)).toBe(false);
+  });
+});
+
+describe("Enter on a Copilot CLI command such as /copy", () => {
+  const enter = { type: "keydown", key: "Enter", ctrlKey: false, altKey: false, metaKey: false };
+  const rule = "─".repeat(40);
+  const footer = " Interactive · Manual Approval · /help show help";
+  // The bottom of Copilot CLI 1.0.103's screen: the input box between two rules, then the footer.
+  const box = (text: string) => () => [" ● Here is the answer", rule, `❯ ${text}`, rule, footer];
+
+  test("asks the program to copy when the input box holds a command", () => {
+    expect(entersCommand(enter, box("/copy"))).toBe(true);
+  });
+
+  test("with the command menu open, the box shows the command Enter picks, so typing /co counts too", () => {
+    const menu = () => ["┃ ❯ /copy                 Copy the last response to the clipboard", rule, "❯ /copy", rule, footer];
+    expect(entersCommand(enter, menu)).toBe(true);
+  });
+
+  test("a prompt that is not a command, an empty box and a screen without the box do not ask", () => {
+    expect(entersCommand(enter, box("copy this to the clipboard"))).toBe(false);
+    expect(entersCommand(enter, box(""))).toBe(false);
+    expect(entersCommand(enter, () => [" ● Working · 3s"])).toBe(false);
+  });
+
+  test("other keys, Enter with a modifier and the key going up do not ask, and only Enter reads the screen", () => {
+    let read = 0;
+    const counted = () => {
+      read++;
+      return box("/copy")();
+    };
+    expect(entersCommand({ ...enter, key: "a" }, counted)).toBe(false);
+    expect(entersCommand({ ...enter, ctrlKey: true }, counted)).toBe(false);
+    expect(entersCommand({ ...enter, type: "keyup" }, counted)).toBe(false);
+    expect(read).toBe(0);
   });
 });

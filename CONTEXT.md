@@ -466,6 +466,10 @@ _Avoid_: request (that is a read request), clarification
 The daemon's one-line prompt that asks a session's agent to read what waits unread for it (a review, task messages, task updates, a handoff, a trust notice), with since when it has waited and what holds it back (`ReadRequestHold` in `waitsFor`): `sent` and not taken, `pending` until the session can take it, `user_text` in the input box, the agent's question (`dialog`), or `idle`, nothing until the user's Deliver now (ADR-159). The agent reads the content itself through the tools the prompt names.
 _Avoid_: inbox, notification, nudge
 
+**Copy request** (`CopyRequest`, `Session.copyRequest`, `CopyRequestSlot`; MCP tool `copy_to_clipboard`, "The agent asks to copy" with Copy and Dismiss in the session panel, `clear-copy-request`):
+Text a session's agent asked to put on the user's clipboard. It waits in the session's panel, the newest one per session, until the user copies or dismisses it; only the user's click writes the clipboard (ADR-180).
+_Avoid_: clipboard write, paste request
+
 **Agent queues** (`agent-queues.json`, `AgentQueues`, `agentQueuesFile`):
 Everything that waits in the `agents` module for the user or an agent: task proposals, unread review comments, task messages, task updates and mise trust notices. Kept in the state directory, so a daemon restart or an update does not lose them; the sessions that come back are asked to read what is unread (ADR-115).
 _Avoid_: inbox, mailbox, outbox

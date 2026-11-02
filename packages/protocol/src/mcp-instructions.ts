@@ -43,6 +43,7 @@ const {
   getReviewComments,
   sendMessage,
   askProposer,
+  copyToClipboard,
   resumeTask,
   getMessages,
   getUpdates,
@@ -64,7 +65,7 @@ export const MCP_INSTRUCTIONS = [
     "files and code into repo cards and a graph of connections between apps, runs mise tasks and Copilot CLI sessions. " +
     `Its tools give you that knowledge. ${runMiseTask.name} and ${stopMiseTask.name} start and stop mise tasks, ` +
     `${startService.name} and ${stopService.name} start and stop services, ` +
-    `${proposeTask.name}, ${proposeChange.name}, ${proposeFolderAction.name}, ${proposeRoutine.name}, ${proposeKnowledge.name}, ${createItem.name}, ${updateItem.name} and ${reportResult.name} record text for the user, and no tool edits repo files or configuration directly.`,
+    `${proposeTask.name}, ${proposeChange.name}, ${proposeFolderAction.name}, ${proposeRoutine.name}, ${proposeKnowledge.name}, ${createItem.name}, ${updateItem.name}, ${reportResult.name} and ${copyToClipboard.name} record text for the user, and no tool edits repo files or configuration directly.`,
   "",
   "How to work with it:",
   `- Find repos: ${listRepos.name} (narrow it with tags such as java, bff or frontend) gives the repo ids the other tools ` +
@@ -147,6 +148,9 @@ export const MCP_INSTRUCTIONS = [
   `- Point the user at a repo, session or task in your answer with a link: ${trackwallLink("repo", "<repo id>")}, ` +
     `${trackwallLink("session", "<session id>")} or ${trackwallLink("task", "<task id>")} (also for a task proposal) ` +
     "opens it in Trackwall when clicked. A link only shows it, it never runs anything.",
+  `- When the user asks you to copy something to the clipboard, call ${copyToClipboard.name} with the exact text, never a ` +
+    "shell command: your shell may have no clipboard of the user's (a container, no desktop). The user copies it with " +
+    "one click in Trackwall; tell them it waits there.",
   `- When you or the user are unsure what Trackwall can do or how a feature works, look it up in the documentation (${TRACKWALL_DOCS_URL}; ` +
     `${TRACKWALL_DOCS_LLMS_URL} lists its pages) instead of guessing; it follows the development version, so a feature ` +
     "there may be newer than the running Trackwall.",

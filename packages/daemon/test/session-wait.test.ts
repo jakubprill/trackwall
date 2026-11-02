@@ -43,6 +43,7 @@ const working: Session = {
   environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
   view: "terminal",
   readRequest: null,
+  copyRequest: null,
 };
 
 describe("what wait_for_session sees of a session", () => {

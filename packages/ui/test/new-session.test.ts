@@ -27,6 +27,7 @@ function session(id: string, over: Partial<Session>): Session {
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
     view: "terminal",
     readRequest: null,
+    copyRequest: null,
     ...over,
   };
 }
