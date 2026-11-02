@@ -8,6 +8,16 @@ import type { ReviewSide } from "@trackwall/protocol";
  */
 export type DiffLineKind = "file" | "meta" | "hunk" | "added" | "removed" | "context";
 
+/** The colour of each kind of line, the same in the "Changes" view and the conversation view. */
+export const DIFF_LINE_CLASSES: Record<DiffLineKind, string> = {
+  file: "text-foreground mt-3 font-medium first:mt-0",
+  meta: "text-muted-foreground",
+  hunk: "text-primary",
+  added: "text-success bg-success/10",
+  removed: "text-destructive bg-destructive/10",
+  context: "text-muted-foreground",
+};
+
 /**
  * Where a line of a change is: the file relative to the repo root and the line number, in the worktree's file (`new`:
  * added and unchanged lines) or in the base commit's (`old`: removed lines).
@@ -127,4 +137,38 @@ export function diffLines(patch: string, maxLines: number): { lines: DiffLine[];
     offset = end < 0 ? patch.length : end + 1;
   }
   return { lines, more: offset < patch.length };
+}
+
+/** A tool call's change as the conversation view shows it. */
+export interface Change {
+  lines: DiffLine[];
+  added: number;
+  removed: number;
+  /** There is more than `lines`: beyond the lines shown, or beyond what the daemon kept of the patch. */
+  more: boolean;
+}
+
+/**
+ * A tool call's change in the conversation view (ADR-107): the lines of its hunks without the file headers, which the
+ * tool's title and files already name, the first `maxLines` of them, and how many lines it adds and removes in what
+ * the daemon kept (`cut` when that is only the beginning).
+ */
+export function changeLines(patch: string, maxLines: number, cut: boolean): Change {
+  const lines = diffLines(patch, Number.POSITIVE_INFINITY).lines;
+  // `diffLines` reads lines before any header as a change; in a patch that starts with `---` instead of `diff --git`
+  // they are the file names, so the change starts at the first hunk.
+  const all = lines
+    .slice(
+      Math.max(
+        lines.findIndex((line) => line.kind === "hunk"),
+        0,
+      ),
+    )
+    .filter((line) => line.kind !== "file" && line.kind !== "meta");
+  return {
+    lines: all.slice(0, maxLines),
+    added: all.filter((line) => line.kind === "added").length,
+    removed: all.filter((line) => line.kind === "removed").length,
+    more: cut || all.length > maxLines,
+  };
 }

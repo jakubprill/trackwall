@@ -12,8 +12,11 @@ import { jsonOf } from "../../src/modules/agents/json.ts";
 /** A call of one tool. */
 type ToolCall = { tool: string; arguments: Record<string, unknown> };
 
-/** The model's answer to one request: text that ends the turn, a call of one tool, or calls of several at once. */
-type ModelReply = { text: string } | ToolCall | { parallel: ToolCall[] };
+/**
+ * The model's answer to one request: text that ends the turn (with the model's reasoning before it, which Copilot CLI
+ * reads from `reasoning_content`), a call of one tool, or calls of several at once.
+ */
+type ModelReply = { text: string; reasoning?: string } | ToolCall | { parallel: ToolCall[] };
 
 const Content = z.union([z.string(), z.array(z.object({ type: z.string(), text: z.string().optional() })), z.null()]);
 const Message = z.object({
@@ -85,7 +88,7 @@ function toolCalls(reply: ToolCall | { parallel: ToolCall[] }, callId: string) {
 function answer(res: ServerResponse, reply: ModelReply, callId: string): void {
   const { delta, finish } =
     "text" in reply
-      ? { delta: { role: "assistant", content: reply.text }, finish: "stop" }
+      ? { delta: { role: "assistant", content: reply.text, reasoning_content: reply.reasoning }, finish: "stop" }
       : { delta: { role: "assistant", tool_calls: toolCalls(reply, callId) }, finish: "tool_calls" };
   const base = { id: callId, object: "chat.completion.chunk", created: 0, model: SCRIPTED_MODEL };
   const chunks = [

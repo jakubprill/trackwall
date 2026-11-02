@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Conversation view: what ACP brings</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<style>
+/* Two panels of the conversation view (ADR-107): what this change builds from Copilot CLI's ACP updates, and what is proposed next. Dark only, like the app. */
+:root { --term: oklch(0.12 0.008 240); }
+body { background: var(--background); color: var(--foreground); font-family: var(--font-sans); line-height: 1.5; margin: 0; }
+.wrap { max-width: 1280px; margin: 0 auto; padding-block: 28px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 24px; }
+h1 { font-size: 22px; margin: 0; text-wrap: balance; }
+h2 { font-size: 15px; margin: 0 0 8px; }
+.lede { color: var(--muted-foreground); max-width: 75ch; margin: 6px 0 0; }
+.hud { font-family: var(--font-mono); font-size: 11px; letter-spacing: var(--tracking-hud); text-transform: uppercase; color: var(--muted-foreground); }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px; }
+.panel { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.bar b { font-size: 14px; flex-grow: 1; }
+.body { padding: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
+.you { align-self: flex-end; max-width: 80%; background: var(--secondary); border: 1px solid var(--border); border-radius: 8px 2px 8px 8px; padding: 8px 12px; }
+.turn { border-left: 2px solid var(--accent); padding-left: 12px; display: flex; flex-direction: column; gap: 8px; }
+.thought { font-size: 12px; color: var(--muted-foreground); }
+.thought p { margin: 6px 0 0; border-left: 1px solid var(--border); padding-left: 10px; font-style: italic; }
+.tool { background: var(--muted); border: 1px solid var(--border); border-radius: 6px; font-size: 12px; overflow: hidden; }
+.tool > div:first-child { display: flex; align-items: center; gap: 8px; padding: 6px 10px; }
+.tool .title { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; }
+.tool .title span:last-child { font-family: var(--font-mono); color: var(--muted-foreground); }
+.ok { color: var(--success); } .run { color: var(--warning); } .bad { color: var(--destructive); }
+.diff { border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px; padding: 4px 0; display: flex; flex-direction: column; }
+.diff span { padding: 0 12px; white-space: pre; }
+.hunk { color: var(--primary); } .ctx { color: var(--muted-foreground); }
+.add { color: var(--success); background: color-mix(in oklch, var(--success) 10%, transparent); }
+.del { color: var(--destructive); background: color-mix(in oklch, var(--destructive) 10%, transparent); }
+.approval { border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.approval pre { margin: 0; background: var(--muted); border-radius: 4px; padding: 4px 8px; font-family: var(--font-mono); font-size: 12px; color: var(--muted-foreground); }
+.approval .diff { background: var(--muted); border-radius: 4px; border-top: 0; }
+button { font: inherit; font-size: 13px; border-radius: 6px; padding: 6px 12px; border: 1px solid var(--border); background: transparent; color: var(--foreground); text-align: left; }
+button.main { background: var(--primary); color: var(--primary-foreground); border-color: transparent; }
+.modes { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.modes button { border: 0; border-radius: 0; padding: 4px 10px; font-size: 12px; color: var(--muted-foreground); }
+.modes button[aria-pressed="true"] { background: var(--accent); color: var(--primary); }
+.meter { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--muted-foreground); }
+.meter i { width: 64px; height: 6px; border-radius: 3px; background: var(--secondary); display: flex; }
+.meter i b { width: 27%; background: var(--primary); border-radius: 3px; }
+.slash { border: 1px solid var(--border); border-radius: 8px; padding: 4px; display: flex; flex-direction: column; font-size: 12px; }
+.slash span { padding: 5px 8px; border-radius: 5px; } .slash span:first-child { background: var(--accent); }
+.slash code { font-family: var(--font-mono); color: var(--primary); margin-right: 8px; }
+.badge { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: var(--tracking-hud); background: var(--accent); color: var(--primary); border-radius: 4px; padding: 1px 6px; }
+.box { border-top: 1px solid var(--border); padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.box textarea { background: var(--background); color: var(--foreground); border: 1px solid var(--border); border-radius: 6px; padding: 8px; font: inherit; font-size: 14px; resize: none; }
+</style>
+<div class="wrap">
+  <header>
+    <div class="hud">Sessions // conversation view</div>
+    <h1>Conversation view: what Copilot CLI sends over ACP</h1>
+    <p class="lede">Copilot CLI's ACP updates carry more than the view showed: the model's reasoning, each file change as a diff and the files a tool works on. The left panel is built: thoughts fold, a change opens in colour with its line counts, and an approval shows the change it allows. The right panel is proposed next: the session's mode, its context use, slash commands and a subagent as one card.</p>
+  </header>
+  <div class="cols">
+    <section class="panel" aria-labelledby="built">
+      <div class="bar"><b id="built">Built: a turn and an approval</b><span class="hud">fix-cart-total</span></div>
+      <div class="body">
+        <div class="you">The cart total ignores discounts. Fix it.</div>
+        <div class="hud">Agent</div>
+        <div class="turn">
+          <details class="thought" open><summary>Thought</summary><p>The total sums prices only; discounts live in pricing/discounts.ts.</p></details>
+          <div>The total never applies <code>discounts()</code>. Fixing it in one place:</div>
+          <div class="tool">
+            <div><span class="ok">✎</span><span class="title"><span>Editing src/cart/total.ts</span><span>src/cart/total.ts</span></span><span class="ok">+2</span><span class="bad">−1</span><span class="ok">done</span></div>
+            <div class="diff"><span class="hunk">@@ -3,3 +3,4 @@</span><span class="ctx"> export function total(items) {</span><span class="del">-  return items.reduce((sum, i) =&gt; sum + i.price, 0);</span><span class="add">+  const gross = items.reduce((sum, i) =&gt; sum + i.price, 0);</span><span class="add">+  return gross - discounts(items);</span></div>
+          </div>
+          <div class="tool"><div><span class="run">▸</span><span class="title"><span>Run tests</span><span>$ pnpm test cart</span></span><span class="run">running</span></div></div>
+        </div>
+        <div class="approval">
+          <strong>Edit file</strong>
+          <pre>src/cart/total.ts</pre>
+          <div class="diff"><span class="hunk">@@ -3,2 +3,3 @@</span><span class="add">+  if (items.length === 0) return 0;</span><span class="ctx">   const gross = items.reduce((sum, i) =&gt; sum + i.price, 0);</span></div>
+          <div>Do you want to allow this?</div>
+          <button class="main" type="button">Allow once</button>
+          <button type="button">Always allow</button>
+          <button type="button">Deny</button>
+        </div>
+      </div>
+    </section>
+    <section class="panel" aria-labelledby="next">
+      <div class="bar">
+        <b id="next">Proposed next: mode, context, commands, subagents</b>
+        <div class="modes" role="group" aria-label="Mode"><button type="button" aria-pressed="true">Agent</button><button type="button" aria-pressed="false">Plan</button><button type="button" aria-pressed="false">Autopilot</button></div>
+        <div class="meter" title="Context used"><i><b></b></i>27%</div>
+      </div>
+      <div class="body">
+        <div class="hud">Agent</div>
+        <div class="turn">
+          <div class="tool">
+            <div><span class="badge">Subagent · explore</span><span class="title"><span>Find callers of /api/cart/total</span></span><span class="ok">done</span></div>
+            <div class="diff"><span class="ctx">Asked: list every service that calls the cart total endpoint.</span><span class="ctx">Found 2 callers: checkout-web and orders-bff.</span></div>
+          </div>
+          <div>Both read <code>total</code> as a number, so the change is safe.</div>
+        </div>
+        <div class="slash" aria-label="Slash commands"><span><code>/compact</code>Summarize the conversation</span><span><code>/review</code>Review the changes</span><span><code>/chronicle</code>Session history and insights</span></div>
+      </div>
+      <div class="box"><span class="ok">● The agent is working…</span><label>Message <textarea rows="2">/c</textarea></label></div>
+    </section>
+  </div>
+</div>
+</body>
+</html>

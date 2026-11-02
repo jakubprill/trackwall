@@ -46,6 +46,15 @@ export const TOOL_STATUS: Record<ToolCallStatus, { label: string; tone?: StatusT
   failed: { label: "failed", tone: "error" },
 };
 
+/** How many lines of a tool call's change the conversation view shows; the "Changes" view has all of them. */
+export const PATCH_SHOWN_LINES = 400;
+
+/** The line under a tool call's title: the command of a shell tool, otherwise the files it works on. */
+export function toolSubtitle(tool: Pick<Extract<ConversationEntry, { kind: "tool" }>, "tool" | "detail" | "files">): string | undefined {
+  const command = tool.tool === "execute" ? tool.detail.find((line) => line.startsWith("$ ")) : undefined;
+  return command ?? (tool.files.length > 0 ? tool.files.join(", ") : undefined);
+}
+
 /**
  * Whose turn it is, in the line above the message box of a running session: the conversation itself shows nothing
  * while the agent thinks, so without it the user cannot tell a working agent from one waiting for them.

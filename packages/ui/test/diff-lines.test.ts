@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { diffLines } from "../src/lib/diff-lines.ts";
+import { changeLines, diffLines } from "../src/lib/diff-lines.ts";
 
 const kinds = (patch: string[]) => diffLines(patch.join("\n"), 100).lines.map((l) => l.kind);
 
@@ -72,5 +72,44 @@ describe("task diff lines", () => {
   test("a file name with a space loses the tab git ends it with", () => {
     const patch = ["diff --git a/my file.ts b/my file.ts", "--- a/my file.ts\t", "+++ b/my file.ts\t", "@@ -1 +1 @@", "-a", "+b"];
     expect(diffLines(patch.join("\n"), 100).lines.at(-1)?.anchor).toEqual({ path: "my file.ts", side: "new", line: 1 });
+  });
+});
+
+describe("a tool call's change", () => {
+  test("shows the hunks without the file header and counts the added and removed lines", () => {
+    const patch =
+      "diff --git a/a.ts b/a.ts\nindex 0000000..0000000 100644\n--- a/a.ts\n+++ b/a.ts\n@@ -1,2 +1,3 @@\n one\n-two\n+TWO\n+three\n";
+    const change = changeLines(patch, 10, false);
+
+    expect(change.lines.map((line) => [line.kind, line.text])).toEqual([
+      ["hunk", "@@ -1,2 +1,3 @@"],
+      ["context", " one"],
+      ["removed", "-two"],
+      ["added", "+TWO"],
+      ["added", "+three"],
+    ]);
+    expect([change.added, change.removed, change.more]).toEqual([2, 1, false]);
+  });
+
+  test("a patch that starts with --- has its file names out of the lines too", () => {
+    const change = changeLines("--- a/dev/null\n+++ b/new.txt\n@@ -0,0 +1,1 @@\n+hello\n", 10, false);
+
+    expect(change.lines.map((line) => line.text)).toEqual(["@@ -0,0 +1,1 @@", "+hello"]);
+    expect([change.added, change.removed]).toEqual([1, 0]);
+  });
+
+  test("beyond the line limit it gives the start, but counts every line, and says there is more", () => {
+    const change = changeLines(`--- a/f\n+++ b/f\n@@ -0,0 +1,5 @@\n${"+x\n".repeat(5)}`, 3, false);
+
+    expect(change.lines).toHaveLength(3);
+    expect([change.added, change.more]).toEqual([5, true]);
+  });
+
+  test("no patch is no change", () => {
+    expect(changeLines("", 10, false)).toEqual({ lines: [], added: 0, removed: 0, more: false });
+  });
+
+  test("a patch the daemon cut says there is more, even when every line it kept is shown", () => {
+    expect(changeLines("--- a/f\n+++ b/f\n@@ -0,0 +1,1 @@\n+x\n", 10, true).more).toBe(true);
   });
 });

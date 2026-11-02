@@ -6,6 +6,7 @@ import {
   readSupervisorView,
   saveSupervisorView,
   sendsMessage,
+  toolSubtitle,
   withEntries,
 } from "../src/lib/conversation.ts";
 
@@ -17,7 +18,17 @@ describe("the conversation view", () => {
       waiting: [],
       entries: [
         { id: "user-1", kind: "user", text: "Check the build" },
-        { id: "tool-1", kind: "tool", title: "Run tests", tool: "execute", status: "pending", detail: [] },
+        {
+          id: "tool-1",
+          kind: "tool",
+          title: "Run tests",
+          tool: "execute",
+          status: "pending",
+          files: [],
+          detail: [],
+          patch: "",
+          patchCut: false,
+        },
       ],
     });
     const next = withEntries(first, {
@@ -25,14 +36,34 @@ describe("the conversation view", () => {
       reset: false,
       waiting: [],
       entries: [
-        { id: "tool-1", kind: "tool", title: "Run tests", tool: "execute", status: "completed", detail: ["ok"] },
+        {
+          id: "tool-1",
+          kind: "tool",
+          title: "Run tests",
+          tool: "execute",
+          status: "completed",
+          files: [],
+          detail: ["ok"],
+          patch: "",
+          patchCut: false,
+        },
         { id: "agent-2", kind: "agent", text: "Green." },
       ],
     });
 
     expect(next).toEqual([
       { id: "user-1", kind: "user", text: "Check the build" },
-      { id: "tool-1", kind: "tool", title: "Run tests", tool: "execute", status: "completed", detail: ["ok"] },
+      {
+        id: "tool-1",
+        kind: "tool",
+        title: "Run tests",
+        tool: "execute",
+        status: "completed",
+        files: [],
+        detail: ["ok"],
+        patch: "",
+        patchCut: false,
+      },
       { id: "agent-2", kind: "agent", text: "Green." },
     ]);
     expect(withEntries(next, { type: "entries", reset: true, entries: [], waiting: [] })).toEqual([]);
@@ -84,14 +115,25 @@ describe("whose turn it is in the conversation view", () => {
 });
 
 describe("turns of the conversation view", () => {
-  test("each user message is a turn, and the agent's answers and tool calls between two of them are one turn named by its first entry", () => {
-    const run: ConversationEntry = { id: "tool-1", kind: "tool", title: "Run tests", tool: "execute", status: "completed", detail: [] };
+  test("each user message is a turn, and the agent's answers, thoughts and tool calls between two of them are one turn named by its first entry", () => {
+    const run: ConversationEntry = {
+      id: "tool-1",
+      kind: "tool",
+      title: "Run tests",
+      tool: "execute",
+      status: "completed",
+      files: [],
+      detail: [],
+      patch: "",
+      patchCut: false,
+    };
     expect(
       conversationTurns([
         { id: "user-1", kind: "user", text: "Check the build" },
         { id: "agent-1", kind: "agent", text: "Running the tests." },
         run,
         { id: "agent-2", kind: "agent", text: "Green." },
+        { id: "thought-1", kind: "thought", text: "The tests pass." },
         { id: "user-2", kind: "user", text: "Thanks" },
       ]),
     ).toEqual([
@@ -99,10 +141,25 @@ describe("turns of the conversation view", () => {
       {
         kind: "agent",
         id: "agent-1",
-        steps: [{ id: "agent-1", kind: "agent", text: "Running the tests." }, run, { id: "agent-2", kind: "agent", text: "Green." }],
+        steps: [
+          { id: "agent-1", kind: "agent", text: "Running the tests." },
+          run,
+          { id: "agent-2", kind: "agent", text: "Green." },
+          { id: "thought-1", kind: "thought", text: "The tests pass." },
+        ],
       },
       { kind: "user", entry: { id: "user-2", kind: "user", text: "Thanks" } },
     ]);
     expect(conversationTurns([])).toEqual([]);
+  });
+});
+
+describe("the line under a tool call's title", () => {
+  test("a shell tool shows its command, another tool its files, and a tool with neither nothing", () => {
+    expect(toolSubtitle({ tool: "execute", detail: ["$ pnpm test", "ok"], files: [] })).toBe("$ pnpm test");
+    expect(toolSubtitle({ tool: "edit", detail: [], files: ["src/total.ts", "src/total.test.ts"] })).toBe(
+      "src/total.ts, src/total.test.ts",
+    );
+    expect(toolSubtitle({ tool: "other", detail: ["3 rows"], files: [] })).toBeUndefined();
   });
 });
