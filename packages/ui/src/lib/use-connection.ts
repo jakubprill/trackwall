@@ -1,3 +1,4 @@
+import { listen } from "@tauri-apps/api/event";
 import { DAEMON_INFO_PATH, DaemonInfo } from "@trackwall/protocol";
 import { useCallback, useEffect, useState } from "react";
 import { call, errorCode, errorMessage } from "./api.ts";
@@ -33,6 +34,12 @@ export interface ConnectionHandle {
   /** Takes the token from a pasted page address; rejects when there is none or the daemon does not accept it either. */
   connectWithAddress: (address: string) => Promise<void>;
 }
+
+/**
+ * The shell's word that the connection failed while in use: a remote daemon refused the token after it restarted with a
+ * new one (ADR-130). The name is also in `apps/desktop/src-tauri/src/attention.rs`.
+ */
+const CONNECTION_LOST_EVENT = "daemon-connection-lost";
 
 const NEW_TOKEN_REFUSED =
   "Trackwall did not accept this token. It gets a new one every time it starts: print the address again and paste the new one.";
@@ -91,6 +98,18 @@ export function useConnection(): ConnectionHandle {
       },
       (err: unknown) => setError(errorMessage(err)),
     );
+  }, []);
+
+  // The views go, and the shell's reason (with the field for the new address, `ConnectionState`) takes their place.
+  useEffect(() => {
+    if (!inDesktopShell()) return;
+    const unlisten = listen(CONNECTION_LOST_EVENT, () => {
+      setConn(undefined);
+      resolveConnection().then(setConn, (err: unknown) => setError(errorMessage(err)));
+    });
+    return () => {
+      void unlisten.then((stop) => stop()).catch(() => undefined);
+    };
   }, []);
 
   const refresh = useCallback(() => {

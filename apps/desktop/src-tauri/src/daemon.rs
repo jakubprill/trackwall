@@ -191,13 +191,22 @@ pub fn shutdown(conn: &Connection) -> Result<(), String> {
     Err(format!("daemon is still responding after {} s", STOP_TIMEOUT.as_secs()))
 }
 
+/// Why the session list did not come: the daemon refused the token, which for a remote daemon means it restarted with
+/// a new one (ADR-130), or anything else, which may pass.
+#[derive(Debug, PartialEq)]
+pub enum SessionsError {
+    TokenRefused,
+    Failed(String),
+}
+
 /// The body of the `POST /api/agents/sessions` reply (the list of Copilot CLI sessions, ADR-26).
-pub fn sessions(conn: &Connection) -> Result<String, String> {
-    let (status, body) = http(conn.port, "POST", "/api/agents/sessions", Some(&conn.token))?;
-    if status != 200 {
-        return Err(format!("session list returned {status}"));
+pub fn sessions(conn: &Connection) -> Result<String, SessionsError> {
+    let (status, body) = http(conn.port, "POST", "/api/agents/sessions", Some(&conn.token)).map_err(SessionsError::Failed)?;
+    match status {
+        200 => Ok(body),
+        401 => Err(SessionsError::TokenRefused),
+        _ => Err(SessionsError::Failed(format!("session list returned {status}"))),
     }
-    Ok(body)
 }
 
 /// The body of the `POST /api/task-outcomes/list` reply (what each task's work came to, ADR-154).

@@ -88,8 +88,8 @@ impl DaemonState {
     }
 
     /// Like `start`, but also when the saved daemon has stopped answering (for example ended from outside the app), or,
-    /// for a remote daemon, no longer takes its token.
-    pub fn restart_if_down(self: &Arc<Self>) {
+    /// for a remote daemon, no longer takes its token. Returns whether it started again, not when the daemon still answers.
+    pub fn restart_if_down(self: &Arc<Self>) -> bool {
         {
             let mut phase = self.lock();
             if let Phase::Ready(conn) = &*phase {
@@ -99,12 +99,21 @@ impl DaemonState {
                     None => daemon::health(conn.port).as_deref() == Some(daemon::VERSION),
                 };
                 if alive {
-                    return;
+                    return false;
                 }
                 *phase = Phase::Idle;
             }
         }
         self.start();
+        true
+    }
+
+    /// A remote daemon refused the token of the connection: it restarted with a new one (ADR-130), which only the user
+    /// can bring. The connection fails with that reason, as a start would, so every window shows the address field.
+    /// The app's own daemon is left to `restart_if_down`, which a window's "Try again" calls. Returns whether the
+    /// connection was dropped: not when a check made now finds the token taken after all (a one-off refusal).
+    pub fn token_refused(self: &Arc<Self>) -> bool {
+        self.remote.get().is_some() && self.restart_if_down()
     }
 
     /// The connection to a running daemon without waiting; `None` during startup, after an error and while closing.
@@ -368,6 +377,43 @@ mod tests {
         state.restart_if_down();
 
         assert!(state.wait().unwrap_err().contains("did not accept the token"));
+    }
+
+    #[test]
+    fn a_session_list_refused_by_a_remote_daemon_fails_the_connection_with_the_token_reason() {
+        let port = rejecting_daemon();
+        let state = Arc::new(DaemonState::new(no_home()));
+        state.use_remote(remote(port, "old"));
+        let conn = Connection { base_url: format!("http://127.0.0.1:{port}"), token: "old".into(), port };
+        *state.lock() = Phase::Ready(conn.clone());
+
+        assert_eq!(daemon::sessions(&conn), Err(daemon::SessionsError::TokenRefused));
+        assert!(state.token_refused());
+
+        assert!(state.ready().is_none());
+        assert!(state.wait().unwrap_err().contains("did not accept the token"));
+    }
+
+    #[test]
+    fn a_one_off_refusal_keeps_the_connection_when_the_remote_daemon_takes_the_token_again() {
+        let (port, _rx) = fake_daemon();
+        let state = Arc::new(DaemonState::new(no_home()));
+        state.use_remote(remote(port, "secret"));
+        *state.lock() = Phase::Ready(Connection { base_url: format!("http://127.0.0.1:{port}"), token: "secret".into(), port });
+
+        assert!(!state.token_refused());
+
+        assert!(state.ready().is_some());
+    }
+
+    #[test]
+    fn a_refused_token_leaves_the_apps_own_daemon_to_a_retry() {
+        let port = rejecting_daemon();
+        let state = Arc::new(ready(port));
+
+        assert!(!state.token_refused());
+
+        assert!(state.ready().is_some());
     }
 
     /// A daemon of the shell's version that answers health and rejects every token, like one restarted with a new token.
