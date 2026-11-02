@@ -53,7 +53,7 @@ export async function openDesktopWindow(
   page.on("console", (message) => {
     if (message.type() === "error") problems.push(`console: ${message.text()}`);
   });
-  await onCspViolation(page, (text) => problems.push(`CSP: ${text}`));
+  await onCspViolation(context, (text) => problems.push(`CSP: ${text}`));
   await page.addInitScript(fakeTauri, daemon);
   const eventsArrived = page
     .waitForEvent("websocket", { predicate: (socket) => new URL(socket.url()).pathname === "/ws", timeout: EVENTS_TIMEOUT_MS })

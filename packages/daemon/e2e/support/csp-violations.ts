@@ -1,13 +1,13 @@
-import type { Page } from "playwright";
+import type { BrowserContext } from "playwright";
 
 /**
- * Reports every Content-Security-Policy violation of a page: the browser fires `securitypolicyviolation` in the page
+ * Reports every Content-Security-Policy violation in the pages of a browser context, a tab opened later in it too: the browser fires `securitypolicyviolation` in the page
  * for each refusal, also one the UI survives with a fallback (a README or an answer as plain text), which a test that
- * only looks at the screen would not notice. Call it before the page loads the UI.
+ * only looks at the screen would not notice. Call it before a page of the context loads the UI.
  */
-export async function onCspViolation(page: Page, report: (text: string) => void): Promise<void> {
-  await page.exposeFunction("reportCspViolation", report);
-  await page.addInitScript(reportCspViolations);
+export async function onCspViolation(context: BrowserContext, report: (text: string) => void): Promise<void> {
+  await context.exposeFunction("reportCspViolation", report);
+  await context.addInitScript(reportCspViolations);
 }
 
 /** Runs in the page before its scripts. */

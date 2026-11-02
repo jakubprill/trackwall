@@ -22,8 +22,8 @@ const NO_BREAK_SPACE = String.fromCharCode(0xa0);
 /**
  * The daemon of `test/support/session-api.ts` (a real facade, PTY and git, the fake Copilot CLI) serving the built UI,
  * and Chromium from Playwright to look at it (ADR-71). `agentOf` is the MCP client a session's agent has through its
- * bridge. `stop` closes the clients and the browser, then the daemon, also when one of them fails, and then fails on any
- * violation of the tab's Content-Security-Policy in a page it opened that `expectedCspViolations` does not name: the
+ * bridge. `stop` closes the clients and the browser, then the daemon, also when one of them fails, and once all closed fails on
+ * any violation of the tab's Content-Security-Policy in a page it opened that `expectedCspViolations` does not name: the
  * daemon sends that policy with the UI (ADR-161), and a refusal the UI survives with a fallback would go unseen.
  */
 async function startTrackwall(options: Omit<SessionApiOptions, "uiDir"> = ONE_REPO, expectedCspViolations?: RegExp) {
@@ -40,8 +40,9 @@ async function startTrackwall(options: Omit<SessionApiOptions, "uiDir"> = ONE_RE
   const cspViolations: string[] = [];
   const watched = async (page: Promise<Page>) => {
     const opened = await page;
-    // Before the UI loads: the page is still blank until the caller navigates.
-    await onCspViolation(opened, (text) => cspViolations.push(text));
+    // Before the UI loads: the page is still blank until the caller navigates. Each helper's page has a context of its
+    // own, so a second tab a test opens in it is watched as well.
+    await onCspViolation(opened.context(), (text) => cspViolations.push(text));
     return opened;
   };
   return {
