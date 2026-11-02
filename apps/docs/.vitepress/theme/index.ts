@@ -4,6 +4,7 @@ import CopyOrDownloadAsMarkdownButtons from "vitepress-plugin-llms/vitepress-com
 import { defineComponent, h } from "vue";
 import { MERMAID_COMPONENT } from "../mermaid-fence.ts";
 import { FEATURE_LIST_PAGE } from "../sidebar.ts";
+import { useImageZoom } from "./image-zoom.ts";
 import { MermaidDiagram } from "./mermaid-diagram.ts";
 import "./trackwall.css";
 
@@ -18,5 +19,8 @@ export default {
   enhanceApp({ app }) {
     app.component("CopyOrDownloadAsMarkdownButtons", CopyPageButton);
     app.component(MERMAID_COMPONENT, MermaidDiagram);
+  },
+  setup() {
+    useImageZoom();
   },
 } satisfies Theme;

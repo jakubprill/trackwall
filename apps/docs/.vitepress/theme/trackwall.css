@@ -78,6 +78,12 @@
   background-size: 24px 24px;
 }
 
+/* A screenshot opens larger on a click (theme/image-zoom.ts), above the top bar and the sidebar of VitePress. */
+.medium-zoom-overlay,
+.medium-zoom-image--opened {
+  z-index: 100;
+}
+
 /* The sentence under the title says what the feature gives you. */
 .vp-doc h1 + p {
   font-size: 18px;
