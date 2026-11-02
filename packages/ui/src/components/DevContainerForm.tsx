@@ -1,10 +1,18 @@
-import { type FormEvent, useCallback, useContext, useState } from "react";
+import { type FormEvent, useCallback, useContext, useEffect, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DaemonPlaceContext } from "@/lib/desktop";
-import { DEFAULT_FOLDER_TO_OPEN, type DevContainer, savedDevContainer, setDevContainer, startDevContainer } from "@/lib/dev-container";
+import {
+  cancelDevContainerStart,
+  DEFAULT_FOLDER_TO_OPEN,
+  type DevContainer,
+  devContainerStarting,
+  savedDevContainer,
+  setDevContainer,
+  startDevContainer,
+} from "@/lib/dev-container";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 
@@ -72,17 +80,39 @@ function DevContainerFields({ saved, initial, onSaved }: { saved: DevContainer |
   );
 }
 
+/** How often the form asks whether a start it did not begin is still waiting. */
+const STARTING_POLL_MS = 2000;
+
 /** Nothing follows in this window: the app restarts. */
 const RESTARTS = () => {};
 
+/**
+ * "Start" and, while a start waits, "Cancel": VS Code may fail in a window the user does not watch, and a start this
+ * window did not begin (before a reload, or in another window) shows the same way, so the user never waits out the time
+ * limit for lack of a way out.
+ */
 function StartButton() {
   const start = useAction(startDevContainer, RESTARTS);
+  const loadStarting = useCallback(() => devContainerStarting(), []);
+  // Asked again every moment, since a cancelled start ends within one poll of its own.
+  const starting = useRemote(loadStarting, { pollMs: STARTING_POLL_MS });
+  const cancel = useAction(cancelDevContainerStart, starting.reload);
+  const reloadStarting = starting.reload;
+  useEffect(() => {
+    if (start.error !== undefined) reloadStarting();
+  }, [reloadStarting, start.error]);
+  const waiting = start.pending || starting.data === true;
   return (
     <div className="flex flex-col gap-1">
-      <div>
-        <Button size="sm" disabled={start.pending} onClick={() => start.run()}>
-          {start.pending ? "Starting…" : "Start the dev container and connect"}
+      <div className="flex gap-2">
+        <Button size="sm" disabled={waiting} onClick={() => start.run()}>
+          {waiting ? "Starting…" : "Start the dev container and connect"}
         </Button>
+        {waiting && (
+          <Button size="sm" variant="outline" disabled={cancel.pending} onClick={() => cancel.run()}>
+            Cancel
+          </Button>
+        )}
       </div>
       {start.pending && (
         <p className="text-muted-foreground text-xs">

@@ -52,6 +52,10 @@ const MAX_OUTPUT: u64 = 256 * 1024;
 const START_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const POLL_INTERVAL: Duration = Duration::from_secs(2);
 
+/// How long after VS Code opened the start keeps waiting on a container whose label differs from the folder only in
+/// case: VS Code fails at once when it does not reuse it, and connects within this when it does.
+const OTHER_CASE_GRACE: Duration = Duration::from_secs(60);
+
 /// The folder with the dev container's configuration and the folder inside the container VS Code opens.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DevContainer {
@@ -208,13 +212,44 @@ fn same_folder(label: &str, folder: &str, ignore_case: bool) -> bool {
     }
 }
 
-/// The id of the running container opened from `folder`, read from `docker ps` lines of id and label.
-fn container_in(ps: &str, folder: &str, ignore_case: bool) -> Option<String> {
-    ps.lines().find_map(|line| {
-        let (id, label) = line.split_once('\t')?;
-        let id_ok = (12..=64).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_hexdigit());
-        (id_ok && same_folder(label, folder, ignore_case)).then(|| id.to_owned())
-    })
+/// A running container opened from the folder.
+#[derive(Debug, PartialEq)]
+struct Found {
+    id: String,
+    /// Its label when it names the folder only without case, e.g. `c:\...` made by the `devcontainer` CLI for `C:\...`:
+    /// the Dev Containers extension compares labels with case, so it does not reuse that container and, with a
+    /// `--name` in `runArgs`, cannot create its own either.
+    other_case: Option<String>,
+}
+
+/// The running container opened from `folder`, read from `docker ps` lines of id and label: one whose label is the
+/// folder as written first, then, where paths ignore case, one whose label differs only in case.
+fn container_in(ps: &str, folder: &str, ignore_case: bool) -> Option<Found> {
+    let rows: Vec<(&str, &str)> = ps
+        .lines()
+        .filter_map(|line| {
+            let (id, label) = line.split_once('\t')?;
+            let id_ok = (12..=64).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_hexdigit());
+            id_ok.then_some((id, label))
+        })
+        .collect();
+    if let Some((id, _)) = rows.iter().find(|(_, label)| same_folder(label, folder, false)) {
+        return Some(Found { id: (*id).to_owned(), other_case: None });
+    }
+    if !ignore_case {
+        return None;
+    }
+    let (id, label) = rows.iter().find(|(_, label)| same_folder(label, folder, true))?;
+    Some(Found { id: (*id).to_owned(), other_case: Some(short(label)) })
+}
+
+/// What to do about a container VS Code does not reuse because its label differs from the folder in case.
+fn other_case_hint(found: &Found, label: &str, folder: &str) -> String {
+    let short_id = &found.id[..12];
+    format!(
+        "A container for this folder is running with the label {label}, which differs from {folder} in case, so VS Code does not \
+         reuse it. Remove it with `docker rm -f {short_id}` and start again, or open it from the folder it was created from."
+    )
 }
 
 #[derive(Deserialize)]
@@ -233,6 +268,9 @@ fn parse_daemon_file(text: &str) -> Option<RemoteDaemon> {
 #[derive(Debug, PartialEq)]
 enum Miss {
     NotYet(String),
+    /// Like `NotYet`, for a container whose label differs from the folder in case: final once VS Code has had
+    /// `OTHER_CASE_GRACE` to reuse it.
+    OtherCase(String),
     Final(String),
 }
 
@@ -296,26 +334,38 @@ fn read_start_result(exit: &Exit) -> Result<(), Miss> {
 }
 
 /// The running container opened from `folder`.
-fn running_container(docker: &Docker, folder: &str) -> Result<String, Miss> {
+fn running_container(docker: &Docker, folder: &str, ignore_case: bool) -> Result<Found, Miss> {
     let label = format!("{{{{.ID}}}}\t{{{{.Label \"{FOLDER_LABEL}\"}}}}");
     let ps = docker.run(&["ps", "--no-trunc", "--format", &label]).map_err(Miss::NotYet)?;
-    let ignore_case = cfg!(any(windows, target_os = "macos"));
     container_in(&ps, folder, ignore_case).ok_or_else(|| Miss::NotYet(format!("No container opened from {folder} is running.")))
+}
+
+/// Where the start looks and how paths compare there: without case on Windows and the default disk of macOS.
+struct Look<'a> {
+    docker: &'a Docker,
+    folder: &'a str,
+    ignore_case: bool,
 }
 
 /// One look: the container of the folder, the daemon in it, and that daemon accepted by `connect`. With `try_start`, a
 /// running container whose daemon does not answer gets `trackwall-container start` before a second look; the polls after
-/// VS Code opened leave starting to the Feature's own `postStartCommand`.
-fn find_daemon(docker: &Docker, folder: &str, connect: Connect, try_start: bool) -> Result<RemoteDaemon, Miss> {
-    let id = running_container(docker, folder)?;
-    match daemon_in(docker, &id, connect) {
+/// VS Code opened leave starting to the Feature's own `postStartCommand`. A container whose label differs from the folder
+/// in case and whose daemon does not answer is `OtherCase` with what to do about it.
+fn find_daemon(look: &Look, connect: Connect, try_start: bool) -> Result<RemoteDaemon, Miss> {
+    let found = running_container(look.docker, look.folder, look.ignore_case)?;
+    let id = found.id.as_str();
+    let result = match daemon_in(look.docker, id, connect) {
         Err(Miss::NotYet(_)) if try_start => {
-            let mut args = vec!["exec", id.as_str()];
+            let mut args = vec!["exec", id];
             args.extend(START_TRACKWALL);
-            read_start_result(&docker.exit(&args).map_err(Miss::NotYet)?)?;
-            daemon_in(docker, &id, connect)
+            read_start_result(&look.docker.exit(&args).map_err(Miss::NotYet)?)?;
+            daemon_in(look.docker, id, connect)
         }
-        found => found,
+        result => result,
+    };
+    match (result, &found.other_case) {
+        (Err(Miss::NotYet(_)), Some(label)) => Err(Miss::OtherCase(other_case_hint(&found, label, look.folder))),
+        (result, _) => result,
     }
 }
 
@@ -335,43 +385,46 @@ const CANCELLED: &str = "Starting the dev container was cancelled.";
 struct Timing {
     timeout: Duration,
     poll: Duration,
+    other_case_grace: Duration,
 }
 
 /// Connects to the daemon of an already running container, or opens VS Code on the dev container and waits until the
 /// daemon in it answers on the forwarded port; `cancelled` ends the wait.
 fn start(
-    docker: &Docker,
+    look: &Look,
     dev: &DevContainer,
     open_editor: &dyn Fn(String) -> Result<(), String>,
     connect: Connect,
     cancelled: &AtomicBool,
     timing: Timing,
 ) -> Result<RemoteDaemon, String> {
-    docker
+    look.docker
         .run(&["version", "--format", "{{.Server.Version}}"])
         .map_err(|e| format!("Docker does not answer ({e}). Start Docker Desktop or Rancher Desktop and try again."))?;
     let was_cancelled = || if cancelled.load(Ordering::SeqCst) { Err(CANCELLED.to_owned()) } else { Ok(()) };
-    match find_daemon(docker, &dev.folder, connect, true) {
+    match find_daemon(look, connect, true) {
         Ok(remote) => return was_cancelled().map(|()| remote),
         Err(Miss::Final(reason)) => return Err(reason),
-        Err(Miss::NotYet(_)) => {}
+        Err(Miss::NotYet(_) | Miss::OtherCase(_)) => {}
     }
     was_cancelled()?;
     open_editor(dev.editor_url())?;
-    let deadline = Instant::now() + timing.timeout;
+    let opened = Instant::now();
+    let deadline = opened + timing.timeout;
     loop {
         std::thread::sleep(timing.poll);
         was_cancelled()?;
-        match find_daemon(docker, &dev.folder, connect, false) {
+        match find_daemon(look, connect, false) {
             Ok(remote) => return was_cancelled().map(|()| remote),
             Err(Miss::Final(reason)) => return Err(reason),
-            Err(Miss::NotYet(last)) if Instant::now() > deadline => {
+            Err(Miss::OtherCase(hint)) if opened.elapsed() > timing.other_case_grace => return Err(hint),
+            Err(Miss::NotYet(last) | Miss::OtherCase(last)) if Instant::now() > deadline => {
                 return Err(format!(
                     "Trackwall did not answer from the container within {} minutes. Last: {last}",
                     timing.timeout.as_secs() / 60
                 ))
             }
-            Err(Miss::NotYet(_)) => {}
+            Err(Miss::NotYet(_) | Miss::OtherCase(_)) => {}
         }
     }
 }
@@ -391,6 +444,10 @@ impl DevContainerStart {
 
     fn is_cancelled(&self) -> bool {
         self.cancelled.load(Ordering::SeqCst)
+    }
+
+    fn is_running(&self) -> bool {
+        self.running.load(Ordering::SeqCst)
     }
 }
 
@@ -426,6 +483,19 @@ pub fn set_dev_container(app: AppHandle, dev: Option<DevContainer>) -> Result<()
     json_file::save(&file, &dev).map_err(|e| format!("{}: {e}", file.display()))
 }
 
+/// Whether a start is waiting for the dev container, also one a window began before it reloaded or another window began.
+#[tauri::command]
+pub fn dev_container_starting(starting: tauri::State<'_, DevContainerStart>) -> bool {
+    starting.is_running()
+}
+
+/// Ends the start in progress, so the user need not wait out `START_TIMEOUT` when VS Code failed in a window they did not
+/// watch; the start answers that it was cancelled within one poll.
+#[tauri::command]
+pub fn cancel_dev_container_start(starting: tauri::State<'_, DevContainerStart>) {
+    starting.cancel();
+}
+
 /// Starts the dev container, or finds it running, and switches the app to the Trackwall daemon in it; the app restarts.
 #[tauri::command]
 pub async fn start_dev_container(
@@ -435,16 +505,19 @@ pub async fn start_dev_container(
 ) -> Result<(), String> {
     let dev = load(&app).ok_or("Set the dev container's folder first.")?;
     if starting.running.swap(true, Ordering::SeqCst) {
-        return Err("The dev container is already starting.".into());
+        return Err("The dev container is already starting. Cancel stops that start.".into());
     }
     let _running = Running(&starting.running);
     starting.cancelled.store(false, Ordering::SeqCst);
     let cancelled = Arc::clone(&starting.cancelled);
-    let timing = Timing { timeout: START_TIMEOUT, poll: POLL_INTERVAL };
+    let timing = Timing { timeout: START_TIMEOUT, poll: POLL_INTERVAL, other_case_grace: OTHER_CASE_GRACE };
     let open_editor = |url: String| system_open::open_outside(url);
-    let found =
-        tauri::async_runtime::spawn_blocking(move || start(&Docker::system(), &dev, &open_editor, &connect_remote, &cancelled, timing))
-            .await;
+    let found = tauri::async_runtime::spawn_blocking(move || {
+        let docker = Docker::system();
+        let look = Look { docker: &docker, folder: &dev.folder, ignore_case: cfg!(any(windows, target_os = "macos")) };
+        start(&look, &dev, &open_editor, &connect_remote, &cancelled, timing)
+    })
+    .await;
     let remote = found.map_err(|e| e.to_string())??;
     remote_daemon::refuse_own_daemon(&state, &remote)?;
     if starting.is_cancelled() {
@@ -488,10 +561,24 @@ mod tests {
 
     #[test]
     fn finds_the_container_by_the_folder_it_was_opened_from() {
-        let ps = format!("{}\t/home/me/other\n{}\tc:\\Users\\me\\Dev\\ws\n", "a".repeat(64), "b".repeat(64));
-        assert_eq!(container_in(&ps, r"C:\Users\me\Dev\ws\", true), Some("b".repeat(64)));
-        assert_eq!(container_in(&ps, r"C:\Users\me\Dev\ws", false), None);
+        let ps = format!("{}\t/home/me/other\n{}\tC:\\Users\\me\\Dev\\ws\n", "a".repeat(64), "b".repeat(64));
+        assert_eq!(container_in(&ps, r"C:\Users\me\Dev\ws\", true), Some(Found { id: "b".repeat(64), other_case: None }));
+        assert_eq!(container_in(&ps, r"C:\Users\me\Dev\ws", false), Some(Found { id: "b".repeat(64), other_case: None }));
         assert_eq!(container_in("not-hex\t/home/me/dev\n", "/home/me/dev", false), None);
+    }
+
+    #[test]
+    fn tells_a_container_whose_label_differs_from_the_folder_only_in_case() {
+        let ps = format!("{}\tc:\\Users\\me\\Dev\\ws\n", "b".repeat(64));
+        let other_case = Some(Found { id: "b".repeat(64), other_case: Some(r"c:\Users\me\Dev\ws".into()) });
+        assert_eq!(container_in(&ps, r"C:\Users\me\Dev\ws", true), other_case);
+        assert_eq!(container_in(&ps, r"C:\Users\me\Dev\ws", false), None);
+    }
+
+    #[test]
+    fn prefers_the_container_vs_code_opened_from_the_folder_as_written() {
+        let ps = format!("{}\tc:\\Users\\me\\Dev\\ws\n{}\tC:\\Users\\me\\Dev\\ws\n", "a".repeat(64), "b".repeat(64));
+        assert_eq!(container_in(&ps, r"C:\Users\me\Dev\ws", true), Some(Found { id: "b".repeat(64), other_case: None }));
     }
 
     #[test]
@@ -534,7 +621,7 @@ mod tests {
             let d = dir.display();
             let version = if docker_up { "echo 27.0" } else { "echo 'Cannot connect to the Docker daemon' >&2; exit 1" };
             let script = format!(
-                "case \"$1\" in\n  version) {version} ;;\n  ps) [ -f {d}/running ] && printf '%s\\t/home/me/dev\\n' {id} ;;\n  exec) [ \"$2\" = {id} ] || exit 1\n    if [ \"$3 $4\" = 'trackwall-container start' ]; then\n      echo >> {d}/started; [ -f {d}/feature ] || exit 127\n      cat {d}/feature; [ -f {d}/feature-starts ] && cp {d}/feature-starts {d}/daemon.json; exit $(cat {d}/feature-code)\n    fi\n    cat {d}/daemon.json ;;\nesac\n",
+                "case \"$1\" in\n  version) {version} ;;\n  ps) [ -f {d}/running ] && printf '%s\\t%s\\n' {id} \"$(cat {d}/label 2>/dev/null || echo /home/me/dev)\" ;;\n  exec) [ \"$2\" = {id} ] || exit 1\n    if [ \"$3 $4\" = 'trackwall-container start' ]; then\n      echo >> {d}/started; [ -f {d}/feature ] || exit 127\n      cat {d}/feature; [ -f {d}/feature-starts ] && cp {d}/feature-starts {d}/daemon.json; exit $(cat {d}/feature-code)\n    fi\n    cat {d}/daemon.json ;;\nesac\n",
                 id = "c".repeat(64)
             );
             let script_path = dir.join("docker");
@@ -563,7 +650,12 @@ mod tests {
         }
 
         fn quick() -> Timing {
-            Timing { timeout: Duration::from_secs(5), poll: Duration::from_millis(20) }
+            Timing { timeout: Duration::from_secs(5), poll: Duration::from_millis(20), other_case_grace: Duration::from_secs(5) }
+        }
+
+        /// The folder the tests' dev container is saved with, compared with case as on Linux.
+        fn look(fake: &Fake) -> Look<'_> {
+            Look { docker: &fake.docker, folder: "/home/me/dev", ignore_case: false }
         }
 
         const ACCEPT: Connect = &|_| Ok(());
@@ -579,7 +671,7 @@ mod tests {
                 Ok(())
             };
 
-            let remote = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &GOING, quick());
+            let remote = start(&look(&fake), &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &GOING, quick());
 
             assert_eq!(remote, Ok(RemoteDaemon { port: 7700, token: TOKEN.into() }));
             assert!(!opened.get());
@@ -595,7 +687,7 @@ mod tests {
                 Ok(())
             };
 
-            let remote = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &GOING, quick());
+            let remote = start(&look(&fake), &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &GOING, quick());
 
             assert_eq!(remote, Ok(RemoteDaemon { port: 7700, token: TOKEN.into() }));
             assert_eq!(opened.into_inner(), Some("vscode://vscode-remote/dev-container+2f686f6d652f6d652f646576/workspaces".into()));
@@ -610,7 +702,7 @@ mod tests {
                 Ok(())
             };
 
-            let err = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &GOING, quick()).unwrap_err();
+            let err = start(&look(&fake), &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &GOING, quick()).unwrap_err();
 
             assert!(err.starts_with("Docker does not answer (Cannot connect to the Docker daemon)"), "{err}");
             assert!(!opened.get());
@@ -627,7 +719,7 @@ mod tests {
             };
             let other_version: Connect = &|_| Err(Miss::Final("Trackwall in the container is 0.1.0, but this app is 0.2.0.".into()));
 
-            let err = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &open, other_version, &GOING, quick()).unwrap_err();
+            let err = start(&look(&fake), &dev("/home/me/dev", "/workspaces"), &open, other_version, &GOING, quick()).unwrap_err();
 
             assert_eq!(err, "Trackwall in the container is 0.1.0, but this app is 0.2.0.");
             assert!(!opened.get());
@@ -638,9 +730,10 @@ mod tests {
             let fake = fake("no-answer", true);
             run_daemon(&fake);
             let refuse: Connect = &|_| Err(Miss::NotYet("No Trackwall daemon answers at 127.0.0.1:7700.".into()));
-            let timing = Timing { timeout: Duration::from_millis(100), poll: Duration::from_millis(20) };
+            let timing =
+                Timing { timeout: Duration::from_millis(100), poll: Duration::from_millis(20), other_case_grace: Duration::from_secs(5) };
 
-            let err = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &|_| Ok(()), refuse, &GOING, timing).unwrap_err();
+            let err = start(&look(&fake), &dev("/home/me/dev", "/workspaces"), &|_| Ok(()), refuse, &GOING, timing).unwrap_err();
 
             assert!(err.ends_with("Last: No Trackwall daemon answers at 127.0.0.1:7700."), "{err}");
         }
@@ -654,7 +747,7 @@ mod tests {
                 Ok(())
             };
 
-            let err = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &cancelled, quick()).unwrap_err();
+            let err = start(&look(&fake), &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &cancelled, quick()).unwrap_err();
 
             assert_eq!(err, CANCELLED);
         }
@@ -669,9 +762,54 @@ mod tests {
                 Ok(())
             };
 
-            let err = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &|_| Ok(()), &connect_then_cancel, &cancelled, quick());
+            let err = start(&look(&fake), &dev("/home/me/dev", "/workspaces"), &|_| Ok(()), &connect_then_cancel, &cancelled, quick());
 
             assert_eq!(err, Err(CANCELLED.to_owned()));
+        }
+
+        /// A container the `devcontainer` CLI made for the folder with another case of its letters, as on Windows.
+        fn other_case_container(fake: &Fake) -> Look<'_> {
+            std::fs::write(fake.dir.join("running"), "").expect("running");
+            std::fs::write(fake.dir.join("label"), "/Home/me/dev").expect("label");
+            std::fs::write(fake.dir.join("daemon.json"), format!(r#"{{"pid":1,"port":7700,"token":"{TOKEN}"}}"#)).expect("daemon.json");
+            Look { docker: &fake.docker, folder: "/home/me/dev", ignore_case: true }
+        }
+
+        #[test]
+        fn says_to_remove_a_container_vs_code_does_not_reuse_because_its_label_differs_in_case() {
+            let fake = fake("other-case", true);
+            let look = other_case_container(&fake);
+            let opened = Cell::new(false);
+            let open = |_| {
+                opened.set(true);
+                Ok(())
+            };
+            let not_forwarded: Connect = &|_| Err(Miss::NotYet("No Trackwall daemon answers at 127.0.0.1:7700.".into()));
+            let timing =
+                Timing { timeout: Duration::from_secs(5), poll: Duration::from_millis(20), other_case_grace: Duration::from_millis(100) };
+
+            let err = start(&look, &dev("/home/me/dev", "/workspaces"), &open, not_forwarded, &GOING, timing).unwrap_err();
+
+            assert!(opened.get(), "VS Code gets its chance to reuse the container first");
+            assert_eq!(
+                err,
+                format!(
+                    "A container for this folder is running with the label /Home/me/dev, which differs from /home/me/dev in case, so VS \
+                     Code does not reuse it. Remove it with `docker rm -f {}` and start again, or open it from the folder it was created \
+                     from.",
+                    "c".repeat(12)
+                )
+            );
+        }
+
+        #[test]
+        fn connects_to_a_container_whose_label_differs_in_case_when_its_daemon_answers() {
+            let fake = fake("other-case-answers", true);
+            let look = other_case_container(&fake);
+
+            let remote = start(&look, &dev("/home/me/dev", "/workspaces"), &|_| Ok(()), ACCEPT, &GOING, quick());
+
+            assert_eq!(remote, Ok(RemoteDaemon { port: 7700, token: TOKEN.into() }));
         }
 
         #[test]
@@ -690,7 +828,7 @@ mod tests {
                 Ok(())
             };
 
-            let remote = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &GOING, quick());
+            let remote = start(&look(&fake), &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &GOING, quick());
 
             assert_eq!(remote, Ok(RemoteDaemon { port: 7700, token: TOKEN.into() }));
             assert!(!opened.get());
@@ -713,7 +851,7 @@ mod tests {
                 Ok(())
             };
 
-            let err = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &GOING, quick());
+            let err = start(&look(&fake), &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &GOING, quick());
 
             assert_eq!(err, Err("Trackwall in the container could not start (start-failed): The daemon exited with code 3.".into()));
             assert!(!opened.get());
@@ -730,7 +868,7 @@ mod tests {
                 Ok(())
             };
 
-            let remote = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &GOING, quick());
+            let remote = start(&look(&fake), &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &GOING, quick());
 
             assert_eq!(remote, Ok(RemoteDaemon { port: 7700, token: TOKEN.into() }));
             assert!(opened.get());
@@ -742,9 +880,10 @@ mod tests {
             let fake = fake("feature-garbled", true);
             std::fs::write(fake.dir.join("running"), "").expect("running");
             with_feature(&fake, "not json", 126, false);
-            let timing = Timing { timeout: Duration::from_millis(100), poll: Duration::from_millis(20) };
+            let timing =
+                Timing { timeout: Duration::from_millis(100), poll: Duration::from_millis(20), other_case_grace: Duration::from_secs(5) };
 
-            let err = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &|_| Ok(()), ACCEPT, &GOING, timing).unwrap_err();
+            let err = start(&look(&fake), &dev("/home/me/dev", "/workspaces"), &|_| Ok(()), ACCEPT, &GOING, timing).unwrap_err();
 
             assert!(err.contains("Last: Trackwall's daemon.json in the container"), "{err}");
             assert_eq!(starts(&fake), 1);
@@ -756,9 +895,10 @@ mod tests {
             std::fs::write(fake.dir.join("running"), "").expect("running");
             with_feature(&fake, r#"{"ok":true,"version":"0.6.0","status":"starting","port":7700}"#, 0, true);
             let refuse: Connect = &|_| Err(Miss::NotYet("No Trackwall daemon answers at 127.0.0.1:7700.".into()));
-            let timing = Timing { timeout: Duration::from_millis(200), poll: Duration::from_millis(20) };
+            let timing =
+                Timing { timeout: Duration::from_millis(200), poll: Duration::from_millis(20), other_case_grace: Duration::from_secs(5) };
 
-            let err = start(&fake.docker, &dev("/home/me/dev", "/workspaces"), &|_| Ok(()), refuse, &GOING, timing).unwrap_err();
+            let err = start(&look(&fake), &dev("/home/me/dev", "/workspaces"), &|_| Ok(()), refuse, &GOING, timing).unwrap_err();
 
             assert!(err.ends_with("Last: No Trackwall daemon answers at 127.0.0.1:7700."), "{err}");
             assert_eq!(starts(&fake), 1);
