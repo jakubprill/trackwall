@@ -15,6 +15,7 @@ Approve or stop an agent's command from the tray panel or the Home dashboard, an
 - One click to answer: the same options Copilot CLI offers in its terminal, or "Stop the agent".
 - The agent's questions in the same places, so you know what it asks before you open its session.
 - Commands you always allow, or never allow, written once for your repos instead of answered in every session.
+- Agent tasks that run without approvals kept in Copilot CLI's sandbox, so a command cannot touch your other repos or your credentials.
 
 ## How it works
 
@@ -32,6 +33,13 @@ toolPermissions:
   - repos: ["orders-*", "payments"]                   # only these repos
     allow: ["shell(mvn:*)", "shell(./mvnw:*)"]
     deny: ["shell(git push)"]
+```
+
+An [agent task](/features/tasks) started with "No approvals" runs its commands in Copilot CLI's sandbox. Each shell command, and every build or script it starts, runs under your system's own isolation: it can write only in the task's worktree (and the system's temporary folder), and it cannot read your other repos or credential folders such as `~/.ssh`. The task can still commit, and `git push` still works, so keep a deny rule for that. The New session form tells you under the options that the task will run in the sandbox, and the task's header says "Sandbox". You choose which tasks run in it with `sandbox` in `workspace.yaml`:
+
+```yaml
+sandbox:
+  tasks: auto   # tasks without approvals (the default); all: every task; off: none
 ```
 
 ## Use it
@@ -53,3 +61,9 @@ toolPermissions:
 - Trackwall reads requests in the layout of Copilot CLI 1.0.103. A request it cannot read is still in the terminal and still makes the session "asking for approval", it only has no buttons.
 - A request taller than the session's terminal, such as the arguments of an MCP tool on a small screen, loses its top in the terminal. Trackwall still shows its buttons, with Copilot CLI's short description ("Use MCP tool: …") as the heading and only the part of the request the terminal shows.
 - Agents connected to the [MCP server](/features/mcp) never see these requests and cannot answer them.
+- The sandbox needs your system's isolation: built into macOS and Windows, and the `bubblewrap` package on Linux (with `slirp4netns`, `iproute2` and `iptables`). Where it cannot run, Trackwall refuses to start a task that should run in it and says what to install; the [doctor](/features/doctor) shows the same. Set `sandbox.tasks: off` to start such tasks without it.
+- In a container the sandbox is off unless you set `sandbox`: the container already keeps the agent away from your computer, and Docker does not let the sandbox start there.
+- A task keeps the sandbox it started with for every resume; a change of `sandbox` applies to tasks you start after it.
+- On Linux a command in the sandbox cannot reach a service on your computer's `localhost`, such as one you started from Trackwall. On macOS it can.
+- Files the agent changes with Copilot CLI's own edit tool, not through a command, are kept in the worktree by Copilot CLI's checks rather than by the system, which is why Copilot CLI still asks before a path it sees outside the worktree.
+- Your own `sandbox` settings in Copilot CLI's `settings.json`, such as extra folders, apply to these tasks too.

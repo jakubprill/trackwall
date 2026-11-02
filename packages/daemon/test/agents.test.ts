@@ -520,6 +520,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
         sessionProfile: () => null,
         autoReviewSettings: () => ({ afterReport: false }),
         javaNavigation: () => null,
+        sandboxSettings: () => ({ tasks: "off" }),
         removeRepo: () => Promise.reject(new Error("unused")),
       },
       vcs: new Vcs(systemTempFolder),

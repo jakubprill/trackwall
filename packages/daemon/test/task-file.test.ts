@@ -19,6 +19,7 @@ const stored = {
   model: "claude-opus-5.5",
   approvals: "ask" as const,
   javaNavigation: true,
+  sandbox: false,
   item: "7c4d1e2f-0000-4000-8000-000000000000",
   view: "conversation" as const,
   conversation: "c0ffee-1",
@@ -121,7 +122,7 @@ describe("tasks.json", () => {
     const { javaNavigation: _, ...old } = stored;
     writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
 
-    expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, javaNavigation: false }]);
+    expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, javaNavigation: false, sandbox: false }]);
   });
 
   test("a task saved before board items comes back working on no item", () => {

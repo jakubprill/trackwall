@@ -65,7 +65,7 @@ describe.skipIf(process.versions.bun === undefined)("Java navigation for tasks (
     const settings = jdtlsSettings();
     const { agents, procs, home } = agentsWithJavaNavigation(dir, projects, () => settings);
     cleanups.push(() => procs.stopAll());
-    expect(agents.startOptions()).toEqual({ javaNavigation: { problem: null } });
+    expect(agents.javaNavigationState()).toEqual({ problem: null });
 
     const task = await agents.createTask("shop", "find the callers of OrderService", { javaNavigation: true });
     expect(task.javaNavigation).toBe(true);
@@ -88,7 +88,7 @@ describe.skipIf(process.versions.bun === undefined)("Java navigation for tasks (
     const dir = makeRepo({ "pom.xml": "<project/>\n" }, "shop");
     const { agents, procs } = makeAgents({ shop: dir }, undefined, mkdtempSync(join(tmpdir(), "trackwall-projects-")));
     cleanups.push(() => procs.stopAll());
-    expect(agents.startOptions()).toEqual({ javaNavigation: null });
+    expect(agents.javaNavigationState()).toEqual(null);
 
     await expect(agents.createTask("shop", "find the callers", { javaNavigation: true })).rejects.toMatchObject({
       code: "bad_request",
@@ -99,7 +99,7 @@ describe.skipIf(process.versions.bun === undefined)("Java navigation for tasks (
     const broken = { ...jdtlsSettings(), java: join(tmpdir(), "no-such-java") };
     const withBroken = agentsWithJavaNavigation(dir, null, () => broken);
     cleanups.push(() => withBroken.procs.stopAll());
-    expect(withBroken.agents.startOptions()).toEqual({ javaNavigation: { problem: `no Java program at ${broken.java}` } });
+    expect(withBroken.agents.javaNavigationState()).toEqual({ problem: `no Java program at ${broken.java}` });
   }, 60_000);
 
   test("a bad javaNavigation key greys the option out with its message, and a resume of a task with navigation still starts, without jdtls", async () => {
@@ -118,9 +118,7 @@ describe.skipIf(process.versions.bun === undefined)("Java navigation for tasks (
     await agents.stop(first);
 
     bad = true;
-    expect(agents.startOptions()).toEqual({
-      javaNavigation: { problem: "workspace.yaml: javaNavigation: jdtls, java and lombok must be full paths" },
-    });
+    expect(agents.javaNavigationState()).toEqual({ problem: "workspace.yaml: javaNavigation: jdtls, java and lombok must be full paths" });
     await agents.resumeTask(task.id);
     expect(pluginManifest(home, sessionOf(agents, task.id)).lspServers).toBeUndefined();
   }, 60_000);

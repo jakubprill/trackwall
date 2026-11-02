@@ -27,6 +27,7 @@ const part = (id: string, repo: string, position: number | null): Task => ({
   model: null,
   approvals: "ask",
   javaNavigation: false,
+  sandbox: false,
   item: null,
   view: "terminal",
   summary: null,

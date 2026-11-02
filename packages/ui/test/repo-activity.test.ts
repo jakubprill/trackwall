@@ -40,6 +40,7 @@ function task(id: string, repo: string, title: string): Task {
     model: null,
     approvals: "ask",
     javaNavigation: false,
+    sandbox: false,
     item: null,
     view: "terminal",
     summary: null,

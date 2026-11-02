@@ -1,7 +1,9 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { MCP_SERVER_NAME, mcpTools, promptBoxText, type Session, TASK_MESSAGE_RULE } from "@trackwall/protocol";
 import { windowTitleFromOsc } from "../src/modules/agents/copilot-osc.ts";
@@ -625,6 +627,54 @@ describe("a task without approvals with the real Copilot CLI (ADR-105)", () => {
       await agents.stop(session);
     } finally {
       writeFileSync(workspaceFile, workspace);
+    }
+  });
+});
+
+/** A folder of the user's home a script in the sandbox tries to write into: outside the temporary folder, which the sandbox lets commands write in. */
+const SANDBOX_PROBE_DIR = ".trackwall-sandbox-contract";
+
+/** A script that writes into that folder: Copilot CLI's check of the paths in a command cannot see into it, as with a build script. */
+const SANDBOX_ESCAPE_SCRIPT = `import { writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+writeFileSync(join(homedir(), "${SANDBOX_PROBE_DIR}", "escaped.txt"), "x");
+`;
+
+describe("a task in Copilot CLI's sandbox with the real Copilot CLI (ADR-181)", () => {
+  test("a task without approvals writes and commits in its worktree, and a script it runs cannot write into a folder of the user's home", async () => {
+    const { agents } = daemon.facade;
+    const workspaceFile = join(daemon.home, "workspace.yaml");
+    const workspace = readFileSync(workspaceFile, "utf8");
+    const outside = join(homedir(), SANDBOX_PROBE_DIR);
+    mkdirSync(outside, { recursive: true });
+    const repo = join(daemon.projects, "shop");
+    writeFileSync(join(repo, "escape.mjs"), SANDBOX_ESCAPE_SCRIPT);
+    const git = (...args: string[]) => spawnSync("git", args, { cwd: repo, encoding: "utf8" });
+    git("add", "escape.mjs");
+    git("-c", "user.name=test", "-c", "user.email=test@example.com", "commit", "-q", "-m", "add the escape script");
+    writeFileSync(workspaceFile, workspace.replace("tasks: off", "tasks: auto"));
+    try {
+      const commit = "git add inside.txt; git -c user.name=agent -c user.email=agent@example.com commit -q -m sandboxed";
+      model.reply(
+        (request) => shellCall(request, { bash: "touch inside.txt", powershell: "New-Item inside.txt" }),
+        (request) => shellCall(request, { bash: commit, powershell: commit }),
+        (request) => shellCall(request, { bash: "node escape.mjs", powershell: "node escape.mjs" }),
+        { text: "Committed inside.txt; the script could not write outside the worktree." },
+      );
+      const task = await agents.createTask("shop", "make a file, commit it, then run the escape script", { approvals: "auto" });
+      expect(task.sandbox).toBe(true);
+      const session = taskSessionOf(task.id);
+      await endOfTurn(session);
+
+      expect(existsSync(join(task.worktree, "inside.txt"))).toBe(true);
+      expect(spawnSync("git", ["log", "-1", "--format=%s"], { cwd: task.worktree, encoding: "utf8" }).stdout.trim()).toBe("sandboxed");
+      expect(existsSync(join(outside, "escaped.txt"))).toBe(false);
+      expect(agents.session(session).dialog).toBeNull();
+      await agents.stop(session);
+    } finally {
+      writeFileSync(workspaceFile, workspace);
+      rmSync(outside, { recursive: true, force: true });
     }
   });
 });

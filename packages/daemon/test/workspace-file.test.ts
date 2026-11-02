@@ -126,6 +126,18 @@ describe("workspace.yaml", () => {
       expect.objectContaining({ code: "invalid_config", message: expect.stringContaining("supervisor") }),
     );
   });
+  test("sandbox.tasks says which tasks run in Copilot CLI's sandbox, a missing key leaves the default to the workspace, and another value is a configuration error of that key", () => {
+    const path = tempFile();
+    expect(new WorkspaceFile(path).sandboxSettings()).toBeNull();
+
+    writeFileSync(path, "sandbox:\n  tasks: all\n");
+    expect(new WorkspaceFile(path).sandboxSettings()).toEqual({ tasks: "all" });
+
+    writeFileSync(path, "sandbox:\n  tasks: never\n");
+    expect(() => new WorkspaceFile(path).sandboxSettings()).toThrow(
+      expect.objectContaining({ code: "invalid_config", message: expect.stringContaining("sandbox") }),
+    );
+  });
   test("agentSecrets names the secrets from mise a session's tools get, none without the key, and a name that is not a variable is a configuration error", () => {
     const path = tempFile();
     expect(new WorkspaceFile(path).agentSecrets()).toEqual([]);

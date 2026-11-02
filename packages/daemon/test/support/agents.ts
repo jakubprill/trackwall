@@ -1,7 +1,14 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AutoReviewSettings, JavaNavigationSettings, Session, SupervisorSettings, ToolPermissions } from "@trackwall/protocol";
+import type {
+  AutoReviewSettings,
+  JavaNavigationSettings,
+  SandboxSettings,
+  Session,
+  SupervisorSettings,
+  ToolPermissions,
+} from "@trackwall/protocol";
 import { DomainError } from "../../src/infra/errors.ts";
 import { Agents, type AgentsDeps } from "../../src/modules/agents/agents.ts";
 import { Logs } from "../../src/modules/logs/logs.ts";
@@ -25,6 +32,8 @@ const fakeCopilot = join(import.meta.dir, "..", "fixtures", "fake-copilot-sessio
  * `miseEnv` is what mise sets for a session (ADR-93); nothing by default. `javaNavigation` is `javaNavigation` from the
  * workspace (ADR-99), read at every task start; not set by default. `autoReview` is `autoReview` from the workspace
  * (ADR-182), read at every report; off by default.
+ * `sandbox` is `sandbox` from the workspace with its
+ * default (ADR-181); off by default, since runners have no bubblewrap.
  */
 export function makeAgents(
   repos: Record<string, string>,
@@ -37,6 +46,7 @@ export function makeAgents(
   miseEnv: AgentsDeps["miseEnv"] = async () => ({ vars: {}, secretNames: [], secretValues: [], profile: null, problem: null }),
   javaNavigation: () => JavaNavigationSettings | null = () => null,
   autoReview: () => AutoReviewSettings = () => ({ afterReport: false }),
+  sandbox: () => SandboxSettings = () => ({ tasks: "off" }),
 ) {
   const procs = new ProcessGroups({
     logs: new Logs({ dir: join(home, "logs"), maxFileBytes: 1024 * 1024, log: () => {} }),
@@ -65,6 +75,7 @@ export function makeAgents(
       sessionProfile: () => null,
       autoReviewSettings: autoReview,
       javaNavigation,
+      sandboxSettings: sandbox,
       removeRepo: () => Promise.reject(new Error("unused")),
     },
     vcs: new Vcs(systemTempFolder),

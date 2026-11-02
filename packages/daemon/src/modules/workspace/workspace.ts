@@ -20,6 +20,7 @@ import {
   type RepoStatus,
   type RepoStatusOk,
   type RepoTagRules,
+  type SandboxSettings,
   type SearchCodeResult,
   type SearchCommitsResult,
   type Session,
@@ -504,6 +505,15 @@ export class Workspace {
    */
   supervisorSettings(): SupervisorSettings {
     return this.deps.file.supervisorSettings();
+  }
+
+  /**
+   * Which tasks run in Copilot CLI's sandbox (`sandbox` in `workspace.yaml`, ADR-181); `invalid_config` for a bad key, so
+   * that a typo never takes a task out of the sandbox. Without the key tasks without approvals do, except in a container,
+   * which is their isolation there and where the sandbox cannot run (Docker does not let it make its namespaces).
+   */
+  sandboxSettings(): SandboxSettings {
+    return this.deps.file.sandboxSettings() ?? { tasks: this.deps.inContainer ? "off" : "auto" };
   }
 
   /**

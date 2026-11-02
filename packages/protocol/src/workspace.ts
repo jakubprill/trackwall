@@ -196,6 +196,15 @@ export type SupervisorSettings = z.infer<typeof SupervisorSettings>;
 export const AutoReviewSettings = z.object({ afterReport: z.boolean().default(false) }).strict();
 export type AutoReviewSettings = z.infer<typeof AutoReviewSettings>;
 
+/**
+ * `sandbox` in `workspace.yaml` (ADR-181), by hand only: which tasks run their commands in Copilot CLI's sandbox
+ * (`--sandbox`), where a shell command may write only in the task's worktree and cannot see the other repos or the
+ * credential folders. `auto` covers the tasks that run without approvals (ADR-105), `all` every task, `off` none. Without
+ * the key it is `auto`, and `off` in a container, which is the isolation there and where the sandbox cannot run.
+ */
+export const SandboxSettings = z.object({ tasks: z.enum(["auto", "all", "off"]) }).strict();
+export type SandboxSettings = z.infer<typeof SandboxSettings>;
+
 /** An environment variable name Copilot CLI's comma-separated `--secret-env-vars` can carry (ADR-93). */
 export const ENV_VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
