@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
@@ -631,6 +631,16 @@ describe("a task without approvals with the real Copilot CLI (ADR-105)", () => {
   });
 });
 
+/** The end of Copilot CLI's newest log in the daemon's `COPILOT_HOME`, for a failure the screen does not explain. */
+function copilotLogTail(): string {
+  const logs = join(daemon.home, "copilot-home", "logs");
+  if (!existsSync(logs)) return "no Copilot CLI logs";
+  const newest = readdirSync(logs)
+    .map((name) => join(logs, name))
+    .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0];
+  return newest === undefined ? "no Copilot CLI log" : `${newest}:\n${readFileSync(newest, "utf8").slice(-6000)}`;
+}
+
 describe("a task in Copilot CLI's sandbox with the real Copilot CLI (ADR-181)", () => {
   test("a task without approvals writes and commits in its worktree, and a script it runs cannot write into the user's home, only into the repo's git directory", async () => {
     const { agents } = daemon.facade;
@@ -654,7 +664,7 @@ describe("a task in Copilot CLI's sandbox with the real Copilot CLI (ADR-181)", 
       await endOfTurn(session).catch(async (error: Error) => {
         const window = viewer(agents, session);
         windows.set(session, window);
-        throw new Error(`${error.message}\nthe terminal so far: ${window.unwrappedText().slice(-4000)}`);
+        throw new Error(`${error.message}\nthe terminal so far: ${window.unwrappedText().slice(-2000)}\n${copilotLogTail()}`);
       });
 
       // What the sandbox answered goes back to the model; a refusal there says what the system is missing.
