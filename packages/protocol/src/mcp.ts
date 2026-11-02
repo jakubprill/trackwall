@@ -8,6 +8,8 @@ import {
   CHANGE_PARTS_MAX,
   CHANGE_PROMPTS_TOO_LONG,
   ChangePartNote,
+  COPY_TEXT_MAX,
+  CopyText,
   changeParts,
   changePromptsFit,
   FOLDER_ACTION_REASON_MAX,
@@ -168,9 +170,10 @@ const [RunningSession, StoppingSession, ExitedSession] = RunState.options;
  * A session for the agent: the same as `Session`, but an ended process group comes without the last screen lines: they
  * are masked only with secret values from the process environment (§4.2), and an agent also prints in the terminal what
  * it read from files or got in its prompt, so one session's screen does not reach another (§8, ADR-36). For the same
- * reason without the agent dialog (ADR-66): it is read from the screen and holds the command or the lines of a file.
+ * reason without the agent dialog (ADR-66): it is read from the screen and holds the command or the lines of a file,
+ * and without the copy request (ADR-180), whose text is the user's.
  */
-export const AgentSession = Session.omit({ dialog: true }).extend({
+export const AgentSession = Session.omit({ dialog: true, copyRequest: true }).extend({
   run: z.discriminatedUnion("kind", [RunningSession, StoppingSession, ExitedSession.omit({ lastLines: true })]),
 });
 export type AgentSession = z.infer<typeof AgentSession>;
@@ -224,6 +227,10 @@ export type SendMessageResult = z.infer<typeof SendMessageResult>;
  * A task's question to its proposer (ADR-160), and when the proposer gets the prompt to read it: `typed` or `queued` as
  * for a message, `on_resume` when no session of the proposer runs now and its next one reads it.
  */
+/** A copy request waits in the session's panel (ADR-180); the clipboard changes only when the user clicks Copy there. */
+export const CopyToClipboardResult = z.object({ waitsFor: z.literal("user_click") });
+export type CopyToClipboardResult = z.infer<typeof CopyToClipboardResult>;
+
 export const AskProposerResult = z.object({ delivery: PromptDelivery });
 export type AskProposerResult = z.infer<typeof AskProposerResult>;
 
@@ -360,6 +367,7 @@ const PROPOSE_FOLDER_ACTION = "propose_folder_action";
 const GET_REVIEW_COMMENTS = "get_review_comments";
 const SEND_MESSAGE = "send_message";
 const ASK_PROPOSER = "ask_proposer";
+const COPY_TO_CLIPBOARD = "copy_to_clipboard";
 const RESUME_TASK = "resume_task";
 const GET_MESSAGES = "get_messages";
 const GET_UPDATES = "get_updates";
@@ -1033,6 +1041,22 @@ export const mcpTools = {
       })
       .strict(),
     result: AskProposerResult,
+  },
+  copyToClipboard: {
+    name: COPY_TO_CLIPBOARD,
+    readOnly: false,
+    destructive: false,
+    // The text is the user's: it stays out of the audit like a message.
+    auditArgs: [] as const,
+    description:
+      "Put text on the user's clipboard when they ask you to copy something (a command, a snippet, an answer). Use this " +
+      "instead of a shell command (pbcopy, xclip, wl-copy, clip.exe, Set-Clipboard): your shell may run in a container " +
+      "or without a desktop, where those fail or reach a clipboard the user does not have. Trackwall shows the text in " +
+      "your session's panel and copies it when the user clicks Copy, so tell them it waits there. A newer call replaces " +
+      `an earlier one not copied yet. Only for a session in Trackwall. Up to ${COPY_TEXT_MAX} characters, line breaks ` +
+      "and tabs but no other control characters.",
+    args: z.object({ text: CopyText.describe(`the exact text to copy, up to ${COPY_TEXT_MAX} characters`) }).strict(),
+    result: CopyToClipboardResult,
   },
   resumeTask: {
     name: RESUME_TASK,

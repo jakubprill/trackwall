@@ -57,6 +57,7 @@ function view(id: string, taskId: string | null, state: TaskState | null, run: S
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
     view: "terminal",
     readRequest: null,
+    copyRequest: null,
   };
 }
 

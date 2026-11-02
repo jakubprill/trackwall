@@ -31,6 +31,7 @@ function session(id: string, startedAt: string, task: string | null = null): Ses
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
     view: "terminal",
     readRequest: null,
+    copyRequest: null,
   };
 }
 

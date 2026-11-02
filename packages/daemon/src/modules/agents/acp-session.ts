@@ -29,6 +29,7 @@ import {
 import type { AgentSession } from "./agent-session.ts";
 import { type CopilotHookOutput, situationOutput } from "./copilot-hook-output.ts";
 import type { CopilotHookRecord } from "./copilot-hook-record.ts";
+import { CopyRequestSlot } from "./copy-request.ts";
 import type { SessionEvent } from "./live-session.ts";
 import { ReadRequestClock } from "./read-request.ts";
 import { SessionAttention } from "./session-attention.ts";
@@ -151,6 +152,7 @@ export class AcpSession implements AgentSession {
   #promptAsked = false;
   #finished = false;
   readonly #readRequest = new ReadRequestClock();
+  readonly copyRequest = new CopyRequestSlot();
 
   constructor(o: AcpSessionOptions) {
     this.id = o.id;
@@ -342,6 +344,7 @@ export class AcpSession implements AgentSession {
       environment: this.environment,
       view: "conversation",
       readRequest: running ? this.#readRequestView() : null,
+      copyRequest: running ? this.copyRequest.request : null,
     };
   }
 

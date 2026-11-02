@@ -1,10 +1,10 @@
-import type { TaskStateChange } from "@trackwall/protocol";
+import { promptBoxOnScreen, type TaskStateChange } from "@trackwall/protocol";
 import { stateFromFolderTrust } from "./copilot-folder-trust.ts";
 import type { CopilotHookRecord } from "./copilot-hook-record.ts";
 import { stateFromHook } from "./copilot-hooks.ts";
 import { answersDialog, type SessionKey, stateFromKey } from "./copilot-keys.ts";
 import { stateFromOsc, windowTitleFromOsc } from "./copilot-osc.ts";
-import { promptBoxOnScreen, stateFromPromptBox } from "./copilot-prompt-box.ts";
+import { stateFromPromptBox } from "./copilot-prompt-box.ts";
 import { CopilotScreen } from "./copilot-screen.ts";
 import { OscParser } from "./osc-parser.ts";
 import { type StateSignal, TaskStateTracker, type TaskStateTrackerOptions } from "./task-state-tracker.ts";

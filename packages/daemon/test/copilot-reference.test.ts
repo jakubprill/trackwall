@@ -1,9 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { TESTED_COPILOT_CLI_VERSION } from "@trackwall/protocol";
+import { promptBoxOnScreen, TESTED_COPILOT_CLI_VERSION } from "@trackwall/protocol";
 import { readAgentDialog } from "../src/modules/agents/copilot-dialog.ts";
-import { promptBoxOnScreen } from "../src/modules/agents/copilot-prompt-box.ts";
 import { CopilotSessionState } from "../src/modules/agents/copilot-session-state.ts";
 import { anonymize, PROMPT_PLACEHOLDER, type ReferenceHook, readReference, referenceFile } from "./support/copilot-reference.ts";
 

@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { asksProgramToCopy, copiesSelection, keepsSelection, osc52Text, ProgramCopy, pastesClipboard } from "../src/lib/terminal-copy.ts";
+import {
+  asksProgramToCopy,
+  copiesSelection,
+  entersCopyCommand,
+  keepsSelection,
+  osc52Text,
+  ProgramCopy,
+  pastesClipboard,
+} from "../src/lib/terminal-copy.ts";
 
 const ctrlC = { type: "keydown", key: "c", ctrlKey: true, altKey: false, metaKey: false };
 const ctrlV = { ...ctrlC, key: "v" };
@@ -86,5 +94,43 @@ describe("copying what Copilot CLI selected itself (OSC 52)", () => {
     expect(copy.take(10_006)).toBe(false);
     copy.asked(20_000);
     expect(copy.take(21_001)).toBe(false);
+  });
+});
+
+describe("Enter on Copilot CLI's /copy", () => {
+  const enter = { type: "keydown", key: "Enter", ctrlKey: false, altKey: false, metaKey: false };
+  const rule = "─".repeat(40);
+  const footer = " Interactive · Manual Approval · /help show help";
+  // The bottom of Copilot CLI 1.0.103's screen: the input box between two rules, then the footer.
+  const box = (text: string) => () => [" ● Here is the answer", rule, `❯ ${text}`, rule, footer];
+
+  test("asks the program to copy when the input box holds /copy", () => {
+    expect(entersCopyCommand(enter, box("/copy"))).toBe(true);
+  });
+
+  test("with the command menu open, the box shows the command Enter picks, so typing /co counts too", () => {
+    const menu = () => ["┃ ❯ /copy                 Copy the last response to the clipboard", rule, "❯ /copy", rule, footer];
+    expect(entersCopyCommand(enter, menu)).toBe(true);
+  });
+
+  test("another command, a prompt, an empty box and a screen without the box do not ask", () => {
+    // Other commands print repo or session content, whose OSC 52 must not fill the clipboard.
+    expect(entersCopyCommand(enter, box("/collect-debug-logs"))).toBe(false);
+    expect(entersCopyCommand(enter, box("/diff"))).toBe(false);
+    expect(entersCopyCommand(enter, box("copy this to the clipboard"))).toBe(false);
+    expect(entersCopyCommand(enter, box(""))).toBe(false);
+    expect(entersCopyCommand(enter, () => [" ● Working · 3s"])).toBe(false);
+  });
+
+  test("other keys, Enter with a modifier and the key going up do not ask, and only Enter reads the screen", () => {
+    let read = 0;
+    const counted = () => {
+      read++;
+      return box("/copy")();
+    };
+    expect(entersCopyCommand({ ...enter, key: "a" }, counted)).toBe(false);
+    expect(entersCopyCommand({ ...enter, ctrlKey: true }, counted)).toBe(false);
+    expect(entersCopyCommand({ ...enter, type: "keyup" }, counted)).toBe(false);
+    expect(read).toBe(0);
   });
 });

@@ -1,6 +1,7 @@
 import type { DialogAnswer, Session, SessionView } from "@trackwall/protocol";
 import type { CopilotHookOutput } from "./copilot-hook-output.ts";
 import type { CopilotHookRecord } from "./copilot-hook-record.ts";
+import type { CopyRequestSlot } from "./copy-request.ts";
 
 /**
  * What `Agents` needs of a session in either view (§4.4): `LiveSession` in a terminal (ADR-26) and `AcpSession` in the
@@ -17,6 +18,8 @@ export interface AgentSession {
   readonly hasConversation: boolean;
   /** Copilot CLI's id of the conversation, once there is one (ADR-107). */
   readonly conversation: string | undefined;
+  /** What the agent asked to copy (ADR-180); the view shows it while the session runs. */
+  readonly copyRequest: CopyRequestSlot;
   /** Reads what the session did since the last call; returns whether it is alive. */
   tick(): boolean;
   view(): Session | undefined;

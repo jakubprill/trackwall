@@ -7,7 +7,7 @@
  * turn with an approval request (the first turn after `sessionStart`, at once with a prompt from `--interactive=`; cut
  * above in a short terminal),
  * a "Yes" option or Enter approves and ends the turn (with `--allow-all-tools` the turn runs without asking) (the input box comes back a moment after `agentStop`, and keys
- * typed in that gap are lost, as in Copilot CLI), and `/exit` ends the session. The line `PARALLEL_TOOLS_PROMPT` starts
+ * typed in that gap are lost, as in Copilot CLI), `/copy` sends the last answer as OSC 52, and `/exit` ends the session. The line `PARALLEL_TOOLS_PROMPT` starts
  * a turn in which the agent calls two such commands at once: as in Copilot CLI (the contract test of ADR-66), both
  * approval requests come at once, the second dialog follows the first answer, and the first command's `postToolUse`
  * comes while the second dialog waits. The fake also prints what the tests check
@@ -266,11 +266,26 @@ let awaitingApprovals = 0;
 /** Between a turn's end and the input box drawn again, where Copilot CLI drops what is typed (ADR-68). */
 let redrawing = false;
 let typed = "";
+/** The last turn's answer, which `/copy` copies. */
+let lastAnswer: string | undefined;
+
+/**
+ * Like Copilot CLI's `/copy` ("Copy the last response to the clipboard", the contract test of ADR-180): the answer goes
+ * out as OSC 52 to the clipboard target, for the terminal to copy, and the input box comes back without a turn.
+ */
+function copyLastAnswer(): void {
+  if (lastAnswer !== undefined) process.stdout.write(`\x1b]52;c;${Buffer.from(lastAnswer).toString("base64")}\x07`);
+  draw(real.promptBox);
+}
 
 function submit(line: string): void {
   if (line === "/exit") {
     replay(real.exit);
     process.exit(0);
+  }
+  if (line === "/copy") {
+    copyLastAnswer();
+    return;
   }
   // The conversation is kept before the hooks go out: a test that stops the session once the daemon has heard the
   // prompt's hook must find it to resume (on Windows the stop came while the fake still waited for the hook's answer).
@@ -281,7 +296,8 @@ function submit(line: string): void {
   const helper = spawn(process.execPath, ["-e", "setTimeout(() => {}, 600000)"], { stdio: "ignore" });
   process.stdout.write(`helper PID: ${helper.pid}\r\n`);
   for (const turnTitle of turnTitles) title(turnTitle.replaceAll(PROMPT_PLACEHOLDER, line));
-  process.stdout.write(`${shortLines(`Thinking about: ${line}`)}\r\n`);
+  lastAnswer = `Thinking about: ${line}`;
+  process.stdout.write(`${shortLines(lastAnswer)}\r\n`);
   const parallel = line === PARALLEL_TOOLS_PROMPT;
   if (allowAllTools) {
     endTurn(replay([...(parallel ? [firstToolDone] : []), ...real.approval.hooks.slice(asked)]));

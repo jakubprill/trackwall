@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RunState, Session } from "@trackwall/protocol";
 import type { AgentSession } from "../src/modules/agents/agent-session.ts";
+import { CopyRequestSlot } from "../src/modules/agents/copy-request.ts";
 import { LastSupervisorFile } from "../src/modules/agents/last-supervisor.ts";
 import { ListedSessions } from "../src/modules/agents/listed-sessions.ts";
 import { ResumableSessions } from "../src/modules/agents/resumable-sessions.ts";
@@ -32,6 +33,7 @@ function fakeSession(
     sessionView: "terminal",
     hasConversation: true,
     conversation: id,
+    copyRequest: new CopyRequestSlot(),
     disposed: false,
     tick: () => run.kind === "running",
     view: () => ({ id, run }) as Session,

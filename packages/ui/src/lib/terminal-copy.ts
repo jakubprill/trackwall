@@ -6,6 +6,8 @@
  * which xterm.js passes to the browser, do that, and Ctrl+C and Ctrl+V stay keys for the program. A program that draws its
  * own selection, as Copilot CLI does, copies it itself (`osc52Text`).
  */
+import { promptBoxText } from "@trackwall/protocol";
+
 type ClipboardKey = Pick<KeyboardEvent, "type" | "key" | "ctrlKey" | "altKey" | "metaKey">;
 
 function ctrlWith(key: ClipboardKey, letter: string): boolean {
@@ -43,7 +45,7 @@ export function keepsSelection(
  * ignores the sequence unless told otherwise. This is the text to copy from the sequence's data (`c;<base64>`), or
  * `undefined` when the data does not set the clipboard: another target only (Copilot CLI sends `p!` on mouse release), a
  * query (`?`, never answered, so a program cannot read the clipboard), an empty payload, or bytes that are not base64
- * of UTF-8 text. No target means the clipboard, as in xterm.
+ * of UTF-8 text. The terminal still refuses text that fails `copyableText`, and says so. No target means the clipboard, as in xterm.
  */
 export function osc52Text(data: string): string | undefined {
   const split = data.indexOf(";");
@@ -66,7 +68,7 @@ const PROGRAM_COPY_MS = 1000;
 /**
  * Whether a key or a click in the terminal is the user asking the program to copy its own selection: Ctrl+C that goes
  * to the program (on macOS too, where Cmd+C is the browser's) or a right click, the two gestures Copilot CLI names.
- * Only then, and only once, does the terminal take an OSC 52 (`ProgramCopy`), so text an agent prints (a file it shows,
+ * Only then (or on Enter on `/copy`, `entersCopyCommand`), and only once, does the terminal take an OSC 52 (`ProgramCopy`), so text an agent prints (a file it shows,
  * a command's output) cannot fill the clipboard while the user types or clicks elsewhere.
  */
 export function asksProgramToCopy(
@@ -75,6 +77,21 @@ export function asksProgramToCopy(
 ): boolean {
   if (input.kind === "pointer") return input.button === 2;
   return ctrlWith(input.key, "c") && !copiesSelection(input.key, { mac, hasSelection });
+}
+
+/** Copilot CLI's command that copies its last answer, by sending OSC 52 too (ADR-180). */
+const COPY_COMMAND = "/copy";
+
+/**
+ * Whether Enter runs Copilot CLI's `/copy` ("Copy the last response to the clipboard"). In a container it reaches no
+ * clipboard of its own, so the terminal's copy of its OSC 52 is the only one. Read from the input box on the screen
+ * (`screenLines`, called only for Enter), not from the keys typed: while the command menu is open the box shows the
+ * command Enter picks (`/co` with `/copy` picked shows `/copy`), and a command recalled from history was never typed.
+ * Any other command or a prompt does not ask, so output they print with an OSC 52 cannot fill the clipboard.
+ */
+export function entersCopyCommand(key: ClipboardKey, screenLines: () => readonly string[]): boolean {
+  const plainEnter = key.type === "keydown" && key.key === "Enter" && !key.ctrlKey && !key.altKey && !key.metaKey;
+  return plainEnter && promptBoxText(screenLines()) === COPY_COMMAND;
 }
 
 /** One OSC 52 copy for each time the user asked for one, if it comes within `PROGRAM_COPY_MS`. */

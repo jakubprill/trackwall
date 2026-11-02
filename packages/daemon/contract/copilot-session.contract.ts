@@ -3,14 +3,14 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSyn
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
-import { MCP_SERVER_NAME, mcpTools, type Session, TASK_MESSAGE_RULE } from "@trackwall/protocol";
+import { MCP_SERVER_NAME, mcpTools, promptBoxText, type Session, TASK_MESSAGE_RULE } from "@trackwall/protocol";
 import { windowTitleFromOsc } from "../src/modules/agents/copilot-osc.ts";
 import { OscParser } from "../src/modules/agents/osc-parser.ts";
 import { readRequestPrompt } from "../src/modules/agents/read-request-prompt.ts";
 import { sessionHooksFile } from "../src/modules/agents/session-launcher.ts";
 import { viewer, waitFor } from "../test/support/agents.ts";
 import { REFERENCE_COLS, REFERENCE_ROWS } from "../test/support/copilot-reference.ts";
-import { untilInputBox } from "../test/support/screen-lines.ts";
+import { screenLines, untilInputBox } from "../test/support/screen-lines.ts";
 import { hookRecords, startRealCopilotDaemon } from "./support/real-copilot.ts";
 import { type Recorder, startRecorder } from "./support/recorder.ts";
 import { type ModelRequest, type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
@@ -363,6 +363,29 @@ describe("a session of the real Copilot CLI", () => {
     expect(copied).not.toContain("\x1b");
     // Ctrl+C with a selection copies; it does not end the session.
     expect(agents.sessions().sessions.find((s) => s.id === id)?.run.kind).toBe("running");
+  });
+
+  // The session terminal copies it on Enter when the input box holds /copy (`entersCopyCommand` in
+  // packages/ui/src/lib/terminal-copy.ts, ADR-180); in a container Copilot CLI's own copy fails without a display.
+  test("/copy shows in the input box when Enter comes, and sends the last answer as OSC 52 to the clipboard target", async () => {
+    const { agents } = daemon.facade;
+    const { id, window } = await startSession();
+    model.reply({ text: "Run: mvn -pl orders verify" });
+    window.attachment.input("which command checks orders?\r");
+    await endOfTurn(id);
+    await untilInputBox(window, "empty");
+
+    window.attachment.input("/copy");
+    const box = async () => promptBoxText(await screenLines(window));
+    const until = Date.now() + 10_000;
+    while ((await box()) !== "/copy" && Date.now() < until) await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(await box()).toBe("/copy");
+    const before = window.text().length;
+    window.attachment.input("\r");
+    const copies = () => new OscParser().feed(window.text().slice(before)).filter((osc) => osc.code === "52" && osc.data.startsWith("c;"));
+    await waitFor(agents, id, () => copies().length > 0, "the OSC 52 copy of /copy", 10_000);
+
+    expect(Buffer.from(copies()[0]?.data.slice(2) ?? "", "base64").toString("utf8")).toBe("Run: mvn -pl orders verify");
   });
 
   test("Copilot CLI reports the mouse in the SGR encoding, and a terminal connected later gets that encoding too", async () => {

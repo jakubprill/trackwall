@@ -33,6 +33,7 @@ function session(id: string, repoId: string, over: Partial<Session> = {}): Sessi
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
     view: "terminal",
     readRequest: null,
+    copyRequest: null,
     ...over,
   };
 }
