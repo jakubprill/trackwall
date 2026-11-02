@@ -11,5 +11,6 @@
       "description": "The port Trackwall listens on, which the container forwards to the same number on your computer."
     }
   },
+  "init": true,
   "postStartCommand": "trackwall-container start"
 }
