@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   AUTO_REVIEW_DIFF_MAX_BYTES,
@@ -243,7 +243,12 @@ export class AutoReviews {
     let end: Partial<AutoReview>;
     try {
       const { answer, refused } = await run;
-      end = { state: "done", findings: reviewFindings(answer, worktree), text: kept(answer), message: refusedMessage(refused) };
+      end = {
+        state: "done",
+        findings: reviewFindings(answer, worktreePaths(worktree)),
+        text: kept(answer),
+        message: refusedMessage(refused),
+      };
     } catch (err) {
       if (!entry.cancelled) this.#deps.log(`automatic review of task ${task}: ${messageOf(err)}`);
       end = entry.cancelled ? { state: "cancelled", message: CANCELLED } : { state: "failed", message: messageOf(err) };
@@ -308,4 +313,13 @@ function stoppedWithDaemon(review: AutoReview, finishedAt: string | null): AutoR
 /** The answer as the review keeps it: without invisible characters, cut at `AUTO_REVIEW_TEXT_MAX`. */
 function kept(answer: string): string {
   return cutText(withoutInvisibleCharacters(answer).trim(), AUTO_REVIEW_TEXT_MAX);
+}
+
+/** The worktree's path as the daemon knows it and with its links resolved, as the reviewer's working directory has it. */
+function worktreePaths(worktree: string): string[] {
+  try {
+    return [worktree, realpathSync.native(worktree)];
+  } catch {
+    return [worktree];
+  }
 }
