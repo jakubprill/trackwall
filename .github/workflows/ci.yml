@@ -237,6 +237,15 @@ jobs:
           tar -xzf out/devcontainer-feature-trackwall.tgz -C "$feature"
           archive="$(ls "$PWD"/out/trackwall-*-linux-x64.tar.gz)"
           (cd "$feature" && PORT=7790 _REMOTE_USER=vscode TRACKWALL_FEATURE_ARCHIVE="$archive" sh install.sh)
+          # The entrypoint (ADR-184), run with no arguments as the Dev Containers CLI runs a Feature's, ends at once and
+          # starts Trackwall in the background: its daemon writes daemon.json without any start of the step's own.
+          /usr/local/share/trackwall/entrypoint.sh
+          [ "$(/usr/local/share/trackwall/entrypoint.sh echo handed-over)" = handed-over ]
+          for attempt in $(seq 1 30); do
+            if [ -s /home/vscode/.trackwall/daemon.json ]; then break; fi
+            sleep 1
+          done
+          [ -s /home/vscode/.trackwall/daemon.json ]
           # A slow runner may answer "starting" first; a later call reports the same daemon as running.
           for attempt in 1 2 3 4 5 6; do
             trackwall-container start | tee "$RUNNER_TEMP/start.json"

@@ -1,6 +1,6 @@
 #!/bin/sh
 # The Trackwall Dev Container Feature (ADR-164): installs the Linux release archive of one version (ADR-163) and the
-# `trackwall-container` command, which the Feature's postStartCommand runs. A shell script, because the Dev Containers
+# `trackwall-container` command, which the Feature's entrypoint and postStartCommand run. A shell script, because the Dev Containers
 # specification runs a Feature's install.sh while the image is built, as root, before anything else is there.
 #
 # The release workflow fills in the values in @...@ (apps/desktop/scripts/package-feature.ts). The archive is checked
@@ -117,4 +117,17 @@ start | update)
 esac
 WRAPPER
 chmod 755 /usr/local/bin/trackwall-container
+
+# The Feature's entrypoint (ADR-184): every start of the container starts Trackwall, also `docker restart` and a start from
+# Docker or Rancher Desktop, which run no postStartCommand (only the Dev Containers tooling does). In the background,
+# so the container's own command is not held up; the start is idempotent, so postStartCommand running it again is a no-op.
+# Its JSON goes nowhere, since nobody reads it here; the daemon's own log is logs/daemon.log.
+mkdir -p /usr/local/share/trackwall
+cat > /usr/local/share/trackwall/entrypoint.sh << 'ENTRYPOINT'
+#!/bin/sh
+# Starts Trackwall with the container, written by the Trackwall Dev Container Feature.
+/usr/local/bin/trackwall-container start > /dev/null &
+exec "$@"
+ENTRYPOINT
+chmod 755 /usr/local/share/trackwall/entrypoint.sh
 echo "Trackwall $VERSION installed for $USER_NAME on port $PORT"
