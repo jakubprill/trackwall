@@ -1,4 +1,4 @@
-import type { RunningMiseTask, Session, Task, TaskMessage } from "@trackwall/protocol";
+import type { RunningMiseTask, Session, Task, TaskMessage, TaskOutcome } from "@trackwall/protocol";
 import { ShieldAlert, ShieldCheck, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,7 @@ export function useTaskTileNotices({
   conn,
   task,
   tasks,
+  outcomes,
   messages,
   sessions,
   runningLive,
@@ -40,6 +41,8 @@ export function useTaskTileNotices({
   conn: Connection;
   task: Task | undefined;
   tasks: readonly Task[];
+  /** The outcomes of the tasks, for the merge requests of a change's parts (ADR-172). */
+  outcomes: ReadonlyMap<string, TaskOutcome>;
   /** The messages the task's proposer sent its session (ADR-68), oldest first. */
   messages: readonly TaskMessage[];
   sessions: readonly Session[];
@@ -54,6 +57,7 @@ export function useTaskTileNotices({
     conn,
     task,
     tasks,
+    outcomes,
     messages,
     runningLive,
     paused,

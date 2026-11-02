@@ -233,6 +233,7 @@ export function SessionsView({
             onSelect={onSelect}
             sessions={list}
             tasks={tasks}
+            outcomes={outcomes}
             messages={sessions.data?.messages ?? []}
             runningLive={runningLive}
             onChanged={sessions.reload}
@@ -468,6 +469,7 @@ function SelectedEntry({
   onSelect,
   sessions,
   tasks,
+  outcomes,
   messages,
   runningLive,
   onChanged,
@@ -489,6 +491,8 @@ function SelectedEntry({
   sessions: readonly Session[];
   /** The tasks on the list, for the task panel's shared-files warning. */
   tasks: readonly Task[];
+  /** The outcomes of the tasks, for the merge requests of a change's parts (ADR-172). */
+  outcomes: ReadonlyMap<string, TaskOutcome>;
   /** The messages proposers sent the tasks' sessions (ADR-68), for the task panel. */
   messages: readonly TaskMessage[];
   /** Pushes of the running mise tasks, for the mise tasks a task's agent runs in its worktree. */
@@ -510,6 +514,7 @@ function SelectedEntry({
           currentSelection={currentSelection}
           sessions={sessions}
           tasks={tasks}
+          outcomes={outcomes}
           messages={messages}
           runningLive={runningLive}
           onSelect={onSelect}
@@ -553,6 +558,7 @@ function SelectedEntry({
         onSessionClosed={onSessionClosed}
         onTaskRemoved={onTaskRemoved}
         sessions={sessions}
+        outcomes={outcomes}
         messages={messages}
         runningLive={runningLive}
       />
@@ -569,6 +575,7 @@ function EntryPanel({
   currentSelection,
   sessions,
   tasks,
+  outcomes,
   messages,
   runningLive,
   onSelect,
@@ -585,6 +592,8 @@ function EntryPanel({
   sessions: readonly Session[];
   /** The tasks on the list, for the task panel's shared-files warning and the same-repo hint of proposals. */
   tasks: readonly Task[];
+  /** The outcomes of the tasks, for the merge requests of a change's parts (ADR-172). */
+  outcomes: ReadonlyMap<string, TaskOutcome>;
   /** The messages proposers sent the tasks' sessions (ADR-68), for the task panel. */
   messages: readonly TaskMessage[];
   /** Pushes of the running mise tasks, for the mise tasks a task's agent runs in its worktree. */
@@ -618,6 +627,7 @@ function EntryPanel({
         session={entry.session}
         sessions={sessions}
         tasks={tasks}
+        outcomes={outcomes}
         messages={messages.filter((m) => m.task === entry.task.id)}
         runningLive={runningLive}
         onChanged={onChanged}

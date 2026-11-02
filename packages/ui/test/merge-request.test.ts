@@ -63,6 +63,7 @@ describe("the merge request draft", () => {
     const draft = mergeRequestDraft(
       task({ summary: { text: "Added the discount and a test.\n", checkSteps: [], reportedAt: "2026-10-26T10:02:00Z" } }),
       verification("passed", tests),
+      null,
     );
 
     expect(draft).toEqual({
@@ -72,11 +73,11 @@ describe("the merge request draft", () => {
   });
 
   test("a task's own title wins, the prompt stands in for a missing summary, and a running verification is left out", () => {
-    expect(mergeRequestDraft(task({ title: "Discount in the cart" }), verification("running"))).toEqual({
+    expect(mergeRequestDraft(task({ title: "Discount in the cart" }), verification("running"), null)).toEqual({
       title: "Discount in the cart",
       description: "Add a 10% discount to the cart\nand show it on the receipt",
     });
-    expect(mergeRequestDraft(task(), verification("failed")).description).toEndWith(
+    expect(mergeRequestDraft(task(), verification("failed"), null).description).toEndWith(
       "\n\nVerification in Trackwall: failed (mise task test)",
     );
   });
@@ -91,6 +92,7 @@ describe("the merge request draft", () => {
         },
       }),
       verification("passed"),
+      null,
     );
 
     expect(draft.description).toBe(
@@ -103,10 +105,30 @@ describe("the merge request draft", () => {
     const draft = mergeRequestDraft(
       task({ summary: { text: "x".repeat(10_000), checkSteps: [], reportedAt: "2026-10-26T10:02:00Z" } }),
       null,
+      null,
     );
 
     expect(draft.description).toHaveLength(MERGE_REQUEST_DESCRIPTION_MAX);
     expect(draft.description.endsWith("…")).toBe(true);
+  });
+
+  test("a part of a change starts with its change block, and a long summary is cut to keep it whole (ADR-172)", () => {
+    const block = "This merge request is part 2 of a change across several repos.";
+    const draft = mergeRequestDraft(
+      task({ summary: { text: "x".repeat(10_000), checkSteps: [], reportedAt: "2026-10-26T10:02:00Z" } }),
+      null,
+      block,
+    );
+
+    expect(draft.description.startsWith(`${block}\n\nxxx`)).toBe(true);
+    expect(draft.description).toHaveLength(MERGE_REQUEST_DESCRIPTION_MAX);
+    expect(draft.description.endsWith("…")).toBe(true);
+  });
+
+  test("a change block longer than the description allows is cut like any text, without the summary", () => {
+    const draft = mergeRequestDraft(task({ summary: null }), null, "y".repeat(10_000));
+
+    expect(draft.description).toBe(`${"y".repeat(MERGE_REQUEST_DESCRIPTION_MAX - 1)}…`);
   });
 });
 

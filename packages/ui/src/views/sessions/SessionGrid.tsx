@@ -1,4 +1,4 @@
-import type { RunningMiseTask, Session, Task, TaskMessage } from "@trackwall/protocol";
+import type { RunningMiseTask, Session, Task, TaskMessage, TaskOutcome } from "@trackwall/protocol";
 import { Maximize2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { SessionScreen } from "@/components/SessionScreen";
@@ -46,6 +46,7 @@ export function SessionGrid({
   onSessionClosed,
   onTaskRemoved,
   sessions,
+  outcomes,
   messages,
   runningLive,
 }: {
@@ -65,6 +66,8 @@ export function SessionGrid({
   onTaskRemoved: (task: string) => void;
   /** For a task tile's notices (ADR-91): the sessions that sent its messages, the messages and the running mise tasks. */
   sessions: readonly Session[];
+  /** The outcomes of the tasks, for the merge requests of a change's parts (ADR-172). */
+  outcomes: ReadonlyMap<string, TaskOutcome>;
   messages: readonly TaskMessage[];
   runningLive: LiveFeed<RunningMiseTask[]> | undefined;
 }) {
@@ -105,6 +108,7 @@ export function SessionGrid({
             onSessionClosed={() => onSessionClosed(entry)}
             onTaskRemoved={onTaskRemoved}
             sessions={sessions}
+            outcomes={outcomes}
             messages={messages}
             runningLive={runningLive}
           />
@@ -128,6 +132,7 @@ function SessionTile({
   onSessionClosed,
   onTaskRemoved,
   sessions,
+  outcomes,
   messages,
   runningLive,
 }: {
@@ -145,6 +150,8 @@ function SessionTile({
   onSessionClosed: () => void;
   onTaskRemoved: (task: string) => void;
   sessions: readonly Session[];
+  /** The outcomes of the tasks, for the merge requests of a change's parts (ADR-172). */
+  outcomes: ReadonlyMap<string, TaskOutcome>;
   messages: readonly TaskMessage[];
   runningLive: LiveFeed<RunningMiseTask[]> | undefined;
 }) {
@@ -158,6 +165,7 @@ function SessionTile({
     conn,
     task,
     tasks,
+    outcomes,
     messages: messages.filter((m) => m.task === task?.id),
     sessions,
     runningLive,
