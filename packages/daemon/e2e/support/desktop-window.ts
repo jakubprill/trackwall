@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Browser, Page } from "playwright";
 import { z } from "zod";
+import { onCspViolation } from "./csp-violations.ts";
 
 /**
  * The UI as the Tauri shell shows it, which the daemon's own page does not: the files under the window's origin with
@@ -52,7 +53,7 @@ export async function openDesktopWindow(
   page.on("console", (message) => {
     if (message.type() === "error") problems.push(`console: ${message.text()}`);
   });
-  await page.exposeFunction("reportCspViolation", (text: string) => problems.push(`CSP: ${text}`));
+  await onCspViolation(context, (text) => problems.push(`CSP: ${text}`));
   await page.addInitScript(fakeTauri, daemon);
   const eventsArrived = page
     .waitForEvent("websocket", { predicate: (socket) => new URL(socket.url()).pathname === "/ws", timeout: EVENTS_TIMEOUT_MS })
@@ -76,14 +77,10 @@ export async function openDesktopWindow(
 
 /**
  * Runs in the page before its scripts: what `@tauri-apps/api` finds in the Tauri window, enough for the UI to start
- * (`daemon_connection` answers, other commands answer nothing, events never come), and every CSP violation reported.
+ * (`daemon_connection` answers, other commands answer nothing, events never come).
  */
 function fakeTauri(daemon: { baseUrl: string; token: string }) {
-  type Fake = Record<string, unknown> & { reportCspViolation: (text: string) => void };
-  const page = window as unknown as Fake;
-  window.addEventListener("securitypolicyviolation", (event) =>
-    page.reportCspViolation(`${event.effectiveDirective} refused ${event.blockedURI} at ${event.sourceFile}:${event.lineNumber}`),
-  );
+  const page = window as unknown as Record<string, unknown>;
   let nextId = 1;
   page.isTauri = true;
   page.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} };
