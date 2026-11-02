@@ -2,13 +2,16 @@ import { CHANGE_PART_NOTE_MAX, TASK_TITLE_MAX } from "@trackwall/protocol";
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { type ChangePartDraft, mayAddPart } from "@/lib/new-session";
+import type { Connection } from "@/lib/connection";
+import { type ChangePartDraft, changePartsOfForm, mayAddPart } from "@/lib/new-session";
+import { ChangeOrderHints } from "./ChangeOrderHints.tsx";
 
 /**
  * The other repos of a task, which make it a change (ADR-171): one more task per repo, all on one branch named after
  * the change's title, in the order their merge requests are to be merged, starting with the repo chosen above.
  */
 export function ChangeParts({
+  conn,
   repos,
   repo,
   parts,
@@ -18,6 +21,7 @@ export function ChangeParts({
   onTitle,
   partly,
 }: {
+  conn: Connection;
   repos: readonly { id: string }[];
   /** The repo chosen above, the change's first part. */
   repo: string;
@@ -30,6 +34,8 @@ export function ChangeParts({
   partly: string | undefined;
 }) {
   const others = repos.filter((r) => r.id !== repo);
+  // The hints follow the parts the change will have, so they load the graph only once a second repo is chosen.
+  const chosen = changePartsOfForm(repo, parts);
   const set = (index: number, part: Partial<ChangePartDraft>) => onParts(parts.map((p, i) => (i === index ? { ...p, ...part } : p)));
   const add = () => onParts([...parts, { repo: others.find((r) => !parts.some((p) => p.repo === r.id))?.id ?? "", note: "" }]);
   if (others.length === 0) return null;
@@ -86,6 +92,7 @@ export function ChangeParts({
           </Button>
         </div>
       ))}
+      {chosen.length > 1 && <ChangeOrderHints conn={conn} repos={chosen.map((part) => part.repo)} />}
       {mayAddPart(parts, others.length) && (
         <Button variant="ghost" className="w-fit" onClick={add} disabled={disabled}>
           <Plus /> Add a repo

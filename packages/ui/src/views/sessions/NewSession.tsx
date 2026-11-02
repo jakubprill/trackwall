@@ -135,6 +135,7 @@ export function NewSession({
           />
           {firstPart !== null && (
             <ChangeParts
+              conn={conn}
               repos={repos.data.repos}
               repo={firstPart}
               parts={change.parts}
