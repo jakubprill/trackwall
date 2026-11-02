@@ -304,7 +304,7 @@ export class Agents {
       openEditor: deps.openEditor,
       log: deps.log,
       javaNavigation: this.#javaNavigation,
-      sandbox: async (approvals) => taskSandbox(deps.repos.sandboxSettings(), approvals, await deps.env()),
+      sandbox: async (approvals) => taskSandbox(sandboxState(deps.repos.sandboxSettings(), await deps.env()), approvals),
       sessions: {
         launch: (spec) => this.#launchTask(spec),
         of: (task) => this.#sessions.views().filter((s) => s.task === task),

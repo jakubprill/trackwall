@@ -57,7 +57,7 @@ describe("config files", () => {
       name: "workspace.yaml",
       path: workspaceFile,
       state: "present",
-      detail: "3 of 14 keys set in the file",
+      detail: "3 of 15 keys set in the file",
     });
     expect(entry("tasks-file")).toEqual({
       id: "tasks-file",

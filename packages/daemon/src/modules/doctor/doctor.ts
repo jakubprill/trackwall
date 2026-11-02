@@ -245,7 +245,6 @@ export class Doctor {
     return ok(`mise ${versionIn(version.value) ?? firstLine(version.value)}`);
   }
 
-  /** Only for someone who set Java navigation up: a path that went missing greys it out on the New session form. */
   /** Only where some task runs in the sandbox (`sandbox.tasks` not `off`, the default in a container). */
   private async copilotSandbox(): Promise<Outcome> {
     const { tasks, problem } = await this.deps.sandbox();
@@ -262,6 +261,7 @@ export class Doctor {
     );
   }
 
+  /** Only for someone who set Java navigation up: a path that went missing greys it out on the New session form. */
   private javaNavigation(): Outcome {
     const state = this.deps.javaNavigation();
     if (state === null) return null;

@@ -35,7 +35,7 @@ toolPermissions:
     deny: ["shell(git push)"]
 ```
 
-An [agent task](/features/tasks) started with "No approvals" runs its commands in Copilot CLI's sandbox. Each shell command, and every build or script it starts, runs under your system's own isolation: it can write only in the task's worktree (and the system's temporary folder), and it cannot read your other repos or credential folders such as `~/.ssh`. The task can still commit, and `git push` still works, so keep a deny rule for that. The New session form tells you under the options that the task will run in the sandbox, and the task's header says "Sandbox". You choose which tasks run in it with `sandbox` in `workspace.yaml`:
+An [agent task](/features/tasks) started with "No approvals" runs its commands in Copilot CLI's sandbox. Each shell command, and every build or script it starts, runs under your system's own isolation: it can write only in the task's worktree (and the repo's git folder and the system's temporary folder), and it cannot read your other repos or credential folders such as `~/.ssh`. The task can still commit, and `git push` still works, so keep a deny rule for that. The New session form tells you under the options that the task will run in the sandbox, and the task's header says "Sandbox". You choose which tasks run in it with `sandbox` in `workspace.yaml`:
 
 ```yaml
 sandbox:
@@ -66,4 +66,6 @@ sandbox:
 - A task keeps the sandbox it started with for every resume; a change of `sandbox` applies to tasks you start after it.
 - On Linux a command in the sandbox cannot reach a service on your computer's `localhost`, such as one you started from Trackwall. On macOS it can.
 - Files the agent changes with Copilot CLI's own edit tool, not through a command, are kept in the worktree by Copilot CLI's checks rather than by the system, which is why Copilot CLI still asks before a path it sees outside the worktree.
+- What Trackwall itself runs for the task, such as Verify, a repo task or a service, runs outside the sandbox, on files the agent may have changed. So do the MCP and language servers Copilot CLI starts, unless your own Copilot CLI settings put them in the sandbox.
+- The repo's `.git` folder stays writable from the sandbox, since the task's commits need it, and with it the repo's git hooks and git config. A misled agent could put a command there that runs outside the sandbox at the next git command in that repo, yours or Trackwall's. To close it, add the repo's `.git/hooks` and `.git/config` to `readonlyPaths` in the `sandbox` settings of Copilot CLI's `settings.json`; commits still work then.
 - Your own `sandbox` settings in Copilot CLI's `settings.json`, such as extra folders, apply to these tasks too.

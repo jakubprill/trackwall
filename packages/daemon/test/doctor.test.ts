@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { chmodSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { TESTED_COPILOT_CLI_VERSION } from "@trackwall/protocol";
@@ -10,6 +10,7 @@ import { folderStorage } from "../src/modules/doctor/folder-storage.ts";
 import type { TlsProbe } from "../src/modules/doctor/tls-probe.ts";
 import { compareVersions, versionIn } from "../src/modules/doctor/version.ts";
 import { fakeHostingClis } from "./support/hosting.ts";
+import { sandboxProgramsFolder } from "./support/sandbox-programs.ts";
 
 const fakeCopilot = join(import.meta.dir, "fixtures", "fake-copilot-session.ts");
 const printVersion = join(import.meta.dir, "fixtures", "print-version.ts");
@@ -56,10 +57,8 @@ interface Setup {
 }
 
 /** A facade on a fresh state directory, with the fake Copilot CLI and a mise that prints its version, or none of them. */
-/** A folder with an executable `bwrap`, which the sandbox check looks for on Linux. */
-const bwrapFolder = mkdtempSync(join(tmpdir(), "trackwall-doctor-bwrap-"));
-writeFileSync(join(bwrapFolder, "bwrap"), "#!/bin/sh\n");
-chmodSync(join(bwrapFolder, "bwrap"), 0o755);
+/** The programs the sandbox check looks for on Linux. */
+const sandboxPrograms = sandboxProgramsFolder();
 
 function doctorFacade(o: Setup) {
   const home = mkdtempSync(join(tmpdir(), "trackwall-doctor-home-"));
@@ -83,8 +82,8 @@ function doctorFacade(o: Setup) {
     sessionHook: () => ({ url: "http://127.0.0.1:9/hooks/unused", headers: {} }),
     sessionMcpServer: () => ({ url: "http://127.0.0.1:9/mcp", headers: {} }),
     hostingClis: fakeHostingClis({ authErrors: o.authErrors }).clis,
-    // With bwrap in PATH, so that the sandbox check is ok also on a Linux runner without bubblewrap (ADR-181).
-    userEnv: async () => ({ ...process.env, COPILOT_HOME: copilotHome, PATH: `${bwrapFolder}${delimiter}${process.env.PATH ?? ""}` }),
+    // With the sandbox programs in PATH, so that the sandbox check is ok also on a Linux runner without them (ADR-181).
+    userEnv: async () => ({ ...process.env, COPILOT_HOME: copilotHome, PATH: `${sandboxPrograms}${delimiter}${process.env.PATH ?? ""}` }),
     tlsProbe: async () => ({ kind: "ok" }),
     connectionProbe: o.connectionProbe,
     log: () => {},

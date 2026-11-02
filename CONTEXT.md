@@ -387,7 +387,7 @@ Whether a task's agent asks the user before tools: `ask` (the default) as every 
 _Avoid_: YOLO, autopilot (Copilot CLI's own modes, not what Trackwall passes), auto-approve
 
 **Sandbox** (`sandbox` in `workspace.yaml`, `SandboxSettings`, `Task.sandbox`, `SandboxState`, `copilot-sandbox.ts`; "Sandbox" on the task):
-Copilot CLI's sandbox (`--sandbox`): a task's shell commands, and the servers Copilot CLI starts, run under the system's isolation, writing only in the worktree. `sandbox.tasks` says which tasks: `auto` (the default; `off` in a container) those without approvals, `all` every task, `off` none; a task keeps the answer from its start (ADR-181).
+Copilot CLI's sandbox (`--sandbox`): a task's shell commands run under the system's isolation, writing only in the worktree, the repo's git directory and the temporary folder. `sandbox.tasks` says which tasks: `auto` (the default; `off` in a container) those without approvals, `all` every task, `off` none; a task keeps the answer from its start (ADR-181).
 _Avoid_: container, jail, isolation mode (the container is the dev container; Trackwall has no isolation of its own)
 
 **Java navigation** (`Task.javaNavigation`, `javaNavigation` in `workspace.yaml`, `JavaNavigationSettings`; "Java navigation" on the start pill):

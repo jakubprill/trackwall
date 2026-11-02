@@ -3,7 +3,6 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { MCP_SERVER_NAME, mcpTools, promptBoxText, type Session, TASK_MESSAGE_RULE } from "@trackwall/protocol";
 import { windowTitleFromOsc } from "../src/modules/agents/copilot-osc.ts";
@@ -15,6 +14,7 @@ import { REFERENCE_COLS, REFERENCE_ROWS } from "../test/support/copilot-referenc
 import { screenLines, untilInputBox } from "../test/support/screen-lines.ts";
 import { hookRecords, startRealCopilotDaemon } from "./support/real-copilot.ts";
 import { type Recorder, startRecorder } from "./support/recorder.ts";
+import { commitEscapeScript, ESCAPE_COMMAND } from "./support/sandbox-escape.ts";
 import { type ModelRequest, type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
 import { USER_MCP_ISSUES, USER_MCP_SERVER, USER_MCP_TOOL } from "./support/user-mcp-server.ts";
 
@@ -631,35 +631,20 @@ describe("a task without approvals with the real Copilot CLI (ADR-105)", () => {
   });
 });
 
-/** A folder of the user's home a script in the sandbox tries to write into: outside the temporary folder, which the sandbox lets commands write in. */
-const SANDBOX_PROBE_DIR = ".trackwall-sandbox-contract";
-
-/** A script that writes into that folder: Copilot CLI's check of the paths in a command cannot see into it, as with a build script. */
-const SANDBOX_ESCAPE_SCRIPT = `import { writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
-writeFileSync(join(homedir(), "${SANDBOX_PROBE_DIR}", "escaped.txt"), "x");
-`;
-
 describe("a task in Copilot CLI's sandbox with the real Copilot CLI (ADR-181)", () => {
-  test("a task without approvals writes and commits in its worktree, and a script it runs cannot write into a folder of the user's home", async () => {
+  test("a task without approvals writes and commits in its worktree, and a script it runs cannot write into the user's home, only into the repo's git directory", async () => {
     const { agents } = daemon.facade;
     const workspaceFile = join(daemon.home, "workspace.yaml");
     const workspace = readFileSync(workspaceFile, "utf8");
-    const outside = join(homedir(), SANDBOX_PROBE_DIR);
-    mkdirSync(outside, { recursive: true });
-    const repo = join(daemon.projects, "shop");
-    writeFileSync(join(repo, "escape.mjs"), SANDBOX_ESCAPE_SCRIPT);
-    const git = (...args: string[]) => spawnSync("git", args, { cwd: repo, encoding: "utf8" });
-    git("add", "escape.mjs");
-    git("-c", "user.name=test", "-c", "user.email=test@example.com", "commit", "-q", "-m", "add the escape script");
-    writeFileSync(workspaceFile, workspace.replace("tasks: off", "tasks: auto"));
+    expect(workspace).toContain("tasks: off");
+    const probe = commitEscapeScript(join(daemon.projects, "shop"));
     try {
+      writeFileSync(workspaceFile, workspace.replace("tasks: off", "tasks: auto"));
       const commit = "git add inside.txt; git -c user.name=agent -c user.email=agent@example.com commit -q -m sandboxed";
       model.reply(
         (request) => shellCall(request, { bash: "touch inside.txt", powershell: "New-Item inside.txt" }),
         (request) => shellCall(request, { bash: commit, powershell: commit }),
-        (request) => shellCall(request, { bash: "node escape.mjs", powershell: "node escape.mjs" }),
+        (request) => shellCall(request, { bash: ESCAPE_COMMAND, powershell: ESCAPE_COMMAND }),
         { text: "Committed inside.txt; the script could not write outside the worktree." },
       );
       const task = await agents.createTask("shop", "make a file, commit it, then run the escape script", { approvals: "auto" });
@@ -669,12 +654,14 @@ describe("a task in Copilot CLI's sandbox with the real Copilot CLI (ADR-181)", 
 
       expect(existsSync(join(task.worktree, "inside.txt"))).toBe(true);
       expect(spawnSync("git", ["log", "-1", "--format=%s"], { cwd: task.worktree, encoding: "utf8" }).stdout.trim()).toBe("sandboxed");
-      expect(existsSync(join(outside, "escaped.txt"))).toBe(false);
+      // The repo's whole git directory is granted for the worktree's commits, hooks and config with it: a gap in §8,
+      // pinned here so that a change in Copilot CLI shows.
+      expect(probe.escapes()).toEqual(["the repo's git hooks", "the repo's git config"]);
       expect(agents.session(session).dialog).toBeNull();
       await agents.stop(session);
     } finally {
       writeFileSync(workspaceFile, workspace);
-      rmSync(outside, { recursive: true, force: true });
+      probe.remove();
     }
   });
 });

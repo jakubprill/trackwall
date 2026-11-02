@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { agentsApi, doctorApi } from "@trackwall/protocol";
@@ -8,18 +8,11 @@ import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 import { viewer, waitFor } from "./support/agents.ts";
 import { fakeHosting } from "./support/hosting.ts";
+import { sandboxProgramsFolder } from "./support/sandbox-programs.ts";
 import { FAKE_COPILOT, ONE_REPO, startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
 const TOKEN = "s".repeat(43);
-
-/** A folder with an executable `bwrap`, so that on a Linux runner without bubblewrap the daemon sees the sandbox can run. */
-function bwrapFolder(): string {
-  const dir = mkdtempSync(join(tmpdir(), "trackwall-bwrap-"));
-  writeFileSync(join(dir, "bwrap"), "#!/bin/sh\n");
-  chmodSync(join(dir, "bwrap"), 0o755);
-  return dir;
-}
 
 /** The fake Copilot CLI with `PATH` as given, which is the `PATH` the daemon checks for bubblewrap. */
 function fakeCopilotWithPath(path: string) {
@@ -85,7 +78,7 @@ describe.skipIf(process.versions.bun === undefined)("a task in Copilot CLI's san
   test(
     "a task without approvals starts Copilot CLI with --sandbox and keeps it on resume, and a task that asks starts without it",
     async () => {
-      const path = `${bwrapFolder()}${delimiter}${process.env.PATH ?? ""}`;
+      const path = `${sandboxProgramsFolder()}${delimiter}${process.env.PATH ?? ""}`;
       daemon = await startSessionApi(TOKEN, { ...ONE_REPO, sandboxTasks: "auto", copilot: fakeCopilotWithPath(path) });
       const options = await daemon.post(agentsApi.startOptions, {});
       expect(options.sandbox).toEqual({ tasks: "auto", problem: null });
@@ -113,7 +106,8 @@ describe.skipIf(process.versions.bun === undefined)("a task in Copilot CLI's san
       const worktreesBefore = existsSync(join(daemon.projects, ".trackwall", "worktrees", "shop"));
 
       await expect(daemon.post(agentsApi.createTask, { repo: "shop", prompt: "map the endpoints", approvals: "auto" })).rejects.toThrow(
-        "this task should run in Copilot CLI's sandbox (sandbox.tasks: auto in workspace.yaml), but bubblewrap (bwrap), which Copilot CLI's sandbox runs on, is not in PATH",
+        // `ip` and `iptables` may also be found in /usr/sbin of the runner, so only the start of the list is fixed.
+        /this task should run in Copilot CLI's sandbox \(sandbox\.tasks: auto in workspace\.yaml\), but bubblewrap \(bwrap\), slirp4netns.*, which Copilot CLI's sandbox runs on, are not in PATH; install it, or set sandbox\.tasks to off$/,
       );
       expect(daemon.facade.agents.sessions().tasks).toEqual([]);
       expect(existsSync(join(daemon.projects, ".trackwall", "worktrees", "shop"))).toBe(worktreesBefore);
@@ -121,8 +115,9 @@ describe.skipIf(process.versions.bun === undefined)("a task in Copilot CLI's san
       const report = await daemon.post(doctorApi.run, {});
       expect(report.checks.find((c) => c.id === "copilot-sandbox")).toMatchObject({
         status: "fail",
-        summary:
-          "Copilot CLI's sandbox cannot run here: bubblewrap (bwrap), which Copilot CLI's sandbox runs on, is not in PATH, so Trackwall refuses to start tasks without approvals.",
+        summary: expect.stringMatching(
+          /^Copilot CLI's sandbox cannot run here: bubblewrap \(bwrap\), slirp4netns.*, so Trackwall refuses to start tasks without approvals\.$/,
+        ),
       });
     },
     SLOW_TEST_TIMEOUT_MS,
