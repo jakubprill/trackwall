@@ -386,6 +386,10 @@ _Avoid_: LLM, engine, agent (for the model)
 Whether a task's agent asks the user before tools: `ask` (the default) as every session does, `auto` runs every tool without asking (`--allow-all-tools`) on every start and resume, deny rules still refusing. Only for a task in its own worktree; the user turns on the "No approvals" pill when starting the task, and a proposer may suggest it on a proposal (ADR-105).
 _Avoid_: YOLO, autopilot (Copilot CLI's own modes, not what Trackwall passes), auto-approve
 
+**Sandbox** (`sandbox` in `workspace.yaml`, `SandboxSettings`, `Task.sandbox`, `SandboxState`, `copilot-sandbox.ts`; "Sandbox" on the task):
+Copilot CLI's sandbox (`--sandbox`): a task's shell commands run under the system's isolation, writing only in the worktree, the repo's git directory and the temporary folder. `sandbox.tasks` says which tasks: `auto` (the default on Linux; `off` on macOS, Windows and in a container) those without approvals, `all` every task, `off` none; a task keeps the answer from its start (ADR-181).
+_Avoid_: container, jail, isolation mode (the container is the dev container; Trackwall has no isolation of its own)
+
 **Java navigation** (`Task.javaNavigation`, `javaNavigation` in `workspace.yaml`, `JavaNavigationSettings`; "Java navigation" on the start pill):
 A Java language server (jdtls) a task's sessions get for Copilot CLI's `lsp` tool, started by Copilot CLI from the session plugin in the task's worktree with the task's own index. The user installs jdtls and its Java with "Install" in Settings › Agents, which writes their paths into `workspace.yaml` (ADR-123), or names their own there by hand (the install's progress and last error: `JavaNavigationInstall`; how a task's jdtls is doing, from its log: `JavaNavigationStatus`, ADR-124), then turns the pill on for a task in a repo tagged java (ADR-99). The install also gets the Java versions the repos build with, the **runtimes** (`JavaNavigationSettings.runtimes`, `JavaRuntime`), which jdtls may run Gradle on and Gradle takes toolchains from, and a Lombok jar (ADR-167).
 _Avoid_: LSP (the protocol, not the option), code intelligence, indexing

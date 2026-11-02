@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { type ConversationEntry, MCP_SERVER_NAME, mcpTools, type Session } from "@trackwall/protocol";
 import { viewer, waitFor } from "../test/support/agents.ts";
 import { startRealCopilotDaemon } from "./support/real-copilot.ts";
+import { commitEscapeScript, ESCAPE_COMMAND, sandboxRefusedEverything } from "./support/sandbox-escape.ts";
 import { type ModelRequest, type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
 
 // The contract of the conversation view with the real Copilot CLI (ADR-107, for tasks ADR-137): `copilot --acp` as the
@@ -267,6 +268,47 @@ describe("a task in the conversation view with the real Copilot CLI (ADR-137)", 
     // The conversation goes on: the model gets the first prompt again with the review.
     expect(JSON.stringify(last)).toContain("add a login test");
     await agents.stop(resumed);
+  });
+});
+
+describe("a task in Copilot CLI's sandbox in the conversation view with the real Copilot CLI (ADR-181)", () => {
+  test("--sandbox holds with --acp too: a script the task runs cannot write into the user's home, only into the repo's git directory", async () => {
+    const { agents } = daemon.facade;
+    const workspace = readFileSync(workspaceFile, "utf8");
+    expect(workspace).toContain("tasks: off");
+    const probe = commitEscapeScript(join(daemon.projects, "shop"));
+    try {
+      writeFileSync(workspaceFile, workspace.replace("tasks: off", "tasks: auto"));
+      model.reply(
+        (request) => shellCall(request, { bash: "touch inside.txt", powershell: "New-Item inside.txt" }),
+        (request) => shellCall(request, { bash: ESCAPE_COMMAND, powershell: ESCAPE_COMMAND }),
+        { text: "The script could not write outside the worktree." },
+      );
+      const task = await agents.createTask("shop", "make a file, then run the escape script", { view: "conversation", approvals: "auto" });
+      expect(task.sandbox).toBe(true);
+      const session = taskSessionOf(task.id);
+      await endOfTurn(session);
+
+      // What the sandbox answered goes back to the model; a refusal there says what the system is missing.
+      const answers = model
+        .requests()
+        .slice(-3)
+        .flatMap((r) => r.toolResults);
+      if (sandboxRefusedEverything(answers)) {
+        expect({ inside: existsSync(join(task.worktree, "inside.txt")), escapes: probe.escapes() }).toEqual({ inside: false, escapes: [] });
+      } else {
+        expect({ inside: existsSync(join(task.worktree, "inside.txt")), answers }).toMatchObject({ inside: true });
+        // On Linux the repo's whole git directory is granted for the worktree's commits, hooks and config with it: a
+        // gap in §8, pinned here so that a change in Copilot CLI shows.
+        const escapes = probe.escapes();
+        expect(escapes).not.toContain("the user's home");
+        if (process.platform === "linux") expect(escapes).toEqual(["the repo's git hooks", "the repo's git config"]);
+      }
+      await agents.stop(session);
+    } finally {
+      writeFileSync(workspaceFile, workspace);
+      probe.remove();
+    }
   });
 });
 

@@ -125,7 +125,7 @@ describe("installing Java navigation from Settings (ADR-123)", () => {
     const mise = JSON.parse(readFileSync(join(installs, "calls.log"), "utf8"));
     expect(mise.ceiling).toBe(mise.cwd);
     expect(mise.cwd.startsWith(join(realpathSync.native(lsp), ".install-"))).toBe(true);
-    expect(facade.agents.startOptions()).toEqual({ javaNavigation: { problem: null } });
+    expect(facade.agents.javaNavigationState()).toEqual({ problem: null });
   });
 
   test("installing again downloads and checks the release again, replaces what is there and keeps the Lombok jar the user named", async () => {

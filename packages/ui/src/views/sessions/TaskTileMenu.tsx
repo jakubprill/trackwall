@@ -13,7 +13,7 @@ import { TileOverlay } from "./TileOverlay.tsx";
 
 /**
  * The task menu of a grid tile (ADR-91): behind one button in the tile's header, so that six tiles keep their header on
- * one line, what the task panel's header has: branch, task port, model, no approvals and start, and VS Code, Verify,
+ * one line, what the task panel's header has: branch, task port, model, no approvals, the sandbox and start, and VS Code, Verify,
  * Copy included files, Stop or Resume. "Changes" opens the task alone on its changes, "Details" the task's sections over the terminal.
  * It lies over the terminal like the other overlays, so that the terminal keeps its size, and is one of the tile's
  * `overlay`, so that opening it closes the task's notices and back. While the task is being ended there is no menu.
@@ -71,6 +71,7 @@ export function useTaskTileMenu({
             <MenuFact name="port" value={String(task.port)} title={`task port: ${TASK_PORT_ENV.join(" and ")} of its mise tasks`} />
             {task.model !== null && <MenuFact name="model" value={task.model} />}
             {task.approvals === "auto" && <MenuFact name="approvals" value="none asked" />}
+            {task.sandbox && <MenuFact name="commands" value="in Copilot CLI's sandbox" />}
             <MenuFact name="started" value={relativeTime(session?.startedAt ?? task.createdAt, new Date())} />
           </dl>
           <Button variant="ghost" size="icon" className="size-6 shrink-0" onClick={overlay.close} aria-label="Close the task menu">

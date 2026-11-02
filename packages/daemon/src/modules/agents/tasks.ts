@@ -28,6 +28,7 @@ import { DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
 import { approvalArgs } from "./copilot-command.ts";
 import type { LspServer } from "./copilot-plugin.ts";
+import { SANDBOX_ARG } from "./copilot-sandbox.ts";
 import { type EndedTaskFacts, type EndedTaskGit, endedTaskFacts } from "./ended-task.ts";
 import type { JavaNavigationServers } from "./java-navigation-servers.ts";
 import { TASK_BRANCH_PREFIX, taskSlug, taskWorktree } from "./task-branch.ts";
@@ -119,6 +120,11 @@ export interface AgentTasksDeps {
   };
   /** The tasks' jdtls (ADR-99), shared with repo sessions (ADR-175). */
   javaNavigation: JavaNavigationServers;
+  /**
+   * Whether a new task with these approvals runs in Copilot CLI's sandbox (ADR-181); `bad_request` when it should and
+   * the sandbox cannot run on this computer.
+   */
+  sandbox: (approvals: TaskApprovals) => Promise<boolean>;
   sessions: TaskSessions;
   file: TaskFile;
   /** Some process group still works in this directory (`procs.liveIn`): a mise task in the worktree locks its files on Windows. */
@@ -266,8 +272,10 @@ export class AgentTasks {
     { id, title, proposedBy, model, approvals, javaNavigation, item, view: sessionView, change }: TaskOrigin,
     launch: "launch" | "hold",
   ): Promise<KnownTask> {
-    // Refused before the worktree exists: a task that asked for Java navigation would otherwise start without it.
+    // Refused before the worktree exists: a task that asked for Java navigation would otherwise start without it, and
+    // one that should run in the sandbox would run with the user's full access.
     if (javaNavigation) this.#deps.javaNavigation.assertCanStart(sessionView, "a task");
+    const sandbox = await this.#deps.sandbox(approvals);
     const repoDir = await this.#deps.repos.repoPath(repo);
     const base = await asRepoUnavailable(repo, this.#deps.vcs.defaultBase(repoDir));
     const worktreesDir = await this.#deps.repos.newTaskWorktreesDir();
@@ -289,6 +297,7 @@ export class AgentTasks {
       model,
       approvals,
       javaNavigation,
+      sandbox,
       item,
       view: sessionView,
       conversation: null,
@@ -728,10 +737,16 @@ export class AgentTasks {
 
   /** The task's first session with its prompt (`new`), or one that goes on with its conversation (`resume`). */
   async #launch(task: KnownTask, start: "new" | "resume"): Promise<void> {
-    // The model and the approvals mode on every start, the first and each resume: Copilot CLI would otherwise resume
-    // on its default model and ask again (ADR-98, ADR-105).
+    // The model, the approvals mode and the sandbox on every start, the first and each resume: Copilot CLI would
+    // otherwise resume on its default model, ask again and leave the sandbox (ADR-98, ADR-105, ADR-181).
     const modelArgs = task.model === null ? [] : [`--model=${task.model}`];
-    const place = { repo: task.repo, cwd: task.worktree, task: task.id, args: [...modelArgs, ...approvalArgs(task.approvals)] };
+    const sandboxArgs = task.sandbox ? [SANDBOX_ARG] : [];
+    const place = {
+      repo: task.repo,
+      cwd: task.worktree,
+      task: task.id,
+      args: [...modelArgs, ...approvalArgs(task.approvals), ...sandboxArgs],
+    };
     if (task.view === "terminal") {
       // `=` instead of a separate argument, so that a prompt starting with `-` is not a Copilot CLI option.
       const args = start === "new" ? [`--session-id=${task.id}`, `--interactive=${task.prompt}`] : [`--resume=${task.id}`];

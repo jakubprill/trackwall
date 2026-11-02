@@ -18,12 +18,15 @@ import {
   inTurn,
   isSupervisor,
   type JavaNavigationSettings,
+  type JavaNavigationState,
   type JavaNavigationStatus,
   type MergeRequest,
   type MiseTarget,
   type PromptDelivery,
   proposalRepos,
   type ReviewComment,
+  type SandboxSettings,
+  type SandboxState,
   type SendMessageResult,
   type SendReviewResult,
   type Session,
@@ -57,6 +60,7 @@ import { AutoReviews } from "./auto-reviews.ts";
 import type { CopilotHookOutput } from "./copilot-hook-output.ts";
 import { CopilotHookEvent } from "./copilot-hook-record.ts";
 import type { LspServer } from "./copilot-plugin.ts";
+import { sandboxState, taskSandbox } from "./copilot-sandbox.ts";
 import type { EndedTaskFacts } from "./ended-task.ts";
 import { HandoffWatch } from "./handoff-watch.ts";
 import { appendHookRecord } from "./hook-tail.ts";
@@ -153,6 +157,8 @@ interface AgentsRepos {
   toolPermissions(session: Pick<Session, "repo" | "supervisor">): ToolPermissions;
   /** `supervisor` from `workspace.yaml` (ADR-78); `invalid_config` for a bad key. */
   supervisorSettings(): SupervisorSettings;
+  /** `sandbox` from `workspace.yaml` with its default (ADR-181): which tasks run in Copilot CLI's sandbox; `invalid_config` for a bad key. */
+  sandboxSettings(): SandboxSettings;
   /** `agentSecrets` from `workspace.yaml` (ADR-93): the secrets from mise a session's tools get; `invalid_config` for a bad key. */
   agentSecrets(): readonly string[];
   /** `autoReview` from `workspace.yaml` (ADR-182): whether a task gets a review once its agent reports; `invalid_config` for a bad key. */
@@ -298,6 +304,7 @@ export class Agents {
       openEditor: deps.openEditor,
       log: deps.log,
       javaNavigation: this.#javaNavigation,
+      sandbox: async (approvals) => taskSandbox(sandboxState(deps.repos.sandboxSettings(), await deps.env()), approvals),
       sessions: {
         launch: (spec) => this.#launchTask(spec),
         of: (task) => this.#sessions.views().filter((s) => s.task === task),
@@ -793,9 +800,22 @@ export class Agents {
     if (item !== null && !(await this.#deps.boardHas(item))) throw new DomainError("not_found", `no board item ${item}`);
   }
 
-  /** What the New session form offers on this computer: whether Java navigation can start now, or why not (ADR-99). */
-  startOptions(): StartOptions {
-    return { javaNavigation: javaNavigationState(this.#javaNavigation.readiness()) };
+  /**
+   * What the New session form offers on this computer: whether Java navigation can start now, or why not (ADR-99), and
+   * which tasks run in Copilot CLI's sandbox and whether it can run here (ADR-181).
+   */
+  async startOptions(): Promise<StartOptions> {
+    return { javaNavigation: this.javaNavigationState(), sandbox: await this.sandboxState() };
+  }
+
+  /** Which tasks run in Copilot CLI's sandbox, and why it cannot run here (ADR-181); `invalid_config` for a bad `sandbox` key. */
+  async sandboxState(): Promise<SandboxState> {
+    return sandboxState(this.#deps.repos.sandboxSettings(), await this.#deps.env());
+  }
+
+  /** Whether Java navigation can start now, or why not (ADR-99); `null` without `javaNavigation` in `workspace.yaml`. */
+  javaNavigationState(): JavaNavigationState {
+    return javaNavigationState(this.#javaNavigation.readiness());
   }
 
   resumeTask(id: string): Promise<Task> {

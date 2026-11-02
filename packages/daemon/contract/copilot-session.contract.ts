@@ -1,7 +1,9 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { MCP_SERVER_NAME, mcpTools, promptBoxText, type Session, TASK_MESSAGE_RULE } from "@trackwall/protocol";
 import { windowTitleFromOsc } from "../src/modules/agents/copilot-osc.ts";
@@ -13,6 +15,7 @@ import { REFERENCE_COLS, REFERENCE_ROWS } from "../test/support/copilot-referenc
 import { screenLines, untilInputBox } from "../test/support/screen-lines.ts";
 import { hookRecords, startRealCopilotDaemon } from "./support/real-copilot.ts";
 import { type Recorder, startRecorder } from "./support/recorder.ts";
+import { commitEscapeScript, ESCAPE_COMMAND, sandboxRefusedEverything } from "./support/sandbox-escape.ts";
 import { type ModelRequest, type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
 import { USER_MCP_ISSUES, USER_MCP_SERVER, USER_MCP_TOOL } from "./support/user-mcp-server.ts";
 
@@ -625,6 +628,77 @@ describe("a task without approvals with the real Copilot CLI (ADR-105)", () => {
       await agents.stop(session);
     } finally {
       writeFileSync(workspaceFile, workspace);
+    }
+  });
+});
+
+/** The end of Copilot CLI's newest log in the daemon's `COPILOT_HOME`, for a failure the screen does not explain. */
+function copilotLogTail(): string {
+  const logs = join(daemon.home, "copilot-home", "logs");
+  if (!existsSync(logs)) return "no Copilot CLI logs";
+  const newest = readdirSync(logs)
+    .map((name) => join(logs, name))
+    .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0];
+  return newest === undefined ? "no Copilot CLI log" : `${newest}:\n${readFileSync(newest, "utf8").slice(-6000)}`;
+}
+
+describe("a task in Copilot CLI's sandbox with the real Copilot CLI (ADR-181)", () => {
+  test("a task without approvals writes and commits in its worktree, and a script it runs cannot write into the user's home, only into the repo's git directory", async () => {
+    const { agents } = daemon.facade;
+    const workspaceFile = join(daemon.home, "workspace.yaml");
+    const workspace = readFileSync(workspaceFile, "utf8");
+    expect(workspace).toContain("tasks: off");
+    const probe = commitEscapeScript(join(daemon.projects, "shop"));
+    // The setup a macOS user needs (ADR-181): without git and gh going through the sandbox's proxy the terminal does
+    // not stop at the question about its certificate authority, and git in Seatbelt may read ~/.gitconfig.
+    const settings = join(daemon.home, "copilot-home", "settings.json");
+    try {
+      mkdirSync(dirname(settings), { recursive: true });
+      const gitconfig = join(homedir(), ".gitconfig");
+      const sandbox = { auth: { git: false, gh: false }, userPolicy: { filesystem: { readonlyPaths: [gitconfig] } } };
+      writeFileSync(settings, JSON.stringify({ sandbox }));
+      writeFileSync(workspaceFile, workspace.replace("tasks: off", "tasks: auto"));
+      const commit =
+        "git add inside.txt; git -c user.name=agent -c user.email=agent@example.com -c commit.gpgsign=false commit -q -m sandboxed";
+      model.reply(
+        (request) => shellCall(request, { bash: "touch inside.txt", powershell: "New-Item inside.txt" }),
+        (request) => shellCall(request, { bash: commit, powershell: commit }),
+        (request) => shellCall(request, { bash: ESCAPE_COMMAND, powershell: ESCAPE_COMMAND }),
+        { text: "Committed inside.txt; the script could not write outside the worktree." },
+      );
+      const task = await agents.createTask("shop", "make a file, commit it, then run the escape script", { approvals: "auto" });
+      expect(task.sandbox).toBe(true);
+      const session = taskSessionOf(task.id);
+      // A question Copilot CLI asks only in a sandboxed terminal (macOS) would stop the turn; the screen says which.
+      await endOfTurn(session).catch(async (error: Error) => {
+        const window = viewer(agents, session);
+        windows.set(session, window);
+        throw new Error(`${error.message}\nthe terminal so far: ${window.unwrappedText().slice(-2000)}\n${copilotLogTail()}`);
+      });
+
+      // What the sandbox answered goes back to the model; a refusal there says what the system is missing.
+      const answers = model
+        .requests()
+        .slice(-3)
+        .flatMap((r) => r.toolResults);
+      if (sandboxRefusedEverything(answers)) {
+        expect({ inside: existsSync(join(task.worktree, "inside.txt")), escapes: probe.escapes() }).toEqual({ inside: false, escapes: [] });
+      } else {
+        expect({ inside: existsSync(join(task.worktree, "inside.txt")), answers }).toMatchObject({ inside: true });
+        const lastCommit = spawnSync("git", ["log", "-1", "--format=%s"], { cwd: task.worktree, encoding: "utf8" }).stdout.trim();
+        expect({ lastCommit, answers }).toMatchObject({ lastCommit: "sandboxed" });
+        // On Linux the repo's whole git directory is granted for the worktree's commits, hooks and config with it: a
+        // gap in §8, pinned here so that a change in Copilot CLI shows.
+        const escapes = probe.escapes();
+        expect(escapes).not.toContain("the user's home");
+        if (process.platform === "linux") expect(escapes).toEqual(["the repo's git hooks", "the repo's git config"]);
+      }
+      expect(agents.session(session).dialog).toBeNull();
+      await agents.stop(session);
+    } finally {
+      rmSync(settings, { force: true });
+      writeFileSync(workspaceFile, workspace);
+      probe.remove();
     }
   });
 });

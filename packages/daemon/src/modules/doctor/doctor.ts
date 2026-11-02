@@ -8,6 +8,7 @@ import {
   type JavaNavigationState,
   type RepoHost,
   type RepoHostKind,
+  type SandboxState,
   TESTED_COPILOT_CLI_VERSION,
   type UnpushedWork,
   unpushedSummary,
@@ -69,6 +70,8 @@ export interface DoctorDeps {
   workspaceFile: string;
   /** Each key of `workspace.yaml` (ADR-108); throws when the file as a whole cannot be read. */
   workspaceKeys: () => WorkspaceKeysRead;
+  /** Which tasks run in Copilot CLI's sandbox and why it cannot run here (`agents`, ADR-181). */
+  sandbox: () => Promise<SandboxState>;
   /** Whether tasks can get Java navigation (`agents`); `null` while `javaNavigation` is not in `workspace.yaml`. */
   javaNavigation: () => JavaNavigationState;
   /** Opens a TLS connection as a session's Node.js would (`probeTls`, a fake in tests); the network check's only way out. */
@@ -110,6 +113,7 @@ export class Doctor {
       git: () => this.git(),
       "copilot-cli": (ctx) => this.copilotCli(ctx),
       "copilot-trusted-folder": (ctx) => this.copilotTrustedFolder(ctx),
+      "copilot-sandbox": () => this.copilotSandbox(),
       network: ({ env }) => networkOutcome(env, { probe: this.deps.probeTls, systemCaFiles: this.deps.systemCaFiles }),
       "model-provider": () => this.modelProvider(),
       mise: (ctx) => this.mise(ctx),
@@ -239,6 +243,22 @@ export class Doctor {
         "Install mise (mise.jdx.dev) and restart Trackwall; repo tasks, services and task verification need it.",
       );
     return ok(`mise ${versionIn(version.value) ?? firstLine(version.value)}`);
+  }
+
+  /** Only where some task runs in the sandbox (`sandbox.tasks` not `off`, the default in a container). */
+  private async copilotSandbox(): Promise<Outcome> {
+    const { tasks, problem } = await this.deps.sandbox();
+    if (tasks === "off") return null;
+    if (problem === null)
+      return ok(
+        tasks === "all"
+          ? "Every task runs its commands in Copilot CLI's sandbox."
+          : "Tasks without approvals run their commands in Copilot CLI's sandbox.",
+      );
+    return fail(
+      `Copilot CLI's sandbox cannot run here: ${problem}, so Trackwall refuses to start ${tasks === "all" ? "any task" : "tasks without approvals"}.`,
+      "Install it (on Linux the bubblewrap package, with slirp4netns, iproute2 and iptables), or set sandbox.tasks to off in workspace.yaml.",
+    );
   }
 
   /** Only for someone who set Java navigation up: a path that went missing greys it out on the New session form. */

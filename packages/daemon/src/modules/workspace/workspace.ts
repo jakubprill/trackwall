@@ -20,6 +20,7 @@ import {
   type RepoStatus,
   type RepoStatusOk,
   type RepoTagRules,
+  type SandboxSettings,
   type SearchCodeResult,
   type SearchCommitsResult,
   type Session,
@@ -507,6 +508,15 @@ export class Workspace {
   }
 
   /**
+   * Which tasks run in Copilot CLI's sandbox (`sandbox` in `workspace.yaml`, ADR-181); `invalid_config` for a bad key, so
+   * that a typo never takes a task out of the sandbox. Without the key tasks without approvals do, except in a container,
+   * which is their isolation there and where the sandbox cannot run (Docker does not let it make its namespaces).
+   */
+  sandboxSettings(): SandboxSettings {
+    return this.deps.file.sandboxSettings() ?? { tasks: defaultSandboxTasks(this.deps.inContainer, process.platform) };
+  }
+
+  /**
    * The secrets from mise that the tools of sessions get (`agentSecrets` in `workspace.yaml`, ADR-93); `invalid_config`
    * for a bad key, so that a typo never shows a secret to an agent.
    */
@@ -621,4 +631,14 @@ function cloneDir(fullName: string): string {
   const dir = fullName.split("/").at(-1);
   if (!dir) throw new Error(`full repo name has no final segment: "${fullName}"`);
   return dir;
+}
+
+/**
+ * `sandbox.tasks` without the key (ADR-181): `auto` only on a Linux computer. In a container the container is the
+ * isolation and bubblewrap cannot run; on macOS git in the sandbox cannot read `~/.gitconfig` and the terminal stops at
+ * Copilot CLI's question about its certificate authority; on Windows the sandbox needs a Windows with BaseContainer.
+ * There the user turns it on once they have checked it.
+ */
+export function defaultSandboxTasks(inContainer: boolean, platform: NodeJS.Platform): SandboxSettings["tasks"] {
+  return !inContainer && platform === "linux" ? "auto" : "off";
 }

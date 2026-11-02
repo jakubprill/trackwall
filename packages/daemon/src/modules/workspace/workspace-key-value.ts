@@ -7,6 +7,7 @@ import {
   type JavaNavigationSettings,
   type RepoHost,
   type RepoTagRules,
+  type SandboxSettings,
   type SupervisorSettings,
   type ToolPermissionRules,
   trackwallDirLabel,
@@ -30,6 +31,7 @@ export interface WorkspaceKeyValues {
   sessionProfile: string | null;
   autoReview: AutoReviewSettings;
   supervisor: SupervisorSettings;
+  sandbox: SandboxSettings | null;
   repoTags: RepoTagRules;
   dayStart: DayStartSettings | null;
   graph: GraphConfig;
@@ -50,6 +52,8 @@ export const workspaceKeyValue: { [K in WorkspaceKey]: (value: WorkspaceKeyValue
   sessionProfile: (profile) => profile ?? "none",
   autoReview: (settings) => `afterReport: ${settings.afterReport}`,
   supervisor: (settings) => `changesCode: ${settings.changesCode}`,
+  sandbox: (settings) =>
+    settings === null ? "tasks: auto on Linux, off on macOS, Windows and in a container" : `tasks: ${settings.tasks}`,
   repoTags: (rules) => {
     const tags = Object.keys(rules);
     return tags.length === 0 ? "none" : `${countLabel(tags.length, { one: "tag", other: "tags" })}: ${tags.join(", ")}`;

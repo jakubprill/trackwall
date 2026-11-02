@@ -75,15 +75,17 @@ const allowAllTools = process.argv.includes(ALLOW_ALL_TOOLS);
 
 /**
  * Task arguments (`--interactive=`, `--resume=`, `--session-id=`), tool permissions (`--allow-tool=`, `--deny-tool=`, `--allow-all-tools`),
- * the secrets Copilot CLI redacts (`--secret-env-vars=`, ADR-93) and the reviewer's limits (ADR-182) the fake prints, so
- * that the test sees them.
+ * the secrets Copilot CLI redacts (`--secret-env-vars=`, ADR-93), the reviewer's limits (ADR-182) and the sandbox (`--sandbox`,
+ * ADR-181) the fake prints, so that the test sees them. Its tools are not sandboxed: what the sandbox stops is the
+ * contract test's.
  */
 const REVIEWER_FLAGS = ["--disable-builtin-mcps", "--no-ask-user", "--disallow-temp-dir"];
 const taskArgs = process.argv.filter(
   (a) =>
     /^--(interactive|resume|session-id|model|allow-tool|deny-tool|secret-env-vars|available-tools|add-dir)=/.test(a) ||
     a === ALLOW_ALL_TOOLS ||
-    REVIEWER_FLAGS.includes(a),
+    REVIEWER_FLAGS.includes(a) ||
+    a === "--sandbox",
 );
 
 /**

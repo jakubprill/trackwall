@@ -9,6 +9,7 @@ import {
   type RepoHost,
   RepoHosts,
   RepoTagRules,
+  SandboxSettings,
   SessionProfile,
   SupervisorSettings,
   ToolPermissionRules,
@@ -26,7 +27,7 @@ import { type WorkspaceKeyValues, workspaceKeyValue } from "./workspace-key-valu
 /**
  * `workspace.yaml` (§4.5, ADR-13): the workspace configuration, which the user can edit by hand and keep
  * in a private repo. Read on every use, so a manual edit works without restarting the daemon. A write changes
- * only one key (`projectsDir`, `worktreesDir`, `gitProgram`, `repoHosts`, `javaNavigation`, which the Java navigation install writes, or `localConfigRemote`, which "Push to this remote" for the local config store writes, or `sessionProfile`, or `autoReview`; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `supervisor` and `agentSecrets` only by hand) and keeps comments and the other keys,
+ * only one key (`projectsDir`, `worktreesDir`, `gitProgram`, `repoHosts`, `javaNavigation`, which the Java navigation install writes, or `localConfigRemote`, which "Push to this remote" for the local config store writes, or `sessionProfile`, or `autoReview`; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `supervisor`, `sandbox` and `agentSecrets` only by hand) and keeps comments and the other keys,
  * including the `repos` list from version 0.2.0, which is no longer read (ADR-18): it is the user's file, so removing it is up to them.
  */
 
@@ -65,6 +66,9 @@ const Keys: { [K in WorkspaceKey]: z.ZodType<WorkspaceKeyValues[K], unknown> } =
   dayStart: DayStartSettings.nullish().transform((settings) => settings ?? null),
   // Whether the supervisor may change code itself (ADR-78); only by hand, like `repoTags`.
   supervisor: SupervisorSettings.nullish().transform((settings) => settings ?? { changesCode: false }),
+  // Which tasks run in Copilot CLI's sandbox (ADR-181); only by hand, like `repoTags`. `null` leaves the default to
+  // `Workspace`, which knows whether the daemon runs in a container.
+  sandbox: SandboxSettings.nullish().transform((settings) => settings ?? null),
   // The secrets from mise that the tools of sessions get (ADR-93); only by hand, like `repoTags`.
   agentSecrets: AgentSecrets.nullish().transform((names) => names ?? []),
   // The mise environment only sessions start with (ADR-136); set in Settings › Agents or by hand.
@@ -146,6 +150,11 @@ export class WorkspaceFile {
   /** The supervisor settings (`supervisor`, ADR-78); the defaults without the key. */
   supervisorSettings(): SupervisorSettings {
     return this.get("supervisor", Keys.supervisor);
+  }
+
+  /** Which tasks run in Copilot CLI's sandbox (`sandbox`, ADR-181); `null` without the key. */
+  sandboxSettings(): SandboxSettings | null {
+    return this.get("sandbox", Keys.sandbox);
   }
 
   /** The secrets from mise that the tools of sessions get (`agentSecrets`, ADR-93); none without the key. */
