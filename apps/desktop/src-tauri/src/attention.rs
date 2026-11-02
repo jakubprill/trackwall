@@ -25,7 +25,8 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::{AppHandle, Emitter, Manager, UserAttentionType};
 
 const POLL: Duration = Duration::from_secs(2);
-/// Sent to every window when the connection to the daemon failed while it was in use (`DaemonState::token_refused`).
+/// Sent to every window when a remote daemon refused the token on the session list and the connection failed with that
+/// reason (`DaemonState::token_refused`).
 const CONNECTION_LOST_EVENT: &str = "daemon-connection-lost";
 /// Tray menu item ids; a session or proposal item is a prefix plus its id.
 pub const MENU_SHOW: &str = "show";
