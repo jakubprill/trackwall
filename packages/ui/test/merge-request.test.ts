@@ -125,7 +125,7 @@ describe("the merge request draft", () => {
     expect(draft.description.endsWith("…")).toBe(true);
   });
 
-  test("a change block longer than the form's address carries is cut like any text, without the summary", () => {
+  test("a change block longer than the description allows is cut like any text, without the summary", () => {
     const draft = mergeRequestDraft(task({ summary: null }), null, "y".repeat(10_000));
 
     expect(draft.description).toBe(`${"y".repeat(MERGE_REQUEST_DESCRIPTION_MAX - 1)}…`);

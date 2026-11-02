@@ -55,7 +55,6 @@ const parts = (states: { payments?: MergeRequestState; ordersApi?: MergeRequestS
   { task: ordersApi, number: 2, mergeRequest: states.ordersApi ? mergeRequest("group/orders-api", 7, states.ordersApi) : null },
   { task: shopWeb, number: 3, mergeRequest: null },
 ];
-const [first, second] = parts({});
 
 describe("the parts of a change", () => {
   test("are the listed tasks of the same change in their merge order, each with the merge request the daemon follows", () => {
@@ -109,8 +108,9 @@ describe("the change block of a merge request", () => {
     ).toContain("[group/payments!12](https://git.example.com/a%20%28b%29/-/merge_requests/12) (open)");
   });
 
-  test("is empty for a task that is no part of a change", () => {
+  test("is none for a task that is no part of a change, or not among the parts", () => {
     expect(changeBlock(unrelated, null)).toBeNull();
+    expect(changeBlock(unrelated, parts({}))).toBeNull();
   });
 });
 
@@ -128,22 +128,22 @@ describe("the links to copy", () => {
 describe("the merge order note", () => {
   test("reminds a waiting part of the earlier parts that are not merged", () => {
     const all = parts({ payments: "open", ordersApi: "open" });
-    expect(mergeOrderNote(all[1] as ChangePart, all)).toEqual({
+    expect(mergeOrderNote({ task: ordersApi, number: 2, mergeRequest: mergeRequest("group/orders-api", 7, "open") }, all)).toEqual({
       text: "Merge after payments, which comes earlier in the change.",
     });
   });
 
   test("warns once a part was merged before an earlier part", () => {
     const all = parts({ ordersApi: "merged" });
-    expect(mergeOrderNote(all[1] as ChangePart, all)).toEqual({
+    expect(mergeOrderNote({ task: ordersApi, number: 2, mergeRequest: mergeRequest("group/orders-api", 7, "merged") }, all)).toEqual({
       tone: "warning",
       text: "Merged before payments, which comes earlier in the change and is not merged yet.",
     });
   });
 
   test("says nothing for the first part, or once every earlier part is merged", () => {
-    expect(mergeOrderNote(first as ChangePart, parts({}))).toBeNull();
-    expect(mergeOrderNote(second as ChangePart, parts({ payments: "merged" }))).toBeNull();
+    expect(mergeOrderNote({ task: payments, number: 1, mergeRequest: null }, parts({}))).toBeNull();
+    expect(mergeOrderNote({ task: ordersApi, number: 2, mergeRequest: null }, parts({ payments: "merged" }))).toBeNull();
   });
 });
 
