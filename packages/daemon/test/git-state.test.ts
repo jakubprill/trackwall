@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, renameSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { gitDirKey } from "../src/modules/vcs/git-state.ts";
 import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
 
@@ -90,5 +91,25 @@ describe("git state from the files of the git directory", () => {
     renameSync(join(repo, ".git", "reftable", "tables.list.lock"), join(repo, ".git", "reftable", "tables.list"));
 
     expect((await stateOf(vcs, repo))?.head).not.toBe(before?.head);
+  });
+});
+
+describe("the key of what the root's git status depends on (ADR-141)", () => {
+  test("a commit on a task branch in its worktree leaves it; a remote-tracking ref from a fetch and a commit in the root change it", async () => {
+    const repo = makeRepo({ "a.txt": "1" });
+    const worktree = join(repo, "..", "task-worktree");
+    gitIn(repo, "worktree", "add", "-q", "-b", "trackwall/retry", worktree);
+    const start = await gitDirKey(repo);
+
+    commitFiles(worktree, { "b.txt": "round" }, "WIP round 1");
+    commitFiles(worktree, { "c.txt": "agent" }, "Retry payments");
+    expect(await gitDirKey(repo)).toBe(start);
+
+    gitIn(repo, "update-ref", "refs/remotes/origin/main", "HEAD");
+    const fetched = await gitDirKey(repo);
+    expect(fetched).not.toBe(start);
+
+    commitFiles(repo, { "a.txt": "2" }, "second");
+    expect(await gitDirKey(repo)).not.toBe(fetched);
   });
 });

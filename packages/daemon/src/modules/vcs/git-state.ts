@@ -70,15 +70,23 @@ export class GitStateReader {
 }
 
 /**
- * What `git status` depends on in the git directory (ADR-141): HEAD and the refs as the repo watch reads them, and the
- * index, which staging, a commit and a `git status` that refreshes stat data rewrite. `undefined` without a git directory
- * or when a file cannot be read this time. Read afresh on every call, so it does not share the repo watch's memory.
+ * What `git status` depends on in the git directory (ADR-141): HEAD with its branch, the remote-tracking refs its upstream
+ * is among, `packed-refs`, and the index, which staging, a commit and a `git status` that refreshes stat data rewrite.
+ * Not the other local branches: a task's commit in its worktree moves its own branch in the shared git directory, which
+ * says nothing about the root's status, and every turn of a task commits (ADR-168). An upstream that is a local branch
+ * is noticed only when the status ages out. `undefined` without a git directory or when a file cannot be read this time.
+ * Read afresh on every call, so it does not share the repo watch's memory.
  */
 export async function gitDirKey(repo: string): Promise<string | undefined> {
   const dirs = await gitDirs(repo);
   if (!dirs) return undefined;
-  const [state, index] = await Promise.all([readRepo(dirs, { refsDirs: new Map() }, new Map()), statIfExists(join(dirs.gitDir, "index"))]);
-  return state ? `${state.head}\n${state.refs}\nindex ${optionalKey(index)}` : undefined;
+  const [state, packed, remotes, index] = await Promise.all([
+    readRepo(dirs, { refsDirs: new Map() }, new Map()),
+    statIfExists(join(dirs.commonDir, "packed-refs")),
+    refsKeys(join(dirs.commonDir, "refs", "remotes"), "/remotes", new Map(), new Map()),
+    statIfExists(join(dirs.gitDir, "index")),
+  ]);
+  return state ? [state.head, `packed-refs ${optionalKey(packed)}`, ...remotes, `index ${optionalKey(index)}`].join("\n") : undefined;
 }
 
 async function readRepo(dirs: GitDirs, cache: RepoCache, previousDirs: ReadonlyMap<string, RefsDir>): Promise<GitState | null> {

@@ -675,7 +675,7 @@ export class AgentTasks {
         );
       const facts = await this.#whileRemoving(id, async () => {
         if (!discardChanges) await this.#refuseLoss(task, keepBranch);
-        const ended = await endedTaskFacts(task, keepBranch, new Date(), this.#deps.vcs, this.#deps.log);
+        const ended = await endedTaskFacts(task, this.#deps.roundCommits(id), keepBranch, new Date(), this.#deps.vcs, this.#deps.log);
         await this.#discard(task, keepBranch);
         return ended;
       });
