@@ -42,10 +42,14 @@ interface Block {
   fields: Partial<Record<Field, string[]>>;
 }
 
-/** The findings of `answer`, at most `AUTO_REVIEW_FINDINGS_MAX`, with paths relative to `worktree`. */
-export function reviewFindings(answer: string, worktree: string): AutoReviewFinding[] {
+/**
+ * The findings of `answer`, at most `AUTO_REVIEW_FINDINGS_MAX`, with paths relative to the worktree. `worktrees` are
+ * the worktree's path as the daemon knows it and as the reviewer sees it with links resolved (on macOS `/var` is
+ * `/private/var`), since the reviewer writes the path its working directory has.
+ */
+export function reviewFindings(answer: string, worktrees: readonly string[]): AutoReviewFinding[] {
   return issueBlocks(withoutInvisibleCharacters(answer))
-    .map((block) => finding(block, worktree))
+    .map((block) => finding(block, worktrees))
     .filter((f) => f !== null)
     .slice(0, AUTO_REVIEW_FINDINGS_MAX);
 }
@@ -92,14 +96,14 @@ function readLine(line: string, blocks: Block[], state: ReadState): void {
   }
 }
 
-function finding(block: Block, worktree: string): AutoReviewFinding | null {
+function finding(block: Block, worktrees: readonly string[]): AutoReviewFinding | null {
   const value = (field: Field) => (block.fields[field] ?? []).join("\n").trim();
   const problem = value("problem");
   const fix = value("suggested fix");
   const text = [problem, fix === "" ? "" : `Suggested fix: ${fix}`].filter((part) => part !== "").join("\n\n");
   const title = block.title === "" ? firstLine(problem) : block.title;
   if (title === "" || text === "") return null;
-  const place = filePlace(plain(value("file")), worktree);
+  const place = filePlace(plain(value("file")), worktrees);
   const severity = AutoReviewSeverity.safeParse(plain(value("severity")).toLowerCase().split(/\W/)[0]);
   return {
     title: cutText(title, AUTO_REVIEW_TITLE_MAX),
@@ -114,11 +118,11 @@ function finding(block: Block, worktree: string): AutoReviewFinding | null {
  * The file and line a finding names, the path relative to the worktree with `/`. The review agent writes absolute
  * paths (its instructions ask for them), so one inside the worktree is made relative; anything else keeps no path.
  */
-function filePlace(file: string, worktree: string): { path: string | null; line: number | null } {
+function filePlace(file: string, worktrees: readonly string[]): { path: string | null; line: number | null } {
   const match = PATH_LINE.exec(file);
   const named = match ? (match[1] ?? "") : file;
   const line = match ? Number(match[2]) : null;
-  const path = relativePath(named.trim(), worktree);
+  const path = worktrees.map((worktree) => relativePath(named.trim(), worktree)).find((p) => p !== null) ?? null;
   return { path, line: path !== null && line !== null && line > 0 ? line : null };
 }
 

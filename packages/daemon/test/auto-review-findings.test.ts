@@ -25,7 +25,7 @@ describe("findings read from the reviewer's answer (ADR-182)", () => {
       "That is all.",
     ].join("\n");
 
-    expect(reviewFindings(answer, WORKTREE)).toEqual([
+    expect(reviewFindings(answer, [WORKTREE])).toEqual([
       {
         title: "Total ignores the discount",
         severity: "high",
@@ -51,28 +51,36 @@ describe("findings read from the reviewer's answer (ADR-182)", () => {
       "The rest looks fine.",
     ].join("\n");
 
-    expect(reviewFindings(answer, WORKTREE)[0]?.text).toBe(
+    expect(reviewFindings(answer, [WORKTREE])[0]?.text).toBe(
       "`Math.floor` drops cents.\n\nSuggested fix: Round instead:\n```ts\nconst cents = Math.round(amount * 100);\n\nreturn cents / 100;\n```",
     );
+  });
+
+  test("a path in the worktree as the reviewer sees it with links resolved is relative to the worktree too", () => {
+    const resolved = join("/", "private", "work", "shop-task");
+    const answer = `## Issue: Leak\n**File:** ${join(resolved, "src", "a.ts")}:7\n**Problem:** It leaks.`;
+
+    expect(reviewFindings(answer, [WORKTREE])[0]).toMatchObject({ path: null, line: null });
+    expect(reviewFindings(answer, [WORKTREE, resolved])[0]).toMatchObject({ path: "src/a.ts", line: 7 });
   });
 
   test("a path outside the worktree or with .. keeps no path and no line", () => {
     const issue = (file: string) => `## Issue: Leak\n**File:** ${file}\n**Problem:** It leaks.`;
 
-    expect(reviewFindings(issue(`${join("/", "etc", "passwd")}:1`), WORKTREE)[0]).toMatchObject({ path: null, line: null });
-    expect(reviewFindings(issue("../other/a.ts:3"), WORKTREE)[0]).toMatchObject({ path: null, line: null });
-    expect(reviewFindings(issue("src/a.ts"), WORKTREE)[0]).toMatchObject({ path: "src/a.ts", line: null });
+    expect(reviewFindings(issue(`${join("/", "etc", "passwd")}:1`), [WORKTREE])[0]).toMatchObject({ path: null, line: null });
+    expect(reviewFindings(issue("../other/a.ts:3"), [WORKTREE])[0]).toMatchObject({ path: null, line: null });
+    expect(reviewFindings(issue("src/a.ts"), [WORKTREE])[0]).toMatchObject({ path: "src/a.ts", line: null });
   });
 
   test("an answer in another shape, or an issue without a problem, gives no findings", () => {
-    expect(reviewFindings("No significant issues found in the reviewed changes.", WORKTREE)).toEqual([]);
-    expect(reviewFindings("## Issue: Something\n**File:** src/a.ts:1", WORKTREE)).toEqual([]);
+    expect(reviewFindings("No significant issues found in the reviewed changes.", [WORKTREE])).toEqual([]);
+    expect(reviewFindings("## Issue: Something\n**File:** src/a.ts:1", [WORKTREE])).toEqual([]);
   });
 
   test("invisible characters are dropped, an unknown severity is none, and text is cut to a review comment", () => {
     const answer = `## Issue: Hidden​ text\n**Severity:** Severe\n**Problem:** ${"x".repeat(3000)}`;
 
-    const [finding] = reviewFindings(answer, WORKTREE);
+    const [finding] = reviewFindings(answer, [WORKTREE]);
 
     expect(finding?.title).toBe("Hidden text");
     expect(finding?.severity).toBeNull();
@@ -83,6 +91,6 @@ describe("findings read from the reviewer's answer (ADR-182)", () => {
   test("at most 20 findings are kept", () => {
     const answer = Array.from({ length: 25 }, (_, i) => `## Issue: Number ${i}\n**Problem:** Wrong.`).join("\n\n");
 
-    expect(reviewFindings(answer, WORKTREE)).toHaveLength(20);
+    expect(reviewFindings(answer, [WORKTREE])).toHaveLength(20);
   });
 });
