@@ -7,11 +7,13 @@ import { createFacade } from "../src/facade.ts";
 import { trustedFolderOf } from "../src/modules/doctor/copilot-trust.ts";
 import { copilotVersionOutcome, Doctor, type DoctorDeps } from "../src/modules/doctor/doctor.ts";
 import { folderStorage } from "../src/modules/doctor/folder-storage.ts";
+import type { TlsProbe } from "../src/modules/doctor/tls-probe.ts";
 import { compareVersions, versionIn } from "../src/modules/doctor/version.ts";
 import { fakeHostingClis } from "./support/hosting.ts";
 
 const fakeCopilot = join(import.meta.dir, "fixtures", "fake-copilot-session.ts");
 const printVersion = join(import.meta.dir, "fixtures", "print-version.ts");
+const fakeMise = join(import.meta.dir, "fixtures", "fake-mise.ts");
 const NOW = new Date("2026-10-27T20:00:00.000Z");
 
 /** A doctor's dependencies where everything answers and nothing is set; a test overrides only what it is about. */
@@ -31,6 +33,8 @@ function fakeDeps(overrides: Partial<DoctorDeps>): DoctorDeps {
     workspaceKeys: () => ({ keys: [], unknown: [] }),
     javaNavigation: () => null,
     probeTls: async () => ({ kind: "ok" }),
+    profileEnvironment: async () => null,
+    probeConnection: async () => ({ kind: "ok" }),
     systemCaFiles: [],
     now: () => NOW,
     ...overrides,
@@ -45,6 +49,9 @@ interface Setup {
   /** Copilot CLI's `config.json` as written (`<projects>` is replaced by the projects folder); `null`: no file. */
   copilotConfig: string | null;
   authErrors?: Record<string, string>;
+  /** The fake mise of the session tests instead of one that prints `mise`'s version (`fake-mise.json` in the projects folder). */
+  fakeMise?: boolean;
+  connectionProbe?: TlsProbe;
 }
 
 /** A facade on a fresh state directory, with the fake Copilot CLI and a mise that prints its version, or none of them. */
@@ -60,7 +67,11 @@ function doctorFacade(o: Setup) {
     homeFrom: "flag",
     openUrl: () => {},
     openFolder: () => {},
-    miseCommand: o.mise === null ? ["trackwall-test-no-mise"] : [process.execPath, printVersion, o.mise],
+    miseCommand: o.fakeMise
+      ? [process.execPath, fakeMise]
+      : o.mise === null
+        ? ["trackwall-test-no-mise"]
+        : [process.execPath, printVersion, o.mise],
     copilotCommand: o.copilot ? [process.execPath, fakeCopilot] : ["trackwall-test-no-copilot"],
     version: "0.0.0-test",
     sessionHook: () => ({ url: "http://127.0.0.1:9/hooks/unused", headers: {} }),
@@ -68,12 +79,53 @@ function doctorFacade(o: Setup) {
     hostingClis: fakeHostingClis({ authErrors: o.authErrors }).clis,
     userEnv: async () => ({ ...process.env, COPILOT_HOME: copilotHome }),
     tlsProbe: async () => ({ kind: "ok" }),
+    connectionProbe: o.connectionProbe,
     log: () => {},
   });
   return { facade, home, projects, copilotHome };
 }
 
 const trusting = '{"trustedFolders":["<projects>"]}';
+
+describe("doctor: the model provider of the session profile (ADR-179)", () => {
+  test("with a session profile whose mise environment sets a provider, the doctor only connects to its host and shows neither the address nor the key", async () => {
+    const probed: { host: string; port: number; proxy: string | null }[] = [];
+    const { facade, projects } = doctorFacade({
+      copilot: true,
+      mise: null,
+      fakeMise: true,
+      copilotConfig: trusting,
+      connectionProbe: async ({ host, port }, o) => {
+        probed.push({ host, port, proxy: o.proxy?.href ?? null });
+        return { kind: "unreachable", message: `connect ECONNREFUSED ${host}:${port}`, proxy: false };
+      },
+    });
+    writeFileSync(
+      join(projects, "fake-mise.json"),
+      JSON.stringify({
+        tasks: [],
+        env: {},
+        envByMiseEnv: {
+          byok: { COPILOT_PROVIDER_BASE_URL: "http://models.internal-host.example:4000/v1", COPILOT_PROVIDER_API_KEY: "sk-local" },
+        },
+      }),
+    );
+    await facade.workspace.setProjectsDir(projects);
+
+    const before = await facade.doctor.run();
+    expect(before.checks.map((c) => c.id)).not.toContain("model-provider");
+    expect(probed).toEqual([]);
+
+    facade.workspace.setSessionProfile("byok");
+    const report = await facade.doctor.run();
+    const row = report.checks.find((c) => c.id === "model-provider");
+    expect(row).toMatchObject({ status: "fail", summary: "The model provider of the session profile byok does not accept connections." });
+    expect(report.checks.map((c) => c.id).indexOf("model-provider")).toBe(report.checks.map((c) => c.id).indexOf("network") + 1);
+    expect(probed).toEqual([{ host: "models.internal-host.example", port: 4000, proxy: null }]);
+    expect(JSON.stringify(report)).not.toContain("internal-host");
+    expect(JSON.stringify(report)).not.toContain("sk-local");
+  });
+});
 
 describe("doctor", () => {
   test("on a computer with everything in place every check is ok, in a fixed order", async () => {

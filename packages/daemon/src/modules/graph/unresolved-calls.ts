@@ -15,7 +15,14 @@ export function unresolvedCalls(index: HttpIndex): GraphProblem[] {
     const { targets, ownRepo } = index.resolve(repo, client);
     if (targets.length > 0 || ownRepo) return [];
     return [
-      { code: "unresolved-call-target", repo, via: client.via, client: client.name, evidence: client.evidence, message: message(client) },
+      {
+        code: "unresolved-call-target",
+        repo,
+        via: client.via,
+        client: client.name,
+        evidence: client.evidence,
+        message: message(index, client),
+      },
     ];
   });
 }
@@ -26,18 +33,27 @@ function isCall(client: ConsumedHttp): boolean {
 }
 
 /** What the graph looked for, and the entry that would connect it: an alias by name or host, or an app's port for `localhost`. */
-function message(client: ConsumedHttp): string {
-  // A spec's server address is often a gateway's, so an alias for its host would send every spec behind it to one repo.
-  if (client.via === "openapi" && client.calls.length === 0 && client.url !== null)
-    return `no app in the list serves the spec ${client.name} downloads from ${client.url}; its host or localhost port names none`;
-  if (client.via === "openapi")
-    return `no repo in the list serves ${MIN_SPEC_COVERAGE * 100}% of the operations of ${client.name} (by operationId, or by path with another prefix)`;
+function message(index: HttpIndex, client: ConsumedHttp): string {
   const url = client.url === null ? undefined : parseHttpUrl(client.url);
+  const sharedPort = url?.port != null && isLocalHost(url.host) && index.reposOnPort(url.port) > 1;
+  if (client.via === "openapi") return specMessage(client, sharedPort);
   const name = client.app ?? (url !== undefined && !isLocalHost(url.host) ? url.host : undefined);
   if (name !== undefined)
     return `no repo in the list is “${name}”; if it is one of yours, map it to its repo under graph.apps in workspace.yaml`;
+  if (url?.port != null && sharedPort)
+    return `apps of several repos run on ${url.host}:${url.port} and none has an endpoint matching the calls of ${client.name}; give each app its own port`;
   if (url?.port != null) return `no app in the list runs on ${url.host}:${url.port} (server.port on its card)`;
   return `no repo in the list has an endpoint matching the calls of ${client.name}`;
+}
+
+/** A spec client's message; its server address is often a gateway's, so an alias for its host would send every spec behind it to one repo. */
+function specMessage(client: ConsumedHttp, sharedPort: boolean): string {
+  if (client.calls.length > 0 || client.url === null)
+    return `no repo in the list serves ${MIN_SPEC_COVERAGE * 100}% of the operations of ${client.name} (by operationId, or by path with another prefix)`;
+  const why = sharedPort
+    ? "apps of several repos run on its localhost port, so the port names none"
+    : "its host or localhost port names none";
+  return `no app in the list serves the spec ${client.name} downloads from ${client.url}; ${why}`;
 }
 
 function isLocalUrl(url: string | null): boolean {

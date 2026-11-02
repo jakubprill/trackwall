@@ -41,10 +41,18 @@ export interface NetworkCheckDeps {
   systemCaFiles: readonly string[];
 }
 
-export async function networkOutcome(env: NodeJS.ProcessEnv, deps: NetworkCheckDeps): Promise<Outcome> {
+/**
+ * The certificate authorities a session's Node.js trusts: its own, `NODE_EXTRA_CA_CERTS` and, with
+ * `NODE_USE_SYSTEM_CA`, the first system bundle where the system keeps one in a file.
+ */
+export async function sessionCertificates(env: NodeJS.ProcessEnv, systemCaFiles: readonly string[]) {
   const extra = await extraCertificates(env);
-  const system = usesSystemCertificates(env) ? await firstSystemBundle(deps.systemCaFiles) : null;
-  const ca = [...rootCertificates, ...(extra?.certs ?? []), ...(system?.certs ?? [])];
+  const system = usesSystemCertificates(env) ? await firstSystemBundle(systemCaFiles) : null;
+  return { extra, system, ca: [...rootCertificates, ...(extra?.certs ?? []), ...(system?.certs ?? [])] };
+}
+
+export async function networkOutcome(env: NodeJS.ProcessEnv, deps: NetworkCheckDeps): Promise<Outcome> {
+  const { extra, system, ca } = await sessionCertificates(env, deps.systemCaFiles);
   const probes = await Promise.all(SESSION_HOSTS.map((host) => probeHost(env, host, ca, deps.probe)));
   const failed = probes.find((p): p is FailedProbe => p.result.kind !== "ok");
   const extraNote = extra?.problem ? ` NODE_EXTRA_CA_CERTS: ${extra.problem}.` : "";
@@ -72,7 +80,7 @@ type FailedProbe = HostProbe & { result: Exclude<TlsProbeResult, { kind: "ok" }>
 async function probeHost(env: NodeJS.ProcessEnv, host: string, ca: readonly string[], probe: TlsProbe): Promise<HostProbe> {
   let proxy: URL | null;
   try {
-    proxy = proxyFor(env, host, HTTPS_PORT);
+    proxy = proxyFor(env, "https:", host, HTTPS_PORT);
   } catch (err) {
     return { host, proxy: null, result: { kind: "error", message: err instanceof Error ? err.message : String(err) } };
   }

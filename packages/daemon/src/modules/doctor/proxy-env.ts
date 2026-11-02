@@ -1,14 +1,21 @@
 import { envKey } from "../../infra/env-key.ts";
 
 /**
- * The proxy a Node.js program such as Copilot CLI uses for an HTTPS address, read from the environment the way Node's
- * `EnvHttpProxyAgent` reads it (§4.15, ADR-166): `https_proxy`, then `HTTPS_PROXY`, then the HTTP proxy, unless
- * `no_proxy` or `NO_PROXY` covers the host. The doctor's network check goes the same way, so its answer is the sessions'.
+ * The proxy a Node.js program such as Copilot CLI uses for an address, read from the environment the way Node's
+ * `EnvHttpProxyAgent` reads it (§4.15, ADR-166): for HTTPS `https_proxy`, then `HTTPS_PROXY`, then the HTTP proxy, for
+ * HTTP only the HTTP proxy (`http_proxy`, `HTTP_PROXY`), unless `no_proxy` or `NO_PROXY` covers the host. The doctor's
+ * checks go the same way, so their answer is the sessions'.
  */
 
-/** The proxy for `https://<host>:<port>`; `null` when the connection goes directly. */
-export function proxyFor(env: NodeJS.ProcessEnv, host: string, port: number): URL | null {
-  const value = first(env, ["https_proxy", "HTTPS_PROXY", "http_proxy", "HTTP_PROXY"]);
+/** The variables of each scheme's proxy, in the order Node's `EnvHttpProxyAgent` reads them: HTTPS falls back to HTTP. */
+const PROXY_VARIABLES = {
+  "https:": ["https_proxy", "HTTPS_PROXY", "http_proxy", "HTTP_PROXY"],
+  "http:": ["http_proxy", "HTTP_PROXY"],
+} as const;
+
+/** The proxy for `<scheme>//<host>:<port>`; `null` when the connection goes directly. */
+export function proxyFor(env: NodeJS.ProcessEnv, scheme: keyof typeof PROXY_VARIABLES, host: string, port: number): URL | null {
+  const value = first(env, PROXY_VARIABLES[scheme]);
   if (value === undefined) return null;
   if (bypassed(first(env, ["no_proxy", "NO_PROXY"]) ?? "", host, port)) return null;
   // A proxy written without its scheme (`proxy:8080`), as some tools accept, is an HTTP proxy.

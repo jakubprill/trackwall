@@ -235,6 +235,89 @@ describe("http edges: target matching", () => {
     expect(graph.edges).toEqual([]);
   });
 
+  test("a localhost port that apps of several repos share points only to the repo whose endpoints match the calls", () => {
+    const calls = [
+      { method: "GET" as const, path: "/api/orders/{id}", operationId: null, evidence: { path: "src/main/java/B.java", line: 20 } },
+    ];
+    const graph = buildGraph(
+      [
+        repo("bff", card([], [client({ name: "orders.url", url: "http://localhost:8080", calls })])),
+        repo("orders-api", card([app("orders", 8080), endpoint("/api/orders/{id}")], [])),
+        repo("billing", card([app("billing", 8080), endpoint("/api/invoices/{id}")], [])),
+      ],
+      { config: NO_CONFIG, file: CONFIG_FILE, problems: [] },
+    );
+    expect(graph.edges.map((e) => [e.from, e.to, e.key, e.confidence])).toEqual([["bff", "orders-api", "localhost:8080", "medium"]]);
+  });
+
+  test("a localhost port that apps of several repos share gives no edge to a client without calls", () => {
+    const graph = buildGraph(
+      [
+        repo("docs", card([], [client({ name: "site.url", url: "http://localhost:8080" })])),
+        repo("orders-api", card([app("orders", 8080)], [])),
+        repo("billing", card([app("billing", 8080)], [])),
+      ],
+      { config: NO_CONFIG, file: CONFIG_FILE, problems: [] },
+    );
+    expect(graph.edges).toEqual([]);
+  });
+
+  test("a localhost port that apps of several repos share is a possible connection to each repo that matches the calls or has no endpoints to say", () => {
+    const calls = [
+      { method: "GET" as const, path: "/api/orders/{id}", operationId: null, evidence: { path: "src/main/java/B.java", line: 20 } },
+    ];
+    const graph = buildGraph(
+      [
+        repo("bff", card([], [client({ name: "orders.url", url: "http://localhost:8080", calls })])),
+        repo("orders-api", card([app("orders", 8080), endpoint("/api/orders/{id}")], [])),
+        repo("orders-copy", card([app("orders-copy", 8080), endpoint("/api/orders/{id}")], [])),
+        repo("legacy", card([app("legacy", 8080)], [])),
+        repo("billing", card([app("billing", 8080), endpoint("/api/invoices/{id}")], [])),
+      ],
+      { config: NO_CONFIG, file: CONFIG_FILE, problems: [] },
+    );
+    expect(graph.edges.map((e) => [e.to, e.confidence])).toEqual([
+      ["legacy", "low"],
+      ["orders-api", "low"],
+      ["orders-copy", "low"],
+    ]);
+  });
+
+  test("a localhost port the client's repo shares with another repo ends the search without an edge when only the client's repo matches the calls", () => {
+    const calls = [
+      { method: "GET" as const, path: "/api/orders/{id}", operationId: null, evidence: { path: "src/main/java/B.java", line: 20 } },
+    ];
+    const graph = buildGraph(
+      [
+        repo(
+          "shop",
+          card([app("orders", 8080), endpoint("/api/orders/{id}")], [client({ name: "self.url", url: "http://localhost:8080", calls })]),
+        ),
+        repo("billing", card([app("billing", 8080), endpoint("/api/invoices/{id}")], [])),
+      ],
+      { config: NO_CONFIG, file: CONFIG_FILE, problems: [] },
+    );
+    expect([graph.edges, graph.problems]).toEqual([[], []]);
+  });
+
+  test("calls to a localhost port that apps of several repos share and none of them serves are a call without a target that says the port is shared", () => {
+    const calls = [
+      { method: "GET" as const, path: "/api/stock/{id}", operationId: null, evidence: { path: "src/main/java/B.java", line: 20 } },
+    ];
+    const graph = buildGraph(
+      [
+        repo("bff", card([], [client({ name: "stock.url", url: "http://localhost:8080", calls })])),
+        repo("orders-api", card([app("orders", 8080), endpoint("/api/orders/{id}")], [])),
+        repo("billing", card([app("billing", 8080), endpoint("/api/invoices/{id}")], [])),
+      ],
+      { config: NO_CONFIG, file: CONFIG_FILE, problems: [] },
+    );
+    expect([graph.edges, graph.problems.map((p) => p.message)]).toEqual([
+      [],
+      ["apps of several repos run on localhost:8080 and none has an endpoint matching the calls of stock.url; give each app its own port"],
+    ]);
+  });
+
   test("lb://name in the configuration points to an app by name, and without calls the confidence is high", () => {
     const graph = buildGraph(
       [
@@ -616,6 +699,18 @@ describe("clients from OpenAPI specs (ADR-129)", () => {
     });
     expect(graph.problems.map((p) => p.message)).toEqual([
       "no app in the list serves the spec api:orders downloads from http://localhost:9999; its host or localhost port names none",
+    ]);
+    const twin = repo("orders-bff-copy", card([app("orders-bff-copy", 8090), endpoint("/api/orders/{id}")], []));
+    const shared = buildGraph([repo("web", card([], [downloaded("http://localhost:8090")])), bff, twin], {
+      config: NO_CONFIG,
+      file: CONFIG_FILE,
+      problems: [],
+    });
+    expect([shared.edges, shared.problems.map((p) => p.message)]).toEqual([
+      [],
+      [
+        "no app in the list serves the spec api:orders downloads from http://localhost:8090; apps of several repos run on its localhost port, so the port names none",
+      ],
     ]);
     // A public API, a host label that names no app, and a spec without operations are not calls the graph can miss.
     const api = repo("api", card([app("api")], []));

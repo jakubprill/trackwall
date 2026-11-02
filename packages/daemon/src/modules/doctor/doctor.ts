@@ -17,7 +17,8 @@ import {
 } from "@trackwall/protocol";
 import { trustedFolderOf, trustedFolders } from "./copilot-trust.ts";
 import { folderStorage } from "./folder-storage.ts";
-import { networkOutcome } from "./network-check.ts";
+import { modelProviderOutcome, type ProfileEnvironment } from "./model-provider-check.ts";
+import { networkOutcome, sessionCertificates } from "./network-check.ts";
 import type { TlsProbe } from "./tls-probe.ts";
 import { compareVersions, versionIn } from "./version.ts";
 
@@ -74,6 +75,13 @@ export interface DoctorDeps {
   probeTls: TlsProbe;
   /** System certificate bundles the network check may name in its fix (`SYSTEM_CA_FILES`). */
   systemCaFiles: readonly string[];
+  /**
+   * What a session in the projects folder starts with under the session profile (`mise`, ADR-179): the provider's address
+   * and the proxy settings, never mise's other secrets; `null` without a profile.
+   */
+  profileEnvironment: () => Promise<ProfileEnvironment | null>;
+  /** Opens and closes a connection as a session's Node.js would reach the host (`probeConnection`, a fake in tests). */
+  probeConnection: TlsProbe;
   now: () => Date;
 }
 
@@ -103,11 +111,19 @@ export class Doctor {
       "copilot-cli": (ctx) => this.copilotCli(ctx),
       "copilot-trusted-folder": (ctx) => this.copilotTrustedFolder(ctx),
       network: ({ env }) => networkOutcome(env, { probe: this.deps.probeTls, systemCaFiles: this.deps.systemCaFiles }),
+      "model-provider": () => this.modelProvider(),
       mise: (ctx) => this.mise(ctx),
       "java-navigation": async () => this.javaNavigation(),
       "github-cli": () => this.hostCli("github"),
       "gitlab-cli": () => this.hostCli("gitlab"),
     };
+  }
+
+  private async modelProvider(): Promise<Outcome> {
+    const read = await this.deps.profileEnvironment();
+    if (read === null) return null;
+    const { ca } = await sessionCertificates(read.env, this.deps.systemCaFiles);
+    return modelProviderOutcome(read, { probe: this.deps.probeConnection, ca });
   }
 
   async run(): Promise<DoctorReport> {

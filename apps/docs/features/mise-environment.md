@@ -54,6 +54,7 @@ Copilot CLI can talk to another model provider instead of your GitHub account, f
    Add the key with `mise set --age-encrypt --stdin -E byok COPILOT_PROVIDER_API_KEY` in the same folder, and trust the file with `mise trust mise.byok.toml`.
 2. In "Settings > Agents > Session profile", type `byok` and click "Save".
 3. Start a session: the line under its header says "profile byok". Every `COPILOT_PROVIDER_*` variable counts as a secret, so the key and the address are hidden from the agent's tools and masked in what Trackwall keeps; the address shows as `***` in logs too.
+4. If a session cannot reach the provider, open "Settings > Diagnostics": the [doctor](/features/doctor) says whether anything answers at the provider's address, without showing it.
 
 Sessions that were already running keep the profile they started with, so they still talk to the old provider. Their panel says "The session profile changed since the session started" (or "The environment from mise changed" when the profile's variables differ too), their key badge on the session grid turns yellow, and "Settings > Agents > Session profile" counts them: **Restart to apply** in the session's panel moves it over with its conversation. To go back to your GitHub account, click "No profile"; nothing needs a restart of Trackwall.
 
