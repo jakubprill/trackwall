@@ -485,6 +485,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
         toolPermissions: () => ({ allow: [], deny: [] }),
         supervisorSettings: () => ({ changesCode: false }),
         agentSecrets: () => [],
+        sessionProfile: () => null,
         javaNavigation: () => null,
         removeRepo: () => Promise.reject(new Error("unused")),
       },

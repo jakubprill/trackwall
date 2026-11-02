@@ -47,6 +47,7 @@ function list(sessions: Session[], proposals: TaskProposal[] = [], taskIds: stri
     proposals,
     messages: [],
     lastSupervisor: null,
+    sessionProfile: { name: null },
   };
 }
 

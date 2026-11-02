@@ -265,9 +265,12 @@ describe.skipIf(process.versions.bun === undefined)(
       const before = await agents.start(null);
       await waitFor(agents, before.id, (s) => s.run.kind === "running", "the session running");
       expect(before.environment.profile).toBeNull();
+      expect(agents.sessions().sessionProfile).toEqual({ name: null });
 
       try {
         expect(settings.setSessionProfile("byok")).toMatchObject({ sessionProfile: "byok", sessionProfileProblem: null });
+        // The list says which profile sessions start with now, so the UI can tell the running one started with none (ADR-178).
+        expect(agents.sessions().sessionProfile).toEqual({ name: "byok" });
         expect(readFileSync(join(daemon.home, "workspace.yaml"), "utf8")).toContain("sessionProfile: byok");
         expect((await agents.environmentChange(before.id)).change).toEqual({
           added: ["COPILOT_PROVIDER_API_KEY", "COPILOT_PROVIDER_BASE_URL"],
@@ -301,6 +304,8 @@ describe.skipIf(process.versions.bun === undefined)(
       workspace("sessionProfile: ../secrets\n");
       try {
         await expect(daemon.facade.agents.start(null)).rejects.toMatchObject({ code: "invalid_config" });
+        // The session list still comes, without a current profile to compare running sessions with.
+        expect(daemon.facade.agents.sessions().sessionProfile).toBeNull();
         expect(daemon.facade.workspace.settings()).toMatchObject({
           sessionProfile: null,
           sessionProfileProblem: expect.stringContaining("a session profile is a name"),

@@ -75,7 +75,7 @@ function proposal(id: string, proposedBy: TaskProposal["proposedBy"]): TaskPropo
 }
 
 function list(parts: Partial<SessionList>): SessionList {
-  return { sessions: [], tasks: [], proposals: [], messages: [], lastSupervisor: null, ...parts };
+  return { sessions: [], tasks: [], proposals: [], messages: [], lastSupervisor: null, sessionProfile: { name: null }, ...parts };
 }
 
 const summary = (data: SessionList) => supervisorSummary(data, sessionRows(data));

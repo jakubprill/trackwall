@@ -160,6 +160,7 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
       proposals: [],
       messages: [],
       lastSupervisor: null,
+      sessionProfile: { name: null },
     });
 
     expect(await restarted.agents.resumeTask(task.id)).toEqual(task);

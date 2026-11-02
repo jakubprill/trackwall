@@ -1,18 +1,20 @@
-import { workspaceApi } from "@trackwall/protocol";
+import { countLabel, type SessionList, workspaceApi } from "@trackwall/protocol";
 import { useCallback } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import { sessionsOnOtherProfile } from "@/lib/session-profile";
 import { useRemote } from "@/lib/use-remote";
 import { PathForm } from "./PathForm.tsx";
 
 /**
  * The session profile (ADR-136): the mise environment only Copilot CLI sessions start with, e.g. `byok` for another model
- * provider in `mise.byok.toml`. It applies to the next session start; a running session shows the change with a restart.
+ * provider in `mise.byok.toml`. It applies to the next session start; a running session shows the change with a restart,
+ * and this section says how many running sessions keep another profile (ADR-178).
  */
-export function SessionProfileSurface({ conn }: { conn: Connection }) {
+export function SessionProfileSurface({ conn, sessions }: { conn: Connection; sessions: SessionList | undefined }) {
   const load = useCallback(() => post(conn, workspaceApi.settings, {}), [conn]);
   const settings = useRemote(load);
 
@@ -22,6 +24,7 @@ export function SessionProfileSurface({ conn }: { conn: Connection }) {
   }
 
   const data = settings.data;
+  const outdated = sessions ? sessionsOnOtherProfile(sessions).length : 0;
   return (
     <Surface label="Session profile">
       <div className="flex flex-col gap-4 p-4">
@@ -47,6 +50,15 @@ export function SessionProfileSurface({ conn }: { conn: Connection }) {
           />
         )}
         {data?.sessionProfileProblem && <p className="text-destructive text-xs break-words">{data.sessionProfileProblem}</p>}
+        {outdated > 0 && (
+          <p className="text-warning text-xs">
+            {countLabel(outdated, {
+              one: "running session keeps the profile it started with",
+              other: "running sessions keep the profile they started with",
+            })}
+            . The session's panel offers Restart to apply, which keeps the conversation.
+          </p>
+        )}
       </div>
     </Surface>
   );

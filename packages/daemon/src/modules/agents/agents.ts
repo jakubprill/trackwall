@@ -47,7 +47,7 @@ import {
   type Verification,
   type WorkingTreeChanges,
 } from "@trackwall/protocol";
-import { DomainError } from "../../infra/errors.ts";
+import { configOrProblem, DomainError } from "../../infra/errors.ts";
 import { AcpSession, type ConversationViewer, type ConversationWindow } from "./acp-session.ts";
 import { AgentQueuesFile } from "./agent-queues.ts";
 import type { AgentSession } from "./agent-session.ts";
@@ -151,6 +151,8 @@ interface AgentsRepos {
   supervisorSettings(): SupervisorSettings;
   /** `agentSecrets` from `workspace.yaml` (ADR-93): the secrets from mise a session's tools get; `invalid_config` for a bad key. */
   agentSecrets(): readonly string[];
+  /** `sessionProfile` from `workspace.yaml` (ADR-136): the mise environment sessions start with; `invalid_config` for a bad key. */
+  sessionProfile(): string | null;
   /** `javaNavigation` from `workspace.yaml` (ADR-99): the Java language server for tasks; `null` without the key. */
   javaNavigation(): JavaNavigationSettings | null;
   /** Moves the repo out of the projects folder (ADR-83) and returns where it went. */
@@ -347,7 +349,13 @@ export class Agents {
     // A proposal being approved that is already a task is only a task: the UI and `list_sessions` see one object.
     const proposals = this.#proposals.list().filter((p) => !tasks.some((t) => t.id === p.id));
     const lastSupervisor = this.#supervisor.resumable()?.session ?? null;
-    return { sessions, tasks, proposals, messages: this.#coordination.messages(), lastSupervisor };
+    return { sessions, tasks, proposals, messages: this.#coordination.messages(), lastSupervisor, sessionProfile: this.#sessionProfile() };
+  }
+
+  /** The profile a session starts with now (ADR-178); `null` while the key cannot be read, which Settings shows. */
+  #sessionProfile(): SessionList["sessionProfile"] {
+    const { value, problem } = configOrProblem(() => this.#deps.repos.sessionProfile(), null);
+    return problem === null ? { name: value } : null;
   }
 
   /** One listed session (`not_found` when it does not exist or the user closed it). */

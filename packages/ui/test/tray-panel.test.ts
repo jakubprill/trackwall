@@ -44,6 +44,7 @@ test("the tray panel lists the task proposals and only the sessions that wait fo
     proposals: [proposal],
     messages: [],
     lastSupervisor: null,
+    sessionProfile: { name: null },
   };
   const entries = trayPanelEntries(list);
   expect(entries.proposals).toEqual([proposal]);
@@ -66,6 +67,7 @@ test("sessions asking for approval come first, apart from the other waiting sess
     proposals: [proposal],
     messages: [],
     lastSupervisor: null,
+    sessionProfile: { name: null },
   };
   const entries = trayPanelEntries(list);
   expect(entries.approvals.map((s) => s.id)).toEqual(["b"]);

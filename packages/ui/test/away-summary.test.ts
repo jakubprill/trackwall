@@ -74,6 +74,7 @@ const list = (fields: Partial<SessionList>): SessionList => ({
   proposals: [],
   messages: [],
   lastSupervisor: null,
+  sessionProfile: { name: null },
   ...fields,
 });
 

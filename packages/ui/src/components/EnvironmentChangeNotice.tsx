@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { environmentChangeParts, restartButton } from "@/lib/environment-change";
+import { profileChange, useCurrentSessionProfile } from "@/lib/session-profile";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 
@@ -14,7 +15,8 @@ const CHECK_MS = 15_000;
 /**
  * The strip under a running session's header when mise would give it another environment than it started with
  * (ADR-119), e.g. a new token in `mise.toml` or a name added to `agentSecrets`, with the restart that applies it. The
- * strip stays while the restart runs and when it fails, since the stop already ended the session it checked. Mount it
+ * strip shows too when the session started with another session profile than sessions get now (ADR-178), which needs
+ * no mise run. It stays while the restart runs and when it fails, since the stop already ended the session it checked. Mount it
  * with the session's id as its `key`, so a restart's error does not stay next to a task's next session.
  */
 export function EnvironmentChangeNotice({
@@ -38,12 +40,18 @@ export function EnvironmentChangeNotice({
     },
   );
   const change = running ? check.data?.change : null;
-  if (!change && !restart.pending && !restart.error) return null;
+  const profile = profileChange(running, useCurrentSessionProfile());
+  if (!change && !profile && !restart.pending && !restart.error) return null;
   const button = restartButton(running, restart.pending);
   return (
     <section aria-label="Environment changed" className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 border-b px-4 py-1.5 text-xs">
       <RotateCw className="text-warning size-3.5 shrink-0" aria-hidden />
-      <span className="shrink-0">The environment from mise changed since the session started</span>
+      <span className="shrink-0">
+        {change || !profile
+          ? "The environment from mise changed since the session started"
+          : "The session profile changed since the session started"}
+      </span>
+      {profile && <span className="text-muted-foreground min-w-0 truncate">{profile}</span>}
       {change && <span className="text-muted-foreground min-w-0 truncate font-mono">{environmentChangeParts(change).join(" · ")}</span>}
       {restart.error && <span className="text-destructive min-w-0 truncate">{restart.error}</span>}
       <Button variant="outline" size="sm" className="ml-auto" onClick={restart.run} disabled={button.disabled} title={button.title}>

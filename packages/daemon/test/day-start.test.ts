@@ -55,7 +55,14 @@ function setup(
     file: new DayStartFile(join(home, "day-start.json"), (msg) => logged.push(msg)),
     log: (msg) => logged.push(msg),
     agents: {
-      sessions: () => ({ sessions: o.sessions ?? [], tasks: o.tasks ?? [], proposals: [], messages: [], lastSupervisor: null }),
+      sessions: () => ({
+        sessions: o.sessions ?? [],
+        tasks: o.tasks ?? [],
+        proposals: [],
+        messages: [],
+        lastSupervisor: null,
+        sessionProfile: { name: null },
+      }),
       assertNoSupervisor: () => {
         if (o.supervisorRuns) throw new DomainError("bad_request", "the supervisor is running; stop it to start your day with a new one");
       },

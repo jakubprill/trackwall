@@ -65,7 +65,7 @@ function proposal(id: string, repo: string, title: string): TaskProposal {
 }
 
 function list(parts: Partial<SessionList>): SessionList {
-  return { sessions: [], tasks: [], proposals: [], messages: [], lastSupervisor: null, ...parts };
+  return { sessions: [], tasks: [], proposals: [], messages: [], lastSupervisor: null, sessionProfile: { name: null }, ...parts };
 }
 
 const running = (repo: string, miseTask: string, inTask: string | null = null): RunningMiseTask => ({
