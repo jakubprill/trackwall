@@ -1,4 +1,5 @@
 import {
+  type CreatedChange,
   type MergeRequest,
   mcpTools,
   type PromptDelivery,
@@ -264,6 +265,12 @@ export class TaskCoordination {
       movedTo,
       at: new Date().toISOString(),
     });
+  }
+
+  /** The user approved proposed change `proposal` (ADR-171): its proposer hears which parts started and which could not. */
+  changeStarted(proposal: string, proposedBy: ProposedBy, { tasks, failed }: CreatedChange): void {
+    const parts = tasks.map((task) => ({ task: task.id, repo: task.repo }));
+    this.#notify(proposedBy, { kind: "change_started", task: proposal, session: null, parts, failed, at: new Date().toISOString() });
   }
 
   /** The user handed task `task` to the supervisor (ADR-155): the supervisor hears it at once, as its first update on it. */

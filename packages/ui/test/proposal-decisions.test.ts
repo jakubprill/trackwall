@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Task, TaskProposal } from "@trackwall/protocol";
-import { selectionAfterDecision, showsGroup, startProposals } from "../src/lib/proposal-decisions.ts";
+import { keptChangeRepos, selectionAfterDecision, showsGroup, startProposals } from "../src/lib/proposal-decisions.ts";
 import type { ProposalsEntry } from "../src/lib/session-entries.ts";
 import { typedModel } from "../src/lib/task-model.ts";
 
@@ -15,6 +15,7 @@ function proposal(id: string): TaskProposal {
     model: null,
     approvals: "ask",
     item: null,
+    parts: null,
     createdAt: "2026-10-25T10:00:00Z",
   };
 }
@@ -97,5 +98,18 @@ describe("where the Sessions view goes after a decision", () => {
     expect(showsGroup({ kind: "proposals", proposer: "main" }, group)).toBe(true);
     expect(showsGroup({ kind: "proposals", proposer: null }, group)).toBe(false);
     expect(showsGroup({ kind: "task", id: "t9" }, group)).toBe(false);
+  });
+});
+
+describe("the repos a proposed change starts with (ADR-171)", () => {
+  const parts = [{ repo: "payments" }, { repo: "orders-api" }, { repo: "shop-web" }];
+
+  test("are the ones the user did not untick, in the proposal's order", () => {
+    expect(keptChangeRepos(parts, new Set())).toEqual(["payments", "orders-api", "shop-web"]);
+    expect(keptChangeRepos(parts, new Set(["orders-api"]))).toEqual(["payments", "shop-web"]);
+  });
+
+  test("are none while fewer than two are kept, since a change has at least two parts", () => {
+    expect(keptChangeRepos(parts, new Set(["payments", "shop-web"]))).toBeUndefined();
   });
 });

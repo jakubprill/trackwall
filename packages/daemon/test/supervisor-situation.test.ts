@@ -69,6 +69,7 @@ describe("the supervisor's situation (ADR-148)", () => {
       model: null,
       approvals: "ask",
       item: null,
+      parts: null,
       proposedBy: { session: "s-task", supervisor: false, task: "t1" },
       createdAt: "2026-10-30T09:10:00.000Z",
     };
@@ -226,6 +227,7 @@ describe("the supervisor's situation (ADR-148)", () => {
       model: null,
       approvals: "ask",
       item: null,
+      parts: null,
       proposedBy: { session: SUPERVISOR, supervisor: true, task: null },
       createdAt: "2026-10-30T09:10:00.000Z",
     };

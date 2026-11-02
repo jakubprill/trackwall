@@ -35,6 +35,7 @@ function proposal(id: string, repo = `repo-${id}`): TaskProposal {
     model: null,
     approvals: "ask",
     item: null,
+    parts: null,
     createdAt: "2026-10-30T10:00:00Z",
   };
 }

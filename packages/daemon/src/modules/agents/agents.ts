@@ -3,9 +3,13 @@ import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   type AgentTaskChanges,
+  type ApproveChangeRequest,
+  CHANGE_PROMPTS_TOO_LONG,
+  type ChangePart,
   type ChangeRequest,
   type CreatedChange,
   changePartPrompt,
+  changePromptsFit,
   type DialogAnswer,
   type EnvironmentCheck,
   type HttpEndpoint,
@@ -439,7 +443,29 @@ export class Agents {
     await this.#deps.repos.repoPath(proposal.repo);
     await this.#assertOnBoard(proposal.item);
     const proposedBy = proposedByOf(caller === null ? null : this.session(caller));
-    return this.#proposals.add({ kind: "task", ...proposal, proposedBy });
+    return this.#proposals.add({ kind: "task", ...proposal, parts: null, proposedBy });
+  }
+
+  /**
+   * A proposed change from session `caller` (ADR-171): one proposal for all its parts, every repo in the projects folder.
+   * A task session proposes work in other repos as subtasks (`propose_task`), which read its handoff: a change would
+   * start beside it, on another branch, while the parts' handoffs run from part to part.
+   */
+  async proposeChange(
+    caller: string | null,
+    { parts, ...proposal }: Pick<TaskProposal, "title" | "prompt" | "model" | "approvals" | "item"> & { parts: ChangePart[] },
+  ): Promise<TaskProposal> {
+    const session = caller === null ? null : this.session(caller);
+    if (session?.task != null)
+      throw new DomainError(
+        "bad_request",
+        "a task proposes the work in other repos with propose_task, one proposal per repo, so that each reads your handoff",
+      );
+    for (const { repo } of parts) await this.#deps.repos.repoPath(repo);
+    await this.#assertOnBoard(proposal.item);
+    const [first] = parts;
+    if (first === undefined) throw new Error("a change has parts");
+    return this.#proposals.add({ kind: "change", repo: first.repo, ...proposal, parts, proposedBy: proposedByOf(session) });
   }
 
   /** A proposal to remove a repo from the projects folder (ADR-83), from session `caller` like a task proposal. */
@@ -460,6 +486,7 @@ export class Agents {
         model: null,
         approvals: "ask",
         item: null,
+        parts: null,
         proposedBy: proposedByOf(session),
       },
       repoDir,
@@ -489,6 +516,31 @@ export class Agents {
     } finally {
       this.#proposals.release(id, this.#tasks.find(id) === undefined);
     }
+  }
+
+  /**
+   * A change from a proposal (ADR-171): `createChange` with the parts the user kept, in the proposal's order, and the
+   * options as the user left them; the first part takes the proposal's id and every part its proposer. The proposal waits again only when
+   * no part started; otherwise it is gone, and its proposer hears which parts started.
+   */
+  async approveChangeProposal(id: string, { prompt, repos, model, approvals, view }: ApproveChangeRequest): Promise<CreatedChange> {
+    const proposal = this.#proposals.get(id);
+    if (proposal.kind !== "change" || proposal.parts === null) throw new DomainError("bad_request", `proposal ${id} is not a change`);
+    const unknown = repos.filter((repo) => !proposal.parts?.some((p) => p.repo === repo));
+    if (unknown.length > 0) throw new DomainError("bad_request", `${unknown.join(", ")} is not a part of the proposed change`);
+    const kept = proposal.parts.filter((part) => repos.includes(part.repo));
+    if (kept.length < 2) throw new DomainError("bad_request", "keep at least two repos of the change, or reject it");
+    if (!changePromptsFit(prompt, kept)) throw new DomainError("bad_request", CHANGE_PROMPTS_TOO_LONG);
+    const { title, proposedBy, item } = this.#proposals.take(id);
+    let created: CreatedChange | undefined;
+    try {
+      const prompts = kept.map((part) => ({ repo: part.repo, prompt: changePartPrompt(prompt, part) }));
+      created = await this.#tasks.createChange(prompts, { id, title, proposedBy, model, approvals, javaNavigation: false, item, view });
+    } finally {
+      this.#proposals.release(id, created === undefined);
+    }
+    this.#coordination.changeStarted(id, proposedBy, created);
+    return created;
   }
 
   /**
@@ -679,7 +731,8 @@ export class Agents {
   async createChange({ title, prompt, parts, approvals, model, item, view }: ChangeRequest): Promise<CreatedChange> {
     await this.#assertOnBoard(item);
     const prompts = parts.map((part) => ({ repo: part.repo, prompt: changePartPrompt(prompt, part) }));
-    return this.#tasks.createChange(prompts, { title, model, approvals, javaNavigation: false, item, view });
+    const origin = { id: randomUUID(), title, proposedBy: null, model, approvals, javaNavigation: false, item, view };
+    return this.#tasks.createChange(prompts, origin);
   }
 
   /**

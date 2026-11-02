@@ -6,8 +6,9 @@ import { ProposalReject } from "./ProposalReject.tsx";
 import { SameRepoTasks } from "./SameRepoTasks.tsx";
 
 /**
- * Below a proposal's prompt, in the proposals panel and in a grid tile (ADR-55): the tasks already in its repo,
- * “Start task” and “Reject…”; for a proposal to remove a repo (ADR-83), “Remove repo” instead of “Start task”.
+ * Below a proposal's prompt, in the proposals panel and in a grid tile (ADR-55): the tasks already in its repo (in each repo of a change),
+ * “Start task” (“Start change” for a change, ADR-171) and “Reject…”; for a proposal to remove a repo (ADR-83), “Remove
+ * repo” instead.
  */
 export function ProposalActions({
   proposal,
@@ -21,7 +22,10 @@ export function ProposalActions({
   proposal: TaskProposal;
   tasks: readonly Task[];
   pending: boolean;
-  /** False with an empty prompt or a model that is not an id, and in a grid tile for a proposal without approvals. */
+  /**
+   * False with an empty prompt or a model that is not an id, for a change with fewer than two repos kept, and in a grid
+   * tile for a proposal without approvals or for a change.
+   */
   canStart: boolean;
   onStart: () => void;
   onRemoveRepo: () => void;
@@ -29,7 +33,9 @@ export function ProposalActions({
 }) {
   return (
     <>
-      <SameRepoTasks repo={proposal.repo} tasks={tasks} />
+      {(proposal.parts?.map((part) => part.repo) ?? [proposal.repo]).map((repo) => (
+        <SameRepoTasks key={repo} repo={repo} tasks={tasks} />
+      ))}
       <div className="flex flex-wrap items-center gap-2">
         {proposal.kind === "remove_repo" ? (
           <Button size="sm" variant="destructive" onClick={onRemoveRepo} disabled={pending}>
@@ -37,7 +43,7 @@ export function ProposalActions({
           </Button>
         ) : (
           <Button size="sm" onClick={onStart} disabled={pending || !canStart}>
-            <GitBranch /> Start task
+            <GitBranch /> {proposal.kind === "change" ? "Start change" : "Start task"}
           </Button>
         )}
         <ProposalReject title={proposal.title} disabled={pending} onReject={onReject} />

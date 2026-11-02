@@ -92,13 +92,28 @@ export type TaskChange = z.infer<typeof TaskChange>;
 
 /** What one part of a change adds to the prompt of the whole: what its repo has to do, when the user said so. */
 export const CHANGE_PART_NOTE_MAX = 1000;
-export const ChangePart = z.object({ repo: RepoId, note: z.string().trim().max(CHANGE_PART_NOTE_MAX).default("") }).strict();
+export const ChangePartNote = z.string().trim().max(CHANGE_PART_NOTE_MAX);
+export const ChangePart = z.object({ repo: RepoId, note: ChangePartNote.default("") }).strict();
 export type ChangePart = z.infer<typeof ChangePart>;
 
 /** A part's prompt: the change's, then the part's note with its repo, so its session reads both in its first message. */
 export function changePartPrompt(prompt: string, { repo, note }: ChangePart): string {
   return note === "" ? prompt : `${prompt}\n\nIn ${repo}: ${note}`;
 }
+
+export const ONE_PART_PER_REPO = "a change has one part per repo";
+export function onePartPerRepo(parts: readonly { repo: string }[]): boolean {
+  return new Set(parts.map((p) => p.repo)).size === parts.length;
+}
+
+/** The parts of a change in their merge order: 2 to `CHANGE_PARTS_MAX`, one per repo. */
+export const ChangeParts = z.array(ChangePart).min(2).max(CHANGE_PARTS_MAX).refine(onePartPerRepo, ONE_PART_PER_REPO);
+
+/** Whether every part's prompt, the change's with the part's note, fits a task's prompt. */
+export function changePromptsFit(prompt: string, parts: readonly ChangePart[]): boolean {
+  return parts.every((part) => changePartPrompt(prompt, part).length <= TASK_PROMPT_MAX);
+}
+export const CHANGE_PROMPTS_TOO_LONG = `a part's prompt with its note is at most ${TASK_PROMPT_MAX} characters`;
 
 /**
  * Text from an agent that a person reads before a decision or that reaches another agent (a task proposal, a summary,
@@ -415,11 +430,12 @@ export const CreatedChange = z.object({
 export type CreatedChange = z.infer<typeof CreatedChange>;
 
 /**
- * What a proposal asks for (ADR-83): `task`, a task in the repo (`propose_task`), or an action on the projects folder
- * that a task cannot do, because a task is a worktree of one repo (`propose_folder_action`): today `remove_repo`, which
- * moves the repo out of the projects folder into `.trackwall/removed`.
+ * What a proposal asks for (ADR-83): `task`, a task in the repo (`propose_task`), `change`, a change across several
+ * repos (`propose_change`, ADR-171), or an action on the projects folder that a task cannot do, because a task is a
+ * worktree of one repo (`propose_folder_action`): today `remove_repo`, which moves the repo out of the projects folder
+ * into `.trackwall/removed`.
  */
-export const ProposalKind = z.enum(["task", "remove_repo"]);
+export const ProposalKind = z.enum(["task", "change", "remove_repo"]);
 export type ProposalKind = z.infer<typeof ProposalKind>;
 
 /** The proposer's reason for a folder action, shown to the user in place of a task's prompt. */
@@ -446,6 +462,11 @@ export const TaskProposal = z.object({
   approvals: TaskApprovals,
   /** The board item the proposed task works on (ADR-133), which the task keeps; `null` for none and for a folder action. */
   item: BoardItemId.nullable(),
+  /**
+   * The parts of a proposed change (ADR-171) in their merge order, each with its note; `repo` is the first one's. `null`
+   * for a task and a folder action.
+   */
+  parts: ChangeParts.nullable(),
   proposedBy: ProposedBy,
   /** ISO 8601. */
   createdAt: z.string(),
@@ -765,21 +786,14 @@ export const agentsApi = {
       .object({
         title: TaskTitle,
         prompt: TaskPrompt,
-        parts: z
-          .array(ChangePart)
-          .min(2)
-          .max(CHANGE_PARTS_MAX)
-          .refine((parts) => new Set(parts.map((p) => p.repo)).size === parts.length, "a change has one part per repo"),
+        parts: ChangeParts,
         approvals: TaskApprovals,
         model: TaskModel.nullable().default(null),
         item: BoardItemId.nullable().default(null),
         view: SessionView.default("terminal"),
       })
       .strict()
-      .refine(
-        ({ prompt, parts }) => parts.every((part) => changePartPrompt(prompt, part).length <= TASK_PROMPT_MAX),
-        `a part's prompt with its note is at most ${TASK_PROMPT_MAX} characters`,
-      ),
+      .refine(({ prompt, parts }) => changePromptsFit(prompt, parts), CHANGE_PROMPTS_TOO_LONG),
     CreatedChange,
   ),
   /** A new session for a task that has no running session, in the task's view: it goes on with the task's conversation. */
@@ -846,6 +860,23 @@ export const agentsApi = {
    * Approving a proposal to remove a repo (ADR-83): refused while a session, a task or a process runs in the repo; then
    * the repo moves into `.trackwall/removed` in the projects folder. A refusal leaves the proposal waiting.
    */
+  /**
+   * Approving a proposed change (ADR-171): `create-change` with the proposal's title, its parts that the user kept
+   * (`repos`, at least two, in the proposal's order whatever their order here) and the options as the user left them.
+   * The first kept part takes the proposal's id, and every part counts as proposed by the proposal's proposer, who hears
+   * which parts started (`change_started`). When no part starts, the proposal waits again.
+   */
+  approveChangeProposal: endpoint(
+    "approve-change-proposal",
+    ProposalRequest.extend({
+      prompt: TaskPrompt,
+      repos: z.array(RepoId).min(2).max(CHANGE_PARTS_MAX),
+      model: TaskModel.nullable(),
+      approvals: TaskApprovals,
+      view: SessionView.default("terminal"),
+    }),
+    CreatedChange,
+  ),
   approveRepoRemoval: endpoint("approve-repo-removal", ProposalRequest, Done),
   /**
    * Rejects a proposal: it leaves the list, and a session waiting on it gets `proposal_rejected` with the user's reason
@@ -867,6 +898,7 @@ export const agentsApi = {
 
 /** What the user asks for when they start a change (ADR-171), with the defaults filled in. */
 export type ChangeRequest = z.infer<typeof agentsApi.createChange.request>;
+export type ApproveChangeRequest = Omit<z.infer<typeof agentsApi.approveChangeProposal.request>, "proposal">;
 
 /**
  * Close codes of the terminal WebSocket from the application range (4000–4999), so that the terminal window can tell the

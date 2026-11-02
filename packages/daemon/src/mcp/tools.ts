@@ -268,6 +268,14 @@ const runs: ToolRuns = {
       }),
     };
   },
+  proposeChange: async (facade, { model, approvals, item, ...change }, { caller }) => ({
+    proposal: await facade.agents.proposeChange(caller, {
+      ...change,
+      model: model ?? null,
+      approvals: approvals ?? "ask",
+      item: item ?? null,
+    }),
+  }),
   proposeFolderAction: async (facade, { repo, reason }, { caller }) => ({
     proposal: await facade.agents.proposeRepoRemoval(caller, repo, reason),
   }),
@@ -385,6 +393,7 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.getTaskChanges, runs.getTaskChanges),
   defineTool(mcpTools.getChangedEndpoints, runs.getChangedEndpoints),
   defineTool(mcpTools.proposeTask, runs.proposeTask),
+  defineTool(mcpTools.proposeChange, runs.proposeChange),
   defineTool(mcpTools.proposeFolderAction, runs.proposeFolderAction),
   defineTool(mcpTools.proposeRoutine, runs.proposeRoutine),
   defineTool(mcpTools.listKnowledge, runs.listKnowledge),

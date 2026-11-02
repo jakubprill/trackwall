@@ -59,3 +59,12 @@ export function selectionAfterDecision(group: ProposalsEntry, decided: ReadonlyS
 export function showsGroup(selection: SessionSelection, group: ProposalsEntry): boolean {
   return selection?.kind === "proposals" && selection.proposer === group.proposer;
 }
+
+/**
+ * The repos of a proposed change (ADR-171) the user kept, in the proposal's order; `undefined` while fewer than two are
+ * kept, since a change has at least two parts.
+ */
+export function keptChangeRepos(parts: readonly { repo: string }[], dropped: ReadonlySet<string>): string[] | undefined {
+  const kept = parts.map((part) => part.repo).filter((repo) => !dropped.has(repo));
+  return kept.length >= 2 ? kept : undefined;
+}

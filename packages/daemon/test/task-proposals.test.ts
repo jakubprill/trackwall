@@ -9,6 +9,7 @@ const PROPOSAL = {
   model: null,
   approvals: "ask" as const,
   item: null,
+  parts: null,
   proposedBy: { session: null, supervisor: false, task: null },
 };
 

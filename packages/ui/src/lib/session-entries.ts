@@ -2,6 +2,7 @@ import {
   countLabel,
   handedToSupervisor,
   isSupervisor,
+  type ProposalKind,
   type ProposedBy,
   type Session,
   type SessionList,
@@ -362,15 +363,21 @@ export function entryId(entry: SessionEntry): string {
   return entry.kind === "task" ? entry.task.id : entry.session.id;
 }
 
-/** A proposal's name wherever it is listed: its repo and title. */
+/** A proposal's name wherever it is listed: its repo (a change's repos in their order) and title. */
 export function proposalName(proposal: TaskProposal): string {
-  return `${proposal.repo} · ${proposal.title}`;
+  return `${proposal.parts?.map((part) => part.repo).join(", ") ?? proposal.repo} · ${proposal.title}`;
 }
 
-/** What a single proposal asks for, as its heading: a task, or removing a repo from the projects folder (ADR-83). */
+/** What a single proposal asks for, as its heading: a task, a change across repos (ADR-171) or removing a repo (ADR-83). */
 export function proposalKindLabel(proposal: TaskProposal): string {
-  return proposal.kind === "remove_repo" ? "Repo removal" : "Task proposal";
+  return PROPOSAL_KIND_LABELS[proposal.kind];
 }
+
+const PROPOSAL_KIND_LABELS: Record<ProposalKind, string> = {
+  task: "Task proposal",
+  change: "Change proposal",
+  remove_repo: "Repo removal",
+};
 
 /** The name of a group of proposals (ADR-55): the proposal's name for one, a count for more. */
 export function proposalsName(proposals: ProposalsEntry["proposals"]): string {

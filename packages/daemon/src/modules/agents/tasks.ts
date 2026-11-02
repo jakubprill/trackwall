@@ -153,8 +153,11 @@ export interface TaskOrigin {
   change: TaskChange | null;
 }
 
-/** What every part of a change starts with (ADR-171): its identity, proposer and place come from the change. */
-export type ChangeOrigin = Omit<TaskOrigin, "id" | "proposedBy" | "change">;
+/**
+ * What every part of a change starts with (ADR-171): `id` is the first part's (a proposed change's id, so the proposer
+ * finds it), the others get their own; the place in the change comes from the change.
+ */
+export type ChangeOrigin = Omit<TaskOrigin, "change">;
 
 /** What the user chooses for a task they start: everything of its origin but the identity a proposal or a change gives it. */
 export type TaskOptions = Omit<TaskOrigin, "id" | "title" | "proposedBy" | "change">;
@@ -227,7 +230,7 @@ export class AgentTasks {
     const failures: { position: number; repo: string; err: unknown }[] = [];
     const held: { position: number; task: KnownTask }[] = [];
     for (const [position, { repo, prompt }] of parts.entries()) {
-      const partOrigin = { ...origin, id: randomUUID(), proposedBy: null, change: { id: change, position } };
+      const partOrigin = { ...origin, id: position === 0 ? origin.id : randomUUID(), change: { id: change, position } };
       await this.#creating(repo, () => this.#create(repo, prompt, partOrigin, "hold")).then(
         (task) => held.push({ position, task }),
         (err: unknown) => failures.push({ position, repo, err }),
