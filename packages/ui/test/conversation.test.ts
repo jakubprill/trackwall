@@ -18,7 +18,17 @@ describe("the conversation view", () => {
       waiting: [],
       entries: [
         { id: "user-1", kind: "user", text: "Check the build" },
-        { id: "tool-1", kind: "tool", title: "Run tests", tool: "execute", status: "pending", files: [], detail: [], patch: "" },
+        {
+          id: "tool-1",
+          kind: "tool",
+          title: "Run tests",
+          tool: "execute",
+          status: "pending",
+          files: [],
+          detail: [],
+          patch: "",
+          patchCut: false,
+        },
       ],
     });
     const next = withEntries(first, {
@@ -26,14 +36,34 @@ describe("the conversation view", () => {
       reset: false,
       waiting: [],
       entries: [
-        { id: "tool-1", kind: "tool", title: "Run tests", tool: "execute", status: "completed", files: [], detail: ["ok"], patch: "" },
+        {
+          id: "tool-1",
+          kind: "tool",
+          title: "Run tests",
+          tool: "execute",
+          status: "completed",
+          files: [],
+          detail: ["ok"],
+          patch: "",
+          patchCut: false,
+        },
         { id: "agent-2", kind: "agent", text: "Green." },
       ],
     });
 
     expect(next).toEqual([
       { id: "user-1", kind: "user", text: "Check the build" },
-      { id: "tool-1", kind: "tool", title: "Run tests", tool: "execute", status: "completed", files: [], detail: ["ok"], patch: "" },
+      {
+        id: "tool-1",
+        kind: "tool",
+        title: "Run tests",
+        tool: "execute",
+        status: "completed",
+        files: [],
+        detail: ["ok"],
+        patch: "",
+        patchCut: false,
+      },
       { id: "agent-2", kind: "agent", text: "Green." },
     ]);
     expect(withEntries(next, { type: "entries", reset: true, entries: [], waiting: [] })).toEqual([]);
@@ -95,6 +125,7 @@ describe("turns of the conversation view", () => {
       files: [],
       detail: [],
       patch: "",
+      patchCut: false,
     };
     expect(
       conversationTurns([

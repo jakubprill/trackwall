@@ -57,34 +57,42 @@ describe("the patch of a tool call", () => {
   const gitDiff = "diff --git a/repo/a.txt b/repo/a.txt\n--- a/repo/a.txt\n+++ b/repo/a.txt\n@@ -1,2 +1,2 @@\n one\n-two\n+TWO\n";
 
   test("a tool that ran has the git diff Copilot CLI sends in its output, without the empty line before it", () => {
-    expect(toolCallPatch({ rawOutput: { content: "File updated.", detailedContent: `\n${gitDiff}` } })).toBe(gitDiff);
+    expect(toolCallPatch({ rawOutput: { content: "File updated.", detailedContent: `\n${gitDiff}` } }).patch).toBe(gitDiff);
   });
 
   test("an approval of a file edit has the diff Copilot CLI sends in its input", () => {
-    expect(toolCallPatch({ rawInput: { fileName: "/repo/a.txt", diff: `\n${gitDiff}` } })).toBe(gitDiff);
+    expect(toolCallPatch({ rawInput: { fileName: "/repo/a.txt", diff: `\n${gitDiff}` } }).patch).toBe(gitDiff);
   });
 
   test("a shell tool's output is not a patch, even when it prints lines that start with a sign", () => {
-    expect(toolCallPatch({ rawOutput: { detailedContent: "--- run 1 ---\n+ one passed\n- one failed" } })).toBe("");
+    expect(toolCallPatch({ rawOutput: { detailedContent: "--- run 1 ---\n+ one passed\n- one failed" } }).patch).toBe("");
   });
 
   test("without a git diff, the replaced and the new text of a diff content are a hunk without line numbers", () => {
-    expect(toolCallPatch({ content: [{ type: "diff", path: "/repo/a.txt", oldText: "two\n", newText: "TWO\nthree\n" }] })).toBe(
+    expect(toolCallPatch({ content: [{ type: "diff", path: "/repo/a.txt", oldText: "two\n", newText: "TWO\nthree\n" }] }).patch).toBe(
       "diff --git a/repo/a.txt b/repo/a.txt\n--- a/repo/a.txt\n+++ b/repo/a.txt\n@@ @@\n-two\n+TWO\n+three\n",
     );
   });
 
   test("a new file's diff content has only added lines", () => {
-    expect(toolCallPatch({ content: [{ type: "diff", path: "/repo/new.txt", oldText: "", newText: "hello" }] })).toBe(
+    expect(toolCallPatch({ content: [{ type: "diff", path: "/repo/new.txt", oldText: "", newText: "hello" }] }).patch).toBe(
       "diff --git a/repo/new.txt b/repo/new.txt\n--- a/repo/new.txt\n+++ b/repo/new.txt\n@@ @@\n+hello\n",
     );
   });
 
   test("a patch over 64 Ki characters is cut after its last whole line", () => {
     const line = `+${"x".repeat(99)}\n`;
-    const patch = toolCallPatch({ rawInput: { diff: `--- a/f\n+++ b/f\n@@ -0,0 +1,1000 @@\n${line.repeat(1000)}` } });
+    const { patch, cut } = toolCallPatch({ rawInput: { diff: `--- a/f\n+++ b/f\n@@ -0,0 +1,1000 @@\n${line.repeat(1000)}` } });
 
     expect(patch.length).toBeLessThanOrEqual(64 * 1024);
     expect(patch.endsWith(line)).toBe(true);
+    expect(cut).toBe(true);
+  });
+
+  test("a line longer than 64 Ki characters goes with the rest, and the patch says it was cut", () => {
+    const { patch, cut } = toolCallPatch({ rawInput: { diff: `--- a/f\n+++ b/f\n@@ -0,0 +1,1 @@\n+${"x".repeat(70_000)}` } });
+
+    expect(patch).toBe("--- a/f\n+++ b/f\n@@ -0,0 +1,1 @@\n");
+    expect(cut).toBe(true);
   });
 });

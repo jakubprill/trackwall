@@ -173,7 +173,7 @@ function Thought({ text, thinking }: { text: string; thinking: boolean }) {
 function ToolCall({ tool }: { tool: Extract<ConversationEntry, { kind: "tool" }> }) {
   const Icon = TOOL_ICONS[tool.tool] ?? Wrench;
   const subtitle = toolSubtitle(tool);
-  const change = changeLines(tool.patch, PATCH_SHOWN_LINES);
+  const change = changeLines(tool.patch, PATCH_SHOWN_LINES, tool.patchCut);
   const opens = tool.detail.length > 0 || change.lines.length > 0;
   return (
     <details className="group bg-muted rounded-md border text-xs">
@@ -200,8 +200,7 @@ function ToolCall({ tool }: { tool: Extract<ConversationEntry, { kind: "tool" }>
       </summary>
       {change.lines.length > 0 && (
         <div className="max-h-96 overflow-auto border-t py-1.5">
-          <PatchLines lines={change.lines} />
-          {change.more && <p className="text-muted-foreground px-3 pt-1.5">The change is longer; showing its beginning.</p>}
+          <PatchLines change={change} />
         </div>
       )}
       {tool.detail.length > 0 && (

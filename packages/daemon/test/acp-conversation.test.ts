@@ -17,7 +17,17 @@ describe("the conversation built from ACP updates", () => {
     expect(conversation.entries()).toEqual([
       { id: "user-1", kind: "user", text: "Check the build" },
       { id: "agent-2", kind: "agent", text: "Looking at it." },
-      { id: "tool-3", kind: "tool", title: "Run tests", tool: "execute", status: "pending", files: [], detail: [], patch: "" },
+      {
+        id: "tool-3",
+        kind: "tool",
+        title: "Run tests",
+        tool: "execute",
+        status: "pending",
+        files: [],
+        detail: [],
+        patch: "",
+        patchCut: false,
+      },
       { id: "agent-4", kind: "agent", text: "All green." },
     ]);
   });
@@ -51,6 +61,7 @@ describe("the conversation built from ACP updates", () => {
           files: [],
           detail: ["hi", "<shellId: 0 completed with exit code 0>"],
           patch: "",
+          patchCut: false,
         },
       ],
       reset: false,
@@ -166,6 +177,7 @@ describe("the conversation built from ACP updates", () => {
         files: [join("src", "total.ts")],
         detail: [],
         patch,
+        patchCut: false,
       },
     ]);
   });

@@ -35,6 +35,9 @@ export const TOOL_TITLE_MAX = 1000;
 export const TOOL_KIND_MAX = 64;
 /** The longest patch of a tool call the daemon keeps; a longer one is cut at the end, on a line. */
 export const TOOL_PATCH_MAX = 64 * 1024;
+/** The most files of a tool call, and the longest path of one. */
+export const TOOL_FILES_MAX = 50;
+export const TOOL_FILE_PATH_MAX = 4096;
 
 /** A unified diff (`git diff`), empty when there is none, as a tool call and an approval carry it. */
 export const ToolPatch = z.string().max(TOOL_PATCH_MAX);
@@ -51,10 +54,12 @@ export const ToolEntry = z.object({
   tool: z.string().max(TOOL_KIND_MAX),
   status: ToolCallStatus,
   /** The files the tool works on, relative to the session's working directory when inside it. */
-  files: z.array(z.string().max(4096)).max(50).default([]),
+  files: z.array(z.string().max(TOOL_FILE_PATH_MAX)).max(TOOL_FILES_MAX).default([]),
   detail: z.array(z.string().max(CONVERSATION_TEXT_MAX)).max(2000),
   /** A daemon before the patch sent none. */
   patch: ToolPatch.default(""),
+  /** The change was longer than `TOOL_PATCH_MAX` and `patch` is its beginning. */
+  patchCut: z.boolean().default(false),
 });
 
 export const ConversationEntry = z.discriminatedUnion("kind", [UserEntry, AgentEntry, ThoughtEntry, ToolEntry]);

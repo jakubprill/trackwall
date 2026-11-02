@@ -111,7 +111,7 @@ export class AcpConversation {
       status: update.status ?? "pending",
       files: toolCallFiles(update, this.#cwd),
       detail: toolCallLines(update),
-      patch: toolCallPatch(update),
+      ...patchFields(update),
     };
     this.#tools.set(update.toolCallId, entry);
     this.#entries.push(entry);
@@ -122,19 +122,28 @@ export class AcpConversation {
   #toolUpdated(known: ToolEntry, update: ToolUpdate): ToolEntry {
     const files = toolCallFiles(update, this.#cwd);
     const detail = toolCallLines(update);
-    const patch = toolCallPatch(update);
+    const change = patchFields(update);
     if (update.title !== undefined) known.title = update.title.slice(0, TOOL_TITLE_MAX);
     if (update.kind !== undefined) known.tool = update.kind.slice(0, TOOL_KIND_MAX);
     if (update.status !== undefined) known.status = update.status;
     if (files.length > 0) known.files = files;
     if (detail.length > 0) known.detail = detail;
-    if (patch !== "") known.patch = patch;
+    if (change.patch !== "") {
+      known.patch = change.patch;
+      known.patchCut = change.patchCut;
+    }
     return known;
   }
 
   #id(kind: string): string {
     return `${kind}-${this.#nextId++}`;
   }
+}
+
+/** A tool call's change as its entry keeps it. */
+function patchFields(update: ToolUpdate): Pick<ToolEntry, "patch" | "patchCut"> {
+  const { patch, cut } = toolCallPatch(update);
+  return { patch, patchCut: cut };
 }
 
 function entrySize(entry: ConversationEntry): number {

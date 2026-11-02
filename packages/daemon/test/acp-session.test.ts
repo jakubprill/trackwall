@@ -215,6 +215,7 @@ describe("a Copilot CLI session over ACP", () => {
       title: "Say hi",
       detail: ["$ echo hi"],
       patch: "",
+      patchCut: false,
       question: "Do you want to allow this?",
       options: [
         { key: "1", label: "Allow once" },

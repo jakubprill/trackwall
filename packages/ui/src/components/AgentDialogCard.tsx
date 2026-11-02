@@ -14,7 +14,8 @@ import { useAction } from "@/lib/use-action";
  * the screen still shows this dialog, so a dialog answered in the terminal meanwhile only says so (`dialog_changed`).
  * Keyed by the session and the dialog's id where it is used, so a new dialog starts without the previous one's error;
  * once answered, the buttons stay off until the session's next state replaces the card. The texts come from the agent
- * and the repo, so they are plain text; an approval over ACP also shows the change it allows in colour (ADR-107). A question is answered in the session terminal (`onOpen`).
+ * and the repo, so they are plain text; an approval over ACP also shows the change it allows in colour
+ * (ADR-107). A question is answered in the session terminal (`onOpen`).
  */
 export function AgentDialogCard({
   conn,
@@ -33,7 +34,7 @@ export function AgentDialogCard({
     () => setAnswered(true),
   );
   const disabled = answer.pending || answered;
-  const change = changeLines(dialog.kind === "approval" ? (dialog.patch ?? "") : "", PATCH_SHOWN_LINES);
+  const change = dialog.kind === "approval" ? changeLines(dialog.patch ?? "", PATCH_SHOWN_LINES, dialog.patchCut ?? false) : undefined;
   return (
     <div className="flex w-full flex-col gap-2 rounded-md border px-3 py-2">
       {dialog.kind === "approval" ? (
@@ -44,10 +45,9 @@ export function AgentDialogCard({
               {dialog.detail.join("\n")}
             </pre>
           )}
-          {change.lines.length > 0 && (
+          {change && change.lines.length > 0 && (
             <div className="bg-muted max-h-72 overflow-auto rounded-sm py-1">
-              <PatchLines lines={change.lines} />
-              {change.more && <p className="text-muted-foreground px-3 pt-1 text-xs">The change is longer; showing its beginning.</p>}
+              <PatchLines change={change} />
             </div>
           )}
           <p className="text-sm">{dialog.question}</p>

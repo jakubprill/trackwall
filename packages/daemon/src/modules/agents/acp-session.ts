@@ -467,7 +467,7 @@ export class AcpSession implements AgentSession {
       title: toolCall.title ?? "Approval",
       // The files first: an approval's title names the tool ("Edit file"), not what it changes.
       detail: [...toolCallFiles(toolCall, this.#o.cwd), ...toolCallLines(toolCall)],
-      patch: toolCallPatch(toolCall),
+      ...approvalPatch(toolCall),
       question: APPROVAL_QUESTION,
       options: options.map((o, i) => ({ key: String(i + 1), label: o.name })),
     };
@@ -531,4 +531,10 @@ export class AcpSession implements AgentSession {
     const message: ConversationServerMessage = { type: "entries", reset, entries, waiting: this.#waiting() };
     for (const viewer of this.#viewers) viewer.send(message);
   }
+}
+
+/** An approval's change, as its dialog carries it. */
+function approvalPatch(toolCall: RequestPermissionParams["toolCall"]): Pick<AgentApproval, "patch" | "patchCut"> {
+  const { patch, cut } = toolCallPatch(toolCall);
+  return { patch, patchCut: cut };
 }

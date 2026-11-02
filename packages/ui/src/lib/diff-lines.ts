@@ -139,19 +139,36 @@ export function diffLines(patch: string, maxLines: number): { lines: DiffLine[];
   return { lines, more: offset < patch.length };
 }
 
+/** A tool call's change as the conversation view shows it. */
+export interface Change {
+  lines: DiffLine[];
+  added: number;
+  removed: number;
+  /** There is more than `lines`: beyond the lines shown, or beyond what the daemon kept of the patch. */
+  more: boolean;
+}
+
 /**
  * A tool call's change in the conversation view (ADR-107): the lines of its hunks without the file headers, which the
- * tool's title and files already name, the first `maxLines` of them, and how many lines it adds and removes in all.
+ * tool's title and files already name, the first `maxLines` of them, and how many lines it adds and removes in what
+ * the daemon kept (`cut` when that is only the beginning).
  */
-export function changeLines(patch: string, maxLines: number): { lines: DiffLine[]; added: number; removed: number; more: boolean } {
+export function changeLines(patch: string, maxLines: number, cut: boolean): Change {
   const lines = diffLines(patch, Number.POSITIVE_INFINITY).lines;
-  // A patch that starts with `---` instead of `diff --git` has its header before the first hunk as well.
-  const firstHunk = lines.findIndex((line) => line.kind === "hunk");
-  const all = lines.slice(Math.max(firstHunk, 0)).filter((line) => line.kind !== "file" && line.kind !== "meta");
+  // `diffLines` reads lines before any header as a change; in a patch that starts with `---` instead of `diff --git`
+  // they are the file names, so the change starts at the first hunk.
+  const all = lines
+    .slice(
+      Math.max(
+        lines.findIndex((line) => line.kind === "hunk"),
+        0,
+      ),
+    )
+    .filter((line) => line.kind !== "file" && line.kind !== "meta");
   return {
     lines: all.slice(0, maxLines),
     added: all.filter((line) => line.kind === "added").length,
     removed: all.filter((line) => line.kind === "removed").length,
-    more: all.length > maxLines,
+    more: cut || all.length > maxLines,
   };
 }

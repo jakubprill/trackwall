@@ -1,5 +1,5 @@
 import { relative } from "node:path";
-import { TOOL_PATCH_MAX } from "@trackwall/protocol";
+import { TOOL_FILE_PATH_MAX, TOOL_FILES_MAX, TOOL_PATCH_MAX } from "@trackwall/protocol";
 import { isInside } from "../../infra/path-inside.ts";
 import { contentText, type SessionUpdate, type ToolCallContent } from "./acp-messages.ts";
 
@@ -18,14 +18,11 @@ type ToolCall = Pick<
 const DETAIL_LINES_MAX = 400;
 /** The most characters of a tool call's detail kept. */
 const DETAIL_CHARS_MAX = 64 * 1024;
-/** The most files of a tool call kept, and the longest path. */
-const FILES_MAX = 50;
-const FILE_PATH_MAX = 4096;
 
 /** The files a tool call works on, once each, relative to the session's working directory when inside it. */
 export function toolCallFiles(toolCall: Pick<ToolCall, "locations">, cwd: string): string[] {
   const paths = (toolCall.locations ?? []).map(({ path }) => (path !== cwd && isInside(cwd, path) ? relative(cwd, path) : path));
-  return [...new Set(paths)].slice(0, FILES_MAX).map((path) => path.slice(0, FILE_PATH_MAX));
+  return [...new Set(paths)].slice(0, TOOL_FILES_MAX).map((path) => path.slice(0, TOOL_FILE_PATH_MAX));
 }
 
 /** What a tool call does or did, as lines, cut at 400 lines and 64 Ki characters: its text, the command it runs, or why it failed. */
@@ -53,14 +50,15 @@ export function toolCallLines(toolCall: Pick<ToolCall, "content" | "rawInput" | 
  * hunk with its context as `git diff` text, in `rawOutput.detailedContent` once a tool ran and in `rawInput.diff` when it
  * asks for an approval; its `diff` content holds only the replaced and the new text, which is the last resort.
  */
-export function toolCallPatch(toolCall: Pick<ToolCall, "content" | "rawInput" | "rawOutput">): string {
+export function toolCallPatch(toolCall: Pick<ToolCall, "content" | "rawInput" | "rawOutput">): { patch: string; cut: boolean } {
   const patch =
     unifiedDiff(stringField(toolCall.rawOutput, "detailedContent")) ??
     unifiedDiff(stringField(toolCall.rawInput, "diff")) ??
     (toolCall.content ?? []).map(contentPatch).join("");
-  if (patch.length <= TOOL_PATCH_MAX) return patch;
-  // Cut on a line, so the last line shown is a whole one.
-  return patch.slice(0, patch.lastIndexOf("\n", TOOL_PATCH_MAX - 1) + 1);
+  if (patch.length <= TOOL_PATCH_MAX) return { patch, cut: false };
+  // Cut on a line, so the last line shown is a whole one; a first line longer than the limit is cut inside.
+  const lastLine = patch.lastIndexOf("\n", TOOL_PATCH_MAX - 1);
+  return { patch: patch.slice(0, lastLine >= 0 ? lastLine + 1 : TOOL_PATCH_MAX), cut: true };
 }
 
 /** The text when it is a unified diff, without the empty lines Copilot CLI puts before it. */
@@ -82,7 +80,7 @@ function contentPatch(content: ToolCallContent): string {
   // Like Copilot CLI's own diffs: an absolute path after `a/` without its leading slash.
   const path = content.path.replace(/^[\\/]+/, "");
   const header = `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n`;
-  return `${header}@@ @@\n${lines(content.oldText, "-")}${lines(String(content.newText), "+")}`;
+  return `${header}@@ @@\n${lines(content.oldText, "-")}${lines(content.newText, "+")}`;
 }
 
 function textLines(content: ToolCallContent): string[] {

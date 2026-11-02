@@ -236,6 +236,8 @@ export const AgentApproval = z.object({
    * as data, while an approval read from the screen has the lines of the change in `detail`.
    */
   patch: ToolPatch.optional(),
+  /** The change was longer than its `patch`, which is its beginning. */
+  patchCut: z.boolean().optional(),
   /** "Do you want to run this command?" */
   question: z.string(),
   /** The choices that answer the dialog at once with their digit; without "No, and tell Copilot…", which needs text typed in the terminal. */
