@@ -189,6 +189,13 @@ export interface ToolPermissions {
 export const SupervisorSettings = z.object({ changesCode: z.boolean().default(false) }).strict();
 export type SupervisorSettings = z.infer<typeof SupervisorSettings>;
 
+/**
+ * `autoReview` in `workspace.yaml` (ADR-182), set in Settings: with `afterReport: true` a task's changes get Copilot CLI's
+ * `/review` once its agent reports its result, which costs model credits; off by default, when it runs only on a click.
+ */
+export const AutoReviewSettings = z.object({ afterReport: z.boolean().default(false) }).strict();
+export type AutoReviewSettings = z.infer<typeof AutoReviewSettings>;
+
 /** An environment variable name Copilot CLI's comma-separated `--secret-env-vars` can carry (ADR-93). */
 export const ENV_VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -251,6 +258,10 @@ export const WorkspaceSettings = z.object({
   sessionProfile: z.string().nullable(),
   /** Why `sessionProfile` in `workspace.yaml` cannot be read; sessions do not start until it is fixed or saved again. */
   sessionProfileProblem: z.string().nullable(),
+  /** `autoReview` from `workspace.yaml` (ADR-182); the default (off) when the key is missing or cannot be read. */
+  autoReview: AutoReviewSettings,
+  /** Why `autoReview` in `workspace.yaml` cannot be read; saving the setting fixes it. */
+  autoReviewProblem: z.string().nullable(),
   /** The full path of `workspace.yaml`, so that the user knows which file to edit by hand. */
   configFile: z.string(),
 });
@@ -362,6 +373,8 @@ export const workspaceApi = {
    * tool sets it: an agent must not choose the model provider of sessions.
    */
   setSessionProfile: endpoint("set-session-profile", z.object({ profile: SessionProfile.nullable() }).strict(), WorkspaceSettings),
+  /** Whether a task's changes get an automatic review once its agent reports its result (ADR-182). No MCP tool sets it: it spends the user's credits. */
+  setAutoReview: endpoint("set-auto-review", AutoReviewSettings.required(), WorkspaceSettings),
   overview: endpoint("overview", RepoRequest, RepoOverview),
   tree: endpoint("tree", z.object({ repo: RepoId, path: RepoPath }).strict(), z.array(TreeEntry)),
   file: endpoint(

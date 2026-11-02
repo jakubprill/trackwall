@@ -1,5 +1,6 @@
 import {
   type AgentSecrets,
+  type AutoReviewSettings,
   countLabel,
   type DayStartSettings,
   type GraphConfig,
@@ -27,6 +28,7 @@ export interface WorkspaceKeyValues {
   toolPermissions: ToolPermissionRules;
   agentSecrets: AgentSecrets;
   sessionProfile: string | null;
+  autoReview: AutoReviewSettings;
   supervisor: SupervisorSettings;
   repoTags: RepoTagRules;
   dayStart: DayStartSettings | null;
@@ -46,6 +48,7 @@ export const workspaceKeyValue: { [K in WorkspaceKey]: (value: WorkspaceKeyValue
   toolPermissions: (rules) => (rules.length === 0 ? "none" : countLabel(rules.length, { one: "rule", other: "rules" })),
   agentSecrets: (names) => (names.length === 0 ? "none" : names.join(", ")),
   sessionProfile: (profile) => profile ?? "none",
+  autoReview: (settings) => `afterReport: ${settings.afterReport}`,
   supervisor: (settings) => `changesCode: ${settings.changesCode}`,
   repoTags: (rules) => {
     const tags = Object.keys(rules);

@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import {
   agentsApi,
+  autoReviewApi,
   batchApi,
   boardApi,
   cardsApi,
@@ -58,6 +59,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(workspaceApi.setWorktreesDir, (f, b) => f.workspace.setWorktreesDir(b.path)),
   route(workspaceApi.setGitProgram, (f, b) => f.workspace.setGitProgram(b.path)),
   route(workspaceApi.setSessionProfile, (f, b) => f.workspace.setSessionProfile(b.profile)),
+  route(workspaceApi.setAutoReview, (f, b) => f.workspace.setAutoReview(b)),
   route(workspaceApi.overview, (f, b) => f.workspace.overview(b.repo)),
   route(workspaceApi.tree, (f, b) => f.workspace.tree(b.repo, b.path)),
   route(workspaceApi.file, (f, b) => f.workspace.file(b.repo, b.path)),
@@ -159,6 +161,9 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(verificationApi.start, (f, b) => f.verifications.start(b.task)),
   route(verificationApi.get, (f, b) => f.verifications.get(b.task)),
   route(verificationApi.cancel, (f, b) => f.verifications.cancel(b.task)),
+  route(autoReviewApi.start, (f, b) => f.agents.startAutoReview(b.task)),
+  route(autoReviewApi.get, (f, b) => f.agents.autoReview(b.task)),
+  route(autoReviewApi.cancel, (f, b) => f.agents.cancelAutoReview(b.task)),
   route(mergeRequestsApi.get, (f, b) => f.mergeRequests.get(b.task)),
   route(mergeRequestsApi.push, (f, b) => f.mergeRequests.push(b.task)),
   route(mergeRequestsApi.formUrl, async (f, b) => ({ url: await f.mergeRequests.formUrl(b) })),

@@ -9,6 +9,11 @@
  * MCP servers, instruction files and arguments it got, so that the tests see them. `session/cancel` ends the turn with
  * `cancelled`. Like Copilot CLI it keeps a conversation per id once it has had a prompt, which `session/load` replays
  * (one from the terminal mode with nothing to replay), and an id without one is error -32002.
+ *
+ * A prompt that starts with `/review` is an automatic review (ADR-182): the agent asks to run its shell command, then
+ * answers with one issue in the format of Copilot CLI's review agent on the first added line of the diff file the prompt
+ * names, followed by whether the command was allowed and the arguments it got. With `FAKE_COPILOT_REVIEW_WAIT` set the
+ * review never ends on its own.
  */
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -95,36 +100,59 @@ export function serveAcp(o: FakeAcpOptions): void {
     if (history.length === 0) update(sessionId, { sessionUpdate: "session_info_update", title: text.slice(0, 50) });
     history.push({ sessionUpdate: "user_message_chunk", content: { type: "text", text } });
     writeFileSync(conversationFile(sessionId), JSON.stringify(history));
-    void (async () => {
-      const toolCallId = `call_${++calls}_0`;
-      const rawInput = { command: FAKE_ACP_COMMAND, description: "Make a file" };
-      update(sessionId, { sessionUpdate: "tool_call", toolCallId, title: "Make a file", kind: "execute", status: "pending", rawInput });
-      const allowed = o.allowAllTools || (await permission(sessionId, toolCallId));
-      if (turn.cancelled) return;
-      if (!allowed) {
-        // As in Copilot CLI, a refused tool ends the turn without another answer.
-        update(sessionId, {
-          sessionUpdate: "tool_call_update",
-          toolCallId,
-          status: "failed",
-          rawOutput: { message: "The user rejected this tool call.", code: "rejected" },
-        });
+    if (text.startsWith("/review")) void review(sessionId, text, turn);
+    else
+      void (async () => {
+        const toolCallId = `call_${++calls}_0`;
+        const rawInput = { command: FAKE_ACP_COMMAND, description: "Make a file" };
+        update(sessionId, { sessionUpdate: "tool_call", toolCallId, title: "Make a file", kind: "execute", status: "pending", rawInput });
+        const allowed = o.allowAllTools || (await permission(sessionId, toolCallId));
+        if (turn.cancelled) return;
+        if (!allowed) {
+          // As in Copilot CLI, a refused tool ends the turn without another answer.
+          update(sessionId, {
+            sessionUpdate: "tool_call_update",
+            toolCallId,
+            status: "failed",
+            rawOutput: { message: "The user rejected this tool call.", code: "rejected" },
+          });
+          turn.end("end_turn");
+          return;
+        }
+        update(sessionId, { sessionUpdate: "tool_call_update", toolCallId, status: "completed", content: [toolText("made-by-agent\n")] });
+        const about = firstAnswer
+          ? `\n\nMCP: ${o.mcpServers.join(", ")}\nInstructions: ${o.instructionFiles.join(", ")}\n${o.args.map((a) => `Argument: ${a}`).join("\n")}`
+          : "";
+        firstAnswer = false;
+        update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: `Thinking about: ${text}${context}` } });
+        update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: about } });
+        writeFileSync(conversationFile(sessionId), JSON.stringify(history));
         turn.end("end_turn");
-        return;
-      }
-      update(sessionId, { sessionUpdate: "tool_call_update", toolCallId, status: "completed", content: [toolText("made-by-agent\n")] });
-      const about = firstAnswer
-        ? `\n\nMCP: ${o.mcpServers.join(", ")}\nInstructions: ${o.instructionFiles.join(", ")}\n${o.args.map((a) => `Argument: ${a}`).join("\n")}`
-        : "";
-      firstAnswer = false;
-      update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: `Thinking about: ${text}${context}` } });
-      update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: about } });
-      writeFileSync(conversationFile(sessionId), JSON.stringify(history));
-      turn.end("end_turn");
-    })();
+      })();
     const stopReason = await ended;
     turns.delete(sessionId);
     send({ id, result: { stopReason } });
+  }
+
+  async function review(sessionId: string, text: string, turn: { end: (stopReason: string) => void; cancelled: boolean }): Promise<void> {
+    if (process.env.FAKE_COPILOT_REVIEW_WAIT !== undefined) return;
+    const allowed = o.allowAllTools || (await permission(sessionId, `call_${++calls}_0`));
+    if (turn.cancelled) return;
+    const diffFile = /in the file `([^`]+)`/.exec(text)?.[1] ?? "";
+    const added = firstAddedLine(existsSync(diffFile) ? readFileSync(diffFile, "utf8") : "");
+    const issue = added
+      ? [
+          `## Issue: Fake finding in ${added.path}`,
+          `**File:** ${join(process.cwd(), added.path)}:${added.line}`,
+          "**Severity:** High",
+          `**Problem:** The fake reviewer flags line ${added.line}.`,
+          "**Evidence:** It always does.",
+          "**Suggested fix:** Look at it again.",
+        ].join("\n")
+      : "No significant issues found in the reviewed changes.";
+    const about = [`Shell: ${allowed ? "allowed" : "refused"}`, ...o.args.map((a) => `Argument: ${a}`)].join("\n");
+    update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: `${issue}\n\n${about}` } });
+    turn.end("end_turn");
   }
 
   async function permission(sessionId: string, toolCallId: string): Promise<boolean> {
@@ -205,6 +233,20 @@ export function serveAcp(o: FakeAcpOptions): void {
   });
   process.stdin.on("end", () => process.exit(0));
   process.on("SIGTERM", () => process.exit(143));
+}
+
+/** The first added line of a unified diff: its file and its number in the new file. */
+function firstAddedLine(diff: string): { path: string; line: number } | undefined {
+  let path = "";
+  let line = 0;
+  for (const text of diff.split("\n")) {
+    const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)/.exec(text);
+    if (text.startsWith("+++ b/")) path = text.slice("+++ b/".length);
+    else if (hunk) line = Number(hunk[1]);
+    else if (text.startsWith("+") && path !== "") return { path, line };
+    else if (!text.startsWith("-") && line > 0) line++;
+  }
+  return undefined;
 }
 
 function toolText(text: string) {

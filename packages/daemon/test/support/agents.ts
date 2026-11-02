@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { JavaNavigationSettings, Session, SupervisorSettings, ToolPermissions } from "@trackwall/protocol";
+import type { AutoReviewSettings, JavaNavigationSettings, Session, SupervisorSettings, ToolPermissions } from "@trackwall/protocol";
 import { DomainError } from "../../src/infra/errors.ts";
 import { Agents, type AgentsDeps } from "../../src/modules/agents/agents.ts";
 import { Logs } from "../../src/modules/logs/logs.ts";
@@ -23,7 +23,8 @@ const fakeCopilot = join(import.meta.dir, "..", "fixtures", "fake-copilot-sessio
  * `supervisor` is `supervisor` from the workspace (ADR-78). `worktreesDir` is the task worktrees folder the workspace gives
  * new tasks (ADR-84); by default one in `home`, so that a restarted daemon with the same `home` finds the same folder.
  * `miseEnv` is what mise sets for a session (ADR-93); nothing by default. `javaNavigation` is `javaNavigation` from the
- * workspace (ADR-99), read at every task start; not set by default.
+ * workspace (ADR-99), read at every task start; not set by default. `autoReview` is `autoReview` from the workspace
+ * (ADR-182), read at every report; off by default.
  */
 export function makeAgents(
   repos: Record<string, string>,
@@ -35,6 +36,7 @@ export function makeAgents(
   worktreesDir: () => string = () => join(home, "task-worktrees"),
   miseEnv: AgentsDeps["miseEnv"] = async () => ({ vars: {}, secretNames: [], secretValues: [], profile: null, problem: null }),
   javaNavigation: () => JavaNavigationSettings | null = () => null,
+  autoReview: () => AutoReviewSettings = () => ({ afterReport: false }),
 ) {
   const procs = new ProcessGroups({
     logs: new Logs({ dir: join(home, "logs"), maxFileBytes: 1024 * 1024, log: () => {} }),
@@ -61,6 +63,7 @@ export function makeAgents(
       supervisorSettings: () => supervisor,
       agentSecrets: () => [],
       sessionProfile: () => null,
+      autoReviewSettings: autoReview,
       javaNavigation,
       removeRepo: () => Promise.reject(new Error("unused")),
     },

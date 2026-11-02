@@ -2,6 +2,7 @@ export * from "./agents.ts";
 export * from "./api.ts";
 export * from "./app-config.ts";
 export * from "./approved-file.ts";
+export * from "./auto-review.ts";
 export * from "./batch.ts";
 export * from "./board.ts";
 export * from "./cards.ts";

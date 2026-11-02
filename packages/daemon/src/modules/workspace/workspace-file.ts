@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import {
   AgentSecrets,
+  AutoReviewSettings,
   DayStartSettings,
   GraphConfig,
   JavaNavigationSettings,
@@ -25,7 +26,7 @@ import { type WorkspaceKeyValues, workspaceKeyValue } from "./workspace-key-valu
 /**
  * `workspace.yaml` (§4.5, ADR-13): the workspace configuration, which the user can edit by hand and keep
  * in a private repo. Read on every use, so a manual edit works without restarting the daemon. A write changes
- * only one key (`projectsDir`, `worktreesDir`, `gitProgram`, `repoHosts`, `javaNavigation`, which the Java navigation install writes, or `localConfigRemote`, which "Push to this remote" for the local config store writes, or `sessionProfile`; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `supervisor` and `agentSecrets` only by hand) and keeps comments and the other keys,
+ * only one key (`projectsDir`, `worktreesDir`, `gitProgram`, `repoHosts`, `javaNavigation`, which the Java navigation install writes, or `localConfigRemote`, which "Push to this remote" for the local config store writes, or `sessionProfile`, or `autoReview`; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `supervisor` and `agentSecrets` only by hand) and keeps comments and the other keys,
  * including the `repos` list from version 0.2.0, which is no longer read (ADR-18): it is the user's file, so removing it is up to them.
  */
 
@@ -68,6 +69,8 @@ const Keys: { [K in WorkspaceKey]: z.ZodType<WorkspaceKeyValues[K], unknown> } =
   agentSecrets: AgentSecrets.nullish().transform((names) => names ?? []),
   // The mise environment only sessions start with (ADR-136); set in Settings › Agents or by hand.
   sessionProfile: SessionProfile.nullish().transform((profile) => profile ?? null),
+  // Whether a task gets Copilot CLI's review once its agent reports (ADR-182); set in Settings › Agents or by hand.
+  autoReview: AutoReviewSettings.nullish().transform((settings) => settings ?? { afterReport: false }),
   // The Java language server for tasks (ADR-99); by hand or by installing it in Settings › Agents (ADR-123).
   javaNavigation: JavaNavigationSettings.refine(
     (settings) => [settings.jdtls, settings.java, settings.lombok, ...settings.runtimes].every((path) => path === null || isFullPath(path)),
@@ -155,6 +158,11 @@ export class WorkspaceFile {
     return this.get("sessionProfile", Keys.sessionProfile);
   }
 
+  /** Whether a task gets an automatic review once its agent reports (`autoReview`, ADR-182); off without the key. */
+  autoReviewSettings(): AutoReviewSettings {
+    return this.get("autoReview", Keys.autoReview);
+  }
+
   /** The address the local config store may be pushed to (`localConfigRemote`, ADR-127); `null` keeps it unpushed. */
   localConfigRemote(): string | null {
     return this.get("localConfigRemote", Keys.localConfigRemote);
@@ -199,6 +207,11 @@ export class WorkspaceFile {
   /** `null` removes the key: sessions start without a profile. */
   setSessionProfile(profile: SessionProfile | null): void {
     this.set("sessionProfile", profile);
+  }
+
+  /** Off removes the key, so that the file says nothing about a setting the user did not turn on. */
+  setAutoReview(settings: AutoReviewSettings): void {
+    this.set("autoReview", settings.afterReport ? settings : null);
   }
 
   /** Without a Lombok jar or runtimes the key has no `lombok` or `runtimes` line, rather than `lombok: null` or `runtimes: []`. */
