@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { type ConversationEntry, MCP_SERVER_NAME, mcpTools, type Session } from "@trackwall/protocol";
 import { viewer, waitFor } from "../test/support/agents.ts";
 import { startRealCopilotDaemon } from "./support/real-copilot.ts";
-import { commitEscapeScript, ESCAPE_COMMAND } from "./support/sandbox-escape.ts";
+import { commitEscapeScript, ESCAPE_COMMAND, sandboxRefusedEverything } from "./support/sandbox-escape.ts";
 import { type ModelRequest, type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
 
 // The contract of the conversation view with the real Copilot CLI (ADR-107, for tasks ADR-137): `copilot --acp` as the
@@ -294,10 +294,14 @@ describe("a task in Copilot CLI's sandbox in the conversation view with the real
         .requests()
         .slice(-3)
         .flatMap((r) => r.toolResults);
-      expect({ inside: existsSync(join(task.worktree, "inside.txt")), answers }).toMatchObject({ inside: true });
-      // The repo's whole git directory is granted for the worktree's commits, hooks and config with it: a gap in §8,
-      // pinned here so that a change in Copilot CLI shows.
-      expect(probe.escapes()).toEqual(["the repo's git hooks", "the repo's git config"]);
+      if (sandboxRefusedEverything(answers)) {
+        expect({ inside: existsSync(join(task.worktree, "inside.txt")), escapes: probe.escapes() }).toEqual({ inside: false, escapes: [] });
+      } else {
+        expect({ inside: existsSync(join(task.worktree, "inside.txt")), answers }).toMatchObject({ inside: true });
+        // The repo's whole git directory is granted for the worktree's commits, hooks and config with it: a gap in
+        // §8, pinned here so that a change in Copilot CLI shows.
+        expect(probe.escapes()).toEqual(["the repo's git hooks", "the repo's git config"]);
+      }
       await agents.stop(session);
     } finally {
       writeFileSync(workspaceFile, workspace);

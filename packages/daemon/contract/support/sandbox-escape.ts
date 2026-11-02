@@ -13,6 +13,17 @@ const PROBE_DIR = join(homedir(), ".trackwall-sandbox-contract");
 const ESCAPED = join(PROBE_DIR, "escaped.txt");
 const SCRIPT_NAME = "escape.mjs";
 
+/**
+ * What Copilot CLI answers every command with on a Windows without BaseContainer, such as GitHub's Windows runners: the
+ * sandbox fails closed there, so the test checks that nothing ran instead of what the sandbox let through.
+ */
+const WINDOWS_WITHOUT_SANDBOX = "Windows sandboxing requires BaseContainer";
+
+/** Whether the shell's answers to the model say the sandbox could not run, so every command was refused. */
+export function sandboxRefusedEverything(answers: readonly string[]): boolean {
+  return process.platform === "win32" && answers.length > 0 && answers.every((a) => a.includes(WINDOWS_WITHOUT_SANDBOX));
+}
+
 /** The command the model runs in the task's worktree. */
 export const ESCAPE_COMMAND = `node ${SCRIPT_NAME}`;
 

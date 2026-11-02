@@ -14,7 +14,7 @@ import { REFERENCE_COLS, REFERENCE_ROWS } from "../test/support/copilot-referenc
 import { screenLines, untilInputBox } from "../test/support/screen-lines.ts";
 import { hookRecords, startRealCopilotDaemon } from "./support/real-copilot.ts";
 import { type Recorder, startRecorder } from "./support/recorder.ts";
-import { commitEscapeScript, ESCAPE_COMMAND } from "./support/sandbox-escape.ts";
+import { commitEscapeScript, ESCAPE_COMMAND, sandboxRefusedEverything } from "./support/sandbox-escape.ts";
 import { type ModelRequest, type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
 import { USER_MCP_ISSUES, USER_MCP_SERVER, USER_MCP_TOOL } from "./support/user-mcp-server.ts";
 
@@ -648,7 +648,12 @@ describe("a task in Copilot CLI's sandbox with the real Copilot CLI (ADR-181)", 
     const workspace = readFileSync(workspaceFile, "utf8");
     expect(workspace).toContain("tasks: off");
     const probe = commitEscapeScript(join(daemon.projects, "shop"));
+    // Without git and gh going through the sandbox's proxy Copilot CLI's terminal has no certificate authority to
+    // offer, a question that would stop the turn on macOS and Windows before the prompt (to check: does it?).
+    const settings = join(daemon.home, "copilot-home", "settings.json");
     try {
+      mkdirSync(dirname(settings), { recursive: true });
+      writeFileSync(settings, JSON.stringify({ sandbox: { auth: { git: false, gh: false } } }));
       writeFileSync(workspaceFile, workspace.replace("tasks: off", "tasks: auto"));
       const commit = "git add inside.txt; git -c user.name=agent -c user.email=agent@example.com commit -q -m sandboxed";
       model.reply(
@@ -672,14 +677,19 @@ describe("a task in Copilot CLI's sandbox with the real Copilot CLI (ADR-181)", 
         .requests()
         .slice(-3)
         .flatMap((r) => r.toolResults);
-      expect({ inside: existsSync(join(task.worktree, "inside.txt")), answers }).toMatchObject({ inside: true });
-      expect(spawnSync("git", ["log", "-1", "--format=%s"], { cwd: task.worktree, encoding: "utf8" }).stdout.trim()).toBe("sandboxed");
-      // The repo's whole git directory is granted for the worktree's commits, hooks and config with it: a gap in §8,
-      // pinned here so that a change in Copilot CLI shows.
-      expect(probe.escapes()).toEqual(["the repo's git hooks", "the repo's git config"]);
+      if (sandboxRefusedEverything(answers)) {
+        expect({ inside: existsSync(join(task.worktree, "inside.txt")), escapes: probe.escapes() }).toEqual({ inside: false, escapes: [] });
+      } else {
+        expect({ inside: existsSync(join(task.worktree, "inside.txt")), answers }).toMatchObject({ inside: true });
+        expect(spawnSync("git", ["log", "-1", "--format=%s"], { cwd: task.worktree, encoding: "utf8" }).stdout.trim()).toBe("sandboxed");
+        // The repo's whole git directory is granted for the worktree's commits, hooks and config with it: a gap in
+        // §8, pinned here so that a change in Copilot CLI shows.
+        expect(probe.escapes()).toEqual(["the repo's git hooks", "the repo's git config"]);
+      }
       expect(agents.session(session).dialog).toBeNull();
       await agents.stop(session);
     } finally {
+      rmSync(settings, { force: true });
       writeFileSync(workspaceFile, workspace);
       probe.remove();
     }
