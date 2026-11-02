@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { toolCallFiles, toolCallLines, toolCallPatch } from "../src/modules/agents/acp-tool-call.ts";
+import { toolCallFiles, toolCallLines, toolCallPatch, toolCallSubagent } from "../src/modules/agents/acp-tool-call.ts";
 
 const text = (t: string) => ({ type: "text" as const, text: t });
 const CWD = join("/", "repo");
@@ -94,5 +94,16 @@ describe("the patch of a tool call", () => {
 
     expect(patch).toBe("--- a/f\n+++ b/f\n@@ -0,0 +1,1 @@\n");
     expect(cut).toBe(true);
+  });
+});
+
+describe("the subagent of a tool call", () => {
+  test("Copilot CLI's task tool names the subagent's type and its prompt, and another tool has no subagent", () => {
+    expect(toolCallSubagent({ rawInput: { agent_type: "explore", prompt: "Find callers", description: "Find" } })).toEqual({
+      type: "explore",
+      prompt: "Find callers",
+    });
+    expect(toolCallSubagent({ rawInput: { command: "npm test" } })).toBeNull();
+    expect(toolCallSubagent({ rawInput: { agent_type: "explore" } })).toBeNull();
   });
 });

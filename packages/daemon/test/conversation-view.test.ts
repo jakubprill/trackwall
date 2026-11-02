@@ -2,15 +2,18 @@ import { afterEach, describe, expect, test } from "bun:test";
 import {
   agentsApi,
   CONVERSATION_SUBPROTOCOL,
+  type ContextUse,
   type ConversationEntry,
+  type ConversationMode,
   ConversationServerMessage,
   dayStartApi,
   PTY_CLOSE_NOT_FOUND,
   PTY_SUBPROTOCOL,
   type Session,
+  type SlashCommand,
 } from "@trackwall/protocol";
 import WebSocket from "ws";
-import { FAKE_ACP_COMMAND } from "./fixtures/fake-copilot-acp.ts";
+import { FAKE_ACP_COMMAND, FAKE_ACP_COMMANDS } from "./fixtures/fake-copilot-acp.ts";
 import { viewer, waitFor } from "./support/agents.ts";
 import { startSessionApi } from "./support/session-api.ts";
 
@@ -29,13 +32,21 @@ async function startDaemon(restartOf?: { home: string; projects: string }) {
 
 type Daemon = Awaited<ReturnType<typeof startSessionApi>>;
 
-/** A conversation view: the entries as the socket's frames build them, keyed and in order. */
+/** A conversation view: the entries as the socket's frames build them, keyed and in order, and the agent's mode, context use and commands. */
 function conversation(daemon: Daemon, session: string, protocols = [CONVERSATION_SUBPROTOCOL, `bearer.${TOKEN}`]) {
   const ws = new WebSocket(`ws://127.0.0.1:${daemon.api.port}/ws/conversation/${session}`, protocols);
   let entries: ConversationEntry[] = [];
+  const info: { mode: ConversationMode | null; context: ContextUse | null; commands: SlashCommand[] } = {
+    mode: null,
+    context: null,
+    commands: [],
+  };
   ws.on("message", (data: Buffer) => {
     const message = ConversationServerMessage.parse(JSON.parse(data.toString("utf8")));
     if (message.reset) entries = [];
+    if (message.mode !== undefined) info.mode = message.mode;
+    if (message.context !== undefined) info.context = message.context;
+    if (message.commands !== undefined) info.commands = message.commands;
     for (const entry of message.entries) {
       const at = entries.findIndex((e) => e.id === entry.id);
       if (at >= 0) entries[at] = entry;
@@ -48,7 +59,7 @@ function conversation(daemon: Daemon, session: string, protocols = [CONVERSATION
     ws.once("unexpected-response", (_req, res) => reject(new Error(`status ${res.statusCode}`)));
   });
   const closed = new Promise<number>((resolve) => ws.once("close", (code) => resolve(code)));
-  return { ws, opened, closed, entries: () => entries };
+  return { ws, opened, closed, entries: () => entries, info: () => info };
 }
 
 async function until(check: () => boolean, what: string): Promise<void> {
@@ -99,6 +110,45 @@ describe.skipIf(process.versions.bun === undefined)("the supervisor in the conve
     expect(answer?.kind === "agent" && answer.text).toContain("MCP: trackwall");
     expect(answer?.kind === "agent" && answer.text).toContain("Instructions: trackwall.instructions.md");
     await until(() => daemon.facade.agents.sessions().lastSupervisor === supervisor.id, "the supervisor's conversation");
+
+    view.ws.close();
+    await daemon.post(agentsApi.stop, { session: supervisor.id });
+  }, 60_000);
+
+  test("the view gets the agent's modes without autopilot, its slash commands and its context use, and the user switches the mode", async () => {
+    const daemon = await startDaemon();
+    const supervisor = await daemon.post(agentsApi.startSupervisor, { conversation: "new", view: "conversation" });
+    await inState(daemon, supervisor.id, "Input");
+    const view = conversation(daemon, supervisor.id);
+    await view.opened;
+    await until(() => view.info().commands.length > 0, "the commands");
+    const agent = "https://agentclientprotocol.com/protocol/session-modes#agent";
+    const plan = "https://agentclientprotocol.com/protocol/session-modes#plan";
+
+    expect(view.info().mode).toEqual({
+      current: agent,
+      options: [
+        { id: agent, name: "Agent", description: "Default agent mode for conversational interactions" },
+        { id: plan, name: "Plan", description: "Plan mode for creating and executing multi-step plans" },
+      ],
+    });
+    expect(view.info().commands).toEqual([
+      { name: "compact", description: FAKE_ACP_COMMANDS[0]?.description ?? "", hint: "focus instructions" },
+      { name: "review", description: FAKE_ACP_COMMANDS[1]?.description ?? "", hint: "" },
+    ]);
+    expect(view.info().context).toBeNull();
+
+    await daemon.post(agentsApi.setMode, { session: supervisor.id, mode: plan });
+    await until(() => view.info().mode?.current === plan, "the plan mode");
+    await expect(
+      daemon.post(agentsApi.setMode, { session: supervisor.id, mode: "https://agentclientprotocol.com/protocol/session-modes#autopilot" }),
+    ).rejects.toThrow("the agent does not offer this mode");
+
+    await daemon.post(agentsApi.say, { session: supervisor.id, text: "Check the build" });
+    const asking = await inState(daemon, supervisor.id, "Approval");
+    await daemon.post(agentsApi.answerDialog, { session: supervisor.id, dialog: asking.dialog?.id ?? "", answer: "1" });
+    await until(() => view.info().context !== null, "the context use");
+    expect(view.info().context).toEqual({ used: 1000, size: 128_000 });
 
     view.ws.close();
     await daemon.post(agentsApi.stop, { session: supervisor.id });

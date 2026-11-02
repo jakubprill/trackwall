@@ -1,6 +1,6 @@
 import { CONVERSATION_TEXT_MAX, type ConversationEntry, TOOL_KIND_MAX, TOOL_TITLE_MAX } from "@trackwall/protocol";
 import { contentText, type SessionUpdate } from "./acp-messages.ts";
-import { toolCallFiles, toolCallLines, toolCallPatch } from "./acp-tool-call.ts";
+import { toolCallFiles, toolCallLines, toolCallPatch, toolCallSubagent } from "./acp-tool-call.ts";
 
 /**
  * The conversation of a session in the conversation view (ADR-107), built from ACP's `session/update` notifications:
@@ -68,7 +68,11 @@ export class AcpConversation {
       case "tool_call":
       case "tool_call_update":
         return [this.#tool(update)];
+      // The session's title, mode, context use and commands are not entries (`acp-session-info.ts`).
       case "session_info_update":
+      case "usage_update":
+      case "config_option_update":
+      case "available_commands_update":
         return [];
     }
   }
@@ -112,6 +116,7 @@ export class AcpConversation {
       files: toolCallFiles(update, this.#cwd),
       detail: toolCallLines(update),
       ...patchFields(update),
+      subagent: toolCallSubagent(update),
     };
     this.#tools.set(update.toolCallId, entry);
     this.#entries.push(entry);
@@ -132,6 +137,7 @@ export class AcpConversation {
       known.patch = change.patch;
       known.patchCut = change.patchCut;
     }
+    known.subagent = toolCallSubagent(update) ?? known.subagent;
     return known;
   }
 
@@ -148,7 +154,8 @@ function patchFields(update: ToolUpdate): Pick<ToolEntry, "patch" | "patchCut"> 
 
 function entrySize(entry: ConversationEntry): number {
   if (entry.kind !== "tool") return entry.text.length;
-  return entry.title.length + entry.files.join("").length + entry.detail.join("").length + entry.patch.length;
+  const sizes = [entry.title, entry.files.join(""), entry.detail.join(""), entry.patch, entry.subagent?.prompt ?? ""];
+  return sizes.reduce((sum, text) => sum + text.length, 0);
 }
 
 function cut(text: string): string {

@@ -5,17 +5,30 @@ import {
   conversationSocket,
   PTY_CLOSE_NOT_FOUND,
   type Session,
+  type SlashCommand,
   type WaitingMessage,
 } from "@trackwall/protocol";
 import { SendHorizontal, Square } from "lucide-react";
 import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AgentDialogCard } from "@/components/AgentDialogCard";
+import { AgentModeSwitch } from "@/components/AgentModeSwitch";
+import { ContextMeter } from "@/components/ContextMeter";
 import { ConversationEntries } from "@/components/ConversationEntries";
+import { SlashCommandList } from "@/components/SlashCommandList";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { conversationStatus, sendsMessage, withEntries } from "@/lib/conversation";
+import {
+  type AgentInfo,
+  conversationStatus,
+  NO_AGENT_INFO,
+  sendsMessage,
+  slashSuggestions,
+  withAgentInfo,
+  withEntries,
+  withSlashCommand,
+} from "@/lib/conversation";
 import { daemonSocket } from "@/lib/daemon-socket";
 import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
 import { inTurn, isLive } from "@/lib/session-state";
@@ -29,7 +42,8 @@ const FOLLOW_PX = 48;
 
 /**
  * The conversation view of a session (ADR-107), in place of its terminal: what the user and the agent said, the tools
- * the agent called, its approval, whose turn it is, and a message box. The user's messages that wait for the turn to end
+ * the agent called, its approval, whose turn it is with the agent's mode and context use, and a message box that suggests
+ * the agent's slash commands. The user's messages that wait for the turn to end
  * show at once, as waiting, until they go. The entries come over the conversation socket, all of them at
  * every connection; messages, answers and Stop go through the `agents` API. Everything is plain text in the page, so
  * scrolling, selecting and copying are the browser's own. Like the terminal, the view tells the daemon whether it is in
@@ -42,6 +56,7 @@ export function ConversationView({ conn, session, selected }: { conn: Connection
   const updateFocus = useRef<() => void>(undefined);
   const [entries, setEntries] = useState<ConversationEntry[]>([]);
   const [waiting, setWaiting] = useState<WaitingMessage[]>([]);
+  const [info, setInfo] = useState<AgentInfo>(NO_AGENT_INFO);
   const [notice, setNotice] = useState<string>();
   const list = useRef<HTMLDivElement>(null);
   const following = useRef(true);
@@ -72,6 +87,7 @@ export function ConversationView({ conn, session, selected }: { conn: Connection
         const message = ConversationServerMessage.safeParse(parseJson(event.data));
         if (!message.success) return;
         setEntries((current) => withEntries(current, message.data));
+        setInfo((current) => withAgentInfo(current, message.data));
         setWaiting(message.data.waiting);
       };
       ws.onclose = (event) => {
@@ -135,21 +151,45 @@ export function ConversationView({ conn, session, selected }: { conn: Connection
         </div>
       )}
       {live && (
-        <p role="status" aria-label="Whose turn" className="border-t px-3 pt-2 text-xs">
-          <StatusLabel {...conversationStatus(session)} />
-        </p>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t px-3 pt-2 text-xs">
+          <p role="status" aria-label="Whose turn" className="min-w-0 flex-1">
+            <StatusLabel {...conversationStatus(session)} />
+          </p>
+          {info.mode && <AgentModeSwitch conn={conn} session={id} mode={info.mode} />}
+          {info.context && <ContextMeter context={info.context} />}
+        </div>
       )}
-      {live && <Composer conn={conn} session={id} working={working} focused={selected && !keyboardElsewhere} />}
+      {live && <Composer conn={conn} session={id} working={working} focused={selected && !keyboardElsewhere} commands={info.commands} />}
     </div>
   );
 }
 
 /**
  * The message box of a running session: Enter sends, Shift+Enter is a new line; a message written during a turn goes
- * once it ends. Stop ends the turn. The box grows with the text, and its buttons sit inside it on one line.
+ * once it ends. Stop ends the turn. The box grows with the text, and its buttons sit inside it on one line. A slash at
+ * its start lists the agent's commands, which ↑, ↓ and Tab or Enter pick and Esc closes.
  */
-function Composer({ conn, session, working, focused }: { conn: Connection; session: string; working: boolean; focused: boolean }) {
+function Composer({
+  conn,
+  session,
+  working,
+  focused,
+  commands,
+}: {
+  conn: Connection;
+  session: string;
+  working: boolean;
+  focused: boolean;
+  commands: readonly SlashCommand[];
+}) {
   const [text, setText] = useState("");
+  const [picked, setPicked] = useState(0);
+  const [listClosed, setListClosed] = useState(false);
+  const suggestions = listClosed ? [] : slashSuggestions(text, commands);
+  const pick = (command: SlashCommand) => {
+    setText(withSlashCommand(command));
+    setPicked(0);
+  };
   const box = useRef<HTMLTextAreaElement>(null);
   const say = useAction(
     (message: string) => post(conn, agentsApi.say, { session, text: message }),
@@ -176,6 +216,7 @@ function Composer({ conn, session, working, focused }: { conn: Connection; sessi
   const error = say.error ?? stop.error;
   return (
     <div className="flex flex-col gap-1 px-3 pt-1 pb-2">
+      {suggestions.length > 0 && <SlashCommandList commands={suggestions} selected={picked} onPick={pick} />}
       <div className="border-input dark:bg-muted focus-within:border-ring focus-within:ring-ring/50 flex items-end gap-2 rounded-md border py-1.5 pr-1.5 pl-3 focus-within:ring-[3px]">
         <textarea
           ref={box}
@@ -184,8 +225,18 @@ function Composer({ conn, session, working, focused }: { conn: Connection; sessi
           value={text}
           rows={1}
           className="placeholder:text-muted-foreground max-h-48 min-w-0 flex-1 resize-none self-center bg-transparent py-1 text-sm outline-none"
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            setPicked(0);
+            setListClosed(false);
+          }}
           onKeyDown={(e) => {
+            if (suggestions.length > 0 && slashKey(e.key, suggestions.length, picked, setPicked, setListClosed)) {
+              e.preventDefault();
+              const command = suggestions[Math.min(picked, suggestions.length - 1)];
+              if ((e.key === "Tab" || e.key === "Enter") && command) pick(command);
+              return;
+            }
             if (!sendsMessage(e.nativeEvent)) return;
             e.preventDefault();
             send();
@@ -213,6 +264,21 @@ function Composer({ conn, session, working, focused }: { conn: Connection; sessi
       {error && <p className="text-destructive text-xs">{error}</p>}
     </div>
   );
+}
+
+/** A key while the slash commands show: ↑ and ↓ move the pick, Esc closes the list; whether the list took the key. */
+function slashKey(
+  key: string,
+  count: number,
+  picked: number,
+  setPicked: (i: number) => void,
+  setListClosed: (closed: boolean) => void,
+): boolean {
+  if (key === "ArrowDown") setPicked((picked + 1) % count);
+  else if (key === "ArrowUp") setPicked((picked - 1 + count) % count);
+  else if (key === "Escape") setListClosed(true);
+  else return key === "Tab" || key === "Enter";
+  return true;
 }
 
 function parseJson(text: string): unknown {

@@ -262,11 +262,11 @@ describe("a Copilot CLI session over ACP", () => {
       method: "session/update",
       params: { sessionId: "other", update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "no" } } },
     });
-    s.send({ method: "session/update", params: { sessionId: "c1", update: { sessionUpdate: "usage_update", used: 1, size: 2 } } });
+    s.send({ method: "session/update", params: { sessionId: "c1", update: { sessionUpdate: "plan", entries: [] } } });
     s.send({ id: 5, method: "fs/read_text_file", params: { path: "/etc/passwd" } });
     await s.settle();
 
-    expect(frames).toEqual([{ type: "entries", reset: true, entries: [], waiting: [] }]);
+    expect(frames).toEqual([{ type: "entries", reset: true, entries: [], waiting: [], mode: null, context: null, commands: [] }]);
     expect(s.written.at(-1)).toMatchObject({ id: 5, error: { code: -32603 } });
   });
 
@@ -465,7 +465,7 @@ describe("a Copilot CLI session over ACP", () => {
     await new Promise((r) => setTimeout(r, 100));
 
     expect(frames).toEqual([
-      { type: "entries", reset: true, entries: [], waiting: [] },
+      { type: "entries", reset: true, entries: [], waiting: [], mode: null, context: null, commands: [] },
       { type: "entries", reset: false, entries: [{ id: "agent-1", kind: "agent", text: "All tests pass." }], waiting: [] },
     ]);
   });
@@ -506,5 +506,92 @@ describe("a session over ACP that may be stuck (ADR-151)", () => {
       params: { sessionId: "c1", update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Still starting" } } },
     });
     expect(s.acp.view()?.stuck).toBeNull();
+  });
+});
+
+describe("the agent's mode, context use and commands in the conversation view", () => {
+  const AGENT = "https://agentclientprotocol.com/protocol/session-modes#agent";
+  const PLAN = "https://agentclientprotocol.com/protocol/session-modes#plan";
+  const modes = (current: string) => [
+    {
+      id: "mode",
+      currentValue: current,
+      options: [
+        { value: AGENT, name: "Agent", description: "Default agent mode" },
+        { value: PLAN, name: "Plan", description: "Plan mode" },
+      ],
+    },
+  ];
+
+  test("commands sent before session/new answers, the mode it answers with and a usage update reach the views", async () => {
+    const s = session();
+    const started = s.acp.start();
+    s.answer("initialize", { protocolVersion: 1 });
+    await s.settle();
+    s.send({
+      method: "session/update",
+      params: {
+        sessionId: "c1",
+        update: {
+          sessionUpdate: "available_commands_update",
+          availableCommands: [{ name: "compact", description: "Summarize", input: { hint: "focus" } }],
+        },
+      },
+    });
+    s.answer("session/new", { sessionId: "c1", configOptions: modes(AGENT) });
+    await started;
+    const frames: ConversationServerMessage[] = [];
+    s.acp.attachConversation({ send: (m) => frames.push(m), closed: () => {} });
+    s.send({
+      method: "session/update",
+      params: { sessionId: "c1", update: { sessionUpdate: "usage_update", used: 10_777, size: 128_000 } },
+    });
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect(frames).toEqual([
+      {
+        type: "entries",
+        reset: true,
+        entries: [],
+        waiting: [],
+        mode: {
+          current: AGENT,
+          options: [
+            { id: AGENT, name: "Agent", description: "Default agent mode" },
+            { id: PLAN, name: "Plan", description: "Plan mode" },
+          ],
+        },
+        context: null,
+        commands: [{ name: "compact", description: "Summarize", hint: "focus" }],
+      },
+      { type: "entries", reset: false, entries: [], waiting: [], context: { used: 10_777, size: 128_000 } },
+    ]);
+  });
+
+  test("switching the mode asks the agent, and a mode it does not offer is refused without asking", async () => {
+    const s = session();
+    const started = s.acp.start();
+    s.answer("initialize", { protocolVersion: 1 });
+    await s.settle();
+    s.answer("session/new", { sessionId: "c1", configOptions: modes(AGENT) });
+    await started;
+
+    const switched = s.acp.setMode(PLAN);
+    await s.settle();
+    expect(s.written.at(-1)).toMatchObject({
+      method: "session/set_config_option",
+      params: { sessionId: "c1", configId: "mode", value: PLAN },
+    });
+    s.answer("session/set_config_option", { configOptions: modes(PLAN) });
+    await switched;
+    const frames: ConversationServerMessage[] = [];
+    s.acp.attachConversation({ send: (m) => frames.push(m), closed: () => {} });
+    expect(frames[0]?.mode?.current).toBe(PLAN);
+
+    const asked = s.written.length;
+    await expect(s.acp.setMode("https://agentclientprotocol.com/protocol/session-modes#autopilot")).rejects.toThrow(
+      "the agent does not offer this mode",
+    );
+    expect(s.written).toHaveLength(asked);
   });
 });

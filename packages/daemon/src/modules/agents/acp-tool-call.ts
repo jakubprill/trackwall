@@ -1,12 +1,19 @@
 import { relative } from "node:path";
-import { TOOL_FILE_PATH_MAX, TOOL_FILES_MAX, TOOL_PATCH_MAX } from "@trackwall/protocol";
+import {
+  CONVERSATION_TEXT_MAX,
+  type ConversationEntry,
+  TOOL_FILE_PATH_MAX,
+  TOOL_FILES_MAX,
+  TOOL_KIND_MAX,
+  TOOL_PATCH_MAX,
+} from "@trackwall/protocol";
 import { isInside } from "../../infra/path-inside.ts";
 import { contentText, type SessionUpdate, type ToolCallContent } from "./acp-messages.ts";
 
 /**
  * What the conversation view shows of a tool call or its approval (ADR-107), read from ACP's tool call fields as
  * Copilot CLI sends them (`contract/acp-session.contract.ts`): the files it works on, its lines (output, the command, why
- * it failed) and the change it makes to files as one unified diff, each cut to what a view can hold.
+ * it failed), the change it makes to files as one unified diff and the subagent it starts, each cut to what a view can hold.
  */
 
 type ToolCall = Pick<
@@ -59,6 +66,17 @@ export function toolCallPatch(toolCall: Pick<ToolCall, "content" | "rawInput" | 
   // Cut on a line, so the last line shown is a whole one; a first line longer than the limit is cut inside.
   const lastLine = patch.lastIndexOf("\n", TOOL_PATCH_MAX - 1);
   return { patch: patch.slice(0, lastLine >= 0 ? lastLine + 1 : TOOL_PATCH_MAX), cut: true };
+}
+
+/**
+ * The subagent a tool call starts: Copilot CLI's `task` tool sends the subagent's type and what it asks it in its input
+ * (`agent_type`, `prompt`); `null` for another tool.
+ */
+export function toolCallSubagent(toolCall: Pick<ToolCall, "rawInput">): Extract<ConversationEntry, { kind: "tool" }>["subagent"] {
+  const type = stringField(toolCall.rawInput, "agent_type");
+  const prompt = stringField(toolCall.rawInput, "prompt");
+  if (type === undefined || prompt === undefined) return null;
+  return { type: type.slice(0, TOOL_KIND_MAX), prompt: prompt.slice(0, CONVERSATION_TEXT_MAX) };
 }
 
 /** The text when it is a unified diff, without the empty lines Copilot CLI puts before it. */

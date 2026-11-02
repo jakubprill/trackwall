@@ -1,13 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import type { ConversationEntry } from "@trackwall/protocol";
 import {
+  contextMeter,
   conversationStatus,
   conversationTurns,
+  NO_AGENT_INFO,
   readSupervisorView,
   saveSupervisorView,
   sendsMessage,
+  slashSuggestions,
   toolSubtitle,
+  withAgentInfo,
   withEntries,
+  withSlashCommand,
 } from "../src/lib/conversation.ts";
 
 describe("the conversation view", () => {
@@ -28,6 +33,7 @@ describe("the conversation view", () => {
           detail: [],
           patch: "",
           patchCut: false,
+          subagent: null,
         },
       ],
     });
@@ -46,6 +52,7 @@ describe("the conversation view", () => {
           detail: ["ok"],
           patch: "",
           patchCut: false,
+          subagent: null,
         },
         { id: "agent-2", kind: "agent", text: "Green." },
       ],
@@ -63,6 +70,7 @@ describe("the conversation view", () => {
         detail: ["ok"],
         patch: "",
         patchCut: false,
+        subagent: null,
       },
       { id: "agent-2", kind: "agent", text: "Green." },
     ]);
@@ -126,6 +134,7 @@ describe("turns of the conversation view", () => {
       detail: [],
       patch: "",
       patchCut: false,
+      subagent: null,
     };
     expect(
       conversationTurns([
@@ -155,11 +164,66 @@ describe("turns of the conversation view", () => {
 });
 
 describe("the line under a tool call's title", () => {
-  test("a shell tool shows its command, another tool its files, and a tool with neither nothing", () => {
-    expect(toolSubtitle({ tool: "execute", detail: ["$ pnpm test", "ok"], files: [] })).toBe("$ pnpm test");
-    expect(toolSubtitle({ tool: "edit", detail: [], files: ["src/total.ts", "src/total.test.ts"] })).toBe(
+  test("a subagent shows its type, a shell tool its command, another tool its files, and a tool with none of them nothing", () => {
+    expect(toolSubtitle({ tool: "other", detail: [], files: [], subagent: { type: "explore", prompt: "Find callers" } })).toBe(
+      "Subagent · explore",
+    );
+    expect(toolSubtitle({ tool: "execute", detail: ["$ pnpm test", "ok"], files: [], subagent: null })).toBe("$ pnpm test");
+    expect(toolSubtitle({ tool: "edit", detail: [], files: ["src/total.ts", "src/total.test.ts"], subagent: null })).toBe(
       "src/total.ts, src/total.test.ts",
     );
-    expect(toolSubtitle({ tool: "other", detail: ["3 rows"], files: [] })).toBeUndefined();
+    expect(toolSubtitle({ tool: "other", detail: ["3 rows"], files: [], subagent: null })).toBeUndefined();
+  });
+});
+
+describe("the agent's mode, context use and commands in the conversation view", () => {
+  const plan = {
+    current: "mode#plan",
+    options: [
+      { id: "mode#agent", name: "Agent", description: "" },
+      { id: "mode#plan", name: "Plan", description: "" },
+    ],
+  };
+  const compact = { name: "compact", description: "Summarize the conversation", hint: "focus instructions" };
+
+  test("a frame changes only what it carries, and a reset starts from nothing", () => {
+    const first = withAgentInfo(NO_AGENT_INFO, {
+      type: "entries",
+      reset: true,
+      entries: [],
+      waiting: [],
+      mode: plan,
+      context: null,
+      commands: [compact],
+    });
+    const next = withAgentInfo(first, { type: "entries", reset: false, entries: [], waiting: [], context: { used: 10, size: 100 } });
+
+    expect(next).toEqual({ mode: plan, context: { used: 10, size: 100 }, commands: [compact] });
+    expect(withAgentInfo(next, { type: "entries", reset: true, entries: [], waiting: [] })).toEqual(NO_AGENT_INFO);
+  });
+
+  test("the context meter is a whole percent of the window and warns from 75%", () => {
+    expect(contextMeter({ used: 10_777, size: 128_000 })).toEqual({ percent: 8, tone: "ok" });
+    expect(contextMeter({ used: 96_000, size: 128_000 })).toEqual({ percent: 75, tone: "warning" });
+    expect(contextMeter({ used: 200, size: 100 })).toEqual({ percent: 100, tone: "warning" });
+  });
+
+  test("a slash at the start lists the commands that start with what follows it, until a space", () => {
+    const review = { name: "review", description: "Review the changes", hint: "" };
+    const chronicle = { name: "chronicle", description: "Session history", hint: "" };
+    const commands = [compact, review, chronicle];
+
+    expect(slashSuggestions("/", commands)).toEqual(commands);
+    expect(slashSuggestions("/C", commands)).toEqual([compact, chronicle]);
+    expect(slashSuggestions("/compact now", commands)).toEqual([]);
+    expect(slashSuggestions("fix /c", commands)).toEqual([]);
+    expect(slashSuggestions("/x", commands)).toEqual([]);
+    expect(withSlashCommand(compact)).toBe("/compact ");
+  });
+
+  test("at most eight commands are suggested at once", () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({ name: `c${i}`, description: "", hint: "" }));
+
+    expect(slashSuggestions("/c", many)).toHaveLength(8);
   });
 });

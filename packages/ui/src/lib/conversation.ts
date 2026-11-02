@@ -1,4 +1,13 @@
-import type { ConversationEntry, ConversationServerMessage, Session, SessionView, ToolCallStatus } from "@trackwall/protocol";
+import type {
+  ContextUse,
+  ConversationEntry,
+  ConversationMode,
+  ConversationServerMessage,
+  Session,
+  SessionView,
+  SlashCommand,
+  ToolCallStatus,
+} from "@trackwall/protocol";
 import type { StatusTone } from "./repo-status.ts";
 
 /**
@@ -49,8 +58,11 @@ export const TOOL_STATUS: Record<ToolCallStatus, { label: string; tone?: StatusT
 /** How many lines of a tool call's change the conversation view shows; the "Changes" view has all of them. */
 export const PATCH_SHOWN_LINES = 400;
 
-/** The line under a tool call's title: the command of a shell tool, otherwise the files it works on. */
-export function toolSubtitle(tool: Pick<Extract<ConversationEntry, { kind: "tool" }>, "tool" | "detail" | "files">): string | undefined {
+/** The line under a tool call's title: the subagent it started, the command of a shell tool, otherwise the files it works on. */
+export function toolSubtitle(
+  tool: Pick<Extract<ConversationEntry, { kind: "tool" }>, "tool" | "detail" | "files" | "subagent">,
+): string | undefined {
+  if (tool.subagent) return `Subagent · ${tool.subagent.type}`;
   const command = tool.tool === "execute" ? tool.detail.find((line) => line.startsWith("$ ")) : undefined;
   return command ?? (tool.files.length > 0 ? tool.files.join(", ") : undefined);
 }
@@ -106,4 +118,51 @@ export function saveSupervisorView(storage: () => Pick<Storage, "setItem">, view
   } catch {
     // The choice holds in this window; only the next start of the app does not remember it.
   }
+}
+
+/** What the view knows of the agent besides its conversation: its mode, its context use and its slash commands. */
+export interface AgentInfo {
+  mode: ConversationMode | null;
+  context: ContextUse | null;
+  commands: SlashCommand[];
+}
+
+export const NO_AGENT_INFO: AgentInfo = { mode: null, context: null, commands: [] };
+
+/** The agent's info after a frame, which carries only what changed (all of it on a reset). */
+export function withAgentInfo(info: AgentInfo, message: ConversationServerMessage): AgentInfo {
+  const base = message.reset ? NO_AGENT_INFO : info;
+  return {
+    mode: message.mode === undefined ? base.mode : message.mode,
+    context: message.context === undefined ? base.context : message.context,
+    commands: message.commands ?? base.commands,
+  };
+}
+
+/** From how much of its window the conversation uses, the meter warns: the agent soon summarizes it (`/compact`). */
+const CONTEXT_WARNING_PERCENT = 75;
+
+/** The context use as a whole percent of the window, with a warning tone once it is nearly full. */
+export function contextMeter(context: ContextUse): { percent: number; tone: StatusTone } {
+  const percent = Math.min(100, Math.max(0, Math.round((context.used / context.size) * 100)));
+  return { percent, tone: percent >= CONTEXT_WARNING_PERCENT ? "warning" : "ok" };
+}
+
+/** How many slash commands the message box suggests at once. */
+const SLASH_SUGGESTIONS_MAX = 8;
+
+/**
+ * The commands the message box suggests: while the message is a slash and the start of a command's name, without a
+ * space yet, the commands whose names start with it.
+ */
+export function slashSuggestions(text: string, commands: readonly SlashCommand[]): SlashCommand[] {
+  const typed = /^\/(\S*)$/.exec(text)?.[1];
+  if (typed === undefined) return [];
+  const start = typed.toLowerCase();
+  return commands.filter((c) => c.name.toLowerCase().startsWith(start)).slice(0, SLASH_SUGGESTIONS_MAX);
+}
+
+/** The message after picking a command: the command and a space for its argument. */
+export function withSlashCommand(command: SlashCommand): string {
+  return `/${command.name} `;
 }

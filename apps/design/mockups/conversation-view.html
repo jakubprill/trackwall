@@ -8,7 +8,7 @@
 </head>
 <body>
 <style>
-/* Two panels of the conversation view (ADR-107): what this change builds from Copilot CLI's ACP updates, and what is proposed next. Dark only, like the app. */
+/* Two panels of the conversation view (ADR-107): a turn with its approval, and the agent's mode, context use, slash commands and a subagent. Dark only, like the app. */
 :root { --term: oklch(0.12 0.008 240); }
 body { background: var(--background); color: var(--foreground); font-family: var(--font-sans); line-height: 1.5; margin: 0; }
 .wrap { max-width: 1280px; margin: 0 auto; padding-block: 28px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 24px; }
@@ -57,11 +57,11 @@ button.main { background: var(--primary); color: var(--primary-foreground); bord
   <header>
     <div class="hud">Sessions // conversation view</div>
     <h1>Conversation view: what Copilot CLI sends over ACP</h1>
-    <p class="lede">Copilot CLI's ACP updates carry more than the view showed: the model's reasoning, each file change as a diff and the files a tool works on. The left panel is built: thoughts fold, a change opens in colour with its line counts, and an approval shows the change it allows. The right panel is proposed next: the session's mode, its context use, slash commands and a subagent as one card.</p>
+    <p class="lede">Copilot CLI's ACP updates carry more than the view showed: the model's reasoning, each file change as a diff and the files a tool works on. The left panel: thoughts fold, a change opens in colour with its line counts, and an approval shows the change it allows. The right panel: the agent's mode (Agent or Plan; autopilot stays a slash command, since it skips every approval), its context use, slash commands and a subagent as one row.</p>
   </header>
   <div class="cols">
     <section class="panel" aria-labelledby="built">
-      <div class="bar"><b id="built">Built: a turn and an approval</b><span class="hud">fix-cart-total</span></div>
+      <div class="bar"><b id="built">A turn and an approval</b><span class="hud">fix-cart-total</span></div>
       <div class="body">
         <div class="you">The cart total ignores discounts. Fix it.</div>
         <div class="hud">Agent</div>
@@ -87,8 +87,8 @@ button.main { background: var(--primary); color: var(--primary-foreground); bord
     </section>
     <section class="panel" aria-labelledby="next">
       <div class="bar">
-        <b id="next">Proposed next: mode, context, commands, subagents</b>
-        <div class="modes" role="group" aria-label="Mode"><button type="button" aria-pressed="true">Agent</button><button type="button" aria-pressed="false">Plan</button><button type="button" aria-pressed="false">Autopilot</button></div>
+        <b id="next">Mode, context, commands, subagents</b>
+        <div class="modes" role="group" aria-label="Mode"><button type="button" aria-pressed="true">Agent</button><button type="button" aria-pressed="false">Plan</button></div>
         <div class="meter" title="Context used"><i><b></b></i>27%</div>
       </div>
       <div class="body">
