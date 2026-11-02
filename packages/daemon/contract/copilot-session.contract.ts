@@ -681,7 +681,8 @@ describe("a task in Copilot CLI's sandbox with the real Copilot CLI (ADR-181)", 
         expect({ inside: existsSync(join(task.worktree, "inside.txt")), escapes: probe.escapes() }).toEqual({ inside: false, escapes: [] });
       } else {
         expect({ inside: existsSync(join(task.worktree, "inside.txt")), answers }).toMatchObject({ inside: true });
-        expect(spawnSync("git", ["log", "-1", "--format=%s"], { cwd: task.worktree, encoding: "utf8" }).stdout.trim()).toBe("sandboxed");
+        const lastCommit = spawnSync("git", ["log", "-1", "--format=%s"], { cwd: task.worktree, encoding: "utf8" }).stdout.trim();
+        expect({ lastCommit, answers }).toMatchObject({ lastCommit: "sandboxed" });
         // The repo's whole git directory is granted for the worktree's commits, hooks and config with it: a gap in
         // §8, pinned here so that a change in Copilot CLI shows.
         expect(probe.escapes()).toEqual(["the repo's git hooks", "the repo's git config"]);
