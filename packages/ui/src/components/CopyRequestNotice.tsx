@@ -17,11 +17,13 @@ import { useAction } from "@/lib/use-action";
 export function CopyRequestNotice({ conn, session, onCleared }: { conn: Connection; session: Session; onCleared: () => void }) {
   const request = session.copyRequest;
   const [readyFor, setReadyFor] = useState<string>();
+  const requestId = request?.id;
+  // On the id, not the object: the session list brings a new object with every update, which must not restart the wait.
   useEffect(() => {
-    if (request === null) return;
-    const timer = setTimeout(() => setReadyFor(request.id), COPY_REQUEST_HOLD_MS);
+    if (requestId === undefined) return;
+    const timer = setTimeout(() => setReadyFor(requestId), COPY_REQUEST_HOLD_MS);
     return () => clearTimeout(timer);
-  }, [request]);
+  }, [requestId]);
   // `copyText` starts before the first `await`, so still inside the click.
   const take = useAction(async (taken: CopyRequest, copy: boolean) => {
     if (copy) await copyText(taken.text);
