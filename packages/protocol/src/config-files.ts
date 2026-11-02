@@ -316,6 +316,7 @@ export const WorkspaceKey = z.enum([
   "gitProgram",
   "repoHosts",
   "toolPermissions",
+  "sandbox",
   "agentSecrets",
   "sessionProfile",
   "autoReview",
@@ -341,6 +342,7 @@ export const WORKSPACE_KEYS: Record<WorkspaceKey, WorkspaceKeyInfo> = {
   gitProgram: { purpose: "Which git Trackwall runs to read your repos.", docs: "repos", settings: "workspace" },
   repoHosts: { purpose: "Where the Repos view searches and clones from.", docs: "repos", settings: "repo-hosts" },
   toolPermissions: { purpose: "Which tools sessions may use without asking you.", docs: "approvals", settings: null },
+  sandbox: { purpose: "Which tasks run their commands in Copilot CLI's sandbox.", docs: "approvals", settings: null },
   agentSecrets: { purpose: "The secrets from mise that the tools of sessions may read.", docs: "mise-environment", settings: null },
   sessionProfile: {
     purpose: "The mise environment sessions start with, such as another model provider.",

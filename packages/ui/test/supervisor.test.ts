@@ -50,6 +50,7 @@ function task(id: string, proposedBy: Task["proposedBy"]): Task {
     model: null,
     approvals: "ask",
     javaNavigation: false,
+    sandbox: false,
     item: null,
     view: "terminal",
     summary: null,

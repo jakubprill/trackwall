@@ -7,7 +7,7 @@ import { RunState } from "./procs.ts";
 import { REVIEW_COMMENTS_MAX, ReviewComment } from "./review.ts";
 import { singleLine } from "./single-line.ts";
 import { TaskStateChange } from "./task-state.ts";
-import { CommitHash, RepoId } from "./workspace.ts";
+import { CommitHash, RepoId, SandboxSettings } from "./workspace.ts";
 
 /**
  * Contract of the `agents` module (§4.4, ADR-26): Copilot CLI sessions in a PTY owned by the daemon, several at once. Every
@@ -471,6 +471,8 @@ export const Task = z.object({
   approvals: TaskApprovals,
   /** Whether its sessions get the Java language server for code navigation (ADR-99). */
   javaNavigation: z.boolean(),
+  /** Whether its sessions run their commands in Copilot CLI's sandbox (ADR-181), as `sandbox` in `workspace.yaml` said at its start. */
+  sandbox: z.boolean(),
   /** The board item the task works on (ADR-133); `null` for a task started from no item. */
   item: BoardItemId.nullable(),
   /** Whether its sessions show as a terminal or in the conversation view (ADR-137). */
@@ -747,7 +749,19 @@ export const JavaNavigationStatus = z.discriminatedUnion("kind", [
 ]);
 export type JavaNavigationStatus = z.infer<typeof JavaNavigationStatus>;
 
-export const StartOptions = z.object({ javaNavigation: JavaNavigationState });
+/**
+ * Copilot CLI's sandbox as a new task would get it (ADR-181): `tasks`, which tasks `sandbox` in `workspace.yaml` puts in
+ * it, and `problem`, why it cannot run on this computer (no `bwrap` on Linux), which refuses to start those tasks; `null` when it can.
+ */
+export const SandboxState = z.object({ tasks: SandboxSettings.shape.tasks, problem: z.string().nullable() });
+export type SandboxState = z.infer<typeof SandboxState>;
+
+/** Whether a task with approvals mode `approvals` runs in the sandbox under `tasks` (ADR-181); the daemon's and the form's one rule. */
+export function sandboxesTask(tasks: SandboxSettings["tasks"], approvals: TaskApprovals): boolean {
+  return tasks === "all" || (tasks === "auto" && approvals === "auto");
+}
+
+export const StartOptions = z.object({ javaNavigation: JavaNavigationState, sandbox: SandboxState });
 export type StartOptions = z.infer<typeof StartOptions>;
 
 const SessionRequest = z.object({ session: SessionId }).strict();

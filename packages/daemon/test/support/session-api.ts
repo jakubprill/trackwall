@@ -1,7 +1,7 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ApiEnvelope, type ContainerId, type DevContainerFolder, type Endpoint } from "@trackwall/protocol";
+import { ApiEnvelope, type ContainerId, type DevContainerFolder, type Endpoint, type SandboxSettings } from "@trackwall/protocol";
 import type { z } from "zod";
 import { EventHub } from "../../src/api/event-hub.ts";
 import { sessionHookRequest } from "../../src/api/hooks.ts";
@@ -45,6 +45,11 @@ export interface SessionApiOptions {
   container?: ContainerId;
   /** The folder the dev container reports it was opened from (ADR-121); none by default. */
   devContainerFolder?: DevContainerFolder;
+  /**
+   * `sandbox.tasks` in `workspace.yaml` (ADR-181), `null` for no key; `off` by default, since most tests start tasks
+   * without approvals on runners without bubblewrap, and the sandbox's own tests choose it.
+   */
+  sandboxTasks?: SandboxSettings["tasks"] | null;
 }
 
 interface CopilotUnderTest {
@@ -52,7 +57,7 @@ interface CopilotUnderTest {
   env: (dirs: { home: string; projects: string }) => NodeJS.ProcessEnv;
 }
 
-const FAKE_COPILOT: CopilotUnderTest = { command: [process.execPath, fakeCopilot], env: () => process.env };
+export const FAKE_COPILOT: CopilotUnderTest = { command: [process.execPath, fakeCopilot], env: () => process.env };
 
 export const ONE_REPO: SessionApiOptions = { repos: { shop: { "README.md": "# shop\n" } }, miseCommand: ["mise"] };
 
@@ -63,7 +68,7 @@ export const ONE_REPO: SessionApiOptions = { repos: { shop: { "README.md": "# sh
  * `hasListedTools` tells whether the MCP server has answered a session's `tools/list`.
  */
 export async function startSessionApi(token: string, options: SessionApiOptions = ONE_REPO) {
-  const { home, projects } = options.restartOf ?? newDirs(options.repos);
+  const { home, projects } = options.restartOf ?? newDirs(options.repos, options.sandboxTasks === undefined ? "off" : options.sandboxTasks);
   const copilot = options.copilot ?? FAKE_COPILOT;
   const desktop = options.desktop ?? true;
   const openers = desktopOpeners(desktop, { openUrl: options.openUrl ?? (() => {}), openFolder: () => {} });
@@ -132,10 +137,11 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
 }
 
 /** A projects folder with `repos` and a state directory whose workspace points to it. */
-function newDirs(repos: SessionApiOptions["repos"]): { home: string; projects: string } {
+function newDirs(repos: SessionApiOptions["repos"], sandboxTasks: SandboxSettings["tasks"] | null): { home: string; projects: string } {
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
   for (const [name, files] of Object.entries(repos)) makeRepo(files, name, projects);
   const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
-  writeFileSync(join(home, "workspace.yaml"), `projectsDir: ${JSON.stringify(projects)}\n`);
+  const sandbox = sandboxTasks === null ? "" : `sandbox:\n  tasks: ${sandboxTasks}\n`;
+  writeFileSync(join(home, "workspace.yaml"), `projectsDir: ${JSON.stringify(projects)}\n${sandbox}`);
   return { home, projects };
 }

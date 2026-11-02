@@ -38,6 +38,7 @@ function task(fields: Partial<Task> & Pick<Task, "id">): Task {
     model: null,
     approvals: "ask",
     javaNavigation: false,
+    sandbox: false,
     item: null,
     view: "terminal",
     summary: null,

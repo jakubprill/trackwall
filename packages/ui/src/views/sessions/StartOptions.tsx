@@ -1,6 +1,7 @@
 import { type SessionView, TASK_MODEL_MAX, type TaskApprovals } from "@trackwall/protocol";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
+import type { SandboxNote } from "@/lib/sandbox";
 import { typedModel } from "@/lib/task-model";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +21,7 @@ export function StartOptions({
   model,
   javaNavigation,
   view,
+  sandbox = null,
   disabled,
 }: {
   /** What the options belong to, named in every accessible name so that several proposals on one screen keep their controls apart. */
@@ -31,6 +33,11 @@ export function StartOptions({
   javaNavigation?: { value: boolean; onChange: (value: boolean) => void; unavailable: string | null };
   /** Whether the task or session shows as a terminal or in the conversation view (ADR-137), still a preview. */
   view?: { value: SessionView; onChange: (value: SessionView) => void };
+  /**
+   * Whether the task's commands run in Copilot CLI's sandbox (ADR-181), which `workspace.yaml` decides, not a pill; shown
+   * only with `approvals`, for a task, since sessions never run in it.
+   */
+  sandbox?: SandboxNote;
   disabled: boolean;
 }) {
   return (
@@ -91,6 +98,18 @@ export function StartOptions({
         <p className="text-warning max-w-prose text-xs">
           The agent runs commands, edits files and calls tools without asking you, also commands such as git push. Your deny rules still
           refuse what they name, and Copilot CLI still asks before paths it sees outside the worktree and before URLs.
+        </p>
+      )}
+      {approvals && sandbox?.kind === "on" && (
+        <p className="text-muted-foreground max-w-prose text-xs">
+          Its commands run in Copilot CLI's sandbox: they can write only in the task's worktree and cannot see your other repos or
+          credential folders.
+        </p>
+      )}
+      {approvals && sandbox?.kind === "unavailable" && (
+        <p className="text-destructive max-w-prose text-xs">
+          This task should run in Copilot CLI's sandbox, which cannot run on this computer: {sandbox.problem}. Install it, or set
+          sandbox.tasks to off in workspace.yaml.
         </p>
       )}
     </div>

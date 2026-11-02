@@ -1,15 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { TESTED_COPILOT_CLI_VERSION } from "@trackwall/protocol";
+import { delimiter, join } from "node:path";
+import { type DoctorCheckId, type DoctorStatus, TESTED_COPILOT_CLI_VERSION } from "@trackwall/protocol";
 import { createFacade } from "../src/facade.ts";
 import { trustedFolderOf } from "../src/modules/doctor/copilot-trust.ts";
 import { copilotVersionOutcome, Doctor, type DoctorDeps } from "../src/modules/doctor/doctor.ts";
 import { folderStorage } from "../src/modules/doctor/folder-storage.ts";
 import type { TlsProbe } from "../src/modules/doctor/tls-probe.ts";
 import { compareVersions, versionIn } from "../src/modules/doctor/version.ts";
+import { defaultSandboxTasks } from "../src/modules/workspace/workspace.ts";
 import { fakeHostingClis } from "./support/hosting.ts";
+import { sandboxProgramsFolder } from "./support/sandbox-programs.ts";
 
 const fakeCopilot = join(import.meta.dir, "fixtures", "fake-copilot-session.ts");
 const printVersion = join(import.meta.dir, "fixtures", "print-version.ts");
@@ -32,6 +34,7 @@ function fakeDeps(overrides: Partial<DoctorDeps>): DoctorDeps {
     workspaceFile: join(tmpdir(), "trackwall-doctor-no-such-workspace.yaml"),
     workspaceKeys: () => ({ keys: [], unknown: [] }),
     javaNavigation: () => null,
+    sandbox: async () => ({ tasks: "off", problem: null }),
     probeTls: async () => ({ kind: "ok" }),
     profileEnvironment: async () => null,
     probeConnection: async () => ({ kind: "ok" }),
@@ -55,6 +58,9 @@ interface Setup {
 }
 
 /** A facade on a fresh state directory, with the fake Copilot CLI and a mise that prints its version, or none of them. */
+/** The programs the sandbox check looks for on Linux. */
+const sandboxPrograms = sandboxProgramsFolder();
+
 function doctorFacade(o: Setup) {
   const home = mkdtempSync(join(tmpdir(), "trackwall-doctor-home-"));
   const projects = mkdtempSync(join(tmpdir(), "trackwall-doctor-projects-"));
@@ -77,7 +83,8 @@ function doctorFacade(o: Setup) {
     sessionHook: () => ({ url: "http://127.0.0.1:9/hooks/unused", headers: {} }),
     sessionMcpServer: () => ({ url: "http://127.0.0.1:9/mcp", headers: {} }),
     hostingClis: fakeHostingClis({ authErrors: o.authErrors }).clis,
-    userEnv: async () => ({ ...process.env, COPILOT_HOME: copilotHome }),
+    // With the sandbox programs in PATH, so that the sandbox check is ok also on a Linux runner without them (ADR-181).
+    userEnv: async () => ({ ...process.env, COPILOT_HOME: copilotHome, PATH: `${sandboxPrograms}${delimiter}${process.env.PATH ?? ""}` }),
     tlsProbe: async () => ({ kind: "ok" }),
     connectionProbe: o.connectionProbe,
     log: () => {},
@@ -86,6 +93,10 @@ function doctorFacade(o: Setup) {
 }
 
 const trusting = '{"trustedFolders":["<projects>"]}';
+
+/** The sandbox check's row as this system gives it without the key: only where tasks run in the sandbox by default (ADR-181). */
+const sandboxRow: [DoctorCheckId, DoctorStatus][] =
+  defaultSandboxTasks(false, process.platform) === "off" ? [] : [["copilot-sandbox", "ok"]];
 
 describe("doctor: the model provider of the session profile (ADR-179)", () => {
   test("with a session profile whose mise environment sets a provider, the doctor only connects to its host and shows neither the address nor the key", async () => {
@@ -139,6 +150,7 @@ describe("doctor", () => {
       ["git", "ok"],
       ["copilot-cli", "ok"],
       ["copilot-trusted-folder", "ok"],
+      ...sandboxRow,
       ["network", "ok"],
       ["mise", "ok"],
       ["github-cli", "ok"],
@@ -156,12 +168,13 @@ describe("doctor", () => {
       ["projects-folder", "fail"],
       ["git", "ok"],
       ["copilot-cli", "fail"],
+      ...sandboxRow,
       ["network", "ok"],
       ["mise", "warn"],
     ]);
     expect(report.checks[0]?.summary).toBe("No projects folder is set.");
     expect(report.checks[2]?.summary).toBe("Copilot CLI (trackwall-test-no-copilot) not found in PATH.");
-    expect(report.checks[4]?.summary).toBe("mise: program trackwall-test-no-mise not found in PATH");
+    expect(report.checks.find((c) => c.id === "mise")?.summary).toBe("mise: program trackwall-test-no-mise not found in PATH");
     expect(report.checks.every((c) => c.status === "ok" || (c.fix ?? "").length > 0)).toBe(true);
   });
 
@@ -287,6 +300,39 @@ describe("doctor", () => {
       ["github-cli", "fail", "workspace.yaml is invalid: repoHosts"],
       ["gitlab-cli", "fail", "workspace.yaml is invalid: repoHosts"],
     ]);
+  });
+});
+
+describe("the check of Copilot CLI's sandbox (ADR-181)", () => {
+  const sandboxCheck = async (sandbox: DoctorDeps["sandbox"]) =>
+    (await new Doctor(fakeDeps({ sandbox })).run()).checks.find((c) => c.id === "copilot-sandbox");
+
+  test("it says which tasks run in the sandbox where it can run, and is left out where no task does", async () => {
+    expect(await sandboxCheck(async () => ({ tasks: "auto", problem: null }))).toEqual({
+      id: "copilot-sandbox",
+      status: "ok",
+      summary: "Tasks without approvals run their commands in Copilot CLI's sandbox.",
+      fix: null,
+    });
+    expect((await sandboxCheck(async () => ({ tasks: "all", problem: null })))?.summary).toBe(
+      "Every task runs its commands in Copilot CLI's sandbox.",
+    );
+    expect(await sandboxCheck(async () => ({ tasks: "off", problem: null }))).toBeUndefined();
+  });
+
+  test("where the sandbox cannot run it fails, naming what is missing and the two ways out", async () => {
+    expect(
+      await sandboxCheck(async () => ({
+        tasks: "auto",
+        problem: "bubblewrap (bwrap), which Copilot CLI's sandbox runs on, is not in PATH",
+      })),
+    ).toEqual({
+      id: "copilot-sandbox",
+      status: "fail",
+      summary:
+        "Copilot CLI's sandbox cannot run here: bubblewrap (bwrap), which Copilot CLI's sandbox runs on, is not in PATH, so Trackwall refuses to start tasks without approvals.",
+      fix: "Install it (on Linux the bubblewrap package, with slirp4netns, iproute2 and iptables), or set sandbox.tasks to off in workspace.yaml.",
+    });
   });
 });
 

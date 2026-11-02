@@ -357,7 +357,7 @@ export function createFacade(o: FacadeOptions): Facade {
   });
   const errorJournal = createErrorJournal({ ...o, workspace });
   const mcpAudit = new McpAudit({ dir: join(o.home, LOGS_DIR), log: o.log });
-  const javaNavigationReadiness = () => agents.startOptions().javaNavigation;
+  const javaNavigationReadiness = () => agents.javaNavigationState();
   const javaNavigation = new JavaNavigation({
     repos: workspace,
     readiness: javaNavigationReadiness,
@@ -390,6 +390,7 @@ export function createFacade(o: FacadeOptions): Facade {
     workspaceFile: workspace.configFile(),
     workspaceKeys: () => workspace.workspaceKeys(),
     javaNavigation: javaNavigationReadiness,
+    sandbox: () => agents.sandboxState(),
     probeTls: o.tlsProbe ?? probeTls,
     // Where a free session starts: the projects folder, with the session profile mise reads there.
     // Without a profile mise is not asked, so nothing decrypts the provider's key for a check that would drop it.

@@ -9,6 +9,7 @@ const CHECK_TITLES: Record<DoctorCheckId, string> = {
   git: "Git",
   "copilot-cli": "Copilot CLI",
   "copilot-trusted-folder": "Copilot CLI trusted folder",
+  "copilot-sandbox": "Copilot CLI sandbox for tasks",
   network: "Network for sessions",
   "model-provider": "Model provider of the session profile",
   mise: "mise",

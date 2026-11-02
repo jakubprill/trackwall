@@ -4,6 +4,7 @@ import {
   cardsApi,
   countLabel,
   pluralNoun,
+  type SandboxState,
   type Session,
   type SessionView,
   TASK_PROMPT_MAX,
@@ -29,6 +30,7 @@ import {
   startsChange,
 } from "@/lib/new-session";
 import { tagsByRepo } from "@/lib/repo-tags";
+import { sandboxNote } from "@/lib/sandbox";
 import type { SessionSelection } from "@/lib/session-entries";
 import { readStartChoice, type StartChoice, saveStartChoice } from "@/lib/start-choices";
 import { typedModel } from "@/lib/task-model";
@@ -81,7 +83,8 @@ export function NewSession({
   const model = typedModel(choice.model);
   const change = useChangeForm(conn, onStarted, () => setPrompt(""));
   const { start, firstPart } = formChangeStart(form, repo, choice.worktree, prompt, change.parts, change.title);
-  const java = javaNavigationInChange(javaNavigationInView(useJavaNavigationOffer(conn, repo), choice.view), startsChange(start));
+  const offers = useStartOffers(conn, repo);
+  const java = javaNavigationInChange(javaNavigationInView(offers.java, choice.view), startsChange(start));
   const javaNavigation = java.kind === "ready" && choice.javaNavigation;
   const { item } = form;
   const createTask = useAction(
@@ -131,6 +134,7 @@ export function NewSession({
             model={{ value: choice.model, onChange: (text: string) => choose({ model: text }) }}
             javaNavigation={javaNavigationPill(java, choice.javaNavigation, (on) => choose({ javaNavigation: on }))}
             view={{ value: choice.view, onChange: (view: SessionView) => choose({ view }) }}
+            sandbox={sandboxNote(offers.sandbox, approvals)}
             disabled={pending}
           />
           {firstPart !== null && (
@@ -196,14 +200,18 @@ function PlaceSelect({
   );
 }
 
-/** Java navigation for a task or session in `repo` (ADR-99, ADR-175), from the repo's tags and the daemon's settings. */
-function useJavaNavigationOffer(conn: Connection, repo: string | null): JavaNavigationOffer {
+/**
+ * Java navigation for a task or session in `repo` (ADR-99, ADR-175), from the repo's tags and the daemon's settings, and
+ * Copilot CLI's sandbox as a new task would get it (ADR-181).
+ */
+function useStartOffers(conn: Connection, repo: string | null): { java: JavaNavigationOffer; sandbox: SandboxState | undefined } {
   const loadTags = useCallback(() => post(conn, cardsApi.tags, {}), [conn]);
   const tags = useRemote(loadTags);
   // Asked again for each repo chosen, so that a fix in workspace.yaml shows without reopening the form.
   const loadOptions = useCallback(() => post(conn, agentsApi.startOptions, {}), [conn, repo]);
   const options = useRemote(loadOptions);
-  return javaNavigationOffer(repo === null ? undefined : tagsByRepo(tags.data).get(repo), options.data?.javaNavigation);
+  const java = javaNavigationOffer(repo === null ? undefined : tagsByRepo(tags.data).get(repo), options.data?.javaNavigation);
+  return { java, sandbox: options.data?.sandbox };
 }
 
 /** The Java navigation pill, or none where the offer is hidden (also in the projects folder, which has no tags). */

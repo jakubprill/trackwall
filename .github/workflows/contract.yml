@@ -51,6 +51,16 @@ jobs:
         with:
           path: packages/daemon/node_modules/.cache/copilot-cli
           key: copilot-cli-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/daemon/scripts/copilot-cli.ts', 'packages/protocol/src/copilot-cli-version.ts') }}
+      # Copilot CLI's sandbox (ADR-181) runs on bubblewrap on Linux, in its own network namespace; Ubuntu 24.04 lets
+      # unprivileged users make namespaces only once AppArmor's restriction is lifted. macOS and Windows have theirs built in.
+      - name: Install what Copilot CLI's sandbox needs on Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q bubblewrap slirp4netns iproute2 iptables
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
       - run: pnpm test:contract
         env:
           TRACKWALL_COPILOT_CLI: ${{ inputs.copilot-cli }}

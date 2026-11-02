@@ -7,7 +7,7 @@ import {
   type TaskMessage,
   type TaskOutcome,
 } from "@trackwall/protocol";
-import { Bot, GitBranch, Layers, Plug, ShieldOff, Trash2 } from "lucide-react";
+import { Bot, Box, GitBranch, Layers, Plug, ShieldOff, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { CopyRequestNotice } from "@/components/CopyRequestNotice";
 import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
@@ -239,7 +239,8 @@ function taskSubtitle(task: Task, sessions: readonly Session[]): string {
 }
 
 /**
- * What the task runs with beyond the defaults: its model (ADR-98), running without approvals (ADR-105), and its place
+ * What the task runs with beyond the defaults: its model (ADR-98), running without approvals (ADR-105), its commands in
+ * Copilot CLI's sandbox (ADR-181), and its place
  * in a change (ADR-171), whose parts the Sessions list shows in their merge order.
  */
 function TaskMarks({ task }: { task: Task }) {
@@ -267,6 +268,15 @@ function TaskMarks({ task }: { task: Task }) {
         >
           <ShieldOff className="size-3" aria-hidden />
           No approvals
+        </span>
+      )}
+      {task.sandbox && (
+        <span
+          className="text-muted-foreground flex shrink-0 items-center gap-1 text-xs"
+          title="Its commands run in Copilot CLI's sandbox: they write only in the worktree and cannot see your other repos or credential folders"
+        >
+          <Box className="size-3" aria-hidden />
+          Sandbox
         </span>
       )}
     </>

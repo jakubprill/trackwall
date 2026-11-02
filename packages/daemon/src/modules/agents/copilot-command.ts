@@ -24,7 +24,7 @@ export function resolveCopilot(command: readonly string[], env: NodeJS.ProcessEn
 
 /** The program's full path or `undefined` when it is missing; `program` can be a name from `PATH` or a full path. */
 export function findCopilot(program: string, env: NodeJS.ProcessEnv): string | undefined {
-  const found = which(program, env);
+  const found = findOnPath(program, env);
   if (!found || !/\.(cmd|bat)$/i.test(found)) return found;
   return nativeCopilot(found);
 }
@@ -44,7 +44,7 @@ function nativeCopilot(script: string): string | undefined {
  * Looks for a program like a shell: in the `PATH` directories, on Windows with the extensions from `PATHEXT` (in their
  * order, like `cmd.exe`). A name with a slash is a path, not a name to look for.
  */
-function which(program: string, env: NodeJS.ProcessEnv): string | undefined {
+export function findOnPath(program: string, env: NodeJS.ProcessEnv): string | undefined {
   const windows = process.platform === "win32";
   const extensions = windows && extname(program) === "" ? (pathValue(env, "PATHEXT") ?? ".COM;.EXE;.BAT;.CMD").split(";") : [""];
   const candidates = (base: string) => extensions.map((ext) => base + ext.toLowerCase());
@@ -61,7 +61,7 @@ function pathValue(env: NodeJS.ProcessEnv, name: string): string | undefined {
   return env[envKey(env, name)];
 }
 
-function isFile(path: string): boolean {
+export function isFile(path: string): boolean {
   try {
     return statSync(path).isFile();
   } catch {
