@@ -14,7 +14,7 @@ describe("a message as an ACP prompt", () => {
     ).toEqual([
       { type: "text", text: "What is wrong here?" },
       { type: "image", mimeType: "image/png", data: PNG },
-      { type: "text", text: "The attached file build.log:\n\nERROR: tests failed" },
+      { type: "text", text: '<attached-file name="build.log">\nERROR: tests failed\n</attached-file>' },
     ]);
   });
 
@@ -48,5 +48,12 @@ describe("the attachments the daemon lets through", () => {
       "the agent takes no images",
     );
     expect(() => checkAttachments([{ kind: "file", name: "c.txt", text: "x" }], false)).not.toThrow();
+  });
+
+  test("an image sent while the session starts, before the agent says whether it takes images, is refused as too early", () => {
+    expect(() => checkAttachments([{ kind: "image", name: "a.png", mimeType: "image/png", data: PNG }], undefined)).toThrow(
+      "the session is still starting",
+    );
+    expect(() => checkAttachments([{ kind: "file", name: "c.txt", text: "x" }], undefined)).not.toThrow();
   });
 });

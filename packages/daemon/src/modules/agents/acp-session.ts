@@ -115,7 +115,7 @@ export interface AcpSessionOptions {
 
 /** A prompt on its way: who wrote it, so that the end of a turn the user drove is not reported to the proposer. */
 /** A prompt to send; the user's carries the id its waiting bubble has until it goes (`WaitingMessage`). */
-type Prompt = { text: string; by: "daemon" } | { text: string; by: "user"; id: string; attachments: readonly MessageAttachment[] };
+type Prompt = { text: string; attachments: readonly MessageAttachment[] } & ({ by: "daemon" } | { by: "user"; id: string });
 
 interface PendingApproval {
   dialog: AgentApproval;
@@ -147,7 +147,8 @@ export class AcpSession implements AgentSession {
   #conversationId: string | undefined;
   #hasConversation: boolean;
   /** The agent takes images in a prompt (`promptCapabilities.image`), as Copilot CLI does. */
-  #takesImages = false;
+  /** Whether the agent takes images, once `initialize` says so. */
+  #takesImages: boolean | undefined;
   #last: TaskStateChange | null = null;
   /** The agent's last update or state change, for `SessionStuck` (ADR-151); the start before either. */
   #lastStepAt = Date.now();
@@ -219,7 +220,7 @@ export class AcpSession implements AgentSession {
     this.#ready = true;
     this.#report("Input", "session ready");
     // Before anything the user wrote while the session started: the day start's briefing comes first.
-    if (this.#o.firstMessage !== undefined) this.#queued.unshift({ text: this.#o.firstMessage, by: "daemon" });
+    if (this.#o.firstMessage !== undefined) this.#queued.unshift({ text: this.#o.firstMessage, by: "daemon", attachments: [] });
     this.#next();
   }
 
@@ -264,7 +265,7 @@ export class AcpSession implements AgentSession {
   say(text: string, attachments: readonly MessageAttachment[] = []): void {
     if (this.#finished) throw new DomainError("bad_request", "the session has ended");
     checkAttachments(attachments, this.#takesImages);
-    if (attachments.length > 0 && this.#queued.some((p) => p.by === "user" && p.attachments.length > 0))
+    if (attachments.length > 0 && this.#queued.some((p) => p.attachments.length > 0))
       throw new DomainError("bad_request", "a message with attachments already waits for the turn to end");
     this.#attention.typed();
     this.#o.onUserText();
@@ -437,7 +438,7 @@ export class AcpSession implements AgentSession {
     const prompt = this.#o.prompt();
     if (prompt === undefined) return;
     this.#o.onPromptSent();
-    this.#prompt({ text: prompt, by: "daemon" });
+    this.#prompt({ text: prompt, by: "daemon", attachments: [] });
   }
 
   #prompt(prompt: Prompt): void {
@@ -447,10 +448,9 @@ export class AcpSession implements AgentSession {
     this.#turn = prompt;
     this.#hasConversation = true;
     this.#o.onTurnStart();
-    const attachments = prompt.by === "user" ? prompt.attachments : [];
-    this.#broadcast(this.#conversation.said(prompt.text, attachments.map(attachmentLabel)));
+    this.#broadcast(this.#conversation.said(prompt.text, prompt.attachments.map(attachmentLabel)));
     this.#report("Working", "prompt sent");
-    connection.request("session/prompt", { sessionId: conversation, prompt: promptBlocks(prompt.text, attachments) }).then(
+    connection.request("session/prompt", { sessionId: conversation, prompt: promptBlocks(prompt.text, prompt.attachments) }).then(
       (result) => this.#turnEnded(prompt, PromptResult.safeParse(result).data?.stopReason ?? "unknown"),
       (err: unknown) => this.#turnFailed(err),
     );

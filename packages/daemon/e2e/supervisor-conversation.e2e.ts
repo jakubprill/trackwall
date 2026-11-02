@@ -37,7 +37,7 @@ describe("the supervisor in the conversation view (ADR-107)", () => {
     await conversation.getByText("check the build", { exact: true }).waitFor();
     await conversation.getByText(/Thinking about: check the build/).waitFor();
     await conversation.getByRole("list", { name: "Attached" }).getByText("notes.txt").waitFor();
-    await conversation.getByText(/Text: The attached file notes\.txt:/).waitFor();
+    await conversation.getByText(/Text: <attached-file name="notes\.txt">/).waitFor();
     await conversation.getByText("Make a file").waitFor();
     // The model's reasoning is folded under "Thought" and opens on a click. As the turn ends the followed list scrolls
     // (the dots of a working agent go, the context meter joins the line above the message box), which can move the row

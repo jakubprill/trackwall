@@ -6,7 +6,6 @@ import {
   Clock,
   FileText,
   Globe,
-  Image,
   type LucideIcon,
   MessageSquare,
   Pencil,
@@ -19,6 +18,7 @@ import {
 import { type ReactNode, Suspense } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LazyMarkdown } from "@/components/LazyMarkdown";
+import { AttachmentChips } from "@/components/MessageAttachments";
 import { PatchLines } from "@/components/PatchLines";
 import { StatusLabel } from "@/components/StatusLabel";
 import type { Connection } from "@/lib/connection";
@@ -106,22 +106,7 @@ function UserMessage({ text, attachments, waiting = false }: { text: string; att
       >
         {text}
       </p>
-      {attachments.length > 0 && (
-        <ul aria-label="Attached" className="flex flex-wrap justify-end gap-1.5 text-xs">
-          {attachments.map((attachment, i) => {
-            const Icon = attachment.kind === "image" ? Image : FileText;
-            return (
-              <li
-                key={`${i}:${attachment.name}`}
-                className="text-muted-foreground flex max-w-60 items-center gap-1 rounded-md border px-1.5 py-0.5"
-              >
-                <Icon className="text-primary size-3.5 shrink-0" aria-hidden />
-                <span className="truncate">{attachment.name}</span>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      {attachments.length > 0 && <AttachmentChips attachments={attachments} label="Attached" />}
       {waiting && (
         <span className="text-muted-foreground flex items-center gap-1 text-xs">
           <Clock className="size-3" aria-hidden />

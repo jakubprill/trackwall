@@ -63,7 +63,7 @@ export const MessageAttachments = z
   .max(ATTACHMENTS_MAX)
   .refine(
     (all) => all.reduce((sum, a) => sum + attachmentBytes(a), 0) <= ATTACHMENTS_MAX_BYTES,
-    "the attachments are larger than 10 MiB together",
+    `the attachments are larger than ${ATTACHMENTS_MAX_BYTES / 1024 / 1024} MiB together`,
   );
 
 /** An attachment as the conversation shows it: what it is and its name. */
@@ -176,5 +176,14 @@ export type ConversationClientMessage = z.infer<typeof ConversationClientMessage
 /** The longest message the user can write to a session in the conversation view. */
 export const SESSION_MESSAGE_MAX = 64 * 1024;
 export const SessionMessage = z.string().trim().min(1).max(SESSION_MESSAGE_MAX);
-/** The largest body of a message to a session: its attachments in base64 and its text, with room for the JSON around them. */
-export const SESSION_MESSAGE_BODY_MAX_BYTES = 16 * 1024 * 1024;
+/** The most bytes JSON can take for one character of a string: a control character as `\u001f`. */
+const JSON_BYTES_PER_CHAR_MAX = 6;
+/**
+ * The largest body of a message to a session, from the limits of what it holds: images as base64 at the most, every
+ * character of the text and the files at JSON's worst, and room for the JSON around them. So any message the schema
+ * takes fits, while the limit stays near what the attachments take.
+ */
+export const SESSION_MESSAGE_BODY_MAX_BYTES =
+  Math.ceil(ATTACHMENTS_MAX_BYTES / 3) * 4 +
+  (ATTACHMENTS_MAX * FILE_ATTACHMENT_MAX_CHARS + SESSION_MESSAGE_MAX) * JSON_BYTES_PER_CHAR_MAX +
+  64 * 1024;

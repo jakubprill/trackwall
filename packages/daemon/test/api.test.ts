@@ -299,7 +299,10 @@ describe("api workspace", () => {
     const read = await post(agentsApi.say.path, large);
     expect(JSON.parse(read.body)).toMatchObject({ error: { code: "not_found" } });
 
-    const tooLarge = await post(agentsApi.say.path, JSON.stringify({ session: "s", text: "x".repeat(17 * 1024 * 1024) }));
+    const tooLarge = await post(
+      agentsApi.say.path,
+      JSON.stringify({ session: "s", text: "x".repeat(protocol.SESSION_MESSAGE_BODY_MAX_BYTES) }),
+    );
     expect(JSON.parse(tooLarge.body)).toMatchObject({ error: { code: "bad_request", message: expect.stringContaining("larger than") } });
     expect((await req(agentsApi.say.path, { method: "POST", body: large })).status).toBe(401);
   });

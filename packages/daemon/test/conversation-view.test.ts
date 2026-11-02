@@ -201,7 +201,7 @@ describe.skipIf(process.versions.bun === undefined)("the supervisor in the conve
     });
     const answer = view.entries().find((e) => e.kind === "agent");
     expect(answer?.kind === "agent" && answer.text).toContain(
-      "Thinking about: What is wrong?\nImage: image/png\nText: The attached file build.log:",
+      `Thinking about: What is wrong?\nImage: image/png\nText: <attached-file name="build.log">`,
     );
 
     view.ws.close();

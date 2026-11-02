@@ -222,7 +222,7 @@ function Composer({
   return (
     <div className="flex flex-col gap-1 px-3 pt-1 pb-2">
       {suggestions.length > 0 && <SlashCommandList commands={suggestions} selected={picked} onPick={pick} />}
-      {files.attachments.length > 0 && <AttachmentChips attachments={files.attachments} onRemove={files.remove} />}
+      {files.attachments.length > 0 && <AttachmentChips attachments={files.attachments} label="Attachments" onRemove={files.remove} />}
       <div className="border-input dark:bg-muted focus-within:border-ring focus-within:ring-ring/50 flex items-end gap-2 rounded-md border py-1.5 pr-1.5 pl-3 focus-within:ring-[3px]">
         <textarea
           ref={box}

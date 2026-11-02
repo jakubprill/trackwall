@@ -248,7 +248,7 @@ describe("the supervisor in the conversation view with the real Copilot CLI", ()
     const [request] = model.requests().slice(-1);
     expect(request?.lastUserImages).toBe(1);
     expect(request?.lastUserText).toContain("What is wrong here?");
-    expect(request?.lastUserText).toContain("The attached file build.log:\n\nERROR: tests failed");
+    expect(request?.lastUserText).toContain('<attached-file name="build.log">\nERROR: tests failed\n</attached-file>');
     await agents.stop(supervisor.id);
   });
 
