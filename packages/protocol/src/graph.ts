@@ -83,8 +83,9 @@ export type GraphConfig = z.infer<typeof GraphConfig>;
  * Edge confidence. Package: `exact` when exactly one repo builds it; `high` from a package alias; `medium` when several
  * repos in the list build it (for example two clones of one repo). HTTP (ADR-30): `exact` when the application name
  * points to one repo and every call has an endpoint in it; `high` for the application name alone or from an application
- * alias; `medium` for a host equal to the repo name, an application port on `localhost`, paths matching the endpoints of
- * one repo, or a name in several repos; `low` for paths matching the endpoints of several repos. A manual edge is `exact`.
+ * alias; `medium` for a host equal to the repo name, an application port on `localhost` (of several repos: the one
+ * other repo whose endpoints match the calls), paths matching the endpoints of one repo, or a name in several repos; `low`
+ * for paths matching the endpoints of several repos or a shared port with several candidates. A manual edge is `exact`.
  */
 export const EdgeConfidence = z.enum(["exact", "high", "medium", "low"]);
 export type EdgeConfidence = z.infer<typeof EdgeConfidence>;
