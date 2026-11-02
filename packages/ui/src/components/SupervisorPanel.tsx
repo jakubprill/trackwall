@@ -1,6 +1,7 @@
 import { agentsApi, countLabel, type Session } from "@trackwall/protocol";
 import { BellRing, Crown, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Square } from "lucide-react";
 import { type FocusEvent, useEffect, useRef, useState } from "react";
+import { CopyRequestNotice } from "@/components/CopyRequestNotice";
 import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
 import { ReadRequestNotice } from "@/components/ReadRequestNotice";
 import { SessionScreen } from "@/components/SessionScreen";
@@ -169,6 +170,7 @@ function SupervisorBody({
       />
       <EnvironmentChangeNotice key={session?.id} conn={conn} session={session} onRestarted={onChanged} />
       <ReadRequestNotice key={`read-request-${session?.id}`} conn={conn} session={session} onDelivered={onChanged} />
+      {session && <CopyRequestNotice key={session.id} conn={conn} session={session} onCleared={onChanged} />}
       {!running && (
         <SupervisorStart conn={conn} supervisor={supervisor} day={day} lastStart={lastStart} onStart={onStart} onChanged={onChanged} />
       )}

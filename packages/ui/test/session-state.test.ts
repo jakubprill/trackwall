@@ -30,6 +30,7 @@ function session(id: string, state: Session["state"], run: Session["run"] = runn
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
     view: "terminal",
     readRequest: null,
+    copyRequest: null,
   };
 }
 

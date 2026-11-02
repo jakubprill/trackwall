@@ -1066,6 +1066,25 @@ export class Agents {
     return this.#sessions.view(session);
   }
 
+  /**
+   * Text session `caller`'s agent asks to put on the user's clipboard (`copy_to_clipboard`, ADR-180): it waits in the
+   * session's panel until the user copies it there. The daemon never writes a clipboard: in a container it has none of
+   * the user's, and an agent must not change what the user pastes without a click.
+   */
+  askToCopy(caller: string | null, text: string): void {
+    const session = caller === null ? undefined : this.#sessions.find(caller);
+    if (session === undefined || !this.#sessions.isRunning(session))
+      throw new DomainError("bad_request", "only a running session in Trackwall can ask to copy; give the user the text in your answer");
+    session.copyRequest.ask(text);
+  }
+
+  /** The user copied or dismissed the copy request `request` of session `id` (ADR-180). */
+  clearCopyRequest(id: string, request: string): Session {
+    const session = this.#sessions.get(id);
+    session.copyRequest.clear(request);
+    return this.#sessions.view(session);
+  }
+
   /** Closes an ended session: it disappears from the list, and its files from the state directory. The session's task stays. */
   dismiss(id: string): SessionList {
     this.#close(id);

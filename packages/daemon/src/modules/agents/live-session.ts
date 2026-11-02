@@ -1,14 +1,15 @@
-import type {
-  AgentDialog,
-  DialogAnswer,
-  ReadRequest,
-  ReadRequestHold,
-  RunState,
-  Session,
-  SessionEnvironment,
-  TaskState,
-  TaskStateChange,
-  TaskUpdate,
+import {
+  type AgentDialog,
+  type DialogAnswer,
+  promptBoxText,
+  type ReadRequest,
+  type ReadRequestHold,
+  type RunState,
+  type Session,
+  type SessionEnvironment,
+  type TaskState,
+  type TaskStateChange,
+  type TaskUpdate,
 } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
 import type { AgentSession } from "./agent-session.ts";
@@ -16,8 +17,9 @@ import { type CopilotHookOutput, hookOutputFor, situationOutput } from "./copilo
 import type { CopilotHookEvent, CopilotHookRecord } from "./copilot-hook-record.ts";
 import { approvalRequest } from "./copilot-hooks.ts";
 import { answersDialog, ESCAPE, type SessionKey, sessionKey } from "./copilot-keys.ts";
-import { promptBoxText } from "./copilot-prompt-box.ts";
+
 import { CopilotSessionState, RETYPE_AFTER_MS } from "./copilot-session-state.ts";
+import { CopyRequestSlot } from "./copy-request.ts";
 import { HookTail } from "./hook-tail.ts";
 import { ReadRequestClock } from "./read-request.ts";
 import { SessionAttention } from "./session-attention.ts";
@@ -206,6 +208,7 @@ export class LiveSession implements AgentSession {
   #daemonTurn = false;
   #submitTimer: NodeJS.Timeout | undefined;
   readonly #readRequest = new ReadRequestClock();
+  readonly copyRequest = new CopyRequestSlot();
   readonly #dialogs: SessionDialogs;
   /**
    * Approvals Copilot CLI drew before their hooks reached the daemon that the user already answered (ADR-71): when such
@@ -467,6 +470,7 @@ export class LiveSession implements AgentSession {
       environment: this.environment,
       view: "terminal",
       readRequest: run.kind === "running" ? this.#readRequestView() : null,
+      copyRequest: run.kind === "running" ? this.copyRequest.request : null,
     };
   }
 

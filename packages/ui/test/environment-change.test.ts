@@ -20,6 +20,7 @@ function session(state: "Working" | "Input" | null, run: Session["run"] = runnin
     environment: { variables: ["GITLAB_TOKEN"], secrets: ["GITLAB_TOKEN"], agentSecrets: [], profile: null, problem: null },
     view: "terminal",
     readRequest: null,
+    copyRequest: null,
   };
 }
 

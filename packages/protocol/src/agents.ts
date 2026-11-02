@@ -118,6 +118,11 @@ export function changePromptsFit(prompt: string, parts: readonly ChangePart[]): 
 }
 export const CHANGE_PROMPTS_TOO_LONG = `a part's prompt with its note is at most ${TASK_PROMPT_MAX} characters`;
 
+/** A character the UI does not show but a model reads or a paste carries (`visibleText`). */
+function hasInvisibleCharacter(text: string): boolean {
+  return /[\p{Cf}\p{Co}\u2028\u2029]/u.test(text);
+}
+
 /**
  * Text from an agent that a person reads before a decision or that reaches another agent (a task proposal, a summary,
  * ADR-39): without characters the UI does not show but a model reads (format characters, including the tags
@@ -129,7 +134,7 @@ export const CHANGE_PROMPTS_TOO_LONG = `a part's prompt with its note is at most
 export function visibleText(text: z.ZodString): z.ZodString {
   // `refine` instead of `regex`: the pattern would go into the MCP tool's JSON Schema, and a client that compiles it
   // without the `u` flag would read `\p{Cf}` as plain letters and reject ordinary text.
-  return text.refine((value) => !/[\p{Cf}\p{Co}\u2028\u2029]/u.test(value), {
+  return text.refine((value) => !hasInvisibleCharacter(value), {
     message: "the text must not contain invisible characters (format or private-use characters, line separators)",
   });
 }
@@ -323,6 +328,45 @@ export const ReadRequest = z.object({
 export type ReadRequest = z.infer<typeof ReadRequest>;
 
 /**
+ * The longest text an agent can ask to copy (ADR-180): more than a command or a snippet needs. The text travels in every
+ * session list the UI gets, because Copy must write the clipboard inside the click, so it is kept small.
+ */
+export const COPY_TEXT_MAX = 10_000;
+
+/**
+ * Whether text may go to the user's clipboard from an agent (ADR-180), by `copy_to_clipboard` or by OSC 52 in a session
+ * terminal: no control characters but line breaks and tabs, so that a paste into a terminal cannot carry an escape
+ * sequence (one that ends a bracketed paste would run the rest as typed keys), and no invisible characters (format,
+ * private use, line separators, as in `visibleText`), so the user pastes what they read.
+ */
+export function copyableText(text: string): boolean {
+  return !/[^\P{Cc}\n\r\t]/u.test(text) && !hasInvisibleCharacter(text);
+}
+
+export const CopyText = z
+  .string()
+  .min(1)
+  .max(COPY_TEXT_MAX)
+  // `refine` instead of `regex`, as in `visibleText`: the pattern would go into the MCP tool's JSON Schema.
+  .refine(copyableText, {
+    message: "the text must not contain control characters other than line breaks and tabs, nor invisible characters",
+  });
+export const CopyRequestId = z.string().min(1).max(64);
+
+/**
+ * A copy request (ADR-180): text a session's agent asked to put on the user's clipboard with `copy_to_clipboard`. The
+ * clipboard changes only when the user clicks Copy in the session's panel, so an agent never swaps what the user pastes
+ * on its own, and a daemon in a container, which has no clipboard of the user's, needs no access to the host for it.
+ */
+export const CopyRequest = z.object({
+  id: CopyRequestId,
+  text: CopyText,
+  /** ISO 8601: when the agent asked. */
+  at: z.iso.datetime(),
+});
+export type CopyRequest = z.infer<typeof CopyRequest>;
+
+/**
  * A session that may be stuck (ADR-151): it is in the middle of a turn (`Working`, or `Stale`) and no step of its agent
  * came for a long time: no hook in a terminal (a finished tool, a prompt, a notification), no update over ACP, no key
  * from the user. Copilot CLI keeps drawing its spinner while a command hangs, so the output alone does not tell; a
@@ -367,6 +411,8 @@ export const Session = z.object({
   view: SessionView,
   /** The read request while something waits unread for the agent of a running session (ADR-159); `null` otherwise. */
   readRequest: ReadRequest.nullable(),
+  /** The agent's latest copy request in a running session (ADR-180), until the user copies or dismisses it; `null` otherwise. */
+  copyRequest: CopyRequest.nullable(),
 });
 export type Session = z.infer<typeof Session>;
 
@@ -750,6 +796,11 @@ export const agentsApi = {
    * into the middle of a turn or twice. An ended session is `bad_request`.
    */
   deliverReadRequest: endpoint("deliver-read-request", SessionRequest, Session),
+  /**
+   * The user copied or dismissed the session's copy request `request` (ADR-180), so it leaves the panel; the UI writes
+   * the clipboard itself, in the click. A newer request of the agent stays, and a request already gone is no error.
+   */
+  clearCopyRequest: endpoint("clear-copy-request", SessionRequest.extend({ request: CopyRequestId }), Session),
   /** Stops the agent's turn in a session in the conversation view (ADR-107), as Esc does in the terminal. */
   interrupt: endpoint("interrupt", SessionRequest, Session),
   /**

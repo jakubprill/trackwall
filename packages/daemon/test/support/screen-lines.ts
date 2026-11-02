@@ -2,7 +2,7 @@
  * The screen of a session window in the daemon's session tests and the contract tests, as Copilot CLI (or the fake)
  * drew it in the reference's size: the window's output put through the emulator once it has processed all of it.
  */
-import { promptBoxOnScreen } from "../../src/modules/agents/copilot-prompt-box.ts";
+import { promptBoxOnScreen } from "@trackwall/protocol";
 import { TerminalScreen } from "../../src/modules/agents/terminal-screen.ts";
 import type { viewer } from "./agents.ts";
 import { REFERENCE_COLS, REFERENCE_ROWS } from "./copilot-reference.ts";
