@@ -33,12 +33,17 @@ describe("the supervisor in the conversation view (ADR-107)", () => {
     await conversation.getByText("check the build", { exact: true }).waitFor();
     await conversation.getByText(/Thinking about: check the build/).waitFor();
     await conversation.getByText("Make a file").waitFor();
-    // The model's reasoning is folded under "Thought" and opens on a click, once the turn has ended and the panel
-    // stopped moving: the line above the message box changes as it ends, and the context meter joins it after.
+    // The model's reasoning is folded under "Thought" and opens on a click. As the turn ends the followed list scrolls
+    // (the dots of a working agent go, the context meter joins the line above the message box), which can move the row
+    // between the moment the click aims and the moment it lands, so the click is tried again until the row opens.
     await panel.getByText("Your turn: the agent waits for your message").waitFor();
+    const reasoning = conversation.getByText("Reasoning about: check the build");
+    for (let tries = 0; !(await reasoning.isVisible()) && tries < 5; tries++) {
+      await conversation.getByText("Thought", { exact: true }).click();
+      await reasoning.waitFor({ timeout: 1000 }).catch(() => {});
+    }
+    await reasoning.waitFor();
     await panel.getByText("Context used:").waitFor({ state: "attached" });
-    await conversation.getByText("Thought", { exact: true }).click();
-    await conversation.getByText("Reasoning about: check the build").waitFor();
 
     await panel.getByRole("button", { name: "Stop", exact: true }).click();
     await panel.getByText("The session has ended; this is its conversation.").waitFor();
