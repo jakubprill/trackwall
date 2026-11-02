@@ -298,9 +298,11 @@ describe("a task in Copilot CLI's sandbox in the conversation view with the real
         expect({ inside: existsSync(join(task.worktree, "inside.txt")), escapes: probe.escapes() }).toEqual({ inside: false, escapes: [] });
       } else {
         expect({ inside: existsSync(join(task.worktree, "inside.txt")), answers }).toMatchObject({ inside: true });
-        // The repo's whole git directory is granted for the worktree's commits, hooks and config with it: a gap in
-        // §8, pinned here so that a change in Copilot CLI shows.
-        expect(probe.escapes()).toEqual(["the repo's git hooks", "the repo's git config"]);
+        // On Linux the repo's whole git directory is granted for the worktree's commits, hooks and config with it: a
+        // gap in §8, pinned here so that a change in Copilot CLI shows.
+        const escapes = probe.escapes();
+        expect(escapes).not.toContain("the user's home");
+        if (process.platform === "linux") expect(escapes).toEqual(["the repo's git hooks", "the repo's git config"]);
       }
       await agents.stop(session);
     } finally {

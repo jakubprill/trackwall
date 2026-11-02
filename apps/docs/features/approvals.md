@@ -15,7 +15,7 @@ Approve or stop an agent's command from the tray panel or the Home dashboard, an
 - One click to answer: the same options Copilot CLI offers in its terminal, or "Stop the agent".
 - The agent's questions in the same places, so you know what it asks before you open its session.
 - Commands you always allow, or never allow, written once for your repos instead of answered in every session.
-- Agent tasks that run without approvals kept in Copilot CLI's sandbox, so a command cannot touch your other repos or your credentials.
+- Agent tasks that run without approvals kept in Copilot CLI's sandbox, so a command cannot touch your other repos or your credentials (on Linux by default, on macOS and Windows when you turn it on).
 
 ## How it works
 
@@ -35,11 +35,11 @@ toolPermissions:
     deny: ["shell(git push)"]
 ```
 
-An [agent task](/features/tasks) started with "No approvals" runs its commands in Copilot CLI's sandbox. Each shell command, and every build or script it starts, runs under your system's own isolation: it can write only in the task's worktree (and the repo's git folder and the system's temporary folder), and it cannot read your other repos or credential folders such as `~/.ssh`. The task can still commit, and `git push` still works, so keep a deny rule for that. The New session form tells you under the options that the task will run in the sandbox, and the task's header says "Sandbox". You choose which tasks run in it with `sandbox` in `workspace.yaml`:
+On Linux, an [agent task](/features/tasks) started with "No approvals" runs its commands in Copilot CLI's sandbox; on macOS and Windows you turn it on yourself. Each shell command, and every build or script it starts, runs under your system's own isolation: it can write only in the task's worktree (and the repo's git folder and the system's temporary folder), and it cannot read your other repos or credential folders such as `~/.ssh`. The task can still commit, and `git push` still works, so keep a deny rule for that. The New session form tells you under the options that the task will run in the sandbox, and the task's header says "Sandbox". You choose which tasks run in it with `sandbox` in `workspace.yaml`:
 
 ```yaml
 sandbox:
-  tasks: auto   # tasks without approvals (the default); all: every task; off: none
+  tasks: auto   # tasks without approvals (the default on Linux); all: every task; off: none (the default elsewhere)
 ```
 
 ## Use it
@@ -63,6 +63,8 @@ sandbox:
 - Agents connected to the [MCP server](/features/mcp) never see these requests and cannot answer them.
 - The sandbox needs your system's isolation: built into macOS and Windows, and the `bubblewrap` package on Linux (with `slirp4netns`, `iproute2` and `iptables`). Where it cannot run, Trackwall refuses to start a task that should run in it and says what to install; the [doctor](/features/doctor) shows the same. Set `sandbox.tasks: off` to start such tasks without it.
 - In a container the sandbox is off unless you set `sandbox`: the container already keeps the agent away from your computer, and Docker does not let the sandbox start there.
+- On macOS it is off unless you set `sandbox`. Git in the sandbox cannot read your `~/.gitconfig`, so add that file to `readonlyPaths` in the `sandbox` settings of Copilot CLI's `settings.json` first, or the task cannot commit. In the terminal, Copilot CLI may first ask whether to install its certificate authority, which it uses to give git and `gh` your sign-in without showing it to the command; answer it once in the task's terminal.
+- On Windows it is off unless you set `sandbox`, and it needs a Windows version with BaseContainer. On an older one Copilot CLI refuses every command of the task and says so.
 - A task keeps the sandbox it started with for every resume; a change of `sandbox` applies to tasks you start after it.
 - On Linux a command in the sandbox cannot reach a service on your computer's `localhost`, such as one you started from Trackwall. On macOS it can.
 - Files the agent changes with Copilot CLI's own edit tool, not through a command, are kept in the worktree by Copilot CLI's checks rather than by the system, which is why Copilot CLI still asks before a path it sees outside the worktree.

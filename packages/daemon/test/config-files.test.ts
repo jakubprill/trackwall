@@ -115,7 +115,7 @@ describe("config files", () => {
       ["gitProgram", "default", "git from PATH", null],
       ["repoHosts", "default", "none", null],
       ["toolPermissions", "default", "none", null],
-      ["sandbox", "default", "tasks: auto (off in a container)", null],
+      ["sandbox", "default", "tasks: auto on Linux, off on macOS, Windows and in a container", null],
       ["agentSecrets", "file", "GITLAB_TOKEN", 2],
       ["sessionProfile", "default", "none", null],
       ["autoReview", "default", "afterReport: false", null],

@@ -52,7 +52,8 @@ export const workspaceKeyValue: { [K in WorkspaceKey]: (value: WorkspaceKeyValue
   sessionProfile: (profile) => profile ?? "none",
   autoReview: (settings) => `afterReport: ${settings.afterReport}`,
   supervisor: (settings) => `changesCode: ${settings.changesCode}`,
-  sandbox: (settings) => (settings === null ? "tasks: auto (off in a container)" : `tasks: ${settings.tasks}`),
+  sandbox: (settings) =>
+    settings === null ? "tasks: auto on Linux, off on macOS, Windows and in a container" : `tasks: ${settings.tasks}`,
   repoTags: (rules) => {
     const tags = Object.keys(rules);
     return tags.length === 0 ? "none" : `${countLabel(tags.length, { one: "tag", other: "tags" })}: ${tags.join(", ")}`;

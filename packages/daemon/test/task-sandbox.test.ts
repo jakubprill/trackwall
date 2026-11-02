@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { agentsApi, doctorApi } from "@trackwall/protocol";
 import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
-import { Workspace } from "../src/modules/workspace/workspace.ts";
+import { defaultSandboxTasks, Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 import { viewer, waitFor } from "./support/agents.ts";
 import { fakeHosting } from "./support/hosting.ts";
@@ -60,8 +60,15 @@ describe("sandbox in workspace.yaml and its default (ADR-181)", () => {
     });
   }
 
-  test("without the key tasks without approvals run in the sandbox, except in a container, and the key wins in both", () => {
-    expect(workspace(null, false).sandboxSettings()).toEqual({ tasks: "auto" });
+  test("without the key tasks without approvals run in the sandbox only on a Linux computer outside a container", () => {
+    expect(defaultSandboxTasks(false, "linux")).toBe("auto");
+    expect(defaultSandboxTasks(true, "linux")).toBe("off");
+    expect(defaultSandboxTasks(false, "darwin")).toBe("off");
+    expect(defaultSandboxTasks(false, "win32")).toBe("off");
+  });
+
+  test("the workspace gives that default without the key, and the key wins on every system", () => {
+    expect(workspace(null, false).sandboxSettings()).toEqual({ tasks: defaultSandboxTasks(false, process.platform) });
     expect(workspace(null, true).sandboxSettings()).toEqual({ tasks: "off" });
     expect(workspace("sandbox:\n  tasks: off\n", false).sandboxSettings()).toEqual({ tasks: "off" });
     expect(workspace("sandbox:\n  tasks: all\n", true).sandboxSettings()).toEqual({ tasks: "all" });

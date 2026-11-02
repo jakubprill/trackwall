@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { MCP_SERVER_NAME, mcpTools, promptBoxText, type Session, TASK_MESSAGE_RULE } from "@trackwall/protocol";
 import { windowTitleFromOsc } from "../src/modules/agents/copilot-osc.ts";
@@ -648,14 +649,17 @@ describe("a task in Copilot CLI's sandbox with the real Copilot CLI (ADR-181)", 
     const workspace = readFileSync(workspaceFile, "utf8");
     expect(workspace).toContain("tasks: off");
     const probe = commitEscapeScript(join(daemon.projects, "shop"));
-    // Without git and gh going through the sandbox's proxy Copilot CLI's terminal has no certificate authority to
-    // offer, a question that would stop the turn on macOS and Windows before the prompt (to check: does it?).
+    // The setup a macOS user needs (ADR-181): without git and gh going through the sandbox's proxy the terminal does
+    // not stop at the question about its certificate authority, and git in Seatbelt may read ~/.gitconfig.
     const settings = join(daemon.home, "copilot-home", "settings.json");
     try {
       mkdirSync(dirname(settings), { recursive: true });
-      writeFileSync(settings, JSON.stringify({ sandbox: { auth: { git: false, gh: false } } }));
+      const gitconfig = join(homedir(), ".gitconfig");
+      const sandbox = { auth: { git: false, gh: false }, userPolicy: { filesystem: { readonlyPaths: [gitconfig] } } };
+      writeFileSync(settings, JSON.stringify({ sandbox }));
       writeFileSync(workspaceFile, workspace.replace("tasks: off", "tasks: auto"));
-      const commit = "git add inside.txt; git -c user.name=agent -c user.email=agent@example.com commit -q -m sandboxed";
+      const commit =
+        "git add inside.txt; git -c user.name=agent -c user.email=agent@example.com -c commit.gpgsign=false commit -q -m sandboxed";
       model.reply(
         (request) => shellCall(request, { bash: "touch inside.txt", powershell: "New-Item inside.txt" }),
         (request) => shellCall(request, { bash: commit, powershell: commit }),
@@ -683,9 +687,11 @@ describe("a task in Copilot CLI's sandbox with the real Copilot CLI (ADR-181)", 
         expect({ inside: existsSync(join(task.worktree, "inside.txt")), answers }).toMatchObject({ inside: true });
         const lastCommit = spawnSync("git", ["log", "-1", "--format=%s"], { cwd: task.worktree, encoding: "utf8" }).stdout.trim();
         expect({ lastCommit, answers }).toMatchObject({ lastCommit: "sandboxed" });
-        // The repo's whole git directory is granted for the worktree's commits, hooks and config with it: a gap in
-        // §8, pinned here so that a change in Copilot CLI shows.
-        expect(probe.escapes()).toEqual(["the repo's git hooks", "the repo's git config"]);
+        // On Linux the repo's whole git directory is granted for the worktree's commits, hooks and config with it: a
+        // gap in §8, pinned here so that a change in Copilot CLI shows.
+        const escapes = probe.escapes();
+        expect(escapes).not.toContain("the user's home");
+        if (process.platform === "linux") expect(escapes).toEqual(["the repo's git hooks", "the repo's git config"]);
       }
       expect(agents.session(session).dialog).toBeNull();
       await agents.stop(session);
