@@ -240,15 +240,17 @@ fn container_in(ps: &str, folder: &str, ignore_case: bool) -> Option<Found> {
         return None;
     }
     let (id, label) = rows.iter().find(|(_, label)| same_folder(label, folder, true))?;
-    Some(Found { id: (*id).to_owned(), other_case: Some(short(label)) })
+    Some(Found { id: (*id).to_owned(), other_case: Some((*label).to_owned()) })
 }
 
-/// What to do about a container VS Code does not reuse because its label differs from the folder in case.
-fn other_case_hint(found: &Found, label: &str, folder: &str) -> String {
-    let short_id = &found.id[..12];
+/// What to do about a container VS Code does not reuse because its label differs from the folder in case; the label is
+/// the container's text, shown cut to a line and never run.
+fn other_case_hint(id: &str, label: &str, folder: &str) -> String {
+    let (label, short_id) = (short(label), &id[..12]);
     format!(
         "A container for this folder is running with the label {label}, which differs from {folder} in case, so VS Code does not \
-         reuse it. Remove it with `docker rm -f {short_id}` and start again, or open it from the folder it was created from."
+         reuse it. Remove it with `docker rm -f {short_id}` (this also deletes what it holds outside the mounted folders) and start again, or \
+         open it from the folder it was created from."
     )
 }
 
@@ -343,7 +345,6 @@ fn running_container(docker: &Docker, folder: &str, ignore_case: bool) -> Result
 /// Where the start looks and how paths compare there: without case on Windows and the default disk of macOS.
 struct Look<'a> {
     docker: &'a Docker,
-    folder: &'a str,
     ignore_case: bool,
 }
 
@@ -351,8 +352,8 @@ struct Look<'a> {
 /// running container whose daemon does not answer gets `trackwall-container start` before a second look; the polls after
 /// VS Code opened leave starting to the Feature's own `postStartCommand`. A container whose label differs from the folder
 /// in case and whose daemon does not answer is `OtherCase` with what to do about it.
-fn find_daemon(look: &Look, connect: Connect, try_start: bool) -> Result<RemoteDaemon, Miss> {
-    let found = running_container(look.docker, look.folder, look.ignore_case)?;
+fn find_daemon(look: &Look, folder: &str, connect: Connect, try_start: bool) -> Result<RemoteDaemon, Miss> {
+    let found = running_container(look.docker, folder, look.ignore_case)?;
     let id = found.id.as_str();
     let result = match daemon_in(look.docker, id, connect) {
         Err(Miss::NotYet(_)) if try_start => {
@@ -364,7 +365,7 @@ fn find_daemon(look: &Look, connect: Connect, try_start: bool) -> Result<RemoteD
         result => result,
     };
     match (result, &found.other_case) {
-        (Err(Miss::NotYet(_)), Some(label)) => Err(Miss::OtherCase(other_case_hint(&found, label, look.folder))),
+        (Err(Miss::NotYet(_)), Some(label)) => Err(Miss::OtherCase(other_case_hint(id, label, folder))),
         (result, _) => result,
     }
 }
@@ -402,7 +403,7 @@ fn start(
         .run(&["version", "--format", "{{.Server.Version}}"])
         .map_err(|e| format!("Docker does not answer ({e}). Start Docker Desktop or Rancher Desktop and try again."))?;
     let was_cancelled = || if cancelled.load(Ordering::SeqCst) { Err(CANCELLED.to_owned()) } else { Ok(()) };
-    match find_daemon(look, connect, true) {
+    match find_daemon(look, &dev.folder, connect, true) {
         Ok(remote) => return was_cancelled().map(|()| remote),
         Err(Miss::Final(reason)) => return Err(reason),
         Err(Miss::NotYet(_) | Miss::OtherCase(_)) => {}
@@ -414,7 +415,7 @@ fn start(
     loop {
         std::thread::sleep(timing.poll);
         was_cancelled()?;
-        match find_daemon(look, connect, false) {
+        match find_daemon(look, &dev.folder, connect, false) {
             Ok(remote) => return was_cancelled().map(|()| remote),
             Err(Miss::Final(reason)) => return Err(reason),
             Err(Miss::OtherCase(hint)) if opened.elapsed() > timing.other_case_grace => return Err(hint),
@@ -490,7 +491,7 @@ pub fn dev_container_starting(starting: tauri::State<'_, DevContainerStart>) -> 
 }
 
 /// Ends the start in progress, so the user need not wait out `START_TIMEOUT` when VS Code failed in a window they did not
-/// watch; the start answers that it was cancelled within one poll.
+/// watch; the start answers that it was cancelled once the Docker call in progress returns (at most `DOCKER_TIMEOUT`).
 #[tauri::command]
 pub fn cancel_dev_container_start(starting: tauri::State<'_, DevContainerStart>) {
     starting.cancel();
@@ -514,7 +515,7 @@ pub async fn start_dev_container(
     let open_editor = |url: String| system_open::open_outside(url);
     let found = tauri::async_runtime::spawn_blocking(move || {
         let docker = Docker::system();
-        let look = Look { docker: &docker, folder: &dev.folder, ignore_case: cfg!(any(windows, target_os = "macos")) };
+        let look = Look { docker: &docker, ignore_case: cfg!(any(windows, target_os = "macos")) };
         start(&look, &dev, &open_editor, &connect_remote, &cancelled, timing)
     })
     .await;
@@ -653,9 +654,9 @@ mod tests {
             Timing { timeout: Duration::from_secs(5), poll: Duration::from_millis(20), other_case_grace: Duration::from_secs(5) }
         }
 
-        /// The folder the tests' dev container is saved with, compared with case as on Linux.
+        /// Paths compared with case, as on Linux.
         fn look(fake: &Fake) -> Look<'_> {
-            Look { docker: &fake.docker, folder: "/home/me/dev", ignore_case: false }
+            Look { docker: &fake.docker, ignore_case: false }
         }
 
         const ACCEPT: Connect = &|_| Ok(());
@@ -772,7 +773,7 @@ mod tests {
             std::fs::write(fake.dir.join("running"), "").expect("running");
             std::fs::write(fake.dir.join("label"), "/Home/me/dev").expect("label");
             std::fs::write(fake.dir.join("daemon.json"), format!(r#"{{"pid":1,"port":7700,"token":"{TOKEN}"}}"#)).expect("daemon.json");
-            Look { docker: &fake.docker, folder: "/home/me/dev", ignore_case: true }
+            Look { docker: &fake.docker, ignore_case: true }
         }
 
         #[test]
@@ -795,8 +796,8 @@ mod tests {
                 err,
                 format!(
                     "A container for this folder is running with the label /Home/me/dev, which differs from /home/me/dev in case, so VS \
-                     Code does not reuse it. Remove it with `docker rm -f {}` and start again, or open it from the folder it was created \
-                     from.",
+                     Code does not reuse it. Remove it with `docker rm -f {}` (this also deletes what it holds outside the mounted \
+                     folders) and start again, or open it from the folder it was created from.",
                     "c".repeat(12)
                 )
             );

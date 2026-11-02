@@ -80,8 +80,9 @@ function DevContainerFields({ saved, initial, onSaved }: { saved: DevContainer |
   );
 }
 
-/** How often the form asks whether a start it did not begin is still waiting. */
+/** How often the form asks whether a start, perhaps one it did not begin, is still waiting, and whether one began elsewhere. */
 const STARTING_POLL_MS = 2000;
+const IDLE_POLL_MS = 10_000;
 
 /** Nothing follows in this window: the app restarts. */
 const RESTARTS = () => {};
@@ -93,9 +94,8 @@ const RESTARTS = () => {};
  */
 function StartButton() {
   const start = useAction(startDevContainer, RESTARTS);
-  const loadStarting = useCallback(() => devContainerStarting(), []);
-  // Asked again every moment, since a cancelled start ends within one poll of its own.
-  const starting = useRemote(loadStarting, { pollMs: STARTING_POLL_MS });
+  // Asked often only while a start waits, which a cancel ends after the Docker call in progress.
+  const starting = useRemote(devContainerStarting, { pollMs: (running) => (running ? STARTING_POLL_MS : IDLE_POLL_MS) });
   const cancel = useAction(cancelDevContainerStart, starting.reload);
   const reloadStarting = starting.reload;
   useEffect(() => {
@@ -114,7 +114,7 @@ function StartButton() {
           </Button>
         )}
       </div>
-      {start.pending && (
+      {waiting && (
         <p className="text-muted-foreground text-xs">
           VS Code opens the dev container; the first start builds it and can take a few minutes. The app restarts once Trackwall in it
           answers.
