@@ -120,6 +120,11 @@ describe.skipIf(process.versions.bun === undefined)("an automatic review of a ta
     const second = await settled(task.id);
     expect(second.diffHash).not.toBe(first.diffHash);
 
+    // A click while the report's start gives way for the same diff still reviews it.
+    daemon.facade.agents.reportSummary(session, "Nothing new.", []);
+    expect(await daemon.facade.agents.startAutoReview(task.id)).toMatchObject({ state: "running", trigger: "user" });
+    await settled(task.id);
+
     await daemon.post(workspaceApi.setAutoReview, { afterReport: false });
     expect(readdirSync(daemon.home)).toContain("workspace.yaml");
   });
@@ -136,6 +141,15 @@ describe.skipIf(process.versions.bun === undefined)("an automatic review of a ta
       await daemon.facade.agents.stop(runningSessionOf(task.id));
       await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
       expect(await daemon.post(autoReviewApi.get, { task: task.id })).toBeNull();
+
+      // Ending a task while its review is still starting waits for the start and stops the reviewer it began.
+      const other = await taskWithChange("add a coupon");
+      await daemon.facade.agents.stop(runningSessionOf(other.id));
+      const starting = daemon.facade.agents.startAutoReview(other.id);
+      await daemon.facade.agents.removeTask(other.id, false, true);
+      expect(await starting).toMatchObject({ state: "running" });
+      expect(daemon.facade.agents.autoReview(other.id)).toBeNull();
+      expect(existsSync(join(daemon.home, "auto-reviews", other.id))).toBe(false);
     } finally {
       delete process.env.FAKE_COPILOT_REVIEW_WAIT;
     }

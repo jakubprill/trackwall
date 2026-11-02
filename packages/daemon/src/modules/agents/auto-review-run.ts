@@ -158,25 +158,50 @@ const NOTICE = /^(Info|Warning|Error): [^\n]*$/;
 /**
  * The reviewer's answer from the turn's updates. Copilot CLI streams the text of the review agent too, as chunks of the
  * same conversation while the `task` tool call that runs it is open, and then the model repeats it: only text while no
- * tool call is open counts, so an issue is read once. Chunks carry no message boundaries, so a tool call or a notice
- * of Copilot CLI starts a new paragraph, and a heading is never glued to the text before it.
+ * tool call is open counts, so an issue is read once. A tool call opens with `tool_call` and closes with an update that
+ * says it completed or failed; should one never close, the answer is all the text, so a review never ends empty.
  */
-class ReviewAnswer {
-  readonly #paragraphs: string[] = [];
+export class ReviewAnswer {
+  readonly #outside = new Paragraphs();
+  readonly #all = new Paragraphs();
   readonly #open = new Set<string>();
-  #newParagraph = true;
   #chars = 0;
 
   add(update: SessionUpdate): void {
     if (update.sessionUpdate === "tool_call" || update.sessionUpdate === "tool_call_update") {
-      if (update.status === "completed" || update.status === "failed") this.#open.delete(update.toolCallId);
-      else this.#open.add(update.toolCallId);
-      this.#newParagraph = true;
+      const ended = update.status === "completed" || update.status === "failed";
+      if (ended) this.#open.delete(update.toolCallId);
+      else if (update.sessionUpdate === "tool_call") this.#open.add(update.toolCallId);
+      this.#outside.breakParagraph();
+      this.#all.breakParagraph();
       return;
     }
     const text = update.sessionUpdate === "agent_message_chunk" ? contentText(update.content) : undefined;
-    if (text === undefined || this.#open.size > 0 || this.#chars > ANSWER_MAX_CHARS) return;
+    if (text === undefined || this.#chars > ANSWER_MAX_CHARS) return;
     this.#chars += text.length;
+    this.#all.add(text);
+    if (this.#open.size === 0) this.#outside.add(text);
+  }
+
+  text(): string {
+    const outside = this.#outside.text();
+    return outside.trim() === "" ? this.#all.text() : outside;
+  }
+}
+
+/**
+ * Chunks carry no message boundaries, so a tool call or a notice of Copilot CLI starts a new paragraph, and a heading
+ * is never glued to the text before it.
+ */
+class Paragraphs {
+  readonly #paragraphs: string[] = [];
+  #newParagraph = true;
+
+  breakParagraph(): void {
+    this.#newParagraph = true;
+  }
+
+  add(text: string): void {
     const notice = NOTICE.test(text);
     if (this.#newParagraph || notice) this.#paragraphs.push(text);
     else this.#paragraphs[this.#paragraphs.length - 1] += text;

@@ -123,6 +123,8 @@ describe("workspace", () => {
         gitProgramProblem: null,
         sessionProfile: null,
         sessionProfileProblem: null,
+        autoReview: { afterReport: false },
+        autoReviewProblem: null,
         configFile: file,
       });
       await expect(workspace.overview("api")).rejects.toMatchObject({ code: "not_found" });
@@ -224,6 +226,8 @@ describe("workspace", () => {
         gitProgramProblem: null,
         sessionProfile: null,
         sessionProfileProblem: null,
+        autoReview: { afterReport: false },
+        autoReviewProblem: null,
         configFile: file,
       });
       expect(readFileSync(file, "utf8")).toContain(`projectsDir: ${projects}`);

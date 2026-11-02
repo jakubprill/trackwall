@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AutoReview, AutoReviewFinding } from "@trackwall/protocol";
-import { autoReviewLabel, findingComment, inDrafts } from "../src/lib/auto-review.ts";
+import { autoReviewLabel, findingComment, inDrafts, shownLines } from "../src/lib/auto-review.ts";
 
 const PATCH = [
   "diff --git a/src/cart.ts b/src/cart.ts",
@@ -16,6 +16,8 @@ const PATCH = [
   "",
 ].join("\n");
 
+const SHOWN = shownLines(PATCH);
+
 const finding = (over: Partial<AutoReviewFinding>): AutoReviewFinding => ({
   title: "Discount ignored",
   severity: "high",
@@ -27,7 +29,7 @@ const finding = (over: Partial<AutoReviewFinding>): AutoReviewFinding => ({
 
 describe("a finding of the automatic review as a review comment (ADR-182)", () => {
   test("a finding on an added line becomes a comment on that line, with the line's code and the title over the text", () => {
-    expect(findingComment(finding({}), PATCH)).toEqual({
+    expect(findingComment(finding({}), SHOWN)).toEqual({
       path: "src/cart.ts",
       side: "new",
       line: 11,
@@ -37,25 +39,30 @@ describe("a finding of the automatic review as a review comment (ADR-182)", () =
   });
 
   test("an unchanged line the diff shows takes a comment too", () => {
-    expect(findingComment(finding({ line: 10 }), PATCH)).toMatchObject({ line: 10, code: "  total() {" });
+    expect(findingComment(finding({ line: 10 }), SHOWN)).toMatchObject({ line: 10, code: "  total() {" });
   });
 
   test("a line the diff does not show, another file or no line gives no comment", () => {
-    expect(findingComment(finding({ line: 40 }), PATCH)).toBeNull();
-    expect(findingComment(finding({ path: "src/tax.ts" }), PATCH)).toBeNull();
-    expect(findingComment(finding({ line: null }), PATCH)).toBeNull();
-    expect(findingComment(finding({ path: null, line: null }), PATCH)).toBeNull();
+    expect(findingComment(finding({ line: 40 }), SHOWN)).toBeNull();
+    expect(findingComment(finding({ path: "src/tax.ts" }), SHOWN)).toBeNull();
+    expect(findingComment(finding({ line: null }), SHOWN)).toBeNull();
+    expect(findingComment(finding({ path: null, line: null }), SHOWN)).toBeNull();
+  });
+
+  test("a line past what the diff shows gives no comment", () => {
+    expect(findingComment(finding({}), shownLines(PATCH, 7))).toBeNull();
+    expect(findingComment(finding({}), shownLines(PATCH, 8))).toMatchObject({ line: 11 });
   });
 
   test("a long finding is cut to what a review comment holds", () => {
-    const comment = findingComment(finding({ text: "x".repeat(2000) }), PATCH);
+    const comment = findingComment(finding({ text: "x".repeat(2000) }), SHOWN);
 
     expect(comment?.text).toHaveLength(2000);
     expect(comment?.text.endsWith("…")).toBe(true);
   });
 
   test("a finding already added is in the drafts, one on another line is not", () => {
-    const comment = findingComment(finding({}), PATCH);
+    const comment = findingComment(finding({}), SHOWN);
     if (comment === null) throw new Error("no comment");
 
     expect(inDrafts(comment, [{ id: 0, comment }])).toBe(true);

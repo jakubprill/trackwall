@@ -7,12 +7,13 @@ import {
   AutoReview,
   type AutoReviewSettings,
   type AutoReviewTrigger,
+  cutText,
   withoutInvisibleCharacters,
 } from "@trackwall/protocol";
 import { z } from "zod";
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { FollowedStateFile } from "../../infra/state-file.ts";
-import { cutText, reviewFindings } from "./auto-review-findings.ts";
+import { reviewFindings } from "./auto-review-findings.ts";
 import { type ReviewOutcome, type ReviewRunProcs, reviewerArgs, runReview } from "./auto-review-run.ts";
 
 /**
@@ -38,9 +39,9 @@ const CANCELLED = "Stopped before the reviewer finished";
 /** What the reviews need of a task: its repo and worktree (`not_found` for an unknown or ended task) and its changes. */
 interface AutoReviewTasks {
   task(id: string): { repo: string; worktree: string };
-  findTask(id: string): unknown;
-  /** The task's changes against its base commit, the diff cut within `maxPatchBytes`. */
-  changes(id: string, maxPatchBytes: number): Promise<{ files: readonly unknown[]; patch: string; truncated: boolean }>;
+  hasTask(id: string): boolean;
+  /** The task's changes against its base commit: how many files changed, and the diff cut within `maxPatchBytes`. */
+  changes(id: string, maxPatchBytes: number): Promise<{ fileCount: number; patch: string; truncated: boolean }>;
 }
 
 /** What a review starts with: Copilot CLI and the environment a session of the task would get (ADR-93, ADR-136). */
@@ -100,7 +101,8 @@ export class AutoReviews {
 
   /** The user's review of a task's changes, or the one running. */
   async start(task: string): Promise<AutoReview> {
-    const review = await this.#startOnce(task, "user");
+    // A start the agent's report began may give way for an unchanged diff; the user's click reviews it anyway.
+    const review = (await this.#startOnce(task, "user")) ?? (await this.#startOnce(task, "user"));
     if (review === null) throw new Error(`the review of task ${task} did not start`);
     return review;
   }
@@ -123,24 +125,35 @@ export class AutoReviews {
 
   /** The task's last review; `null` when there was none or the task has ended. */
   get(task: string): AutoReview | null {
-    if (!this.#deps.tasks.findTask(task)) return null;
+    if (!this.#deps.tasks.hasTask(task)) return null;
     return this.#byTask.get(task)?.review ?? null;
   }
 
   /** Stops the running review; it ends `cancelled`. A finished one is returned as it is. */
   async cancel(task: string): Promise<AutoReview | null> {
-    const entry = this.#byTask.get(task);
-    if (entry?.review.state === "running") {
-      entry.cancelled = true;
-      await this.#deps.procs.stop(reviewOwner(task));
-      await entry.done;
-    }
+    await this.stop(task);
     return this.get(task);
   }
 
-  /** An ended task keeps no review: stopped if it runs, and forgotten in memory and in the file. */
-  async forget(task: string): Promise<void> {
-    await this.cancel(task);
+  /**
+   * Stops the task's review that is starting or running, so nothing of Trackwall runs in its worktree any more; `null`
+   * right away when there is none, so ending a task without a review does not wait a turn.
+   */
+  stop(task: string): Promise<void> | null {
+    const starting = this.#starting.get(task);
+    if (starting === undefined && this.#byTask.get(task)?.review.state !== "running") return null;
+    return (async () => {
+      await starting?.catch(() => null);
+      const entry = this.#byTask.get(task);
+      if (entry?.review.state !== "running") return;
+      entry.cancelled = true;
+      await this.#deps.procs.stop(reviewOwner(task));
+      await entry.done;
+    })();
+  }
+
+  /** An ended task keeps no review, in memory or in the file; its review was stopped before (`stop`). */
+  forget(task: string): void {
     this.#byTask.delete(task);
     this.#follow();
   }
@@ -168,15 +181,26 @@ export class AutoReviews {
   async #start(task: string, trigger: AutoReviewTrigger): Promise<AutoReview | null> {
     const { repo, worktree } = this.#deps.tasks.task(task);
     const changes = await this.#deps.tasks.changes(task, AUTO_REVIEW_DIFF_MAX_BYTES);
-    if (changes.files.length === 0) throw new DomainError("bad_request", `task ${task} has no changes to review`);
+    if (changes.fileCount === 0) {
+      // The agent reports on tasks without changes too; only the user's click is told.
+      if (trigger === "report") return null;
+      throw new DomainError("bad_request", `task ${task} has no changes to review`);
+    }
     const diffHash = createHash("sha256").update(changes.patch).digest("hex");
-    if (trigger === "report" && this.#byTask.get(task)?.review.diffHash === diffHash) return null;
+    const last = this.#byTask.get(task)?.review;
+    // Only a review that finished saw the diff; one that failed or was stopped is tried again.
+    if (trigger === "report" && last?.state === "done" && last.diffHash === diffHash) return null;
     const launch = await this.#deps.launch({ repo, task });
     const dir = join(this.#deps.home, AUTO_REVIEWS_DIR, task);
-    rmSync(dir, { recursive: true, force: true });
-    mkdirSync(dir, { recursive: true });
     const diffFile = join(dir, DIFF_FILE);
-    writeFileSync(diffFile, changes.patch);
+    try {
+      rmSync(dir, { recursive: true, force: true });
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(diffFile, changes.patch);
+    } catch (err) {
+      rmSync(dir, { recursive: true, force: true });
+      throw err;
+    }
     const entry: Entry = {
       review: {
         task,
@@ -243,7 +267,7 @@ export class AutoReviews {
   /** Daemon start: the reviews the previous daemon left, of the tasks still there; a running one ended with it. */
   #restore(): void {
     for (const review of this.#file.read()?.reviews ?? []) {
-      if (!this.#deps.tasks.findTask(review.task)) continue;
+      if (!this.#deps.tasks.hasTask(review.task)) continue;
       const restored = review.state === "running" ? stoppedWithDaemon(review, null) : review;
       this.#byTask.set(review.task, { review: restored, done: Promise.resolve(), cancelled: false });
     }

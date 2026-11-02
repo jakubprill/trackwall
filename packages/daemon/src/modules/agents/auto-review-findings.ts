@@ -1,9 +1,10 @@
-import { isAbsolute, relative, sep } from "node:path";
+import { isAbsolute, relative } from "node:path";
 import {
   AUTO_REVIEW_FINDINGS_MAX,
   AUTO_REVIEW_TITLE_MAX,
   type AutoReviewFinding,
   AutoReviewSeverity,
+  cutText,
   REVIEW_COMMENT_MAX,
   withoutInvisibleCharacters,
 } from "@trackwall/protocol";
@@ -26,6 +27,10 @@ import {
 
 const ISSUE_HEADING = /^\s*#{1,4}\s*Issue\b[^:\n]*:\s*(.*)$/i;
 const FIELD = /^\s*(?:[-*]\s+)?\*\*(File|Severity|Problem|Evidence|Suggested fix)\s*:?\s*\*\*\s*:?\s*(.*)$/i;
+/** A Markdown rule (`---`), which ends a field. */
+const RULE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
+/** A line that opens or closes a Markdown code block. */
+const FENCE = /^\s*(?:```|~~~)/;
 /** `path:12`, `path:12-14` or `path:12:5`; the first number is the line. */
 const PATH_LINE = /^(.*?):(\d+)(?:[-–:]\d+)?$/;
 
@@ -47,29 +52,44 @@ export function reviewFindings(answer: string, worktree: string): AutoReviewFind
 
 function issueBlocks(answer: string): Block[] {
   const blocks: Block[] = [];
-  let field: Field | null = null;
-  for (const line of answer.split(/\r?\n/)) {
-    const heading = ISSUE_HEADING.exec(line);
-    if (heading) {
-      blocks.push({ title: plain(heading[1] ?? ""), fields: {} });
-      field = null;
-      continue;
-    }
-    const block = blocks.at(-1);
-    if (!block) continue;
-    const labelled = FIELD.exec(line);
-    const name = FIELDS.find((f) => f === labelled?.[1]?.toLowerCase());
-    if (labelled && name) {
-      field = name;
-      block.fields[name] = [labelled[2] ?? ""];
-    } else if (line.trim() === "" || /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
-      // A field is one paragraph: what follows a blank line or a rule is the reviewer's own text.
-      field = null;
-    } else if (field !== null) {
-      block.fields[field]?.push(line);
-    }
-  }
+  const state: ReadState = { field: null, inFence: false };
+  for (const line of answer.split(/\r?\n/)) readLine(line, blocks, state);
   return blocks;
+}
+
+/** The field the lines go to, and whether they are in a code block of it. */
+interface ReadState {
+  field: Field | null;
+  inFence: boolean;
+}
+
+function readLine(line: string, blocks: Block[], state: ReadState): void {
+  const block = blocks.at(-1);
+  if (state.field !== null && state.inFence) {
+    block?.fields[state.field]?.push(line);
+    state.inFence = !FENCE.test(line);
+    return;
+  }
+  const heading = ISSUE_HEADING.exec(line);
+  if (heading) {
+    blocks.push({ title: plain(heading[1] ?? ""), fields: {} });
+    state.field = null;
+    return;
+  }
+  if (!block) return;
+  const labelled = FIELD.exec(line);
+  const name = FIELDS.find((f) => f === labelled?.[1]?.toLowerCase());
+  if (labelled && name) {
+    state.field = name;
+    block.fields[name] = [labelled[2] ?? ""];
+  } else if (line.trim() === "" || RULE.test(line)) {
+    // A field is one paragraph: what follows a blank line or a rule is the reviewer's own text.
+    state.field = null;
+  } else if (state.field !== null) {
+    block.fields[state.field]?.push(line);
+    // A code block in a field keeps its blank lines.
+    state.inFence = FENCE.test(line);
+  }
 }
 
 function finding(block: Block, worktree: string): AutoReviewFinding | null {
@@ -107,8 +127,8 @@ function relativePath(named: string, worktree: string): string | null {
   const inWorktree = isAbsolute(named) ? relative(worktree, named) : named;
   const parts = inWorktree.split(/[\\/]+/).filter((part) => part !== "" && part !== ".");
   if (parts.length === 0 || parts.includes("..") || isAbsolute(inWorktree) || /^[A-Za-z]:/.test(inWorktree)) return null;
-  // `relative` gives `sep`, a path from the model `/`; the contract's paths use `/` (`ChangedFile.path`).
-  return parts.join("/").split(sep).join("/");
+  // The contract's paths use `/` (`ChangedFile.path`), whatever separator `relative` or the model gave.
+  return parts.join("/");
 }
 
 /** Without Markdown's backticks and bold around it. */
@@ -118,11 +138,4 @@ function plain(text: string): string {
 
 function firstLine(text: string): string {
   return plain(text.split("\n")[0] ?? "");
-}
-
-/** Cut to `max` characters with "…", never between the two halves of a character outside the BMP. */
-export function cutText(text: string, max: number): string {
-  if (text.length <= max) return text;
-  const kept = text.slice(0, max - 1);
-  return `${/[\uD800-\uDBFF]$/.test(kept) ? kept.slice(0, -1) : kept}…`;
 }

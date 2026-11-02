@@ -37,6 +37,25 @@ describe("findings read from the reviewer's answer (ADR-182)", () => {
     ]);
   });
 
+  test("a code block in a field keeps its blank lines, and the field ends at the first blank line after it", () => {
+    const answer = [
+      "## Issue: Tax rounds down",
+      "**Problem:** `Math.floor` drops cents.",
+      "**Suggested fix:** Round instead:",
+      "```ts",
+      "const cents = Math.round(amount * 100);",
+      "",
+      "return cents / 100;",
+      "```",
+      "",
+      "The rest looks fine.",
+    ].join("\n");
+
+    expect(reviewFindings(answer, WORKTREE)[0]?.text).toBe(
+      "`Math.floor` drops cents.\n\nSuggested fix: Round instead:\n```ts\nconst cents = Math.round(amount * 100);\n\nreturn cents / 100;\n```",
+    );
+  });
+
   test("a path outside the worktree or with .. keeps no path and no line", () => {
     const issue = (file: string) => `## Issue: Leak\n**File:** ${file}\n**Problem:** It leaks.`;
 

@@ -328,8 +328,11 @@ export class Agents {
     this.#autoReviews = new AutoReviews({
       tasks: {
         task: (id) => this.#tasks.task(id),
-        findTask: (id) => this.#tasks.find(id),
-        changes: (id, maxPatchBytes) => this.#tasks.agentChanges(id, maxPatchBytes, []),
+        hasTask: (id) => this.#tasks.find(id) !== undefined,
+        changes: async (id, maxPatchBytes) => {
+          const { files, patch, truncated } = await this.#tasks.agentChanges(id, maxPatchBytes, []);
+          return { fileCount: files.length, patch, truncated };
+        },
       },
       launch: async ({ repo, task }) => {
         const { copilot, mise } = await this.#launcher.inputs({ repo, supervisor: false, task });
@@ -988,10 +991,12 @@ export class Agents {
   }
 
   async removeTask(id: string, keepBranch: boolean, discardChanges: boolean): Promise<void> {
-    // Its reviewer runs in the worktree, which the removal refuses while a process of Trackwall is in it.
-    await this.#autoReviews.cancel(id);
+    // Its reviewer runs in the worktree, which the removal refuses while a process of Trackwall is in it. Without one,
+    // the removal starts at once, so a change computation that comes after it refuses.
+    const stopping = this.#autoReviews.stop(id);
+    if (stopping !== null) await stopping;
     const ended = await this.#tasks.remove(id, keepBranch, discardChanges);
-    await this.#autoReviews.forget(id);
+    this.#autoReviews.forget(id);
     this.#reviews.take(id);
     this.#miseTrust.forget({ task: id });
     this.#handoffs.forget(id);

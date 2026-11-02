@@ -1,11 +1,10 @@
 import type { ChangedFile, WorkingTreeChanges } from "@trackwall/protocol";
 import { Fragment, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
-import { type DiffAnchor, type DiffLine, type DiffLineKind, diffLines } from "@/lib/diff-lines";
+import { DIFF_SHOWN_LINES, type DiffAnchor, type DiffLine, type DiffLineKind, diffLines } from "@/lib/diff-lines";
 import { cn } from "@/lib/utils";
 
-/** Beyond this many lines or files the browser starts to choke, and the rest is better read in VS Code anyway. */
-const MAX_LINES = 4000;
+/** Beyond this many files the browser starts to choke, like beyond `DIFF_SHOWN_LINES` lines. */
 const MAX_FILES = 500;
 
 const CHANGE_LABELS = {
@@ -37,7 +36,7 @@ export interface LineAnnotations {
  * An empty set of files stays with the caller, because each view says something different about it.
  */
 export function ChangesDiff({ changes, annotations }: { changes: WorkingTreeChanges; annotations?: LineAnnotations }) {
-  const { lines, more } = diffLines(changes.patch, MAX_LINES);
+  const { lines, more } = diffLines(changes.patch, DIFF_SHOWN_LINES);
   const files = changes.files.slice(0, MAX_FILES);
   return (
     <>

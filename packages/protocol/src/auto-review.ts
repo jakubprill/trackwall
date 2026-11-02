@@ -57,7 +57,7 @@ export const AutoReview = z.object({
   trigger: AutoReviewTrigger,
   /** ISO 8601. */
   startedAt: z.string(),
-  /** ISO 8601; `null` while running, and on one cancelled because Trackwall stopped during the run. */
+  /** ISO 8601; `null` while running, and on one cancelled because Trackwall crashed during the run (a stop gives its time). */
   finishedAt: z.string().nullable(),
   /** SHA-256 of the diff the reviewer got: an automatic review of the same changes is not run again. */
   diffHash: z.string().regex(/^[0-9a-f]{64}$/),

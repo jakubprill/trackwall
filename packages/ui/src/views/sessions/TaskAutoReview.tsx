@@ -1,8 +1,9 @@
 import type { AutoReview, AutoReviewFinding } from "@trackwall/protocol";
 import { MessageSquarePlus, ScanSearch, Square } from "lucide-react";
+import { useMemo } from "react";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
-import { autoReviewLabel, findingComment, inDrafts } from "@/lib/auto-review";
+import { autoReviewLabel, findingComment, inDrafts, type ShownLines, shownLines } from "@/lib/auto-review";
 import type { Connection } from "@/lib/connection";
 import { relativeTime } from "@/lib/format";
 import { useTaskAutoReview } from "@/lib/use-task-auto-review";
@@ -62,6 +63,8 @@ export function TaskAutoReview({
 
 function ReviewResult({ autoReview, patch, review }: { autoReview: AutoReview; patch: string; review: TaskReview }) {
   const { findings, message, text, diffTruncated, state } = autoReview;
+  // Read once per diff, not per finding on every poll.
+  const shown = useMemo(() => shownLines(patch), [patch]);
   return (
     <>
       {diffTruncated && <p className="text-warning text-xs">The change was too large: the reviewer got only its first part.</p>}
@@ -70,7 +73,7 @@ function ReviewResult({ autoReview, patch, review }: { autoReview: AutoReview; p
         <ul aria-label="Findings" className="flex flex-col gap-2">
           {findings.map((finding, i) => (
             // Two findings may share a title and line, so the position tells them apart.
-            <Finding key={`${i}:${finding.title}`} finding={finding} patch={patch} review={review} />
+            <Finding key={`${i}:${finding.title}`} finding={finding} shown={shown} review={review} />
           ))}
         </ul>
       )}
@@ -84,8 +87,8 @@ function ReviewResult({ autoReview, patch, review }: { autoReview: AutoReview; p
   );
 }
 
-function Finding({ finding, patch, review }: { finding: AutoReviewFinding; patch: string; review: TaskReview }) {
-  const comment = findingComment(finding, patch);
+function Finding({ finding, shown, review }: { finding: AutoReviewFinding; shown: ShownLines; review: TaskReview }) {
+  const comment = findingComment(finding, shown);
   const added = comment !== null && inDrafts(comment, review.drafts);
   const place = finding.path === null ? null : finding.line === null ? finding.path : `${finding.path}:${finding.line}`;
   return (
