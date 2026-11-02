@@ -60,6 +60,7 @@ describe("the workspace knowledge about a change's merge order", () => {
         [
           deployOrder,
           relation("one-repo", ["payments", "billing"]),
+          relation("one-repo-twice", ["payments", "payments"]),
           relation("unapproved", ["payments", "orders-api"], false),
           relation("a-pitfall", ["payments", "orders-api"], true, "pitfall"),
         ],

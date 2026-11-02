@@ -42,6 +42,6 @@ function hintText(edge: GraphEdge): string {
 /** The approved `relation` entries of workspace knowledge about at least two of the change's repos. */
 export function orderRelations(repos: readonly string[], entries: readonly KnowledgeListEntry[]): KnowledgeListEntry[] {
   return entries.filter(
-    (entry) => entry.kind === "relation" && entry.approved && entry.repos.filter((repo) => repos.includes(repo)).length >= 2,
+    (entry) => entry.kind === "relation" && entry.approved && new Set(repos.filter((repo) => entry.repos.includes(repo))).size >= 2,
   );
 }

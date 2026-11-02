@@ -3,7 +3,7 @@ import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { Connection } from "@/lib/connection";
-import { type ChangePartDraft, mayAddPart } from "@/lib/new-session";
+import { type ChangePartDraft, changePartsOfForm, mayAddPart } from "@/lib/new-session";
 import { ChangeOrderHints } from "./ChangeOrderHints.tsx";
 
 /**
@@ -34,6 +34,8 @@ export function ChangeParts({
   partly: string | undefined;
 }) {
   const others = repos.filter((r) => r.id !== repo);
+  // The hints follow the parts the change will have, so they load the graph only once a second repo is chosen.
+  const chosen = changePartsOfForm(repo, parts);
   const set = (index: number, part: Partial<ChangePartDraft>) => onParts(parts.map((p, i) => (i === index ? { ...p, ...part } : p)));
   const add = () => onParts([...parts, { repo: others.find((r) => !parts.some((p) => p.repo === r.id))?.id ?? "", note: "" }]);
   if (others.length === 0) return null;
@@ -90,7 +92,7 @@ export function ChangeParts({
           </Button>
         </div>
       ))}
-      {parts.length > 0 && <ChangeOrderHints conn={conn} repos={[repo, ...parts.map((part) => part.repo)]} />}
+      {chosen.length > 1 && <ChangeOrderHints conn={conn} repos={chosen.map((part) => part.repo)} />}
       {mayAddPart(parts, others.length) && (
         <Button variant="ghost" className="w-fit" onClick={add} disabled={disabled}>
           <Plus /> Add a repo

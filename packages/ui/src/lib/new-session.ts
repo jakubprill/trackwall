@@ -77,13 +77,19 @@ export interface ChangePartDraft {
  */
 export function changeStart(start: NewSessionStart, added: readonly ChangePartDraft[], title: string): NewSessionStart {
   if (start.kind !== "task") return start;
-  const parts: ChangePart[] = [{ repo: start.repo, note: "" }];
-  for (const { repo, note } of added) if (repo !== "" && !parts.some((p) => p.repo === repo)) parts.push({ repo, note: note.trim() });
+  const parts = changePartsOfForm(start.repo, added);
   if (parts.length === 1) return start;
   const text = title.trim();
   return text === ""
     ? { kind: "needs-title" }
     : { kind: "change", title: text, prompt: start.prompt, parts: parts.slice(0, CHANGE_PARTS_MAX) };
+}
+
+/** The parts the form makes: the task's repo first, then each chosen repo once, in the order the user put them. */
+export function changePartsOfForm(first: string, added: readonly ChangePartDraft[]): ChangePart[] {
+  const parts: ChangePart[] = [{ repo: first, note: "" }];
+  for (const { repo, note } of added) if (repo !== "" && !parts.some((p) => p.repo === repo)) parts.push({ repo, note: note.trim() });
+  return parts;
 }
 
 /**
