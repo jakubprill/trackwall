@@ -9,6 +9,7 @@ import { useRemote } from "@/lib/use-remote";
 import type { TaskReview } from "@/lib/use-task-review";
 import { reviewAnnotations } from "./LineComments.tsx";
 import { ReviewBar } from "./ReviewBar.tsx";
+import { TaskAutoReview } from "./TaskAutoReview.tsx";
 
 /**
  * Live diff: the agent changes files within seconds, and one request is a few quick git commands on the worktree
@@ -20,7 +21,7 @@ const POLL_MS = 2000;
  * The task's "Changes" tab (ADR-31): files and diff of the worktree against the base commit, polled every 2 s while
  * the tab is open, so you can see what the agent is doing before it commits anything. `paused` stops polling
  * (the worktree disappears while the task is being ended) and keeps the last data. Lines of the diff take review comments
- * for the task's agent (ADR-62).
+ * for the task's agent (ADR-62), and the automatic review above the diff offers findings as such comments (ADR-182).
  */
 export function TaskChangesView({ conn, task, paused, review }: { conn: Connection; task: string; paused: boolean; review: TaskReview }) {
   const load = useCallback(() => post(conn, agentsApi.taskChanges, { task }), [conn, task]);
@@ -31,6 +32,9 @@ export function TaskChangesView({ conn, task, paused, review }: { conn: Connecti
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <ReviewBar review={review} />
+      {changes.data.files.length > 0 && (
+        <TaskAutoReview conn={conn} task={task} patch={changes.data.patch} paused={paused} review={review} />
+      )}
       <ChangesBody changes={changes.data} review={review} />
     </div>
   );

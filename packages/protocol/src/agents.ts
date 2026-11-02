@@ -118,9 +118,16 @@ export function changePromptsFit(prompt: string, parts: readonly ChangePart[]): 
 }
 export const CHANGE_PROMPTS_TOO_LONG = `a part's prompt with its note is at most ${TASK_PROMPT_MAX} characters`;
 
-/** A character the UI does not show but a model reads or a paste carries (`visibleText`). */
+/** The characters the UI does not show but a model reads or a paste carries (`visibleText`). */
+const INVISIBLE_CHARACTERS = /[\p{Cf}\p{Co}\u2028\u2029]/gu;
+
 function hasInvisibleCharacter(text: string): boolean {
-  return /[\p{Cf}\p{Co}\u2028\u2029]/u.test(text);
+  return new RegExp(INVISIBLE_CHARACTERS.source, "u").test(text);
+}
+
+/** The text without the characters `visibleText` refuses: for model text the daemon keeps rather than refuses whole (ADR-182). */
+export function withoutInvisibleCharacters(text: string): string {
+  return text.replace(INVISIBLE_CHARACTERS, "");
 }
 
 /**

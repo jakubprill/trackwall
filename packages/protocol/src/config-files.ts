@@ -21,6 +21,7 @@ export const ConfigEntryId = z.enum([
   "last-supervisor-file",
   "agent-queues-file",
   "verifications-file",
+  "auto-reviews-file",
   "task-journal-file",
   "day-start-file",
   "routine-approvals-file",
@@ -48,6 +49,7 @@ export type ConfigWriter = "you" | "trackwall" | "copilot-cli";
 /** A page of the documentation site, as its path under `features/` (`apps/docs/features/<page>.md`). */
 export type DocsPage =
   | "approvals"
+  | "auto-review"
   | "config-files"
   | "doctor"
   | "graph"
@@ -134,6 +136,14 @@ export const CONFIG_ENTRIES: Record<ConfigEntryId, ConfigEntryInfo> = {
     internal: true,
     purpose: "The last verification of each task, so its verdict is still there after a restart.",
     docs: "tasks",
+  },
+  "auto-reviews-file": {
+    place: "state",
+    kind: "file",
+    writer: "trackwall",
+    internal: true,
+    purpose: "The last automatic review of each task, so its findings are still there after a restart.",
+    docs: "auto-review",
   },
   "task-journal-file": {
     place: "state",
@@ -308,6 +318,7 @@ export const WorkspaceKey = z.enum([
   "toolPermissions",
   "agentSecrets",
   "sessionProfile",
+  "autoReview",
   "javaNavigation",
   "localConfigRemote",
   "supervisor",
@@ -334,6 +345,11 @@ export const WORKSPACE_KEYS: Record<WorkspaceKey, WorkspaceKeyInfo> = {
   sessionProfile: {
     purpose: "The mise environment sessions start with, such as another model provider.",
     docs: "mise-environment",
+    settings: "agents",
+  },
+  autoReview: {
+    purpose: "Whether a task's changes get Copilot CLI's review once its agent reports.",
+    docs: "auto-review",
     settings: "agents",
   },
   javaNavigation: { purpose: "The Java language server tasks can get for code navigation.", docs: "java-navigation", settings: "agents" },

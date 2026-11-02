@@ -1,5 +1,6 @@
 import {
   countLabel,
+  cutText,
   type HostedProject,
   MERGE_REQUEST_DESCRIPTION_MAX,
   MERGE_REQUEST_TITLE_MAX,
@@ -38,18 +39,18 @@ export function mergeRequestDraft(task: Task, verification: Verification | null,
   const checks = task.summary && task.summary.checkSteps.length > 0 ? `\n\n${checkStepsSection(task.summary.checkSteps)}` : "";
   const verdict = verification && verification.state !== "running" ? `\n\n${verificationLine(verification)}` : "";
   return {
-    title: cut(title, MERGE_REQUEST_TITLE_MAX),
+    title: cutText(title, MERGE_REQUEST_TITLE_MAX),
     description: withBlock(changeBlock, `${body}${checks}${verdict}`),
   };
 }
 
 function withBlock(block: string | null, rest: string): string {
-  if (block === null) return cut(rest, MERGE_REQUEST_DESCRIPTION_MAX);
+  if (block === null) return cutText(rest, MERGE_REQUEST_DESCRIPTION_MAX);
   const separator = "\n\n";
   const room = MERGE_REQUEST_DESCRIPTION_MAX - block.length - separator.length;
   // Six parts with long addresses still leave room; a block that does not is cut like any text.
-  if (room < 1) return cut(block, MERGE_REQUEST_DESCRIPTION_MAX);
-  return `${block}${separator}${cut(rest, room)}`;
+  if (room < 1) return cutText(block, MERGE_REQUEST_DESCRIPTION_MAX);
+  return `${block}${separator}${cutText(rest, room)}`;
 }
 
 /** `How to check:` and the steps as a numbered Markdown list, which GitLab and GitHub both render. */
@@ -61,18 +62,6 @@ function checkStepsSection(steps: readonly string[]): string {
 function verificationLine(verification: Verification): string {
   const tests = verification.tests && verification.tests.reports > 0 ? `, ${testCountsLabel(verification.tests.totals)}` : "";
   return `Verification in Trackwall: ${verification.state} (mise task ${verification.miseTask}${tests})`;
-}
-
-/** By code points, so a cut never splits an emoji; the daemon's limits count UTF-16 units, which is never fewer. */
-function cut(text: string, max: number): string {
-  if (text.length <= max) return text;
-  const chars = Array.from(text);
-  let kept = "";
-  for (const char of chars) {
-    if (kept.length + char.length > max - 1) break;
-    kept += char;
-  }
-  return `${kept}…`;
 }
 
 /** `2 commits · 1 not pushed · 3 files not committed`, or the warning that the remote moved on. */

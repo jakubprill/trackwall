@@ -1,6 +1,7 @@
 import { dirname, join, relative } from "node:path";
 import {
   type AgentSecrets,
+  type AutoReviewSettings,
   type CloneJob,
   type Commit,
   type DayStartSettings,
@@ -167,6 +168,7 @@ export class Workspace {
     const worktreesDir = configOrProblem(() => this.deps.file.worktreesDir(), null);
     const gitProgram = configOrProblem(() => this.deps.file.gitProgram(), null);
     const sessionProfile = configOrProblem(() => this.deps.file.sessionProfile(), null);
+    const autoReview = configOrProblem(() => this.deps.file.autoReviewSettings(), { afterReport: false });
     // What Settings shows is what runs: a hand edit of `gitProgram` applies when Settings reads it (ADR-112).
     this.deps.vcs.useGitProgram(gitProgram.value);
     return {
@@ -178,6 +180,8 @@ export class Workspace {
       gitProgramProblem: gitProgram.problem,
       sessionProfile: sessionProfile.value,
       sessionProfileProblem: sessionProfile.problem,
+      autoReview: autoReview.value,
+      autoReviewProblem: autoReview.problem,
       configFile: this.configFile(),
     };
   }
@@ -473,6 +477,17 @@ export class Workspace {
   setSessionProfile(profile: SessionProfile | null): WorkspaceSettings {
     this.deps.file.setSessionProfile(profile);
     return this.settings();
+  }
+
+  /** Whether a task gets an automatic review once its agent reports (ADR-182). Takes effect at the next report. */
+  setAutoReview(settings: AutoReviewSettings): WorkspaceSettings {
+    this.deps.file.setAutoReview(settings);
+    return this.settings();
+  }
+
+  /** `autoReview` from `workspace.yaml` (ADR-182); `invalid_config` for a bad key, so that a typo spends no credits. */
+  autoReviewSettings(): AutoReviewSettings {
+    return this.deps.file.autoReviewSettings();
   }
 
   /**

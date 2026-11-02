@@ -107,6 +107,9 @@ class FilePosition {
   }
 }
 
+/** How many lines of a diff the "Changes" view shows: beyond this the browser starts to choke, and the rest is better read in VS Code anyway. */
+export const DIFF_SHOWN_LINES = 4000;
+
 /** The first `maxLines` lines of the diff; `more` when there are further ones. */
 export function diffLines(patch: string, maxLines: number): { lines: DiffLine[]; more: boolean } {
   const lines: DiffLine[] = [];

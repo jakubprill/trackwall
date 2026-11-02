@@ -4,6 +4,8 @@ import { join } from "node:path";
 import {
   type AgentTaskChanges,
   type ApproveChangeRequest,
+  type AutoReview,
+  type AutoReviewSettings,
   CHANGE_PROMPTS_TOO_LONG,
   type ChangePart,
   type ChangeRequest,
@@ -51,6 +53,7 @@ import { DomainError } from "../../infra/errors.ts";
 import { AcpSession, type ConversationViewer, type ConversationWindow } from "./acp-session.ts";
 import { AgentQueuesFile } from "./agent-queues.ts";
 import type { AgentSession } from "./agent-session.ts";
+import { AutoReviews } from "./auto-reviews.ts";
 import type { CopilotHookOutput } from "./copilot-hook-output.ts";
 import { CopilotHookEvent } from "./copilot-hook-record.ts";
 import type { LspServer } from "./copilot-plugin.ts";
@@ -115,6 +118,7 @@ import type { ScreenViewer } from "./terminal-screen.ts";
 export const TASKS_FILE = "tasks.json";
 /** The sessions that run, for the next daemon to resume (ADR-95). */
 export const RESUMABLE_SESSIONS_FILE = "resumable-sessions.json";
+export { AUTO_REVIEWS_FILE } from "./auto-reviews.ts";
 export { LAST_SUPERVISOR_FILE } from "./last-supervisor.ts";
 export { TASK_ROUNDS_FILE } from "./task-rounds.ts";
 /** Proposals, reviews, messages and updates that wait, for the next daemon (ADR-115). */
@@ -151,6 +155,8 @@ interface AgentsRepos {
   supervisorSettings(): SupervisorSettings;
   /** `agentSecrets` from `workspace.yaml` (ADR-93): the secrets from mise a session's tools get; `invalid_config` for a bad key. */
   agentSecrets(): readonly string[];
+  /** `autoReview` from `workspace.yaml` (ADR-182): whether a task gets a review once its agent reports; `invalid_config` for a bad key. */
+  autoReviewSettings(): AutoReviewSettings;
   /** `sessionProfile` from `workspace.yaml` (ADR-136): the mise environment sessions start with; `invalid_config` for a bad key. */
   sessionProfile(): string | null;
   /** `javaNavigation` from `workspace.yaml` (ADR-99): the Java language server for tasks; `null` without the key. */
@@ -239,6 +245,7 @@ export class Agents {
   readonly #restarting = new Set<string>();
   readonly #launcher: SessionLauncher;
   readonly #javaNavigation: JavaNavigationServers;
+  readonly #autoReviews: AutoReviews;
 
   constructor(deps: AgentsDeps) {
     this.#deps = deps;
@@ -316,6 +323,24 @@ export class Agents {
       hasProposer: (proposer) =>
         proposerExists(proposer, { hasTask: (task) => this.#tasks.find(task) !== undefined, hasSession: (id) => this.#sessions.has(id) }),
       changed: () => this.#queues.follow(),
+      log: deps.log,
+    });
+    this.#autoReviews = new AutoReviews({
+      tasks: {
+        task: (id) => this.#tasks.task(id),
+        hasTask: (id) => this.#tasks.find(id) !== undefined,
+        changes: async (id, maxPatchBytes) => {
+          const { files, patch, truncated } = await this.#tasks.agentChanges(id, maxPatchBytes, []);
+          return { fileCount: files.length, patch, truncated };
+        },
+      },
+      launch: async ({ repo, task }) => {
+        const { copilot, mise } = await this.#launcher.inputs({ repo, supervisor: false, task });
+        return { program: copilot.program, prefix: copilot.args, env: mise.env, args: mise.args, secrets: mise.secretValues };
+      },
+      procs: deps.procs,
+      settings: () => deps.repos.autoReviewSettings(),
+      home: deps.home,
       log: deps.log,
     });
     this.#queues = new AgentQueuesFile(join(deps.home, AGENT_QUEUES_FILE), deps.log, {
@@ -612,6 +637,7 @@ export class Agents {
     const own = this.#ownTask(caller, "can report a result");
     const reported = this.#tasks.setSummary(own.task, text, checkSteps);
     this.#coordination.resultReported(reported, own.session);
+    this.#autoReviews.afterReport(own.task);
     return reported;
   }
 
@@ -840,6 +866,21 @@ export class Agents {
     return this.#rounds.pushWithRoundsSquashed(id, push);
   }
 
+  /** The user's automatic review of a task's changes (ADR-182), or the one running. */
+  startAutoReview(id: string): Promise<AutoReview> {
+    return this.#autoReviews.start(id);
+  }
+
+  /** The task's last automatic review (ADR-182); `null` without one. */
+  autoReview(id: string): AutoReview | null {
+    return this.#autoReviews.get(id);
+  }
+
+  /** Stops the task's running automatic review (ADR-182). */
+  cancelAutoReview(id: string): Promise<AutoReview | null> {
+    return this.#autoReviews.cancel(id);
+  }
+
   /** Other tasks of the same repo that change the same files (ADR-44). */
   taskSharedFiles(id: string): Promise<TaskSharedFiles[]> {
     return this.#tasks.sharedFiles(id);
@@ -950,7 +991,12 @@ export class Agents {
   }
 
   async removeTask(id: string, keepBranch: boolean, discardChanges: boolean): Promise<void> {
+    // Its reviewer runs in the worktree, which the removal refuses while a process of Trackwall is in it. Without one,
+    // the removal starts at once, so a change computation that comes after it refuses.
+    const stopping = this.#autoReviews.stop(id);
+    if (stopping !== null) await stopping;
     const ended = await this.#tasks.remove(id, keepBranch, discardChanges);
+    this.#autoReviews.forget(id);
     this.#reviews.take(id);
     this.#miseTrust.forget({ task: id });
     this.#handoffs.forget(id);
@@ -1238,9 +1284,10 @@ export class Agents {
 
   /**
    * Daemon exit, before `procs.stopAll`: the sessions it stops stay in the list for the next daemon to resume (ADR-95),
-   * and the queues stay as they are now (ADR-115), with the user's latest typing in them.
+   * the queues stay as they are now (ADR-115), with the user's latest typing in them, and so do the automatic reviews (ADR-182).
    */
   keepRunningSessionsForResume(): void {
+    this.#autoReviews.keepForRestart();
     this.#sessions.keepRunningForResume();
     this.#queues.follow();
     this.#queues.stopFollowing();

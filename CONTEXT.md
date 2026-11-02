@@ -418,6 +418,10 @@ _Avoid_: code review (that is the pre-PR review in `AGENTS.md`), feedback
 What the user writes on one line of a task's changes for its agent: the file, the side (`new` for an added or unchanged line, `old` for a removed one), the line number, the line's code and the text. Queued, also across a daemon restart (ADR-115), until the task's session reads it with `get_review_comments`, which marks it read (ADR-62).
 _Avoid_: note, remark, comment on a merge request (that lives on the repo host)
 
+**Automatic review** (`AutoReview`, `AutoReviewFinding`, `autoReviewApi`, `autoReview` in `workspace.yaml`; "Review" and the "Automatic review" section of the task's "Changes" tab):
+Copilot CLI's built-in `/review` on a task's changes, run by the daemon with only the tools that read, on the user's click or after the task's agent reports its result when the user turned that on (ADR-182). Its **findings** (title, severity, file and line, problem and suggested fix) become review comments only when the user adds them and sends the review.
+_Avoid_: code review (that is the pre-PR review in `AGENTS.md`), auto-review in product texts, verification (that runs the tests)
+
 **Merge request** (`MergeRequest`, module `merge-requests`, `mergeRequestsApi`; the "Merge request" section of the task panel):
 The request on the repo host to merge a task branch into the task's base branch, on GitHub called a pull request. Trackwall pushes the task branch at the user's request and opens the repo host's form for it with a title and description from the task; the user creates it there, and the task panel follows it, found by the task branch as its source branch (ADR-77).
 _Avoid_: pull request (except for GitHub's own pages), PR, MR in product texts

@@ -74,11 +74,16 @@ const ALLOW_ALL_TOOLS = "--allow-all-tools";
 const allowAllTools = process.argv.includes(ALLOW_ALL_TOOLS);
 
 /**
- * Task arguments (`--interactive=`, `--resume=`, `--session-id=`), tool permissions (`--allow-tool=`, `--deny-tool=`, `--allow-all-tools`) and
- * the secrets Copilot CLI redacts (`--secret-env-vars=`, ADR-93) the fake prints, so that the test sees them.
+ * Task arguments (`--interactive=`, `--resume=`, `--session-id=`), tool permissions (`--allow-tool=`, `--deny-tool=`, `--allow-all-tools`),
+ * the secrets Copilot CLI redacts (`--secret-env-vars=`, ADR-93) and the reviewer's limits (ADR-182) the fake prints, so
+ * that the test sees them.
  */
+const REVIEWER_FLAGS = ["--disable-builtin-mcps", "--no-ask-user", "--disallow-temp-dir"];
 const taskArgs = process.argv.filter(
-  (a) => /^--(interactive|resume|session-id|model|allow-tool|deny-tool|secret-env-vars)=/.test(a) || a === ALLOW_ALL_TOOLS,
+  (a) =>
+    /^--(interactive|resume|session-id|model|allow-tool|deny-tool|secret-env-vars|available-tools|add-dir)=/.test(a) ||
+    a === ALLOW_ALL_TOOLS ||
+    REVIEWER_FLAGS.includes(a),
 );
 
 /**
@@ -93,7 +98,9 @@ const toolEnv = (name: string) => (hiddenEnv.includes(name) ? "(hidden)" : (proc
 // `FAKE_COPILOT_ACP_EXIT` makes it end before the handshake, like a Copilot CLI that cannot start.
 if (process.argv.includes("--acp")) {
   if (process.env.FAKE_COPILOT_ACP_EXIT !== undefined) process.exit(3);
-  serveAcp({ mcpServers, instructionFiles, args: taskArgs, allowAllTools, fire: pluginHooks(process.argv, "s1") });
+  // An automatic review starts without the session plugin (ADR-182), so no hook fires.
+  const fire = process.argv.includes("--plugin-dir") ? pluginHooks(process.argv, "s1") : () => [];
+  serveAcp({ mcpServers, instructionFiles, args: taskArgs, allowAllTools, fire });
   await new Promise<never>(() => {});
 }
 
