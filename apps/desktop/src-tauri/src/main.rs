@@ -151,6 +151,8 @@ fn main() {
             dev_container::dev_container,
             dev_container::set_dev_container,
             dev_container::start_dev_container,
+            dev_container::dev_container_starting,
+            dev_container::cancel_dev_container_start,
             host_folder::host_projects_folder,
             host_folder::set_host_projects_folder,
             host_folder::show_in_host_folder,

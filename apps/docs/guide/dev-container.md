@@ -110,6 +110,8 @@ The app can do what you would otherwise do by hand: open the dev container, wait
 
 Docker Desktop or Rancher Desktop has to be running. If the container already runs with Trackwall in it, the app connects right away, and starts Trackwall there first when it is not running; if Trackwall there is another version than the app, it says so at once. Otherwise it opens VS Code on the dev container, as your own shortcut or "Reopen in Container" does; VS Code may ask once whether to open it. The first start builds the container and can take several minutes. Once Trackwall in the container answers on the forwarded port, the app restarts and connects. Keep the VS Code window open: it forwards the port. When Trackwall in the container restarts later, the app shows the same button again on the screen it shows when it cannot connect.
 
+While it waits, **Cancel** stops the start, for example when VS Code shows an error in its own window; the app shows "Starting…" and Cancel also after the window reloads or in another window. If a container for the folder runs under the same path written with other upper- and lower-case letters (`c:\Users\...` instead of `C:\Users\...`, as the `devcontainer` command line may write it), VS Code does not reuse it and, when the configuration names the container in `runArgs`, cannot create its own: after a minute the app says so and names the `docker rm -f` command that removes it.
+
 The app finds the container by the folder you entered and reads Trackwall's address and token from it with `docker`; nothing is sent anywhere else. A dev container opened from a folder inside WSL instead of Windows is not supported yet.
 
 ## MCP servers on your computer

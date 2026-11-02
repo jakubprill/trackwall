@@ -9,6 +9,8 @@ import { z } from "zod";
  */
 const GET_COMMAND = "dev_container";
 const SET_COMMAND = "set_dev_container";
+const STARTING_COMMAND = "dev_container_starting";
+const CANCEL_COMMAND = "cancel_dev_container_start";
 const START_COMMAND = "start_dev_container";
 
 export const DevContainer = z.object({ folder: z.string(), open: z.string() });
@@ -30,4 +32,14 @@ export function setDevContainer(dev: DevContainer | null): Promise<void> {
 /** Starts the container, or finds it running, and switches the app to Trackwall in it; the app restarts. */
 export function startDevContainer(): Promise<void> {
   return invoke(START_COMMAND);
+}
+
+/** Whether a start is waiting for the container, also one this window began before it reloaded or another window began. */
+export async function devContainerStarting(): Promise<boolean> {
+  return z.boolean().parse(await invoke<unknown>(STARTING_COMMAND));
+}
+
+/** Ends the start in progress; it then fails with "Starting the dev container was cancelled." */
+export function cancelDevContainerStart(): Promise<void> {
+  return invoke(CANCEL_COMMAND);
 }

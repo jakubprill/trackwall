@@ -1,10 +1,18 @@
-import { type FormEvent, useCallback, useContext, useState } from "react";
+import { type FormEvent, useCallback, useContext, useEffect, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DaemonPlaceContext } from "@/lib/desktop";
-import { DEFAULT_FOLDER_TO_OPEN, type DevContainer, savedDevContainer, setDevContainer, startDevContainer } from "@/lib/dev-container";
+import {
+  cancelDevContainerStart,
+  DEFAULT_FOLDER_TO_OPEN,
+  type DevContainer,
+  devContainerStarting,
+  savedDevContainer,
+  setDevContainer,
+  startDevContainer,
+} from "@/lib/dev-container";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 
@@ -72,19 +80,41 @@ function DevContainerFields({ saved, initial, onSaved }: { saved: DevContainer |
   );
 }
 
+/** How often the form asks whether a start, perhaps one it did not begin, is still waiting, and whether one began elsewhere. */
+const STARTING_POLL_MS = 2000;
+const IDLE_POLL_MS = 10_000;
+
 /** Nothing follows in this window: the app restarts. */
 const RESTARTS = () => {};
 
+/**
+ * "Start" and, while a start waits, "Cancel": VS Code may fail in a window the user does not watch, and a start this
+ * window did not begin (before a reload, or in another window) shows the same way, so the user never waits out the time
+ * limit for lack of a way out.
+ */
 function StartButton() {
   const start = useAction(startDevContainer, RESTARTS);
+  // Asked often only while a start waits, which a cancel ends after the Docker call in progress.
+  const starting = useRemote(devContainerStarting, { pollMs: (running) => (running ? STARTING_POLL_MS : IDLE_POLL_MS) });
+  const cancel = useAction(cancelDevContainerStart, starting.reload);
+  const reloadStarting = starting.reload;
+  useEffect(() => {
+    if (start.error !== undefined) reloadStarting();
+  }, [reloadStarting, start.error]);
+  const waiting = start.pending || starting.data === true;
   return (
     <div className="flex flex-col gap-1">
-      <div>
-        <Button size="sm" disabled={start.pending} onClick={() => start.run()}>
-          {start.pending ? "Starting…" : "Start the dev container and connect"}
+      <div className="flex gap-2">
+        <Button size="sm" disabled={waiting} onClick={() => start.run()}>
+          {waiting ? "Starting…" : "Start the dev container and connect"}
         </Button>
+        {waiting && (
+          <Button size="sm" variant="outline" disabled={cancel.pending} onClick={() => cancel.run()}>
+            Cancel
+          </Button>
+        )}
       </div>
-      {start.pending && (
+      {waiting && (
         <p className="text-muted-foreground text-xs">
           VS Code opens the dev container; the first start builds it and can take a few minutes. The app restarts once Trackwall in it
           answers.
