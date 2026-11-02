@@ -26,6 +26,13 @@ test("the shell signals a jump under the same event name the UI listens to", () 
   expect(ui).toBe(shell);
 });
 
+test("the shell says the connection was lost under the same event name the UI listens to", () => {
+  const shell = /const CONNECTION_LOST_EVENT: &str = "([^"]+)";/.exec(read("apps/desktop/src-tauri/src/attention.rs"))?.[1];
+  const ui = /const CONNECTION_LOST_EVENT = "([^"]+)";/.exec(read("packages/ui/src/lib/use-connection.ts"))?.[1];
+  expect(shell).toBe("daemon-connection-lost");
+  expect(ui).toBe(shell);
+});
+
 test("the UI takes the jump with the command the shell defines", () => {
   const shell = /#\[tauri::command\]\s*pub fn (\w+)/.exec(shellSource)?.[1];
   const ui = /const TAKE_JUMP_COMMAND = "([^"]+)";/.exec(uiSource)?.[1];

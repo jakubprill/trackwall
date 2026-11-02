@@ -107,6 +107,17 @@ impl DaemonState {
         self.start();
     }
 
+    /// A remote daemon refused the token of the connection: it restarted with a new one (ADR-130), which only the user
+    /// can bring. The connection fails with that reason, as a start would, so every window shows the address field.
+    /// The app's own daemon is left to `restart_if_down`, which a window's "Try again" calls. Returns whether it failed.
+    pub fn token_refused(self: &Arc<Self>) -> bool {
+        if self.remote.get().is_none() {
+            return false;
+        }
+        self.restart_if_down();
+        true
+    }
+
     /// The connection to a running daemon without waiting; `None` during startup, after an error and while closing.
     pub fn ready(&self) -> Option<Connection> {
         match &*self.lock() {
@@ -368,6 +379,31 @@ mod tests {
         state.restart_if_down();
 
         assert!(state.wait().unwrap_err().contains("did not accept the token"));
+    }
+
+    #[test]
+    fn a_session_list_refused_by_a_remote_daemon_fails_the_connection_with_the_token_reason() {
+        let port = rejecting_daemon();
+        let state = Arc::new(DaemonState::new(no_home()));
+        state.use_remote(remote(port, "old"));
+        let conn = Connection { base_url: format!("http://127.0.0.1:{port}"), token: "old".into(), port };
+        *state.lock() = Phase::Ready(conn.clone());
+
+        assert_eq!(daemon::sessions(&conn), Err(daemon::SessionsError::TokenRefused));
+        assert!(state.token_refused());
+
+        assert!(state.ready().is_none());
+        assert!(state.wait().unwrap_err().contains("did not accept the token"));
+    }
+
+    #[test]
+    fn a_refused_token_leaves_the_apps_own_daemon_to_a_retry() {
+        let port = rejecting_daemon();
+        let state = Arc::new(ready(port));
+
+        assert!(!state.token_refused());
+
+        assert!(state.ready().is_some());
     }
 
     /// A daemon of the shell's version that answers health and rejects every token, like one restarted with a new token.

@@ -11,7 +11,7 @@
 //! The daemon also clears it, without a state change, once the user has seen an ended turn (ADR-47).
 
 use crate::badge::{Badge, TrayIcons};
-use crate::daemon;
+use crate::daemon::{self, SessionsError};
 use crate::daemon_state::DaemonState;
 use crate::jump::Jump;
 use crate::notification;
@@ -22,9 +22,11 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
-use tauri::{AppHandle, Manager, UserAttentionType};
+use tauri::{AppHandle, Emitter, Manager, UserAttentionType};
 
 const POLL: Duration = Duration::from_secs(2);
+/// Sent to every window when the connection to the daemon failed while it was in use (`DaemonState::token_refused`).
+const CONNECTION_LOST_EVENT: &str = "daemon-connection-lost";
 /// Tray menu item ids; a session or proposal item is a prefix plus its id.
 pub const MENU_SHOW: &str = "show";
 pub const MENU_NEW_WINDOW: &str = "new-window";
@@ -214,8 +216,18 @@ pub fn build_menu(app: &AppHandle, waiting: &[Waiting], proposals: &[Proposal]) 
     }
     menu.append(&MenuItem::with_id(app, MENU_SHOW, "Show Trackwall", true, None::<&str>)?)?;
     menu.append(&MenuItem::with_id(app, MENU_NEW_WINDOW, "New window", true, None::<&str>)?)?;
-    menu.append(&MenuItem::with_id(app, MENU_QUIT, "Quit (stops the daemon)", true, None::<&str>)?)?;
+    let remote = app.state::<Arc<DaemonState>>().remote().is_some();
+    menu.append(&MenuItem::with_id(app, MENU_QUIT, quit_label(remote), true, None::<&str>)?)?;
     Ok(menu)
+}
+
+/// Quitting stops the app's own daemon, but not a remote one (ADR-130), which keeps running for its container.
+fn quit_label(remote: bool) -> &'static str {
+    if remote {
+        "Quit"
+    } else {
+        "Quit (stops the daemon)"
+    }
 }
 
 /// The session or proposal of a tray menu item; `None` for the fixed items.
@@ -330,7 +342,12 @@ pub fn watch(app: AppHandle, state: Arc<DaemonState>, tray_id: &'static str, tra
                     notification::show_failed_pipelines(&app, &new);
                 }
             }
-            let polled = conn.and_then(|conn| daemon::sessions(&conn).ok()).and_then(|body| parse_sessions(&body));
+            let reply = conn.map(|conn| daemon::sessions(&conn));
+            if matches!(reply, Some(Err(SessionsError::TokenRefused))) && state.token_refused() {
+                // The windows ask for the connection again and get the reason, instead of views that all fail.
+                let _ = app.emit(CONNECTION_LOST_EVENT, ());
+            }
+            let polled = reply.and_then(Result::ok).and_then(|body| parse_sessions(&body));
             let gone = failures.after_poll(polled.is_some());
             let Some(now) = polled else {
                 if gone {
@@ -517,6 +534,12 @@ mod tests {
         assert!(failures.after_poll(false));
         assert!(failures.after_poll(false));
         assert!(!failures.after_poll(true));
+    }
+
+    #[test]
+    fn quit_says_it_stops_the_daemon_only_when_the_daemon_is_the_apps_own() {
+        assert_eq!(quit_label(false), "Quit (stops the daemon)");
+        assert_eq!(quit_label(true), "Quit");
     }
 
     #[test]
