@@ -44,7 +44,8 @@ A `.devcontainer/devcontainer.json` that keeps the repos, Trackwall's state, the
     "TRACKWALL_HOME": "/home/vscode/.trackwall",
     "TRACKWALL_DEVCONTAINER_HOST_FOLDER": "${localWorkspaceFolder}"
   },
-  "postCreateCommand": "sudo chown -R vscode:vscode /workspaces /home/vscode/.trackwall /home/vscode/.copilot /home/vscode/.config/mise"
+  "postCreateCommand": "sudo chown -R vscode:vscode /workspaces /home/vscode/.trackwall /home/vscode/.copilot /home/vscode/.config/mise",
+  "shutdownAction": "none"
 }
 ```
 
@@ -54,6 +55,7 @@ A `.devcontainer/devcontainer.json` that keeps the repos, Trackwall's state, the
 - `TRACKWALL_HOME` tells the desktop app where Trackwall keeps its state in the container.
 - `requireLocalPort` keeps the forwarded port at 7700 on your computer. Keep VS Code's `remote.localPortHost` at its default, `localhost`: with `allInterfaces` other computers on your network reach the forwarded port. Trackwall accepts a page only from `127.0.0.1:<port>` or `localhost:<port>` with the port it listens on, so a forward to another number does not load.
 - `TRACKWALL_DEVCONTAINER_HOST_FOLDER` tells Trackwall which folder on your computer the container was opened from, so "Open in VS Code" opens the same kind of window as opening that folder in a container yourself, with the extensions and settings of this `devcontainer.json`. Without it, VS Code attaches to the running container without them. Use it when you open the container from a folder on Windows or macOS; from a folder inside WSL it may not open.
+- `shutdownAction` keeps the container running when you close its last VS Code window. Trackwall and its sessions live in the container, and by default VS Code stops the container with its last window, which stops every running session; "Open in VS Code" in Trackwall can replace or close that window too. The container then runs until you stop it in Docker or Rancher Desktop (`docker stop <container name>`), and its sessions keep working while no window is open. VS Code forwards port 7700 only while one of its windows is open on the container, so Trackwall's page and the desktop app reach it again when you open one; a session waiting for your approval waits until then.
 - Behind a proxy, set `HTTPS_PROXY` and `HTTP_PROXY` in `containerEnv` too, and keep `NO_PROXY` as above. A proxy that replaces certificates also needs its certificate in the image, and `NODE_EXTRA_CA_CERTS` pointing at it in `containerEnv`, because Copilot CLI does not read the system's certificates; the [doctor](/features/doctor) names the file when the image already has it.
 
 ## Start Trackwall
@@ -65,7 +67,7 @@ Rebuild the container ("Dev Containers: Rebuild Container" in VS Code). From the
 3. Print the address with its token: `trackwall-container address`, and open it in the browser on your computer.
 4. Sign in to Copilot CLI once: run `copilot`, type `/login` and follow the steps in your browser. The sign-in stays in the `workspace-copilot` volume.
 
-The browser keeps the token for that address, so a bookmark of `http://127.0.0.1:7700` and a new tab open Trackwall without it. The token changes every time Trackwall starts: after a restart, open or reload the page, and it asks for the address; print it again as in step 3 and paste it there. Trackwall's output goes to `~/.trackwall/logs/daemon.log` in the container; look there when it does not answer. It stops when the container stops, or when you stop it from the app.
+The browser keeps the token for that address, so a bookmark of `http://127.0.0.1:7700` and a new tab open Trackwall without it. The token changes every time Trackwall starts: after a restart, open or reload the page, and it asks for the address; print it again as in step 3 and paste it there. Trackwall's output goes to `~/.trackwall/logs/daemon.log` in the container; look there when it does not answer. It stops when the container stops, or when you stop it from the app; with `shutdownAction` set as above, closing VS Code does not stop the container.
 
 `trackwall-container start` is safe to run at any time: it starts Trackwall only when it does not run, and prints one line of JSON, for example `{"ok":true,"version":"0.6.0","status":"running","port":7700,"daemon":{"version":"0.6.0","pid":812}}`. `starting` means Trackwall is still coming up; an error says what failed. After crashing ten times in a row within a minute of each start, Trackwall is not started again until you run the command. A Trackwall you started some other way in the container keeps running, but nothing starts it again after a crash; the log says so.
 
