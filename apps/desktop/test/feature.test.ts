@@ -33,7 +33,7 @@ describe("the Dev Container Feature (ADR-164)", () => {
   });
 
   test("runs the container with an init process, so the stopped sessions' orphans are reaped and their group counts as stopped", () => {
-    expect(JSON.parse(templates.json).init).toBe(true);
+    expect(JSON.parse(featureFiles(templates, values).json).init).toBe(true);
   });
 
   test("refuses a value that would break out of its quotes in install.sh, and a placeholder it has no value for", () => {
