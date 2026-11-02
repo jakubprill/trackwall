@@ -237,7 +237,10 @@ jobs:
           tar -xzf out/devcontainer-feature-trackwall.tgz -C "$feature"
           archive="$(ls "$PWD"/out/trackwall-*-linux-x64.tar.gz)"
           (cd "$feature" && PORT=7790 _REMOTE_USER=vscode TRACKWALL_FEATURE_ARCHIVE="$archive" sh install.sh)
-          # A slow runner may answer "starting" first; a later call reports the same daemon as running.
+          # The entrypoint (ADR-184) hands over to the container's command and starts Trackwall in the background.
+          [ "$(/usr/local/share/trackwall/entrypoint.sh echo handed-over)" = handed-over ]
+          # A slow runner may answer "starting" first; a later call reports the same daemon as running, the one the
+          # entrypoint started.
           for attempt in 1 2 3 4 5 6; do
             trackwall-container start | tee "$RUNNER_TEMP/start.json"
             if grep -q '"status":"running","port":7790' "$RUNNER_TEMP/start.json"; then break; fi
