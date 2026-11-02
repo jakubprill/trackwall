@@ -1,6 +1,7 @@
 import {
   agentsApi,
   countLabel,
+  proposalRepos,
   type RunningMiseTask,
   type Session,
   type SessionList,
@@ -423,7 +424,7 @@ function ProposalsListItem({
   active: boolean;
   onSelect: () => void;
 }) {
-  const repos = [...new Set(entry.proposals.map((p) => p.repo))].join(", ");
+  const repos = [...new Set(entry.proposals.flatMap(proposalRepos))].join(", ");
   return (
     <button
       type="button"

@@ -142,7 +142,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
 
     const text = read({ ...before, commit: "c".repeat(40), ended: false });
     expect(text).toContain(
-      "- Your task is part 2 of 3 of one change the user started across several repos: each part is a task in its own repo, all on the branch `trackwall/refund-api-9d0c11`, and their merge requests are to be merged in this order:\n" +
+      "- Your task is part 2 of 3 of one change across several repos: each part is a task in its own repo, all on the branch `trackwall/refund-api-9d0c11`, and their merge requests are to be merged in this order:\n" +
         "  1. the repo `payments`, task `5e7a1c3b-0000-4000-8000-000000000000`\n" +
         "  2. the repo `orders-api`, task `1b4e28ba-2fa1-11d2-883f-0016d3cca427` (yours)\n" +
         "  3. the repo `shop-web`, task `7f3e2d1c-0000-4000-8000-000000000000`\n",

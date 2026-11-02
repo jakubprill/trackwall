@@ -114,6 +114,7 @@ describe("MCP server over Streamable HTTP", () => {
       "get_task_changes",
       "get_changed_endpoints",
       "propose_task",
+      "propose_change",
       "propose_folder_action",
       "propose_routine",
       "list_knowledge",
@@ -146,6 +147,7 @@ describe("MCP server over Streamable HTTP", () => {
     const writing = tools.filter((t) => t.annotations?.readOnlyHint !== true).map((t) => t.name);
     expect(writing).toEqual([
       "propose_task",
+      "propose_change",
       "propose_folder_action",
       "propose_routine",
       "propose_knowledge",

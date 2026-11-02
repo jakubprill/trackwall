@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
-import { agentsApi, GetHandoffResult } from "@trackwall/protocol";
+import { agentsApi, GetHandoffResult, GetUpdatesResult, ProposeTaskResult } from "@trackwall/protocol";
 import { sessionDir } from "../src/modules/agents/session-launcher.ts";
 import { TaskFile } from "../src/modules/agents/task-file.ts";
 import { commitFiles, gitIn } from "./support/git-repo.ts";
@@ -98,7 +98,7 @@ describe.skipIf(process.versions.bun === undefined)("a change across several rep
     const ordersSession = runningSession(orders.id);
     const text = instructionsOf(ordersSession);
     expect(text).toContain(
-      `- Your task is part 2 of 3 of one change the user started across several repos: each part is a task in its own repo, all on the branch \`${payments.branch}\`, and their merge requests are to be merged in this order:\n` +
+      `- Your task is part 2 of 3 of one change across several repos: each part is a task in its own repo, all on the branch \`${payments.branch}\`, and their merge requests are to be merged in this order:\n` +
         `  1. the repo \`payments\`, task \`${payments.id}\`\n` +
         `  2. the repo \`orders-api\`, task \`${orders.id}\` (yours)\n` +
         `  3. the repo \`shop-web\`, task \`${web.id}\`\n`,
@@ -156,5 +156,100 @@ describe.skipIf(process.versions.bun === undefined)("a change across several rep
       }),
     ).rejects.toThrow("a change has one part per repo");
     expect(daemon.facade.agents.sessions().tasks.length).toBe(before);
+  }, 60_000);
+  test("an agent proposes a change on one card, the user unticks a repo, and the proposer hears which parts started", async () => {
+    const main = await daemon.facade.agents.start("payments");
+    const client = await connectSessionClient(daemon.api.port, daemon.home, main.id);
+    clients.push(client);
+    const { proposal } = ProposeTaskResult.parse(
+      (
+        await client.callTool({
+          name: "propose_change",
+          arguments: {
+            title: "Refund API",
+            prompt: "Add refunds",
+            parts: [
+              { repo: "payments", note: "add POST /api/refunds" },
+              { repo: "orders-api", note: "call it on cancel" },
+              { repo: "shop-web" },
+            ],
+          },
+        })
+      ).structuredContent,
+    );
+    expect(proposal).toMatchObject({
+      kind: "change",
+      repo: "payments",
+      title: "Refund API",
+      parts: [
+        { repo: "payments", note: "add POST /api/refunds" },
+        { repo: "orders-api", note: "call it on cancel" },
+        { repo: "shop-web", note: "" },
+      ],
+      proposedBy: { session: main.id, supervisor: false, task: null },
+    });
+    // Neither one task's approval nor fewer than two repos start it; the proposal waits.
+    await expect(
+      daemon.post(agentsApi.approveProposal, { proposal: proposal.id, prompt: "Add refunds", model: null, approvals: "ask" }),
+    ).rejects.toThrow(`proposal ${proposal.id} is not a task`);
+    const approve = (parts: { repo: string; note: string }[]) =>
+      daemon.post(agentsApi.approveChangeProposal, {
+        proposal: proposal.id,
+        prompt: "Add refunds, idempotently",
+        parts,
+        model: null,
+        approvals: "ask",
+      });
+    await expect(
+      approve([
+        { repo: "payments", note: "" },
+        { repo: "billing", note: "" },
+      ]),
+    ).rejects.toThrow("billing is not a part of the proposed change");
+    expect(daemon.facade.agents.sessions().proposals.map((p) => p.id)).toEqual([proposal.id]);
+
+    // The user unticked orders-api, put shop-web first by mistake and edited the payments note.
+    const { tasks, failed } = await approve([
+      { repo: "shop-web", note: "" },
+      { repo: "payments", note: "add POST /api/refunds, idempotent" },
+    ]);
+
+    expect(failed).toEqual([]);
+    // The proposal's order, not the request's, with the notes the user left; the first part takes the proposal's id,
+    // and every part its proposer.
+    expect(tasks.map((t) => [t.repo, t.change?.position, t.prompt])).toEqual([
+      ["payments", 0, "Add refunds, idempotently\n\nIn payments: add POST /api/refunds, idempotent"],
+      ["shop-web", 1, "Add refunds, idempotently"],
+    ]);
+    expect(tasks[0]?.id).toBe(proposal.id);
+    expect(tasks.map((t) => t.proposedBy)).toEqual([proposal.proposedBy, proposal.proposedBy]);
+    expect(tasks[1]?.branch).toBe(tasks[0]?.branch ?? "");
+    expect(daemon.facade.agents.sessions().proposals).toEqual([]);
+    const { updates } = GetUpdatesResult.parse((await client.callTool({ name: "get_updates", arguments: {} })).structuredContent);
+    expect(updates[0]).toEqual({
+      kind: "change_started",
+      task: proposal.id,
+      session: null,
+      parts: tasks.map((t) => ({ task: t.id, repo: t.repo })),
+      failed: [],
+      at: expect.any(String),
+    });
+
+    // A part's own session proposes the work of other repos as subtasks, not as a change.
+    const partClient = await connectSessionClient(daemon.api.port, daemon.home, runningSession(tasks[1]?.id ?? ""));
+    clients.push(partClient);
+    const refused = await partClient.callTool({
+      name: "propose_change",
+      arguments: { title: "More", prompt: "More", parts: [{ repo: "payments" }, { repo: "orders-api" }] },
+    });
+    expect(refused.content).toEqual([
+      {
+        type: "text",
+        text: "bad_request: a task proposes the work in other repos with propose_task, one proposal per repo, so that each reads your handoff",
+      },
+    ]);
+
+    await endAll(tasks);
+    await daemon.facade.agents.stop(main.id);
   }, 60_000);
 });

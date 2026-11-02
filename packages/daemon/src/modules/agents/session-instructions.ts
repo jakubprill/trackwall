@@ -95,7 +95,7 @@ function sessionRole(role: SessionRole): string[] {
 }
 
 function supervisorRole(changesCode: boolean): string[] {
-  const delegate = `hand each piece of work to an agent with ${mcpTools.proposeTask.name}, one proposal per repo with a prompt that stands on its own. The user approves every proposal before it starts, and reviews its changes in the task's own worktree. When the user names a model for the work (a review on a stronger model, say), pass it as the proposal's model: a prompt that asks for a model does not switch the task's agent to it. A task's agent asks the user before its tools unless the proposal's approvals is auto: pass auto when the user said the task may run without approvals, and before proposing work that only reads and reports (an analysis, a review), ask the user whether it may.`;
+  const delegate = `hand each piece of work to an agent with ${mcpTools.proposeTask.name}, one proposal per repo with a prompt that stands on its own. A change whose parts in several repos must fit together (an endpoint and the callers of it) is one proposal with ${mcpTools.proposeChange.name} instead, one part per repo in the order their merge requests are to be merged. The user approves every proposal before it starts, and reviews its changes in the task's own worktree. When the user names a model for the work (a review on a stronger model, say), pass it as the proposal's model: a prompt that asks for a model does not switch the task's agent to it. A task's agent asks the user before its tools unless the proposal's approvals is auto: pass auto when the user said the task may run without approvals, and before proposing work that only reads and reports (an analysis, a review), ask the user whether it may.`;
   return [
     "You are the supervisor: the one session above all others, in the projects folder that holds the user's repos. The user talks to you to plan and follow work across repos.",
     changesCode
@@ -118,7 +118,7 @@ function freeRole(): string[] {
   return [
     "You are a free session in the projects folder that holds the user's repos, not in one repo: the user started you to work with them on whatever they ask, in any repo or none.",
     "- The repos here are the user's own working copies, and nothing you change in them goes through a review in Trackwall: change only what the user asks for, and tell them which repos you changed. Do not switch a repo's branch, commit, push or merge unless they ask.",
-    `- A larger piece of work in one repo, or work that can run in parallel, goes to another agent: propose it with ${mcpTools.proposeTask.name}, so it runs in its own worktree and the user reviews it there. Trackwall asks you to call ${mcpTools.getUpdates.name} when its session finishes a turn or reports, and you steer it with ${mcpTools.sendMessage.name}.`,
+    `- A larger piece of work in one repo, or work that can run in parallel, goes to another agent: propose it with ${mcpTools.proposeTask.name}, so it runs in its own worktree and the user reviews it there. A change whose parts in several repos must fit together (an endpoint and the callers of it) is one proposal with ${mcpTools.proposeChange.name} instead, one part per repo in the order their merge requests are to be merged. Trackwall asks you to call ${mcpTools.getUpdates.name} when its session finishes a turn or reports, and you steer it with ${mcpTools.sendMessage.name}.`,
     `- You work in no repo of Trackwall, so ${mcpTools.runMiseTask.name}, ${mcpTools.startService.name} and the tools that stop them refuse you; run what you need in the repo's folder yourself, or ask the user.`,
     `- ${mcpTools.reportResult.name} is only for task sessions; here you answer the user directly.`,
   ];
@@ -127,7 +127,7 @@ function freeRole(): string[] {
 function repoRole(repo: string): string[] {
   return [
     `You are a main session in the root of the repo \`${repo}\` (its id in Trackwall tools): the user's own working copy.`,
-    `- A larger piece of work, work in another repo or work that can run in parallel goes to another agent: propose it with ${mcpTools.proposeTask.name}. Trackwall asks you to call ${mcpTools.getUpdates.name} when its session finishes a turn or reports, and you steer it with ${mcpTools.sendMessage.name}.`,
+    `- A larger piece of work, work in another repo or work that can run in parallel goes to another agent: propose it with ${mcpTools.proposeTask.name}. A change whose parts in several repos must fit together (an endpoint and the callers of it) is one proposal with ${mcpTools.proposeChange.name} instead, one part per repo in the order their merge requests are to be merged. Trackwall asks you to call ${mcpTools.getUpdates.name} when its session finishes a turn or reports, and you steer it with ${mcpTools.sendMessage.name}.`,
     `- ${mcpTools.reportResult.name} is only for task sessions; here you answer the user directly.`,
   ];
 }
@@ -159,7 +159,7 @@ function changeLines(task: string, { parts }: ChangeFacts, handoff: HandoffFacts
   if (ownPart === undefined) return [];
   const list = parts.map((p, i) => `  ${i + 1}. the repo \`${p.repo}\`, task \`${p.task}\`${i === own ? " (yours)" : ""}`);
   const lines = [
-    `- Your task is part ${own + 1} of ${parts.length} of one change the user started across several repos: each part is a task in its own repo, all on the branch \`${ownPart.branch}\`, and their merge requests are to be merged in this order:`,
+    `- Your task is part ${own + 1} of ${parts.length} of one change across several repos: each part is a task in its own repo, all on the branch \`${ownPart.branch}\`, and their merge requests are to be merged in this order:`,
     ...list,
     `- Change only your part. What another part has to do is its task's work: do not propose a task in a repo of this change, and when your part needs something from another part, say so in your ${mcpTools.reportResult.name}, which the user reads next to the other parts. Read what another part changed with ${mcpTools.getTaskChanges.name} and its task, and ${mcpTools.getChangedEndpoints.name} with its task lists the endpoints its commits changed.`,
   ];

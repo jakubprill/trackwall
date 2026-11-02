@@ -1,4 +1,4 @@
-import type { SessionView, Task, TaskApprovals } from "@trackwall/protocol";
+import type { ChangePart, SessionView, Task, TaskApprovals } from "@trackwall/protocol";
 import { errorMessage } from "./api.ts";
 import type { ProposalsEntry, SessionSelection } from "./session-entries.ts";
 
@@ -58,4 +58,19 @@ export function selectionAfterDecision(group: ProposalsEntry, decided: ReadonlyS
  */
 export function showsGroup(selection: SessionSelection, group: ProposalsEntry): boolean {
   return selection?.kind === "proposals" && selection.proposer === group.proposer;
+}
+
+/**
+ * The parts of a proposed change (ADR-171) the user kept, in the proposal's order, each with its note as the user left
+ * it (`notes` by repo); `undefined` while fewer than two are kept, since a change has at least two parts.
+ */
+export function keptChangeParts(
+  parts: readonly ChangePart[],
+  dropped: ReadonlySet<string>,
+  notes: ReadonlyMap<string, string>,
+): ChangePart[] | undefined {
+  const kept = parts
+    .filter((part) => !dropped.has(part.repo))
+    .map((part) => ({ repo: part.repo, note: notes.get(part.repo) ?? part.note }));
+  return kept.length >= 2 ? kept : undefined;
 }

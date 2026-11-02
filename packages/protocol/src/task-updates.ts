@@ -31,7 +31,8 @@ const UpdateBase = z.object({
  * whose logs the proposer or the task's agent reads with the user's own MCP server for the repo host;
  * `proposal_rejected`: the user rejected the proposal, with their reason when they gave one; `repo_removed`: the user
  * approved a proposal to remove a repo, which is now in `movedTo` (ADR-83; `task` is the proposal's id); `handed_over`: the
- * user handed the supervisor a task they had started (ADR-155); `question`: the task's agent asked its proposer something
+ * user handed the supervisor a task they had started (ADR-155); `change_started`: the user approved a proposed change
+ * (ADR-171; `task` is the proposal's id), with the part tasks that started and the repos whose part could not; `question`: the task's agent asked its proposer something
  * with `ask_proposer` (ADR-160), which the proposer answers with `send_message`. A turn the user drove by
  * typing into the task's session gives no `turn_ended`: the user is handling it.
  */
@@ -57,6 +58,11 @@ export const TaskUpdate = z.discriminatedUnion("kind", [
   UpdateBase.extend({ kind: z.literal("proposal_rejected"), reason: z.string().nullable() }),
   UpdateBase.extend({ kind: z.literal("repo_removed"), repo: RepoId, movedTo: z.string() }),
   UpdateBase.extend({ kind: z.literal("handed_over") }),
+  UpdateBase.extend({
+    kind: z.literal("change_started"),
+    parts: z.array(z.object({ task: TaskId, repo: RepoId })),
+    failed: z.array(z.object({ repo: RepoId, message: z.string() })),
+  }),
   UpdateBase.extend({ kind: z.literal("question"), text: TaskMessageText }),
 ]);
 export type TaskUpdate = z.infer<typeof TaskUpdate>;

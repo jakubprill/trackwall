@@ -71,6 +71,7 @@ function proposal(id: string, createdAt: string, proposer: string | null = null)
     model: null,
     approvals: "ask",
     item: null,
+    parts: null,
     createdAt,
   };
 }
@@ -395,6 +396,21 @@ describe("proposal kinds (ADR-83)", () => {
     const removal: TaskProposal = { ...proposal("p2", "2026-10-26T10:00:00Z"), kind: "remove_repo" };
     expect(proposalsName([task, { ...task, id: "p3" }])).toBe("2 task proposals");
     expect(proposalsName([task, removal])).toBe("2 proposals");
+  });
+
+  test("a proposed change is named by its repos in their merge order and its title (ADR-171)", () => {
+    const change: TaskProposal = {
+      ...proposal("p1", "2026-10-26T10:00:00Z"),
+      kind: "change",
+      repo: "payments",
+      title: "Refund API",
+      parts: [
+        { repo: "payments", note: "add POST /api/refunds" },
+        { repo: "shop-web", note: "" },
+      ],
+    };
+    expect(proposalKindLabel(change)).toBe("Change proposal");
+    expect(proposalsName([change])).toBe("payments, shop-web · Refund API");
   });
 });
 

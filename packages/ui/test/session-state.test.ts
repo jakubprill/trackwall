@@ -150,6 +150,7 @@ const proposals: SessionEntry = {
       model: null,
       approvals: "ask",
       item: null,
+      parts: null,
       createdAt: "",
     },
   ],

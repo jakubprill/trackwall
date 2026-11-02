@@ -3,9 +3,13 @@ import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   type AgentTaskChanges,
+  type ApproveChangeRequest,
+  CHANGE_PROMPTS_TOO_LONG,
+  type ChangePart,
   type ChangeRequest,
   type CreatedChange,
   changePartPrompt,
+  changePromptsFit,
   type DialogAnswer,
   type EnvironmentCheck,
   type HttpEndpoint,
@@ -16,6 +20,7 @@ import {
   type MergeRequest,
   type MiseTarget,
   type PromptDelivery,
+  proposalRepos,
   type ReviewComment,
   type SendMessageResult,
   type SendReviewResult,
@@ -439,7 +444,29 @@ export class Agents {
     await this.#deps.repos.repoPath(proposal.repo);
     await this.#assertOnBoard(proposal.item);
     const proposedBy = proposedByOf(caller === null ? null : this.session(caller));
-    return this.#proposals.add({ kind: "task", ...proposal, proposedBy });
+    return this.#proposals.add({ kind: "task", ...proposal, parts: null, proposedBy });
+  }
+
+  /**
+   * A proposed change from session `caller` (ADR-171): one proposal for all its parts, every repo in the projects folder.
+   * A task session proposes work in other repos as subtasks (`propose_task`), which read its handoff: a change would
+   * start beside it, on another branch, while the parts' handoffs run from part to part.
+   */
+  async proposeChange(
+    caller: string | null,
+    { parts, ...proposal }: Pick<TaskProposal, "title" | "prompt" | "model" | "approvals" | "item"> & { parts: ChangePart[] },
+  ): Promise<TaskProposal> {
+    const session = caller === null ? null : this.session(caller);
+    if (session?.task != null)
+      throw new DomainError(
+        "bad_request",
+        "a task proposes the work in other repos with propose_task, one proposal per repo, so that each reads your handoff",
+      );
+    for (const { repo } of parts) await this.#deps.repos.repoPath(repo);
+    await this.#assertOnBoard(proposal.item);
+    const [first] = parts;
+    if (first === undefined) throw new Error("a change has parts");
+    return this.#proposals.add({ kind: "change", repo: first.repo, ...proposal, parts, proposedBy: proposedByOf(session) });
   }
 
   /** A proposal to remove a repo from the projects folder (ADR-83), from session `caller` like a task proposal. */
@@ -460,6 +487,7 @@ export class Agents {
         model: null,
         approvals: "ask",
         item: null,
+        parts: null,
         proposedBy: proposedByOf(session),
       },
       repoDir,
@@ -492,6 +520,34 @@ export class Agents {
   }
 
   /**
+   * A change from a proposal (ADR-171): `createChange` with the parts the user kept, in the proposal's order, and the
+   * options and notes as the user left them; the first part made takes the proposal's id and every part its proposer. The proposal waits again only when
+   * no part started; otherwise it is gone, and its proposer hears which parts started.
+   */
+  async approveChangeProposal(id: string, { prompt, parts, model, approvals, view }: ApproveChangeRequest): Promise<CreatedChange> {
+    const proposal = this.#proposals.get(id);
+    if (proposal.parts === null) throw new DomainError("bad_request", `proposal ${id} is not a change`);
+    const proposed = proposalRepos(proposal);
+    const unknown = parts.filter((part) => !proposed.includes(part.repo)).map((part) => part.repo);
+    if (unknown.length > 0) throw new DomainError("bad_request", `${unknown.join(", ")} is not a part of the proposed change`);
+    // The proposal's order, which the user approved; the notes as the user left them.
+    const kept = proposed.flatMap((repo) => parts.filter((part) => part.repo === repo));
+    if (!changePromptsFit(prompt, kept)) throw new DomainError("bad_request", CHANGE_PROMPTS_TOO_LONG);
+    const { title, proposedBy, item } = this.#proposals.take(id);
+    const prompts = kept.map((part) => ({ repo: part.repo, prompt: changePartPrompt(prompt, part) }));
+    let created: CreatedChange;
+    try {
+      created = await this.#tasks.createChange(prompts, { title, proposedBy, model, approvals, javaNavigation: false, item, view }, id);
+    } catch (err) {
+      this.#proposals.release(id, true);
+      throw err;
+    }
+    this.#proposals.release(id, false);
+    this.#coordination.changeStarted(id, proposedBy, created);
+    return created;
+  }
+
+  /**
    * The user approves removing a repo (ADR-83). Refused while anything of the repo would lose its folder: a session in
    * it, a task (its worktree belongs to the repo's git directory) or a process started there. A refusal leaves the
    * proposal waiting, so the user ends those and approves again. The other proposals for the repo are rejected with it,
@@ -502,7 +558,7 @@ export class Agents {
     if (proposal.kind !== "remove_repo") throw new DomainError("bad_request", `proposal ${id} is not a repo removal`);
     const repoDir = this.#proposals.removalDir(id);
     if (repoDir === undefined) throw new Error(`repo removal ${id} has no folder`);
-    if (this.#proposals.list().some((p) => p.repo === proposal.repo && this.#proposals.approving(p.id)))
+    if (this.#proposals.list().some((p) => proposalRepos(p).includes(proposal.repo) && this.#proposals.approving(p.id)))
       throw new DomainError("bad_request", `${proposal.repo} is already being removed or a task of it started`);
     this.#assertNothingRunsIn(proposal.repo, repoDir);
     this.#proposals.take(id);
@@ -516,7 +572,7 @@ export class Agents {
     this.#proposals.release(id, false);
     this.#coordination.repoRemoved(proposal, movedTo);
     for (const other of this.#proposals.list())
-      if (other.repo === proposal.repo && this.#proposals.find(other.id))
+      if (proposalRepos(other).includes(proposal.repo) && this.#proposals.find(other.id))
         this.rejectProposal(other.id, `${proposal.repo} was removed from the projects folder`);
   }
 
@@ -679,7 +735,7 @@ export class Agents {
   async createChange({ title, prompt, parts, approvals, model, item, view }: ChangeRequest): Promise<CreatedChange> {
     await this.#assertOnBoard(item);
     const prompts = parts.map((part) => ({ repo: part.repo, prompt: changePartPrompt(prompt, part) }));
-    return this.#tasks.createChange(prompts, { title, model, approvals, javaNavigation: false, item, view });
+    return this.#tasks.createChange(prompts, { title, proposedBy: null, model, approvals, javaNavigation: false, item, view });
   }
 
   /**

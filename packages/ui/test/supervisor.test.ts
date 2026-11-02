@@ -68,6 +68,7 @@ function proposal(id: string, proposedBy: TaskProposal["proposedBy"]): TaskPropo
     model: null,
     approvals: "ask",
     item: null,
+    parts: null,
     proposedBy,
     createdAt: "2026-10-25T10:10:00Z",
   };

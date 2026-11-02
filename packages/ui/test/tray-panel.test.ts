@@ -33,6 +33,7 @@ const proposal: TaskProposal = {
   model: null,
   approvals: "ask",
   item: null,
+  parts: null,
   createdAt: "2026-10-24T10:00:00Z",
 };
 

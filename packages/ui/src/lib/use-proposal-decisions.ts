@@ -1,4 +1,4 @@
-import { agentsApi, type Task } from "@trackwall/protocol";
+import { agentsApi, type ChangePart, type Task } from "@trackwall/protocol";
 import { useState } from "react";
 import { errorMessage, post } from "./api.ts";
 import type { Connection } from "./connection.ts";
@@ -52,6 +52,19 @@ export function useProposalDecisions({
     ).then(({ started, failed }) => settle(failed, new Set(started.map((t) => t.id)), started));
   };
 
+  /**
+   * Starts a proposed change (ADR-171) with the parts the user kept. Parts that could not start are said to the proposer,
+   * which hears which started, so the view moves on to the first part that did, like after any start.
+   */
+  const startChange = (start: ProposalStart, parts: readonly ChangePart[]) => {
+    begin();
+    const { id, ...options } = start;
+    post(conn, agentsApi.approveChangeProposal, { proposal: id, parts: [...parts], ...options }).then(
+      ({ tasks }) => settle(new Map(), new Set([id]), tasks),
+      (err: unknown) => settle(new Map([[id, errorMessage(err)]]), new Set(), []),
+    );
+  };
+
   /** One decision on one proposal that starts no task: a rejection or an approved folder action (ADR-83). */
   const decide = (id: string, request: Promise<unknown>) => {
     begin();
@@ -63,5 +76,5 @@ export function useProposalDecisions({
   const reject = (id: string, reason: string) => decide(id, post(conn, agentsApi.rejectProposal, { proposal: id, reason }));
   const removeRepo = (id: string) => decide(id, post(conn, agentsApi.approveRepoRemoval, { proposal: id }));
 
-  return { pending, errors, start, reject, removeRepo };
+  return { pending, errors, start, startChange, reject, removeRepo };
 }

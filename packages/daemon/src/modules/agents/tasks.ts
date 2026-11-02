@@ -153,8 +153,8 @@ export interface TaskOrigin {
   change: TaskChange | null;
 }
 
-/** What every part of a change starts with (ADR-171): its identity, proposer and place come from the change. */
-export type ChangeOrigin = Omit<TaskOrigin, "id" | "proposedBy" | "change">;
+/** What every part of a change starts with (ADR-171): its identity and place come from the change. */
+export type ChangeOrigin = Omit<TaskOrigin, "id" | "change">;
 
 /** What the user chooses for a task they start: everything of its origin but the identity a proposal or a change gives it. */
 export type TaskOptions = Omit<TaskOrigin, "id" | "title" | "proposedBy" | "change">;
@@ -220,14 +220,20 @@ export class AgentTasks {
    * the first session starts, so each session's instructions name all its siblings; until its own session starts, a part
    * is held, so no resume, end or handing over gets between. The sessions then start in order, and each part takes as its
    * handoff the part right before it that is still on the list, since an earlier one whose session could not start is
-   * gone. A part that cannot be made or started is in `failed`, in the parts' order, and the others go on.
+   * gone. A part that cannot be made or started is in `failed`, in the parts' order, and the others go on. The first
+   * part made gets `firstId`: a proposed change's id, which its proposer waits on.
    */
-  async createChange(parts: readonly { repo: string; prompt: string }[], origin: ChangeOrigin): Promise<CreatedChange> {
+  async createChange(
+    parts: readonly { repo: string; prompt: string }[],
+    origin: ChangeOrigin,
+    firstId: string = randomUUID(),
+  ): Promise<CreatedChange> {
     const change = randomUUID();
     const failures: { position: number; repo: string; err: unknown }[] = [];
     const held: { position: number; task: KnownTask }[] = [];
     for (const [position, { repo, prompt }] of parts.entries()) {
-      const partOrigin = { ...origin, id: randomUUID(), proposedBy: null, change: { id: change, position } };
+      // A proposed change's id goes to the first part made, so a part that cannot be made does not leave it unused.
+      const partOrigin = { ...origin, id: held.length === 0 ? firstId : randomUUID(), change: { id: change, position } };
       await this.#creating(repo, () => this.#create(repo, prompt, partOrigin, "hold")).then(
         (task) => held.push({ position, task }),
         (err: unknown) => failures.push({ position, repo, err }),
