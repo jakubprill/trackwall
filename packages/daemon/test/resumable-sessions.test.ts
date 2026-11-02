@@ -59,7 +59,7 @@ describe("the list of sessions a restart resumes", () => {
     expect(new ResumableSessions(path, () => {}).read()).toEqual([MAIN, SUPERVISOR]);
   });
 
-  test("a supervisor with a repo breaks the file, so a hand edit never starts the supervisor in place of a main session", () => {
+  test("a supervisor with a repo breaks the file, so a hand edit never starts the supervisor in place of a repo session", () => {
     const path = newPath();
     writeFileSync(path, JSON.stringify({ sessions: [{ ...MAIN, supervisor: true }] }));
     const log: string[] = [];
@@ -143,7 +143,7 @@ describe("how a start goes on with a session's conversation", () => {
     expect(new ResumableSessions(path, () => {}).read()).toEqual([MAIN]);
   });
 
-  test("a file of a Trackwall before main sessions had start options resumes them on the default model, without Java navigation (ADR-175)", () => {
+  test("a file of a Trackwall before repo sessions had start options resumes them on the default model, without Java navigation (ADR-175)", () => {
     const path = newPath();
     const { model: _, javaNavigation: __, ...older } = MAIN;
     writeFileSync(path, JSON.stringify({ sessions: [older] }));

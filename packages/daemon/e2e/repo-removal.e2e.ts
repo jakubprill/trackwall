@@ -14,7 +14,7 @@ describe("a repo removal proposed by a session (ADR-83)", () => {
   test("the user reads the reason and removes the repo, which moves out of the projects folder", async () => {
     const { daemon } = trackwall();
     const main = await daemon.post(agentsApi.start, { repo: "shop" });
-    await waitFor(daemon.facade.agents, main.id, (s) => s.state !== null, "the main session's first state");
+    await waitFor(daemon.facade.agents, main.id, (s) => s.state !== null, "the repo session's first state");
     const agent = await trackwall().agentOf(main.id);
     await agent.callTool({
       name: "propose_folder_action",

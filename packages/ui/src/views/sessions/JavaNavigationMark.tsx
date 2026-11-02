@@ -13,7 +13,7 @@ export function JavaNavigationMark({ conn, task, running }: { conn: Connection; 
 }
 
 /**
- * The same for a running main session (ADR-175), in its header: the daemon knows whether the session has Java
+ * The same for a running repo session (ADR-175), in its header: the daemon knows whether the session has Java
  * navigation and answers `null` when it does not, so the mark shows nothing.
  */
 export function SessionJavaNavigationMark({ conn, session, running }: { conn: Connection; session: Session; running: boolean }) {

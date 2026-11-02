@@ -42,7 +42,7 @@ export function javaNavigationInChange(offer: JavaNavigationOffer, change: boole
 }
 
 /**
- * Whether a session's header asks the daemon how its jdtls is doing (ADR-175): a running main session in a repo, in a
+ * Whether a session's header asks the daemon how its jdtls is doing (ADR-175): a running repo session in a repo, in a
  * terminal, the only kind that can have one of its own; a task's session shows the task's in the task's header.
  */
 export function asksSessionJavaNavigation(session: Session, running: boolean): boolean {

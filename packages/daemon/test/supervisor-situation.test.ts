@@ -119,7 +119,7 @@ describe("the supervisor's situation (ADR-148)", () => {
         HEADER,
         '- task proposal p1 "Show the login error" in web, proposed from task t1: waits for the user to approve or reject it',
         '- task t1 "Add a login test" in api, started by the user: waits for the user\'s approval',
-        "- a main session in web (session s-main), started by the user: waits for the user",
+        "- a repo session in web (session s-main), started by the user: waits for the user",
         "- a free session in the projects folder (session s-free), started by the user: working",
         '- task t2 "Retry a failed payment once, then give up" in payments, proposed by you: no session (resume_task goes on with it); reported a result at 2026-10-30T09:05:00.000Z',
       ].join("\n"),
@@ -201,7 +201,7 @@ describe("the supervisor's situation (ADR-148)", () => {
     const stuck = session({ id: "s-main", repo: "web", state: state("Working"), stuck: { lastStepAt: "2026-10-30T08:40:00.000Z" } });
 
     expect(supervisorSituation({ sessions: [supervisor, stuck], tasks: [], proposals: [] }, SUPERVISOR, [])).toBe(
-      `${HEADER}\n- a main session in web (session s-main), started by the user: may be stuck: no step since 2026-10-30T08:40:00.000Z`,
+      `${HEADER}\n- a repo session in web (session s-main), started by the user: may be stuck: no step since 2026-10-30T08:40:00.000Z`,
     );
   });
 

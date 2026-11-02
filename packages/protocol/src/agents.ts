@@ -878,7 +878,7 @@ export const agentsApi = {
   /** How the task's Java language server is doing (ADR-124); `null` for a task without Java navigation. */
   taskJavaNavigation: endpoint("task-java-navigation", TaskRequest, JavaNavigationStatus.nullable()),
   /**
-   * How the Java language server of a session is doing (ADR-124): its task's, or a main session's own (ADR-175);
+   * How the Java language server of a session is doing (ADR-124): its task's, or a repo session's own (ADR-175);
    * `null` for a session without Java navigation.
    */
   sessionJavaNavigation: endpoint("session-java-navigation", SessionRequest, JavaNavigationStatus.nullable()),

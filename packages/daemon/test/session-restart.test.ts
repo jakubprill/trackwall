@@ -73,7 +73,7 @@ describe.skipIf(process.versions.bun === undefined)("sessions across a daemon re
     await stopDaemon(before);
     const after = await startDaemon({ home: before.home, projects: before.projects });
 
-    // A main session and the supervisor under the same ids; a task's session is a new one of the same task.
+    // A repo session and the supervisor under the same ids; a task's session is a new one of the same task.
     expect(await argumentOnScreen(after, main.id, "--resume=")).toContain(`Argument: --resume=${main.id}`);
     expect(after.facade.agents.session(main.id)).toMatchObject({ repo: "shop", task: null, run: { kind: "running" } });
     // The supervisor never had a prompt, so Copilot CLI keeps no conversation of it: it starts anew under its id.
@@ -100,10 +100,10 @@ describe.skipIf(process.versions.bun === undefined)("sessions across a daemon re
     expect(after.facade.agents.task(task.id).approvals).toBe("auto");
   }, 60_000);
 
-  test("a main session started on a model keeps it in the next daemon (ADR-175)", async () => {
+  test("a repo session started on a model keeps it in the next daemon (ADR-175)", async () => {
     const before = await startDaemon();
     const main = await before.facade.agents.start("shop", "explain the build", { model: "claude-opus-5.5" });
-    await waitFor(before.facade.agents, main.id, (s) => s.state !== null, "the main session's first turn");
+    await waitFor(before.facade.agents, main.id, (s) => s.state !== null, "the repo session's first turn");
 
     await stopDaemon(before);
     const after = await startDaemon({ home: before.home, projects: before.projects });

@@ -34,7 +34,7 @@ describe.skipIf(process.versions.bun === undefined)("the supervisor's situation 
     await waitFor(daemon.facade.agents, supervisor.id, () => window.unwrappedText().includes("Prompt context:"), "the prompt's context");
     const screen = window.unwrappedText();
     expect(screen).toContain("Prompt context: Trackwall's work under way as this prompt came");
-    expect(screen).toContain(`- a main session in shop (session ${main.id}), started by the user:`);
+    expect(screen).toContain(`- a repo session in shop (session ${main.id}), started by the user:`);
   });
 
   test("a task's failed verification reaches the supervisor with its next prompt (ADR-156)", async () => {

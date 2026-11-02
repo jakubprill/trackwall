@@ -42,7 +42,7 @@ const PROJECTS_FOLDER = "";
 
 /**
  * A new task or session (ADR-100): a repo from the projects folder, or the projects folder itself, and a prompt for the
- * agent. In a repo with its own worktree it becomes a task (ADR-31); without one a main session in the repo's working
+ * agent. In a repo with its own worktree it becomes a task (ADR-31); without one a repo session in the repo's working
  * copy (ADR-26), and in the projects folder a free session, both with the prompt as their first message when there is one.
  * Every one can run on a chosen model (ADR-98), in the conversation view (ADR-137), and, in a repo tagged java and a
  * terminal, with a Java language server (ADR-99, ADR-175); only a task, whose changes wait for review in its own worktree,

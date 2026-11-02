@@ -73,7 +73,7 @@ async function conversationOf(agents: Agents, session: string): Promise<Conversa
 describe.skipIf(process.versions.bun === undefined)(
   "start options of a session without its own worktree (real PTY, fake Copilot CLI)",
   () => {
-    test("a main session runs on the model the user chose, also after a restart, and asks for approvals", async () => {
+    test("a repo session runs on the model the user chose, also after a restart, and asks for approvals", async () => {
       const { agents } = startAgents();
 
       const session = await agents.start("shop", "explain the build", { model: "claude-opus-5.5" });
@@ -100,7 +100,7 @@ describe.skipIf(process.versions.bun === undefined)(
       expect(answer?.kind === "agent" && answer.text).toContain("Argument: --model=gpt-5");
     }, 60_000);
 
-    test("a main session with Java navigation gets jdtls in its own data folder, keeps it across a restart, and closing it deletes the data", async () => {
+    test("a repo session with Java navigation gets jdtls in its own data folder, keeps it across a restart, and closing it deletes the data", async () => {
       const settings = jdtlsSettings();
       const { agents, home, projects } = startAgents(() => settings);
 
@@ -126,7 +126,7 @@ describe.skipIf(process.versions.bun === undefined)(
       expect(existsSync(data)).toBe(false);
     }, 60_000);
 
-    test("a main session without Java navigation gets no jdtls and says nothing of it", async () => {
+    test("a repo session without Java navigation gets no jdtls and says nothing of it", async () => {
       const settings = jdtlsSettings();
       const { agents, home } = startAgents(() => settings);
 

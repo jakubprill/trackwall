@@ -36,7 +36,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     // Session instructions with the session's role come from the session directory, not from the repo (ADR-46).
     expect(window.text()).toContain("Instructions: trackwall.instructions.md");
     const instructions = readFileSync(join(home, "sessions", started.id, "instructions", "trackwall.instructions.md"), "utf8");
-    expect(instructions).toContain("You are a main session in the root of the repo `shop`");
+    expect(instructions).toContain("You are a repo session in the root of the repo `shop`");
     expect(readdirSync(repoDir)).toEqual([]);
     // The session reaches the MCP server over HTTP with this session's token, by which the server knows who is calling (ADR-39, ADR-89).
     const mcpConfig = JSON.parse(readFileSync(join(home, "sessions", started.id, "mcp-config.json"), "utf8"));
