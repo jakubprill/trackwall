@@ -1,12 +1,13 @@
 import type { DoctorCheck } from "@trackwall/protocol";
+import { envKey } from "../../infra/env-key.ts";
 import { isSecretName } from "../../infra/secret-name.ts";
 import { proxyFor, shownProxy } from "./proxy-env.ts";
-import type { ConnectionProbe, ConnectionProbeResult } from "./tls-probe.ts";
+import type { TlsProbe, TlsProbeResult } from "./tls-probe.ts";
 
 /**
  * The doctor's model provider check (§4.15, ADR-179): whether anything accepts connections at the model provider the
  * session profile points Copilot CLI at (`COPILOT_PROVIDER_BASE_URL`, ADR-136), e.g. a local proxy that stopped. It only
- * opens a connection and closes it: no request, no API key (it never reads one), nothing but `CONNECT host:port` to a
+ * opens a connection and closes it: no request, no API key (it never receives one), nothing but `CONNECT host:port` to a
  * proxy. The address is a secret (it may carry a key), so no outcome names it, its host or a socket's message, which
  * would; only the profile and a proxy's host and port are shown, as the network check shows them.
  */
@@ -14,6 +15,8 @@ import type { ConnectionProbe, ConnectionProbeResult } from "./tls-probe.ts";
 /** The variable Copilot CLI takes its model provider's address from (ADR-136). */
 const PROVIDER_ADDRESS = "COPILOT_PROVIDER_BASE_URL";
 const PROBE_TIMEOUT_MS = 5_000;
+/** What the check keeps of the secrets: the address, and the proxy settings, which mise may keep as secrets for a login in them. */
+const KEPT_NAMES = new Set([PROVIDER_ADDRESS, "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"]);
 
 type Outcome = Omit<DoctorCheck, "id">;
 
@@ -43,21 +46,20 @@ export interface ProfileMiseEnv {
  */
 export function profileEnvironment(userEnv: NodeJS.ProcessEnv, mise: ProfileMiseEnv): ProfileEnvironment | null {
   if (mise.profile === null) return null;
-  const secret = (name: string) => name !== PROVIDER_ADDRESS && (isSecretName(name) || mise.secretNames.includes(name));
+  const secret = (name: string) => !KEPT_NAMES.has(name.toUpperCase()) && (isSecretName(name) || mise.secretNames.includes(name));
   const env = Object.fromEntries(Object.entries({ ...userEnv, ...mise.vars }).filter(([name]) => !secret(name)));
   return { profile: mise.profile, env, problem: mise.problem };
 }
 
 export interface ModelProviderDeps {
-  probe: ConnectionProbe;
+  probe: TlsProbe;
   /** The certificates a session trusts, for an HTTPS proxy's own certificate. */
   ca: readonly string[];
 }
 
-/** The check's outcome; `null` without a session profile or when the profile sets no provider (sessions use GitHub then). */
-export async function modelProviderOutcome(read: ProfileEnvironment | null, deps: ModelProviderDeps): Promise<Outcome | null> {
-  if (read === null) return null;
-  const address = read.env[PROVIDER_ADDRESS]?.trim();
+/** The check's outcome; `null` when the profile sets no provider (sessions use GitHub then). */
+export async function modelProviderOutcome(read: ProfileEnvironment, deps: ModelProviderDeps): Promise<Outcome | null> {
+  const address = read.env[envKey(read.env, PROVIDER_ADDRESS)]?.trim();
   if (!address) return read.problem === null ? null : profileUnreadable(read.profile);
   const target = providerTarget(address);
   if (target === null)
@@ -93,7 +95,7 @@ function profileUnreadable(profile: string): Outcome {
   };
 }
 
-function probeOutcome(profile: string, proxy: URL | null, result: ConnectionProbeResult): Outcome {
+function probeOutcome(profile: string, proxy: URL | null, result: TlsProbeResult): Outcome {
   const provider = `the model provider of the session profile ${profile}`;
   const via = proxy === null ? "" : ` through the proxy ${shownProxy(proxy)}`;
   const check = `Check that the provider in ${PROVIDER_ADDRESS} of mise.${profile}.toml runs, for example a local proxy in front of it, and that the address is right.`;
@@ -114,6 +116,13 @@ function probeOutcome(profile: string, proxy: URL | null, result: ConnectionProb
         status: "warn",
         summary: `The proxy did not open a connection to ${provider} (${result.status}), so it could not be checked.`,
         fix: `If sessions cannot reach the provider, add its host to NO_PROXY or ask whoever runs the proxy to allow it. ${proxyFix}`,
+      };
+    case "untrusted":
+      // No TLS goes to the provider, so this is an HTTPS proxy's own certificate.
+      return {
+        status: "fail",
+        summary: `The certificate of the proxy${proxy === null ? "" : ` ${shownProxy(proxy)}`} is not trusted (${result.code}).`,
+        fix: 'Set NODE_EXTRA_CA_CERTS to the proxy\'s root certificate as a PEM file; the line "Network for sessions" says more.',
       };
     case "error":
       return { status: "fail", summary: `${capitalized(provider)} could not be checked${via}.`, fix: check };

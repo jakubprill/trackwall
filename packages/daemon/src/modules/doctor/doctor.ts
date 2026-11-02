@@ -19,7 +19,7 @@ import { trustedFolderOf, trustedFolders } from "./copilot-trust.ts";
 import { folderStorage } from "./folder-storage.ts";
 import { modelProviderOutcome, type ProfileEnvironment } from "./model-provider-check.ts";
 import { networkOutcome, sessionCertificates } from "./network-check.ts";
-import type { ConnectionProbe, TlsProbe } from "./tls-probe.ts";
+import type { TlsProbe } from "./tls-probe.ts";
 import { compareVersions, versionIn } from "./version.ts";
 
 /**
@@ -81,7 +81,7 @@ export interface DoctorDeps {
    */
   profileEnvironment: () => Promise<ProfileEnvironment | null>;
   /** Opens and closes a connection as a session's Node.js would reach the host (`probeConnection`, a fake in tests). */
-  probeConnection: ConnectionProbe;
+  probeConnection: TlsProbe;
   now: () => Date;
 }
 

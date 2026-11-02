@@ -7,7 +7,7 @@ import { createFacade } from "../src/facade.ts";
 import { trustedFolderOf } from "../src/modules/doctor/copilot-trust.ts";
 import { copilotVersionOutcome, Doctor, type DoctorDeps } from "../src/modules/doctor/doctor.ts";
 import { folderStorage } from "../src/modules/doctor/folder-storage.ts";
-import type { ConnectionProbe } from "../src/modules/doctor/tls-probe.ts";
+import type { TlsProbe } from "../src/modules/doctor/tls-probe.ts";
 import { compareVersions, versionIn } from "../src/modules/doctor/version.ts";
 import { fakeHostingClis } from "./support/hosting.ts";
 
@@ -51,7 +51,7 @@ interface Setup {
   authErrors?: Record<string, string>;
   /** The fake mise of the session tests instead of one that prints `mise`'s version (`fake-mise.json` in the projects folder). */
   fakeMise?: boolean;
-  connectionProbe?: ConnectionProbe;
+  connectionProbe?: TlsProbe;
 }
 
 /** A facade on a fresh state directory, with the fake Copilot CLI and a mise that prints its version, or none of them. */

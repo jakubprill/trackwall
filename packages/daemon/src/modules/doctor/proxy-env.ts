@@ -3,7 +3,8 @@ import { envKey } from "../../infra/env-key.ts";
 /**
  * The proxy a Node.js program such as Copilot CLI uses for an address, read from the environment the way Node's
  * `EnvHttpProxyAgent` reads it (§4.15, ADR-166): for HTTPS `https_proxy`, then `HTTPS_PROXY`, then the HTTP proxy, for
- * HTTP only the HTTP proxy (`http_proxy`, `HTTP_PROXY`), unless `no_proxy` or `NO_PROXY` covers the host. The doctor's network check goes the same way, so its answer is the sessions'.
+ * HTTP only the HTTP proxy (`http_proxy`, `HTTP_PROXY`), unless `no_proxy` or `NO_PROXY` covers the host. The doctor's
+ * checks go the same way, so their answer is the sessions'.
  */
 
 /** The variables of each scheme's proxy, in the order Node's `EnvHttpProxyAgent` reads them: HTTPS falls back to HTTP. */

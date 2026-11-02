@@ -7,7 +7,7 @@ import {
   providerTarget,
 } from "../src/modules/doctor/model-provider-check.ts";
 import { proxyFor, shownProxy } from "../src/modules/doctor/proxy-env.ts";
-import { type ConnectionProbe, type ConnectionProbeResult, probeConnection } from "../src/modules/doctor/tls-probe.ts";
+import { probeConnection, type TlsProbe, type TlsProbeResult } from "../src/modules/doctor/tls-probe.ts";
 
 /** A TCP server that counts the bytes anyone sends it, and whether its connection was closed. */
 async function startListener() {
@@ -170,15 +170,24 @@ describe("the environment of the model provider check", () => {
     });
   });
 
+  test("keeps a proxy setting mise holds as a secret for the login in it, so the check takes the sessions' route", () => {
+    const withProxySecret = {
+      ...mise,
+      vars: { ...mise.vars, https_proxy: "http://me:pass@proxy.example.org:3128" },
+      secretNames: [...mise.secretNames, "https_proxy"],
+    };
+    expect(profileEnvironment({}, withProxySecret)?.env.https_proxy).toBe("http://me:pass@proxy.example.org:3128");
+  });
+
   test("without a session profile there is nothing to check", () => {
     expect(profileEnvironment({}, { ...mise, profile: null })).toBeNull();
   });
 });
 
 /** A probe that answers `result` and records the targets and proxies it was given. */
-function scriptedProbe(result: ConnectionProbeResult) {
+function scriptedProbe(result: TlsProbeResult) {
   const calls: { host: string; port: number; proxy: string | null }[] = [];
-  const probe: ConnectionProbe = async ({ host, port }, o) => {
+  const probe: TlsProbe = async ({ host, port }, o) => {
     calls.push({ host, port, proxy: o.proxy?.href ?? null });
     return result;
   };
@@ -200,9 +209,8 @@ function expectNothingOfTheAddress(outcome: unknown): void {
 }
 
 describe("model provider check", () => {
-  test("without a session profile, or with one that sets no provider, there is no row", async () => {
+  test("a session profile that sets no provider gives no row", async () => {
     const { probe, calls } = scriptedProbe({ kind: "ok" });
-    expect(await modelProviderOutcome(null, { probe, ca: [] })).toBeNull();
     expect(await modelProviderOutcome(byok({ SHOP_REGION: "byok" }), { probe, ca: [] })).toBeNull();
     expect(calls).toEqual([]);
   });
@@ -225,7 +233,7 @@ describe("model provider check", () => {
     expect(calls[0]?.proxy).toBe("http://me:proxy-pass@proxy.example.org:3128/");
   });
 
-  test.each<[ConnectionProbeResult, string, string]>([
+  test.each<[TlsProbeResult, string, string]>([
     [
       { kind: "unreachable", message: "connect ECONNREFUSED models.internal-host.example:8443", proxy: false },
       "fail",
@@ -255,6 +263,18 @@ describe("model provider check", () => {
     expect(outcome).toMatchObject({
       status: "warn",
       summary: "The proxy did not open a connection to the model provider of the session profile byok (403), so it could not be checked.",
+    });
+    expectNothingOfTheAddress(outcome);
+  });
+
+  test("an HTTPS proxy whose own certificate is not trusted is named, with the certificate to add", async () => {
+    const { probe } = scriptedProbe({ kind: "untrusted", code: "SELF_SIGNED_CERT_IN_CHAIN", issuer: null, proxy: true });
+    const env = { COPILOT_PROVIDER_BASE_URL: HIDDEN, HTTPS_PROXY: "https://proxy.example.org:3129" };
+    const outcome = await modelProviderOutcome(byok(env), { probe, ca: [] });
+    expect(outcome).toMatchObject({
+      status: "fail",
+      summary: "The certificate of the proxy proxy.example.org:3129 is not trusted (SELF_SIGNED_CERT_IN_CHAIN).",
+      fix: expect.stringContaining("NODE_EXTRA_CA_CERTS"),
     });
     expectNothingOfTheAddress(outcome);
   });

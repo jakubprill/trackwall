@@ -40,7 +40,7 @@ import { trustedFolderOf, trustedFolders } from "./modules/doctor/copilot-trust.
 import { Doctor } from "./modules/doctor/doctor.ts";
 import { profileEnvironment } from "./modules/doctor/model-provider-check.ts";
 import { SYSTEM_CA_FILES } from "./modules/doctor/network-check.ts";
-import { type ConnectionProbe, probeConnection, probeTls, type TlsProbe } from "./modules/doctor/tls-probe.ts";
+import { probeConnection, probeTls, type TlsProbe } from "./modules/doctor/tls-probe.ts";
 import { ErrorJournal } from "./modules/error-journal/error-journal.ts";
 import type { ErrorJournalWorkspace } from "./modules/error-journal/known-values.ts";
 import { Graph } from "./modules/graph/graph.ts";
@@ -199,7 +199,7 @@ export interface FacadeOptions {
   /** Only for tests, which keep the doctor's network check off the network; the daemon leaves it out for `probeTls` (ADR-166). */
   tlsProbe?: TlsProbe;
   /** Only for tests, like `tlsProbe`; the daemon leaves it out for `probeConnection` (ADR-179). */
-  connectionProbe?: ConnectionProbe;
+  connectionProbe?: TlsProbe;
   /** The folder the daemon serves the UI from: the error journal maps the UI's frames with its source maps (ADR-94). */
   uiDir?: string;
   log: (msg: string) => void;
@@ -391,7 +391,9 @@ export function createFacade(o: FacadeOptions): Facade {
     javaNavigation: javaNavigationReadiness,
     probeTls: o.tlsProbe ?? probeTls,
     // Where a free session starts: the projects folder, with the session profile mise reads there.
-    profileEnvironment: async () => profileEnvironment(await o.userEnv(), await mise.sessionEnv({ repo: null, task: null })),
+    // Without a profile mise is not asked, so nothing decrypts the provider's key for a check that would drop it.
+    profileEnvironment: async () =>
+      workspace.sessionProfile() === null ? null : profileEnvironment(await o.userEnv(), await mise.sessionEnv({ repo: null, task: null })),
     probeConnection: o.connectionProbe ?? probeConnection,
     systemCaFiles: SYSTEM_CA_FILES,
     now: () => new Date(),

@@ -3,10 +3,11 @@ import { type DetailedPeerCertificate, type TLSSocket, connect as tlsConnect } f
 import { proxyPort } from "./proxy-env.ts";
 
 /**
- * Opens a TLS connection to a host the way a Node.js program behind the user's proxy would (§4.15, ADR-166): through an
- * HTTP `CONNECT` tunnel when a proxy is given, trusting only the certificates given. It sends nothing after the handshake
- * and closes the connection at once, so it carries no data and no credential except the proxy's own login. The tunnel is
- * written by hand rather than with `http.request`, whose `CONNECT` support differs between Bun and Node.
+ * Opens a connection to a host the way a Node.js program behind the user's proxy would (§4.15) and closes it at once:
+ * through an HTTP `CONNECT` tunnel when a proxy is given, trusting only the certificates given. `probeTls` makes a TLS
+ * handshake with the host (ADR-166), `probeConnection` only connects (ADR-179). Neither sends data or a credential except
+ * the proxy's own login. The tunnel is written by hand rather than with `http.request`, whose `CONNECT` support differs
+ * between Bun and Node.
  */
 
 export type TlsProbeResult =
@@ -104,35 +105,26 @@ function openTunnel(
   });
 }
 
-export type ConnectionProbeResult = Extract<TlsProbeResult, { kind: "ok" | "dns" | "unreachable" | "proxy-refused" | "error" }>;
-
-export type ConnectionProbe = (target: { host: string; port: number }, o: TlsProbeOptions) => Promise<ConnectionProbeResult>;
-
 /**
  * Opens a connection to a host and closes it at once, through an HTTP `CONNECT` tunnel when a proxy is given (§4.15,
  * ADR-179): nothing goes to the host, not even a TLS greeting, and the proxy gets only `CONNECT host:port` with its own
  * login. It tells whether something accepts connections there, which is all the doctor may learn about a model provider
- * without sending it a request.
+ * without sending it a request. Only an HTTPS proxy's own certificate can be `untrusted` here.
  */
-export const probeConnection: ConnectionProbe = async (target, o) => {
+export const probeConnection: TlsProbe = async (target, o) => {
   let socket: Socket | null = null;
   try {
     const opened =
       o.proxy === null ? { socket: await connectDirectly(target, o.timeoutMs) } : await openTunnel(o.proxy, target, o.ca, o.timeoutMs);
-    if ("kind" in opened) return connectionResult(opened);
+    if ("kind" in opened) return opened;
     socket = opened.socket;
     return { kind: "ok" };
   } catch (err) {
-    return connectionResult(classify(err, o.proxy !== null));
+    return classify(err, o.proxy !== null);
   } finally {
     socket?.destroy();
   }
 };
-
-/** Only an HTTPS proxy's own certificate can be untrusted here, since the probe makes no TLS connection to the host. */
-function connectionResult(result: TlsProbeResult): ConnectionProbeResult {
-  return result.kind === "untrusted" ? { kind: "error", message: "the proxy's certificate is not trusted" } : result;
-}
 
 function connectDirectly(target: { host: string; port: number }, timeoutMs: number): Promise<Socket> {
   return new Promise((resolve, reject) => {
