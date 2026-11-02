@@ -6,7 +6,7 @@
  * which xterm.js passes to the browser, do that, and Ctrl+C and Ctrl+V stay keys for the program. A program that draws its
  * own selection, as Copilot CLI does, copies it itself (`osc52Text`).
  */
-import { copyableText, promptBoxText } from "@trackwall/protocol";
+import { promptBoxText } from "@trackwall/protocol";
 
 type ClipboardKey = Pick<KeyboardEvent, "type" | "key" | "ctrlKey" | "altKey" | "metaKey">;
 
@@ -44,8 +44,8 @@ export function keepsSelection(
  * click it copies that text by sending OSC 52 (`ESC ] 52 ; c ; <base64> BEL`), as a program does over SSH. xterm.js
  * ignores the sequence unless told otherwise. This is the text to copy from the sequence's data (`c;<base64>`), or
  * `undefined` when the data does not set the clipboard: another target only (Copilot CLI sends `p!` on mouse release), a
- * query (`?`, never answered, so a program cannot read the clipboard), an empty payload, bytes that are not base64
- * of UTF-8 text, or text with an escape sequence or an invisible character (`copyableText`). No target means the clipboard, as in xterm.
+ * query (`?`, never answered, so a program cannot read the clipboard), an empty payload, or bytes that are not base64
+ * of UTF-8 text. The terminal still refuses text that fails `copyableText`, and says so. No target means the clipboard, as in xterm.
  */
 export function osc52Text(data: string): string | undefined {
   const split = data.indexOf(";");
@@ -56,9 +56,7 @@ export function osc52Text(data: string): string | undefined {
   if ((targets !== "" && !targets.includes("c")) || payload === "" || payload === "?") return undefined;
   try {
     const bytes = Uint8Array.from(atob(payload), (char) => char.charCodeAt(0));
-    const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    // What an agent asks to copy with `copy_to_clipboard` must pass the same rule (ADR-180).
-    return copyableText(text) ? text : undefined;
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   } catch {
     return undefined;
   }

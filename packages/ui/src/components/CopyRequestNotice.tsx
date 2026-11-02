@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
 import type { Connection } from "@/lib/connection";
-import { COPY_REQUEST_HOLD_MS, copyRequestPreview } from "@/lib/copy-request";
+import { COPY_REQUEST_HOLD_MS, copyReady, copyRequestPreview } from "@/lib/copy-request";
 import { useAction } from "@/lib/use-action";
 
 /**
@@ -18,7 +18,6 @@ export function CopyRequestNotice({ conn, session, onCleared }: { conn: Connecti
   const request = session.copyRequest;
   const [readyFor, setReadyFor] = useState<string>();
   const requestId = request?.id;
-  // On the id, not the object: the session list brings a new object with every update, which must not restart the wait.
   useEffect(() => {
     if (requestId === undefined) return;
     const timer = setTimeout(() => setReadyFor(requestId), COPY_REQUEST_HOLD_MS);
@@ -45,7 +44,7 @@ export function CopyRequestNotice({ conn, session, onCleared }: { conn: Connecti
       <span className="text-muted-foreground shrink-0">{counts.filter((count) => count !== undefined).join(" · ")}</span>
       {take.error && <span className="text-destructive min-w-0 truncate">{take.error}</span>}
       <span className="ml-auto flex shrink-0 gap-1">
-        <Button size="sm" onClick={() => take.run(request, true)} disabled={take.pending || readyFor !== request.id}>
+        <Button size="sm" onClick={() => take.run(request, true)} disabled={take.pending || !copyReady(readyFor, request)}>
           <ClipboardCopy /> Copy
         </Button>
         <Button variant="ghost" size="sm" onClick={() => take.run(request, false)} disabled={take.pending} title="Dismiss without copying">

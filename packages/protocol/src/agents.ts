@@ -118,6 +118,11 @@ export function changePromptsFit(prompt: string, parts: readonly ChangePart[]): 
 }
 export const CHANGE_PROMPTS_TOO_LONG = `a part's prompt with its note is at most ${TASK_PROMPT_MAX} characters`;
 
+/** A character the UI does not show but a model reads or a paste carries (`visibleText`). */
+function hasInvisibleCharacter(text: string): boolean {
+  return /[\p{Cf}\p{Co}\u2028\u2029]/u.test(text);
+}
+
 /**
  * Text from an agent that a person reads before a decision or that reaches another agent (a task proposal, a summary,
  * ADR-39): without characters the UI does not show but a model reads (format characters, including the tags
@@ -129,7 +134,7 @@ export const CHANGE_PROMPTS_TOO_LONG = `a part's prompt with its note is at most
 export function visibleText(text: z.ZodString): z.ZodString {
   // `refine` instead of `regex`: the pattern would go into the MCP tool's JSON Schema, and a client that compiles it
   // without the `u` flag would read `\p{Cf}` as plain letters and reject ordinary text.
-  return text.refine((value) => !/[\p{Cf}\p{Co}\u2028\u2029]/u.test(value), {
+  return text.refine((value) => !hasInvisibleCharacter(value), {
     message: "the text must not contain invisible characters (format or private-use characters, line separators)",
   });
 }
@@ -335,7 +340,7 @@ export const COPY_TEXT_MAX = 10_000;
  * private use, line separators, as in `visibleText`), so the user pastes what they read.
  */
 export function copyableText(text: string): boolean {
-  return !/[^\P{Cc}\n\r\t]|[\p{Cf}\p{Co}\u2028\u2029]/u.test(text);
+  return !/[^\P{Cc}\n\r\t]/u.test(text) && !hasInvisibleCharacter(text);
 }
 
 export const CopyText = z

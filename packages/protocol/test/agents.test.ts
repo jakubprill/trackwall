@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { agentsApi, REJECTION_REASON_MAX, TaskPrompt, TaskTitle, visibleText } from "../src/agents.ts";
+import { agentsApi, copyableText, REJECTION_REASON_MAX, TaskPrompt, TaskTitle, visibleText } from "../src/agents.ts";
 
 describe("text from an agent", () => {
   test("a task title is one line without control characters", () => {
@@ -32,5 +32,21 @@ describe("rejecting a task proposal", () => {
   test(`a reason longer than ${REJECTION_REASON_MAX} characters is refused`, () => {
     const request = { proposal: "11111111-1111-4111-8111-111111111111", reason: "x".repeat(REJECTION_REASON_MAX + 1) };
     expect(agentsApi.rejectProposal.request.safeParse(request).success).toBe(false);
+  });
+});
+
+describe("text an agent may put on the clipboard (ADR-180)", () => {
+  test("line breaks and tabs pass, so a command or a snippet copies as it is", () => {
+    expect(copyableText("cd orders\r\n\tmvn verify")).toBe(true);
+    expect(copyableText("zażółć gęślą jaźń")).toBe(true);
+  });
+
+  test("an escape sequence, DEL, a C1 control or an invisible character is refused, so a paste carries only what the user read", () => {
+    // ESC [ 2 0 1 ~ ends a bracketed paste in a terminal, and the rest of the paste would run as typed keys.
+    expect(copyableText("ls\u001b[201~rm -rf ~")).toBe(false);
+    expect(copyableText("ls\u007f")).toBe(false);
+    expect(copyableText(`ls${String.fromCodePoint(0x9b)}2J`)).toBe(false);
+    expect(copyableText(`ls${String.fromCodePoint(0x202e)}rm`)).toBe(false);
+    expect(copyableText(`ls${String.fromCodePoint(0x2028)}rm`)).toBe(false);
   });
 });

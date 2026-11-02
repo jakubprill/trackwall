@@ -1,6 +1,6 @@
 import "@xterm/xterm/css/xterm.css";
 import { isTauri } from "@tauri-apps/api/core";
-import { PTY_CLOSE_NOT_FOUND, type PtyClientMessage, ptySocket } from "@trackwall/protocol";
+import { copyableText, PTY_CLOSE_NOT_FOUND, type PtyClientMessage, ptySocket } from "@trackwall/protocol";
 import { FitAddon } from "@xterm/addon-fit";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { Terminal } from "@xterm/xterm";
@@ -36,6 +36,7 @@ import { FocusReporter, terminalInFront } from "@/lib/window-focus";
 const RECONNECT_MS = 1000;
 const KEYS_DROPPED = "The terminal was still connecting to the session, so some of the keys you typed were dropped.";
 const COPY_FAILED = "Could not copy to the clipboard; try again.";
+const COPY_REFUSED = "Not copied: the text holds control or invisible characters that would go into a paste unseen.";
 /** OSC 52: the program sets the clipboard (`osc52Text`). */
 const OSC_CLIPBOARD = 52;
 /** A screen image that comes sooner than this needs no word about it; the label would only flash. */
@@ -126,7 +127,10 @@ export function SessionTerminal({
     element.addEventListener("pointerdown", noteClick, { capture: true });
     const copyHandler = terminal.parser.registerOscHandler(OSC_CLIPBOARD, (data) => {
       const text = osc52Text(data);
-      if (text !== undefined && programCopy.take(performance.now())) copyText(text).catch(() => setNotice(COPY_FAILED));
+      if (text === undefined || !programCopy.take(performance.now())) return true;
+      // The rule of `copy_to_clipboard` (ADR-180): no escape sequence or invisible character goes into a paste.
+      if (copyableText(text)) copyText(text).catch(() => setNotice(COPY_FAILED));
+      else setNotice(COPY_REFUSED);
       return true;
     });
     fit.fit();

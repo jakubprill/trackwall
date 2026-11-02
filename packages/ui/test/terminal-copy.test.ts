@@ -70,13 +70,6 @@ describe("copying what Copilot CLI selected itself (OSC 52)", () => {
     expect(osc52Text(`c;${Buffer.from([0xff, 0xfe]).toString("base64")}`)).toBeUndefined();
   });
 
-  test("text with an escape sequence or an invisible character copies nothing, as for copy_to_clipboard", () => {
-    // ESC [ 2 0 1 ~ ends a bracketed paste in a terminal, and the rest of the paste would run as typed keys.
-    expect(osc52Text(`c;${Buffer.from("ls\u001b[201~rm -rf ~").toString("base64")}`)).toBeUndefined();
-    expect(osc52Text(`c;${Buffer.from(`ls${String.fromCodePoint(0x202e)}rm`).toString("base64")}`)).toBeUndefined();
-    expect(osc52Text(`c;${Buffer.from("cd orders\r\n\tmvn verify").toString("base64")}`)).toBe("cd orders\r\n\tmvn verify");
-  });
-
   test("a trailing semicolon after the payload does not lose the copy", () => {
     expect(osc52Text(`c;${Buffer.from("text").toString("base64")};`)).toBe("text");
   });

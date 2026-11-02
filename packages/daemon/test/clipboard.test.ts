@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Client } from "@modelcontextprotocol/client";
 import { agentsApi, CopyToClipboardResult, ListSessionsResult } from "@trackwall/protocol";
-import { waitFor } from "./support/agents.ts";
+import { OscParser } from "../src/modules/agents/osc-parser.ts";
+import { viewer, waitFor } from "./support/agents.ts";
 import { connectHttpClient, connectSessionClient } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
@@ -100,6 +101,28 @@ describe.skipIf(process.versions.bun === undefined)("copy_to_clipboard (real PTY
     expect(JSON.stringify(withEscape.content)).toContain("control characters other than line breaks and tabs, nor invisible characters");
     expect(hidden.isError).toBe(true);
     expect(copyRequestOf(main.id)).toBeNull();
+    await daemon.facade.agents.stop(main.id);
+  });
+});
+
+describe.skipIf(process.versions.bun === undefined)("/copy in the session terminal (real PTY, fake Copilot CLI)", () => {
+  test("Enter on /copy sends the last answer as OSC 52 to the terminal, which copies it", async () => {
+    const main = await mainSession();
+    const window = viewer(daemon.facade.agents, main.id);
+    window.attachment.input("what is in this repo?\r");
+    await waitFor(daemon.facade.agents, main.id, (s) => s.state?.state === "Approval", "the approval request");
+    window.attachment.input("1");
+    await waitFor(daemon.facade.agents, main.id, (s) => s.state?.reason === "hook agentStop", "the end of the turn");
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    // The fake keeps Copilot CLI's /copy (the contract test); the screen the session terminal reads on Enter
+    // (`entersCopyCommand`) is the contract test's, since the fake echoes keys under its input box, not in it.
+    window.attachment.input("/copy\r");
+    const copies = () => new OscParser().feed(window.text()).filter((osc) => osc.code === "52");
+    await waitFor(daemon.facade.agents, main.id, () => copies().length > 0, "the OSC 52 copy");
+
+    expect(copies().map((osc) => osc.data)).toEqual([`c;${Buffer.from("Thinking about: what is in this repo?").toString("base64")}`]);
+    window.attachment.detach();
     await daemon.facade.agents.stop(main.id);
   });
 });
