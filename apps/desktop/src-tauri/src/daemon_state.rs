@@ -96,7 +96,7 @@ impl DaemonState {
                 // A remote daemon restarted on the same port answers health but no longer takes the saved token.
                 let alive = match self.remote.get() {
                     Some(remote) => daemon::connect_remote(remote).is_ok(),
-                    None => daemon::health(conn.port).as_deref() == Some(daemon::VERSION),
+                    None => daemon::health(conn.port, conn.reach).as_deref() == Some(daemon::VERSION),
                 };
                 if alive {
                     return false;
@@ -234,7 +234,7 @@ mod tests {
 
     fn ready(port: u16) -> DaemonState {
         let state = DaemonState::new(no_home());
-        *state.lock() = Phase::Ready(Connection { base_url: format!("http://127.0.0.1:{port}"), token: "secret".into(), port });
+        *state.lock() = Phase::Ready(Connection::new(port, "secret", daemon::Reach::Local));
         state
     }
 
@@ -372,7 +372,7 @@ mod tests {
         let port = rejecting_daemon();
         let state = Arc::new(DaemonState::new(no_home()));
         state.use_remote(remote(port, "old"));
-        *state.lock() = Phase::Ready(Connection { base_url: format!("http://127.0.0.1:{port}"), token: "old".into(), port });
+        *state.lock() = Phase::Ready(Connection::new(port, "old", daemon::Reach::Remote));
 
         state.restart_if_down();
 
@@ -384,7 +384,7 @@ mod tests {
         let port = rejecting_daemon();
         let state = Arc::new(DaemonState::new(no_home()));
         state.use_remote(remote(port, "old"));
-        let conn = Connection { base_url: format!("http://127.0.0.1:{port}"), token: "old".into(), port };
+        let conn = Connection::new(port, "old", daemon::Reach::Remote);
         *state.lock() = Phase::Ready(conn.clone());
 
         assert_eq!(daemon::sessions(&conn), Err(daemon::SessionsError::TokenRefused));
@@ -399,11 +399,49 @@ mod tests {
         let (port, _rx) = fake_daemon();
         let state = Arc::new(DaemonState::new(no_home()));
         state.use_remote(remote(port, "secret"));
-        *state.lock() = Phase::Ready(Connection { base_url: format!("http://127.0.0.1:{port}"), token: "secret".into(), port });
+        *state.lock() = Phase::Ready(Connection::new(port, "secret", daemon::Reach::Remote));
 
         assert!(!state.token_refused());
 
         assert!(state.ready().is_some());
+    }
+
+    /// Like `fake_daemon`, but every answer waits `delay` first, as a port forwarded by VS Code's Dev Containers does while
+    /// it starts a `docker exec` for the connection (#330).
+    fn slow_daemon(delay: std::time::Duration) -> u16 {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind 127.0.0.1:0");
+        let port = listener.local_addr().expect("listening address").port();
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().flatten() {
+                std::thread::spawn(move || {
+                    let mut buf = [0u8; 4096];
+                    let _ = stream.read(&mut buf);
+                    std::thread::sleep(delay);
+                    let body = format!(r#"{{"ok":true,"data":{{"version":"{}"}}}}"#, daemon::VERSION);
+                    let _ = stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}", body.len()).as_bytes());
+                });
+            }
+        });
+        port
+    }
+
+    #[test]
+    fn a_remote_daemon_whose_forwarded_port_takes_seconds_to_answer_stays_connected() {
+        let port = slow_daemon(std::time::Duration::from_millis(2500));
+        let state = Arc::new(DaemonState::new(no_home()));
+        state.use_remote(remote(port, "secret"));
+        *state.lock() = Phase::Ready(Connection::new(port, "secret", daemon::Reach::Remote));
+
+        assert!(!state.restart_if_down());
+
+        assert!(state.ready().is_some());
+    }
+
+    #[test]
+    fn the_apps_own_daemon_that_does_not_answer_in_one_and_a_half_seconds_counts_as_down() {
+        let port = slow_daemon(std::time::Duration::from_millis(2500));
+
+        assert_eq!(daemon::health(port, daemon::Reach::Local), None);
     }
 
     #[test]

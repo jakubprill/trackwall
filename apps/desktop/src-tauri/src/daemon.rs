@@ -20,7 +20,25 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// A generous limit: the first launch of an unsigned binary can be scanned by an antivirus for a long time (§9).
 const START_TIMEOUT: Duration = Duration::from_secs(60);
 const STOP_TIMEOUT: Duration = Duration::from_secs(10);
-const IO_TIMEOUT: Duration = Duration::from_millis(1500);
+
+/// Where the daemon is, which sets how long a request to it may take (ADR-183).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Reach {
+    /// The app's own sidecar on this computer: a connection opens at once, so a short limit tells a dead daemon quickly.
+    Local,
+    /// A daemon in a container behind a forwarded port (ADR-130): VS Code's forward starts a `docker exec` for every new
+    /// connection, which takes seconds on a busy Windows machine whose security software checks each process start.
+    Remote,
+}
+
+impl Reach {
+    fn timeout(self) -> Duration {
+        match self {
+            Reach::Local => Duration::from_millis(1500),
+            Reach::Remote => Duration::from_secs(10),
+        }
+    }
+}
 
 /// The fields of `daemon.json` the shell needs; the version is checked through `/api/health`, not from the file.
 #[derive(Debug, Clone, Deserialize)]
@@ -38,11 +56,19 @@ pub struct Connection {
     pub token: String,
     #[serde(skip)]
     pub port: u16,
+    #[serde(skip)]
+    pub reach: Reach,
+}
+
+impl Connection {
+    pub fn new(port: u16, token: &str, reach: Reach) -> Self {
+        Connection { base_url: format!("http://127.0.0.1:{port}"), token: token.to_owned(), port, reach }
+    }
 }
 
 impl From<&DaemonFile> for Connection {
     fn from(f: &DaemonFile) -> Self {
-        Connection { base_url: format!("http://127.0.0.1:{}", f.port), token: f.token.clone(), port: f.port }
+        Connection::new(f.port, &f.token, Reach::Local)
     }
 }
 
@@ -64,7 +90,7 @@ pub fn trackwall_home() -> Result<PathBuf, String> {
 
 /// A running daemon of the same version described by `daemon.json`.
 pub fn discover(home: &Path) -> Option<Connection> {
-    read_daemon_file(home).filter(|f| health(f.port).as_deref() == Some(VERSION)).map(|f| Connection::from(&f))
+    read_daemon_file(home).filter(|f| health(f.port, Reach::Local).as_deref() == Some(VERSION)).map(|f| Connection::from(&f))
 }
 
 pub fn read_daemon_file(home: &Path) -> Option<DaemonFile> {
@@ -73,8 +99,8 @@ pub fn read_daemon_file(home: &Path) -> Option<DaemonFile> {
 }
 
 /// The version from `GET /api/health`, or `None` when nobody answers.
-pub fn health(port: u16) -> Option<String> {
-    let (status, body) = http(port, "GET", "/api/health", None).ok()?;
+pub fn health(port: u16, reach: Reach) -> Option<String> {
+    let (status, body) = http(port, reach, "GET", "/api/health", None).ok()?;
     if status != 200 {
         return None;
     }
@@ -89,7 +115,7 @@ pub fn health(port: u16) -> Option<String> {
 /// `cancel` stops the waiting and kills a started sidecar that does not answer yet (exit during startup).
 pub fn ensure_daemon(home: &Path, cancel: &AtomicBool) -> Result<Connection, String> {
     if let Some(existing) = read_daemon_file(home) {
-        match health(existing.port) {
+        match health(existing.port, Reach::Local) {
             Some(v) if v == VERSION => return Ok(Connection::from(&existing)),
             Some(v) => {
                 return Err(format!(
@@ -118,7 +144,7 @@ pub fn ensure_daemon(home: &Path, cancel: &AtomicBool) -> Result<Connection, Str
             return Err(format!("The daemon exited during startup ({status}).\n\n{}", log_tail(&log_path)));
         }
         if let Some(f) = read_daemon_file(home).filter(|f| f.pid == child.id()) {
-            if health(f.port).as_deref() == Some(VERSION) {
+            if health(f.port, Reach::Local).as_deref() == Some(VERSION) {
                 return Ok(Connection::from(&f));
             }
         }
@@ -150,7 +176,7 @@ const DAEMON_INFO_PATH: &str = "/api/daemon/info";
 /// Checks a remote daemon (ADR-130): it answers, has this app's version and accepts the token.
 pub fn connect_remote(remote: &RemoteDaemon) -> Result<Connection, String> {
     let port = remote.port;
-    match health(port) {
+    match health(port, Reach::Remote) {
         None => {
             return Err(format!(
                 "No Trackwall daemon answers at 127.0.0.1:{port}. Start it (for example in its container), check that the \
@@ -165,8 +191,8 @@ pub fn connect_remote(remote: &RemoteDaemon) -> Result<Connection, String> {
         }
         Some(_) => {}
     }
-    match http(port, "GET", DAEMON_INFO_PATH, Some(&remote.token))? {
-        (200, _) => Ok(Connection { base_url: format!("http://127.0.0.1:{port}"), token: remote.token.clone(), port }),
+    match http(port, Reach::Remote, "GET", DAEMON_INFO_PATH, Some(&remote.token))? {
+        (200, _) => Ok(Connection::new(port, &remote.token, Reach::Remote)),
         (401, _) => Err(format!(
             "The daemon at 127.0.0.1:{port} did not accept the token: it gets a new one every time it starts. \
              Paste the address with its current token."
@@ -177,13 +203,13 @@ pub fn connect_remote(remote: &RemoteDaemon) -> Result<Connection, String> {
 
 /// Graceful stop: `POST /api/daemon/shutdown`, then waiting until health stops answering.
 pub fn shutdown(conn: &Connection) -> Result<(), String> {
-    let (status, body) = http(conn.port, "POST", "/api/daemon/shutdown", Some(&conn.token))?;
+    let (status, body) = http(conn.port, conn.reach, "POST", "/api/daemon/shutdown", Some(&conn.token))?;
     if status != 200 {
         return Err(format!("shutdown returned {status}: {body}"));
     }
     let deadline = Instant::now() + STOP_TIMEOUT;
     while Instant::now() < deadline {
-        if health(conn.port).is_none() {
+        if health(conn.port, conn.reach).is_none() {
             return Ok(());
         }
         std::thread::sleep(Duration::from_millis(100));
@@ -201,7 +227,7 @@ pub enum SessionsError {
 
 /// The body of the `POST /api/agents/sessions` reply (the list of Copilot CLI sessions, ADR-26).
 pub fn sessions(conn: &Connection) -> Result<String, SessionsError> {
-    let (status, body) = http(conn.port, "POST", "/api/agents/sessions", Some(&conn.token)).map_err(SessionsError::Failed)?;
+    let (status, body) = http(conn.port, conn.reach, "POST", "/api/agents/sessions", Some(&conn.token)).map_err(SessionsError::Failed)?;
     match status {
         200 => Ok(body),
         401 => Err(SessionsError::TokenRefused),
@@ -211,7 +237,7 @@ pub fn sessions(conn: &Connection) -> Result<String, SessionsError> {
 
 /// The body of the `POST /api/task-outcomes/list` reply (what each task's work came to, ADR-154).
 pub fn task_outcomes(conn: &Connection) -> Result<String, String> {
-    let (status, body) = http(conn.port, "POST", "/api/task-outcomes/list", Some(&conn.token))?;
+    let (status, body) = http(conn.port, conn.reach, "POST", "/api/task-outcomes/list", Some(&conn.token))?;
     if status != 200 {
         return Err(format!("task outcomes returned {status}"));
     }
@@ -278,12 +304,14 @@ fn log_tail(path: &Path) -> String {
     }
 }
 
-/// A minimal HTTP/1.1 client for the daemon on 127.0.0.1: `Connection: close`, the response read to the end.
-fn http(port: u16, method: &str, path: &str, token: Option<&str>) -> Result<(u16, String), String> {
+/// A minimal HTTP/1.1 client for the daemon on 127.0.0.1: `Connection: close`, the response read to the end, each step
+/// within the limit of `reach`.
+fn http(port: u16, reach: Reach, method: &str, path: &str, token: Option<&str>) -> Result<(u16, String), String> {
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    let mut stream = TcpStream::connect_timeout(&addr, IO_TIMEOUT).map_err(|e| e.to_string())?;
-    stream.set_read_timeout(Some(IO_TIMEOUT)).map_err(|e| e.to_string())?;
-    stream.set_write_timeout(Some(IO_TIMEOUT)).map_err(|e| e.to_string())?;
+    let timeout = reach.timeout();
+    let mut stream = TcpStream::connect_timeout(&addr, timeout).map_err(|e| e.to_string())?;
+    stream.set_read_timeout(Some(timeout)).map_err(|e| e.to_string())?;
+    stream.set_write_timeout(Some(timeout)).map_err(|e| e.to_string())?;
     let auth = token.map(|t| format!("Authorization: Bearer {t}\r\n")).unwrap_or_default();
     let req = format!("{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{auth}Content-Length: 0\r\nConnection: close\r\n\r\n");
     stream.write_all(req.as_bytes()).map_err(|e| e.to_string())?;
@@ -350,7 +378,7 @@ mod tests {
 
     #[test]
     fn connection_serializes_without_port() {
-        let c = Connection { base_url: "http://127.0.0.1:1".into(), token: "t".into(), port: 1 };
+        let c = Connection::new(1, "t", Reach::Local);
         assert_eq!(serde_json::to_string(&c).unwrap(), r#"{"baseUrl":"http://127.0.0.1:1","token":"t"}"#);
     }
 }
