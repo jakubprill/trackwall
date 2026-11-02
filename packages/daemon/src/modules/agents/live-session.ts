@@ -580,9 +580,12 @@ export class LiveSession implements AgentSession {
     } else if (event !== "notification") this.#earlyAnswers = 0;
   }
 
-  /** Until the session has a state, its screen may show the input box of a new session (ADR-69). */
+  /**
+   * Until the first hook, the screen may show the folder trust dialog, and until the session has a state, or after that
+   * dialog, the input box of a new session (ADR-69).
+   */
   #readPromptBox(): void {
-    if (this.#last === null) this.#report(this.#state.screen(() => this.#screen.lines()));
+    if (this.#state.screenSpeaks) this.#report(this.#state.screen(() => this.#screen.lines()));
   }
 
   #report(changes: readonly (TaskStateChange | undefined)[]): void {
