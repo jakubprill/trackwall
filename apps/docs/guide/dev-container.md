@@ -60,7 +60,7 @@ A `.devcontainer/devcontainer.json` that keeps the repos, Trackwall's state, the
 
 ## Start Trackwall
 
-Rebuild the container ("Dev Containers: Rebuild Container" in VS Code). From then on Trackwall starts with the container, on port 7700, and starts again by itself if it crashes. Then, in a terminal of the container:
+Rebuild the container ("Dev Containers: Rebuild Container" in VS Code). From then on Trackwall starts with the container, on port 7700, and starts again by itself if it crashes. From 0.5.17 it starts also when the container starts without VS Code, for example after `docker restart` or from Docker or Rancher Desktop; with 0.5.16 and older, run `trackwall-container start` in the container then. Trackwall then starts before VS Code connects, so keep its settings, such as `TRACKWALL_HOME` and a proxy, in `containerEnv`, not `remoteEnv`. A Docker Compose dev container started with `docker compose up` instead of VS Code does not start Trackwall by itself. Then, in a terminal of the container:
 
 1. Install [mise](https://mise.jdx.dev/getting-started.html) as its guide describes, then Copilot CLI with it: `mise use -g node@22 npm:@github/copilot`. Trackwall finds tools installed with mise without further setup.
 2. Point Trackwall at the repos: in Settings › Workspace choose `/workspaces`, or run `echo "projectsDir: /workspaces" > ~/.trackwall/workspace.yaml` before the first start.

@@ -32,6 +32,13 @@ describe("the Dev Container Feature (ADR-164)", () => {
     expect(files.install).not.toMatch(/@[A-Z0-9_]+@/);
   });
 
+  test("starts Trackwall at every start of the container, not only when VS Code runs postStartCommand", () => {
+    const files = featureFiles(templates, values);
+    expect(JSON.parse(files.json).entrypoint).toBe("/usr/local/share/trackwall/entrypoint.sh");
+    expect(files.install).toContain("cat > /usr/local/share/trackwall/entrypoint.sh << 'ENTRYPOINT'");
+    expect(files.install).toContain('/usr/local/bin/trackwall-container start > /dev/null &\nexec "$@"\n');
+  });
+
   test("runs the container with an init process, so the stopped sessions' orphans are reaped and their group counts as stopped", () => {
     expect(JSON.parse(featureFiles(templates, values).json).init).toBe(true);
   });

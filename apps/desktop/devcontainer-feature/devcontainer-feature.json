@@ -12,5 +12,6 @@
     }
   },
   "init": true,
+  "entrypoint": "/usr/local/share/trackwall/entrypoint.sh",
   "postStartCommand": "trackwall-container start"
 }
