@@ -223,7 +223,7 @@ export class HttpIndex {
       () => (host ? this.byAlias(host, client, base) : []),
       () => (label && !local ? this.byApp(from, label, client, base) : []),
       () => (label && !local ? this.byRepoName(label, client, base) : []),
-      () => (local && port !== null ? this.byPort(port, client, base) : []),
+      () => (local && port !== null ? this.byPort(from, port, client, base) : []),
     ];
     for (const attempt of attempts) {
       const found = attempt();
@@ -270,15 +270,33 @@ export class HttpIndex {
     }));
   }
 
-  private byPort(port: number, client: ConsumedHttp, base: string): HttpTarget[] {
-    return (this.ports.get(port) ?? []).map(({ repo, app }) => ({
-      repo,
-      basis: "port",
-      confidence: "medium",
-      key: `localhost:${port}`,
-      evidence: [appEvidence(repo, app)],
-      calls: this.match(repo, client, base, app.name),
-    }));
+  /**
+   * The repos whose app runs on the `localhost` port. Spring's default 8080 is often the port of apps in several repos,
+   * and then the port alone says nothing: the targets are only the repos among them whose endpoints match the client's
+   * calls, or that have no endpoints on their card to say (like `bySpecNames`), and a client without calls gets none.
+   * Confidence is counted from other repos, like `byApp`: `medium` for one whose endpoints match, otherwise `low`.
+   */
+  private byPort(from: string, port: number, client: ConsumedHttp, base: string): HttpTarget[] {
+    const apps = this.ports.get(port) ?? [];
+    const targets = apps.map(
+      ({ repo, app }): HttpTarget => ({
+        repo,
+        basis: "port",
+        confidence: "medium",
+        key: `localhost:${port}`,
+        evidence: [appEvidence(repo, app)],
+        calls: this.match(repo, client, base, app.name),
+      }),
+    );
+    if (this.reposOnPort(port) <= 1) return targets;
+    const kept = targets.filter((t) => t.calls.length > 0 || (client.calls.length > 0 && !this.endpointsByRepo.has(t.repo)));
+    const others = new Set(kept.filter((t) => t.repo !== from).map((t) => t.repo));
+    return kept.map((t) => ({ ...t, confidence: others.size === 1 && t.calls.length > 0 ? "medium" : "low" }));
+  }
+
+  /** How many repos have an app on the `localhost` port: with more than one the port alone names none of them. */
+  reposOnPort(port: number): number {
+    return new Set((this.ports.get(port) ?? []).map((a) => a.repo)).size;
   }
 
   /**
@@ -337,7 +355,7 @@ export class HttpIndex {
     ]);
     if (local && url?.port != null) {
       const port = url.port;
-      attempts.push(() => this.byPort(port, client, base));
+      attempts.push(() => this.byPort(from, port, client, base));
     }
     for (const attempt of attempts) {
       const found = attempt().filter((t) => client.calls.length === 0 || t.calls.length > 0 || !this.endpointsByRepo.has(t.repo));
