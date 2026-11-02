@@ -658,7 +658,10 @@ describe("a task in Copilot CLI's sandbox with the real Copilot CLI (ADR-181)", 
       });
 
       // What the sandbox answered goes back to the model; a refusal there says what the system is missing.
-      const answers = model.requests().slice(-3).flatMap((r) => r.toolResults);
+      const answers = model
+        .requests()
+        .slice(-3)
+        .flatMap((r) => r.toolResults);
       expect({ inside: existsSync(join(task.worktree, "inside.txt")), answers }).toMatchObject({ inside: true });
       expect(spawnSync("git", ["log", "-1", "--format=%s"], { cwd: task.worktree, encoding: "utf8" }).stdout.trim()).toBe("sandboxed");
       // The repo's whole git directory is granted for the worktree's commits, hooks and config with it: a gap in §8,
