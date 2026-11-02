@@ -32,7 +32,7 @@ export type MergeRequestDraftText = Pick<MergeRequestForm, "title" | "descriptio
  * can try the change the same way. A part of a change starts with its change block (ADR-172), which a long summary is
  * cut to make room for, so the reviewer always sees the other repos.
  */
-export function mergeRequestDraft(task: Task, verification: Verification | null, changeBlock = ""): MergeRequestDraftText {
+export function mergeRequestDraft(task: Task, verification: Verification | null, changeBlock: string | null): MergeRequestDraftText {
   const title = (task.title ?? task.prompt.split("\n", 1)[0] ?? "").trim();
   const body = (task.summary?.text ?? task.prompt).trim();
   const checks = task.summary && task.summary.checkSteps.length > 0 ? `\n\n${checkStepsSection(task.summary.checkSteps)}` : "";
@@ -43,8 +43,8 @@ export function mergeRequestDraft(task: Task, verification: Verification | null,
   };
 }
 
-function withBlock(block: string, rest: string): string {
-  if (block === "") return cut(rest, MERGE_REQUEST_DESCRIPTION_MAX);
+function withBlock(block: string | null, rest: string): string {
+  if (block === null) return cut(rest, MERGE_REQUEST_DESCRIPTION_MAX);
   const separator = "\n\n";
   const room = MERGE_REQUEST_DESCRIPTION_MAX - block.length - separator.length;
   // Six parts with long addresses still leave room; a block that does not is cut like any text.

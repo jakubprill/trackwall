@@ -7,13 +7,18 @@ import type { StatusTone } from "./repo-status.ts";
  * The merge requests of a change (ADR-171, ADR-172) as one piece of work: its parts in their merge order, each with the
  * merge request the daemon follows from its branch, the change block a part's merge request description starts with,
  * the same list for a comment on the merge requests opened earlier, and the note that says what to merge first. Only
- * the parts still on the task list are known: a part that ended is no longer listed. Trackwall writes nothing to the
+ * the parts still on the task list are known: a part that ended is no longer listed (§4.4). Trackwall writes nothing to the
  * repo host (ADR-77): the user pastes the list. No React here, so the wording is tested on its own.
  */
 
-/** One part of a change: its task and the merge request from its branch, `null` before one was found. */
+/** What a part of a change shows while it has no merge request, in the panel and in the Markdown list alike. */
+export const NO_MERGE_REQUEST_YET = "no merge request yet";
+
+/** One part of a change: its task, its number in the merge order counted from 1, and the merge request from its branch. */
 export interface ChangePart {
   task: Task;
+  number: number;
+  /** `null` before one was found. */
   mergeRequest: FollowedMergeRequest | null;
 }
 
@@ -21,57 +26,57 @@ export interface ChangePart {
 export function changePartsOf(task: Task, tasks: readonly Task[], outcomes: ReadonlyMap<string, TaskOutcome>): ChangePart[] | null {
   const change = task.change;
   if (!change) return null;
-  const listed = tasks.filter((t) => t.id !== task.id && t.change?.id === change.id);
-  return [task, ...listed]
-    .sort((a, b) => (a.change?.position ?? 0) - (b.change?.position ?? 0))
-    .map((part) => ({ task: part, mergeRequest: outcomes.get(part.id)?.mergeRequest ?? null }));
-}
-
-/** The number a part has in the merge order, counted from 1 as the user reads it. */
-export function partNumber(task: Task): number {
-  return (task.change?.position ?? 0) + 1;
+  return [task, ...tasks.filter((t) => t.id !== task.id)]
+    .flatMap((t) => (t.change?.id === change.id ? [{ task: t, number: t.change.position + 1 }] : []))
+    .sort((a, b) => a.number - b.number)
+    .map((part) => ({ ...part, mergeRequest: outcomes.get(part.task.id)?.mergeRequest ?? null }));
 }
 
 /**
- * The parts as a numbered Markdown list in their merge order, which GitLab and GitHub both render: each repo with a link
- * to its merge request and the merge request's state. `current` is the part whose merge request the list goes into, and
- * it says "this merge request" instead of a link, which does not exist yet.
+ * The parts as a Markdown list in their merge order, each with its number as text: a numbered list would be numbered
+ * again by the repo host and lose the gap a part that ended leaves. `current` is the part whose merge request the list
+ * goes into, which says "this merge request" instead of a link, since that does not exist yet.
  */
-function orderList(parts: readonly ChangePart[], current: Task | null): string {
+function orderList(parts: readonly ChangePart[], current: ChangePart | null): string {
   return parts
-    .map(({ task, mergeRequest }) => {
-      const what = task.id === current?.id ? "this merge request" : mergeRequestLink(mergeRequest);
-      return `${partNumber(task)}. \`${task.repo}\`: ${what}`;
+    .map((part) => {
+      const what = part.task.id === current?.task.id ? "this merge request" : mergeRequestLink(part.mergeRequest);
+      return `- Part ${part.number}, \`${part.task.repo}\`: ${what}`;
     })
     .join("\n");
 }
 
 /** `[group/payments!12](url) (open)`, or that the part has none yet. */
 function mergeRequestLink(mergeRequest: FollowedMergeRequest | null): string {
-  if (!mergeRequest) return "no merge request yet";
+  if (!mergeRequest) return NO_MERGE_REQUEST_YET;
   const name = `${mergeRequest.project.path}${mergeRequestNumber(mergeRequest.project, mergeRequest.number)}`;
-  return `[${name}](${mergeRequest.url}) (${mergeRequestStateLabel(mergeRequest.state).label})`;
+  return `[${name}](${markdownUrl(mergeRequest.url)}) (${mergeRequestStateLabel(mergeRequest.state).label})`;
+}
+
+/** The repo host's address, with what would end a Markdown link's target encoded. */
+function markdownUrl(url: string): string {
+  return url.replace(/[()<> ]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
 }
 
 /**
  * The block a part's merge request description starts with, so the reviewer of each repo sees the others and the order
- * to merge them in. Empty for a task that is no part of a change.
+ * to merge them in. `null` for a task that is no part of a change.
  */
-export function changeBlock(task: Task, parts: readonly ChangePart[] | null): string {
-  if (!parts) return "";
+export function changeBlock(task: Task, parts: readonly ChangePart[] | null): string | null {
+  const current = parts?.find((part) => part.task.id === task.id);
+  if (!parts || !current) return null;
   return [
-    `This merge request is part ${partNumber(task)} of a change across several repos, all on the branch \`${task.branch}\`. Merge in this order:`,
-    orderList(parts, task),
+    `This merge request is part ${current.number} of a change across several repos, all on the branch \`${task.branch}\`. Merge in this order:`,
+    orderList(parts, current),
   ].join("\n\n");
 }
 
 /**
  * The same list for a comment on the merge requests opened before the others existed, which "Copy links" puts on the
- * clipboard: the user pastes it, since Trackwall writes nothing to the repo host.
+ * clipboard: the user pastes it, since Trackwall writes nothing to the repo host. Every part shares the task's branch.
  */
-export function changeLinks(parts: readonly ChangePart[]): string {
-  const branch = parts[0]?.task.branch ?? "";
-  return [`Part of a change across several repos, all on the branch \`${branch}\`. Merge in this order:`, orderList(parts, null)].join(
+export function changeLinks(task: Task, parts: readonly ChangePart[]): string {
+  return [`Part of a change across several repos, all on the branch \`${task.branch}\`. Merge in this order:`, orderList(parts, null)].join(
     "\n\n",
   );
 }
@@ -86,10 +91,9 @@ function merged(part: ChangePart): boolean {
  * repos may not work together until that one is; a reminder of the earlier parts while it waits. Nothing once every
  * earlier part is merged, and nothing to enforce: the user merges on the repo host (ADR-9).
  */
-export function mergeOrderNote(task: Task, parts: readonly ChangePart[]): { tone?: StatusTone; text: string } | null {
-  const self = parts.find((part) => part.task.id === task.id);
-  const earlier = parts.filter((part) => partNumber(part.task) < partNumber(task) && !merged(part));
-  if (!self || earlier.length === 0) return null;
+export function mergeOrderNote(self: ChangePart, parts: readonly ChangePart[]): { tone?: StatusTone; text: string } | null {
+  const earlier = parts.filter((part) => part.number < self.number && !merged(part));
+  if (earlier.length === 0) return null;
   const names = earlier.map((part) => part.task.repo).join(", ");
   if (merged(self)) return { tone: "warning", text: `Merged before ${names}, which comes earlier in the change and is not merged yet.` };
   return { text: `Merge after ${names}, which comes earlier in the change.` };
@@ -106,7 +110,8 @@ export type PartPush = { repo: string } & ({ kind: "pushed" } | { kind: "nothing
 
 /**
  * "Push all parts": one part after another, each through the part's own Push, so every safeguard of that push holds.
- * A part with nothing to push is skipped rather than refused, and a failed part does not stop the others.
+ * A part with nothing to push is skipped rather than refused, and a failed part does not stop the others. One at a
+ * time, so the user's credentials helper asks at most once at a time and the summary follows the merge order.
  */
 export async function pushAllParts(
   parts: readonly ChangePart[],

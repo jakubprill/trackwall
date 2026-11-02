@@ -51,10 +51,11 @@ const shopWeb = part("t3", "shop-web", 2);
 const unrelated = part("t4", "docs", null);
 
 const parts = (states: { payments?: MergeRequestState; ordersApi?: MergeRequestState }): ChangePart[] => [
-  { task: payments, mergeRequest: states.payments ? mergeRequest("group/payments", 12, states.payments) : null },
-  { task: ordersApi, mergeRequest: states.ordersApi ? mergeRequest("group/orders-api", 7, states.ordersApi) : null },
-  { task: shopWeb, mergeRequest: null },
+  { task: payments, number: 1, mergeRequest: states.payments ? mergeRequest("group/payments", 12, states.payments) : null },
+  { task: ordersApi, number: 2, mergeRequest: states.ordersApi ? mergeRequest("group/orders-api", 7, states.ordersApi) : null },
+  { task: shopWeb, number: 3, mergeRequest: null },
 ];
+const [first, second] = parts({});
 
 describe("the parts of a change", () => {
   test("are the listed tasks of the same change in their merge order, each with the merge request the daemon follows", () => {
@@ -66,9 +67,9 @@ describe("the parts of a change", () => {
     };
 
     expect(changePartsOf(ordersApi, [shopWeb, unrelated, ordersApi, payments], new Map([["t1", outcome]]))).toEqual([
-      { task: payments, mergeRequest: mergeRequest("group/payments", 12, "open") },
-      { task: ordersApi, mergeRequest: null },
-      { task: shopWeb, mergeRequest: null },
+      { task: payments, number: 1, mergeRequest: mergeRequest("group/payments", 12, "open") },
+      { task: ordersApi, number: 2, mergeRequest: null },
+      { task: shopWeb, number: 3, mergeRequest: null },
     ]);
   });
 
@@ -81,45 +82,68 @@ describe("the change block of a merge request", () => {
   test("lists every repo in the merge order with its merge request, this one named as such", () => {
     expect(changeBlock(ordersApi, parts({ payments: "merged" }))).toBe(
       `This merge request is part 2 of a change across several repos, all on the branch \`${BRANCH}\`. Merge in this order:\n\n` +
-        "1. `payments`: [group/payments!12](https://gitlab.example.com/group/payments/-/merge_requests/12) (merged)\n" +
-        "2. `orders-api`: this merge request\n" +
-        "3. `shop-web`: no merge request yet",
+        "- Part 1, `payments`: [group/payments!12](https://gitlab.example.com/group/payments/-/merge_requests/12) (merged)\n" +
+        "- Part 2, `orders-api`: this merge request\n" +
+        "- Part 3, `shop-web`: no merge request yet",
     );
   });
 
+  test("keeps the numbers of the parts still listed, so a part that ended leaves a gap the repo host does not renumber", () => {
+    const listed = changePartsOf(shopWeb, [shopWeb, payments], new Map());
+
+    expect(changeBlock(shopWeb, listed)).toBe(
+      `This merge request is part 3 of a change across several repos, all on the branch \`${BRANCH}\`. Merge in this order:\n\n` +
+        "- Part 1, `payments`: no merge request yet\n" +
+        "- Part 3, `shop-web`: this merge request",
+    );
+  });
+
+  test("encodes what would end a link in the repo host's address", () => {
+    const odd = { ...mergeRequest("group/payments", 12, "open"), url: "https://git.example.com/a (b)/-/merge_requests/12" };
+
+    expect(
+      changeBlock(ordersApi, [
+        { task: payments, number: 1, mergeRequest: odd },
+        { task: ordersApi, number: 2, mergeRequest: null },
+      ]),
+    ).toContain("[group/payments!12](https://git.example.com/a%20%28b%29/-/merge_requests/12) (open)");
+  });
+
   test("is empty for a task that is no part of a change", () => {
-    expect(changeBlock(unrelated, null)).toBe("");
+    expect(changeBlock(unrelated, null)).toBeNull();
   });
 });
 
 describe("the links to copy", () => {
   test("list every part with its merge request, for a comment on the ones opened earlier", () => {
-    expect(changeLinks(parts({ payments: "open", ordersApi: "open" }))).toBe(
+    expect(changeLinks(payments, parts({ payments: "open", ordersApi: "open" }))).toBe(
       `Part of a change across several repos, all on the branch \`${BRANCH}\`. Merge in this order:\n\n` +
-        "1. `payments`: [group/payments!12](https://gitlab.example.com/group/payments/-/merge_requests/12) (open)\n" +
-        "2. `orders-api`: [group/orders-api!7](https://gitlab.example.com/group/orders-api/-/merge_requests/7) (open)\n" +
-        "3. `shop-web`: no merge request yet",
+        "- Part 1, `payments`: [group/payments!12](https://gitlab.example.com/group/payments/-/merge_requests/12) (open)\n" +
+        "- Part 2, `orders-api`: [group/orders-api!7](https://gitlab.example.com/group/orders-api/-/merge_requests/7) (open)\n" +
+        "- Part 3, `shop-web`: no merge request yet",
     );
   });
 });
 
 describe("the merge order note", () => {
   test("reminds a waiting part of the earlier parts that are not merged", () => {
-    expect(mergeOrderNote(ordersApi, parts({ payments: "open", ordersApi: "open" }))).toEqual({
+    const all = parts({ payments: "open", ordersApi: "open" });
+    expect(mergeOrderNote(all[1] as ChangePart, all)).toEqual({
       text: "Merge after payments, which comes earlier in the change.",
     });
   });
 
   test("warns once a part was merged before an earlier part", () => {
-    expect(mergeOrderNote(ordersApi, parts({ ordersApi: "merged" }))).toEqual({
+    const all = parts({ ordersApi: "merged" });
+    expect(mergeOrderNote(all[1] as ChangePart, all)).toEqual({
       tone: "warning",
       text: "Merged before payments, which comes earlier in the change and is not merged yet.",
     });
   });
 
   test("says nothing for the first part, or once every earlier part is merged", () => {
-    expect(mergeOrderNote(payments, parts({}))).toBeNull();
-    expect(mergeOrderNote(ordersApi, parts({ payments: "merged" }))).toBeNull();
+    expect(mergeOrderNote(first as ChangePart, parts({}))).toBeNull();
+    expect(mergeOrderNote(second as ChangePart, parts({ payments: "merged" }))).toBeNull();
   });
 });
 

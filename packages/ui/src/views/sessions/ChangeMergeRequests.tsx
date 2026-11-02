@@ -8,7 +8,7 @@ import {
   type ChangePart,
   changeLinks,
   mergeOrderNote,
-  partNumber,
+  NO_MERGE_REQUEST_YET,
   pushAllConsequence,
   pushAllParts,
   pushAllSummary,
@@ -49,10 +49,11 @@ export function ChangeMergeRequests({
       onPushed();
     },
   );
-  if (!parts) return null;
-  const note = mergeOrderNote(task, parts);
+  const self = parts?.find((part) => part.task.id === task.id);
+  if (!parts || !self) return null;
+  const note = mergeOrderNote(self, parts);
   const copy = () =>
-    copyText(changeLinks(parts)).then(
+    copyText(changeLinks(task, parts)).then(
       () => setCopied("Copied: paste it as a comment on the merge requests opened earlier."),
       () => setCopied("Could not copy to the clipboard."),
     );
@@ -64,7 +65,7 @@ export function ChangeMergeRequests({
     <section aria-label="Change" className="flex flex-col gap-2 border-b px-4 py-3">
       <div className="flex items-center gap-3">
         <span className="hud-label">Change</span>
-        <span className="text-muted-foreground flex-1 truncate text-xs">{`Part ${partNumber(task)} · merge in this order`}</span>
+        <span className="text-muted-foreground flex-1 truncate text-xs">{`Part ${self.number} · merge in this order`}</span>
         <Button variant="outline" size="sm" onClick={() => setConfirming(true)} disabled={pushAll.pending || confirming}>
           <Upload /> {pushAll.pending ? "Pushing…" : "Push all parts"}
         </Button>
@@ -93,16 +94,15 @@ export function ChangeMergeRequests({
         </div>
       )}
       {summary && <StatusLabel tone={summary.tone} label={summary.text} />}
-      {pushAll.error && <p className="text-destructive text-xs">{pushAll.error}</p>}
     </section>
   );
 }
 
 /** `1. payments  group/payments!12  merged`, the task's own part marked. */
-function PartRow({ part: { task, mergeRequest }, current }: { part: ChangePart; current: boolean }) {
+function PartRow({ part: { task, number, mergeRequest }, current }: { part: ChangePart; current: boolean }) {
   return (
     <li className="flex min-w-0 items-center gap-3" aria-current={current ? "true" : undefined}>
-      <span className="text-muted-foreground w-4 shrink-0 text-right">{partNumber(task)}.</span>
+      <span className="text-muted-foreground w-4 shrink-0 text-right">{number}.</span>
       <span className={current ? "truncate font-medium" : "truncate"}>{task.repo}</span>
       {mergeRequest ? (
         <span className="flex min-w-0 items-center gap-2" title={mergeRequest.url}>
@@ -110,7 +110,7 @@ function PartRow({ part: { task, mergeRequest }, current }: { part: ChangePart; 
           <StatusLabel {...mergeRequestStatus(mergeRequest)} />
         </span>
       ) : (
-        <span className="text-muted-foreground">no merge request yet</span>
+        <span className="text-muted-foreground">{NO_MERGE_REQUEST_YET}</span>
       )}
     </li>
   );
