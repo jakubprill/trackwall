@@ -1,4 +1,4 @@
-import type { ConversationEntry, WaitingMessage } from "@trackwall/protocol";
+import type { AttachmentLabel, ConversationEntry, WaitingMessage } from "@trackwall/protocol";
 import {
   Bot,
   Brain,
@@ -6,6 +6,7 @@ import {
   Clock,
   FileText,
   Globe,
+  Image,
   type LucideIcon,
   MessageSquare,
   Pencil,
@@ -64,14 +65,14 @@ export function ConversationEntries({
     <>
       {turns.map((turn, at) =>
         turn.kind === "user" ? (
-          <UserMessage key={turn.entry.id} text={turn.entry.text} />
+          <UserMessage key={turn.entry.id} text={turn.entry.text} attachments={turn.entry.attachments} />
         ) : (
           <AgentTurn key={turn.id} conn={conn} turn={turn} streaming={working && at === turns.length - 1} />
         ),
       )}
       {working && <Working />}
       {waiting.map((message) => (
-        <UserMessage key={message.id} text={message.text} waiting />
+        <UserMessage key={message.id} text={message.text} attachments={message.attachments} waiting />
       ))}
     </>
   );
@@ -88,8 +89,11 @@ function Speaker({ icon: Icon, name, align }: { icon: LucideIcon; name: string; 
   );
 }
 
-/** The user's message; a waiting one (written during a turn) is dashed until the turn ends and it goes. */
-function UserMessage({ text, waiting = false }: { text: string; waiting?: boolean }) {
+/**
+ * The user's message with the names of what it attached; a waiting one (written during a turn) is dashed until the turn
+ * ends and it goes.
+ */
+function UserMessage({ text, attachments, waiting = false }: { text: string; attachments: readonly AttachmentLabel[]; waiting?: boolean }) {
   return (
     <div className="flex max-w-3/4 flex-col items-end gap-1.5 self-end">
       <Speaker icon={User} name="You" align="end" />
@@ -102,6 +106,22 @@ function UserMessage({ text, waiting = false }: { text: string; waiting?: boolea
       >
         {text}
       </p>
+      {attachments.length > 0 && (
+        <ul aria-label="Attached" className="flex flex-wrap justify-end gap-1.5 text-xs">
+          {attachments.map((attachment, i) => {
+            const Icon = attachment.kind === "image" ? Image : FileText;
+            return (
+              <li
+                key={`${i}:${attachment.name}`}
+                className="text-muted-foreground flex max-w-60 items-center gap-1 rounded-md border px-1.5 py-0.5"
+              >
+                <Icon className="text-primary size-3.5 shrink-0" aria-hidden />
+                <span className="truncate">{attachment.name}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
       {waiting && (
         <span className="text-muted-foreground flex items-center gap-1 text-xs">
           <Clock className="size-3" aria-hidden />

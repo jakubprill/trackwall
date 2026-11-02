@@ -15,6 +15,7 @@ import { AgentDialogCard } from "@/components/AgentDialogCard";
 import { AgentModeSwitch } from "@/components/AgentModeSwitch";
 import { ContextMeter } from "@/components/ContextMeter";
 import { ConversationEntries } from "@/components/ConversationEntries";
+import { AttachButton, AttachmentChips, useMessageAttachments } from "@/components/MessageAttachments";
 import { SlashCommandList } from "@/components/SlashCommandList";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
@@ -191,9 +192,13 @@ function Composer({
     setPicked(0);
   };
   const box = useRef<HTMLTextAreaElement>(null);
+  const files = useMessageAttachments();
   const say = useAction(
-    (message: string) => post(conn, agentsApi.say, { session, text: message }),
-    () => setText(""),
+    (message: string) => post(conn, agentsApi.say, { session, text: message, attachments: files.attachments }),
+    () => {
+      setText("");
+      files.clear();
+    },
   );
   const stop = useAction(
     () => post(conn, agentsApi.interrupt, { session }),
@@ -213,10 +218,11 @@ function Composer({
   const send = () => {
     if (text.trim() !== "" && !say.pending) say.run(text);
   };
-  const error = say.error ?? stop.error;
+  const error = say.error ?? stop.error ?? files.problem;
   return (
     <div className="flex flex-col gap-1 px-3 pt-1 pb-2">
       {suggestions.length > 0 && <SlashCommandList commands={suggestions} selected={picked} onPick={pick} />}
+      {files.attachments.length > 0 && <AttachmentChips attachments={files.attachments} onRemove={files.remove} />}
       <div className="border-input dark:bg-muted focus-within:border-ring focus-within:ring-ring/50 flex items-end gap-2 rounded-md border py-1.5 pr-1.5 pl-3 focus-within:ring-[3px]">
         <textarea
           ref={box}
@@ -225,6 +231,13 @@ function Composer({
           value={text}
           rows={1}
           className="placeholder:text-muted-foreground max-h-48 min-w-0 flex-1 resize-none self-center bg-transparent py-1 text-sm outline-none"
+          onPaste={(e) => {
+            // A pasted screenshot or file is an attachment; pasted text stays text.
+            const pasted = [...e.clipboardData.files];
+            if (pasted.length === 0) return;
+            e.preventDefault();
+            void files.add(pasted);
+          }}
           onChange={(e) => {
             setText(e.target.value);
             setPicked(0);
@@ -242,6 +255,7 @@ function Composer({
             send();
           }}
         />
+        <AttachButton onFiles={(picked) => void files.add(picked)} />
         {working && (
           <Button size="sm" variant="outline" title="Stop the turn; the session goes on" disabled={stop.pending} onClick={() => stop.run()}>
             <Square /> Stop the turn
@@ -259,7 +273,8 @@ function Composer({
         </Button>
       </div>
       <p className="text-muted-foreground text-xs">
-        Enter sends, Shift+Enter is a new line{working ? "; a message written now goes when the turn ends" : ""}
+        Enter sends, Shift+Enter is a new line, and a pasted screenshot is attached
+        {working ? "; a message written now goes when the turn ends" : ""}
       </p>
       {error && <p className="text-destructive text-xs">{error}</p>}
     </div>

@@ -4,7 +4,7 @@ import { useTrackwall } from "./support/trackwall-ui.ts";
 const trackwall = useTrackwall();
 
 describe("the supervisor in the conversation view (ADR-107)", () => {
-  test("a supervisor started in the conversation view switches to Plan, suggests slash commands, takes a message, asks for its approval in the panel, shows its answer, its folded thought and its context use, drops the message box once stopped, and offers to continue it", async () => {
+  test("a supervisor started in the conversation view switches to Plan, suggests slash commands, takes a message with a file attached, asks for its approval in the panel, shows its answer, its folded thought and its context use, drops the message box once stopped, and offers to continue it", async () => {
     const page = await trackwall().open();
     await page.getByRole("button", { name: /Pin the supervisor panel open/ }).click();
     const panel = page.getByRole("complementary", { name: "Supervisor" });
@@ -24,6 +24,10 @@ describe("the supervisor in the conversation view (ADR-107)", () => {
     await commands.waitFor({ state: "detached" });
     if ((await message.inputValue()) !== "/compact ") throw new Error(`the command was not picked: ${await message.inputValue()}`);
 
+    await panel
+      .getByLabel("Files to attach")
+      .setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("the build is red\n") });
+    await panel.getByRole("list", { name: "Attachments" }).getByText("notes.txt").waitFor();
     await message.fill("check the build");
     await message.press("Enter");
     await panel.getByText("Do you want to allow this?").waitFor();
@@ -32,6 +36,8 @@ describe("the supervisor in the conversation view (ADR-107)", () => {
     const conversation = panel.getByRole("log", { name: "Conversation" });
     await conversation.getByText("check the build", { exact: true }).waitFor();
     await conversation.getByText(/Thinking about: check the build/).waitFor();
+    await conversation.getByRole("list", { name: "Attached" }).getByText("notes.txt").waitFor();
+    await conversation.getByText(/Text: The attached file notes\.txt:/).waitFor();
     await conversation.getByText("Make a file").waitFor();
     // The model's reasoning is folded under "Thought" and opens on a click. As the turn ends the followed list scrolls
     // (the dots of a working agent go, the context meter joins the line above the message box), which can move the row

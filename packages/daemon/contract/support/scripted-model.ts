@@ -38,6 +38,8 @@ export interface ModelRequest {
   system: string;
   /** The text of the last message from the user. */
   lastUserText: string;
+  /** How many images the last message from the user has. */
+  lastUserImages: number;
   /** The texts of every message from the user, in order: the conversation the model sees. */
   userTexts: string[];
   /** The tool results since the last assistant message, in order. */
@@ -52,6 +54,10 @@ function text(content: z.infer<typeof Content> | undefined): string {
   return content.map((part) => part.text ?? "").join("");
 }
 
+function images(content: z.infer<typeof Content> | undefined): number {
+  return Array.isArray(content) ? content.filter((part) => part.type === "image_url").length : 0;
+}
+
 function summarize(request: z.infer<typeof Request>): ModelRequest {
   const { messages } = request;
   const lastAssistant = messages.findLastIndex((m) => m.role === "assistant");
@@ -62,6 +68,7 @@ function summarize(request: z.infer<typeof Request>): ModelRequest {
       .map((m) => text(m.content))
       .join("\n"),
     lastUserText: text(messages.findLast((m) => m.role === "user")?.content),
+    lastUserImages: images(messages.findLast((m) => m.role === "user")?.content),
     userTexts: messages.filter((m) => m.role === "user").map((m) => text(m.content)),
     toolResults: messages
       .slice(lastAssistant + 1)

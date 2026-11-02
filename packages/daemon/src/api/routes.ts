@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import {
+  API_BODY_MAX_BYTES,
   agentsApi,
   autoReviewApi,
   batchApi,
@@ -33,7 +34,11 @@ import { DomainError } from "../infra/errors.ts";
  * The `POST /api/<module>/<action>` routes (§5.2) of all modules in one map. The path and schemas come
  * from `@trackwall/protocol`, so `server.ts` does not know the modules, and an action's result must match the contract's type.
  */
-type PostHandler = (facade: Facade, body: unknown) => Promise<unknown>;
+interface PostHandler {
+  run: (facade: Facade, body: unknown) => Promise<unknown>;
+  /** The largest body the server reads for the action, which it checks before it holds the body in memory. */
+  maxBodyBytes: number;
+}
 
 function route<Req extends z.ZodType, Data extends z.ZodType>(
   endpoint: Endpoint<Req, Data>,
@@ -41,10 +46,13 @@ function route<Req extends z.ZodType, Data extends z.ZodType>(
 ): [string, PostHandler] {
   return [
     endpoint.path,
-    async (facade, body) => {
-      const parsed = endpoint.request.safeParse(body);
-      if (!parsed.success) throw new DomainError("bad_request", z.prettifyError(parsed.error));
-      return run(facade, parsed.data);
+    {
+      maxBodyBytes: endpoint.maxBodyBytes ?? API_BODY_MAX_BYTES,
+      run: async (facade, body) => {
+        const parsed = endpoint.request.safeParse(body);
+        if (!parsed.success) throw new DomainError("bad_request", z.prettifyError(parsed.error));
+        return run(facade, parsed.data);
+      },
     },
   ];
 }
@@ -180,7 +188,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(agentsApi.deliverReadRequest, (f, b) => f.agents.deliverReadRequest(b.session)),
   route(agentsApi.clearCopyRequest, (f, b) => f.agents.clearCopyRequest(b.session, b.request)),
   route(agentsApi.answerDialog, (f, b) => f.agents.answerDialog(b.session, b.dialog, b.answer)),
-  route(agentsApi.say, (f, b) => f.agents.say(b.session, b.text)),
+  route(agentsApi.say, (f, b) => f.agents.say(b.session, b.text, b.attachments)),
   route(agentsApi.interrupt, (f, b) => f.agents.interrupt(b.session)),
   route(agentsApi.setMode, (f, b) => f.agents.setMode(b.session, b.mode)),
   route(agentsApi.dismiss, (f, b) => f.agents.dismiss(b.session)),

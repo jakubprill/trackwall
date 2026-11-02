@@ -22,7 +22,7 @@ describe("the conversation view", () => {
       reset: true,
       waiting: [],
       entries: [
-        { id: "user-1", kind: "user", text: "Check the build" },
+        { id: "user-1", kind: "user", text: "Check the build", attachments: [] },
         {
           id: "tool-1",
           kind: "tool",
@@ -59,7 +59,7 @@ describe("the conversation view", () => {
     });
 
     expect(next).toEqual([
-      { id: "user-1", kind: "user", text: "Check the build" },
+      { id: "user-1", kind: "user", text: "Check the build", attachments: [] },
       {
         id: "tool-1",
         kind: "tool",
@@ -138,15 +138,15 @@ describe("turns of the conversation view", () => {
     };
     expect(
       conversationTurns([
-        { id: "user-1", kind: "user", text: "Check the build" },
+        { id: "user-1", kind: "user", text: "Check the build", attachments: [] },
         { id: "agent-1", kind: "agent", text: "Running the tests." },
         run,
         { id: "agent-2", kind: "agent", text: "Green." },
         { id: "thought-1", kind: "thought", text: "The tests pass." },
-        { id: "user-2", kind: "user", text: "Thanks" },
+        { id: "user-2", kind: "user", text: "Thanks", attachments: [] },
       ]),
     ).toEqual([
-      { kind: "user", entry: { id: "user-1", kind: "user", text: "Check the build" } },
+      { kind: "user", entry: { id: "user-1", kind: "user", text: "Check the build", attachments: [] } },
       {
         kind: "agent",
         id: "agent-1",
@@ -157,7 +157,7 @@ describe("turns of the conversation view", () => {
           { id: "thought-1", kind: "thought", text: "The tests pass." },
         ],
       },
-      { kind: "user", entry: { id: "user-2", kind: "user", text: "Thanks" } },
+      { kind: "user", entry: { id: "user-2", kind: "user", text: "Thanks", attachments: [] } },
     ]);
     expect(conversationTurns([])).toEqual([]);
   });

@@ -11,7 +11,9 @@ export const ACP_PROTOCOL_VERSION = 1;
 
 export const InitializeResult = z.object({
   protocolVersion: z.number(),
-  agentCapabilities: z.object({ loadSession: z.boolean().optional() }).optional(),
+  agentCapabilities: z
+    .object({ loadSession: z.boolean().optional(), promptCapabilities: z.object({ image: z.boolean().optional() }).optional() })
+    .optional(),
 });
 
 /**

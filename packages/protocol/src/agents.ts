@@ -2,7 +2,14 @@ import { z } from "zod";
 import { apiEndpoints, Done } from "./api.ts";
 import { BoardItemId } from "./board.ts";
 import { WorkingTreeChanges } from "./changes.ts";
-import { ConversationModeId, SessionMessage, SessionView, ToolPatch } from "./conversation.ts";
+import {
+  ConversationModeId,
+  MessageAttachments,
+  SESSION_MESSAGE_BODY_MAX_BYTES,
+  SessionMessage,
+  SessionView,
+  ToolPatch,
+} from "./conversation.ts";
 import { RunState } from "./procs.ts";
 import { REVIEW_COMMENTS_MAX, ReviewComment } from "./review.ts";
 import { singleLine } from "./single-line.ts";
@@ -815,9 +822,12 @@ export const agentsApi = {
   restart: endpoint("restart", SessionRequest, Session),
   /**
    * A message from the user to a session in the conversation view (ADR-107): its next prompt, sent at once when the agent
-   * waits, otherwise after its turn. A session in a terminal gets what the user types there instead (`bad_request`).
+   * waits, otherwise after its turn, with the images and text files the user attached. A session in a terminal gets what
+   * the user types there instead, and an agent that takes no images refuses them (`bad_request`). Only from the UI.
    */
-  say: endpoint("say", SessionRequest.extend({ text: SessionMessage }), Session),
+  say: endpoint("say", SessionRequest.extend({ text: SessionMessage, attachments: MessageAttachments.default([]) }), Session, {
+    maxBodyBytes: SESSION_MESSAGE_BODY_MAX_BYTES,
+  }),
   /**
    * The user's Deliver now (ADR-159) for a read request nothing would send (`idle`): it goes to the agent as soon as the
    * agent can take it, at once into an empty input box, also after an Esc. It never goes into text in the input box,

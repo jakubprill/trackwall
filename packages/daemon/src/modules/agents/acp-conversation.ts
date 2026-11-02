@@ -1,4 +1,4 @@
-import { CONVERSATION_TEXT_MAX, type ConversationEntry, TOOL_KIND_MAX, TOOL_TITLE_MAX } from "@trackwall/protocol";
+import { type AttachmentLabel, CONVERSATION_TEXT_MAX, type ConversationEntry, TOOL_KIND_MAX, TOOL_TITLE_MAX } from "@trackwall/protocol";
 import { contentText, type SessionUpdate } from "./acp-messages.ts";
 import { toolCallFiles, toolCallLines, toolCallPatch, toolCallSubagent } from "./acp-tool-call.ts";
 
@@ -51,8 +51,8 @@ export class AcpConversation {
   }
 
   /** A message the daemon sent the agent itself; the agent does not echo a prompt back as `user_message_chunk`. */
-  said(text: string): ConversationChange {
-    const entry: ConversationEntry = { id: this.#id("user"), kind: "user", text: cut(text) };
+  said(text: string, attachments: readonly AttachmentLabel[] = []): ConversationChange {
+    const entry: ConversationEntry = { id: this.#id("user"), kind: "user", text: cut(text), attachments: [...attachments] };
     this.#entries.push(entry);
     return this.#trimmed([entry]);
   }
@@ -98,7 +98,9 @@ export class AcpConversation {
       last.text = cut(last.text + text);
       return [last];
     }
-    const entry: ConversationEntry = { id: this.#id(kind), kind, text: cut(text) };
+    const id = this.#id(kind);
+    // A replayed message's attachments are not known: Copilot CLI replays only its text.
+    const entry: ConversationEntry = kind === "user" ? { id, kind, text: cut(text), attachments: [] } : { id, kind, text: cut(text) };
     this.#entries.push(entry);
     return [entry];
   }

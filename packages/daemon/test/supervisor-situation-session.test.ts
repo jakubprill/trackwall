@@ -75,7 +75,9 @@ describe.skipIf(process.versions.bun === undefined)("the supervisor's situation 
         closed: () => {},
       })
       .detach();
-    expect(entries.filter((e) => e.kind === "user")).toEqual([{ id: expect.any(String), kind: "user", text: "what is going on?" }]);
+    expect(entries.filter((e) => e.kind === "user")).toEqual([
+      { id: expect.any(String), kind: "user", text: "what is going on?", attachments: [] },
+    ]);
     const answer = entries.findLast((e) => e.kind === "agent");
     expect(answer?.kind === "agent" && answer.text).toContain("Prompt context: Trackwall's work under way as this prompt came");
     expect(answer?.kind === "agent" && answer.text).toContain(`- task ${task.id} "add a signup test" in shop, started by the user:`);

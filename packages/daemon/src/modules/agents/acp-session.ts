@@ -4,6 +4,7 @@ import type {
   ConversationInfo,
   ConversationServerMessage,
   DialogAnswer,
+  MessageAttachment,
   ReadRequest,
   ReadRequestHold,
   RunState,
@@ -28,6 +29,7 @@ import {
   SessionUpdate,
   SessionUpdateParams,
 } from "./acp-messages.ts";
+import { attachmentLabel, checkAttachments, promptBlocks } from "./acp-prompt.ts";
 import { AcpSessionInfo } from "./acp-session-info.ts";
 import { toolCallFiles, toolCallLines, toolCallPatch } from "./acp-tool-call.ts";
 import type { AgentSession } from "./agent-session.ts";
@@ -113,7 +115,7 @@ export interface AcpSessionOptions {
 
 /** A prompt on its way: who wrote it, so that the end of a turn the user drove is not reported to the proposer. */
 /** A prompt to send; the user's carries the id its waiting bubble has until it goes (`WaitingMessage`). */
-type Prompt = { text: string; by: "daemon" } | { text: string; by: "user"; id: string };
+type Prompt = { text: string; by: "daemon" } | { text: string; by: "user"; id: string; attachments: readonly MessageAttachment[] };
 
 interface PendingApproval {
   dialog: AgentApproval;
@@ -144,6 +146,8 @@ export class AcpSession implements AgentSession {
   /** Copilot CLI's id of the conversation, once `session/new` or `session/load` answered. */
   #conversationId: string | undefined;
   #hasConversation: boolean;
+  /** The agent takes images in a prompt (`promptCapabilities.image`), as Copilot CLI does. */
+  #takesImages = false;
   #last: TaskStateChange | null = null;
   /** The agent's last update or state change, for `SessionStuck` (ADR-151); the start before either. */
   #lastStepAt = Date.now();
@@ -226,6 +230,7 @@ export class AcpSession implements AgentSession {
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
       }),
     );
+    this.#takesImages = agent.agentCapabilities?.promptCapabilities?.image === true;
     if (agent.protocolVersion !== ACP_PROTOCOL_VERSION)
       throw new Error(`Copilot CLI speaks ACP version ${agent.protocolVersion}, not ${ACP_PROTOCOL_VERSION}`);
     const { cwd, load } = this.#o;
@@ -255,13 +260,16 @@ export class AcpSession implements AgentSession {
     return this.#hasConversation;
   }
 
-  /** A message from the user: the next prompt, at once when the agent waits, otherwise after its turn. */
-  say(text: string): void {
+  /** A message from the user with what they attached: the next prompt, at once when the agent waits, otherwise after its turn. */
+  say(text: string, attachments: readonly MessageAttachment[] = []): void {
     if (this.#finished) throw new DomainError("bad_request", "the session has ended");
+    checkAttachments(attachments, this.#takesImages);
+    if (attachments.length > 0 && this.#queued.some((p) => p.by === "user" && p.attachments.length > 0))
+      throw new DomainError("bad_request", "a message with attachments already waits for the turn to end");
     this.#attention.typed();
     this.#o.onUserText();
     this.#waitingIds += 1;
-    this.#queued.push({ text, by: "user", id: `waiting-${this.#waitingIds}` });
+    this.#queued.push({ text, by: "user", id: `waiting-${this.#waitingIds}`, attachments });
     this.#next();
     // A message that waits for the turn shows as waiting at once, not only when it goes (which sends its own frame).
     if (this.#queued.length > 0) this.#scheduleFlush();
@@ -269,7 +277,9 @@ export class AcpSession implements AgentSession {
 
   /** The user's messages waiting for the turn to end, oldest first. */
   #waiting(): WaitingMessage[] {
-    return this.#queued.flatMap((p) => (p.by === "user" ? [{ id: p.id, text: p.text }] : []));
+    return this.#queued.flatMap((p) =>
+      p.by === "user" ? [{ id: p.id, text: p.text, attachments: p.attachments.map(attachmentLabel) }] : [],
+    );
   }
 
   /** Stops the turn, as Esc does in the terminal: an approval waiting is refused, and the agent ends its turn. */
@@ -437,9 +447,10 @@ export class AcpSession implements AgentSession {
     this.#turn = prompt;
     this.#hasConversation = true;
     this.#o.onTurnStart();
-    this.#broadcast(this.#conversation.said(prompt.text));
+    const attachments = prompt.by === "user" ? prompt.attachments : [];
+    this.#broadcast(this.#conversation.said(prompt.text, attachments.map(attachmentLabel)));
     this.#report("Working", "prompt sent");
-    connection.request("session/prompt", { sessionId: conversation, prompt: [{ type: "text", text: prompt.text }] }).then(
+    connection.request("session/prompt", { sessionId: conversation, prompt: promptBlocks(prompt.text, attachments) }).then(
       (result) => this.#turnEnded(prompt, PromptResult.safeParse(result).data?.stopReason ?? "unknown"),
       (err: unknown) => this.#turnFailed(err),
     );
