@@ -17,7 +17,8 @@
  *
  * Like Copilot CLI it answers `session/new` with the agent's modes (Agent, Plan, Autopilot), offers two slash commands
  * at once, switches the mode on `session/set_config_option`, and says after each turn how much context it uses
- * (1000 tokens a turn of 128000).
+ * (1000 tokens a turn of 128000). It takes images in a prompt, and its answer names each block after the first: an
+ * image by its type, a text block by its first line.
  */
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -35,7 +36,10 @@ const Message = z.object({
   params: z.record(z.string(), z.unknown()).optional(),
   result: z.unknown().optional(),
 });
-const PromptParams = z.object({ sessionId: z.string(), prompt: z.array(z.object({ type: z.string(), text: z.string().optional() })) });
+const PromptParams = z.object({
+  sessionId: z.string(),
+  prompt: z.array(z.object({ type: z.string(), text: z.string().optional(), mimeType: z.string().optional() })),
+});
 const SessionParams = z.object({ sessionId: z.string() });
 const PermissionAnswer = z.object({
   outcome: z.union([z.object({ outcome: z.literal("selected"), optionId: z.string() }), z.object({ outcome: z.literal("cancelled") })]),
@@ -107,7 +111,13 @@ export function serveAcp(o: FakeAcpOptions): void {
       notFound(id, sessionId);
       return;
     }
-    const text = blocks.map((b) => b.text ?? "").join("");
+    const [first, ...attached] = blocks;
+    const text = first?.text ?? "";
+    // What came with the prompt, as the answer names it: an image by its type, a text block by its first line.
+    const attachments = attached
+      .map((b) => (b.type === "image" ? `Image: ${b.mimeType ?? "?"}` : `Text: ${(b.text ?? "").split("\n")[0]}`))
+      .map((line) => `\n${line}`)
+      .join("");
     const context = o
       .fire("userPromptSubmitted", { prompt: text, cwd: process.cwd() })
       .flatMap((output) => {
@@ -147,7 +157,10 @@ export function serveAcp(o: FakeAcpOptions): void {
           ? `\n\nMCP: ${o.mcpServers.join(", ")}\nInstructions: ${o.instructionFiles.join(", ")}\n${o.args.map((a) => `Argument: ${a}`).join("\n")}`
           : "";
         firstAnswer = false;
-        update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: `Thinking about: ${text}${context}` } });
+        update(sessionId, {
+          sessionUpdate: "agent_message_chunk",
+          content: { type: "text", text: `Thinking about: ${text}${attachments}${context}` },
+        });
         update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: about } });
         // Copilot CLI sends the model's reasoning of a reply after the reply's text (`contract/acp-session.contract.ts`).
         update(sessionId, { sessionUpdate: "agent_thought_chunk", content: { type: "text", text: `Reasoning about: ${text}` } });
@@ -226,7 +239,14 @@ export function serveAcp(o: FakeAcpOptions): void {
   /** The requests the fake answers, by method. */
   const requests: Record<string, (id: number | string, params: unknown) => void> = {
     initialize: (id) =>
-      send({ id, result: { protocolVersion: 1, agentCapabilities: { loadSession: true }, agentInfo: { name: "Copilot" } } }),
+      send({
+        id,
+        result: {
+          protocolVersion: 1,
+          agentCapabilities: { loadSession: true, promptCapabilities: { image: true } },
+          agentInfo: { name: "Copilot" },
+        },
+      }),
     "session/new": (id) => {
       const sessionId = randomUUID();
       conversations.set(sessionId, []);

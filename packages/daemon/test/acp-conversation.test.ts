@@ -15,7 +15,7 @@ describe("the conversation built from ACP updates", () => {
     conversation.apply({ sessionUpdate: "agent_message_chunk", content: text("All green.") });
 
     expect(conversation.entries()).toEqual([
-      { id: "user-1", kind: "user", text: "Check the build" },
+      { id: "user-1", kind: "user", text: "Check the build", attachments: [] },
       { id: "agent-2", kind: "agent", text: "Looking at it." },
       {
         id: "tool-3",
@@ -123,7 +123,7 @@ describe("the conversation built from ACP updates", () => {
     conversation.clear();
     conversation.apply({ sessionUpdate: "user_message_chunk", content: text("first") });
 
-    expect(conversation.entries()).toEqual([{ id: "user-2", kind: "user", text: "first" }]);
+    expect(conversation.entries()).toEqual([{ id: "user-2", kind: "user", text: "first", attachments: [] }]);
   });
 
   test("a message longer than an entry keeps its end", () => {

@@ -21,6 +21,7 @@ import {
   type JavaNavigationState,
   type JavaNavigationStatus,
   type MergeRequest,
+  type MessageAttachment,
   type MiseTarget,
   type PromptDelivery,
   proposalRepos,
@@ -1170,10 +1171,10 @@ export class Agents {
   }
 
   /** A message from the user to a session in the conversation view (ADR-107). */
-  say(id: string, text: string): Session {
+  say(id: string, text: string, attachments: readonly MessageAttachment[] = []): Session {
     const session = this.#conversationOf(id);
     if (!this.#sessions.isRunning(session)) throw new DomainError("bad_request", "the session is no longer running");
-    session.say(text);
+    session.say(text, attachments);
     return this.#sessions.view(session);
   }
 

@@ -101,7 +101,7 @@ describe.skipIf(process.versions.bun === undefined)("the supervisor in the conve
     await until(() => view.entries().some((e) => e.kind === "agent" && e.text.includes("Argument:")), "the answer");
     await until(() => view.entries().some((e) => e.kind === "thought"), "the thought");
     const [said, tool, answer, thought] = view.entries();
-    expect(said).toMatchObject({ kind: "user", text: "Check the build" });
+    expect(said).toMatchObject({ kind: "user", text: "Check the build", attachments: [] });
     expect(tool).toMatchObject({ kind: "tool", title: "Make a file", tool: "execute", status: "completed", detail: ["made-by-agent", ""] });
     expect(answer).toMatchObject({ kind: "agent" });
     expect(answer?.kind === "agent" && answer.text).toContain("Thinking about: Check the build");
@@ -149,6 +149,60 @@ describe.skipIf(process.versions.bun === undefined)("the supervisor in the conve
     await daemon.post(agentsApi.answerDialog, { session: supervisor.id, dialog: asking.dialog?.id ?? "", answer: "1" });
     await until(() => view.info().context !== null, "the context use");
     expect(view.info().context).toEqual({ used: 1000, size: 128_000 });
+
+    view.ws.close();
+    await daemon.post(agentsApi.stop, { session: supervisor.id });
+  }, 60_000);
+
+  test("a message's image and text file reach the agent after its text, its entry names them, and a second message with attachments cannot wait too", async () => {
+    const daemon = await startDaemon();
+    const supervisor = await daemon.post(agentsApi.startSupervisor, { conversation: "new", view: "conversation" });
+    await inState(daemon, supervisor.id, "Input");
+    const view = conversation(daemon, supervisor.id);
+    await view.opened;
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]).toString("base64");
+
+    await daemon.post(agentsApi.say, {
+      session: supervisor.id,
+      text: "What is wrong?",
+      attachments: [
+        { kind: "image", name: "screen.png", mimeType: "image/png", data: png },
+        { kind: "file", name: "build.log", text: "ERROR: tests failed" },
+      ],
+    });
+    const asking = await inState(daemon, supervisor.id, "Approval");
+    await daemon.post(agentsApi.say, {
+      session: supervisor.id,
+      text: "And this?",
+      attachments: [{ kind: "file", name: "next.log", text: "more" }],
+    });
+    await expect(
+      daemon.post(agentsApi.say, { session: supervisor.id, text: "And that?", attachments: [{ kind: "file", name: "x.log", text: "x" }] }),
+    ).rejects.toThrow("a message with attachments already waits for the turn to end");
+    await expect(
+      daemon.post(agentsApi.say, {
+        session: supervisor.id,
+        text: "Not a PNG",
+        attachments: [{ kind: "image", name: "fake.png", mimeType: "image/png", data: Buffer.from("hello").toString("base64") }],
+      }),
+    ).rejects.toThrow("fake.png is not an image of type image/png");
+    await daemon.post(agentsApi.answerDialog, { session: supervisor.id, dialog: asking.dialog?.id ?? "", answer: "1" });
+    await until(() => view.entries().some((e) => e.kind === "agent" && e.text.includes("Image: image/png")), "the answer");
+
+    const [said] = view.entries();
+    expect(said).toEqual({
+      id: expect.any(String),
+      kind: "user",
+      text: "What is wrong?",
+      attachments: [
+        { kind: "image", name: "screen.png" },
+        { kind: "file", name: "build.log" },
+      ],
+    });
+    const answer = view.entries().find((e) => e.kind === "agent");
+    expect(answer?.kind === "agent" && answer.text).toContain(
+      `Thinking about: What is wrong?\nImage: image/png\nText: <attached-file name="build.log">`,
+    );
 
     view.ws.close();
     await daemon.post(agentsApi.stop, { session: supervisor.id });
@@ -235,7 +289,7 @@ describe.skipIf(process.versions.bun === undefined)("the supervisor in the conve
     const view = conversation(daemon, first.id);
     await view.opened;
     await until(() => view.entries().some((e) => e.kind === "agent"), "the loaded conversation");
-    expect(view.entries()[0]).toMatchObject({ kind: "user", text: "remember this" });
+    expect(view.entries()[0]).toMatchObject({ kind: "user", text: "remember this", attachments: [] });
     view.ws.close();
     await agents.stop(first.id);
 

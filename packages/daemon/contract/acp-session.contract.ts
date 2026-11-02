@@ -136,7 +136,7 @@ describe("the supervisor in the conversation view with the real Copilot CLI", ()
     expect(first?.system).toContain("You are the supervisor");
     await view.until((entries) => entries.at(-1)?.kind === "agent", "the answer");
     const entries = view.entries();
-    expect(entries[0]).toEqual({ id: expect.any(String), kind: "user", text: "make a file" });
+    expect(entries[0]).toEqual({ id: expect.any(String), kind: "user", text: "make a file", attachments: [] });
     expect(entries.find((e) => e.kind === "tool")).toMatchObject({ tool: "execute", status: "completed" });
     expect(entries.at(-1)).toMatchObject({ kind: "agent", text: "Made **one** file." });
     view.detach();
@@ -229,6 +229,26 @@ describe("the supervisor in the conversation view with the real Copilot CLI", ()
       detail: ["Two files."],
     });
     view.detach();
+    await agents.stop(supervisor.id);
+  });
+
+  test("a message's image reaches the model as an image, and its text file as text with the file's name", async () => {
+    const { agents } = daemon.facade;
+    const supervisor = await startSupervisor();
+    // A 1×1 PNG.
+    const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC";
+    model.reply({ text: "A red dot and a failed build." });
+
+    agents.say(supervisor.id, "What is wrong here?", [
+      { kind: "image", name: "screen.png", mimeType: "image/png", data: png },
+      { kind: "file", name: "build.log", text: "ERROR: tests failed" },
+    ]);
+    await waitFor(agents, supervisor.id, (s) => s.state?.reason === "stop end_turn", "end of turn", SESSION_MS);
+
+    const [request] = model.requests().slice(-1);
+    expect(request?.lastUserImages).toBe(1);
+    expect(request?.lastUserText).toContain("What is wrong here?");
+    expect(request?.lastUserText).toContain('<attached-file name="build.log">\nERROR: tests failed\n</attached-file>');
     await agents.stop(supervisor.id);
   });
 

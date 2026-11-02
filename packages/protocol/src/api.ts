@@ -57,7 +57,12 @@ export interface Endpoint<Req extends z.ZodType = z.ZodType, Data extends z.ZodT
   request: Req;
   /** Schema of the `data` field in the response `{ ok: true, data }`. */
   data: Data;
+  /** The largest request body the daemon reads for this action; `API_BODY_MAX_BYTES` when not set. */
+  maxBodyBytes?: number;
 }
+
+/** The largest request body of an action: they are small JSON objects, apart from the few that set their own. */
+export const API_BODY_MAX_BYTES = 64 * 1024;
 
 /** The result of an action that returns nothing (`data: null`). */
 export const Done = z.null();
@@ -70,9 +75,10 @@ export const ApiEnvelope = apiResult(z.unknown());
  * returns, so the path of an action is spelled in one place and a test can check that the daemon routes every action.
  */
 export function apiEndpoints(module: string) {
-  return <Req extends z.ZodType, Data extends z.ZodType>(action: string, request: Req, data: Data): Endpoint<Req, Data> => ({
-    path: `/api/${module}/${action}`,
-    request,
-    data,
-  });
+  return <Req extends z.ZodType, Data extends z.ZodType>(
+    action: string,
+    request: Req,
+    data: Data,
+    options: { maxBodyBytes?: number } = {},
+  ): Endpoint<Req, Data> => ({ path: `/api/${module}/${action}`, request, data, ...options });
 }

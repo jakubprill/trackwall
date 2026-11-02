@@ -55,9 +55,6 @@ const STATUS: Record<ErrorCode, number> = {
   internal: 500,
 };
 
-/** Request bodies are small JSON objects; larger ones are rejected before they are held in memory in full. */
-const MAX_BODY_BYTES = 64 * 1024;
-
 /**
  * The daemon's HTTP API on `127.0.0.1` with WebSockets (§5.2) and the MCP server under `/mcp` (§5.3); `port: 0` picks a random
  * free port.
@@ -192,7 +189,8 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
     return;
   }
   const post = req.method === "POST" ? postRoutes.get(path) : undefined;
-  if (post) return ok(res, await post(o.facade, await readJson(req)));
+  // The token was checked before any of the body is read, so only the daemon's own clients send a large one.
+  if (post) return ok(res, await post.run(o.facade, await readJson(req, post.maxBodyBytes)));
   return fail(res, "not_found", `no route ${req.method} ${path}`);
 }
 
@@ -209,9 +207,9 @@ function send(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-/** The request's JSON body; an empty body is `{}`. */
-async function readJson(req: IncomingMessage): Promise<unknown> {
-  const text = (await readBody(req, MAX_BODY_BYTES)).toString("utf8");
+/** The request's JSON body, an empty one `{}`; one over `maxBytes` is rejected before it is held in memory in full. */
+async function readJson(req: IncomingMessage, maxBytes: number): Promise<unknown> {
+  const text = (await readBody(req, maxBytes)).toString("utf8");
   if (text.trim() === "") return {};
   try {
     return JSON.parse(text);

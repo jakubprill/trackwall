@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as protocol from "@trackwall/protocol";
 import {
+  agentsApi,
   apiResult,
   BatchRun,
   batchApi,
@@ -287,6 +288,23 @@ describe("api workspace", () => {
     const res = await post(workspaceApi.list.path, JSON.stringify({ tooLarge: "x".repeat(70_000) }));
     expect(res.status).toBe(400);
     expect(JSON.parse(res.body)).toMatchObject({ error: { code: "bad_request", message: expect.stringContaining("larger than") } });
+  });
+
+  test("a message to a session may be larger than 64 KB for its attachments, up to its own limit, and only with the token", async () => {
+    const large = JSON.stringify({
+      session: crypto.randomUUID(),
+      text: "see the file",
+      attachments: [{ kind: "file", name: "a.txt", text: "x".repeat(200_000) }],
+    });
+    const read = await post(agentsApi.say.path, large);
+    expect(JSON.parse(read.body)).toMatchObject({ error: { code: "not_found" } });
+
+    const tooLarge = await post(
+      agentsApi.say.path,
+      JSON.stringify({ session: "s", text: "x".repeat(protocol.SESSION_MESSAGE_BODY_MAX_BYTES) }),
+    );
+    expect(JSON.parse(tooLarge.body)).toMatchObject({ error: { code: "bad_request", message: expect.stringContaining("larger than") } });
+    expect((await req(agentsApi.say.path, { method: "POST", body: large })).status).toBe(401);
   });
 
   test("a link from a README opens in the system only as a web page, in canonical form", async () => {

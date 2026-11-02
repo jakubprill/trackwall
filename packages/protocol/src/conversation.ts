@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { singleLine } from "./single-line.ts";
 
 /**
  * The conversation view (ADR-107): a Copilot CLI session the daemon runs over the Agent Client Protocol (`copilot
@@ -20,8 +21,58 @@ export const CONVERSATION_TEXT_MAX = 200_000;
 const EntryId = z.string().min(1).max(128);
 const EntryText = z.string().max(CONVERSATION_TEXT_MAX);
 
-/** What the user wrote, or what the daemon sent for them (a review, task messages, updates). */
-export const UserEntry = z.object({ id: EntryId, kind: z.literal("user"), text: EntryText });
+/** The most attachments of one message, and the most bytes of all of them (a few screenshots). */
+export const ATTACHMENTS_MAX = 5;
+export const ATTACHMENTS_MAX_BYTES = 10 * 1024 * 1024;
+/** The longest text file the user can attach; the agent gets it whole, in its context. */
+export const FILE_ATTACHMENT_MAX_CHARS = 256 * 1024;
+
+/** The kinds of images an agent takes (Copilot CLI's `promptCapabilities.image`). */
+export const ImageMimeType = z.enum(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+export type ImageMimeType = z.infer<typeof ImageMimeType>;
+
+/** A file's name as the user's computer gave it, one line without a folder. */
+const AttachmentName = singleLine(z.string().trim().min(1).max(200), "a file name").refine(
+  (name) => !/[/\\]/.test(name),
+  "a file name without a folder",
+);
+
+/** An image the user pasted or attached: base64 of at most `ATTACHMENTS_MAX_BYTES`. */
+export const ImageAttachment = z.object({
+  kind: z.literal("image"),
+  name: AttachmentName,
+  mimeType: ImageMimeType,
+  data: z
+    .string()
+    .max(Math.ceil(ATTACHMENTS_MAX_BYTES / 3) * 4)
+    .regex(/^[A-Za-z0-9+/]+={0,2}$/, "base64"),
+});
+/** A text file the user attached, as its text. */
+export const FileAttachment = z.object({ kind: z.literal("file"), name: AttachmentName, text: z.string().max(FILE_ATTACHMENT_MAX_CHARS) });
+export const MessageAttachment = z.discriminatedUnion("kind", [ImageAttachment, FileAttachment]);
+export type MessageAttachment = z.infer<typeof MessageAttachment>;
+
+/** How many bytes an attachment takes: an image's decoded size, a file's text. */
+export function attachmentBytes(attachment: MessageAttachment): number {
+  return attachment.kind === "image" ? Math.floor((attachment.data.length * 3) / 4) : attachment.text.length;
+}
+
+/** A message's attachments, at most `ATTACHMENTS_MAX` of `ATTACHMENTS_MAX_BYTES` together. */
+export const MessageAttachments = z
+  .array(MessageAttachment)
+  .max(ATTACHMENTS_MAX)
+  .refine(
+    (all) => all.reduce((sum, a) => sum + attachmentBytes(a), 0) <= ATTACHMENTS_MAX_BYTES,
+    `the attachments are larger than ${ATTACHMENTS_MAX_BYTES / 1024 / 1024} MiB together`,
+  );
+
+/** An attachment as the conversation shows it: what it is and its name. */
+export const AttachmentLabel = z.object({ kind: z.enum(["image", "file"]), name: AttachmentName });
+export type AttachmentLabel = z.infer<typeof AttachmentLabel>;
+const AttachmentLabels = z.array(AttachmentLabel).max(ATTACHMENTS_MAX).default([]);
+
+/** What the user wrote, or what the daemon sent for them (a review, task messages, updates), with what the user attached. */
+export const UserEntry = z.object({ id: EntryId, kind: z.literal("user"), text: EntryText, attachments: AttachmentLabels });
 /** The agent's answer, Markdown as the model wrote it. */
 export const AgentEntry = z.object({ id: EntryId, kind: z.literal("agent"), text: EntryText });
 /** What the agent thought on its way to an answer (the model's reasoning), shown folded. */
@@ -100,7 +151,7 @@ export const ConversationInfo = z.object({
 export type ConversationInfo = z.infer<typeof ConversationInfo>;
 
 /** A message the user wrote during a turn, which goes to the agent as the next prompt once the turn ends. */
-export const WaitingMessage = z.object({ id: EntryId, text: EntryText });
+export const WaitingMessage = z.object({ id: EntryId, text: EntryText, attachments: AttachmentLabels });
 export type WaitingMessage = z.infer<typeof WaitingMessage>;
 
 /**
@@ -125,3 +176,14 @@ export type ConversationClientMessage = z.infer<typeof ConversationClientMessage
 /** The longest message the user can write to a session in the conversation view. */
 export const SESSION_MESSAGE_MAX = 64 * 1024;
 export const SessionMessage = z.string().trim().min(1).max(SESSION_MESSAGE_MAX);
+/** The most bytes JSON can take for one character of a string: a control character as `\u001f`. */
+const JSON_BYTES_PER_CHAR_MAX = 6;
+/**
+ * The largest body of a message to a session, from the limits of what it holds: images as base64 at the most, every
+ * character of the text and the files at JSON's worst, and room for the JSON around them. So any message the schema
+ * takes fits, while the limit stays near what the attachments take.
+ */
+export const SESSION_MESSAGE_BODY_MAX_BYTES =
+  Math.ceil(ATTACHMENTS_MAX_BYTES / 3) * 4 +
+  (ATTACHMENTS_MAX * FILE_ATTACHMENT_MAX_CHARS + SESSION_MESSAGE_MAX) * JSON_BYTES_PER_CHAR_MAX +
+  64 * 1024;
