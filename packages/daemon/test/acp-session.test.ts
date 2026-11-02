@@ -166,6 +166,30 @@ describe("a Copilot CLI session over ACP", () => {
     expect(s.acp.view()?.readRequest?.waitsFor).toBe("idle");
   });
 
+  test("an approval of a file edit names the file in the working directory and carries the change as a patch", async () => {
+    const s = session();
+    await s.ready();
+    s.acp.say("go");
+    const diff = "diff --git a/projects/a.ts b/projects/a.ts\n--- a/projects/a.ts\n+++ b/projects/a.ts\n@@ -1,1 +1,1 @@\n-one\n+ONE\n";
+    s.send({
+      id: 0,
+      method: "session/request_permission",
+      params: {
+        sessionId: "c1",
+        toolCall: {
+          toolCallId: "call_1",
+          title: "Edit file",
+          kind: "edit",
+          rawInput: { fileName: "/projects/a.ts", diff: `\n${diff}` },
+          locations: [{ path: "/projects/a.ts" }],
+        },
+        options: [{ optionId: "allow_once", kind: "allow_once", name: "Allow once" }],
+      },
+    });
+
+    expect(s.acp.view()?.dialog).toMatchObject({ kind: "approval", title: "Edit file", detail: ["a.ts"], patch: diff });
+  });
+
   test("an approval request is the session's dialog until it is answered with the option's digit", async () => {
     const s = session();
     await s.ready();
@@ -190,6 +214,7 @@ describe("a Copilot CLI session over ACP", () => {
       kind: "approval",
       title: "Say hi",
       detail: ["$ echo hi"],
+      patch: "",
       question: "Do you want to allow this?",
       options: [
         { key: "1", label: "Allow once" },

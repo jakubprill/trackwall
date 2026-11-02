@@ -126,6 +126,8 @@ export function serveAcp(o: FakeAcpOptions): void {
         firstAnswer = false;
         update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: `Thinking about: ${text}${context}` } });
         update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: about } });
+        // Copilot CLI sends the model's reasoning of a reply after the reply's text (`contract/acp-session.contract.ts`).
+        update(sessionId, { sessionUpdate: "agent_thought_chunk", content: { type: "text", text: `Reasoning about: ${text}` } });
         writeFileSync(conversationFile(sessionId), JSON.stringify(history));
         turn.end("end_turn");
       })();

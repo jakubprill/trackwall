@@ -119,6 +119,38 @@ describe("the supervisor in the conversation view with the real Copilot CLI", ()
     await agents.stop(supervisor.id);
   });
 
+  test("a file edit's approval and entry carry the file and the change as a patch, and the model's reasoning is a thought", async () => {
+    const { agents } = daemon.facade;
+    const supervisor = await startSupervisor();
+    const view = conversationOf(supervisor.id);
+    const file = join(daemon.projects, "edited-by-acp.txt");
+    writeFileSync(file, "one\ntwo\nthree\n");
+    model.reply(
+      { tool: "edit", arguments: { path: file, old_str: "two\n", new_str: "TWO\n" } },
+      { text: "Edited the file.", reasoning: "The second line was lower case." },
+    );
+
+    agents.say(supervisor.id, "edit the file");
+    const asking = await inState(supervisor.id, "Approval");
+
+    expect(asking.dialog).toMatchObject({ kind: "approval", detail: ["edited-by-acp.txt"] });
+    const asked = asking.dialog?.kind === "approval" ? (asking.dialog.patch ?? "") : "";
+    expect(asked).toMatch(/^diff --git /);
+    expect(asked).toContain("\n-two\n+TWO\n");
+    agents.answerDialog(supervisor.id, asking.dialog?.id ?? "", "1");
+    await inState(supervisor.id, "Input");
+
+    expect(readFileSync(file, "utf8")).toBe("one\nTWO\nthree\n");
+    await view.until((entries) => entries.some((e) => e.kind === "thought"), "the thought");
+    const edit = view.entries().find((e) => e.kind === "tool");
+    expect(edit).toMatchObject({ tool: "edit", status: "completed", files: ["edited-by-acp.txt"] });
+    expect(edit?.kind === "tool" && edit.patch).toMatch(/^diff --git [\s\S]*\n-two\n\+TWO\n/);
+    expect(view.entries().find((e) => e.kind === "thought")).toMatchObject({ text: "The second line was lower case." });
+    expect(view.entries().find((e) => e.kind === "agent")).toMatchObject({ text: "Edited the file." });
+    view.detach();
+    await agents.stop(supervisor.id);
+  });
+
   test("a refused approval does not run the command, and Stop during an approval ends the turn as cancelled", async () => {
     const { agents } = daemon.facade;
     const supervisor = await startSupervisor();

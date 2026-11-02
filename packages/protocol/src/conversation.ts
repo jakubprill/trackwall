@@ -24,6 +24,8 @@ const EntryText = z.string().max(CONVERSATION_TEXT_MAX);
 export const UserEntry = z.object({ id: EntryId, kind: z.literal("user"), text: EntryText });
 /** The agent's answer, Markdown as the model wrote it. */
 export const AgentEntry = z.object({ id: EntryId, kind: z.literal("agent"), text: EntryText });
+/** What the agent thought on its way to an answer (the model's reasoning), shown folded. */
+export const ThoughtEntry = z.object({ id: EntryId, kind: z.literal("thought"), text: EntryText });
 
 /** Where a tool call is: asked for, running, done or failed (refused tools too). */
 export const ToolCallStatus = z.enum(["pending", "in_progress", "completed", "failed"]);
@@ -31,8 +33,16 @@ export type ToolCallStatus = z.infer<typeof ToolCallStatus>;
 
 export const TOOL_TITLE_MAX = 1000;
 export const TOOL_KIND_MAX = 64;
+/** The longest patch of a tool call the daemon keeps; a longer one is cut at the end, on a line. */
+export const TOOL_PATCH_MAX = 64 * 1024;
 
-/** A tool the agent called: its title, what kind of tool, where it is, and lines of what it did (a diff, a command, an error). */
+/** A unified diff (`git diff`), empty when there is none, as a tool call and an approval carry it. */
+export const ToolPatch = z.string().max(TOOL_PATCH_MAX);
+
+/**
+ * A tool the agent called: its title, what kind of tool, where it is, the files it reads or changes, lines of what it
+ * did (its output, a command, an error), and the change it makes to files as a unified diff.
+ */
 export const ToolEntry = z.object({
   id: EntryId,
   kind: z.literal("tool"),
@@ -40,10 +50,14 @@ export const ToolEntry = z.object({
   /** ACP's tool kind (`read`, `edit`, `execute`, `search`, `other`, …), as Copilot CLI gives it. */
   tool: z.string().max(TOOL_KIND_MAX),
   status: ToolCallStatus,
+  /** The files the tool works on, relative to the session's working directory when inside it. */
+  files: z.array(z.string().max(4096)).max(50).default([]),
   detail: z.array(z.string().max(CONVERSATION_TEXT_MAX)).max(2000),
+  /** A daemon before the patch sent none. */
+  patch: ToolPatch.default(""),
 });
 
-export const ConversationEntry = z.discriminatedUnion("kind", [UserEntry, AgentEntry, ToolEntry]);
+export const ConversationEntry = z.discriminatedUnion("kind", [UserEntry, AgentEntry, ThoughtEntry, ToolEntry]);
 export type ConversationEntry = z.infer<typeof ConversationEntry>;
 
 /** A message the user wrote during a turn, which goes to the agent as the next prompt once the turn ends. */

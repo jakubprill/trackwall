@@ -44,6 +44,8 @@ const ToolCallFields = {
   kind: z.string().optional(),
   status: ToolCallStatus.optional(),
   content: z.array(ToolCallContent).optional(),
+  /** The files the tool works on. */
+  locations: z.array(z.object({ path: z.string() })).optional(),
   rawInput: z.unknown().optional(),
   rawOutput: z.unknown().optional(),
 };
@@ -51,6 +53,7 @@ const ToolCallFields = {
 export const SessionUpdate = z.discriminatedUnion("sessionUpdate", [
   z.object({ sessionUpdate: z.literal("user_message_chunk"), content: ContentBlock }),
   z.object({ sessionUpdate: z.literal("agent_message_chunk"), content: ContentBlock }),
+  z.object({ sessionUpdate: z.literal("agent_thought_chunk"), content: ContentBlock }),
   z.object({ sessionUpdate: z.literal("tool_call"), ...ToolCallFields }),
   z.object({ sessionUpdate: z.literal("tool_call_update"), ...ToolCallFields }),
   z.object({ sessionUpdate: z.literal("session_info_update"), title: z.string().nullish() }),

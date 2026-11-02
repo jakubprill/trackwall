@@ -88,11 +88,13 @@ describe.skipIf(process.versions.bun === undefined)("the supervisor in the conve
     await daemon.post(agentsApi.answerDialog, { session: supervisor.id, dialog, answer: "1" });
     await inState(daemon, supervisor.id, "Input");
     await until(() => view.entries().some((e) => e.kind === "agent" && e.text.includes("Argument:")), "the answer");
-    const [said, tool, answer] = view.entries();
+    await until(() => view.entries().some((e) => e.kind === "thought"), "the thought");
+    const [said, tool, answer, thought] = view.entries();
     expect(said).toMatchObject({ kind: "user", text: "Check the build" });
     expect(tool).toMatchObject({ kind: "tool", title: "Make a file", tool: "execute", status: "completed", detail: ["made-by-agent", ""] });
     expect(answer).toMatchObject({ kind: "agent" });
     expect(answer?.kind === "agent" && answer.text).toContain("Thinking about: Check the build");
+    expect(thought).toMatchObject({ kind: "thought", text: "Reasoning about: Check the build" });
     // Copilot CLI over ACP gets the same MCP server and instructions as in a terminal, and no session plugin.
     expect(answer?.kind === "agent" && answer.text).toContain("MCP: trackwall");
     expect(answer?.kind === "agent" && answer.text).toContain("Instructions: trackwall.instructions.md");

@@ -1,7 +1,7 @@
 import type { ChangedFile, WorkingTreeChanges } from "@trackwall/protocol";
 import { Fragment, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
-import { DIFF_SHOWN_LINES, type DiffAnchor, type DiffLine, type DiffLineKind, diffLines } from "@/lib/diff-lines";
+import { DIFF_LINE_CLASSES, DIFF_SHOWN_LINES, type DiffAnchor, type DiffLine, diffLines } from "@/lib/diff-lines";
 import { cn } from "@/lib/utils";
 
 /** Beyond this many files the browser starts to choke, like beyond `DIFF_SHOWN_LINES` lines. */
@@ -12,15 +12,6 @@ const CHANGE_LABELS = {
   modified: { label: "modified", variant: "default" },
   deleted: { label: "deleted", variant: "destructive" },
 } as const satisfies Record<ChangedFile["change"], { label: string; variant: string }>;
-
-const LINE_CLASSES: Record<DiffLineKind, string> = {
-  file: "text-foreground mt-3 font-medium first:mt-0",
-  meta: "text-muted-foreground",
-  hunk: "text-primary",
-  added: "text-success bg-success/10",
-  removed: "text-destructive bg-destructive/10",
-  context: "text-muted-foreground",
-};
 
 /**
  * What a view adds to the lines of a change (the lines with an anchor): a task's review comments (ADR-62) put a button
@@ -59,7 +50,7 @@ export function ChangesDiff({ changes, annotations }: { changes: WorkingTreeChan
       <pre className="bg-muted overflow-x-auto rounded-md border p-3 font-mono text-xs leading-5">
         {lines.map((line) => (
           <Fragment key={line.offset}>
-            <div className={cn("px-1 whitespace-pre", annotations && "group flex", LINE_CLASSES[line.kind])}>
+            <div className={cn("px-1 whitespace-pre", annotations && "group flex", DIFF_LINE_CLASSES[line.kind])}>
               {annotations && <span className="w-5 shrink-0">{line.anchor && annotations.gutter(line.anchor)}</span>}
               {line.text || " "}
             </div>

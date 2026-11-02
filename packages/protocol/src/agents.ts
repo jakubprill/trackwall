@@ -2,7 +2,7 @@ import { z } from "zod";
 import { apiEndpoints, Done } from "./api.ts";
 import { BoardItemId } from "./board.ts";
 import { WorkingTreeChanges } from "./changes.ts";
-import { SessionMessage, SessionView } from "./conversation.ts";
+import { SessionMessage, SessionView, ToolPatch } from "./conversation.ts";
 import { RunState } from "./procs.ts";
 import { REVIEW_COMMENTS_MAX, ReviewComment } from "./review.ts";
 import { singleLine } from "./single-line.ts";
@@ -231,6 +231,11 @@ export const AgentApproval = z.object({
   title: z.string(),
   /** What the dialog shows between the heading and the question: the command, the file and its lines. */
   detail: z.array(z.string()),
+  /**
+   * The change to a file the approval allows, as a unified diff: only over ACP (ADR-107), where Copilot CLI sends it
+   * as data, while an approval read from the screen has the lines of the change in `detail`.
+   */
+  patch: ToolPatch.optional(),
   /** "Do you want to run this command?" */
   question: z.string(),
   /** The choices that answer the dialog at once with their digit; without "No, and tell Copilot…", which needs text typed in the terminal. */

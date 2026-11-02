@@ -14,7 +14,7 @@ import type {
 } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
 import { AcpConnection, AcpError } from "./acp-connection.ts";
-import { AcpConversation, type ConversationChange, toolCallLines } from "./acp-conversation.ts";
+import { AcpConversation, type ConversationChange } from "./acp-conversation.ts";
 import {
   ACP_PROTOCOL_VERSION,
   InitializeResult,
@@ -26,6 +26,7 @@ import {
   SessionUpdate,
   SessionUpdateParams,
 } from "./acp-messages.ts";
+import { toolCallFiles, toolCallLines, toolCallPatch } from "./acp-tool-call.ts";
 import type { AgentSession } from "./agent-session.ts";
 import { type CopilotHookOutput, situationOutput } from "./copilot-hook-output.ts";
 import type { CopilotHookRecord } from "./copilot-hook-record.ts";
@@ -123,7 +124,7 @@ export class AcpSession implements AgentSession {
   readonly startedAt = new Date().toISOString();
   readonly environment: SessionEnvironment;
   readonly #o: AcpSessionOptions;
-  readonly #conversation = new AcpConversation();
+  readonly #conversation: AcpConversation;
   readonly #attention = new SessionAttention();
   readonly #viewers = new Set<ConversationViewer>();
   readonly #decoder = new TextDecoder();
@@ -161,6 +162,7 @@ export class AcpSession implements AgentSession {
     this.task = o.task;
     this.environment = o.environment;
     this.#o = o;
+    this.#conversation = new AcpConversation(o.cwd);
     this.#hasConversation = o.load !== undefined;
     this.#connection = new AcpConnection({
       write: (line) => this.#channel?.write(line),
@@ -442,10 +444,10 @@ export class AcpSession implements AgentSession {
     if (method !== "session/update") return;
     const parsed = SessionUpdateParams.safeParse(params);
     if (!parsed.success || parsed.data.sessionId !== this.#conversationId) return;
-    // Any update of the conversation is a step (ADR-151), also a thought or a plan the daemon does not show.
+    // Any update of the conversation is a step (ADR-151), also a plan the daemon does not show.
     this.#lastStepAt = Date.now();
     const update = SessionUpdate.safeParse(parsed.data.update);
-    // A kind the daemon does not show (available commands, usage, thoughts, plans).
+    // A kind the daemon does not show (available commands, usage, plans).
     if (!update.success) return;
     if (update.data.sessionUpdate === "session_info_update") this.#windowTitle = update.data.title ?? this.#windowTitle;
     this.#broadcast(this.#conversation.apply(update.data));
@@ -463,7 +465,9 @@ export class AcpSession implements AgentSession {
       id: `approval-${++this.#approvalCount}`,
       kind: "approval",
       title: toolCall.title ?? "Approval",
-      detail: toolCallLines(toolCall),
+      // The files first: an approval's title names the tool ("Edit file"), not what it changes.
+      detail: [...toolCallFiles(toolCall, this.#o.cwd), ...toolCallLines(toolCall)],
+      patch: toolCallPatch(toolCall),
       question: APPROVAL_QUESTION,
       options: options.map((o, i) => ({ key: String(i + 1), label: o.name })),
     };

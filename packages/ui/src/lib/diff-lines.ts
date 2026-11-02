@@ -8,6 +8,16 @@ import type { ReviewSide } from "@trackwall/protocol";
  */
 export type DiffLineKind = "file" | "meta" | "hunk" | "added" | "removed" | "context";
 
+/** The colour of each kind of line, the same in the "Changes" view and the conversation view. */
+export const DIFF_LINE_CLASSES: Record<DiffLineKind, string> = {
+  file: "text-foreground mt-3 font-medium first:mt-0",
+  meta: "text-muted-foreground",
+  hunk: "text-primary",
+  added: "text-success bg-success/10",
+  removed: "text-destructive bg-destructive/10",
+  context: "text-muted-foreground",
+};
+
 /**
  * Where a line of a change is: the file relative to the repo root and the line number, in the worktree's file (`new`:
  * added and unchanged lines) or in the base commit's (`old`: removed lines).
@@ -127,4 +137,21 @@ export function diffLines(patch: string, maxLines: number): { lines: DiffLine[];
     offset = end < 0 ? patch.length : end + 1;
   }
   return { lines, more: offset < patch.length };
+}
+
+/**
+ * A tool call's change in the conversation view (ADR-107): the lines of its hunks without the file headers, which the
+ * tool's title and files already name, the first `maxLines` of them, and how many lines it adds and removes in all.
+ */
+export function changeLines(patch: string, maxLines: number): { lines: DiffLine[]; added: number; removed: number; more: boolean } {
+  const lines = diffLines(patch, Number.POSITIVE_INFINITY).lines;
+  // A patch that starts with `---` instead of `diff --git` has its header before the first hunk as well.
+  const firstHunk = lines.findIndex((line) => line.kind === "hunk");
+  const all = lines.slice(Math.max(firstHunk, 0)).filter((line) => line.kind !== "file" && line.kind !== "meta");
+  return {
+    lines: all.slice(0, maxLines),
+    added: all.filter((line) => line.kind === "added").length,
+    removed: all.filter((line) => line.kind === "removed").length,
+    more: all.length > maxLines,
+  };
 }
