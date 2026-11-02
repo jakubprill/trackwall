@@ -9,7 +9,7 @@ const edge = (from: string, to: string, kind: GraphEdge["kind"], confidence: Edg
   source: kind === "calls" ? "http" : "package",
   key: to,
   confidence,
-  evidence: [{ repo: from, file: "pom.xml", line: 12, text: `uses ${to}` }],
+  evidence: [{ repo: from, path: "pom.xml", line: 12, detail: `uses ${to}` }],
 });
 
 const relation = (name: string, repos: string[], approved = true, kind: KnowledgeListEntry["kind"] = "relation"): KnowledgeListEntry => ({
