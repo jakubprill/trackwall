@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>3D dashboard on Home</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<style>
+/* Layout: the dashboard mockup at full width like the app window, the notes below it in one column.
+   One dark look on purpose: it previews the Trackwall UI, which is a dark HUD (ADR-16). */
+:root {
+  --bg: var(--background);
+  --surface: var(--card);
+  --glass: color-mix(in oklch, var(--card) 78%, transparent);
+  --line: var(--border);
+  --fg: var(--foreground);
+  --local-muted: var(--muted-foreground);
+  --local-accent: var(--primary);
+  --ok: var(--success);
+  --warn: var(--warning);
+  --bad: var(--destructive);
+  --accent-soft: color-mix(in oklch, var(--primary) 10%, transparent);
+  --warn-soft: color-mix(in oklch, var(--warning) 12%, transparent);
+  --f-display: var(--font-sans);
+  --f-body: var(--font-sans);
+  --f-mono: var(--font-mono);
+}
+* { box-sizing: border-box; }
+html, body { background: var(--bg); color: var(--fg); }
+body {
+  font: 15px/1.6 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 72px;
+}
+a { color: var(--local-accent); }
+code, .mono { font-family: var(--f-mono); font-size: .88em; }
+code { background: var(--accent-soft); padding: 1px 5px; border-radius: 3px; }
+:focus-visible { outline: 2px solid var(--local-accent); outline-offset: 2px; }
+.page { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+header.top { display: flex; flex-direction: column; gap: 12px; }
+.eyebrow { font: 500 12px/1 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--local-accent); }
+h1 { font: 600 clamp(30px, 5vw, 46px)/1.08 var(--f-display); margin: 0; letter-spacing: .01em; text-wrap: balance; }
+h2 { font: 600 24px/1.2 var(--f-display); margin: 0; text-wrap: balance; display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+h2 .tag { font: 500 12px/1 var(--f-mono); color: var(--local-muted); letter-spacing: .08em; }
+h3 { font: 600 16px/1.35 var(--f-body); margin: 0; }
+p { margin: 0; max-width: 72ch; }
+.lede { font-size: 17px; max-width: 74ch; }
+.muted { color: var(--local-muted); }
+
+/* ---------- Makieta ---------- */
+.mock { position: relative; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #03060a; }
+.mock-bar { display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--surface); flex-wrap: wrap; }
+.mock-bar .brand { font: 600 13px/1 var(--f-display); letter-spacing: .14em; text-transform: uppercase; }
+.mock-bar .crumb { font: 500 12px/1 var(--f-mono); color: var(--local-muted); }
+.mock-bar .spacer { flex: 1; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.seg button, .tbtn { font: 500 12px/1 var(--f-mono); letter-spacing: .04em; color: var(--local-muted); background: transparent; border: 0; padding: 7px 10px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"], .tbtn[aria-pressed="true"] { color: var(--local-accent); background: var(--accent-soft); }
+.tbtn { border: 1px solid var(--line); border-radius: 4px; }
+.seg button:hover, .tbtn:hover { color: var(--fg); }
+.mbody { position: relative; }
+.stage { position: relative; height: min(700px, 78vh); min-height: 480px; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+.stage canvas.dragging { cursor: grabbing; }
+.labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.lbl { position: absolute; transform: translate(-50%, -100%); white-space: nowrap; font: 500 11px/1.2 var(--f-mono); color: var(--local-muted); padding: 2px 5px; border-radius: 3px; letter-spacing: .02em; }
+.lbl.repo { color: rgba(217, 230, 236, .62); }
+.lbl.repo.hot { color: var(--fg); background: rgba(5, 8, 11, .7); border: 1px solid var(--line); }
+.lbl.sess { color: var(--fg); background: rgba(5, 8, 11, .78); border: 1px solid var(--line); }
+.lbl.sess.attn { border-color: var(--warn); color: var(--warn); }
+.lbl.sess.err { border-color: var(--bad); color: var(--bad); }
+.lbl.layer { font: 600 11px/1 var(--f-display); letter-spacing: .18em; text-transform: uppercase; color: rgba(63, 210, 232, .55); transform: translate(-50%, -50%); }
+.lbl.core { color: var(--local-accent); font: 600 11px/1.3 var(--f-display); letter-spacing: .16em; text-transform: uppercase; text-align: center; transform: translate(-50%, -50%); }
+
+.panel-l, .panel-r { position: absolute; top: 14px; width: 270px; background: var(--glass); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 6px; display: flex; flex-direction: column; min-width: 0; }
+.panel-l { left: 14px; }
+.panel-r { right: 14px; width: 300px; max-height: calc(100% - 28px); overflow: auto; }
+.ph { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 12px 14px 8px; }
+.ph .t { font: 600 12px/1 var(--f-display); letter-spacing: .16em; text-transform: uppercase; color: var(--local-muted); }
+.ph .n { font: 600 26px/1 var(--f-display); color: var(--warn); font-variant-numeric: tabular-nums; }
+.queue { list-style: none; margin: 0; padding: 0 6px 8px; display: flex; flex-direction: column; gap: 2px; }
+.queue button { width: 100%; text-align: left; background: transparent; border: 1px solid transparent; border-radius: 4px; color: var(--fg); padding: 7px 8px; cursor: pointer; display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 2px 8px; align-items: baseline; font: inherit; }
+.queue button:hover, .queue button[aria-current="true"] { border-color: var(--line); background: var(--accent-soft); }
+.queue .dot { width: 8px; height: 8px; border-radius: 50%; align-self: center; }
+.queue .ttl { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.queue .sub { grid-column: 2; font: 400 11px/1.3 var(--f-mono); color: var(--local-muted); }
+.queue .sep { font: 500 10px/1 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--local-muted); padding: 10px 8px 4px; }
+.hint { font: 400 11px/1.4 var(--f-mono); color: var(--local-muted); padding: 8px 14px 12px; border-top: 1px solid var(--line); }
+kbd { font: 500 10px/1 var(--f-mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px; padding: 2px 4px; color: var(--fg); }
+
+.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 4px 12px 12px; }
+.tile { border: 1px solid var(--line); border-radius: 5px; padding: 10px; display: flex; flex-direction: column; gap: 4px; min-width: 0; background: rgba(5, 8, 11, .45); }
+.tile .v { font: 600 24px/1 var(--f-display); font-variant-numeric: tabular-nums; }
+.tile .k { font: 500 11px/1.25 var(--f-mono); color: var(--local-muted); letter-spacing: .03em; }
+.tile .s { font-size: 12px; color: var(--local-muted); }
+.tile.wide { grid-column: 1 / -1; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; font: 500 11px/1 var(--f-mono); padding: 4px 6px; border-radius: 3px; border: 1px solid currentColor; white-space: nowrap; }
+.chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); } .acc { color: var(--local-accent); } .dim { color: var(--local-muted); }
+.sel { padding: 4px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+.sel .name { font: 600 20px/1.15 var(--f-display); overflow-wrap: anywhere; }
+.kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; font-size: 13px; }
+.kv dt { font: 500 11px/1.6 var(--f-mono); color: var(--local-muted); }
+.kv dd { margin: 0; overflow-wrap: anywhere; }
+.acts { display: flex; gap: 6px; flex-wrap: wrap; }
+.acts button { font: 500 12px/1 var(--f-mono); color: var(--local-accent); background: var(--accent-soft); border: 1px solid rgba(63, 210, 232, .35); border-radius: 4px; padding: 7px 10px; cursor: pointer; }
+.acts button.sec { color: var(--fg); background: transparent; border-color: var(--line); }
+.back { align-self: flex-start; font: 500 11px/1 var(--f-mono); color: var(--local-muted); background: none; border: 0; padding: 0; cursor: pointer; }
+.legend { position: absolute; left: 14px; bottom: 12px; display: flex; gap: 12px; flex-wrap: wrap; font: 500 11px/1 var(--f-mono); color: var(--local-muted); pointer-events: none; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.sample { position: absolute; right: 14px; bottom: 12px; font: 500 10px/1 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--local-muted); border: 1px dashed var(--line); padding: 5px 7px; border-radius: 3px; pointer-events: none; }
+.nogl[hidden] { display: none; }
+.nogl { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: var(--local-muted); padding: 24px; }
+.mock-cap { font-size: 13px; color: var(--local-muted); }
+.vnote { margin: 0; max-width: none; padding: 8px 14px; font-size: 13px; color: var(--local-muted); border-bottom: 1px solid var(--line); background: var(--surface); }
+.vnote strong { color: var(--local-accent); font: 600 12px/1 var(--f-display); letter-spacing: .12em; text-transform: uppercase; margin-right: 8px; }
+.hcard { position: absolute; z-index: 5; width: 250px; pointer-events: none; background: rgba(8, 14, 18, .94); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; box-shadow: 0 8px 28px rgba(0,0,0,.5); }
+.hcard[hidden] { display: none; }
+.hcard strong { font: 600 15px/1.2 var(--f-display); }
+.hcard .m { color: var(--local-muted); font-size: 12px; }
+.hcard .h { font: 500 10px/1.3 var(--f-mono); color: var(--local-accent); letter-spacing: .04em; }
+.toast { position: absolute; z-index: 6; left: 50%; bottom: 44px; transform: translateX(-50%); background: var(--surface); border: 1px solid var(--local-accent); border-radius: 6px; padding: 10px 14px; display: flex; gap: 10px; align-items: baseline; font-size: 13px; box-shadow: 0 0 24px var(--accent-soft); max-width: calc(100% - 32px); }
+.toast[hidden] { display: none; }
+
+@media (max-width: 980px) {
+  .stage { height: 440px; min-height: 0; }
+  .panel-l, .panel-r { position: static; width: auto; max-height: none; backdrop-filter: none; background: var(--surface); border-radius: 0; border-width: 1px 0 0; }
+  .side { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .legend { position: static; padding: 10px 14px; border-top: 1px solid var(--line); }
+  .sample { top: 10px; bottom: auto; }
+}
+@media (max-width: 640px) { .side { grid-template-columns: minmax(0, 1fr); } .stage { height: 360px; } }
+
+/* ---------- Dokument ---------- */
+.doc { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 40px; margin-top: 20px; }
+nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 20px); align-self: start; font: 13px/1.5 var(--f-mono); display: flex; flex-direction: column; gap: 6px; }
+nav.toc a { color: var(--local-muted); text-decoration: none; padding-left: 10px; border-left: 1px solid var(--line); }
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--local-accent); border-left-color: var(--local-accent); outline: none; }
+main { min-width: 0; display: flex; flex-direction: column; gap: 56px; }
+section { display: flex; flex-direction: column; gap: 18px; scroll-margin-top: 20px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.card.key { border-color: var(--local-accent); box-shadow: 0 0 0 1px var(--accent-soft), 0 0 32px var(--accent-soft); }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+ul.clean { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; max-width: 74ch; }
+figure { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+figure img { width: 100%; height: auto; border-radius: 4px; border: 1px solid var(--line); display: block; }
+figcaption { font-size: 13px; color: var(--local-muted); }
+.tablebox { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+th { font: 500 11px/1.3 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--local-muted); background: var(--accent-soft); white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.n { font-family: var(--f-mono); color: var(--local-accent); white-space: nowrap; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font: 500 11px/1 var(--f-mono); padding: 4px 7px; border-radius: 3px; border: 1px solid currentColor; white-space: nowrap; letter-spacing: .04em; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.issue { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 14px; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+.issue:last-child { border-bottom: 0; }
+.issue .pr { font: 600 13px/1 var(--f-display); letter-spacing: .1em; padding-top: 3px; }
+.issue .body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.issue .wa { font-size: 13px; color: var(--local-muted); }
+.steps { counter-reset: s; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; }
+.steps li::before { content: counter(s); font: 600 20px/1.2 var(--f-display); color: var(--local-accent); }
+@media (max-width: 860px) {
+  .doc { grid-template-columns: minmax(0, 1fr); }
+  nav.toc { position: static; flex-direction: row; flex-wrap: wrap; gap: 8px 14px; }
+  .grid2, .grid3 { grid-template-columns: minmax(0, 1fr); }
+  .issue { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+}
+</style>
+
+<div class="page">
+<header class="top">
+  <span class="eyebrow">Concept, round 2 · 2026-10-24 · Pawn 0.1.0-alpha.5 from npm</span>
+  <h1>A 3D dashboard as the first screen</h1>
+  <p class="lede">One screen that answers three questions when Trackwall opens: <strong>what waits for me</strong>, <strong>what state the repos are in</strong> and <strong>what runs now</strong>. The middle is a 3D scene drawn with Pawn, and the sides show the same numbers in plain HTML, so the scene hides nothing. Round two: three scene proposals with richer objects in the Trackwall style, short labels with a preview on hover, and clicks that lead to sessions and repos.</p>
+</header>
+
+<div class="mock" id="mock">
+  <div class="mock-bar">
+    <span class="brand">Trackwall</span>
+    <span class="crumb">Home · Ctrl+1</span>
+    <span class="spacer"></span>
+    <div class="seg" role="group" aria-label="Scene proposal">
+      <button type="button" data-variant="orbit" aria-pressed="true">A · Orbit+</button>
+      <button type="button" data-variant="floor" aria-pressed="false">B · Floor</button>
+      <button type="button" data-variant="track" aria-pressed="false">C · Track</button>
+    </div>
+    <button type="button" class="tbtn" id="tog-edges" aria-pressed="true">Connections</button>
+    <button type="button" class="tbtn" id="btn-fit">Fit</button>
+  </div>
+  <p class="vnote" id="variant-note"></p>
+  <div class="mbody">
+  <div class="stage" id="stage">
+    <canvas id="cv" aria-label="3D scene: the daemon core, a ring of Copilot sessions and a ring of repos with their connections"></canvas>
+    <div class="labels" id="labels"></div>
+    <div class="nogl" id="nogl" hidden><p>This browser did not create a WebGL context. In the app the dashboard would then show only the panels with numbers.</p></div>
+    <span class="sample">Sample data</span>
+    <div class="hcard" id="hcard" hidden></div>
+    <div class="toast" id="toast" role="status" hidden></div>
+  </div>
+  <div class="side">
+    <aside class="panel-l" aria-label="Needs you">
+      <div class="ph"><span class="t">Needs you</span><span class="n" id="q-count">0</span></div>
+      <ul class="queue" id="queue"></ul>
+      <div class="hint"><kbd>N</kbd> next waiting · <kbd>Enter</kbd> open · <kbd>Esc</kbd> back</div>
+    </aside>
+    <aside class="panel-r" aria-label="Details" id="detail"></aside>
+  </div>
+  <div class="legend" aria-hidden="true">
+    <span><i style="background: var(--warn)"></i>needs you / local changes</span>
+    <span><i style="background: var(--local-accent)"></i>working / behind remote</span>
+    <span><i style="background: var(--bad)"></i>error / unavailable</span>
+    <span><i style="background: #35505d"></i>clean</span>
+  </div>
+  </div>
+</div>
+<p class="mock-cap">Switch between the three proposals with the A, B and C buttons above the scene. Hover an object for a preview. A click shows details on the right, and a double click, <kbd>Enter</kbd> or the button in the details goes to the session or repo (the mockup only says where it would go). Drag to rotate. The objects are built from simple solids; in the app they would be small glTF models loaded through Pawn (<code>Model</code>, <code>Assets</code>).</p>
+
+<div class="doc">
+<main>
+
+<section id="uklad">
+  <h2>Three scene proposals <span class="tag">chosen: A, built as the Orbit layout (ADR-33)</span></h2>
+  <p>All three have the same panels (Needs you on the left, Details on the right), the same set of objects and the same label rules. They differ in what sits at the centre of attention.</p>
+  <div class="grid3">
+    <div class="card key"><span class="eyebrow">A · Orbit+</span><h3>Rings, extended</h3><p class="muted">The daemon core is a reactor with a turning ring of slots; sessions are drones on an inner track, tied to their repos; repos are modules on the rim. Connections are thin wires that packets travel along: HTTP faster, packages slower.</p><p><span class="pill ok">dashboard at start</span></p></div>
+    <div class="card"><span class="eyebrow">B · Floor</span><h3>Control hall</h3><p class="muted">The “Layers” version, turned into an isometric view: four layer zones on a dotted floor, pipes routed at right angles, sessions above their repos, session wires meeting at the daemon in front. It shows the structure best.</p><p><span class="pill warn">a second view, for example in the graph</span></p></div>
+    <div class="card"><span class="eyebrow">C · Track</span><h3>Work track</h3><p class="muted">A glowing track through the stations Working, Needs you, Failed, Review, Done (and Proposed, once there is <code>propose_task</code>). A session stands at the station of its state and moves on when the state changes. Repos are only a shelf in the background, so this is a view of sessions, not of the environment.</p><p><span class="pill dim">for the Sessions view</span></p></div>
+  </div>
+  <div class="tablebox">
+  <table>
+    <thead><tr><th>Object</th><th>Model</th><th>What it shows without reading</th></tr></thead>
+    <tbody>
+      <tr><td>Repo of the Frontends layer</td><td>Terminal: a screen on a stand</td><td>The screen glows in the state colour, and flickers when the repo is unavailable</td></tr>
+      <tr><td>Repo of the BFF layer</td><td>Gateway: a cylinder with an antenna and a ring</td><td>The ring in the state colour, the antenna tip blinks</td></tr>
+      <tr><td>Repo of the Services layer</td><td>A rack with LEDs</td><td>The top LED is the state, the second blinks while a mise task runs</td></tr>
+      <tr><td>Repo of the Libraries layer</td><td>A transparent box with a core</td><td>Edges and core in the state colour</td></tr>
+      <tr><td>Every repo</td><td>A plate with a state bar</td><td>Bars next to the plate: local changes or commits to pull (up to 5); a grey tile in the corner without mise; a ring with a spark while a task runs</td></tr>
+      <tr><td>Copilot session</td><td>Drone: a hexagonal body with a ring</td><td>The ring spins while it works; a waiting one has an amber light beam with a floating ring, an error a red one; an ended one is grey</td></tr>
+      <tr><td>Daemon</td><td>A reactor with a ring of slots</td><td>The core breathes while the daemon runs; later a flash on an MCP call</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="grid2">
+    <div class="card"><h3>Labels: the bare minimum</h3><ul class="clean"><li>Repo: the name only, and only on a repo that is not clean. A clean repo has no label until you hover it.</li><li>Session: one word, only when action is needed (<em>Needs you</em>, <em>Error</em>). Working sessions speak through colour and motion.</li><li>Zones and stations: the name of the layer or stage.</li></ul></div>
+    <div class="card"><h3>Hover, click, double click</h3><ul class="clean"><li><strong>Hover</strong>: a preview card at the cursor with the state, the sessions in the repo, the connections and a hint of what a click does; the connections light up.</li><li><strong>Click</strong>: details on the right and the camera moves closer.</li><li><strong>Double click</strong>, <kbd>Enter</kbd> or the button in the details: go to the session terminal, the change review or the repo. In the app that is real navigation to the existing views.</li></ul></div>
+  </div>
+  <p>The rule for the whole screen: <strong>the scene is a second way of showing the same numbers, not the only one</strong>. Everything you need to read is also in the HTML panels. So the dashboard works with a screen reader, with WebGL off (the dashboard without the scene, with the panels only) and in a narrow window.</p>
+</section>
+
+</main>
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+<script>
+(() => {
+"use strict";
+// Sample data: generic names, nothing real.
+const LAYERS = ["Frontends", "BFF", "Services", "Libraries"];
+const REPOS = [
+  ["web-shop", 0, "behind", 1], ["admin-panel", 0, "clean"], ["docs-site", 0, "clean", 0, true],
+  ["shop-bff", 1, "clean"], ["orders-bff", 1, "changes", 4], ["admin-bff", 1, "clean"],
+  ["orders-api", 2, "clean"], ["payments-api", 2, "behind", 3], ["catalog-api", 2, "changes", 2], ["users-api", 2, "clean"],
+  ["search-api", 2, "unavailable"], ["notifications", 2, "clean", 0, true], ["inventory-api", 2, "clean"], ["pricing-api", 2, "clean"],
+  ["common-dto", 3, "clean"], ["http-client", 3, "clean"], ["auth-lib", 3, "clean"], ["events-lib", 3, "clean"], ["ui-kit", 3, "changes", 1],
+].map(([id, layer, status, n = 0, noMise = false]) => ({ id, layer, status, n, noMise, branch: status === "unavailable" ? null : "main" }));
+const RUNNING = { "orders-api": "dev", "catalog-api": "test" };
+const EDGES = [
+  ["web-shop", "shop-bff", "http"], ["web-shop", "ui-kit", "package"], ["admin-panel", "admin-bff", "http"], ["admin-panel", "ui-kit", "package"],
+  ["shop-bff", "catalog-api", "http"], ["shop-bff", "orders-api", "http"], ["shop-bff", "pricing-api", "http"], ["orders-bff", "orders-api", "http"],
+  ["orders-bff", "payments-api", "http"], ["admin-bff", "users-api", "http"], ["admin-bff", "catalog-api", "http"], ["orders-api", "common-dto", "package"],
+  ["orders-api", "events-lib", "package"], ["payments-api", "common-dto", "package"], ["payments-api", "http-client", "package"], ["catalog-api", "search-api", "http"],
+  ["catalog-api", "common-dto", "package"], ["users-api", "auth-lib", "package"], ["inventory-api", "events-lib", "package"], ["notifications", "events-lib", "package"],
+  ["pricing-api", "http-client", "package"], ["orders-api", "inventory-api", "manual"],
+];
+const SESSIONS = [
+  { id: "s1", title: "Add retry to payment call", repo: "orders-bff", state: "Approval", attn: true, age: "12 min", note: "Wants to run: mvn -q test" },
+  { id: "s2", title: "Fix catalog pagination", repo: "catalog-api", state: "Working", age: "4 min", note: "Editing 3 files" },
+  { id: "s3", title: "Upgrade router to v7", repo: "web-shop", state: "Input", attn: true, age: "31 min", note: "Asks: keep the legacy redirects?" },
+  { id: "s4", title: "Add audit log", repo: "users-api", state: "Working", age: "9 min", note: "Running tests" },
+  { id: "s5", title: "Button sizes", repo: "ui-kit", state: "Done", age: "1 h", note: "3 unsaved changes in worktree" },
+  { id: "s6", title: "Webhook signature check", repo: "payments-api", state: "Error", age: "22 min", note: "Exited with code 1" },
+];
+const STATE_LABEL = { Working: "working", Input: "waits for you", Approval: "asks for approval", Plan: "waits for plan approval", Done: "done", Error: "error" };
+const STATUS_LABEL = { clean: "clean", changes: (r) => `${r.n} local changes`, behind: (r) => `${r.n} behind remote`, unavailable: "unavailable" };
+const KIND = ["Terminal", "Gateway", "Rack", "Crate"];
+
+const css = getComputedStyle(document.documentElement);
+const tok = (n) => css.getPropertyValue(n).trim();
+const COL = { warn: tok("--warn"), bad: tok("--bad"), acc: tok("--local-accent"), ok: tok("--ok"), clean: "#35505d", bg: "#03060a", fg: tok("--fg"), muted: tok("--local-muted"), body: "#101d24", base: "#0a151b" };
+const repoColor = (r) => ({ clean: COL.clean, changes: COL.warn, behind: COL.acc, unavailable: COL.bad })[r.status];
+const sessColor = (s) => (s.attn ? COL.warn : s.state === "Error" ? COL.bad : s.state === "Working" ? COL.acc : COL.muted);
+const sessTone = (s) => (s.attn ? "warn" : s.state === "Error" ? "bad" : s.state === "Working" ? "acc" : "dim");
+const repoTone = (r) => ({ clean: "dim", changes: "warn", behind: "acc", unavailable: "bad" })[r.status];
+const statusText = (r) => { const l = STATUS_LABEL[r.status]; return typeof l === "function" ? l(r) : l; };
+const byId = Object.fromEntries(REPOS.map((r) => [r.id, r]));
+const sessById = Object.fromEntries(SESSIONS.map((s) => [s.id, s]));
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+// ---------- Going to a view (in the mockup: a message) ----------
+const toastEl = document.getElementById("toast");
+let toastTimer = 0;
+function openTarget(kind, id, what) {
+  const text = kind === "session"
+    ? `${what || "Open terminal"} → Sessions › “${sessById[id].title}”`
+    : `${what || "Open repo"} → Repos › ${id}`;
+  toastEl.innerHTML = `<span class="eyebrow">In the app</span><span>${esc(text)}</span>`;
+  toastEl.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => (toastEl.hidden = true), 2600);
+}
+
+// ---------- Panels (they work without WebGL too) ----------
+let selected = null;
+const queueEl = document.getElementById("queue");
+const detailEl = document.getElementById("detail");
+const queueItems = [
+  ...SESSIONS.filter((s) => s.attn).map((s) => ({ kind: "session", id: s.id, tone: "warn", t: s.title, sub: `${s.repo} · ${STATE_LABEL[s.state]} · ${s.age}`, group: "Sessions" })),
+  ...SESSIONS.filter((s) => s.state === "Done").map((s) => ({ kind: "session", id: s.id, tone: "warn", t: s.title, sub: `${s.repo} · ${s.note}`, group: "Review" })),
+  ...SESSIONS.filter((s) => s.state === "Error").map((s) => ({ kind: "session", id: s.id, tone: "bad", t: s.title, sub: `${s.repo} · ${s.note}`, group: "Problems" })),
+  ...REPOS.filter((r) => r.status === "unavailable").map((r) => ({ kind: "repo", id: r.id, tone: "bad", t: r.id, sub: "repo unavailable · .git missing", group: "Problems" })),
+];
+function renderQueue() {
+  document.getElementById("q-count").textContent = SESSIONS.filter((s) => s.attn).length;
+  let last = "";
+  queueEl.innerHTML = queueItems.map((q) => {
+    const sep = q.group !== last ? `<li class="sep">${q.group}</li>` : ""; last = q.group;
+    const cur = selected && selected.kind === q.kind && selected.id === q.id;
+    return `${sep}<li><button type="button" data-kind="${q.kind}" data-id="${q.id}" aria-current="${cur}" title="Click: show · Double-click: open"><span class="dot" style="background: var(--${q.tone})"></span><span class="ttl">${esc(q.t)}</span><span class="sub">${esc(q.sub)}</span></button></li>`;
+  }).join("");
+}
+queueEl.addEventListener("click", (e) => { const b = e.target.closest("button[data-id]"); if (b) select(b.dataset.kind, b.dataset.id); });
+queueEl.addEventListener("dblclick", (e) => { const b = e.target.closest("button[data-id]"); if (b) openTarget(b.dataset.kind, b.dataset.id); });
+function renderDetail() {
+  if (!selected) {
+    const c = (st) => REPOS.filter((r) => r.status === st).length;
+    detailEl.innerHTML = `<div class="ph"><span class="t">Environment</span><span class="chip ok">daemon 0.2.0</span></div>
+      <div class="tiles">
+        <div class="tile"><span class="v">${SESSIONS.length}</span><span class="k">Copilot sessions</span><div class="chips"><span class="chip warn">${SESSIONS.filter((s) => s.attn).length} need you</span><span class="chip acc">${SESSIONS.filter((s) => s.state === "Working").length} working</span></div></div>
+        <div class="tile"><span class="v">${REPOS.length}</span><span class="k">Repositories</span><div class="chips"><span class="chip warn">${c("changes")} changed</span><span class="chip acc">${c("behind")} behind</span><span class="chip bad">${c("unavailable")} unavailable</span></div></div>
+        <div class="tile"><span class="v">${Object.keys(RUNNING).length}</span><span class="k">Running mise tasks</span><span class="s">orders-api dev · catalog-api test</span></div>
+        <div class="tile"><span class="v">${EDGES.length}</span><span class="k">Connections</span><span class="s">${EDGES.filter((e) => e[2] === "http").length} HTTP · ${EDGES.filter((e) => e[2] === "package").length} package · 1 manual</span></div>
+        <div class="tile wide"><span class="k">MCP</span><span class="s">2 agents connected · last call <span class="mono">who_calls(orders-api)</span> 2 min ago</span></div>
+        <div class="tile wide"><span class="k">Sync</span><span class="s">Last sync 08:42 · 16 up to date · 2 skipped · 1 failed</span></div>
+      </div>`;
+    return;
+  }
+  if (selected.kind === "repo") {
+    const r = byId[selected.id];
+    const uses = EDGES.filter((e) => e[0] === r.id), usedBy = EDGES.filter((e) => e[1] === r.id);
+    const sess = SESSIONS.filter((s) => s.repo === r.id);
+    detailEl.innerHTML = `<div class="sel"><button type="button" class="back" data-back>‹ Environment</button>
+      <span class="eyebrow">${LAYERS[r.layer]} · repo</span><span class="name">${esc(r.id)}</span>
+      <div class="chips"><span class="chip ${repoTone(r)}">${statusText(r)}</span>${r.noMise ? '<span class="chip dim">no mise.toml</span>' : ""}${RUNNING[r.id] ? `<span class="chip acc">mise run ${RUNNING[r.id]}</span>` : ""}</div>
+      <dl class="kv"><dt>branch</dt><dd>${r.branch ?? "—"}</dd><dt>uses</dt><dd>${uses.map((e) => esc(e[1])).join(", ") || "—"}</dd><dt>used by</dt><dd>${usedBy.map((e) => esc(e[0])).join(", ") || "—"}</dd><dt>sessions</dt><dd>${sess.map((s) => esc(s.title)).join(", ") || "—"}</dd></dl>
+      <div class="acts"><button type="button" data-open="Open repo">Open repo</button><button type="button" class="sec" data-open="New task">New task</button><button type="button" class="sec" data-open="Sync">Sync</button></div></div>`;
+  } else {
+    const s = sessById[selected.id];
+    const main = s.state === "Done" ? "Review changes" : s.attn ? "Answer in terminal" : "Open terminal";
+    detailEl.innerHTML = `<div class="sel"><button type="button" class="back" data-back>‹ Environment</button>
+      <span class="eyebrow">Copilot session · ${esc(s.repo)}</span><span class="name">${esc(s.title)}</span>
+      <div class="chips"><span class="chip ${sessTone(s)}">${STATE_LABEL[s.state]}</span></div>
+      <dl class="kv"><dt>repo</dt><dd>${esc(s.repo)} (worktree)</dd><dt>running</dt><dd>${s.age}</dd><dt>now</dt><dd>${esc(s.note)}</dd></dl>
+      <div class="acts"><button type="button" data-open="${main}">${main}</button><button type="button" class="sec" data-open-repo="${esc(s.repo)}">Open repo</button></div></div>`;
+  }
+}
+detailEl.addEventListener("click", (e) => {
+  if (e.target.closest("[data-back]")) return select(null);
+  const o = e.target.closest("[data-open]");
+  if (o && selected) return openTarget(selected.kind, selected.id, o.dataset.open);
+  const r = e.target.closest("[data-open-repo]");
+  if (r) openTarget("repo", r.dataset.openRepo);
+});
+
+let scene3d = null;
+function select(kind, id) {
+  selected = kind ? { kind, id } : null;
+  renderQueue(); renderDetail();
+  if (scene3d) scene3d.focus(selected);
+}
+const mockEl = document.getElementById("mock");
+mockEl.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") select(null);
+  if (e.key === "Enter" && selected && !e.target.closest("button")) openTarget(selected.kind, selected.id);
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "n" && e.key !== "N") return;
+  const r = mockEl.getBoundingClientRect();
+  if (r.bottom < 0 || r.top > innerHeight) return;
+  const waiting = SESSIONS.filter((s) => s.attn);
+  const at = selected && selected.kind === "session" ? waiting.findIndex((s) => s.id === selected.id) : -1;
+  select("session", waiting[(at + 1) % waiting.length].id);
+});
+renderQueue(); renderDetail();
+
+// ---------- Scene: shared ----------
+const stage = document.getElementById("stage");
+const canvas = document.getElementById("cv");
+if (typeof THREE === "undefined" || !document.createElement("canvas").getContext("webgl2")) { document.getElementById("nogl").hidden = false; return; }
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(COL.bg);
+scene.fog = new THREE.Fog(COL.bg, 26, 48);
+const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 200);
+scene.add(new THREE.HemisphereLight(0xbfe9f2, 0x05080b, 0.85));
+const sun = new THREE.DirectionalLight(0xffffff, 0.9); sun.position.set(5, 12, 7); scene.add(sun);
+
+const lerp = (a, b, t) => a + (b - a) * t;
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const std = (c, e = 0, o = 1) => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: e, roughness: 0.6, metalness: 0.25, transparent: o < 1, opacity: o });
+const glow = (c, o = 1) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, depthWrite: o >= 1, blending: o < 1 ? THREE.AdditiveBlending : THREE.NormalBlending });
+const dark = () => std(COL.body, 0.0);
+function box(w, h, d, m, x = 0, y = 0, z = 0) { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); return o; }
+function cyl(rt, rb, h, seg, m, x = 0, y = 0, z = 0) { const o = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), m); o.position.set(x, y, z); return o; }
+function edges(mesh, c, o = 0.5) { const l = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), new THREE.LineBasicMaterial({ color: c, transparent: true, opacity: o })); l.position.copy(mesh.position); l.rotation.copy(mesh.rotation); return l; }
+
+// Labels and the preview card
+const labelsEl = document.getElementById("labels");
+const hcard = document.getElementById("hcard");
+function mkLabel(cls, text) { const d = document.createElement("div"); d.className = `lbl ${cls}`; d.textContent = text; labelsEl.appendChild(d); return d; }
+const v3 = new THREE.Vector3();
+function project(p) { v3.copy(p).project(camera); return { x: (v3.x * 0.5 + 0.5) * stage.clientWidth, y: (-v3.y * 0.5 + 0.5) * stage.clientHeight, behind: v3.z > 1 }; }
+function place(el, p, show = true) {
+  const s = project(p);
+  if (!show || s.behind) { el.style.visibility = "hidden"; return; }
+  el.style.visibility = "visible"; el.style.left = `${s.x}px`; el.style.top = `${s.y}px`;
+}
+function cardHtml(key) {
+  const [kind, id] = key.split(":");
+  if (kind === "repo") {
+    const r = byId[id]; const sess = SESSIONS.filter((s) => s.repo === id);
+    return `<span class="eyebrow">${LAYERS[r.layer]}</span><strong>${esc(id)}</strong>
+      <span class="chips"><span class="chip ${repoTone(r)}">${statusText(r)}</span>${RUNNING[id] ? `<span class="chip acc">mise ${RUNNING[id]}</span>` : ""}${r.noMise ? '<span class="chip dim">no mise</span>' : ""}</span>
+      ${sess.length ? `<span class="m">${sess.length} session${sess.length > 1 ? "s" : ""}: ${esc(sess.map((s) => s.title).join(", "))}</span>` : ""}
+      <span class="m">${EDGES.filter((e) => e[1] === id).length} used by · ${EDGES.filter((e) => e[0] === id).length} uses</span>
+      <span class="h">Click: details · Double-click: open</span>`;
+  }
+  if (kind === "session") {
+    const s = sessById[id];
+    return `<span class="eyebrow">Session · ${esc(s.repo)}</span><strong>${esc(s.title)}</strong>
+      <span class="chips"><span class="chip ${sessTone(s)}">${STATE_LABEL[s.state]}</span></span>
+      <span class="m">${esc(s.note)} · ${s.age}</span><span class="h">Click: details · Double-click: ${s.attn ? "answer" : "open"}</span>`;
+  }
+  if (kind === "station") return `<span class="eyebrow">Stage</span><strong>${esc(id)}</strong><span class="m">${stationCount(id)} session(s)</span>`;
+  return `<span class="eyebrow">Daemon</span><strong>trackwall-daemon 0.2.0</strong><span class="m">Bun · 2 MCP agents · uptime 3 h</span>`;
+}
+const stationCount = (st) => SESSIONS.filter((s) => stationOf(s) === st).length;
+function stationOf(s) { return s.attn ? "Needs you" : s.state === "Error" ? "Failed" : s.state === "Done" ? "Review" : "Working"; }
+
+// ---------- Model set (in the app: glTF models through Pawn `Model`, here simple solids) ----------
+function statusStrip(g, r, w, z) { const m = glow(repoColor(r)); const s = box(w, 0.035, 0.02, m, 0, 0.06, z); g.add(s); return m; }
+function changeBars(g, r, x) {
+  for (let i = 0; i < Math.min(r.n, 5); i++) g.add(box(0.05, 0.05 + i * 0.03, 0.05, glow(r.status === "behind" ? COL.acc : COL.warn), x, 0.12 + (0.05 + i * 0.03) / 2, 0.24 - i * 0.07));
+}
+function repoModel(r) {
+  const g = new THREE.Group();
+  const accent = r.status === "clean" ? COL.clean : repoColor(r);
+  const plate = box(0.9, 0.08, 0.68, std(COL.base), 0, 0.04, 0); g.add(plate, edges(plate, COL.acc, 0.25));
+  const anim = [];
+  if (r.layer === 0) { // Terminal: a screen on a stand
+    g.add(cyl(0.03, 0.05, 0.22, 8, dark(), 0, 0.19, -0.05));
+    const frame = box(0.66, 0.42, 0.05, dark(), 0, 0.48, -0.05); frame.rotation.x = -0.12; g.add(frame, edges(frame, COL.acc, 0.35));
+    const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.58, 0.34), glow(r.status === "clean" ? "#123a47" : accent, 0.85));
+    scr.position.set(0, 0.48, -0.022); scr.rotation.x = -0.12; g.add(scr);
+    for (let i = 0; i < 3; i++) { const ln = box(0.3 - i * 0.07, 0.025, 0.002, glow(COL.fg, 0.35), -0.1, 0.56 - i * 0.07, -0.018); ln.rotation.x = -0.12; g.add(ln); }
+    if (r.status === "unavailable") anim.push((t) => (scr.material.opacity = 0.4 + 0.4 * (Math.sin(t * 13) > 0.6)));
+  } else if (r.layer === 1) { // Gateway: a node with antennas
+    const hub = cyl(0.22, 0.26, 0.34, 8, dark(), 0, 0.25, 0); g.add(hub, edges(hub, COL.acc, 0.35));
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.018, 6, 32), glow(accent === COL.clean ? COL.acc : accent, 0.9)); ring.rotation.x = Math.PI / 2; ring.position.y = 0.3; g.add(ring);
+    g.add(cyl(0.012, 0.012, 0.36, 4, dark(), -0.13, 0.58, 0), cyl(0.012, 0.012, 0.26, 4, dark(), 0.13, 0.53, 0));
+    const tip = cyl(0.03, 0.03, 0.03, 8, glow(accent === COL.clean ? COL.acc : accent), -0.13, 0.77, 0); g.add(tip);
+    anim.push((t) => { if (!reduced) ring.rotation.z = t * 0.8; tip.material.opacity = 0.5 + 0.5 * Math.abs(Math.sin(t * 2)); });
+  } else if (r.layer === 2) { // Rack: a cabinet with LEDs
+    const body = box(0.56, 0.62, 0.44, dark(), 0, 0.39, 0); g.add(body, edges(body, COL.acc, 0.35));
+    for (let i = 0; i < 4; i++) {
+      const lit = i === 0 ? accent : i === 1 && RUNNING[r.id] ? COL.acc : "#1b3540";
+      const led = box(0.4, 0.035, 0.01, glow(lit), 0, 0.58 - i * 0.12, 0.226); g.add(led);
+      if (i === 1 && RUNNING[r.id]) anim.push((t) => (led.material.opacity = 0.4 + 0.6 * (Math.sin(t * 9 + i) > 0)));
+    }
+    g.add(box(0.5, 0.02, 0.38, std("#18303a"), 0, 0.71, 0));
+  } else { // Crate: a transparent box with a core
+    const shell = box(0.46, 0.46, 0.46, std(COL.body, 0, 0.35), 0, 0.31, 0); g.add(shell, edges(shell, accent === COL.clean ? COL.acc : accent, 0.7));
+    const coreC = box(0.18, 0.18, 0.18, glow(accent === COL.clean ? "#1f6a7a" : accent), 0, 0.31, 0); g.add(coreC);
+    anim.push((t) => { if (!reduced) { coreC.rotation.y = t * 0.6; coreC.rotation.x = t * 0.4; } });
+  }
+  statusStrip(g, r, 0.6, 0.345);
+  if (r.status === "changes" || r.status === "behind") changeBars(g, r, 0.38);
+  if (r.noMise) g.add(box(0.16, 0.02, 0.16, std(COL.muted, 0.2), -0.33, 0.09, -0.24));
+  if (RUNNING[r.id]) {
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(0.58, 0.012, 6, 48), glow(COL.acc, 0.9)); halo.rotation.x = Math.PI / 2; halo.position.y = 0.05; g.add(halo);
+    const spark = box(0.04, 0.04, 0.04, glow(COL.acc), 0.5, 0.1, 0); g.add(spark);
+    anim.push((t) => { const a = t * 1.4; spark.position.set(Math.cos(a) * 0.58, 0.07, Math.sin(a) * 0.58); });
+  }
+  return { g, anim };
+}
+function sessionModel(s) {
+  const g = new THREE.Group();
+  const c = sessColor(s);
+  const pod = cyl(0.17, 0.2, 0.14, 6, std(COL.body, 0), 0, 0, 0); g.add(pod, edges(pod, c, 0.9));
+  const eye = cyl(0.09, 0.09, 0.02, 12, glow(c), 0, 0.08, 0); g.add(eye);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.29, 0.014, 6, 6), glow(c, 0.9)); ring.rotation.x = Math.PI / 2; g.add(ring);
+  const anim = [];
+  let beam = null;
+  if (s.attn || s.state === "Error") {
+    beam = cyl(0.045, 0.1, 2.6, 12, glow(c, 0.25), 0, 1.35, 0); g.add(beam);
+    const cap = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.012, 6, 24), glow(c, 0.9)); cap.rotation.x = Math.PI / 2; g.add(cap);
+    anim.push((t) => {
+      const p = reduced ? 0.5 : (t * 0.6) % 1;
+      cap.position.y = 0.1 + p * 2.4; cap.material.opacity = 0.9 * (1 - p);
+      if (s.attn) beam.material.opacity = reduced ? 0.28 : 0.18 + 0.14 * Math.sin(t * 4);
+    });
+  }
+  anim.push((t) => {
+    if (reduced) return;
+    g.position.y = g.userData.baseY + 0.05 * Math.sin(t * 1.6 + s.id.charCodeAt(1));
+    if (s.state === "Working") ring.rotation.z = t * 2.2;
+  });
+  return { g, anim };
+}
+function daemonCore() {
+  const g = new THREE.Group(); const anim = [];
+  const disc = cyl(1.25, 1.35, 0.12, 48, std(COL.base), 0, 0.06, 0); g.add(disc, edges(disc, COL.acc, 0.2));
+  const col = cyl(0.36, 0.42, 0.7, 12, dark(), 0, 0.47, 0); g.add(col, edges(col, COL.acc, 0.35));
+  const core = cyl(0.24, 0.24, 0.5, 24, glow(COL.acc, 0.55), 0, 0.5, 0); g.add(core);
+  g.add(cyl(0.48, 0.48, 0.05, 24, std("#18303a"), 0, 0.84, 0));
+  const segs = new THREE.Group(); g.add(segs);
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2;
+    const m = box(0.22, 0.05, 0.08, glow(i % 4 === 0 ? COL.acc : "#16404b"), Math.cos(a) * 0.95, 0.16, Math.sin(a) * 0.95);
+    m.rotation.y = -a; segs.add(m);
+  }
+  anim.push((t) => { if (!reduced) segs.rotation.y = t * 0.15; core.material.opacity = 0.45 + 0.15 * Math.sin(t * 1.3); });
+  return { g, anim };
+}
+
+// ---------- Connections with packets on the way ----------
+function makeLink(curve, kind, root) {
+  const geo = new THREE.TubeGeometry(curve, 48, kind === "manual" ? 0.008 : 0.014, 5, false);
+  const m = glow(COL.acc, 0.22); const tube = new THREE.Mesh(geo, m); root.add(tube);
+  const packets = [];
+  const n = kind === "http" ? 3 : kind === "package" ? 1 : 0;
+  for (let i = 0; i < n; i++) { const p = box(0.06, 0.06, 0.06, glow(COL.acc, 0.95)); root.add(p); packets.push(p); }
+  const speed = kind === "http" ? 0.35 : 0.16;
+  return {
+    tube, packets,
+    update(t, lit, dim, show) {
+      tube.visible = show; m.opacity = dim ? (lit ? 0.85 : 0.05) : 0.22;
+      packets.forEach((p, i) => { p.visible = show && (!dim || lit); if (reduced) { p.visible = false; return; } p.position.copy(curve.getPoint((t * speed + i / packets.length) % 1)); });
+    },
+  };
+}
+
+// ---------- Three proposals ----------
+let world = null;
+const animators = [];
+function addItem(w, key, obj, anim, labelText, labelCls, showLabel) {
+  obj.traverse((o) => { if (o.isMesh) { o.userData.key = key; w.pickables.push(o); } });
+  w.root.add(obj); animators.push(...anim);
+  const lbl = labelText ? mkLabel(labelCls, labelText) : null;
+  w.items[key] = { obj, lbl, showLabel, labelY: labelCls.includes("sess") ? 0.5 : 1.05 };
+  return w.items[key];
+}
+function newWorld(view) { return { root: new THREE.Group(), pickables: [], items: {}, links: [], extraLabels: [], view }; }
+const sessLabel = (s) => (s.attn ? "Needs you" : s.state === "Error" ? "Error" : "");
+const sessCls = (s) => `sess ${s.attn ? "attn" : s.state === "Error" ? "err" : ""}`;
+const repoShowLabel = (r) => r.status !== "clean";
+
+function buildOrbit() {
+  const w = newWorld({ yaw: 0.25, pitch: 0.95, dist: 21, fov: 38 });
+  const R = 6.6, RS = 3.3, GAP = 0.34;
+  const d = daemonCore(); addItem(w, "daemon:core", d.g, d.anim, "", "core", false);
+  w.extraLabels.push({ el: mkLabel("core", "daemon"), p: V(0, 1.15, 0) });
+  const track = new THREE.Mesh(new THREE.RingGeometry(RS - 0.012, RS + 0.012, 128).rotateX(-Math.PI / 2), glow("#1e4652", 0.9)); w.root.add(track);
+  const grid = new THREE.PolarGridHelper(9.5, 24, 5, 96, 0x12303a, 0x0b1a20); grid.position.y = -0.01; w.root.add(grid);
+  const per = LAYERS.map((_, l) => REPOS.filter((r) => r.layer === l));
+  const span = Math.PI * 2 - GAP * 4; let a0 = -Math.PI / 2 - (span * per[0].length / REPOS.length) / 2;
+  const ang = {};
+  per.forEach((list, l) => {
+    const sp = span * list.length / REPOS.length;
+    const arc = new THREE.Mesh(new THREE.RingGeometry(R + 0.7, R + 0.76, 64, 1, -a0 - sp, sp).rotateX(-Math.PI / 2), glow(COL.acc, 0.5)); w.root.add(arc);
+    const mid = a0 + sp / 2; w.extraLabels.push({ el: mkLabel("layer", LAYERS[l]), p: V(Math.cos(mid) * (R + 1.55), 0, Math.sin(mid) * (R + 1.55)) });
+    list.forEach((r, i) => {
+      const a = a0 + sp * (i + 0.5) / list.length; ang[r.id] = a;
+      const m = repoModel(r); m.g.position.set(Math.cos(a) * R, 0, Math.sin(a) * R); m.g.rotation.y = -a - Math.PI / 2;
+      addItem(w, `repo:${r.id}`, m.g, m.anim, r.id, "repo", repoShowLabel(r));
+    });
+    a0 += sp + GAP;
+  });
+  const onRepo = {};
+  SESSIONS.forEach((s) => {
+    const k = (onRepo[s.repo] = (onRepo[s.repo] || 0) + 1) - 1;
+    const a = ang[s.repo] + k * 0.14; const m = sessionModel(s);
+    m.g.userData.baseY = 0.55; m.g.position.set(Math.cos(a) * RS, 0.55, Math.sin(a) * RS);
+    addItem(w, `session:${s.id}`, m.g, m.anim, sessLabel(s), sessCls(s), !!sessLabel(s));
+    const rp = w.items[`repo:${s.repo}`].obj.position;
+    const tether = makeLink(new THREE.LineCurve3(m.g.position.clone(), V(rp.x, 0.4, rp.z)), "package", w.root);
+    tether.tube.material.color.set(sessColor(s)); tether.packets.forEach((p) => p.material.color.set(sessColor(s)));
+    w.tethers = (w.tethers || []).concat({ link: tether, repo: s.repo });
+  });
+  EDGES.forEach(([f, t, kind]) => {
+    const A = w.items[`repo:${f}`].obj.position, B = w.items[`repo:${t}`].obj.position;
+    const mid = A.clone().add(B).multiplyScalar(0.5);
+    const curve = new THREE.QuadraticBezierCurve3(V(A.x, 0.12, A.z), V(mid.x * 0.2, 0.12, mid.z * 0.2), V(B.x, 0.12, B.z));
+    w.links.push({ f, t, link: makeLink(curve, kind, w.root) });
+  });
+  return w;
+}
+
+function buildFloor() {
+  const w = newWorld({ yaw: Math.PI / 4, pitch: 0.72, dist: 37, fov: 20 });
+  // Dotted floor
+  const pts = []; for (let x = -12; x <= 12; x += 0.6) for (let z = -9; z <= 9; z += 0.6) pts.push(x, 0, z);
+  const dots = new THREE.Points(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(pts, 3)), new THREE.PointsMaterial({ color: 0x1d3a44, size: 0.05 }));
+  w.root.add(dots);
+  const per = LAYERS.map((_, l) => REPOS.filter((r) => r.layer === l));
+  const zoneX = [-7.4, -3.4, 1.8, 7.4];
+  per.forEach((list, l) => {
+    const cols = l === 2 ? 2 : 1; const rows = Math.ceil(list.length / cols);
+    const wZ = rows * 1.5 + 0.6, wX = cols * 1.7 + 0.6;
+    const zone = box(wX, 0.06, wZ, std("#08131a"), zoneX[l], 0.03, 0); w.root.add(zone, edges(zone, COL.acc, 0.35));
+    const corner = box(0.5, 0.02, 0.08, glow(COL.acc), zoneX[l] - wX / 2 + 0.3, 0.07, -wZ / 2 + 0.06); w.root.add(corner);
+    w.extraLabels.push({ el: mkLabel("layer", LAYERS[l]), p: V(zoneX[l], 0, -wZ / 2 - 0.6) });
+    list.forEach((r, i) => {
+      const cx = cols === 2 ? (i % 2 ? 0.85 : -0.85) : 0; const rz = Math.floor(i / cols);
+      const m = repoModel(r); m.g.position.set(zoneX[l] + cx, 0.06, (rz - (rows - 1) / 2) * 1.5);
+      addItem(w, `repo:${r.id}`, m.g, m.anim, r.id, "repo", repoShowLabel(r));
+    });
+  });
+  const d = daemonCore(); d.g.scale.setScalar(0.75); d.g.position.set(0, 0, 7.6); addItem(w, "daemon:core", d.g, d.anim, "", "core", false);
+  w.extraLabels.push({ el: mkLabel("core", "daemon"), p: V(0, 1.0, 7.6) });
+  const onRepo = {};
+  SESSIONS.forEach((s) => {
+    const rp = w.items[`repo:${s.repo}`].obj.position; const k = (onRepo[s.repo] = (onRepo[s.repo] || 0) + 1) - 1;
+    const m = sessionModel(s); m.g.userData.baseY = 1.45; m.g.position.set(rp.x + 0.55 + k * 0.4, 1.45, rp.z + 0.3);
+    addItem(w, `session:${s.id}`, m.g, m.anim, sessLabel(s), sessCls(s), !!sessLabel(s));
+    // Session wire to the daemon along the floor
+    const P = m.g.position; const D = V(0, 0.1, 7.6);
+    const cp = new THREE.CurvePath(); [[V(P.x, P.y - 0.15, P.z), V(P.x, 0.1, P.z)], [V(P.x, 0.1, P.z), V(P.x, 0.1, 6.2)], [V(P.x, 0.1, 6.2), D]].forEach(([a, b]) => cp.add(new THREE.LineCurve3(a, b)));
+    const tether = makeLink(cp, "package", w.root); tether.tube.material.color.set(sessColor(s)); tether.packets.forEach((p) => p.material.color.set(sessColor(s)));
+    w.tethers = (w.tethers || []).concat({ link: tether, repo: s.repo });
+  });
+  // Pipes routed at right angles between the zones
+  EDGES.forEach(([f, t, kind], i) => {
+    const A = w.items[`repo:${f}`].obj.position, B = w.items[`repo:${t}`].obj.position;
+    const y = 0.1 + (i % 4) * 0.03; const mx = (A.x + B.x) / 2 + ((i % 3) - 1) * 0.18;
+    const cp = new THREE.CurvePath();
+    [[V(A.x + 0.45, y, A.z), V(mx, y, A.z)], [V(mx, y, A.z), V(mx, y, B.z)], [V(mx, y, B.z), V(B.x - 0.45, y, B.z)]].forEach(([a, b]) => { if (a.distanceTo(b) > 0.001) cp.add(new THREE.LineCurve3(a, b)); });
+    w.links.push({ f, t, link: makeLink(cp, kind, w.root) });
+  });
+  return w;
+}
+
+function buildTrack() {
+  const w = newWorld({ yaw: Math.PI / 4 - 0.15, pitch: 0.78, dist: 34, fov: 22 });
+  const STATIONS = [
+    { id: "Proposed", c: "#2a4a55", p: V(-7.5, 0, -3.2), soon: true },
+    { id: "Working", c: COL.acc, p: V(-3.6, 0, -3.2) },
+    { id: "Needs you", c: COL.warn, p: V(0.6, 0, -1.2) },
+    { id: "Failed", c: COL.bad, p: V(4.6, 0, -3.2) },
+    { id: "Review", c: COL.warn, p: V(4.6, 0, 1.6) },
+    { id: "Done", c: COL.clean, p: V(8.4, 0, 1.6) },
+  ];
+  const pts = []; for (let x = -12; x <= 12; x += 0.6) for (let z = -8; z <= 8; z += 0.6) pts.push(x, 0, z);
+  w.root.add(new THREE.Points(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(pts, 3)), new THREE.PointsMaterial({ color: 0x1d3a44, size: 0.05 })));
+  // Path through the stations
+  const path = new THREE.CatmullRomCurve3(STATIONS.map((s) => V(s.p.x, 0.1, s.p.z)), false, "centripetal");
+  const road = makeLink(path, "http", w.root); w.road = road;
+  STATIONS.forEach((st) => {
+    const g = new THREE.Group(); g.position.copy(st.p);
+    const plate = box(1.9, 0.14, 1.9, std(COL.base), 0, 0.07, 0); g.add(plate, edges(plate, st.c, 0.6));
+    const pad = cyl(0.7, 0.75, 0.06, 32, glow(st.c, st.soon ? 0.25 : 0.55), 0, 0.17, 0); g.add(pad);
+    const n = stationCount(st.id);
+    for (let i = 0; i < 4; i++) g.add(box(0.32, 0.04, 0.06, glow(i < n ? st.c : "#13303a"), -0.6 + i * 0.4, 0.16, 0.92));
+    addItem(w, `station:${st.id}`, g, [], "", "layer", false);
+    w.extraLabels.push({ el: mkLabel("layer", st.soon ? `${st.id} · soon` : st.id), p: V(st.p.x, 0, st.p.z - 1.45) });
+    const here = SESSIONS.filter((s) => stationOf(s) === st.id);
+    here.forEach((s, i) => {
+      const a = (i / Math.max(1, here.length)) * Math.PI * 2 + 0.6; const rr = here.length > 1 ? 0.45 : 0;
+      const m = sessionModel(s); m.g.userData.baseY = 0.75; m.g.position.set(st.p.x + Math.cos(a) * rr, 0.75, st.p.z + Math.sin(a) * rr);
+      addItem(w, `session:${s.id}`, m.g, m.anim, sessLabel(s), sessCls(s), !!sessLabel(s));
+    });
+  });
+  // Repo shelf in the background: one cabinet per repo, state colour
+  REPOS.forEach((r, i) => {
+    const m = repoModel(r); m.g.scale.setScalar(0.62); m.g.position.set(-8.4 + i * 0.93, 0, 5.6);
+    addItem(w, `repo:${r.id}`, m.g, m.anim, r.id, "repo", repoShowLabel(r));
+  });
+  const shelf = box(18.6, 0.05, 1.1, std("#08131a"), 0, 0.02, 5.6); w.root.add(shelf, edges(shelf, COL.acc, 0.3));
+  w.extraLabels.push({ el: mkLabel("layer", "Repositories"), p: V(-8.6, 0, 4.7) });
+  const d = daemonCore(); d.g.scale.setScalar(0.7); d.g.position.set(-8.2, 0, 1.4); addItem(w, "daemon:core", d.g, d.anim, "", "core", false);
+  w.extraLabels.push({ el: mkLabel("core", "daemon"), p: V(-8.2, 0.95, 1.4) });
+  return w;
+}
+const BUILDERS = { orbit: buildOrbit, floor: buildFloor, track: buildTrack };
+
+function disposeWorld() {
+  if (!world) return;
+  scene.remove(world.root);
+  world.root.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+  labelsEl.innerHTML = ""; animators.length = 0;
+}
+let variant = "orbit";
+function build(v) {
+  disposeWorld(); variant = v; world = BUILDERS[v](); scene.add(world.root);
+  document.querySelectorAll("[data-variant]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.variant === v)));
+  document.getElementById("variant-note").innerHTML = NOTES[v];
+  if (selected) focus(selected); else fit();
+}
+const NOTES = {
+  orbit: "<strong>A · Orbit+</strong> The daemon core, sessions around it as drones, repos on the rim as modules of four kinds (terminal, gateway, rack, box).",
+  floor: "<strong>B · Floor</strong> A control hall in isometric view: layer zones as in the 2D graph, pipes between repos routed at right angles, sessions above their repos.",
+  track: "<strong>C · Track</strong> The sessions' work track: stations Working, Needs you, Failed, Review, Done. Sessions stand at the station of their state, repos on a shelf in the background.",
+};
+
+// Camera
+const cam = { yaw: 0, pitch: 0.9, dist: 20, fov: 38, tx: 0, ty: 0, tz: 0 };
+const camGoal = { ...cam };
+const zoomOut = () => (stage.clientWidth < 640 ? 1.25 : 1);
+function fit() { Object.assign(camGoal, world.view, { dist: world.view.dist * zoomOut(), tx: 0, ty: 0, tz: variant === "track" ? 1 : 0 }); }
+function focus(sel) {
+  if (!world) return;
+  if (!sel) { fit(); return; }
+  const it = world.items[`${sel.kind}:${sel.id}`]; if (!it) return;
+  const p = it.obj.position;
+  Object.assign(camGoal, { tx: p.x * 0.6, ty: 0, tz: p.z * 0.6, dist: world.view.dist * 0.72 * zoomOut() });
+}
+scene3d = { focus };
+function applyCam() {
+  const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+  camera.position.set(cam.tx + Math.sin(cam.yaw) * cp * cam.dist, cam.ty + sp * cam.dist, cam.tz + Math.cos(cam.yaw) * cp * cam.dist);
+  camera.lookAt(cam.tx, cam.ty, cam.tz);
+  if (Math.abs(camera.fov - cam.fov) > 0.01) { camera.fov = cam.fov; camera.updateProjectionMatrix(); }
+}
+
+// Hover, click, double click
+const ray = new THREE.Raycaster(); const ndc = new THREE.Vector2();
+let hover = null;
+function pickAt(cx, cy) {
+  const r = canvas.getBoundingClientRect();
+  ndc.set(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const hit = ray.intersectObjects(world.pickables, false)[0];
+  return hit ? hit.object.userData.key : null;
+}
+function showCard(key, cx, cy) {
+  if (!key) { hcard.hidden = true; return; }
+  const r = stage.getBoundingClientRect();
+  if (hcard.dataset.key !== key) { hcard.innerHTML = cardHtml(key); hcard.dataset.key = key; }
+  hcard.hidden = false;
+  const x = Math.min(cx - r.left + 16, r.width - hcard.offsetWidth - 8), y = Math.min(cy - r.top + 16, r.height - hcard.offsetHeight - 8);
+  hcard.style.left = `${Math.max(8, x)}px`; hcard.style.top = `${Math.max(8, y)}px`;
+}
+let drag = null;
+canvas.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY, yaw: camGoal.yaw, pitch: camGoal.pitch, moved: false }; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener("pointermove", (e) => {
+  if (drag) {
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 4) { drag.moved = true; canvas.classList.add("dragging"); hcard.hidden = true; }
+    if (drag.moved) { camGoal.yaw = Math.max(world.view.yaw - 1, Math.min(world.view.yaw + 1, drag.yaw - dx * 0.006)); camGoal.pitch = Math.max(0.45, Math.min(1.35, drag.pitch + dy * 0.004)); }
+    return;
+  }
+  hover = pickAt(e.clientX, e.clientY);
+  canvas.style.cursor = hover ? "pointer" : "";
+  if (e.pointerType === "mouse") showCard(hover, e.clientX, e.clientY);
+});
+canvas.addEventListener("pointerup", (e) => {
+  const moved = drag && drag.moved; drag = null; canvas.classList.remove("dragging");
+  if (moved) return;
+  const k = pickAt(e.clientX, e.clientY);
+  if (!k) return select(null);
+  const [kind, id] = k.split(":");
+  if (kind === "repo" || kind === "session") select(kind, id);
+  else if (kind === "station") { const s = SESSIONS.find((x) => stationOf(x) === id); if (s) select("session", s.id); }
+});
+canvas.addEventListener("dblclick", (e) => { const k = pickAt(e.clientX, e.clientY); if (!k) return; const [kind, id] = k.split(":"); if (kind === "repo" || kind === "session") openTarget(kind, id); });
+canvas.addEventListener("pointerleave", () => { hover = null; hcard.hidden = true; });
+
+document.querySelectorAll("[data-variant]").forEach((b) => b.addEventListener("click", () => build(b.dataset.variant)));
+let showEdges = true;
+const bE = document.getElementById("tog-edges");
+bE.addEventListener("click", () => { showEdges = !showEdges; bE.setAttribute("aria-pressed", String(showEdges)); });
+document.getElementById("btn-fit").addEventListener("click", () => select(null));
+
+function resize() { const w = stage.clientWidth, h = stage.clientHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+new ResizeObserver(resize).observe(stage); resize();
+
+let visible = true;
+new IntersectionObserver(([en]) => { visible = en.isIntersecting; if (visible) requestAnimationFrame(frame); }).observe(stage);
+let last = performance.now();
+function frame(now) {
+  if (!visible) return;
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  const k = 1 - Math.exp(-dt * 5);
+  for (const key of ["yaw", "pitch", "dist", "fov", "tx", "ty", "tz"]) cam[key] = lerp(cam[key], camGoal[key], k);
+  applyCam();
+  const t = now / 1000;
+  for (const a of animators) a(t);
+  const selKey = selected ? `${selected.kind}:${selected.id}` : null;
+  const focusRepo = (selected && selected.kind === "repo" && selected.id) || (hover && hover.startsWith("repo:") && hover.slice(5)) ||
+    (selected && selected.kind === "session" && sessById[selected.id].repo) || (hover && hover.startsWith("session:") && sessById[hover.slice(8)].repo) || null;
+  for (const key in world.items) {
+    const it = world.items[key]; const on = key === selKey || key === hover;
+    const base = it.obj.userData.baseScale || (it.obj.userData.baseScale = it.obj.scale.x);
+    it.obj.scale.setScalar(lerp(it.obj.scale.x, base * (on ? 1.12 : 1), k));
+    if (it.lbl) {
+      it.lbl.classList.toggle("hot", on);
+      const p = it.obj.position;
+      place(it.lbl, V(p.x, p.y + it.labelY * base, p.z), it.showLabel || on || key === `repo:${focusRepo}`);
+    }
+  }
+  for (const l of world.links) l.link.update(t, focusRepo && (l.f === focusRepo || l.t === focusRepo), !!focusRepo, showEdges);
+  for (const th of world.tethers || []) th.link.update(t, th.repo === focusRepo, false, true);
+  if (world.road) world.road.update(t, true, false, true);
+  for (const x of world.extraLabels) place(x.el, x.p);
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+build("orbit"); Object.assign(cam, camGoal); camera.fov = cam.fov; camera.updateProjectionMatrix();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
