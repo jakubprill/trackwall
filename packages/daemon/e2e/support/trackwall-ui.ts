@@ -1,9 +1,10 @@
 import { afterAll, beforeAll } from "bun:test";
 import type { Client } from "@modelcontextprotocol/client";
-import { type Browser, chromium, type Locator, type Page } from "playwright";
+import { chromium, type Locator, type Page } from "playwright";
 import { newToken } from "../../src/infra/discovery.ts";
 import { connectSessionClient } from "../../test/support/mcp-client.ts";
 import { ONE_REPO, type SessionApiOptions, startSessionApi } from "../../test/support/session-api.ts";
+import { onCspViolation } from "./csp-violations.ts";
 import { openDesktopWindow } from "./desktop-window.ts";
 import { UI_DIR } from "./ui-dir.ts";
 
@@ -21,9 +22,11 @@ const NO_BREAK_SPACE = String.fromCharCode(0xa0);
 /**
  * The daemon of `test/support/session-api.ts` (a real facade, PTY and git, the fake Copilot CLI) serving the built UI,
  * and Chromium from Playwright to look at it (ADR-71). `agentOf` is the MCP client a session's agent has through its
- * bridge. `stop` closes the clients and the browser, then the daemon, also when one of them fails.
+ * bridge. `stop` closes the clients and the browser, then the daemon, also when one of them fails, and then fails on any
+ * violation of the tab's Content-Security-Policy in a page it opened that `expectedCspViolations` does not name: the
+ * daemon sends that policy with the UI (ADR-161), and a refusal the UI survives with a fallback would go unseen.
  */
-async function startTrackwall(options: Omit<SessionApiOptions, "uiDir"> = ONE_REPO) {
+async function startTrackwall(options: Omit<SessionApiOptions, "uiDir"> = ONE_REPO, expectedCspViolations?: RegExp) {
   const token = newToken();
   // WebGL on SwiftShader, which a runner without a GPU needs and Chromium no longer falls back to by itself: without it
   // Home shows no 3D scene, and the scene's code never runs.
@@ -34,6 +37,13 @@ async function startTrackwall(options: Omit<SessionApiOptions, "uiDir"> = ONE_RE
   });
   const origin = `http://127.0.0.1:${daemon.api.port}`;
   const clients: Client[] = [];
+  const cspViolations: string[] = [];
+  const watched = async (page: Promise<Page>) => {
+    const opened = await page;
+    // Before the UI loads: the page is still blank until the caller navigates.
+    await onCspViolation(opened, (text) => cspViolations.push(text));
+    return opened;
+  };
   return {
     daemon,
     origin,
@@ -45,16 +55,17 @@ async function startTrackwall(options: Omit<SessionApiOptions, "uiDir"> = ONE_RE
      */
     openWithoutToken: async () => {
       const context = await browser.newContext({ viewport: VIEWPORT, colorScheme: "dark" });
-      const page = await context.newPage();
+      const page = await watched(context.newPage());
       await page.goto(origin);
       return page;
     },
     /** The main window as the Tauri shell opens it, on Home. */
-    open: (viewport = VIEWPORT) => openMainWindow(browser, origin, token, viewport),
+    open: async (viewport = VIEWPORT) => openMainWindow(await watched(browser.newPage({ viewport, colorScheme: "dark" })), origin, token),
     /** The main window as the Tauri shell shows it: under the window's origin and CSP, connected through the shell. */
     openDesktopWindow: (failingFiles?: RegExp) => openDesktopWindow(browser, { baseUrl: origin, token }, VIEWPORT, failingFiles),
     /** The tray panel (ADR-50): the same UI under `#tray-panel`, at the size of its window. */
-    openTrayPanel: () => openTrayPanel(browser, origin, token),
+    openTrayPanel: async () =>
+      openTrayPanel(await watched(browser.newPage({ viewport: TRAY_PANEL_VIEWPORT, colorScheme: "dark" })), origin, token),
     agentOf: async (session: string) => {
       const client = await connectSessionClient(daemon.api.port, daemon.home, session);
       clients.push(client);
@@ -67,6 +78,8 @@ async function startTrackwall(options: Omit<SessionApiOptions, "uiDir"> = ONE_RE
       } finally {
         await daemon.stop();
       }
+      const unexpected = cspViolations.filter((text) => !expectedCspViolations?.test(text));
+      if (unexpected.length > 0) throw new Error(`the tab's CSP refused:\n${unexpected.join("\n")}`);
     },
   };
 }
@@ -77,11 +90,11 @@ export type Trackwall = Awaited<ReturnType<typeof startTrackwall>>;
  * Starts Trackwall before the tests of the file and stops it after them; call the result in a test for the running
  * one. The stop waits for a start still under way, so a start that outlives its time limit is stopped too.
  */
-export function useTrackwall(options?: Omit<SessionApiOptions, "uiDir">): () => Trackwall {
+export function useTrackwall(options?: Omit<SessionApiOptions, "uiDir">, expectedCspViolations?: RegExp): () => Trackwall {
   let starting: Promise<Trackwall> | undefined;
   let started: Trackwall | undefined;
   beforeAll(async () => {
-    starting = startTrackwall(options);
+    starting = startTrackwall(options, expectedCspViolations);
     started = await starting;
   }, START_TIMEOUT_MS);
   afterAll(async () => {
@@ -105,8 +118,7 @@ async function signIn(page: Page, origin: string, token: string): Promise<void> 
  * CLI draws: the fake does not redraw when the terminal shrinks, as Copilot CLI does, and its approval dialog wrapped
  * over two rows is no dialog the daemon can read.
  */
-async function openMainWindow(browser: Browser, origin: string, token: string, viewport: { width: number; height: number }): Promise<Page> {
-  const page = await browser.newPage({ viewport, colorScheme: "dark" });
+async function openMainWindow(page: Page, origin: string, token: string): Promise<Page> {
   await signIn(page, origin, token);
   await page.getByRole("button", { name: "Fold the supervisor panel" }).click();
   return page;
@@ -116,8 +128,7 @@ async function openMainWindow(browser: Browser, origin: string, token: string, v
  * The tray panel reads the connection from the tab's storage, so after signing in the tab loads the panel's address,
  * with another query string so that the browser loads the page again instead of only changing the fragment.
  */
-async function openTrayPanel(browser: Browser, origin: string, token: string): Promise<Page> {
-  const page = await browser.newPage({ viewport: TRAY_PANEL_VIEWPORT, colorScheme: "dark" });
+async function openTrayPanel(page: Page, origin: string, token: string): Promise<Page> {
   await signIn(page, origin, token);
   await page.goto(`${origin}/?panel#tray-panel`);
   return page;

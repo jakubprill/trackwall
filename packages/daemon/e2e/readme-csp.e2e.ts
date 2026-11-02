@@ -5,7 +5,11 @@ const PIXEL = "http://pixel.example.test/p.png";
 /** A Mermaid label with HTML, which `strict` mode lets through: an image from outside, a tracking pixel. */
 const README = `# shop\n\n\`\`\`mermaid\nflowchart LR\n  A["<img src='${PIXEL}' width=10> start"] --> B[finish]\n\`\`\`\n`;
 
-const trackwall = useTrackwall({ repos: { shop: { "README.md": README } }, miseCommand: ["mise"] });
+// The image refused is the point of the test; any other refusal fails it.
+const trackwall = useTrackwall(
+  { repos: { shop: { "README.md": README } }, miseCommand: ["mise"] },
+  /^img-src refused http:\/\/pixel\.example\.test\//,
+);
 
 describe("the UI in a browser tab under the daemon's Content-Security-Policy", () => {
   test("a README's Mermaid diagram draws, and an image from outside in its label never leaves the browser", async () => {
