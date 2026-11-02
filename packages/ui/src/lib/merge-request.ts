@@ -29,17 +29,27 @@ export type MergeRequestDraftText = Pick<MergeRequestForm, "title" | "descriptio
 /**
  * The draft of the form: the task's title (or the first line of its prompt) and the agent's summary (or the prompt)
  * with its check steps (ADR-169) and the verdict of the last verification, so the reviewer sees what the user saw and
- * can try the change the same way.
+ * can try the change the same way. A part of a change starts with its change block (ADR-172), which a long summary is
+ * cut to make room for, so the reviewer always sees the other repos.
  */
-export function mergeRequestDraft(task: Task, verification: Verification | null): MergeRequestDraftText {
+export function mergeRequestDraft(task: Task, verification: Verification | null, changeBlock = ""): MergeRequestDraftText {
   const title = (task.title ?? task.prompt.split("\n", 1)[0] ?? "").trim();
   const body = (task.summary?.text ?? task.prompt).trim();
   const checks = task.summary && task.summary.checkSteps.length > 0 ? `\n\n${checkStepsSection(task.summary.checkSteps)}` : "";
   const verdict = verification && verification.state !== "running" ? `\n\n${verificationLine(verification)}` : "";
   return {
     title: cut(title, MERGE_REQUEST_TITLE_MAX),
-    description: cut(`${body}${checks}${verdict}`, MERGE_REQUEST_DESCRIPTION_MAX),
+    description: withBlock(changeBlock, `${body}${checks}${verdict}`),
   };
+}
+
+function withBlock(block: string, rest: string): string {
+  if (block === "") return cut(rest, MERGE_REQUEST_DESCRIPTION_MAX);
+  const separator = "\n\n";
+  const room = MERGE_REQUEST_DESCRIPTION_MAX - block.length - separator.length;
+  // Six parts with long addresses still leave room; a block that does not is cut like any text.
+  if (room < 1) return cut(block, MERGE_REQUEST_DESCRIPTION_MAX);
+  return `${block}${separator}${cut(rest, room)}`;
 }
 
 /** `How to check:` and the steps as a numbered Markdown list, which GitLab and GitHub both render. */

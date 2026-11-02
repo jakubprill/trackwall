@@ -108,6 +108,19 @@ describe("the merge request draft", () => {
     expect(draft.description).toHaveLength(MERGE_REQUEST_DESCRIPTION_MAX);
     expect(draft.description.endsWith("…")).toBe(true);
   });
+
+  test("a part of a change starts with its change block, and a long summary is cut to keep it whole (ADR-172)", () => {
+    const block = "This merge request is part 2 of a change across several repos.";
+    const draft = mergeRequestDraft(
+      task({ summary: { text: "x".repeat(10_000), checkSteps: [], reportedAt: "2026-10-26T10:02:00Z" } }),
+      null,
+      block,
+    );
+
+    expect(draft.description.startsWith(`${block}\n\nxxx`)).toBe(true);
+    expect(draft.description).toHaveLength(MERGE_REQUEST_DESCRIPTION_MAX);
+    expect(draft.description.endsWith("…")).toBe(true);
+  });
 });
 
 describe("the task branch against the remote", () => {
