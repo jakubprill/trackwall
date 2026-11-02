@@ -654,7 +654,7 @@ describe("a task in Copilot CLI's sandbox with the real Copilot CLI (ADR-181)", 
       await endOfTurn(session).catch(async (error: Error) => {
         const window = viewer(agents, session);
         windows.set(session, window);
-        throw new Error(`${error.message}\nthe screen:\n${(await screenLines(window)).join("\n")}`);
+        throw new Error(`${error.message}\nthe terminal so far: ${window.unwrappedText().slice(-4000)}`);
       });
 
       // What the sandbox answered goes back to the model; a refusal there says what the system is missing.
