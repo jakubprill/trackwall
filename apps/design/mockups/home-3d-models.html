@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>3D dashboard: models and labels</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<style>
+/* Layout: the scene at full width as the hero, the variant description under it, then the diagnosis, the comparison and the recommendation. */
+:root {
+  --bg: var(--background);
+  --surface: var(--card);
+  --line: var(--border);
+  --fg: var(--foreground);
+  --local-muted: var(--muted-foreground);
+  --local-primary: var(--primary);
+  --local-warning: var(--warning);
+  --danger: var(--destructive);
+  --local-font-sans: var(--font-sans);
+  --local-font-mono: var(--font-mono);
+}
+html, body { background: var(--bg); color: var(--fg); }
+body { font-family: var(--local-font-sans); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 64px; display: grid; gap: 40px; }
+header { display: grid; gap: 10px; }
+.eyebrow { font-family: var(--local-font-mono); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--local-primary); }
+h1 { font-size: clamp(26px, 4vw, 38px); line-height: 1.15; margin: 0; font-weight: 600; text-wrap: balance; }
+h2 { font-size: 22px; margin: 0; font-weight: 600; text-wrap: balance; }
+h3 { font-size: 16px; margin: 0; font-weight: 600; }
+p { margin: 0; max-width: 72ch; }
+.lede { color: var(--local-muted); font-size: 16px; }
+section { display: grid; gap: 16px; }
+
+/* Scena */
+.stage { position: relative; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--bg); height: min(72vh, 680px); min-height: 440px; max-width: 100%; }
+.stage canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+.stage canvas:active { cursor: grabbing; }
+.overlay { position: absolute; inset: 0; pointer-events: none; }
+.overlay svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.toolbar { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; justify-content: space-between; pointer-events: none; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 4px; background: rgba(10, 11, 15, 0.82); pointer-events: auto; }
+.seg button { font: 500 12px/1 var(--local-font-mono); letter-spacing: 0.06em; color: var(--local-muted); background: none; border: 0; padding: 9px 12px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { color: var(--bg); background: var(--local-primary); }
+.seg button:focus-visible { outline: 2px solid var(--local-primary); outline-offset: 2px; }
+.toggles { display: flex; gap: 8px; flex-wrap: wrap; }
+.meter { position: absolute; left: 12px; bottom: 10px; font: 11px/1.4 var(--local-font-mono); color: var(--local-muted); background: rgba(10, 11, 15, 0.7); padding: 4px 8px; border-radius: 3px; font-variant-numeric: tabular-nums; }
+.hint { position: absolute; right: 12px; bottom: 10px; font: 11px/1.4 var(--local-font-mono); color: var(--local-muted); }
+
+/* Etykiety: callout (A) */
+.co { position: absolute; top: 0; left: 0; font-family: var(--local-font-mono); white-space: nowrap; padding: 5px 9px 6px; background: linear-gradient(90deg, rgba(14, 19, 25, 0.92), rgba(14, 19, 25, 0.72)); border-left: 2px solid var(--c, var(--local-primary)); color: var(--fg); will-change: transform; }
+.co.right { border-left: 0; border-right: 2px solid var(--c, var(--local-primary)); text-align: right; }
+.co-name { font-size: 11px; letter-spacing: 0.04em; color: var(--local-muted); }
+.co-val { font-size: 12px; color: var(--c); margin-top: 1px; }
+.co-val b { font-size: 20px; font-weight: 500; margin-right: 4px; }
+.co-chip { display: inline-block; margin-top: 3px; font-size: 10px; padding: 1px 5px; border: 1px solid rgba(92, 207, 230, 0.45); color: var(--local-primary); border-radius: 2px; }
+.co.quiet { padding: 3px 7px; background: rgba(14, 19, 25, 0.6); border-color: rgba(147, 160, 173, 0.45); }
+.co.quiet .co-name { color: #c4ccd4; }
+.co.hot { box-shadow: 0 0 0 1px var(--c, var(--local-primary)); }
+.co.session { padding: 3px 7px; }
+.co.session .co-name { color: var(--c); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }
+.co.core .co-name { letter-spacing: 0.1em; text-transform: uppercase; font-size: 10px; }
+
+/* Etykiety: tagi (C) */
+.tag { position: absolute; top: 0; left: 0; font-family: var(--local-font-mono); font-size: 11px; white-space: nowrap; color: #c9d1d8; text-shadow: 0 0 4px var(--bg), 0 0 8px var(--bg); will-change: transform; line-height: 1.25; }
+.tag .v { color: var(--c); }
+.tag.hot { color: var(--fg); }
+
+.below { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+.below > div { min-width: 0; display: grid; gap: 8px; align-content: start; }
+.below h3 { font-family: var(--local-font-mono); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--local-primary); font-weight: 500; }
+ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; max-width: 72ch; }
+li::marker { color: var(--local-primary); }
+.muted { color: var(--local-muted); }
+code { font-family: var(--local-font-mono); font-size: 0.88em; color: #cfe9f1; }
+
+.diag { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.diag div { border-top: 2px solid var(--local-warning); padding-top: 10px; display: grid; gap: 4px; min-width: 0; }
+.diag b { font-weight: 600; }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 14px; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--local-font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--local-muted); font-weight: 500; }
+tr:last-child td { border-bottom: 0; }
+tr.rec td { background: rgba(92, 207, 230, 0.06); }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+
+.rec-box { border: 1px solid rgba(92, 207, 230, 0.4); border-radius: 6px; padding: 18px 20px; display: grid; gap: 12px; background: rgba(92, 207, 230, 0.04); }
+@media (max-width: 560px) { .stage { min-height: 380px; height: 62vh; } .hint { display: none; } }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Trackwall · Home · propozycje</div>
+    <h1>3D dashboard: better models and labels</h1>
+    <p class="lede">The orbit stays. Three things change: how a repo and a session look, how the daemon core looks, and how objects are labelled. Below is a live scene with three variants on the same data (11 repos, 6 sessions, 10 connections). Drag to rotate, scroll to zoom, hover an object.</p>
+  </header>
+
+  <section aria-label="Scene">
+    <div class="stage" id="stage">
+      <canvas id="cv" aria-label="Mockup of the 3D dashboard"></canvas>
+      <div class="overlay" id="overlay"><svg id="leaders"></svg></div>
+      <div class="toolbar">
+        <div class="seg" role="group" aria-label="Variant">
+          <button id="v-a" aria-pressed="true">A · HOLO</button>
+          <button id="v-b" aria-pressed="false">B · PYLONS</button>
+          <button id="v-c" aria-pressed="false">C · ORBS</button>
+        </div>
+        <div class="toggles">
+          <div class="seg" role="group" aria-label="Labels">
+            <button id="l-all" aria-pressed="true">ALL NAMES</button>
+            <button id="l-key" aria-pressed="false">ONLY IMPORTANT</button>
+          </div>
+          <div class="seg" role="group" aria-label="Motion">
+            <button id="m-on" aria-pressed="true">MOTION</button>
+            <button id="m-off" aria-pressed="false">STOP</button>
+          </div>
+        </div>
+      </div>
+      <div class="meter" id="meter">…</div>
+      <div class="hint">drag · scroll · hover</div>
+    </div>
+    <div class="below" id="desc"></div>
+  </section>
+
+  <section>
+    <div class="eyebrow">What got in the way</div>
+    <h2>Diagnosis of the scene in 0.4.1</h2>
+    <div class="diag">
+      <div><b>A clean repo has no name.</b><span class="muted">A label shows only with changes. When everything is clean, you see six anonymous boxes and cannot tell which is which.</span></div>
+      <div><b>Dark on grey.</b><span class="muted">The solids have the card colour (almost black) under “studio” light on a transparent background. The contrast is low, and a clean repo's state is the <code>--secondary</code> colour, almost the background.</span></div>
+      <div><b>The solids do not glow.</b><span class="muted">The shape of the kind (terminal, gateway, rack, box) is lost from afar. The inspiration works because the objects are light on a dark background, not solids in light.</span></div>
+      <div><b>The label says nothing.</b><span class="muted">It is only the name or the state in a grey frame. The number of changes, the commits to pull and a running task show only in the card on hover.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Comparison</div>
+    <h2>Three variants side by side</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Variant</th><th>Models</th><th>Labels</th><th>Readability</th><th>Cost on a weak laptop</th><th>Work</th></tr></thead>
+        <tbody>
+          <tr class="rec"><td><b>A · Holo</b><br><span class="muted">chosen, with C as a second style (ADR-104)</span></td><td>The same 4 kinds, but as a hologram: a translucent solid, bright edges, a glowing centre, a base with rings and a state arc.</td><td>A callout with a leader line, the name always, the number and the task when something happens. Spread apart so they do not overlap.</td><td>Highest: the kind from the shape, the state from the colour and arc, the value from the number.</td><td>Medium. ~150 draw calls with 11 repos, no post-processing.</td><td>1 PR: models, core, label layer</td></tr>
+          <tr><td><b>B · Pylons</b></td><td>One shape for all: a hexagonal pillar with the kind's icon above it and rings for the number of changes.</td><td>Text lies on the floor behind the orbit and turns to the camera. Part of the scene, no HTML.</td><td>Good from above, weaker at a low camera angle. The kind only from the icon.</td><td>Low. The text is textures, nothing is computed in the DOM.</td><td>1 PR, but the text textures need redrawing on every state change</td></tr>
+          <tr><td><b>C · Orbs</b></td><td>Glowing spheres as in the second inspiration, sized by activity. No shape for the kind.</td><td>Short tags next to the sphere, outside the orbit, without frames.</td><td>The state reads at once, the kind is lost. Closest to a “relationship chart”.</td><td>Lowest. Good as a power-saving mode.</td><td>A small PR</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Recommendation</div>
+    <div class="rec-box">
+      <h2>A · Holo, with two changes from the inspiration</h2>
+      <ul>
+        <li><b>No percentages.</b> The inspiration shows “65%”, but there is no honest percentage for a repo. We show the numbers the model already has: changes, commits to pull, a task. The only real fraction is working sessions out of all, and that draws the arc in the core.</li>
+        <li><b>No bloom.</b> A post-processing glow takes several full-screen passes. On an integrated Intel GPU at 125–150% scaling on Windows that drops frames at once. Here every glow is a sprite with a gradient texture and additive blending: no extra passes.</li>
+        <li><b>The name always, the value only when needed.</b> A clean repo gets a quiet label with only its name. A repo with changes, commits to pull or a task gets a full callout. A session gets a label only when it waits for you or has an error, as before. The “Only important” switch on the scene shows the old mode for comparison.</li>
+        <li><b>Performance guards:</b> DPR capped at 1.5; shared geometries and textures; without motion (reduced motion or a hidden window) the scene draws only after a camera move; labels laid out in one SVG layer.</li>
+      </ul>
+      <p class="muted">C fits later as an automatic power-saving mode, should A not stay smooth on a slower machine. The frame counter in the lower left corner of the scene shows how it runs on your hardware.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">What would change in the code</div>
+    <h2>Scope of variant A</h2>
+    <ul>
+      <li><code>packages/scene/src/models/</code>: new solids of four kinds, a base with a state arc (a canvas texture, one per state), a new core with rings, a session drone with a glow. The <code>HomeScene</code> contract unchanged.</li>
+      <li><code>home-labels.ts</code>: a repo always has a label, and the scene also passes the quiet or full variant to <code>createLabel</code>.</li>
+      <li>A layer of leader lines in the UI (<code>HomeCanvas</code>): Pawn <code>Labels</code> gives only the label's position, so the lines and the spreading are done in one SVG. Possibly a Pawn request (“a label with a leader line”).</li>
+      <li>Colours still from the UI tokens. A clean repo moves from <code>--secondary</code> to a dimmed <code>--primary</code>, so it shows against the background.</li>
+      <li>Tests: the label spreading and the choice of label variant as unit tests in <code>packages/scene/test</code>; the existing Home E2E test keeps passing. A new ADR.</li>
+    </ul>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script>
+(() => {
+"use strict";
+const COL = { bg: 0x0a0b0f, body: "#1a232c", plate: "#0d1117", primary: "#5ccfe6", warning: "#f0bd59", danger: "#ef5b5e", muted: "#93a0ad", calm: "#3f7f90" };
+const CSS = { primary: "var(--local-primary)", warning: "var(--local-warning)", danger: "var(--danger)" };
+
+// ---- Sample data (the same for every variant) ----
+const LAYERS = 4;
+const REPOS = [
+  { id: "web-shop", layer: 0, kind: "entry", state: "changed", count: 3, task: null },
+  { id: "admin-ui", layer: 0, kind: "entry", state: "clean", count: 0, task: "dev" },
+  { id: "api-gateway", layer: 1, kind: "gateway", state: "clean", count: 0, task: null },
+  { id: "auth-service", layer: 2, kind: "backend", state: "behind", count: 2, task: null },
+  { id: "orders-service", layer: 2, kind: "backend", state: "changed", count: 7, task: "test" },
+  { id: "payments-service", layer: 2, kind: "backend", state: "clean", count: 0, task: null },
+  { id: "catalog-service", layer: 2, kind: "backend", state: "unavailable", count: 0, task: null },
+  { id: "shared-model", layer: 3, kind: "library", state: "clean", count: 0, task: null },
+  { id: "common-lib", layer: 3, kind: "library", state: "behind", count: 1, task: null },
+  { id: "docs-site", layer: null, kind: "entry", state: "clean", count: 0, task: null },
+  { id: "build-tools", layer: null, kind: "library", state: "clean", count: 0, task: null },
+];
+const SESSIONS = [
+  { id: "s1", repo: "orders-service", state: "working" },
+  { id: "s2", repo: "orders-service", state: "attention" },
+  { id: "s3", repo: "web-shop", state: "working" },
+  { id: "s4", repo: "auth-service", state: "idle" },
+  { id: "s5", repo: "common-lib", state: "error" },
+  { id: "s6", repo: "payments-service", state: "working" },
+];
+const LINKS = [
+  ["web-shop", "api-gateway", "http"], ["admin-ui", "api-gateway", "http"], ["api-gateway", "auth-service", "http"],
+  ["api-gateway", "orders-service", "http"], ["orders-service", "payments-service", "http"], ["orders-service", "catalog-service", "http"],
+  ["orders-service", "shared-model", "package"], ["payments-service", "common-lib", "package"], ["auth-service", "common-lib", "package"],
+  ["catalog-service", "shared-model", "package"],
+];
+
+const stateColor = (s) => s === "changed" ? COL.warning : s === "behind" ? COL.primary : s === "unavailable" ? COL.danger : COL.calm;
+const stateCss = (s) => s === "changed" ? CSS.warning : s === "behind" ? CSS.primary : s === "unavailable" ? CSS.danger : "rgba(147,160,173,.6)";
+const sessionColor = (s) => ({ working: COL.primary, attention: COL.warning, idle: COL.calm, error: COL.danger, done: COL.muted })[s];
+const isQuiet = (r) => r.state === "clean" && !r.task;
+function repoValue(r) {
+  if (r.state === "changed") return { n: r.count, unit: r.count === 1 ? "change" : "changes" };
+  if (r.state === "behind") return { n: r.count, unit: "to pull" };
+  if (r.state === "unavailable") return { n: "", unit: "unavailable" };
+  return null;
+}
+
+// ---- Orbit layout (a port of orbit-layout.ts) ----
+const REPO_R = 6.6, SESSION_R = 3.3, GAP = 0.34;
+function layout() {
+  const groups = [...Array.from({ length: LAYERS }, (_, i) => i), null].map((l) => REPOS.filter((r) => r.layer === l)).filter((g) => g.length);
+  const span = Math.PI * 2 - GAP * groups.length;
+  const out = { sectors: [], repos: new Map(), sessions: new Map() };
+  let start = -Math.PI / 2 - (span * groups[0].length) / REPOS.length / 2;
+  for (const g of groups) {
+    const s = (span * g.length) / REPOS.length;
+    out.sectors.push({ start, span: s });
+    const slot = s / g.length;
+    g.forEach((r, i) => {
+      const a = start + slot * (i + 0.5);
+      out.repos.set(r.id, a);
+      const own = SESSIONS.filter((x) => x.repo === r.id);
+      const spread = Math.min(0.14, (slot * 0.8) / Math.max(own.length, 1));
+      own.forEach((x, j) => out.sessions.set(x.id, a + (j - (own.length - 1) / 2) * spread));
+    });
+    start += s + GAP;
+  }
+  return out;
+}
+const LAY = layout();
+const at = (a, r, y = 0) => new THREE.Vector3(Math.cos(a) * r, y, Math.sin(a) * r);
+
+// ---- Renderer, kamera ----
+const stage = document.getElementById("stage");
+const canvas = document.getElementById("cv");
+const overlay = document.getElementById("overlay");
+const svg = document.getElementById("leaders");
+const meter = document.getElementById("meter");
+let renderer;
+try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true }); }
+catch (e) { meter.textContent = "WebGL is not available in this browser"; return; }
+const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
+renderer.setPixelRatio(DPR);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(COL.bg);
+scene.fog = new THREE.Fog(COL.bg, 22, 42);
+scene.add(new THREE.HemisphereLight(0xbfe9f5, 0x0a0b0f, 0.9));
+const key = new THREE.DirectionalLight(0xffffff, 0.6); key.position.set(4, 10, 6); scene.add(key);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+const target = new THREE.Vector3(0, 0, 0.9);
+const cam = { az: 0.0, pol: 0.95, dist: 22 };
+function placeCamera() {
+  const aspect = stage.clientWidth / stage.clientHeight;
+  const d = cam.dist * Math.max(1, 1.45 / aspect);
+  camera.position.set(target.x + d * Math.sin(cam.pol) * Math.sin(cam.az), target.y + d * Math.cos(cam.pol), target.z + d * Math.sin(cam.pol) * Math.cos(cam.az));
+  camera.lookAt(target);
+  dirty = true;
+}
+let dirty = true;
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+  placeCamera();
+}
+new ResizeObserver(resize).observe(stage);
+
+// ---- Shared resources: canvas textures, materials ----
+function canvasTex(size, draw) {
+  const c = document.createElement("canvas"); c.width = c.height = size;
+  draw(c.getContext("2d"), size);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+}
+const GLOW = canvasTex(128, (g, s) => {
+  const gr = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+  gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.25, "rgba(255,255,255,.45)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = gr; g.fillRect(0, 0, s, s);
+});
+const TICKS = canvasTex(256, (g, s) => {
+  g.translate(s / 2, s / 2); g.strokeStyle = "rgba(255,255,255,.9)"; g.lineWidth = 3;
+  for (let i = 0; i < 48; i++) { const a = (i / 48) * Math.PI * 2; const r0 = i % 4 === 0 ? 104 : 110; g.beginPath(); g.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); g.lineTo(Math.cos(a) * 118, Math.sin(a) * 118); g.stroke(); }
+  g.lineWidth = 2; g.setLineDash([22, 14]); g.beginPath(); g.arc(0, 0, 124, 0, Math.PI * 2); g.stroke();
+});
+const padCache = new Map();
+function padTex(color, fraction) {
+  const k = color + fraction.toFixed(2);
+  if (padCache.has(k)) return padCache.get(k);
+  const t = canvasTex(256, (g, s) => {
+    g.translate(s / 2, s / 2);
+    const fill = g.createRadialGradient(0, 0, 10, 0, 0, 96); fill.addColorStop(0, "rgba(92,207,230,.10)"); fill.addColorStop(1, "rgba(92,207,230,0)");
+    g.fillStyle = fill; g.beginPath(); g.arc(0, 0, 96, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = "rgba(92,207,230,.35)"; g.lineWidth = 2; g.beginPath(); g.arc(0, 0, 92, 0, Math.PI * 2); g.stroke();
+    g.strokeStyle = "rgba(255,255,255,.08)"; g.lineWidth = 9; g.beginPath(); g.arc(0, 0, 80, 0, Math.PI * 2); g.stroke();
+    g.strokeStyle = color; g.lineCap = "round"; g.lineWidth = 9; g.beginPath(); g.arc(0, 0, 80, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * fraction); g.stroke();
+  });
+  padCache.set(k, t); return t;
+}
+const matCache = new Map();
+const glowMat = (color, opacity = 1) => {
+  const k = "g" + color + opacity; if (!matCache.has(k)) matCache.set(k, new THREE.SpriteMaterial({ map: GLOW, color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false }));
+  return matCache.get(k);
+};
+const lit = (color, opacity = 1) => new THREE.MeshBasicMaterial({ color, transparent: opacity < 1, opacity, depthWrite: opacity >= 1, blending: opacity < 1 ? THREE.AdditiveBlending : THREE.NormalBlending });
+const holo = (opacity = 0.55) => new THREE.MeshStandardMaterial({ color: COL.body, emissive: COL.primary, emissiveIntensity: 0.06, roughness: 0.5, metalness: 0.4, transparent: true, opacity, depthWrite: false });
+const edgesOf = (mesh, color, opacity) => { const l = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 20), new THREE.LineBasicMaterial({ color, transparent: true, opacity })); l.position.copy(mesh.position); l.rotation.copy(mesh.rotation); l.raycast = () => {}; return l; };
+const mesh = (geo, mat, x = 0, y = 0, z = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); return m; };
+const flat = (geo) => geo.rotateX(-Math.PI / 2);
+function sprite(color, size, y, opacity = 1) { const s = new THREE.Sprite(glowMat(color, opacity)); s.scale.set(size, size, 1); s.position.y = y; s.raycast = () => {}; return s; }
+function noPick(o) { o.traverse((c) => { c.raycast = () => {}; }); return o; }
+
+// ---- Shared elements: floor, core, session track, layer arcs, connections ----
+function floor(group) {
+  const grid = new THREE.PolarGridHelper(11, 24, 8, 96, 0x1d3440, 0x14222b);
+  grid.position.y = -0.01; group.add(noPick(grid));
+  const halo = new THREE.Mesh(flat(new THREE.PlaneGeometry(26, 26)), new THREE.MeshBasicMaterial({ map: GLOW, color: 0x123a48, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
+  halo.position.y = -0.02; group.add(noPick(halo));
+  for (const s of LAY.sectors) {
+    const arc = new THREE.Mesh(flat(new THREE.RingGeometry(REPO_R + 1.05, REPO_R + 1.11, 64, 1, -s.start - s.span, s.span)), lit(COL.primary, 0.55));
+    group.add(noPick(arc));
+  }
+  const track = new THREE.Mesh(flat(new THREE.RingGeometry(SESSION_R - 0.015, SESSION_R + 0.015, 128)), lit(COL.primary, 0.3));
+  group.add(noPick(track));
+}
+
+function core(group, anim) {
+  const c = new THREE.Group();
+  const working = SESSIONS.filter((s) => s.state === "working").length;
+  const waiting = SESSIONS.filter((s) => s.state === "attention").length;
+  const disc = mesh(new THREE.CylinderGeometry(1.35, 1.45, 0.14, 48), holo(0.85), 0, 0.07, 0);
+  c.add(disc, edgesOf(disc, COL.primary, 0.35));
+  // A base with arcs: working (cyan) and waiting (amber) sessions out of all.
+  const pad = new THREE.Mesh(flat(new THREE.PlaneGeometry(4.6, 4.6)), new THREE.MeshBasicMaterial({ map: canvasTex(512, (g, s) => {
+    g.translate(s / 2, s / 2); g.lineCap = "butt";
+    const total = SESSIONS.length, a0 = -Math.PI / 2;
+    g.strokeStyle = "rgba(255,255,255,.07)"; g.lineWidth = 14; g.beginPath(); g.arc(0, 0, 200, 0, Math.PI * 2); g.stroke();
+    g.strokeStyle = COL.primary; g.beginPath(); g.arc(0, 0, 200, a0, a0 + (working / total) * Math.PI * 2 - 0.04); g.stroke();
+    g.strokeStyle = COL.warning; g.beginPath(); g.arc(0, 0, 200, a0 + (working / total) * Math.PI * 2 + 0.04, a0 + ((working + waiting) / total) * Math.PI * 2); g.stroke();
+    g.strokeStyle = "rgba(92,207,230,.35)"; g.lineWidth = 2; g.beginPath(); g.arc(0, 0, 226, 0, Math.PI * 2); g.stroke();
+    g.beginPath(); g.arc(0, 0, 176, 0, Math.PI * 2); g.stroke();
+  }), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  pad.position.y = 0.02; c.add(noPick(pad));
+  const ticks = new THREE.Mesh(flat(new THREE.PlaneGeometry(3.3, 3.3)), new THREE.MeshBasicMaterial({ map: TICKS, color: COL.primary, transparent: true, opacity: 0.7, depthWrite: false, blending: THREE.AdditiveBlending }));
+  ticks.position.y = 0.16; c.add(noPick(ticks));
+  const rings = [0.95, 0.72].map((r, i) => { const t = mesh(new THREE.TorusGeometry(r, 0.025, 8, 64), lit(COL.primary, 0.85), 0, 0.45 + i * 0.28, 0); t.rotation.x = Math.PI / 2; c.add(t); return t; });
+  const col = mesh(new THREE.CylinderGeometry(0.32, 0.38, 0.9, 24, 1, true), lit(COL.primary, 0.35), 0, 0.6, 0); c.add(col);
+  const heart = mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.7, 16), lit("#bff3ff"), 0, 0.6, 0); c.add(heart);
+  c.add(sprite(COL.primary, 4.2, 0.6, 0.55), sprite("#bff3ff", 1.4, 0.7, 0.9));
+  group.add(noPick(c));
+  anim.push((t) => {
+    ticks.rotation.y = t * 0.12;
+    rings[0].rotation.z = t * 0.5; rings[0].rotation.x = Math.PI / 2 + Math.sin(t * 0.6) * 0.12;
+    rings[1].rotation.z = -t * 0.8; rings[1].rotation.y = Math.cos(t * 0.5) * 0.15;
+    heart.material.opacity = 1; col.material.opacity = 0.28 + 0.1 * Math.sin(t * 1.4);
+  });
+  return [
+    { kind: "core", world: new THREE.Vector3(-1.3, 0.9, 0), side: "left", html: `<div class="co-name">sessions working</div><div class="co-val"><b>${working}</b>of ${SESSIONS.length}</div>`, c: CSS.primary },
+    { kind: "core", world: new THREE.Vector3(1.3, 0.9, 0), side: "right", html: `<div class="co-name">waiting for you</div><div class="co-val"><b>${waiting}</b>${waiting === 1 ? "session" : "sessions"}</div>`, c: CSS.warning },
+  ];
+}
+
+function links(group, anim, positions, emphasis) {
+  for (const [from, to, kind] of LINKS) {
+    const a = positions.get(from), b = positions.get(to);
+    const mid = a.clone().add(b).multiplyScalar(0.5); mid.multiplyScalar(0.45); mid.y = 1.6;
+    const curve = new THREE.QuadraticBezierCurve3(a.clone().setY(0.35), mid, b.clone().setY(0.35));
+    const geo = new THREE.BufferGeometry().setFromPoints(curve.getPoints(48));
+    const mat = kind === "http" ? new THREE.LineBasicMaterial({ color: COL.primary, transparent: true, opacity: 0.28, blending: THREE.AdditiveBlending, depthWrite: false })
+      : new THREE.LineDashedMaterial({ color: COL.primary, dashSize: 0.18, gapSize: 0.14, transparent: true, opacity: 0.22, depthWrite: false });
+    const line = new THREE.Line(geo, mat); if (kind !== "http") line.computeLineDistances(); line.raycast = () => {};
+    group.add(line);
+    const packets = kind === "http" ? [0, 0.5].map(() => { const s = sprite(COL.primary, 0.32, 0, 0.95); group.add(s); return s; }) : [];
+    emphasis.push({ from, to, mat, packets, base: mat.opacity });
+    if (packets.length) anim.push((t) => packets.forEach((p, i) => p.position.copy(curve.getPoint((t * 0.3 + i / packets.length) % 1))));
+  }
+}
+
+function sessions(group, anim, pickables, labels, style) {
+  const repoPos = new Map(REPOS.map((r) => [r.id, at(LAY.repos.get(r.id), REPO_R)]));
+  for (const s of SESSIONS) {
+    const a = LAY.sessions.get(s.id); const p = at(a, SESSION_R);
+    const color = sessionColor(s.state);
+    const g = new THREE.Group(); g.position.copy(p);
+    const inner = new THREE.Group(); g.add(inner);
+    if (style === "orb") {
+      inner.add(mesh(new THREE.SphereGeometry(0.13, 16, 12), lit(color), 0, 0.35, 0), sprite(color, 0.9, 0.35, 0.8));
+    } else {
+      const body = mesh(new THREE.CylinderGeometry(0.2, 0.24, 0.1, 6), holo(0.9), 0, 0.3, 0);
+      inner.add(body, edgesOf(body, color, 0.95), mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.03, 16), lit(color), 0, 0.37, 0));
+      const ring = mesh(new THREE.TorusGeometry(0.33, 0.016, 6, 6), lit(color, 0.9), 0, 0.3, 0); ring.rotation.x = Math.PI / 2; inner.add(ring);
+      inner.add(sprite(color, 1.1, 0.3, 0.55));
+      if (s.state === "working") anim.push((t) => { ring.rotation.z = t * 2.2; });
+    }
+    const loud = s.state === "attention" || s.state === "error";
+    if (loud) {
+      const shaft = mesh(new THREE.CylinderGeometry(0.04, 0.1, 2.6, 12, 1, true), lit(color, 0.22), 0, 1.65, 0); g.add(noPick(shaft));
+      const rising = mesh(new THREE.TorusGeometry(0.15, 0.012, 6, 24), lit(color, 0.9)); rising.rotation.x = Math.PI / 2; g.add(noPick(rising));
+      anim.push((t) => { const k = (t * 0.6) % 1; rising.position.y = 0.4 + k * 2.4; rising.material.opacity = 0.9 * (1 - k); });
+      labels.push({ kind: "session", world: p.clone().setY(0.6), html: `<div class="co-name">${s.state === "attention" ? "waiting for you" : "error"}</div>`, c: s.state === "attention" ? CSS.warning : CSS.danger, important: true });
+    }
+    const phase = s.id.charCodeAt(1);
+    anim.push((t) => { inner.position.y = 0.05 * Math.sin(t * 1.6 + phase); });
+    // Wire to the repo
+    const tether = new THREE.Line(new THREE.BufferGeometry().setFromPoints([p.clone().setY(0.3), repoPos.get(s.repo).clone().setY(0.2)]), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.18, depthWrite: false }));
+    tether.raycast = () => {}; group.add(tether, g);
+  }
+}
+
+// ---- Variant A: holograms ----
+const KIND_A = {
+  entry(r, color) {
+    const g = new THREE.Group();
+    const stand = mesh(new THREE.CylinderGeometry(0.03, 0.06, 0.32, 8), holo(0.9), 0, 0.3, 0); g.add(stand);
+    const frame = mesh(new THREE.BoxGeometry(0.86, 0.54, 0.05), holo(0.5), 0, 0.72, 0); frame.rotation.x = -0.15;
+    g.add(frame, edgesOf(frame, COL.primary, 0.9));
+    const screen = mesh(new THREE.PlaneGeometry(0.76, 0.44), new THREE.MeshBasicMaterial({ map: screenTex(color), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }), 0, 0.72, 0.03);
+    screen.rotation.x = -0.15; g.add(screen);
+    return { g, top: 1.05, anim: r.state === "unavailable" ? (t) => { screen.material.opacity = Math.sin(t * 13) > 0.6 ? 1 : 0.35; } : null };
+  },
+  gateway(r, color) {
+    const g = new THREE.Group();
+    const hub = mesh(new THREE.CylinderGeometry(0.26, 0.3, 0.46, 6), holo(0.5), 0, 0.38, 0); g.add(hub, edgesOf(hub, COL.primary, 0.9));
+    const core = mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.36, 12), lit(color), 0, 0.38, 0); g.add(core);
+    const ring = mesh(new THREE.TorusGeometry(0.42, 0.018, 6, 48), lit(color === COL.calm ? COL.primary : color, 0.9), 0, 0.42, 0); ring.rotation.x = Math.PI / 2 - 0.25; g.add(ring);
+    for (const [x, h] of [[-0.14, 0.42], [0.14, 0.3]]) { g.add(mesh(new THREE.CylinderGeometry(0.012, 0.012, h, 4), holo(0.9), x, 0.61 + h / 2, 0)); g.add(sprite(COL.primary, 0.28, 0.61 + h, 0.9)); }
+    return { g, top: 1.1, anim: (t) => { ring.rotation.z = t * 0.9; } };
+  },
+  backend(r, color) {
+    const g = new THREE.Group();
+    const body = mesh(new THREE.BoxGeometry(0.58, 0.8, 0.46), holo(0.45), 0, 0.5, 0); g.add(body, edgesOf(body, COL.primary, 0.9));
+    const leds = [0, 1, 2, 3].map((i) => mesh(new THREE.BoxGeometry(0.44, 0.04, 0.01), lit(i === 0 ? color : i === 1 && r.task ? COL.primary : "#24323d"), 0, 0.76 - i * 0.14, 0.236));
+    g.add(...leds);
+    const top = mesh(new THREE.BoxGeometry(0.62, 0.03, 0.5), lit(color === COL.calm ? "#2a4a55" : color, 1), 0, 0.915, 0); g.add(top);
+    return { g, top: 1.05, anim: r.task ? (t) => { leds[1].material.color.set(Math.sin(t * 9) > 0 ? COL.primary : "#24323d"); } : null };
+  },
+  library(r, color) {
+    const g = new THREE.Group();
+    const shell = mesh(new THREE.IcosahedronGeometry(0.36, 0), holo(0.25), 0, 0.55, 0); g.add(shell, edgesOf(shell, COL.primary, 0.85));
+    const coreM = mesh(new THREE.OctahedronGeometry(0.15, 0), lit(color === COL.calm ? COL.primary : color), 0, 0.55, 0); g.add(coreM, sprite(color === COL.calm ? COL.primary : color, 0.9, 0.55, 0.6));
+    return { g, top: 1.0, anim: (t) => { coreM.rotation.set(t * 0.5, t * 0.7, 0); shell.rotation.y = -t * 0.15; } };
+  },
+};
+function screenTex(color) {
+  return canvasTex(128, (g, s) => {
+    g.fillStyle = color; g.globalAlpha = 0.22; g.fillRect(0, 0, s, s); g.globalAlpha = 0.9;
+    for (let i = 0; i < 5; i++) { g.fillStyle = i === 0 ? color : "rgba(200,220,230,.55)"; g.fillRect(12, 16 + i * 20, [90, 70, 82, 50, 64][i], 7); }
+  });
+}
+
+function buildA(group, anim, pickables, labels) {
+  for (const r of REPOS) {
+    const a = LAY.repos.get(r.id); const p = at(a, REPO_R); const color = stateColor(r.state);
+    const node = new THREE.Group(); node.position.copy(p); node.rotation.y = 0;
+    const v = repoValue(r);
+    const frac = r.state === "changed" || r.state === "behind" ? Math.min(r.count / 8, 1) * 0.85 + 0.15 : r.state === "unavailable" ? 1 : 0.0;
+    const pad = new THREE.Mesh(flat(new THREE.PlaneGeometry(1.7, 1.7)), new THREE.MeshBasicMaterial({ map: padTex(r.state === "clean" ? COL.primary : color, frac), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    pad.position.y = 0.02; node.add(noPick(pad));
+    const ticks = new THREE.Mesh(flat(new THREE.PlaneGeometry(1.9, 1.9)), new THREE.MeshBasicMaterial({ map: TICKS, color: r.task ? COL.primary : "#3a6574", transparent: true, opacity: r.task ? 0.9 : 0.5, depthWrite: false, blending: THREE.AdditiveBlending }));
+    ticks.position.y = 0.03; node.add(noPick(ticks));
+    const base = mesh(new THREE.CylinderGeometry(0.5, 0.56, 0.08, 6), holo(0.9), 0, 0.06, 0); node.add(base, edgesOf(base, COL.primary, 0.4));
+    if (r.state !== "clean") node.add(sprite(color, 2.2, 0.35, 0.35));
+    const k = KIND_A[r.kind](r, color); node.add(k.g);
+    if (k.anim) anim.push(k.anim);
+    anim.push((t) => { ticks.rotation.y = t * (r.task ? 0.9 : 0.12); });
+    group.add(node);
+    pickables.push({ id: r.id, obj: node, hit: hitbox(node, 1.1) });
+    labels.push({ kind: "repo", id: r.id, world: p.clone().setY(k.top + 0.1), repo: r, c: stateCss(r.state), important: !isQuiet(r),
+      html: calloutHtml(r, v) });
+  }
+}
+function calloutHtml(r, v) {
+  let h = `<div class="co-name">${r.id}</div>`;
+  if (v) h += `<div class="co-val">${v.n !== "" ? `<b>${v.n}</b>` : ""}${v.unit}</div>`;
+  if (r.task) h += `<div class="co-chip">▶ ${r.task}</div>`;
+  return h;
+}
+function hitbox(node, h) { const m = mesh(new THREE.CylinderGeometry(0.6, 0.6, h, 8), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }), 0, h / 2, 0); node.add(m); return m; }
+
+// ---- Variant B: pylons and text on the floor ----
+const glyphCache = new Map();
+function glyphTex(kind) {
+  if (glyphCache.has(kind)) return glyphCache.get(kind);
+  const t = canvasTex(128, (g, s) => {
+    g.strokeStyle = "#ffffff"; g.lineWidth = 7; g.lineJoin = "round"; g.lineCap = "round"; g.translate(s / 2, s / 2);
+    if (kind === "entry") { g.strokeRect(-38, -30, 76, 48); g.beginPath(); g.moveTo(0, 18); g.lineTo(0, 34); g.moveTo(-18, 36); g.lineTo(18, 36); g.stroke(); }
+    if (kind === "gateway") { g.beginPath(); g.moveTo(-36, -12); g.lineTo(30, -12); g.moveTo(18, -26); g.lineTo(32, -12); g.lineTo(18, 2); g.moveTo(36, 14); g.lineTo(-30, 14); g.moveTo(-18, 0); g.lineTo(-32, 14); g.lineTo(-18, 28); g.stroke(); }
+    if (kind === "backend") { for (let i = 0; i < 3; i++) { g.strokeRect(-34, -34 + i * 24, 68, 18); } }
+    if (kind === "library") { g.beginPath(); for (let i = 0; i < 6; i++) { const a = Math.PI / 6 + (i * Math.PI) / 3; g.lineTo(Math.cos(a) * 38, Math.sin(a) * 38); } g.closePath(); g.moveTo(0, 0); g.lineTo(0, 38); g.moveTo(0, 0); g.lineTo(Math.cos(-Math.PI / 6 - Math.PI * 2 / 3) * 38, Math.sin(-Math.PI / 6 - Math.PI * 2 / 3) * 38); g.moveTo(0, 0); g.lineTo(Math.cos(-Math.PI / 6) * 38, Math.sin(-Math.PI / 6) * 38); g.stroke(); }
+  });
+  glyphCache.set(kind, t); return t;
+}
+function floorText(lines) {
+  const c = document.createElement("canvas"); const g = c.getContext("2d");
+  const px = 44; g.font = `500 ${px}px "IBM Plex Mono", monospace`;
+  const w = Math.ceil(Math.max(...lines.map((l) => g.measureText(l.text).width))) + 24;
+  c.width = w; c.height = Math.ceil(px * 1.25 * lines.length) + 12;
+  g.font = `500 ${px}px "IBM Plex Mono", monospace`; g.textBaseline = "top"; g.textAlign = "center";
+  lines.forEach((l, i) => { g.fillStyle = l.color; g.fillText(l.text, w / 2, 6 + i * px * 1.25); });
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  const scale = 0.0072;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(c.width * scale, c.height * scale), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false }));
+  m.rotation.order = "YXZ"; m.raycast = () => {};
+  return m;
+}
+function buildB(group, anim, pickables, labels, floorLabels) {
+  const H = { entry: 1.15, gateway: 0.95, backend: 0.85, library: 0.7 };
+  for (const r of REPOS) {
+    const a = LAY.repos.get(r.id); const p = at(a, REPO_R); const color = stateColor(r.state);
+    const node = new THREE.Group(); node.position.copy(p);
+    const h = H[r.kind];
+    const pylon = mesh(new THREE.CylinderGeometry(0.3, 0.36, h, 6), holo(0.55), 0, h / 2, 0); node.add(pylon, edgesOf(pylon, COL.primary, 0.85));
+    const band = mesh(new THREE.CylinderGeometry(0.305, 0.305, 0.07, 6), lit(r.state === "clean" ? "#2f6878" : color), 0, h - 0.08, 0); node.add(band);
+    const n = r.state === "changed" || r.state === "behind" ? Math.min(r.count, 5) : 0;
+    for (let i = 0; i < n; i++) { const ring = mesh(new THREE.TorusGeometry(0.46 + i * 0.07, 0.012, 4, 6), lit(color, 0.85), 0, 0.04, 0); ring.rotation.x = Math.PI / 2; node.add(noPick(ring)); }
+    const icon = new THREE.Sprite(new THREE.SpriteMaterial({ map: glyphTex(r.kind), color: r.state === "clean" ? "#9fdcec" : color, transparent: true, depthWrite: false }));
+    icon.scale.set(0.42, 0.42, 1); icon.position.y = h + 0.38; icon.raycast = () => {}; node.add(icon);
+    if (r.state !== "clean") node.add(sprite(color, 1.9, h * 0.6, 0.3));
+    if (r.task) { const halo = mesh(new THREE.TorusGeometry(0.62, 0.012, 4, 48), lit(COL.primary, 0.9), 0, 0.03, 0); halo.rotation.x = Math.PI / 2; node.add(noPick(halo)); const spark = sprite(COL.primary, 0.3, 0.05); node.add(spark); anim.push((t) => spark.position.set(Math.cos(t * 1.4) * 0.62, 0.05, Math.sin(t * 1.4) * 0.62)); }
+    anim.push((t) => { icon.position.y = h + 0.38 + 0.04 * Math.sin(t * 1.5 + a * 3); });
+    group.add(node);
+    pickables.push({ id: r.id, obj: node, hit: hitbox(node, h + 0.6) });
+    const v = repoValue(r);
+    const lines = [{ text: r.id, color: isQuiet(r) ? "#b9c3cc" : "#eef2f5" }];
+    if (v || r.task) lines.push({ text: [v ? `${v.n} ${v.unit}`.trim() : null, r.task ? `▶ ${r.task}` : null].filter(Boolean).join("  ·  "), color: r.state === "clean" ? COL.primary : color });
+    const text = floorText(lines); text.position.copy(at(a, REPO_R + 1.6, 0.03)); group.add(text);
+    floorLabels.push({ mesh: text, quiet: isQuiet(r) });
+  }
+}
+
+// ---- Variant C: orbs ----
+function buildC(group, anim, pickables, labels) {
+  for (const r of REPOS) {
+    const a = LAY.repos.get(r.id); const p = at(a, REPO_R); const color = r.state === "clean" ? COL.primary : stateColor(r.state);
+    const node = new THREE.Group(); node.position.copy(p);
+    const sess = SESSIONS.filter((s) => s.repo === r.id).length;
+    const size = 0.2 + Math.min(r.count, 7) * 0.025 + sess * 0.04;
+    const orb = mesh(new THREE.SphereGeometry(size, 20, 14), lit(r.state === "clean" ? "#8fdcec" : color), 0, 0.7, 0); node.add(orb);
+    node.add(sprite(color, size * (r.state === "clean" ? 5 : 8), 0.7, r.state === "clean" ? 0.35 : 0.75));
+    const stem = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0.7 - size, 0)]), new THREE.LineDashedMaterial({ color, dashSize: 0.05, gapSize: 0.05, transparent: true, opacity: 0.6 }));
+    stem.computeLineDistances(); stem.raycast = () => {}; node.add(stem);
+    const dot = new THREE.Mesh(flat(new THREE.RingGeometry(0.12, 0.16, 24)), lit(color, 0.8)); dot.position.y = 0.01; node.add(noPick(dot));
+    if (r.task) { const ring = mesh(new THREE.TorusGeometry(size + 0.12, 0.01, 4, 40), lit(COL.primary, 0.9), 0, 0.7, 0); node.add(noPick(ring)); anim.push((t) => { ring.rotation.x = t * 1.2; ring.rotation.y = t * 0.7; }); }
+    if (r.state === "unavailable") anim.push((t) => { orb.material.opacity = Math.sin(t * 13) > 0.6 ? 1 : 0.4; orb.material.transparent = true; });
+    group.add(node);
+    pickables.push({ id: r.id, obj: node, hit: hitbox(node, 1.2) });
+    const v = repoValue(r);
+    const val = [v ? `${v.n} ${v.unit}`.trim() : null, r.task ? `▶ ${r.task}` : null].filter(Boolean).join(" · ");
+    labels.push({ kind: "tag", id: r.id, world: at(a, REPO_R + 0.75, 0.7), angle: a, repo: r, c: stateCss(r.state === "clean" && r.task ? "behind" : r.state), important: !isQuiet(r),
+      html: `${r.id}${val ? `<br><span class="v">${val}</span>` : ""}` });
+  }
+}
+
+// ---- Scene build for the variant ----
+let world = null;
+let variant = "a", labelMode = "all", motion = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+let hovered = null;
+function disposeTree(o) { o.traverse((c) => { if (c.geometry) c.geometry.dispose(); }); }
+function build() {
+  if (world) { scene.remove(world.group); disposeTree(world.group); world.labels.forEach((l) => l.el && l.el.remove()); svg.innerHTML = ""; }
+  const group = new THREE.Group(); const anim = []; const pickables = []; const labels = []; const emphasis = []; const floorLabels = [];
+  floor(group);
+  labels.push(...core(group, anim));
+  const repoPos = new Map(REPOS.map((r) => [r.id, at(LAY.repos.get(r.id), REPO_R)]));
+  links(group, anim, repoPos, emphasis);
+  if (variant === "a") buildA(group, anim, pickables, labels);
+  if (variant === "b") buildB(group, anim, pickables, labels, floorLabels);
+  if (variant === "c") buildC(group, anim, pickables, labels);
+  sessions(group, anim, pickables, labels, variant === "c" ? "orb" : "pod");
+  for (const l of labels) {
+    const el = document.createElement("div");
+    el.className = l.kind === "tag" ? "tag" : `co ${l.kind}`;
+    el.style.setProperty("--c", l.c); el.innerHTML = l.html; overlay.appendChild(el); l.el = el;
+    if (l.kind !== "tag") { l.path = document.createElementNS("http://www.w3.org/2000/svg", "path"); l.path.setAttribute("fill", "none"); l.path.setAttribute("stroke-width", "1"); l.dot = document.createElementNS("http://www.w3.org/2000/svg", "circle"); l.dot.setAttribute("r", "2.5"); svg.append(l.path, l.dot); }
+  }
+  scene.add(group);
+  world = { group, anim, pickables, labels, emphasis, floorLabels };
+  for (const a of anim) a(t);
+  describe(); dirty = true;
+}
+
+// ---- Labels: projection, spreading, leader lines ----
+const v3 = new THREE.Vector3();
+function project(p) { v3.copy(p).project(camera); return { x: (v3.x + 1) / 2 * stage.clientWidth, y: (1 - v3.y) / 2 * stage.clientHeight, behind: v3.z > 1 }; }
+const RESOLVED = (c) => c.startsWith("var(") ? getComputedStyle(document.documentElement).getPropertyValue(c.slice(4, -1)).trim() : c;
+function updateLabels() {
+  const W = stage.clientWidth;
+  const center = project(target);
+  const sides = { left: [], right: [] };
+  for (const l of world.labels) {
+    const visible = labelMode === "all" || l.important || l.kind === "core" || hovered === l.id;
+    const s = project(l.world);
+    l.el.hidden = !visible || s.behind; if (l.path) { l.path.style.display = l.el.hidden ? "none" : ""; l.dot.style.display = l.path.style.display; }
+    if (l.el.hidden) continue;
+    l.el.classList.toggle("hot", hovered === l.id);
+    if (l.kind === "tag") {
+      const right = Math.cos(l.angle + cam.az * 0) >= 0 ? s.x >= center.x : s.x >= center.x;
+      const w = l.el.offsetWidth, h = l.el.offsetHeight;
+      const x = right ? s.x + 4 : s.x - w - 4;
+      l.el.style.textAlign = right ? "left" : "right";
+      l.el.style.transform = `translate(${Math.round(Math.max(4, Math.min(W - w - 4, x)))}px, ${Math.round(s.y - h / 2)}px)`;
+      continue;
+    }
+    const side = l.side || (s.x < center.x ? "left" : "right");
+    l.el.classList.toggle("right", side === "left");
+    sides[side].push({ l, s, w: l.el.offsetWidth, h: l.el.offsetHeight, y: s.y - 30 - l.el.offsetHeight / 2 });
+  }
+  for (const [side, list] of Object.entries(sides)) {
+    list.sort((a, b) => a.y - b.y);
+    for (let i = 1; i < list.length; i++) {
+      const prev = list[i - 1], cur = list[i];
+      // Only labels that would overlap horizontally are spread vertically.
+      const prevX = side === "left" ? prev.s.x - 30 - prev.w : prev.s.x + 30;
+      const curX = side === "left" ? cur.s.x - 30 - cur.w : cur.s.x + 30;
+      const overlapX = curX < prevX + prev.w + 6 && prevX < curX + cur.w + 6;
+      if (overlapX && cur.y < prev.y + prev.h + 5) cur.y = prev.y + prev.h + 5;
+    }
+    for (const it of list) {
+      const { l, s, w, h } = it;
+      const elbowX = side === "left" ? s.x - 16 : s.x + 16;
+      let x = side === "left" ? s.x - 30 - w : s.x + 30;
+      x = Math.max(4, Math.min(W - w - 4, x));
+      const cy = it.y + h / 2;
+      l.el.style.transform = `translate(${Math.round(x)}px, ${Math.round(it.y)}px)`;
+      const edgeX = side === "left" ? x + w : x;
+      const col = RESOLVED(l.c);
+      l.path.setAttribute("d", `M${s.x.toFixed(1)},${s.y.toFixed(1)} L${elbowX.toFixed(1)},${cy.toFixed(1)} L${edgeX.toFixed(1)},${cy.toFixed(1)}`);
+      l.path.setAttribute("stroke", col); l.path.setAttribute("stroke-opacity", l.important || hovered === l.id ? "0.85" : "0.4");
+      l.dot.setAttribute("cx", s.x.toFixed(1)); l.dot.setAttribute("cy", s.y.toFixed(1)); l.dot.setAttribute("fill", col);
+    }
+  }
+  for (const f of world.floorLabels) { f.mesh.rotation.set(-Math.PI / 2, cam.az, 0); f.mesh.visible = labelMode === "all" || !f.quiet; }
+}
+
+// ---- Hover: highlight the connections ----
+const ray = new THREE.Raycaster(); const ndc = new THREE.Vector2();
+canvas.addEventListener("pointermove", (e) => {
+  if (drag) return;
+  const r = canvas.getBoundingClientRect(); ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const hit = ray.intersectObjects(world.pickables.map((p) => p.hit), false)[0];
+  const id = hit ? world.pickables.find((p) => p.hit === hit.object).id : null;
+  if (id !== hovered) { hovered = id; canvas.style.cursor = id ? "pointer" : ""; applyEmphasis(); dirty = true; }
+});
+function applyEmphasis() {
+  for (const e of world.emphasis) {
+    const on = hovered && (e.from === hovered || e.to === hovered);
+    e.mat.opacity = !hovered ? e.base : on ? 0.9 : 0.05;
+    e.packets.forEach((p) => { p.visible = !hovered || on; });
+  }
+  for (const p of world.pickables) p.obj.scale.setScalar(p.id === hovered ? 1.12 : 1);
+}
+
+// ---- Camera: drag and scroll ----
+let drag = null;
+canvas.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY, az: cam.az, pol: cam.pol }; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener("pointerup", () => { drag = null; });
+canvas.addEventListener("pointermove", (e) => {
+  if (!drag) return;
+  cam.az = drag.az - (e.clientX - drag.x) * 0.006;
+  cam.pol = Math.min(1.3, Math.max(0.35, drag.pol - (e.clientY - drag.y) * 0.005));
+  placeCamera();
+});
+canvas.addEventListener("wheel", (e) => { e.preventDefault(); cam.dist = Math.min(34, Math.max(11, cam.dist * (1 + Math.sign(e.deltaY) * 0.08))); placeCamera(); }, { passive: false });
+
+// ---- Loop ----
+const clock = new THREE.Clock(); let t = 0; let frames = 0, acc = 0, fps = 0;
+function loop() {
+  requestAnimationFrame(loop);
+  const dt = clock.getDelta();
+  if (motion) { t += dt; for (const a of world.anim) a(t); dirty = true; }
+  if (!dirty) return;
+  renderer.render(scene, camera); updateLabels(); dirty = false;
+  frames++; acc += dt;
+  if (acc > 0.5) { fps = Math.round(frames / acc); frames = 0; acc = 0;
+    meter.textContent = `${motion ? fps + " fps" : "on demand"} · ${renderer.info.render.calls} draw calls · DPR ${DPR}`; }
+}
+
+// ---- Variant descriptions ----
+const DESC = {
+  a: [["Models", "The same four kinds as before, but as a hologram: a translucent solid, bright edges and a glowing centre in the state colour. Under each repo a base with a ring and an arc: the arc grows with the number of changes or commits to pull. A running task spins the outer scale faster."],
+      ["Labels", "A callout with a leader line, pushed out of the orbit as in the inspiration. The name always; a big number with a unit only when the repo has changes, commits to pull or is unavailable; a badge with the task's name. Labels on one side spread apart so they do not overlap."],
+      ["Core", "A reactor with two rings and a session arc: cyan is working, amber is waiting for you. Two callouts with real numbers instead of percentages."]],
+  b: [["Models", "One shape for every repo: a hexagonal pylon, taller for an entry point, lower for a library. An icon floating above it tells the kind, a glowing band on top is the state, rings at the base count the changes."],
+      ["Labels", "Text lies on the floor behind the orbit and always faces the camera, like names on a map. Nothing hangs over the scene and nothing overlaps, but from a low camera the text flattens."],
+      ["Cost", "The least work per frame: no HTML layer. But a state change means redrawing the text texture."]],
+  c: [["Models", "Glowing spheres as in the second inspiration. The size grows with the number of changes and sessions, the colour is the state, a dotted stem joins the sphere to the floor. The kind of repo disappears from view."],
+      ["Labels", "Short tags without frames next to the sphere: the name and the value in the state colour. Very light, but with 15 repos the back of the scene gets crowded."],
+      ["When", "Good as a power-saving mode for a weak GPU or as a distant view. As the main look it loses what made Orbit+ appealing: recognisable solids."]],
+};
+function describe() {
+  document.getElementById("desc").innerHTML = DESC[variant].map(([h, p]) => `<div><h3>${h}</h3><p class="muted">${p}</p></div>`).join("");
+}
+
+// ---- Switches ----
+function seg(ids, onPick) { ids.forEach((id) => document.getElementById(id).addEventListener("click", () => { ids.forEach((o) => document.getElementById(o).setAttribute("aria-pressed", String(o === id))); onPick(id); })); }
+seg(["v-a", "v-b", "v-c"], (id) => { variant = id.slice(2); hovered = null; build(); });
+seg(["l-all", "l-key"], (id) => { labelMode = id === "l-all" ? "all" : "key"; dirty = true; });
+seg(["m-on", "m-off"], (id) => { motion = id === "m-on"; dirty = true; });
+if (!motion) { document.getElementById("m-on").setAttribute("aria-pressed", "false"); document.getElementById("m-off").setAttribute("aria-pressed", "true"); }
+
+// On a narrow scene (a phone) start in the “only important” mode: also a proposal for a narrow app window.
+if (stage.clientWidth < 640) { labelMode = "key"; document.getElementById("l-all").setAttribute("aria-pressed", "false"); document.getElementById("l-key").setAttribute("aria-pressed", "true"); }
+resize(); build();
+loop();
+document.fonts && document.fonts.ready.then(() => { if (variant === "b") build(); dirty = true; });
+})();
+</script>
+</body>
+</html>

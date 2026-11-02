@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Board and notes</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<style>
+/* Layout: one reading column (~760px) with wide bands for the comparison table and the app mockups. */
+:root {
+  --bg: var(--background);
+  --surface: var(--card);
+  --fg: var(--foreground);
+  --line: var(--border);
+  --local-accent: var(--primary);
+  --accent-soft: color-mix(in oklch, var(--primary) 12%, transparent);
+  --warn: var(--warning);
+  --warn-soft: color-mix(in oklch, var(--warning) 12%, transparent);
+  --bad: var(--destructive);
+  --bad-soft: color-mix(in oklch, var(--destructive) 12%, transparent);
+  --ok: var(--success);
+  --ok-soft: color-mix(in oklch, var(--success) 12%, transparent);
+  --app-bg: var(--background);
+  --app-panel: var(--card);
+  --app-line: var(--border);
+  --app-fg: var(--foreground);
+  --app-muted: var(--muted-foreground);
+  --app-accent: var(--primary);
+  --app-chip: var(--secondary);
+  --display: var(--font-sans);
+  --body: var(--font-sans);
+  --mono: var(--font-mono);
+}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15.5px;line-height:1.6;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:40px 80px}
+.wrap{max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:56px}
+.col{max-width:760px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;line-height:1.25;margin:0}
+h1{font-size:2.1rem;font-weight:700;letter-spacing:-.01em}
+h2{font-size:1.45rem;font-weight:600;margin-bottom:14px}
+h3{font-size:1.05rem;font-weight:600;margin:22px 0 8px}
+p{margin:0 0 12px} ul,ol{margin:0 0 12px;padding-left:22px} li{margin-bottom:6px}
+code,.mono{font-family:var(--mono);font-size:.86em}
+code{background:var(--accent-soft);padding:1px 5px;border-radius:4px}
+a{color:var(--local-accent)}
+.eyebrow{font-family:var(--mono);font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-foreground);margin-bottom:10px}
+.lede{font-size:1.1rem;color:var(--muted-foreground);max-width:68ch;margin-top:12px}
+.verdict{border-left:3px solid var(--local-accent);background:var(--surface);padding:18px 22px;margin-top:22px;max-width:760px}
+.verdict p:last-child{margin:0}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.box{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px 18px;min-width:0}
+.box h3{margin-top:0}
+.tag{display:inline-block;font-family:var(--mono);font-size:.72rem;padding:1px 7px;border-radius:999px;vertical-align:1px}
+.t-have{background:var(--ok-soft);color:var(--ok)} .t-new{background:var(--accent-soft);color:var(--local-accent)}
+.t-no{background:var(--bad-soft);color:var(--bad)} .t-later{background:var(--warn-soft);color:var(--warn)}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:760px;font-size:.92rem}
+th,td{text-align:left;vertical-align:top;padding:10px 14px;border-bottom:1px solid var(--line)}
+th{font-family:var(--mono);font-size:.74rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-foreground);font-weight:500;background:var(--bg)}
+tr:last-child td{border-bottom:0}
+td:first-child{font-weight:600;white-space:nowrap}
+.challenge{background:var(--warn-soft);border-radius:8px;padding:16px 20px;max-width:760px}
+.challenge h3{margin-top:0;color:var(--warn)}
+pre{font-family:var(--mono);font-size:.82rem;line-height:1.55;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow-x:auto;margin:0 0 12px}
+
+/* app mockups */
+.app{background:var(--app-bg);color:var(--app-fg);border-radius:10px;overflow:hidden;font-size:13px;line-height:1.45;border:1px solid var(--app-line)}
+.app-top{display:flex;gap:4px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--app-line);flex-wrap:wrap}
+.app-tab{padding:4px 10px;border-radius:6px;color:var(--app-muted)}
+.app-tab.on{background:var(--app-chip);color:var(--app-fg)}
+.app-body{display:grid;grid-template-columns:1fr 300px;min-height:360px}
+.board-wrap{overflow-x:auto;min-width:0}
+.board{display:grid;grid-template-columns:repeat(5,minmax(170px,1fr));gap:10px;padding:12px;min-width:880px}
+.lane h4{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--app-muted);font-weight:500;margin:2px 2px 8px;display:flex;justify-content:space-between}
+.lane{display:flex;flex-direction:column;gap:8px}
+.item{background:var(--app-panel);border:1px solid var(--app-line);border-radius:7px;padding:9px 10px;display:flex;flex-direction:column;gap:6px}
+.item.sel{border-color:var(--app-accent)}
+.item b{font-weight:500}
+.chips{display:flex;gap:4px;flex-wrap:wrap}
+.chip{font-family:var(--mono);font-size:10.5px;background:var(--app-chip);color:var(--app-muted);border-radius:4px;padding:0 5px}
+.chip.run{color:#7fd6c8} .chip.wait{color:#f0c36a} .chip.mr{color:#a9b8ff} .chip.agent{color:#d9a6f2}
+.side{border-left:1px solid var(--app-line);padding:12px 14px;display:flex;flex-direction:column;gap:10px;background:var(--app-panel)}
+.side h5{margin:0;font-size:14px;font-weight:600}
+.side .lbl{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--app-muted)}
+.side .txt{color:var(--app-fg);opacity:.9}
+.btn{display:inline-block;border:1px solid var(--app-line);border-radius:6px;padding:3px 9px;color:var(--app-fg);font-size:12px}
+.btn.pri{background:var(--app-accent);border-color:var(--app-accent);color:#08201c;font-weight:600}
+.task-row{display:flex;justify-content:space-between;gap:6px;align-items:center;font-size:12px}
+.notes-body{display:grid;grid-template-columns:230px 1fr;min-height:320px}
+.nlist{border-right:1px solid var(--app-line);padding:10px;display:flex;flex-direction:column;gap:2px}
+.nlist .grp{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--app-muted);margin:8px 4px 4px}
+.nlist .n{padding:4px 8px;border-radius:5px;display:flex;justify-content:space-between;gap:6px}
+.nlist .n.on{background:var(--app-chip)}
+.neditor{padding:14px 18px;min-width:0}
+.neditor h5{font-size:16px;margin:0 0 4px}
+.neditor .meta{color:var(--app-muted);font-size:11.5px;margin-bottom:12px}
+.neditor ul{padding-left:18px}
+.caption{font-size:.85rem;color:var(--muted-foreground);margin-top:8px}
+.steps{display:flex;flex-direction:column;gap:12px;max-width:820px}
+.step{display:grid;grid-template-columns:64px 1fr;gap:14px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 18px}
+.step .n{font-family:var(--mono);color:var(--local-accent);font-size:.8rem;padding-top:3px}
+.step h3{margin:0 0 6px}
+.step p{margin:0 0 6px;color:var(--fg)}
+.step .t{font-size:.86rem;color:var(--muted-foreground)}
+.q{counter-reset:q;list-style:none;padding:0;max-width:760px}
+.q li{counter-increment:q;position:relative;padding-left:36px;margin-bottom:14px}
+.q li::before{content:counter(q);position:absolute;left:0;top:0;width:24px;height:24px;border-radius:50%;background:var(--accent-soft);color:var(--local-accent);font-family:var(--mono);font-size:.8rem;display:grid;place-items:center}
+.src{font-size:.82rem;color:var(--muted-foreground)}
+@media (max-width:760px){
+  .app-body,.notes-body{grid-template-columns:1fr}
+  .side{border-left:0;border-top:1px solid var(--app-line)}
+  .nlist{border-right:0;border-bottom:1px solid var(--app-line)}
+  .step{grid-template-columns:1fr;gap:4px}
+  h1{font-size:1.7rem}
+}
+</style>
+
+<div class="wrap">
+
+<header class="col">
+  <div class="eyebrow">Plan view · mockup · 2026-10-29</div>
+  <h1>Board and notes</h1>
+  <p class="lede">A personal layer under the issue tracker, not a second tracker: a work tree with an idea inbox that saves an idea in two seconds, a board of items, and a knowledge base per repo, with MCP tools for agents. The tab is called Board with items (<code>BoardItem</code>), because a task in Trackwall is already an agent's task in a worktree. Built as the Plan view (ADR-133).</p>
+</header>
+
+<section>
+  <div class="col"><h2>Views</h2><p>The mockups show the layout, not the final look. Texts in English, as in the product.</p></div>
+  <h3>Plan (tree) and quick idea capture</h3>
+  <div class="app" role="img" aria-label="Mockup of the Plan view with the work tree">
+    <div class="app-top"><span class="app-tab">Home</span><span class="app-tab">Repos</span><span class="app-tab">Overview</span><span class="app-tab">Sessions</span><span class="app-tab on">Plan</span><span class="app-tab">Board</span><span class="app-tab">Knowledge</span><span class="app-tab">Settings</span></div>
+    <div class="notes-body">
+      <div class="nlist">
+        <div class="n on"><span>Inbox</span><span class="chip wait">7 new</span></div>
+        <div class="grp">Projects</div>
+        <div class="n"><span>Order history</span><span class="chip">SHOP-400</span></div>
+        <div class="n"><span>Refunds audit</span></div>
+        <div class="n"><span>Invoice export</span></div>
+        <div class="grp">Archived</div>
+        <div class="n"><span style="color:var(--app-muted)">Q3 payments</span></div>
+      </div>
+      <div class="neditor">
+        <div style="border:1px solid var(--app-accent);border-radius:7px;padding:7px 10px;margin-bottom:14px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><span>💡 <span style="color:var(--app-fg)">Paging component could be shared with invoices</span></span><span class="chip">Enter to save · Esc</span></div>
+        <h5>Order history <span class="chip">SHOP-400 ↗</span></h5>
+        <div class="meta">Project · 2 of 5 done · 1 in review</div>
+        <div style="display:flex;flex-direction:column;gap:5px;font-size:12.5px">
+          <div>▾ <b>Customers see their order history</b> <span class="chip">SHOP-412</span> <span class="chip">1 of 3 done</span></div>
+          <div style="padding-left:20px">▾ <b>History endpoint in the BFF</b> <span class="chip">orders-bff</span> <span class="chip run">● task running</span></div>
+          <div style="padding-left:40px">· Paging params like invoices <span class="chip agent">idea from task</span></div>
+          <div style="padding-left:40px">· Cache the customer lookup <span class="chip agent">idea from task</span></div>
+          <div style="padding-left:20px">▸ <b>History list on the account page</b> <span class="chip">web-shop</span> <span class="chip">ready</span></div>
+          <div style="padding-left:20px">✓ <span style="color:var(--app-muted)">Index on orders.customer_id</span> <span class="chip mr">merged</span></div>
+          <div>▸ <b>Export history to CSV</b> <span class="chip">SHOP-415</span> <span class="chip">ideas</span></div>
+          <div style="padding-left:20px;color:var(--app-muted)">+ Add (Enter) · indent (Tab) · Split… · Start task</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="caption">A shortcut opens the idea line above any view; a saved idea lands in the Inbox. Ideas from an agent land straight under the item of its task, marked as such. On a leaf, “Start task” opens the task form with the item's text.</p>
+
+  <h3 style="margin-top:28px">Board</h3>
+  <div class="app" role="img" aria-label="Mockup of the Board view">
+    <div class="app-top"><span class="app-tab">Home</span><span class="app-tab">Repos</span><span class="app-tab">Overview</span><span class="app-tab">Sessions</span><span class="app-tab">Plan</span><span class="app-tab on">Board</span><span class="app-tab">Knowledge</span><span class="app-tab">Settings</span><span class="chip" style="margin-left:auto">Project: all ▾</span></div>
+    <div class="app-body">
+      <div class="board-wrap"><div class="board">
+        <div class="lane"><h4>Ideas <span>4</span></h4>
+          <div class="item"><b>Cache the repo cards between restarts</b><div class="chips"><span class="chip">trackwall</span></div></div>
+          <div class="item"><b>Flaky OrderMapperTest on Windows</b><div class="chips"><span class="chip">orders-api</span><span class="chip agent">from task</span></div></div>
+          <div class="item"><b>Try Testcontainers in the container</b></div>
+        </div>
+        <div class="lane"><h4>Ready <span>2</span></h4>
+          <div class="item sel"><b>Order history in the BFF and the front-end</b><div class="chips"><span class="chip">orders-bff</span><span class="chip">web-shop</span><span class="chip">SHOP-412</span></div></div>
+          <div class="item"><b>Bump Spring Boot in payments</b><div class="chips"><span class="chip">payments</span></div></div>
+        </div>
+        <div class="lane"><h4>In progress <span>1</span></h4>
+          <div class="item"><b>Retry for the invoice export</b><div class="chips"><span class="chip">invoices</span><span class="chip run">● 1 running</span><span class="chip wait">● 1 waiting</span></div></div>
+        </div>
+        <div class="lane"><h4>Review <span>1</span></h4>
+          <div class="item"><b>Audit log for refunds</b><div class="chips"><span class="chip">payments</span><span class="chip mr">MR !231 · passed</span></div></div>
+        </div>
+        <div class="lane"><h4>Done <span>3</span></h4>
+          <div class="item"><b>Fix the date filter on orders</b><div class="chips"><span class="chip mr">merged</span></div></div>
+        </div>
+      </div></div>
+      <aside class="side">
+        <h5>Order history in the BFF and the front-end</h5>
+        <div><span class="lbl">Ready · ticket</span> <span class="chip">SHOP-412 ↗</span></div>
+        <div class="txt">Endpoint GET /orders/history in the BFF, then the list on the account page. Paging like the invoices page.</div>
+        <div class="lbl">Tasks</div>
+        <div class="task-row"><span>orders-bff</span><span class="btn pri">Start task</span></div>
+        <div class="task-row"><span>web-shop</span><span class="btn pri">Start task</span></div>
+        <div><span class="btn">Ask the supervisor to split it</span></div>
+        <div class="lbl">Knowledge for these repos</div>
+        <div class="txt">• orders-bff: Local start <br>• web-shop: Paging component</div>
+        <div><span class="btn">Move to…</span> <span class="btn">Edit</span></div>
+      </aside>
+    </div>
+  </div>
+  <p class="caption">The board shows only leaves of the tree (items without children), because only they have tasks. The <em>In progress</em> and <em>Review</em> columns move on their own from the state of the tasks, and chips show the state of tasks and merge requests. “Ask the supervisor to split it” sends the supervisor a message; its proposals land in the inbox in Sessions as before, with a link to the item.</p>
+
+  <h3 style="margin-top:28px">Knowledge</h3>
+  <div class="app" role="img" aria-label="Mockup of the Knowledge view">
+    <div class="app-top"><span class="app-tab">Home</span><span class="app-tab">Repos</span><span class="app-tab">Overview</span><span class="app-tab">Sessions</span><span class="app-tab">Plan</span><span class="app-tab">Board</span><span class="app-tab on">Knowledge</span><span class="app-tab">Settings</span></div>
+    <div class="notes-body">
+      <div class="nlist">
+        <div class="n" style="border:1px solid var(--app-line)"><span style="color:var(--app-muted)">Search…</span></div>
+        <div class="n"><span>All</span><span class="chip">Unconfirmed 3</span></div>
+        <div class="grp">Workspace</div>
+        <div class="n"><span>VPN before sync</span></div>
+        <div class="n"><span>Maven settings in the container</span><span class="chip wait">unconfirmed</span></div>
+        <div class="grp">orders-bff</div>
+        <div class="n on"><span>Local start</span></div>
+        <div class="n"><span>Why two Feign clients</span><span class="chip wait">unconfirmed</span></div>
+        <div class="grp">payments</div>
+        <div class="n"><span>Test data for refunds</span><span class="chip">may be stale</span></div>
+      </div>
+      <div class="neditor">
+        <h5>Local start</h5>
+        <div class="meta">orders-bff · written by task "Retry for the invoice export" · confirmed by you today · refs application-local.yml</div>
+        <ul>
+          <li>Start <span class="mono">orders-api</span> first, the BFF fails its health check without it.</li>
+          <li>Profile <span class="mono">local</span>; the <span class="mono">dev</span> profile points at the shared database.</li>
+          <li>Port 8081, the front-end proxies <span class="mono">/api</span> there.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <p class="caption">A repo's entries also show as a “Knowledge” tab in the repo view. An unconfirmed entry has “Confirm”, “Edit” and “Delete” buttons; the store's git gives the history of changes.</p>
+</section>
+
+</div>
+</body>
+</html>
