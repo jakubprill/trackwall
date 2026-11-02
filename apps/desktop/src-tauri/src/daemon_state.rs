@@ -2,7 +2,7 @@
 //! Guarantees that after `stop` the shell will not start the daemon again, so no exit path leaves an orphan.
 //! With a remote daemon (ADR-130) the same states hold, but "start" only connects and "stop" leaves the daemon running.
 
-use crate::daemon::{self, Connection};
+use crate::daemon::{self, Connection, DaemonLocation};
 use crate::remote_daemon::RemoteDaemon;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -70,7 +70,7 @@ impl DaemonState {
         let me = Arc::clone(self);
         std::thread::spawn(move || {
             let result = match me.remote.get() {
-                Some(remote) => daemon::connect_remote(remote),
+                Some(remote) => daemon::connect_remote(remote).map_err(String::from),
                 None => me.home.clone().and_then(|home| daemon::ensure_daemon(&home, &me.cancel)),
             };
             *me.lock() = match result {
@@ -90,17 +90,19 @@ impl DaemonState {
     /// Like `start`, but also when the saved daemon has stopped answering (for example ended from outside the app), or,
     /// for a remote daemon, no longer takes its token. Returns whether it started again, not when the daemon still answers.
     pub fn restart_if_down(self: &Arc<Self>) -> bool {
-        {
+        if let Some(conn) = self.ready() {
+            // Checked without the lock: a forwarded port can take seconds (ADR-183), and `ready`, `wait` and `stop` must
+            // not wait for it. A remote daemon restarted on the same port answers health but no longer takes the token.
+            let alive = match self.remote.get() {
+                Some(remote) => daemon::connect_remote(remote).is_ok(),
+                None => daemon::health(conn.port, DaemonLocation::Local).as_deref() == Some(daemon::VERSION),
+            };
+            if alive {
+                return false;
+            }
             let mut phase = self.lock();
-            if let Phase::Ready(conn) = &*phase {
-                // A remote daemon restarted on the same port answers health but no longer takes the saved token.
-                let alive = match self.remote.get() {
-                    Some(remote) => daemon::connect_remote(remote).is_ok(),
-                    None => daemon::health(conn.port).as_deref() == Some(daemon::VERSION),
-                };
-                if alive {
-                    return false;
-                }
+            // Only the connection that was checked; another start or a stop may have come meanwhile.
+            if matches!(&*phase, Phase::Ready(now) if now.port == conn.port && now.token == conn.token) {
                 *phase = Phase::Idle;
             }
         }
@@ -234,7 +236,7 @@ mod tests {
 
     fn ready(port: u16) -> DaemonState {
         let state = DaemonState::new(no_home());
-        *state.lock() = Phase::Ready(Connection { base_url: format!("http://127.0.0.1:{port}"), token: "secret".into(), port });
+        *state.lock() = Phase::Ready(Connection::new(port, "secret", DaemonLocation::Local));
         state
     }
 
@@ -372,7 +374,7 @@ mod tests {
         let port = rejecting_daemon();
         let state = Arc::new(DaemonState::new(no_home()));
         state.use_remote(remote(port, "old"));
-        *state.lock() = Phase::Ready(Connection { base_url: format!("http://127.0.0.1:{port}"), token: "old".into(), port });
+        *state.lock() = Phase::Ready(Connection::new(port, "old", DaemonLocation::Remote));
 
         state.restart_if_down();
 
@@ -384,7 +386,7 @@ mod tests {
         let port = rejecting_daemon();
         let state = Arc::new(DaemonState::new(no_home()));
         state.use_remote(remote(port, "old"));
-        let conn = Connection { base_url: format!("http://127.0.0.1:{port}"), token: "old".into(), port };
+        let conn = Connection::new(port, "old", DaemonLocation::Remote);
         *state.lock() = Phase::Ready(conn.clone());
 
         assert_eq!(daemon::sessions(&conn), Err(daemon::SessionsError::TokenRefused));
@@ -399,11 +401,58 @@ mod tests {
         let (port, _rx) = fake_daemon();
         let state = Arc::new(DaemonState::new(no_home()));
         state.use_remote(remote(port, "secret"));
-        *state.lock() = Phase::Ready(Connection { base_url: format!("http://127.0.0.1:{port}"), token: "secret".into(), port });
+        *state.lock() = Phase::Ready(Connection::new(port, "secret", DaemonLocation::Remote));
 
         assert!(!state.token_refused());
 
         assert!(state.ready().is_some());
+    }
+
+    /// Like `fake_daemon`, but every answer waits `delay` first, as a port forwarded by VS Code's Dev Containers does while
+    /// it starts a `docker exec` for the connection (#330).
+    fn slow_daemon(delay: std::time::Duration) -> u16 {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind 127.0.0.1:0");
+        let port = listener.local_addr().expect("listening address").port();
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().flatten() {
+                std::thread::spawn(move || {
+                    let mut buf = [0u8; 4096];
+                    let _ = stream.read(&mut buf);
+                    std::thread::sleep(delay);
+                    let body = format!(r#"{{"ok":true,"data":{{"version":"{}"}}}}"#, daemon::VERSION);
+                    let _ = stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}", body.len()).as_bytes());
+                });
+            }
+        });
+        port
+    }
+
+    #[test]
+    fn a_remote_daemon_whose_forwarded_port_takes_seconds_to_answer_stays_connected() {
+        let port = slow_daemon(std::time::Duration::from_millis(2500));
+        let state = Arc::new(DaemonState::new(no_home()));
+        state.use_remote(remote(port, "secret"));
+        *state.lock() = Phase::Ready(Connection::new(port, "secret", DaemonLocation::Remote));
+
+        assert!(!state.restart_if_down());
+
+        assert!(state.ready().is_some());
+    }
+
+    #[test]
+    fn checking_a_slow_remote_daemon_does_not_hold_up_the_rest_of_the_shell() {
+        let port = slow_daemon(std::time::Duration::from_millis(2500));
+        let state = Arc::new(DaemonState::new(no_home()));
+        state.use_remote(remote(port, "secret"));
+        *state.lock() = Phase::Ready(Connection::new(port, "secret", DaemonLocation::Remote));
+        let checking = Arc::clone(&state);
+        let check = std::thread::spawn(move || checking.restart_if_down());
+        std::thread::sleep(std::time::Duration::from_millis(200));
+
+        let asked = std::time::Instant::now();
+        assert!(state.ready().is_some());
+        assert!(asked.elapsed() < std::time::Duration::from_millis(500));
+        assert!(!check.join().expect("the check ends"));
     }
 
     #[test]

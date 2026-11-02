@@ -280,12 +280,13 @@ enum Miss {
 type Connect<'a> = &'a dyn Fn(&RemoteDaemon) -> Result<(), Miss>;
 
 fn connect_remote(remote: &RemoteDaemon) -> Result<(), Miss> {
-    match daemon::health(remote.port) {
-        Some(version) if version != daemon::VERSION => Err(Miss::Final(format!(
+    match daemon::connect_remote(remote) {
+        Ok(_) => Ok(()),
+        Err(daemon::RemoteRefusal::OtherVersion { version, .. }) => Err(Miss::Final(format!(
             "Trackwall in the container is {version}, but this app is {}. Update the older one so both are the same version.",
             daemon::VERSION
         ))),
-        _ => daemon::connect_remote(remote).map(drop).map_err(Miss::NotYet),
+        Err(daemon::RemoteRefusal::Refused(reason)) => Err(Miss::NotYet(reason)),
     }
 }
 
