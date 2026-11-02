@@ -4,13 +4,13 @@ import {
   contextMeter,
   conversationStatus,
   conversationTurns,
-  NO_AGENT_INFO,
+  NO_CONVERSATION_INFO,
   readSupervisorView,
   saveSupervisorView,
   sendsMessage,
   slashSuggestions,
   toolSubtitle,
-  withAgentInfo,
+  withConversationInfo,
   withEntries,
   withSlashCommand,
 } from "../src/lib/conversation.ts";
@@ -187,7 +187,7 @@ describe("the agent's mode, context use and commands in the conversation view", 
   const compact = { name: "compact", description: "Summarize the conversation", hint: "focus instructions" };
 
   test("a frame changes only what it carries, and a reset starts from nothing", () => {
-    const first = withAgentInfo(NO_AGENT_INFO, {
+    const first = withConversationInfo(NO_CONVERSATION_INFO, {
       type: "entries",
       reset: true,
       entries: [],
@@ -196,10 +196,10 @@ describe("the agent's mode, context use and commands in the conversation view", 
       context: null,
       commands: [compact],
     });
-    const next = withAgentInfo(first, { type: "entries", reset: false, entries: [], waiting: [], context: { used: 10, size: 100 } });
+    const next = withConversationInfo(first, { type: "entries", reset: false, entries: [], waiting: [], context: { used: 10, size: 100 } });
 
     expect(next).toEqual({ mode: plan, context: { used: 10, size: 100 }, commands: [compact] });
-    expect(withAgentInfo(next, { type: "entries", reset: true, entries: [], waiting: [] })).toEqual(NO_AGENT_INFO);
+    expect(withConversationInfo(next, { type: "entries", reset: true, entries: [], waiting: [] })).toEqual(NO_CONVERSATION_INFO);
   });
 
   test("the context meter is a whole percent of the window and warns from 75%", () => {
@@ -218,6 +218,8 @@ describe("the agent's mode, context use and commands in the conversation view", 
     expect(slashSuggestions("/compact now", commands)).toEqual([]);
     expect(slashSuggestions("fix /c", commands)).toEqual([]);
     expect(slashSuggestions("/x", commands)).toEqual([]);
+    // A whole command lists nothing, so Enter sends it.
+    expect(slashSuggestions("/compact", commands)).toEqual([]);
     expect(withSlashCommand(compact)).toBe("/compact ");
   });
 

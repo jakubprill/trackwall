@@ -568,6 +568,39 @@ describe("the agent's mode, context use and commands in the conversation view", 
     ]);
   });
 
+  test("settings the daemon cannot read leave the mode unknown and the session starts", async () => {
+    const s = session();
+    const started = s.acp.start();
+    s.answer("initialize", { protocolVersion: 1 });
+    await s.settle();
+    const settings = Array.from({ length: 51 }, (_, i) => ({ id: `setting-${i}`, currentValue: "off" }));
+    s.answer("session/new", { sessionId: "c1", configOptions: [...settings, { currentValue: "no id" }] });
+    await started;
+    const frames: ConversationServerMessage[] = [];
+    s.acp.attachConversation({ send: (m) => frames.push(m), closed: () => {} });
+
+    expect(s.acp.view()?.state?.state).toBe("Input");
+    expect(frames[0]?.mode).toBeNull();
+  });
+
+  test("an update of another conversation sent before session/new answers never reaches the views", async () => {
+    const s = session();
+    const started = s.acp.start();
+    s.answer("initialize", { protocolVersion: 1 });
+    await s.settle();
+    s.send({
+      method: "session/update",
+      params: { sessionId: "other", update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "not ours" } } },
+    });
+    s.answer("session/new", { sessionId: "c1" });
+    await started;
+    const frames: ConversationServerMessage[] = [];
+    s.acp.attachConversation({ send: (m) => frames.push(m), closed: () => {} });
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect(frames.flatMap((f) => f.entries)).toEqual([]);
+  });
+
   test("switching the mode asks the agent, and a mode it does not offer is refused without asking", async () => {
     const s = session();
     const started = s.acp.start();

@@ -1,11 +1,11 @@
 import { relative } from "node:path";
 import {
   CONVERSATION_TEXT_MAX,
-  type ConversationEntry,
+  SUBAGENT_TYPE_MAX,
   TOOL_FILE_PATH_MAX,
   TOOL_FILES_MAX,
-  TOOL_KIND_MAX,
   TOOL_PATCH_MAX,
+  type ToolSubagent,
 } from "@trackwall/protocol";
 import { isInside } from "../../infra/path-inside.ts";
 import { contentText, type SessionUpdate, type ToolCallContent } from "./acp-messages.ts";
@@ -72,11 +72,11 @@ export function toolCallPatch(toolCall: Pick<ToolCall, "content" | "rawInput" | 
  * The subagent a tool call starts: Copilot CLI's `task` tool sends the subagent's type and what it asks it in its input
  * (`agent_type`, `prompt`); `null` for another tool.
  */
-export function toolCallSubagent(toolCall: Pick<ToolCall, "rawInput">): Extract<ConversationEntry, { kind: "tool" }>["subagent"] {
+export function toolCallSubagent(toolCall: Pick<ToolCall, "rawInput">): ToolSubagent | null {
   const type = stringField(toolCall.rawInput, "agent_type");
   const prompt = stringField(toolCall.rawInput, "prompt");
   if (type === undefined || prompt === undefined) return null;
-  return { type: type.slice(0, TOOL_KIND_MAX), prompt: prompt.slice(0, CONVERSATION_TEXT_MAX) };
+  return { type: type.slice(0, SUBAGENT_TYPE_MAX), prompt: prompt.slice(0, CONVERSATION_TEXT_MAX) };
 }
 
 /** The text when it is a unified diff, without the empty lines Copilot CLI puts before it. */

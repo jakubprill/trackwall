@@ -1,6 +1,7 @@
 import type {
   AgentApproval,
   ConversationEntry,
+  ConversationInfo,
   ConversationServerMessage,
   DialogAnswer,
   ReadRequest,
@@ -27,7 +28,7 @@ import {
   SessionUpdate,
   SessionUpdateParams,
 } from "./acp-messages.ts";
-import { AcpSessionInfo, type SessionInfo } from "./acp-session-info.ts";
+import { AcpSessionInfo } from "./acp-session-info.ts";
 import { toolCallFiles, toolCallLines, toolCallPatch } from "./acp-tool-call.ts";
 import type { AgentSession } from "./agent-session.ts";
 import { type CopilotHookOutput, situationOutput } from "./copilot-hook-output.ts";
@@ -133,7 +134,8 @@ export class AcpSession implements AgentSession {
   /** The agent's mode, context use and commands. */
   readonly #info = new AcpSessionInfo();
   /** Updates before `session/new` answered with the conversation's id: Copilot CLI sends its commands first. */
-  readonly #early: unknown[] = [];
+  readonly #early: SessionUpdateParams[] = [];
+  #earlyOverflowLogged = false;
   readonly #attention = new SessionAttention();
   readonly #viewers = new Set<ConversationViewer>();
   readonly #decoder = new TextDecoder();
@@ -157,7 +159,7 @@ export class AcpSession implements AgentSession {
   readonly #pending = new Map<string, ConversationEntry>();
   #pendingReset = false;
   /** What changed of the agent's mode, context use and commands since the last frame. */
-  #pendingInfo: Partial<SessionInfo> = {};
+  #pendingInfo: Partial<ConversationInfo> = {};
   #flush: ReturnType<typeof setTimeout> | undefined;
   readonly #queued: Prompt[] = [];
   #waitingIds = 0;
@@ -230,10 +232,10 @@ export class AcpSession implements AgentSession {
     if (load !== undefined && agent.agentCapabilities?.loadSession !== true)
       throw new Error("Copilot CLI cannot load a conversation over ACP");
     if (load === undefined) {
-      const created = NewSessionResult.parse(await connection.request("session/new", { cwd, mcpServers: [] }));
-      this.#conversationId = created.sessionId;
-      this.#infoChanged(this.#info.settings(created.configOptions));
-      for (const params of this.#early.splice(0)) this.#notification("session/update", params);
+      const created: unknown = await connection.request("session/new", { cwd, mcpServers: [] });
+      this.#conversationId = NewSessionResult.parse(created).sessionId;
+      this.#infoChanged(this.#info.settings(ConfigOptionsResult.safeParse(created).data?.configOptions));
+      for (const params of this.#early.splice(0)) this.#update(params);
     } else {
       // The agent replays the conversation as updates of that id before it answers; no view is attached yet.
       this.#conversation.clear();
@@ -478,11 +480,25 @@ export class AcpSession implements AgentSession {
     if (method !== "session/update") return;
     const parsed = SessionUpdateParams.safeParse(params);
     if (!parsed.success) return;
-    if (this.#conversationId === undefined && this.#early.length < EARLY_UPDATES_MAX) this.#early.push(params);
-    if (parsed.data.sessionId !== this.#conversationId) return;
+    if (this.#conversationId === undefined) this.#keepEarly(parsed.data);
+    else this.#update(parsed.data);
+  }
+
+  /** An update before the conversation has an id waits for it, up to `EARLY_UPDATES_MAX`; the rest go, said once in the log. */
+  #keepEarly(params: SessionUpdateParams): void {
+    if (this.#early.length < EARLY_UPDATES_MAX) {
+      this.#early.push(params);
+    } else if (!this.#earlyOverflowLogged) {
+      this.#earlyOverflowLogged = true;
+      this.#o.log(`session ${this.id}: dropped updates that came before the conversation had an id`);
+    }
+  }
+
+  #update(params: SessionUpdateParams): void {
+    if (params.sessionId !== this.#conversationId) return;
     // Any update of the conversation is a step (ADR-151), also a plan the daemon does not show.
     this.#lastStepAt = Date.now();
-    const update = SessionUpdate.safeParse(parsed.data.update);
+    const update = SessionUpdate.safeParse(params.update);
     // A kind the daemon does not show (plans).
     if (!update.success) return;
     if (update.data.sessionUpdate === "session_info_update") this.#windowTitle = update.data.title ?? this.#windowTitle;
@@ -548,7 +564,7 @@ export class AcpSession implements AgentSession {
     this.#scheduleFlush();
   }
 
-  #infoChanged(change: Partial<SessionInfo> | undefined): void {
+  #infoChanged(change: Partial<ConversationInfo> | undefined): void {
     if (change === undefined) return;
     Object.assign(this.#pendingInfo, change);
     this.#scheduleFlush();

@@ -1,6 +1,7 @@
 import {
   agentsApi,
   type ConversationEntry,
+  type ConversationInfo,
   ConversationServerMessage,
   conversationSocket,
   PTY_CLOSE_NOT_FOUND,
@@ -20,12 +21,11 @@ import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import {
-  type AgentInfo,
   conversationStatus,
-  NO_AGENT_INFO,
+  NO_CONVERSATION_INFO,
   sendsMessage,
   slashSuggestions,
-  withAgentInfo,
+  withConversationInfo,
   withEntries,
   withSlashCommand,
 } from "@/lib/conversation";
@@ -56,7 +56,7 @@ export function ConversationView({ conn, session, selected }: { conn: Connection
   const updateFocus = useRef<() => void>(undefined);
   const [entries, setEntries] = useState<ConversationEntry[]>([]);
   const [waiting, setWaiting] = useState<WaitingMessage[]>([]);
-  const [info, setInfo] = useState<AgentInfo>(NO_AGENT_INFO);
+  const [info, setInfo] = useState<ConversationInfo>(NO_CONVERSATION_INFO);
   const [notice, setNotice] = useState<string>();
   const list = useRef<HTMLDivElement>(null);
   const following = useRef(true);
@@ -87,7 +87,7 @@ export function ConversationView({ conn, session, selected }: { conn: Connection
         const message = ConversationServerMessage.safeParse(parseJson(event.data));
         if (!message.success) return;
         setEntries((current) => withEntries(current, message.data));
-        setInfo((current) => withAgentInfo(current, message.data));
+        setInfo((current) => withConversationInfo(current, message.data));
         setWaiting(message.data.waiting);
       };
       ws.onclose = (event) => {

@@ -26,12 +26,21 @@ describe("the agent's mode", () => {
     expect(info.offers(`${MODES}autopilot`)).toBe(false);
   });
 
-  test("autopilot the user turned on with /autopilot shows as the mode the agent works in", () => {
+  test("autopilot the user turned on with /autopilot shows as the mode the agent works in, and still cannot be switched to", () => {
     const info = new AcpSessionInfo();
     info.settings([modeSetting("autopilot")]);
 
     expect(info.get().mode?.current).toBe(`${MODES}autopilot`);
     expect(info.get().mode?.options.map((o) => o.name)).toEqual(["Agent", "Plan", "Autopilot"]);
+    expect(info.offers(`${MODES}autopilot`)).toBe(false);
+  });
+
+  test("a mode Copilot CLI adds later is neither shown nor switched to, since it may skip approvals as autopilot does", () => {
+    const info = new AcpSessionInfo();
+    info.settings([{ id: "mode", currentValue: `${MODES}agent`, options: [option("agent", "Agent"), option("yolo", "Yolo")] }]);
+
+    expect(info.get().mode?.options.map((o) => o.name)).toEqual(["Agent"]);
+    expect(info.offers(`${MODES}yolo`)).toBe(false);
   });
 
   test("settings without a mode, or a mode without a value, change nothing", () => {
@@ -61,7 +70,7 @@ describe("the context use and the slash commands", () => {
     expect(info.apply({ sessionUpdate: "usage_update", used: 5, size: 0 })).toEqual({ context: null });
   });
 
-  test("a command keeps its name without a slash, its description and its hint, and a command without a name is left out", () => {
+  test("a command keeps its name without a slash, its description and its hint, each name once, and a command without a name is left out", () => {
     const info = new AcpSessionInfo();
 
     expect(
@@ -70,6 +79,7 @@ describe("the context use and the slash commands", () => {
         availableCommands: [
           { name: "/compact", description: "Summarize", input: { hint: "focus instructions" } },
           { name: "review", description: null, input: null },
+          { name: "compact", description: "A second compact" },
           { name: "" },
         ],
       }),

@@ -1,7 +1,7 @@
 import type {
   ContextUse,
   ConversationEntry,
-  ConversationMode,
+  ConversationInfo,
   ConversationServerMessage,
   Session,
   SessionView,
@@ -120,18 +120,11 @@ export function saveSupervisorView(storage: () => Pick<Storage, "setItem">, view
   }
 }
 
-/** What the view knows of the agent besides its conversation: its mode, its context use and its slash commands. */
-export interface AgentInfo {
-  mode: ConversationMode | null;
-  context: ContextUse | null;
-  commands: SlashCommand[];
-}
+export const NO_CONVERSATION_INFO: ConversationInfo = { mode: null, context: null, commands: [] };
 
-export const NO_AGENT_INFO: AgentInfo = { mode: null, context: null, commands: [] };
-
-/** The agent's info after a frame, which carries only what changed (all of it on a reset). */
-export function withAgentInfo(info: AgentInfo, message: ConversationServerMessage): AgentInfo {
-  const base = message.reset ? NO_AGENT_INFO : info;
+/** The conversation info after a frame, which carries only what changed (all of it on a reset). */
+export function withConversationInfo(info: ConversationInfo, message: ConversationServerMessage): ConversationInfo {
+  const base = message.reset ? NO_CONVERSATION_INFO : info;
   return {
     mode: message.mode === undefined ? base.mode : message.mode,
     context: message.context === undefined ? base.context : message.context,
@@ -153,13 +146,16 @@ const SLASH_SUGGESTIONS_MAX = 8;
 
 /**
  * The commands the message box suggests: while the message is a slash and the start of a command's name, without a
- * space yet, the commands whose names start with it.
+ * space yet, the commands whose names start with it. A whole command that no other name continues lists nothing, so
+ * Enter sends it.
  */
 export function slashSuggestions(text: string, commands: readonly SlashCommand[]): SlashCommand[] {
   const typed = /^\/(\S*)$/.exec(text)?.[1];
   if (typed === undefined) return [];
   const start = typed.toLowerCase();
-  return commands.filter((c) => c.name.toLowerCase().startsWith(start)).slice(0, SLASH_SUGGESTIONS_MAX);
+  const matches = commands.filter((c) => c.name.toLowerCase().startsWith(start));
+  if (matches.length === 1 && matches[0]?.name.toLowerCase() === start) return [];
+  return matches.slice(0, SLASH_SUGGESTIONS_MAX);
 }
 
 /** The message after picking a command: the command and a space for its argument. */

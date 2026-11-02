@@ -42,6 +42,11 @@ export const TOOL_FILE_PATH_MAX = 4096;
 /** A unified diff (`git diff`), empty when there is none, as a tool call and an approval carry it. */
 export const ToolPatch = z.string().max(TOOL_PATCH_MAX);
 
+export const SUBAGENT_TYPE_MAX = 64;
+/** A subagent a tool call started (Copilot CLI's `task` tool): its type (`explore`, …) and what it was asked. */
+export const ToolSubagent = z.object({ type: z.string().max(SUBAGENT_TYPE_MAX), prompt: EntryText });
+export type ToolSubagent = z.infer<typeof ToolSubagent>;
+
 /**
  * A tool the agent called: its title, what kind of tool, where it is, the files it reads or changes, lines of what it
  * did (its output, a command, an error), and the change it makes to files as a unified diff.
@@ -61,10 +66,7 @@ export const ToolEntry = z.object({
   /** The change was longer than `TOOL_PATCH_MAX` and `patch` is its beginning. */
   patchCut: z.boolean().default(false),
   /** A subagent the tool started: its type and what it was asked; `null` for any other tool. */
-  subagent: z
-    .object({ type: z.string().max(TOOL_KIND_MAX), prompt: EntryText })
-    .nullable()
-    .default(null),
+  subagent: ToolSubagent.nullable().default(null),
 });
 
 export const ConversationEntry = z.discriminatedUnion("kind", [UserEntry, AgentEntry, ThoughtEntry, ToolEntry]);
@@ -89,6 +91,14 @@ export const SlashCommand = z.object({ name: z.string().min(1).max(64), descript
 export type SlashCommand = z.infer<typeof SlashCommand>;
 export const SLASH_COMMANDS_MAX = 300;
 
+/** What the conversation view shows of the agent besides its entries: its mode, its context use and its slash commands. */
+export const ConversationInfo = z.object({
+  mode: ConversationMode.nullable(),
+  context: ContextUse.nullable(),
+  commands: z.array(SlashCommand).max(SLASH_COMMANDS_MAX),
+});
+export type ConversationInfo = z.infer<typeof ConversationInfo>;
+
 /** A message the user wrote during a turn, which goes to the agent as the next prompt once the turn ends. */
 export const WaitingMessage = z.object({ id: EntryId, text: EntryText });
 export type WaitingMessage = z.infer<typeof WaitingMessage>;
@@ -104,9 +114,7 @@ export const ConversationServerMessage = z.object({
   reset: z.boolean(),
   entries: z.array(ConversationEntry),
   waiting: z.array(WaitingMessage).default([]),
-  mode: ConversationMode.nullable().optional(),
-  context: ContextUse.nullable().optional(),
-  commands: z.array(SlashCommand).max(SLASH_COMMANDS_MAX).optional(),
+  ...ConversationInfo.partial().shape,
 });
 export type ConversationServerMessage = z.infer<typeof ConversationServerMessage>;
 

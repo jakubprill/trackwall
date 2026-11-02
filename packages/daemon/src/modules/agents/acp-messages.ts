@@ -28,8 +28,11 @@ const ConfigOption = z.object({ id: z.string(), currentValue: z.unknown(), optio
 export type ConfigOption = z.infer<typeof ConfigOption>;
 const ConfigOptions = z.array(ConfigOption).max(50);
 
-export const NewSessionResult = z.object({ sessionId: ConversationId, configOptions: ConfigOptions.optional() });
-/** The answer to `session/load` and `session/set_config_option`. */
+export const NewSessionResult = z.object({ sessionId: ConversationId });
+/**
+ * The settings in the answer to `session/new`, `session/load` and `session/set_config_option`, read apart from the rest
+ * with `safeParse`: settings the daemon cannot read only leave the mode unknown, they never stop a session.
+ */
 export const ConfigOptionsResult = z.object({ configOptions: ConfigOptions.optional() });
 
 export const PromptResult = z.object({ stopReason: z.string() });
@@ -80,6 +83,7 @@ export type SessionUpdate = z.infer<typeof SessionUpdate>;
 
 /** `session/update`: the update is parsed separately, so a kind the daemon does not know is skipped, not an error. */
 export const SessionUpdateParams = z.object({ sessionId: z.string(), update: z.object({ sessionUpdate: z.string() }).loose() });
+export type SessionUpdateParams = z.infer<typeof SessionUpdateParams>;
 
 export const PermissionOption = z.object({
   optionId: z.string().min(1).max(128),
