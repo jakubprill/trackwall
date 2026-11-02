@@ -1,3 +1,4 @@
+import type { Stats } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { fileKey } from "../../infra/file-key.ts";
@@ -73,48 +74,61 @@ export class GitStateReader {
  * What `git status` depends on in the git directory (ADR-141): HEAD with its branch, the remote-tracking refs its upstream
  * is among, `packed-refs`, and the index, which staging, a commit and a `git status` that refreshes stat data rewrite.
  * Not the other local branches: a task's commit in its worktree moves its own branch in the shared git directory, which
- * says nothing about the root's status, and every turn of a task commits (ADR-168). An upstream that is a local branch
- * is noticed only when the status ages out. `undefined` without a git directory or when a file cannot be read this time.
- * Read afresh on every call, so it does not share the repo watch's memory.
+ * says nothing about the root's status, and every turn of a task commits (ADR-168). With reftable every ref lives in
+ * one table list, so there a task's commit still counts. An upstream that is a local branch, or one set in `config`,
+ * is noticed only when the status ages out. `undefined` without a git directory or when a file cannot be read this
+ * time. Read afresh on every call, so it does not share the repo watch's memory.
  */
 export async function gitDirKey(repo: string): Promise<string | undefined> {
   const dirs = await gitDirs(repo);
   if (!dirs) return undefined;
-  const [state, packed, remotes, index] = await Promise.all([
-    readRepo(dirs, { refsDirs: new Map() }, new Map()),
+  const [head, packed, remotes, index] = await Promise.all([
+    readHead(dirs, { refsDirs: new Map() }),
     statIfExists(join(dirs.commonDir, "packed-refs")),
     refsKeys(join(dirs.commonDir, "refs", "remotes"), "/remotes", new Map(), new Map()),
     statIfExists(join(dirs.gitDir, "index")),
   ]);
-  return state ? [state.head, `packed-refs ${optionalKey(packed)}`, ...remotes, `index ${optionalKey(index)}`].join("\n") : undefined;
+  return head ? [head.key, `packed-refs ${optionalKey(packed)}`, ...remotes, `index ${optionalKey(index)}`].join("\n") : undefined;
 }
 
 async function readRepo(dirs: GitDirs, cache: RepoCache, previousDirs: ReadonlyMap<string, RefsDir>): Promise<GitState | null> {
+  const [head, packed, log, refs] = await Promise.all([
+    readHead(dirs, cache),
+    statIfExists(join(dirs.commonDir, "packed-refs")),
+    stat(join(dirs.gitDir, "logs", "HEAD")).catch(() => undefined),
+    refsKeys(join(dirs.commonDir, "refs"), "", previousDirs, cache.refsDirs),
+  ]);
+  if (!head) return null;
+  return {
+    head: head.key,
+    // `packed-refs` can also hold the checked-out branch; a change there is reported as a ref change only.
+    refs: [`packed-refs ${optionalKey(packed)}`, ...refs].join("\n"),
+    usedMs: (log ?? head.file).mtimeMs,
+  };
+}
+
+/** HEAD's key (`GitState.head`) and the stat of its file; `null` without a HEAD file. */
+async function readHead(dirs: GitDirs, cache: RepoCache): Promise<{ key: string; file: Stats } | null> {
   const headFile = join(dirs.gitDir, "HEAD");
   const head = await statIfExists(headFile);
   if (!head) return null;
   const ref = await headRef(headFile, fileKey(head), cache);
-  const [branch, packed, reftable, worktreeReftable, log, refs] = await Promise.all([
+  const [branch, reftable, worktreeReftable] = await Promise.all([
     ref === null ? undefined : statIfExists(join(dirs.commonDir, ...ref.split("/"))),
-    statIfExists(join(dirs.commonDir, "packed-refs")),
     statIfExists(join(dirs.commonDir, "reftable", "tables.list")),
     // A worktree's own refs, HEAD among them, have a reftable of their own.
     dirs.gitDir === dirs.commonDir ? undefined : statIfExists(join(dirs.gitDir, "reftable", "tables.list")),
-    stat(join(dirs.gitDir, "logs", "HEAD")).catch(() => undefined),
-    refsKeys(join(dirs.commonDir, "refs"), "", previousDirs, cache.refsDirs),
   ]);
   return {
     // The checked-out branch's own file: a commit renames a new file over it, which a coarse directory time may not show.
     // With reftable every ref, the branch too, lives in `tables.list`, so any ref change there counts as HEAD moving.
-    head: [
+    key: [
       `HEAD ${fileKey(head)}`,
       `${ref ?? "detached"} ${optionalKey(branch)}`,
       `reftable ${optionalKey(reftable)}`,
       `worktree reftable ${optionalKey(worktreeReftable)}`,
     ].join("\n"),
-    // `packed-refs` can also hold the checked-out branch; a change there is reported as a ref change only.
-    refs: [`packed-refs ${optionalKey(packed)}`, ...refs].join("\n"),
-    usedMs: (log ?? head).mtimeMs,
+    file: head,
   };
 }
 
