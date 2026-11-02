@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { errorMessage } from "@/lib/api";
+import { type ChangePart, changeBlock } from "@/lib/change-merge-requests";
 import type { Connection } from "@/lib/connection";
 import { useOpenWebLink } from "@/lib/desktop";
 import {
@@ -40,11 +41,14 @@ export function TaskMergeRequest({
   task,
   verification,
   state: { state, push, pushing, openForm, opening, error },
+  change,
 }: {
   conn: Connection;
   task: Task;
   verification: Verification | null;
   state: TaskMergeRequestState;
+  /** The parts of the task's change, whose list the draft starts with (ADR-172). */
+  change: readonly ChangePart[] | null;
 }) {
   const [draft, setDraft] = useState<MergeRequestDraftText>();
   if (!state?.push || state.push.commits === 0)
@@ -62,7 +66,7 @@ export function TaskMergeRequest({
           <Upload /> {pushing ? "Pushing…" : "Push"}
         </Button>
         {formReady && state.project && !draft && (
-          <Button variant="outline" size="sm" onClick={() => setDraft(mergeRequestDraft(task, verification))}>
+          <Button variant="outline" size="sm" onClick={() => setDraft(mergeRequestDraft(task, verification, changeBlock(task, change)))}>
             <GitPullRequestArrow /> Open merge request
           </Button>
         )}

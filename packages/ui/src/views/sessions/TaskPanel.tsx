@@ -1,4 +1,12 @@
-import { mayHandToSupervisor, type RunningMiseTask, type Session, TASK_PORT_ENV, type Task, type TaskMessage } from "@trackwall/protocol";
+import {
+  mayHandToSupervisor,
+  type RunningMiseTask,
+  type Session,
+  TASK_PORT_ENV,
+  type Task,
+  type TaskMessage,
+  type TaskOutcome,
+} from "@trackwall/protocol";
 import { Bot, GitBranch, Layers, Plug, ShieldOff, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
@@ -40,6 +48,7 @@ export function TaskPanel({
   session,
   sessions,
   tasks,
+  outcomes,
   messages,
   runningLive,
   onChanged,
@@ -55,6 +64,8 @@ export function TaskPanel({
   sessions: readonly Session[];
   /** All tasks on the list, to name the task that changes the same files. */
   tasks: readonly Task[];
+  /** The outcomes of the tasks, for the merge requests of a change's parts (ADR-172). */
+  outcomes: ReadonlyMap<string, TaskOutcome>;
   /** The messages the task's proposer sent its session (ADR-68), oldest first. */
   messages: readonly TaskMessage[];
   /** Pushes of the running mise tasks, for the mise tasks a task's agent runs in its worktree. */
@@ -72,7 +83,7 @@ export function TaskPanel({
   const [removing, setRemoving] = useState(false);
   const review = useTaskReview(conn, task.id);
   const confirmingRemoval = removing && !liveSession;
-  const details = useTaskDetails({ conn, task, tasks, messages, runningLive, paused: confirmingRemoval });
+  const details = useTaskDetails({ conn, task, tasks, outcomes, messages, runningLive, paused: confirmingRemoval });
   const [detailsOpen, setDetailsOpen] = useState(false);
   const detailsArea = useRef<HTMLElement>(null);
   const shown: TaskTab = session || tab !== "session" ? tab : "changes";

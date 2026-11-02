@@ -13,6 +13,7 @@ Start one piece of work in several repos at once, one agent per repo, on one bra
 - The same branch name in every repo, so the merge requests of one change are easy to find together on GitLab or GitHub.
 - Agents that know their siblings: each one knows the other repos of the change, their tasks and the order to merge them in.
 - An agent that follows the repo before it: when the earlier part commits, the next one is told to read what changed.
+- Merge requests that point to each other: each one lists the other repos and the order to merge them in, and each part's panel shows all the merge requests of the change.
 
 ## How it works
 
@@ -24,7 +25,9 @@ Each part after the first builds on the part right before it. When that part's a
 
 An agent can propose a change too: the [supervisor](/features/supervisor) or another [main session](/features/main-session) that plans work across repos. The proposal waits in "Sessions" like a task proposal, as one card that lists every repo in the merge order with what it has to do. Read the prompt and the notes, edit them if you like, untick the repos the change should leave out and press "Start change". Each part then reports to the session that proposed it, which follows them like the tasks it proposes. The agent of a task proposes work in other repos as separate tasks instead, which build on its own branch.
 
-Every part is an ordinary task: you review, verify, push and open its merge request from its own panel, and end it on its own. Merge them in the order shown. Nothing waits for that order and nothing merges by itself.
+Every part is an ordinary task: you review, verify and open its merge request from its own panel, and end it on its own. Above the "Merge request" section, a "Change" section lists every part in the merge order with its merge request and its state. It says which parts to merge first, and warns in yellow when a part was merged before an earlier one, since the repos may not work together until that one is merged too. "Push all parts" pushes the branch of every part that has commits to push, after you confirm, exactly as each part's own "Push" would; it then says which parts it pushed, which had nothing to push and which failed.
+
+When you open a part's merge request, its description starts with the list of the change's parts in the merge order, each with a link to its merge request or "no merge request yet". The merge requests you opened earlier do not know about the later ones, so press "Copy links" and paste the list as a comment on them. Merge them in the order shown. Nothing waits for that order and nothing merges by itself.
 
 ## Use it
 
@@ -32,7 +35,8 @@ Every part is an ordinary task: you review, verify, push and open its merge requ
 2. Write the prompt for the whole change.
 3. Press "Add a repo" for each other repo, in the order to merge them, with a note for what that repo has to do.
 4. Type a title for the change and press "Create change in N repos".
-5. When each part is done, push it and open its merge request from its task panel, in the merge order.
+5. When the parts are done, press "Push all parts" in any part's panel, then open each part's merge request from its own panel, in the merge order.
+6. Press "Copy links" and paste the list as a comment on the merge requests you opened before the last one.
 
 When an agent proposed the change, open its card in "Sessions", read and edit the prompt and the notes, untick the repos to leave out, and press "Start change".
 
@@ -43,4 +47,5 @@ When an agent proposed the change, open its card in "Sessions", read and edit th
 - A proposed change starts from the proposals panel, not from a grid tile, since you choose its repos there.
 - The parts of a change start without [Java navigation](/features/java-navigation); start a task on its own when you need it.
 - The merge order is the order you put the repos in. Trackwall does not reorder them, and it does not stop you from merging out of order.
+- Trackwall writes nothing on GitLab or GitHub: the list goes into the merge request description you approve, and into the comment you paste. A part you have ended is no longer listed.
 - A part's agent does not propose tasks in the other repos of its change. When it needs something from another part, it says so in its summary.

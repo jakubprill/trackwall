@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { Connection } from "@/lib/connection";
 import type { TaskSection } from "@/lib/task-notices";
 import type { TaskDetails as Details } from "@/lib/use-task-details";
+import { ChangeMergeRequests } from "./ChangeMergeRequests.tsx";
 import { SharedFiles } from "./SharedFiles.tsx";
 import { TaskIncludedFiles } from "./TaskIncludedFiles.tsx";
 import { TaskMergeRequest } from "./TaskMergeRequest.tsx";
@@ -20,7 +21,7 @@ const SECTION_ATTRIBUTE = "data-task-section";
  * The sections above a task's terminal (ADR-91), the same in the task panel and in a grid tile's overlay: the files
  * copied into the worktree (ADR-61), the warnings about shared files (ADR-44) and a changed mise config (ADR-59), the
  * messages from the proposer (ADR-68), the summary (ADR-39), the verification (ADR-64), the way to a merge request
- * (ADR-77), the service on the repo's port (ADR-132) and the mise tasks the agent runs in the worktree. Each section hides itself when it has nothing to show.
+ * (ADR-77) with the change it is part of (ADR-172), the service on the repo's port (ADR-132) and the mise tasks the agent runs in the worktree. Each section hides itself when it has nothing to show.
  */
 export function TaskDetails({
   conn,
@@ -59,7 +60,14 @@ export function TaskDetails({
         <TaskVerification conn={conn} state={details.verification} />
       </Section>
       <Section id="merge-request" only={only}>
-        <TaskMergeRequest conn={conn} task={task} verification={details.verification.verification} state={details.mergeRequest} />
+        <ChangeMergeRequests conn={conn} task={task} parts={details.change} onPushed={details.mergeRequest.reload} />
+        <TaskMergeRequest
+          conn={conn}
+          task={task}
+          verification={details.verification.verification}
+          state={details.mergeRequest}
+          change={details.change}
+        />
       </Section>
       <Section id="service" only={only}>
         <TaskService conn={conn} task={task} />

@@ -1,6 +1,7 @@
-import { agentsApi, type RunningMiseTask, type Task, type TaskMessage, type TaskMiseConfig } from "@trackwall/protocol";
+import { agentsApi, type RunningMiseTask, type Task, type TaskMessage, type TaskMiseConfig, type TaskOutcome } from "@trackwall/protocol";
 import { useCallback } from "react";
 import { post } from "./api.ts";
+import { changePartsOf } from "./change-merge-requests.ts";
 import type { Connection } from "./connection.ts";
 import type { LiveFeed } from "./daemon-events.ts";
 import { taskName } from "./session-entries.ts";
@@ -24,6 +25,7 @@ export function useTaskDetails({
   conn,
   task,
   tasks,
+  outcomes,
   messages,
   runningLive,
   paused,
@@ -33,6 +35,8 @@ export function useTaskDetails({
   task: Task | undefined;
   /** All tasks on the list, to name the other task of shared files. */
   tasks: readonly Task[];
+  /** The outcomes of the tasks, for the merge requests of the other parts of the task's change (ADR-172). */
+  outcomes: ReadonlyMap<string, TaskOutcome>;
   /** The messages the task's proposer sent its session (ADR-68), oldest first. */
   messages: readonly TaskMessage[];
   runningLive: LiveFeed<RunningMiseTask[]> | undefined;
@@ -75,6 +79,8 @@ export function useTaskDetails({
   return {
     verification,
     mergeRequest,
+    /** The parts of the task's change in their merge order, `null` for a task that is no part of one. */
+    change: task ? changePartsOf(task, tasks, outcomes) : null,
     sharedFiles,
     miseConfig,
     miseRuns,

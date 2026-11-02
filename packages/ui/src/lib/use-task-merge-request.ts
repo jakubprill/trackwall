@@ -23,6 +23,7 @@ export function useTaskMergeRequest(conn: Connection, task: string, paused: bool
   }, remote.reload);
   return {
     state: remote.data,
+    reload: remote.reload,
     push: push.run,
     pushing: push.pending,
     openForm: openForm.run,
