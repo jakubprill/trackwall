@@ -206,12 +206,12 @@ describe("proxy from the environment", () => {
     [{ HTTPS_PROXY: "http://proxy.example.org:3128", NO_PROXY: "hub.com" }, "github.com", "proxy.example.org:3128"],
     [{}, "github.com", null],
   ])("%j for %s goes through %s", (env, host, shown) => {
-    const proxy = proxyFor(env, host, 443);
+    const proxy = proxyFor(env, "https:", host, 443);
     expect(proxy === null ? null : shownProxy(proxy)).toBe(shown);
   });
 
   test("a proxy that is not HTTP is refused, without its password", () => {
-    expect(() => proxyFor({ HTTPS_PROXY: "socks5://user:secret@proxy.example.org:1080" }, "github.com", 443)).toThrow(
+    expect(() => proxyFor({ HTTPS_PROXY: "socks5://user:secret@proxy.example.org:1080" }, "https:", "github.com", 443)).toThrow(
       "the proxy proxy.example.org:1080 is not an HTTP proxy",
     );
   });

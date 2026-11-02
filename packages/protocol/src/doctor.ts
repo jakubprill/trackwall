@@ -19,6 +19,7 @@ export const DoctorCheckId = z.enum([
   "copilot-cli",
   "copilot-trusted-folder",
   "network",
+  "model-provider",
   "mise",
   "java-navigation",
   "github-cli",
