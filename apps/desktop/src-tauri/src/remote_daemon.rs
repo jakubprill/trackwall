@@ -83,7 +83,9 @@ pub async fn use_remote_daemon(
     let remote = parse_address(&address)?;
     refuse_own_daemon(&state, &remote)?;
     let checked = remote.clone();
-    tauri::async_runtime::spawn_blocking(move || daemon::connect_remote(&checked)).await.map_err(|e| e.to_string())??;
+    tauri::async_runtime::spawn_blocking(move || daemon::connect_remote(&checked).map_err(String::from))
+        .await
+        .map_err(|e| e.to_string())??;
     starting.cancel();
     switch_to(&app, &remote)
 }
