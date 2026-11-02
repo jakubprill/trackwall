@@ -27,6 +27,7 @@ import { toggle } from "@/lib/set-toggle";
 import { typedModel } from "@/lib/task-model";
 import { useProposalDecisions } from "@/lib/use-proposal-decisions";
 import { cn } from "@/lib/utils";
+import { ChangeOrderHints } from "./ChangeOrderHints.tsx";
 import { ChangeProposalParts } from "./ChangeProposalParts.tsx";
 import { ProposalActions, ProposalError } from "./ProposalActions.tsx";
 import { RepoRemovalNote } from "./RepoRemovalNote.tsx";
@@ -201,6 +202,12 @@ export function ProposalInbox({
                           disabled={decisions.pending}
                           onDropped={(dropped) => edit(p, { dropped })}
                           onNotes={(notes) => edit(p, { notes })}
+                        />
+                      )}
+                      {p.parts && (
+                        <ChangeOrderHints
+                          conn={conn}
+                          repos={p.parts.map((part) => part.repo).filter((repo) => !editOf(p).dropped.has(repo))}
                         />
                       )}
                       <Textarea
