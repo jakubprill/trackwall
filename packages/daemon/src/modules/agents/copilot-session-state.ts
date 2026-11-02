@@ -1,4 +1,5 @@
 import type { TaskStateChange } from "@trackwall/protocol";
+import { stateFromFolderTrust } from "./copilot-folder-trust.ts";
 import type { CopilotHookRecord } from "./copilot-hook-record.ts";
 import { stateFromHook } from "./copilot-hooks.ts";
 import { answersDialog, type SessionKey, stateFromKey } from "./copilot-keys.ts";
@@ -91,6 +92,12 @@ export class CopilotSessionState {
   #approvalsAsked = 0;
   /** A `postToolUse` held back while an approval request waits, and when it came. */
   #heldToolUse: { signal: StateSignal; at: number } | undefined;
+  /**
+   * What the screen can still tell (`screen`): before the first state the folder trust dialog or the input box, after a
+   * key the dialog may already have taken only the box (`keyed`), while the dialog waits nothing new, after its answer
+   * the input box, and after the box or the first hook nothing.
+   */
+  #screenPhase: "start" | "keyed" | "trust" | "answered" | "done" = "start";
 
   constructor(o: CopilotSessionStateOptions) {
     this.#tracker = new TaskStateTracker(o);
@@ -139,6 +146,7 @@ export class CopilotSessionState {
     if (keepsWaiting && hookSignal) this.#heldToolUse = { signal: hookSignal, at: this.#now() };
     else if (hookSignal) this.#heldToolUse = undefined;
     const signal = keepsWaiting ? undefined : hookSignal;
+    if (signal) this.#screenPhase = "done";
     if (signal) this.#inPromptBox = !withPrompt && (record.event === "sessionStart" || record.event === "agentStop");
     // Only a request of a known kind is counted; one guessed from the text may be no dialog at all.
     const asked = signal?.confidence === "high" ? 1 : 0;
@@ -178,13 +186,35 @@ export class CopilotSessionState {
   }
 
   /**
-   * The session's screen image (its visible lines): until the first state, the input box of a new session is waiting for
-   * you (ADR-69). Copilot CLI sends its first hook only with the first prompt, so without this a new session would have
-   * no state. Not while a prompt is on its way, so the session does not wait for you while its agent is about to start.
+   * The session's screen image (its visible lines), before the first hook (`#screenPhase`). The folder trust dialog waits
+   * for an answer, also while a prompt is on its way, which Copilot CLI takes only after it (`copilot-folder-trust.ts`);
+   * once answered it is not read again, so a dialog not redrawn yet does not ask twice. Until the first state, and after
+   * that answer, the input box of a new session is waiting for you (ADR-69): Copilot CLI sends its first hook only with
+   * the first prompt, so without this a new session would have no state. Not while a prompt is on its way, so the session
+   * does not wait for you while its agent is about to start.
    */
   screen(lines: () => readonly string[]): TaskStateChange[] {
-    if (this.#tracker.current !== undefined || this.#promptOnItsWay()) return [];
-    return this.#signal(stateFromPromptBox(lines()));
+    if (!this.screenSpeaks) return [];
+    const shown = lines();
+    const trust = this.#screenPhase === "start" ? stateFromFolderTrust(shown) : undefined;
+    if (trust) {
+      // A state from OSC outranks the screen; the dialog then waits unseen, and the screen keeps trying.
+      const stale = this.#tick();
+      const asked = this.#tracker.signal(trust);
+      if (asked) this.#screenPhase = "trust";
+      return [stale, asked].filter((c) => c !== undefined);
+    }
+    // Before the answer the box speaks only for a session with no state at all, as before the dialog was known.
+    const noState = this.#screenPhase === "answered" || this.#tracker.current === undefined;
+    if (!noState || this.#promptOnItsWay()) return [];
+    const box = stateFromPromptBox(shown);
+    if (box) this.#screenPhase = "done";
+    return this.#signal(box);
+  }
+
+  /** Whether the screen can still tell the state (`screen`). */
+  get screenSpeaks(): boolean {
+    return this.#screenPhase !== "done" && this.#screenPhase !== "trust";
   }
 
   #signal(signal: StateSignal | undefined): TaskStateChange[] {
@@ -197,8 +227,11 @@ export class CopilotSessionState {
     const stale = this.#tick();
     const current = this.#tracker.current?.state;
     const signal = stateFromKey(key, current);
+    // A key before the screen was read may have answered the trust dialog: one not redrawn yet must not ask again.
+    if (this.#screenPhase === "start") this.#screenPhase = "keyed";
     if (!signal) return [stale].filter((c) => c !== undefined);
     this.#lastAnswerAt = this.#now();
+    if (this.#screenPhase === "trust") this.#screenPhase = "answered";
     // An answer to one of several approval requests: the next one's dialog follows, so the session still waits (ADR-66).
     if (current === "Approval" && answersDialog(key) && this.#approvalsAsked > 1) {
       this.#approvalsAsked--;

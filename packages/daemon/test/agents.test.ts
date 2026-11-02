@@ -94,6 +94,38 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     await agents.stop(started.id);
   }, 60_000);
 
+  test("a session in a folder Copilot CLI does not trust waits for you with its folder trust dialog, and the answer from outside the terminal starts it", async () => {
+    const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
+    const { agents, procs } = makeAgents({ shop: repoDir }, undefined, null, undefined, {
+      ...process.env,
+      FAKE_COPILOT_UNTRUSTED_FOLDER: "1",
+    });
+    cleanups.push(() => procs.stopAll());
+    const started = await agents.start("shop");
+
+    const trust = await waitFor(agents, started.id, (s) => s.dialog !== null, "the folder trust dialog");
+    expect(trust.state).toMatchObject({ state: "Approval", source: "screen", reason: "screen folder trust dialog" });
+    expect(trust.needsAttention).toBe(true);
+    if (trust.dialog?.kind !== "approval") throw new Error("no approval dialog");
+    expect(trust.dialog).toMatchObject({ title: "Confirm folder trust", question: "Do you trust the files in this folder?" });
+    expect(trust.dialog.options.map((o) => o.key)).toEqual(["1", "2"]);
+
+    agents.answerDialog(started.id, trust.dialog.id, "1");
+    const waiting = await waitFor(agents, started.id, (s) => s.state?.state === "Input", "the input box after the answer");
+    expect(waiting.state).toMatchObject({ source: "screen", reason: "screen input box before the first prompt" });
+    expect(waiting.dialog).toBeNull();
+    await agents.stop(started.id);
+
+    const refused = await agents.start("shop");
+    const window = viewer(agents, refused.id);
+    await waitFor(agents, refused.id, (s) => s.dialog !== null, "the folder trust dialog again");
+    window.attachment.input("\u001b");
+    const ended = await waitFor(agents, refused.id, (s) => s.run.kind === "exited", "the end after No");
+    expect(ended.run).toMatchObject({ kind: "exited", exitCode: 1 });
+    expect(ended.state).toMatchObject({ state: "Done", source: "hook", reason: "hook sessionEnd user_exit" });
+    window.attachment.detach();
+  }, 60_000);
+
   test("an approval cut above by a short terminal is read with the text of its notification as the heading", async () => {
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
     const { agents, procs } = makeAgents({ shop: repoDir });
