@@ -8,6 +8,7 @@ mod attention;
 mod autostart;
 mod badge;
 mod clipboard;
+mod container_cli;
 mod daemon;
 mod daemon_state;
 mod dev_container;
@@ -151,6 +152,7 @@ fn main() {
             dev_container::dev_container,
             dev_container::set_dev_container,
             dev_container::start_dev_container,
+            dev_container::update_dev_container,
             dev_container::dev_container_starting,
             dev_container::cancel_dev_container_start,
             host_folder::host_projects_folder,
