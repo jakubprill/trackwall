@@ -42,6 +42,11 @@ export const TOOL_FILE_PATH_MAX = 4096;
 /** A unified diff (`git diff`), empty when there is none, as a tool call and an approval carry it. */
 export const ToolPatch = z.string().max(TOOL_PATCH_MAX);
 
+export const SUBAGENT_TYPE_MAX = 64;
+/** A subagent a tool call started (Copilot CLI's `task` tool): its type (`explore`, …) and what it was asked. */
+export const ToolSubagent = z.object({ type: z.string().max(SUBAGENT_TYPE_MAX), prompt: EntryText });
+export type ToolSubagent = z.infer<typeof ToolSubagent>;
+
 /**
  * A tool the agent called: its title, what kind of tool, where it is, the files it reads or changes, lines of what it
  * did (its output, a command, an error), and the change it makes to files as a unified diff.
@@ -60,10 +65,39 @@ export const ToolEntry = z.object({
   patch: ToolPatch.default(""),
   /** The change was longer than `TOOL_PATCH_MAX` and `patch` is its beginning. */
   patchCut: z.boolean().default(false),
+  /** A subagent the tool started: its type and what it was asked; `null` for any other tool. */
+  subagent: ToolSubagent.nullable().default(null),
 });
 
 export const ConversationEntry = z.discriminatedUnion("kind", [UserEntry, AgentEntry, ThoughtEntry, ToolEntry]);
 export type ConversationEntry = z.infer<typeof ConversationEntry>;
+
+/** Copilot CLI's id of a mode (a URL today). */
+export const ConversationModeId = z.string().min(1).max(256);
+
+/** One of the agent's modes (Agent, Plan, …): Copilot CLI's id, name and description. */
+export const ConversationModeOption = z.object({ id: ConversationModeId, name: z.string().max(64), description: z.string().max(1000) });
+
+/** The agent's mode: the one it works in, and the ones the user can switch to. */
+export const ConversationMode = z.object({ current: ConversationModeId, options: z.array(ConversationModeOption).max(10) });
+export type ConversationMode = z.infer<typeof ConversationMode>;
+
+/** How much of the model's context window the conversation uses, in tokens. */
+export const ContextUse = z.object({ used: z.number().int().nonnegative(), size: z.number().int().positive() });
+export type ContextUse = z.infer<typeof ContextUse>;
+
+/** A slash command the agent offers (`/compact`), with what it does and a hint at its argument (empty for none). */
+export const SlashCommand = z.object({ name: z.string().min(1).max(64), description: z.string().max(1000), hint: z.string().max(200) });
+export type SlashCommand = z.infer<typeof SlashCommand>;
+export const SLASH_COMMANDS_MAX = 300;
+
+/** What the conversation view shows of the agent besides its entries: its mode, its context use and its slash commands. */
+export const ConversationInfo = z.object({
+  mode: ConversationMode.nullable(),
+  context: ContextUse.nullable(),
+  commands: z.array(SlashCommand).max(SLASH_COMMANDS_MAX),
+});
+export type ConversationInfo = z.infer<typeof ConversationInfo>;
 
 /** A message the user wrote during a turn, which goes to the agent as the next prompt once the turn ends. */
 export const WaitingMessage = z.object({ id: EntryId, text: EntryText });
@@ -72,13 +106,15 @@ export type WaitingMessage = z.infer<typeof WaitingMessage>;
 /**
  * What the daemon sends on the conversation socket: `entries` that are new or changed, in order, after `reset` all of
  * them (the first frame, and after the conversation was loaded again), and every frame the user's messages that wait
- * for the turn to end, oldest first (none from a daemon before them).
+ * for the turn to end, oldest first (none from a daemon before them). The agent's `mode`, its `context` use and its
+ * slash `commands` come in the first frame and then only in a frame where they changed; `null` until the agent told.
  */
 export const ConversationServerMessage = z.object({
   type: z.literal("entries"),
   reset: z.boolean(),
   entries: z.array(ConversationEntry),
   waiting: z.array(WaitingMessage).default([]),
+  ...ConversationInfo.partial().shape,
 });
 export type ConversationServerMessage = z.infer<typeof ConversationServerMessage>;
 

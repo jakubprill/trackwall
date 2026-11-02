@@ -20,7 +20,20 @@ export const InitializeResult = z.object({
  */
 export const ConversationId = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/);
 
+/**
+ * A setting of the session the agent offers (`configOptions`): the daemon reads the `mode` select. Its options stay
+ * unknown here, since ACP also allows groups of them; `acp-session-info.ts` reads the ones it can.
+ */
+const ConfigOption = z.object({ id: z.string(), currentValue: z.unknown(), options: z.array(z.unknown()).optional() });
+export type ConfigOption = z.infer<typeof ConfigOption>;
+const ConfigOptions = z.array(ConfigOption).max(50);
+
 export const NewSessionResult = z.object({ sessionId: ConversationId });
+/**
+ * The settings in the answer to `session/new`, `session/load` and `session/set_config_option`, read apart from the rest
+ * with `safeParse`: settings the daemon cannot read only leave the mode unknown, they never stop a session.
+ */
+export const ConfigOptionsResult = z.object({ configOptions: ConfigOptions.optional() });
 
 export const PromptResult = z.object({ stopReason: z.string() });
 
@@ -57,11 +70,20 @@ export const SessionUpdate = z.discriminatedUnion("sessionUpdate", [
   z.object({ sessionUpdate: z.literal("tool_call"), ...ToolCallFields }),
   z.object({ sessionUpdate: z.literal("tool_call_update"), ...ToolCallFields }),
   z.object({ sessionUpdate: z.literal("session_info_update"), title: z.string().nullish() }),
+  z.object({ sessionUpdate: z.literal("usage_update"), used: z.number(), size: z.number() }),
+  z.object({ sessionUpdate: z.literal("config_option_update"), configOptions: ConfigOptions }),
+  z.object({
+    sessionUpdate: z.literal("available_commands_update"),
+    availableCommands: z
+      .array(z.object({ name: z.string(), description: z.string().nullish(), input: z.object({ hint: z.string().nullish() }).nullish() }))
+      .max(1000),
+  }),
 ]);
 export type SessionUpdate = z.infer<typeof SessionUpdate>;
 
 /** `session/update`: the update is parsed separately, so a kind the daemon does not know is skipped, not an error. */
 export const SessionUpdateParams = z.object({ sessionId: z.string(), update: z.object({ sessionUpdate: z.string() }).loose() });
+export type SessionUpdateParams = z.infer<typeof SessionUpdateParams>;
 
 export const PermissionOption = z.object({
   optionId: z.string().min(1).max(128),

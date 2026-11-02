@@ -1184,6 +1184,14 @@ export class Agents {
     return this.#sessions.view(session);
   }
 
+  /** Switches the agent of a session in the conversation view to one of the modes it offers (ADR-107). */
+  async setMode(id: string, mode: string): Promise<Session> {
+    const session = this.#conversationOf(id);
+    if (!this.#sessions.isRunning(session)) throw new DomainError("bad_request", "the session is no longer running");
+    await session.setMode(mode);
+    return this.#sessions.view(session);
+  }
+
   #conversationOf(id: string): AcpSession {
     const session = this.#sessions.get(id);
     if (!(session instanceof AcpSession)) throw new DomainError("bad_request", `session ${id} runs in a terminal, not as a conversation`);

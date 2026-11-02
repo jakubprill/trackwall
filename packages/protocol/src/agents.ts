@@ -2,7 +2,7 @@ import { z } from "zod";
 import { apiEndpoints, Done } from "./api.ts";
 import { BoardItemId } from "./board.ts";
 import { WorkingTreeChanges } from "./changes.ts";
-import { SessionMessage, SessionView, ToolPatch } from "./conversation.ts";
+import { ConversationModeId, SessionMessage, SessionView, ToolPatch } from "./conversation.ts";
 import { RunState } from "./procs.ts";
 import { REVIEW_COMMENTS_MAX, ReviewComment } from "./review.ts";
 import { singleLine } from "./single-line.ts";
@@ -831,6 +831,12 @@ export const agentsApi = {
   clearCopyRequest: endpoint("clear-copy-request", SessionRequest.extend({ request: CopyRequestId }), Session),
   /** Stops the agent's turn in a session in the conversation view (ADR-107), as Esc does in the terminal. */
   interrupt: endpoint("interrupt", SessionRequest, Session),
+  /**
+   * Switches the agent of a session in the conversation view to one of the modes its conversation frames offer (ADR-107),
+   * as Shift+Tab does in the terminal. A mode it does not offer, or a session in a terminal, is `bad_request`. Only from
+   * the UI, never from MCP.
+   */
+  setMode: endpoint("set-mode", SessionRequest.extend({ mode: ConversationModeId }), Session),
   /**
    * Answers the session's agent dialog named by its `dialog` id (ADR-66): the daemon types the option's digit or Esc
    * into the session, as a key from the session terminal. A dialog no longer on the screen is `dialog_changed`, and

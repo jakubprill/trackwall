@@ -182,6 +182,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(agentsApi.answerDialog, (f, b) => f.agents.answerDialog(b.session, b.dialog, b.answer)),
   route(agentsApi.say, (f, b) => f.agents.say(b.session, b.text)),
   route(agentsApi.interrupt, (f, b) => f.agents.interrupt(b.session)),
+  route(agentsApi.setMode, (f, b) => f.agents.setMode(b.session, b.mode)),
   route(agentsApi.dismiss, (f, b) => f.agents.dismiss(b.session)),
   route(agentsApi.createTask, (f, { repo, prompt, handoffFrom, ...options }) => f.agents.createTask(repo, prompt, options, handoffFrom)),
   route(agentsApi.createChange, (f, b) => f.agents.createChange(b)),

@@ -27,6 +27,7 @@ describe("the conversation built from ACP updates", () => {
         detail: [],
         patch: "",
         patchCut: false,
+        subagent: null,
       },
       { id: "agent-4", kind: "agent", text: "All green." },
     ]);
@@ -62,6 +63,7 @@ describe("the conversation built from ACP updates", () => {
           detail: ["hi", "<shellId: 0 completed with exit code 0>"],
           patch: "",
           patchCut: false,
+          subagent: null,
         },
       ],
       reset: false,
@@ -178,6 +180,35 @@ describe("the conversation built from ACP updates", () => {
         detail: [],
         patch,
         patchCut: false,
+        subagent: null,
+      },
+    ]);
+  });
+
+  test("a subagent's tool call says the subagent's type and what it was asked, and its answer is the tool's detail", () => {
+    const conversation = new AcpConversation(CWD);
+    const rawInput = { description: "Find callers", prompt: "List every caller of the total.", agent_type: "explore", name: "finder" };
+    conversation.apply({ sessionUpdate: "tool_call", toolCallId: "t1", title: "Find callers", kind: "other", status: "pending", rawInput });
+    conversation.apply({
+      sessionUpdate: "tool_call_update",
+      toolCallId: "t1",
+      status: "completed",
+      content: [{ type: "content", content: text("Two callers.") }],
+      rawOutput: { content: "Two callers.", detailedContent: "Two callers." },
+    });
+
+    expect(conversation.entries()).toEqual([
+      {
+        id: "tool-1",
+        kind: "tool",
+        title: "Find callers",
+        tool: "other",
+        status: "completed",
+        files: [],
+        detail: ["Two callers."],
+        patch: "",
+        patchCut: false,
+        subagent: { type: "explore", prompt: "List every caller of the total." },
       },
     ]);
   });

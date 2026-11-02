@@ -1,7 +1,15 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { type ConversationEntry, MCP_SERVER_NAME, mcpTools, type Session } from "@trackwall/protocol";
+import {
+  type ContextUse,
+  type ConversationEntry,
+  type ConversationMode,
+  MCP_SERVER_NAME,
+  mcpTools,
+  type Session,
+  type SlashCommand,
+} from "@trackwall/protocol";
 import { viewer, waitFor } from "../test/support/agents.ts";
 import { startRealCopilotDaemon } from "./support/real-copilot.ts";
 import { commitEscapeScript, ESCAPE_COMMAND, sandboxRefusedEverything } from "./support/sandbox-escape.ts";
@@ -53,12 +61,20 @@ function shellCall(request: ModelRequest, command: { bash: string; powershell: s
 
 const inState = (id: string, state: string) => waitFor(daemon.facade.agents, id, (s) => s.state?.state === state, state, SESSION_MS);
 
-/** The conversation as the conversation socket sends it. */
+/** The conversation as the conversation socket sends it, and the agent's mode, context use and commands. */
 function conversationOf(id: string) {
   let entries: ConversationEntry[] = [];
+  const info: { mode: ConversationMode | null; context: ContextUse | null; commands: SlashCommand[] } = {
+    mode: null,
+    context: null,
+    commands: [],
+  };
   const window = daemon.facade.agents.attachConversation(id, {
     send: (message) => {
       if (message.reset) entries = [];
+      if (message.mode !== undefined) info.mode = message.mode;
+      if (message.context !== undefined) info.context = message.context;
+      if (message.commands !== undefined) info.commands = message.commands;
       for (const entry of message.entries) {
         const at = entries.findIndex((e) => e.id === entry.id);
         if (at >= 0) entries[at] = entry;
@@ -76,7 +92,14 @@ function conversationOf(id: string) {
       await new Promise((r) => setTimeout(r, 20));
     }
   };
-  return { entries: () => entries, until, detach: () => window.detach() };
+  const infoUntil = async (check: (i: typeof info) => boolean, what: string) => {
+    const deadline = Date.now() + 5_000;
+    while (!check(info)) {
+      if (Date.now() > deadline) throw new Error(`gave up waiting for ${what}: ${JSON.stringify(info)}`);
+      await new Promise((r) => setTimeout(r, 20));
+    }
+  };
+  return { entries: () => entries, info: () => info, until, infoUntil, detach: () => window.detach() };
 }
 
 async function startSupervisor(): Promise<Session> {
@@ -148,6 +171,63 @@ describe("the supervisor in the conversation view with the real Copilot CLI", ()
     expect(edit?.kind === "tool" && edit.patch).toMatch(/^diff --git [\s\S]*\n-two\n\+TWO\n/);
     expect(view.entries().find((e) => e.kind === "thought")).toMatchObject({ text: "The second line was lower case." });
     expect(view.entries().find((e) => e.kind === "agent")).toMatchObject({ text: "Edited the file." });
+    view.detach();
+    await agents.stop(supervisor.id);
+  });
+
+  test("the agent offers Agent and Plan but not autopilot, its slash commands, its context use after a turn, and switches to Plan", async () => {
+    const { agents } = daemon.facade;
+    const supervisor = await startSupervisor();
+    const view = conversationOf(supervisor.id);
+    await view.infoUntil((i) => i.mode !== null && i.commands.length > 0, "the mode and the commands");
+    const plan = "https://agentclientprotocol.com/protocol/session-modes#plan";
+
+    expect(view.info().mode?.current).toBe("https://agentclientprotocol.com/protocol/session-modes#agent");
+    expect(view.info().mode?.options.map((o) => o.name)).toEqual(["Agent", "Plan"]);
+    expect(view.info().commands.find((c) => c.name === "compact")).toMatchObject({ hint: "focus instructions" });
+
+    await agents.setMode(supervisor.id, plan);
+    await view.infoUntil((i) => i.mode?.current === plan, "the plan mode");
+    model.reply({ text: "Planned." });
+    agents.say(supervisor.id, "plan it");
+    await waitFor(agents, supervisor.id, (s) => s.state?.reason === "stop end_turn", "end of turn", SESSION_MS);
+    await view.infoUntil((i) => i.context !== null, "the context use");
+
+    expect(view.info().context?.size).toBeGreaterThan(view.info().context?.used ?? Number.POSITIVE_INFINITY);
+    view.detach();
+    await agents.stop(supervisor.id);
+  });
+
+  test("a subagent the model starts with the task tool is a tool entry with the subagent's type and prompt, and its answer", async () => {
+    const { agents } = daemon.facade;
+    const supervisor = await startSupervisor();
+    const view = conversationOf(supervisor.id);
+    const prompt = "List the files in the folder.";
+    model.reply(
+      { tool: "task", arguments: { description: "List files", prompt, agent_type: "explore", name: "lister" } },
+      { text: "Two files." },
+      { text: "The subagent found two files." },
+    );
+
+    agents.say(supervisor.id, "ask a subagent");
+    for (;;) {
+      const now = await waitFor(
+        agents,
+        supervisor.id,
+        (s) => s.state?.state === "Approval" || s.state?.reason === "stop end_turn",
+        "a step",
+        SESSION_MS,
+      );
+      if (now.state?.state !== "Approval") break;
+      agents.answerDialog(supervisor.id, now.dialog?.id ?? "", "1");
+    }
+
+    await view.until((entries) => entries.some((e) => e.kind === "tool" && e.status === "completed"), "the subagent's result");
+    expect(view.entries().find((e) => e.kind === "tool")).toMatchObject({
+      title: "List files",
+      subagent: { type: "explore", prompt },
+      detail: ["Two files."],
+    });
     view.detach();
     await agents.stop(supervisor.id);
   });

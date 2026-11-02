@@ -1,6 +1,7 @@
 import type {
   AgentApproval,
   ConversationEntry,
+  ConversationInfo,
   ConversationServerMessage,
   DialogAnswer,
   ReadRequest,
@@ -17,6 +18,7 @@ import { AcpConnection, AcpError } from "./acp-connection.ts";
 import { AcpConversation, type ConversationChange } from "./acp-conversation.ts";
 import {
   ACP_PROTOCOL_VERSION,
+  ConfigOptionsResult,
   InitializeResult,
   NewSessionResult,
   type PermissionOption,
@@ -26,6 +28,7 @@ import {
   SessionUpdate,
   SessionUpdateParams,
 } from "./acp-messages.ts";
+import { AcpSessionInfo } from "./acp-session-info.ts";
 import { toolCallFiles, toolCallLines, toolCallPatch } from "./acp-tool-call.ts";
 import type { AgentSession } from "./agent-session.ts";
 import { type CopilotHookOutput, situationOutput } from "./copilot-hook-output.ts";
@@ -51,6 +54,9 @@ const HANDSHAKE_CHECK_MS = 200;
 
 /** How long changes of the conversation gather before they go to the views: a streamed answer goes in a few frames, not one per chunk. */
 const FLUSH_MS = 50;
+
+/** The most updates kept before the conversation has an id; Copilot CLI sends one or two. */
+const EARLY_UPDATES_MAX = 20;
 
 /** The question the UI shows over an approval's options, as the terminal's dialog asks it. */
 const APPROVAL_QUESTION = "Do you want to allow this?";
@@ -125,6 +131,11 @@ export class AcpSession implements AgentSession {
   readonly environment: SessionEnvironment;
   readonly #o: AcpSessionOptions;
   readonly #conversation: AcpConversation;
+  /** The agent's mode, context use and commands. */
+  readonly #info = new AcpSessionInfo();
+  /** Updates before `session/new` answered with the conversation's id: Copilot CLI sends its commands first. */
+  readonly #early: SessionUpdateParams[] = [];
+  #earlyOverflowLogged = false;
   readonly #attention = new SessionAttention();
   readonly #viewers = new Set<ConversationViewer>();
   readonly #decoder = new TextDecoder();
@@ -147,6 +158,8 @@ export class AcpSession implements AgentSession {
   /** Changed entries waiting for the next frame, by id; `reset` when the views get all entries again. */
   readonly #pending = new Map<string, ConversationEntry>();
   #pendingReset = false;
+  /** What changed of the agent's mode, context use and commands since the last frame. */
+  #pendingInfo: Partial<ConversationInfo> = {};
   #flush: ReturnType<typeof setTimeout> | undefined;
   readonly #queued: Prompt[] = [];
   #waitingIds = 0;
@@ -219,12 +232,16 @@ export class AcpSession implements AgentSession {
     if (load !== undefined && agent.agentCapabilities?.loadSession !== true)
       throw new Error("Copilot CLI cannot load a conversation over ACP");
     if (load === undefined) {
-      this.#conversationId = NewSessionResult.parse(await connection.request("session/new", { cwd, mcpServers: [] })).sessionId;
+      const created: unknown = await connection.request("session/new", { cwd, mcpServers: [] });
+      this.#conversationId = NewSessionResult.parse(created).sessionId;
+      this.#infoChanged(this.#info.settings(ConfigOptionsResult.safeParse(created).data?.configOptions));
+      for (const params of this.#early.splice(0)) this.#update(params);
     } else {
       // The agent replays the conversation as updates of that id before it answers; no view is attached yet.
       this.#conversation.clear();
       this.#conversationId = load;
-      await connection.request("session/load", { sessionId: load, cwd, mcpServers: [] });
+      const loaded = ConfigOptionsResult.safeParse(await connection.request("session/load", { sessionId: load, cwd, mcpServers: [] }));
+      this.#infoChanged(this.#info.settings(loaded.data?.configOptions));
     }
   }
 
@@ -298,9 +315,28 @@ export class AcpSession implements AgentSession {
     this.#answerFirst({ outcome: "selected", optionId: option.optionId });
   }
 
+  /**
+   * Switches the agent to a mode it offers (Agent, Plan); its answer and the agent's update say the mode it works in now.
+   * A mode it does not offer, autopilot among them (`acp-session-info.ts`), is refused.
+   */
+  async setMode(mode: string): Promise<void> {
+    if (this.#finished) throw new DomainError("bad_request", "the session has ended");
+    const conversation = this.#conversationId;
+    if (conversation === undefined || !this.#info.offers(mode)) throw new DomainError("bad_request", "the agent does not offer this mode");
+    let result: unknown;
+    try {
+      result = await this.#connection.request("session/set_config_option", { sessionId: conversation, configId: "mode", value: mode });
+    } catch (err) {
+      // Only the code: the message is the agent's own text.
+      throw new DomainError("bad_request", `the agent did not switch the mode${err instanceof AcpError ? ` (ACP error ${err.code})` : ""}`);
+    }
+    this.#infoChanged(this.#info.settings(ConfigOptionsResult.safeParse(result).data?.configOptions));
+  }
+
   /** A conversation view: all entries first, then the changed ones; `closed` when the session disappears. */
   attachConversation(viewer: ConversationViewer): ConversationWindow {
-    viewer.send({ type: "entries", reset: true, entries: [...this.#conversation.entries()], waiting: this.#waiting() });
+    const entries = [...this.#conversation.entries()];
+    viewer.send({ type: "entries", reset: true, entries, waiting: this.#waiting(), ...this.#info.get() });
     this.#viewers.add(viewer);
     const attention = this.#attention.window();
     return {
@@ -443,13 +479,30 @@ export class AcpSession implements AgentSession {
   #notification(method: string, params: unknown): void {
     if (method !== "session/update") return;
     const parsed = SessionUpdateParams.safeParse(params);
-    if (!parsed.success || parsed.data.sessionId !== this.#conversationId) return;
+    if (!parsed.success) return;
+    if (this.#conversationId === undefined) this.#keepEarly(parsed.data);
+    else this.#update(parsed.data);
+  }
+
+  /** An update before the conversation has an id waits for it, up to `EARLY_UPDATES_MAX`; the rest go, said once in the log. */
+  #keepEarly(params: SessionUpdateParams): void {
+    if (this.#early.length < EARLY_UPDATES_MAX) {
+      this.#early.push(params);
+    } else if (!this.#earlyOverflowLogged) {
+      this.#earlyOverflowLogged = true;
+      this.#o.log(`session ${this.id}: dropped updates that came before the conversation had an id`);
+    }
+  }
+
+  #update(params: SessionUpdateParams): void {
+    if (params.sessionId !== this.#conversationId) return;
     // Any update of the conversation is a step (ADR-151), also a plan the daemon does not show.
     this.#lastStepAt = Date.now();
-    const update = SessionUpdate.safeParse(parsed.data.update);
-    // A kind the daemon does not show (available commands, usage, plans).
+    const update = SessionUpdate.safeParse(params.update);
+    // A kind the daemon does not show (plans).
     if (!update.success) return;
     if (update.data.sessionUpdate === "session_info_update") this.#windowTitle = update.data.title ?? this.#windowTitle;
+    this.#infoChanged(this.#info.apply(update.data));
     this.#broadcast(this.#conversation.apply(update.data));
   }
 
@@ -511,6 +564,12 @@ export class AcpSession implements AgentSession {
     this.#scheduleFlush();
   }
 
+  #infoChanged(change: Partial<ConversationInfo> | undefined): void {
+    if (change === undefined) return;
+    Object.assign(this.#pendingInfo, change);
+    this.#scheduleFlush();
+  }
+
   #scheduleFlush(): void {
     this.#flush ??= setTimeout(() => this.#sendPending(), FLUSH_MS);
   }
@@ -526,9 +585,12 @@ export class AcpSession implements AgentSession {
     const reset = this.#pendingReset;
     // Copies: an entry still growing must not change under a frame a view has not read yet.
     const entries = (reset ? this.#conversation.entries() : [...this.#pending.values()]).map((e) => structuredClone(e));
+    // Copies too: the commands of a frame a view has not read yet must not change under it.
+    const info = structuredClone(reset ? this.#info.get() : this.#pendingInfo);
     this.#pending.clear();
     this.#pendingReset = false;
-    const message: ConversationServerMessage = { type: "entries", reset, entries, waiting: this.#waiting() };
+    this.#pendingInfo = {};
+    const message: ConversationServerMessage = { type: "entries", reset, entries, waiting: this.#waiting(), ...info };
     for (const viewer of this.#viewers) viewer.send(message);
   }
 }

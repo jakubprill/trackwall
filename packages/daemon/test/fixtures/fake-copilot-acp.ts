@@ -14,6 +14,10 @@
  * answers with one issue in the format of Copilot CLI's review agent on the first added line of the diff file the prompt
  * names, followed by whether the command was allowed and the arguments it got. With `FAKE_COPILOT_REVIEW_WAIT` set the
  * review never ends on its own.
+ *
+ * Like Copilot CLI it answers `session/new` with the agent's modes (Agent, Plan, Autopilot), offers two slash commands
+ * at once, switches the mode on `session/set_config_option`, and says after each turn how much context it uses
+ * (1000 tokens a turn of 128000).
  */
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -37,6 +41,19 @@ const PermissionAnswer = z.object({
   outcome: z.union([z.object({ outcome: z.literal("selected"), optionId: z.string() }), z.object({ outcome: z.literal("cancelled") })]),
 });
 const Updates = z.array(z.record(z.string(), z.unknown()));
+
+const MODE_URL = "https://agentclientprotocol.com/protocol/session-modes#";
+const MODES = [
+  { value: `${MODE_URL}agent`, name: "Agent", description: "Default agent mode for conversational interactions" },
+  { value: `${MODE_URL}plan`, name: "Plan", description: "Plan mode for creating and executing multi-step plans" },
+  { value: `${MODE_URL}autopilot`, name: "Autopilot", description: "Autonomous mode that enables allow-all" },
+];
+/** The slash commands the fake offers; the tests look for them in the view. */
+export const FAKE_ACP_COMMANDS = [
+  { name: "compact", description: "Summarize conversation history to reduce context window usage.", input: { hint: "focus instructions" } },
+  { name: "review", description: "Run code review agent to analyze changes" },
+];
+const SetConfigParams = z.object({ sessionId: z.string(), configId: z.string(), value: z.string() });
 
 /** The terminal mode's folder: a conversation of either mode goes on in the other, as in Copilot CLI (an empty file is one from a terminal). */
 const conversationsDir = join(tmpdir(), "trackwall-fake-copilot-conversations");
@@ -62,6 +79,12 @@ export function serveAcp(o: FakeAcpOptions): void {
   const turns = new Map<string, { end: (stopReason: string) => void; cancelled: boolean }>();
   let firstAnswer = true;
   let calls = 0;
+  let mode = MODES[0]?.value ?? "";
+  let turnsDone = 0;
+  const configOptions = () => [
+    { type: "select", id: "mode", name: "Mode", category: "mode", currentValue: mode, options: MODES },
+    { type: "select", id: "allow_all", name: "Allow All", category: "permissions", currentValue: "off", options: [] },
+  ];
 
   const send = (message: Record<string, unknown>): void => {
     process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", ...message })}\n`);
@@ -133,6 +156,8 @@ export function serveAcp(o: FakeAcpOptions): void {
       })();
     const stopReason = await ended;
     turns.delete(sessionId);
+    turnsDone += 1;
+    update(sessionId, { sessionUpdate: "usage_update", used: 1000 * turnsDone, size: 128_000 });
     send({ id, result: { stopReason } });
   }
 
@@ -206,7 +231,24 @@ export function serveAcp(o: FakeAcpOptions): void {
       const sessionId = randomUUID();
       conversations.set(sessionId, []);
       mkdirSync(conversationsDir, { recursive: true });
-      send({ id, result: { sessionId } });
+      send({ id, result: { sessionId, configOptions: configOptions() } });
+      send({
+        method: "session/update",
+        params: { sessionId, update: { sessionUpdate: "available_commands_update", availableCommands: FAKE_ACP_COMMANDS } },
+      });
+    },
+    "session/set_config_option": (id, params) => {
+      const { sessionId, configId, value } = SetConfigParams.parse(params);
+      if (configId !== "mode" || !MODES.some((m) => m.value === value)) {
+        send({ id, error: { code: -32602, message: `Invalid value for ${configId}` } });
+        return;
+      }
+      mode = value;
+      send({
+        method: "session/update",
+        params: { sessionId, update: { sessionUpdate: "config_option_update", configOptions: configOptions() } },
+      });
+      send({ id, result: { configOptions: configOptions() } });
     },
     "session/load": load,
     "session/prompt": (id, params) => void prompt(id, params),

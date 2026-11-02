@@ -171,10 +171,10 @@ function Thought({ text, thinking }: { text: string; thinking: boolean }) {
  * lines it changes, and its state; the row opens its change in colour and its lines.
  */
 function ToolCall({ tool }: { tool: Extract<ConversationEntry, { kind: "tool" }> }) {
-  const Icon = TOOL_ICONS[tool.tool] ?? Wrench;
+  const Icon = tool.subagent ? Bot : (TOOL_ICONS[tool.tool] ?? Wrench);
   const subtitle = toolSubtitle(tool);
   const change = changeLines(tool.patch, PATCH_SHOWN_LINES, tool.patchCut);
-  const opens = tool.detail.length > 0 || change.lines.length > 0;
+  const opens = tool.detail.length > 0 || change.lines.length > 0 || tool.subagent !== null;
   return (
     <details className="group bg-muted rounded-md border text-xs">
       <summary
@@ -190,7 +190,7 @@ function ToolCall({ tool }: { tool: Extract<ConversationEntry, { kind: "tool" }>
           }
           aria-hidden
         />
-        <Icon className="text-primary size-3.5 shrink-0" aria-label={tool.tool} />
+        <Icon className="text-primary size-3.5 shrink-0" aria-label={tool.subagent ? "subagent" : tool.tool} />
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="truncate font-medium">{tool.title}</span>
           {subtitle && <span className="text-muted-foreground truncate font-mono">{subtitle}</span>}
@@ -198,6 +198,12 @@ function ToolCall({ tool }: { tool: Extract<ConversationEntry, { kind: "tool" }>
         {change.lines.length > 0 && <ChangeCount added={change.added} removed={change.removed} />}
         <StatusLabel {...TOOL_STATUS[tool.status]} />
       </summary>
+      {tool.subagent && (
+        <div className="border-t px-3 py-2">
+          <p className="text-muted-foreground font-medium">Asked</p>
+          <p className="break-words whitespace-pre-wrap">{tool.subagent.prompt}</p>
+        </div>
+      )}
       {change.lines.length > 0 && (
         <div className="max-h-96 overflow-auto border-t py-1.5">
           <PatchLines change={change} />
