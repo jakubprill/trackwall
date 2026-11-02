@@ -12,6 +12,7 @@ const SET_COMMAND = "set_dev_container";
 const STARTING_COMMAND = "dev_container_starting";
 const CANCEL_COMMAND = "cancel_dev_container_start";
 const START_COMMAND = "start_dev_container";
+const UPDATE_COMMAND = "update_dev_container";
 
 export const DevContainer = z.object({ folder: z.string(), open: z.string() });
 export type DevContainer = z.infer<typeof DevContainer>;
@@ -29,9 +30,21 @@ export function setDevContainer(dev: DevContainer | null): Promise<void> {
   return invoke(SET_COMMAND, { dev });
 }
 
-/** Starts the container, or finds it running, and switches the app to Trackwall in it; the app restarts. */
-export function startDevContainer(): Promise<void> {
-  return invoke(START_COMMAND);
+/** Trackwall in the container runs another version than the app; "Update" installs the app's version there (ADR-165). */
+export const OtherVersion = z.object({ container: z.string(), app: z.string() });
+export type OtherVersion = z.infer<typeof OtherVersion>;
+
+/**
+ * Starts the container, or finds it running, and switches the app to Trackwall in it; the app restarts. Resolves with the
+ * versions when Trackwall in the container is another version, which `updateDevContainer` replaces.
+ */
+export async function startDevContainer(): Promise<OtherVersion | null> {
+  return OtherVersion.nullable().parse(await invoke<unknown>(START_COMMAND));
+}
+
+/** Installs the app's version of Trackwall in the running container and switches the app to it; the app restarts. */
+export function updateDevContainer(): Promise<void> {
+  return invoke(UPDATE_COMMAND);
 }
 
 /** Whether a start is waiting for the container, also one this window began before it reloaded or another window began. */
