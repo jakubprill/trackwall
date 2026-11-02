@@ -117,7 +117,7 @@ export interface AgentTasksDeps {
     /** The task worktrees folder for a new task (ADR-84), made when it is the default one in `.trackwall` (ADR-125). */
     newTaskWorktreesDir(): Promise<string>;
   };
-  /** The tasks' jdtls (ADR-99), shared with main sessions (ADR-175). */
+  /** The tasks' jdtls (ADR-99), shared with repo sessions (ADR-175). */
   javaNavigation: JavaNavigationServers;
   sessions: TaskSessions;
   file: TaskFile;

@@ -32,7 +32,7 @@ export const ResumableSession = z.preprocess(
        * Copilot CLI picks the id itself (ADR-107).
        */
       conversation: ConversationId.optional(),
-      /** A main or free session's model (ADR-175); a task's is the task's. A file of a Trackwall before it has none. */
+      /** A repo or free session's model (ADR-175); a task's is the task's. A file of a Trackwall before it has none. */
       model: TaskModel.nullable().default(null),
       /** A repo session's Java navigation (ADR-175); a task's is the task's. */
       javaNavigation: z.boolean().default(false),
@@ -48,8 +48,8 @@ export type ResumableSession = z.infer<typeof ResumableSession>;
  * (ADR-175): its model and, in a repo, Java navigation. A task's sessions take both from the task, the supervisor has
  * neither.
  */
-export type OwnSessionStart = Pick<ResumableSession, "model" | "javaNavigation">;
-export const PLAIN_START: OwnSessionStart = { model: null, javaNavigation: false };
+export type SessionStartOptions = Pick<ResumableSession, "model" | "javaNavigation">;
+export const PLAIN_START: SessionStartOptions = { model: null, javaNavigation: false };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;

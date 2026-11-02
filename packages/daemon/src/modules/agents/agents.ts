@@ -66,12 +66,12 @@ import { MiseTrustNotices, type TrustRecipient, trustRecipientOf } from "./mise-
 import { proposedByOf, proposerExists, proposerKeyOf, proposerKind, proposerOf } from "./proposer.ts";
 import { readRequestPrompt } from "./read-request-prompt.ts";
 import {
-  type OwnSessionStart,
   PLAIN_START,
   type ResumableSession,
   ResumableSessions,
   resumablePlace,
   type SessionLaunch,
+  type SessionStartOptions,
   sessionLaunch,
 } from "./resumable-sessions.ts";
 import type { SessionMiseEnv } from "./session-env.ts";
@@ -124,8 +124,8 @@ export const LEGACY_WORKTREES_DIR = "worktrees";
 
 /** What `agents` needs from `procs`; wired in the facade. */
 /** What `#launchAs` adds to a start for a repo or free session (ADR-175); nothing for the supervisor. */
-interface MainLaunch {
-  start?: OwnSessionStart;
+interface LaunchWithOptions {
+  start?: SessionStartOptions;
   /** Before the session's own arguments, as a task's model (ADR-98). */
   args?: readonly string[];
   lspServers?: Record<string, LspServer>;
@@ -380,18 +380,18 @@ export class Agents {
   async start(
     repo: string | null,
     prompt?: string,
-    { model = null, javaNavigation = false, view = "terminal" }: Partial<OwnSessionStart> & { view?: SessionView } = {},
+    { model = null, javaNavigation = false, view = "terminal" }: Partial<SessionStartOptions> & { view?: SessionView } = {},
   ): Promise<Session> {
     if (javaNavigation) this.#assertJavaNavigation(repo, view);
     const id = randomUUID();
     const cwd = repo === null ? await this.#deps.repos.projectsDir() : await this.#deps.repos.repoPath(repo);
     const place = { repo, supervisor: false, cwd, task: null };
     const start = { model, javaNavigation };
-    if (view === "conversation") return this.#launchOwn({ view, id, load: undefined, firstMessage: prompt }, place, start);
+    if (view === "conversation") return this.#launchWithOptions({ view, id, load: undefined, firstMessage: prompt }, place, start);
     const args = [`--session-id=${id}`, ...(prompt === undefined ? [] : [`--interactive=${prompt}`])];
     const started = prompt !== undefined;
     const spec = { view, id, args, promptOnStart: started, hasConversation: started, conversation: id };
-    return this.#launchOwn(spec, place, start);
+    return this.#launchWithOptions(spec, place, start);
   }
 
   /** Java navigation needs a repo's build, besides what any start with it needs; refused before the start. */
@@ -401,11 +401,11 @@ export class Agents {
   }
 
   /**
-   * A main or free session's start in either view with what it started with (ADR-175): the model on every start, and
+   * A repo or free session's start in either view with what it started with (ADR-175): the model on every start, and
    * jdtls in a terminal under the session's id, so a restart starts it warm. A start whose settings broke since starts
    * without jdtls and logs why.
    */
-  async #launchOwn(spec: SessionLaunch, place: SessionPlace, start: OwnSessionStart): Promise<Session> {
+  async #launchWithOptions(spec: SessionLaunch, place: SessionPlace, start: SessionStartOptions): Promise<Session> {
     // Before the session's own arguments, as a task's (ADR-98).
     const args = start.model === null ? [] : [`--model=${start.model}`];
     // Only a hand-edited `resumable-sessions.json` gets here with Java navigation in the conversation view.
@@ -1019,7 +1019,7 @@ export class Agents {
   /**
    * A running session stops and starts again with its conversation (ADR-119), the way a daemon restart resumes it
    * (ADR-95): a task's session as Resume does, the supervisor, a free session and a repo session under their id. The
-   * new start reads the environment, `agentSecrets` and tool permissions again. A main or free session gives up its
+   * new start reads the environment, `agentSecrets` and tool permissions again. A repo or free session gives up its
    * place in the list before the start, since an id is listed once, so a failed start leaves it out of the list;
    * Copilot CLI still keeps its conversation.
    */
@@ -1170,7 +1170,7 @@ export class Agents {
     }
     const cwd = repo === null ? await this.#deps.repos.projectsDir() : await this.#deps.repos.repoPath(repo);
     const { model, javaNavigation } = left;
-    const started = await this.#launchOwn(spec, { repo, supervisor: false, cwd, task: null }, { model, javaNavigation });
+    const started = await this.#launchWithOptions(spec, { repo, supervisor: false, cwd, task: null }, { model, javaNavigation });
     this.#askToReadLeft(left.session);
     return started;
   }
@@ -1205,7 +1205,7 @@ export class Agents {
   async #launchAs(
     spec: SessionLaunch,
     place: SessionPlace,
-    { start = PLAIN_START, args = [], lspServers = {} }: MainLaunch = {},
+    { start = PLAIN_START, args = [], lspServers = {} }: LaunchWithOptions = {},
   ): Promise<Session> {
     if (spec.view === "terminal") return this.#launch({ ...spec, ...place, args: [...args, ...spec.args], lspServers }, start);
     this.#assertNotListed(spec.id);

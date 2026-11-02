@@ -40,7 +40,7 @@ function runningSessionOf(task: string): string {
   return session.id;
 }
 
-/** A main session in the repo root, past its `sessionStart`, and its MCP client. */
+/** A repo session, the main session of what it proposes, past its `sessionStart`, and its MCP client. */
 async function mainSession() {
   const main = await daemon.facade.agents.start("shop");
   await waitFor(daemon.facade.agents, main.id, (s) => s.state?.state === "Input", "sessionStart");

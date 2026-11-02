@@ -3,7 +3,7 @@ import { isSupervisor, type RunState, type Session } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
 import type { AgentSession } from "./agent-session.ts";
 import { LAST_SUPERVISOR_FILE, type LastSupervisor, type LastSupervisorFile } from "./last-supervisor.ts";
-import { type OwnSessionStart, PLAIN_START, type ResumableSession, type ResumableSessions } from "./resumable-sessions.ts";
+import { PLAIN_START, type ResumableSession, type ResumableSessions, type SessionStartOptions } from "./resumable-sessions.ts";
 import type { SessionMiseEnv, SessionMiseLaunch } from "./session-env.ts";
 import { SessionEnvironments } from "./session-env-change.ts";
 import { type StartedSession, sessionDir, sessionOwner } from "./session-launcher.ts";
@@ -12,7 +12,7 @@ import type { SessionTokens } from "./session-tokens.ts";
 /**
  * The sessions the daemon lists (§4.4, ADR-26), newest last: a started session joins, and leaves when the user closes it
  * or a restart starts it again. The list owns what lasts as long as a session is listed: the 200 ms tick that reads its
- * hook records and the end of its process, the environment it started with (ADR-119), what a main session started
+ * hook records and the end of its process, the environment it started with (ADR-119), what a repo or free session started
  * with (ADR-175), its session token and its directory. At every tick it writes the running sessions for the next daemon to resume (ADR-95) and the newest
  * supervisor a start with `last` goes on with (ADR-96). Everything a session means for tasks, proposals and messages is
  * `Agents`'s.
@@ -36,8 +36,8 @@ export class ListedSessions {
   readonly #sessions = new Map<string, AgentSession>();
   /** The environment each listed session started with, to tell when mise would give it another one (ADR-119). */
   readonly #environments = new SessionEnvironments();
-  /** The model and Java navigation of each listed main or free session, which its restart repeats (ADR-175). */
-  readonly #starts = new Map<string, OwnSessionStart>();
+  /** The model and Java navigation of each listed repo or free session, which its restart repeats (ADR-175). */
+  readonly #starts = new Map<string, SessionStartOptions>();
   #timer: NodeJS.Timeout | undefined;
 
   constructor(deps: ListedSessionsDeps) {
@@ -45,7 +45,7 @@ export class ListedSessions {
   }
 
   /** A started session joins the list; the tick runs while any session is listed. */
-  add({ session, miseEnv, mise }: StartedSession, start: OwnSessionStart = PLAIN_START): void {
+  add({ session, miseEnv, mise }: StartedSession, start: SessionStartOptions = PLAIN_START): void {
     this.#sessions.set(session.id, session);
     this.#starts.set(session.id, start);
     this.#environments.remember(session.id, miseEnv, mise);
@@ -68,7 +68,7 @@ export class ListedSessions {
   }
 
   /** What the listed session started with (ADR-175); nothing special for a task's session or the supervisor. */
-  startOf(id: string): OwnSessionStart {
+  startOf(id: string): SessionStartOptions {
     return this.#starts.get(id) ?? PLAIN_START;
   }
 
