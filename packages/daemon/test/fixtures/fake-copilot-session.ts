@@ -198,14 +198,20 @@ const secondRequest = real.approval.hooks.slice(2, asked).map((h) => ({
   payload: Object.fromEntries(Object.entries(h.payload).map(([k, v]) => [k, typeof v === "string" ? secondCommand(v) : v])),
 }));
 
-const [startTitle, ...turnTitles] = real.titles;
-if (startTitle === undefined) throw new Error("the reference has no window title");
-title(startTitle);
-// Like Copilot CLI: every mouse move reported, in the SGR encoding (`copilot-session.contract.ts`).
-process.stdout.write("\x1b[?1003h\x1b[?1006h");
-process.stdout.write(`Welcome to the fake, MCP: ${mcpServers.join(", ")}\r\n`);
-process.stdout.write(`Instructions: ${instructionFiles.join(", ")}\r\n`);
-process.stdout.write(`LSP: ${lspServers.join(", ")}\r\n`);
+const [firstTitle, ...turnTitles] = real.titles;
+if (firstTitle === undefined) throw new Error("the reference has no window title");
+/** Named again, since `begin` runs later and TypeScript does not keep the check above for it. */
+const startTitle: string = firstTitle;
+
+/**
+ * `FAKE_COPILOT_UNTRUSTED_FOLDER` stands for a folder Copilot CLI does not trust: like Copilot CLI (the contract test of
+ * the folder trust dialog) it asks before anything else, with no hook, goes on after "Yes" (`1`, `2` or Enter) and ends
+ * with `sessionEnd` and exit code 1 after "No" (Esc).
+ * The dialog is the real binary's screen (`dialog-folder-trust-120.txt`), its box only.
+ */
+let trustPending = process.env.FAKE_COPILOT_UNTRUSTED_FOLDER !== undefined;
+const TRUST_KEYS = new Set(["1", "2", "\r", "\n"]);
+
 /** Shorter than the session screen (`INITIAL_COLS` in `agents.ts`, 120 columns), with room for the input box's margin. */
 const SHORT_LINE_CHARS = 100;
 /**
@@ -213,17 +219,52 @@ const SHORT_LINE_CHARS = 100;
  * (`unwrappedText`). Text that fits in one line stays as it is.
  */
 const shortLines = (text: string) => text.replace(new RegExp(`.{${SHORT_LINE_CHARS}}(?=.)`, "g"), "$&\r\n");
-process.stdout.write(`Directory:\r\n${shortLines(process.cwd())}\r\n`);
-for (const arg of taskArgs) process.stdout.write(`Argument: ${arg}\r\n`);
-for (const name of shownEnv) process.stdout.write(`Env ${name}=${toolEnv(name)}\r\n`);
-draw(real.promptBox);
 
 // A prompt given at the start (`--interactive=`, a task's session) is the first prompt, so it starts the hooks at once.
-let started = initialPrompt !== undefined;
-if (started) {
-  keepConversation();
-  replay([startHook]);
+let started = false;
+
+/** What Copilot CLI shows and sends once it works in the folder. */
+function begin(): void {
+  title(startTitle);
+  // Like Copilot CLI: every mouse move reported, in the SGR encoding (`copilot-session.contract.ts`).
+  process.stdout.write("\x1b[?1003h\x1b[?1006h");
+  process.stdout.write(`Welcome to the fake, MCP: ${mcpServers.join(", ")}\r\n`);
+  process.stdout.write(`Instructions: ${instructionFiles.join(", ")}\r\n`);
+  process.stdout.write(`LSP: ${lspServers.join(", ")}\r\n`);
+  process.stdout.write(`Directory:\r\n${shortLines(process.cwd())}\r\n`);
+  for (const arg of taskArgs) process.stdout.write(`Argument: ${arg}\r\n`);
+  for (const name of shownEnv) process.stdout.write(`Env ${name}=${toolEnv(name)}\r\n`);
+  draw(real.promptBox);
+  started = initialPrompt !== undefined;
+  if (started) {
+    keepConversation();
+    replay([startHook]);
+  }
 }
+
+/** Keys while the folder trust dialog waits: "Yes" draws the screen anew without the dialog, as Copilot CLI does. */
+function answerTrust(chunk: Buffer): void {
+  // "No (Esc)": Copilot CLI ends as after `/exit`, with its end-of-session hook, but with exit code 1 (the contract test).
+  if (chunk.toString("utf8") === ESCAPE) {
+    replay(real.exit);
+    process.exit(1);
+  }
+  if (
+    !typedText(chunk)
+      .split("")
+      .some((key) => TRUST_KEYS.has(key))
+  )
+    return;
+  trustPending = false;
+  process.stdout.write("\x1b[2J\x1b[H");
+  begin();
+}
+
+if (trustPending) {
+  const trustScreen = readFileSync(join(import.meta.dir, "copilot", "dialog-folder-trust-120.txt"), "utf8").split("\n");
+  draw(trustScreen.slice(trustScreen.findIndex((line) => line.startsWith("╭"))));
+} else begin();
+
 /** Approval requests of the turn not answered yet. */
 let awaitingApprovals = 0;
 /** Between a turn's end and the input box drawn again, where Copilot CLI drops what is typed (ADR-68). */
@@ -308,6 +349,10 @@ const typedText = (chunk: Buffer) => stripAnsi(chunk.toString("utf8")).replaceAl
 // in the reference, so the fake keeps waiting for an approval.
 process.stdin.setRawMode?.(true);
 process.stdin.on("data", (chunk: Buffer) => {
+  if (trustPending) {
+    answerTrust(chunk);
+    return;
+  }
   for (const key of typedText(chunk)) {
     if (awaitingApprovals > 0) {
       if (APPROVE_KEYS.has(key)) approve();

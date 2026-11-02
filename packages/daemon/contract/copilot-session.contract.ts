@@ -7,6 +7,7 @@ import { MCP_SERVER_NAME, mcpTools, type Session, TASK_MESSAGE_RULE } from "@tra
 import { windowTitleFromOsc } from "../src/modules/agents/copilot-osc.ts";
 import { OscParser } from "../src/modules/agents/osc-parser.ts";
 import { readRequestPrompt } from "../src/modules/agents/read-request-prompt.ts";
+import { sessionHooksFile } from "../src/modules/agents/session-launcher.ts";
 import { viewer, waitFor } from "../test/support/agents.ts";
 import { REFERENCE_COLS, REFERENCE_ROWS } from "../test/support/copilot-reference.ts";
 import { untilInputBox } from "../test/support/screen-lines.ts";
@@ -384,6 +385,49 @@ describe("a session of the real Copilot CLI", () => {
     expect(config).toStartWith("//");
     const check = (await daemon.facade.doctor.run()).checks.find((c) => c.id === "copilot-trusted-folder");
     expect(check?.status).toBe("ok");
+  });
+
+  test("a folder not in trustedFolders shows the folder trust dialog before any hook, the daemon waits for the answer, and the answer leads to the input box", async () => {
+    const { agents } = daemon.facade;
+    const configFile = join(daemon.home, "copilot-home", "config.json");
+    // Written at the first session's start; a test run with only this test has none yet.
+    const config = existsSync(configFile) ? readFileSync(configFile, "utf8") : undefined;
+    mkdirSync(dirname(configFile), { recursive: true });
+    // Only the state folder trusted: the repo in the projects folder is not.
+    writeFileSync(configFile, JSON.stringify({ trustedFolders: [daemon.home] }));
+    try {
+      const started = await agents.start("shop");
+      openWindow(started.id);
+      const trust = await waitFor(agents, started.id, (s) => s.dialog !== null, "the folder trust dialog", SESSION_MS);
+      expect(trust.state).toMatchObject({ state: "Approval", source: "screen", reason: "screen folder trust dialog" });
+      expect(trust.needsAttention).toBe(true);
+      if (trust.dialog?.kind !== "approval") throw new Error(`no approval dialog: ${JSON.stringify(trust.dialog)}`);
+      expect(trust.dialog).toMatchObject({ title: "Confirm folder trust", question: "Do you trust the files in this folder?" });
+      expect(trust.dialog.options).toEqual([
+        { key: "1", label: "Yes" },
+        { key: "2", label: "Yes, and remember this folder for future sessions" },
+      ]);
+      expect(existsSync(sessionHooksFile(daemon.home, started.id)) ? hookRecords(daemon.home, started.id) : []).toEqual([]);
+
+      // "Yes" for this session only, so that config.json stays as the test wrote it.
+      agents.answerDialog(started.id, trust.dialog.id, "1");
+      const waiting = await waitFor(agents, started.id, (s) => s.state?.state === "Input", "the input box after the answer", SESSION_MS);
+      expect(waiting.state).toMatchObject({ source: "screen", reason: "screen input box before the first prompt" });
+      await agents.stop(started.id);
+
+      // "No (Esc)" ends Copilot CLI as `/exit` does, with sessionEnd, though with exit code 1; the fake does the same.
+      const refused = await agents.start("shop");
+      const window = openWindow(refused.id);
+      await waitFor(agents, refused.id, (s) => s.dialog !== null, "the folder trust dialog again", SESSION_MS);
+      window.attachment.input("\u001b");
+      const ended = await waitFor(agents, refused.id, (s) => s.run.kind === "exited", "the end after No", SESSION_MS);
+      expect(ended.run).toMatchObject({ kind: "exited", exitCode: 1 });
+      expect(ended.state).toMatchObject({ state: "Done", source: "hook", reason: "hook sessionEnd user_exit" });
+    } finally {
+      // Without the file, the next session's start writes the trusted folders again.
+      if (config === undefined) rmSync(configFile);
+      else writeFileSync(configFile, config);
+    }
   });
 
   test("/exit ends the session with sessionEnd, and the session is Done", async () => {
