@@ -3,7 +3,7 @@ import { type CardWarmupProgress, DaemonEvent, type RunningMiseTask, type Sessio
 import { EventHub } from "../src/api/event-hub.ts";
 import type { Facade } from "../src/facade.ts";
 
-const EMPTY: SessionList = { sessions: [], tasks: [], proposals: [], messages: [], lastSupervisor: null };
+const EMPTY: SessionList = { sessions: [], tasks: [], proposals: [], messages: [], lastSupervisor: null, sessionProfile: { name: null } };
 const RUNNING: RunningMiseTask = {
   repo: "shop",
   task: null,

@@ -1,4 +1,4 @@
-import type { CardWarmupProgress, McpAuditRevision } from "@trackwall/protocol";
+import type { CardWarmupProgress, McpAuditRevision, SessionList } from "@trackwall/protocol";
 import { type ReactNode, useState } from "react";
 import { RemoteDaemonSurface } from "@/components/RemoteDaemonSurface";
 import type { Connection } from "@/lib/connection";
@@ -28,6 +28,8 @@ type SettingsProps = {
   update: AppUpdateHandle | undefined;
   warmupLive: LiveFeed<CardWarmupProgress> | undefined;
   mcpCallsLive: LiveFeed<McpAuditRevision> | undefined;
+  /** The session list, to tell how many running sessions keep another session profile (ADR-178). */
+  sessions: SessionList | undefined;
   /** Reconnects to the daemon, for a read that failed because the daemon is gone. */
   onRetry: () => void;
   /** After the projects folder is saved, so that the app can show its repos. */
@@ -81,6 +83,7 @@ function Section({
   update,
   warmupLive,
   mcpCallsLive,
+  sessions,
   onRetry,
   onSaved,
 }: SettingsProps & { section: SettingsSection }): ReactNode {
@@ -94,7 +97,7 @@ function Section({
     case "copilot-cli":
       return <ConnectCopilotSurface conn={conn} onRetry={onRetry} />;
     case "session-profile":
-      return <SessionProfileSurface conn={conn} />;
+      return <SessionProfileSurface conn={conn} sessions={sessions} />;
     case "java-navigation":
       return <JavaNavigationSurface conn={conn} />;
     case "mcp-calls":

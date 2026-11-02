@@ -60,6 +60,7 @@ export function makeAgents(
       toolPermissions: () => toolPermissions,
       supervisorSettings: () => supervisor,
       agentSecrets: () => [],
+      sessionProfile: () => null,
       javaNavigation,
       removeRepo: () => Promise.reject(new Error("unused")),
     },

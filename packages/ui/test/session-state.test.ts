@@ -221,6 +221,7 @@ test("a browser tab's title counts sessions waiting for you, the supervisor amon
     proposals: [{ id: "p1" }, { id: "p2" }],
     messages: [],
     lastSupervisor: null,
+    sessionProfile: { name: null },
   } as unknown as SessionList;
   expect(waitingInTab(list)).toBe(4);
   expect(waitingInTab(undefined)).toBe(0);

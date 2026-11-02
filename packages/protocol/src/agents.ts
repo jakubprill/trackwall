@@ -544,6 +544,12 @@ export const SessionList = z.object({
    * on with (ADR-96); also after the daemon restarts and after the user closed it. `null` when there is none.
    */
   lastSupervisor: SessionId.nullable(),
+  /**
+   * The session profile a session starts with now (`sessionProfile`, ADR-136), so the UI can tell a running session that
+   * started with another one (ADR-178); `name: null` for no profile. `null` while `workspace.yaml` has a key that is not a
+   * plain name, when no session starts at all.
+   */
+  sessionProfile: z.object({ name: z.string().nullable() }).nullable(),
 });
 export type SessionList = z.infer<typeof SessionList>;
 

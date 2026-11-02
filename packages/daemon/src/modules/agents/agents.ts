@@ -151,6 +151,8 @@ interface AgentsRepos {
   supervisorSettings(): SupervisorSettings;
   /** `agentSecrets` from `workspace.yaml` (ADR-93): the secrets from mise a session's tools get; `invalid_config` for a bad key. */
   agentSecrets(): readonly string[];
+  /** `sessionProfile` from `workspace.yaml` (ADR-136): the mise environment sessions start with; `invalid_config` for a bad key. */
+  sessionProfile(): string | null;
   /** `javaNavigation` from `workspace.yaml` (ADR-99): the Java language server for tasks; `null` without the key. */
   javaNavigation(): JavaNavigationSettings | null;
   /** Moves the repo out of the projects folder (ADR-83) and returns where it went. */
@@ -347,7 +349,20 @@ export class Agents {
     // A proposal being approved that is already a task is only a task: the UI and `list_sessions` see one object.
     const proposals = this.#proposals.list().filter((p) => !tasks.some((t) => t.id === p.id));
     const lastSupervisor = this.#supervisor.resumable()?.session ?? null;
-    return { sessions, tasks, proposals, messages: this.#coordination.messages(), lastSupervisor };
+    return { sessions, tasks, proposals, messages: this.#coordination.messages(), lastSupervisor, sessionProfile: this.#sessionProfile() };
+  }
+
+  /**
+   * The profile a session starts with now (ADR-178); `null` while it cannot be read: a bad key, which Settings shows, or
+   * `workspace.yaml` locked for a moment on Windows. The session list must come whatever the file does, since the UI, the
+   * events and `list_sessions` all depend on it; a session start reads the file again and reports its own error.
+   */
+  #sessionProfile(): SessionList["sessionProfile"] {
+    try {
+      return { name: this.#deps.repos.sessionProfile() };
+    } catch {
+      return null;
+    }
   }
 
   /** One listed session (`not_found` when it does not exist or the user closed it). */

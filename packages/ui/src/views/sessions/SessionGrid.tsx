@@ -9,6 +9,7 @@ import type { LiveFeed } from "@/lib/daemon-events";
 import { IS_MAC } from "@/lib/platform";
 import { entryId, entrySession, proposalsName, type SessionEntry, type SessionSelection } from "@/lib/session-entries";
 import { type GridPage, gridShape } from "@/lib/session-grid";
+import { profileChange, useCurrentSessionProfile } from "@/lib/session-profile";
 import { sessionShortcutLabel } from "@/lib/session-shortcut";
 import { PROPOSAL_STATUS, sessionPlace, sessionStateLabel } from "@/lib/session-state";
 import { useSessionClose } from "@/lib/use-session-close";
@@ -174,7 +175,8 @@ function SessionTile({
     onOpenChanges: () => task && onOpenChanges(task.id),
     onChanged,
   });
-  const environment = useSessionEnvironmentTile(session?.environment);
+  const currentProfile = useCurrentSessionProfile();
+  const environment = useSessionEnvironmentTile(session?.environment, profileChange(session, currentProfile));
   const tile = useRef<HTMLDivElement>(null);
   // A selected tile without a terminal takes the keyboard itself, so that keys stop going to the terminal selected before.
   useEffect(() => {
