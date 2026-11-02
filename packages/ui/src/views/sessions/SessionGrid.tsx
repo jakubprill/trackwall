@@ -175,7 +175,8 @@ function SessionTile({
     onOpenChanges: () => task && onOpenChanges(task.id),
     onChanged,
   });
-  const environment = useSessionEnvironmentTile(session?.environment, profileChange(session, useCurrentSessionProfile()));
+  const currentProfile = useCurrentSessionProfile();
+  const environment = useSessionEnvironmentTile(session?.environment, profileChange(session, currentProfile));
   const tile = useRef<HTMLDivElement>(null);
   // A selected tile without a terminal takes the keyboard itself, so that keys stop going to the terminal selected before.
   useEffect(() => {

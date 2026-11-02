@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { environmentChangeParts, restartButton } from "@/lib/environment-change";
-import { profileChange, useCurrentSessionProfile } from "@/lib/session-profile";
+import { environmentStripTitle, profileChange, useCurrentSessionProfile } from "@/lib/session-profile";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 
@@ -39,18 +39,15 @@ export function EnvironmentChangeNotice({
       onRestarted();
     },
   );
+  const currentProfile = useCurrentSessionProfile();
   const change = running ? check.data?.change : null;
-  const profile = profileChange(running, useCurrentSessionProfile());
+  const profile = profileChange(running, currentProfile);
   if (!change && !profile && !restart.pending && !restart.error) return null;
   const button = restartButton(running, restart.pending);
   return (
     <section aria-label="Environment changed" className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 border-b px-4 py-1.5 text-xs">
       <RotateCw className="text-warning size-3.5 shrink-0" aria-hidden />
-      <span className="shrink-0">
-        {change || !profile
-          ? "The environment from mise changed since the session started"
-          : "The session profile changed since the session started"}
-      </span>
+      <span className="shrink-0">{environmentStripTitle(Boolean(change), profile)}</span>
       {profile && <span className="text-muted-foreground min-w-0 truncate">{profile}</span>}
       {change && <span className="text-muted-foreground min-w-0 truncate font-mono">{environmentChangeParts(change).join(" · ")}</span>}
       {restart.error && <span className="text-destructive min-w-0 truncate">{restart.error}</span>}

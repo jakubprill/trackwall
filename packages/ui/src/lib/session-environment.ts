@@ -35,6 +35,31 @@ export function sessionEnvironmentLines(environment: SessionEnvironment): Sessio
   };
 }
 
+/** What a grid tile's environment badge and card show (ADR-93, ADR-178). */
+export interface TileEnvironment {
+  /** Yellow: the session got less than its place gives, or it started with another session profile. */
+  warn: boolean;
+  label: string;
+  /** The number on the badge; `null` when mise gave the session nothing and only the profile changed. */
+  count: number | null;
+  summary: string;
+  /** What the card says before the names: the profile change, then why the session got less. */
+  notes: string[];
+}
+
+/** The tile's environment from the panel's lines and the profile note (`profileChange`); `null` shows no badge. */
+export function tileEnvironment(lines: SessionEnvironmentLines | null, profileNote: string | null): TileEnvironment | null {
+  if (lines === null && profileNote === null) return null;
+  const notes = [profileNote && `${profileNote}. Open the session to restart it.`, lines?.problem ?? null];
+  return {
+    warn: (lines?.problem ?? null) !== null || profileNote !== null,
+    label: [lines?.badgeLabel ?? "no variables", profileNote && "the session profile changed"].filter(Boolean).join(", "),
+    count: lines?.count ?? null,
+    summary: lines?.summary ?? "No variables from mise",
+    notes: notes.filter((note): note is string => Boolean(note)),
+  };
+}
+
 /** The card waits a moment before it shows on hover and before it hides, so that passing the mouse over does nothing. */
 export const HOVER_OPEN_MS = 250;
 export const HOVER_CLOSE_MS = 200;

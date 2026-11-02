@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Session, SessionList } from "@trackwall/protocol";
-import { currentSessionProfile, profileChange, sessionsOnOtherProfile } from "../src/lib/session-profile.ts";
+import { currentSessionProfile, environmentStripTitle, profileChange, sessionsOnOtherProfile } from "../src/lib/session-profile.ts";
 
 const running = { kind: "running", runId: "r", startedAt: "2026-11-02T08:00:00Z", pid: 10 } as const;
 const exited: Session["run"] = {
@@ -63,5 +63,17 @@ describe("a running session that started with another session profile than sessi
     const sessions = [session("old", null), session("new", "byok"), session("ended", null, exited)];
     expect(sessionsOnOtherProfile(list(sessions, { name: "byok" })).map((s) => s.id)).toEqual(["old"]);
     expect(sessionsOnOtherProfile(list(sessions, null))).toEqual([]);
+  });
+});
+
+describe("the headline of a session panel's environment strip (ADR-119, ADR-178)", () => {
+  test("names the mise variables when they changed, also with the profile, and the profile when only it changed", () => {
+    expect(environmentStripTitle(true, null)).toBe("The environment from mise changed since the session started");
+    expect(environmentStripTitle(true, "Started with no profile; sessions now start with profile byok")).toBe(
+      "The environment from mise changed since the session started",
+    );
+    expect(environmentStripTitle(false, "Started with no profile; sessions now start with profile byok")).toBe(
+      "The session profile changed since the session started",
+    );
   });
 });

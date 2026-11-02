@@ -6,6 +6,7 @@ import {
   HOVER_CLOSE_MS,
   HOVER_OPEN_MS,
   sessionEnvironmentLines,
+  tileEnvironment,
 } from "../src/lib/session-environment.ts";
 
 describe("the environment a session got from mise", () => {
@@ -61,6 +62,36 @@ describe("the environment a session got from mise", () => {
 });
 
 /** Timers the test runs by hand: `run(ms)` fires every pending timer due within `ms` of now. */
+describe("the environment badge and card on a grid tile (ADR-93, ADR-178)", () => {
+  const PROFILE = "Started with no profile; sessions now start with profile byok";
+  const lines = sessionEnvironmentLines({ variables: ["SHOP_REGION"], secrets: [], agentSecrets: [], profile: null, problem: null });
+
+  test("shows no badge when mise gave nothing and the session runs with the current profile", () => {
+    expect(tileEnvironment(null, null)).toBeNull();
+  });
+
+  test("turns the badge yellow and puts the profile change first on the card", () => {
+    expect(tileEnvironment(lines, PROFILE)).toEqual({
+      warn: true,
+      label: "1 variable from mise, the session profile changed",
+      count: 1,
+      summary: "1 variable from mise",
+      notes: [`${PROFILE}. Open the session to restart it.`],
+    });
+    expect(tileEnvironment(lines, null)).toMatchObject({ warn: false, label: "1 variable from mise", notes: [] });
+  });
+
+  test("shows a badge without a count when only the profile changed", () => {
+    expect(tileEnvironment(null, PROFILE)).toEqual({
+      warn: true,
+      label: "no variables, the session profile changed",
+      count: null,
+      summary: "No variables from mise",
+      notes: [`${PROFILE}. Open the session to restart it.`],
+    });
+  });
+});
+
 function handTimers() {
   let now = 0;
   const pending = new Map<number, { at: number; run: () => void }>();

@@ -37,6 +37,13 @@ export function sessionsOnOtherProfile(list: SessionList): Session[] {
   return list.sessions.filter((session) => profileChange(session, list.sessionProfile) !== null);
 }
 
+/** The headline of the panel's environment strip: the mise variables when they changed too, which they usually do. */
+export function environmentStripTitle(variablesChanged: boolean, profileNote: string | null): string {
+  return variablesChanged || profileNote === null
+    ? "The environment from mise changed since the session started"
+    : "The session profile changed since the session started";
+}
+
 function profileName(profile: string | null): string {
   return profile === null ? "no profile" : `profile ${profile}`;
 }

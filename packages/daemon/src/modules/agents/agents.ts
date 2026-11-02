@@ -47,7 +47,7 @@ import {
   type Verification,
   type WorkingTreeChanges,
 } from "@trackwall/protocol";
-import { configOrProblem, DomainError } from "../../infra/errors.ts";
+import { DomainError } from "../../infra/errors.ts";
 import { AcpSession, type ConversationViewer, type ConversationWindow } from "./acp-session.ts";
 import { AgentQueuesFile } from "./agent-queues.ts";
 import type { AgentSession } from "./agent-session.ts";
@@ -352,10 +352,17 @@ export class Agents {
     return { sessions, tasks, proposals, messages: this.#coordination.messages(), lastSupervisor, sessionProfile: this.#sessionProfile() };
   }
 
-  /** The profile a session starts with now (ADR-178); `null` while the key cannot be read, which Settings shows. */
+  /**
+   * The profile a session starts with now (ADR-178); `null` while it cannot be read: a bad key, which Settings shows, or
+   * `workspace.yaml` locked for a moment on Windows. The session list must come whatever the file does, since the UI, the
+   * events and `list_sessions` all depend on it; a session start reads the file again and reports its own error.
+   */
   #sessionProfile(): SessionList["sessionProfile"] {
-    const { value, problem } = configOrProblem(() => this.#deps.repos.sessionProfile(), null);
-    return problem === null ? { name: value } : null;
+    try {
+      return { name: this.#deps.repos.sessionProfile() };
+    } catch {
+      return null;
+    }
   }
 
   /** One listed session (`not_found` when it does not exist or the user closed it). */
