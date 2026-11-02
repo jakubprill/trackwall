@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   ContainerStartResult,
+  ContainerUpdateResult,
   DAEMON_INFO_PATH,
   TaskState,
   TRACKWALL_LINK_KINDS,
@@ -291,6 +292,7 @@ test("the UI keeps and starts the dev container with the commands and fields the
     "dev_container_starting",
     "cancel_dev_container_start",
     "start_dev_container",
+    "update_dev_container",
   ]);
   expect([...ui.matchAll(/_COMMAND = "([^"]+)";/g)].map((m) => m[1])).toEqual(commands);
   expect(shell).toContain("dev: Option<DevContainer>");
@@ -298,12 +300,32 @@ test("the UI keeps and starts the dev container with the commands and fields the
   const fields = [...(/pub struct DevContainer \{([^}]*)\}/.exec(shell)?.[1] ?? "").matchAll(/pub (\w+): String/g)].map((m) => m[1]);
   expect(fields).toEqual(["folder", "open"]);
   expect(ui).toContain("z.object({ folder: z.string(), open: z.string() })");
+  const otherVersion = [...(/pub struct OtherVersion \{([^}]*)\}/.exec(shell)?.[1] ?? "").matchAll(/(\w+): /g)].map((m) => m[1]);
+  expect(otherVersion).toEqual(["container", "app"]);
+  expect(ui).toContain("z.object({ container: z.string(), app: z.string() })");
 });
 
 test("the shell runs trackwall-container start and its tests answer as the command's schema says", () => {
   const shell = read("apps/desktop/src-tauri/src/dev_container.rs");
-  expect(shell).toContain('const START_TRACKWALL: [&str; 2] = ["trackwall-container", "start"];');
+  const cli = read("apps/desktop/src-tauri/src/container_cli.rs");
+  expect(cli).toContain('pub const START: [&str; 2] = ["trackwall-container", "start"];');
+  expect(cli).toContain('pub const START_ERRORS: [&str; 2] = ["bad-arguments", "start-failed"];');
+  expect(ContainerStartResult.safeParse({ ok: false, version: "1", error: { code: "start-failed", message: "" } }).success).toBe(true);
   const answers = [...shell.matchAll(/with_feature\(\s*&fake,\s*r#"(.*?)"#/gs)].map((m) => JSON.parse(m[1] ?? ""));
   expect(answers.length).toBe(3);
   for (const answer of answers) expect(ContainerStartResult.safeParse(answer).success).toBe(true);
+});
+
+test("the shell runs trackwall-container update with the app's version, and its tests answer as the command's schema says", () => {
+  const shell = read("apps/desktop/src-tauri/src/dev_container.rs");
+  const cli = read("apps/desktop/src-tauri/src/container_cli.rs");
+  expect(cli).toContain('pub const UPDATE: [&str; 2] = ["trackwall-container", "update"];');
+  expect(cli).toContain('pub const UPDATE_ERRORS: [&str; 3] = ["bad-arguments", "update-running", "update-failed"];');
+  expect(shell).toContain("args.push(daemon::VERSION);");
+  const answers = [...shell.matchAll(/with_update\(\s*&?fake,\s*r#"(.*?)"#/gs)].map((m) => JSON.parse(m[1] ?? ""));
+  const formatted = [...shell.matchAll(/with_update\(\s*&?fake,\s*&format!\(\s*r#"(.*?)"#/gs)].map((m) =>
+    JSON.parse((m[1] ?? "").replaceAll("{{", "{").replaceAll("}}", "}").replace("{}", "0.2.0")),
+  );
+  expect(answers.length + formatted.length).toBe(3);
+  for (const answer of [...answers, ...formatted]) expect(ContainerUpdateResult.safeParse(answer).success).toBe(true);
 });

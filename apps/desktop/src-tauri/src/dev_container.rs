@@ -6,12 +6,15 @@
 //! `docker exec`, checks the daemon like a pasted address (ADR-130) and switches the app to it. The port in `daemon.json`
 //! is the one inside the container, which the dev container guide forwards to the same number (`requireLocalPort`);
 //! another number fails the check rather than reaching something else. A running container whose daemon does not answer
-//! first gets `trackwall-container start` (the Trackwall Feature, ADR-164), once per start.
+//! first gets `trackwall-container start` (the Trackwall Feature, ADR-164), once per start. A daemon of another version
+//! ends the start with that version, and "Update" then runs `trackwall-container update <this app's version>` (ADR-165)
+//! and waits for the daemon to come back with it.
 //!
 //! The token never leaves this computer: it goes from the container to the shell over Docker's own channel and is saved
 //! like a pasted one. Every command is built from constants and the saved folder, never from what the daemon or the
 //! container reports.
 
+use crate::container_cli::{self, Answer};
 use crate::daemon;
 use crate::daemon_state::DaemonState;
 use crate::remote_daemon::{self, RemoteDaemon};
@@ -34,15 +37,6 @@ const FOLDER_LABEL: &str = "devcontainer.local_folder";
 /// sees as the daemon does, or the default under the home folder of the user `docker exec` runs as.
 const READ_DAEMON_FILE: &str = r#"cat "${TRACKWALL_HOME:-$HOME/.trackwall}/daemon.json""#;
 
-/// Starts the daemon of the Trackwall Dev Container Feature when it does not answer (ADR-164); idempotent, it prints one
-/// JSON object (`ContainerStartResult` in `protocol`) within `DOCKER_TIMEOUT`. Run without `--user`: as root it runs
-/// itself again as the remote user, whose `daemon.json` `READ_DAEMON_FILE` reads.
-const START_TRACKWALL: [&str; 2] = ["trackwall-container", "start"];
-
-/// What `docker exec` exits with when the command is not in the container: an image without the Feature, or a Feature
-/// whose binary is gone, which the start then treats the same way and waits out.
-const COMMAND_NOT_FOUND: i32 = 127;
-
 const DOCKER_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// More than Docker prints for `ps` with many containers; a container cannot make the window hold more of `daemon.json`.
@@ -51,6 +45,9 @@ const MAX_OUTPUT: u64 = 256 * 1024;
 /// The first start builds the image, which can take a while.
 const START_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const POLL_INTERVAL: Duration = Duration::from_secs(2);
+
+/// The download, the signature check and the restart; the update itself goes back after a minute without an answer.
+const UPDATE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
 /// How long after VS Code opened the start keeps waiting on a container whose label differs from the folder only in
 /// case: VS Code fails at once when it does not reuse it, and connects within this when it does.
@@ -273,66 +270,62 @@ enum Miss {
     /// Like `NotYet`, for a container whose label differs from the folder in case: final once VS Code has had
     /// `OTHER_CASE_GRACE` to reuse it.
     OtherCase(String),
+    /// A daemon of another version, which only an update (of the app or of Trackwall in the container) fixes; its token
+    /// tells one daemon start from the next (ADR-130).
+    OtherVersion {
+        version: String,
+        token: String,
+    },
     Final(String),
 }
 
-/// The daemon at `remote` accepted, or why not; a daemon of another version is final.
+impl Miss {
+    fn reason(self) -> String {
+        match self {
+            Miss::NotYet(reason) | Miss::OtherCase(reason) | Miss::Final(reason) => reason,
+            Miss::OtherVersion { version, .. } => format!("Trackwall in the container is {version}."),
+        }
+    }
+}
+
+/// The daemon at `remote` accepted, or why not.
 type Connect<'a> = &'a dyn Fn(&RemoteDaemon) -> Result<(), Miss>;
 
 fn connect_remote(remote: &RemoteDaemon) -> Result<(), Miss> {
     match daemon::connect_remote(remote) {
         Ok(_) => Ok(()),
-        Err(daemon::RemoteRefusal::OtherVersion { version, .. }) => Err(Miss::Final(format!(
-            "Trackwall in the container is {version}, but this app is {}. Update the older one so both are the same version.",
-            daemon::VERSION
-        ))),
+        Err(daemon::RemoteRefusal::OtherVersion { version, .. }) => {
+            Err(Miss::OtherVersion { version: short(&version), token: remote.token.clone() })
+        }
         Err(daemon::RemoteRefusal::Refused(reason)) => Err(Miss::NotYet(reason)),
     }
 }
 
-/// The part of `ContainerStartResult` (protocol) the window acts on: whether it started, and why not.
-#[derive(Deserialize)]
-struct StartResult {
-    ok: bool,
-    error: Option<StartError>,
-}
-
-#[derive(Deserialize)]
-struct StartError {
-    code: StartErrorCode,
-    message: String,
-}
-
-/// The stable codes of `CONTAINER_START_ERRORS` (protocol); another code is not an answer of Trackwall's.
-#[derive(Deserialize)]
-#[serde(rename_all = "kebab-case")]
-enum StartErrorCode {
-    BadArguments,
-    StartFailed,
-}
-
-impl StartErrorCode {
-    fn as_str(&self) -> &'static str {
-        match self {
-            StartErrorCode::BadArguments => "bad-arguments",
-            StartErrorCode::StartFailed => "start-failed",
-        }
-    }
-}
-
 /// What `trackwall-container start` answered: nothing to do when the image has no Feature (the daemon may still come from
-/// the user's own `postStartCommand`), a final miss when it could not start the daemon. Its message is shown, never run.
+/// the user's own `postStartCommand`), a final miss when it could not start the daemon.
 fn read_start_result(exit: &Exit) -> Result<(), Miss> {
-    if exit.code == Some(COMMAND_NOT_FOUND) {
-        return Ok(());
-    }
-    let last_line = exit.stdout.lines().rev().find(|line| !line.trim().is_empty()).unwrap_or_default();
-    match serde_json::from_str::<StartResult>(last_line) {
-        Ok(StartResult { ok: true, .. }) => Ok(()),
-        Ok(StartResult { error: Some(StartError { code, message }), .. }) => {
-            Err(Miss::Final(format!("Trackwall in the container could not start ({}): {}", code.as_str(), short(&message))))
+    match container_cli::read(exit.code, &exit.stdout, &container_cli::START_ERRORS) {
+        Answer::Done | Answer::NoFeature => Ok(()),
+        Answer::Failed { code, message } => {
+            Err(Miss::Final(format!("Trackwall in the container could not start ({code}): {}", short(&message))))
         }
-        _ => Err(Miss::NotYet("trackwall-container start in the container did not answer as Trackwall does.".into())),
+        Answer::Unreadable => Err(Miss::NotYet("trackwall-container start in the container did not answer as Trackwall does.".into())),
+    }
+}
+
+/// What `trackwall-container update` answered: `updating` and `current` both go on to wait for the daemon.
+fn read_update_result(exit: &Exit) -> Result<(), String> {
+    match container_cli::read(exit.code, &exit.stdout, &container_cli::UPDATE_ERRORS) {
+        Answer::Done => Ok(()),
+        Answer::NoFeature => Err(format!(
+            "This container has no Trackwall Feature that can update it. Change the version in the Feature's address in \
+             devcontainer.json to {} and rebuild the container.",
+            daemon::VERSION
+        )),
+        Answer::Failed { code, message } => Err(format!("Trackwall in the container could not update ({code}): {}", short(&message))),
+        Answer::Unreadable => {
+            Err(format!("trackwall-container update in the container did not answer as Trackwall does: {}", short(&exit.stderr)))
+        }
     }
 }
 
@@ -358,9 +351,7 @@ fn find_daemon(look: &Look, folder: &str, connect: Connect, try_start: bool) -> 
     let id = found.id.as_str();
     let result = match daemon_in(look.docker, id, connect) {
         Err(Miss::NotYet(_)) if try_start => {
-            let mut args = vec!["exec", id];
-            args.extend(START_TRACKWALL);
-            read_start_result(&look.docker.exit(&args).map_err(Miss::NotYet)?)?;
+            read_start_result(&look.docker.exit(&container_cli::exec(id, container_cli::START)).map_err(Miss::NotYet)?)?;
             daemon_in(look.docker, id, connect)
         }
         result => result,
@@ -383,6 +374,30 @@ fn daemon_in(docker: &Docker, id: &str, connect: Connect) -> Result<RemoteDaemon
 }
 
 const CANCELLED: &str = "Starting the dev container was cancelled.";
+const UPDATE_CANCELLED: &str = "Waiting for the update was cancelled; the update already started in the container goes on there.";
+
+/// `message` once the user chose another daemon or clicked "Cancel".
+fn unless_cancelled(cancelled: &AtomicBool, message: &str) -> Result<(), String> {
+    if cancelled.load(Ordering::SeqCst) {
+        Err(message.to_owned())
+    } else {
+        Ok(())
+    }
+}
+
+/// How a start ends when it does not fail: a daemon to switch to, or one of another version that "Update" can replace.
+#[derive(Debug, PartialEq)]
+enum Outcome {
+    Connect(RemoteDaemon),
+    OtherVersion(String),
+}
+
+fn docker_answers(look: &Look) -> Result<(), String> {
+    look.docker
+        .run(&["version", "--format", "{{.Server.Version}}"])
+        .map(drop)
+        .map_err(|e| format!("Docker does not answer ({e}). Start Docker Desktop or Rancher Desktop and try again."))
+}
 
 struct Timing {
     timeout: Duration,
@@ -399,13 +414,12 @@ fn start(
     connect: Connect,
     cancelled: &AtomicBool,
     timing: Timing,
-) -> Result<RemoteDaemon, String> {
-    look.docker
-        .run(&["version", "--format", "{{.Server.Version}}"])
-        .map_err(|e| format!("Docker does not answer ({e}). Start Docker Desktop or Rancher Desktop and try again."))?;
-    let was_cancelled = || if cancelled.load(Ordering::SeqCst) { Err(CANCELLED.to_owned()) } else { Ok(()) };
+) -> Result<Outcome, String> {
+    docker_answers(look)?;
+    let was_cancelled = || unless_cancelled(cancelled, CANCELLED);
     match find_daemon(look, &dev.folder, connect, true) {
-        Ok(remote) => return was_cancelled().map(|()| remote),
+        Ok(remote) => return was_cancelled().map(|()| Outcome::Connect(remote)),
+        Err(Miss::OtherVersion { version, .. }) => return was_cancelled().map(|()| Outcome::OtherVersion(version)),
         Err(Miss::Final(reason)) => return Err(reason),
         Err(Miss::NotYet(_) | Miss::OtherCase(_)) => {}
     }
@@ -417,7 +431,8 @@ fn start(
         std::thread::sleep(timing.poll);
         was_cancelled()?;
         match find_daemon(look, &dev.folder, connect, false) {
-            Ok(remote) => return was_cancelled().map(|()| remote),
+            Ok(remote) => return was_cancelled().map(|()| Outcome::Connect(remote)),
+            Err(Miss::OtherVersion { version, .. }) => return was_cancelled().map(|()| Outcome::OtherVersion(version)),
             Err(Miss::Final(reason)) => return Err(reason),
             Err(Miss::OtherCase(hint)) if opened.elapsed() > timing.other_case_grace => return Err(hint),
             Err(Miss::NotYet(last) | Miss::OtherCase(last)) if Instant::now() > deadline => {
@@ -428,6 +443,51 @@ fn start(
             }
             Err(Miss::NotYet(_) | Miss::OtherCase(_)) => {}
         }
+    }
+}
+
+/// Runs `trackwall-container update` with this app's version in the running container and waits until its daemon
+/// answers with that version. The old version answering under a new token is a daemon started again: the update's own
+/// rollback (ADR-165), which ends the wait at once; under the old token it is the old daemon still running while the
+/// update downloads.
+fn update(look: &Look, dev: &DevContainer, connect: Connect, cancelled: &AtomicBool, timing: Timing) -> Result<Outcome, String> {
+    docker_answers(look)?;
+    let found = running_container(look.docker, &dev.folder, look.ignore_case).map_err(Miss::reason)?;
+    let old_token = match daemon_in(look.docker, &found.id, connect) {
+        Ok(remote) => return Ok(Outcome::Connect(remote)),
+        Err(Miss::OtherVersion { token, .. }) => Some(token),
+        Err(_) => None,
+    };
+    let mut args = container_cli::exec(&found.id, container_cli::UPDATE);
+    args.push(daemon::VERSION);
+    read_update_result(&look.docker.exit(&args)?)?;
+    let deadline = Instant::now() + timing.timeout;
+    loop {
+        unless_cancelled(cancelled, UPDATE_CANCELLED)?;
+        let miss = match find_daemon(look, &dev.folder, connect, false) {
+            Ok(remote) => return unless_cancelled(cancelled, UPDATE_CANCELLED).map(|()| Outcome::Connect(remote)),
+            Err(Miss::Final(reason)) => return Err(reason),
+            Err(miss) => miss,
+        };
+        if let Miss::OtherVersion { version, token } = &miss {
+            if old_token.as_ref().is_some_and(|old| old != token) {
+                return Err(format!(
+                    "Trackwall in the container went back to {version}: {} did not start there. Its log in the container, \
+                     logs/daemon.log under Trackwall's folder, says why.",
+                    daemon::VERSION
+                ));
+            }
+        }
+        if Instant::now() > deadline {
+            return Err(format!(
+                "Trackwall in the container did not answer as {} within {} minutes. Its log in the container, logs/daemon.log \
+                 under Trackwall's folder, says why. Last: {}",
+                daemon::VERSION,
+                timing.timeout.as_secs() / 60,
+                miss.reason()
+            ));
+        }
+        std::thread::sleep(timing.poll);
     }
 }
 
@@ -442,10 +502,6 @@ impl DevContainerStart {
     /// Ends a start in progress; called when the user picks a daemon some other way.
     pub fn cancel(&self) {
         self.cancelled.store(true, Ordering::SeqCst);
-    }
-
-    fn is_cancelled(&self) -> bool {
-        self.cancelled.load(Ordering::SeqCst)
     }
 
     fn is_running(&self) -> bool {
@@ -498,34 +554,75 @@ pub fn cancel_dev_container_start(starting: tauri::State<'_, DevContainerStart>)
     starting.cancel();
 }
 
+/// What the window shows when the container runs another version: the two versions, and "Update" installs the app's.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OtherVersion {
+    container: String,
+    app: &'static str,
+}
+
 /// Starts the dev container, or finds it running, and switches the app to the Trackwall daemon in it; the app restarts.
+/// A daemon of another version is not an error: the window offers to update it.
 #[tauri::command]
 pub async fn start_dev_container(
     app: AppHandle,
     state: tauri::State<'_, Arc<DaemonState>>,
     starting: tauri::State<'_, DevContainerStart>,
+) -> Result<Option<OtherVersion>, String> {
+    let timing = Timing { timeout: START_TIMEOUT, poll: POLL_INTERVAL, other_case_grace: OTHER_CASE_GRACE };
+    exclusive(&app, &state, &starting, CANCELLED, move |look, dev, cancelled| {
+        let open_editor = |url: String| system_open::open_outside(url);
+        start(look, dev, &open_editor, &connect_remote, cancelled, timing)
+    })
+    .await
+}
+
+/// Installs this app's version of Trackwall in the running dev container (ADR-165) and switches the app to it once it
+/// answers; the app restarts.
+#[tauri::command]
+pub async fn update_dev_container(
+    app: AppHandle,
+    state: tauri::State<'_, Arc<DaemonState>>,
+    starting: tauri::State<'_, DevContainerStart>,
 ) -> Result<(), String> {
-    let dev = load(&app).ok_or("Set the dev container's folder first.")?;
+    let timing = Timing { timeout: UPDATE_TIMEOUT, poll: POLL_INTERVAL, other_case_grace: OTHER_CASE_GRACE };
+    exclusive(&app, &state, &starting, UPDATE_CANCELLED, move |look, dev, cancelled| update(look, dev, &connect_remote, cancelled, timing))
+        .await
+        .map(drop)
+}
+
+/// Runs `work` on the saved dev container as the one start in progress, off the window's thread, and switches the app to
+/// the daemon it found while still holding the start, unless the user chose another daemon meanwhile.
+async fn exclusive(
+    app: &AppHandle,
+    state: &DaemonState,
+    starting: &DevContainerStart,
+    cancelled_message: &str,
+    work: impl FnOnce(&Look, &DevContainer, &AtomicBool) -> Result<Outcome, String> + Send + 'static,
+) -> Result<Option<OtherVersion>, String> {
+    let dev = load(app).ok_or("Set the dev container's folder first.")?;
     if starting.running.swap(true, Ordering::SeqCst) {
-        return Err("The dev container is already starting. Cancel stops that start.".into());
+        return Err("The dev container is already starting or updating. Cancel stops the wait.".into());
     }
     let _running = Running(&starting.running);
     starting.cancelled.store(false, Ordering::SeqCst);
     let cancelled = Arc::clone(&starting.cancelled);
-    let timing = Timing { timeout: START_TIMEOUT, poll: POLL_INTERVAL, other_case_grace: OTHER_CASE_GRACE };
-    let open_editor = |url: String| system_open::open_outside(url);
-    let found = tauri::async_runtime::spawn_blocking(move || {
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
         let docker = Docker::system();
         let look = Look { docker: &docker, ignore_case: cfg!(any(windows, target_os = "macos")) };
-        start(&look, &dev, &open_editor, &connect_remote, &cancelled, timing)
+        work(&look, &dev, &cancelled)
     })
-    .await;
-    let remote = found.map_err(|e| e.to_string())??;
-    remote_daemon::refuse_own_daemon(&state, &remote)?;
-    if starting.is_cancelled() {
-        return Err(CANCELLED.into());
+    .await
+    .map_err(|e| e.to_string())??;
+    match outcome {
+        Outcome::OtherVersion(container) => Ok(Some(OtherVersion { container, app: daemon::VERSION })),
+        Outcome::Connect(remote) => {
+            remote_daemon::refuse_own_daemon(state, &remote)?;
+            unless_cancelled(&starting.cancelled, cancelled_message)?;
+            remote_daemon::switch_to(app, &remote).map(|()| None)
+        }
     }
-    remote_daemon::switch_to(&app, &remote)
 }
 
 #[cfg(test)]
@@ -623,7 +720,7 @@ mod tests {
             let d = dir.display();
             let version = if docker_up { "echo 27.0" } else { "echo 'Cannot connect to the Docker daemon' >&2; exit 1" };
             let script = format!(
-                "case \"$1\" in\n  version) {version} ;;\n  ps) [ -f {d}/running ] && printf '%s\\t%s\\n' {id} \"$(cat {d}/label 2>/dev/null || echo /home/me/dev)\" ;;\n  exec) [ \"$2\" = {id} ] || exit 1\n    if [ \"$3 $4\" = 'trackwall-container start' ]; then\n      echo >> {d}/started; [ -f {d}/feature ] || exit 127\n      cat {d}/feature; [ -f {d}/feature-starts ] && cp {d}/feature-starts {d}/daemon.json; exit $(cat {d}/feature-code)\n    fi\n    cat {d}/daemon.json ;;\nesac\n",
+                "case \"$1\" in\n  version) {version} ;;\n  ps) if [ -f {d}/running ]; then printf '%s\\t%s\\n' {id} \"$(cat {d}/label 2>/dev/null || echo /home/me/dev)\"; fi ;;\n  exec) [ \"$2\" = {id} ] || exit 1\n    if [ \"$3 $4\" = 'trackwall-container start' ]; then\n      echo >> {d}/started; [ -f {d}/feature ] || exit 127\n      cat {d}/feature; [ -f {d}/feature-starts ] && cp {d}/feature-starts {d}/daemon.json; exit $(cat {d}/feature-code)\n    fi\n    if [ \"$3 $4\" = 'trackwall-container update' ]; then\n      echo \"$5\" >> {d}/updated; [ -f {d}/feature ] || exit 127\n      cat {d}/update; exit $(cat {d}/update-code)\n    fi\n    cat {d}/daemon.json ;;\nesac\n",
                 id = "c".repeat(64)
             );
             let script_path = dir.join("docker");
@@ -675,7 +772,7 @@ mod tests {
 
             let remote = start(&look(&fake), &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &GOING, quick());
 
-            assert_eq!(remote, Ok(RemoteDaemon { port: 7700, token: TOKEN.into() }));
+            assert_eq!(remote, Ok(Outcome::Connect(RemoteDaemon { port: 7700, token: TOKEN.into() })));
             assert!(!opened.get());
         }
 
@@ -691,7 +788,7 @@ mod tests {
 
             let remote = start(&look(&fake), &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &GOING, quick());
 
-            assert_eq!(remote, Ok(RemoteDaemon { port: 7700, token: TOKEN.into() }));
+            assert_eq!(remote, Ok(Outcome::Connect(RemoteDaemon { port: 7700, token: TOKEN.into() })));
             assert_eq!(opened.into_inner(), Some("vscode://vscode-remote/dev-container+2f686f6d652f6d652f646576/workspaces".into()));
         }
 
@@ -719,11 +816,11 @@ mod tests {
                 opened.set(true);
                 Ok(())
             };
-            let other_version: Connect = &|_| Err(Miss::Final("Trackwall in the container is 0.1.0, but this app is 0.2.0.".into()));
+            let other_version: Connect = &|_| Err(Miss::OtherVersion { version: "0.1.0".into(), token: TOKEN.into() });
 
-            let err = start(&look(&fake), &dev("/home/me/dev", "/workspaces"), &open, other_version, &GOING, quick()).unwrap_err();
+            let outcome = start(&look(&fake), &dev("/home/me/dev", "/workspaces"), &open, other_version, &GOING, quick());
 
-            assert_eq!(err, "Trackwall in the container is 0.1.0, but this app is 0.2.0.");
+            assert_eq!(outcome, Ok(Outcome::OtherVersion("0.1.0".into())));
             assert!(!opened.get());
         }
 
@@ -811,7 +908,7 @@ mod tests {
 
             let remote = start(&look, &dev("/home/me/dev", "/workspaces"), &|_| Ok(()), ACCEPT, &GOING, quick());
 
-            assert_eq!(remote, Ok(RemoteDaemon { port: 7700, token: TOKEN.into() }));
+            assert_eq!(remote, Ok(Outcome::Connect(RemoteDaemon { port: 7700, token: TOKEN.into() })));
         }
 
         #[test]
@@ -832,7 +929,7 @@ mod tests {
 
             let remote = start(&look(&fake), &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &GOING, quick());
 
-            assert_eq!(remote, Ok(RemoteDaemon { port: 7700, token: TOKEN.into() }));
+            assert_eq!(remote, Ok(Outcome::Connect(RemoteDaemon { port: 7700, token: TOKEN.into() })));
             assert!(!opened.get());
             assert_eq!(starts(&fake), 1);
         }
@@ -872,7 +969,7 @@ mod tests {
 
             let remote = start(&look(&fake), &dev("/home/me/dev", "/workspaces"), &open, ACCEPT, &GOING, quick());
 
-            assert_eq!(remote, Ok(RemoteDaemon { port: 7700, token: TOKEN.into() }));
+            assert_eq!(remote, Ok(Outcome::Connect(RemoteDaemon { port: 7700, token: TOKEN.into() })));
             assert!(opened.get());
             assert_eq!(starts(&fake), 1);
         }
@@ -904,6 +1001,180 @@ mod tests {
 
             assert!(err.ends_with("Last: No Trackwall daemon answers at 127.0.0.1:7700."), "{err}");
             assert_eq!(starts(&fake), 1);
+        }
+
+        /// The Feature's `update` answer and exit code.
+        fn with_update(fake: &Fake, output: &str, code: i32) {
+            std::fs::write(fake.dir.join("feature"), "").expect("feature");
+            std::fs::write(fake.dir.join("update"), output).expect("update");
+            std::fs::write(fake.dir.join("update-code"), code.to_string()).expect("update-code");
+        }
+
+        fn updated_to(fake: &Fake) -> String {
+            std::fs::read_to_string(fake.dir.join("updated")).unwrap_or_default()
+        }
+
+        /// The old daemon of version 0.1.0 under the token of one start.
+        fn old(token: &str) -> Result<(), Miss> {
+            Err(Miss::OtherVersion { version: "0.1.0".into(), token: token.into() })
+        }
+
+        fn not_yet() -> Result<(), Miss> {
+            Err(Miss::NotYet("No Trackwall daemon answers at 127.0.0.1:7700.".into()))
+        }
+
+        /// A daemon that answers each look in turn as the update goes on; the last answer repeats.
+        fn answers(seq: Vec<Result<(), Miss>>) -> impl Fn(&RemoteDaemon) -> Result<(), Miss> {
+            let seq = RefCell::new(seq.into_iter().collect::<std::collections::VecDeque<_>>());
+            move |_| {
+                let mut seq = seq.borrow_mut();
+                let next = seq.pop_front().expect("an answer");
+                if seq.is_empty() {
+                    seq.push_back(match &next {
+                        Ok(()) => Ok(()),
+                        Err(Miss::OtherVersion { version, token }) => {
+                            Err(Miss::OtherVersion { version: version.clone(), token: token.clone() })
+                        }
+                        Err(Miss::NotYet(r)) => Err(Miss::NotYet(r.clone())),
+                        Err(other) => panic!("{other:?}"),
+                    });
+                }
+                next
+            }
+        }
+
+        fn updating(fake: &Fake) {
+            with_update(fake, &format!(r#"{{"ok":true,"version":"0.1.0","status":"updating","target":"{}"}}"#, daemon::VERSION), 0);
+        }
+
+        #[test]
+        fn updates_to_this_apps_version_and_connects_once_the_daemon_answers_with_it() {
+            let fake = fake("update", true);
+            run_daemon(&fake);
+            updating(&fake);
+            let daemon = answers(vec![old("first"), old("first"), not_yet(), Ok(())]);
+
+            let outcome = update(&look(&fake), &dev("/home/me/dev", "/workspaces"), &daemon, &GOING, quick());
+
+            assert_eq!(outcome, Ok(Outcome::Connect(RemoteDaemon { port: 7700, token: TOKEN.into() })));
+            assert_eq!(updated_to(&fake), format!("{}\n", daemon::VERSION));
+        }
+
+        #[test]
+        fn keeps_waiting_when_the_old_daemon_misses_a_look_while_the_update_downloads() {
+            let fake = fake("update-blip", true);
+            run_daemon(&fake);
+            updating(&fake);
+            let daemon = answers(vec![old("first"), not_yet(), old("first"), not_yet(), Ok(())]);
+
+            let outcome = update(&look(&fake), &dev("/home/me/dev", "/workspaces"), &daemon, &GOING, quick());
+
+            assert_eq!(outcome, Ok(Outcome::Connect(RemoteDaemon { port: 7700, token: TOKEN.into() })));
+        }
+
+        #[test]
+        fn says_the_update_went_back_when_the_old_version_answers_from_a_new_start() {
+            let fake = fake("update-rollback", true);
+            run_daemon(&fake);
+            updating(&fake);
+            let daemon = answers(vec![old("first"), not_yet(), old("second")]);
+
+            let err = update(&look(&fake), &dev("/home/me/dev", "/workspaces"), &daemon, &GOING, quick()).unwrap_err();
+
+            assert!(err.starts_with("Trackwall in the container went back to 0.1.0"), "{err}");
+        }
+
+        #[test]
+        fn points_to_the_log_when_the_old_daemon_still_answers_at_the_deadline() {
+            let fake = fake("update-stuck", true);
+            run_daemon(&fake);
+            updating(&fake);
+            let daemon = answers(vec![old("first")]);
+            let timing = Timing { timeout: Duration::from_millis(100), poll: Duration::from_millis(20), other_case_grace: Duration::ZERO };
+
+            let err = update(&look(&fake), &dev("/home/me/dev", "/workspaces"), &daemon, &GOING, timing).unwrap_err();
+
+            assert!(err.contains("did not answer as"), "{err}");
+            assert!(err.ends_with("Last: Trackwall in the container is 0.1.0."), "{err}");
+        }
+
+        #[test]
+        fn stops_waiting_for_the_update_on_cancel() {
+            let fake = fake("update-cancelled", true);
+            run_daemon(&fake);
+            updating(&fake);
+            let cancelled = AtomicBool::new(false);
+            let daemon = |_: &RemoteDaemon| {
+                let answer = old("first");
+                if std::fs::read_to_string(fake.dir.join("updated")).is_ok() {
+                    cancelled.store(true, Ordering::SeqCst);
+                }
+                answer
+            };
+
+            let err = update(&look(&fake), &dev("/home/me/dev", "/workspaces"), &daemon, &cancelled, quick());
+
+            assert_eq!(err, Err(UPDATE_CANCELLED.to_owned()));
+        }
+
+        #[test]
+        fn connects_without_updating_when_trackwall_in_the_container_already_has_this_apps_version() {
+            let fake = fake("update-current", true);
+            run_daemon(&fake);
+            updating(&fake);
+
+            let outcome = update(&look(&fake), &dev("/home/me/dev", "/workspaces"), ACCEPT, &GOING, quick());
+
+            assert_eq!(outcome, Ok(Outcome::Connect(RemoteDaemon { port: 7700, token: TOKEN.into() })));
+            assert_eq!(updated_to(&fake), "");
+        }
+
+        #[test]
+        fn connects_when_the_update_answers_that_the_daemon_already_runs_this_apps_version() {
+            let fake = fake("update-answers-current", true);
+            run_daemon(&fake);
+            with_update(&fake, &format!(r#"{{"ok":true,"version":"0.1.0","status":"current","target":"{}"}}"#, daemon::VERSION), 0);
+            let daemon = answers(vec![old("first"), Ok(())]);
+
+            let outcome = update(&look(&fake), &dev("/home/me/dev", "/workspaces"), &daemon, &GOING, quick());
+
+            assert_eq!(outcome, Ok(Outcome::Connect(RemoteDaemon { port: 7700, token: TOKEN.into() })));
+            assert_eq!(updated_to(&fake), format!("{}\n", daemon::VERSION));
+        }
+
+        #[test]
+        fn shows_why_trackwall_in_the_container_could_not_update() {
+            let fake = fake("update-running", true);
+            run_daemon(&fake);
+            with_update(
+                &fake,
+                r#"{"ok":false,"version":"0.1.0","error":{"code":"update-running","message":"Another update is running."}}"#,
+                1,
+            );
+
+            let err = update(&look(&fake), &dev("/home/me/dev", "/workspaces"), &answers(vec![old("first")]), &GOING, quick());
+
+            assert_eq!(err, Err("Trackwall in the container could not update (update-running): Another update is running.".into()));
+        }
+
+        #[test]
+        fn says_to_rebuild_a_container_without_the_trackwall_feature() {
+            let fake = fake("update-no-feature", true);
+            run_daemon(&fake);
+
+            let err = update(&look(&fake), &dev("/home/me/dev", "/workspaces"), &answers(vec![old("first")]), &GOING, quick()).unwrap_err();
+
+            assert!(err.starts_with("This container has no Trackwall Feature that can update it."), "{err}");
+        }
+
+        #[test]
+        fn updates_nothing_while_the_container_is_not_running() {
+            let fake = fake("update-stopped", true);
+
+            let err = update(&look(&fake), &dev("/home/me/dev", "/workspaces"), ACCEPT, &GOING, quick()).unwrap_err();
+
+            assert_eq!(err, "No container opened from /home/me/dev is running.");
+            assert_eq!(updated_to(&fake), "");
         }
     }
 }
