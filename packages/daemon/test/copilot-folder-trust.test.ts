@@ -53,7 +53,15 @@ describe("Copilot CLI asking to trust its folder, read from the screen", () => {
     session.key("choice");
 
     expect(session.screen(() => trust)).toEqual([]);
-    expect(session.screenSpeaks).toBe(true);
+    expect(summary(session.screen(() => box))).toEqual(["Input screen medium screen input box before the first prompt"]);
+  });
+
+  test("a key pressed before the screen showed the dialog answered it, so the dialog not redrawn yet does not ask", () => {
+    const session = sessionState(false);
+    session.key("enter");
+
+    expect(session.screen(() => trust)).toEqual([]);
+    expect(summary(session.screen(() => box))).toEqual(["Input screen medium screen input box before the first prompt"]);
   });
 
   test("while the dialog waits the screen is not read again", () => {

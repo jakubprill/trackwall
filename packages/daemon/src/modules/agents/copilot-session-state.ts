@@ -93,10 +93,11 @@ export class CopilotSessionState {
   /** A `postToolUse` held back while an approval request waits, and when it came. */
   #heldToolUse: { signal: StateSignal; at: number } | undefined;
   /**
-   * What the screen can still tell (`screen`): before the first state the folder trust dialog or the input box, while
-   * the dialog waits nothing new, after its answer the input box, and after the box or the first hook nothing.
+   * What the screen can still tell (`screen`): before the first state the folder trust dialog or the input box, after a
+   * key the dialog may already have taken only the box (`keyed`), while the dialog waits nothing new, after its answer
+   * the input box, and after the box or the first hook nothing.
    */
-  #screenPhase: "start" | "trust" | "answered" | "done" = "start";
+  #screenPhase: "start" | "keyed" | "trust" | "answered" | "done" = "start";
 
   constructor(o: CopilotSessionStateOptions) {
     this.#tracker = new TaskStateTracker(o);
@@ -193,12 +194,15 @@ export class CopilotSessionState {
    * does not wait for you while its agent is about to start.
    */
   screen(lines: () => readonly string[]): TaskStateChange[] {
-    if (this.#screenPhase === "done" || this.#screenPhase === "trust") return [];
+    if (!this.screenSpeaks) return [];
     const shown = lines();
     const trust = this.#screenPhase === "start" ? stateFromFolderTrust(shown) : undefined;
     if (trust) {
-      this.#screenPhase = "trust";
-      return this.#signal(trust);
+      // A state from OSC outranks the screen; the dialog then waits unseen, and the screen keeps trying.
+      const stale = this.#tick();
+      const asked = this.#tracker.signal(trust);
+      if (asked) this.#screenPhase = "trust";
+      return [stale, asked].filter((c) => c !== undefined);
     }
     // Before the answer the box speaks only for a session with no state at all, as before the dialog was known.
     const noState = this.#screenPhase === "answered" || this.#tracker.current === undefined;
@@ -223,6 +227,8 @@ export class CopilotSessionState {
     const stale = this.#tick();
     const current = this.#tracker.current?.state;
     const signal = stateFromKey(key, current);
+    // A key before the screen was read may have answered the trust dialog: one not redrawn yet must not ask again.
+    if (this.#screenPhase === "start") this.#screenPhase = "keyed";
     if (!signal) return [stale].filter((c) => c !== undefined);
     this.#lastAnswerAt = this.#now();
     if (this.#screenPhase === "trust") this.#screenPhase = "answered";

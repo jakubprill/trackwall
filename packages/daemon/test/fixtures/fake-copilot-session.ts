@@ -249,12 +249,8 @@ function answerTrust(chunk: Buffer): void {
     replay(real.exit);
     process.exit(1);
   }
-  if (
-    !typedText(chunk)
-      .split("")
-      .some((key) => TRUST_KEYS.has(key))
-  )
-    return;
+  // One key per answer, as in Copilot CLI: a paste with an answer key in it answers nothing.
+  if (!TRUST_KEYS.has(typedText(chunk))) return;
   trustPending = false;
   process.stdout.write("\x1b[2J\x1b[H");
   begin();
