@@ -650,7 +650,12 @@ describe("a task in Copilot CLI's sandbox with the real Copilot CLI (ADR-181)", 
       const task = await agents.createTask("shop", "make a file, commit it, then run the escape script", { approvals: "auto" });
       expect(task.sandbox).toBe(true);
       const session = taskSessionOf(task.id);
-      await endOfTurn(session);
+      // A question Copilot CLI asks only in a sandboxed terminal (macOS) would stop the turn; the screen says which.
+      await endOfTurn(session).catch(async (error: Error) => {
+        const window = viewer(agents, session);
+        windows.set(session, window);
+        throw new Error(`${error.message}\nthe screen:\n${(await screenLines(window)).join("\n")}`);
+      });
 
       expect(existsSync(join(task.worktree, "inside.txt"))).toBe(true);
       expect(spawnSync("git", ["log", "-1", "--format=%s"], { cwd: task.worktree, encoding: "utf8" }).stdout.trim()).toBe("sandboxed");
