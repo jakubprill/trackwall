@@ -893,7 +893,8 @@ export const mcpTools = {
       "requests are to be merged, the repo the others build on first. Trackwall shows the user one card with every repo, " +
       "and nothing runs until the user approves it; the user may untick repos (at least two stay) or reject it. Each part " +
       "is an ordinary task with its own session, which knows its sibling parts and reads the part before it with " +
-      `get_handoff. The approved proposal's id becomes the task id of the first part Trackwall could make, and ${GET_UPDATES} says which ` +
+      `get_handoff. The approved proposal's id becomes the task id of the first part Trackwall could make (when that part's session ` +
+      `then fails to start, the id names nothing; ${LIST_SESSIONS} shows the parts), and ${GET_UPDATES} says which ` +
       `parts started (change_started) and then what happens to each, as for ${PROPOSE_TASK}. Use ${PROPOSE_TASK} for work ` +
       `in one repo, and for work in other repos when you run a task yourself: a task cannot propose a change. ` +
       "Write the prompt so that it stands alone for every part (each agent sees nothing else), and say in a part's note " +

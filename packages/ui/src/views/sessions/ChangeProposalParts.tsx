@@ -1,5 +1,5 @@
 import { CHANGE_PART_NOTE_MAX, type ChangePart } from "@trackwall/protocol";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { toggle } from "@/lib/set-toggle";
 
 /**
@@ -45,18 +45,25 @@ export function ChangeProposalParts({
               />
               {index + 1}. {part.repo}
             </label>
-            <Input
+            <Textarea
               aria-label={`What ${part.repo} has to do`}
               placeholder="No note: the prompt alone"
               value={notes.get(part.repo) ?? part.note}
               maxLength={CHANGE_PART_NOTE_MAX}
               disabled={disabled || dropped.has(part.repo)}
               onChange={(e) => onNotes(new Map(notes).set(part.repo, e.target.value))}
-              className="min-w-48 flex-1"
+              // The whole note in view, so no part of the agent's text starts unread (`field-sizing` where the engine has it).
+              rows={noteRows(notes.get(part.repo) ?? part.note)}
+              className="field-sizing-content min-w-48 flex-1"
             />
           </li>
         ))}
       </ol>
     </div>
   );
+}
+
+/** Rows enough for a note's every line at about 70 characters a row, where the engine cannot size the field itself. */
+function noteRows(note: string): number {
+  return note.split("\n").reduce((rows, line) => rows + Math.max(1, Math.ceil(line.length / 70)), 0);
 }
