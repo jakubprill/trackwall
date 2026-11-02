@@ -153,15 +153,26 @@ describe.skipIf(process.versions.bun === undefined)("removing a repo from the pr
     expect(daemon.facade.agents.sessions().proposals.map((p) => p.id)).not.toContain(second.id);
   }, 30_000);
 
-  test("removing a repo rejects the other proposals for it, which could no longer start", async () => {
+  test("removing a repo rejects the other proposals for it, also a change with it as a part, which could no longer start", async () => {
     const removal = await proposeRemoval(outside, "archive", "Unused");
     const task = ProposeTaskResult.parse(
       (await outside.callTool({ name: "propose_task", arguments: { repo: "archive", title: "Fix", prompt: "fix" } })).structuredContent,
     ).proposal;
+    // A change with the repo as a later part could no longer start either (ADR-171).
+    const change = ProposeTaskResult.parse(
+      (
+        await outside.callTool({
+          name: "propose_change",
+          arguments: { title: "Move pages", prompt: "move them", parts: [{ repo: "web" }, { repo: "archive" }] },
+        })
+      ).structuredContent,
+    ).proposal;
 
     await daemon.post(agentsApi.approveRepoRemoval, { proposal: removal.id });
 
-    expect(daemon.facade.agents.sessions().proposals.map((p) => p.id)).not.toContain(task.id);
+    const waiting = daemon.facade.agents.sessions().proposals.map((p) => p.id);
+    expect(waiting).not.toContain(task.id);
+    expect(waiting).not.toContain(change.id);
     await expect(
       daemon.post(agentsApi.approveProposal, { proposal: task.id, prompt: "fix", model: null, approvals: "ask" }),
     ).rejects.toThrow("no task proposal");

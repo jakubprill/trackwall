@@ -1,11 +1,20 @@
-import { type Session, type SessionView, TASK_PROMPT_MAX, type Task, type TaskApprovals, type TaskProposal } from "@trackwall/protocol";
+import {
+  type ChangePart,
+  changePromptsFit,
+  type Session,
+  type SessionView,
+  TASK_PROMPT_MAX,
+  type Task,
+  type TaskApprovals,
+  type TaskProposal,
+} from "@trackwall/protocol";
 import { ChevronDown, ChevronRight, GitBranch, Lightbulb } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { Connection } from "@/lib/connection";
 import { relativeTime } from "@/lib/format";
-import { keptChangeRepos, type ProposalStart } from "@/lib/proposal-decisions";
+import { keptChangeParts, type ProposalStart } from "@/lib/proposal-decisions";
 import {
   type ProposalsEntry,
   proposalKindLabel,
@@ -28,8 +37,16 @@ import { StartOptions } from "./StartOptions.tsx";
  * they are: each with its repo, title, prompt, model (ADR-98) and approvals mode (ADR-105), which the user opens to read and may edit before the start. The user
  * starts one, or ticks several and starts them together; a proposal can be ticked only once it has been opened, so a
  * prompt from an agent is never started unread. “Reject…” takes an optional reason for the session that proposed it.
- * A proposed change (ADR-171) lists its repos, which the user may untick, and starts as one. Until then nothing runs. `focus` is the proposal to open (from the list, the tray, a link or the last decision).
+ * A proposed change (ADR-171) lists its repos with their notes, which the user may untick and edit, and starts as one. Until then nothing runs. `focus` is the proposal to open (from the list, the tray, a link or the last decision).
  */
+/** What the user changed on a proposed change before starting it (ADR-171): the repos unticked and the notes edited. */
+interface ChangeEdit {
+  dropped: ReadonlySet<string>;
+  /** By repo. */
+  notes: ReadonlyMap<string, string>;
+}
+const NO_CHANGE_EDIT: ChangeEdit = { dropped: new Set(), notes: new Map() };
+
 export function ProposalInbox({
   conn,
   group,
@@ -55,8 +72,8 @@ export function ProposalInbox({
   const [models, setModels] = useState<ReadonlyMap<string, string>>(new Map());
   const [approvals, setApprovals] = useState<ReadonlyMap<string, TaskApprovals>>(new Map());
   const [views, setViews] = useState<ReadonlyMap<string, SessionView>>(new Map());
-  // The repos the user unticked on each proposed change (ADR-171).
-  const [dropped, setDropped] = useState<ReadonlyMap<string, ReadonlySet<string>>>(new Map());
+  // The repos the user unticked and the notes they edited on each proposed change (ADR-171).
+  const [changeEdits, setChangeEdits] = useState<ReadonlyMap<string, ChangeEdit>>(new Map());
   const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
   // `null` once the user closed it; an id that is no longer waiting falls back to the first proposal.
   const [open, setOpen] = useState<string | null>(focus ?? proposals[0].id);
@@ -83,15 +100,24 @@ export function ProposalInbox({
       ? undefined
       : { id: p.id, prompt: promptOf(p), model, approvals: approvalsOf(p), view: viewOf(p) };
   };
-  const droppedOf = (p: TaskProposal): ReadonlySet<string> => dropped.get(p.id) ?? new Set();
-  /** A change's repos the user kept, or `undefined` while fewer than two are; `[]` for another proposal. */
-  const keptOf = (p: TaskProposal): string[] | undefined => (p.parts === null ? [] : keptChangeRepos(p.parts, droppedOf(p)));
+  const editOf = (p: TaskProposal): ChangeEdit => changeEdits.get(p.id) ?? NO_CHANGE_EDIT;
+  const edit = (p: TaskProposal, change: Partial<ChangeEdit>) =>
+    setChangeEdits(new Map(changeEdits).set(p.id, { ...editOf(p), ...change }));
+  /** A change's parts as the user left them, or `undefined` while fewer than two are kept or a prompt is too long. */
+  const partsOf = (p: TaskProposal, prompt: string): ChangePart[] | undefined => {
+    const parts = p.parts === null ? undefined : keptChangeParts(p.parts, editOf(p).dropped, editOf(p).notes);
+    return parts !== undefined && changePromptsFit(prompt, parts) ? parts : undefined;
+  };
+  const canStart = (p: TaskProposal) => {
+    const start = startOf(p);
+    return start !== undefined && (p.kind !== "change" || partsOf(p, start.prompt) !== undefined);
+  };
   const decide = (p: TaskProposal) => {
     const start = startOf(p);
-    const kept = keptOf(p);
-    if (start === undefined || kept === undefined) return;
-    if (p.kind === "change") decisions.startChange(start, kept);
-    else decisions.start([start]);
+    if (start === undefined) return;
+    if (p.kind !== "change") return decisions.start([start]);
+    const parts = partsOf(p, start.prompt);
+    if (parts !== undefined) decisions.startChange(start, parts);
   };
   const toStart = proposals.filter((p) => ticked.has(p.id));
   // Ticking and "Start selected" are for tasks; a folder action has its own button (ADR-83).
@@ -170,9 +196,11 @@ export function ProposalInbox({
                         <ChangeProposalParts
                           title={p.title}
                           parts={p.parts}
-                          dropped={droppedOf(p)}
+                          dropped={editOf(p).dropped}
+                          notes={editOf(p).notes}
                           disabled={decisions.pending}
-                          onDropped={(next) => setDropped(new Map(dropped).set(p.id, next))}
+                          onDropped={(dropped) => edit(p, { dropped })}
+                          onNotes={(notes) => edit(p, { notes })}
                         />
                       )}
                       <Textarea
@@ -195,7 +223,7 @@ export function ProposalInbox({
                     proposal={p}
                     tasks={tasks}
                     pending={decisions.pending}
-                    canStart={startOf(p) !== undefined && keptOf(p) !== undefined}
+                    canStart={canStart(p)}
                     onStart={() => decide(p)}
                     onRemoveRepo={() => decisions.removeRepo(p.id)}
                     onReject={(reason) => decisions.reject(p.id, reason)}

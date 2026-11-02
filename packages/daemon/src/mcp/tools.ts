@@ -13,6 +13,7 @@ import {
   mcpToolEffect,
   mcpTools,
   miseTaskLogSource,
+  proposalRepos,
   type Repo,
   type RepoTags,
   type Session,
@@ -229,7 +230,7 @@ const runs: ToolRuns = {
     return {
       sessions: sessions.filter(inRepo).map(agentSession),
       tasks: tasks.filter(inRepo),
-      proposals: proposals.filter(inRepo),
+      proposals: proposals.filter((p) => repo === undefined || proposalRepos(p).includes(repo)),
       caller,
     };
   },

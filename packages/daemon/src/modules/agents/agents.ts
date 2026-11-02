@@ -20,6 +20,7 @@ import {
   type MergeRequest,
   type MiseTarget,
   type PromptDelivery,
+  proposalRepos,
   type ReviewComment,
   type SendMessageResult,
   type SendReviewResult,
@@ -520,25 +521,28 @@ export class Agents {
 
   /**
    * A change from a proposal (ADR-171): `createChange` with the parts the user kept, in the proposal's order, and the
-   * options as the user left them; the first part takes the proposal's id and every part its proposer. The proposal waits again only when
+   * options and notes as the user left them; the first part made takes the proposal's id and every part its proposer. The proposal waits again only when
    * no part started; otherwise it is gone, and its proposer hears which parts started.
    */
-  async approveChangeProposal(id: string, { prompt, repos, model, approvals, view }: ApproveChangeRequest): Promise<CreatedChange> {
+  async approveChangeProposal(id: string, { prompt, parts, model, approvals, view }: ApproveChangeRequest): Promise<CreatedChange> {
     const proposal = this.#proposals.get(id);
-    if (proposal.kind !== "change" || proposal.parts === null) throw new DomainError("bad_request", `proposal ${id} is not a change`);
-    const unknown = repos.filter((repo) => !proposal.parts?.some((p) => p.repo === repo));
+    if (proposal.parts === null) throw new DomainError("bad_request", `proposal ${id} is not a change`);
+    const proposed = proposalRepos(proposal);
+    const unknown = parts.filter((part) => !proposed.includes(part.repo)).map((part) => part.repo);
     if (unknown.length > 0) throw new DomainError("bad_request", `${unknown.join(", ")} is not a part of the proposed change`);
-    const kept = proposal.parts.filter((part) => repos.includes(part.repo));
-    if (kept.length < 2) throw new DomainError("bad_request", "keep at least two repos of the change, or reject it");
+    // The proposal's order, which the user approved; the notes as the user left them.
+    const kept = proposed.flatMap((repo) => parts.filter((part) => part.repo === repo));
     if (!changePromptsFit(prompt, kept)) throw new DomainError("bad_request", CHANGE_PROMPTS_TOO_LONG);
     const { title, proposedBy, item } = this.#proposals.take(id);
-    let created: CreatedChange | undefined;
+    const prompts = kept.map((part) => ({ repo: part.repo, prompt: changePartPrompt(prompt, part) }));
+    let created: CreatedChange;
     try {
-      const prompts = kept.map((part) => ({ repo: part.repo, prompt: changePartPrompt(prompt, part) }));
-      created = await this.#tasks.createChange(prompts, { id, title, proposedBy, model, approvals, javaNavigation: false, item, view });
-    } finally {
-      this.#proposals.release(id, created === undefined);
+      created = await this.#tasks.createChange(prompts, { title, proposedBy, model, approvals, javaNavigation: false, item, view }, id);
+    } catch (err) {
+      this.#proposals.release(id, true);
+      throw err;
     }
+    this.#proposals.release(id, false);
     this.#coordination.changeStarted(id, proposedBy, created);
     return created;
   }
@@ -554,7 +558,7 @@ export class Agents {
     if (proposal.kind !== "remove_repo") throw new DomainError("bad_request", `proposal ${id} is not a repo removal`);
     const repoDir = this.#proposals.removalDir(id);
     if (repoDir === undefined) throw new Error(`repo removal ${id} has no folder`);
-    if (this.#proposals.list().some((p) => p.repo === proposal.repo && this.#proposals.approving(p.id)))
+    if (this.#proposals.list().some((p) => proposalRepos(p).includes(proposal.repo) && this.#proposals.approving(p.id)))
       throw new DomainError("bad_request", `${proposal.repo} is already being removed or a task of it started`);
     this.#assertNothingRunsIn(proposal.repo, repoDir);
     this.#proposals.take(id);
@@ -568,7 +572,7 @@ export class Agents {
     this.#proposals.release(id, false);
     this.#coordination.repoRemoved(proposal, movedTo);
     for (const other of this.#proposals.list())
-      if (other.repo === proposal.repo && this.#proposals.find(other.id))
+      if (proposalRepos(other).includes(proposal.repo) && this.#proposals.find(other.id))
         this.rejectProposal(other.id, `${proposal.repo} was removed from the projects folder`);
   }
 
@@ -731,8 +735,7 @@ export class Agents {
   async createChange({ title, prompt, parts, approvals, model, item, view }: ChangeRequest): Promise<CreatedChange> {
     await this.#assertOnBoard(item);
     const prompts = parts.map((part) => ({ repo: part.repo, prompt: changePartPrompt(prompt, part) }));
-    const origin = { id: randomUUID(), title, proposedBy: null, model, approvals, javaNavigation: false, item, view };
-    return this.#tasks.createChange(prompts, origin);
+    return this.#tasks.createChange(prompts, { title, proposedBy: null, model, approvals, javaNavigation: false, item, view });
   }
 
   /**

@@ -8,6 +8,7 @@ import {
   type ProposalKind,
   type ProposedBy,
   pipelineStateText,
+  proposalRepos,
   type Session,
   type SessionList,
   type Task,
@@ -54,7 +55,7 @@ export function supervisorSituation(
   const lines = [
     ...list.proposals.map(
       (p) =>
-        `- ${PROPOSAL_KINDS[p.kind]} ${p.id} ${quoted(p.title)} in ${p.parts?.map((part) => part.repo).join(", ") ?? p.repo}, ${origin(p.proposedBy)}: waits for the user to approve or reject it`,
+        `- ${PROPOSAL_KINDS[p.kind]} ${p.id} ${quoted(p.title)} in ${proposalRepos(p).join(", ")}, ${origin(p.proposedBy)}: waits for the user to approve or reject it`,
     ),
     ...tasks.filter(runs).map(taskLine),
     ...list.sessions.filter((s) => s.id !== self && s.task === null && !isSupervisor(s) && s.run.kind !== "exited").map(sessionLine),

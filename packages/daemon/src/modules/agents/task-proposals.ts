@@ -23,8 +23,10 @@ const REMEMBERED_REJECTIONS = 100;
  * removal and the remembered rejections (oldest first).
  */
 export const StoredProposals = z.object({
-  // A proposal saved before ADR-133 has no board item.
-  pending: z.array(TaskProposal.extend({ item: TaskProposal.shape.item.default(null) })).max(MAX_PENDING_PROPOSALS),
+  // A proposal saved before ADR-133 has no board item, and one saved before proposed changes (ADR-171) no parts.
+  pending: z
+    .array(TaskProposal.extend({ item: TaskProposal.shape.item.default(null), parts: TaskProposal.shape.parts.default(null) }))
+    .max(MAX_PENDING_PROPOSALS),
   removalDirs: z.record(TaskId, z.string().max(4096).refine(isAbsolute, "a repo folder must be a full path")),
   rejected: z.array(z.object({ id: TaskId, reason: z.string().nullable() })).max(REMEMBERED_REJECTIONS),
 });

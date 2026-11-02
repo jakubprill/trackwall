@@ -1,4 +1,4 @@
-import type { Task, TaskProposal } from "@trackwall/protocol";
+import { proposalRepos, type Task, type TaskProposal } from "@trackwall/protocol";
 import { FolderX, GitBranch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -33,7 +33,7 @@ export function ProposalActions({
 }) {
   return (
     <>
-      {(proposal.parts?.map((part) => part.repo) ?? [proposal.repo]).map((repo) => (
+      {proposalRepos(proposal).map((repo) => (
         <SameRepoTasks key={repo} repo={repo} tasks={tasks} />
       ))}
       <div className="flex flex-wrap items-center gap-2">

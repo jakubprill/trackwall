@@ -1,4 +1,5 @@
-import type { Session, SessionId, SessionList, TaskProposal, TaskState } from "@trackwall/protocol";
+import { proposalRepos, type Session, type SessionId, type SessionList, type TaskProposal, type TaskState } from "@trackwall/protocol";
+import { proposalKindLabel, proposalName, proposalsName } from "./session-entries.ts";
 import { STATE_LABELS, sessionPlace, waitingInTab } from "./session-state.ts";
 import type { Jump } from "./use-jump-request.ts";
 
@@ -117,8 +118,8 @@ function proposalsNotice({ tag, proposals }: Burst): BrowserNotice | undefined {
   if (!first) return undefined;
   const one = proposals.length === 1;
   return {
-    title: one ? `Task proposal for ${first.repo}` : `${proposals.length} task proposals`,
-    body: one ? first.title : proposals.map((p) => `${p.repo}: ${p.title}`).join("\n"),
+    title: one ? `${proposalKindLabel(first)} for ${proposalRepos(first).join(", ")}` : proposalsName([first, ...proposals.slice(1)]),
+    body: one ? first.title : proposals.map(proposalName).join("\n"),
     tag,
     target: { kind: "proposal", id: first.id },
   };

@@ -192,23 +192,33 @@ describe.skipIf(process.versions.bun === undefined)("a change across several rep
     await expect(
       daemon.post(agentsApi.approveProposal, { proposal: proposal.id, prompt: "Add refunds", model: null, approvals: "ask" }),
     ).rejects.toThrow(`proposal ${proposal.id} is not a task`);
-    const approve = (repos: string[]) =>
+    const approve = (parts: { repo: string; note: string }[]) =>
       daemon.post(agentsApi.approveChangeProposal, {
         proposal: proposal.id,
         prompt: "Add refunds, idempotently",
-        repos,
+        parts,
         model: null,
         approvals: "ask",
       });
-    await expect(approve(["payments", "billing"])).rejects.toThrow("billing is not a part of the proposed change");
+    await expect(
+      approve([
+        { repo: "payments", note: "" },
+        { repo: "billing", note: "" },
+      ]),
+    ).rejects.toThrow("billing is not a part of the proposed change");
     expect(daemon.facade.agents.sessions().proposals.map((p) => p.id)).toEqual([proposal.id]);
 
-    const { tasks, failed } = await approve(["shop-web", "payments"]);
+    // The user unticked orders-api, put shop-web first by mistake and edited the payments note.
+    const { tasks, failed } = await approve([
+      { repo: "shop-web", note: "" },
+      { repo: "payments", note: "add POST /api/refunds, idempotent" },
+    ]);
 
     expect(failed).toEqual([]);
-    // The proposal's order, not the request's; the first part takes the proposal's id, and every part its proposer.
+    // The proposal's order, not the request's, with the notes the user left; the first part takes the proposal's id,
+    // and every part its proposer.
     expect(tasks.map((t) => [t.repo, t.change?.position, t.prompt])).toEqual([
-      ["payments", 0, "Add refunds, idempotently\n\nIn payments: add POST /api/refunds"],
+      ["payments", 0, "Add refunds, idempotently\n\nIn payments: add POST /api/refunds, idempotent"],
       ["shop-web", 1, "Add refunds, idempotently"],
     ]);
     expect(tasks[0]?.id).toBe(proposal.id);

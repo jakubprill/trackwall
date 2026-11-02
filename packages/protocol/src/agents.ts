@@ -106,8 +106,11 @@ export function onePartPerRepo(parts: readonly { repo: string }[]): boolean {
   return new Set(parts.map((p) => p.repo)).size === parts.length;
 }
 
-/** The parts of a change in their merge order: 2 to `CHANGE_PARTS_MAX`, one per repo. */
-export const ChangeParts = z.array(ChangePart).min(2).max(CHANGE_PARTS_MAX).refine(onePartPerRepo, ONE_PART_PER_REPO);
+/** The parts of a change in their merge order, each part as `part` reads it: 2 to `CHANGE_PARTS_MAX`, one per repo. */
+export function changeParts<Part extends z.ZodType<{ repo: string }>>(part: Part) {
+  return z.array(part).min(2).max(CHANGE_PARTS_MAX).refine(onePartPerRepo, ONE_PART_PER_REPO);
+}
+export const ChangeParts = changeParts(ChangePart);
 
 /** Whether every part's prompt, the change's with the part's note, fits a task's prompt. */
 export function changePromptsFit(prompt: string, parts: readonly ChangePart[]): boolean {
@@ -472,6 +475,11 @@ export const TaskProposal = z.object({
   createdAt: z.string(),
 });
 export type TaskProposal = z.infer<typeof TaskProposal>;
+
+/** The repos a proposal is about: a change's repos in their merge order (ADR-171), otherwise its one repo. */
+export function proposalRepos(proposal: Pick<TaskProposal, "repo" | "parts">): string[] {
+  return proposal.parts?.map((part) => part.repo) ?? [proposal.repo];
+}
 
 /**
  * A task message (ADR-68): text the session that delegated a task (its proposer: a main session, the supervisor or an
@@ -857,26 +865,26 @@ export const agentsApi = {
     Task,
   ),
   /**
-   * Approving a proposal to remove a repo (ADR-83): refused while a session, a task or a process runs in the repo; then
-   * the repo moves into `.trackwall/removed` in the projects folder. A refusal leaves the proposal waiting.
-   */
-  /**
-   * Approving a proposed change (ADR-171): `create-change` with the proposal's title, its parts that the user kept
-   * (`repos`, at least two, in the proposal's order whatever their order here) and the options as the user left them.
-   * The first kept part takes the proposal's id, and every part counts as proposed by the proposal's proposer, who hears
-   * which parts started (`change_started`). When no part starts, the proposal waits again.
+   * Approving a proposed change (ADR-171): `create-change` with the proposal's title, the parts the user kept with the
+   * notes as the user left them (`parts`, at least two of the proposal's repos, in the proposal's order whatever their
+   * order here) and the options. The first part made takes the proposal's id, and every part counts as proposed by the
+   * proposal's proposer, who hears which parts started (`change_started`). When no part starts, the proposal waits again.
    */
   approveChangeProposal: endpoint(
     "approve-change-proposal",
     ProposalRequest.extend({
       prompt: TaskPrompt,
-      repos: z.array(RepoId).min(2).max(CHANGE_PARTS_MAX),
+      parts: ChangeParts,
       model: TaskModel.nullable(),
       approvals: TaskApprovals,
       view: SessionView.default("terminal"),
     }),
     CreatedChange,
   ),
+  /**
+   * Approving a proposal to remove a repo (ADR-83): refused while a session, a task or a process runs in the repo; then
+   * the repo moves into `.trackwall/removed` in the projects folder. A refusal leaves the proposal waiting.
+   */
   approveRepoRemoval: endpoint("approve-repo-removal", ProposalRequest, Done),
   /**
    * Rejects a proposal: it leaves the list, and a session waiting on it gets `proposal_rejected` with the user's reason

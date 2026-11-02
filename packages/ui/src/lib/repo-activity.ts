@@ -1,4 +1,4 @@
-import type { RunningMiseTask, SessionList, Task } from "@trackwall/protocol";
+import { proposalRepos, type RunningMiseTask, type SessionList, type Task } from "@trackwall/protocol";
 import type { StatusTone } from "./repo-status.ts";
 import { runStateLabel } from "./run-state.ts";
 import { entryTime, latestSession, type SessionSelection, taskName } from "./session-entries.ts";
@@ -45,7 +45,7 @@ interface Work {
 
 function proposals(repo: string, list: SessionList): RepoActivityItem[] {
   return list.proposals
-    .filter((p) => p.repo === repo)
+    .filter((p) => proposalRepos(p).includes(repo))
     .map((p) => ({
       key: `proposal:${p.id}`,
       name: p.title,

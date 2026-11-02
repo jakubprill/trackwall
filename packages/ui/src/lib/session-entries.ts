@@ -4,6 +4,7 @@ import {
   isSupervisor,
   type ProposalKind,
   type ProposedBy,
+  proposalRepos,
   type Session,
   type SessionList,
   type Task,
@@ -365,7 +366,7 @@ export function entryId(entry: SessionEntry): string {
 
 /** A proposal's name wherever it is listed: its repo (a change's repos in their order) and title. */
 export function proposalName(proposal: TaskProposal): string {
-  return `${proposal.parts?.map((part) => part.repo).join(", ") ?? proposal.repo} · ${proposal.title}`;
+  return `${proposalRepos(proposal).join(", ")} · ${proposal.title}`;
 }
 
 /** What a single proposal asks for, as its heading: a task, a change across repos (ADR-171) or removing a repo (ADR-83). */

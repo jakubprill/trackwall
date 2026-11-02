@@ -1,4 +1,4 @@
-import type { SessionView, Task, TaskApprovals } from "@trackwall/protocol";
+import type { ChangePart, SessionView, Task, TaskApprovals } from "@trackwall/protocol";
 import { errorMessage } from "./api.ts";
 import type { ProposalsEntry, SessionSelection } from "./session-entries.ts";
 
@@ -61,10 +61,16 @@ export function showsGroup(selection: SessionSelection, group: ProposalsEntry): 
 }
 
 /**
- * The repos of a proposed change (ADR-171) the user kept, in the proposal's order; `undefined` while fewer than two are
- * kept, since a change has at least two parts.
+ * The parts of a proposed change (ADR-171) the user kept, in the proposal's order, each with its note as the user left
+ * it (`notes` by repo); `undefined` while fewer than two are kept, since a change has at least two parts.
  */
-export function keptChangeRepos(parts: readonly { repo: string }[], dropped: ReadonlySet<string>): string[] | undefined {
-  const kept = parts.map((part) => part.repo).filter((repo) => !dropped.has(repo));
+export function keptChangeParts(
+  parts: readonly ChangePart[],
+  dropped: ReadonlySet<string>,
+  notes: ReadonlyMap<string, string>,
+): ChangePart[] | undefined {
+  const kept = parts
+    .filter((part) => !dropped.has(part.repo))
+    .map((part) => ({ repo: part.repo, note: notes.get(part.repo) ?? part.note }));
   return kept.length >= 2 ? kept : undefined;
 }

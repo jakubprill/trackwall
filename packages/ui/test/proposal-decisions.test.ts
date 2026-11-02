@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Task, TaskProposal } from "@trackwall/protocol";
-import { keptChangeRepos, selectionAfterDecision, showsGroup, startProposals } from "../src/lib/proposal-decisions.ts";
+import { keptChangeParts, selectionAfterDecision, showsGroup, startProposals } from "../src/lib/proposal-decisions.ts";
 import type { ProposalsEntry } from "../src/lib/session-entries.ts";
 import { typedModel } from "../src/lib/task-model.ts";
 
@@ -101,15 +101,22 @@ describe("where the Sessions view goes after a decision", () => {
   });
 });
 
-describe("the repos a proposed change starts with (ADR-171)", () => {
-  const parts = [{ repo: "payments" }, { repo: "orders-api" }, { repo: "shop-web" }];
+describe("the parts a proposed change starts with (ADR-171)", () => {
+  const parts = [
+    { repo: "payments", note: "add POST /api/refunds" },
+    { repo: "orders-api", note: "" },
+    { repo: "shop-web", note: "show a refund button" },
+  ];
 
-  test("are the ones the user did not untick, in the proposal's order", () => {
-    expect(keptChangeRepos(parts, new Set())).toEqual(["payments", "orders-api", "shop-web"]);
-    expect(keptChangeRepos(parts, new Set(["orders-api"]))).toEqual(["payments", "shop-web"]);
+  test("are the ones the user did not untick, in the proposal's order, with the notes as the user left them", () => {
+    expect(keptChangeParts(parts, new Set(), new Map())).toEqual(parts);
+    expect(keptChangeParts(parts, new Set(["orders-api"]), new Map([["shop-web", "hide it behind a flag"]]))).toEqual([
+      { repo: "payments", note: "add POST /api/refunds" },
+      { repo: "shop-web", note: "hide it behind a flag" },
+    ]);
   });
 
   test("are none while fewer than two are kept, since a change has at least two parts", () => {
-    expect(keptChangeRepos(parts, new Set(["payments", "shop-web"]))).toBeUndefined();
+    expect(keptChangeParts(parts, new Set(["payments", "shop-web"]), new Map())).toBeUndefined();
   });
 });

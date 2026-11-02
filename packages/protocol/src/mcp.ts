@@ -8,13 +8,12 @@ import {
   CHANGE_PARTS_MAX,
   CHANGE_PROMPTS_TOO_LONG,
   ChangePartNote,
+  changeParts,
   changePromptsFit,
   FOLDER_ACTION_REASON_MAX,
   FolderActionReason,
   HANDOFF_FILES_MAX,
   JavaNavigationStatus,
-  ONE_PART_PER_REPO,
-  onePartPerRepo,
   PromptDelivery,
   Session,
   SessionId,
@@ -894,7 +893,7 @@ export const mcpTools = {
       "requests are to be merged, the repo the others build on first. Trackwall shows the user one card with every repo, " +
       "and nothing runs until the user approves it; the user may untick repos (at least two stay) or reject it. Each part " +
       "is an ordinary task with its own session, which knows its sibling parts and reads the part before it with " +
-      `get_handoff. The approved proposal's id becomes the first started part's task id, and ${GET_UPDATES} says which ` +
+      `get_handoff. The approved proposal's id becomes the task id of the first part Trackwall could make, and ${GET_UPDATES} says which ` +
       `parts started (change_started) and then what happens to each, as for ${PROPOSE_TASK}. Use ${PROPOSE_TASK} for work ` +
       `in one repo, and for work in other repos when you run a task yourself: a task cannot propose a change. ` +
       "Write the prompt so that it stands alone for every part (each agent sees nothing else), and say in a part's note " +
@@ -907,21 +906,16 @@ export const mcpTools = {
         prompt: visibleText(TaskPrompt).describe(
           `the instructions every part's agent gets, with the goal, the contract and how to check the result, up to ${TASK_PROMPT_MAX} characters with the longest note`,
         ),
-        parts: z
-          .array(
-            z
-              .object({
-                repo: RepoArg,
-                note: visibleText(ChangePartNote)
-                  .default("")
-                  .describe(`what this repo has to do, added to the prompt for its part only, up to ${CHANGE_PART_NOTE_MAX} characters`),
-              })
-              .strict(),
-          )
-          .min(2)
-          .max(CHANGE_PARTS_MAX)
-          .refine(onePartPerRepo, ONE_PART_PER_REPO)
-          .describe(`2 to ${CHANGE_PARTS_MAX} repos, one part each, in the order their merge requests are to be merged`),
+        parts: changeParts(
+          z
+            .object({
+              repo: RepoArg,
+              note: visibleText(ChangePartNote)
+                .default("")
+                .describe(`what this repo has to do, added to the prompt for its part only, up to ${CHANGE_PART_NOTE_MAX} characters`),
+            })
+            .strict(),
+        ).describe(`2 to ${CHANGE_PARTS_MAX} repos, one part each, in the order their merge requests are to be merged`),
         model: TaskModel.optional().describe("Copilot CLI model id every part's session runs on, as for propose_task"),
         approvals: TaskApprovals.optional().describe("ask (the default) or auto for every part, as for propose_task"),
         item: ItemArg.optional().describe(`the board item the change works on (from ${LIST_ITEMS}); every part keeps it`),
@@ -1095,7 +1089,8 @@ export const mcpTools = {
       `${GET_SESSION}), error, exited, result_reported (with the summary), verified (passed, failed or cancelled with ` +
       "a message), pipeline_failed (the pipeline of the merge request from its branch failed: links to both and the jobs " +
       "that failed it; read a job's log with your MCP server for the repo host, if you have one), proposal_rejected (with the user's reason), repo_removed (the user approved your " +
-      `${PROPOSE_FOLDER_ACTION}; movedTo is where the repo went), question (the task's agent asks you something with ` +
+      `${PROPOSE_FOLDER_ACTION}; movedTo is where the repo went), change_started (the user approved your ${PROPOSE_CHANGE}: parts are the ` +
+      `parts that started with their task ids, failed the repos whose part could not), question (the task's agent asks you something with ` +
       `${ASK_PROPOSER}: answer it with ${SEND_MESSAGE}, or tell the user when it is theirs to decide), and, for the supervisor, handed_over (the user handed it ` +
       "a task they had started, which it follows and may message from now on). A turn the user drove themselves in the task's session " +
       "is left out. Trackwall asks you to call it when an update arrives, so instead of polling, end your turn and wait. " +

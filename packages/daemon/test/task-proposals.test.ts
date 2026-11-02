@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { MAX_PENDING_PROPOSALS, TaskProposals } from "../src/modules/agents/task-proposals.ts";
+import { MAX_PENDING_PROPOSALS, StoredProposals, TaskProposals } from "../src/modules/agents/task-proposals.ts";
 
 const PROPOSAL = {
   kind: "task" as const,
@@ -81,6 +81,13 @@ describe("task proposals", () => {
     expect(after.list()).toEqual([waiting]);
     expect(after.take(waiting.id)).toEqual(waiting);
     expect(after.rejection(rejected.id)).toEqual({ reason: "Not now" });
+  });
+
+  test("a proposal stored before proposed changes (ADR-171), without parts, comes back as a task proposal", () => {
+    const { parts: _, ...older } = { ...PROPOSAL, id: "3f2a1c4e-8b7d-4e6f-9a1b-2c3d4e5f6a7b", createdAt: "2026-11-01T10:00:00Z" };
+    const stored = StoredProposals.parse({ pending: [older], removalDirs: {}, rejected: [] });
+
+    expect(stored.pending).toEqual([{ ...older, parts: null }]);
   });
 
   test("a repo removal keeps its folder across the restart until it is decided, and one without its folder in the file is dropped", () => {
