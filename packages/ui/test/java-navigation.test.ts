@@ -125,7 +125,7 @@ describe("the Java navigation mark of a running session (ADR-175)", () => {
     readRequest: null,
   };
 
-  test("a running main session in a terminal asks how its jdtls is doing", () => {
+  test("a running repo session in a terminal asks how its jdtls is doing", () => {
     expect(asksSessionJavaNavigation(main, true)).toBe(true);
   });
 

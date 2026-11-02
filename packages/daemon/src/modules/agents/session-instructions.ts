@@ -18,7 +18,7 @@ import type { HandoffFacts } from "./task-handoff.ts";
  * repository instruction, because the daemon adds its directory to `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` in the session
  * environment. It changes neither the user's repo nor `~/.copilot`. The content is the session's environment (the
  * Trackwall version and where the user sees the session), its role (the supervisor or a free session in the projects
- * folder, a main session in the repo root or a task session in a worktree) and the shared MCP instruction (`MCP_INSTRUCTIONS`), which
+ * folder, a repo session in the repo root or a task session in a worktree) and the shared MCP instruction (`MCP_INSTRUCTIONS`), which
  * Copilot CLI does not take from the MCP server.
  */
 
@@ -29,7 +29,7 @@ const INSTRUCTIONS_FILE = "trackwall.instructions.md";
 
 /**
  * Who the session is: the supervisor in the projects folder (ADR-58), which may change code only with
- * `supervisor.changesCode` (ADR-78), a free session in the projects folder (ADR-100), or in a repo a main session in its
+ * `supervisor.changesCode` (ADR-78), a free session in the projects folder (ADR-100), or in a repo a repo session in its
  * root, or a task session in the task's worktree, with the task that handed it its work (ADR-143) and the change it is a
  * part of (ADR-171).
  */
@@ -126,7 +126,8 @@ function freeRole(): string[] {
 
 function repoRole(repo: string): string[] {
   return [
-    `You are a main session in the root of the repo \`${repo}\` (its id in Trackwall tools): the user's own working copy.`,
+    `You are a repo session in the root of the repo \`${repo}\` (its id in Trackwall tools): the user's own working copy.`,
+    "- Nothing you change here goes through a review in Trackwall: change only what the user asks for. Do not switch this working copy's branch, commit, push or merge unless they ask: Trackwall reads the repo's callers and the impact of every task's change from the branch checked out here, and runs the repo's service from it.",
     `- A larger piece of work, work in another repo or work that can run in parallel goes to another agent: propose it with ${mcpTools.proposeTask.name}. A change whose parts in several repos must fit together (an endpoint and the callers of it) is one proposal with ${mcpTools.proposeChange.name} instead, one part per repo in the order their merge requests are to be merged. Trackwall asks you to call ${mcpTools.getUpdates.name} when its session finishes a turn or reports, and you steer it with ${mcpTools.sendMessage.name}.`,
     `- ${mcpTools.reportResult.name} is only for task sessions; here you answer the user directly.`,
   ];

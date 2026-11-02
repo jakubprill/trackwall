@@ -2,7 +2,7 @@ import { CHANGE_PARTS_MAX, type ChangePart, isFreeSession, type Session } from "
 import { isLive } from "./session-state.ts";
 
 /**
- * What the New session form starts (ADR-100): a task in its own worktree (ADR-31), a main session in a repo's own
+ * What the New session form starts (ADR-100): a task in its own worktree (ADR-31), a repo session in a repo's own
  * working copy, or a free session in the projects folder; the last two with the prompt as their first message when
  * there is one. A task needs a prompt, so without one there is nothing to start.
  */
@@ -52,7 +52,7 @@ export function formStart(form: NewSessionForm, repo: string | null, worktree: b
 }
 
 /**
- * The running sessions that already work where a new session without its own worktree would: the main sessions in the
+ * The running sessions that already work where a new session without its own worktree would: the repo sessions in the
  * repo's root, or the free sessions in the projects folder. Two agents in one working copy change each other's files.
  */
 export function sessionsInSameFolder(sessions: readonly Session[], repo: string | null): Session[] {

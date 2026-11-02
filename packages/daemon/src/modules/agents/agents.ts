@@ -66,7 +66,7 @@ import { MiseTrustNotices, type TrustRecipient, trustRecipientOf } from "./mise-
 import { proposedByOf, proposerExists, proposerKeyOf, proposerKind, proposerOf } from "./proposer.ts";
 import { readRequestPrompt } from "./read-request-prompt.ts";
 import {
-  type MainSessionStart,
+  type OwnSessionStart,
   PLAIN_START,
   type ResumableSession,
   ResumableSessions,
@@ -123,9 +123,9 @@ export const AGENT_QUEUES_FILE = "agent-queues.json";
 export const LEGACY_WORKTREES_DIR = "worktrees";
 
 /** What `agents` needs from `procs`; wired in the facade. */
-/** What `#launchAs` adds to a start for a main session (ADR-175); nothing for the supervisor. */
+/** What `#launchAs` adds to a start for a repo or free session (ADR-175); nothing for the supervisor. */
 interface MainLaunch {
-  start?: MainSessionStart;
+  start?: OwnSessionStart;
   /** Before the session's own arguments, as a task's model (ADR-98). */
   args?: readonly string[];
   lspServers?: Record<string, LspServer>;
@@ -371,7 +371,7 @@ export class Agents {
   }
 
   /**
-   * A main session in the root of `repo`, or with `repo: null` a free session in the projects folder (ADR-100), with
+   * A repo session in the root of `repo`, or with `repo: null` a free session in the projects folder (ADR-100), with
    * `prompt` as its first message (`--interactive`) when there is one. In a terminal its id is also Copilot CLI's
    * session id, so a restart can resume it (ADR-95); in the conversation view Copilot CLI picks the conversation's id
    * (ADR-107). It runs on `model` and, in a repo, with `javaNavigation` gets jdtls, on every start (ADR-175); it always
@@ -380,18 +380,18 @@ export class Agents {
   async start(
     repo: string | null,
     prompt?: string,
-    { model = null, javaNavigation = false, view = "terminal" }: Partial<MainSessionStart> & { view?: SessionView } = {},
+    { model = null, javaNavigation = false, view = "terminal" }: Partial<OwnSessionStart> & { view?: SessionView } = {},
   ): Promise<Session> {
     if (javaNavigation) this.#assertJavaNavigation(repo, view);
     const id = randomUUID();
     const cwd = repo === null ? await this.#deps.repos.projectsDir() : await this.#deps.repos.repoPath(repo);
     const place = { repo, supervisor: false, cwd, task: null };
     const start = { model, javaNavigation };
-    if (view === "conversation") return this.#launchMain({ view, id, load: undefined, firstMessage: prompt }, place, start);
+    if (view === "conversation") return this.#launchOwn({ view, id, load: undefined, firstMessage: prompt }, place, start);
     const args = [`--session-id=${id}`, ...(prompt === undefined ? [] : [`--interactive=${prompt}`])];
     const started = prompt !== undefined;
     const spec = { view, id, args, promptOnStart: started, hasConversation: started, conversation: id };
-    return this.#launchMain(spec, place, start);
+    return this.#launchOwn(spec, place, start);
   }
 
   /** Java navigation needs a repo's build, besides what any start with it needs; refused before the start. */
@@ -405,7 +405,7 @@ export class Agents {
    * jdtls in a terminal under the session's id, so a restart starts it warm. A start whose settings broke since starts
    * without jdtls and logs why.
    */
-  async #launchMain(spec: SessionLaunch, place: SessionPlace, start: MainSessionStart): Promise<Session> {
+  async #launchOwn(spec: SessionLaunch, place: SessionPlace, start: OwnSessionStart): Promise<Session> {
     // Before the session's own arguments, as a task's (ADR-98).
     const args = start.model === null ? [] : [`--model=${start.model}`];
     // Only a hand-edited `resumable-sessions.json` gets here with Java navigation in the conversation view.
@@ -850,7 +850,7 @@ export class Agents {
     return this.#tasks.javaNavigationStatus(id);
   }
 
-  /** How a session's jdtls is doing: its task's, or a main session's own (ADR-175); `null` without Java navigation. */
+  /** How a session's jdtls is doing: its task's, or a repo session's own (ADR-175); `null` without Java navigation. */
   async sessionJavaNavigation(id: string): Promise<JavaNavigationStatus | null> {
     const session = this.#sessions.get(id);
     if (session.task !== null) return this.#tasks.javaNavigationStatus(session.task);
@@ -959,7 +959,7 @@ export class Agents {
     this.#deps.onTaskRemoved(ended);
   }
 
-  /** A start in a terminal; a new id by default, and for a main session what it started with (ADR-175). */
+  /** A start in a terminal; a new id by default, and for a repo or free session what it started with (ADR-175). */
   async #launch({ id = randomUUID(), ...spec }: Omit<TerminalLaunch, "id"> & { id?: string }, start = PLAIN_START): Promise<Session> {
     this.#assertNotListed(id);
     return this.#listed(await this.#launcher.terminal({ id, ...spec }), start);
@@ -1018,7 +1018,7 @@ export class Agents {
 
   /**
    * A running session stops and starts again with its conversation (ADR-119), the way a daemon restart resumes it
-   * (ADR-95): a task's session as Resume does, the supervisor, a free session and a main session under their id. The
+   * (ADR-95): a task's session as Resume does, the supervisor, a free session and a repo session under their id. The
    * new start reads the environment, `agentSecrets` and tool permissions again. A main or free session gives up its
    * place in the list before the start, since an id is listed once, so a failed start leaves it out of the list;
    * Copilot CLI still keeps its conversation.
@@ -1129,7 +1129,7 @@ export class Agents {
   /**
    * Daemon start, once the API listens (the sessions' hooks and MCP server need its port): the sessions that ran when
    * the previous daemon stopped go on with their conversations (ADR-95). A task's session resumes as Resume does; the
-   * supervisor, a free session and a main session start again under their id with `--resume`. One that cannot (its task
+   * supervisor, a free session and a repo session start again under their id with `--resume`. One that cannot (its task
    * was ended, its repo is gone, a supervisor already runs) goes to the log.
    */
   async resumeLeftSessions(): Promise<void> {
@@ -1148,7 +1148,7 @@ export class Agents {
   }
 
   /**
-   * A supervisor, free or main session that did not start again and is out of the list: what waited for it has nobody
+   * A supervisor, free or repo session that did not start again and is out of the list: what waited for it has nobody
    * to reach, as when the user closes a session (ADR-115), and its jdtls index nobody to use (ADR-175).
    */
   async #forgetLeftMain({ session: id, supervisor, javaNavigation }: ResumableSession): Promise<void> {
@@ -1170,7 +1170,7 @@ export class Agents {
     }
     const cwd = repo === null ? await this.#deps.repos.projectsDir() : await this.#deps.repos.repoPath(repo);
     const { model, javaNavigation } = left;
-    const started = await this.#launchMain(spec, { repo, supervisor: false, cwd, task: null }, { model, javaNavigation });
+    const started = await this.#launchOwn(spec, { repo, supervisor: false, cwd, task: null }, { model, javaNavigation });
     this.#askToReadLeft(left.session);
     return started;
   }
@@ -1199,7 +1199,7 @@ export class Agents {
   }
 
   /**
-   * A start in the view it names, in `place`; for a main session with what it started with (ADR-175): `args` go before
+   * A start in the view it names, in `place`; for a repo or free session with what it started with (ADR-175): `args` go before
    * the session's own, and `lspServers` only into a terminal's plugin.
    */
   async #launchAs(
@@ -1240,7 +1240,7 @@ export class Agents {
     const { javaNavigation } = this.#sessions.startOf(id);
     this.#unlist(session);
     this.#coordination.sessionClosed(session);
-    // A main session's jdtls index lasts while the session does (ADR-175).
+    // A repo session's jdtls index lasts while the session does (ADR-175).
     if (javaNavigation) void this.#javaNavigation.remove(id, `session ${id}`);
   }
 

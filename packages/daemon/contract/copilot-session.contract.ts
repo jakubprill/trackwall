@@ -329,7 +329,7 @@ describe("a session of the real Copilot CLI", () => {
         .map((tool) => copilotToolName(tool.name))
         .sort(),
     );
-    expect(first?.system).toContain("You are a main session in the root of the repo `shop`");
+    expect(first?.system).toContain("You are a repo session in the root of the repo `shop`");
     expect(second?.toolResults.join("\n")).toContain('"id":"shop"');
     // A read-only Trackwall tool runs without an approval request.
     expect(hookRecords(daemon.home, id).map((r) => r.event)).not.toContain("notification");
@@ -845,7 +845,7 @@ describe("the supervisor's situation with the real Copilot CLI (ADR-148)", () =>
     // Copilot CLI puts the hook's context after the user's text, as a system reminder, not as the user's words.
     const [message] = model.requests().at(-1)?.userTexts.slice(-1) ?? [];
     expect(message).toContain("what is going on?\n\n<system_reminder>\nTrackwall's work under way as this prompt came");
-    expect(message).toContain(`\n- a main session in shop (session ${main.id}), started by the user: waits for the user\n`);
+    expect(message).toContain(`\n- a repo session in shop (session ${main.id}), started by the user: waits for the user\n`);
     await agents.stop(supervisor.id);
     await agents.stop(main.id);
   });

@@ -177,11 +177,12 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     expect(text).toContain("The user sees this session in Trackwall's Sessions view");
   });
 
-  test("a session in the repo root is a main session and does not get the task rules", () => {
+  test("a session in the repo root is a repo session that keeps the user's checkout and does not get the task rules", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
     writeSessionInstructions(sessionDir, "0.3.0", { kind: "repo", repo: "shop" }, NO_KNOWLEDGE);
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
-    expect(text).toContain("You are a main session in the root of the repo `shop`");
+    expect(text).toContain("You are a repo session in the root of the repo `shop`");
+    expect(text).toContain("Do not switch this working copy's branch, commit, push or merge unless they ask");
     expect(text).not.toContain("Work only in this worktree");
   });
 
@@ -201,7 +202,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     expect(text).toContain(
       "a repo's remote (from list_repos) is its project path there, and a task's branch is the source branch of its merge request",
     );
-    expect(text).not.toContain("main session in the root");
+    expect(text).not.toContain("repo session in the root");
     expect(text).not.toContain("Work only in this worktree");
     expect(text).toContain(MCP_INSTRUCTIONS);
   });

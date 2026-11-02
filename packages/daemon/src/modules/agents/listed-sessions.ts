@@ -3,7 +3,7 @@ import { isSupervisor, type RunState, type Session } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
 import type { AgentSession } from "./agent-session.ts";
 import { LAST_SUPERVISOR_FILE, type LastSupervisor, type LastSupervisorFile } from "./last-supervisor.ts";
-import { type MainSessionStart, PLAIN_START, type ResumableSession, type ResumableSessions } from "./resumable-sessions.ts";
+import { type OwnSessionStart, PLAIN_START, type ResumableSession, type ResumableSessions } from "./resumable-sessions.ts";
 import type { SessionMiseEnv, SessionMiseLaunch } from "./session-env.ts";
 import { SessionEnvironments } from "./session-env-change.ts";
 import { type StartedSession, sessionDir, sessionOwner } from "./session-launcher.ts";
@@ -37,7 +37,7 @@ export class ListedSessions {
   /** The environment each listed session started with, to tell when mise would give it another one (ADR-119). */
   readonly #environments = new SessionEnvironments();
   /** The model and Java navigation of each listed main or free session, which its restart repeats (ADR-175). */
-  readonly #starts = new Map<string, MainSessionStart>();
+  readonly #starts = new Map<string, OwnSessionStart>();
   #timer: NodeJS.Timeout | undefined;
 
   constructor(deps: ListedSessionsDeps) {
@@ -45,7 +45,7 @@ export class ListedSessions {
   }
 
   /** A started session joins the list; the tick runs while any session is listed. */
-  add({ session, miseEnv, mise }: StartedSession, start: MainSessionStart = PLAIN_START): void {
+  add({ session, miseEnv, mise }: StartedSession, start: OwnSessionStart = PLAIN_START): void {
     this.#sessions.set(session.id, session);
     this.#starts.set(session.id, start);
     this.#environments.remember(session.id, miseEnv, mise);
@@ -68,7 +68,7 @@ export class ListedSessions {
   }
 
   /** What the listed session started with (ADR-175); nothing special for a task's session or the supervisor. */
-  startOf(id: string): MainSessionStart {
+  startOf(id: string): OwnSessionStart {
     return this.#starts.get(id) ?? PLAIN_START;
   }
 

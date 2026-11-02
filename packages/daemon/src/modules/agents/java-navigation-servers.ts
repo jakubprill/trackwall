@@ -14,7 +14,7 @@ import {
 import { jdtlsStatus, readJdtlsLog } from "./jdtls-log.ts";
 
 /**
- * The jdtls of whoever has Java navigation (§4.4, ADR-99, ADR-175): a task, under its id, or a main session in a repo
+ * The jdtls of whoever has Java navigation (§4.4, ADR-99, ADR-175): a task, under its id, or a repo session in a repo
  * root, under the session's id. Each owner has its own data folder in `<projects folder>/.trackwall/lsp/<owner>`, since
  * two jdtls must not share one; it lasts while the owner does, so a resume or restart starts warm, and goes with it.
  */

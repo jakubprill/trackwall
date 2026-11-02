@@ -11,7 +11,7 @@ import { ConversationId } from "./acp-messages.ts";
  * of the last check.
  */
 
-/** One session to resume: the supervisor or a free session (`repo: null`), a main session in a repo root, or a task's session. */
+/** One session to resume: the supervisor or a free session (`repo: null`), a repo session in a repo root, or a task's session. */
 export const ResumableSession = z.preprocess(
   // A file of a Trackwall before free sessions (ADR-100) has no `supervisor`: a session without a repo there was the supervisor.
   (row) => (isRecord(row) && !("supervisor" in row) ? { ...row, supervisor: row.repo === null && row.task === null } : row),
@@ -34,7 +34,7 @@ export const ResumableSession = z.preprocess(
       conversation: ConversationId.optional(),
       /** A main or free session's model (ADR-175); a task's is the task's. A file of a Trackwall before it has none. */
       model: TaskModel.nullable().default(null),
-      /** A main session's Java navigation (ADR-175); a task's is the task's. */
+      /** A repo session's Java navigation (ADR-175); a task's is the task's. */
       javaNavigation: z.boolean().default(false),
     })
     .refine((s) => !s.supervisor || (s.repo === null && s.task === null), "the supervisor has no repo and no task")
@@ -44,12 +44,12 @@ export const ResumableSession = z.preprocess(
 export type ResumableSession = z.infer<typeof ResumableSession>;
 
 /**
- * What a main or free session started with that each of its starts repeats, the first, a restart and a daemon restart
+ * What a repo or free session (a session the user starts without a task) started with that each of its starts repeats, the first, a restart and a daemon restart
  * (ADR-175): its model and, in a repo, Java navigation. A task's sessions take both from the task, the supervisor has
  * neither.
  */
-export type MainSessionStart = Pick<ResumableSession, "model" | "javaNavigation">;
-export const PLAIN_START: MainSessionStart = { model: null, javaNavigation: false };
+export type OwnSessionStart = Pick<ResumableSession, "model" | "javaNavigation">;
+export const PLAIN_START: OwnSessionStart = { model: null, javaNavigation: false };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;

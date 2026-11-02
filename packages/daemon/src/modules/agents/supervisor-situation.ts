@@ -88,7 +88,7 @@ function mergeRequestText(mr: FollowedMergeRequest): string {
 }
 
 function sessionLine(session: Session): string {
-  const where = session.repo === null ? "a free session in the projects folder" : `a main session in ${session.repo}`;
+  const where = session.repo === null ? "a free session in the projects folder" : `a repo session in ${session.repo}`;
   return `- ${where} (session ${session.id}), started by the user: ${sessionStatus(session)}`;
 }
 
