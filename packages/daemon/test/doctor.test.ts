@@ -2,13 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
-import { TESTED_COPILOT_CLI_VERSION } from "@trackwall/protocol";
+import { type DoctorCheckId, type DoctorStatus, TESTED_COPILOT_CLI_VERSION } from "@trackwall/protocol";
 import { createFacade } from "../src/facade.ts";
 import { trustedFolderOf } from "../src/modules/doctor/copilot-trust.ts";
 import { copilotVersionOutcome, Doctor, type DoctorDeps } from "../src/modules/doctor/doctor.ts";
 import { folderStorage } from "../src/modules/doctor/folder-storage.ts";
 import type { TlsProbe } from "../src/modules/doctor/tls-probe.ts";
 import { compareVersions, versionIn } from "../src/modules/doctor/version.ts";
+import { defaultSandboxTasks } from "../src/modules/workspace/workspace.ts";
 import { fakeHostingClis } from "./support/hosting.ts";
 import { sandboxProgramsFolder } from "./support/sandbox-programs.ts";
 
@@ -93,6 +94,10 @@ function doctorFacade(o: Setup) {
 
 const trusting = '{"trustedFolders":["<projects>"]}';
 
+/** The sandbox check's row as this system gives it without the key: only where tasks run in the sandbox by default (ADR-181). */
+const sandboxRow: [DoctorCheckId, DoctorStatus][] =
+  defaultSandboxTasks(false, process.platform) === "off" ? [] : [["copilot-sandbox", "ok"]];
+
 describe("doctor: the model provider of the session profile (ADR-179)", () => {
   test("with a session profile whose mise environment sets a provider, the doctor only connects to its host and shows neither the address nor the key", async () => {
     const probed: { host: string; port: number; proxy: string | null }[] = [];
@@ -145,7 +150,7 @@ describe("doctor", () => {
       ["git", "ok"],
       ["copilot-cli", "ok"],
       ["copilot-trusted-folder", "ok"],
-      ["copilot-sandbox", "ok"],
+      ...sandboxRow,
       ["network", "ok"],
       ["mise", "ok"],
       ["github-cli", "ok"],
@@ -163,13 +168,13 @@ describe("doctor", () => {
       ["projects-folder", "fail"],
       ["git", "ok"],
       ["copilot-cli", "fail"],
-      ["copilot-sandbox", "ok"],
+      ...sandboxRow,
       ["network", "ok"],
       ["mise", "warn"],
     ]);
     expect(report.checks[0]?.summary).toBe("No projects folder is set.");
     expect(report.checks[2]?.summary).toBe("Copilot CLI (trackwall-test-no-copilot) not found in PATH.");
-    expect(report.checks[5]?.summary).toBe("mise: program trackwall-test-no-mise not found in PATH");
+    expect(report.checks.find((c) => c.id === "mise")?.summary).toBe("mise: program trackwall-test-no-mise not found in PATH");
     expect(report.checks.every((c) => c.status === "ok" || (c.fix ?? "").length > 0)).toBe(true);
   });
 
