@@ -31,4 +31,33 @@ Once connected, an agent can answer questions like "Which repos are in my projec
 
 ## Other MCP clients
 
-An MCP client that speaks HTTP can connect to `http://127.0.0.1:<port>/mcp` with the header `Authorization: Bearer <token>`. The port and token are in `daemon.json` in the state directory (`~/.trackwall`) and change every time Trackwall starts, so the command above is the simpler way.
+Any MCP client, such as an editor's agent or another coding agent, can use the same server. Add it to the client as a server that the client starts and talks to over stdio, with the `command` and `args` from the JSON entry in "Settings > Agents"; leave out its `type` and `tools` keys, which only Copilot CLI reads. In a client configured with JSON this usually looks like:
+
+```json
+{
+  "mcpServers": {
+    "trackwall": {
+      "command": "<command from Settings > Agents>",
+      "args": ["mcp-stdio"]
+    }
+  }
+}
+```
+
+The exact keys depend on the client. A client that speaks HTTP can instead connect to `http://127.0.0.1:<port>/mcp` with the header `Authorization: Bearer <token>`. The port and token are in `daemon.json` in the state directory (`~/.trackwall`) and change every time Trackwall starts, so the command is the simpler way.
+
+### What works from another client
+
+An agent in another client is not a Trackwall session, so it gets what Trackwall knows, but not the parts that belong to a session in "Sessions". Like a session you start yourself, it gets Trackwall's guidance on the tools only if the client accepts instructions from MCP servers (see above).
+
+| Works | Does not work |
+|---|---|
+| Repos, cards, code and commit search, the connection graph and endpoints | Reading a task's review comments, messages or handoff, asking a task's proposer a question and reporting a task's result: only the agent of a task in "Sessions" does that |
+| Logs, errors, test results and a Spring app's configuration | Sending messages to a task's agent and getting updates about tasks: follow a task with `wait_for_session` instead |
+| Running and stopping mise tasks and services, calling endpoints, verifying a task | Asking you to copy text, and state, approvals and notifications in the app for that agent: Trackwall does not see its terminal |
+| Proposing tasks and changes, waiting for sessions, resuming a task | |
+| Your plan, routines and workspace knowledge | |
+
+### What it is allowed to do
+
+An agent in another client counts as you, like a program in your own terminal. Unlike a session in "Sessions", it can run mise tasks and services in every repo and every task's worktree, still only with a mise configuration you have trusted; when it is refused for an untrusted one, it is not told when you trust it later. What no agent can do is on the [MCP server](/features/mcp) page. Its calls show in [MCP calls](/features/mcp-calls) as an agent outside Trackwall. Connect only clients you would let run commands in your repos.

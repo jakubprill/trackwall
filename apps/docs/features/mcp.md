@@ -17,7 +17,7 @@ Give Copilot CLI and other agents your whole projects folder: repos, code search
 
 ## How it works
 
-Trackwall runs an MCP server that every session in "Sessions" is connected to. Copilot CLI in your own terminal, or another MCP client, can connect to it too: [Connect Copilot CLI](/guide/connect-copilot-cli) shows how.
+Trackwall runs an MCP server that every session in "Sessions" is connected to. Copilot CLI in your own terminal, or another MCP client, can connect to it too: [Connect Copilot CLI](/guide/connect-copilot-cli) shows how, and what such an agent can and cannot do.
 
 The agent sees the same projects folder you see in Trackwall, through the tools below. It can read everything, and it can run mise tasks and services, but never in a repo whose mise configuration you have not trusted. No tool changes Trackwall's settings, answers an approval or stops a session: those stay with you. A new task starts only when you approve its proposal; after that, the session that proposed it can send its agent messages and resume it.
 
