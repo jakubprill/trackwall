@@ -6,6 +6,7 @@ import type { LiveFeed } from "@/lib/daemon-events";
 import { SETTINGS_CATEGORIES, type SettingsCategory, type SettingsSection, settingsCategory } from "@/lib/settings-categories";
 import type { AppUpdateHandle } from "@/lib/use-app-update";
 import { cn } from "@/lib/utils";
+import { AutoReviewSurface } from "./AutoReviewSurface.tsx";
 import { BrowserNotificationsSurface } from "./BrowserNotificationsSurface.tsx";
 import { ConfigFilesSurface } from "./ConfigFilesSurface.tsx";
 import { ConnectCopilotSurface } from "./ConnectCopilotSurface.tsx";
@@ -98,6 +99,8 @@ function Section({
       return <ConnectCopilotSurface conn={conn} onRetry={onRetry} />;
     case "session-profile":
       return <SessionProfileSurface conn={conn} sessions={sessions} />;
+    case "auto-review":
+      return <AutoReviewSurface conn={conn} />;
     case "java-navigation":
       return <JavaNavigationSurface conn={conn} />;
     case "mcp-calls":

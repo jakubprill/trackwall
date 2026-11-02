@@ -20,8 +20,8 @@ describe("Settings categories", () => {
     expect(settingsCategory("agents").sections).toContain("copilot-cli");
   });
 
-  test("the session profile is under Agents, next to connecting Copilot CLI, and the MCP calls agents made last", () => {
-    expect(settingsCategory("agents").sections).toEqual(["copilot-cli", "session-profile", "java-navigation", "mcp-calls"]);
+  test("the session profile and the automatic review are under Agents, next to connecting Copilot CLI, and the MCP calls agents made last", () => {
+    expect(settingsCategory("agents").sections).toEqual(["copilot-cli", "session-profile", "auto-review", "java-navigation", "mcp-calls"]);
   });
 
   test("how Home draws its scene is under App, with the other settings of this computer", () => {
