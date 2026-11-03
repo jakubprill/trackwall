@@ -88,6 +88,34 @@ describe("daemon events in the UI", () => {
     events.close();
   });
 
+  test("the connection counts as lost from a drop until the next connection opens, not before the first one", async () => {
+    const sockets = fakeSockets();
+    const events = makeEvents(sockets);
+    const changes: boolean[] = [];
+    events.onLostChange(() => changes.push(events.isLost()));
+    expect(events.isLost()).toBe(false);
+
+    sockets.open();
+    sockets.close();
+    expect(events.isLost()).toBe(true);
+    await new Promise((r) => setTimeout(r, 1100));
+    sockets.close();
+    expect(events.isLost()).toBe(true);
+    await new Promise((r) => setTimeout(r, 2100));
+    sockets.open();
+    expect(events.isLost()).toBe(false);
+    expect(changes).toEqual([true, false]);
+    events.close();
+  });
+
+  test("a first connection that fails counts as lost", () => {
+    const sockets = fakeSockets();
+    const events = makeEvents(sockets);
+    sockets.close();
+    expect(events.isLost()).toBe(true);
+    events.close();
+  });
+
   test("a closed client does not reconnect", async () => {
     const sockets = fakeSockets();
     const events = makeEvents(sockets);
