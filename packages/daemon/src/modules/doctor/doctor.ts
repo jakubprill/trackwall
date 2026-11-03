@@ -17,6 +17,7 @@ import {
   workspaceKeysSummary,
 } from "@trackwall/protocol";
 import { trustedFolderOf, trustedFolders } from "./copilot-trust.ts";
+import { type DiskSpace, gigabytes, LOW_DISK_BYTES, VERY_LOW_DISK_BYTES } from "./disk-space.ts";
 import { folderStorage } from "./folder-storage.ts";
 import { modelProviderOutcome, type ProfileEnvironment } from "./model-provider-check.ts";
 import { networkOutcome, sessionCertificates } from "./network-check.ts";
@@ -34,7 +35,13 @@ import { compareVersions, versionIn } from "./version.ts";
 const CHECK_TIMEOUT_MS = 15_000;
 /** What to do about work that lives only in the container's volume (ADR-162). */
 const UNPUSHED_FIX =
-  "Push it, or keep the Docker volume with the repos: removing the volume or resetting Docker deletes it. Home lists the repos.";
+  'Push it, or back up the Docker volume with the repos ("Back up the repos" in the dev container guide): removing the volume or resetting Docker deletes it. Home lists the repos.';
+/** What to do about a disk that is filling up, anywhere. */
+const DISK_FIX =
+  "Free some space: remove tasks you no longer need, and clear build caches such as ~/.m2/repository and ~/.gradle/caches, which download again.";
+/** And in a container, whose disk is the disk of Docker's virtual machine. */
+const CONTAINER_DISK_FIX =
+  " The container's disk is the disk of Docker's virtual machine: on your computer, `docker system prune` (without `--volumes`, which would delete the repos) removes old images and containers, and the settings of Docker Desktop or Rancher Desktop can make that disk bigger.";
 /** What to do about a repo git could not read in that check. */
 const READ_FIX = "Run git status in that repo in a terminal of the container to see why.";
 /** A program's error in a summary: its first line, cut. */
@@ -64,6 +71,12 @@ export interface DoctorDeps {
   repoHosts: () => RepoHost[];
   /** The work in the projects folder on no remote, read only in a container (`workspace`, ADR-162). */
   unpushedWork: () => Promise<UnpushedWork>;
+  /** Free space of the file system a folder is on (`diskSpace`, a fake in tests). */
+  diskSpace: (folder: string) => Promise<DiskSpace>;
+  /** The home folder, where build caches such as `~/.m2` live. */
+  homeDir: string;
+  /** Trackwall runs in a container, whose disk is Docker's (ADR-162). */
+  inContainer: boolean;
   /** `/proc/self/mountinfo` on Linux, `null` elsewhere: where the projects folder's files live. */
   mountTable: () => Promise<string | null>;
   /** The full path of `workspace.yaml`. */
@@ -108,6 +121,7 @@ export class Doctor {
     this.checks = {
       "projects-folder": (ctx) => this.projectsFolder(ctx),
       "projects-folder-storage": (ctx) => this.projectsFolderStorage(ctx),
+      "disk-space": (ctx) => this.diskSpace(ctx),
       "unpushed-work": (ctx) => this.unpushedWork(ctx),
       "workspace-file": () => this.workspaceFile(),
       git: () => this.git(),
@@ -182,6 +196,36 @@ export class Doctor {
       `The projects folder is a folder of your computer mounted into Linux (${storage.fsType} at ${storage.mountPoint}), so git and builds there are slow.`,
       'Clone the repos into the Linux file system instead, for example a Docker volume or a folder in your Linux home, and choose that folder in "Settings > Workspace".',
     );
+  }
+
+  /**
+   * The least free space of the disks of the projects folder and the home folder; a folder that cannot be read is left
+   * out (a missing projects folder is the other check's). Two folders with the same free and total space are taken
+   * to be on one disk and named together.
+   */
+  private async diskSpace({ projectsDir }: CheckContext): Promise<Outcome> {
+    const folders = [
+      { name: "the projects folder", path: projectsDir.ok ? projectsDir.value : null },
+      { name: "your home folder", path: this.deps.homeDir },
+    ];
+    const read = await Promise.all(
+      folders.map(async ({ name, path }) => ({ name, space: path === null ? null : await this.deps.diskSpace(path).catch(() => null) })),
+    );
+    const disks = new Map<string, { names: string[]; free: number }>();
+    for (const { name, space } of read) {
+      if (space === null) continue;
+      const key = `${space.free}/${space.total}`;
+      const disk = disks.get(key) ?? { names: [], free: space.free };
+      disk.names.push(name);
+      disks.set(key, disk);
+    }
+    const lowest = [...disks.values()].sort((a, b) => a.free - b.free)[0];
+    if (lowest === undefined) return null;
+    const where = lowest.names.join(" and ");
+    const fix = this.deps.inContainer ? DISK_FIX + CONTAINER_DISK_FIX : DISK_FIX;
+    if (lowest.free < VERY_LOW_DISK_BYTES) return fail(`Only ${gigabytes(lowest.free)} free on the disk of ${where}.`, fix);
+    if (lowest.free < LOW_DISK_BYTES) return warn(`Only ${gigabytes(lowest.free)} free on the disk of ${where}.`, fix);
+    return ok(`${gigabytes(lowest.free)} free on the disk of ${where}.`);
   }
 
   /**
