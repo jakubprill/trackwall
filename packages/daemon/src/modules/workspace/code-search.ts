@@ -1,10 +1,12 @@
 import {
   CODE_SEARCH_LINE_MAX_CHARS,
   CODE_SEARCH_MAX_CHARS,
+  type CodeFile,
   type CodeLine,
   type CodeMatch,
   type CodeQuery,
   type CodeSearchFailure,
+  type CodeSearchOutput,
   type CodeSearchRepo,
   type SearchCodeResult,
 } from "@trackwall/protocol";
@@ -15,12 +17,13 @@ import type { RepoEntry } from "./projects-dir.ts";
 /**
  * Code search in many repos of the projects folder (§4.5, ADR-40): `git grep` in each repo's HEAD commit, matches
  * joined in list order and cut to the limit. A repo git cannot search goes to `failed` and does not take away the
- * results of the others.
+ * results of the others. With `files` output only the files with matches and their counts come back (ADR-187).
  */
 
 export interface CodeSearchQuery extends CodeQuery {
-  /** Most matches in the result. */
+  /** Most matches in the result, or most files with `files` output. */
   limit: number;
+  output: CodeSearchOutput;
 }
 
 /** A line from `git grep`; `column: null` is a context line. */
@@ -35,6 +38,12 @@ interface GrepLine {
 export interface CodeSearchVcs {
   headCommit(dir: string): Promise<string | null>;
   grep(dir: string, commit: string, query: CodeQuery, maxBytes: number): Promise<{ lines: GrepLine[]; truncated: boolean }>;
+  grepCounts(
+    dir: string,
+    commit: string,
+    query: CodeQuery,
+    maxBytes: number,
+  ): Promise<{ files: { path: string; count: number }[]; truncated: boolean }>;
 }
 
 /**
@@ -51,7 +60,7 @@ const GREP_MAX_BYTES = 2 * 1024 * 1024;
 const CODE_SEARCH_BUDGET_MS = 60_000;
 
 type RepoOutcome =
-  | { kind: "ok"; searched: CodeSearchRepo; matches: CodeMatch[] }
+  | { kind: "ok"; searched: CodeSearchRepo; matches: CodeMatch[]; files: CodeFile[] }
   | { kind: "empty" }
   | { kind: "skipped"; repo: string }
   | { kind: "failed"; failure: CodeSearchFailure };
@@ -69,34 +78,43 @@ export async function searchCode(
   const outcomes = await mapLimit(entries, SEARCH_CONCURRENCY, async (entry): Promise<RepoOutcome> => {
     if (found >= query.limit || Date.now() >= deadline) return { kind: "skipped", repo: entry.id };
     const outcome = await searchRepo(entry, vcs, query);
-    if (outcome.kind === "ok") found += outcome.matches.length;
+    if (outcome.kind === "ok") found += outcome.matches.length + outcome.files.length;
     return outcome;
   });
   return joinOutcomes(outcomes, query.limit);
 }
 
-/** Matches of all repos in list order, within `limit` and `CODE_SEARCH_MAX_CHARS`. */
+/** Matches (or files) of all repos in list order, within `limit` and `CODE_SEARCH_MAX_CHARS`. */
 function joinOutcomes(outcomes: readonly RepoOutcome[], limit: number): SearchCodeResult {
-  const result: SearchCodeResult = { matches: [], truncated: false, searched: [], failed: [], skipped: [] };
+  const result: SearchCodeResult = { matches: [], files: [], truncated: false, searched: [], failed: [], skipped: [] };
   let chars = 0;
+  // One character budget for the whole result, whichever repo the line text comes from.
+  const fits = (size: number) => {
+    chars += size;
+    return chars <= CODE_SEARCH_MAX_CHARS;
+  };
   for (const outcome of outcomes) {
     if (outcome.kind === "failed") result.failed.push(outcome.failure);
     if (outcome.kind === "skipped") result.skipped.push(outcome.repo);
     result.truncated ||= outcome.kind === "skipped";
     if (outcome.kind !== "ok") continue;
-    const searched = { ...outcome.searched };
-    for (const match of outcome.matches) {
-      chars += lineChars(match);
-      if (result.matches.length >= limit || chars > CODE_SEARCH_MAX_CHARS) {
-        searched.truncated = true;
-        break;
-      }
-      result.matches.push(match);
-    }
+    const complete =
+      takeWithin(outcome.matches, result.matches, limit, (match) => fits(lineChars(match))) &&
+      takeWithin(outcome.files, result.files, limit, (file) => fits(file.path.length));
+    const searched = { ...outcome.searched, truncated: outcome.searched.truncated || !complete };
     result.searched.push(searched);
     result.truncated ||= searched.truncated;
   }
   return result;
+}
+
+/** Appends `items` to `into` while it holds fewer than `limit` and each `fits`; false when an item was left out. */
+function takeWithin<T>(items: readonly T[], into: T[], limit: number, fits: (item: T) => boolean): boolean {
+  for (const item of items) {
+    if (!fits(item) || into.length >= limit) return false;
+    into.push(item);
+  }
+  return true;
 }
 
 function lineChars(match: CodeMatch): number {
@@ -107,14 +125,30 @@ async function searchRepo(entry: RepoEntry, vcs: CodeSearchVcs, query: CodeSearc
   try {
     const commit = await vcs.headCommit(entry.path);
     if (commit === null) return { kind: "empty" };
-    const { lines, truncated } = await vcs.grep(entry.path, commit, query, GREP_MAX_BYTES);
-    // More than `limit` matches of one repo never reach the result, so they are not built at all.
-    const matches = withContext(entry.id, lines, query.context, query.limit + 1);
-    const cut = matches.length > query.limit;
-    return { kind: "ok", searched: { repo: entry.id, commit, truncated: truncated || cut }, matches: matches.slice(0, query.limit) };
+    const found = query.output === "files" ? await repoFiles(entry, vcs, commit, query) : await repoMatches(entry, vcs, commit, query);
+    return { kind: "ok", ...found, searched: { repo: entry.id, commit, truncated: found.truncated } };
   } catch (err) {
     return { kind: "failed", failure: { repo: entry.id, message: messageOf(err) } };
   }
+}
+
+interface RepoFound {
+  matches: CodeMatch[];
+  files: CodeFile[];
+  truncated: boolean;
+}
+
+async function repoMatches(entry: RepoEntry, vcs: CodeSearchVcs, commit: string, query: CodeSearchQuery): Promise<RepoFound> {
+  const { lines, truncated } = await vcs.grep(entry.path, commit, query, GREP_MAX_BYTES);
+  // More than `limit` matches of one repo never reach the result, so they are not built at all.
+  const matches = withContext(entry.id, lines, query.context, query.limit + 1);
+  return { matches: matches.slice(0, query.limit), files: [], truncated: truncated || matches.length > query.limit };
+}
+
+async function repoFiles(entry: RepoEntry, vcs: CodeSearchVcs, commit: string, query: CodeSearchQuery): Promise<RepoFound> {
+  const { files, truncated } = await vcs.grepCounts(entry.path, commit, query, GREP_MAX_BYTES);
+  const found = files.slice(0, query.limit).map((f) => ({ repo: entry.id, path: f.path, matches: f.count }));
+  return { matches: [], files: found, truncated: truncated || files.length > query.limit };
 }
 
 /**

@@ -20,8 +20,6 @@ import {
   MCP_INSTRUCTIONS,
   mcpTools,
   RepoCardResult,
-  SearchCodeResult,
-  SearchCommitsResult,
   Subgraph,
   WhoCallsResult,
   workspaceApi,
@@ -270,58 +268,61 @@ describe("MCP server over Streamable HTTP", () => {
     await client.close();
   });
 
-  test("search_code returns matches with context, with tags only from repos with every one of them, and an unknown repo is not_found", async () => {
+  test("search_code answers with grep-like text only, with tags only from repos with every one of them, and an unknown repo is not_found", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
-    const search = async (args: Record<string, unknown>) =>
-      (await client.callTool({ name: "search_code", arguments: args })).structuredContent;
-    const head = gitIn(orders, "rev-parse", "HEAD").trim();
+    const call = async (args: Record<string, unknown>) => {
+      const result = await client.callTool({ name: "search_code", arguments: args });
+      return { content: result.content, structured: result.structuredContent };
+    };
+    const text = async (args: Record<string, unknown>) => (await call(args)).content;
+    const at = `@${gitIn(orders, "rev-parse", "HEAD").trim().slice(0, 12)}`;
 
-    // By default a fixed string, case-sensitive, with two context lines.
-    expect(SearchCodeResult.parse(await search({ pattern: "BFF" }))).toEqual({
-      matches: [
-        {
-          repo: "orders-bff",
-          path: "README.md",
-          line: 3,
-          column: 1,
-          text: "BFF for the shop.",
-          before: [
-            { line: 1, text: "# Orders" },
-            { line: 2, text: "" },
-          ],
-          after: [],
-        },
-      ],
-      truncated: false,
-      searched: [{ repo: "orders-bff", commit: head, truncated: false }],
-      failed: [],
-      skipped: [],
+    // By default a fixed string, case-sensitive, without context lines; no JSON, which Copilot CLI would add after the text.
+    expect(await call({ pattern: "BFF" })).toEqual({
+      content: [{ type: "text", text: `## orders-bff ${at}\n### README.md\n3:BFF for the shop.\nSearched 1 repo; 1 with matches.` }],
+      structured: undefined,
     });
-    const searched = async (tags: string[]) => SearchCodeResult.parse(await search({ pattern: "x", tags })).searched.map((r) => r.repo);
-    expect(await searched(["java", "bff"])).toEqual(["orders-bff"]);
-    expect(await searched(["frontend"])).toEqual([]);
+    expect(await text({ pattern: "BFF", context: 2 })).toEqual([
+      { type: "text", text: `## orders-bff ${at}\n### README.md\n1-# Orders\n2-\n3:BFF for the shop.\nSearched 1 repo; 1 with matches.` },
+    ]);
+    expect(await text({ pattern: "r", output: "files", paths: ["README.md", "pom.xml"] })).toEqual([
+      { type: "text", text: `## orders-bff ${at}\nREADME.md (2)\npom.xml (1)\nSearched 1 repo; 1 with matches.` },
+    ]);
+    const nothing = (repos: number) => [
+      { type: "text" as const, text: `No matches.\nSearched ${repos} ${repos === 1 ? "repo" : "repos"}; 0 with matches.` },
+    ];
+    expect(await text({ pattern: "no such text anywhere" })).toEqual(nothing(1));
+    expect(await text({ pattern: "no such text anywhere", tags: ["java", "bff"] })).toEqual(nothing(1));
+    expect(await text({ pattern: "no such text anywhere", tags: ["frontend"] })).toEqual(nothing(0));
+    expect(await text({ pattern: "no such text anywhere", tags: [] })).toEqual(nothing(1));
     const unknown = await client.callTool({ name: "search_code", arguments: { pattern: "x", repos: ["missing"] } });
     expect(unknown.content).toEqual([{ type: "text", text: 'not_found: no repo "missing" in the projects folder' }]);
-    // A repo outside the tags does not hide an unknown id, and an empty tag list is no filter.
+    // A repo outside the tags does not hide an unknown id.
     const unknownTagged = await client.callTool({ name: "search_code", arguments: { pattern: "x", repos: ["missing"], tags: ["java"] } });
     expect(unknownTagged.isError).toBe(true);
-    expect(await searched([])).toEqual(["orders-bff"]);
     // A newline would make git search for every line of the pattern separately.
     const multiline = await client.callTool({ name: "search_code", arguments: { pattern: "BFF\nfor" } });
     expect(multiline.isError).toBe(true);
     await client.close();
   });
 
-  test("search_commits finds commits by message in the history of every repo, and the tag filter and an unknown repo work as in search_code", async () => {
+  test("search_commits answers with a line per commit and its files, and the tag filter and an unknown repo work as in search_code", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
-    const search = async (args: Record<string, unknown>) =>
-      SearchCommitsResult.parse((await client.callTool({ name: "search_commits", arguments: args })).structuredContent);
+    const text = async (args: Record<string, unknown>) => (await client.callTool({ name: "search_commits", arguments: args })).content;
+    const hash = gitIn(orders, "rev-parse", "HEAD").trim();
+    const [author, day] = gitIn(orders, "log", "-1", "--format=%an%x00%cI").trim().split("\0");
 
-    const found = await search({ message: "first" });
-    expect(found.commits.map((c) => [c.repo, c.hash, c.subject, c.files])).toEqual([
-      ["orders-bff", gitIn(orders, "rev-parse", "HEAD").trim(), "first commit", ["README.md", "pom.xml", "src/app.ts"]],
+    expect(await text({ message: "first" })).toEqual([
+      {
+        type: "text",
+        text:
+          `orders-bff ${hash.slice(0, 12)} ${day?.slice(0, 10)} ${author}: first commit\n` +
+          "  README.md\n  pom.xml\n  src/app.ts\nSearched 1 repo; 1 with commits.",
+      },
     ]);
-    expect((await search({ text: "x", tags: ["frontend"] })).searched).toEqual([]);
+    expect(await text({ text: "x", tags: ["frontend"] })).toEqual([
+      { type: "text", text: "No commits found.\nSearched 0 repos; 0 with commits." },
+    ]);
     const unknown = await client.callTool({ name: "search_commits", arguments: { repos: ["missing"] } });
     expect(unknown.content).toEqual([{ type: "text", text: 'not_found: no repo "missing" in the projects folder' }]);
     const badDate = await client.callTool({ name: "search_commits", arguments: { since: "last week" } });

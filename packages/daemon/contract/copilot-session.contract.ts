@@ -338,6 +338,21 @@ describe("a session of the real Copilot CLI", () => {
     expect(hookRecords(daemon.home, id).map((r) => r.event)).not.toContain("notification");
   });
 
+  test("a Trackwall tool without structuredContent reaches the model as its text alone: search_code as grep-like lines", async () => {
+    const { id, window } = await startSession();
+
+    model.reply(
+      { tool: copilotToolName(mcpTools.searchCode.name), arguments: { pattern: "nothing like this anywhere" } },
+      { text: "None." },
+    );
+    window.attachment.input("search the code\r");
+    await endOfTurn(id);
+
+    // Copilot CLI 1.0.103 adds a tool's structuredContent after its text when the two differ, so search_code returns
+    // the text alone (ADR-187); with it, the JSON came after the text and the model read the result twice.
+    expect(model.requests().at(-1)?.toolResults).toEqual(["No matches.\nSearched 1 repo; 0 with matches."]);
+  });
+
   // The session terminal in the UI copies this text to the clipboard (`osc52Text` in packages/ui/src/lib/terminal-copy.ts).
   test("text selected with a mouse drag is copied on Ctrl+C as OSC 52 to the clipboard target", async () => {
     const { agents } = daemon.facade;
