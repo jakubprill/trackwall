@@ -10,7 +10,7 @@ import {
   type WaitingMessage,
 } from "@trackwall/protocol";
 import { SendHorizontal, Square } from "lucide-react";
-import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AgentDialogCard } from "@/components/AgentDialogCard";
 import { AgentModeSwitch } from "@/components/AgentModeSwitch";
 import { ContextMeter } from "@/components/ContextMeter";
@@ -33,7 +33,7 @@ import {
   withSlashCommand,
 } from "@/lib/conversation";
 import { daemonSocket } from "@/lib/daemon-socket";
-import { type DiffPick, readDiffPanelOpen, saveDiffPanelOpen, shownDiff } from "@/lib/diff-panel";
+import { type DiffPick, shownDiff } from "@/lib/diff-panel";
 import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
 import { inTurn, isLive } from "@/lib/session-state";
 import { browserTimers } from "@/lib/timers";
@@ -66,7 +66,9 @@ export function ConversationView({ conn, session, selected }: { conn: Connection
   const list = useRef<HTMLDivElement>(null);
   const following = useRef(true);
   const id = session.id;
-  const diff = useDiffPanel();
+  // The diff panel: closed in every new view, open once the user picks a change, with the file they picked.
+  const [diffOpen, setDiffOpen] = useState(false);
+  const [diffPick, setDiffPick] = useState<DiffPick | null>(null);
 
   useEffect(() => {
     let socket: WebSocket | undefined;
@@ -132,7 +134,12 @@ export function ConversationView({ conn, session, selected }: { conn: Connection
   const live = session.run.kind === "running";
   const working = inTurn(session);
   const ended = !isLive(session);
-  const shown = diff.open ? shownDiff(conversationTurns(entries), diff.pick) : null;
+  const turns = useMemo(() => conversationTurns(entries), [entries]);
+  const shown = useMemo(() => (diffOpen ? shownDiff(turns, diffPick) : null), [diffOpen, turns, diffPick]);
+  const showDiff = (pick: DiffPick) => {
+    setDiffPick(pick);
+    setDiffOpen(true);
+  };
   return (
     // The container of the `@4xl:` queries that show the diff panel and the "Show diff" buttons only when wide.
     <div className="@container flex min-h-0 flex-1">
@@ -153,11 +160,11 @@ export function ConversationView({ conn, session, selected }: { conn: Connection
           <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-5 px-4 py-4">
             <ConversationEntries
               conn={conn}
-              entries={entries}
+              turns={turns}
               waiting={live ? waiting : []}
               working={working && !session.dialog}
               shownDiff={shown && { turn: shown.turn, path: shown.file.path }}
-              onShowDiff={diff.show}
+              onShowDiff={showDiff}
             />
           </div>
         </div>
@@ -177,35 +184,16 @@ export function ConversationView({ conn, session, selected }: { conn: Connection
         )}
         {live && <Composer conn={conn} session={id} working={working} focused={selected && !keyboardElsewhere} commands={info.commands} />}
       </div>
-      {diff.open && (
+      {diffOpen && (
         <ConversationDiffPanel
           shown={shown}
-          onPick={(path) => shown && diff.show({ turn: shown.turn, path })}
-          onClose={diff.close}
+          onPick={(path) => shown && showDiff({ turn: shown.turn, path })}
+          onClose={() => setDiffOpen(false)}
           className="hidden w-1/2 @4xl:flex"
         />
       )}
     </div>
   );
-}
-
-/** Whether the diff panel is open, remembered in this browser profile, and the file the user picked for it. */
-function useDiffPanel() {
-  const [open, setOpen] = useState(() => readDiffPanelOpen(() => window.localStorage));
-  const [pick, setPick] = useState<DiffPick | null>(null);
-  const toggle = (next: boolean) => {
-    setOpen(next);
-    saveDiffPanelOpen(() => window.localStorage, next);
-  };
-  return {
-    open,
-    pick,
-    show: (next: DiffPick) => {
-      setPick(next);
-      toggle(true);
-    },
-    close: () => toggle(false),
-  };
 }
 
 /**

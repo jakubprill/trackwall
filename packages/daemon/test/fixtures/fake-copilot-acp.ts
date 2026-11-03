@@ -11,7 +11,8 @@
  * (one from the terminal mode with nothing to replay), and an id without one is error -32002.
  *
  * A prompt that starts with `Edit ` asks to edit `README.md` in its working directory instead of running the command,
- * and its result carries the change as `git diff` text, as Copilot CLI's edit tool does; the file stays as it is.
+ * and its input and result carry the change as `git diff` text, as Copilot CLI's edit tool does in the probe of ADR-107
+ * (`test/acp-tool-call.test.ts` has the same shapes); the file stays as it is.
  *
  * A prompt that starts with `/review` is an automatic review (ADR-182): the agent asks to run its shell command, then
  * answers with one issue in the format of Copilot CLI's review agent on the first added line of the diff file the prompt
@@ -35,20 +36,25 @@ export const FAKE_ACP_COMMAND = "echo made-by-agent";
 /** The line a prompt that starts with `Edit ` adds to `README.md`, after its first line. */
 export const FAKE_ACP_EDIT_LINE = "Edited by the agent.";
 
+/** A tool the fake calls, as `tool_call` and `session/request_permission` name it. */
+type FakeToolCall = { title: string; kind: string; rawInput: Record<string, string>; locations?: { path: string }[] };
+
+/** The shell command every turn runs, as it is called and what it gives back. */
+const SHELL_TOOL: { call: FakeToolCall; result: Record<string, unknown> } = {
+  call: { title: "Make a file", kind: "execute", rawInput: { command: FAKE_ACP_COMMAND, description: "Make a file" } },
+  result: { content: [toolText("made-by-agent\n")] },
+};
+
 /**
  * The tool of a turn, as it is called and what it gives back: the shell command, or the edit of `README.md` for a
  * prompt that starts with `Edit `.
  */
-function turnTool(prompt: string) {
-  if (!prompt.startsWith("Edit "))
-    return {
-      call: { title: "Make a file", kind: "execute", rawInput: { command: FAKE_ACP_COMMAND, description: "Make a file" } },
-      result: { content: [toolText("made-by-agent\n")] },
-    };
+function turnTool(prompt: string): typeof SHELL_TOOL {
+  if (!prompt.startsWith("Edit ")) return SHELL_TOOL;
   const path = join(process.cwd(), "README.md");
   const diff = `diff --git a/README.md b/README.md\n--- a/README.md\n+++ b/README.md\n@@ -1,1 +1,2 @@\n # shop\n+${FAKE_ACP_EDIT_LINE}\n`;
   return {
-    call: { title: "Edit file", kind: "edit", rawInput: { path, diff }, locations: [{ path }] },
+    call: { title: "Edit file", kind: "edit", rawInput: { fileName: path, diff }, locations: [{ path }] },
     result: { content: [toolText("File edited.")], rawOutput: { content: "File edited.", detailedContent: diff } },
   };
 }
@@ -205,7 +211,7 @@ export function serveAcp(o: FakeAcpOptions): void {
 
   async function review(sessionId: string, text: string, turn: { end: (stopReason: string) => void; cancelled: boolean }): Promise<void> {
     if (process.env.FAKE_COPILOT_REVIEW_WAIT !== undefined) return;
-    const allowed = o.allowAllTools || (await permission(sessionId, `call_${++calls}_0`, turnTool("/review").call));
+    const allowed = o.allowAllTools || (await permission(sessionId, `call_${++calls}_0`, SHELL_TOOL.call));
     if (turn.cancelled) return;
     const diffFile = /in the file `([^`]+)`/.exec(text)?.[1] ?? "";
     const added = firstAddedLine(existsSync(diffFile) ? readFileSync(diffFile, "utf8") : "");
@@ -224,7 +230,7 @@ export function serveAcp(o: FakeAcpOptions): void {
     turn.end("end_turn");
   }
 
-  async function permission(sessionId: string, toolCallId: string, tool: ReturnType<typeof turnTool>["call"]): Promise<boolean> {
+  async function permission(sessionId: string, toolCallId: string, tool: FakeToolCall): Promise<boolean> {
     const answer = PermissionAnswer.parse(
       await ask("session/request_permission", {
         sessionId,

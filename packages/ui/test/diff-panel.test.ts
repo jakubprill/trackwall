@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ConversationEntry } from "@trackwall/protocol";
 import { conversationTurns } from "../src/lib/conversation.ts";
-import { readDiffPanelOpen, saveDiffPanelOpen, shownDiff, turnFiles } from "../src/lib/diff-panel.ts";
+import { shownDiff, turnFiles } from "../src/lib/diff-panel.ts";
 
 function edit(id: string, files: string[], patch: string): Extract<ConversationEntry, { kind: "tool" }> {
   return {
@@ -65,22 +65,18 @@ describe("the diff panel of the conversation view", () => {
     expect(shownDiff(conversationTurns([{ id: "agent-1", kind: "agent", text: "Nothing changed." }]), null)).toBeNull();
   });
 
-  test("the panel is closed until the user leaves it open, and a storage that fails reads as closed", () => {
-    const stored = new Map<string, string>();
-    const storage = () => ({
-      getItem: (key: string) => stored.get(key) ?? null,
-      setItem: (key: string, value: string) => void stored.set(key, value),
-    });
+  test("a call that changed two files is two files, named as the daemon named them though the patch has their absolute paths", () => {
+    const patch =
+      "diff --git a/home/me/shop/src/a.ts b/home/me/shop/src/a.ts\n--- a/home/me/shop/src/a.ts\n+++ b/home/me/shop/src/a.ts\n@@ -1,1 +1,1 @@\n-one\n+ONE\n" +
+      "diff --git a/home/me/shop/src/b.ts b/home/me/shop/src/b.ts\n--- a/home/me/shop/src/b.ts\n+++ b/home/me/shop/src/b.ts\n@@ -7,0 +7,1 @@\n+two\n";
 
-    expect(readDiffPanelOpen(storage)).toBe(false);
-    saveDiffPanelOpen(storage, true);
-    expect(readDiffPanelOpen(storage)).toBe(true);
-    saveDiffPanelOpen(storage, false);
-    expect(readDiffPanelOpen(storage)).toBe(false);
-    const broken = () => {
-      throw new Error("storage is off");
-    };
-    expect(readDiffPanelOpen(broken)).toBe(false);
-    expect(() => saveDiffPanelOpen(broken, true)).not.toThrow();
+    const files = turnFiles([edit("tool-1", ["src/a.ts", "src/b.ts"], patch)]);
+
+    expect(files.map((f) => [f.path, f.added, f.removed])).toEqual([
+      ["src/a.ts", 1, 1],
+      ["src/b.ts", 1, 0],
+    ]);
+    expect(files[1]?.changes[0]?.change.lines.map((l) => l.text)).toEqual(["@@ -7,0 +7,1 @@", "+two"]);
+    expect(turnFiles([edit("tool-2", [], patch)]).map((f) => f.path)).toEqual(["home/me/shop/src/a.ts", "home/me/shop/src/b.ts"]);
   });
 });

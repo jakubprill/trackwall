@@ -1,11 +1,11 @@
 import type { ConversationEntry } from "@trackwall/protocol";
-import { type ConversationTurn, PATCH_SHOWN_LINES } from "./conversation.ts";
-import { type Change, changeLines } from "./diff-lines.ts";
+import type { ConversationTurn } from "./conversation.ts";
+import { type Change, changeLines, DIFF_SHOWN_LINES, diffLines } from "./diff-lines.ts";
 
 /**
  * The diff panel of the conversation view (ADR-107): beside a wide conversation, the files one agent turn changed with
  * the diff of each. It is optional: closed until the user opens a file of a turn, closed again with ✕, and nothing in
- * the conversation waits for it. This browser profile remembers whether it is open, like the supervisor's view.
+ * the conversation waits for it. Each view starts with it closed.
  */
 
 type ToolEntry = Extract<ConversationEntry, { kind: "tool" }>;
@@ -18,23 +18,44 @@ export interface TurnFile {
   changes: { tool: string; change: Change }[];
 }
 
-/** The file of a tool call's change: its one file, or what it names when it has several or none. */
-export function changedFile(tool: Pick<ToolEntry, "files" | "title">): string {
-  return tool.files.length > 0 ? tool.files.join(", ") : tool.title;
+/**
+ * A tool call's change file by file. Copilot CLI's patch names a file by its absolute path without the leading slash
+ * (`a/home/me/shop/src/a.ts`), so a file goes by the name the daemon gave the call (relative to the session's working
+ * directory) that the patch's path ends with, and by the patch's path only when no name fits.
+ */
+export function toolFileChanges(tool: Pick<ToolEntry, "files" | "patch" | "patchCut">): { path: string; change: Change }[] {
+  if (tool.patch === "") return [];
+  const lines = diffLines(tool.patch, Number.POSITIVE_INFINITY).lines;
+  const starts = lines.filter((line) => line.kind === "file").map((line) => line.offset);
+  const pieces = starts.length === 0 ? [0] : starts;
+  return pieces.map((from, at) => {
+    const piece = tool.patch.slice(from, pieces[at + 1] ?? tool.patch.length);
+    const cut = tool.patchCut && at === pieces.length - 1;
+    const change = changeLines(piece, DIFF_SHOWN_LINES, cut);
+    return { path: fileOf(tool.files, change, pieces.length), change };
+  });
 }
 
-/** The files a turn's tool calls changed, in the order the turn first changed them; a call without a patch changed none. */
+function fileOf(files: readonly string[], change: Change, pieces: number): string {
+  const [only] = files;
+  if (pieces === 1 && files.length === 1 && only !== undefined) return only;
+  const path = change.lines.find((line) => line.anchor !== null)?.anchor?.path;
+  if (path === undefined) return files.join(", ");
+  return files.find((file) => path.endsWith(file.replaceAll("\\", "/"))) ?? path;
+}
+
+/** The files a turn's tool calls changed, in the order the turn first changed them. */
 export function turnFiles(steps: readonly ConversationEntry[]): TurnFile[] {
   const files = new Map<string, TurnFile>();
   for (const step of steps) {
-    if (step.kind !== "tool" || step.patch === "") continue;
-    const change = changeLines(step.patch, PATCH_SHOWN_LINES, step.patchCut);
-    const path = changedFile(step);
-    const file = files.get(path) ?? { path, added: 0, removed: 0, changes: [] };
-    file.added += change.added;
-    file.removed += change.removed;
-    file.changes.push({ tool: step.id, change });
-    files.set(path, file);
+    if (step.kind !== "tool") continue;
+    for (const { path, change } of toolFileChanges(step)) {
+      const file = files.get(path) ?? { path, added: 0, removed: 0, changes: [] };
+      file.added += change.added;
+      file.removed += change.removed;
+      file.changes.push({ tool: step.id, change });
+      files.set(path, file);
+    }
   }
   return [...files.values()];
 }
@@ -70,23 +91,4 @@ export function shownDiff(turns: readonly ConversationTurn[], pick: DiffPick | n
     if (file) return { turn: turn.id, files, file };
   }
   return null;
-}
-
-const OPEN_KEY = "trackwall.conversation.diffPanel";
-
-/** Closed unless the user left it open; a storage failure reads as closed. */
-export function readDiffPanelOpen(storage: () => Pick<Storage, "getItem">): boolean {
-  try {
-    return storage().getItem(OPEN_KEY) === "open";
-  } catch {
-    return false;
-  }
-}
-
-export function saveDiffPanelOpen(storage: () => Pick<Storage, "setItem">, open: boolean): void {
-  try {
-    storage().setItem(OPEN_KEY, open ? "open" : "closed");
-  } catch {
-    // The panel stays as it is in this window; only the next start of the app does not remember it.
-  }
 }

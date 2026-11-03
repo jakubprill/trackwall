@@ -1,6 +1,6 @@
 import { FileDiff, X } from "lucide-react";
+import { PatchLines } from "@/components/PatchLines";
 import { Button } from "@/components/ui/button";
-import { DIFF_LINE_CLASSES } from "@/lib/diff-lines";
 import type { DiffShown, TurnFile } from "@/lib/diff-panel";
 import { fileName } from "@/lib/file-name";
 import { cn } from "@/lib/utils";
@@ -65,7 +65,7 @@ function FilePill({ file, picked, onPick }: { file: TurnFile; picked: boolean; o
   );
 }
 
-/** The file's changes, each with the line numbers it has in the file: the new file's, or the old one's for a removed line. */
+/** The file's changes with line numbers, one after another when the turn changed it more than once. */
 function FileDiffLines({ file }: { file: TurnFile }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -75,15 +75,7 @@ function FileDiffLines({ file }: { file: TurnFile }) {
       <div className="min-h-0 flex-1 overflow-auto py-1.5">
         {file.changes.map(({ tool, change }) => (
           <div key={tool} className="border-b pb-1.5 last:border-b-0">
-            <pre className="font-mono text-xs leading-5">
-              {change.lines.map((line) => (
-                <div key={line.offset} className={cn("flex whitespace-pre", DIFF_LINE_CLASSES[line.kind])}>
-                  <span className="text-muted-foreground w-10 shrink-0 pr-2 text-right select-none">{line.anchor?.line ?? ""}</span>
-                  <span className="pr-3">{line.text || " "}</span>
-                </div>
-              ))}
-            </pre>
-            {change.more && <p className="text-muted-foreground px-3 pt-1.5 text-xs">The change is longer; showing its beginning.</p>}
+            <PatchLines change={change} lineNumbers />
           </div>
         ))}
       </div>
