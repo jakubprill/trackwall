@@ -8,6 +8,7 @@ import {
   SESSION_MESSAGE_BODY_MAX_BYTES,
   SessionMessage,
   SessionView,
+  TOOL_FILE_PATH_MAX,
   ToolPatch,
 } from "./conversation.ts";
 import { RunState } from "./procs.ts";
@@ -936,6 +937,15 @@ export const agentsApi = {
    */
   sessionJavaNavigation: endpoint("session-java-navigation", SessionRequest, JavaNavigationStatus.nullable()),
   openTaskEditor: endpoint("open-task-editor", TaskRequest, Done),
+  /**
+   * A file of a session's conversation in VS Code at a line (ADR-107): `path` as a tool call names it, inside the
+   * session's working directory.
+   */
+  openConversationFile: endpoint(
+    "open-conversation-file",
+    SessionRequest.extend({ path: z.string().min(1).max(TOOL_FILE_PATH_MAX), line: z.number().int().positive() }),
+    Done,
+  ),
   /**
    * Copies the files the repo root's `.worktreeinclude` names into the task's existing worktree again (ADR-61), with the
    * same rules as at its start; a file the worktree already has stays as it is. Only from the UI, never from MCP.

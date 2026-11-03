@@ -211,8 +211,8 @@ export interface AgentsDeps {
    * session is calling.
    */
   sessionMcpServer: (sessionToken: string) => HttpEndpoint;
-  /** Opens a directory in VS Code (a task's worktree). */
-  openEditor: (dir: string) => void;
+  /** Opens VS Code on a folder (a task's worktree), or on a file at `line` (a file of a conversation). */
+  openEditor: (path: string, line?: number) => void;
   /** Whether a board item is on the board (ADR-133): a task or a proposal names only an existing one. */
   boardHas: (item: string) => Promise<boolean>;
   /** The workspace knowledge the user approved for a session in `repo` (`null`: in the projects folder), ADR-170. */
@@ -937,6 +937,11 @@ export class Agents {
 
   openTaskEditor(id: string): void {
     this.#tasks.openEditor(id);
+  }
+
+  /** A file of a session's conversation in VS Code at `line` (ADR-107), only inside the session's working directory. */
+  openConversationFile(id: string, path: string, line: number): void {
+    this.#deps.openEditor(this.#conversationOf(id).fileOf(path), line);
   }
 
   /**
