@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { relative } from "node:path";
 import {
   CONVERSATION_TEXT_MAX,
@@ -26,9 +27,26 @@ const DETAIL_LINES_MAX = 400;
 /** The most characters of a tool call's detail kept. */
 const DETAIL_CHARS_MAX = 64 * 1024;
 
+/**
+ * The names of a session's working directory a tool call's file can start with: as the daemon gave it, and as the
+ * system resolves it, since Copilot CLI names files from its resolved working directory (on macOS a temporary folder
+ * under `/var` is `/private/var`).
+ */
+export function workingDirectoryNames(cwd: string): string[] {
+  try {
+    const real = realpathSync(cwd);
+    return real === cwd ? [cwd] : [cwd, real];
+  } catch {
+    return [cwd];
+  }
+}
+
 /** The files a tool call works on, once each, relative to the session's working directory when inside it. */
-export function toolCallFiles(toolCall: Pick<ToolCall, "locations">, cwd: string): string[] {
-  const paths = (toolCall.locations ?? []).map(({ path }) => (path !== cwd && isInside(cwd, path) ? relative(cwd, path) : path));
+export function toolCallFiles(toolCall: Pick<ToolCall, "locations">, cwdNames: readonly string[]): string[] {
+  const paths = (toolCall.locations ?? []).map(({ path }) => {
+    const cwd = cwdNames.find((name) => path !== name && isInside(name, path));
+    return cwd === undefined ? path : relative(cwd, path);
+  });
   return [...new Set(paths)].slice(0, TOOL_FILES_MAX).map((path) => path.slice(0, TOOL_FILE_PATH_MAX));
 }
 

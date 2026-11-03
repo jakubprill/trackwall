@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { toolCallFiles, toolCallLines, toolCallPatch, toolCallSubagent } from "../src/modules/agents/acp-tool-call.ts";
+import {
+  toolCallFiles,
+  toolCallLines,
+  toolCallPatch,
+  toolCallSubagent,
+  workingDirectoryNames,
+} from "../src/modules/agents/acp-tool-call.ts";
 
 const text = (t: string) => ({ type: "text" as const, text: t });
 const CWD = join("/", "repo");
@@ -42,14 +50,29 @@ describe("the files of a tool call", () => {
     const inside = join(CWD, "src", "a.ts");
     const outside = join("/", "elsewhere", "b.ts");
 
-    expect(toolCallFiles({ locations: [{ path: inside }, { path: outside }, { path: inside }] }, CWD)).toEqual([
+    expect(toolCallFiles({ locations: [{ path: inside }, { path: outside }, { path: inside }] }, [CWD])).toEqual([
       join("src", "a.ts"),
       outside,
     ]);
   });
 
+  test("a file named from the working directory's resolved path, as Copilot CLI names it on macOS, is relative to it too", () => {
+    const folder = mkdtempSync(join(realpathSync(tmpdir()), "tw-cwd-"));
+    const real = join(folder, "shop");
+    const link = join(folder, "linked-shop");
+    mkdirSync(real);
+    symlinkSync(real, link, "junction");
+    try {
+      expect(workingDirectoryNames(link)).toEqual([link, real]);
+      expect(workingDirectoryNames(real)).toEqual([real]);
+      expect(toolCallFiles({ locations: [{ path: join(real, "README.md") }] }, workingDirectoryNames(link))).toEqual(["README.md"]);
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
+  });
+
   test("a tool without locations works on no files", () => {
-    expect(toolCallFiles({}, CWD)).toEqual([]);
+    expect(toolCallFiles({}, [CWD])).toEqual([]);
   });
 });
 

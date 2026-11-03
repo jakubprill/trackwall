@@ -7,7 +7,7 @@ const CWD = join("/", "repo");
 
 describe("the conversation built from ACP updates", () => {
   test("message chunks join into one entry until the other side speaks or a tool runs", () => {
-    const conversation = new AcpConversation(CWD);
+    const conversation = new AcpConversation([CWD]);
     conversation.said("Check the build");
     conversation.apply({ sessionUpdate: "agent_message_chunk", content: text("Looking ") });
     conversation.apply({ sessionUpdate: "agent_message_chunk", content: text("at it.") });
@@ -34,7 +34,7 @@ describe("the conversation built from ACP updates", () => {
   });
 
   test("a tool call's updates change its entry, and apply returns the entry it changed", () => {
-    const conversation = new AcpConversation(CWD);
+    const conversation = new AcpConversation([CWD]);
     conversation.apply({
       sessionUpdate: "tool_call",
       toolCallId: "call_1",
@@ -72,7 +72,7 @@ describe("the conversation built from ACP updates", () => {
   });
 
   test("a new tool call with the id of an earlier one, as after a loaded conversation, is a new entry", () => {
-    const conversation = new AcpConversation(CWD);
+    const conversation = new AcpConversation([CWD]);
     conversation.apply({ sessionUpdate: "tool_call", toolCallId: "call_1_0", title: "Before the load", status: "completed" });
     conversation.apply({ sessionUpdate: "tool_call", toolCallId: "call_1_0", title: "After the load", status: "pending" });
     conversation.apply({ sessionUpdate: "tool_call_update", toolCallId: "call_1_0", status: "completed" });
@@ -84,7 +84,7 @@ describe("the conversation built from ACP updates", () => {
   });
 
   test("updates without text (an image, usage, a title) change nothing", () => {
-    const conversation = new AcpConversation(CWD);
+    const conversation = new AcpConversation([CWD]);
 
     expect(conversation.apply({ sessionUpdate: "agent_message_chunk", content: { type: "image" } })).toEqual({ entries: [], reset: false });
     expect(conversation.apply({ sessionUpdate: "session_info_update", title: "run echo" })).toEqual({ entries: [], reset: false });
@@ -92,7 +92,7 @@ describe("the conversation built from ACP updates", () => {
   });
 
   test("the oldest entries go beyond 1000, and then the views get the whole conversation again", () => {
-    const conversation = new AcpConversation(CWD);
+    const conversation = new AcpConversation([CWD]);
     for (let i = 1; i <= 1000; i++) conversation.said(`message ${i}`);
 
     const change = conversation.said("message 1001");
@@ -103,14 +103,14 @@ describe("the conversation built from ACP updates", () => {
   });
 
   test("the oldest entries go once the conversation holds over 4 Mi characters", () => {
-    const conversation = new AcpConversation(CWD);
+    const conversation = new AcpConversation([CWD]);
     for (let i = 0; i < 25; i++) conversation.said("x".repeat(200_000));
 
     expect(conversation.entries().length).toBe(20);
   });
 
   test("a tool's title and kind are cut to what the protocol allows", () => {
-    const conversation = new AcpConversation(CWD);
+    const conversation = new AcpConversation([CWD]);
     conversation.apply({ sessionUpdate: "tool_call", toolCallId: "call_1", title: "t".repeat(5000), kind: "k".repeat(500) });
 
     const [entry] = conversation.entries();
@@ -118,7 +118,7 @@ describe("the conversation built from ACP updates", () => {
   });
 
   test("clear forgets the conversation before a load replays it", () => {
-    const conversation = new AcpConversation(CWD);
+    const conversation = new AcpConversation([CWD]);
     conversation.said("first");
     conversation.clear();
     conversation.apply({ sessionUpdate: "user_message_chunk", content: text("first") });
@@ -127,7 +127,7 @@ describe("the conversation built from ACP updates", () => {
   });
 
   test("a message longer than an entry keeps its end", () => {
-    const conversation = new AcpConversation(CWD);
+    const conversation = new AcpConversation([CWD]);
     conversation.apply({ sessionUpdate: "agent_message_chunk", content: text("a".repeat(200_000)) });
     conversation.apply({ sessionUpdate: "agent_message_chunk", content: text("THE END") });
 
@@ -136,7 +136,7 @@ describe("the conversation built from ACP updates", () => {
     expect(entry?.kind === "agent" && entry.text.endsWith("THE END")).toBe(true);
   });
   test("the agent's thought chunks join into one thought entry, apart from its answer", () => {
-    const conversation = new AcpConversation(CWD);
+    const conversation = new AcpConversation([CWD]);
     conversation.apply({ sessionUpdate: "agent_thought_chunk", content: text("The total ignores ") });
     conversation.apply({ sessionUpdate: "agent_thought_chunk", content: text("discounts.") });
     conversation.apply({ sessionUpdate: "agent_message_chunk", content: text("Fixing the total.") });
@@ -148,7 +148,7 @@ describe("the conversation built from ACP updates", () => {
   });
 
   test("an edit's entry has its file relative to the working directory, and its change once the tool ran", () => {
-    const conversation = new AcpConversation(CWD);
+    const conversation = new AcpConversation([CWD]);
     const file = join(CWD, "src", "total.ts");
     conversation.apply({
       sessionUpdate: "tool_call",
@@ -186,7 +186,7 @@ describe("the conversation built from ACP updates", () => {
   });
 
   test("a subagent's tool call says the subagent's type and what it was asked, and its answer is the tool's detail", () => {
-    const conversation = new AcpConversation(CWD);
+    const conversation = new AcpConversation([CWD]);
     const rawInput = { description: "Find callers", prompt: "List every caller of the total.", agent_type: "explore", name: "finder" };
     conversation.apply({ sessionUpdate: "tool_call", toolCallId: "t1", title: "Find callers", kind: "other", status: "pending", rawInput });
     conversation.apply({
