@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Conversation view for reviewing changes</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<style>
+/* The conversation view as a review tool for a frontend developer: the agent's plan above the conversation, the files a
+   turn changed beside it with their diff, and three actions on a line. A narrow panel keeps the diff in the conversation. */
+body { background: var(--background); color: var(--foreground); font-family: var(--font-sans); line-height: 1.5; margin: 0; }
+.wrap { max-width: 1280px; margin: 0 auto; padding-block: 28px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 24px; }
+h1 { font-size: 22px; margin: 0; text-wrap: balance; }
+h2 { font-size: 15px; margin: 0; }
+.lede { color: var(--muted-foreground); max-width: 80ch; margin: 6px 0 0; }
+.hud { font-family: var(--font-mono); font-size: 11px; letter-spacing: var(--tracking-hud); text-transform: uppercase; color: var(--muted-foreground); }
+code { font-family: var(--font-mono); font-size: 12px; }
+.frame { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); overflow: hidden; display: flex; flex-direction: column; }
+.tabs { display: flex; gap: 18px; padding: 8px 14px 0; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--muted-foreground); }
+.tabs span { padding-bottom: 6px; } .tabs .on { color: var(--foreground); border-bottom: 2px solid var(--primary); }
+.plan { display: flex; align-items: center; gap: 14px; padding: 8px 14px; border-bottom: 1px solid var(--border); font-size: 12px; flex-wrap: wrap; }
+.plan ol { list-style: none; display: flex; gap: 14px; margin: 0; padding: 0; flex-wrap: wrap; }
+.plan li { display: flex; align-items: center; gap: 6px; color: var(--muted-foreground); }
+.plan li.done { color: var(--success); } .plan li.now { color: var(--foreground); font-weight: 600; }
+.plan li.now::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--primary); box-shadow: var(--shadow-glow-primary); }
+.split { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); min-height: 520px; }
+.talk { border-right: 1px solid var(--border); padding: 14px; display: flex; flex-direction: column; gap: 12px; font-size: 14px; }
+.you { align-self: flex-end; max-width: 80%; background: var(--secondary); border: 1px solid var(--border); border-radius: 8px 2px 8px 8px; padding: 8px 12px; }
+.turn { border-left: 2px solid var(--accent); padding-left: 12px; display: flex; flex-direction: column; gap: 8px; }
+.file { display: flex; align-items: center; gap: 8px; background: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 12px; font-family: var(--font-mono); }
+.file.sel { border-color: var(--primary); }
+.file span:first-child { flex-grow: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ok { color: var(--success); } .bad { color: var(--destructive); } .run { color: var(--warning); }
+.quote { border-left: 2px solid var(--primary); padding: 2px 8px; font-family: var(--font-mono); font-size: 12px; color: var(--muted-foreground); }
+.box { margin-top: auto; border: 1px solid var(--input); border-radius: 6px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted-foreground); }
+.side { display: flex; flex-direction: column; min-width: 0; }
+.files { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.files span { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; color: var(--muted-foreground); }
+.files span.on { color: var(--primary); border-color: var(--primary); }
+.head { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 12px; flex-wrap: wrap; }
+.head b { font-family: var(--font-mono); font-weight: 500; flex-grow: 1; }
+button { font: inherit; font-size: 12px; border-radius: 6px; padding: 3px 10px; border: 1px solid var(--border); background: transparent; color: var(--foreground); }
+.diff { font-family: var(--font-mono); font-size: 12px; display: flex; flex-direction: column; padding: 6px 0; overflow-x: auto; }
+.diff > div { display: grid; grid-template-columns: 40px 1fr; white-space: pre; }
+.diff i { font-style: normal; color: var(--muted-foreground); text-align: right; padding-right: 10px; }
+.diff span { padding: 0 10px; }
+.hunk span { color: var(--primary); } .ctx span { color: var(--muted-foreground); }
+.add { background: color-mix(in oklch, var(--success) 10%, transparent); } .add span { color: var(--success); }
+.del { background: color-mix(in oklch, var(--destructive) 10%, transparent); } .del span { color: var(--destructive); }
+.line-sel { outline: 1px solid var(--primary); }
+.diff > .actions { display: flex; white-space: normal; gap: 6px; padding: 6px 12px 6px 50px; flex-wrap: wrap; }
+.actions button.main { background: var(--primary); color: var(--primary-foreground); border-color: transparent; }
+.diff > .comment { white-space: normal; margin: 0 12px 8px 50px; border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.note { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); padding: 12px 14px; font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
+.note p { margin: 0; color: var(--muted-foreground); }
+.narrow { max-width: 420px; }
+@media (max-width: 860px) { .split { grid-template-columns: minmax(0, 1fr); } .talk { border-right: 0; border-bottom: 1px solid var(--border); } }
+</style>
+<div class="wrap">
+  <header>
+    <div class="hud">Sessions // conversation view // review</div>
+    <h1>The conversation view as the place to review the agent's changes</h1>
+    <p class="lede">For a frontend developer the work is in the diffs. A wide panel puts the files the turn changed beside the conversation, the agent's plan sits above both, and a line of a diff takes a review comment, opens in VS Code or goes into the message as a quote. A narrow panel (a grid tile, the supervisor) keeps each change as a card in the conversation.</p>
+  </header>
+
+  <section class="frame" aria-labelledby="wide">
+    <div class="tabs"><span class="on" id="wide">Chat</span><span>Changes</span><span>Rounds</span><span>Impact</span><span>MCP calls</span></div>
+    <div class="plan" aria-label="The agent's plan">
+      <span class="hud">Plan 2 / 4</span>
+      <ol>
+        <li class="done">✓ Find where the total is computed</li>
+        <li class="done">✓ Apply discounts in total()</li>
+        <li class="now">Update CartSummary to show the discount</li>
+        <li>Run the cart tests</li>
+      </ol>
+    </div>
+    <div class="split">
+      <div class="talk">
+        <div class="you">The cart total ignores discounts. Fix it and show the discount in the summary.</div>
+        <div class="hud">Agent</div>
+        <div class="turn">
+          <div>The total never applied <code>discounts()</code>. Fixed in one place, and the summary now shows the discount line:</div>
+          <div class="file"><span>src/cart/total.ts</span><span class="ok">+2</span><span class="bad">−1</span></div>
+          <div class="file sel"><span>src/components/CartSummary.tsx</span><span class="ok">+6</span><span class="bad">−1</span></div>
+          <div class="file"><span class="run">▸ $ pnpm test cart</span><span class="run">running</span></div>
+        </div>
+        <div class="box">
+          <div class="quote">CartSummary.tsx:14 &lt;Row label="Discount" value={-discount} /&gt;</div>
+          <span>Why a negative value here instead of formatting it in Row?</span>
+          <span class="hud">Enter sends · the quote came from “Ask about this”</span>
+        </div>
+      </div>
+      <div class="side">
+        <div class="files" aria-label="Files this turn changed"><span>total.ts +2 −1</span><span class="on">CartSummary.tsx +6 −1</span></div>
+        <div class="head"><b>src/components/CartSummary.tsx</b><button type="button">Open in VS Code</button><button type="button">Whole file</button></div>
+        <div class="diff">
+          <div class="hunk"><i></i><span>@@ -10,6 +10,11 @@ export function CartSummary({ items }) {</span></div>
+          <div class="ctx"><i>10</i><span>  const subtotal = sum(items);</span></div>
+          <div class="add"><i>11</i><span>+ const discount = discounts(items);</span></div>
+          <div class="ctx"><i>12</i><span>  return (</span></div>
+          <div class="ctx"><i>13</i><span>    &lt;Summary&gt;</span></div>
+          <div class="add line-sel"><i>14</i><span>+     &lt;Row label="Discount" value={-discount} /&gt;</span></div>
+          <div class="actions"><button type="button">Comment</button><button type="button">Open in VS Code at 14</button><button type="button" class="main">Ask about this</button></div>
+          <div class="del"><i>15</i><span>-     &lt;Row label="Total" value={subtotal} /&gt;</span></div>
+          <div class="add"><i>15</i><span>+     &lt;Row label="Total" value={subtotal - discount} /&gt;</span></div>
+          <div class="ctx"><i>16</i><span>    &lt;/Summary&gt;</span></div>
+          <div class="add"><i>17</i><span>+   // a discount over the subtotal is capped in discounts()</span></div>
+          <div class="comment"><span class="hud">Review comment · line 17</span><span>Add a test for a discount larger than the subtotal.</span><span class="hud">Goes to the agent with the review, once its turn ends</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="frame narrow" aria-labelledby="narrow">
+    <div class="plan"><span class="hud" id="narrow">Plan 2 / 4</span><span class="ok">Update CartSummary…</span></div>
+    <div class="talk" style="border-right:0">
+      <div class="hud">Agent · narrow panel</div>
+      <div class="turn">
+        <div class="file sel"><span>CartSummary.tsx</span><span class="ok">+6</span><span class="bad">−1</span></div>
+        <div class="diff" style="background:var(--muted);border-radius:6px">
+          <div class="add"><i>14</i><span>+ &lt;Row label="Discount" …/&gt;</span></div>
+          <div class="del"><i>15</i><span>- &lt;Row label="Total" …/&gt;</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="notes">
+    <div class="note"><h2>Plan</h2><p>The agent's plan as ACP sends it (to be confirmed with a contract test on Copilot CLI): done, current and waiting steps. Folded to the current step in a narrow panel.</p></div>
+    <div class="note"><h2>Files beside the conversation</h2><p>The files the selected turn changed, from the diffs of its tool calls; a file card in the conversation selects it. "Whole file" switches to the task's Changes for the full worktree diff.</p></div>
+    <div class="note"><h2>Actions on a line</h2><p>Comment: a review comment, the same as in Changes, delivered when the turn ends. Open in VS Code: the worktree file at that line. Ask about this: the line goes into the message box as a quote.</p></div>
+  </div>
+</div>
+</body>
+</html>
