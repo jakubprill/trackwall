@@ -57,6 +57,8 @@ export async function startRealCopilotDaemon(
   model: ScriptedModel,
   options: Partial<SessionApiOptions> = {},
   env: Record<string, string | undefined> = {},
+  /** The command the daemon runs for Copilot CLI's binary, such as the binary behind `acp-tap.ts`. */
+  wrap: (copilot: string) => string[] = (copilot) => [copilot],
 ) {
   const copilot = await copilotCli();
   const userEnv = (dirs: { home: string; projects: string }) =>
@@ -64,7 +66,7 @@ export async function startRealCopilotDaemon(
   const api = await startSessionApi(TOKEN, {
     ...ONE_REPO,
     ...options,
-    copilot: { command: [copilot], env: userEnv },
+    copilot: { command: wrap(copilot), env: userEnv },
   });
   return { ...api, copilot };
 }
