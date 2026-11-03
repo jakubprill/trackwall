@@ -177,9 +177,18 @@ export const TaskModel = z
 export const TaskApprovals = z.enum(["ask", "auto"]);
 export type TaskApprovals = z.infer<typeof TaskApprovals>;
 
-/** A task summary from its session (`report_result`, ADR-39): what it did and what is left, for the session that delegated the task. */
+/**
+ * A task summary from its session (`report_result`, ADR-39): what it did and what is left, for the session that delegated
+ * the task and as the merge request's description, which holds `MERGE_REQUEST_DESCRIPTION_MAX` characters together with
+ * the check steps and the verification verdict.
+ */
 export const TASK_SUMMARY_MAX = 4000;
 export const TaskSummaryText = z.string().trim().min(1).max(TASK_SUMMARY_MAX);
+/**
+ * The length a session is asked to aim for, in words, because a model keeps to a word count better than to characters;
+ * well under the limit, so that the check steps and the verdict still fit the merge request's description after it.
+ */
+export const TASK_SUMMARY_WORDS = 300;
 
 /**
  * How to check the change by hand (ADR-169): short steps with what the user should see, such as "Open /orders and press
