@@ -3,12 +3,19 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CONFIG_ENTRIES, WORKSPACE_KEYS } from "@trackwall/protocol";
 import { FEATURE_GROUPS, SIDEBAR } from "../.vitepress/sidebar.ts";
+import { TALK_PAGE_CLASS, TALK_PAGES } from "../.vitepress/talk-pages.ts";
 
 // Every feature page follows TEMPLATE.md, so "All features", the sidebar and llms.txt stay complete (ADR-56).
 const DOCS = join(import.meta.dir, "..");
 const featurePages = readdirSync(join(DOCS, "features")).filter((file) => file.endsWith(".md") && file !== "index.md");
 const guidePages = readdirSync(join(DOCS, "guide")).filter((file) => file.endsWith(".md"));
-const sitePages = ["index.md", "features/index.md", ...featurePages.map((f) => `features/${f}`), ...guidePages.map((f) => `guide/${f}`)];
+const sitePages = [
+  "index.md",
+  "features/index.md",
+  ...featurePages.map((f) => `features/${f}`),
+  ...guidePages.map((f) => `guide/${f}`),
+  ...TALK_PAGES,
+];
 const read = (path: string) => readFileSync(join(DOCS, path), "utf8");
 /** A field of a parsed YAML or JSON value, or undefined when the value is not an object. */
 const field = (value: unknown, key: string): unknown => (typeof value === "object" && value !== null ? Reflect.get(value, key) : undefined);
@@ -142,4 +149,39 @@ test("the install commands download the current version", () => {
 test("every page Settings › Files links to for a file or a key of workspace.yaml is a feature page", () => {
   const pages = [...Object.values(CONFIG_ENTRIES), ...Object.values(WORKSPACE_KEYS)].map((info) => `${info.docs}.md`);
   expect(pages.filter((page) => !featurePages.includes(page))).toEqual([]);
+});
+
+test("a talk page asks search engines and the site search to leave it out and has the talk's slides", () => {
+  for (const path of TALK_PAGES) {
+    const { fields } = frontmatter(path);
+    expect({ path, pageClass: fields.pageClass, search: fields.search, head: fields.head }).toEqual({
+      path,
+      pageClass: TALK_PAGE_CLASS,
+      search: false,
+      head: [["meta", { name: "robots", content: "noindex" }]],
+    });
+  }
+});
+
+test("only the talk pages link to each other, and nothing else on the site links to them", () => {
+  const talkLinks = (path: string) => [...read(path).matchAll(/\]\((\/(?:pl\/)?talk)\)/g)].map((m) => m[1]);
+  const linking = sitePages.filter((path) => !TALK_PAGES.includes(path) && talkLinks(path).length > 0);
+  const inSidebar = SIDEBAR.flatMap((entry) => entry.items ?? []).filter((item) => item.link?.endsWith("/talk"));
+  expect({ linking, inSidebar, english: talkLinks("talk.md"), polish: talkLinks("pl/talk.md") }).toEqual({
+    linking: [],
+    inSidebar: [],
+    english: ["/pl/talk"],
+    polish: ["/talk"],
+  });
+});
+
+test("the Polish talk has the slides of the English one, with the same numbers and times", () => {
+  const slides = (path: string) =>
+    [...read(path).matchAll(/<p class="slide-meta">(\d+) · [^·<]+ · (\d+:\d\d)/g)].map((m) => `${m[1]} ${m[2]}`);
+  const sections = (path: string) => read(path).match(/<section class="slide">/g)?.length ?? 0;
+  expect(slides("talk.md").length).toBe(sections("talk.md"));
+  expect({ slides: slides("pl/talk.md"), sections: sections("pl/talk.md") }).toEqual({
+    slides: slides("talk.md"),
+    sections: sections("talk.md"),
+  });
 });
