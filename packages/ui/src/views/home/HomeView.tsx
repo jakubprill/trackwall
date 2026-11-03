@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
-import { daemonAnswered, homeHasObject, homeModel } from "@/lib/home-model";
+import { daemonAnswered, homeDaemonRunning, homeHasObject, homeModel } from "@/lib/home-model";
 import { listNeedsSettings } from "@/lib/repo-status";
 import { GRAPH_PACE, REPO_LIST_PACE } from "@/lib/repo-watch";
 import type { SessionSelection } from "@/lib/session-entries";
@@ -40,6 +40,7 @@ const HomeCanvas = lazy(() => import("./HomeCanvas.tsx").then((m) => ({ default:
 export function HomeView({
   conn,
   runningLive,
+  eventsLost,
   repoWatch,
   sessions,
   onOpenInSessions,
@@ -50,6 +51,8 @@ export function HomeView({
   conn: Connection;
   /** Running mise tasks from the events; `undefined` for a moment after a connection change, and polled until then. */
   runningLive: LiveFeed<RunningMiseTask[]> | undefined;
+  /** The events connection to the daemon dropped and has not come back (`DaemonEvents.isLost`). */
+  eventsLost: boolean;
   /** Commits and repos added to the folder (ADR-63): the list and the graph are fetched again at once. */
   repoWatch: RepoWatchHandle;
   sessions: RemoteHandle<SessionList>;
@@ -71,7 +74,7 @@ export function HomeView({
   const [hovered, setHovered] = useState<HomeKey | null>(null);
   const [unavailable, setUnavailable] = useState<string>();
 
-  const daemonRunning = daemonAnswered(repos.error, repos.errorCode);
+  const daemonRunning = homeDaemonRunning({ answered: daemonAnswered(repos.error, repos.errorCode), eventsLost });
   const repoList = repos.data?.repos;
   const sessionList = sessions.data?.sessions;
   const model = useMemo(

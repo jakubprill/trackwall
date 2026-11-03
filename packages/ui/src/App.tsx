@@ -31,7 +31,7 @@ import { readSupervisorLayout, type SupervisorLayout, saveSupervisorLayout, unfo
 import { useAppMenu } from "@/lib/use-app-menu";
 import { useAppUpdate } from "@/lib/use-app-update";
 import { useConnection } from "@/lib/use-connection";
-import { useDaemonEvents } from "@/lib/use-daemon-events";
+import { useDaemonEvents, useDaemonLost } from "@/lib/use-daemon-events";
 import { useFileDrop } from "@/lib/use-file-drop";
 import { useJumpRequest } from "@/lib/use-jump-request";
 import { useRepoWatch } from "@/lib/use-repo-watch";
@@ -133,6 +133,7 @@ export function App() {
     }
   });
   const events = useDaemonEvents(conn);
+  const eventsLost = useDaemonLost(events);
   // The supervisor panel (ADR-58) is on the right of every view; unfolded (pinned or wide), it shows the supervisor's state all the time.
   const [supervisorLayout, setSupervisorLayout] = useState(() => readSupervisorLayout(() => window.localStorage));
   const chooseSupervisorLayout = useCallback((layout: SupervisorLayout) => {
@@ -253,6 +254,7 @@ export function App() {
                       <HomeView
                         conn={conn}
                         runningLive={runningLive}
+                        eventsLost={eventsLost}
                         repoWatch={repoWatch}
                         sessions={sessions}
                         onOpenInSessions={openInSessions}
