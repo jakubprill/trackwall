@@ -219,6 +219,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   }),
   route(terminalsApi.start, (f, b) => f.terminals.start(b)),
   route(terminalsApi.list, (f) => f.terminals.list()),
+  route(terminalsApi.files, (f, b) => f.folderFiles.list(b)),
   route(terminalsApi.close, async (f, b) => {
     await f.terminals.close(b.terminal);
     return null;

@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { lstat, open } from "node:fs/promises";
+import { type FileHandle, lstat, open } from "node:fs/promises";
 
 /**
  * Reading a small file a repo or an agent may have planted (`local-config` and `cards`, ADR-86): only a regular file,
@@ -13,6 +13,24 @@ const FLAGS = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NO
 
 /** The file's content; `undefined` when nothing is at `path`, and an error for a link, a non-regular file or one over the limit. */
 export async function readRegularFile(path: string, maxBytes: number): Promise<Buffer | undefined> {
+  const opened = await openRegularFile(path, maxBytes);
+  if (!opened) return undefined;
+  const { handle } = opened;
+  try {
+    const buffer = Buffer.alloc(maxBytes + 1);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    if (bytesRead > maxBytes) throw new Error(`${path} is larger than ${sizeLabel(maxBytes)}`);
+    return buffer.subarray(0, bytesRead);
+  } finally {
+    await handle.close();
+  }
+}
+
+/**
+ * The file opened for reading, with its size, under the same rules; the caller closes the handle. Also for a file
+ * streamed out rather than read whole (a download from a place's folder, ADR-187).
+ */
+export async function openRegularFile(path: string, maxBytes: number): Promise<{ handle: FileHandle; size: number } | undefined> {
   const before = await lstat(path).catch((err: NodeJS.ErrnoException) => {
     if (err.code === "ENOENT") return undefined;
     throw err;
@@ -27,12 +45,15 @@ export async function readRegularFile(path: string, maxBytes: number): Promise<B
     const opened = await handle.stat();
     if (!opened.isFile() || opened.ino !== before.ino || opened.dev !== before.dev)
       throw new Error(`${path} changed into something other than a regular file while it was read`);
-    if (opened.size > maxBytes) throw new Error(`${path} is larger than ${Math.round(maxBytes / 1024)} KB`);
-    const buffer = Buffer.alloc(maxBytes + 1);
-    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-    if (bytesRead > maxBytes) throw new Error(`${path} is larger than ${Math.round(maxBytes / 1024)} KB`);
-    return buffer.subarray(0, bytesRead);
-  } finally {
+    if (opened.size > maxBytes) throw new Error(`${path} is larger than ${sizeLabel(maxBytes)}`);
+    return { handle, size: opened.size };
+  } catch (err) {
     await handle.close();
+    throw err;
   }
+}
+
+/** A limit as people read it: KB up to a megabyte, MB above. */
+function sizeLabel(bytes: number): string {
+  return bytes < 1024 ** 2 ? `${Math.round(bytes / 1024)} KB` : `${Math.round(bytes / 1024 ** 2)} MB`;
 }

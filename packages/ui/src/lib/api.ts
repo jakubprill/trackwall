@@ -40,6 +40,20 @@ export function post<Req extends z.ZodType, Data extends z.ZodType>(
   });
 }
 
+/**
+ * An action whose answer is a file's bytes rather than `{ ok, data }` (`terminals/download`, ADR-187); a refusal still
+ * comes as the envelope and throws like `call`.
+ */
+export async function download(conn: Connection, path: string, body: unknown): Promise<Blob> {
+  const headers = new Headers({ "content-type": "application/json" });
+  if (conn.token) headers.set("authorization", `Bearer ${conn.token}`);
+  const res = await fetch(`${conn.baseUrl}${path}`, { method: "POST", headers, body: JSON.stringify(body) });
+  if (res.ok) return res.blob();
+  const envelope = ApiEnvelope.safeParse(await res.json().catch(() => undefined));
+  if (envelope.success && !envelope.data.ok) throw new ApiCallError(envelope.data.error.code, envelope.data.error.message);
+  throw new ApiCallError("bad_response", `unexpected response ${res.status} from ${path}`);
+}
+
 /** The API error code (`error.code`) when the error came from the daemon. */
 export function errorCode(err: unknown): CallErrorCode | undefined {
   return err instanceof ApiCallError ? err.code : undefined;
