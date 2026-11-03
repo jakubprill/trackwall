@@ -1,6 +1,7 @@
 import { countLabel } from "@trackwall/protocol";
 import { Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { fileName } from "@/lib/file-name";
 import type { TaskReview } from "@/lib/use-task-review";
 
 /**
@@ -49,9 +50,4 @@ export function ReviewBar({ review }: { review: TaskReview }) {
       {sentMessage && !sendError && <p className="text-muted-foreground text-xs">{sentMessage}</p>}
     </section>
   );
-}
-
-/** The last segment of a path with `/`: the list stays readable with deep Java packages, and the full path is in the tooltip. */
-function fileName(path: string): string {
-  return path.slice(path.lastIndexOf("/") + 1);
 }

@@ -13,6 +13,7 @@ import type { ReactNode } from "react";
 import { Surface } from "@/components/Surface";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { fileName } from "@/lib/file-name";
 import { edgeLabel, problemClient } from "@/lib/graph-labels";
 import type { EdgePair } from "@/lib/graph-layout";
 
@@ -183,11 +184,6 @@ function PairItem({ repo, edges, onSelect }: { repo: string; edges: GraphEdge[];
  */
 function evidenceText(e: EdgeEvidence): string {
   return e.repo === null ? `${fileName(e.path)} ${e.detail}` : `${e.repo}: ${evidenceLabel(e)} ${e.detail}`;
-}
-
-/** The last segment of a full Windows or macOS path (the UI has no `node:path`). */
-function fileName(path: string): string {
-  return path.split(/[\\/]/).pop() ?? path;
 }
 
 /** A list in a surface with the item count in the header and a sentence when it is empty. */
