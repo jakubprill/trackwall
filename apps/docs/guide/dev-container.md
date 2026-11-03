@@ -57,6 +57,7 @@ A `.devcontainer/devcontainer.json` that keeps the repos, Trackwall's state, the
 - `TRACKWALL_DEVCONTAINER_HOST_FOLDER` tells Trackwall which folder on your computer the container was opened from, so "Open in VS Code" opens the same kind of window as opening that folder in a container yourself, with the extensions and settings of this `devcontainer.json`. Without it, VS Code attaches to the running container without them. Use it when you open the container from a folder on Windows or macOS; from a folder inside WSL it may not open.
 - `shutdownAction` keeps the container running when you close its last VS Code window. Trackwall and its sessions live in the container, and by default VS Code stops the container with its last window, which stops every running session; "Open in VS Code" in Trackwall can replace or close that window too. The container then runs until you stop it in Docker or Rancher Desktop (`docker stop <container name>`), and its sessions keep working while no window is open. VS Code forwards port 7700 only while one of its windows is open on the container, so Trackwall's page and the desktop app reach it again when you open one; a session waiting for your approval waits until then.
 - Behind a proxy, set `HTTPS_PROXY` and `HTTP_PROXY` in `containerEnv` too, and keep `NO_PROXY` as above. A proxy that replaces certificates also needs its certificate in the image, and `NODE_EXTRA_CA_CERTS` pointing at it in `containerEnv`, because Copilot CLI does not read the system's certificates; the [doctor](/features/doctor) names the file when the image already has it.
+- The container's clock runs in UTC, so the times in logs, in builds and of new commits are in UTC rather than your time zone. Add your time zone to `containerEnv`, for example `"TZ": "Europe/Berlin"`, and rebuild the container. The time zone names come from the `tzdata` package, which the Dev Containers base images have; in an image of your own, install it if `date` in the container still says UTC.
 
 ## Start Trackwall
 
@@ -123,6 +124,31 @@ Copilot CLI in the container reaches an MCP server that runs on your computer at
 
 Tokens for such servers come in through [Environment from mise](/features/mise-environment) like on your computer. Follow that page's steps in the container to create the age key: it lands in `~/.config/mise`, which the `workspace-mise` volume keeps across rebuilds.
 
+## Back up the repos
+
+Commits you have not pushed, stashes and task worktrees live only in the `workspace-repos` volume. Before you remove the volume, reset Docker, or move to another computer, copy the volume into one file on your computer:
+
+1. Stop the container, so that neither Trackwall nor git changes the repos while they are copied: `docker stop <container name>`, or stop it in Docker or Rancher Desktop.
+2. On your computer, not in the container, in the folder where the file should go, run:
+
+   ```sh
+   docker run --rm -v workspace-repos:/repos:ro -v "${PWD}:/backup" debian:stable-slim tar czf /backup/workspace-repos.tar.gz -C /repos .
+   ```
+
+3. Start the container again.
+
+The command works the same in PowerShell, in a terminal of macOS and in WSL, but not in Git Bash, which rewrites the paths `/repos` and `/backup`. The volume is mounted read-only, so the backup cannot change your repos. The file holds everything in your repos, including files git ignores, such as a local `.env`, so keep it where you would keep the repos themselves.
+
+To put the backup into a volume, with the container stopped, run:
+
+```sh
+docker run --rm -v workspace-repos:/repos -v "${PWD}:/backup" debian:stable-slim tar xzf /backup/workspace-repos.tar.gz -C /repos
+```
+
+It creates the volume when it does not exist. Into a volume that already has repos, it writes over every file with the same name, so restore into a new, empty volume unless that is what you want.
+
+Trackwall's state (`workspace-trackwall`) and the Copilot CLI sign-in (`workspace-copilot`) are backed up the same way: replace both `workspace-repos` in the command, the volume's name and the file's name, so that each backup gets its own file.
+
 ## Good to know
 
 - In the browser alone there is no tray and no [Start at sign-in](/features/start-at-sign-in); for those, [use the desktop app](#use-the-desktop-app). The tab shows how many agents wait for you in its title and can show [notifications in the browser](/features/browser-notifications).
@@ -131,4 +157,4 @@ Tokens for such servers come in through [Environment from mise](/features/mise-e
 - The command from [Connect Copilot CLI](/guide/connect-copilot-cli) is a path inside the container, so it works for a Copilot CLI in the container, not on your computer.
 - To update without rebuilding, run `trackwall-container update <version>` in the container, for example `trackwall-container update 0.6.0`. It answers at once and does the rest in the background: it downloads that version from GitHub, checks that it was signed by Trackwall's release key, restarts Trackwall on it, and goes back to the version you had when the new one does not start within a minute. Running sessions stop and resume as after any restart. `logs/daemon.log` in Trackwall's state folder says how it went, and `trackwall-container address` gives the new address with its token. The update stays in the state volume; rebuilding the container returns to the version in the Feature's address unless you change `<version>` there too, which is the other way to update.
 - VS Code's port forward starts a program for every new connection, which can take a few seconds when the computer is busy or its security software checks every program that starts. The desktop app waits up to 10 seconds for Trackwall in a container before it says it lost the connection. If it still loses it while Trackwall in the container runs (inside the container `curl http://127.0.0.1:7700/api/health` answers at once), the forward is slower than that: close other work or ask whoever runs the security software to exclude `docker.exe`.
-- Repos with changes you have not pushed live only in the `workspace-repos` volume. Removing the volume, or "Reset to factory defaults" in Docker Desktop, deletes them. "Only in this container" on [Home](/features/home) and the [doctor](/features/doctor) list what is at stake.
+- Repos with changes you have not pushed live only in the `workspace-repos` volume. Removing the volume, or "Reset to factory defaults" in Docker Desktop, deletes them. "Only in this container" on [Home](/features/home) and the [doctor](/features/doctor) list what is at stake. [Back up the repos](#back-up-the-repos) before you remove the volume.

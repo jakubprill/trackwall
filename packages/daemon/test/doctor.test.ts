@@ -30,6 +30,9 @@ function fakeDeps(overrides: Partial<DoctorDeps>): DoctorDeps {
     projectsDir: async () => null,
     repoHosts: () => [],
     mountTable: async () => null,
+    diskSpace: async () => ({ disk: 1, free: 100 * 1024 ** 3, total: 200 * 1024 ** 3 }),
+    homeDir: tmpdir(),
+    inContainer: false,
     unpushedWork: async () => ({ inContainer: false, repos: [], unreadable: [] }),
     workspaceFile: join(tmpdir(), "trackwall-doctor-no-such-workspace.yaml"),
     workspaceKeys: () => ({ keys: [], unknown: [] }),
@@ -87,6 +90,7 @@ function doctorFacade(o: Setup) {
     userEnv: async () => ({ ...process.env, COPILOT_HOME: copilotHome, PATH: `${sandboxPrograms}${delimiter}${process.env.PATH ?? ""}` }),
     tlsProbe: async () => ({ kind: "ok" }),
     connectionProbe: o.connectionProbe,
+    diskSpace: async () => ({ disk: 1, free: 100 * 1024 ** 3, total: 200 * 1024 ** 3 }),
     log: () => {},
   });
   return { facade, home, projects, copilotHome };
@@ -146,6 +150,7 @@ describe("doctor", () => {
     const report = await facade.doctor.run();
     expect(report.checks.map((c) => [c.id, c.status])).toEqual([
       ["projects-folder", "ok"],
+      ["disk-space", "ok"],
       ["workspace-file", "ok"],
       ["git", "ok"],
       ["copilot-cli", "ok"],
@@ -166,6 +171,7 @@ describe("doctor", () => {
     const report = await facade.doctor.run();
     expect(report.checks.map((c) => [c.id, c.status])).toEqual([
       ["projects-folder", "fail"],
+      ["disk-space", "ok"],
       ["git", "ok"],
       ["copilot-cli", "fail"],
       ...sandboxRow,
@@ -173,7 +179,7 @@ describe("doctor", () => {
       ["mise", "warn"],
     ]);
     expect(report.checks[0]?.summary).toBe("No projects folder is set.");
-    expect(report.checks[2]?.summary).toBe("Copilot CLI (trackwall-test-no-copilot) not found in PATH.");
+    expect(report.checks.find((c) => c.id === "copilot-cli")?.summary).toBe("Copilot CLI (trackwall-test-no-copilot) not found in PATH.");
     expect(report.checks.find((c) => c.id === "mise")?.summary).toBe("mise: program trackwall-test-no-mise not found in PATH");
     expect(report.checks.every((c) => c.status === "ok" || (c.fix ?? "").length > 0)).toBe(true);
   });
@@ -293,6 +299,7 @@ describe("doctor", () => {
     expect(report.checkedAt).toBe(NOW.toISOString());
     expect(report.checks.map((c) => [c.id, c.status, c.summary])).toEqual([
       ["projects-folder", "fail", "No projects folder is set."],
+      ["disk-space", "ok", "100.0 GB free on the disk of your home folder."],
       ["git", "fail", "git: program git not found in PATH"],
       ["copilot-cli", "fail", "Copilot CLI: mise: broken install"],
       ["network", "ok", expect.stringMatching(/^github\.com and api\.githubcopilot\.com answer /)],
@@ -466,5 +473,70 @@ describe.skipIf(process.platform === "win32")("the doctor on a projects folder m
     expect(await storageCheck(`1590 1572 0:150 / / rw - ext4 /dev/vda1 rw`, local)).toBeUndefined();
     expect(await storageCheck(mountinfo, "/mnt/dev/no-such-folder")).toBeUndefined();
     expect(await storageCheck(null, local)).toBeUndefined();
+  });
+});
+
+describe("the doctor on free disk space", () => {
+  const GB = 1024 ** 3;
+
+  function diskCheck(o: {
+    projectsDir: string | null;
+    spaces: Record<string, { disk: number; free: number; total: number }>;
+    inContainer?: boolean;
+  }) {
+    const deps = fakeDeps({
+      projectsDir: async () => o.projectsDir,
+      homeDir: "/home/me",
+      inContainer: o.inContainer ?? false,
+      diskSpace: async (folder) => {
+        const space = o.spaces[folder];
+        if (space === undefined) throw new Error(`ENOENT: ${folder}`);
+        return space;
+      },
+    });
+    return new Doctor(deps).run().then((report) => report.checks.find((c) => c.id === "disk-space"));
+  }
+
+  test("plenty of space on one disk names both folders once", async () => {
+    const disk = { disk: 1, free: 52.4 * GB, total: 200 * GB };
+    expect(await diskCheck({ projectsDir: "/work", spaces: { "/work": disk, "/home/me": disk } })).toEqual({
+      id: "disk-space",
+      status: "ok",
+      summary: "52.4 GB free on the disk of the projects folder and your home folder.",
+      fix: null,
+    });
+  });
+
+  test("of two disks the fuller one counts: under 10 GB is a warning", async () => {
+    const check = await diskCheck({
+      projectsDir: "/work",
+      spaces: { "/work": { disk: 1, free: 80 * GB, total: 200 * GB }, "/home/me": { disk: 2, free: 6.5 * GB, total: 60 * GB } },
+    });
+    expect(check).toMatchObject({ status: "warn", summary: "Only 6.5 GB free on the disk of your home folder." });
+    expect(check?.fix).toContain("~/.m2/repository");
+    expect(check?.fix).not.toContain("docker system prune");
+  });
+
+  test("under 2 GB is a problem, and in a container the fix also names Docker's disk without deleting the volumes", async () => {
+    const disk = { disk: 1, free: 1.2 * GB, total: 100 * GB };
+    const check = await diskCheck({ projectsDir: "/work", inContainer: true, spaces: { "/work": disk, "/home/me": disk } });
+    expect(check).toMatchObject({ status: "fail", summary: "Only 1.2 GB free on the disk of the projects folder and your home folder." });
+    expect(check?.fix).toContain("`docker system prune` (without `--volumes`, which would delete the repos)");
+  });
+
+  test("without a projects folder only the home folder is checked, and with nothing readable there is no row", async () => {
+    expect(await diskCheck({ projectsDir: null, spaces: { "/home/me": { disk: 2, free: 30 * GB, total: 60 * GB } } })).toMatchObject({
+      summary: "30.0 GB free on the disk of your home folder.",
+    });
+    expect(await diskCheck({ projectsDir: "/work", spaces: {} })).toBeUndefined();
+  });
+
+  test("the real disk of the system's temp folder can be read, and a folder in it is on the same disk", async () => {
+    const { diskSpace } = await import("../src/modules/doctor/disk-space.ts");
+    const space = await diskSpace(tmpdir());
+    expect(space.total).toBeGreaterThan(0);
+    expect(space.free).toBeGreaterThan(0);
+    expect(space.free).toBeLessThanOrEqual(space.total);
+    expect((await diskSpace(mkdtempSync(join(tmpdir(), "trackwall-doctor-disk-")))).disk).toBe(space.disk);
   });
 });

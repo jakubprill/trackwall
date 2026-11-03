@@ -13,6 +13,7 @@ import { apiEndpoints } from "./api.ts";
 export const DoctorCheckId = z.enum([
   "projects-folder",
   "projects-folder-storage",
+  "disk-space",
   "unpushed-work",
   "workspace-file",
   "git",
