@@ -63,7 +63,7 @@ button { font: inherit; font-size: 12px; border-radius: 6px; padding: 3px 10px; 
   <header>
     <div class="hud">Sessions // conversation view // review</div>
     <h1>The conversation view as the place to review the agent's changes</h1>
-    <p class="lede">For a frontend developer the work is in the diffs. A wide panel puts the files the turn changed beside the conversation, the agent's plan sits above both, and a line of a diff takes a review comment, opens in VS Code or goes into the message as a quote. A narrow panel (a grid tile, the supervisor) keeps each change as a card in the conversation.</p>
+    <p class="lede">For a frontend developer the work is in the diffs. The diff panel is optional: closed at first, it opens when you pick a file card and closes with ✕, and nothing in the conversation waits for it. Open in a wide panel, it puts the files the turn changed beside the conversation, the agent's plan sits above both, and a line of a diff takes a review comment, opens in VS Code or goes into the message as a quote. A narrow panel (a grid tile, the supervisor) keeps each change as a card in the conversation.</p>
   </header>
 
   <section class="frame" aria-labelledby="wide">
@@ -95,7 +95,7 @@ button { font: inherit; font-size: 12px; border-radius: 6px; padding: 3px 10px; 
       </div>
       <div class="side">
         <div class="files" aria-label="Files this turn changed"><span>total.ts +2 −1</span><span class="on">CartSummary.tsx +6 −1</span></div>
-        <div class="head"><b>src/components/CartSummary.tsx</b><button type="button">Open in VS Code</button><button type="button">Whole file</button></div>
+        <div class="head"><b>src/components/CartSummary.tsx</b><button type="button">Open in VS Code</button><button type="button">Whole file</button><button type="button" aria-label="Close the diff">✕</button></div>
         <div class="diff">
           <div class="hunk"><i></i><span>@@ -10,6 +10,11 @@ export function CartSummary({ items }) {</span></div>
           <div class="ctx"><i>10</i><span>  const subtotal = sum(items);</span></div>
@@ -111,6 +111,21 @@ button { font: inherit; font-size: 12px; border-radius: 6px; padding: 3px 10px; 
           <div class="comment"><span class="hud">Review comment · line 17</span><span>Add a test for a discount larger than the subtotal.</span><span class="hud">Goes to the agent with the review, once its turn ends</span></div>
         </div>
       </div>
+    </div>
+  </section>
+
+  <section class="frame" aria-labelledby="closed">
+    <div class="tabs"><span class="on" id="closed">Chat · diff panel closed (the default)</span></div>
+    <div class="plan"><span class="hud">Plan 2 / 4</span><ol><li class="now">Update CartSummary to show the discount</li></ol></div>
+    <div class="talk" style="border-right:0">
+      <div class="you">The cart total ignores discounts. Fix it and show the discount in the summary.</div>
+      <div class="hud">Agent</div>
+      <div class="turn">
+        <div>The total never applied <code>discounts()</code>. Fixed in one place, and the summary now shows the discount line:</div>
+        <div class="file"><span>src/cart/total.ts</span><span class="ok">+2</span><span class="bad">−1</span><span class="hud">show diff</span></div>
+        <div class="file"><span>src/components/CartSummary.tsx</span><span class="ok">+6</span><span class="bad">−1</span><span class="hud">show diff</span></div>
+      </div>
+      <div class="box"><span>Write to the agent…</span></div>
     </div>
   </section>
 
@@ -130,7 +145,7 @@ button { font: inherit; font-size: 12px; border-radius: 6px; padding: 3px 10px; 
 
   <div class="notes">
     <div class="note"><h2>Plan</h2><p>The agent's plan as ACP sends it (to be confirmed with a contract test on Copilot CLI): done, current and waiting steps. Folded to the current step in a narrow panel.</p></div>
-    <div class="note"><h2>Files beside the conversation</h2><p>The files the selected turn changed, from the diffs of its tool calls; a file card in the conversation selects it. "Whole file" switches to the task's Changes for the full worktree diff.</p></div>
+    <div class="note"><h2>Files beside the conversation</h2><p>Optional and closed at first: a file card opens the panel, ✕ closes it, and the choice is remembered in this browser; the conversation, its approvals and the message box work the same with it closed. The files the selected turn changed, from the diffs of its tool calls; a file card in the conversation selects it. "Whole file" switches to the task's Changes for the full worktree diff.</p></div>
     <div class="note"><h2>Actions on a line</h2><p>Comment: a review comment, the same as in Changes, delivered when the turn ends. Open in VS Code: the worktree file at that line. Ask about this: the line goes into the message box as a quote.</p></div>
   </div>
 </div>
