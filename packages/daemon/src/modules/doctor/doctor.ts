@@ -75,7 +75,7 @@ export interface DoctorDeps {
   diskSpace: (folder: string) => Promise<DiskSpace>;
   /** The home folder, where build caches such as `~/.m2` live. */
   homeDir: string;
-  /** Trackwall runs in a container, whose disk is Docker's (ADR-162). */
+  /** Trackwall runs in a container, whose disk is Docker's: the same `FacadeOptions.inContainer` that `unpushedWork` reads (ADR-162). */
   inContainer: boolean;
   /** `/proc/self/mountinfo` on Linux, `null` elsewhere: where the projects folder's files live. */
   mountTable: () => Promise<string | null>;
@@ -200,8 +200,7 @@ export class Doctor {
 
   /**
    * The least free space of the disks of the projects folder and the home folder; a folder that cannot be read is left
-   * out (a missing projects folder is the other check's). Two folders with the same free and total space are taken
-   * to be on one disk and named together.
+   * out (a missing projects folder is the other check's). Two folders on one device are named together.
    */
   private async diskSpace({ projectsDir }: CheckContext): Promise<Outcome> {
     const folders = [
@@ -211,13 +210,12 @@ export class Doctor {
     const read = await Promise.all(
       folders.map(async ({ name, path }) => ({ name, space: path === null ? null : await this.deps.diskSpace(path).catch(() => null) })),
     );
-    const disks = new Map<string, { names: string[]; free: number }>();
+    const disks = new Map<number, { names: string[]; free: number }>();
     for (const { name, space } of read) {
       if (space === null) continue;
-      const key = `${space.free}/${space.total}`;
-      const disk = disks.get(key) ?? { names: [], free: space.free };
+      const disk = disks.get(space.disk) ?? { names: [], free: space.free };
       disk.names.push(name);
-      disks.set(key, disk);
+      disks.set(space.disk, disk);
     }
     const lowest = [...disks.values()].sort((a, b) => a.free - b.free)[0];
     if (lowest === undefined) return null;

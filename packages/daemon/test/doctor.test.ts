@@ -30,7 +30,7 @@ function fakeDeps(overrides: Partial<DoctorDeps>): DoctorDeps {
     projectsDir: async () => null,
     repoHosts: () => [],
     mountTable: async () => null,
-    diskSpace: async () => ({ free: 100 * 1024 ** 3, total: 200 * 1024 ** 3 }),
+    diskSpace: async () => ({ disk: 1, free: 100 * 1024 ** 3, total: 200 * 1024 ** 3 }),
     homeDir: tmpdir(),
     inContainer: false,
     unpushedWork: async () => ({ inContainer: false, repos: [], unreadable: [] }),
@@ -90,7 +90,7 @@ function doctorFacade(o: Setup) {
     userEnv: async () => ({ ...process.env, COPILOT_HOME: copilotHome, PATH: `${sandboxPrograms}${delimiter}${process.env.PATH ?? ""}` }),
     tlsProbe: async () => ({ kind: "ok" }),
     connectionProbe: o.connectionProbe,
-    diskSpace: async () => ({ free: 100 * 1024 ** 3, total: 200 * 1024 ** 3 }),
+    diskSpace: async () => ({ disk: 1, free: 100 * 1024 ** 3, total: 200 * 1024 ** 3 }),
     log: () => {},
   });
   return { facade, home, projects, copilotHome };
@@ -479,7 +479,11 @@ describe.skipIf(process.platform === "win32")("the doctor on a projects folder m
 describe("the doctor on free disk space", () => {
   const GB = 1024 ** 3;
 
-  function diskCheck(o: { projectsDir: string | null; spaces: Record<string, { free: number; total: number }>; inContainer?: boolean }) {
+  function diskCheck(o: {
+    projectsDir: string | null;
+    spaces: Record<string, { disk: number; free: number; total: number }>;
+    inContainer?: boolean;
+  }) {
     const deps = fakeDeps({
       projectsDir: async () => o.projectsDir,
       homeDir: "/home/me",
@@ -494,7 +498,7 @@ describe("the doctor on free disk space", () => {
   }
 
   test("plenty of space on one disk names both folders once", async () => {
-    const disk = { free: 52.4 * GB, total: 200 * GB };
+    const disk = { disk: 1, free: 52.4 * GB, total: 200 * GB };
     expect(await diskCheck({ projectsDir: "/work", spaces: { "/work": disk, "/home/me": disk } })).toEqual({
       id: "disk-space",
       status: "ok",
@@ -506,7 +510,7 @@ describe("the doctor on free disk space", () => {
   test("of two disks the fuller one counts: under 10 GB is a warning", async () => {
     const check = await diskCheck({
       projectsDir: "/work",
-      spaces: { "/work": { free: 80 * GB, total: 200 * GB }, "/home/me": { free: 6.5 * GB, total: 60 * GB } },
+      spaces: { "/work": { disk: 1, free: 80 * GB, total: 200 * GB }, "/home/me": { disk: 2, free: 6.5 * GB, total: 60 * GB } },
     });
     expect(check).toMatchObject({ status: "warn", summary: "Only 6.5 GB free on the disk of your home folder." });
     expect(check?.fix).toContain("~/.m2/repository");
@@ -514,24 +518,25 @@ describe("the doctor on free disk space", () => {
   });
 
   test("under 2 GB is a problem, and in a container the fix also names Docker's disk without deleting the volumes", async () => {
-    const disk = { free: 1.2 * GB, total: 100 * GB };
+    const disk = { disk: 1, free: 1.2 * GB, total: 100 * GB };
     const check = await diskCheck({ projectsDir: "/work", inContainer: true, spaces: { "/work": disk, "/home/me": disk } });
     expect(check).toMatchObject({ status: "fail", summary: "Only 1.2 GB free on the disk of the projects folder and your home folder." });
     expect(check?.fix).toContain("`docker system prune` (without `--volumes`, which would delete the repos)");
   });
 
   test("without a projects folder only the home folder is checked, and with nothing readable there is no row", async () => {
-    expect(await diskCheck({ projectsDir: null, spaces: { "/home/me": { free: 30 * GB, total: 60 * GB } } })).toMatchObject({
+    expect(await diskCheck({ projectsDir: null, spaces: { "/home/me": { disk: 2, free: 30 * GB, total: 60 * GB } } })).toMatchObject({
       summary: "30.0 GB free on the disk of your home folder.",
     });
     expect(await diskCheck({ projectsDir: "/work", spaces: {} })).toBeUndefined();
   });
 
-  test("the real disk of the system's temp folder can be read", async () => {
+  test("the real disk of the system's temp folder can be read, and a folder in it is on the same disk", async () => {
     const { diskSpace } = await import("../src/modules/doctor/disk-space.ts");
     const space = await diskSpace(tmpdir());
     expect(space.total).toBeGreaterThan(0);
     expect(space.free).toBeGreaterThan(0);
     expect(space.free).toBeLessThanOrEqual(space.total);
+    expect((await diskSpace(mkdtempSync(join(tmpdir(), "trackwall-doctor-disk-")))).disk).toBe(space.disk);
   });
 });

@@ -1,4 +1,4 @@
-import { statfs } from "node:fs/promises";
+import { stat, statfs } from "node:fs/promises";
 
 /**
  * Free disk space for the doctor's check (§4.15): where the projects folder is (worktrees, build output) and where the
@@ -12,6 +12,8 @@ export const LOW_DISK_BYTES = 10 * 1024 ** 3;
 export const VERY_LOW_DISK_BYTES = 2 * 1024 ** 3;
 
 export interface DiskSpace {
+  /** The device the folder is on (`stat().dev`): two folders with the same one share their free space. */
+  disk: number;
   /** Bytes the daemon's user may still write. */
   free: number;
   total: number;
@@ -19,8 +21,8 @@ export interface DiskSpace {
 
 /** What `statfs` says of the file system a folder is on. */
 export async function diskSpace(folder: string): Promise<DiskSpace> {
-  const fs = await statfs(folder);
-  return { free: fs.bavail * fs.bsize, total: fs.blocks * fs.bsize };
+  const [fs, st] = await Promise.all([statfs(folder), stat(folder)]);
+  return { disk: st.dev, free: fs.bavail * fs.bsize, total: fs.blocks * fs.bsize };
 }
 
 /** `12.3 GB`, in units of 1024³ bytes as file managers show them. */

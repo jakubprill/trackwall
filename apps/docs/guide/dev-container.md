@@ -57,7 +57,7 @@ A `.devcontainer/devcontainer.json` that keeps the repos, Trackwall's state, the
 - `TRACKWALL_DEVCONTAINER_HOST_FOLDER` tells Trackwall which folder on your computer the container was opened from, so "Open in VS Code" opens the same kind of window as opening that folder in a container yourself, with the extensions and settings of this `devcontainer.json`. Without it, VS Code attaches to the running container without them. Use it when you open the container from a folder on Windows or macOS; from a folder inside WSL it may not open.
 - `shutdownAction` keeps the container running when you close its last VS Code window. Trackwall and its sessions live in the container, and by default VS Code stops the container with its last window, which stops every running session; "Open in VS Code" in Trackwall can replace or close that window too. The container then runs until you stop it in Docker or Rancher Desktop (`docker stop <container name>`), and its sessions keep working while no window is open. VS Code forwards port 7700 only while one of its windows is open on the container, so Trackwall's page and the desktop app reach it again when you open one; a session waiting for your approval waits until then.
 - Behind a proxy, set `HTTPS_PROXY` and `HTTP_PROXY` in `containerEnv` too, and keep `NO_PROXY` as above. A proxy that replaces certificates also needs its certificate in the image, and `NODE_EXTRA_CA_CERTS` pointing at it in `containerEnv`, because Copilot CLI does not read the system's certificates; the [doctor](/features/doctor) names the file when the image already has it.
-- The container's clock runs in UTC, so times in logs, `git log` and builds are an hour or more off from yours. Add your time zone to `containerEnv`, for example `"TZ": "Europe/Berlin"`, and rebuild the container. The time zone names come from the `tzdata` package, which the Dev Containers base images have; in an image of your own, install it if `date` in the container still says UTC.
+- The container's clock runs in UTC, so the times in logs, in builds and of new commits are in UTC rather than your time zone. Add your time zone to `containerEnv`, for example `"TZ": "Europe/Berlin"`, and rebuild the container. The time zone names come from the `tzdata` package, which the Dev Containers base images have; in an image of your own, install it if `date` in the container still says UTC.
 
 ## Start Trackwall
 
@@ -126,19 +126,28 @@ Tokens for such servers come in through [Environment from mise](/features/mise-e
 
 ## Back up the repos
 
-Commits you have not pushed, stashes and task worktrees live only in the `workspace-repos` volume. Before you remove the volume, reset Docker, or move to another computer, copy the volume into one file on your computer. Run this on your computer, not in the container, in the folder where the file should go, while no task is running:
+Commits you have not pushed, stashes and task worktrees live only in the `workspace-repos` volume. Before you remove the volume, reset Docker, or move to another computer, copy the volume into one file on your computer:
 
-```sh
-docker run --rm -v workspace-repos:/repos:ro -v "${PWD}:/backup" debian:stable-slim tar czf /backup/workspace-repos.tar.gz -C /repos .
-```
+1. Stop the container, so that neither Trackwall nor git changes the repos while they are copied: `docker stop <container name>`, or stop it in Docker or Rancher Desktop.
+2. On your computer, not in the container, in the folder where the file should go, run:
 
-It works the same in PowerShell, in a terminal of macOS and in WSL. The volume is mounted read-only, so the backup cannot change your repos. To put it back into a new, empty volume of the same name:
+   ```sh
+   docker run --rm -v workspace-repos:/repos:ro -v "${PWD}:/backup" debian:stable-slim tar czf /backup/workspace-repos.tar.gz -C /repos .
+   ```
+
+3. Start the container again.
+
+The command works the same in PowerShell, in a terminal of macOS and in WSL, but not in Git Bash, which rewrites the paths `/repos` and `/backup`. The volume is mounted read-only, so the backup cannot change your repos. The file holds everything in your repos, including files git ignores, such as a local `.env`, so keep it where you would keep the repos themselves.
+
+To put the backup into a volume, with the container stopped, run:
 
 ```sh
 docker run --rm -v workspace-repos:/repos -v "${PWD}:/backup" debian:stable-slim tar xzf /backup/workspace-repos.tar.gz -C /repos
 ```
 
-The same two commands, with another volume's name, back up Trackwall's state (`workspace-trackwall`) or the Copilot CLI sign-in (`workspace-copilot`). The file holds everything in your repos, including files git ignores, such as a local `.env`, so keep it where you would keep the repos themselves.
+It creates the volume when it does not exist. Into a volume that already has repos, it writes over every file with the same name, so restore into a new, empty volume unless that is what you want.
+
+Trackwall's state (`workspace-trackwall`) and the Copilot CLI sign-in (`workspace-copilot`) are backed up the same way: replace both `workspace-repos` in the command, the volume's name and the file's name, so that each backup gets its own file.
 
 ## Good to know
 
