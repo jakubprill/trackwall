@@ -175,7 +175,7 @@ One verdict on a task's changes (ADR-64): the mise task `test` (`VERIFY_MISE_TAS
 _Avoid_: check, CI, validation (that is a schema at the point of entry)
 
 **Code search** (`searchCode`, MCP tool `search_code`, result `SearchCodeResult`):
-A fixed string or a regular expression in the files of the latest commit of many repos of the projects folder at once, through `git grep` (ADR-40); a match (`CodeMatch`) is a repo, path, line, column and context lines. It does not see uncommitted changes, just like browsing a repo.
+A fixed string or a regular expression in the files of the latest commit of many repos of the projects folder at once, through `git grep` (ADR-40); a match (`CodeMatch`) is a repo, path, line, column and context lines, and with `output: "files"` the result is the files with matches (`CodeFile`) and their match counts instead (ADR-187). It does not see uncommitted changes, just like browsing a repo.
 _Avoid_: grep (the tool underneath), index (there is none)
 
 **Commit search** (`searchCommits`, MCP tool `search_commits`, result `SearchCommitsResult`):

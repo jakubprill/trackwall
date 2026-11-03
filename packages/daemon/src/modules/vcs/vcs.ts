@@ -35,7 +35,7 @@ import { checkGitProgram, type GitVersion, git, gitRead, gitVersion } from "./gi
 import { mainRemote, readConfig } from "./git-config.ts";
 import { useGitProgram } from "./git-program.ts";
 import { type GitState, GitStateReader, gitDirKey } from "./git-state.ts";
-import { grep, grepFiles } from "./grep.ts";
+import { grep, grepCounts, grepFiles } from "./grep.ts";
 import { readHeadCommit } from "./head-commit.ts";
 import { hostedProject } from "./hosted-project.ts";
 import { excludeLocally, ignoredPaths, trackedPaths } from "./local-files.ts";
@@ -237,6 +237,7 @@ export class Vcs {
   // `git grep` over a commit's objects (`grep.ts`): source files for cards (ADR-30) and code search (ADR-40).
   readonly grepFiles = grepFiles;
   readonly grep = grep;
+  readonly grepCounts = grepCounts;
   // `git log` over a commit's history for commit search (`log-search.ts`, ADR-149).
   readonly searchLog = searchLog;
 
