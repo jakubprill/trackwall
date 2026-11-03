@@ -68,6 +68,19 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     expect(text).not.toContain("unless they contradict the user");
   });
 
+  test("a task session is told the limits of its result, so that report_result is not refused for a long summary or step", () => {
+    const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
+    writeSessionInstructions(
+      sessionDir,
+      "0.4.1",
+      { kind: "task", repo: "shop", task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427", handoff: null, change: null },
+      NO_KNOWLEDGE,
+    );
+    const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
+    expect(text).toContain("so write it for the reviewer in about 300 words: more than 4000 characters is refused.");
+    expect(text).toContain("each on one line of up to 300 characters, with what to do and what they should see");
+  });
+
   test("a task session proposes the work that builds on its change after committing it, to the repos that call what it changed (ADR-143)", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
     writeSessionInstructions(
