@@ -10,10 +10,11 @@ import {
   type WaitingMessage,
 } from "@trackwall/protocol";
 import { SendHorizontal, Square } from "lucide-react";
-import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AgentDialogCard } from "@/components/AgentDialogCard";
 import { AgentModeSwitch } from "@/components/AgentModeSwitch";
 import { ContextMeter } from "@/components/ContextMeter";
+import { ConversationDiffPanel } from "@/components/ConversationDiffPanel";
 import { ConversationEntries } from "@/components/ConversationEntries";
 import { AttachButton, AttachmentChips, useMessageAttachments } from "@/components/MessageAttachments";
 import { SlashCommandList } from "@/components/SlashCommandList";
@@ -23,6 +24,7 @@ import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import {
   conversationStatus,
+  conversationTurns,
   NO_CONVERSATION_INFO,
   sendsMessage,
   slashSuggestions,
@@ -31,6 +33,7 @@ import {
   withSlashCommand,
 } from "@/lib/conversation";
 import { daemonSocket } from "@/lib/daemon-socket";
+import { type DiffPick, shownDiff } from "@/lib/diff-panel";
 import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
 import { inTurn, isLive } from "@/lib/session-state";
 import { browserTimers } from "@/lib/timers";
@@ -48,7 +51,8 @@ const FOLLOW_PX = 48;
  * show at once, as waiting, until they go. The entries come over the conversation socket, all of them at
  * every connection; messages, answers and Stop go through the `agents` API. Everything is plain text in the page, so
  * scrolling, selecting and copying are the browser's own. Like the terminal, the view tells the daemon whether it is in
- * front of the user (ADR-47).
+ * front of the user (ADR-47). A wide view can open the diff panel beside it; a narrow one hides the panel and keeps each
+ * change in the conversation.
  */
 export function ConversationView({ conn, session, selected }: { conn: Connection; session: Session; selected: boolean }) {
   const keyboardElsewhere = useContext(KeyboardElsewhere);
@@ -62,6 +66,9 @@ export function ConversationView({ conn, session, selected }: { conn: Connection
   const list = useRef<HTMLDivElement>(null);
   const following = useRef(true);
   const id = session.id;
+  // The diff panel: closed in every new view, open once the user picks a change, with the file they picked.
+  const [diffOpen, setDiffOpen] = useState(false);
+  const [diffPick, setDiffPick] = useState<DiffPick | null>(null);
 
   useEffect(() => {
     let socket: WebSocket | undefined;
@@ -127,40 +134,64 @@ export function ConversationView({ conn, session, selected }: { conn: Connection
   const live = session.run.kind === "running";
   const working = inTurn(session);
   const ended = !isLive(session);
+  const turns = useMemo(() => conversationTurns(entries), [entries]);
+  const shown = useMemo(() => (diffOpen ? shownDiff(turns, diffPick) : null), [diffOpen, turns, diffPick]);
+  const showDiff = (pick: DiffPick) => {
+    setDiffPick(pick);
+    setDiffOpen(true);
+  };
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {notice && <p className="text-warning border-b px-3 py-1 text-xs">{notice}</p>}
-      {ended && <p className="text-muted-foreground border-b px-3 py-1 text-xs">The session has ended; this is its conversation.</p>}
-      <div
-        ref={list}
-        role="log"
-        aria-label="Conversation"
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto text-sm"
-        onScroll={(e) => {
-          const el = e.currentTarget;
-          following.current = el.scrollHeight - el.scrollTop - el.clientHeight < FOLLOW_PX;
-        }}
-      >
-        {/* A column of reading width in the middle, so that a wide panel does not stretch lines across the screen. */}
-        <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-5 px-4 py-4">
-          <ConversationEntries conn={conn} entries={entries} waiting={live ? waiting : []} working={working && !session.dialog} />
+    // The container of the `@4xl:` queries that show the diff panel and the "Show diff" buttons only when wide.
+    <div className="@container flex min-h-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {notice && <p className="text-warning border-b px-3 py-1 text-xs">{notice}</p>}
+        {ended && <p className="text-muted-foreground border-b px-3 py-1 text-xs">The session has ended; this is its conversation.</p>}
+        <div
+          ref={list}
+          role="log"
+          aria-label="Conversation"
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto text-sm"
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            following.current = el.scrollHeight - el.scrollTop - el.clientHeight < FOLLOW_PX;
+          }}
+        >
+          {/* A column of reading width in the middle, so that a wide panel does not stretch lines across the screen. */}
+          <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-5 px-4 py-4">
+            <ConversationEntries
+              conn={conn}
+              turns={turns}
+              waiting={live ? waiting : []}
+              working={working && !session.dialog}
+              shownDiff={shown && { turn: shown.turn, path: shown.file.path }}
+              onShowDiff={showDiff}
+            />
+          </div>
         </div>
+        {live && session.dialog && (
+          <div className="border-t px-3 py-2">
+            <AgentDialogCard key={`${id}:${session.dialog.id}`} conn={conn} session={id} dialog={session.dialog} onOpen={() => {}} />
+          </div>
+        )}
+        {live && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t px-3 pt-2 text-xs">
+            <p role="status" aria-label="Whose turn" className="min-w-0 flex-1">
+              <StatusLabel {...conversationStatus(session)} />
+            </p>
+            {info.mode && <AgentModeSwitch conn={conn} session={id} mode={info.mode} />}
+            {info.context && <ContextMeter context={info.context} />}
+          </div>
+        )}
+        {live && <Composer conn={conn} session={id} working={working} focused={selected && !keyboardElsewhere} commands={info.commands} />}
       </div>
-      {live && session.dialog && (
-        <div className="border-t px-3 py-2">
-          <AgentDialogCard key={`${id}:${session.dialog.id}`} conn={conn} session={id} dialog={session.dialog} onOpen={() => {}} />
-        </div>
+      {diffOpen && (
+        <ConversationDiffPanel
+          shown={shown}
+          onPick={(path) => shown && showDiff({ turn: shown.turn, path })}
+          onClose={() => setDiffOpen(false)}
+          className="hidden w-1/2 @4xl:flex"
+        />
       )}
-      {live && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t px-3 pt-2 text-xs">
-          <p role="status" aria-label="Whose turn" className="min-w-0 flex-1">
-            <StatusLabel {...conversationStatus(session)} />
-          </p>
-          {info.mode && <AgentModeSwitch conn={conn} session={id} mode={info.mode} />}
-          {info.context && <ContextMeter context={info.context} />}
-        </div>
-      )}
-      {live && <Composer conn={conn} session={id} working={working} focused={selected && !keyboardElsewhere} commands={info.commands} />}
     </div>
   );
 }
