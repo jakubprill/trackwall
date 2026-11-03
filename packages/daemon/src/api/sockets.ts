@@ -5,7 +5,8 @@ import { type WebSocket, WebSocketServer } from "ws";
 import { type OriginPolicy, tokenMatches } from "./guard.ts";
 
 /**
- * The API's WebSockets (§5.2): `/ws` events and session terminals `/ws/pty/<session>`. One place to handle `upgrade`
+ * The API's WebSockets (§5.2): `/ws` events, session terminals `/ws/pty/<session>`, folder terminals
+ * `/ws/terminal/<terminal>` and conversation views. One place to handle `upgrade`
  * and the same protections as the rest of the API (§8): `Host` and `Origin` from `OriginPolicy`, the token compared in constant time.
  * A browser cannot set a header for a WebSocket, so the token comes as the `bearer.<token>` subprotocol next to
  * the socket's subprotocol, and the server confirms only the latter.

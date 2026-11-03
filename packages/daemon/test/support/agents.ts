@@ -57,6 +57,7 @@ export function makeAgents(
   });
   const opened: string[] = [];
   const agents: Agents = new Agents({
+    closeFolderTerminal: async () => {},
     procs,
     repos: {
       repoPath: async (id) => {

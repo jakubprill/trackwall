@@ -126,7 +126,7 @@ describe.skipIf(process.versions.bun === undefined)("removing a repo from the pr
     const proposal = await proposeRemoval(outside, "billing", "Moved to another team");
 
     await expect(daemon.post(agentsApi.approveRepoRemoval, { proposal: proposal.id })).rejects.toThrow(
-      "stop the mise tasks and services running in billing first",
+      "stop the mise tasks, services and terminals running in billing first",
     );
 
     await outside.callTool({ name: "stop_mise_task", arguments: { repo: "billing", miseTask: "dev" } });

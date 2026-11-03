@@ -19,7 +19,7 @@ Browse, clone and sync every git repo in your projects folder from one list.
 
 ## How it works
 
-Trackwall works with one projects folder: every git repo directly inside it is on the list in "Repos". A repo you clone into the folder appears by itself. Select a repo and it opens on its [card](/features/repo-card), a summary of what the repo is and provides. The other tabs show its files, its latest commits, its uncommitted changes, its mise tasks and, last, its README (formatted as on GitHub, with tables, task lists, code and Mermaid diagrams).
+Trackwall works with one projects folder: every git repo directly inside it is on the list in "Repos". A repo you clone into the folder appears by itself. Select a repo and it opens on its [card](/features/repo-card), a summary of what the repo is and provides. The other tabs show its files, its latest commits, its uncommitted changes, its mise tasks, a [shell](/features/shell) in its folder and, last, its README (formatted as on GitHub, with tables, task lists, code and Mermaid diagrams).
 
 The list shows every repo as soon as you open it. Each one says "loading" until git has read it, and the repo you selected and the ones at the top of the list come first, so you do not wait for the whole folder. If reading fails, the list says so and offers "Retry".
 
