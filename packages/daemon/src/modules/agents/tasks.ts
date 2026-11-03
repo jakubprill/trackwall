@@ -347,7 +347,10 @@ export class AgentTasks {
       await this.#launch(task, "new");
     } catch (err) {
       // A failed cleanup leaves the task on the list, so that the user can end it themselves.
-      await this.#whileRemoving(id, () => this.#discard(task, false)).then(
+      await this.#whileRemoving(id, async () => {
+        await this.#deps.closeFolderTerminal(id);
+        await this.#discard(task, false);
+      }).then(
         () => this.#save(this.#tasks.filter((t) => t.id !== id)),
         (e: unknown) => this.#deps.log(`cleaning up task ${id}: ${messageOf(e)}`),
       );
@@ -680,7 +683,9 @@ export class AgentTasks {
       this.#refuseRunning(task, "ending it");
       const facts = await this.#whileRemoving(id, async () => {
         if (!discardChanges) await this.#refuseLoss(task, keepBranch);
-        // The user's shell goes with the worktree, but only once the end is certain; `#removing` refuses a new one.
+        // The user's shell goes with the worktree, after the refusals the user answers (a running session, unsaved
+        // changes): before the check for other processes, which would count it. So an end refused for a mise task or
+        // service still running there has closed the shell. `#removing` refuses a new one meanwhile.
         await this.#deps.closeFolderTerminal(id);
         if (this.#deps.liveIn(task.worktree))
           throw new DomainError(
