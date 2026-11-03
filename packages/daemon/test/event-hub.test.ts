@@ -32,6 +32,7 @@ function fakeFacade(state: {
     board: { revision: state.board ?? (() => 0) },
     mcpAudit: { revision: state.mcpCalls ?? (() => 0) },
     taskOutcomes: state.outcomes ?? (() => []),
+    terminals: { list: () => [] },
   } as unknown as Facade;
 }
 
@@ -62,10 +63,11 @@ describe("the /ws event source", () => {
       { type: "board.changed", payload: { revision: 0 } },
       { type: "mcp.calls.changed", payload: { revision: 0 } },
       { type: "task-outcomes.changed", payload: [] },
+      { type: "terminals.changed", payload: [] },
     ]);
 
     await tick();
-    expect(client.events).toHaveLength(7);
+    expect(client.events).toHaveLength(8);
 
     sessions = {
       ...EMPTY,
@@ -81,7 +83,7 @@ describe("the /ws event source", () => {
       ],
     };
     await tick();
-    expect(client.events.slice(7)).toEqual([{ type: "sessions.changed", payload: sessions }]);
+    expect(client.events.slice(8)).toEqual([{ type: "sessions.changed", payload: sessions }]);
     unsubscribe();
   });
 
@@ -92,7 +94,7 @@ describe("the /ws event source", () => {
     const unsubscribeFirst = hub.subscribe(first.listener);
     const unsubscribeSecond = hub.subscribe(second.listener);
     expect(second.events).toEqual(first.events);
-    expect(first.events).toHaveLength(7);
+    expect(first.events).toHaveLength(8);
     unsubscribeFirst();
     unsubscribeSecond();
   });
@@ -126,6 +128,7 @@ describe("the /ws event source", () => {
       { type: "board.changed", payload: { revision: 0 } },
       { type: "mcp.calls.changed", payload: { revision: 0 } },
       { type: "task-outcomes.changed", payload: [] },
+      { type: "terminals.changed", payload: [] },
     ]);
     unsubscribe();
     unsubscribeLate();
@@ -159,7 +162,7 @@ describe("the /ws event source", () => {
     outcomes = [{ task: "3f2a9c1e-0000-4000-8000-000000000000", repo: "shop", verification: "passed", mergeRequest: null }];
     await tick();
 
-    expect(client.events.slice(7)).toEqual([
+    expect(client.events.slice(8)).toEqual([
       { type: "repos.changed", payload: { startedAt: STARTED_AT, revision: 1 } },
       { type: "cards.warmup.changed", payload: { running: true, done: 3, total: 10 } },
       { type: "board.changed", payload: { revision: 1 } },

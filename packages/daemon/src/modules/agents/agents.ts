@@ -54,6 +54,7 @@ import {
   type WorkingTreeChanges,
 } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
+import type { ScreenViewer } from "../../infra/terminal-screen.ts";
 import { AcpSession, type ConversationViewer, type ConversationWindow } from "./acp-session.ts";
 import { AgentQueuesFile } from "./agent-queues.ts";
 import type { AgentSession } from "./agent-session.ts";
@@ -104,7 +105,6 @@ import { TaskProposals } from "./task-proposals.ts";
 import { TaskReviews } from "./task-reviews.ts";
 import { type RoundsVcs, TASK_ROUNDS_FILE, TaskRoundList } from "./task-rounds.ts";
 import { AgentTasks, type TaskLaunch, type TaskOptions, type TasksVcs } from "./tasks.ts";
-import type { ScreenViewer } from "./terminal-screen.ts";
 
 /**
  * The `agents` module (§4.4, ADR-26): Copilot CLI sessions started from the UI in a repo from the projects folder,
@@ -631,7 +631,8 @@ export class Agents {
     const tasks = this.#tasks.list().filter((t) => t.repo === repo);
     if (tasks.length > 0)
       throw new DomainError("bad_request", `end the tasks of ${repo} first (${tasks.length}): their worktrees belong to the repo`);
-    if (this.#deps.procs.liveIn(repoDir)) throw new DomainError("bad_request", `stop the mise tasks and services running in ${repo} first`);
+    if (this.#deps.procs.liveIn(repoDir))
+      throw new DomainError("bad_request", `stop the mise tasks, services and terminals running in ${repo} first`);
   }
 
   rejectProposal(id: string, reason: string | undefined): void {

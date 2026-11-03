@@ -17,6 +17,7 @@ import { DomainError, messageOf } from "./infra/errors.ts";
 import { runProgram } from "./infra/run-program.ts";
 import { extractTarGz } from "./infra/tar.ts";
 import { ensureTrackwallDir } from "./infra/trackwall-dir.ts";
+import { userShell } from "./infra/user-shell.ts";
 import {
   AGENT_QUEUES_FILE,
   Agents,
@@ -58,6 +59,7 @@ import { RuntimeFile } from "./modules/procs/runtime-file.ts";
 import { Routines } from "./modules/routines/routines.ts";
 import { Services } from "./modules/services/services.ts";
 import { TASK_JOURNAL_FILE, TASK_JOURNAL_MAX_RECORDS, TaskJournal } from "./modules/task-journal/task-journal.ts";
+import { FolderTerminals } from "./modules/terminals/folder-terminals.ts";
 import { TestReports } from "./modules/test-results/test-reports.ts";
 import { Hosting, type HostingClis } from "./modules/vcs/hosting.ts";
 import { systemTempFolder, Vcs } from "./modules/vcs/vcs.ts";
@@ -93,6 +95,8 @@ export interface Facade {
   /** Short facts about the user's repos in `.trackwall/knowledge` of the projects folder, with their approvals (ADR-170). */
   knowledge: Knowledge;
   services: Services;
+  /** The user's own shells in a repo root or a task's worktree, shown like session terminals (ADR-185). */
+  terminals: FolderTerminals;
   testReports: TestReports;
   verifications: Verifications;
   /** What ended tasks were and left, searched by `search_task_history` (ADR-150). */
@@ -445,6 +449,14 @@ export function createFacade(o: FacadeOptions): Facade {
     });
   }
 
+  const terminals = new FolderTerminals({
+    procs,
+    folder: async ({ repo, task }) => (task === null ? workspace.repoPath(repo) : agents.taskOfRepo(task, repo).worktree),
+    env: o.userEnv,
+    shell: (env) => userShell(env),
+    log: o.log,
+  });
+
   return {
     workspace,
     repoWatch,
@@ -460,6 +472,7 @@ export function createFacade(o: FacadeOptions): Facade {
     knowledge,
     agents,
     services,
+    terminals,
     testReports,
     verifications,
     taskJournal,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { TerminalScreen } from "../src/modules/agents/terminal-screen.ts";
+import { TerminalScreen } from "../src/infra/terminal-screen.ts";
 
 function snapshotAfter(output: string): Promise<string> {
   const screen = new TerminalScreen(80, 24);

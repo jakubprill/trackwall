@@ -11,7 +11,7 @@ import type { EventHub } from "./event-hub.ts";
 import { eventSocketRoute } from "./event-socket.ts";
 import { hasValidToken, OriginPolicy } from "./guard.ts";
 import { HOOKS_PATH, handleHook } from "./hooks.ts";
-import { ptySocketRoute } from "./pty-socket.ts";
+import { ptySocketRoute, terminalSocketRoute } from "./pty-socket.ts";
 import { postRoutes } from "./routes.ts";
 import { attachSockets } from "./sockets.ts";
 import { serveStatic } from "./static.ts";
@@ -52,6 +52,7 @@ const STATUS: Record<ErrorCode, number> = {
   dialog_changed: 409,
   service_unavailable: 409,
   no_desktop: 409,
+  terminal_unavailable: 409,
   internal: 500,
 };
 
@@ -84,7 +85,12 @@ export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer
   const closeSockets = attachSockets(server, {
     token: options.token,
     policy: () => policy,
-    routes: [eventSocketRoute(options.events), ptySocketRoute(options.facade), conversationSocketRoute(options.facade)],
+    routes: [
+      eventSocketRoute(options.events),
+      ptySocketRoute(options.facade),
+      terminalSocketRoute(options.facade),
+      conversationSocketRoute(options.facade),
+    ],
   });
   return {
     server,

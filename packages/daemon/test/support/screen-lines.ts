@@ -3,7 +3,7 @@
  * drew it in the reference's size: the window's output put through the emulator once it has processed all of it.
  */
 import { promptBoxOnScreen } from "@trackwall/protocol";
-import { TerminalScreen } from "../../src/modules/agents/terminal-screen.ts";
+import { TerminalScreen } from "../../src/infra/terminal-screen.ts";
 import type { viewer } from "./agents.ts";
 import { REFERENCE_COLS, REFERENCE_ROWS } from "./copilot-reference.ts";
 

@@ -12,12 +12,12 @@ import {
   type TaskUpdate,
 } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
+import { type ScreenViewer, TerminalScreen } from "../../infra/terminal-screen.ts";
 import type { AgentSession } from "./agent-session.ts";
 import { type CopilotHookOutput, hookOutputFor, situationOutput } from "./copilot-hook-output.ts";
 import type { CopilotHookEvent, CopilotHookRecord } from "./copilot-hook-record.ts";
 import { approvalRequest } from "./copilot-hooks.ts";
 import { answersDialog, ESCAPE, type SessionKey, sessionKey } from "./copilot-keys.ts";
-
 import { CopilotSessionState, RETYPE_AFTER_MS } from "./copilot-session-state.ts";
 import { CopyRequestSlot } from "./copy-request.ts";
 import { HookTail } from "./hook-tail.ts";
@@ -25,7 +25,6 @@ import { ReadRequestClock } from "./read-request.ts";
 import { SessionAttention } from "./session-attention.ts";
 import { SessionDialogs, selectsOption } from "./session-dialogs.ts";
 import { sessionStuck } from "./session-stuck.ts";
-import { type ScreenViewer, TerminalScreen } from "./terminal-screen.ts";
 
 /**
  * One running (or ended) Copilot CLI session in the daemon (§4.4): the screen for session terminals, the state from hooks,
