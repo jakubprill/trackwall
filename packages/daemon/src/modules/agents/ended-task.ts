@@ -34,6 +34,8 @@ export interface EndedTaskGit {
  */
 export async function endedTaskFacts(
   task: StoredTask,
+  /** The task's round commits (ADR-168): their subject says only "WIP round", so the record lists the other commits. */
+  roundCommits: ReadonlySet<string>,
   branchKept: boolean,
   endedAt: Date,
   git: EndedTaskGit,
@@ -71,7 +73,7 @@ export async function endedTaskFacts(
     return {
       ...facts,
       head: range.commits[0]?.hash ?? task.base,
-      commits: range.commits.map(({ hash, subject }) => ({ hash, subject })),
+      commits: range.commits.filter(({ hash }) => !roundCommits.has(hash)).map(({ hash, subject }) => ({ hash, subject })),
       commitsTotal: range.total,
       files: changed?.paths ?? [],
       filesTruncated: changed?.truncated ?? false,

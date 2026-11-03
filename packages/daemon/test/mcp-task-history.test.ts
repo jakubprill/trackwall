@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
 import { TaskHistoryResult } from "@trackwall/protocol";
 import { waitUntil } from "../src/platform/process-group.ts";
+import { viewer, waitFor } from "./support/agents.ts";
 import { gitIn } from "./support/git-repo.ts";
 import { connectHttpClient } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
@@ -19,6 +20,9 @@ beforeAll(async () => {
     miseCommand: ["mise"],
   });
   client = await connectHttpClient(daemon.api.port, TOKEN);
+  // Round commits (ADR-168) carry the user's own identity, which git takes from the repo's config here.
+  gitIn(join(daemon.projects, "shop"), "config", "user.name", "Repo User");
+  gitIn(join(daemon.projects, "shop"), "config", "user.email", "user@example.com");
 }, SLOW_TEST_TIMEOUT_MS);
 
 afterAll(async () => {
@@ -97,6 +101,34 @@ describe.skipIf(process.versions.bun === undefined)("the task journal and search
     );
     expect(found.tasks).toMatchObject([
       { task: task.id, branchKept: false, commits: [{ subject: "Rename the cart to basket" }], commitsTotal: 1, files: ["src/cart.ts"] },
+    ]);
+  }, 60_000);
+  test("the record lists the agent's own commits, not the WIP round commits Trackwall made at the end of its turns (ADR-168)", async () => {
+    const agents = daemon.facade.agents;
+    const task = await agents.createTask("shop", "Empty the cart on logout");
+    const session = agents.sessions().sessions.find((s) => s.task === task.id);
+    if (!session) throw new Error("the task has no session");
+    // The agent commits its work, then a turn ends with a change left uncommitted: Trackwall commits it as a round.
+    writeFileSync(join(task.worktree, "src", "cart.ts"), "export const cart = [];\nexport const emptyOnLogout = true;\n");
+    gitIn(task.worktree, "commit", "-qam", "Empty the cart on logout");
+    const terminal = viewer(agents, session.id);
+    terminal.attachment.input("start\r");
+    await waitFor(agents, session.id, (s) => s.state?.state === "Approval", "the turn's approval");
+    writeFileSync(join(task.worktree, "README.md"), "# shop\n\nThe cart empties on logout.\n");
+    terminal.attachment.input("1");
+    expect(await waitUntil(() => gitIn(task.worktree, "log", "-1", "--format=%s").startsWith("WIP round 1"), 20_000)).toBe(true);
+    terminal.attachment.detach();
+    await agents.stop(session.id);
+
+    await agents.removeTask(task.id, true, false);
+    const journal = join(daemon.home, "task-journal.jsonl");
+    expect(await waitUntil(() => readFileSync(journal, "utf8").includes(task.id), 5000)).toBe(true);
+
+    const found = TaskHistoryResult.parse(
+      (await client.callTool({ name: "search_task_history", arguments: { text: "logout" } })).structuredContent,
+    );
+    expect(found.tasks).toMatchObject([
+      { task: task.id, commits: [{ subject: "Empty the cart on logout" }], commitsTotal: 2, files: ["README.md", "src/cart.ts"] },
     ]);
   }, 60_000);
 });

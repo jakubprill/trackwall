@@ -736,7 +736,8 @@ export const mcpTools = {
       "commit subjects or changed files; leave it empty to list the newest. Narrow with repos (ids, also of repos no " +
       "longer in the projects folder) and since (YYYY-MM-DD, when the task ended). Each task has its repo, prompt, " +
       "the session's last summary, its branch with base and head commit (branchKept: the branch is still in the repo), " +
-      `the newest commits (up to ${TASK_HISTORY_MAX_COMMITS}, commitsTotal counts all), the changed files and the last ` +
+      `the newest commits without Trackwall's WIP round commits (up to ${TASK_HISTORY_MAX_COMMITS}, commitsTotal counts all), ` +
+      "the changed files and the last " +
       "verification. Newest ended first; truncated: true when more matched than fit, narrow the query.",
     args: z
       .object({
