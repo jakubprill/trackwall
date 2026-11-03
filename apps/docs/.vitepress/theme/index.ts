@@ -7,7 +7,7 @@ import { FEATURE_LIST_PAGE } from "../sidebar.ts";
 import { TALK_PAGES } from "../talk-pages.ts";
 import { useImageZoom } from "./image-zoom.ts";
 import { MermaidDiagram } from "./mermaid-diagram.ts";
-import { useTalkKeys } from "./talk-keys.ts";
+import { TalkDeck } from "./talk-deck.ts";
 import "./trackwall.css";
 
 /** The pages the build writes no Markdown copy of (config.ts), so they get no button to copy one. */
@@ -21,12 +21,13 @@ const CopyPageButton = defineComponent(() => {
 
 export default {
   extends: DefaultTheme,
+  // The deck's bar comes after the text of every page and draws itself only on a talk page.
+  Layout: () => h(DefaultTheme.Layout, null, { "doc-after": () => h(TalkDeck) }),
   enhanceApp({ app }) {
     app.component("CopyOrDownloadAsMarkdownButtons", CopyPageButton);
     app.component(MERMAID_COMPONENT, MermaidDiagram);
   },
   setup() {
     useImageZoom();
-    useTalkKeys();
   },
 } satisfies Theme;

@@ -113,19 +113,30 @@
   height: auto;
 }
 
-/* The talk (talk-pages.ts): one slide per screen, snapping into place below the top bar as the reader scrolls. */
-html:has(.talk) {
-  scroll-snap-type: y proximity;
-}
-
+/* The talk (talk-pages.ts, theme/talk-deck.ts): slides one below another, and once the deck takes over, one slide
+   at a time filling the window, with the page's title only above the first. */
 .talk .vp-doc section.slide {
-  scroll-snap-align: start;
-  scroll-margin-top: calc(var(--vp-nav-height) + 16px);
   margin: 24px 0;
   padding: 8px 24px 16px;
   border: 1px solid var(--vp-c-divider);
   border-radius: 10px;
   background: var(--vp-c-bg-soft);
+}
+
+.talk .vp-doc.deck section.slide:not(.shown),
+.talk .vp-doc.deck:not(.on-first) > div > :not(section) {
+  display: none;
+}
+
+/* Room for the window's top bar, the page's padding and the deck's bar. */
+.talk .vp-doc.deck section.slide {
+  min-height: calc(100vh - var(--vp-nav-height) - 160px);
+  margin-bottom: 96px;
+}
+
+.talk .vp-doc.deck section.slide img {
+  max-height: 40vh;
+  width: auto;
 }
 
 /* The slides carry the page, so a slide's title needs no rule above it. */
@@ -144,4 +155,47 @@ html:has(.talk) {
   letter-spacing: var(--tracking-hud);
   text-transform: uppercase;
   color: var(--vp-c-text-2);
+}
+
+/* Previous, the slide's number and next, at the bottom of the window whatever the slide's length. */
+.talk-deck-bar {
+  position: fixed;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  z-index: 20;
+  transform: translateX(-50%);
+  padding: 6px 12px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 10px;
+  background: var(--vp-c-bg);
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--vp-font-family-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--vp-c-text-2);
+}
+
+.talk-deck-bar button {
+  min-width: 44px;
+  min-height: 36px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  background: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-1);
+}
+
+.talk-deck-bar button:hover:not([aria-disabled="true"]) {
+  border-color: var(--vp-c-brand-1);
+  color: var(--vp-c-brand-1);
+}
+
+.talk-deck-bar button:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 2px;
+}
+
+.talk-deck-bar button[aria-disabled="true"] {
+  opacity: 0.4;
 }
