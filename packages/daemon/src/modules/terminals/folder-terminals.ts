@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { lstat } from "node:fs/promises";
 import { type FolderTerminal, MAX_FOLDER_TERMINALS, type RunState, type TerminalPlace } from "@trackwall/protocol";
 import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { KeyedQueue } from "../../infra/keyed-queue.ts";
@@ -67,7 +68,12 @@ function terminalOwner(id: string): string {
 export class FolderTerminals {
   readonly #deps: FolderTerminalsDeps;
   readonly #entries = new Map<string, Entry>();
-  /** Starts and closes of one place run one after another, so a double click opens one shell. */
+  /** The same entries by place (`placeKey`): one per place. */
+  readonly #atPlace = new Map<string, Entry>();
+  /**
+   * Starts and closes of one place run one after another, so a double click opens one shell, and a task's end
+   * (`closeTask`) waits for a start in flight in its worktree and closes what it started.
+   */
   readonly #places = new KeyedQueue();
 
   constructor(deps: FolderTerminalsDeps) {
@@ -77,11 +83,14 @@ export class FolderTerminals {
   /** The place's terminal: the live one, or its ended one with a new shell, or a new one. */
   start(place: TerminalPlace): Promise<FolderTerminal> {
     return this.#places.run(placeKey(place), async () => {
-      const cwd = await this.#deps.folder(place);
-      const known = this.#atPlace(place);
+      const known = this.#atPlace.get(placeKey(place));
       if (known && this.#live(known)) return this.#view(known);
       if (!known && this.#entries.size >= MAX_FOLDER_TERMINALS)
-        throw new DomainError("bad_request", `${MAX_FOLDER_TERMINALS} terminals are open; close one before opening another`);
+        throw new DomainError(
+          "bad_request",
+          `${MAX_FOLDER_TERMINALS} terminals are open, also ended ones; close one before opening another`,
+        );
+      const cwd = await this.#folder(place);
       const entry = known ?? this.#add(place);
       try {
         await this.#spawn(entry, cwd);
@@ -124,21 +133,39 @@ export class FolderTerminals {
   /** Ends the shell, once its end is confirmed (`stop_unconfirmed` otherwise, and the terminal stays), and forgets it. */
   async close(id: string): Promise<void> {
     const entry = this.#get(id);
-    await this.#places.run(placeKey(entry.place), async () => {
-      await this.#deps.procs.stop(terminalOwner(id));
-      this.#forget(entry);
+    await this.#places.run(placeKey(entry.place), () => this.#close(entry));
+  }
+
+  /** Closes the terminal in a task's worktree, also one starting now, before the worktree goes away. */
+  closeTask(task: string): Promise<void> {
+    const key = taskKey(task);
+    return this.#places.run(key, async () => {
+      const entry = this.#atPlace.get(key);
+      if (entry) await this.#close(entry);
     });
   }
 
-  /** Closes every terminal in a task's worktree or anywhere in a repo, before that folder goes away. */
-  async closeIn(where: { repo: string } | { task: string }): Promise<void> {
-    const inside = [...this.#entries.values()].filter((e) => ("task" in where ? e.place.task === where.task : e.place.repo === where.repo));
-    await Promise.all(inside.map((entry) => this.close(entry.id)));
+  /** Within the place's queue; a close that another one already finished does nothing. */
+  async #close(entry: Entry): Promise<void> {
+    if (this.#entries.get(entry.id) !== entry) return;
+    await this.#deps.procs.stop(terminalOwner(entry.id));
+    this.#forget(entry);
+  }
+
+  /** The place's folder; a worktree must be a folder of its own, since its agent could swap it for a link to anywhere. */
+  async #folder(place: TerminalPlace): Promise<string> {
+    const folder = await this.#deps.folder(place);
+    if (place.task === null) return folder;
+    const stat = await lstat(folder).catch(() => undefined);
+    if (stat === undefined || !stat.isDirectory())
+      throw new DomainError("repo_unavailable", `${folder} is not a folder (it is gone, or a link)`);
+    return folder;
   }
 
   #add(place: TerminalPlace): Entry {
     const entry: Entry = { id: randomUUID(), place, screen: new TerminalScreen(INITIAL_COLS, INITIAL_ROWS), closers: new Set() };
     this.#entries.set(entry.id, entry);
+    this.#atPlace.set(placeKey(place), entry);
     return entry;
   }
 
@@ -152,7 +179,10 @@ export class FolderTerminals {
         env,
         cols: entry.screen.cols,
         rows: entry.screen.rows,
-        onData: (bytes) => entry.screen.write(bytes),
+        // Output the PTY still flushes after a close must not reach a disposed screen.
+        onData: (bytes) => {
+          if (this.#entries.get(entry.id) === entry) entry.screen.write(bytes);
+        },
       });
       entry.pty = terminal;
     } catch (err) {
@@ -169,13 +199,10 @@ export class FolderTerminals {
 
   #forget(entry: Entry): void {
     this.#entries.delete(entry.id);
+    this.#atPlace.delete(placeKey(entry.place));
     for (const closed of entry.closers) closed();
     entry.closers.clear();
     entry.screen.dispose();
-  }
-
-  #atPlace(place: TerminalPlace): Entry | undefined {
-    return [...this.#entries.values()].find((e) => placeKey(e.place) === placeKey(place));
   }
 
   #get(id: string): Entry {
@@ -201,8 +228,13 @@ export class FolderTerminals {
   }
 }
 
+/**
+ * Without the last lines of an ended shell: they are what the user typed and saw (a `cat .env`), which the screen
+ * already holds for the windows, and the list goes to every listener of the events.
+ */
 function viewOf(entry: Entry, run: RunState): FolderTerminal {
-  return { id: entry.id, repo: entry.place.repo, task: entry.place.task, run };
+  const shown = run.kind === "exited" ? { ...run, lastLines: [] } : run;
+  return { id: entry.id, repo: entry.place.repo, task: entry.place.task, run: shown };
 }
 
 /** A start that failed as the user can act on it: a folder that went away, or a shell this daemon cannot run. */
@@ -211,6 +243,11 @@ function startError(err: unknown): unknown {
   return new DomainError(err.reason === "cwd_invalid" ? "repo_unavailable" : "terminal_unavailable", err.message);
 }
 
+/** A task id is unique across repos, so a task's place is its id alone. */
 function placeKey(place: TerminalPlace): string {
-  return `${place.repo}\n${place.task ?? ""}`;
+  return place.task === null ? `repo:${place.repo}` : taskKey(place.task);
+}
+
+function taskKey(task: string): string {
+  return `task:${task}`;
 }

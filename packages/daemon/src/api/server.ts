@@ -11,7 +11,7 @@ import type { EventHub } from "./event-hub.ts";
 import { eventSocketRoute } from "./event-socket.ts";
 import { hasValidToken, OriginPolicy } from "./guard.ts";
 import { HOOKS_PATH, handleHook } from "./hooks.ts";
-import { ptySocketRoute, terminalSocketRoute } from "./pty-socket.ts";
+import { sessionSocketRoute, terminalSocketRoute } from "./pty-socket.ts";
 import { postRoutes } from "./routes.ts";
 import { attachSockets } from "./sockets.ts";
 import { serveStatic } from "./static.ts";
@@ -87,7 +87,7 @@ export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer
     policy: () => policy,
     routes: [
       eventSocketRoute(options.events),
-      ptySocketRoute(options.facade),
+      sessionSocketRoute(options.facade),
       terminalSocketRoute(options.facade),
       conversationSocketRoute(options.facade),
     ],

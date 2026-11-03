@@ -49,7 +49,7 @@ interface PtyKind {
   attach: Attach;
 }
 
-export function ptySocketRoute(facade: Facade): SocketRoute {
+export function sessionSocketRoute(facade: Facade): SocketRoute {
   return route({
     prefix: PTY_SOCKET_PREFIX,
     subprotocol: PTY_SUBPROTOCOL,

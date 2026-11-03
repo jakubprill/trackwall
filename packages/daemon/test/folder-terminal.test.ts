@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { realpathSync } from "node:fs";
+import { realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ApiEnvelope, agentsApi, PTY_CLOSE_NOT_FOUND, TERMINAL_SUBPROTOCOL, terminalsApi } from "@trackwall/protocol";
 import WebSocket from "ws";
@@ -127,6 +127,22 @@ describe.skipIf(process.versions.bun === undefined)("a folder terminal (real PTY
     await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
 
     expect(await window.closed).toBe(PTY_CLOSE_NOT_FOUND);
+    expect(await daemon.post(terminalsApi.list, {})).toEqual([]);
+  }, 60_000);
+
+  test("an end of a task that is refused leaves its shell running", async () => {
+    const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "change nothing", approvals: "ask" });
+    const session = daemon.facade.agents.sessions().sessions.find((s) => s.task === task.id && s.run.kind === "running");
+    if (session) await daemon.facade.agents.stop(session.id);
+    writeFileSync(join(task.worktree, "notes.txt"), "not committed\n");
+    const terminal = await daemon.post(terminalsApi.start, { repo: "shop", task: task.id });
+
+    expect(await errorOf(agentsApi.removeTask.path, { task: task.id, keepBranch: false, discardChanges: false })).toBe("unsaved_changes");
+
+    expect(await daemon.post(terminalsApi.list, {})).toEqual([
+      expect.objectContaining({ id: terminal.id, run: expect.objectContaining({ kind: "running" }) }),
+    ]);
+    await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
     expect(await daemon.post(terminalsApi.list, {})).toEqual([]);
   }, 60_000);
 

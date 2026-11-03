@@ -214,8 +214,6 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     return null;
   }),
   route(agentsApi.removeTask, async (f, b) => {
-    // A shell the user left open in the worktree would refuse the removal, as any process of Trackwall there does.
-    await f.terminals.closeIn({ task: b.task });
     await f.agents.removeTask(b.task, b.keepBranch, b.discardChanges);
     return null;
   }),

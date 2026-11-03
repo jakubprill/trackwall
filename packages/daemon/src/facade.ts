@@ -293,6 +293,8 @@ export function createFacade(o: FacadeOptions): Facade {
   });
   const agents = new Agents({
     procs,
+    // `terminals` needs `agents` for the task worktrees, so it is made below; a task ends only after both.
+    closeFolderTerminal: (task): Promise<void> => terminals.closeTask(task),
     repos: workspace,
     vcs,
     home: o.home,
@@ -449,9 +451,9 @@ export function createFacade(o: FacadeOptions): Facade {
     });
   }
 
-  const terminals = new FolderTerminals({
+  const terminals: FolderTerminals = new FolderTerminals({
     procs,
-    folder: async ({ repo, task }) => (task === null ? workspace.repoPath(repo) : agents.taskOfRepo(task, repo).worktree),
+    folder: async ({ repo, task }): Promise<string> => (task === null ? workspace.repoPath(repo) : agents.taskWorktreeForShell(task, repo)),
     env: o.userEnv,
     shell: (env) => userShell(env),
     log: o.log,

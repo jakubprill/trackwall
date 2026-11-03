@@ -44,20 +44,20 @@ const CONNECTING_LABEL_MS = 300;
 const RESET = "\x1bc";
 
 /**
- * A terminal in the UI (§4.4, ADR-26): xterm.js connected over a WebSocket to a PTY in the daemon, a session's or a
- * folder terminal's (ADR-185). The
- * daemon sends the screen image first, so switching sessions or a dropped connection starts from the current screen,
- * not an empty terminal. Keys and the terminal size go to the session; the PTY takes the size of the last session
- * terminal that reported one, and a window that comes to the front reports its terminals' sizes again, so with the
- * session open in two windows (ADR-49) the one you work in sets it. The window also tells the daemon whether it is in front of the user, which marks the session seen
- * (ADR-47). In the grid (ADR-48) several terminals are open at once; only the `selected` one takes the keyboard and
- * counts as in front, so a waiting session in another tile keeps waiting until the user selects it. Files dropped on
- * the terminal (ADR-51) are pasted as their paths, as if the user typed them. Keys typed before the first connection
- * opens wait for it (`InputBeforeOpen`). Text the program copies (OSC 52, how Copilot CLI copies its own selection) goes
- * to the clipboard only as the answer to the user's Ctrl+C or right click in this terminal (`asksProgramToCopy`) or to
- * Enter on Copilot CLI's `/copy` (`entersCopyCommand`).
- * Until the daemon's screen image comes, the terminal shows the screen it had when it last closed in this window, and
- * says it is connecting (ADR-117): where the daemon answers late, the frame would otherwise stay black for seconds.
+ * A terminal in the UI (§4.4, ADR-26): xterm.js connected over a WebSocket to a PTY in the daemon, a session's Copilot
+ * CLI or a folder terminal's shell (ADR-185). The daemon sends the screen image first, so switching views or a dropped
+ * connection starts from the current screen, not an empty terminal. Keys and the terminal size go to the program; the
+ * PTY takes the size of the last terminal that reported one, and a window that comes to the front reports its
+ * terminals' sizes again, so with the same terminal open in two windows (ADR-49) the one you work in sets it. Files
+ * dropped on the terminal (ADR-51) are pasted as their paths, as if the user typed them. Keys typed before the first
+ * connection opens wait for it (`InputBeforeOpen`). Text the program copies (OSC 52) goes to the clipboard only as the
+ * answer to the user's Ctrl+C or right click in this terminal (`asksProgramToCopy`). Until the daemon's screen image
+ * comes, the terminal shows the screen it had when it last closed in this window, and says it is connecting (ADR-117):
+ * where the daemon answers late, the frame would otherwise stay black for seconds.
+ *
+ * For Copilot CLI only (`PtyKind.copilotCli`): the window tells the daemon whether it is in front of the user, which
+ * marks the session seen (ADR-47), and in the grid (ADR-48) only the `selected` tile counts as in front; and Enter on
+ * Copilot CLI's `/copy` (`entersCopyCommand`) also lets its copy through.
  */
 /** The screen the program draws, top to bottom, as text: from `baseY`, not from where the user has scrolled back to. */
 function screenLines(terminal: Terminal): string[] {
@@ -65,8 +65,10 @@ function screenLines(terminal: Terminal): string[] {
   return Array.from({ length: terminal.rows }, (_, row) => buffer.getLine(buffer.baseY + row)?.translateToString(true) ?? "");
 }
 
-/** What the terminal says about what it shows: a session, or a folder terminal's shell (ADR-185). */
-export interface PtyTerminalWords {
+/** What runs in the terminal: a session's Copilot CLI, or a folder terminal's shell (ADR-185). */
+export interface PtyKind {
+  /** Copilot CLI, which has a "waiting for you" the window's focus clears, and a `/copy` command. */
+  copilotCli: boolean;
   /** The thing behind the terminal, in "Connecting to the …". */
   noun: "session" | "shell";
   /** Shown above the terminal once its program has ended. */
@@ -79,7 +81,7 @@ export function PtyTerminal({
   screenKey,
   live,
   selected,
-  words,
+  kind,
 }: {
   conn: Connection;
   socket: DaemonSocket;
@@ -87,11 +89,10 @@ export function PtyTerminal({
   screenKey: string;
   live: boolean;
   selected: boolean;
-  words: PtyTerminalWords;
+  kind: PtyKind;
 }) {
-  const { noun } = words;
+  const { noun, copilotCli } = kind;
   const { path, subprotocol } = address;
-  const keysDropped = `The terminal was still connecting to the ${noun}, so some of the keys you typed were dropped.`;
   const keyboardElsewhere = useContext(KeyboardElsewhere);
   const focused = selected && !keyboardElsewhere;
   const frame = useRef<HTMLDivElement>(null);
@@ -165,8 +166,11 @@ export function PtyTerminal({
       if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
     };
     const sendSize = () => send({ type: "resize", cols: terminal.cols, rows: terminal.rows });
+    const keysDropped = `The terminal was still connecting to the ${noun}, so some of the keys you typed were dropped.`;
     const focus = new FocusReporter(
-      (inFront) => send({ type: "focus", focused: inFront }),
+      (inFront) => {
+        if (copilotCli) send({ type: "focus", focused: inFront });
+      },
       () => terminalInFront(takesFocus.current, document),
       browserTimers,
     );
@@ -225,7 +229,10 @@ export function PtyTerminal({
       else if (taken === "dropped") setNotice(keysDropped);
     });
     terminal.attachCustomKeyEventHandler((event) => {
-      if (asksProgramToCopy({ kind: "key", key: event }, selection()) || entersCopyCommand(event, () => screenLines(terminal)))
+      if (
+        asksProgramToCopy({ kind: "key", key: event }, selection()) ||
+        (copilotCli && entersCopyCommand(event, () => screenLines(terminal)))
+      )
         programCopy.asked(performance.now());
       // `false` without `preventDefault`: xterm.js leaves the key alone and the browser pastes into its text area.
       if (pastesClipboard(event, { mac: IS_MAC })) return false;
@@ -284,7 +291,7 @@ export function PtyTerminal({
       updateFocus.current = undefined;
       terminal.dispose();
     };
-  }, [conn, path, subprotocol, screenKey, noun, keysDropped, lastScreens]);
+  }, [conn, path, subprotocol, screenKey, noun, copilotCli, lastScreens]);
 
   useEffect(() => {
     if (focused) term.current?.focus();
@@ -294,7 +301,7 @@ export function PtyTerminal({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {notice && <p className="text-warning border-b px-3 py-1 text-xs">{notice}</p>}
-      {!live && <p className="text-muted-foreground border-b px-3 py-1 text-xs">{words.ended}</p>}
+      {!live && <p className="text-muted-foreground border-b px-3 py-1 text-xs">{kind.ended}</p>}
       <div ref={frame} {...{ [FILE_DROP_TARGET]: "" }} className={cn("relative min-h-0 flex-1 overflow-hidden", DROP_HOVER_RING)}>
         <div ref={host} className="absolute inset-2 font-mono" />
         {/* Over the terminal, not above it: a bar in the flow would shrink the terminal and make the TUI redraw. */}

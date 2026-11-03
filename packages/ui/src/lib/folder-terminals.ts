@@ -12,3 +12,11 @@ export const FolderTerminalsLive = createContext<LiveFeed<FolderTerminal[]> | un
 export function terminalAt(list: readonly FolderTerminal[], place: TerminalPlace): FolderTerminal | undefined {
   return list.find((terminal) => terminal.repo === place.repo && terminal.task === place.task);
 }
+
+/**
+ * Whether opening the Shell tab starts the place's shell: once per tab, after the list came and showed none. A start
+ * already asked for, one that failed, or a shell the user closed waits for the button instead.
+ */
+export function startsOnOpen(state: { loaded: boolean; hasTerminal: boolean; alreadyAsked: boolean }): boolean {
+  return state.loaded && !state.hasTerminal && !state.alreadyAsked;
+}

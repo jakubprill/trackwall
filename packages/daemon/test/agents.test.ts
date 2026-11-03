@@ -503,6 +503,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     await expect(agents.start("other")).rejects.toMatchObject({ code: "not_found" });
 
     const missing = new Agents({
+      closeFolderTerminal: async () => {},
       procs: {
         startTerminal: () => Promise.reject(new Error("should not start")),
         startChannel: () => Promise.reject(new Error("should not start")),

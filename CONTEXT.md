@@ -598,7 +598,7 @@ The small window next to the tray icon, opened by a left click on it, with the t
 _Avoid_: popup, tray menu (that is the menu on a right click)
 
 **Screen image** (`TerminalScreen`):
-The state of a session's screen, which the daemon keeps in a windowless terminal emulator and sends to a session terminal on connection, before further output.
+The state of a session's or a folder terminal's screen, which the daemon keeps in a windowless terminal emulator and sends to a terminal in the UI on connection, before further output.
 _Avoid_: screenshot (that is a picture), output history
 
 **Last screen** (`LastScreens`, `useLastScreens`):

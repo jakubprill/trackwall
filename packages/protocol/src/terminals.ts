@@ -24,7 +24,7 @@ export const FolderTerminal = z.object({
 });
 export type FolderTerminal = z.infer<typeof FolderTerminal>;
 
-/** More live folder terminals than a person can watch is a script, not a person. */
+/** More folder terminals, ended ones too, than a person can watch is a script, not a person; each keeps a screen in memory. */
 export const MAX_FOLDER_TERMINALS = 16;
 
 const endpoint = apiEndpoints("terminals");

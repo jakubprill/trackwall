@@ -178,6 +178,8 @@ interface AgentsRepos {
 
 export interface AgentsDeps {
   procs: AgentsProcs;
+  /** Closes the user's folder terminal in a task's worktree before the task ends (`terminals`, ADR-185). */
+  closeFolderTerminal: (task: string) => Promise<void>;
   repos: AgentsRepos;
   /** Task worktrees and branches (ADR-31), and the round commits in them (ADR-168). */
   vcs: TasksVcs & RoundsVcs;
@@ -300,6 +302,7 @@ export class Agents {
       repos: deps.repos,
       file: new TaskFile(join(deps.home, TASKS_FILE), deps.log),
       liveIn: (dir) => deps.procs.liveIn(dir),
+      closeFolderTerminal: (task) => deps.closeFolderTerminal(task),
       legacyWorktreesDir: join(deps.home, LEGACY_WORKTREES_DIR),
       roundCommits: (task) => this.#rounds.roundCommits(task),
       openEditor: deps.openEditor,
@@ -1008,6 +1011,11 @@ export class Agents {
    * The worktree a mise task of the task runs in, while its mise config is the trusted one, and the task port its runs
    * get; for the `mise` module (ADR-59, ADR-61).
    */
+  /** The worktree of task `id` of `repo` for the user's shell (ADR-185); refused while the task is being ended. */
+  taskWorktreeForShell(id: string, repo: string): string {
+    return this.#tasks.worktreeForShell(id, repo);
+  }
+
   trustedTaskWorktree(id: string, repo: string): Promise<{ worktree: string; port: number }> {
     return this.#tasks.trustedWorktree(id, repo);
   }
