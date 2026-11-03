@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { GraphEdge, Repo, RepoGraph, Session } from "@trackwall/protocol";
 import { repoNeedsYou } from "@trackwall/scene/model";
-import { daemonAnswered, homeDaemonRunning, homeHasObject, homeModel, homeRepoStatus, homeSessionState } from "../src/lib/home-model.ts";
+import { daemonWork, homeDaemonRunning, homeHasObject, homeModel, homeRepoStatus, homeSessionState } from "../src/lib/home-model.ts";
 
 const running = { kind: "running", runId: "r", startedAt: "2026-10-24T10:00:00Z", pid: 10 } as const;
 
@@ -125,26 +125,11 @@ describe("dashboard snapshot", () => {
       sessions: [session("s1", "api"), session("s2", "gone")],
       graph: undefined,
       running: [{ repo: "api", task: null, miseTask: "dev", run: running }],
-      daemonRunning: true,
+      daemonRunning: false,
     });
 
     expect(model.repos[0]?.runningTask).toBe("dev");
     expect(model.sessions.map((s) => s.id)).toEqual(["s1"]);
-    expect(model.daemonRunning).toBe(true);
-  });
-
-  test("while the daemon is not running, its last sessions and running mise tasks are not on the dashboard, but the repos are", () => {
-    const model = homeModel({
-      repos: [repo("api")],
-      sessions: [session("s1", "api")],
-      graph: undefined,
-      running: [{ repo: "api", task: null, miseTask: "dev", run: running }],
-      daemonRunning: false,
-    });
-
-    expect(model.repos.map((r) => r.id)).toEqual(["api"]);
-    expect(model.repos[0]?.runningTask).toBeNull();
-    expect(model.sessions).toEqual([]);
     expect(model.daemonRunning).toBe(false);
   });
 });
@@ -194,15 +179,26 @@ describe("selection and daemon state on the dashboard", () => {
   });
 
   test("the daemon is running while it answers: an error with its code counts, a broken connection and a response outside the contract do not", () => {
-    expect(daemonAnswered(undefined, undefined)).toBe(true);
-    expect(daemonAnswered("workspace.yaml: bad key", "invalid_config")).toBe(true);
-    expect(daemonAnswered("Failed to fetch", undefined)).toBe(false);
-    expect(daemonAnswered("unexpected response 502", "bad_response")).toBe(false);
+    expect(homeDaemonRunning(undefined, undefined, false)).toBe(true);
+    expect(homeDaemonRunning("workspace.yaml: bad key", "invalid_config", false)).toBe(true);
+    expect(homeDaemonRunning("Failed to fetch", undefined, false)).toBe(false);
+    expect(homeDaemonRunning("unexpected response 502", "bad_response", false)).toBe(false);
   });
 
   test("the daemon is not running once its events connection is lost, even while the last repo list still answered", () => {
-    expect(homeDaemonRunning({ answered: true, eventsLost: false })).toBe(true);
-    expect(homeDaemonRunning({ answered: true, eventsLost: true })).toBe(false);
-    expect(homeDaemonRunning({ answered: false, eventsLost: false })).toBe(false);
+    expect(homeDaemonRunning(undefined, undefined, true)).toBe(false);
+  });
+
+  test("once the events connection is lost, the daemon's last sessions and running mise tasks are gone", () => {
+    const sessions = [session("s1", "api")];
+    const tasks = [{ repo: "api", task: null, miseTask: "dev", run: running }];
+    expect(daemonWork(true, sessions, tasks)).toEqual({ sessions: [], running: [] });
+  });
+
+  test("a failed poll alone keeps the last sessions and running mise tasks, and sessions not loaded yet stay unloaded", () => {
+    const sessions = [session("s1", "api")];
+    const tasks = [{ repo: "api", task: null, miseTask: "dev", run: running }];
+    expect(daemonWork(false, sessions, tasks)).toEqual({ sessions, running: tasks });
+    expect(daemonWork(false, undefined, undefined)).toEqual({ sessions: undefined, running: [] });
   });
 });

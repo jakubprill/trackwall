@@ -29,13 +29,7 @@ export interface HomeSources {
   daemonRunning: boolean;
 }
 
-/**
- * Sessions and mise tasks run under the daemon, which stops them when it stops: while it is not running, the last ones it
- * reported are not on the dashboard, so that it does not show "working" for a daemon that is gone. Repos stay, because their
- * git state does not depend on it.
- */
 export function homeModel({ repos, sessions, graph, running, daemonRunning }: HomeSources): HomeModel {
-  const live = daemonRunning ? { sessions, running } : { sessions: [], running: [] };
   const ids = new Set(repos.map((r) => r.id));
   const edges = (graph?.edges ?? []).filter((e) => ids.has(e.from) && ids.has(e.to));
   const layout = layoutGraph([...ids], edges);
@@ -46,12 +40,10 @@ export function homeModel({ repos, sessions, graph, running, daemonRunning }: Ho
       id: repo.id,
       layer: layout.boxes.get(repo.id)?.column ?? null,
       ...repoState(repo),
-      runningTask: live.running.find((t) => t.repo === repo.id)?.miseTask ?? null,
+      runningTask: running.find((t) => t.repo === repo.id)?.miseTask ?? null,
     })),
     // A session stands at its repo on the scene; the supervisor has none (ADR-58) and lives in its own panel.
-    sessions: live.sessions.flatMap((s) =>
-      s.repo !== null && ids.has(s.repo) ? [{ id: s.id, repo: s.repo, state: homeSessionState(s) }] : [],
-    ),
+    sessions: sessions.flatMap((s) => (s.repo !== null && ids.has(s.repo) ? [{ id: s.id, repo: s.repo, state: homeSessionState(s) }] : [])),
     links: homeLinks(edges),
     daemonRunning,
   };
@@ -107,20 +99,26 @@ export const HOME_SESSION_STATUS: Record<HomeSessionState, HomeStatus> = {
 };
 
 /**
- * The daemon is running as long as it answers: an error with a daemon code (for example a bad `workspace.yaml`) came
- * from it, and one without a code or with `bad_response` (for example a proxy error page instead of an API envelope) is
- * a dropped connection.
+ * The daemon is running as long as it answers and its events connection is not lost (`DaemonEvents.isLost`), which shows
+ * a stop at once, while the repo list, polled every 30 s while its events are live, keeps its last answer until the next
+ * request. An error with a daemon code (for example a bad `workspace.yaml`) came from it, and one without a code or with
+ * `bad_response` (for example a proxy error page instead of an API envelope) is a dropped connection.
  */
-export function daemonAnswered(error: string | undefined, errorCode: CallErrorCode | undefined): boolean {
-  return error === undefined || (errorCode !== undefined && errorCode !== "bad_response");
+export function homeDaemonRunning(error: string | undefined, errorCode: CallErrorCode | undefined, eventsLost: boolean): boolean {
+  return !eventsLost && (error === undefined || (errorCode !== undefined && errorCode !== "bad_response"));
 }
 
 /**
- * Running while the last answer came from the daemon and its events connection is not lost: a drop is seen at once, while
- * the repo list, polled every 30 s while its events are live, would keep its last answer until the next request.
+ * Sessions and mise tasks run under the daemon, which stops them with itself: once its events connection is lost, the last
+ * ones it reported are gone, so the dashboard does not show "working" for a daemon that has stopped. A failed poll alone
+ * does not count, since the daemon may well be there. `undefined` sessions (not loaded yet) stay `undefined`.
  */
-export function homeDaemonRunning({ answered, eventsLost }: { answered: boolean; eventsLost: boolean }): boolean {
-  return answered && !eventsLost;
+export function daemonWork(
+  eventsLost: boolean,
+  sessions: readonly Session[] | undefined,
+  running: readonly RunningMiseTask[] | undefined,
+): { sessions: readonly Session[] | undefined; running: readonly RunningMiseTask[] } {
+  return eventsLost ? { sessions: [], running: [] } : { sessions, running: running ?? [] };
 }
 
 export function homeDaemonStatus(running: boolean): HomeStatus {

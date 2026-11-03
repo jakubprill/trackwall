@@ -69,8 +69,9 @@ export class DaemonEvents {
   }
 
   /**
-   * The connection dropped, or the first one failed, and no new one has opened yet. On loopback that means the daemon
-   * stopped or is restarting, which the UI sees here at once, while a poll would notice it only at its next request.
+   * The connection dropped, or the first one failed, and no new one has opened yet: mostly the daemon stopped or is
+   * restarting (or the port forward to a daemon in a container dropped), which the UI sees here at once, while a poll would
+   * notice it only at its next request. It clears when a reconnect opens, at most `MAX_RECONNECT_MS` after the daemon is back.
    */
   isLost(): boolean {
     return this.#lost;
