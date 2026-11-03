@@ -191,7 +191,7 @@ function authenticate(req: IncomingMessage, sessionScoped: boolean, o: ApiOption
  */
 function journalArea(url: string | undefined): string {
   const path = (url ?? "").split("?")[0] ?? "";
-  if (postRoutes.has(path)) return `api:${path}`;
+  if (postRoutes.has(path) || path === DOWNLOAD_PATH) return `api:${path}`;
   return path.startsWith(HOOKS_PATH) ? "api:hooks" : "api:other";
 }
 

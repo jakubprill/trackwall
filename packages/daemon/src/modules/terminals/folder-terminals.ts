@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { lstat } from "node:fs/promises";
 import { type FolderTerminal, MAX_FOLDER_TERMINALS, type RunState, type TerminalPlace } from "@trackwall/protocol";
 import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { KeyedQueue } from "../../infra/keyed-queue.ts";
 import { type ScreenViewer, TerminalScreen } from "../../infra/terminal-screen.ts";
+import { checkedPlaceFolder } from "./place-folder.ts";
 
 /**
  * Folder terminals (§4.23, ADR-185): the user's own shell in a repo root or a task's worktree, in a PTY from `procs`,
@@ -152,14 +152,8 @@ export class FolderTerminals {
     this.#forget(entry);
   }
 
-  /** The place's folder; a worktree must be a folder of its own, since its agent could swap it for a link to anywhere. */
   async #folder(place: TerminalPlace): Promise<string> {
-    const folder = await this.#deps.folder(place);
-    if (place.task === null) return folder;
-    const stat = await lstat(folder).catch(() => undefined);
-    if (stat === undefined || !stat.isDirectory())
-      throw new DomainError("repo_unavailable", `${folder} is not a folder (it is gone, or a link)`);
-    return folder;
+    return checkedPlaceFolder(place, await this.#deps.folder(place));
   }
 
   #add(place: TerminalPlace): Entry {

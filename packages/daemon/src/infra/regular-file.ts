@@ -11,6 +11,19 @@ import { type FileHandle, lstat, open } from "node:fs/promises";
 /** `O_NOFOLLOW` and `O_NONBLOCK` are 0 where the system lacks them (Windows), which leaves the flags as they were. */
 const FLAGS = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0);
 
+/** The file is over the caller's limit; a class of its own so a caller can say what to do instead. */
+export class FileTooLargeError extends Error {
+  readonly maxBytes: number;
+
+  constructor(path: string, maxBytes: number) {
+    super(`${path} is larger than ${sizeLabel(maxBytes)}`);
+    this.maxBytes = maxBytes;
+  }
+}
+
+/** The path is a link, a folder, a FIFO or a device, or became one while it was opened. */
+export class NotRegularFileError extends Error {}
+
 /** The file's content; `undefined` when nothing is at `path`, and an error for a link, a non-regular file or one over the limit. */
 export async function readRegularFile(path: string, maxBytes: number): Promise<Buffer | undefined> {
   const opened = await openRegularFile(path, maxBytes);
@@ -19,7 +32,7 @@ export async function readRegularFile(path: string, maxBytes: number): Promise<B
   try {
     const buffer = Buffer.alloc(maxBytes + 1);
     const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-    if (bytesRead > maxBytes) throw new Error(`${path} is larger than ${sizeLabel(maxBytes)}`);
+    if (bytesRead > maxBytes) throw new FileTooLargeError(path, maxBytes);
     return buffer.subarray(0, bytesRead);
   } finally {
     await handle.close();
@@ -36,16 +49,16 @@ export async function openRegularFile(path: string, maxBytes: number): Promise<{
     throw err;
   });
   if (!before) return undefined;
-  if (!before.isFile()) throw new Error(`${path} is not a regular file (a link or a folder)`);
+  if (!before.isFile()) throw new NotRegularFileError(`${path} is not a regular file (a link or a folder)`);
   const handle = await open(path, FLAGS).catch((err: NodeJS.ErrnoException) => {
-    if (err.code === "ELOOP") throw new Error(`${path} is not a regular file (a link or a folder)`);
+    if (err.code === "ELOOP") throw new NotRegularFileError(`${path} is not a regular file (a link or a folder)`);
     throw err;
   });
   try {
     const opened = await handle.stat();
     if (!opened.isFile() || opened.ino !== before.ino || opened.dev !== before.dev)
-      throw new Error(`${path} changed into something other than a regular file while it was read`);
-    if (opened.size > maxBytes) throw new Error(`${path} is larger than ${sizeLabel(maxBytes)}`);
+      throw new NotRegularFileError(`${path} changed into something other than a regular file while it was read`);
+    if (opened.size > maxBytes) throw new FileTooLargeError(path, maxBytes);
     return { handle, size: opened.size };
   } catch (err) {
     await handle.close();

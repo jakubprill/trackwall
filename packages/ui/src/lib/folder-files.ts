@@ -18,7 +18,8 @@ export function entryAction(entry: FolderEntry): "open" | "download" | null {
 
 /** Hands the bytes to the browser as a download named `name`: the page cannot write a file itself. */
 export function saveFile(blob: Blob, name: string): void {
-  const url = URL.createObjectURL(blob);
+  // Never the answer's own type: a webview that opens a blob instead of saving it must not render an agent's `.html`.
+  const url = URL.createObjectURL(new Blob([blob], { type: "application/octet-stream" }));
   const link = document.createElement("a");
   link.href = url;
   link.download = name;
