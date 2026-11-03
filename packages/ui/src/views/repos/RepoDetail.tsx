@@ -3,6 +3,7 @@ import { FolderOpen } from "lucide-react";
 import { type ReactNode, Suspense, useCallback, useContext, useState } from "react";
 import { EditorButton } from "@/components/EditorButton";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
+import { FolderShell } from "@/components/FolderShell";
 import { LazyMarkdown } from "@/components/LazyMarkdown";
 import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
@@ -86,6 +87,12 @@ export function RepoDetail({
           {tab === "commits" && <Loaded remote={overview}>{(o) => <RepoCommits commits={o.commits} />}</Loaded>}
           {tab === "changes" && <RepoChanges conn={conn} repo={repo.id} refreshKey={head} />}
           {tab === "mise" && <RepoMiseTasks conn={conn} repo={repo.id} />}
+          {tab === "shell" && (
+            // A fixed height in the scrolling page: the terminal fits itself to its frame, and the frame to nothing else.
+            <div className="flex h-[70vh] flex-col overflow-hidden rounded-md border">
+              <FolderShell conn={conn} place={{ repo: repo.id, task: null }} folder={repo.path} />
+            </div>
+          )}
           {tab === "readme" && <Loaded remote={overview}>{(o) => <Readme conn={conn} readme={o.readme} />}</Loaded>}
         </>
       )}
