@@ -5,7 +5,7 @@ import { KeyedQueue } from "../../infra/keyed-queue.ts";
 import { type ScreenViewer, TerminalScreen } from "../../infra/terminal-screen.ts";
 
 /**
- * Folder terminals (§4.13, ADR-185): the user's own shell in a repo root or a task's worktree, in a PTY from `procs`,
+ * Folder terminals (§4.23, ADR-185): the user's own shell in a repo root or a task's worktree, in a PTY from `procs`,
  * with a screen on the daemon side like a session's, so a window that connects later starts from the current screen.
  * One terminal per place: a second start hands back the live one. They live in memory only; a daemon restart ends
  * them with every other group. The place comes as ids and the shell from the daemon's environment, so a request

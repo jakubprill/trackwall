@@ -577,6 +577,10 @@ _Avoid_: chat outside the "Chat (preview)" control and the "Chat" tab it gives a
 xterm.js in the Sessions view and the supervisor panel, connected over the WebSocket `/ws/pty/<session>` to the session's PTY. Several session terminals, also in different windows, can show the same session; the PTY takes the size of the last one that reported it, and a window that comes to the front reports the size of its terminals again (ADR-49).
 _Avoid_: terminal window (a window is the app window)
 
+**Folder terminal** (`FolderTerminal`, `FolderTerminals`, `terminals` module; the "Shell" tab in the UI):
+The user's own shell in a repo root or a task's worktree (its **place**, `TerminalPlace`), which the daemon runs in a PTY and the UI shows like a session terminal (ADR-185). One per place; it keeps running when its tab closes, and ends when the user closes it, ends the task, or the daemon stops. In the UI it is the "Shell" tab, because a task's "Terminal" tab is its session's.
+_Avoid_: console, terminal on its own in the UI (a task's "Terminal" tab is the session terminal)
+
 **Session layout** (`SessionLayout`):
 How the right side of the Sessions view shows entries (ADR-48): `1` is the selected entry alone with its full panel (tabs, Stop, Resume), `2` and `4` a grid page of that many entries, `auto` a grid of the whole list, up to nine per page.
 In the Sessions view the switch is labelled just "Layout".

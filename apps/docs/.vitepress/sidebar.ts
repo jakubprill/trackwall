@@ -26,6 +26,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
     text: "Run",
     items: [
       { text: "mise tasks", link: "/features/mise-tasks" },
+      { text: "Shell", link: "/features/shell" },
       { text: "Local config backup", link: "/features/local-config" },
       { text: "Environment from mise", link: "/features/mise-environment" },
       { text: "Services", link: "/features/services" },
