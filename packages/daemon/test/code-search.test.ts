@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseGrep } from "../src/modules/vcs/grep.ts";
+import { parseGrep, parseGrepCounts } from "../src/modules/vcs/grep.ts";
 import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { type CodeSearchQuery, searchCode } from "../src/modules/workspace/code-search.ts";
 import { Workspace } from "../src/modules/workspace/workspace.ts";
@@ -44,7 +44,7 @@ async function workspaceWithRepos() {
  */
 const REPOS_SETUP_MS = 20_000;
 
-const QUERY: Omit<CodeSearchQuery, "pattern"> = { regex: false, ignoreCase: false, paths: [], context: 0, limit: 100 };
+const QUERY: Omit<CodeSearchQuery, "pattern"> = { regex: false, ignoreCase: false, paths: [], context: 0, limit: 100, output: "lines" };
 
 describe("code search", () => {
   test(
@@ -178,6 +178,34 @@ describe("code search", () => {
   );
 
   test(
+    "files output gives the files with matches and how many lines match in each, without the lines, and limit counts files",
+    async () => {
+      const { workspace, orders } = await workspaceWithRepos();
+      commitFiles(orders, { "notes.txt": "TODO one\nnothing\nTODO two\n" }, "notes");
+
+      const result = await workspace.searchCode({ ...QUERY, pattern: "TODO", output: "files" });
+
+      expect(result.matches).toEqual([]);
+      expect(result.files).toEqual([
+        { repo: "orders", path: "notes.txt", matches: 2 },
+        { repo: "orders", path: "src/main/java/Orders.java", matches: 1 },
+        { repo: "orders", path: "src/test/java/OrdersTest.java", matches: 1 },
+        { repo: "orders", path: "windows.txt", matches: 1 },
+      ]);
+      expect(result.truncated).toBe(false);
+
+      const limited = await workspace.searchCode({ ...QUERY, pattern: "TODO", output: "files", limit: 2 });
+      expect(limited.files.map((f) => f.path)).toEqual(["notes.txt", "src/main/java/Orders.java"]);
+      expect(limited.searched.map((r) => [r.repo, r.truncated])).toEqual([
+        ["orders", true],
+        ["web", false],
+      ]);
+      expect(limited.truncated).toBe(true);
+    },
+    REPOS_SETUP_MS,
+  );
+
+  test(
     "an invalid regex puts each repo in failed with git's message instead of failing the whole search",
     async () => {
       const { workspace } = await workspaceWithRepos();
@@ -204,6 +232,7 @@ function fakeRepos(count: number, text = "TODO", delayMs = 0) {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
       return { lines: [{ path: "a.txt", line: 1, column: 1, text }], truncated: false };
     },
+    grepCounts: async () => ({ files: [{ path: "a.txt", count: 1 }], truncated: false }),
   };
   return { entries, vcs, grepped };
 }
@@ -262,6 +291,25 @@ describe("parseGrep", () => {
       { path: "src/a.ts", line: 2, column: null, text: "b 12" },
       { path: "src/a.ts", line: 9, column: 1, text: "foo" },
       { path: "src/b.ts", line: 4, column: 2, text: "a\x00b" },
+    ]);
+  });
+});
+
+describe("parseGrepCounts", () => {
+  test("reads a path and its count per line and skips lines of another shape", () => {
+    const commit = "a".repeat(40);
+    const out = [
+      `${commit}:src/a.ts\x003`,
+      `${commit}:docs/b c.md\x0012`,
+      "garbage",
+      `${commit}:no-count\x00`,
+      `${commit}:x\x000`,
+      "",
+    ].join("\n");
+
+    expect(parseGrepCounts(out, commit)).toEqual([
+      { path: "src/a.ts", count: 3 },
+      { path: "docs/b c.md", count: 12 },
     ]);
   });
 });

@@ -46,7 +46,14 @@ import {
 } from "./agents.ts";
 import { APP_CONFIG_KEY_MAX, APP_CONFIG_MAX_ENTRIES, APP_CONFIG_PROFILE_MAX, AppConfig, SPRING_DEFAULT_PROFILE } from "./app-config.ts";
 import { RepoCardResult, TagName } from "./cards.ts";
-import { CODE_SEARCH_LINE_MAX_CHARS, CODE_SEARCH_MAX_MATCHES, CodePathspecs, CodeQuery, SearchCodeResult } from "./code-search.ts";
+import {
+  CODE_SEARCH_LINE_MAX_CHARS,
+  CODE_SEARCH_MAX_MATCHES,
+  CodePathspecs,
+  CodeQuery,
+  CodeSearchOutput,
+  SearchCodeResult,
+} from "./code-search.ts";
 import { COMMIT_SEARCH_MAX_COMMITS, COMMIT_SEARCH_MAX_FILES, CommitQuery, SearchCommitsResult } from "./commit-search.ts";
 import { DAY_REPORT_COMMITS, DayReport } from "./day-start.ts";
 import {
@@ -662,13 +669,13 @@ export const mcpTools = {
     description:
       "Search code in many repos at once (git grep in each repo's latest commit, not in uncommitted changes): a fixed " +
       "string by default, a POSIX extended regular expression with regex: true (use [0-9] and [[:space:]], not \\d " +
-      "or \\s). Each match has repo, path, line, " +
-      `column, the line text (cut to ${CODE_SEARCH_LINE_MAX_CHARS} characters) and context lines before and after. ` +
-      "Narrow with repos (ids), tags (every given tag) and paths (git pathspecs: *.java in any directory, src/, " +
-      ":!*.test.ts to exclude). searched lists the repos with the commit searched; failed the repos git could not " +
-      "search, with the reason (e.g. an invalid regular expression); skipped the repos not searched because the limit " +
-      "was already reached or time ran out. truncated: true when matches may be missing (also per repo in searched); " +
-      "narrow the query.",
+      "or \\s). The result is grep-like text: a '## <repo> @<commit>' line per repo with matches, then each file's " +
+      `path and its lines as '<line>:<text>' for a match and '<line>-<text>' for context (text cut to ${CODE_SEARCH_LINE_MAX_CHARS} ` +
+      "characters, '--' between groups), and a last line with how many repos were searched. output: \"files\" lists " +
+      "only the files with how many lines match in each: start with it when you do not know how many matches to expect, " +
+      "then read the files you need. Narrow with repos (ids), tags (every given tag) and paths (git pathspecs: *.java " +
+      "in any directory, src/, :!*.test.ts to exclude). The text names the repos git could not search, with the reason " +
+      "(e.g. an invalid regular expression), and says when matches may be missing; then narrow the query.",
     args: z
       .object({
         pattern: CodeQuery.shape.pattern.describe("text to find, or a regular expression with regex: true"),
@@ -677,14 +684,17 @@ export const mcpTools = {
         repos: z.array(RepoId).min(1).max(200).optional().describe(`only these repos (ids from ${LIST_REPOS}); default all`),
         tags: RepoTagsArg.optional().describe('only repos with every one of these tags, without #, e.g. ["java"]'),
         paths: CodeQuery.shape.paths.default([]).describe('only these paths (git pathspecs), e.g. ["*.java", ":!src/test/"]'),
-        context: CodeQuery.shape.context.default(2).describe("context lines before and after each match, default 2"),
+        output: CodeSearchOutput.default("lines").describe(
+          '"lines" (default): match lines with context; "files": only the files and their match counts',
+        ),
+        context: CodeQuery.shape.context.default(0).describe("context lines before and after each match, default 0"),
         limit: z
           .number()
           .int()
           .min(1)
           .max(CODE_SEARCH_MAX_MATCHES)
-          .default(100)
-          .describe(`maximum number of matches (up to ${CODE_SEARCH_MAX_MATCHES}), default 100`),
+          .default(50)
+          .describe(`maximum number of matches, or of files with output: "files" (up to ${CODE_SEARCH_MAX_MATCHES}), default 50`),
       })
       .strict(),
     result: SearchCodeResult,
@@ -699,11 +709,10 @@ export const mcpTools = {
       "renaming a field shows in every repo that used the old name), message searches commit messages (e.g. an issue key), author the author name or e-mail; " +
       "fixed strings by default, POSIX extended regular expressions with regex: true. Narrow with repos (ids), tags " +
       "(every given tag), paths (git pathspecs) and since (YYYY-MM-DD). With no filter it lists the newest commits. " +
-      "Each commit has repo, hash, author, date (committer date), subject and the files it changed (with text, only the files where it " +
-      `changed; at most ${COMMIT_SEARCH_MAX_FILES}, filesTruncated says when there are more). Newest first across all ` +
-      "repos. searched lists the repos with the commit whose history was searched; failed the repos git could not " +
-      "search, with the reason; skipped the repos not searched because time ran out. truncated: true when commits may " +
-      "be missing (also per repo in searched); narrow the query.",
+      "The result is text, newest first across all repos: a line per commit, '<repo> <hash> <day> <author>: <subject>' " +
+      "(committer date), then the files it changed, indented (with text, only the files where it changed; at most " +
+      `${COMMIT_SEARCH_MAX_FILES}), and a last line with how many repos were searched. The text names the repos git ` +
+      "could not search, with the reason, and says when commits may be missing; then narrow the query.",
     args: z
       .object({
         text: CommitQuery.shape.text.describe("text that the commits' changes add or remove, e.g. a field or endpoint name"),
