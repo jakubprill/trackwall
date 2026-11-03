@@ -8,7 +8,7 @@ search: false
 
 Krótka prezentacja Trackwall w slajdach, z tym, co powiedzieć i co pokazać na każdym z nich.
 
-[In English](/talk) · Strzałki, spacja albo J i K przesuwają o jeden slajd. Razem dziesięć minut, dziewięć bez dwóch slajdów opcjonalnych. Demo to wymyślony sklep z dwudziestu repo, ten sam co na zrzutach tej strony.
+[In English](/talk) · Strzałki na dole, klawisze strzałek, spacja albo J i K przesuwają o jeden slajd. Razem dziesięć minut, dziewięć bez dwóch slajdów opcjonalnych. Demo to wymyślony sklep z dwudziestu repo, ten sam co na zrzutach tej strony.
 
 <section class="slide">
 
@@ -213,6 +213,6 @@ Siatka sesji, jedna sesja czekająca na zgodę i zgoda udzielona z traya.
 Agent przestaje widzieć tylko swój folder. Widzi cały system, tak jak ty.
 :::
 
-</section>
-
 [Why Trackwall](/guide/why-trackwall) · [How it works](/guide/how-it-works) · [Security model](/guide/security-model) · [Limits today](/guide/limits) · [Install](/guide/install) (po angielsku)
+
+</section>

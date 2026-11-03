@@ -1,4 +1,4 @@
-// The talk: a ten-minute walk through Trackwall as slides that scroll, for a presenter and for anyone who missed it
+// The talk: a ten-minute walk through Trackwall as slides shown one at a time (theme/talk-deck.ts), for a presenter and for anyone who missed it
 // (ADR-56). The site does not link it from its navigation, search engines are asked not to index it, and it has
 // no Markdown copy, since it repeats the guide for listeners rather than readers.
 
@@ -19,7 +19,6 @@ export const TALK_FRONTMATTER = {
   aside: false,
   outline: false,
   editLink: false,
-  lastUpdated: false,
   prev: false,
   next: false,
   head: [["meta", { name: "robots", content: "noindex" }]],

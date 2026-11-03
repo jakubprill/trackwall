@@ -1,18 +1,17 @@
-// Moving between the slides of the talk with the keyboard (talk-keys.ts): which slide a key press goes to.
+// Which slide of the talk to show (talk-deck.ts): moving one slide at a time, and the slide a link names.
 
-/** How far above the top of the window a slide may start and still count as the one being shown, in pixels. */
-const SHOWN_TOLERANCE = 8;
+/** The slide one step from `index` in `direction`; the first and the last stay where they are. */
+export function stepSlide(index: number, count: number, direction: 1 | -1): number {
+  return Math.min(count - 1, Math.max(0, index + direction));
+}
 
-/**
- * The index of the slide to scroll to, from where each slide starts on the page (in order), the window's scroll
- * position and the direction. Back from the middle of a slide goes to its start; the first slide comes from above
- * the first one, and the last one stays the last.
- */
-export function slideToShow(slideTops: number[], scrollTop: number, direction: 1 | -1): number | undefined {
-  if (slideTops.length === 0) return undefined;
-  const shown = slideTops.findLastIndex((top) => top <= scrollTop + SHOWN_TOLERANCE);
-  if (shown === -1) return direction === 1 ? 0 : undefined;
-  const intoShown = scrollTop > (slideTops[shown] ?? scrollTop) + SHOWN_TOLERANCE;
-  if (direction === -1 && intoShown) return shown;
-  return Math.min(slideTops.length - 1, Math.max(0, shown + direction));
+/** The slide a link's hash names as its number from 1 (`#3` is the third), or the first when it names none. */
+export function slideFromHash(hash: string, count: number): number {
+  const number = Number(hash.replace(/^#/, ""));
+  return Number.isInteger(number) && number >= 1 && number <= count ? number - 1 : 0;
+}
+
+/** The hash that names a slide, so a link or a reload opens the talk on it. */
+export function hashOfSlide(index: number): string {
+  return `#${index + 1}`;
 }

@@ -21,7 +21,11 @@ export default defineConfig({
   srcExclude: [TEMPLATE],
   cleanUrls: true,
   transformPageData(pageData) {
-    if (TALK_PAGES.includes(pageData.relativePath)) Object.assign(pageData.frontmatter, TALK_FRONTMATTER);
+    if (!TALK_PAGES.includes(pageData.relativePath)) return;
+    Object.assign(pageData.frontmatter, TALK_FRONTMATTER);
+    // VitePress reads the date from git before this hook, so `lastUpdated: false` would come too late; a slide has no
+    // place for it.
+    pageData.lastUpdated = undefined;
   },
   // The app has one dark theme (ADR-16); the site opens dark and still offers the light one.
   appearance: "dark",
