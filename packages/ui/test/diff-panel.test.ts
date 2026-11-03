@@ -78,5 +78,10 @@ describe("the diff panel of the conversation view", () => {
     ]);
     expect(files[1]?.changes[0]?.change.lines.map((l) => l.text)).toEqual(["@@ -7,0 +7,1 @@", "+two"]);
     expect(turnFiles([edit("tool-2", [], patch)]).map((f) => f.path)).toEqual(["home/me/shop/src/a.ts", "home/me/shop/src/b.ts"]);
+    const similar =
+      "diff --git a/home/me/shop/data.ts b/home/me/shop/data.ts\n--- a/home/me/shop/data.ts\n+++ b/home/me/shop/data.ts\n@@ -1,1 +1,1 @@\n-x\n+y\n";
+    expect(turnFiles([edit("tool-3", ["a.ts", "data.ts"], similar)]).map((f) => f.path)).toEqual(["data.ts"]);
+    const binary = "diff --git a/home/me/shop/logo.png b/home/me/shop/logo.png\nBinary files differ\n";
+    expect(turnFiles([edit("tool-4", ["logo.png"], binary)])).toEqual([]);
   });
 });

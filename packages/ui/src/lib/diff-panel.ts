@@ -21,27 +21,37 @@ export interface TurnFile {
 /**
  * A tool call's change file by file. Copilot CLI's patch names a file by its absolute path without the leading slash
  * (`a/home/me/shop/src/a.ts`), so a file goes by the name the daemon gave the call (relative to the session's working
- * directory) that the patch's path ends with, and by the patch's path only when no name fits.
+ * directory) that the patch's path ends with, and by the patch's path only when no name fits. A file without lines of
+ * a change (a binary or a renamed one) is left out, since there is nothing to show of it. A patch in plain `---` and
+ * `+++` form, without `diff --git`, stays one piece.
  */
 export function toolFileChanges(tool: Pick<ToolEntry, "files" | "patch" | "patchCut">): { path: string; change: Change }[] {
   if (tool.patch === "") return [];
   const lines = diffLines(tool.patch, Number.POSITIVE_INFINITY).lines;
   const starts = lines.filter((line) => line.kind === "file").map((line) => line.offset);
   const pieces = starts.length === 0 ? [0] : starts;
-  return pieces.map((from, at) => {
-    const piece = tool.patch.slice(from, pieces[at + 1] ?? tool.patch.length);
-    const cut = tool.patchCut && at === pieces.length - 1;
-    const change = changeLines(piece, DIFF_SHOWN_LINES, cut);
-    return { path: fileOf(tool.files, change, pieces.length), change };
-  });
+  return pieces
+    .map((from, at) => {
+      const piece = tool.patch.slice(from, pieces[at + 1] ?? tool.patch.length);
+      const cut = tool.patchCut && at === pieces.length - 1;
+      const change = changeLines(piece, DIFF_SHOWN_LINES, cut);
+      return { path: fileOf(tool.files, change, pieces.length), change };
+    })
+    .filter(({ change }) => change.lines.length > 0);
 }
 
 function fileOf(files: readonly string[], change: Change, pieces: number): string {
   const [only] = files;
   if (pieces === 1 && files.length === 1 && only !== undefined) return only;
   const path = change.lines.find((line) => line.anchor !== null)?.anchor?.path;
-  if (path === undefined) return files.join(", ");
-  return files.find((file) => path.endsWith(file.replaceAll("\\", "/"))) ?? path;
+  if (path === undefined) return files.join(", ") || "a changed file";
+  // A whole folder name: `src/a.ts` is not `src/data.ts`.
+  return (
+    files.find((file) => {
+      const name = file.replaceAll("\\", "/");
+      return path === name || path.endsWith(`/${name}`);
+    }) ?? path
+  );
 }
 
 /** The files a turn's tool calls changed, in the order the turn first changed them. */

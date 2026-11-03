@@ -16,7 +16,7 @@ import {
   User,
   Wrench,
 } from "lucide-react";
-import { type ReactNode, Suspense } from "react";
+import { type ReactNode, Suspense, useMemo } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LazyMarkdown } from "@/components/LazyMarkdown";
 import { AttachmentChips } from "@/components/MessageAttachments";
@@ -210,7 +210,8 @@ function ToolCall({
   const subtitle = toolSubtitle(tool);
   const change = changeLines(tool.patch, PATCH_SHOWN_LINES, tool.patchCut);
   const opens = tool.detail.length > 0 || change.lines.length > 0 || tool.subagent !== null;
-  const paths = toolFileChanges(tool).map((file) => file.path);
+  // Parsed once per change, not on every chunk the conversation streams.
+  const paths = useMemo(() => toolFileChanges(tool).map((file) => file.path), [tool]);
   const [first] = paths;
   const diffShown = shownDiff !== null && paths.includes(shownDiff);
   return (
