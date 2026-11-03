@@ -31,7 +31,7 @@ import {
 } from "./acp-messages.ts";
 import { attachmentLabel, checkAttachments, promptBlocks } from "./acp-prompt.ts";
 import { AcpSessionInfo } from "./acp-session-info.ts";
-import { toolCallFiles, toolCallLines, toolCallPatch } from "./acp-tool-call.ts";
+import { toolCallFiles, toolCallLines, toolCallPatch, workingDirectoryNames } from "./acp-tool-call.ts";
 import type { AgentSession } from "./agent-session.ts";
 import { type CopilotHookOutput, situationOutput } from "./copilot-hook-output.ts";
 import type { CopilotHookRecord } from "./copilot-hook-record.ts";
@@ -132,6 +132,8 @@ export class AcpSession implements AgentSession {
   readonly startedAt = new Date().toISOString();
   readonly environment: SessionEnvironment;
   readonly #o: AcpSessionOptions;
+  /** The session's working directory as given and as resolved (`workingDirectoryNames`), once. */
+  readonly #cwdNames: readonly string[];
   readonly #conversation: AcpConversation;
   /** The agent's mode, context use and commands. */
   readonly #info = new AcpSessionInfo();
@@ -180,7 +182,8 @@ export class AcpSession implements AgentSession {
     this.task = o.task;
     this.environment = o.environment;
     this.#o = o;
-    this.#conversation = new AcpConversation(o.cwd);
+    this.#cwdNames = workingDirectoryNames(o.cwd);
+    this.#conversation = new AcpConversation(this.#cwdNames);
     this.#hasConversation = o.load !== undefined;
     this.#connection = new AcpConnection({
       write: (line) => this.#channel?.write(line),
@@ -530,7 +533,7 @@ export class AcpSession implements AgentSession {
       kind: "approval",
       title: toolCall.title ?? "Approval",
       // The files first: an approval's title names the tool ("Edit file"), not what it changes.
-      detail: [...toolCallFiles(toolCall, this.#o.cwd), ...toolCallLines(toolCall)],
+      detail: [...toolCallFiles(toolCall, this.#cwdNames), ...toolCallLines(toolCall)],
       ...approvalPatch(toolCall),
       question: APPROVAL_QUESTION,
       options: options.map((o, i) => ({ key: String(i + 1), label: o.name })),
