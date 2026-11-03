@@ -23,6 +23,7 @@ import {
   servicesApi,
   taskOutcomesApi,
   taskRoundsApi,
+  terminalsApi,
   verificationApi,
   workspaceApi,
 } from "@trackwall/protocol";
@@ -214,6 +215,12 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   }),
   route(agentsApi.removeTask, async (f, b) => {
     await f.agents.removeTask(b.task, b.keepBranch, b.discardChanges);
+    return null;
+  }),
+  route(terminalsApi.start, (f, b) => f.terminals.start(b)),
+  route(terminalsApi.list, (f) => f.terminals.list()),
+  route(terminalsApi.close, async (f, b) => {
+    await f.terminals.close(b.terminal);
     return null;
   }),
   route(agentsApi.approveProposal, (f, b) => f.agents.approveProposal(b.proposal, b.prompt, b.model, b.approvals, b.view)),

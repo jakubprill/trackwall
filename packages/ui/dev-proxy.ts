@@ -7,8 +7,8 @@ import { DAEMON_FILE, DaemonFile, daemonSocketAt, SOCKET_TOKEN_PREFIX, TRACKWALL
 import type { Plugin } from "vite";
 
 /**
- * Only `vite dev`: forwards `/api/*` and the WebSockets of events (`/ws`) and session terminals (`/ws/pty/*`) to the
- * daemon from `pnpm dev`, with the token from `daemon.json`.
+ * Only `vite dev`: forwards `/api/*` and the daemon's WebSockets (`daemonSocketAt`: events, session and folder
+ * terminals, conversation views) to the daemon from `pnpm dev`, with the token from `daemon.json`.
  * The development daemon keeps its state in `<repo>/.trackwall-dev`, separate from the released app in `~/.trackwall`
  * (`TRACKWALL_HOME` overrides both).
  * The file is read on every request, so the start order of the daemon and Vite does not matter,
@@ -16,7 +16,9 @@ import type { Plugin } from "vite";
  *
  * The proxy adds the token, so it has to guard what the daemon checks by `Origin` itself (§5.2): it lets through only
  * requests from the Vite page. Without this any page in the browser could send a POST form to
- * `127.0.0.1:5173/api/...` and perform an action in the daemon.
+ * `127.0.0.1:5173/api/...` and perform an action in the daemon. A socket or an action must also come with the page's
+ * `Origin`, which a browser always sends there: a local program without one (a script an agent runs) would otherwise
+ * get the token's powers, a folder terminal's shell among them (ADR-185).
  */
 /** The daemon's `dev` script gives the same directory (`--home ../../.trackwall-dev`). */
 const DEV_HOME = fileURLToPath(new URL("../../.trackwall-dev", import.meta.url));
@@ -39,7 +41,7 @@ export function daemonDevProxy(): Plugin {
         const target = daemonSocketAt(URL.parse(req.url ?? "/", "http://127.0.0.1")?.pathname ?? "");
         if (!target) return; // Vite HMR has its own handling
         const daemon = readDaemon();
-        if (!daemon || (req.headers.origin !== undefined && !ownOrigins().includes(req.headers.origin))) return void socket.destroy();
+        if (!daemon || req.headers.origin === undefined || !ownOrigins().includes(req.headers.origin)) return void socket.destroy();
         proxyDaemonSocket(req, socket, head, daemon, target.subprotocol);
       });
       server.middlewares.use("/api", (req, res) => {
@@ -53,10 +55,7 @@ export function daemonDevProxy(): Plugin {
           res.end(JSON.stringify({ ok: false, error: { code: status === 403 ? "forbidden_origin" : "internal", message } }));
         };
 
-        const own = ownOrigins();
-        const origin = req.headers.origin;
-        const site = req.headers["sec-fetch-site"];
-        if ((origin !== undefined && !own.includes(origin)) || (site !== undefined && site !== "same-origin" && site !== "none")) {
+        if (!fromVitePage(req, ownOrigins())) {
           return reply(403, "request from outside the Vite page");
         }
 
@@ -122,4 +121,12 @@ function proxyDaemonSocket(req: IncomingMessage, socket: Duplex, head: Buffer, d
   upstream.on("response", () => socket.destroy());
   upstream.on("error", () => socket.destroy());
   upstream.end();
+}
+
+/** A request the Vite page sent: a GET may come without `Origin` (a reload), anything that acts must carry the page's. */
+function fromVitePage(req: IncomingMessage, own: readonly string[]): boolean {
+  const origin = req.headers.origin;
+  const site = req.headers["sec-fetch-site"];
+  const fromPage = origin === undefined ? req.method === "GET" || req.method === "HEAD" : own.includes(origin);
+  return fromPage && (site === undefined || site === "same-origin" || site === "none");
 }

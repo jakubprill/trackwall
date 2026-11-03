@@ -51,6 +51,7 @@ export * from "./task-outcomes.ts";
 export * from "./task-rounds.ts";
 export * from "./task-state.ts";
 export * from "./task-updates.ts";
+export * from "./terminals.ts";
 export * from "./test-results.ts";
 export * from "./trackwall-dir.ts";
 export * from "./unpushed-work.ts";

@@ -11,6 +11,7 @@ import { Bot, Box, GitBranch, Layers, Plug, ShieldOff, Trash2 } from "lucide-rea
 import { useRef, useState } from "react";
 import { CopyRequestNotice } from "@/components/CopyRequestNotice";
 import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
+import { FolderShell } from "@/components/FolderShell";
 import { ReadRequestNotice } from "@/components/ReadRequestNotice";
 import { SessionScreen } from "@/components/SessionScreen";
 import { StatusLabel } from "@/components/StatusLabel";
@@ -208,6 +209,7 @@ function TaskTabContent({
   return (
     <>
       {shown === "session" && session && <SessionScreen conn={conn} session={session} selected />}
+      {shown === "shell" && <FolderShell key={task.id} conn={conn} place={{ repo: task.repo, task: task.id }} folder={task.worktree} />}
       {shown === "changes" && (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <TaskChangesView conn={conn} task={task.id} paused={paused} review={review} />
