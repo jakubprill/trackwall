@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import type { Connection } from "./connection.ts";
 import { DaemonEvents } from "./daemon-events.ts";
 
@@ -15,4 +15,10 @@ export function useDaemonEvents(conn: Connection | undefined): DaemonEvents | un
     };
   }, [conn]);
   return events;
+}
+
+/** Whether the events connection is lost now (`DaemonEvents.isLost`); `false` without a connection to the daemon. */
+export function useDaemonLost(events: DaemonEvents | undefined): boolean {
+  const subscribe = useCallback((onChange: () => void) => events?.onLostChange(onChange) ?? (() => {}), [events]);
+  return useSyncExternalStore(subscribe, () => events?.isLost() ?? false);
 }

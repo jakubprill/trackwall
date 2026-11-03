@@ -99,12 +99,26 @@ export const HOME_SESSION_STATUS: Record<HomeSessionState, HomeStatus> = {
 };
 
 /**
- * The daemon is running as long as it answers: an error with a daemon code (for example a bad `workspace.yaml`) came
- * from it, and one without a code or with `bad_response` (for example a proxy error page instead of an API envelope) is
- * a dropped connection.
+ * The daemon is running as long as it answers and its events connection is not lost (`DaemonEvents.isLost`), which shows
+ * a stop at once, while the repo list, polled every 30 s while its events are live, keeps its last answer until the next
+ * request. An error with a daemon code (for example a bad `workspace.yaml`) came from it, and one without a code or with
+ * `bad_response` (for example a proxy error page instead of an API envelope) is a dropped connection.
  */
-export function daemonAnswered(error: string | undefined, errorCode: CallErrorCode | undefined): boolean {
-  return error === undefined || (errorCode !== undefined && errorCode !== "bad_response");
+export function homeDaemonRunning(error: string | undefined, errorCode: CallErrorCode | undefined, eventsLost: boolean): boolean {
+  return !eventsLost && (error === undefined || (errorCode !== undefined && errorCode !== "bad_response"));
+}
+
+/**
+ * Sessions and mise tasks run under the daemon, which stops them with itself: once its events connection is lost, the last
+ * ones it reported are gone, so the dashboard does not show "working" for a daemon that has stopped. A failed poll alone
+ * does not count, since the daemon may well be there. `undefined` sessions (not loaded yet) stay `undefined`.
+ */
+export function daemonWork(
+  eventsLost: boolean,
+  sessions: readonly Session[] | undefined,
+  running: readonly RunningMiseTask[] | undefined,
+): { sessions: readonly Session[] | undefined; running: readonly RunningMiseTask[] } {
+  return eventsLost ? { sessions: [], running: [] } : { sessions, running: running ?? [] };
 }
 
 export function homeDaemonStatus(running: boolean): HomeStatus {

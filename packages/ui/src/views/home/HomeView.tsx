@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
-import { daemonAnswered, homeHasObject, homeModel } from "@/lib/home-model";
+import { daemonWork, homeDaemonRunning, homeHasObject, homeModel } from "@/lib/home-model";
 import { listNeedsSettings } from "@/lib/repo-status";
 import { GRAPH_PACE, REPO_LIST_PACE } from "@/lib/repo-watch";
 import type { SessionSelection } from "@/lib/session-entries";
@@ -40,6 +40,7 @@ const HomeCanvas = lazy(() => import("./HomeCanvas.tsx").then((m) => ({ default:
 export function HomeView({
   conn,
   runningLive,
+  eventsLost,
   repoWatch,
   sessions,
   onOpenInSessions,
@@ -50,6 +51,8 @@ export function HomeView({
   conn: Connection;
   /** Running mise tasks from the events; `undefined` for a moment after a connection change, and polled until then. */
   runningLive: LiveFeed<RunningMiseTask[]> | undefined;
+  /** The events connection to the daemon dropped and has not come back (`DaemonEvents.isLost`). */
+  eventsLost: boolean;
   /** Commits and repos added to the folder (ADR-63): the list and the graph are fetched again at once. */
   repoWatch: RepoWatchHandle;
   sessions: RemoteHandle<SessionList>;
@@ -71,28 +74,30 @@ export function HomeView({
   const [hovered, setHovered] = useState<HomeKey | null>(null);
   const [unavailable, setUnavailable] = useState<string>();
 
-  const daemonRunning = daemonAnswered(repos.error, repos.errorCode);
+  const daemonRunning = homeDaemonRunning(repos.error, repos.errorCode, eventsLost);
   const repoList = repos.data?.repos;
-  const sessionList = sessions.data?.sessions;
+  const work = useMemo(() => daemonWork(eventsLost, sessions.data?.sessions, running.data), [eventsLost, sessions.data, running.data]);
+  const sessionList = work.sessions;
   const model = useMemo(
     () =>
       homeModel({
         repos: repoList ?? [],
         sessions: sessionList ?? [],
         graph: graph.data,
-        running: running.data ?? [],
+        running: work.running,
         daemonRunning,
       }),
-    [repoList, sessionList, graph.data, running.data, daemonRunning],
+    [repoList, sessionList, graph.data, work.running, daemonRunning],
   );
   // A selection of an object that vanished from the dashboard snapshot is dropped: it does not come back by itself when a repo
   // or session with that key appears again.
   const current = selected && homeHasObject(model, selected) ? selected : null;
-  // Only with loaded data: after a connection change the lists are empty for a moment, and the object has not vanished at all.
+  // Only with loaded data: after a connection change the lists are empty for a moment, and the object has not vanished at all;
+  // nor while the daemon's connection is lost, since its sessions come back with it.
   const loaded = repoList !== undefined && sessionList !== undefined;
   useEffect(() => {
-    if (loaded && selected && !current) setSelected(null);
-  }, [loaded, selected, current]);
+    if (loaded && !eventsLost && selected && !current) setSelected(null);
+  }, [loaded, eventsLost, selected, current]);
   // Until both lists arrive the panels say so, instead of counts of zero that look like an empty environment.
   const loading = !loaded && !repos.error && !sessions.error;
   const unavailableNow = useCallback((reason: string) => {
@@ -180,7 +185,7 @@ export function HomeView({
         model={model}
         repos={lookup.repos}
         sessions={lookup.sessions}
-        running={running.data ?? []}
+        running={work.running}
         onSelect={setSelected}
         onOpen={open}
       />
