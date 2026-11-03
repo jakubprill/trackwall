@@ -1,19 +1,7 @@
 ---
 title: Trackwall w dziesięć minut
 description: Krótka prezentacja Trackwall w slajdach, z tym, co powiedzieć i co pokazać na każdym z nich.
-pageClass: talk
-sidebar: false
-aside: false
-outline: false
 search: false
-editLink: false
-lastUpdated: false
-prev: false
-next: false
-head:
-  - - meta
-    - name: robots
-      content: noindex
 ---
 
 # Trackwall w dziesięć minut
@@ -137,7 +125,7 @@ Zadanie „Retry the payment call”, jego „Changes”, czerwone „Verify”,
 - Nadzorca (supervisor) dzieli pracę na zadanie dla każdego repo, czeka na twoją zgodę, pilnuje zadań i nimi kieruje.
 - Przykład z demo: `payments`, `notifications`, `admin-web` i `billing`.
 - <Badge type="tip" text="nowe" /> Proponowana zmiana przychodzi jako jedna karta z repo w kolejności merge; możesz poprawić prompt i odznaczyć repo.
-- <Badge type="tip" text="nowe" /> Sekcja „Change” pokazuje każdy merge request z jego stanem i kolejność merge („orders-api woła payments, więc payments zwykle idzie pierwsze”) i pushuje wszystkie części naraz.
+- <Badge type="tip" text="nowe" /> Sekcja „Change” pokazuje każdy merge request z jego stanem i kolejność merge z powodem wziętym z grafu (które repo woła które) i pushuje wszystkie części naraz.
 
 </section>
 
@@ -193,7 +181,7 @@ Siatka sesji, jedna sesja czekająca na zgodę i zgoda udzielona z traya.
 
 - Daemon słucha tylko na `127.0.0.1`, a każde żądanie wymaga jego tokenu.
 - Żadne narzędzie MCP nie zmienia ustawień Trackwall ani nie odpowiada na zgody; robisz to tylko ty, w aplikacji.
-- <Badge type="tip" text="nowe" /> Zadanie z „No approvals” działa w **sandboksie** Copilot CLI: pisze tylko w swoim worktree i nie czyta twoich innych repo ani `~/.ssh`.
+- <Badge type="tip" text="nowe" /> Zadanie z „No approvals” działa w **sandboksie** Copilot CLI, na Linuksie domyślnie, a na macOS i Windows po włączeniu: pisze tylko w swoim worktree i folderze git repo i nie czyta twoich innych repo ani `~/.ssh`.
 - Sekrety pochodzą z mise i są maskowane w logach. Każde wywołanie narzędzia przez agenta jest w „MCP calls”.
 - Granica: agent działa jako ty. Trzymanie sekretów z dala od niego chroni przed wypadkiem, nie przed zdeterminowanym agentem.
 

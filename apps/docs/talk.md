@@ -1,19 +1,7 @@
 ---
 title: Trackwall in ten minutes
 description: A short talk about Trackwall as slides, with what to say and what to show on each one.
-pageClass: talk
-sidebar: false
-aside: false
-outline: false
 search: false
-editLink: false
-lastUpdated: false
-prev: false
-next: false
-head:
-  - - meta
-    - name: robots
-      content: noindex
 ---
 
 # Trackwall in ten minutes
@@ -137,7 +125,7 @@ The task "Retry the payment call", its "Changes", a red "Verify", then "Review".
 - The supervisor splits the work into one task per repo, waits for your approval, follows the tasks and steers them.
 - The demo's example: `payments`, `notifications`, `admin-web` and `billing`.
 - <Badge type="tip" text="new" /> A proposed change arrives as one card with its repos in merge order; you can edit the prompt and untick repos.
-- <Badge type="tip" text="new" /> The "Change" section lists every merge request with its state and the merge order ("orders-api calls payments, so payments is usually merged first"), and pushes all parts at once.
+- <Badge type="tip" text="new" /> The "Change" section lists every merge request with its state and the merge order, with its reason from the graph (which repo calls which), and pushes all parts at once.
 
 </section>
 
@@ -193,7 +181,7 @@ The session grid, one session waiting for an approval, and the approval answered
 
 - The daemon listens only on `127.0.0.1`, and every request needs its token.
 - No MCP tool changes Trackwall's settings or answers an approval; only you do, in the app.
-- <Badge type="tip" text="new" /> A task with "No approvals" runs in Copilot CLI's **sandbox**: it writes only in its worktree and cannot read your other repos or `~/.ssh`.
+- <Badge type="tip" text="new" /> A task with "No approvals" runs in Copilot CLI's **sandbox**, on Linux by default and on macOS and Windows when you turn it on: it writes only in its worktree and the repo's git folder, and cannot read your other repos or `~/.ssh`.
 - Secrets come from mise and are masked in logs. Every tool call an agent makes is in "MCP calls".
 - The limit: an agent runs as you. Keeping secrets out of its way prevents accidents, not a determined agent.
 

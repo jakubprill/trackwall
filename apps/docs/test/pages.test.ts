@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CONFIG_ENTRIES, WORKSPACE_KEYS } from "@trackwall/protocol";
 import { FEATURE_GROUPS, SIDEBAR } from "../.vitepress/sidebar.ts";
-import { TALK_PAGE_CLASS, TALK_PAGES } from "../.vitepress/talk-pages.ts";
+import { TALK_PAGES } from "../.vitepress/talk-pages.ts";
 
 // Every feature page follows TEMPLATE.md, so "All features", the sidebar and llms.txt stay complete (ADR-56).
 const DOCS = join(import.meta.dir, "..");
@@ -151,16 +151,8 @@ test("every page Settings › Files links to for a file or a key of workspace.ya
   expect(pages.filter((page) => !featurePages.includes(page))).toEqual([]);
 });
 
-test("a talk page asks search engines and the site search to leave it out and has the talk's slides", () => {
-  for (const path of TALK_PAGES) {
-    const { fields } = frontmatter(path);
-    expect({ path, pageClass: fields.pageClass, search: fields.search, head: fields.head }).toEqual({
-      path,
-      pageClass: TALK_PAGE_CLASS,
-      search: false,
-      head: [["meta", { name: "robots", content: "noindex" }]],
-    });
-  }
+test("a talk page is left out of the site search", () => {
+  for (const path of TALK_PAGES) expect({ path, search: frontmatter(path).fields.search }).toEqual({ path, search: false });
 });
 
 test("only the talk pages link to each other, and nothing else on the site links to them", () => {

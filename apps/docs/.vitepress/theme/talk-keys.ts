@@ -7,22 +7,27 @@ import { slideToShow } from "./slides.ts";
 
 /** A slide of a talk page: a `<section class="slide">` in its Markdown. */
 const SLIDE = ".vp-doc section.slide";
+/** A screenshot opened larger (image-zoom.ts): the keys are the zoom's until it closes. */
+const OPEN_ZOOM = ".medium-zoom-overlay";
 
-const NEXT_KEYS = ["ArrowDown", "ArrowRight", "PageDown", "j"];
-const PREVIOUS_KEYS = ["ArrowUp", "ArrowLeft", "PageUp", "k"];
+const NEXT_KEYS = ["arrowdown", "arrowright", "pagedown", "j"];
+const PREVIOUS_KEYS = ["arrowup", "arrowleft", "pageup", "k"];
 
-/** The direction a key moves in, or undefined when the key is not one of the talk's. */
+/** The direction a key moves in, or undefined when the key is not one of the talk's; J and K also with Shift or Caps Lock. */
 function direction(event: KeyboardEvent): 1 | -1 | undefined {
-  if (event.key === " ") return event.shiftKey ? -1 : 1;
-  if (NEXT_KEYS.includes(event.key)) return 1;
-  if (PREVIOUS_KEYS.includes(event.key)) return -1;
+  const key = event.key.toLowerCase();
+  if (key === " ") return event.shiftKey ? -1 : 1;
+  if (NEXT_KEYS.includes(key)) return 1;
+  if (PREVIOUS_KEYS.includes(key)) return -1;
   return undefined;
 }
 
-/** Whether the key goes to something the reader types into, such as the search box, rather than to the page. */
-function isTyping(event: KeyboardEvent): boolean {
+/** Whether the key belongs to what has the focus: a field the reader types into, or a link or button Space presses. */
+function isForFocused(event: KeyboardEvent): boolean {
   const target = event.target;
-  return target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return true;
+  return event.key === " " && ["A", "BUTTON"].includes(target.tagName);
 }
 
 /** Called from the theme's setup: listens to the keyboard on every page and acts only on a talk page. */
@@ -30,7 +35,8 @@ export function useTalkKeys(): void {
   const { frontmatter } = useData();
   const onKey = (event: KeyboardEvent) => {
     if (frontmatter.value.pageClass !== TALK_PAGE_CLASS) return;
-    if (event.altKey || event.ctrlKey || event.metaKey || isTyping(event)) return;
+    if (event.altKey || event.ctrlKey || event.metaKey || isForFocused(event)) return;
+    if (document.querySelector(OPEN_ZOOM) !== null) return;
     const step = direction(event);
     if (step === undefined) return;
     const slides = Array.from(document.querySelectorAll<HTMLElement>(SLIDE));
