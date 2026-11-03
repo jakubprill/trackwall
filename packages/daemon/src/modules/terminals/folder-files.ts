@@ -16,7 +16,7 @@ import { FileTooLargeError, NotRegularFileError, openRegularFile } from "../../i
 import { checkedPlaceFolder } from "./place-folder.ts";
 
 /**
- * The files of a place's folder (§4.23, ADR-187): a read-only list next to its Shell tab and a download of one file, so
+ * The files of a place's folder (§4.23, ADR-188): a read-only list next to its Shell tab and a download of one file, so
  * that a build's JAR, a log or a heap dump reaches the user's computer when the daemon runs in a container. The place
  * comes as ids like a folder terminal's (a task's worktree not a link itself), the path only as names under its folder:
  * no `.` or `..`, no link anywhere on the way, and the resolved path inside the folder's resolved path, checked again

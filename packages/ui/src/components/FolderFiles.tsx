@@ -11,7 +11,7 @@ import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 
 /**
- * The "Files on disk" panel of the Shell tab (ADR-187): the place's folder as it is now, uncommitted files and build output too,
+ * The "Files on disk" panel of the Shell tab (ADR-188): the place's folder as it is now, uncommitted files and build output too,
  * read only. A folder opens on click, a file downloads to the user's computer, which is how a JAR or a log leaves a
  * container. Links are listed and never followed.
  */

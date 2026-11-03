@@ -1,7 +1,7 @@
 import type { FolderEntry } from "@trackwall/protocol";
 
 /**
- * The "Files on disk" panel of the Shell tab (ADR-187) without React: paths under a place as the daemon takes them (names joined
+ * The "Files on disk" panel of the Shell tab (ADR-188) without React: paths under a place as the daemon takes them (names joined
  * with `/`, `""` for the folder itself), and saving a downloaded file from the page.
  */
 

@@ -6,7 +6,7 @@ import type { FileDownload } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
 
 /**
- * `POST /api/terminals/download` (ADR-187, §5.2): one file of a place's folder as its bytes, the one action whose answer
+ * `POST /api/terminals/download` (ADR-188, §5.2): one file of a place's folder as its bytes, the one action whose answer
  * is not `{ ok, data }`. The body names the file like the list does; the file is opened by `folderFiles` before any
  * header goes out, so a refusal is still the usual JSON error.
  */

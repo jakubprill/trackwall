@@ -29,7 +29,7 @@ export const MAX_FOLDER_TERMINALS = 16;
 
 /**
  * A file or folder under a place, as a path relative to the place's folder with `/` between names (`""` is the folder
- * itself). The daemon refuses `.` and `..`, an empty name and a link anywhere on the way (ADR-187).
+ * itself). The daemon refuses `.` and `..`, an empty name and a link anywhere on the way (ADR-188).
  */
 export const PlacePath = z.string().max(4096);
 
@@ -80,6 +80,6 @@ export const terminalsApi = {
   list: endpoint("list", z.object({}).strict(), z.array(FolderTerminal)),
   /** Ends the terminal's shell and forgets it; returns once the end is confirmed (`stop_unconfirmed` otherwise). */
   close: endpoint("close", z.object({ terminal: TerminalId }).strict(), Done),
-  /** The folder at `path` in the place, read only (ADR-187); `bad_request` for a path that is not a folder of it. */
+  /** The folder at `path` in the place, read only (ADR-188); `bad_request` for a path that is not a folder of it. */
   files: endpoint("files", PlaceFile, FolderListing),
 };

@@ -38,7 +38,7 @@ export function post<Req extends z.ZodType, Data extends z.ZodType>(
 }
 
 /**
- * An action whose answer is a file's bytes rather than `{ ok, data }` (`terminals/download`, ADR-187); a refusal still
+ * An action whose answer is a file's bytes rather than `{ ok, data }` (`terminals/download`, ADR-188); a refusal still
  * comes as the envelope and throws like `call`.
  */
 export async function download(conn: Connection, path: string, body: unknown): Promise<Blob> {

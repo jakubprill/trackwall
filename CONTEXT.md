@@ -582,7 +582,7 @@ The user's own shell in a repo root or a task's worktree (its **place**, `Termin
 _Avoid_: console, terminal on its own in the UI (a task's "Terminal" tab is the session terminal)
 
 **Folder files** (`FolderFiles`, `folderFiles` in the facade, `terminals/files`, `terminals/download`; the "Files on disk" panel of the Shell tab in the UI):
-The files of a folder terminal's place, as they are on disk, listed read only and downloaded one at a time to the user's computer (ADR-187). Paths are names under the place's folder (`PlaceFile`); links are listed and never followed.
+The files of a folder terminal's place, as they are on disk, listed read only and downloaded one at a time to the user's computer (ADR-188). Paths are names under the place's folder (`PlaceFile`); links are listed and never followed.
 _Avoid_: file browser, file manager (it only lists and downloads); the repo's "Files" tab, which shows the last commit
 
 **Session layout** (`SessionLayout`):

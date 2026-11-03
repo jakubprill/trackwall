@@ -41,7 +41,7 @@ export async function readRegularFile(path: string, maxBytes: number): Promise<B
 
 /**
  * The file opened for reading, with its size, under the same rules; the caller closes the handle. Also for a file
- * streamed out rather than read whole (a download from a place's folder, ADR-187).
+ * streamed out rather than read whole (a download from a place's folder, ADR-188).
  */
 export async function openRegularFile(path: string, maxBytes: number): Promise<{ handle: FileHandle; size: number } | undefined> {
   const before = await lstat(path).catch((err: NodeJS.ErrnoException) => {

@@ -101,7 +101,7 @@ export interface Facade {
   services: Services;
   /** The user's own shells in a repo root or a task's worktree, shown like session terminals (ADR-185). */
   terminals: FolderTerminals;
-  /** The files of a repo root or a task's worktree, read only, next to its Shell tab (ADR-187). */
+  /** The files of a repo root or a task's worktree, read only, next to its Shell tab (ADR-188). */
   folderFiles: FolderFiles;
   testReports: TestReports;
   verifications: Verifications;
