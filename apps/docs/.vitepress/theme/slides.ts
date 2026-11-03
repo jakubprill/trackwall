@@ -1,18 +1,35 @@
-// Moving between the slides of the talk with the keyboard (talk-keys.ts): which slide a key press goes to.
+// Which slide of the talk to show (talk-deck.ts): the keys that move between slides, moving one slide at a time,
+// and the slide a link names.
 
-/** How far above the top of the window a slide may start and still count as the one being shown, in pixels. */
-const SHOWN_TOLERANCE = 8;
+/** The keys a presenter's clicker sends (Page Up and Down) and the ones a keyboard offers; Up, Down and Space keep scrolling a long slide. */
+const NEXT_KEYS = ["arrowright", "pagedown", "j"];
+const PREVIOUS_KEYS = ["arrowleft", "pageup", "k"];
 
-/**
- * The index of the slide to scroll to, from where each slide starts on the page (in order), the window's scroll
- * position and the direction. Back from the middle of a slide goes to its start; the first slide comes from above
- * the first one, and the last one stays the last.
- */
-export function slideToShow(slideTops: number[], scrollTop: number, direction: 1 | -1): number | undefined {
-  if (slideTops.length === 0) return undefined;
-  const shown = slideTops.findLastIndex((top) => top <= scrollTop + SHOWN_TOLERANCE);
-  if (shown === -1) return direction === 1 ? 0 : undefined;
-  const intoShown = scrollTop > (slideTops[shown] ?? scrollTop) + SHOWN_TOLERANCE;
-  if (direction === -1 && intoShown) return shown;
-  return Math.min(slideTops.length - 1, Math.max(0, shown + direction));
+/** The direction a key moves the deck in, or undefined when the key is not one of the deck's; J and K also with Shift or Caps Lock. */
+export function slideKeyDirection(key: string): 1 | -1 | undefined {
+  const name = key.toLowerCase();
+  if (NEXT_KEYS.includes(name)) return 1;
+  if (PREVIOUS_KEYS.includes(name)) return -1;
+  return undefined;
+}
+
+/** Whether a key goes to the element that has the focus, a field the reader types into, rather than to the deck. */
+export function isTypingInto(focused: { tagName: string; isContentEditable: boolean } | null): boolean {
+  return focused !== null && (focused.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(focused.tagName));
+}
+
+/** The slide one step from `index` in `direction`; the first and the last stay where they are. */
+export function stepSlide(index: number, count: number, direction: 1 | -1): number {
+  return Math.min(count - 1, Math.max(0, index + direction));
+}
+
+/** The slide a hash names by its number from 1 (`#3` is the third), or undefined when it names none, as a heading's hash. */
+export function slideFromHash(hash: string, count: number): number | undefined {
+  const number = Number(hash.replace(/^#/, ""));
+  return hash.length > 1 && Number.isInteger(number) && number >= 1 && number <= count ? number - 1 : undefined;
+}
+
+/** The hash that names a slide, so a link or a reload opens the talk on it. */
+export function hashOfSlide(index: number): string {
+  return `#${index + 1}`;
 }
