@@ -112,3 +112,36 @@
   max-width: 100%;
   height: auto;
 }
+
+/* The talk (talk-pages.ts): one slide per screen, snapping into place below the top bar as the reader scrolls. */
+html:has(.talk) {
+  scroll-snap-type: y proximity;
+}
+
+.talk .vp-doc section.slide {
+  scroll-snap-align: start;
+  scroll-margin-top: calc(var(--vp-nav-height) + 16px);
+  margin: 24px 0;
+  padding: 8px 24px 16px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 10px;
+  background: var(--vp-c-bg-soft);
+}
+
+/* The slides carry the page, so a slide's title needs no rule above it. */
+.talk .vp-doc section.slide h2 {
+  margin-top: 16px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* The number, topic and time of a slide, as a HUD label in the app. */
+.talk .vp-doc .slide-meta {
+  margin: 16px 0 0;
+  font-family: var(--vp-font-family-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: var(--tracking-hud);
+  text-transform: uppercase;
+  color: var(--vp-c-text-2);
+}
