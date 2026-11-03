@@ -8,7 +8,7 @@ search: false
 
 A short talk about Trackwall as slides, with what to say and what to show on each one.
 
-[Po polsku](/pl/talk) · The arrows at the bottom, the arrow keys, Space or J and K move one slide at a time. Ten minutes in all, nine without the two optional slides. The demo is the made-up shop of twenty repos from the screenshots of this site.
+[Po polsku](/pl/talk) · The arrows at the bottom, the left and right arrow keys, Page Up and Down (a clicker) or J and K move one slide at a time. Ten minutes in all, nine without the two optional slides. The demo is the made-up shop of twenty repos from the screenshots of this site.
 
 <section class="slide">
 

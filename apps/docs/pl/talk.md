@@ -8,7 +8,7 @@ search: false
 
 Krótka prezentacja Trackwall w slajdach, z tym, co powiedzieć i co pokazać na każdym z nich.
 
-[In English](/talk) · Strzałki na dole, klawisze strzałek, spacja albo J i K przesuwają o jeden slajd. Razem dziesięć minut, dziewięć bez dwóch slajdów opcjonalnych. Demo to wymyślony sklep z dwudziestu repo, ten sam co na zrzutach tej strony.
+[In English](/talk) · Strzałki na dole, klawisze strzałek w lewo i w prawo, Page Up i Down (pilot) albo J i K przesuwają o jeden slajd. Razem dziesięć minut, dziewięć bez dwóch slajdów opcjonalnych. Demo to wymyślony sklep z dwudziestu repo, ten sam co na zrzutach tej strony.
 
 <section class="slide">
 

@@ -186,7 +186,7 @@
   color: var(--vp-c-text-1);
 }
 
-.talk-deck-bar button:hover:not(:disabled) {
+.talk-deck-bar button:hover:not([aria-disabled="true"]) {
   border-color: var(--vp-c-brand-1);
   color: var(--vp-c-brand-1);
 }
@@ -196,6 +196,6 @@
   outline-offset: 2px;
 }
 
-.talk-deck-bar button:disabled {
+.talk-deck-bar button[aria-disabled="true"] {
   opacity: 0.4;
 }

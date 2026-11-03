@@ -1,78 +1,71 @@
 // The talk as a deck (talk-pages.ts): one slide at a time, with buttons and the keys a presenter's clicker or
-// keyboard sends to move between them, and the slide's number in the address so a reload stays on it. Without
-// JavaScript the page is the slides one below another.
+// keyboard sends to move between them (slides.ts), and the slide's number in the address so a reload stays on it.
+// Without JavaScript the page is the slides one below another.
 import { useData, useRoute } from "vitepress";
-import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import { TALK_PAGE_CLASS } from "../talk-pages.ts";
-import { hashOfSlide, slideFromHash, stepSlide } from "./slides.ts";
+import { defineComponent, h, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
+import { hashOfSlide, isTypingInto, slideFromHash, slideKeyDirection, stepSlide } from "./slides.ts";
 
-/** The page's text; its `deck` class turns the slides into a deck (trackwall.css). */
-const DOC = ".talk .vp-doc";
+/** The text of a talk page; its `deck` class turns the slides into a deck (trackwall.css). */
+const TALK_DOC = ".talk .vp-doc";
 /** A slide: a `<section class="slide">` in the page's Markdown. */
 const SLIDE = "section.slide";
 /** A screenshot opened larger (image-zoom.ts): the keys are the zoom's until it closes. */
 const OPEN_ZOOM = ".medium-zoom-overlay";
 
-const NEXT_KEYS = ["arrowdown", "arrowright", "pagedown", "j"];
-const PREVIOUS_KEYS = ["arrowup", "arrowleft", "pageup", "k"];
-
-/** The direction a key moves in, or undefined when the key is not one of the deck's; J and K also with Shift or Caps Lock. */
-function direction(event: KeyboardEvent): 1 | -1 | undefined {
-  const key = event.key.toLowerCase();
-  if (key === " ") return event.shiftKey ? -1 : 1;
-  if (NEXT_KEYS.includes(key)) return 1;
-  if (PREVIOUS_KEYS.includes(key)) return -1;
-  return undefined;
-}
-
-/** Whether the key belongs to what has the focus: a field the reader types into, or a link or button Space presses. */
-function isForFocused(event: KeyboardEvent): boolean {
-  const target = event.target;
-  if (!(target instanceof HTMLElement)) return false;
-  if (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return true;
-  return event.key === " " && ["A", "BUTTON"].includes(target.tagName);
-}
+/** The bar's words; the Polish talk is a page under /pl/, not a locale with its own `lang` (ADR-142). */
+const LABELS = {
+  en: { bar: "Slides", previous: "Previous slide", next: "Next slide" },
+  pl: { bar: "Slajdy", previous: "Poprzedni slajd", next: "Następny slajd" },
+};
 
 /** The bar under a talk's slides: previous, the slide's number of all, next; nothing on other pages. */
 export const TalkDeck = defineComponent(() => {
-  const { frontmatter } = useData();
+  const { page } = useData();
   const route = useRoute();
-  const isTalk = computed(() => frontmatter.value.pageClass === TALK_PAGE_CLASS);
-  const slides = ref<HTMLElement[]>([]);
+  const doc = shallowRef<Element | null>(null);
+  const slides = shallowRef<HTMLElement[]>([]);
   const shown = ref(0);
 
   const show = (index: number) => {
-    const doc = document.querySelector(DOC);
     for (const [i, slide] of slides.value.entries()) slide.classList.toggle("shown", i === index);
-    doc?.classList.toggle("on-first", index === 0);
+    doc.value?.classList.toggle("on-first", index === 0);
     shown.value = index;
-    history.replaceState(history.state, "", hashOfSlide(index));
+    if (location.hash !== hashOfSlide(index)) history.replaceState(history.state, "", hashOfSlide(index));
     window.scrollTo({ top: 0 });
   };
   const step = (by: 1 | -1) => show(stepSlide(shown.value, slides.value.length, by));
 
-  // VitePress swaps the page without reloading; the slides of a new page exist once Vue has rendered it.
+  /** The slide the address names: by its number, or the slide holding the heading a link points at. */
+  const named = (): number | undefined => {
+    const byNumber = slideFromHash(location.hash, slides.value.length);
+    if (byNumber !== undefined) return byNumber;
+    const anchor = location.hash.length > 1 ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null;
+    const holder = anchor?.closest<HTMLElement>(SLIDE);
+    return holder === null || holder === undefined ? undefined : slides.value.indexOf(holder);
+  };
+
+  // VitePress swaps the page without reloading, and renders a new page's classes afresh; its slides exist once Vue
+  // has rendered it.
   const attach = () => {
-    const doc = document.querySelector(DOC);
-    slides.value = doc === null ? [] : Array.from(doc.querySelectorAll<HTMLElement>(SLIDE));
-    if (doc === null || slides.value.length === 0) return;
-    doc.classList.add("deck");
-    show(slideFromHash(location.hash, slides.value.length));
+    doc.value = document.querySelector(TALK_DOC);
+    slides.value = doc.value === null ? [] : Array.from(doc.value.querySelectorAll<HTMLElement>(SLIDE));
+    if (doc.value === null || slides.value.length === 0) return;
+    doc.value.classList.add("deck");
+    show(named() ?? 0);
   };
 
   const onKey = (event: KeyboardEvent) => {
-    if (!isTalk.value || slides.value.length === 0) return;
-    if (event.altKey || event.ctrlKey || event.metaKey || isForFocused(event)) return;
+    if (slides.value.length === 0 || event.altKey || event.ctrlKey || event.metaKey) return;
+    if (isTypingInto(event.target instanceof HTMLElement ? event.target : null)) return;
     if (document.querySelector(OPEN_ZOOM) !== null) return;
-    const by = direction(event);
+    const by = slideKeyDirection(event.key);
     if (by === undefined) return;
     event.preventDefault();
     step(by);
   };
-
-  // A link to another slide of the same talk, or the browser's back button, changes only the hash.
+  // A link to another slide or heading of the same talk, or the browser's back button, changes only the hash.
   const onHash = () => {
-    if (isTalk.value && slides.value.length > 0) show(slideFromHash(location.hash, slides.value.length));
+    if (slides.value.length > 0) show(named() ?? shown.value);
   };
 
   onMounted(() => {
@@ -91,11 +84,15 @@ export const TalkDeck = defineComponent(() => {
 
   return () => {
     const count = slides.value.length;
-    if (!isTalk.value || count === 0) return null;
-    return h("nav", { class: "talk-deck-bar", "aria-label": "Slides" }, [
-      h("button", { type: "button", "aria-label": "Previous slide", disabled: shown.value === 0, onClick: () => step(-1) }, "←"),
+    if (count === 0) return null;
+    const labels = page.value.relativePath.startsWith("pl/") ? LABELS.pl : LABELS.en;
+    // aria-disabled rather than disabled, so the button a presenter clicked keeps the focus at either end.
+    const button = (label: string, by: 1 | -1, atEnd: boolean, arrow: string) =>
+      h("button", { type: "button", "aria-label": label, "aria-disabled": atEnd, onClick: () => atEnd || step(by) }, arrow);
+    return h("nav", { class: "talk-deck-bar", "aria-label": labels.bar }, [
+      button(labels.previous, -1, shown.value === 0, "←"),
       h("span", { class: "talk-deck-count", "aria-live": "polite" }, `${shown.value + 1} / ${count}`),
-      h("button", { type: "button", "aria-label": "Next slide", disabled: shown.value === count - 1, onClick: () => step(1) }, "→"),
+      button(labels.next, 1, shown.value === count - 1, "→"),
     ]);
   };
 });
