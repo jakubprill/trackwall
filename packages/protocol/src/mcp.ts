@@ -19,6 +19,7 @@ import {
   PromptDelivery,
   Session,
   SessionId,
+  TASK_CHECK_STEP_MAX,
   TASK_CHECK_STEPS_MAX,
   TASK_MESSAGE_MAX,
   TASK_MESSAGES_WITHOUT_USER,
@@ -26,6 +27,7 @@ import {
   TASK_PROMPT_MAX,
   TASK_SUMMARY_MAX,
   TASK_SUMMARY_MAX_FILES,
+  TASK_SUMMARY_WORDS,
   TASK_TITLE_MAX,
   Task,
   TaskApprovals,
@@ -971,9 +973,16 @@ export const mcpTools = {
       `${LIST_SESSIONS} and the Sessions view). Calling it again replaces the summary and its check steps. Commit your changes on the task branch before reporting.`,
     args: z
       .object({
-        summary: visibleText(TaskSummaryText).describe(`the result in a few sentences, up to ${TASK_SUMMARY_MAX} characters`),
+        summary: visibleText(TaskSummaryText).describe(
+          `the result for the reviewer in about ${TASK_SUMMARY_WORDS} words: it becomes the description of the task's merge ` +
+            `request, together with the check steps; more than ${TASK_SUMMARY_MAX} characters is refused`,
+        ),
         checkSteps: z
-          .array(visibleText(TaskCheckStep))
+          .array(
+            visibleText(TaskCheckStep).describe(
+              `one step on one line, without line breaks or tabs, up to ${TASK_CHECK_STEP_MAX} characters; a longer one is refused`,
+            ),
+          )
           .max(TASK_CHECK_STEPS_MAX)
           .default([])
           .describe(
