@@ -6,6 +6,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { copilotCli, PINNED_COPILOT_ENV } from "../../scripts/copilot-cli.ts";
 import { CopilotHookRecord } from "../../src/modules/agents/copilot-hook-record.ts";
 import { jsonOf } from "../../src/modules/agents/json.ts";
@@ -48,6 +49,8 @@ function byokEnv(model: ScriptedModel, dirs: { home: string; projects: string })
 
 const TOKEN = "c".repeat(43);
 
+const ACP_TAP = fileURLToPath(new URL("./acp-tap.ts", import.meta.url));
+
 /**
  * The daemon API with the real Copilot CLI on a projects folder with the one repo `shop`, and the path of the Copilot
  * CLI binary; `options` change the session API's options (where the hooks go), and `env` the user environment the
@@ -57,16 +60,17 @@ export async function startRealCopilotDaemon(
   model: ScriptedModel,
   options: Partial<SessionApiOptions> = {},
   env: Record<string, string | undefined> = {},
-  /** The command the daemon runs for Copilot CLI's binary, such as the binary behind `acp-tap.ts`. */
-  wrap: (copilot: string) => string[] = (copilot) => [copilot],
+  /** `acpTap`: a file that gets Copilot CLI's ACP output, through `acp-tap.ts` in front of it. */
+  { acpTap }: { acpTap?: string } = {},
 ) {
   const copilot = await copilotCli();
+  const command = acpTap === undefined ? [copilot] : [process.execPath, ACP_TAP, acpTap, copilot];
   const userEnv = (dirs: { home: string; projects: string }) =>
     Object.fromEntries(Object.entries({ ...byokEnv(model, dirs), ...env }).filter(([, value]) => value !== undefined));
   const api = await startSessionApi(TOKEN, {
     ...ONE_REPO,
     ...options,
-    copilot: { command: wrap(copilot), env: userEnv },
+    copilot: { command, env: userEnv },
   });
   return { ...api, copilot };
 }

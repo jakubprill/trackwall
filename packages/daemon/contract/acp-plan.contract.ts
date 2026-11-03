@@ -1,10 +1,10 @@
-import { afterAll, beforeAll, expect, setDefaultTimeout, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { ConversationEntry } from "@trackwall/protocol";
 import { z } from "zod";
+import { jsonOf } from "../src/modules/agents/json.ts";
 import { waitFor } from "../test/support/agents.ts";
 import { startRealCopilotDaemon } from "./support/real-copilot.ts";
 import { type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
@@ -22,11 +22,16 @@ let model: ScriptedModel;
 let daemon: Awaited<ReturnType<typeof startRealCopilotDaemon>>;
 const tapDir = mkdtempSync(join(tmpdir(), "trackwall-acp-tap-"));
 const tapFile = join(tapDir, "acp-output.jsonl");
-const tap = fileURLToPath(new URL("./support/acp-tap.ts", import.meta.url));
 
 beforeAll(async () => {
   model = await startScriptedModel();
-  daemon = await startRealCopilotDaemon(model, {}, {}, (copilot) => [process.execPath, tap, tapFile, copilot]);
+  daemon = await startRealCopilotDaemon(model, {}, {}, { acpTap: tapFile });
+});
+
+afterEach(async () => {
+  const { agents } = daemon.facade;
+  for (const session of agents.sessions().sessions) if (session.run.kind === "running") await agents.stop(session.id);
+  expect(model.takeLeftovers()).toEqual({ problems: [], unusedReplies: 0 });
 });
 
 afterAll(async () => {
@@ -43,17 +48,9 @@ function updatesOf(kind: string): unknown[] {
   return readFileSync(tapFile, "utf8")
     .split("\n")
     .flatMap((line) => {
-      const parsed = Update.safeParse(parseJson(line));
+      const parsed = jsonOf(Update).safeParse(line);
       return parsed.success && parsed.data.params.update.sessionUpdate === kind ? [parsed.data.params.update] : [];
     });
-}
-
-function parseJson(line: string): unknown {
-  try {
-    return JSON.parse(line);
-  } catch {
-    return undefined;
-  }
 }
 
 test("the agent's todos reach ACP as an empty plan and the title of the todo in progress as a thought, not as plan entries", async () => {
@@ -86,8 +83,11 @@ test("the agent's todos reach ACP as an empty plan and the title of the todo in 
   const plans = updatesOf("plan");
   expect(plans.length).toBeGreaterThan(0);
   expect(plans).toEqual(plans.map(() => ({ sessionUpdate: "plan", entries: [] })));
-  const thoughts = [...entries.values()].filter((e) => e.kind === "thought").map((e) => e.text);
-  expect(thoughts).toContain("Writing the test");
+  // An update can come after the prompt's result (`acp-session.contract.ts`), so the thought is waited for.
+  const thoughts = () => [...entries.values()].filter((e) => e.kind === "thought").map((e) => e.text);
+  const deadline = Date.now() + 5_000;
+  while (!thoughts().includes("Writing the test") && Date.now() < deadline) await new Promise((r) => setTimeout(r, 20));
+  expect(thoughts()).toContain("Writing the test");
   view.detach();
   await agents.stop(supervisor.id);
 });
