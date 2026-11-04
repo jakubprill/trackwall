@@ -43,14 +43,14 @@ function evidenceSide(edge: GraphEdge, evidence: EdgeEvidence): string {
   return `${evidence.repo} `;
 }
 
-/** A node without a card shows only why; counts of a node with one are left out when they are zero. */
+/** A node without a card shows why instead of counts; counts of zero are left out. */
 function nodeLine(node: GraphNode): string {
   const facts = [
     node.remote === null ? undefined : `remote ${node.remote}`,
     node.tags.length > 0 ? `tags ${node.tags.join(", ")}` : undefined,
     node.apps.length > 0 ? `apps ${node.apps.join(", ")}` : undefined,
-    node.provides ? countLabel(node.provides, PACKAGES) : undefined,
-    node.endpoints ? countLabel(node.endpoints, ENDPOINTS) : undefined,
+    node.provides !== null && node.provides > 0 ? countLabel(node.provides, PACKAGES) : undefined,
+    node.endpoints !== null && node.endpoints > 0 ? countLabel(node.endpoints, ENDPOINTS) : undefined,
     node.problem === null ? undefined : `no card: ${node.problem}`,
   ].filter((fact) => fact !== undefined);
   return facts.length === 0 ? node.repo : `${node.repo}: ${facts.join("; ")}`;

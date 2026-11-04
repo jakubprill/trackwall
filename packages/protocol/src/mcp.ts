@@ -623,7 +623,7 @@ export const mcpTools = {
     auditArgs: ["repo", "depth"] as const,
     description:
       "Part of the connection graph around a repo: the repos up to depth connections away in both directions (what it " +
-      "uses and who uses it), one line each under '## Repos' with tags, Spring Boot app names, the number of packages " +
+      "uses and who uses it), one line each under '## Repos' with remote address, tags, Spring Boot app names, the number of packages " +
       "and endpoints, or why the repo has no card; the connections between them under '## Connections', written as in " +
       "who_calls; and under '## Problems' the HTTP clients of these repos whose target is no repo in the list " +
       "(unresolved-call-target): an external system, or a repo the user maps under graph.apps.",
@@ -646,9 +646,10 @@ export const mcpTools = {
       "name or OpenAPI operationId and summary. Best match first, each a block of text: '<METHOD> <path> in <repo> (app " +
       "<app>), match path|path-end|text' (ANY: any method), then its handler, file and line, request and response types, " +
       "or 'only in an OpenAPI spec' when the code does not map it (e.g. its interface is generated during the build), and " +
-      "its OpenAPI operation; then a 'caller' line per repo whose HTTP client calls it (client, how, confidence, the call " +
-      "and where it is) with 'from' lines: the caller repo's endpoints whose handlers reach that call (or why none are " +
-      "listed); then 'calls' lines: the endpoints of other repos this endpoint's handler calls. Follow from and calls " +
+      "its OpenAPI operation; then a 'caller' line per call from another repo's HTTP client (client, how, confidence, the " +
+      "call, ?: method not known, and where it is) with 'from' lines: the caller repo's endpoints whose handlers reach " +
+      "that call (or why none are listed); then 'calls' lines: the endpoints of other repos this endpoint's handler " +
+      "calls ('calls: not traced' when its code was not followed, unlike 'calls nothing'). Follow from and calls " +
       `repeatedly to see what a change to an endpoint affects. At most ${MAX_FOUND_ENDPOINTS} endpoints.`,
     args: z
       .object({
