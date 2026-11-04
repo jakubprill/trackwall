@@ -351,8 +351,14 @@ export class Vcs {
   }
 
   /** The paths that differ between two commits, at most `max`; `undefined` when `from` is unknown. */
-  changedPathsBetween(dir: string, from: string, to: string, max: number): Promise<{ paths: string[]; truncated: boolean } | undefined> {
-    return changedPathsBetween(dir, from, to, max);
+  changedPathsBetween(
+    dir: string,
+    from: string,
+    to: string,
+    max: number,
+    pathspecs: readonly string[] = [],
+  ): Promise<{ paths: string[]; truncated: boolean } | undefined> {
+    return changedPathsBetween(dir, from, to, max, pathspecs);
   }
 
   /** The newest `limit` commits of `commit`'s history, newest first. */

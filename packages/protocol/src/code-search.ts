@@ -34,13 +34,16 @@ export const CodePathspec = z
 export const CODE_PATHSPECS_MAX = 20;
 export const CodePathspecs = z.array(CodePathspec).max(CODE_PATHSPECS_MAX);
 
+/** The longest search pattern. */
+export const CODE_QUERY_PATTERN_MAX = 500;
+
 /** What to search for and where in one repo; the `search_code` tool adds the choice of repos and the match limit. */
 export const CodeQuery = z.object({
   /** One line: git would split a pattern with a newline into several, and one of them may match every line. */
   pattern: z
     .string()
     .min(1)
-    .max(500)
+    .max(CODE_QUERY_PATTERN_MAX)
     .refine((p) => printable(p, true), "pattern: one line, no control characters except tab"),
   /** A POSIX extended regular expression (`git grep -E`) instead of a fixed string. */
   regex: z.boolean(),

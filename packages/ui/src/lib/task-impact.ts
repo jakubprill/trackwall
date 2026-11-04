@@ -1,8 +1,8 @@
-import { type ChangedEndpoints, countLabel, type ImpactedRepo, type TaskProposal } from "@trackwall/protocol";
+import { type ChangedEndpoints, type ChangedType, countLabel, type ImpactedRepo, type TaskProposal } from "@trackwall/protocol";
 import type { EdgePair } from "./graph-layout.ts";
 
 /**
- * The logic of a task's Impact tab and of the impact on the Overview graph (ADR-147): where each repo the change reaches
+ * The logic of a task's Impact tab and of the impact on the Overview graph (ADR-147, ADR-205): where each repo the change reaches
  * sits in the drawing and what the summary says; the prompt of a hand-off is `handoffPrompt` in `protocol`. Without React.
  */
 
@@ -33,22 +33,42 @@ export function impactRings(changed: Pick<ChangedEndpoints, "repo" | "impact">):
   return new Map([[changed.repo, 0], ...changed.impact.map((r) => [r.repo, r.ring] as const)]);
 }
 
-/** One line over the tab: how many endpoints changed and how many repos the change reaches, sure or maybe. */
-export function impactSummary({ endpoints, impact, truncated }: Pick<ChangedEndpoints, "endpoints" | "impact" | "truncated">): string {
-  if (endpoints.length === 0) return "The task's commits change no endpoint.";
-  const changed = `${countLabel(endpoints.length, { one: "endpoint", other: "endpoints" })}${truncated ? " (more not shown)" : ""} changed`;
-  if (impact.length === 0) return `${changed}; no other repo calls them.`;
+/**
+ * One line over the tab: how many endpoints and public library types changed and how many repos the change reaches,
+ * sure or maybe.
+ */
+export function impactSummary({
+  endpoints,
+  types,
+  impact,
+  truncated,
+}: Pick<ChangedEndpoints, "endpoints" | "types" | "impact" | "truncated">): string {
+  if (endpoints.length === 0 && types.length === 0) return "The task's commits change no endpoint.";
+  const counted = [
+    endpoints.length > 0 && countLabel(endpoints.length, { one: "endpoint", other: "endpoints" }),
+    types.length > 0 && countLabel(types.length, { one: "public type", other: "public types" }),
+  ].filter((c) => c !== false);
+  const changed = `${counted.join(" and ")}${truncated ? " (more not shown)" : ""} changed`;
+  if (impact.length === 0) return `${changed}; no other repo ${types.length === 0 ? "calls" : "uses"} them.`;
   const maybe = impact.filter((r) => !r.sure).length;
   const reached = countLabel(impact.length - maybe, { one: "repo", other: "repos" });
   return `${changed}, reaching ${reached}${maybe > 0 ? ` and maybe ${maybe} more` : ""}.`;
 }
 
+/** The line under a changed library type: what of it changed and how many repos import it. */
+export function typeChangeDetail({ declaration, members, users }: Pick<ChangedType, "declaration" | "members" | "users">): string {
+  const changed = [...(declaration ? ["declaration"] : []), ...members];
+  const importing =
+    users.length === 0 ? "no importing repos" : countLabel(users.length, { one: "importing repo", other: "importing repos" });
+  return [...(changed.length > 0 ? [changed.join(", ")] : []), importing].join(" · ");
+}
+
 /**
- * Why Trackwall itself proposed a task (ADR-198), under the proposal's title: the proposal's prompt came from comparing
- * the task's commits, not from its agent. `null` for any other proposal.
+ * Why Trackwall itself proposed a task (ADR-198, ADR-205), under the proposal's title: the proposal's prompt came from
+ * comparing the task's commits, not from its agent. `null` for any other proposal.
  */
 export function impactProposalNote(proposal: Pick<TaskProposal, "repo" | "fromImpact">): string | null {
-  return proposal.fromImpact ? `Proposed by Trackwall: ${proposal.repo} calls endpoints this task's commits changed` : null;
+  return proposal.fromImpact ? `Proposed by Trackwall: ${proposal.repo} uses endpoints or public types this task's commits changed` : null;
 }
 
 /**

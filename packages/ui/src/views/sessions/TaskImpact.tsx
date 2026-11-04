@@ -2,6 +2,7 @@ import {
   agentsApi,
   type ChangedEndpoint,
   type ChangedEndpoints,
+  type ChangedType,
   contractChange,
   graphApi,
   handingTaskName,
@@ -19,15 +20,15 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { IMPACT_POLL_MS, impactPoints, impactSummary, RING_GAP } from "@/lib/task-impact";
+import { IMPACT_POLL_MS, impactPoints, impactSummary, RING_GAP, typeChangeDetail } from "@/lib/task-impact";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
 import { ImpactRings } from "./ImpactRings.tsx";
 
 /**
- * The task's "Impact" tab (ADR-147): the endpoints the task's commits change, the repos that call them and, ring by
- * ring, the repos their endpoints reach, drawn round the task's repo. Each reached repo can be handed a task of its
+ * The task's "Impact" tab (ADR-147, ADR-205): the endpoints and public library types the task's commits change, the
+ * repos that call or import them and, ring by ring, the repos their endpoints reach, drawn round the task's repo. Each reached repo can be handed a task of its
  * own, which reads this task's change as if this task's session had proposed it (ADR-143). Commits only: the tab says
  * which commit it read.
  */
@@ -68,7 +69,7 @@ export function TaskImpact({
         </Button>
       </header>
       <ReadNotes changed={data} />
-      {data.endpoints.length > 0 && (
+      {(data.endpoints.length > 0 || data.types.length > 0) && (
         <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,34rem)_1fr] xl:items-start">
           <ImpactRings
             repo={data.repo}
@@ -79,7 +80,8 @@ export function TaskImpact({
             onSelect={setSelected}
           />
           <div className="flex min-w-0 flex-col gap-4">
-            <EndpointList endpoints={data.endpoints} />
+            {data.endpoints.length > 0 && <EndpointList endpoints={data.endpoints} />}
+            {data.types.length > 0 && <TypeList types={data.types} />}
             <ReachedRepos conn={conn} task={task} changed={data} selected={selected} onSelect={setSelected} onOpenTask={onOpenTask} />
           </div>
         </div>
@@ -130,6 +132,27 @@ function EndpointList({ endpoints }: { endpoints: readonly ChangedEndpoint[] }) 
                 .filter(Boolean)
                 .join(" · ")}
             </p>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function TypeList({ types }: { types: readonly ChangedType[] }) {
+  return (
+    <section aria-label="Changed library types" className="flex flex-col gap-2">
+      <h3 className="hud-label">Changed library types</h3>
+      <ul className="flex flex-col gap-2">
+        {types.map((t) => (
+          <li key={t.type} className="surface px-3 py-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <Badge variant={CHANGE_BADGE[t.change]}>{t.change}</Badge>
+              <span className="truncate font-mono text-sm" title={`${t.evidence.path}:${t.evidence.line}`}>
+                {t.type}
+              </span>
+            </div>
+            <p className="text-muted-foreground pt-1 font-mono text-2xs">{typeChangeDetail(t)}</p>
           </li>
         ))}
       </ul>

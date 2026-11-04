@@ -103,6 +103,7 @@ export function makeAgents(
       head: base,
       contractsCompared: true,
       endpoints: [],
+      types: [],
       truncated: false,
       problems: [],
       impact: [],
