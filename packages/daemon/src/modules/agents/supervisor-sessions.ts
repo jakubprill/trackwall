@@ -42,7 +42,8 @@ export class SupervisorSessions {
   /**
    * The running supervisor, or a new one. With `last` it goes on with the newest supervisor's conversation under its id
    * (ADR-96); that start closes the ended supervisor first, since an id is listed once, so when the start itself fails
-   * the last screen is gone; a configuration that refuses it refuses it before the close. `view` is a terminal or the conversation view (ADR-107); the last conversation goes on in either.
+   * the last screen is gone; a configuration that refuses it refuses it before the close. `view` is a terminal or the
+   * conversation view (ADR-107); the last conversation goes on in either.
    */
   async start(conversation: SupervisorConversation, view: SessionView): Promise<Session> {
     if (this.#starting) return this.#starting;
@@ -111,7 +112,8 @@ export class SupervisorSessions {
     // and only once nothing in the configuration refuses that start.
     if (sessions.has(spec.id)) {
       await this.#deps.check(place);
-      this.#deps.close(spec.id);
+      // The user may have closed it during the check.
+      if (sessions.has(spec.id)) this.#deps.close(spec.id);
     }
     const started = await this.#deps.launch(spec, place);
     // One of them may have been dismissed during the start; the start has still succeeded.

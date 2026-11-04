@@ -29,7 +29,7 @@ const RESUMED: SessionLaunch = {
  * Supervisors over a list the test fills, whose starts finish only when the test lets them; `refusal` is what the
  * configuration refuses a start with.
  */
-function makeSupervisors(listed: Session[] = [], refusal?: Error) {
+function makeSupervisors(listed: Session[] = [], refusal?: Error, duringCheck: () => void = () => {}) {
   const home = mkdtempSync(join(tmpdir(), "trackwall-supervisor-"));
   homes.push(home);
   const steps: string[] = [];
@@ -40,6 +40,7 @@ function makeSupervisors(listed: Session[] = [], refusal?: Error) {
     projectsDir: async () => home,
     check: async () => {
       steps.push("check");
+      duringCheck();
       if (refusal) throw refusal;
     },
     launch: (spec) => {
@@ -113,5 +114,16 @@ describe("supervisor sessions", () => {
     await starting;
 
     expect(steps).toEqual(["check", "close left", "launch left"]);
+  });
+
+  test("going on with the ended supervisor's conversation still starts when the user closed it during the check", async () => {
+    const listed = [supervisorView("left", "exited")];
+    const { supervisors, steps, finishStarts } = makeSupervisors(listed, undefined, () => listed.splice(0));
+
+    const starting = supervisors.resume(RESUMED);
+    await finishStarts();
+    await starting;
+
+    expect(steps).toEqual(["check", "launch left"]);
   });
 });
