@@ -142,6 +142,13 @@ One repository of the workspace, identified by a slug from the name of its direc
 A repo the user marked with a star in "Repos", which the list then shows at the top, ahead of the alphabetical rest (ADR-192). Kept by repo id; only the user stars or unstars.
 _Avoid_: favourite, pinned repo
 
+**Starred on the host** (`starredOnHost` in `RemoteRepoSearch`; in the UI *Starred on the host*):
+A repo the user starred on GitLab or GitHub itself; the "Add repo" search can show only those (ADR-201). Not a starred repo, which is Trackwall's own mark.
+_Avoid_: starred (alone, in the search), favourite
+
+**Search scope** (`RemoteRepoScope`: `member`, `visible`; in the UI *My projects*, *All I can see*):
+Which GitLab projects the "Add repo" search covers: those the user is a member of, also through a group, or every project the user can see (ADR-201). GitHub's list does not change with it.
+
 **Remote address** (`Repo.remote`):
 The address of the main remote (`origin` or the only remote in git, `mainRemote`) as `host/path`, for example `gitlab.example.com/shop/api`, without the protocol and user. It identifies the repo independently of the directory name (ADR-21).
 _Avoid_: repo URL (a URL has a protocol and may carry a token), remote without qualification (that is a name in git, for example `origin`)

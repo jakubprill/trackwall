@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { HostName, RemoteRepoName, RepoHosts, RepoPath, workspaceApi } from "../src/index.ts";
+import { HostName, RemoteRepoName, RemoteRepoSearch, RepoHosts, RepoPath, workspaceApi } from "../src/index.ts";
 
 describe("workspace contract", () => {
   test("a path in a repo does not leave the commit's tree and has no control characters", () => {
@@ -32,5 +32,13 @@ describe("workspace contract", () => {
     const gitlab = { kind: "gitlab", host: "gitlab.example.com" };
     expect(RepoHosts.safeParse([gitlab, { kind: "github", host: "github.com" }]).success).toBe(true);
     expect(RepoHosts.safeParse([gitlab, { kind: "gitlab", host: "GitLab.example.com" }]).success).toBe(false);
+  });
+
+  test("a repo search takes one topic and at most 10 pages", () => {
+    const search = { query: " orders ", scope: "visible", topic: "java", language: "", starredOnHost: false, pages: 2 } as const;
+    expect(RemoteRepoSearch.parse(search)).toEqual({ ...search, query: "orders" });
+    expect(RemoteRepoSearch.safeParse({ ...search, topic: "java,spring" }).success).toBe(false);
+    expect(RemoteRepoSearch.safeParse({ ...search, pages: 11 }).success).toBe(false);
+    expect(RemoteRepoSearch.safeParse({ ...search, scope: "everything" }).success).toBe(false);
   });
 });
