@@ -54,7 +54,7 @@ import {
 } from "./parse.ts";
 import { pathKey } from "./path-key.ts";
 import { remoteAddress } from "./remote.ts";
-import { reachRemote } from "./remote-reach.ts";
+import { networkRemote, reachRemote } from "./remote-reach.ts";
 import {
   commitRound,
   moveBranch,
@@ -168,12 +168,14 @@ export class Vcs {
     return readUnpushed(dir, async (worktree) => (await this.status(worktree, "recent")).changes);
   }
 
-  /**
-   * Whether git reaches the main remote as a sync would (ADR-195): its address as `host/path`, `null` when it is no HTTPS
-   * or SSH address; git's error otherwise.
-   */
-  reachRemote(dir: string): Promise<string | null> {
-    return reachRemote(dir);
+  /** The main remote's HTTPS or SSH address and its `host/path`; `null` for another kind of remote or none (ADR-195). */
+  networkRemote(dir: string): Promise<{ url: string; address: string } | null> {
+    return networkRemote(dir);
+  }
+
+  /** Whether git reaches `url` with the user's sign-in, outside every repo (ADR-195); git's error otherwise. */
+  reachRemote(url: string): Promise<void> {
+    return reachRemote(url);
   }
 
   private async readStatus(dir: string): Promise<TimedStatus> {

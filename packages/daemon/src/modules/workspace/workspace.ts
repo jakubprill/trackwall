@@ -106,7 +106,8 @@ interface WorkspaceVcs extends CodeSearchVcs, CommitSearchVcs {
   file(dir: string, path: string, maxBytes: number): Promise<FileContent | undefined>;
   changes(dir: string, maxPatchBytes: number): Promise<WorkingTreeChanges>;
   unpushed(dir: string): Promise<RepoUnpushedRead>;
-  reachRemote(dir: string): Promise<string | null>;
+  networkRemote(dir: string): Promise<{ url: string; address: string } | null>;
+  reachRemote(url: string): Promise<void>;
 }
 
 /** What `workspace` needs from the repo hosts of the `vcs` module (ADR-19). */
@@ -177,28 +178,27 @@ export class Workspace {
   }
 
   /**
-   * Whether git reaches each repo host of the projects folder (ADR-195): one repo per host, the first by id, at most
+   * Whether git reaches each repo host of the projects folder (ADR-195): one repo per host, the first by id with an HTTPS or SSH remote, at most
    * `MAX_REACHED_HOSTS` hosts, since one answer per host says whether the keys or sign-in for it work.
    */
   async remoteReach(): Promise<RemoteReach[]> {
     const { entries } = await this.entries();
-    const byHost = new Map<string, { repo: string; path: string }>();
-    const addresses = await mapLimit(entries, STATUS_CONCURRENCY, (entry) => this.deps.vcs.remote(entry.path).catch(() => null));
+    const remotes = await mapLimit(entries, STATUS_CONCURRENCY, (entry) => this.deps.vcs.networkRemote(entry.path).catch(() => null));
+    const byHost = new Map<string, { repo: string; url: string }>();
     entries.forEach((entry, i) => {
-      const host = addresses[i]?.split("/")[0];
-      if (host !== undefined && !byHost.has(host) && byHost.size < MAX_REACHED_HOSTS)
-        byHost.set(host, { repo: entry.id, path: entry.path });
+      const remote = remotes[i];
+      const host = remote?.address.split("/")[0];
+      if (remote && host !== undefined && !byHost.has(host) && byHost.size < MAX_REACHED_HOSTS)
+        byHost.set(host, { repo: entry.id, url: remote.url });
     });
-    const reads = await Promise.all(
-      [...byHost].map(([host, { repo, path }]) =>
-        this.deps.vcs.reachRemote(path).then(
-          (address): RemoteReach | null => (address === null ? null : { host, repo, error: null }),
+    return Promise.all(
+      [...byHost].map(([host, { repo, url }]) =>
+        this.deps.vcs.reachRemote(url).then(
+          (): RemoteReach => ({ host, repo, error: null }),
           (err: unknown): RemoteReach => ({ host, repo, error: messageOf(err) }),
         ),
       ),
     );
-    // A remote that is no HTTPS or SSH address (a local folder, `git://`) is nothing to sign in to.
-    return reads.filter((read): read is RemoteReach => read !== null);
   }
 
   settings(): WorkspaceSettings {

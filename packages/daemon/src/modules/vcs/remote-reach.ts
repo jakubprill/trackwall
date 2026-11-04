@@ -1,25 +1,34 @@
+import { tmpdir } from "node:os";
 import { git } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { networkAddress } from "./remote.ts";
 
 /**
- * Whether git reaches a repo's main remote as a sync's fetch would (ADR-195): `git ls-remote` of the same remote, with the
- * same environment without prompts, so a missing SSH key, an unknown host key or a missing sign-in fails here at once
- * instead of hanging. It reads only the remote's refs; nothing is fetched or written.
+ * Whether git reaches a repo's main remote with the user's own sign-in (ADR-195): `git ls-remote` of the remote's address,
+ * with the environment without prompts a sync's fetch has, so a missing SSH key, an unknown host key or a missing sign-in
+ * fails at once instead of hanging. It runs outside the repo, on the address the repo's configuration resolves to, so
+ * only the user's and the system's configuration apply: the doctor runs it whenever Settings opens, and a repo's own
+ * configuration, which a task's agent can write, must not run a program then (`core.sshCommand`, a credential helper,
+ * `uploadpack`). That is also the sign-in the check is about. It reads only the remote's refs; nothing is written.
  */
 
-/** A remote that answers does so in a second or two, also over a VPN; longer is a host that cannot be reached. */
-const REACH_TIMEOUT_MS = 15_000;
+/** A remote that answers does so in a second or two, also over a VPN; the doctor's report waits for the slowest host. */
+const REACH_TIMEOUT_MS = 8_000;
 
-/** The remote it reached as `host/path`; `null` for a repo whose main remote is no HTTPS or SSH address (nothing to check). */
-export async function reachRemote(dir: string): Promise<string | null> {
-  const config = await readConfig(dir);
-  const remote = mainRemote(config);
+/** The main remote's HTTPS or SSH address as `host/path`; `null` for anything else (a local folder, `git://`). */
+export async function networkRemote(dir: string): Promise<{ url: string; address: string } | null> {
+  const remote = mainRemote(await readConfig(dir));
   const address = remote && networkAddress(remote.url);
-  if (!remote || address === undefined) return null;
-  await git(dir, ["ls-remote", "--quiet", "--", remote.name, "HEAD"], {
+  return remote && address !== undefined ? { url: remote.url, address } : null;
+}
+
+/** Throws git's message when the remote at `url` (an HTTPS or SSH address) does not answer with the user's sign-in. */
+export async function reachRemote(url: string): Promise<void> {
+  if (networkAddress(url) === undefined) throw new Error(`${url} is not an HTTPS or SSH address`);
+  const outside = tmpdir();
+  const user = await readConfig(outside);
+  await git(outside, ["ls-remote", "--quiet", "--", url, "HEAD"], {
     timeoutMs: REACH_TIMEOUT_MS,
-    network: { sshCommand: config.sshCommand },
+    network: { sshCommand: user.sshCommand },
   });
-  return address;
 }
