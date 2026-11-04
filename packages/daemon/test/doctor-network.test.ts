@@ -5,8 +5,8 @@ import { type AddressInfo, createServer as createNetServer, connect as netConnec
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer as createTlsServer } from "node:tls";
+import { proxyFor, shownProxy } from "../src/infra/proxy-env.ts";
 import { networkOutcome, SESSION_HOSTS } from "../src/modules/doctor/network-check.ts";
-import { proxyFor, shownProxy } from "../src/modules/doctor/proxy-env.ts";
 import { probeTls, type TlsProbe, type TlsProbeResult } from "../src/modules/doctor/tls-probe.ts";
 import { INSPECTION_CA, LOCALHOST_CERT, LOCALHOST_KEY } from "./fixtures/tls-certificates.ts";
 import { RUNTIMES } from "./support/runtimes.ts";

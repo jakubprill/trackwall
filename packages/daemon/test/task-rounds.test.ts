@@ -43,13 +43,16 @@ async function taskInFirstTurn(prompt: string) {
   const terminal = viewer(daemon.facade.agents, session.id);
   terminal.attachment.input("start\r");
   await waitFor(daemon.facade.agents, session.id, (s) => s.state?.state === "Approval", "the first turn's approval");
+  // The turn's start is read from the worktree in the background, after its hook; the rounds are listed after it, so
+  // once they come back the worktree as the turn found it is known. A test that wrote a file before (Windows runs git
+  // slowly) would have the agent's own change read as one from outside.
+  expect(await rounds(task.id)).toEqual({ rounds: [], undo: null, blocked: null, problem: null });
   return { task, session: session.id, terminal };
 }
 
 describe.skipIf(process.versions.bun === undefined)("task rounds (ADR-168; real PTY and git, fake Copilot CLI)", () => {
   test("a turn that changed the worktree is a round with a commit and a diff of its own, and Undo round takes it back and tells the agent", async () => {
     const { task, session, terminal } = await taskInFirstTurn("Add a cart");
-    expect(await rounds(task.id)).toEqual({ rounds: [], undo: null, blocked: null, problem: null });
 
     // The agent writes a file and leaves it uncommitted; the turn ends with the approval.
     writeFileSync(join(task.worktree, "cart.ts"), "export const cart = [];\n");

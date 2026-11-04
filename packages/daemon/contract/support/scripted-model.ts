@@ -46,6 +46,8 @@ export interface ModelRequest {
   toolResults: string[];
   /** The tool names the model may call. */
   tools: string[];
+  /** The request's HTTP headers, names in lower case: what Copilot CLI sends a custom provider (ADR-194). */
+  headers: Record<string, string>;
 }
 
 function text(content: z.infer<typeof Content> | undefined): string {
@@ -58,7 +60,7 @@ function images(content: z.infer<typeof Content> | undefined): number {
   return Array.isArray(content) ? content.filter((part) => part.type === "image_url").length : 0;
 }
 
-function summarize(request: z.infer<typeof Request>): ModelRequest {
+function summarize(request: z.infer<typeof Request>, headers: IncomingMessage["headers"]): ModelRequest {
   const { messages } = request;
   const lastAssistant = messages.findLastIndex((m) => m.role === "assistant");
   return {
@@ -75,6 +77,7 @@ function summarize(request: z.infer<typeof Request>): ModelRequest {
       .filter((m) => m.role === "tool")
       .map((m) => text(m.content)),
     tools: request.tools.map((t) => t.function.name),
+    headers: Object.fromEntries(Object.entries(headers).flatMap(([name, value]) => (typeof value === "string" ? [[name, value]] : []))),
   };
 }
 
@@ -138,7 +141,7 @@ export async function startScriptedModel() {
     const parsed = jsonOf(Request).safeParse(Buffer.concat(chunks).toString("utf8"));
     if (!parsed.success) return refuse(res, `a request it cannot read: ${parsed.error.message}`);
     if (parsed.data.stream !== true) return refuse(res, "a request without streaming");
-    const request = summarize(parsed.data);
+    const request = summarize(parsed.data, req.headers);
     requests.push(request);
     const next = queue.shift();
     if (next === undefined) return refuse(res, `no reply queued for the request after "${request.lastUserText.slice(-80)}"`);

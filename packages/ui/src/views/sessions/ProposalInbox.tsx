@@ -29,6 +29,7 @@ import {
 import { toggle } from "@/lib/set-toggle";
 import { typedModel } from "@/lib/task-model";
 import { useProposalDecisions } from "@/lib/use-proposal-decisions";
+import { useProviderModels } from "@/lib/use-provider-models";
 import { useRemote } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
 import { ChangeOrderHints } from "./ChangeOrderHints.tsx";
@@ -76,6 +77,7 @@ export function ProposalInbox({
   // Whether a proposal started without approvals runs in Copilot CLI's sandbox, or is refused (ADR-181).
   const loadStartOptions = useCallback(() => post(conn, agentsApi.startOptions, {}), [conn]);
   const sandbox = useRemote(loadStartOptions).data?.sandbox;
+  const providerModels = useProviderModels(conn).models;
   const [prompts, setPrompts] = useState<ReadonlyMap<string, string>>(new Map());
   const [models, setModels] = useState<ReadonlyMap<string, string>>(new Map());
   const [approvals, setApprovals] = useState<ReadonlyMap<string, TaskApprovals>>(new Map());
@@ -228,7 +230,11 @@ export function ProposalInbox({
                         subject={p.title}
                         approvals={{ value: approvalsOf(p), onChange: (value) => setApprovals(new Map(approvals).set(p.id, value)) }}
                         sandbox={sandboxNote(sandbox, approvalsOf(p))}
-                        model={{ value: modelTextOf(p), onChange: (value) => setModels(new Map(models).set(p.id, value)) }}
+                        model={{
+                          value: modelTextOf(p),
+                          onChange: (value) => setModels(new Map(models).set(p.id, value)),
+                          suggestions: providerModels,
+                        }}
                         view={{ value: viewOf(p), onChange: (value) => setViews(new Map(views).set(p.id, value)) }}
                         disabled={decisions.pending}
                       />

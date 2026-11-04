@@ -80,9 +80,18 @@ export async function commitBackups(dir: string, files: readonly BackupFile[], m
     const scratch = await mkdtemp(join(scratchDir, "store-index-"));
     const indexFile = join(scratch, "index");
     let entries: { path: string; oid: string }[];
+    // One write per distinct content: on Windows two git processes writing the same object at once can fail with
+    // "Permission denied" (the same `mise.local.toml` in several repos).
+    const hashed = new Map<string, Promise<string>>();
+    const hashOnce = (content: Buffer) => {
+      const key = content.toString("latin1");
+      const oid = hashed.get(key) ?? hashBlob(dir, content, config);
+      hashed.set(key, oid);
+      return oid;
+    };
     try {
       if (parent !== null) await git(dir, ["read-tree", parent], { indexFile, config });
-      entries = await Promise.all(files.map(async (f) => ({ path: f.path, oid: await hashBlob(dir, f.content, config) })));
+      entries = await Promise.all(files.map(async (f) => ({ path: f.path, oid: await hashOnce(f.content) })));
       for (const { path, oid } of entries) await git(dir, updateIndex(path, oid), { indexFile, config });
       const tree = (await git(dir, ["write-tree"], { indexFile, config })).stdout.toString("utf8").trim();
       if (parent !== null && tree === (await treeOf(dir, parent))) return false;

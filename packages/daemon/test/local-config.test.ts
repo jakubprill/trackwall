@@ -168,6 +168,27 @@ describe("the local config store", () => {
   );
 
   test(
+    "the same file in many repos is written into the store once, since two git processes writing one object at once fail on Windows",
+    async () => {
+      const gitForBackupOf = async (contentOf: (i: number) => string) => {
+        const { projects, backUp, storeCommits } = await setup();
+        for (let i = 0; i < 20; i++)
+          writeFileSync(join(makeRepo({ "pom.xml": "<project/>" }, `repo-${i}`, projects), "mise.local.toml"), contentOf(i));
+        const before = gitProcessesStarted();
+        await backUp();
+        expect(storeCommits()).toBe(1);
+        return gitProcessesStarted() - before;
+      };
+
+      const same = await gitForBackupOf(() => TASKS);
+      const distinct = await gitForBackupOf((i) => `${TASKS}# repo ${i}\n`);
+
+      expect(distinct - same).toBe(19);
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
     "the list of all repos has only those with local config or a backup, and git runs only in those",
     async () => {
       const { projects, facade, backUp } = await setup();
