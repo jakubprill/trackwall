@@ -923,6 +923,7 @@ describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
       const requests = model.requests();
       const updatesPrompt = readRequestPrompt({
         reviewComments: 0,
+        pipelineFix: false,
         messages: 0,
         handoffMoved: false,
         roundUndone: false,
@@ -931,6 +932,7 @@ describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
       });
       const messagesPrompt = readRequestPrompt({
         reviewComments: 0,
+        pipelineFix: false,
         messages: 1,
         handoffMoved: false,
         roundUndone: false,

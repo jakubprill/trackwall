@@ -17,8 +17,8 @@ function mergeRequest(pipeline: PipelineState | null, extra: Partial<FollowedMer
       failedJobs:
         pipeline === "failed"
           ? [
-              { name: "unit-tests", url: null },
-              { name: "lint", url: null },
+              { name: "unit-tests", url: null, id: null },
+              { name: "lint", url: null, id: null },
             ]
           : [],
     },
