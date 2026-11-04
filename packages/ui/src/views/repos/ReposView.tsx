@@ -80,6 +80,7 @@ export function ReposView({
   // The selected repo and the top of the list get their statuses first (ADR-113); only remembered, so every render may.
   useEffect(() => list.showFirst(shownFirst(selected, repos)));
   const actionsDir = folderForActions(list.data, needsSettings);
+  const shown = panelShown(panel, actionsDir);
   const canSync = actionsDir !== null;
   const syncedAgo = sync.run && relativeTime(sync.run.startedAt, new Date());
 
@@ -103,7 +104,7 @@ export function ReposView({
           </span>
         </div>
         {actionsDir !== null && (
-          <FolderActions projectsDir={actionsDir} sync={sync} batch={batch} shellShown={panel === "shell"} onShow={setPanel} />
+          <FolderActions projectsDir={actionsDir} sync={sync} batch={batch} shellShown={shown === "shell"} onShow={setPanel} />
         )}
         <TagFilter counts={filter.counts} selected={filter.selected} onToggle={filter.toggle} onClear={filter.clear} />
         <nav aria-label="Repo list" className="flex-1 overflow-y-auto px-2 pb-4">
@@ -131,7 +132,7 @@ export function ReposView({
               position={i + 1}
               syncBadge={syncedAgo ? listSyncBadge(synced.get(repo.path), syncedAgo) : undefined}
               tags={filter.tags.get(repo.id) ?? []}
-              active={panel === "repo" && repo.id === current?.id}
+              active={shown === "repo" && repo.id === current?.id}
               onSelect={() => {
                 setSelected(repo.id);
                 setPanel("repo");
@@ -141,12 +142,12 @@ export function ReposView({
         </nav>
       </aside>
       <section className="min-h-0 min-w-0 overflow-y-auto">
-        {panel === "clone" && <CloneView conn={conn} onCloned={list.reload} onOpenSettings={onOpenSettings} />}
-        {panel === "sync" && <SyncView sync={sync} canSync={canSync} />}
+        {shown === "clone" && <CloneView conn={conn} onCloned={list.reload} onOpenSettings={onOpenSettings} />}
+        {shown === "sync" && <SyncView sync={sync} canSync={canSync} />}
         {/* A new tag filter is a new group of repos: the panel starts with all of them ticked. */}
-        {panel === "batch" && <BatchView key={filter.selected.join(",")} batch={batch} repos={repos} />}
-        {panel === "shell" && actionsDir !== null && <ProjectsFolderShell conn={conn} projectsDir={actionsDir} />}
-        {panel === "repo" && current && (
+        {shown === "batch" && <BatchView key={filter.selected.join(",")} batch={batch} repos={repos} />}
+        {shown === "shell" && actionsDir !== null && <ProjectsFolderShell conn={conn} projectsDir={actionsDir} />}
+        {shown === "repo" && current && (
           <RepoDetail
             key={current.id}
             conn={conn}
@@ -162,6 +163,11 @@ export function ReposView({
       </section>
     </div>
   );
+}
+
+/** The panel to show: the shell of a projects folder that is no longer set gives way to the repo. */
+function panelShown(panel: Panel, actionsDir: string | null): Panel {
+  return panel === "shell" && actionsDir === null ? "repo" : panel;
 }
 
 /** The projects folder the actions on all repos work in (sync, batch, shell): none while it is not set or not readable. */

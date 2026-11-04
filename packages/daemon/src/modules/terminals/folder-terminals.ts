@@ -54,6 +54,8 @@ interface Entry {
   readonly id: string;
   readonly place: TerminalPlace;
   readonly screen: TerminalScreen;
+  /** The folder the current shell started in; `undefined` until it has started. */
+  cwd?: string;
   /** The PTY of the current shell; `undefined` until it has started. */
   pty?: { write(data: string): void; resize(cols: number, rows: number): void };
   /** Windows to tell that the terminal is gone (`close`), so they stop waiting for output. */
@@ -83,8 +85,13 @@ export class FolderTerminals {
   /** The place's terminal: the live one, or its ended one with a new shell, or a new one. */
   start(place: TerminalPlace): Promise<FolderTerminal> {
     return this.#places.run(placeKey(place), async () => {
-      const known = this.#atPlace.get(placeKey(place));
-      if (known && this.#live(known)) return this.#view(known);
+      let known = this.#atPlace.get(placeKey(place));
+      if (known && this.#live(known)) {
+        if (!(await this.#movedAway(known))) return this.#view(known);
+        // The projects folder changed in Settings: its shell is no longer in it.
+        await this.#close(known);
+        known = undefined;
+      }
       if (!known && this.#entries.size >= MAX_FOLDER_TERMINALS)
         throw new DomainError(
           "bad_request",
@@ -152,6 +159,12 @@ export class FolderTerminals {
     this.#forget(entry);
   }
 
+  /** Whether the projects folder is now another folder than the one the place's shell started in. */
+  async #movedAway(entry: Entry): Promise<boolean> {
+    if (entry.place.repo !== null) return false;
+    return entry.cwd !== (await this.#deps.folder(entry.place));
+  }
+
   async #folder(place: TerminalPlace): Promise<string> {
     return checkedPlaceFolder(place, await this.#deps.folder(place));
   }
@@ -179,6 +192,7 @@ export class FolderTerminals {
         },
       });
       entry.pty = terminal;
+      entry.cwd = cwd;
     } catch (err) {
       throw startError(err);
     }

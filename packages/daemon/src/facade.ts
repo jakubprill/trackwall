@@ -99,9 +99,9 @@ export interface Facade {
   /** Short facts about the user's repos in `.trackwall/knowledge` of the projects folder, with their approvals (ADR-170). */
   knowledge: Knowledge;
   services: Services;
-  /** The user's own shells in a repo root or a task's worktree, shown like session terminals (ADR-185). */
+  /** The user's own shells in the projects folder, a repo root or a task's worktree, shown like session terminals (ADR-185). */
   terminals: FolderTerminals;
-  /** The files of a repo root or a task's worktree, read only, next to its Shell tab (ADR-188). */
+  /** The files of the projects folder, a repo root or a task's worktree, read only, next to its Shell tab (ADR-188). */
   folderFiles: FolderFiles;
   testReports: TestReports;
   verifications: Verifications;
