@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { type ChangedEndpoint, type ChangedEndpoints, type ImpactedRepo, MAX_CHANGED_ENDPOINTS, type Task } from "@trackwall/protocol";
 import { ImpactProposals, impactOffers, offeredAfter } from "../src/modules/agents/impact-proposals.ts";
-import { TaskProposals } from "../src/modules/agents/task-proposals.ts";
+import { MAX_PENDING_PROPOSALS, TaskProposals } from "../src/modules/agents/task-proposals.ts";
 
 const caller = (repo: string, path: string) => ({
   repo,
@@ -161,6 +161,35 @@ describe("impact proposals at the end of a task's turn (ADR-198)", () => {
     impact.replacedBy("t1", ["orders-bff"]);
 
     expect(proposed()).toEqual(["s9 orders-bff true", "s1 legacy-reports true"]);
+  });
+
+  test("a full list of proposals stops the check without counting the repo, so a later turn offers it once there is room", async () => {
+    const { impact, proposals, proposed, offered, logged } = setup();
+    const fillers = Array.from({ length: MAX_PENDING_PROPOSALS }, (_, i) =>
+      proposals.add({
+        kind: "task",
+        repo: "payments",
+        title: `Fill ${i}`,
+        prompt: "fill",
+        model: null,
+        approvals: "ask",
+        item: null,
+        parts: null,
+        proposedBy: { session: null, supervisor: false, task: null },
+      }),
+    );
+
+    await impact.turnOver("t1", "s1");
+    expect(offered).toEqual({});
+    expect(logged).toEqual([
+      `task t1: proposing tasks from its impact: ${MAX_PENDING_PROPOSALS} proposals are already waiting for the user; wait for their decision`,
+    ]);
+
+    proposals.reject(fillers[0]?.id ?? "", null);
+    await impact.turnOver("t1", "s1");
+    // One free place: orders-bff gets it, and legacy-reports waits for the next one.
+    expect(proposed().filter((p) => p.endsWith(" true"))).toEqual(["s1 orders-bff true"]);
+    expect(Object.keys(offered)).toEqual(["orders-bff"]);
   });
 
   test("an ended task proposes nothing", async () => {

@@ -1404,6 +1404,8 @@ export class Agents {
           void this.#rounds
             .turnOver(task)
             .then(() => this.#handoffs.turnOver(task))
+            // A failed handoff check does not hold back the impact proposals.
+            .catch((err: unknown) => this.#deps.log(`task ${task}: after its turn: ${String(err)}`))
             .then(() => this.#impactProposals.turnOver(task, id));
       },
       onEvent: (event: SessionEvent) => {
