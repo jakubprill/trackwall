@@ -1,11 +1,14 @@
 import {
+  type ChangeCardProblem,
   type ChangedEndpoints,
+  type ChangedType,
   type EndpointChanges,
   type FindEndpointResult,
   GraphConfig,
   type HttpMethod,
   type RepoGraph,
   type Subgraph,
+  type TypeChange,
   type WhoCallsResult,
 } from "@trackwall/protocol";
 import { configOrProblem, DomainError } from "../../infra/errors.ts";
@@ -26,10 +29,16 @@ import { subgraph } from "./subgraph.ts";
 /** What `graph` needs from `cards`; wired in the facade. */
 interface GraphCards {
   all(): Promise<{ cards: GraphCardInput[]; tagRulesProblem: string | null }>;
-  endpointChanges(repo: string, dir: string, base: string, readTypes: boolean): Promise<EndpointChanges>;
+  endpointChanges(repo: string, dir: string, base: string): Promise<EndpointChanges>;
+  libraryTypeChanges(
+    repo: string,
+    dir: string,
+    base: string,
+    head: string,
+  ): Promise<{ types: TypeChange[]; problems: ChangeCardProblem[] }>;
 }
 
-/** What `graph` needs from `workspace`: the `graph` entries from `workspace.yaml`, and code search for imports (ADR-201). */
+/** What `graph` needs from `workspace`: the `graph` entries from `workspace.yaml`, and code search for imports (ADR-205). */
 interface GraphWorkspace {
   graphConfig(): GraphConfig;
   configFile(): string;
@@ -48,6 +57,8 @@ export class Graph {
    * repos, so the same commits and the same configuration do not compute the graph a second time (the UI asks for it after every repo change and as a safety net, ADR-63).
    */
   private last: { key: string; graph: RepoGraph; http: HttpIndex } | undefined;
+  /** The last users of changed library types, keyed by the graph's key, the consumers and the changes (ADR-205). */
+  private lastUsers: { key: string; types: ChangedType[]; truncated: boolean } | undefined;
 
   constructor(deps: GraphDeps) {
     this.deps = deps;
@@ -64,24 +75,43 @@ export class Graph {
 
   /**
    * The endpoints and the public Java types of its packages that the commits in `dir`, a worktree of repo `repo`, change
-   * against commit `base`, with the repos that call or import them (`get_changed_endpoints`, ADR-145, ADR-201).
+   * against commit `base`, with the repos that call or import them (`get_changed_endpoints`, ADR-145, ADR-205).
    */
   async changedEndpoints(repo: string, dir: string, base: string): Promise<ChangedEndpoints> {
-    const { graph, http } = await this.current();
-    // Public types matter only to a repo that depends on a package of this one, so without one they are not read.
-    const consumers = packageConsumers(graph, repo);
-    const { changes, types: typeChanges, ...read } = await this.deps.cards.endpointChanges(repo, dir, base, consumers.length > 0);
+    const [{ changes, ...read }, { graph, http }] = await Promise.all([this.deps.cards.endpointChanges(repo, dir, base), this.current()]);
     const { endpoints, truncated, impact } = withCallers(http, repo, changes);
-    const types = await withUsers(typeChanges, consumers, (query, repos) => this.deps.workspace.searchCode(query, repos));
+    const library = await this.libraryUsers(repo, dir, base, read.head, graph);
     return {
       repo,
       base,
       ...read,
+      problems: [...read.problems, ...library.problems],
       endpoints,
-      types: types.types,
-      truncated: truncated || types.truncated,
-      impact: withLibraryUsers(impact, repo, types.types),
+      types: library.types,
+      truncated: truncated || library.truncated,
+      impact: withLibraryUsers(impact, repo, library.types),
     };
+  }
+
+  /**
+   * The changed library types of the commits with the repos that import them (ADR-205). Only a repo some repo depends
+   * on is compared, so a task in an app reads no extra file. The users of the same changes in the same graph are kept,
+   * since the Impact tab asks again every few seconds.
+   */
+  private async libraryUsers(
+    repo: string,
+    dir: string,
+    base: string,
+    head: string,
+    graph: RepoGraph,
+  ): Promise<{ types: ChangedType[]; truncated: boolean; problems: ChangeCardProblem[] }> {
+    const consumers = packageConsumers(graph, repo);
+    if (consumers.length === 0) return { types: [], truncated: false, problems: [] };
+    const { types: changes, problems } = await this.deps.cards.libraryTypeChanges(repo, dir, base, head);
+    const key = JSON.stringify([this.last?.key ?? null, consumers, changes]);
+    if (this.lastUsers?.key !== key)
+      this.lastUsers = { key, ...(await withUsers(changes, consumers, (query, repos) => this.deps.workspace.searchCode(query, repos))) };
+    return { types: this.lastUsers.types, truncated: this.lastUsers.truncated, problems };
   }
 
   private async current(): Promise<{ graph: RepoGraph; http: HttpIndex }> {

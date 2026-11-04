@@ -135,7 +135,7 @@ const rate: ChangedType = {
   users: [{ repo: "billing", evidence: { path: "src/main/java/com/example/billing/Tax.java", line: 6 } }],
 };
 
-describe("the prompt of a task handed a change of library types (ADR-201)", () => {
+describe("the prompt of a task handed a change of library types (ADR-205)", () => {
   test("a repo is shown only its own imports of the changed types", () => {
     expect(typesUsedBy([money, rate], "orders-bff").map((t) => [t.type, t.users.map((u) => u.repo)])).toEqual([
       ["com.example.money.Money", ["orders-bff"]],

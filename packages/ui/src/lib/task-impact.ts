@@ -1,8 +1,8 @@
-import { type ChangedEndpoints, countLabel, type ImpactedRepo, type TaskProposal } from "@trackwall/protocol";
+import { type ChangedEndpoints, type ChangedType, countLabel, type ImpactedRepo, type TaskProposal } from "@trackwall/protocol";
 import type { EdgePair } from "./graph-layout.ts";
 
 /**
- * The logic of a task's Impact tab and of the impact on the Overview graph (ADR-147, ADR-201): where each repo the change reaches
+ * The logic of a task's Impact tab and of the impact on the Overview graph (ADR-147, ADR-205): where each repo the change reaches
  * sits in the drawing and what the summary says; the prompt of a hand-off is `handoffPrompt` in `protocol`. Without React.
  */
 
@@ -55,8 +55,16 @@ export function impactSummary({
   return `${changed}, reaching ${reached}${maybe > 0 ? ` and maybe ${maybe} more` : ""}.`;
 }
 
+/** The line under a changed library type: what of it changed and how many repos import it. */
+export function typeChangeDetail({ declaration, members, users }: Pick<ChangedType, "declaration" | "members" | "users">): string {
+  const changed = [...(declaration ? ["declaration"] : []), ...members];
+  const importing =
+    users.length === 0 ? "no importing repos" : countLabel(users.length, { one: "importing repo", other: "importing repos" });
+  return [...(changed.length > 0 ? [changed.join(", ")] : []), importing].join(" · ");
+}
+
 /**
- * Why Trackwall itself proposed a task (ADR-198, ADR-201), under the proposal's title: the proposal's prompt came from
+ * Why Trackwall itself proposed a task (ADR-198, ADR-205), under the proposal's title: the proposal's prompt came from
  * comparing the task's commits, not from its agent. `null` for any other proposal.
  */
 export function impactProposalNote(proposal: Pick<TaskProposal, "repo" | "fromImpact">): string | null {

@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import type { ChangedEndpoint, ChangedType, ImpactedRepo } from "@trackwall/protocol";
-import { impactEdgeRing, impactPoints, impactProposalNote, impactRings, impactSummary, RING_GAP } from "../src/lib/task-impact.ts";
+import {
+  impactEdgeRing,
+  impactPoints,
+  impactProposalNote,
+  impactRings,
+  impactSummary,
+  RING_GAP,
+  typeChangeDetail,
+} from "../src/lib/task-impact.ts";
 
 const caller = (repo: string, client: string, line: number) => ({
   repo,
@@ -45,7 +53,7 @@ describe("a task's impact", () => {
     );
   });
 
-  test("the summary counts changed public library types next to endpoints (ADR-201)", () => {
+  test("the summary counts changed public library types next to endpoints (ADR-205)", () => {
     const money: ChangedType = {
       change: "removed",
       package: "com.example.money",
@@ -61,6 +69,14 @@ describe("a task's impact", () => {
     expect(impactSummary({ endpoints: [getOrder], types: [money, money], impact: [bff], truncated: false })).toBe(
       "1 endpoint and 2 public types changed, reaching 1 repo.",
     );
+  });
+
+  test("a changed library type says what of it changed and how many repos import it", () => {
+    const user = { repo: "billing", evidence: { path: "A.java", line: 1 } };
+    expect(typeChangeDetail({ declaration: true, members: ["split(int)"], users: [user] })).toBe(
+      "declaration, split(int) · 1 importing repo",
+    );
+    expect(typeChangeDetail({ declaration: false, members: [], users: [] })).toBe("no importing repos");
   });
 
   test("each repo has its ring, the task's repo 0", () => {

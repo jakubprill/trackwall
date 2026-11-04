@@ -32,7 +32,7 @@ function searchGiving(matches: CodeMatch[], truncated = false): { search: Librar
   return { search, asked };
 }
 
-describe("the users of changed library types (ADR-201)", () => {
+describe("the users of changed library types (ADR-205)", () => {
   test("the consumers are the repos with a depends-on edge to the task's repo", () => {
     const edge = (from: string, to: string, kind: "depends-on" | "calls") => ({
       from,
@@ -71,7 +71,8 @@ describe("the users of changed library types (ADR-201)", () => {
 
     expect(asked).toEqual([
       {
-        pattern: "^[[:space:]]*import[[:space:]]+(static[[:space:]]+)?(com\\.example\\.money)\\.",
+        pattern:
+          "^[[:space:]]*import[[:space:]]+(static[[:space:]]+)?(com\\.example\\.money\\.Money|com\\.example\\.money\\.\\*|com\\.example\\.money\\.Rate)([.;]|[[:space:]])",
         paths: ["*.java"],
         repos: ["audit", "billing", "reports", "shop"],
       },
@@ -90,27 +91,41 @@ describe("the users of changed library types (ADR-201)", () => {
     expect(truncated).toBe(false);
   });
 
-  test("without consumers nothing is searched, and a cut search marks the result as cut", async () => {
+  test("without consumers nothing is searched, and a cut search or a consumer git could not search marks the result as cut", async () => {
     const none = searchGiving([]);
     expect((await withUsers([money], [], none.search)).types[0]?.users).toEqual([]);
     expect(none.asked).toEqual([]);
 
     expect((await withUsers([money], ["shop"], searchGiving([], true).search)).truncated).toBe(true);
+    const failing: LibrarySearch = async () => ({
+      matches: [],
+      files: [],
+      truncated: false,
+      searched: [],
+      failed: [{ repo: "shop", message: "fatal: bad object HEAD" }],
+      skipped: [],
+    });
+    expect((await withUsers([money], ["shop"], failing)).truncated).toBe(true);
   });
 
-  test("a package name that is not Java identifiers and dots stays out of the pattern, and a $ in one is escaped", () => {
-    expect(importPatterns(["com.example.money", "com.example.(a|.*)", "com.example.$gen"])).toEqual([
-      "^[[:space:]]*import[[:space:]]+(static[[:space:]]+)?(com\\.example\\.money|com\\.example\\.\\$gen)\\.",
+  test("a name that is not Java identifiers and dots stays out of the pattern, a $ in one is escaped, and the default package is skipped", () => {
+    const types = [
+      { package: "com.example", type: "com.example.(a|.*)" },
+      { package: "com.example", type: "com.example.Gen$Money" },
+      { package: "", type: "Loose" },
+    ];
+    expect(importPatterns(types)).toEqual([
+      "^[[:space:]]*import[[:space:]]+(static[[:space:]]+)?(com\\.example\\.Gen\\$Money|com\\.example\\.\\*)([.;]|[[:space:]])",
     ]);
   });
 
   test("many packages are split into patterns that code search takes", () => {
     const packages = Array.from({ length: 30 }, (_, i) => `com.example.platform.module${i}.api`);
-    const patterns = importPatterns(packages);
+    const patterns = importPatterns(packages.map((p) => ({ package: p, type: `${p}.Client` })));
 
     expect(patterns.length).toBeGreaterThan(1);
     for (const p of patterns) expect(p.length).toBeLessThanOrEqual(500);
-    expect(patterns.join("|").match(/module\d+/g)).toHaveLength(30);
+    expect(patterns.join("|").match(/module\d+\\.api\\.Client/g)).toHaveLength(30);
   });
 
   test("a user the endpoints do not reach joins ring 1, surely reached and carrying nothing on; a reached one keeps its ring", () => {

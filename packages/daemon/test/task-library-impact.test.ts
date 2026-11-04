@@ -74,7 +74,7 @@ function proposals(): TaskProposal[] {
 }
 
 describe.skipIf(process.versions.bun === undefined)(
-  "library impact: a task that changes a public type of a package proposes a task to each repo importing it (ADR-201; real git, cards and code search, fake Copilot CLI)",
+  "library impact: a task that changes a public type of a package proposes a task to each repo importing it (ADR-205; real git, cards and code search, fake Copilot CLI)",
   () => {
     test("removing a public method lists the type with the repo that imports it, which joins ring 1 and gets a proposal when the turn ends", async () => {
       const task = await daemon.post(agentsApi.createTask, { repo: "money-lib", prompt: "Drop Money.split", approvals: "ask" });

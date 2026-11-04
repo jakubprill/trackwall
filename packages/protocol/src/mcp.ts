@@ -861,7 +861,7 @@ export const mcpTools = {
       "null when its card could not trace) and sure (false when only an untraced repo or a client without paths leads there). " +
       "types: the public Java types of the repo's Maven or Gradle packages the commits remove or change (a visible member " +
       "removed or with another signature, a new abstract method, another declaration), each with users: the repos that " +
-      "depend on the package and import it; such a repo is in ring 1 with no calls. " +
+      "depend on the package and import it; such a repo no endpoint reaches joins ring 1 with no calls. " +
       `Only committed work counts (head is the commit read): commit ` +
       `first. A changed path is a removed and an added endpoint. Use it before you propose the work that builds on your ` +
       `change, one proposal per caller repo, and to see what the task that handed you your work changed. At most ` +

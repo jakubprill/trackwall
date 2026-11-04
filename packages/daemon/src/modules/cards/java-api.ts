@@ -2,7 +2,7 @@ import type { Node } from "web-tree-sitter";
 import { lineOf, typeText } from "./contract-syntax.ts";
 
 /**
- * The public API of a Java file (§4.6, ADR-199): the types another module can see (public, and nested public in them; an
+ * The public API of a Java file (§4.6, ADR-205): the types another module can see (public, and nested public in them; an
  * interface's members are public unless private) with their visible members, read from the syntax tree. A member is
  * known by its key (a method's name and parameter types, a field's or enum constant's name) and described by its
  * signature, so a changed return or field type is a change of the same member, and an overload is another member.
@@ -36,22 +36,30 @@ export function readJavaApi(root: Node): ApiType[] {
   const name = pkg?.namedChildren.find((c) => c.type === "scoped_identifier" || c.type === "identifier");
   const packageName = name ? typeText(name) : "";
   const prefix = packageName === "" ? "" : `${packageName}.`;
-  return root.namedChildren.flatMap((c) => (TYPE_DECLARATIONS.has(c.type) ? apiTypes(c, packageName, prefix, false) : []));
+  return root.namedChildren.flatMap((c) => (TYPE_DECLARATIONS.has(c.type) ? apiTypes(c, packageName, prefix, null) : []));
 }
 
-function apiTypes(node: Node, pkg: string, prefix: string, inInterface: boolean): ApiType[] {
+/** Where a type is declared: at the top of the file (`null`), or nested in a class or in an interface. */
+type Outer = "class" | "interface" | null;
+
+function apiTypes(node: Node, pkg: string, prefix: string, outer: Outer): ApiType[] {
   const name = node.childForFieldName("name");
-  if (!name || !visible(node, inInterface, false)) return [];
+  // A nested `protected` type is seen by the consumer's subclasses, like a member.
+  if (!name || !visible(node, outer === "interface", outer !== null)) return [];
   const qualified = `${prefix}${name.text}`;
   const body = node.childForFieldName("body");
   const memberOfInterface = INTERFACE_LIKE.has(node.type);
   const members = new Map<string, string>();
   const nested: ApiType[] = [];
+  const kind = memberOfInterface ? "interface" : "class";
   for (const member of bodyMembers(body)) {
-    if (TYPE_DECLARATIONS.has(member.type)) nested.push(...apiTypes(member, pkg, `${qualified}.`, memberOfInterface));
+    if (TYPE_DECLARATIONS.has(member.type)) nested.push(...apiTypes(member, pkg, `${qualified}.`, kind));
     else for (const [key, signature] of memberSignatures(member, name.text, memberOfInterface)) members.set(key, signature);
   }
-  return [{ pkg, name: qualified, line: lineOf(name), header: header(node), members }, ...nested];
+  // A class without a constructor has the implicit one without arguments, which a new constructor takes away.
+  if (node.type === "class_declaration" && !bodyMembers(body).some((m) => m.type === "constructor_declaration"))
+    members.set(`${name.text}()`, `${name.text}()`);
+  return [{ pkg, name: qualified, line: lineOf(name), header: header(node, outer), members }, ...nested];
 }
 
 /** The members of a type's body; an enum's body declarations after its constants count too. */
@@ -64,7 +72,7 @@ function memberSignatures(member: Node, typeName: string, inInterface: boolean):
   // An interface's fields are public constants and its methods public unless private.
   if (!visible(member, inInterface, true)) return [];
   if (member.type === "method_declaration" || member.type === "constructor_declaration") return method(member, typeName, inInterface);
-  if (member.type === "field_declaration" || member.type === "constant_declaration") return fields(member);
+  if (member.type === "field_declaration" || member.type === "constant_declaration") return fields(member, inInterface);
   if (member.type === "annotation_type_element_declaration") return annotationElement(member);
   return [];
 }
@@ -83,19 +91,23 @@ function method(member: Node, typeName: string, inInterface: boolean): [string, 
   return [[key, returns ? `${prefix}${key}: ${typeText(returns)}` : `${prefix}${key}`]];
 }
 
-function fields(member: Node): [string, string][] {
+function fields(member: Node, inInterface: boolean): [string, string][] {
   const type = member.childForFieldName("type");
   if (!type) return [];
+  // An interface's field is `static final` whether the code says so or not.
+  const prefix = inInterface ? "static final " : modifiers(member);
   return member.childrenForFieldName("declarator").flatMap((d): [string, string][] => {
     const name = d.childForFieldName("name");
-    return name ? [[name.text, `${modifiers(member)}${name.text}: ${typeText(type)}`]] : [];
+    return name ? [[name.text, `${prefix}${name.text}: ${typeText(type)}`]] : [];
   });
 }
 
+/** An annotation element without a default must be given at every use, so it counts as abstract: a new one breaks them. */
 function annotationElement(member: Node): [string, string][] {
   const name = member.childForFieldName("name");
   const type = member.childForFieldName("type");
-  return name && type ? [[`${name.text}()`, `${name.text}(): ${typeText(type)}`]] : [];
+  const required = member.childForFieldName("value") === null ? "abstract " : "";
+  return name && type ? [[`${name.text}()`, `${required}${name.text}(): ${typeText(type)}`]] : [];
 }
 
 /** Whether another module sees the declaration: `public`, `protected` for a member, or any but `private` in an interface. */
@@ -141,10 +153,16 @@ function modifierWords(node: Node): Set<string> {
   return new Set((mods?.children ?? []).map((c) => c.type));
 }
 
-/** The declaration's head without its body, annotations and comments: `class Foo<T> extends Bar implements Baz`. */
-function header(node: Node): string {
-  return node.children
-    .filter((c) => c.type !== "modifiers" && !c.type.endsWith("_body"))
-    .map(typeText)
-    .join(" ");
+/**
+ * The declaration's head without its body, annotations and comments, with the modifiers that limit its users:
+ * `final class Foo<T> extends Bar implements Baz`. `static` counts only for a class nested in a class, where its absence
+ * makes it an inner class; elsewhere a nested type is static anyway.
+ */
+function header(node: Node, outer: Outer): string {
+  const words = modifierWords(node);
+  const limits = ["static", "abstract", "final", "sealed", "non-sealed"].filter(
+    (w) => words.has(w) && (w !== "static" || (outer === "class" && node.type === "class_declaration")),
+  );
+  const head = node.children.filter((c) => c.type !== "modifiers" && !c.type.endsWith("_body")).map(typeText);
+  return [...limits, ...head].join(" ");
 }

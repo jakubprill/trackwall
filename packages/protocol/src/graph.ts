@@ -339,7 +339,7 @@ export const MAX_CHANGED_TYPES = 50;
 
 /**
  * A public Java type of a module that builds a Maven or Gradle package, which a task's commits remove or change in a way
- * that can break the code of another repo using that package (ADR-201). `changed` is a visible member (a public or
+ * that can break the code of another repo using that package (ADR-205). `changed` is a visible member (a public or
  * protected method, constructor, field or enum constant) removed or with another signature, a new abstract method that
  * implementations lack, or another declaration (kind, type parameters, supertypes, record components). Added types and
  * members break nobody, so they are not listed.
@@ -387,9 +387,7 @@ export const EndpointChanges = z.object({
    * removed endpoints are listed.
    */
   contractsCompared: z.boolean(),
-  /** The public Java types of the repo's packages that the commits remove or change (ADR-201). */
-  types: z.array(TypeChange),
-  /** What either card, or the reading of public types, could not read, so a change there may be missing. */
+  /** What either card could not read, so a change there may be missing. */
   problems: z.array(ChangeCardProblem),
 });
 export type EndpointChanges = z.infer<typeof EndpointChanges>;
@@ -431,17 +429,22 @@ export const ImpactedRepo = z.object({
 export type ImpactedRepo = z.infer<typeof ImpactedRepo>;
 
 /** The endpoints a task's commits change against its base commit (`get_changed_endpoints`, ADR-145). */
-export const ChangedEndpoints = EndpointChanges.omit({ changes: true, types: true }).extend({
+export const ChangedEndpoints = EndpointChanges.omit({ changes: true }).extend({
   repo: RepoId,
   base: CommitHash,
   endpoints: z.array(ChangedEndpoint),
-  /** The removed and changed public types of the repo's packages with the repos that import them (ADR-201). */
+  /** The removed and changed public types of the repo's packages with the repos that import them (ADR-205). */
   types: z.array(ChangedType),
-  /** More changed endpoints than `MAX_CHANGED_ENDPOINTS`, or types than `MAX_CHANGED_TYPES`. */
+  /** What either card, or the reading of the changed library Java files, could not read, so a change there may be missing. */
+  problems: z.array(ChangeCardProblem),
+  /**
+   * More changed endpoints than `MAX_CHANGED_ENDPOINTS`, or types than `MAX_CHANGED_TYPES`, or a search for their users
+   * that was cut or failed in a repo.
+   */
   truncated: z.boolean(),
   /**
    * The repos the removed and changed endpoints reach, nearest ring first (ADR-147). A repo that imports a changed type
-   * and is reached by no endpoint is in ring 1 with no calls (ADR-201).
+   * and is reached by no endpoint is in ring 1 with no calls (ADR-205).
    */
   impact: z.array(ImpactedRepo),
 });

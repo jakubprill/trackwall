@@ -5,19 +5,25 @@ import type { SyntaxParsers } from "./syntax-tree.ts";
 
 /**
  * The public Java types a task's commits remove or change in the modules of its repo that build a Maven or Gradle
- * package (§4.6, ADR-201): another repo can depend on that package and import them. Only the Java files that differ
+ * package (§4.6, ADR-205): another repo can depend on that package and import them. Only the Java files that differ
  * between the base and the head are read, on both sides, so a task touching no library code costs one `git diff`.
  * Kotlin files and code generated during the build are not read.
  */
 
-/** Most changed files looked at: a change of more is a generated or moved package, which a list of types would not help with. */
+/** Most changed library Java files looked at: a change of more is a generated or moved package, which a list of types would not help with. */
 const API_FILES_MAX = 300;
 /** All Java files read on one side of the comparison, together. */
 const API_READ_MAX_BYTES = 8 * 1024 * 1024;
 
 /** What reading the public types needs from `vcs`. */
 export interface ApiChangesVcs {
-  changedPathsBetween(dir: string, from: string, to: string, max: number): Promise<{ paths: string[]; truncated: boolean } | undefined>;
+  changedPathsBetween(
+    dir: string,
+    from: string,
+    to: string,
+    max: number,
+    pathspecs: readonly string[],
+  ): Promise<{ paths: string[]; truncated: boolean } | undefined>;
   readFiles(dir: string, commit: string, paths: readonly string[], maxBytes: number): Promise<Map<string, Buffer>>;
 }
 
@@ -42,6 +48,12 @@ export function librarySourceRoots(cards: readonly Pick<RepoCard, "provides">[])
   return [...new Set(roots)];
 }
 
+/** The removed and changed public types of a comparison, with what could not be read. */
+export interface LibraryTypeChanges {
+  types: TypeChange[];
+  problems: ChangeCardProblem[];
+}
+
 /** The removed and changed public types between commits `base` and `head` in `roots`, with what could not be read. */
 export async function apiChanges(
   vcs: ApiChangesVcs,
@@ -49,17 +61,19 @@ export async function apiChanges(
   commits: { base: string; head: string },
   roots: readonly string[],
   parsers: SyntaxParsers,
-): Promise<{ types: TypeChange[]; problems: ChangeCardProblem[] }> {
+): Promise<LibraryTypeChanges> {
   if (roots.length === 0) return { types: [], problems: [] };
-  const diff = await vcs.changedPathsBetween(dir, commits.base, commits.head, API_FILES_MAX);
+  // The limit counts library Java files only, so a change of many other files does not push them out.
+  const pathspecs = roots.map((root) => `${root}*.java`);
+  const diff = await vcs.changedPathsBetween(dir, commits.base, commits.head, API_FILES_MAX, pathspecs);
   if (diff === undefined) throw new Error(`commit ${commits.base} is not in the repo`);
-  const paths = diff.paths.filter((p) => p.endsWith(".java") && roots.some((root) => p.startsWith(root)));
+  const paths = diff.paths;
   const problems: ChangeCardProblem[] = [];
   if (diff.truncated)
     problems.push({
       code: "files-not-read",
       path: "",
-      message: `more than ${API_FILES_MAX} changed files; public Java types were compared only in the first ones`,
+      message: `more than ${API_FILES_MAX} changed library Java files; public types were compared only in the first ones`,
       commit: "head",
     });
   const [before, after] = await Promise.all([
@@ -95,11 +109,13 @@ async function readSide(
   const apis: FileApi[] = [];
   const failed: string[] = [];
   for (const [path, blob] of files) {
-    const result = parsers.read("java", blob.toString("utf8"), readJavaApi);
-    if (result.kind === "parsed") apis.push({ path, types: result.value });
+    // A file with syntax errors may lose a type or members in the tree, which would look removed.
+    const result = parsers.read("java", blob.toString("utf8"), (root) => (root.hasError ? null : readJavaApi(root)));
+    if (result.kind === "parsed" && result.value !== null) apis.push({ path, types: result.value });
     else {
       failed.push(path);
-      problems.push({ code: "parse-incomplete", path, message: `public types not read: ${result.kind}`, commit: side });
+      const why = result.kind === "parsed" ? "syntax errors" : result.kind;
+      problems.push({ code: "parse-incomplete", path, message: `public types not read: ${why}`, commit: side });
     }
   }
   return { files: [...files.keys()], apis, failed };

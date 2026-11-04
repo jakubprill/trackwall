@@ -4,7 +4,7 @@ import type { ChangedEndpoint, ChangedEndpoints, ChangedType, ImpactedRepo } fro
 import { mcpTools } from "./mcp.ts";
 
 /**
- * What a task handed on to a repo its change reaches is told (ADR-147, ADR-198, ADR-201): the prompt of a hand-off from the
+ * What a task handed on to a repo its change reaches is told (ADR-147, ADR-198, ADR-205): the prompt of a hand-off from the
  * Impact tab and of an impact proposal the daemon makes when the task's turn ends, built from the comparison of the
  * task's cards (`get_changed_endpoints`). In `protocol`, because the UI and the daemon build the same prompt.
  */

@@ -41,7 +41,7 @@ export const StoredTask = Task.omit({ worktree: true }).extend({
   handoff: TaskHandoff.nullable().default(null),
   change: Task.shape.change.default(null),
   /**
-   * The endpoints and library types each repo was offered a task for from this task's impact (ADR-198, ADR-201), by
+   * The endpoints and library types each repo was offered a task for from this task's impact (ADR-198, ADR-205), by
    * repo, as `METHOD path` and `type name`: an impact proposal, or the work its agent proposed or the user started there
    * first. A repo is offered again only for one not in its list, so a rejected proposal does not come back with the next turn.
    */

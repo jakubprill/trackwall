@@ -50,7 +50,7 @@ const changed: ChangedEndpoints = {
   impact: [reached("orders-bff", 1), reached("legacy-reports", 1), reached("admin-web", 1, false), reached("shop-web", 2)],
 };
 
-describe("which repos an impact proposal goes to (ADR-198, ADR-201)", () => {
+describe("which repos an impact proposal goes to (ADR-198, ADR-205)", () => {
   test("a repo of ring 1 that surely calls a removed or changed endpoint is offered every such endpoint it calls", () => {
     expect(impactOffers(changed, {}).map((o) => [o.repo, o.keys])).toEqual([
       ["orders-bff", ["GET /api/orders/{id}"]],
@@ -76,7 +76,7 @@ describe("which repos an impact proposal goes to (ADR-198, ADR-201)", () => {
     expect(impactOffers(changed, { "orders-bff": after }).map((o) => o.repo)).toEqual(["legacy-reports"]);
   });
 
-  test("a repo importing a removed or changed library type is offered it, in any ring, and once offered only a newly changed type offers it again (ADR-201)", () => {
+  test("a repo importing a removed or changed library type is offered it, in any ring, and once offered only a newly changed type offers it again (ADR-205)", () => {
     const money: ChangedType = {
       change: "changed",
       package: "com.example.money",

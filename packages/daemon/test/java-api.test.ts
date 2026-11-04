@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type FileApi, librarySourceRoots, typeChanges } from "../src/modules/cards/api-changes.ts";
+import { type ApiChangesVcs, apiChanges, type FileApi, librarySourceRoots, typeChanges } from "../src/modules/cards/api-changes.ts";
 import { readJavaApi } from "../src/modules/cards/java-api.ts";
 import { loadSyntaxParsers } from "../src/modules/cards/syntax-tree.ts";
 
@@ -32,7 +32,7 @@ const money = [
   "class Helper { public void help() {} }",
 ].join("\n");
 
-describe("the public API of a Java file (ADR-201)", () => {
+describe("the public API of a Java file (ADR-205)", () => {
   test("lists public types with nested ones by full name, and only the members another module sees, keyed by name and parameter types", () => {
     const types = api(MONEY, money).types.map((t) => ({ name: t.name, line: t.line, header: t.header, members: [...t.members] }));
 
@@ -81,7 +81,7 @@ describe("the public API of a Java file (ADR-201)", () => {
   });
 });
 
-describe("which public types a change breaks (ADR-201)", () => {
+describe("which public types a change breaks (ADR-205)", () => {
   test("code that only moved, a new member and a new type break nothing", () => {
     const after = money
       .replace("public class Money", "\n\npublic class Money")
@@ -162,5 +162,100 @@ describe("which public types a change breaks (ADR-201)", () => {
       "src/main/java/",
       "money/src/main/java/",
     ]);
+  });
+
+  test("a constructor added to a class without one takes away its implicit constructor without arguments", () => {
+    const before = "package p;\npublic class Rate { public long basis() { return 0; } }";
+    const after = "package p;\npublic class Rate { public Rate(long basis) {} public long basis() { return 0; } }";
+
+    expect(typeChanges([api("Rate.java", before)], [api("Rate.java", after)]).map((c) => c.members)).toEqual([["Rate()"]]);
+  });
+
+  test("a new annotation element without a default breaks every use, one with a default does not", () => {
+    const before = 'package p;\npublic @interface Audited { String value() default ""; }';
+    const withDefault = before.replace("}", "int level() default 1; }");
+    const required = before.replace("}", "int level(); }");
+
+    expect(typeChanges([api("A.java", before)], [api("A.java", withDefault)])).toEqual([]);
+    expect(typeChanges([api("A.java", before)], [api("A.java", required)]).map((c) => c.members)).toEqual([["level()"]]);
+  });
+
+  test("a class made final or sealed changes its declaration, and a nested class losing static becomes an inner one", () => {
+    const before = "package p;\npublic class Shape { public static class Point {} }";
+    const changes = (after: string) => typeChanges([api("S.java", before)], [api("S.java", after)]).map((c) => [c.type, c.declaration]);
+
+    expect(changes(before.replace("public class Shape", "public final class Shape"))).toEqual([["p.Shape", true]]);
+    expect(changes(before.replace("public static class Point", "public class Point"))).toEqual([["p.Shape.Point", true]]);
+  });
+
+  test("a protected nested type counts, and an interface constant is the same with or without static final written", () => {
+    const before = "package p;\npublic class Base { protected static class Hook {} public interface Limits { int MAX = 3; } }";
+    const after = before.replace("protected static class Hook {}", "").replace("int MAX = 3;", "static final int MAX = 3;");
+
+    expect(typeChanges([api("B.java", before)], [api("B.java", after)]).map((c) => [c.change, c.type])).toEqual([
+      ["removed", "p.Base.Hook"],
+    ]);
+  });
+});
+
+describe("reading the changed library files of a task (ADR-205)", () => {
+  const BASE = "a".repeat(40);
+  const HEAD = "b".repeat(40);
+  const RATE = "money/src/main/java/p/Rate.java";
+
+  function vcs(files: Record<string, Record<string, string>>, truncated = false): { vcs: ApiChangesVcs; asked: string[][] } {
+    const asked: string[][] = [];
+    return {
+      asked,
+      vcs: {
+        changedPathsBetween: async (_dir, _from, _to, _max, pathspecs) => {
+          asked.push([...pathspecs]);
+          return { paths: [MONEY, RATE], truncated };
+        },
+        readFiles: async (_dir, commit, paths) =>
+          new Map(
+            paths.flatMap((path) =>
+              files[commit]?.[path] === undefined ? [] : [[path, Buffer.from(files[commit]?.[path] ?? "")] as const],
+            ),
+          ),
+      },
+    };
+  }
+
+  test("only the library sources' Java files are asked for, and a file with syntax errors on either side is left out of the comparison", async () => {
+    const rate = "package p;\npublic class Rate { public long basis() { return 0; } }";
+    const files = {
+      [BASE]: { [MONEY]: money, [RATE]: rate },
+      [HEAD]: {
+        [MONEY]: money.replace("public Money(long amount) {}", "public Money(long amount {}"),
+        [RATE]: "package p;\npublic class Rate {}",
+      },
+    };
+    const { vcs: git, asked } = vcs(files);
+
+    const read = await apiChanges(git, "/repo", { base: BASE, head: HEAD }, ["money/src/main/java/"], parsers);
+
+    expect(asked).toEqual([["money/src/main/java/*.java"]]);
+    expect(read.types.map((t) => [t.type, t.members])).toEqual([["p.Rate", ["basis()"]]]);
+    expect(read.problems).toEqual([
+      { code: "parse-incomplete", path: MONEY, message: "public types not read: syntax errors", commit: "head" },
+    ]);
+  });
+
+  test("too many changed files and files over the read limit are named as not read", async () => {
+    const { vcs: git } = vcs({}, true);
+
+    const read = await apiChanges(git, "/repo", { base: BASE, head: HEAD }, ["money/src/main/java/"], parsers);
+
+    expect(read.problems.map((p) => [p.code, p.path])).toEqual([
+      ["files-not-read", ""],
+      ["files-not-read", MONEY],
+    ]);
+  });
+
+  test("a repo without library sources reads nothing", async () => {
+    const { vcs: git, asked } = vcs({});
+    expect(await apiChanges(git, "/repo", { base: BASE, head: HEAD }, [], parsers)).toEqual({ types: [], problems: [] });
+    expect(asked).toEqual([]);
   });
 });

@@ -18,7 +18,7 @@ import { KeyedQueue } from "../../infra/keyed-queue.ts";
 import type { NewProposal } from "./task-proposals.ts";
 
 /**
- * Impact proposals (§4.4, ADR-198, ADR-201): when a turn of a task's session ends, the daemon compares the task's commits
+ * Impact proposals (§4.4, ADR-198, ADR-205): when a turn of a task's session ends, the daemon compares the task's commits
  * with its base, as `get_changed_endpoints` does (ADR-145, ADR-147), and proposes a task to each repo of ring 1 that
  * surely calls an endpoint they removed or changed, and to each repo that imports a public library type they removed or
  * changed, unless that repo was offered every such endpoint and type before. The proposal is
