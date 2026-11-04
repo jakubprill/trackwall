@@ -131,6 +131,18 @@ export function hyperlinkHandler(mac: boolean, open: { external: (url: string) =
   };
 }
 
+/**
+ * Opens a plain `http` or `https` address the program printed (`@xterm/addon-web-links` finds it), such as the one a
+ * service logs when it starts or the one `git push` prints for a merge request, on Ctrl+click or Cmd+click, the same way
+ * as a hyperlink (OSC 8): a plain click stays the program's.
+ */
+export function webLinkHandler(mac: boolean, open: (url: string) => void): (event: MouseEvent, uri: string) => void {
+  return (event, uri) => {
+    const target = hyperlinkTarget(uri);
+    if (target?.kind === "external" && opensLink(event, mac)) open(target.url);
+  };
+}
+
 /** Underlines `trackwall://` links in the terminal and opens them on Ctrl+click or Cmd+click.
  * A link split over rows is one link for each row it covers, so the underline stays on its own characters and leaves
  * out the indentation and borders between them. */
