@@ -59,5 +59,6 @@ export * from "./terminals.ts";
 export * from "./test-results.ts";
 export * from "./trackwall-dir.ts";
 export * from "./unpushed-work.ts";
+export * from "./usage-report.ts";
 export * from "./verification.ts";
 export * from "./workspace.ts";

@@ -13,6 +13,7 @@ import {
   type TaskOutcome,
   type TerminalPlace,
 } from "@trackwall/protocol";
+import { copilotHome } from "./infra/copilot-home.ts";
 import { downloadVerified } from "./infra/download.ts";
 import { vscodeUrl } from "./infra/editor-url.ts";
 import { DomainError, messageOf } from "./infra/errors.ts";
@@ -33,6 +34,7 @@ import {
 } from "./modules/agents/agents.ts";
 import { resolveCopilot } from "./modules/agents/copilot-command.ts";
 import { withMiseVars } from "./modules/agents/session-env.ts";
+import { TASK_BRANCH_PREFIX } from "./modules/agents/task-branch.ts";
 import { Batch } from "./modules/batch/batch.ts";
 import { Board } from "./modules/board/board.ts";
 import type { AppConfigQuery } from "./modules/cards/app-config.ts";
@@ -67,6 +69,8 @@ import { TASK_JOURNAL_FILE, TASK_JOURNAL_MAX_RECORDS, TaskJournal } from "./modu
 import { FolderFiles } from "./modules/terminals/folder-files.ts";
 import { FolderTerminals } from "./modules/terminals/folder-terminals.ts";
 import { TestReports } from "./modules/test-results/test-reports.ts";
+import { UsageReport } from "./modules/usage-report/usage-report.ts";
+import type { KnownPlaces } from "./modules/usage-report/work-place.ts";
 import { Hosting, type HostingClis } from "./modules/vcs/hosting.ts";
 import { systemTempFolder, Vcs } from "./modules/vcs/vcs.ts";
 import { VERIFICATIONS_FILE, Verifications } from "./modules/verification/verifications.ts";
@@ -117,6 +121,8 @@ export interface Facade {
   errorJournal: ErrorJournal;
   /** Every MCP tool call the daemon answered, with its caller, identifier arguments and outcome, on this computer only (ADR-152). */
   mcpAudit: McpAudit;
+  /** What Copilot CLI used in a week, by work and by tool, from its own event logs (ADR-195). */
+  usageReport: UsageReport;
   /** Checks of what Trackwall needs on this computer, each with what to do when it fails (ADR-101). */
   doctor: Doctor;
   /** The models the session profile's model provider offers, which the Model fields suggest (ADR-194). */
@@ -376,6 +382,12 @@ export function createFacade(o: FacadeOptions): Facade {
   });
   const errorJournal = createErrorJournal({ ...o, workspace });
   const mcpAudit = new McpAudit({ dir: join(o.home, LOGS_DIR), log: o.log });
+  const usageReport = new UsageReport({
+    copilotHome: async () => copilotHome(await o.userEnv()),
+    places: () => knownPlaces(agents, taskJournal, workspace),
+    now: Date.now,
+    log: o.log,
+  });
   const javaNavigationReadiness = () => agents.javaNavigationState();
   const javaNavigation = new JavaNavigation({
     repos: workspace,
@@ -517,6 +529,7 @@ export function createFacade(o: FacadeOptions): Facade {
     dayStart,
     errorJournal,
     mcpAudit,
+    usageReport,
     doctor,
     providerModels,
     javaNavigation,
@@ -542,5 +555,24 @@ export function createFacade(o: FacadeOptions): Facade {
       agents.keepRunningSessionsForResume();
       verifications.keepForRestart();
     },
+  };
+}
+
+/**
+ * The tasks, repos and projects folder the usage report ties conversations to (ADR-195): running tasks from `agents`,
+ * ended ones from the task journal, and the repos without git, which only their folders are needed of.
+ */
+async function knownPlaces(agents: Agents, taskJournal: TaskJournal, workspace: Workspace): Promise<KnownPlaces> {
+  const list = await workspace.entryList().catch(() => ({ projectsDir: null, repos: [] }));
+  return {
+    tasks: [
+      ...agents.tasks().map((t) => ({ id: t.id, repo: t.repo, branch: t.branch, worktree: t.worktree, title: t.title, prompt: t.prompt })),
+      ...taskJournal
+        .records()
+        .map((r) => ({ id: r.task, repo: r.repo, branch: r.branch, worktree: null, title: r.title, prompt: r.prompt })),
+    ],
+    repos: list.repos.map((r) => ({ id: r.id, path: r.path })),
+    projectsDir: list.projectsDir,
+    taskBranchPrefix: TASK_BRANCH_PREFIX,
   };
 }

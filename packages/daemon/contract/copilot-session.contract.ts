@@ -5,9 +5,9 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { MCP_SERVER_NAME, mcpTools, promptBoxText, type Session, TASK_MESSAGE_RULE } from "@trackwall/protocol";
+import { MCP_SERVER_NAME, mcpTools, promptBoxText, type Session, TASK_MESSAGE_RULE, type UsageReport } from "@trackwall/protocol";
+import { conversationEventLog } from "../src/infra/copilot-home.ts";
 import { windowTitleFromOsc } from "../src/modules/agents/copilot-osc.ts";
-import { conversationEventLog } from "../src/modules/agents/copilot-usage-log.ts";
 import { OscParser } from "../src/modules/agents/osc-parser.ts";
 import { readRequestPrompt } from "../src/modules/agents/read-request-prompt.ts";
 import { sessionHooksFile } from "../src/modules/agents/session-launcher.ts";
@@ -191,6 +191,56 @@ describe("a session of the real Copilot CLI", () => {
     await endOfTurn(resumed.id);
     const second = await waitFor(agents, resumed.id, (s) => s.usage?.modelCalls === 2, "the second turn's usage", SESSION_MS);
     expect(second.usage).toMatchObject({ inputTokens: 2, outputTokens: 2 });
+  });
+
+  test("the event log has each model call's tool definition tokens and each tool call's server, outcome and result tokens, which the weekly usage report reads (ADR-195)", async () => {
+    const { id, window } = await startSession();
+    model.reply(
+      {
+        parallel: [
+          { tool: copilotToolName(mcpTools.listRepos.name), arguments: {} },
+          { tool: "view", arguments: { path: join(daemon.projects, "shop") } },
+          // A read-only tool that refuses its argument: an error, without an approval request.
+          { tool: copilotToolName(mcpTools.getTaskChanges.name), arguments: { task: "no-such-task" } },
+        ],
+      },
+      { text: "Listed." },
+    );
+    // Other tests' conversations are in the same Copilot CLI home, so the turn shows as what it adds to the report.
+    const before = await daemon.facade.usageReport.week(0);
+    window.attachment.input("list the repos\r");
+    await endOfTurn(id);
+
+    const tool = (report: UsageReport, name: string) =>
+      report.tools.find((t) => t.tool === name) ?? { server: null, calls: 0, failures: 0, resultTokens: 0 };
+    const added = (report: UsageReport, name: string) => {
+      const [now, then] = [tool(report, name), tool(before, name)];
+      return {
+        server: now.server,
+        calls: now.calls - then.calls,
+        failures: now.failures - then.failures,
+        resultTokens: now.resultTokens - then.resultTokens,
+      };
+    };
+    const shop = (report: UsageReport) => report.work.find((w) => w.kind === "repo" && w.repo === "shop");
+    // Copilot CLI writes the log in batches, so the tool calls may land after the turn's agentStop.
+    const until = Date.now() + SESSION_MS;
+    let report = await daemon.facade.usageReport.week(0);
+    while (
+      added(report, mcpTools.getTaskChanges.name).calls === 0 ||
+      (shop(report)?.usage.modelCalls ?? 0) < (shop(before)?.usage.modelCalls ?? 0) + 2
+    ) {
+      if (Date.now() > until) throw new Error(`the report never had the turn: ${JSON.stringify(report)}`);
+      await new Promise((r) => setTimeout(r, 200));
+      report = await daemon.facade.usageReport.week(0);
+    }
+    // The definitions of every tool the model was offered go with every call.
+    expect(report.toolDefinitionTokens - before.toolDefinitionTokens).toBeGreaterThan(1000);
+    expect(added(report, mcpTools.listRepos.name)).toMatchObject({ server: MCP_SERVER_NAME, calls: 1, failures: 0 });
+    expect(added(report, mcpTools.listRepos.name).resultTokens).toBeGreaterThan(0);
+    expect(added(report, "view")).toMatchObject({ server: null, calls: 1, failures: 0 });
+    expect(added(report, "view").resultTokens).toBeGreaterThan(0);
+    expect(added(report, mcpTools.getTaskChanges.name)).toEqual({ server: MCP_SERVER_NAME, calls: 1, failures: 1, resultTokens: 0 });
   });
 
   test("a shell command asks for approval as a permission_prompt notification, the daemon reads the dialog, and its answer runs it", async () => {

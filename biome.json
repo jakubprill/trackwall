@@ -162,6 +162,7 @@
                       "!../../infra/loopback.ts",
                       "!../../infra/env-key.ts",
                       "!../../infra/copilot-home.ts",
+                      "!../../infra/copilot-usage-receipt.ts",
                       "!../../infra/path-inside.ts",
                       "!../../infra/xml.ts",
                       "!../../infra/glob.ts",
