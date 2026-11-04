@@ -4,7 +4,7 @@ import { proxyFor } from "../../infra/proxy-env.ts";
 import { DNS_CODES, openConnection, serverName, UNREACHABLE_CODES } from "../../infra/proxy-tunnel.ts";
 
 /**
- * One request to the model provider the way a session's Copilot CLI reaches it (ADR-194, ADR-195): directly or through an HTTP
+ * One request to the model provider the way a session's Copilot CLI reaches it (ADR-194, ADR-197): directly or through an HTTP
  * `CONNECT` tunnel of the proxy its environment names (`infra/proxy-env.ts`), over TLS trusting only the certificates
  * given, with `Connection: close` so the answer ends with the connection. HTTP/1.1 is written by hand for the same reason
  * the tunnel is: `http.request` on a socket of one's own differs between Bun and Node. A failure is told by a fixed

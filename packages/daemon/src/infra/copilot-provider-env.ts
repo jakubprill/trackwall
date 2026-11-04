@@ -1,6 +1,6 @@
 /**
  * The variables Copilot CLI takes a custom model provider from (`copilot help environment`, ADR-136), in one place for
- * the doctor's check (ADR-179), the provider's model list and format probes (ADR-194, ADR-195) and a session's start,
+ * the doctor's check (ADR-179), the provider's model list and format probes (ADR-194, ADR-197) and a session's start,
  * which sets the format per session.
  */
 export const COPILOT_PROVIDER_ENV = {

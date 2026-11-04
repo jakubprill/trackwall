@@ -7,7 +7,7 @@ import { probeWireApis } from "./wire-api-probe.ts";
 
 /**
  * The models the model provider of the session profile offers (§4.24, ADR-194), for the Model fields to suggest, and
- * the format each answers in (ADR-195), for a session's start to set. The daemon asks the provider itself, as a
+ * the format each answers in (ADR-197), for a session's start to set. The daemon asks the provider itself, as a
  * session's Copilot CLI would reach it, because the key must not leave the daemon and Copilot CLI with a custom
  * provider lists no models (neither in a session nor over ACP). A list is kept for a few minutes per profile, address
  * and credentials, so opening a form does not ask the provider each time; a failure is not kept, so asking again tries
@@ -79,7 +79,7 @@ export class ProviderModels {
   }
 
   /**
-   * The format a session on `model` must use with the provider of its environment (ADR-195): the one format the model
+   * The format a session on `model` must use with the provider of its environment (ADR-197): the one format the model
    * answered in, probed on its first use and remembered; `null` to leave the session's environment as it is, when it
    * names no provider over HTTP, already names that format, the model answered in both formats or in neither, or the
    * provider could not be asked (then not again for a minute).

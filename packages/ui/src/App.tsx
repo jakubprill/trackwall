@@ -313,6 +313,7 @@ export function App() {
                           repoWatch={repoWatch}
                           sessions={sessions.data}
                           initialImpactTask={impactTask}
+                          onOpenInSessions={openInSessions}
                         />
                       )}
                       {conn && view === "plan" && (

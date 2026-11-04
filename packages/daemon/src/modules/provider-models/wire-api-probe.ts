@@ -3,7 +3,7 @@ import type { ProviderAnswer, ProviderCall } from "./provider-call.ts";
 import { providerUrl } from "./provider-request.ts";
 
 /**
- * Which format a model of the provider answers in (ADR-195): one smallest request in each of Copilot CLI's two
+ * Which format a model of the provider answers in (ADR-197): one smallest request in each of Copilot CLI's two
  * formats, `POST /chat/completions` and `POST /responses`, with a one-word prompt and the fewest output tokens a
  * provider takes, sent at once. A provider refuses the other format at once with a 400 ("this model only supports the
  * Responses API"), so the probe costs at most two tiny answers, once per model. `/models` does not say which format a

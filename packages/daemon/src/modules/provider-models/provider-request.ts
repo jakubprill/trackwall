@@ -7,7 +7,7 @@ import { envKey } from "../../infra/env-key.ts";
  * environment as Copilot CLI reads it (`copilot help environment`, ADR-136, ADR-194): `COPILOT_PROVIDER_BASE_URL`,
  * `COPILOT_PROVIDER_BEARER_TOKEN` before `COPILOT_PROVIDER_API_KEY` as a bearer token, and the extra
  * `COPILOT_PROVIDER_HEADERS`, with the format `COPILOT_PROVIDER_WIRE_API` and `COPILOT_PROVIDER_TRANSPORT`. Only an OpenAI-compatible provider (`COPILOT_PROVIDER_TYPE` `openai`, the default) has the
- * `GET /models` list and the format probes of ADR-195 asked here, and a key from `COPILOT_PROVIDER_API_KEY_COMMAND` is not run: the daemon does not run a
+ * `GET /models` list and the format probes of ADR-197 asked here, and a key from `COPILOT_PROVIDER_API_KEY_COMMAND` is not run: the daemon does not run a
  * command named in a file an agent might reach (§1.2).
  */
 

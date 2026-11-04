@@ -34,6 +34,7 @@ function fakeDeps(overrides: Partial<DoctorDeps>): DoctorDeps {
     homeDir: tmpdir(),
     inContainer: false,
     unpushedWork: async () => ({ inContainer: false, repos: [], unreadable: [] }),
+    remoteReach: async () => [],
     workspaceFile: join(tmpdir(), "trackwall-doctor-no-such-workspace.yaml"),
     workspaceKeys: () => ({ keys: [], unknown: [] }),
     javaNavigation: () => null,

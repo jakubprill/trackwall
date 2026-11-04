@@ -7,7 +7,7 @@ import type { ProviderModel, ProviderModelList } from "@trackwall/protocol";
 
 /**
  * The hint beside a suggested model: its context window rounded to thousands of tokens, and the one format it answers
- * in once a session found it out (ADR-195); empty when neither is known.
+ * in once a session found it out (ADR-197); empty when neither is known.
  */
 export function modelHint(model: ProviderModel): string {
   const parts: string[] = [];

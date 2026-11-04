@@ -303,6 +303,10 @@ A link from the repo that uses to the repo that is used, with a kind (`EdgeKind`
 A gap in a repo's facts that only the whole graph shows, with a code like a card problem (ADR-116): `unresolved-call-target`, an HTTP client the code uses that points to no repo in the list.
 _Avoid_: error (the graph is still built), dangling call
 
+**Version drift** (`VersionDrift`, `RepoGraph.drift`, kind `DriftKind`; UI "Version drift", "Align to <version>"):
+A tool, Spring Boot, a Maven parent pom or BOM, or a build plugin that the repos of the projects folder use in different versions, found from their cards with the file and line of each (ADR-196). Its target is the newest of those versions, and aligning starts a task or a change in the repos off it.
+_Avoid_: config drift (only versions are compared), outdated (the target is the newest in the folder, not the newest released)
+
 **Package alias** (`graph.packages` in `workspace.yaml`):
 A package name and the repo that provides it, when that repo's card does not show it (a package built outside the build files, a different name in the artifact repository). It works only for a package no repo on the list builds.
 
@@ -656,7 +660,7 @@ The models the model provider of the session profile offers, from its `GET /mode
 _Avoid_: model catalog (Copilot CLI's own list of GitHub's models), available models
 
 **Wire API** (`WireApi`, `ProviderModel.wireApi`, Copilot CLI's `COPILOT_PROVIDER_WIRE_API`):
-The format Copilot CLI speaks to a custom model provider in, `completions` (Chat Completions) or `responses` (the Responses API). A model of a gateway may answer in only one of them; a session's start sets the one its model answers in, learned by a probe on the model's first use (ADR-195).
+The format Copilot CLI speaks to a custom model provider in, `completions` (Chat Completions) or `responses` (the Responses API). A model of a gateway may answer in only one of them; a session's start sets the one its model answers in, learned by a probe on the model's first use (ADR-197).
 _Avoid_: protocol, API type, format (in names; "format" is fine in prose)
 
 **Secret from mise** (`secretNames`, `SessionEnvironment.secrets`):
