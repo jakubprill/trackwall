@@ -33,7 +33,8 @@ const fakeCopilot = join(import.meta.dir, "..", "fixtures", "fake-copilot-sessio
  * workspace (ADR-99), read at every task start; not set by default. `autoReview` is `autoReview` from the workspace
  * (ADR-182), read at every report; off by default.
  * `sandbox` is `sandbox` from the workspace with its
- * default (ADR-181); off by default, since runners have no bubblewrap.
+ * default (ADR-181); off by default, since runners have no bubblewrap. `supervisorModel` is `supervisorModel` from the
+ * workspace (ADR-193), read at every supervisor start; Copilot CLI's default by default.
  */
 export function makeAgents(
   repos: Record<string, string>,
@@ -47,6 +48,7 @@ export function makeAgents(
   javaNavigation: () => JavaNavigationSettings | null = () => null,
   autoReview: () => AutoReviewSettings = () => ({ afterReport: false }),
   sandbox: () => SandboxSettings = () => ({ tasks: "off" }),
+  supervisorModel: () => string | null = () => null,
 ) {
   const procs = new ProcessGroups({
     logs: new Logs({ dir: join(home, "logs"), maxFileBytes: 1024 * 1024, log: () => {} }),
@@ -72,6 +74,7 @@ export function makeAgents(
       newTaskWorktreesDir: async () => worktreesDir(),
       toolPermissions: () => toolPermissions,
       supervisorSettings: () => supervisor,
+      supervisorModel,
       agentSecrets: () => [],
       sessionProfile: () => null,
       autoReviewSettings: autoReview,

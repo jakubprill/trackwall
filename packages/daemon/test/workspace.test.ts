@@ -125,6 +125,8 @@ describe("workspace", () => {
         sessionProfileProblem: null,
         autoReview: { afterReport: false },
         autoReviewProblem: null,
+        supervisorModel: null,
+        supervisorModelProblem: null,
         configFile: file,
       });
       await expect(workspace.overview("api")).rejects.toMatchObject({ code: "not_found" });
@@ -228,6 +230,8 @@ describe("workspace", () => {
         sessionProfileProblem: null,
         autoReview: { afterReport: false },
         autoReviewProblem: null,
+        supervisorModel: null,
+        supervisorModelProblem: null,
         configFile: file,
       });
       expect(readFileSync(file, "utf8")).toContain(`projectsDir: ${projects}`);

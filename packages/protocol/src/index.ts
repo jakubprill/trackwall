@@ -49,6 +49,7 @@ export * from "./services.ts";
 export * from "./sockets.ts";
 export * from "./sync.ts";
 export * from "./task-history.ts";
+export * from "./task-model.ts";
 export * from "./task-outcomes.ts";
 export * from "./task-rounds.ts";
 export * from "./task-state.ts";

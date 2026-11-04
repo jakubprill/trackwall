@@ -535,6 +535,10 @@ _Avoid_: assign, delegate (that is what the supervisor does with a proposal)
 The short list of the work under way that the daemon gives the supervisor with every prompt: each task with who started it, what its newest session does and what its work came to (its last verification and its merge request with the pipeline, ADR-156), the proposals waiting for the user, and the user's other running sessions, as they are when the prompt comes. Facts from the daemon's session list, not the agent's own words; the details stay in `list_sessions` and `get_session`.
 _Avoid_: briefing (that is what the supervisor writes for the day start), status report, context (too general)
 
+**Supervisor model** (`supervisorModel` in `workspace.yaml`, `WorkspaceSettings.supervisorModel`, action `set-supervisor-model`; UI "Supervisor model" in Settings › Agents):
+The Copilot CLI model the supervisor runs on, an id of the same shape as a task model, passed as `--model` on each of its starts, a resume and a restart included; `null` for Copilot CLI's default (ADR-193). Set in Settings or by hand, never by an MCP tool.
+_Avoid_: default model (that is Copilot CLI's own), coordinator model
+
 **Supervisor panel** (`SupervisorPanel`):
 The column on the right of the main window, in every view, with the supervisor's terminal, its state and the work it delegated, or, while none runs, its start card (`SupervisorStart`): "Start my day", "Continue" (the last supervisor's conversation, while Copilot CLI keeps one, `SessionList.lastSupervisor`) and "New conversation", one of them first as the main choice, and "Show as" for a terminal or the conversation view (ADR-58, ADR-70, ADR-96, ADR-126). Pinned open, wide ("Widen": most of the window, for reading the supervisor), or folded to a strip that keeps a bell while the supervisor or a task proposal under it waits for you (`SupervisorLayout` in `supervisor-layout.ts`); Alt+0 unfolds it, a wide panel staying wide, and puts the keyboard in its terminal.
 _Avoid_: sidebar (that is the list on the left of a view), drawer

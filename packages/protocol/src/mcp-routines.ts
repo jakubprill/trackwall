@@ -1,8 +1,9 @@
 import { z } from "zod";
-import { TASK_PROMPT_MAX, TASK_TITLE_MAX, TaskApprovals, TaskModel } from "./agents.ts";
+import { TASK_PROMPT_MAX, TASK_TITLE_MAX, TaskApprovals } from "./agents.ts";
 import type { McpTool } from "./mcp.ts";
 import { GET_CHANGED_ENDPOINTS, GET_REPO, LIST_REPOS, PROPOSE_TASK, REPORT_RESULT, RepoArg, RUN_MISE_TASK } from "./mcp-args.ts";
 import { Routine, RoutineEntry, RoutineName } from "./routines.ts";
+import { TaskModel } from "./task-model.ts";
 import { trackwallDirLabel } from "./trackwall-dir.ts";
 
 /**
