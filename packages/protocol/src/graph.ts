@@ -149,12 +149,47 @@ export const GraphProblem = z.object({
 });
 export type GraphProblem = z.infer<typeof GraphProblem>;
 
+/**
+ * What a version drift is about (ADR-196): `tool` a tool version from the mise config or a hint (`ToolRequirement`;
+ * Java compared by its major version), `spring-boot` the Spring Boot version from its parent, BOM or build plugin,
+ * `parent` another Maven parent pom or imported BOM, `plugin` a Maven build plugin or a Gradle plugin.
+ */
+export const DriftKind = z.enum(["tool", "spring-boot", "parent", "plugin"]);
+export type DriftKind = z.infer<typeof DriftKind>;
+
+/** One repo of a version drift: the versions its card gives for the subject and where. */
+export const DriftedRepo = z.object({
+  repo: RepoId,
+  /** The versions as compared: one in most repos, more when modules or files of one repo disagree. */
+  versions: z.array(z.string()).min(1),
+  /** The files and lines that give them, with the value as written there (`java = temurin-21.0.2`). */
+  evidence: z.array(MechanismEvidence).min(1),
+});
+export type DriftedRepo = z.infer<typeof DriftedRepo>;
+
+/**
+ * A version drift (ADR-196): one tool, framework, parent pom or plugin that the repos of the projects folder use in
+ * different versions, from their cards. Only the joined cards show it, like a graph problem.
+ */
+export const VersionDrift = z.object({
+  kind: DriftKind,
+  /** The tool name (`java`, `node`), `spring-boot`, or the package (`org.apache.maven.plugins:maven-surefire-plugin`). */
+  name: z.string(),
+  /** The newest version among the repos, which aligning moves the others to; `null` when none reads as a number (`lts`, `latest`). */
+  target: z.string().nullable(),
+  /** At least two repos, in the order of the repo list. */
+  repos: z.array(DriftedRepo).min(2),
+});
+export type VersionDrift = z.infer<typeof VersionDrift>;
+
 /** The whole graph: nodes in the order of the repo list, edges, gaps, and errors in `graph` entries of `workspace.yaml`. */
 export const RepoGraph = z.object({
   nodes: z.array(GraphNode),
   edges: z.array(GraphEdge),
   /** Gaps in the repos' facts found while joining the cards (ADR-116), in the order of the repo list. */
   problems: z.array(GraphProblem),
+  /** Tools, frameworks, parent poms and plugins the repos use in different versions (ADR-196). */
+  drift: z.array(VersionDrift),
   /** A `graph` entry in `workspace.yaml` that cannot be used (for example a repo not in the list), as a sentence for a person. */
   configProblems: z.array(z.string()),
   /** The full path of `workspace.yaml`, where package aliases and manual edges are added. */
