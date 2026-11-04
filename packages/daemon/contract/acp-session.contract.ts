@@ -102,6 +102,9 @@ function conversationOf(id: string) {
   return { entries: () => entries, info: () => info, until, infoUntil, detach: () => window.detach() };
 }
 
+/** A model other than the scripted model's default, which only `/model` in the conversation asks for (ADR-193). */
+const CHAT_MODEL = "trackwall-chat-model";
+
 async function startSupervisor(): Promise<Session> {
   const supervisor = await daemon.facade.agents.startSupervisor("new", "conversation");
   expect(supervisor).toMatchObject({ supervisor: true, view: "conversation" });
@@ -140,6 +143,22 @@ describe("the supervisor in the conversation view with the real Copilot CLI", ()
     expect(entries.find((e) => e.kind === "tool")).toMatchObject({ tool: "execute", status: "completed" });
     expect(entries.at(-1)).toMatchObject({ kind: "agent", text: "Made **one** file." });
     view.detach();
+    await agents.stop(supervisor.id);
+  });
+
+  test("/model with a model id switches the conversation's model for the next prompt, which the bare /model cannot do there (ADR-193)", async () => {
+    const { agents } = daemon.facade;
+    const supervisor = await startSupervisor();
+    model.reply({ text: "On the other model." });
+
+    agents.say(supervisor.id, `/model ${CHAT_MODEL}`);
+    await inState(supervisor.id, "Input");
+    agents.say(supervisor.id, "which model");
+    await waitFor(agents, supervisor.id, (s) => s.state?.reason === "stop end_turn", "end of turn", SESSION_MS);
+
+    const last = model.requests().at(-1);
+    expect(last?.lastUserText).toContain("which model");
+    expect(last).toMatchObject({ model: CHAT_MODEL });
     await agents.stop(supervisor.id);
   });
 

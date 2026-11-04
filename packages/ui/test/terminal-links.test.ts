@@ -7,6 +7,7 @@ import {
   opensLink,
   type TerminalRow,
   trackwallLinkProvider,
+  webLinkHandler,
 } from "../src/lib/terminal-links.ts";
 
 const TASK = "0b7e3a52-5c1f-4c55-9a4e-2f1d7c3b9e10";
@@ -159,4 +160,19 @@ test("a named trackwall hyperlink opens in Trackwall on Ctrl+click", () => {
   handler.activate({ ctrlKey: false, metaKey: false } as MouseEvent, "trackwall://repo/orders-api", range);
   handler.activate({ ctrlKey: true, metaKey: false } as MouseEvent, "trackwall://repo/orders-api", range);
   expect(opened).toEqual(["page trackwall://repo/orders-api"]);
+});
+
+test("a plain web address the program printed opens on Ctrl+click or Cmd+click, and nothing else does", () => {
+  const opened: string[] = [];
+  const windows = webLinkHandler(false, (url) => opened.push(url));
+  const mac = webLinkHandler(true, (url) => opened.push(url));
+  const click = (mods: Partial<MouseEvent>) => ({ ctrlKey: false, metaKey: false, ...mods }) as MouseEvent;
+
+  windows(click({ ctrlKey: true }), "http://localhost:8080/actuator");
+  windows(click({}), "https://gitlab.example/merge_requests/1");
+  mac(click({ metaKey: true }), "https://example.com/mr/2");
+  mac(click({ ctrlKey: true }), "https://example.com/mr/3");
+  windows(click({ ctrlKey: true }), "javascript:alert(1)");
+
+  expect(opened).toEqual(["http://localhost:8080/actuator", "https://example.com/mr/2"]);
 });
