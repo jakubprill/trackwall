@@ -29,10 +29,16 @@ test("anything but one valid id of a known kind is not a link", () => {
   expect(parseTrackwallLink(" trackwall://repo/orders-api")).toBeUndefined();
 });
 
-test("candidates in running text leave out the full stop that ends a sentence", () => {
-  const text = "Open trackwall://repo/orders-api. Then (trackwall://repo/billing_) too.";
-  expect([...text.matchAll(trackwallLinkCandidates())].map((m) => m[0])).toEqual([
+const candidates = (text: string) => [...text.matchAll(trackwallLinkCandidates())].map((m) => m[0]);
+
+test("candidates in running text leave out the full stop, question mark or bracket that ends a sentence", () => {
+  expect(candidates("Open trackwall://repo/orders-api. Then (trackwall://repo/billing_) too. Seen trackwall://repo/web?")).toEqual([
     "trackwall://repo/orders-api",
     "trackwall://repo/billing_",
+    "trackwall://repo/web",
   ]);
+});
+
+test("a longer address is no candidate, rather than a shorter link than the text shows", () => {
+  expect(candidates("see trackwall://repo/orders/main, trackwall://repo/orders?run=1 and xtrackwall://repo/a")).toEqual([]);
 });

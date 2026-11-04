@@ -74,7 +74,10 @@ test("the kinds of jump targets (`kind`) are the same in the shell and in the UI
   // `Jump` in Rust has `rename_all = "lowercase"`, so the `Proposal` variant is `"proposal"`; `NextWaiting` is renamed.
   const variants = /pub enum Jump \{([^}]*)\}/.exec(shellSource)?.[1] ?? "";
   const shell = [...variants.matchAll(/(?:rename = "([\w-]+)"\)\]\s*(\w+)|^\s*(\w+)\()/gm)].map((m) => m[1] ?? m[3]?.toLowerCase());
-  const ui = [...uiSource.matchAll(/kind: z\.literal\("([\w-]+)"\)/g)].map((m) => m[1]);
+  // The UI's `Jump` starts with the targets of a `trackwall://` link (`TrackwallLinkTarget` in protocol).
+  const kinds = (source: string) => [...source.matchAll(/kind: z\.literal\("([\w-]+)"\)/g)].map((m) => m[1]);
+  expect(uiSource).toContain("...TrackwallLinkTarget.options,");
+  const ui = [...kinds(read("packages/protocol/src/links.ts")), ...kinds(uiSource)];
   expect(shell).toEqual(["repo", "session", "task", "proposal", "next-waiting"]);
   expect(ui).toEqual(shell);
 });

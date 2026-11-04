@@ -1,5 +1,5 @@
 import { createMermaidPlugin } from "@streamdown/mermaid";
-import { ExternalLink, parseTrackwallLink } from "@trackwall/protocol";
+import { ExternalLink } from "@trackwall/protocol";
 import { ImageOff } from "lucide-react";
 import { type ComponentProps, type MouseEvent, useState } from "react";
 import rehypeRaw from "rehype-raw";
@@ -8,7 +8,7 @@ import { Streamdown } from "streamdown";
 import { errorMessage } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { useOpenWebLink } from "@/lib/desktop";
-import { MARKDOWN_REMARK_PLUGINS, MARKDOWN_SANITIZE_SCHEMA } from "@/lib/markdown-links";
+import { MARKDOWN_REMARK_PLUGINS, MARKDOWN_SANITIZE_SCHEMA, markdownLinkAddress } from "@/lib/markdown-links";
 import { useOpenTrackwallLink } from "@/lib/trackwall-link";
 import { cn } from "@/lib/utils";
 
@@ -95,19 +95,13 @@ export function Markdown({
 /** A link to a web page or a `trackwall://` link looks like a link; a relative one, an anchor and other protocols stay
  * text with the address in a tooltip. */
 function Link({ href, children }: ComponentProps<"a">) {
-  const url = linkAddress(href);
+  const url = markdownLinkAddress(href);
   if (url === undefined) return <span title={href}>{children}</span>;
   return (
     <a href={url} title={url} className="text-primary underline-offset-4 hover:underline">
       {children}
     </a>
   );
-}
-
-function linkAddress(href: string | undefined): string | undefined {
-  if (href !== undefined && parseTrackwallLink(href)) return href;
-  const web = ExternalLink.safeParse(href);
-  return web.success ? web.data : undefined;
 }
 
 function Image({ alt, src }: ComponentProps<"img">) {

@@ -11,22 +11,11 @@ import { createContext, useCallback, useContext } from "react";
  */
 const OPEN_LINK_COMMAND = "open_link";
 
-export interface TrackwallLinkOpeners {
-  inShell: boolean;
-  viaShell: (url: string) => Promise<void>;
-  inPage: (target: TrackwallLinkTarget) => void;
-}
-
-/** Whether the link is one: anything else opens nothing. */
-export function openTrackwallLink(url: string, { inShell, viaShell, inPage }: TrackwallLinkOpeners): boolean {
+/** Whether the link is one: anything else opens nothing. `open` gets the link and its checked target. */
+export function openTrackwallLink(url: string, open: (url: string, target: TrackwallLinkTarget) => void): boolean {
   const target = parseTrackwallLink(url);
-  if (!target) return false;
-  if (!inShell) {
-    inPage(target);
-    return true;
-  }
-  viaShell(url).catch((err: unknown) => console.error("[jump] could not open the link", err));
-  return true;
+  if (target) open(url, target);
+  return target !== undefined;
 }
 
 /** How the page shows a link's target: `App`, which also takes the shell's jumps. */
@@ -37,13 +26,11 @@ export function useOpenTrackwallLink(): (url: string) => boolean {
   const show = useContext(ShowTrackwallTarget);
   return useCallback(
     (url: string) =>
-      openTrackwallLink(url, {
-        inShell: isTauri(),
-        viaShell: (link) => invoke(OPEN_LINK_COMMAND, { url: link }),
-        inPage: (target) => {
-          if (show) show(target);
-          else console.error("[jump] nothing in this page shows a link's target", target);
-        },
+      openTrackwallLink(url, (link, target) => {
+        if (isTauri()) {
+          invoke(OPEN_LINK_COMMAND, { url: link }).catch((err: unknown) => console.error("[jump] could not open the link", err));
+        } else if (show) show(target);
+        else console.error("[jump] nothing in this page shows a link's target", target);
       }),
     [show],
   );

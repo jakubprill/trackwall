@@ -1,6 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { RepoId, SessionId, TaskId } from "@trackwall/protocol";
+import { TaskId, TrackwallLinkTarget } from "@trackwall/protocol";
 import { useEffect, useRef } from "react";
 import { z } from "zod";
 
@@ -16,9 +16,7 @@ const JUMP_EVENT = "jump-requested";
 const TAKE_JUMP_COMMAND = "take_jump";
 
 const Jump = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("repo"), id: RepoId }),
-  z.object({ kind: z.literal("session"), id: SessionId }),
-  z.object({ kind: z.literal("task"), id: TaskId }),
+  ...TrackwallLinkTarget.options,
   z.object({ kind: z.literal("proposal"), id: TaskId }),
   z.object({ kind: z.literal("next-waiting") }),
 ]);

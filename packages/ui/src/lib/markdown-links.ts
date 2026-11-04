@@ -1,4 +1,4 @@
-import { parseTrackwallLink, TRACKWALL_LINK_SCHEME, trackwallLinkCandidates } from "@trackwall/protocol";
+import { ExternalLink, parseTrackwallLink, TRACKWALL_LINK_SCHEME, trackwallLink, trackwallLinkCandidates } from "@trackwall/protocol";
 import { defaultSchema } from "rehype-sanitize";
 import { defaultRemarkPlugins } from "streamdown";
 
@@ -33,8 +33,8 @@ export const MARKDOWN_SANITIZE_SCHEMA = {
 /** Streamdown's own remark plugins (GFM among them) are replaced when any are passed, so they come first. */
 export const MARKDOWN_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), remarkTrackwallLinks];
 
-/** Nodes whose text is not looked into: a link stays one link, code stays code. */
-const LEFT_AS_THEY_ARE = new Set(["link", "linkReference", "definition", "code", "html"]);
+/** Nodes whose text is not looked into: a link stays one link (code has no children to look into). */
+const LEFT_AS_THEY_ARE = new Set(["link", "linkReference"]);
 
 function remarkTrackwallLinks() {
   return (tree: MarkdownNode) => linkChildren(tree);
@@ -43,25 +43,41 @@ function remarkTrackwallLinks() {
 function linkChildren(node: MarkdownNode): void {
   if (!node.children || LEFT_AS_THEY_ARE.has(node.type)) return;
   node.children = node.children.flatMap((child) => {
-    if (child.type === "text") return linkText(child.value ?? "");
-    if (child.type === "inlineCode" && child.value !== undefined && parseTrackwallLink(child.value.trim())) {
-      return [{ type: "link", url: child.value.trim(), children: [child] }];
-    }
+    if (child.type === "text") return linkText(child);
+    const url = child.type === "inlineCode" ? canonicalLink(child.value?.trim() ?? "") : undefined;
+    if (url !== undefined) return [{ type: "link", url, children: [child] }];
     linkChildren(child);
     return [child];
   });
 }
 
-/** A text node split into text and links; the text itself when it holds none. */
-function linkText(value: string): MarkdownNode[] {
+/** A text node split into text and links; the node itself when it holds none. */
+function linkText(node: MarkdownNode): MarkdownNode[] {
+  const value = node.value ?? "";
   const nodes: MarkdownNode[] = [];
   let from = 0;
   for (const match of value.matchAll(trackwallLinkCandidates())) {
-    if (!parseTrackwallLink(match[0])) continue;
+    const url = canonicalLink(match[0]);
+    if (url === undefined) continue;
     if (match.index > from) nodes.push({ type: "text", value: value.slice(from, match.index) });
-    nodes.push({ type: "link", url: match[0], children: [{ type: "text", value: match[0] }] });
+    nodes.push({ type: "link", url, children: [{ type: "text", value: match[0] }] });
     from = match.index + match[0].length;
   }
+  if (from === 0) return [node];
   if (from < value.length) nodes.push({ type: "text", value: value.slice(from) });
   return nodes;
+}
+
+/** The address a link node gets: written from what was parsed, in lower case where the sanitizer compares the
+ * protocol with case, so the `href` is exactly what was checked. */
+function canonicalLink(text: string): string | undefined {
+  const target = parseTrackwallLink(text);
+  return target && trackwallLink(target.kind, target.id);
+}
+
+/** The address a link in Markdown keeps: a `trackwall://` link or a web page address; anything else stays text. */
+export function markdownLinkAddress(href: string | undefined): string | undefined {
+  if (href !== undefined && parseTrackwallLink(href)) return href;
+  const web = ExternalLink.safeParse(href);
+  return web.success ? web.data : undefined;
 }

@@ -3,7 +3,7 @@ import type { ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import rehypeSanitize from "rehype-sanitize";
 import { Streamdown } from "streamdown";
-import { MARKDOWN_REMARK_PLUGINS, MARKDOWN_SANITIZE_SCHEMA } from "../src/lib/markdown-links.ts";
+import { MARKDOWN_REMARK_PLUGINS, MARKDOWN_SANITIZE_SCHEMA, markdownLinkAddress } from "../src/lib/markdown-links.ts";
 
 const SESSION = "0b7e3a52-5c1f-4c55-9a4e-2f1d7c3b9e10";
 
@@ -57,4 +57,21 @@ test("web links still work and other protocols lose their address", () => {
     " x",
     " f",
   ]);
+});
+
+test("a trackwall link with an upper-case scheme still links, with the address written in lower case", () => {
+  expect(linksIn("See TrackWall://repo/orders-api now")).toEqual(["trackwall://repo/orders-api TrackWall://repo/orders-api"]);
+});
+
+test("a longer address that starts like a trackwall link stays text", () => {
+  expect(linksIn("see trackwall://repo/orders/main and trackwall://repo/orders?run=1")).toEqual([]);
+});
+
+test("a Markdown link keeps a trackwall or web address and drops any other", () => {
+  expect(markdownLinkAddress("trackwall://repo/orders-api")).toBe("trackwall://repo/orders-api");
+  expect(markdownLinkAddress("https://example.com/docs")).toBe("https://example.com/docs");
+  expect(markdownLinkAddress("trackwall://repo/orders-api?run=1")).toBeUndefined();
+  expect(markdownLinkAddress("javascript:alert(1)")).toBeUndefined();
+  expect(markdownLinkAddress("#top")).toBeUndefined();
+  expect(markdownLinkAddress(undefined)).toBeUndefined();
 });
