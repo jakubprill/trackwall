@@ -7,6 +7,7 @@ import {
   type AutoReview,
   type AutoReviewSettings,
   CHANGE_PROMPTS_TOO_LONG,
+  type ChangedEndpoints,
   type ChangePart,
   type ChangeRequest,
   type CreatedChange,
@@ -23,6 +24,7 @@ import {
   type MergeRequest,
   type MessageAttachment,
   type MiseTarget,
+  type PipelineFix,
   type PromptDelivery,
   proposalRepos,
   type ReviewComment,
@@ -66,6 +68,7 @@ import { sandboxState, taskSandbox } from "./copilot-sandbox.ts";
 import type { EndedTaskFacts } from "./ended-task.ts";
 import { HandoffWatch } from "./handoff-watch.ts";
 import { appendHookRecord } from "./hook-tail.ts";
+import { ImpactProposals } from "./impact-proposals.ts";
 import { javaNavigationState } from "./java-language-server.ts";
 import { JavaNavigationServers } from "./java-navigation-servers.ts";
 import { LAST_SUPERVISOR_FILE, LastSupervisorFile } from "./last-supervisor.ts";
@@ -103,7 +106,7 @@ import { supervisorSituation } from "./supervisor-situation.ts";
 import { TaskCoordination } from "./task-coordination.ts";
 import { TaskFile } from "./task-file.ts";
 import { TaskProposals } from "./task-proposals.ts";
-import { TaskReviews } from "./task-reviews.ts";
+import { TaskReviews, type UnreadReview } from "./task-reviews.ts";
 import { type RoundsVcs, TASK_ROUNDS_FILE, TaskRoundList } from "./task-rounds.ts";
 import { AgentTasks, type TaskLaunch, type TaskOptions, type TasksVcs } from "./tasks.ts";
 
@@ -230,6 +233,11 @@ export interface AgentsDeps {
    * facts go to the task journal (ADR-150).
    */
   onTaskRemoved: (ended: EndedTaskFacts) => void;
+  /**
+   * The removed and changed endpoints of a task's commits and the repos they reach (`graph`, ADR-145, ADR-147), which
+   * the end of the task's turn turns into impact proposals (ADR-198).
+   */
+  taskImpact: (task: Task) => Promise<ChangedEndpoints>;
   log: (msg: string) => void;
 }
 
@@ -245,6 +253,7 @@ export class Agents {
   readonly #reviews = new TaskReviews(() => this.#queues.follow());
   readonly #miseTrust = new MiseTrustNotices(() => this.#queues.follow());
   readonly #handoffs: HandoffWatch;
+  readonly #impactProposals: ImpactProposals;
   readonly #rounds: TaskRoundList;
   readonly #coordination: TaskCoordination;
   readonly #supervisor: SupervisorSessions;
@@ -328,6 +337,7 @@ export class Agents {
       log: deps.log,
     });
     this.#handoffs = new HandoffWatch(this.#tasks, (task) => this.#sessions.runningOfTask(task)?.askToRead(), deps.log);
+    this.#impactProposals = new ImpactProposals({ tasks: this.#tasks, proposals: this.#proposals, impact: deps.taskImpact, log: deps.log });
     this.#coordination = new TaskCoordination({
       task: (id) => this.task(id),
       findTask: (id) => this.findTask(id),
@@ -499,6 +509,8 @@ export class Agents {
     await this.#deps.repos.repoPath(proposal.repo);
     await this.#assertOnBoard(proposal.item);
     const proposedBy = proposedByOf(caller === null ? null : this.session(caller));
+    // The agent knows better than the comparison what the repo has to do (ADR-198).
+    if (proposedBy.task !== null) this.#impactProposals.replacedBy(proposedBy.task, [proposal.repo]);
     return this.#proposals.add({ kind: "task", ...proposal, parts: null, proposedBy });
   }
 
@@ -521,7 +533,13 @@ export class Agents {
     await this.#assertOnBoard(proposal.item);
     const [first] = parts;
     if (first === undefined) throw new Error("a change has parts");
-    return this.#proposals.add({ kind: "change", repo: first.repo, ...proposal, parts, proposedBy: proposedByOf(session) });
+    return this.#proposals.add({
+      kind: "change",
+      repo: first.repo,
+      ...proposal,
+      parts,
+      proposedBy: proposedByOf(session),
+    });
   }
 
   /** A proposal to remove a repo from the projects folder (ADR-83), from session `caller` like a task proposal. */
@@ -670,11 +688,24 @@ export class Agents {
     return { unread, delivery: running ? running.askToRead() : "on_resume" };
   }
 
+  /**
+   * The user's request that the task's agent fix the failed pipeline of its merge request (ADR-197), queued like a review:
+   * the task's running session is asked to read it, now or once it waits for input; without one, the session the user resumes is.
+   */
+  askToFixPipeline(id: string, fix: PipelineFix): PromptDelivery {
+    // Only to refuse an unknown or ended task (`not_found`).
+    this.#tasks.task(id);
+    this.#reviews.fixPipeline(id, fix);
+    this.#coordination.reviewed(id);
+    return this.#sessions.runningOfTask(id)?.askToRead() ?? "on_resume";
+  }
+
   /** The prompt for what waits unread for a session: its task's review comments and messages, and its updates. */
   #readRequestPrompt(session: { id: string; supervisor: boolean; task: string | null }): string | undefined {
     const reviewComments = session.task === null ? 0 : this.#reviews.unread(session.task);
     return readRequestPrompt({
       reviewComments,
+      pipelineFix: session.task !== null && this.#reviews.pipelineFixUnread(session.task),
       handoffMoved: session.task !== null && this.#handoffs.waiting(session.task),
       roundUndone: session.task !== null && this.#rounds.undoneUntold(session.task),
       ...this.#coordination.unread(session),
@@ -682,8 +713,8 @@ export class Agents {
     });
   }
 
-  /** The unread review comments of session `caller`'s own task (`get_review_comments`), which now count as read. */
-  takeReviewComments(caller: string | null): ReviewComment[] {
+  /** The unread review comments and pipeline fix of session `caller`'s own task (`get_review_comments`), which now count as read. */
+  takeReviewComments(caller: string | null): UnreadReview {
     return this.#reviews.take(this.#ownTask(caller, "has review comments").task);
   }
 
@@ -785,7 +816,10 @@ export class Agents {
     // `task` throws `not_found` for a task that is not on the list, before a worktree exists.
     const proposedBy = handoffFrom === null ? null : { session: null, supervisor: false, task: this.task(handoffFrom).id };
     const origin = { id: randomUUID(), title, proposedBy, model, approvals, javaNavigation, item, view, change: null };
-    return this.#tasks.create(repo, prompt, origin);
+    const task = await this.#tasks.create(repo, prompt, origin);
+    // The user handed the repo the work from the Impact tab, so the daemon's proposal for it is done (ADR-198).
+    if (handoffFrom !== null) this.#impactProposals.replacedBy(handoffFrom, [repo]);
+    return task;
   }
 
   /** A change the user typed (ADR-171): a task per part, see `AgentTasks.createChange`; `item` must be on the board. */
@@ -1378,8 +1412,15 @@ export class Agents {
         if (task !== null) void this.#rounds.turnStarted(task);
       },
       onTurnOver: () => {
-        // The round commit first: it moves the branch, which the tasks it handed work to then hear about (ADR-144).
-        if (task !== null) void this.#rounds.turnOver(task).then(() => this.#handoffs.turnOver(task));
+        // The round commit first: it moves the branch, which the tasks it handed work to then hear about (ADR-144), and
+        // which the impact proposals compare (ADR-198).
+        if (task !== null)
+          void this.#rounds
+            .turnOver(task)
+            .then(() => this.#handoffs.turnOver(task))
+            // A failed handoff check does not hold back the impact proposals.
+            .catch((err: unknown) => this.#deps.log(`task ${task}: after its turn: ${String(err)}`))
+            .then(() => this.#impactProposals.turnOver(task, id));
       },
       onEvent: (event: SessionEvent) => {
         if (event.kind === "turn_ended") this.#miseTrust.turnEnded(trustRecipientOf({ id, task }));

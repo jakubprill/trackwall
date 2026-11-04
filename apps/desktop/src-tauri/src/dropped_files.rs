@@ -1,4 +1,4 @@
-//! Files dropped on a window whose daemon runs on another computer (ADR-196): the page sends their bytes to the daemon,
+//! Files dropped on a window whose daemon runs on another computer (ADR-199): the page sends their bytes to the daemon,
 //! which keeps them in the projects folder, because a path of this computer means nothing in a container. The page
 //! never gets file system access of its own: `read_dropped_file` works only with a remote daemon, and reads only a file
 //! the user dropped on that same window in the last `KEEP`, each path once, and only a file, not a folder, of at most

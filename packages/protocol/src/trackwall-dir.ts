@@ -12,7 +12,7 @@ export const TRACKWALL_DIR = ".trackwall";
  * indexes, removed after each git command (clarification to ADR-31); `removed`, where a removed repo goes (ADR-83);
  * `board`, the board items, one Markdown file each (ADR-133); `routines`, the routines, one Markdown file each
  * (ADR-173); `knowledge`, the workspace knowledge, one Markdown file per entry (ADR-170); `drops`, files dropped on a terminal from
- * a computer that is not the daemon's, each in a folder of its own, kept for a week (ADR-196).
+ * a computer that is not the daemon's, each in a folder of its own, kept for a week (ADR-199).
  * A name alone means nothing in the projects folder, so a path is made only from `TrackwallFolder`.
  */
 export type TrackwallFolder = "local" | "worktrees" | "lsp" | "scratch" | "removed" | "board" | "routines" | "knowledge" | "drops";

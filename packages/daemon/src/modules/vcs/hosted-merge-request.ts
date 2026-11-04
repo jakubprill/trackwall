@@ -13,7 +13,7 @@ import { z } from "zod";
 /**
  * How GitHub and GitLab differ for a task's merge request (ADR-77): the address of the new merge request form with its
  * fields filled in, and the API paths and response fields of the merge request from a source branch and its pipeline
- * with the jobs that failed it (ADR-154).
+ * with the jobs that failed it (ADR-154), and of such a job's log (ADR-197).
  * Only reads go through the API; the user creates the merge request in the form. Running `gh` and `glab` is in
  * `hosting.ts`, the rest are pure functions.
  */
@@ -29,6 +29,8 @@ const FORM_URL_MAX = 7000;
 
 interface MergeRequestHostApi {
   formUrl(project: HostedProject, form: MergeRequestForm): string;
+  /** The API path of a failed job's log as plain text (ADR-197). */
+  jobLogPath(project: HostedProject, job: string): string;
   /** The most recently updated merge request from `branch` in any state; `null` when there is none. */
   find(api: HostApi, project: HostedProject, branch: string): Promise<MergeRequest | null>;
 }
@@ -47,9 +49,19 @@ const GitHubPull = z.object({
 const GitHubCheckRuns = z.object({
   total_count: z.number().int().nonnegative(),
   check_runs: z.array(
-    z.object({ name: z.string(), status: z.string(), conclusion: z.string().nullable(), html_url: z.string().nullable() }),
+    z.object({
+      id: z.number().int().positive(),
+      name: z.string(),
+      status: z.string(),
+      conclusion: z.string().nullable(),
+      html_url: z.string().nullable(),
+      app: z.object({ slug: z.string() }).nullish(),
+    }),
   ),
 });
+
+/** The app whose check runs are Actions jobs, whose id reads their log (ADR-197); another app keeps its logs itself. */
+const GITHUB_ACTIONS_APP = "github-actions";
 type GitHubCheckRun = z.infer<typeof GitHubCheckRuns>["check_runs"][number];
 
 /** GitHub's largest page of check runs, and how many pages to read: a commit with more checks than that is rare. */
@@ -103,6 +115,8 @@ const githubApi: MergeRequestHostApi = {
     const query = new URLSearchParams({ quick_pull: "1", title: form.title, body: form.description });
     return `https://${project.host}/${project.path}/compare/${range}?${query}`;
   },
+  // GitHub answers with a redirect to the log's file, which `gh api` follows.
+  jobLogPath: (project, job) => `repos/${project.path}/actions/jobs/${job}/logs`,
   async find(api, project, branch) {
     const owner = project.path.split("/")[0] ?? "";
     const head = encodeURIComponent(`${owner}:${branch}`);
@@ -117,7 +131,7 @@ const githubApi: MergeRequestHostApi = {
     const state = combinedState(states);
     const failedJobs = [
       ...runs.failed,
-      ...status.statuses.filter((s) => statusState(s.state) === "failed").map((s) => ({ name: s.context, url: s.target_url })),
+      ...status.statuses.filter((s) => statusState(s.state) === "failed").map((s) => ({ name: s.context, url: s.target_url, id: null })),
     ];
     return {
       number: pull.number,
@@ -146,7 +160,9 @@ async function checkRuns(api: HostApi, commit: string): Promise<{ states: Pipeli
     if (runs.length >= total || received.check_runs.length < CHECK_RUNS_PAGE) break;
   }
   const states = runs.map(checkRunState);
-  const failed = runs.filter((run) => checkRunState(run) === "failed").map((run) => ({ name: run.name, url: run.html_url }));
+  const failed = runs
+    .filter((run) => checkRunState(run) === "failed")
+    .map((run) => ({ name: run.name, url: run.html_url, id: run.app?.slug === GITHUB_ACTIONS_APP ? String(run.id) : null }));
   return { states: runs.length < total ? [...states, "pending"] : states, failed };
 }
 
@@ -166,7 +182,9 @@ const GitLabMergeRequest = z.object({
 });
 
 /** A job of a pipeline; one allowed to fail does not fail the pipeline, so it is not one that failed it. */
-const GitLabJobs = z.array(z.object({ name: z.string(), web_url: z.string(), allow_failure: z.boolean() }));
+const GitLabJobs = z.array(
+  z.object({ id: z.number().int().positive(), name: z.string(), web_url: z.string(), allow_failure: z.boolean() }),
+);
 
 /** GitLab's pipeline statuses; one GitLab adds later counts as `pending` until it is known. */
 function gitlabPipelineState(status: string): PipelineState {
@@ -203,6 +221,7 @@ const gitlabApi: MergeRequestHostApi = {
     query.set("merge_request[description]", form.description);
     return `https://${project.host}/${project.path}/-/merge_requests/new?${query}`;
   },
+  jobLogPath: (project, job) => `projects/${encodeURIComponent(project.path)}/jobs/${job}/trace`,
   async find(api, project, branch) {
     const base = `projects/${encodeURIComponent(project.path)}/merge_requests`;
     const [found] = await api(
@@ -232,7 +251,7 @@ async function gitlabFailedJobs(api: HostApi, project: HostedProject, pipeline: 
     `projects/${encodeURIComponent(project.path)}/pipelines/${pipeline}/jobs?scope[]=failed&per_page=${PIPELINE_FAILED_JOBS_MAX * 2}`,
     GitLabJobs,
   );
-  return atMost(jobs.filter((job) => !job.allow_failure).map((job) => ({ name: job.name, url: job.web_url })));
+  return atMost(jobs.filter((job) => !job.allow_failure).map((job) => ({ name: job.name, url: job.web_url, id: String(job.id) })));
 }
 
 const MERGE_REQUEST_APIS: Record<RepoHostKind, MergeRequestHostApi> = { github: githubApi, gitlab: gitlabApi };
@@ -261,6 +280,11 @@ export function mergeRequestFormUrl(project: HostedProject, form: MergeRequestFo
 /** A branch name in a URL path: its `/` stay, as GitHub writes them, and everything else is escaped. */
 function branchPath(branch: string): string {
   return branch.split("/").map(encodeURIComponent).join("/");
+}
+
+/** The API path of the log of job `job` (a `JobId`) in `project`, read as plain text. */
+export function jobLogPath(project: HostedProject, job: string): string {
+  return MERGE_REQUEST_APIS[project.kind].jobLogPath(project, job);
 }
 
 /** The most recently updated merge request from `branch` in `project`, in any state; `null` when there is none. */

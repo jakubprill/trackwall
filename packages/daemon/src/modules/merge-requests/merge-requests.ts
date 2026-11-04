@@ -1,14 +1,20 @@
-import type {
-  BranchOnRemote,
-  FollowedMergeRequest,
-  HostedProject,
-  MergeRequest,
-  MergeRequestDraft,
-  MergeRequestForm,
-  MergeRequestLookup,
-  RepoHost,
-  Task,
-  TaskMergeRequest,
+import {
+  type BranchOnRemote,
+  type FailedJob,
+  type FollowedMergeRequest,
+  type HostedProject,
+  type JobLog,
+  type MergeRequest,
+  type MergeRequestDraft,
+  type MergeRequestForm,
+  type MergeRequestLookup,
+  PIPELINE_FIX_LOGS_MAX,
+  type Pipeline,
+  type PipelineFix,
+  type PromptDelivery,
+  type RepoHost,
+  type Task,
+  type TaskMergeRequest,
 } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { ACTIVE_CHECK_MS, nextCheckMs, pipelineFailedNow, type WatchRead } from "./watch-schedule.ts";
@@ -20,8 +26,9 @@ import { ACTIVE_CHECK_MS, nextCheckMs, pipelineFailedNow, type WatchRead } from 
  * found by the task branch as its source branch. The daemon creates nothing on the repo host, so it needs no
  * permission there beyond what `gh` and `glab` already read with, and a merge request made any other way (by the
  * user, an agent, another MCP server) shows the same. It also follows every task's merge request in the background
- * (ADR-154): the Sessions list shows it, and a pipeline that fails is announced. Kept only in memory: the repo host's
- * last answers, and what it last read of each task.
+ * (ADR-154): the Sessions list shows it, and a pipeline that fails is announced. On the user's request it reads the end
+ * of a failed job's log, and hands the failed jobs' logs to the task's agent as a pipeline fix (ADR-197). Kept only in
+ * memory: the repo host's last answers, and what it last read of each task.
  */
 
 /** Repo host answers serve every panel and window for this long: the panel asks every half minute, and pipelines take minutes. */
@@ -32,7 +39,10 @@ const WATCH_TICK_MS = 15_000;
 /** After a push, how long the watch reads every minute while the repo host still shows the pipeline from before it. */
 const AFTER_PUSH_MS = 10 * 60_000;
 
-/** What the module needs from `agents`: the tasks, a task, its commits and uncommitted files, and the squash of its round commits (ADR-168). */
+/**
+ * What the module needs from `agents`: the tasks, a task, its commits and uncommitted files, the squash of its round
+ * commits (ADR-168), and a pipeline fix for its agent (ADR-197).
+ */
 interface MergeRequestTasks {
   tasks(): Task[];
   task(id: string): Task;
@@ -41,6 +51,8 @@ interface MergeRequestTasks {
   taskChangesSummary(id: string): Promise<{ commits: number; uncommitted: number }>;
   /** Runs `push` with the task's round commits squashed (`source`, `undefined` for none) and moves the branch there after it. */
   pushWithRoundsSquashed(id: string, push: (source: string | undefined) => Promise<void>): Promise<void>;
+  /** Queues the user's pipeline fix for the task's agent and asks its session to read it. */
+  askToFixPipeline(id: string, fix: PipelineFix): PromptDelivery;
 }
 
 /** What the module needs from `vcs`: the main remote as a project on a repo host, the task branch against it, and its push. */
@@ -50,10 +62,11 @@ interface MergeRequestVcs {
   pushBranch(dir: string, branch: string, source?: string): Promise<void>;
 }
 
-/** What the module needs from the repo hosts in `vcs`: the merge request from a branch, and the new merge request form. */
+/** What the module needs from the repo hosts in `vcs`: the merge request from a branch, the new merge request form, and a job's log. */
 interface MergeRequestHosting {
   mergeRequest(project: HostedProject, branch: string): Promise<MergeRequest | null>;
   mergeRequestForm(project: HostedProject, form: MergeRequestForm): string;
+  jobLog(project: HostedProject, job: string): Promise<{ raw: string; cut: boolean }>;
 }
 
 export interface MergeRequestsDeps {
@@ -63,6 +76,8 @@ export interface MergeRequestsDeps {
   /** The repo hosts from the settings (`workspace`), to tell a GitLab remote from an unknown host. */
   repoHosts: () => RepoHost[];
   openUrl: (url: string) => void;
+  /** The end of a job's log, cleaned and masked like a log line (`logs`, ADR-197); `cut` when the daemon did not read all of it. */
+  jobLogExcerpt: (raw: string, cut: boolean) => Promise<Omit<JobLog, "job">>;
   /** The pipeline of a task's merge request failed since the read before (`pipelineFailedNow`). */
   onPipelineFailed: (task: Task, mergeRequest: MergeRequest) => void;
   log: (msg: string) => void;
@@ -263,6 +278,54 @@ export class MergeRequests {
     return this.#deps.hosting.mergeRequestForm(state.project, { source: task.branch, target: state.targetBranch, title, description });
   }
 
+  /** The end of the log of a job that failed the pipeline of the task's open merge request (ADR-197). */
+  async jobLog(id: string, job: string): Promise<JobLog> {
+    const { project, pipeline } = await this.#failedPipeline(id);
+    const failed = pipeline.failedJobs.find((j) => j.id === job);
+    if (!failed) throw new DomainError("not_found", `job ${job} is not one that failed the pipeline ${pipeline.url}`);
+    if (!hasLog(failed)) throw new DomainError("not_found", `job ${job} has no log Trackwall can read`);
+    return this.#readJobLog(project, failed);
+  }
+
+  /**
+   * The user's request to the task's agent to fix the failed pipeline of its open merge request (ADR-197): the end of the
+   * logs of the first `PIPELINE_FIX_LOGS_MAX` failed jobs that have one, the others by name, also a job whose log the
+   * repo host did not give (gone past its retention, a timeout): the agent still gets the rest.
+   */
+  async fixPipeline(id: string): Promise<{ delivery: PromptDelivery }> {
+    const { project, pipeline } = await this.#failedPipeline(id);
+    const readable = pipeline.failedJobs.filter(hasLog).slice(0, PIPELINE_FIX_LOGS_MAX);
+    const reads = await Promise.allSettled(readable.map((job) => this.#readJobLog(project, job)));
+    const logs = reads.flatMap((read) => (read.status === "fulfilled" ? [read.value] : []));
+    const read = new Set(logs.map((log) => log.job));
+    const otherJobs = pipeline.failedJobs.filter((job) => !read.has(job)).map((job) => job.name);
+    const fix = { pipeline: pipeline.url, commit: pipeline.commit, logs, otherJobs };
+    return { delivery: this.#deps.tasks.askToFixPipeline(id, fix) };
+  }
+
+  /** The task's open merge request whose pipeline failed, as the repo host shows it now (or within `LOOKUP_CACHE_MS`). */
+  async #failedPipeline(id: string): Promise<{ project: HostedProject; pipeline: Pipeline }> {
+    const task = this.#deps.tasks.task(id);
+    const { onRemote, project } = await this.#branch(task);
+    if (!project) throw unknownHost(task);
+    if (!onRemote?.published) throw new DomainError("bad_request", `branch ${task.branch} is not pushed, so it has no pipeline`);
+    const now = Date.now();
+    const lookup = await this.#lookup(task, project, now);
+    this.#recordLookup(id, project, lookup, now);
+    if (lookup.kind === "unavailable") throw new DomainError("bad_request", `cannot read the merge request: ${lookup.message}`);
+    const mergeRequest = lookup.kind === "found" ? lookup.mergeRequest : null;
+    if (mergeRequest?.state !== "open" || mergeRequest.pipeline?.state !== "failed")
+      throw new DomainError("bad_request", `branch ${task.branch} has no open merge request whose pipeline failed`);
+    return { project, pipeline: mergeRequest.pipeline };
+  }
+
+  async #readJobLog(project: HostedProject, job: JobWithLog): Promise<JobLog> {
+    const { raw, cut } = await this.#deps.hosting.jobLog(project, job.id).catch((err: unknown) => {
+      throw new DomainError("bad_request", `cannot read the log of job ${job.name}: ${messageOf(err)}`);
+    });
+    return { job, ...(await this.#deps.jobLogExcerpt(raw, cut)) };
+  }
+
   /** The repo host's answer, shared for `LOOKUP_CACHE_MS` by the panel and the watch; a pure read, which callers record. */
   #lookup(task: Task, project: HostedProject, now: number): Promise<MergeRequestLookup> {
     const key = task.id;
@@ -280,6 +343,13 @@ export class MergeRequests {
     this.#lookups.set(key, { at: now, lookup });
     return lookup;
   }
+}
+
+type JobWithLog = FailedJob & { id: string };
+
+/** A GitLab or GitHub Actions job, whose log the daemon can read (ADR-197). */
+function hasLog(job: FailedJob): job is JobWithLog {
+  return job.id !== null;
 }
 
 /** A push's fast pace lasts until the repo host shows a pipeline on another commit than before it, or until it runs out. */

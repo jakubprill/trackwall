@@ -14,8 +14,8 @@ See which repo uses which, through shared packages and HTTP calls, with the line
 - A map of your projects folder: which repo uses another repo's package and which one calls another repo's endpoints.
 - Frontends on the left, gateways and backends in the middle, libraries on the right, each with its running service.
 - For every connection, whether one repo calls the other or depends on it to build, how sure Trackwall is, and the file and line that prove it.
-- The HTTP calls that lead nowhere Trackwall knows, so you can tell an external service from a missing link.
-- A place to add the connections Trackwall cannot see.
+- The HTTP calls that lead nowhere Trackwall knows, so you can tell an external service from a missing link, and a place to add the connections Trackwall cannot see.
+- The versions your repos disagree on: Java, Node.js and the other tools in their mise config, Spring Boot, parent poms and BOMs, and build plugins, with a way to bring the older repos up to the newest one.
 
 ## How it works
 
@@ -27,13 +27,16 @@ A repo whose [service](/features/services) runs shows it on its box: a green dot
 
 When a repo's HTTP client calls an app that no repo in your projects folder is, the panel lists it under "Calls without a target", with the file and line of the client and what Trackwall looked for. That is either a service outside your folder, or one of your repos under another name, which an `apps` entry in `workspace.yaml` connects.
 
+With no repo selected, the panel lists the versions your repos disagree on under "Version drift": for example Java 17 in two repos and 21 in the rest, or three versions of the Spring Boot parent. Each repo shows its version, and the ones behind the newest are marked. A selected repo shows the same for itself, with the file and line of each version. "Align to 21" opens a short form with the repos behind and a prompt you can edit; Start runs a task in one repo, or a [change](/features/changes) with one task per repo, each told which lines hold its old version. Nothing starts until you press Start.
+
 Some connections do not show in the code, for example an address that only exists in your deployment. Add those by hand in `~/.trackwall/workspace.yaml`, and they appear in the graph like the others.
 
 ## Use it
 
 1. Open "Overview" (Ctrl+4, ⌘4 on macOS).
 2. Click a repo to see what it uses and who uses it.
-3. Add a missing connection under `graph` in `~/.trackwall/workspace.yaml` (below).
+3. To align versions, close the repo panel, find the subject under "Version drift" and choose "Align to …", check the repos and the prompt, and press Start.
+4. Add a missing connection under `graph` in `~/.trackwall/workspace.yaml` (below).
 
 ## Good to know
 
@@ -43,6 +46,7 @@ Some connections do not show in the code, for example an address that only exist
 - `find_endpoint` takes a path the way you have it: with or without the app's context path or a gateway prefix, a whole URL, `GET /api/orders/42`, or a few words such as "cancel order", which it looks for in paths, handler names and OpenAPI summaries. The closest matches come first, and each result says whether it matched the whole path, its end or the words.
 - For Java repos, `find_endpoint` also tells which endpoint makes a call, not only which repo: Trackwall follows the calls from each endpoint's code to the HTTP clients it uses. So an agent can ask what a change to one endpoint affects and follow it from endpoint to endpoint. Calls made by scheduled jobs or event listeners belong to no endpoint, and repos with Kotlin code are not followed yet.
 - When several of your apps run on the same `localhost` port (Spring's default 8080 is common), the port alone does not say which one an address means: Trackwall connects the caller only to the app whose endpoints match its calls, and an address without calls gets no connection from the port. Giving each app its own port makes the connection firmer.
+- Version drift compares Java by its major version, so `17`, `17.0.9` and `temurin-17.0.9` are the same Java; every other version is compared as written. A repo with a mise config is judged by it rather than by its `pom.xml` or `.java-version`, because mise installs what it says. Plain dependencies are not compared, since their versions usually come from a BOM; a range such as `>=18`, an alias such as `lts/iron`, or a property Trackwall cannot fill in (`${jacoco.version}`) is skipped, since it names no one version. The target is the newest version among your repos, a release before its own release candidate or snapshot.
 - "Impact of" at the top lights the repos a task's change reaches, ring by ring: see [Impact of a task](/features/impact).
 - A commit, checkout or pull in any repo, or a repo added to the projects folder, redraws the graph within a couple of seconds. A hand edit of `workspace.yaml` shows up within five minutes, or at once with the refresh button.
 - The first graph after a start waits for the cards of every repo; while they are computed, the view says how many are done.

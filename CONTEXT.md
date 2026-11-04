@@ -118,7 +118,7 @@ One directory on the user's disk, set in `workspace.yaml` or in the settings. Ea
 _Avoid_: workspace directory, root, folder (without qualification)
 
 **Trackwall folder** (`TRACKWALL_DIR` = `.trackwall`, `TrackwallFolder`, `trackwallDir`):
-The one hidden folder in the projects folder where Trackwall keeps everything beside the repos, one folder per purpose: `local` (the local config store), `worktrees` (the default task worktrees folder), `lsp`, `scratch` and `removed` (ADR-125), and `drops`, the dropped files (ADR-196). It is not the state folder `~/.trackwall`, which holds Trackwall's own memory and lies outside the projects folder.
+The one hidden folder in the projects folder where Trackwall keeps everything beside the repos, one folder per purpose: `local` (the local config store), `worktrees` (the default task worktrees folder), `lsp`, `scratch` and `removed` (ADR-125), and `drops`, the dropped files (ADR-199). It is not the state folder `~/.trackwall`, which holds Trackwall's own memory and lies outside the projects folder.
 _Avoid_: data folder, `.trackwall-*` folders (their names before ADR-125)
 
 **Dropped folder** (`DroppedFolder`, action `dropped-folder`, UI `FolderDrop`; in Polish *upuszczony folder*):
@@ -126,7 +126,7 @@ A folder or file dropped on the Trackwall window outside a session terminal, des
 _Avoid_: imported repo, added repo
 
 **Dropped file** (`DroppedFile`, `POST /api/terminals/drop`, `droppedFiles` in the facade, `.trackwall/drops`):
-A file dropped on a session terminal or a shell whose daemon runs on another computer (in a container, or reached from a browser): the window sends its bytes, the daemon keeps a copy in a folder of its own under `.trackwall/drops`, and the terminal gets the copy's path pasted (ADR-196). Removed at the next drop a day later. With the daemon on this desktop a dropped file is not copied; its own path is pasted.
+A file dropped on a session terminal or a shell whose daemon runs on another computer (in a container, or reached from a browser): the window sends its bytes, the daemon keeps a copy in a folder of its own under `.trackwall/drops`, and the terminal gets the copy's path pasted (ADR-199). Removed at the next drop a day later. With the daemon on this desktop a dropped file is not copied; its own path is pasted.
 _Avoid_: upload, attachment
 
 **Repo host** (`RepoHost`, `repoHosts` in `workspace.yaml`):
@@ -307,6 +307,10 @@ A link from the repo that uses to the repo that is used, with a kind (`EdgeKind`
 A gap in a repo's facts that only the whole graph shows, with a code like a card problem (ADR-116): `unresolved-call-target`, an HTTP client the code uses that points to no repo in the list.
 _Avoid_: error (the graph is still built), dangling call
 
+**Version drift** (`VersionDrift`, `RepoGraph.drift`, kind `DriftKind`; UI "Version drift", "Align to <version>"):
+A tool, Spring Boot, a Maven parent pom or BOM, or a build plugin that the repos of the projects folder use in different versions, found from their cards with the file and line of each (ADR-196). Its target is the newest of those versions, and aligning starts a task or a change in the repos off it.
+_Avoid_: config drift (only versions are compared), outdated (the target is the newest in the folder, not the newest released)
+
 **Package alias** (`graph.packages` in `workspace.yaml`):
 A package name and the repo that provides it, when that repo's card does not show it (a package built outside the build files, a different name in the artifact repository). It works only for a package no repo on the list builds.
 
@@ -443,8 +447,12 @@ The request on the repo host to merge a task branch into the task's base branch,
 _Avoid_: pull request (except for GitHub's own pages), PR, MR in product texts
 
 **Pipeline** (`Pipeline`, `PipelineState`):
-What ran on a merge request's last commit, as one state: GitLab's pipeline, or GitHub's check runs and commit statuses summed up worst first (ADR-77). A failed one names its **failed jobs** (`FailedJob`): GitLab's jobs that failed it, GitHub's failed checks and statuses, each with its page; their logs stay on the repo host (ADR-154).
+What ran on a merge request's last commit, as one state: GitLab's pipeline, or GitHub's check runs and commit statuses summed up worst first (ADR-77). A failed one names its **failed jobs** (`FailedJob`): GitLab's jobs that failed it, GitHub's failed checks and statuses, each with its page and, for a GitLab job or a GitHub Actions job, its id, by which the daemon reads the end of its log on request (`JobLog`, ADR-197).
 _Avoid_: CI, build (a build is a mise task), checks
+
+**Pipeline fix** (`PipelineFix`, `merge-requests/fix-pipeline`, "Fix" under a failed pipeline in the task panel):
+The user's request to a task's agent to fix the failed pipeline of the task's merge request, with the end of the failed jobs' logs. Queued like a review and read with `get_review_comments` (ADR-197); the fix goes on the same task branch, so the merge request gets it with the next push.
+_Avoid_: retry, rerun (that is the repo host's button), fix task (no new task is made)
 
 **Followed merge request** (`FollowedMergeRequest`, `MergeRequests.followed`, `checkWatched`):
 A task's merge request as the daemon last read it while following every task in the background (ADR-154), with its project and `pipelineFailedAt`, the moment the daemon saw its pipeline fail after seeing it otherwise. A new `pipelineFailedAt` is a failed pipeline to announce.
@@ -460,6 +468,7 @@ _Avoid_: parent, owner, manager
 
 **Handoff** (`TaskHandoff` in `task-handoff.ts`, `StoredTask.handoff`):
 What a task whose session proposed another task hands that task: the handing task, its repo and branch, and the commit its branch was at when the user approved the proposal, taken from Trackwall's task list and git. Every session of the proposed task is told where to read the work it builds on (ADR-143). When the handing task's branch moves (to a commit with other files, looking past its round commits, ADR-168), the proposed task is asked to call the MCP tool `get_handoff` (`TaskHandoffState`), which lists the commits and files since it last read (ADR-144), and `get_changed_endpoints` with the handing task lists the endpoints its commits changed (ADR-145). The user can also hand a task's work to a repo its change reaches, with "Hand off" in its Impact tab (`handoffFrom`, ADR-147).
+_Avoid_: dependency, upstream, parent task
 
 **Change** (`Task.change`, `TaskChange`, `ChangeId`; "change" in the UI):
 One piece of work across several repos that the user starts at once, or approves on one card when an agent proposes it (`propose_change`, a `TaskProposal` of `kind: change`): one task per repo, its **parts**, all on one branch name from the change's title, each with its place in the **merge order** (`TaskChange.position`), the order their merge requests are to be merged. A change is no record of its own: it is the tasks that carry its id, and it ends with its last part. Each part's session knows its siblings, and builds on the part right before it as a handoff (ADR-171). The merge order is information; nothing waits for it or merges by it (ADR-9). Not a subtask: no part proposed another, so none reports to another; the parts of a proposed change all report to its proposer.
@@ -468,7 +477,10 @@ _Avoid_: multi-repo task, epic; and do not confuse it with a task's changes (its
 **Impact** (`ImpactedRepo`, `impact` in `ChangedEndpoints`, `graph/impact.ts`; in the UI the task's *Impact* tab and *Impact of* in Overview):
 The repos a task's committed API change reaches, in rings: ring 1 calls a changed endpoint, ring 2 calls an endpoint of ring 1 that makes such a call, up to three rings; a repo reached only through code Trackwall could not follow, or through a client without paths, is *maybe* (`sure: false`) (ADR-147).
 _Avoid_: blast radius, ripple, consumers (for the whole set)
-_Avoid_: dependency, upstream, parent task
+
+**Impact proposal** (`TaskProposal.fromImpact`, `impact-proposals.ts`; "Proposed by Trackwall" under the proposal's title):
+A task proposal the daemon makes when a task's turn ends, for each repo of ring 1 of its impact that surely calls an endpoint the task's commits removed or changed: the task's own proposal, so an approved one is its subtask, with the Impact tab's hand-off prompt. A repo is offered each endpoint once (ADR-198).
+_Avoid_: auto-handoff, consumer task
 
 **Task message** (`TaskMessage`, MCP tools `send_message` and `get_messages`; "Messages" in the task panel):
 Text a task's proposer sends to the task's session: a correction, an answer, a change elsewhere to follow. The daemon asks the task's session to read it the way it asks for a review, and the task's agent reads it with `get_messages`. At most 5 to a task until the user takes part again (ADR-68).
