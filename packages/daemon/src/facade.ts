@@ -463,8 +463,13 @@ export function createFacade(o: FacadeOptions): Facade {
     });
   }
 
-  const placeFolder = async ({ repo, task }: TerminalPlace): Promise<string> =>
-    task === null ? workspace.repoPath(repo) : agents.taskWorktreeForShell(task, repo);
+  const placeFolder = async ({ repo, task }: TerminalPlace): Promise<string> => {
+    if (repo === null) {
+      if (task !== null) throw new DomainError("bad_request", "a task's place names its repo");
+      return workspace.projectsDir();
+    }
+    return task === null ? workspace.repoPath(repo) : agents.taskWorktreeForShell(task, repo);
+  };
   const terminals: FolderTerminals = new FolderTerminals({
     procs,
     folder: placeFolder,

@@ -6,7 +6,7 @@ import { type ScreenViewer, TerminalScreen } from "../../infra/terminal-screen.t
 import { checkedPlaceFolder } from "./place-folder.ts";
 
 /**
- * Folder terminals (§4.23, ADR-185): the user's own shell in a repo root or a task's worktree, in a PTY from `procs`,
+ * Folder terminals (§4.23, ADR-185): the user's own shell in the projects folder, a repo root or a task's worktree, in a PTY from `procs`,
  * with a screen on the daemon side like a session's, so a window that connects later starts from the current screen.
  * One terminal per place: a second start hands back the live one. They live in memory only; a daemon restart ends
  * them with every other group. The place comes as ids and the shell from the daemon's environment, so a request
@@ -34,7 +34,7 @@ export interface TerminalProcs {
 
 export interface FolderTerminalsDeps {
   procs: TerminalProcs;
-  /** The folder of a place: the repo root from `workspace`, a task's worktree from `agents`; `not_found` or `bad_request` otherwise. */
+  /** The folder of a place: the projects folder or a repo root from `workspace`, a task's worktree from `agents`; `not_found` or `bad_request` otherwise. */
   folder: (place: TerminalPlace) => Promise<string>;
   /** The environment of processes started for the user (`userEnv`). */
   env: () => Promise<NodeJS.ProcessEnv>;
@@ -237,9 +237,10 @@ function startError(err: unknown): unknown {
   return new DomainError(err.reason === "cwd_invalid" ? "repo_unavailable" : "terminal_unavailable", err.message);
 }
 
-/** A task id is unique across repos, so a task's place is its id alone. */
+/** A task id is unique across repos, so a task's place is its id alone; the projects folder is one place of its own. */
 function placeKey(place: TerminalPlace): string {
-  return place.task === null ? `repo:${place.repo}` : taskKey(place.task);
+  if (place.task !== null) return taskKey(place.task);
+  return place.repo === null ? "projects-folder" : `repo:${place.repo}`;
 }
 
 function taskKey(task: string): string {

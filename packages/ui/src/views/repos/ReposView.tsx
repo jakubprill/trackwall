@@ -1,5 +1,5 @@
 import { NO_MISE_TAG, type Repo, type RepoList, type RepoTag, type RunningMiseTask, type SessionList } from "@trackwall/protocol";
-import { FolderOpen, Plus, RefreshCw } from "lucide-react";
+import { FolderOpen, Plus, RefreshCw, SquareTerminal } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
@@ -22,12 +22,16 @@ import { useTagFilter } from "@/lib/use-tag-filter";
 import { cn } from "@/lib/utils";
 import { BatchBar, BatchView } from "./BatchView.tsx";
 import { CloneView } from "./CloneView.tsx";
+import { ProjectsFolderShell } from "./ProjectsFolderShell.tsx";
 import { RepoDetail } from "./RepoDetail.tsx";
 import { SyncBar, SyncView } from "./SyncView.tsx";
 import { TagFilter } from "./TagFilter.tsx";
 
-/** What the right side shows: the selected repo, the search for repos to clone, the sync, or the batch command. */
-type Panel = "repo" | "clone" | "sync" | "batch";
+/**
+ * What the right side shows: the selected repo, the search for repos to clone, the sync, the batch command, or the
+ * shell of the projects folder.
+ */
+type Panel = "repo" | "clone" | "sync" | "batch" | "shell";
 
 /** About how many repos the list shows without scrolling: they get their statuses before the rest (ADR-113). */
 const FIRST_SHOWN = 15;
@@ -75,7 +79,8 @@ export function ReposView({
   const current = repos.find((r) => r.id === selected) ?? repos[0];
   // The selected repo and the top of the list get their statuses first (ADR-113); only remembered, so every render may.
   useEffect(() => list.showFirst(shownFirst(selected, repos)));
-  const canSync = Boolean(list.data?.projectsDir) && !needsSettings;
+  const actionsDir = folderForActions(list.data, needsSettings);
+  const canSync = actionsDir !== null;
   const syncedAgo = sync.run && relativeTime(sync.run.startedAt, new Date());
 
   return (
@@ -97,8 +102,8 @@ export function ReposView({
             </Button>
           </span>
         </div>
-        {canSync && list.data?.projectsDir && (
-          <FolderActions projectsDir={list.data.projectsDir} sync={sync} batch={batch} onShow={setPanel} />
+        {actionsDir !== null && (
+          <FolderActions projectsDir={actionsDir} sync={sync} batch={batch} shellShown={panel === "shell"} onShow={setPanel} />
         )}
         <TagFilter counts={filter.counts} selected={filter.selected} onToggle={filter.toggle} onClear={filter.clear} />
         <nav aria-label="Repo list" className="flex-1 overflow-y-auto px-2 pb-4">
@@ -140,6 +145,7 @@ export function ReposView({
         {panel === "sync" && <SyncView sync={sync} canSync={canSync} />}
         {/* A new tag filter is a new group of repos: the panel starts with all of them ticked. */}
         {panel === "batch" && <BatchView key={filter.selected.join(",")} batch={batch} repos={repos} />}
+        {panel === "shell" && actionsDir !== null && <ProjectsFolderShell conn={conn} projectsDir={actionsDir} />}
         {panel === "repo" && current && (
           <RepoDetail
             key={current.id}
@@ -158,6 +164,11 @@ export function ReposView({
   );
 }
 
+/** The projects folder the actions on all repos work in (sync, batch, shell): none while it is not set or not readable. */
+function folderForActions(list: RepoList | undefined, needsSettings: boolean): string | null {
+  return needsSettings ? null : (list?.projectsDir ?? null);
+}
+
 /** The tag filter rejected all repos. */
 function NoTagMatch({ shown, all }: { shown: number; all: number }) {
   if (shown > 0 || all === 0) return null;
@@ -169,23 +180,36 @@ function repoCount(shown: number, all: number): string {
   return shown === all ? twoDigits(all) : `${twoDigits(shown)}/${twoDigits(all)}`;
 }
 
-/** Under the list header: the projects folder path and actions on all its repos at once. */
+/** Under the list header: the projects folder path with its shell, and actions on all its repos at once. */
 function FolderActions({
   projectsDir,
   sync,
   batch,
+  shellShown,
   onShow,
 }: {
   projectsDir: string;
   sync: SyncRunHandle;
   batch: BatchRunHandle;
-  onShow: (panel: Extract<Panel, "sync" | "batch">) => void;
+  shellShown: boolean;
+  onShow: (panel: Extract<Panel, "sync" | "batch" | "shell">) => void;
 }) {
   return (
     <>
-      <p className="text-muted-foreground truncate px-4 pb-3 font-mono text-xs" title={projectsDir}>
-        {projectsDir}
-      </p>
+      <div className="flex items-center gap-1 pr-2 pb-2 pl-4">
+        <p className="text-muted-foreground min-w-0 flex-1 truncate font-mono text-xs" title={projectsDir}>
+          {projectsDir}
+        </p>
+        <Button
+          variant={shellShown ? "secondary" : "ghost"}
+          size="sm"
+          onClick={() => onShow("shell")}
+          aria-pressed={shellShown}
+          title="A shell in the projects folder, with all its repos"
+        >
+          <SquareTerminal /> Shell
+        </Button>
+      </div>
       <SyncBar sync={sync} onShow={() => onShow("sync")} />
       <BatchBar batch={batch} onShow={() => onShow("batch")} />
     </>

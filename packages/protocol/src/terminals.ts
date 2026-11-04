@@ -5,20 +5,34 @@ import { RunState } from "./procs.ts";
 import { RepoId } from "./workspace.ts";
 
 /**
- * A folder terminal (ADR-185): the user's own shell in a repo root or a task's worktree, in a PTY the daemon owns and the
+ * A folder terminal (ADR-185): the user's own shell in the projects folder, a repo root or a task's worktree, in a PTY the daemon owns and the
  * UI shows like a session terminal. The request names the place by its ids, never by a path, and the daemon chooses the
  * shell from its own environment; there is no MCP tool for it.
  */
 
 export const TerminalId = z.uuid();
 
-/** Where a folder terminal works: a repo root (`task: null`) or the worktree of a task of that repo. */
-export const TerminalPlace = z.object({ repo: RepoId, task: TaskId.nullable() }).strict();
+/**
+ * Where a folder terminal works: the projects folder (`repo: null, task: null`), a repo root (`task: null`) or the
+ * worktree of a task of that repo. A task always names its repo.
+ */
+const placeShape = { repo: RepoId.nullable(), task: TaskId.nullable() };
+
+function namesTaskWithRepo(place: { repo: string | null; task: string | null }): boolean {
+  return place.task === null || place.repo !== null;
+}
+
+const TASK_NEEDS_REPO = { message: "a task's place names its repo", path: ["repo"] };
+
+export const TerminalPlace = z.object(placeShape).strict().refine(namesTaskWithRepo, TASK_NEEDS_REPO);
 export type TerminalPlace = z.infer<typeof TerminalPlace>;
+
+/** The place of the projects folder: every repo of the workspace under one folder (in a dev container, its volume). */
+export const PROJECTS_FOLDER_PLACE: TerminalPlace = { repo: null, task: null };
 
 export const FolderTerminal = z.object({
   id: TerminalId,
-  repo: RepoId,
+  repo: RepoId.nullable(),
   task: TaskId.nullable(),
   run: RunState,
 });
@@ -34,7 +48,10 @@ export const MAX_FOLDER_TERMINALS = 16;
 export const PlacePath = z.string().max(4096);
 
 /** What is at a path in a place's folder (`terminals/files`, `terminals/download`). */
-export const PlaceFile = TerminalPlace.extend({ path: PlacePath }).strict();
+export const PlaceFile = z
+  .object({ ...placeShape, path: PlacePath })
+  .strict()
+  .refine(namesTaskWithRepo, TASK_NEEDS_REPO);
 export type PlaceFile = z.infer<typeof PlaceFile>;
 
 /** A link is shown but never followed: it may point anywhere, out of the place too. */
@@ -73,7 +90,8 @@ const endpoint = apiEndpoints("terminals");
 export const terminalsApi = {
   /**
    * The place's terminal: the live one when there is one, otherwise a new shell there. `not_found` for a repo or task
-   * that is not there, `bad_request` for a task of another repo or above `MAX_FOLDER_TERMINALS`.
+   * that is not there, `bad_request` for a task of another repo, for the projects folder while none is set, or above
+   * `MAX_FOLDER_TERMINALS`.
    */
   start: endpoint("start", TerminalPlace, FolderTerminal),
   /** Every folder terminal of this daemon, also one whose shell ended and that was not closed yet. */

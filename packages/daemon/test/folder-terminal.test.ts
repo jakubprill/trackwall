@@ -77,6 +77,23 @@ describe.skipIf(process.versions.bun === undefined)("a folder terminal (real PTY
     await daemon.post(terminalsApi.close, { terminal: terminal.id });
   }, 60_000);
 
+  test("the projects folder has a shell of its own, beside the shell of a repo in it", async () => {
+    const repoShell = await daemon.post(terminalsApi.start, { repo: "shop", task: null });
+    const terminal = await daemon.post(terminalsApi.start, { repo: null, task: null });
+    expect(terminal).toMatchObject({ repo: null, task: null, run: { kind: "running" } });
+    expect(terminal.id).not.toBe(repoShell.id);
+
+    const window = connect(terminal.id);
+    await window.opened;
+    window.ws.send(JSON.stringify({ type: "input", data: PRINT_FOLDER }));
+    await until(() => window.text().includes(printed(daemon.projects)), "the projects folder printed by the shell");
+    expect((await daemon.post(terminalsApi.start, { repo: null, task: null })).id).toBe(terminal.id);
+
+    window.ws.close();
+    await daemon.post(terminalsApi.close, { terminal: terminal.id });
+    await daemon.post(terminalsApi.close, { terminal: repoShell.id });
+  }, 60_000);
+
   test("opening the terminal of a place again hands back the live one, also when asked twice at once", async () => {
     const [a, b] = await Promise.all([
       daemon.post(terminalsApi.start, { repo: "billing", task: null }),
@@ -146,13 +163,14 @@ describe.skipIf(process.versions.bun === undefined)("a folder terminal (real PTY
     expect(await daemon.post(terminalsApi.list, {})).toEqual([]);
   }, 60_000);
 
-  test("a place that is not there, or a task of another repo, opens nothing", async () => {
+  test("a place that is not there, a task of another repo, or a task without its repo, opens nothing", async () => {
     const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "change nothing", approvals: "ask" });
 
     expect(await errorOf(terminalsApi.start.path, { repo: "nowhere", task: null })).toBe("not_found");
     expect(await errorOf(terminalsApi.start.path, { repo: "shop", task: "00000000-0000-4000-8000-000000000000" })).toBe("not_found");
     expect(await errorOf(terminalsApi.start.path, { repo: "billing", task: task.id })).toBe("bad_request");
     expect(await errorOf(terminalsApi.start.path, { repo: "shop", task: null, cwd: "/" })).toBe("bad_request");
+    expect(await errorOf(terminalsApi.start.path, { repo: null, task: task.id })).toBe("bad_request");
     expect(await daemon.post(terminalsApi.list, {})).toEqual([]);
 
     const session = daemon.facade.agents.sessions().sessions.find((s) => s.task === task.id && s.run.kind === "running");
