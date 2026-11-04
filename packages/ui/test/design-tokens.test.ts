@@ -34,4 +34,12 @@ describe("design tokens", () => {
     );
     expect(found).toEqual([]);
   });
+
+  test("a view with a session terminal paints no opaque background under it, so a tile looks like a session alone", () => {
+    const opaque = tsxFiles(join(import.meta.dir, "..", "src")).filter((file) => {
+      const source = readFileSync(file, "utf8");
+      return source.includes("<SessionScreen") && /\bbg-background\b/.test(source);
+    });
+    expect(opaque).toEqual([]);
+  });
 });
