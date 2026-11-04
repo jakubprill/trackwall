@@ -92,6 +92,7 @@ export function HomeDetails({
               session={session.id}
               dialog={session.dialog}
               onOpen={() => onOpen(sessionKey(session.id))}
+              takesKeyboard={false}
             />
           )}
           <Button size="sm" onClick={() => onOpen(sessionKey(session.id))}>

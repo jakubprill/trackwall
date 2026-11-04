@@ -97,6 +97,7 @@ function WaitingSession({ conn, session, onOpen }: { conn: Connection | undefine
             session={session.id}
             dialog={session.dialog}
             onOpen={onOpen}
+            takesKeyboard={false}
           />
         </li>
       )}
