@@ -1,5 +1,5 @@
 import { workspaceApi } from "@trackwall/protocol";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { post } from "./api.ts";
 import type { Connection } from "./connection.ts";
 import { useAction } from "./use-action.ts";
@@ -14,10 +14,14 @@ export interface StarredReposHandle {
   toggle: (repo: string, starred: boolean) => void;
 }
 
-/** The starred repos of `workspace.yaml` (ADR-192), read once per view and again after every star or unstar. */
+/**
+ * The starred repos of `workspace.yaml` (ADR-192), read once per view; a star or unstar answers with the new list, which
+ * replaces the one read, so a click needs no second request.
+ */
 export function useStarredRepos(conn: Connection): StarredReposHandle {
   const load = useCallback(() => post(conn, workspaceApi.starredRepos, {}), [conn]);
   const remote = useRemote(load);
-  const save = useAction((repo: string, starred: boolean) => post(conn, workspaceApi.setRepoStarred, { repo, starred }), remote.reload);
-  return { ids: remote.data ?? [], error: save.error ?? remote.error, pending: save.pending, toggle: save.run };
+  const [saved, setSaved] = useState<readonly string[]>();
+  const save = useAction((repo: string, starred: boolean) => post(conn, workspaceApi.setRepoStarred, { repo, starred }), setSaved);
+  return { ids: saved ?? remote.data ?? [], error: save.error ?? remote.error, pending: save.pending, toggle: save.run };
 }

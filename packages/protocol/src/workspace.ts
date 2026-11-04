@@ -93,12 +93,12 @@ export type Repo = z.infer<typeof Repo>;
  */
 const ProjectsDir = z.string().nullable();
 
-/** More starred repos than this would make the list's top no shorter than the list. */
+/** Bounds `starredRepos` in `workspace.yaml` and the answer that carries it; far more than a list's top needs. */
 export const MAX_STARRED_REPOS = 1000;
 
 /**
  * The repos the user starred (`starredRepos` in `workspace.yaml`, ADR-192), which the Repos view lists first; in the order
- * they were starred. An id whose folder is gone stays until the user unstars it, so a repo cloned again comes back starred.
+ * they were starred, which only a person reading the file sees: the list sorts them by name. An id whose folder is gone stays until the user unstars it, so a repo cloned again comes back starred.
  */
 export const StarredRepos = z.array(RepoId).max(MAX_STARRED_REPOS);
 export type StarredRepos = z.infer<typeof StarredRepos>;
