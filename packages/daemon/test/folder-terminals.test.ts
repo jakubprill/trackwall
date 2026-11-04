@@ -67,6 +67,21 @@ describe("folder terminals", () => {
     expect(noPty.list()).toEqual([]);
   });
 
+  test("the projects folder's shell is started again in the new folder once the projects folder changed", async () => {
+    const { procs, started } = fakeProcs();
+    let projects = "/projects";
+    const open = terminals(procs, async () => projects);
+    const first = await open.start({ repo: null, task: null });
+    expect((await open.start({ repo: null, task: null })).id).toBe(first.id);
+
+    projects = "/elsewhere";
+    const again = await open.start({ repo: null, task: null });
+
+    expect(again.id).not.toBe(first.id);
+    expect(started.map((s) => s.cwd)).toEqual(["/projects", "/elsewhere"]);
+    expect(open.list().map((t) => t.id)).toEqual([again.id]);
+  });
+
   test("a place the daemon cannot find starts nothing", async () => {
     const { procs, started } = fakeProcs();
     const open = terminals(procs, async () => {
