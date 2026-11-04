@@ -1,7 +1,9 @@
 import "@xterm/xterm/css/xterm.css";
 import { copyableText, type DaemonSocket, PTY_CLOSE_NOT_FOUND, type PtyClientMessage } from "@trackwall/protocol";
 import { FitAddon } from "@xterm/addon-fit";
+import { SearchAddon } from "@xterm/addon-search";
 import { SerializeAddon } from "@xterm/addon-serialize";
+import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal } from "@xterm/xterm";
 import { useContext, useEffect, useRef, useState } from "react";
 import { errorMessage } from "@/lib/api";
@@ -25,13 +27,15 @@ import {
   ProgramCopy,
   pastesClipboard,
 } from "@/lib/terminal-copy";
-import { hyperlinkHandler, trackwallLinkProvider } from "@/lib/terminal-links";
+import { hyperlinkHandler, trackwallLinkProvider, webLinkHandler } from "@/lib/terminal-links";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
+import { opensSearch } from "@/lib/terminal-search";
 import { cssTokens, terminalTheme } from "@/lib/terminal-theme";
 import { browserTimers } from "@/lib/timers";
 import { useOpenTrackwallLink } from "@/lib/trackwall-link";
 import { cn } from "@/lib/utils";
 import { FocusReporter, terminalInFront } from "@/lib/window-focus";
+import { TerminalSearch } from "./TerminalSearch.tsx";
 
 const RECONNECT_MS = 1000;
 const COPY_FAILED = "Could not copy to the clipboard; try again.";
@@ -105,6 +109,7 @@ export function PtyTerminal({
   const updateFocus = useRef<() => void>(undefined);
   const [notice, setNotice] = useState<string>();
   const [connecting, setConnecting] = useState(false);
+  const [search, setSearch] = useState<SearchAddon>();
   const lastScreens = useLastScreens();
   // Through a ref: whether the daemon has a desktop arrives after the terminal opens, and must not open it again.
   const openLink = useOpenWebLink(conn);
@@ -125,13 +130,14 @@ export function PtyTerminal({
     terminal.loadAddon(fit);
     const serializer = new SerializeAddon();
     terminal.loadAddon(serializer);
+    const searcher = new SearchAddon();
+    terminal.loadAddon(searcher);
     const links = terminal.registerLinkProvider(trackwallLinkProvider(terminal, IS_MAC, (url) => openTrackwall.current(url)));
-    terminal.options.linkHandler = hyperlinkHandler(IS_MAC, {
-      external: (url) => {
-        openWebLink.current(url).catch((err: unknown) => setNotice(`Could not open the link: ${errorMessage(err)}`));
-      },
-      trackwall: (url) => openTrackwall.current(url),
-    });
+    const openExternal = (url: string) => {
+      openWebLink.current(url).catch((err: unknown) => setNotice(`Could not open the link: ${errorMessage(err)}`));
+    };
+    terminal.options.linkHandler = hyperlinkHandler(IS_MAC, { external: openExternal, trackwall: (url) => openTrackwall.current(url) });
+    terminal.loadAddon(new WebLinksAddon(webLinkHandler(IS_MAC, openExternal)));
     terminal.open(element);
     // In the capture phase, before xterm.js reports the move to the program and so clears the selection.
     const holdMove = (event: MouseEvent) => {
@@ -232,6 +238,11 @@ export function PtyTerminal({
       else if (taken === "dropped") setNotice(keysDropped);
     });
     terminal.attachCustomKeyEventHandler((event) => {
+      if (opensSearch(event, { mac: IS_MAC })) {
+        event.preventDefault();
+        setSearch(searcher);
+        return false;
+      }
       if (
         asksProgramToCopy({ kind: "key", key: event }, selection()) ||
         (copilotCli && entersCopyCommand(event, () => screenLines(terminal)))
@@ -292,6 +303,7 @@ export function PtyTerminal({
       socket?.close();
       term.current = undefined;
       updateFocus.current = undefined;
+      setSearch(undefined);
       terminal.dispose();
     };
   }, [conn, path, subprotocol, screenKey, noun, copilotCli, lastScreens]);
@@ -309,6 +321,15 @@ export function PtyTerminal({
       {!live && <p className="text-muted-foreground border-b px-3 py-1 text-xs">{kind.ended}</p>}
       <div ref={frame} {...{ [FILE_DROP_TARGET]: "" }} className={cn("relative min-h-0 flex-1 overflow-hidden", DROP_HOVER_RING)}>
         <div ref={host} className="absolute inset-2 font-mono" />
+        {search && (
+          <TerminalSearch
+            search={search}
+            onClose={() => {
+              setSearch(undefined);
+              term.current?.focus();
+            }}
+          />
+        )}
         {/* Over the terminal, not above it: a bar in the flow would shrink the terminal and make the TUI redraw. */}
         {connecting && (
           <p className="bg-overlay text-muted-foreground pointer-events-none absolute right-4 bottom-4 rounded-md border px-3 py-1 text-xs shadow-lg">
