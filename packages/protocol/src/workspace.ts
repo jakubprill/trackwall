@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { apiEndpoints, Done } from "./api.ts";
 import { WorkingTreeChanges } from "./changes.ts";
-import { CloneJob, CloneRequest, HostRepos, RepoHosts } from "./repo-hosts.ts";
+import { CloneJob, CloneRequest, HostRepos, RemoteRepoSearch, RepoHosts } from "./repo-hosts.ts";
 import { SyncRun } from "./sync.ts";
 import { TaskModel } from "./task-model.ts";
 
@@ -446,7 +446,7 @@ export const workspaceApi = {
    * name (GitLab on its side from 3 characters, also in the group path; shorter ones and GitHub are filtered by the daemon),
    * empty gives the most recently changed (GitLab) or all of them (GitHub).
    */
-  remoteRepos: endpoint("remote-repos", z.object({ query: z.string().trim().max(100) }).strict(), RemoteRepoList),
+  remoteRepos: endpoint("remote-repos", RemoteRepoSearch, RemoteRepoList),
   /** Starts cloning and returns it at once in the `running` state; progress through `clones`. */
   clone: endpoint("clone", CloneRequest, CloneJob),
   /** Clones into the current projects folder since the daemon started, in the order they began. */

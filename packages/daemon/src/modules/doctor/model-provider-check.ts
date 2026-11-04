@@ -1,4 +1,5 @@
 import type { DoctorCheck } from "@trackwall/protocol";
+import { COPILOT_PROVIDER_ENV } from "../../infra/copilot-provider-env.ts";
 import { envKey } from "../../infra/env-key.ts";
 import { proxyFor, shownProxy } from "../../infra/proxy-env.ts";
 import { isSecretName } from "../../infra/secret-name.ts";
@@ -13,7 +14,7 @@ import type { TlsProbe, TlsProbeResult } from "./tls-probe.ts";
  */
 
 /** The variable Copilot CLI takes its model provider's address from (ADR-136). */
-const PROVIDER_ADDRESS = "COPILOT_PROVIDER_BASE_URL";
+const PROVIDER_ADDRESS = COPILOT_PROVIDER_ENV.baseUrl;
 const PROBE_TIMEOUT_MS = 5_000;
 /** What the check keeps of the secrets: the address, and the proxy settings, which mise may keep as secrets for a login in them. */
 const KEPT_NAMES = new Set([PROVIDER_ADDRESS, "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"]);

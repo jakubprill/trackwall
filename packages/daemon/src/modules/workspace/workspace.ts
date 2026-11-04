@@ -13,6 +13,8 @@ import {
   type JavaNavigationSettings,
   PATCH_MAX_BYTES,
   type RemoteRepoList,
+  type RemoteRepoMore,
+  type RemoteRepoSearch,
   type Repo,
   type RepoHost,
   type RepoList,
@@ -112,7 +114,7 @@ interface WorkspaceVcs extends CodeSearchVcs, CommitSearchVcs {
 
 /** What `workspace` needs from the repo hosts of the `vcs` module (ADR-19). */
 interface WorkspaceHosting {
-  repos(host: RepoHost, query: string): Promise<{ repos: HostedRepo[]; truncated: boolean }>;
+  repos(host: RepoHost, search: RemoteRepoSearch): Promise<{ repos: HostedRepo[]; more: RemoteRepoMore }>;
   clone(host: RepoHost, fullName: string, dest: string): Promise<void>;
 }
 
@@ -318,12 +320,12 @@ export class Workspace {
   }
 
   /**
-   * Repos matching `query` from every repo host at once; a repo host that does not answer does not take away the others' lists.
+   * Repos matching `search` from every repo host at once; a repo host that does not answer does not take away the others' lists.
    */
-  async remoteRepos(query: string): Promise<RemoteRepoList> {
+  async remoteRepos(search: RemoteRepoSearch): Promise<RemoteRepoList> {
     const projectsDir = this.deps.file.projectsDir();
     const taken = projectsDir === null ? () => false : await takenNames(projectsDir);
-    const hosts = await Promise.all(this.deps.file.repoHosts().map((host) => this.hostRepos(host, query, taken)));
+    const hosts = await Promise.all(this.deps.file.repoHosts().map((host) => this.hostRepos(host, search, taken)));
     return { projectsDir, hosts };
   }
 
@@ -656,14 +658,14 @@ export class Workspace {
     return { ...entry, remote, status };
   }
 
-  private async hostRepos(host: RepoHost, query: string, taken: (name: string) => boolean): Promise<HostRepos> {
+  private async hostRepos(host: RepoHost, search: RemoteRepoSearch, taken: (name: string) => boolean): Promise<HostRepos> {
     try {
-      const { repos, truncated } = await this.deps.hosting.repos(host, query);
+      const { repos, more } = await this.deps.hosting.repos(host, search);
       const withDirs = repos.map((repo) => {
         const dir = cloneDir(repo.fullName);
         return { ...repo, dir, inProjectsDir: taken(dir) };
       });
-      return { host, listing: { kind: "ok", repos: withDirs, truncated } };
+      return { host, listing: { kind: "ok", repos: withDirs, more } };
     } catch (err) {
       return { host, listing: { kind: "unavailable", message: messageOf(err) } };
     }

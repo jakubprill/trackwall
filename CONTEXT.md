@@ -142,6 +142,13 @@ One repository of the workspace, identified by a slug from the name of its direc
 A repo the user marked with a star in "Repos", which the list then shows at the top, ahead of the alphabetical rest (ADR-192). Kept by repo id; only the user stars or unstars.
 _Avoid_: favourite, pinned repo
 
+**Starred on the host** (`starredOnHost` in `RemoteRepoSearch`; in the UI *Starred on the host*):
+A repo the user starred on GitLab or GitHub itself; the "Add repo" search can show only those (ADR-201). Not a starred repo, which is Trackwall's own mark.
+_Avoid_: starred (alone, in the search), favourite
+
+**Search scope** (`RemoteRepoScope`: `member`, `visible`; in the UI *My projects*, *All I can see*):
+Which GitLab projects the "Add repo" search covers: those the user is a member of, also through a group, or every project the user can see (ADR-201). GitHub's list does not change with it.
+
 **Remote address** (`Repo.remote`):
 The address of the main remote (`origin` or the only remote in git, `mainRemote`) as `host/path`, for example `gitlab.example.com/shop/api`, without the protocol and user. It identifies the repo independently of the directory name (ADR-21).
 _Avoid_: repo URL (a URL has a protocol and may carry a token), remote without qualification (that is a name in git, for example `origin`)
@@ -597,6 +604,10 @@ _Avoid_: hung, frozen, stale (that is `Stale`, no output at all)
 What a session's Copilot CLI conversation used, summed from the receipts Copilot CLI writes after each model call (ADR-190): AI credits when Copilot CLI reported them, otherwise premium requests of the legacy billing, otherwise only tokens. It covers the whole conversation, also before a resume.
 _Avoid_: cost, spend, budget (Trackwall sets no limit)
 
+**Usage report** (`UsageReport`, the `usage-report` module, `usageReportApi`; in the UI *Copilot usage* in Settings › Agents):
+What Copilot CLI used on this computer in a week, from the event logs it keeps for every conversation (ADR-199): the total, one **usage work** row (`UsageWork`: a task, the supervisor, sessions in a repo, or outside the projects folder) per piece of work with its Copilot usage and its **tool definition tokens** (the input tokens that were the tools' definitions, sent with every model call), and one **usage tool** row (`UsageTool`) per tool with its calls, failures and **result tokens**. Do not confuse with the MCP audit, which lists Trackwall's own tool calls one by one without tokens.
+_Avoid_: bill, invoice, cost report
+
 **While you were away** (`AwaySummary`, `awaySummary`, `AwayItem`; an **absence** is `AwayPeriod`, opened by `absenceAt` after `AWAY_AFTER_MS`):
 The strip above the views after the user comes back to Trackwall from 15 minutes without a key, click, scroll, pointer move or a window brought to the front in any of its windows, listing what changed in the session list since then (ADR-151). The user dismisses it.
 _Avoid_: digest, notifications (those are the system's and the browser's), journal
@@ -670,6 +681,10 @@ _Avoid_: provider setting, MISE_ENV (that is mise's variable)
 **Provider models** (`ProviderModelList`, `ProviderModel`, module `provider-models`, action `provider-models/list`):
 The models the model provider of the session profile offers, from its `GET /models`, which the Model fields suggest as the user types; any other id can still be typed (ADR-194). The daemon asks the provider with the profile's key, which never leaves it. Without a session profile there are none.
 _Avoid_: model catalog (Copilot CLI's own list of GitHub's models), available models
+
+**Wire API** (`WireApi`, `ProviderModel.wireApi`, Copilot CLI's `COPILOT_PROVIDER_WIRE_API`):
+The format Copilot CLI speaks to a custom model provider in, `completions` (Chat Completions) or `responses` (the Responses API). A model of a gateway may answer in only one of them; a session's start sets the one its model answers in, learned by a probe on the model's first use (ADR-200).
+_Avoid_: protocol, API type, format (in names; "format" is fine in prose)
 
 **Secret from mise** (`secretNames`, `SessionEnvironment.secrets`):
 A variable of the session environment that mise redacts (`redact = true`, an age-encrypted value) or whose name looks like a secret; its value is masked, and the agent's tools do not get it unless it is in the agent secrets (ADR-93).

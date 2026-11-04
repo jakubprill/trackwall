@@ -10,6 +10,7 @@ import { AutoReviewSurface } from "./AutoReviewSurface.tsx";
 import { BrowserNotificationsSurface } from "./BrowserNotificationsSurface.tsx";
 import { ConfigFilesSurface } from "./ConfigFilesSurface.tsx";
 import { ConnectCopilotSurface } from "./ConnectCopilotSurface.tsx";
+import { CopilotUsageSurface } from "./CopilotUsageSurface.tsx";
 import { DaemonSurface } from "./DaemonSurface.tsx";
 import { DoctorSurface } from "./DoctorSurface.tsx";
 import { ErrorJournalSurface } from "./ErrorJournalSurface.tsx";
@@ -108,6 +109,8 @@ function Section({
       return <JavaNavigationSurface conn={conn} />;
     case "mcp-calls":
       return <McpCallsSurface conn={conn} live={mcpCallsLive} />;
+    case "copilot-usage":
+      return <CopilotUsageSurface conn={conn} />;
     case "start-at-sign-in":
       return <StartAtSignInSurface />;
     case "remote-daemon":

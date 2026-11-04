@@ -31,7 +31,7 @@ The list and the repo header count your uncommitted work as "3 changed, 1 new". 
 
 "Sync all" fetches every repo and moves its default branch to the remote one when that is a clean fast-forward. A repo with changes on its default branch, or with a branch that has diverged, stays untouched. When the sync is done, a panel says in one sentence per repo what happened: whether the default branch moved, whether your files changed, and how many uncommitted files are left. The same sentence is in the tooltip on the list.
 
-The "+" button above the list searches the GitLab and GitHub hosts you added in "Settings > Repo hosts" and clones the repo you pick into the projects folder. If the [local config backup](/features/local-config) has files for that repo, such as `mise.local.toml`, they are put back before the clone shows as done.
+The "+" button above the list searches the GitLab and GitHub hosts you added in "Settings > Repo hosts" and clones the repo you pick into the projects folder. The search matches the repo's name, group and description. On GitLab, "My projects" covers the projects you are a member of, also through a group, and "All I can see" adds every project you can open, such as other teams' internal ones. You can narrow the list to one topic, one language (`Java`, `TypeScript`) or the repos you starred on the host, and each repo shows its topics. GitLab gives the results 100 at a time, most recently changed first; "Show more" adds the next 100. If the [local config backup](/features/local-config) has files for that repo, such as `mise.local.toml`, they are put back before the clone shows as done.
 
 ## Use it
 
@@ -39,11 +39,12 @@ The "+" button above the list searches the GitLab and GitHub hosts you added in 
 2. Open "Repos" (Ctrl+2, ⌘2 on macOS) and select a repo.
 3. Star the repos you open most, so they stay at the top.
 4. Press "Sync all" to bring every repo up to date.
-5. To clone, press "+", search for the repo and pick it.
+5. To clone, press "+", search for the repo (or pick a topic or language) and press "Clone" next to it.
 
 ## Good to know
 
 - Trackwall needs `git` on your `PATH`. Cloning needs a signed-in `glab` (`glab auth login --hostname <host>`) for GitLab or `gh` (`gh auth login`) for GitHub; Trackwall does not store your token.
+- The search shows at most 1000 repos per host. On GitLab, type at least 3 characters of the name, or pick a topic or language, and GitLab searches all of its projects; on GitHub, Trackwall filters your first 1000 repos. "Show more" adds 100 more on every GitLab host at once. GitHub always lists your own repos, those you collaborate on and those of your organisations, so "My projects" and "All I can see" change only the GitLab results. A search shorter than 3 characters filters the repos already shown.
 - Only repos directly inside the projects folder are listed, and folders whose name starts with a dot are skipped.
 - A commit, checkout, pull or new branch, made in Trackwall or anywhere else, shows in the list within a couple of seconds, and so does a repo cloned into the folder. The count of uncommitted files refreshes about every 30 seconds.
 - Dropping a folder on the window: a listed repo opens in "Repos"; a folder full of repos, or a repo from somewhere else, is offered as the new projects folder.

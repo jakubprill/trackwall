@@ -25,6 +25,7 @@ import {
   taskOutcomesApi,
   taskRoundsApi,
   terminalsApi,
+  usageReportApi,
   verificationApi,
   workspaceApi,
 } from "@trackwall/protocol";
@@ -93,7 +94,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(workspaceApi.droppedFolder, (f, b) => f.workspace.droppedFolder(b.path)),
   route(workspaceApi.repoHosts, (f) => f.workspace.repoHosts()),
   route(workspaceApi.setRepoHosts, (f, b) => f.workspace.setRepoHosts(b.repoHosts)),
-  route(workspaceApi.remoteRepos, (f, b) => f.workspace.remoteRepos(b.query)),
+  route(workspaceApi.remoteRepos, (f, b) => f.workspace.remoteRepos(b)),
   route(workspaceApi.clone, (f, b) => f.workspace.clone(b.host, b.fullName)),
   route(workspaceApi.clones, (f) => f.workspace.cloneJobs()),
   route(workspaceApi.sync, (f) => f.workspace.sync()),
@@ -127,6 +128,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     return null;
   }),
   route(mcpAuditApi.calls, (f, b) => f.mcpAudit.list(b.task)),
+  route(usageReportApi.week, (f, b) => f.usageReport.week(b.weeksAgo)),
   route(localConfigApi.store, (f) => f.localConfig.store()),
   route(localConfigApi.repo, (f, b) => f.localConfig.repo(b.repo)),
   route(localConfigApi.repos, (f) => f.localConfig.repos()),

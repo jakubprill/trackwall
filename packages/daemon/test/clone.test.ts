@@ -36,6 +36,9 @@ async function workspaceWithGitLab(config: FakeHostingConfig = {}, afterClone = 
   return { workspace, projects, file };
 }
 
+/** The search the "Add repo" view starts with: the first page of the user's repos, without filters. */
+const EVERY_REPO = { query: "", scope: "member", topic: "", language: "", starredOnHost: false, pages: 1 } as const;
+
 function finished(workspace: Workspace, fullName: string): Promise<CloneJob | undefined> {
   return finishedClone(() => workspace.cloneJobs(), fullName);
 }
@@ -45,7 +48,7 @@ describe("cloning from a repo host into the projects folder", () => {
     const { workspace, projects } = await workspaceWithGitLab({ repos: [project("shop/Orders-BFF"), project("shop/web")] });
     mkdirSync(join(projects, "orders-bff"));
 
-    const list = await workspace.remoteRepos("");
+    const list = await workspace.remoteRepos(EVERY_REPO);
 
     expect(list.projectsDir).toBe(projects);
     expect(list.hosts).toEqual([
@@ -53,7 +56,7 @@ describe("cloning from a repo host into the projects folder", () => {
         host: GITLAB,
         listing: {
           kind: "ok",
-          truncated: false,
+          more: "none",
           repos: [
             expect.objectContaining({ fullName: "shop/Orders-BFF", dir: "Orders-BFF", inProjectsDir: true }),
             expect.objectContaining({ fullName: "shop/web", dir: "web", inProjectsDir: false }),
@@ -70,7 +73,7 @@ describe("cloning from a repo host into the projects folder", () => {
     });
     workspace.setRepoHosts([GITLAB, { kind: "gitlab", host: "second.example.com" }]);
 
-    const { hosts } = await workspace.remoteRepos("");
+    const { hosts } = await workspace.remoteRepos(EVERY_REPO);
 
     expect(hosts.map((h) => [h.host.host, h.listing.kind])).toEqual([
       ["gitlab.example.com", "unavailable"],
