@@ -26,14 +26,14 @@ type ToolUpdate = Extract<SessionUpdate, { sessionUpdate: "tool_call" | "tool_ca
 type TextEntry = Extract<ConversationEntry, { text: string }>;
 
 export class AcpConversation {
-  /** The session's working directory, which the files of tool calls are shown relative to. */
-  readonly #cwd: string;
+  /** The names of the session's working directory (`workingDirectoryNames`), which tool calls' files are shown relative to. */
+  readonly #cwdNames: readonly string[];
   readonly #entries: ConversationEntry[] = [];
   readonly #tools = new Map<string, ToolEntry>();
   #nextId = 1;
 
-  constructor(cwd: string) {
-    this.#cwd = cwd;
+  constructor(cwdNames: readonly string[]) {
+    this.#cwdNames = cwdNames;
   }
 
   entries(): readonly ConversationEntry[] {
@@ -115,7 +115,7 @@ export class AcpConversation {
       title: (update.title ?? "Tool").slice(0, TOOL_TITLE_MAX),
       tool: (update.kind ?? "other").slice(0, TOOL_KIND_MAX),
       status: update.status ?? "pending",
-      files: toolCallFiles(update, this.#cwd),
+      files: toolCallFiles(update, this.#cwdNames),
       detail: toolCallLines(update),
       ...patchFields(update),
       subagent: toolCallSubagent(update),
@@ -127,7 +127,7 @@ export class AcpConversation {
 
   /** An update changes only what it sends; Copilot CLI sends a tool's files and change again with its result. */
   #toolUpdated(known: ToolEntry, update: ToolUpdate): ToolEntry {
-    const files = toolCallFiles(update, this.#cwd);
+    const files = toolCallFiles(update, this.#cwdNames);
     const detail = toolCallLines(update);
     const change = patchFields(update);
     if (update.title !== undefined) known.title = update.title.slice(0, TOOL_TITLE_MAX);
