@@ -41,4 +41,5 @@ A task's "Terminal" tab is still the agent's session; "Shell" is yours. Ending a
 - A shell runs whatever your shell's own setup runs when it starts, also a per-folder config an agent may have written into a task's worktree (such as a `.envrc` with direnv).
 - Removing a repo is refused while its shell runs; close the shell first.
 - Agents cannot see or type into your shell.
+- Ctrl+Shift+F (Cmd+F on macOS) finds text in the shell, also in what scrolled away; Ctrl+F stays your shell's own key. Ctrl+click (Cmd+click on macOS) on a web address the shell printed, such as the merge request link from `git push`, opens it in your browser.
 - A file of more than 1 GB cannot be downloaded from "Files on disk", since it is held in memory before it is saved; copy it with `docker cp <container name>:<path> .` on your computer instead. A folder with more than 2000 entries shows the first 2000.
