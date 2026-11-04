@@ -11,8 +11,7 @@ Browse, clone and sync every git repo in your projects folder from one list.
 
 ## What you get
 
-- Every repo of your projects folder in one list, with its branch, its uncommitted changes and how far it is ahead of or behind its remote.
-- A star on the repos you use most keeps them at the top of the list.
+- Every repo of your projects folder in one list, with its branch, its uncommitted changes and how far it is ahead of or behind its remote, and the repos you starred at the top.
 - The card, files, commits, uncommitted changes (file by file, with the diff) and README of each repo without leaving Trackwall, and VS Code one click away.
 - A search across your GitLab and GitHub hosts that clones the repo you pick in one click.
 - "Sync all": every repo fetched, and every default branch moved forward where that is safe.
