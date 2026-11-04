@@ -36,9 +36,9 @@ The agent sees the same projects folder you see in Trackwall, through the tools 
 | `search_code` | Text or a regular expression in all repos at once, narrowed by repo, tag or path, as short grep-like lines grouped by repo and file, or only the list of files with how many lines match in each. |
 | `search_commits` | Who changed what and when, in the history of all repos at once: the commits that add or remove a text such as a field or an endpoint path, or by message (an issue key), author, path or date, newest first with the files they changed. |
 | `search_task_history` | The tasks you have ended, found by words: what each one was asked, what its agent reported, its commits, the files it changed and its last verification, so an agent can see how a similar change was done before. |
-| `who_calls` | Who uses a repo, through packages and HTTP, with evidence. |
+| `who_calls` | Who uses a repo, through packages and HTTP, with evidence, as one short line per connection. |
 | `subgraph_for` | The part of the connection graph around a repo, with its calls that lead to no repo. |
-| `find_endpoint` | An HTTP endpoint from code or an OpenAPI spec, by path, URL or words, with its types, the repos and endpoints that call it, and the endpoints it calls. |
+| `find_endpoint` | An HTTP endpoint from code or an OpenAPI spec, by path, URL or words, with its types, the repos and endpoints that call it, and the endpoints it calls, as a short block of text per endpoint. |
 | `run_mise_task`, `wait_for_mise_task`, `stop_mise_task`, `list_running_mise_tasks` | Run a repo's mise task, wait up to 55 s for it, stop it, list what runs. With `task`, in that task's worktree. A task that declares arguments takes them, such as a test filter for `test`. |
 | `tail` | A mise task's log from a cursor, with secrets replaced by `***`; with `task`, the run in that task's worktree. `contains` keeps only lines with that text and `minLevel` only lines at that level or above. |
 | `get_errors` | Errors from the mise task logs, newest first: error lines, compiler errors, exceptions with stack traces, Spring and Gradle failure reports; repeats counted once. With `minLevel: warn`, warnings too. `contains` keeps only errors with a line holding that text, such as an exception class or an endpoint path. |

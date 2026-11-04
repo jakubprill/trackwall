@@ -25,6 +25,8 @@ import { DomainError } from "../infra/errors.ts";
 import { itemSummaries, matchesItem } from "./board-items.ts";
 import { codeSearchText } from "./code-search-text.ts";
 import { commitSearchText } from "./commit-search-text.ts";
+import { findEndpointText } from "./endpoint-text.ts";
+import { subgraphText, whoCallsText } from "./graph-text.ts";
 
 /**
  * The daemon's MCP tools (§5.3, ADR-24): each is a thin mapping onto the facade, so the agent sees the same state as the UI
@@ -393,9 +395,9 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.getErrors, runs.getErrors),
   defineTool(mcpTools.getTestResults, runs.getTestResults),
   defineTool(mcpTools.getAppConfig, runs.getAppConfig),
-  defineTool(mcpTools.whoCalls, runs.whoCalls),
-  defineTool(mcpTools.subgraphFor, runs.subgraphFor),
-  defineTool(mcpTools.findEndpoint, runs.findEndpoint),
+  defineTool(mcpTools.whoCalls, runs.whoCalls, whoCallsText),
+  defineTool(mcpTools.subgraphFor, runs.subgraphFor, subgraphText),
+  defineTool(mcpTools.findEndpoint, runs.findEndpoint, findEndpointText),
   defineTool(mcpTools.searchCode, runs.searchCode, codeSearchText),
   defineTool(mcpTools.searchCommits, runs.searchCommits, commitSearchText),
   defineTool(mcpTools.searchTaskHistory, runs.searchTaskHistory),
