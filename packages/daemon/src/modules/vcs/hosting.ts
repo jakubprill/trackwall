@@ -5,13 +5,14 @@ import {
   hostKey,
   type MergeRequest,
   type MergeRequestForm,
+  type RemoteRepoSearch,
   type RepoHost,
   type RepoHostKind,
 } from "@trackwall/protocol";
 import { runProgram } from "../../infra/run-program.ts";
 import { gitEnv } from "./git.ts";
 import { findMergeRequest, jobLogPath, mergeRequestFormUrl } from "./hosted-merge-request.ts";
-import { githubApi, gitlabApi, type HostingApi } from "./hosted-repo.ts";
+import { githubApi, gitlabApi, type HostedRepoFilter, type HostingApi } from "./hosted-repo.ts";
 
 /**
  * Repo hosts in the `vcs` module (§4.5, ADR-19): the list of repos available to the user, a clone of the chosen one and the
@@ -40,8 +41,9 @@ const PAGE_SIZE = 100;
 /** One API page; taking longer usually means there is no network or the VPN is down. */
 const PAGE_TIMEOUT_MS = 30_000;
 /**
- * How long fetched pages serve later queries: a search filtered in the daemon (GitHub, a short query
- * in GitLab) does not fetch the list on every keystroke, and a new repo on the repo host appears after this time at the latest.
+ * How long a fetched page serves later queries: a search filtered in the daemon (GitHub, a short query in GitLab) does
+ * not fetch the list on every keystroke, "Show more" fetches only the new page, and a new repo on the repo host appears
+ * after this time at the latest.
  */
 const CACHE_MS = 60_000;
 /**
@@ -57,24 +59,43 @@ const JOB_LOG_MAX_BYTES = 8 * 1024 * 1024;
 export interface HostedRepos {
   /** In the repo host's order (`HostingApi`). */
   repos: HostedRepo[];
-  /** As many pages were fetched as `maxPages` allows, and the last one was full. */
-  truncated: boolean;
+  /** The last fetched page was full: below `maxPages` a `next-page`, at it a `narrow` (`HostRepos`). */
+  more: "none" | "next-page" | "narrow";
+}
+
+interface ReposPage {
+  items: HostedRepo[];
+  received: number;
 }
 
 export class Hosting {
   private readonly clis: HostingClis;
-  private readonly cache = new Map<string, { at: number; fetched: Promise<HostedRepos> }>();
+  private readonly cache = new Map<string, { at: number; fetched: Promise<ReposPage> }>();
 
   constructor(clis: HostingClis) {
     this.clis = clis;
   }
 
-  /** Repos matching `query` (case-insensitive, in the full name or description); an empty `query` is all of them. */
-  async repos(host: RepoHost, query: string): Promise<HostedRepos> {
+  /**
+   * Repos matching `search`: `query` case-insensitively in the full name or description (an empty one is all of them),
+   * and the filters, on as many pages as the repo host's API fetches for `search.pages`.
+   */
+  async repos(host: RepoHost, search: RemoteRepoSearch): Promise<HostedRepos> {
     const api = APIS[host.kind];
-    const onServer = api.searchesOnServer(query);
-    const { repos, truncated } = await this.fetchCached(host, onServer ? query : "");
-    return { repos: onServer ? repos : repos.filter((r) => matches(r, query)), truncated };
+    const onServer = api.searchesOnServer(search.query);
+    const { pages, ...filter } = search;
+    const serverFilter = { ...filter, query: onServer ? search.query : "" };
+    const repos: HostedRepo[] = [];
+    let full = true;
+    let fetched = 0;
+    while (full && fetched < api.pages(pages)) {
+      fetched++;
+      const page = await this.pageCached(host, fetched, serverFilter);
+      repos.push(...page.items);
+      full = page.received === PAGE_SIZE;
+    }
+    const more = !full ? "none" : fetched < api.maxPages ? "next-page" : "narrow";
+    return { repos: onServer ? repos : repos.filter((r) => matches(r, search.query)), more };
   }
 
   /** A clone of `fullName` into `dest` (a directory that does not exist yet). */
@@ -114,28 +135,17 @@ export class Hosting {
   }
 
   /** A failed fetch does not stay in memory, so "Try again" after signing in asks the repo host anew. */
-  private fetchCached(host: RepoHost, serverQuery: string): Promise<HostedRepos> {
+  private pageCached(host: RepoHost, page: number, filter: HostedRepoFilter): Promise<ReposPage> {
     const now = Date.now();
     for (const [key, entry] of this.cache) if (now - entry.at > CACHE_MS) this.cache.delete(key);
-    const key = `${hostKey(host)}\n${serverQuery}`;
+    const api = APIS[host.kind];
+    const key = `${hostKey(host)}\n${page}\n${JSON.stringify(filter)}`;
     const cached = this.cache.get(key);
     if (cached) return cached.fetched;
-    const fetched = this.fetch(host, serverQuery);
+    const fetched = this.api(host, api.reposPage(page, PAGE_SIZE, filter), (json) => api.parseReposPage(json, filter));
     this.cache.set(key, { at: now, fetched });
     fetched.catch(() => this.cache.delete(key));
     return fetched;
-  }
-
-  private async fetch(host: RepoHost, serverQuery: string): Promise<HostedRepos> {
-    const api = APIS[host.kind];
-    const repos: HostedRepo[] = [];
-    let truncated = true;
-    for (let page = 1; page <= api.maxPages && truncated; page++) {
-      const pageRepos = await this.api(host, api.reposPage(page, PAGE_SIZE, serverQuery), (json) => api.parseReposPage(json));
-      repos.push(...pageRepos.items);
-      truncated = pageRepos.received === PAGE_SIZE;
-    }
-    return { repos, truncated };
   }
 
   /** One `<cli> api` call; the response is outside data, so JSON checked by `parse`, and an error without a dump of it. */

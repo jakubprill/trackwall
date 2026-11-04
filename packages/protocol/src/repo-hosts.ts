@@ -68,8 +68,43 @@ export const HostedRepo = z.object({
   webUrl: z.string(),
   /** ISO 8601, the last change on the repo host; `null` when the repo host did not give it. */
   updatedAt: z.string().nullable(),
+  /** The repo host's topics of the repo, in its order; empty when it has none. */
+  topics: z.array(z.string()),
 });
 export type HostedRepo = z.infer<typeof HostedRepo>;
+
+/** The most pages of 100 repos a search fetches from a repo host ("Show more", ADR-201). */
+export const MAX_REMOTE_REPO_PAGES = 10;
+
+/**
+ * Which repos a search covers on GitLab (ADR-201): those the user is a `member` of (also through a group), or every
+ * repo the user can see, such as a company instance's internal ones. GitHub lists the user's own and organisation
+ * repos either way.
+ */
+export const RemoteRepoScope = z.enum(["member", "visible"]);
+export type RemoteRepoScope = z.infer<typeof RemoteRepoScope>;
+
+/** A search for repos on every repo host at once (ADR-19, ADR-201); an empty text field filters nothing. */
+export const RemoteRepoSearch = z
+  .object({
+    /** A fragment of the repo's name, group or description. */
+    query: z.string().trim().max(100),
+    scope: RemoteRepoScope,
+    /** One repo host topic the repo has, compared case-insensitively; GitLab would read a comma as a list of topics. */
+    topic: z
+      .string()
+      .trim()
+      .max(100)
+      .regex(/^[^,]*$/, "one topic, without a comma"),
+    /** The repo's main programming language as the repo host names it (`Java`, `TypeScript`), compared case-insensitively. */
+    language: z.string().trim().max(100),
+    /** Only repos the user starred on the repo host itself, not Trackwall's starred repos (ADR-192). */
+    starredOnHost: z.boolean(),
+    /** How many pages of 100 to show; a repo host that fetches every page at once (GitHub) ignores it. */
+    pages: z.number().int().min(1).max(MAX_REMOTE_REPO_PAGES),
+  })
+  .strict();
+export type RemoteRepoSearch = z.infer<typeof RemoteRepoSearch>;
 
 /** A repo from a repo host with what the daemon knows about the projects folder. */
 export const RemoteRepo = HostedRepo.extend({
@@ -87,8 +122,11 @@ export const HostRepos = z.object({
       kind: z.literal("ok"),
       /** Without archived ones, in the repo host's order: GitHub by name, GitLab most recently changed first. */
       repos: z.array(RemoteRepo),
-      /** The repo host has more repos than Trackwall fetches (§4.5), so results may be missing; narrowing the search helps. */
-      truncated: z.boolean(),
+      /**
+       * What lies beyond the list: `none`, a `next-page` that "Show more" fetches, or more than Trackwall fetches at all
+       * (§4.5), so that only narrowing the search finds the rest (`narrow`).
+       */
+      more: z.enum(["none", "next-page", "narrow"]),
     }),
     /** `gh` or `glab` did not answer: the program is missing, not signed in, no network; details in `message`. */
     z.object({ kind: z.literal("unavailable"), message: z.string() }),
