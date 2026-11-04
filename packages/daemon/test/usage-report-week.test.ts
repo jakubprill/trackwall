@@ -88,7 +88,12 @@ describe("the weekly usage report over Copilot CLI's event logs (ADR-195)", () =
     "a projects folder reached through a link matches the real folder Copilot CLI recorded",
     async () => {
       const link = join(mkdtempSync(join(tmpdir(), "trackwall-link-")), "projects");
-      const { report, conversation } = setUp({ knownProjectsDir: (projects) => (symlinkSync(projects, link), link) });
+      const { report, conversation } = setUp({
+        knownProjectsDir: (projects) => {
+          symlinkSync(projects, link);
+          return link;
+        },
+      });
       conversation("a", [receipt("2026-11-03T08:00:00Z", 1, "a:1")]);
 
       expect((await report.week(0)).work.map((w) => w.kind)).toEqual(["supervisor"]);
