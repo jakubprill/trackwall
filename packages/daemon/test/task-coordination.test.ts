@@ -636,5 +636,6 @@ function verification(taskId: string): Verification {
     failures: [],
     errors: [],
     lastLines: [],
+    outdated: false,
   };
 }

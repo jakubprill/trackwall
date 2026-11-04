@@ -17,6 +17,8 @@ export const TaskOutcome = z.object({
   repo: RepoId,
   /** The state of its last verification; `null` when it has had none. */
   verification: VerificationState.nullable(),
+  /** The worktree's files changed after that verification's run started (ADR-195); `false` without one. */
+  verificationOutdated: z.boolean(),
   /** The merge request from its branch as last read from the repo host; `null` before one was found. */
   mergeRequest: FollowedMergeRequest.nullable(),
 });

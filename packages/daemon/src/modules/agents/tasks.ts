@@ -90,6 +90,8 @@ export interface TasksVcs extends HandoffGit, EndedTaskGit {
   deleteBranch(repoDir: string, branch: string): Promise<void>;
   pendingWork(work: TaskWork): Promise<TaskPendingWork>;
   worktreeChanges(dir: string, base: string, maxPatchBytes: number, paths: readonly string[]): Promise<TaskChanges>;
+  /** One hash of what the worktree's files hold beyond `base` (ADR-195). */
+  worktreeFingerprint(dir: string, base: string): Promise<string>;
 }
 
 /**
@@ -615,9 +617,19 @@ export class AgentTasks {
   }
 
   #readChanges(id: string, maxPatchBytes: number, paths: readonly string[]): Promise<TaskChanges> {
+    return this.#readWorktree(id, (task) => this.#deps.vcs.worktreeChanges(task.worktree, task.base, maxPatchBytes, paths));
+  }
+
+  /** The fingerprint of what the task's worktree holds (ADR-195), for a verification to tell when its verdict is outdated. */
+  fingerprint(id: string): Promise<string> {
+    return this.#readWorktree(id, (task) => this.#deps.vcs.worktreeFingerprint(task.worktree, task.base));
+  }
+
+  /** A git read of the task's worktree, which ending the task waits for before it deletes the worktree. */
+  #readWorktree<T>(id: string, read: (task: KnownTask) => Promise<T>): Promise<T> {
     if (this.#removing.has(id)) throw new DomainError("bad_request", "this task is already being ended");
     const task = this.#existingWorktree(id);
-    const reading = asRepoUnavailable(task.branch, this.#deps.vcs.worktreeChanges(task.worktree, task.base, maxPatchBytes, paths));
+    const reading = asRepoUnavailable(task.branch, read(task));
     const reads = this.#reading.get(id) ?? new Set();
     this.#reading.set(id, reads.add(reading));
     void reading

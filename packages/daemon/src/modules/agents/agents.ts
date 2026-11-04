@@ -929,6 +929,11 @@ export class Agents {
     return this.#javaNavigation.status(id, view.run.kind === "exited" ? null : new Date(view.startedAt));
   }
 
+  /** One hash of what a task's worktree holds (ADR-195): a verification keeps the one its run started on. */
+  taskFingerprint(id: string): Promise<string> {
+    return this.#tasks.fingerprint(id);
+  }
+
   /** A task's changes without the diff, for an agent (the MCP tool `get_session`). */
   taskChangesSummary(id: string): Promise<TaskChangesSummary> {
     return this.#tasks.summary(id);

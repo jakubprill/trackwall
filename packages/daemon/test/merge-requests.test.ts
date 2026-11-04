@@ -176,6 +176,7 @@ describe.skipIf(process.versions.bun === undefined)("following a task's merge re
       task: task.id,
       repo: "shop",
       verification: null,
+      verificationOutdated: false,
       mergeRequest: {
         number: 7,
         title: "Speed up the cart",

@@ -40,6 +40,7 @@ const verification = (state: Verification["state"], tests: Verification["tests"]
   failures: [],
   errors: [],
   lastLines: [],
+  outdated: false,
 });
 
 const push = (fields: Partial<TaskBranchPush>): TaskBranchPush => ({
@@ -80,6 +81,12 @@ describe("the merge request draft", () => {
     });
     expect(mergeRequestDraft(task(), verification("failed"), null).description).toEndWith(
       "\n\nVerification in Trackwall: failed (mise task test)",
+    );
+  });
+
+  test("an outdated verdict says it is about an earlier version of the changes (ADR-195)", () => {
+    expect(mergeRequestDraft(task(), { ...verification("passed"), outdated: true }, null).description).toEndWith(
+      "\n\nVerification in Trackwall: passed on an earlier version of the changes (mise task test)",
     );
   });
 

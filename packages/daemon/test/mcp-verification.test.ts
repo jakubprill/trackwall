@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
 import { GetSessionResult, VerifyTaskResult, verificationApi } from "@trackwall/protocol";
 import { z } from "zod";
+import { gitIn } from "./support/git-repo.ts";
 import { connectHttpClient, connectSessionClient } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
@@ -109,6 +111,38 @@ describe.skipIf(process.versions.bun === undefined)("verify_task (real worktree 
 
       const seen = GetSessionResult.parse((await client.callTool({ name: "get_session", arguments: { session } })).structuredContent);
       expect(seen.verification).toEqual(verification);
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "an edit in the worktree after the verdict makes it outdated in the task panel, get_session and the task outcomes, until the next verification (ADR-195)",
+    async () => {
+      const task = await daemon.facade.agents.createTask("warehouse", "add a shelf");
+      const { client, session } = await sessionClient(task.id);
+      // The fake mise logs its calls next to the files, where a real build writes `target/`: the repo ignores it.
+      writeFileSync(join(task.worktree, ".gitignore"), "calls.log\n");
+      writeFileSync(join(task.worktree, "shelf.txt"), "a shelf\n");
+      await verify(client, { repo: "warehouse", task: task.id });
+      // A round commit after the turn changes no file, so it leaves the verdict as it was.
+      gitIn(task.worktree, "add", ".gitignore", "shelf.txt");
+      gitIn(task.worktree, "commit", "--quiet", "-m", "WIP round 1");
+      await daemon.facade.verifications.checkOutdated();
+      expect(await daemon.post(verificationApi.get, { task: task.id })).toMatchObject({ state: "passed", outdated: false });
+
+      writeFileSync(join(task.worktree, "shelf.txt"), "a longer shelf\n");
+      await daemon.facade.verifications.checkOutdated();
+
+      expect(await daemon.post(verificationApi.get, { task: task.id })).toMatchObject({ state: "passed", outdated: true });
+      const seen = GetSessionResult.parse((await client.callTool({ name: "get_session", arguments: { session } })).structuredContent);
+      expect(seen.verification?.outdated).toBe(true);
+      expect(daemon.facade.taskOutcomes().find((o) => o.task === task.id)).toMatchObject({
+        verification: "passed",
+        verificationOutdated: true,
+      });
+
+      const { verification } = VerifyTaskResult.parse((await verify(client, { repo: "warehouse", task: task.id })).structuredContent);
+      expect(verification).toMatchObject({ state: "passed", outdated: false });
     },
     TIMEOUT,
   );

@@ -24,22 +24,29 @@ import { waitLimited } from "../../infra/wait-limit.ts";
  * written since the run started (`test-results`) and the errors of the run's log (`logs`) into a verdict. It composes
  * those modules and runs nothing itself, like `batch`. It keeps the last verification of every task, also across a
  * daemon restart (ADR-115) in `verifications.json`, which follows every change while the daemon works and stops
- * following once it stops (`keepForRestart`), so the runs the stop ends do not reach it as failures.
+ * following once it stops (`keepForRestart`), so the runs the stop ends do not reach it as failures. A verification keeps
+ * the fingerprint of the worktree its run started on, and a periodic check marks its verdict `outdated` once the
+ * worktree's files hold something else (ADR-195).
  */
 
 export const VERIFICATIONS_FILE = "verifications.json";
 
+/** A verification with the fingerprint of the worktree its run started on; `null` when it could not be read. */
+const StoredVerification = Verification.extend({ worktree: z.string().nullable().default(null) });
+
 /** What `verifications.json` keeps: the last verification of each task. */
-const StoredVerifications = z.object({ verifications: z.array(Verification) });
+const StoredVerifications = z.object({ verifications: z.array(StoredVerification) });
 type StoredVerifications = z.infer<typeof StoredVerifications>;
 
 /** Why a verification the previous daemon left running has no verdict: its run ended with that daemon. */
 const STOPPED_WITH_DAEMON = "Trackwall stopped during the run, so it has no verdict; verify again";
 
-/** What the module needs from `agents`: a task's repo, and whether the task still exists. */
+/** What the module needs from `agents`: a task's repo, whether the task still exists, and what its worktree holds. */
 interface VerificationTasks {
   task(id: string): { repo: string };
   findTask(id: string): { repo: string } | undefined;
+  /** One hash of what the task's worktree holds beyond its base (ADR-195). */
+  taskFingerprint(id: string): Promise<string>;
 }
 
 /** What the module needs from `mise`: a run in a task's worktree, its end, and a stop. */
@@ -78,9 +85,14 @@ interface TaskTarget {
   task: string;
 }
 
+/** How often the worktrees of the verified tasks are compared with the fingerprint their verification started on. */
+const OUTDATED_CHECK_MS = 15_000;
+
 interface Entry {
   /** Replaced, never changed in place, so a caller holds one moment of it. */
   verification: Verification;
+  /** The fingerprint of the worktree when the run started; `null` when it could not be read, and then it is never outdated. */
+  worktree: string | null;
   /** Settles once the verification is no longer `running`. */
   done: Promise<void>;
 }
@@ -91,6 +103,9 @@ export class Verifications {
   /** A start in progress per task: two clicks (or the button and the agent) at once give one verification. */
   readonly #starting = new Map<string, Promise<Verification>>();
   readonly #file: FollowedStateFile<StoredVerifications>;
+  #timer: NodeJS.Timeout | undefined;
+  /** The round of `checkOutdated` in progress, which a second call joins. */
+  #checking: Promise<void> | undefined;
 
   constructor(deps: VerificationsDeps) {
     this.#deps = deps;
@@ -108,10 +123,10 @@ export class Verifications {
   #restore(): void {
     const stored = this.#file.read();
     if (stored === undefined) return;
-    for (const verification of stored.verifications) {
+    for (const { worktree, ...verification } of stored.verifications) {
       if (!this.#deps.tasks.findTask(verification.task)) continue;
       const restored = verification.state === "running" ? stoppedWithDaemon(verification, null) : verification;
-      this.#byTask.set(verification.task, { verification: restored, done: Promise.resolve() });
+      this.#byTask.set(verification.task, { verification: restored, worktree, done: Promise.resolve() });
     }
   }
 
@@ -122,9 +137,60 @@ export class Verifications {
   keepForRestart(): void {
     const now = new Date().toISOString();
     this.#file.follow({
-      verifications: [...this.#byTask.values()].map(({ verification: v }) => (v.state === "running" ? stoppedWithDaemon(v, now) : v)),
+      verifications: [...this.#byTask.values()].map(({ verification: v, worktree }) => ({
+        ...(v.state === "running" ? stoppedWithDaemon(v, now) : v),
+        worktree,
+      })),
     });
     this.#file.stopFollowing();
+  }
+
+  /** Compares the verified worktrees with their fingerprints every `intervalMs` (ADR-195); `main.ts` starts it after the API. */
+  startOutdatedCheck(intervalMs = OUTDATED_CHECK_MS): void {
+    if (this.#timer) return;
+    this.#timer = setInterval(() => void this.checkOutdated(), intervalMs);
+    this.#timer.unref();
+  }
+
+  close(): void {
+    clearInterval(this.#timer);
+    this.#timer = undefined;
+  }
+
+  /**
+   * One round of the check (ADR-195): the worktree of every task whose verification has a verdict that is not outdated
+   * yet, one task after another, against the fingerprint its run started on. A different one marks the verdict
+   * `outdated`, which stays until the next verification replaces it, even when the files come back. A worktree that
+   * cannot be read (the task is being ended, its worktree is gone) leaves the verdict as it is.
+   */
+  checkOutdated(): Promise<void> {
+    this.#checking ??= this.#checkOutdated().finally(() => {
+      this.#checking = undefined;
+    });
+    return this.#checking;
+  }
+
+  async #checkOutdated(): Promise<void> {
+    for (const [task, entry] of [...this.#byTask]) {
+      const { verification, worktree } = entry;
+      const verdict = verification.state === "passed" || verification.state === "failed";
+      if (!verdict || verification.outdated || worktree === null || !this.#deps.tasks.findTask(task)) continue;
+      const now = await this.#fingerprint(task);
+      // A new verification may have replaced this one while the worktree was read.
+      if (now === null || now === worktree || this.#byTask.get(task) !== entry) continue;
+      entry.verification = { ...entry.verification, outdated: true };
+      this.#follow();
+    }
+  }
+
+  /** The worktree's fingerprint, or `null` (logged) when it cannot be read: a verification without one is never outdated. */
+  async #fingerprint(task: string): Promise<string | null> {
+    try {
+      return await this.#deps.tasks.taskFingerprint(task);
+    } catch (err) {
+      this.#deps.log(`fingerprint of the worktree of task ${task}: ${messageOf(err)}`);
+      return null;
+    }
   }
 
   /**
@@ -196,8 +262,10 @@ export class Verifications {
     this.#forgetEndedTasks();
     // On daemon exit `procs` refuses the run, so no verification starts after the groups were stopped.
     const target: TaskTarget = { repo: this.#deps.tasks.task(task).repo, task };
+    // Before the run: what the run itself writes (reports, a build) is ignored by the repo, or else counts as a change.
+    const worktree = await this.#fingerprint(task);
     const run = await this.#deps.mise.start(target, VERIFY_MISE_TASK);
-    const entry: Entry = { verification: runningVerification(target, run), done: Promise.resolve() };
+    const entry: Entry = { verification: runningVerification(target, run), worktree, done: Promise.resolve() };
     entry.done = this.#finish(target, run).then(
       (verification) => this.#settle(entry, verification),
       (err: unknown) => {
@@ -232,7 +300,7 @@ export class Verifications {
 
   /** The verifications as they are now, for the next daemon. */
   #follow(): void {
-    this.#file.follow({ verifications: [...this.#byTask.values()].map((entry) => entry.verification) });
+    this.#file.follow({ verifications: [...this.#byTask.values()].map(({ verification, worktree }) => ({ ...verification, worktree })) });
   }
 
   /** The verdict once the run's group has ended: the exit code, then the reports the run wrote, then its log errors. */
@@ -299,6 +367,7 @@ function runningVerification({ repo, task }: TaskTarget, run: RunState): Verific
     failures: [],
     errors: [],
     lastLines: [],
+    outdated: false,
   };
 }
 

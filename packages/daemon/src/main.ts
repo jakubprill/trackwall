@@ -172,6 +172,7 @@ async function start(
     facade.repoWatch.start();
     facade.localConfig.start();
     facade.mergeRequests.start();
+    facade.verifications.startOutdatedCheck();
     // After the API too: a resumed session's hooks and MCP server need its port (ADR-95).
     void facade.agents.resumeLeftSessions();
     const self = { pid: process.pid, port: api.port, token, startedAt, version: VERSION };

@@ -58,10 +58,14 @@ function checkStepsSection(steps: readonly string[]): string {
   return ["How to check:", ...steps.map((step, index) => `${index + 1}. ${step}`)].join("\n");
 }
 
-/** `Verification in Trackwall: passed (mise task test, 128 tests · 3 skipped)`. */
+/**
+ * `Verification in Trackwall: passed (mise task test, 128 tests · 3 skipped)`; an outdated one (ADR-195) says the changes
+ * moved on after it, so the reviewer does not take it for a verdict on what they read.
+ */
 function verificationLine(verification: Verification): string {
   const tests = verification.tests && verification.tests.reports > 0 ? `, ${testCountsLabel(verification.tests.totals)}` : "";
-  return `Verification in Trackwall: ${verification.state} (mise task ${verification.miseTask}${tests})`;
+  const outdated = verification.outdated ? " on an earlier version of the changes" : "";
+  return `Verification in Trackwall: ${verification.state}${outdated} (mise task ${verification.miseTask}${tests})`;
 }
 
 /** `2 commits · 1 not pushed · 3 files not committed`, or the warning that the remote moved on. */

@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { LogError, LogErrorsQuery, MiseTarget, RunState, TestFailure, TestResults, Verification } from "@trackwall/protocol";
@@ -95,6 +95,8 @@ function setup({
   taskIds?: string[];
 } = {}) {
   const tasks = new Map(taskIds.map((id) => [id, { repo: "shop" }]));
+  /** What the task's worktree holds, as its fingerprint; an `Error` when it cannot be read. */
+  const worktree: { fingerprint: string | Error } = { fingerprint: "files-1" };
   const calls: string[] = [];
   let runs = 0;
   let current: { run: RunState; finish: (state: RunState) => void; ended: Promise<RunState> } | undefined;
@@ -131,6 +133,10 @@ function setup({
         return task;
       },
       findTask: (id) => tasks.get(id),
+      taskFingerprint: async () => {
+        if (worktree.fingerprint instanceof Error) throw worktree.fingerprint;
+        return worktree.fingerprint;
+      },
     },
     mise,
     testReports: {
@@ -158,7 +164,7 @@ function setup({
     // The verdict is computed after the end, in the background.
     expect(await waitUntil(() => verifications.get(TASK)?.state !== "running", 2000)).toBe(true);
   };
-  return { verifications, mise, tasks, calls, readSince, errorRequests, verdicts, end, file };
+  return { verifications, mise, tasks, worktree, calls, readSince, errorRequests, verdicts, end, file };
 }
 
 describe("verification of a task", () => {
@@ -366,6 +372,82 @@ describe("verification of a task", () => {
   });
 });
 
+describe("an outdated verdict (ADR-195)", () => {
+  test("a verdict becomes outdated once the worktree holds other files than when its run started, and stays so", async () => {
+    const { verifications, worktree, end } = setup();
+    await verifications.start(TASK);
+    await end(0);
+
+    await verifications.checkOutdated();
+    expect(verifications.get(TASK)).toMatchObject({ state: "passed", outdated: false });
+
+    worktree.fingerprint = "files-2";
+    await verifications.checkOutdated();
+    expect(verifications.get(TASK)).toMatchObject({ state: "passed", outdated: true });
+
+    // The agent undoes its edit: the verdict was still given before it, so it stays outdated.
+    worktree.fingerprint = "files-1";
+    await verifications.checkOutdated();
+    expect(verifications.get(TASK)?.outdated).toBe(true);
+  });
+
+  test("a failed verdict becomes outdated too, and the next verification is about the files as they are now", async () => {
+    const { verifications, worktree, end } = setup({ reports: results([CART_SUM]) });
+    await verifications.start(TASK);
+    await end(1);
+    worktree.fingerprint = "files-2";
+    await verifications.checkOutdated();
+    expect(verifications.get(TASK)).toMatchObject({ state: "failed", outdated: true });
+
+    await verifications.start(TASK);
+    await end(0);
+    await verifications.checkOutdated();
+
+    expect(verifications.get(TASK)).toMatchObject({ state: "failed", outdated: false });
+  });
+
+  test("a running verification is never outdated: what changes during its run counts once it has its verdict", async () => {
+    const { verifications, worktree, end } = setup();
+    await verifications.start(TASK);
+    worktree.fingerprint = "files-2";
+
+    await verifications.checkOutdated();
+    expect(verifications.get(TASK)).toMatchObject({ state: "running", outdated: false });
+
+    await end(0);
+    await verifications.checkOutdated();
+    expect(verifications.get(TASK)).toMatchObject({ state: "passed", outdated: true });
+  });
+
+  test("a cancelled verification has no verdict to be outdated", async () => {
+    const { verifications, worktree } = setup();
+    await verifications.start(TASK);
+    await verifications.cancel(TASK);
+    worktree.fingerprint = "files-2";
+
+    await verifications.checkOutdated();
+
+    expect(verifications.get(TASK)).toMatchObject({ state: "cancelled", outdated: false });
+  });
+
+  test("a worktree that could not be read when the run started never makes the verdict outdated, nor one that cannot be read later", async () => {
+    const unreadAtStart = setup();
+    unreadAtStart.worktree.fingerprint = new Error("the worktree of task trackwall/fix does not exist");
+    await unreadAtStart.verifications.start(TASK);
+    await unreadAtStart.end(0);
+    unreadAtStart.worktree.fingerprint = "files-2";
+    await unreadAtStart.verifications.checkOutdated();
+    expect(unreadAtStart.verifications.get(TASK)).toMatchObject({ state: "passed", outdated: false });
+
+    const unreadLater = setup();
+    await unreadLater.verifications.start(TASK);
+    await unreadLater.end(0);
+    unreadLater.worktree.fingerprint = new Error("this task is already being ended");
+    await unreadLater.verifications.checkOutdated();
+    expect(unreadLater.verifications.get(TASK)).toMatchObject({ state: "passed", outdated: false });
+  });
+});
+
 describe("verifications across a daemon restart (ADR-115)", () => {
   test("the last verdict of a task comes back in the next daemon", async () => {
     const before = setup({ reports: results([CART_SUM]) });
@@ -378,6 +460,60 @@ describe("verifications across a daemon restart (ADR-115)", () => {
 
     expect(after.verifications.get(TASK)).toEqual(verdict);
     expect(after.verdicts).toEqual([]);
+  });
+
+  test("an outdated verdict comes back outdated", async () => {
+    const before = setup();
+    await before.verifications.start(TASK);
+    await before.end(0);
+    before.worktree.fingerprint = "files-2";
+    await before.verifications.checkOutdated();
+    before.verifications.keepForRestart();
+
+    const after = setup({ file: before.file });
+
+    expect(after.verifications.get(TASK)).toMatchObject({ state: "passed", outdated: true });
+  });
+
+  test("a verdict that was not outdated is still compared with the files its run started on", async () => {
+    const before = setup();
+    await before.verifications.start(TASK);
+    await before.end(0);
+    before.verifications.keepForRestart();
+
+    const after = setup({ file: before.file });
+    await after.verifications.checkOutdated();
+    expect(after.verifications.get(TASK)?.outdated).toBe(false);
+    after.worktree.fingerprint = "files-2";
+    await after.verifications.checkOutdated();
+
+    expect(after.verifications.get(TASK)?.outdated).toBe(true);
+  });
+
+  test("a verification from before fingerprints comes back not outdated, and never becomes so", async () => {
+    const file = join(homes, `verifications-${++daemons}.json`);
+    const older = {
+      task: TASK,
+      repo: "shop",
+      miseTask: "test",
+      state: "passed" as const,
+      runId: "run-1",
+      startedAt: STARTED_AT,
+      finishedAt: ENDED_AT,
+      exitCode: 0,
+      message: null,
+      tests: null,
+      failures: [],
+      errors: [],
+      lastLines: [],
+    };
+    writeFileSync(file, JSON.stringify({ verifications: [older] }));
+
+    const after = setup({ file });
+    after.worktree.fingerprint = "files-2";
+    await after.verifications.checkOutdated();
+
+    expect(after.verifications.get(TASK)).toEqual({ ...older, outdated: false });
   });
 
   test("one running when the daemon stops comes back cancelled, not failed by the stop that ended its run", async () => {
