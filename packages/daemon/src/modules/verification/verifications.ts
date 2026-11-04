@@ -31,8 +31,14 @@ import { waitLimited } from "../../infra/wait-limit.ts";
 
 export const VERIFICATIONS_FILE = "verifications.json";
 
-/** A verification with the fingerprint of the worktree its run started on; `null` when it could not be read. */
-const StoredVerification = Verification.extend({ worktree: z.string().nullable().default(null) });
+/**
+ * A verification with the fingerprint of the worktree its run started on, `null` when it could not be read; a file from
+ * before fingerprints (ADR-195) has neither field, read as never outdated.
+ */
+const StoredVerification = Verification.extend({
+  outdated: z.boolean().default(false),
+  worktreeFingerprint: z.string().nullable().default(null),
+});
 
 /** What `verifications.json` keeps: the last verification of each task. */
 const StoredVerifications = z.object({ verifications: z.array(StoredVerification) });
@@ -92,7 +98,7 @@ interface Entry {
   /** Replaced, never changed in place, so a caller holds one moment of it. */
   verification: Verification;
   /** The fingerprint of the worktree when the run started; `null` when it could not be read, and then it is never outdated. */
-  worktree: string | null;
+  worktreeFingerprint: string | null;
   /** Settles once the verification is no longer `running`. */
   done: Promise<void>;
 }
@@ -123,10 +129,10 @@ export class Verifications {
   #restore(): void {
     const stored = this.#file.read();
     if (stored === undefined) return;
-    for (const { worktree, ...verification } of stored.verifications) {
+    for (const { worktreeFingerprint, ...verification } of stored.verifications) {
       if (!this.#deps.tasks.findTask(verification.task)) continue;
       const restored = verification.state === "running" ? stoppedWithDaemon(verification, null) : verification;
-      this.#byTask.set(verification.task, { verification: restored, worktree, done: Promise.resolve() });
+      this.#byTask.set(verification.task, { verification: restored, worktreeFingerprint, done: Promise.resolve() });
     }
   }
 
@@ -137,9 +143,9 @@ export class Verifications {
   keepForRestart(): void {
     const now = new Date().toISOString();
     this.#file.follow({
-      verifications: [...this.#byTask.values()].map(({ verification: v, worktree }) => ({
+      verifications: [...this.#byTask.values()].map(({ verification: v, worktreeFingerprint }) => ({
         ...(v.state === "running" ? stoppedWithDaemon(v, now) : v),
-        worktree,
+        worktreeFingerprint,
       })),
     });
     this.#file.stopFollowing();
@@ -172,12 +178,12 @@ export class Verifications {
 
   async #checkOutdated(): Promise<void> {
     for (const [task, entry] of [...this.#byTask]) {
-      const { verification, worktree } = entry;
+      const { verification, worktreeFingerprint } = entry;
       const verdict = verification.state === "passed" || verification.state === "failed";
-      if (!verdict || verification.outdated || worktree === null || !this.#deps.tasks.findTask(task)) continue;
+      if (!verdict || verification.outdated || worktreeFingerprint === null || !this.#deps.tasks.findTask(task)) continue;
       const now = await this.#fingerprint(task);
       // A new verification may have replaced this one while the worktree was read.
-      if (now === null || now === worktree || this.#byTask.get(task) !== entry) continue;
+      if (now === null || now === worktreeFingerprint || this.#byTask.get(task) !== entry) continue;
       entry.verification = { ...entry.verification, outdated: true };
       this.#follow();
     }
@@ -263,9 +269,9 @@ export class Verifications {
     // On daemon exit `procs` refuses the run, so no verification starts after the groups were stopped.
     const target: TaskTarget = { repo: this.#deps.tasks.task(task).repo, task };
     // Before the run: what the run itself writes (reports, a build) is ignored by the repo, or else counts as a change.
-    const worktree = await this.#fingerprint(task);
+    const worktreeFingerprint = await this.#fingerprint(task);
     const run = await this.#deps.mise.start(target, VERIFY_MISE_TASK);
-    const entry: Entry = { verification: runningVerification(target, run), worktree, done: Promise.resolve() };
+    const entry: Entry = { verification: runningVerification(target, run), worktreeFingerprint, done: Promise.resolve() };
     entry.done = this.#finish(target, run).then(
       (verification) => this.#settle(entry, verification),
       (err: unknown) => {
@@ -300,7 +306,9 @@ export class Verifications {
 
   /** The verifications as they are now, for the next daemon. */
   #follow(): void {
-    this.#file.follow({ verifications: [...this.#byTask.values()].map(({ verification, worktree }) => ({ ...verification, worktree })) });
+    this.#file.follow({
+      verifications: [...this.#byTask.values()].map(({ verification, worktreeFingerprint }) => ({ ...verification, worktreeFingerprint })),
+    });
   }
 
   /** The verdict once the run's group has ended: the exit code, then the reports the run wrote, then its log errors. */

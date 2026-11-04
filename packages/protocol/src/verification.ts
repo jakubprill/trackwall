@@ -69,9 +69,9 @@ export const Verification = z.object({
   /**
    * The files in the task's worktree changed after the run started (ADR-195), so the verdict is about an earlier version
    * of the task's changes; the next verification replaces it. `false` while running, and for a verification whose start
-   * could not read the worktree. Absent in a `verifications.json` from before, read as `false`.
+   * could not read the worktree.
    */
-  outdated: z.boolean().default(false),
+  outdated: z.boolean(),
 });
 export type Verification = z.infer<typeof Verification>;
 

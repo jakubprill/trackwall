@@ -3,7 +3,7 @@ import { createReadStream } from "node:fs";
 import { lstat, readlink } from "node:fs/promises";
 import { resolve } from "node:path";
 import { mapLimit } from "../../infra/map-limit.ts";
-import { workingTreeChanges } from "./worktree-changes.ts";
+import { changedPaths } from "./worktree-changes.ts";
 
 /**
  * A task worktree's fingerprint (ADR-195): one hash of what its files hold, so a verification can tell that they changed
@@ -20,27 +20,25 @@ const HASH_CONCURRENCY = 8;
 const CONTENT_HASH_MAX_BYTES = 16 * 1024 * 1024;
 
 export async function worktreeFingerprint(dir: string, base: string, scratchDir: string): Promise<string> {
-  const { files, truncated } = await workingTreeChanges(dir, base, 0, [], scratchDir);
-  const paths = files.map((file) => file.path).sort();
+  const listed = await changedPaths(dir, base, scratchDir);
+  const paths = listed.paths.sort();
   const digests = await mapLimit(paths, HASH_CONCURRENCY, (path) => fileDigest(resolve(dir, path)));
   const hash = createHash("sha256").update(`base ${base}\n`);
   paths.forEach((path, i) => {
     hash.update(`${path}\0${digests[i]}\n`);
   });
   // A cut file list (tens of thousands of new files) still gives one value; an edit past the cut is not seen.
-  if (truncated) hash.update("truncated\n");
+  if (listed.truncated) hash.update("truncated\n");
   return hash.digest("hex");
 }
 
 /** What one changed path holds now, without following a link: a deleted file, a link's target, a nested repo or a content hash. */
 async function fileDigest(path: string): Promise<string> {
-  let info: Awaited<ReturnType<typeof lstat>>;
-  try {
-    info = await lstat(path);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return "missing";
+  const info = await lstat(path).catch((err: NodeJS.ErrnoException) => {
+    if (err.code === "ENOENT") return undefined;
     throw err;
-  }
+  });
+  if (info === undefined) return "missing";
   if (info.isSymbolicLink()) return `link ${await readlink(path)}`;
   // A directory is a nested repo (`git add` would record its HEAD); what changes inside it is not this worktree's change.
   if (info.isDirectory()) return "directory";

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
@@ -67,6 +67,25 @@ describe("the fingerprint of a worktree (ADR-195)", () => {
       writeFileSync(join(dir, "README.md"), "# shop\n");
 
       expect(await vcs.worktreeFingerprint(dir, base)).toBe(before);
+    },
+    SLOW_TEST_TIMEOUT_MS,
+  );
+
+  test.skipIf(process.platform === "win32")(
+    "a changed file that loses its executable bit, or a link that points elsewhere, changes it (not on Windows, which has neither)",
+    async () => {
+      const { dir, base } = worktree();
+      writeFileSync(join(dir, "run.sh"), "#!/bin/sh\n");
+      chmodSync(join(dir, "run.sh"), 0o755);
+      symlinkSync("src/cart.ts", join(dir, "current"));
+      const before = await vcs.worktreeFingerprint(dir, base);
+
+      chmodSync(join(dir, "run.sh"), 0o644);
+      const notExecutable = await vcs.worktreeFingerprint(dir, base);
+      rmSync(join(dir, "current"));
+      symlinkSync("README.md", join(dir, "current"));
+
+      expect(new Set([before, notExecutable, await vcs.worktreeFingerprint(dir, base)]).size).toBe(3);
     },
     SLOW_TEST_TIMEOUT_MS,
   );

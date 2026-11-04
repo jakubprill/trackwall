@@ -95,8 +95,8 @@ function setup({
   taskIds?: string[];
 } = {}) {
   const tasks = new Map(taskIds.map((id) => [id, { repo: "shop" }]));
-  /** What the task's worktree holds, as its fingerprint; an `Error` when it cannot be read. */
-  const worktree: { fingerprint: string | Error } = { fingerprint: "files-1" };
+  /** What the task's worktree holds, as its fingerprint; an `Error` when it cannot be read. `reads` counts the reads. */
+  const worktree: { fingerprint: string | Error; reads: number; read?: Promise<void> } = { fingerprint: "files-1", reads: 0 };
   const calls: string[] = [];
   let runs = 0;
   let current: { run: RunState; finish: (state: RunState) => void; ended: Promise<RunState> } | undefined;
@@ -134,6 +134,9 @@ function setup({
       },
       findTask: (id) => tasks.get(id),
       taskFingerprint: async () => {
+        worktree.reads++;
+        // A test that sets `read` holds the read until it settles.
+        await worktree.read;
         if (worktree.fingerprint instanceof Error) throw worktree.fingerprint;
         return worktree.fingerprint;
       },
@@ -428,6 +431,37 @@ describe("an outdated verdict (ADR-195)", () => {
     await verifications.checkOutdated();
 
     expect(verifications.get(TASK)).toMatchObject({ state: "cancelled", outdated: false });
+  });
+
+  test("two checks at once read each worktree once", async () => {
+    const { verifications, worktree, end } = setup();
+    await verifications.start(TASK);
+    await end(0);
+    const readsAfterStart = worktree.reads;
+
+    await Promise.all([verifications.checkOutdated(), verifications.checkOutdated()]);
+
+    expect(worktree.reads - readsAfterStart).toBe(1);
+  });
+
+  test("a verification that a new one replaced while its worktree was read is not marked, and the new one is not either", async () => {
+    const { verifications, worktree, end } = setup();
+    await verifications.start(TASK);
+    await end(0);
+    let release = () => {};
+    worktree.read = new Promise((resolve) => {
+      release = resolve;
+    });
+    worktree.fingerprint = "files-2";
+    const checking = verifications.checkOutdated();
+
+    // The new verification starts on the changed files, read once the held read goes on.
+    const starting = verifications.start(TASK);
+    release();
+    await Promise.all([checking, starting]);
+    await end(1);
+
+    expect(verifications.get(TASK)).toMatchObject({ state: "failed", outdated: false });
   });
 
   test("a worktree that could not be read when the run started never makes the verdict outdated, nor one that cannot be read later", async () => {
