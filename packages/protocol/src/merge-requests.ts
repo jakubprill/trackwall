@@ -46,7 +46,8 @@ export const FailedJob = z.object({
    * The job whose log Trackwall can read: every GitLab job and a GitHub Actions check; `null` for a check of another app and
    * a commit status, whose logs live elsewhere.
    */
-  id: JobId.nullable(),
+  // An unread `pipeline_failed` update in `agent-queues.json` from before ADR-195 has none.
+  id: JobId.nullable().default(null),
 });
 export type FailedJob = z.infer<typeof FailedJob>;
 

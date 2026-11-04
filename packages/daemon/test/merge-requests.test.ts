@@ -284,6 +284,18 @@ describe.skipIf(process.versions.bun === undefined)("following a task's merge re
         pipelineFix: { pipeline: "https://gitlab.example.com/shop/shop/-/pipelines/50", commit: sha, logs: [job], otherJobs: [] },
       });
       expect(agents.takeReviewComments(session?.id ?? "").pipelineFix).toBeNull();
+
+      // A job whose log the repo host does not give any more goes by name; the fix still reaches the agent.
+      hosting.reconfigure({
+        apiResponses: mr7("failed", sha),
+        apiPathErrors: { "projects/shop%2Fshop/jobs/501/trace": "HTTP 404: 404 Not found" },
+      });
+      await roundAfter(1);
+      await expect(daemon.post(mergeRequestsApi.jobLog, { task: task.id, job: "501" })).rejects.toThrow(
+        "cannot read the log of job unit-tests: HTTP 404",
+      );
+      await daemon.post(mergeRequestsApi.fixPipeline, { task: task.id });
+      expect(agents.takeReviewComments(session?.id ?? "").pipelineFix).toMatchObject({ logs: [], otherJobs: ["unit-tests"] });
     } finally {
       delete process.env.ORDERS_DB_PASSWORD;
       for (const session of agents.sessions().sessions) await agents.stop(session.id);

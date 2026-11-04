@@ -21,7 +21,7 @@ export function useTaskReview(conn: Connection, task: string) {
     (comments: ReviewComment[]) => post(conn, agentsApi.sendReview, { task, comments }),
     (result) => {
       setDrafts((current) => current.filter((d) => !sentIds.current.has(d.id)));
-      setSentMessage(deliveryMessage(result.delivery));
+      setSentMessage(deliveryMessage(result.delivery, "your review"));
     },
   );
   return {

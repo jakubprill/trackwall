@@ -157,7 +157,15 @@ function FoundMergeRequest({
         {linkError && <span className="text-destructive truncate">{linkError}</span>}
       </div>
       {failedJobs.length > 0 && (
-        <FailedJobs conn={conn} task={task} jobs={failedJobs} open={open} fix={canFixPipeline(mergeRequest) ? fix : undefined} />
+        <FailedJobs
+          // A new pipeline starts without the log shown for the one before.
+          key={pipeline?.commit}
+          conn={conn}
+          task={task}
+          jobs={failedJobs}
+          open={open}
+          fix={canFixPipeline(mergeRequest) ? fix : undefined}
+        />
       )}
     </div>
   );

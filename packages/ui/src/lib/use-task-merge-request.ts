@@ -23,10 +23,13 @@ export function useTaskMergeRequest(conn: Connection, task: string, paused: bool
     if (desktop) return post(conn, mergeRequestsApi.openForm, { task, ...draft });
     return windowOpener.openOnceKnown(async () => (await post(conn, mergeRequestsApi.formUrl, { task, ...draft })).url);
   }, remote.reload);
-  const [fixSent, setFixSent] = useState<string>();
+  const lookup = remote.data?.lookup;
+  const commit = lookup?.kind === "found" ? (lookup.mergeRequest.pipeline?.commit ?? null) : null;
+  // A note about the pipeline it was sent for: a new pipeline after the next push has not been sent.
+  const [fixSent, setFixSent] = useState<{ commit: string | null; text: string }>();
   const fixPipeline = useAction(
     () => post(conn, mergeRequestsApi.fixPipeline, { task }),
-    ({ delivery }) => setFixSent(deliveryMessage(delivery, "the failed jobs' logs")),
+    ({ delivery }) => setFixSent({ commit, text: deliveryMessage(delivery, "the failed jobs' logs") }),
   );
   return {
     state: remote.data,
@@ -37,7 +40,7 @@ export function useTaskMergeRequest(conn: Connection, task: string, paused: bool
     opening: openForm.pending,
     fixPipeline: fixPipeline.run,
     fixing: fixPipeline.pending,
-    fixSent,
+    fixSent: fixSent?.commit === commit ? fixSent.text : undefined,
     error: push.error ?? openForm.error ?? fixPipeline.error ?? remote.error,
   };
 }

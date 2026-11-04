@@ -27,7 +27,7 @@ export function lineComment(anchor: DiffAnchor, diffText: string, text: string):
 }
 
 /** What the user is told after sending `what` (the review, a pipeline fix, ADR-195): when the agent gets it. */
-export function deliveryMessage(delivery: PromptDelivery, what = "your review"): string {
+export function deliveryMessage(delivery: PromptDelivery, what: string): string {
   switch (delivery) {
     case "typed":
       return `Sent: the agent is reading ${what}.`;

@@ -77,7 +77,7 @@ export interface MergeRequestsDeps {
   repoHosts: () => RepoHost[];
   openUrl: (url: string) => void;
   /** The end of a job's log, cleaned and masked like a log line (`logs`, ADR-195); `cut` when the daemon did not read all of it. */
-  jobLogExcerpt: (raw: string, cut: boolean) => Promise<{ text: string; truncated: boolean }>;
+  jobLogExcerpt: (raw: string, cut: boolean) => Promise<Omit<JobLog, "job">>;
   /** The pipeline of a task's merge request failed since the read before (`pipelineFailedNow`). */
   onPipelineFailed: (task: Task, mergeRequest: MergeRequest) => void;
   log: (msg: string) => void;
@@ -283,18 +283,21 @@ export class MergeRequests {
     const { project, pipeline } = await this.#failedPipeline(id);
     const failed = pipeline.failedJobs.find((j) => j.id === job);
     if (!failed) throw new DomainError("not_found", `job ${job} is not one that failed the pipeline ${pipeline.url}`);
-    return this.#readJobLog(project, failed, job);
+    if (!hasLog(failed)) throw new DomainError("not_found", `job ${job} has no log Trackwall can read`);
+    return this.#readJobLog(project, failed);
   }
 
   /**
    * The user's request to the task's agent to fix the failed pipeline of its open merge request (ADR-195): the end of the
-   * logs of the first `PIPELINE_FIX_LOGS_MAX` failed jobs that have one, the others by name.
+   * logs of the first `PIPELINE_FIX_LOGS_MAX` failed jobs that have one, the others by name, also a job whose log the
+   * repo host did not give (gone past its retention, a timeout): the agent still gets the rest.
    */
   async fixPipeline(id: string): Promise<{ delivery: PromptDelivery }> {
     const { project, pipeline } = await this.#failedPipeline(id);
-    const readable = pipeline.failedJobs.flatMap((job) => (job.id === null ? [] : [{ job, id: job.id }])).slice(0, PIPELINE_FIX_LOGS_MAX);
-    const logs = await Promise.all(readable.map(({ job, id: jobId }) => this.#readJobLog(project, job, jobId)));
-    const read = new Set(readable.map(({ job }) => job));
+    const readable = pipeline.failedJobs.filter(hasLog).slice(0, PIPELINE_FIX_LOGS_MAX);
+    const reads = await Promise.allSettled(readable.map((job) => this.#readJobLog(project, job)));
+    const logs = reads.flatMap((read) => (read.status === "fulfilled" ? [read.value] : []));
+    const read = new Set(logs.map((log) => log.job));
     const otherJobs = pipeline.failedJobs.filter((job) => !read.has(job)).map((job) => job.name);
     const fix = { pipeline: pipeline.url, commit: pipeline.commit, logs, otherJobs };
     return { delivery: this.#deps.tasks.askToFixPipeline(id, fix) };
@@ -316,8 +319,8 @@ export class MergeRequests {
     return { project, pipeline: mergeRequest.pipeline };
   }
 
-  async #readJobLog(project: HostedProject, job: FailedJob, id: string): Promise<JobLog> {
-    const { raw, cut } = await this.#deps.hosting.jobLog(project, id).catch((err: unknown) => {
+  async #readJobLog(project: HostedProject, job: JobWithLog): Promise<JobLog> {
+    const { raw, cut } = await this.#deps.hosting.jobLog(project, job.id).catch((err: unknown) => {
       throw new DomainError("bad_request", `cannot read the log of job ${job.name}: ${messageOf(err)}`);
     });
     return { job, ...(await this.#deps.jobLogExcerpt(raw, cut)) };
@@ -340,6 +343,13 @@ export class MergeRequests {
     this.#lookups.set(key, { at: now, lookup });
     return lookup;
   }
+}
+
+type JobWithLog = FailedJob & { id: string };
+
+/** A GitLab or GitHub Actions job, whose log the daemon can read (ADR-195). */
+function hasLog(job: FailedJob): job is JobWithLog {
+  return job.id !== null;
 }
 
 /** A push's fast pace lasts until the repo host shows a pipeline on another commit than before it, or until it runs out. */

@@ -14,6 +14,8 @@ const Config = z.object({
   repos: z.array(z.unknown()).default([]),
   /** A message on stderr and code 1 for `api` with the given `--hostname`. */
   apiErrors: z.record(z.string(), z.string()).default({}),
+  /** A message on stderr and code 1 for `api` with the given path without its query (a job log gone from the repo host). */
+  apiPathErrors: z.record(z.string(), z.string()).default({}),
   /** A raw `api` response instead of pages from `repos`. */
   apiRaw: z.string().optional(),
   /**
@@ -45,6 +47,8 @@ if (command === "api") {
     process.exit(0);
   }
   const path = args.at(-1) ?? "";
+  const pathError = config.apiPathErrors[path.split("?")[0] ?? ""];
+  if (pathError) fail(pathError);
   const response = config.apiResponses[path.split("?")[0] ?? ""];
   if (response !== undefined) {
     // A string is a plain-text answer, such as a job's log.
