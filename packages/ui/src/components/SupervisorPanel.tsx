@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { StartButton } from "@/lib/day-start";
+import { KEYBOARD_REGION } from "@/lib/keyboard-elsewhere";
 import { IS_MAC } from "@/lib/platform";
 import {
   entryId,
@@ -83,6 +84,7 @@ export function SupervisorPanel({
     <aside
       ref={panel}
       aria-label={SUPERVISOR}
+      {...{ [KEYBOARD_REGION]: "" }}
       className={cn("bg-card flex min-w-0 shrink-0 flex-col border-l", layout === "wide" ? "w-supervisor-wide" : "w-supervisor")}
       onFocus={() => onFocusedChange(true)}
       onBlur={leave}
