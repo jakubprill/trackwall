@@ -35,6 +35,7 @@ import type { SessionSelection } from "@/lib/session-entries";
 import { readStartChoice, type StartChoice, saveStartChoice } from "@/lib/start-choices";
 import { typedModel } from "@/lib/task-model";
 import { useAction } from "@/lib/use-action";
+import { useProviderModels } from "@/lib/use-provider-models";
 import { useRemote } from "@/lib/use-remote";
 import { ChangeParts } from "./ChangeParts.tsx";
 import { StartOptions } from "./StartOptions.tsx";
@@ -84,6 +85,7 @@ export function NewSession({
   const change = useChangeForm(conn, onStarted, () => setPrompt(""));
   const { start, firstPart } = formChangeStart(form, repo, choice.worktree, prompt, change.parts, change.title);
   const offers = useStartOffers(conn, repo);
+  const providerModels = useProviderModels(conn).models;
   const java = javaNavigationInChange(javaNavigationInView(offers.java, choice.view), startsChange(start));
   const javaNavigation = java.kind === "ready" && choice.javaNavigation;
   const { item } = form;
@@ -131,7 +133,7 @@ export function NewSession({
               repo === null || !form.sessions ? undefined : { value: choice.worktree, onChange: (worktree) => choose({ worktree }) }
             }
             approvals={start.kind === "session" ? undefined : { value: approvals, onChange: setApprovals }}
-            model={{ value: choice.model, onChange: (text: string) => choose({ model: text }) }}
+            model={{ value: choice.model, onChange: (text: string) => choose({ model: text }), suggestions: providerModels }}
             javaNavigation={javaNavigationPill(java, choice.javaNavigation, (on) => choose({ javaNavigation: on }))}
             view={{ value: choice.view, onChange: (view: SessionView) => choose({ view }) }}
             sandbox={sandboxNote(offers.sandbox, approvals)}

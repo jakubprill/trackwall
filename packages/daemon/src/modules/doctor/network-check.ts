@@ -2,7 +2,7 @@ import { readFile, stat } from "node:fs/promises";
 import { rootCertificates } from "node:tls";
 import type { DoctorCheck } from "@trackwall/protocol";
 import { envKey } from "../../infra/env-key.ts";
-import { proxyFor, shownProxy } from "./proxy-env.ts";
+import { proxyFor, shownProxy } from "../../infra/proxy-env.ts";
 import type { TlsProbe, TlsProbeResult } from "./tls-probe.ts";
 
 /**

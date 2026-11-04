@@ -1,5 +1,6 @@
-import { type SessionView, TASK_MODEL_MAX, type TaskApprovals } from "@trackwall/protocol";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ProviderModel, type SessionView, TASK_MODEL_MAX, type TaskApprovals } from "@trackwall/protocol";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { ProviderModelOptions } from "@/components/ProviderModelOptions";
 import { Input } from "@/components/ui/input";
 import type { SandboxNote } from "@/lib/sandbox";
 import { typedModel } from "@/lib/task-model";
@@ -28,7 +29,8 @@ export function StartOptions({
   subject?: string;
   worktree?: { value: boolean; onChange: (value: boolean) => void };
   approvals?: { value: TaskApprovals; onChange: (value: TaskApprovals) => void };
-  model?: { value: string; onChange: (value: string) => void };
+  /** `suggestions`: the models of the session profile's provider (ADR-194), which the field offers as the user types. */
+  model?: { value: string; onChange: (value: string) => void; suggestions?: readonly ProviderModel[] };
   /** `unavailable` is why it cannot be turned on now; `null` when it can. */
   javaNavigation?: { value: boolean; onChange: (value: boolean) => void; unavailable: string | null };
   /** Whether the task or session shows as a terminal or in the conversation view (ADR-137), still a preview. */
@@ -67,7 +69,15 @@ export function StartOptions({
             No approvals
           </Pill>
         )}
-        {model && <ModelPill subject={subject} value={model.value} onChange={model.onChange} disabled={disabled} />}
+        {model && (
+          <ModelPill
+            subject={subject}
+            value={model.value}
+            onChange={model.onChange}
+            suggestions={model.suggestions ?? []}
+            disabled={disabled}
+          />
+        )}
         {javaNavigation && (
           <Pill
             label={named("Java navigation", subject)}
@@ -166,19 +176,23 @@ function named(label: string, subject: string | undefined): string {
 /**
  * A task's model (ADR-98): a pill naming Copilot CLI's default until the user opens it to type a model id; a model the
  * proposer chose, or one remembered for the repo, shows its field at once. The field stays while the user edits it, also
- * when they clear it, and folds back into the pill when left empty. Empty is Copilot CLI's default model.
+ * when they clear it, and folds back into the pill when left empty. Empty is Copilot CLI's default model. With a session
+ * profile's provider, the field suggests its models (ADR-194).
  */
 function ModelPill({
   subject,
   value,
   onChange,
+  suggestions,
   disabled,
 }: {
   subject: string | undefined;
   value: string;
   onChange: (value: string) => void;
+  suggestions: readonly ProviderModel[];
   disabled: boolean;
 }) {
+  const listId = useId();
   const [shown, setShown] = useState(value !== "");
   const opened = useRef(false);
   const field = useRef<HTMLInputElement>(null);
@@ -221,7 +235,9 @@ function ModelPill({
         maxLength={TASK_MODEL_MAX}
         spellCheck={false}
         disabled={disabled}
+        list={suggestions.length > 0 ? listId : undefined}
       />
+      {suggestions.length > 0 && <ProviderModelOptions id={listId} models={suggestions} />}
       {invalid && <span className="text-destructive pr-2 text-xs">A model id, such as claude-opus-5.5</span>}
     </span>
   );

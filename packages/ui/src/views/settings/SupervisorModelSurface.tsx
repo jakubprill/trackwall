@@ -5,6 +5,7 @@ import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import { useProviderModels } from "@/lib/use-provider-models";
 import { useRemote } from "@/lib/use-remote";
 import { PathForm } from "./PathForm.tsx";
 
@@ -15,6 +16,7 @@ import { PathForm } from "./PathForm.tsx";
 export function SupervisorModelSurface({ conn }: { conn: Connection }) {
   const load = useCallback(() => post(conn, workspaceApi.settings, {}), [conn]);
   const settings = useRemote(load);
+  const { models } = useProviderModels(conn);
 
   async function save(model: string | null) {
     await post(conn, workspaceApi.setSupervisorModel, { model });
@@ -41,6 +43,7 @@ export function SupervisorModelSurface({ conn }: { conn: Connection }) {
             initialPath={data.supervisorModel ?? ""}
             configFile={data.configFile}
             folder={false}
+            suggestions={models}
             save={save}
             resetLabel="Copilot CLI's default"
             reset={data.supervisorModel === null && !data.supervisorModelProblem ? undefined : () => save(null)}

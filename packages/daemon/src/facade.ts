@@ -32,6 +32,7 @@ import {
   TASKS_FILE,
 } from "./modules/agents/agents.ts";
 import { resolveCopilot } from "./modules/agents/copilot-command.ts";
+import { withMiseVars } from "./modules/agents/session-env.ts";
 import { Batch } from "./modules/batch/batch.ts";
 import { Board } from "./modules/board/board.ts";
 import type { AppConfigQuery } from "./modules/cards/app-config.ts";
@@ -44,7 +45,7 @@ import { trustedFolderOf, trustedFolders } from "./modules/doctor/copilot-trust.
 import { type DiskSpace, diskSpace } from "./modules/doctor/disk-space.ts";
 import { Doctor } from "./modules/doctor/doctor.ts";
 import { profileEnvironment } from "./modules/doctor/model-provider-check.ts";
-import { SYSTEM_CA_FILES } from "./modules/doctor/network-check.ts";
+import { SYSTEM_CA_FILES, sessionCertificates } from "./modules/doctor/network-check.ts";
 import { probeConnection, probeTls, type TlsProbe } from "./modules/doctor/tls-probe.ts";
 import { ErrorJournal } from "./modules/error-journal/error-journal.ts";
 import type { ErrorJournalWorkspace } from "./modules/error-journal/known-values.ts";
@@ -59,6 +60,7 @@ import { MergeRequests } from "./modules/merge-requests/merge-requests.ts";
 import { Mise } from "./modules/mise/mise.ts";
 import { ProcessGroups } from "./modules/procs/process-groups.ts";
 import { RuntimeFile } from "./modules/procs/runtime-file.ts";
+import { ProviderModels } from "./modules/provider-models/provider-models.ts";
 import { Routines } from "./modules/routines/routines.ts";
 import { Services } from "./modules/services/services.ts";
 import { TASK_JOURNAL_FILE, TASK_JOURNAL_MAX_RECORDS, TaskJournal } from "./modules/task-journal/task-journal.ts";
@@ -117,6 +119,8 @@ export interface Facade {
   mcpAudit: McpAudit;
   /** Checks of what Trackwall needs on this computer, each with what to do when it fails (ADR-101). */
   doctor: Doctor;
+  /** The models the session profile's model provider offers, which the Model fields suggest (ADR-194). */
+  providerModels: ProviderModels;
   /** Installs jdtls and its Java for tasks' Java navigation, from Settings (ADR-123). */
   javaNavigation: JavaNavigation;
   /** Every file and folder Trackwall reads or writes, with its state, and the keys of `workspace.yaml` (ADR-108). */
@@ -418,6 +422,17 @@ export function createFacade(o: FacadeOptions): Facade {
     systemCaFiles: SYSTEM_CA_FILES,
     now: () => new Date(),
   });
+  const providerModels = new ProviderModels({
+    // As a free session gets it in the projects folder, the provider's key included, which stays in the daemon; without a
+    // profile mise is not asked, so nothing decrypts a key for a list sessions on GitHub's models do not use.
+    profileEnv: async () => {
+      const profile = workspace.sessionProfile();
+      if (profile === null) return null;
+      const mised = await mise.sessionEnv({ repo: null, task: null });
+      return { profile, env: withMiseVars(await o.userEnv(), mised.vars), problem: mised.problem };
+    },
+    ca: async (env) => (await sessionCertificates(env, SYSTEM_CA_FILES)).ca,
+  });
   const configFiles = new ConfigFiles({
     stateDir: { path: o.home, from: o.homeFrom },
     statePaths: {
@@ -503,6 +518,7 @@ export function createFacade(o: FacadeOptions): Facade {
     errorJournal,
     mcpAudit,
     doctor,
+    providerModels,
     javaNavigation,
     configFiles,
     openLink: o.openUrl,
