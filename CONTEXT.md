@@ -303,6 +303,10 @@ A link from the repo that uses to the repo that is used, with a kind (`EdgeKind`
 A gap in a repo's facts that only the whole graph shows, with a code like a card problem (ADR-116): `unresolved-call-target`, an HTTP client the code uses that points to no repo in the list.
 _Avoid_: error (the graph is still built), dangling call
 
+**Version drift** (`VersionDrift`, `RepoGraph.drift`, kind `DriftKind`; UI "Version drift", "Align to <version>"):
+A tool, Spring Boot, a Maven parent pom or BOM, or a build plugin that the repos of the projects folder use in different versions, found from their cards with the file and line of each (ADR-196). Its target is the newest of those versions, and aligning starts a task or a change in the repos off it.
+_Avoid_: config drift (only versions are compared), outdated (the target is the newest in the folder, not the newest released)
+
 **Package alias** (`graph.packages` in `workspace.yaml`):
 A package name and the repo that provides it, when that repo's card does not show it (a package built outside the build files, a different name in the artifact repository). It works only for a package no repo on the list builds.
 

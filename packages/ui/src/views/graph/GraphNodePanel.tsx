@@ -1,4 +1,5 @@
 import {
+  type DriftedRepo,
   type EdgeConfidence,
   type EdgeEvidence,
   evidenceLabel,
@@ -8,6 +9,7 @@ import {
   pluralNoun,
   type RepoGraph,
   type Service,
+  type VersionDrift,
 } from "@trackwall/protocol";
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
@@ -19,6 +21,7 @@ import { fileName } from "@/lib/file-name";
 import { edgeLabel, problemClient } from "@/lib/graph-labels";
 import type { EdgePair } from "@/lib/graph-layout";
 import { serviceStateLabel } from "@/lib/service-state";
+import { RepoDriftSection } from "./GraphDrift.tsx";
 
 /** Edge confidence for a person (ADR-29, ADR-30; rules at `EdgeConfidence`); `Record` forces an entry for each. */
 const CONFIDENCE_LABELS: Record<EdgeConfidence, string> = {
@@ -37,6 +40,7 @@ export function GraphNodePanel({
   node,
   pairs,
   problems,
+  drift,
   service,
   onSelect,
   onClose,
@@ -48,6 +52,8 @@ export function GraphNodePanel({
   pairs: readonly EdgePair[];
   /** The graph's problems in this repo (`repoProblems`). */
   problems: readonly GraphProblem[];
+  /** The version drifts this repo is part of, with its own versions (`repoDrift`, ADR-196). */
+  drift: readonly { drift: VersionDrift; own: DriftedRepo }[];
   onSelect: (repo: string) => void;
   onClose: () => void;
 }) {
@@ -105,6 +111,7 @@ export function GraphNodePanel({
           ))}
         </Section>
       )}
+      {drift.length > 0 && <RepoDriftSection drift={drift} />}
     </div>
   );
 }
@@ -120,8 +127,11 @@ function ProblemItem({ problem }: { problem: GraphProblem }) {
   );
 }
 
-/** The panel without a selected repo: the counts, `graph` entries with errors, and where to add manual connections. */
-export function GraphSummaryPanel({ graph, pairs }: { graph: RepoGraph; pairs: readonly EdgePair[] }) {
+/**
+ * The panel without a selected repo: the counts, what the view puts below them (the version drift, ADR-196), `graph`
+ * entries with errors, and where to add manual connections.
+ */
+export function GraphSummaryPanel({ graph, pairs, children }: { graph: RepoGraph; pairs: readonly EdgePair[]; children?: ReactNode }) {
   const withProblems = graph.nodes.filter((n) => n.problem !== null).length;
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -132,6 +142,7 @@ export function GraphSummaryPanel({ graph, pairs }: { graph: RepoGraph; pairs: r
         <Stat label="No card" value={withProblems} />
         <Stat label="Calls without a target" value={graph.problems.length} />
       </dl>
+      {children}
       <p className="text-muted-foreground text-sm">
         A line goes from a repo to each repo whose package it depends on or whose app it calls over HTTP. Select a repo to see its
         connections, their confidence and the evidence (file and line), and its HTTP clients that point to no repo in the list.
