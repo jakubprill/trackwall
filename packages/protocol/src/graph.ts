@@ -175,8 +175,8 @@ export const VersionDrift = z.object({
   kind: DriftKind,
   /** The tool name (`java`, `node`), `spring-boot`, or the package (`org.apache.maven.plugins:maven-surefire-plugin`). */
   name: z.string(),
-  /** The newest version among the repos, which aligning moves the others to; `null` when none reads as a number (`lts`, `latest`). */
-  target: z.string().nullable(),
+  /** The newest version among the repos, which aligning moves the others to. */
+  target: z.string(),
   /** At least two repos, in the order of the repo list. */
   repos: z.array(DriftedRepo).min(2),
 });

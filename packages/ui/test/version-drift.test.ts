@@ -42,7 +42,6 @@ describe("version drift in the Overview view", () => {
 
   test("the repos to align are the ones with any version other than the target, also a repo whose modules disagree", () => {
     expect(reposToAlign(JAVA).map((r) => r.repo)).toEqual(["orders", "billing"]);
-    expect(reposToAlign({ ...JAVA, target: null })).toEqual([]);
   });
 
   test("the form starts with at most six repos, a change's limit", () => {
@@ -59,18 +58,21 @@ describe("version drift in the Overview view", () => {
   });
 
   test("the change is titled by the subject and target, and each part says what its repo has and where", () => {
-    expect(alignTitle(JAVA, "21")).toBe("Align Java to 21");
-    expect(alignPrompt(SUREFIRE, "3.5.1")).toStartWith(
+    expect(alignTitle(JAVA)).toBe("Align Java to 21");
+    expect(alignPrompt(SUREFIRE)).toStartWith(
       "Move this repo to org.apache.maven.plugins:maven-surefire-plugin (build plugin) 3.5.1, the newest version other repos",
     );
     expect(alignPart(BILLING)).toEqual({
       repo: "billing",
-      note: "it uses 17, 21 at api/pom.xml:9 (java 17 (hint)), worker/pom.xml:9 (java 21 (hint))",
+      note: "it uses 17, 21 at api/pom.xml:9: java 17 (hint), worker/pom.xml:9: java 21 (hint)",
     });
   });
 
-  test("a repo's drifts are the ones it is part of", () => {
-    expect(repoDrift({ drift: [JAVA, SUREFIRE] }, "billing").map((d) => d.name)).toEqual(["java"]);
-    expect(repoDrift({ drift: [JAVA, SUREFIRE] }, "orders").map((d) => d.name)).toEqual(["java", SUREFIRE.name]);
+  test("a repo's drifts are the ones it is part of, each with the repo's own versions", () => {
+    expect(repoDrift({ drift: [JAVA, SUREFIRE] }, "billing")).toEqual([{ drift: JAVA, own: BILLING }]);
+    expect(repoDrift({ drift: [JAVA, SUREFIRE] }, "orders").map(({ drift, own }) => [drift.name, own.versions])).toEqual([
+      ["java", ["17"]],
+      [SUREFIRE.name, ["3.2.5"]],
+    ]);
   });
 });

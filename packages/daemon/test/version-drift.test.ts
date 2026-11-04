@@ -135,15 +135,25 @@ describe("versionDrift", () => {
     ]);
   });
 
-  test("the target is the newest release, a release beats its own pre-release, and words give no target", () => {
+  test("the target is the newest release, a release beats its pre-releases, and pre-releases go by stage and number", () => {
     const boot = (version: string) => card([], [maven("org.springframework.boot:spring-boot-starter-parent", version, "parent")]);
+    const target = (...versions: string[]) => versionDrift(versions.map((v, i) => repo(`r${i}`, boot(v))))[0]?.target;
 
-    const numbered = versionDrift([repo("a", boot("3.4.0-RC1")), repo("b", boot("3.4.0")), repo("c", boot("3.10.1-SNAPSHOT"))]);
-    const words = versionDrift([repo("a", card([tool("node", "lts")])), repo("b", card([tool("node", "latest")]))]);
+    expect(target("3.4.0", "3.10.1-SNAPSHOT")).toBe("3.10.1-SNAPSHOT");
+    expect(target("3.4.0-RC1", "3.4.0")).toBe("3.4.0");
+    expect(target("3.4.0-RC1", "3.4.0-RC2")).toBe("3.4.0-RC2");
+    expect(target("3.4.0-RC1", "3.4.0-M2", "3.4.0-SNAPSHOT")).toBe("3.4.0-RC1");
+  });
 
-    expect(numbered[0]?.target).toBe("3.10.1-SNAPSHOT");
-    expect(versionDrift([repo("a", boot("3.4.0-RC1")), repo("b", boot("3.4.0"))])[0]?.target).toBe("3.4.0");
-    expect(words.map((d) => [d.name, d.target])).toEqual([["node", null]]);
+  test("ranges and aliases name no version, so a repo with engines >=18 or .nvmrc lts/iron is not counted", () => {
+    const drift = versionDrift([
+      repo("a", card([tool("node", ">=18", "hint", "package.json")])),
+      repo("b", card([tool("node", "lts/iron", "hint", ".nvmrc")])),
+      repo("c", card([tool("node", "22")])),
+      repo("d", card([tool("node", "latest")])),
+    ]);
+
+    expect(drift).toEqual([]);
   });
 
   test("a tool only one repo has, a repo without commits and a repo git cannot read give no drift", () => {

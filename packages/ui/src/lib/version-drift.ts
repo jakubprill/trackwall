@@ -36,16 +36,27 @@ export function driftKindLabel(kind: DriftKind): string {
   return KIND_LABELS[kind];
 }
 
-/** The drifts a repo is part of, in the graph's order. */
-export function repoDrift(graph: Pick<RepoGraph, "drift">, repo: string): VersionDrift[] {
-  return graph.drift.filter((d) => d.repos.some((r) => r.repo === repo));
+/** A drift's key in a list: its kind and subject, unique in a graph. */
+export function driftKey(drift: Pick<VersionDrift, "kind" | "name">): string {
+  return `${drift.kind}:${drift.name}`;
 }
 
-/** The repos to align: every repo with a version other than the target; none when there is no target to move to. */
+/** Whether a repo is on the drift's target in every module, so there is nothing to align in it. */
+export function onTarget(drift: Pick<VersionDrift, "target">, repo: DriftedRepo): boolean {
+  return repo.versions.every((v) => v === drift.target);
+}
+
+/** The repos to align: every repo with a version other than the target. */
 export function reposToAlign(drift: VersionDrift): DriftedRepo[] {
-  const { target } = drift;
-  if (target === null) return [];
-  return drift.repos.filter((r) => r.versions.some((v) => v !== target));
+  return drift.repos.filter((r) => !onTarget(drift, r));
+}
+
+/** A repo's drifts with its own versions in each, in the graph's order. */
+export function repoDrift(graph: Pick<RepoGraph, "drift">, repo: string): { drift: VersionDrift; own: DriftedRepo }[] {
+  return graph.drift.flatMap((drift) => {
+    const own = drift.repos.find((r) => r.repo === repo);
+    return own ? [{ drift, own }] : [];
+  });
 }
 
 /** The repos the form starts with: a change has at most `CHANGE_PARTS_MAX` parts, so the first ones in the list. */
@@ -56,23 +67,23 @@ export function initialAlignRepos(drift: VersionDrift): string[] {
 }
 
 /** The change's title, which also names its branch: `Align Java to 21`. */
-export function alignTitle(drift: VersionDrift, target: string): string {
-  return `Align ${driftSubject(drift)} to ${target}`.slice(0, TASK_TITLE_MAX);
+export function alignTitle(drift: VersionDrift): string {
+  return `Align ${driftSubject(drift)} to ${drift.target}`.slice(0, TASK_TITLE_MAX);
 }
 
 /** What every repo's agent is asked to do; each part's note says what its repo has now and where. */
-export function alignPrompt(drift: VersionDrift, target: string): string {
+export function alignPrompt(drift: VersionDrift): string {
   const what =
     drift.kind === "tool" || drift.kind === "spring-boot" ? driftSubject(drift) : `${drift.name} (${driftKindLabel(drift.kind)})`;
   return (
-    `Move this repo to ${what} ${target}, the newest version other repos in the projects folder use. ` +
-    "Change the version where the lines below give it, and anything the new version needs, such as a deprecated API or a changed setting. " +
+    `Move this repo to ${what} ${drift.target}, the newest version other repos in the projects folder use. ` +
+    "Change the version where the note below says, and anything the new version needs, such as a deprecated API or a changed setting. " +
     "Build the project and run its tests, and say what you changed and what you could not move."
   );
 }
 
 /** A repo's part: its versions and the lines that give them, cut to fit a part's note. */
 export function alignPart(repo: DriftedRepo): ChangePart {
-  const where = repo.evidence.map((e) => `${evidenceLabel(e)} (${e.detail})`).join(", ");
+  const where = repo.evidence.map((e) => `${evidenceLabel(e)}: ${e.detail}`).join(", ");
   return { repo: repo.repo, note: `it uses ${repo.versions.join(", ")} at ${where}`.slice(0, CHANGE_PART_NOTE_MAX) };
 }

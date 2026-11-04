@@ -67,20 +67,20 @@ function sightings(card: RepoCard): Sighting[] {
 
 /** Per tool, the mise entries when the repo has any, otherwise its hints. */
 function toolSightings(tools: readonly ToolRequirement[]): Sighting[] {
-  const names = new Set(tools.map((t) => t.tool));
-  return [...names].flatMap((name) => {
-    const all = tools.filter((t) => t.tool === name);
+  const byTool = new Map<string, ToolRequirement[]>();
+  for (const t of tools) byTool.set(t.tool, [...(byTool.get(t.tool) ?? []), t]);
+  return [...byTool].flatMap(([name, all]) => {
     const fromMise = all.filter((t) => t.source === "mise");
     return (fromMise.length > 0 ? fromMise : all).flatMap((t) => {
-      if (unsubstituted(t.version)) return [];
       const version = name === "java" ? javaMajor(t.version) : t.version.trim();
+      if (!comparable(version)) return [];
       return [{ kind: "tool" as const, name, version, evidence: { ...t.evidence, detail: `${name} ${t.version} (${t.source})` } }];
     });
   });
 }
 
 function packageSighting(pkg: ConsumedPackage): Sighting[] {
-  if (pkg.version === null || unsubstituted(pkg.version)) return [];
+  if (pkg.version === null || !comparable(pkg.version.trim())) return [];
   const kind = packageKind(pkg);
   if (kind === undefined) return [];
   const name = kind === "spring-boot" ? "spring-boot" : pkg.name;
@@ -96,14 +96,18 @@ function packageKind(pkg: ConsumedPackage): DriftKind | undefined {
   return undefined;
 }
 
-/** A version the build tool would substitute from a property or a variable, which the card left as written. */
-function unsubstituted(version: string): boolean {
-  return version.includes("$");
+/**
+ * A version that names one release: it starts with a number and has nothing the build tool would substitute (`${…}`,
+ * `$version`). A range (`>=18`, `^20.0.0`), an alias (`lts`, `lts/iron`, `latest`) or a property says no version to
+ * compare or to move to.
+ */
+function comparable(version: string): boolean {
+  return /^\d/.test(version) && !version.includes("$");
 }
 
 /**
  * The major Java version from the ways repos write it: `21`, `21.0.2`, `1.8` (Java 8), mise's `temurin-21.0.2+13` and
- * `corretto-17`, SDKMAN's `21.0.2-tem`. A version without a number (`lts`) stays as written.
+ * `corretto-17`, SDKMAN's `21.0.2-tem`. A version without a number (`lts`) stays as written, and is not comparable.
  */
 function javaMajor(version: string): string {
   const bare = version
@@ -114,13 +118,14 @@ function javaMajor(version: string): string {
 }
 
 /**
- * The newest of the versions: their leading numbers compared one by one, and at the same numbers a release before a
- * pre-release (`3.3.0` over `3.3.0-RC1`, `-SNAPSHOT`, `-M2`). `null` when none starts with a number.
+ * The newest of the versions, all starting with a number: their leading numbers compared one by one, and at the same
+ * numbers a release before a pre-release (`3.3.0` over `3.3.0-RC1`), and pre-releases by their stage and number
+ * (`-SNAPSHOT` before `-M2` before `-RC1` before `-RC2`).
  */
-function newestVersion(versions: readonly string[]): string | null {
-  let newest: string | null = null;
-  for (const v of versions) if (numbers(v).length > 0 && (newest === null || compareVersions(v, newest) > 0)) newest = v;
-  return newest;
+function newestVersion(versions: readonly string[]): string {
+  const [first, ...rest] = versions;
+  if (first === undefined) throw new Error("a version drift has at least two versions");
+  return rest.reduce((newest, v) => (compareVersions(v, newest) > 0 ? v : newest), first);
 }
 
 function compareVersions(a: string, b: string): number {
@@ -129,7 +134,8 @@ function compareVersions(a: string, b: string): number {
     const diff = (x[i] ?? 0) - (y[i] ?? 0);
     if (diff !== 0) return diff;
   }
-  return Number(!preRelease(a)) - Number(!preRelease(b));
+  const [p, q] = [preRelease(a), preRelease(b)];
+  return p.stage - q.stage || p.number - q.number;
 }
 
 /** The numbers of the leading `1.2.3` part. */
@@ -138,6 +144,13 @@ function numbers(version: string): number[] {
   return core === undefined ? [] : core.split(".").map(Number);
 }
 
-function preRelease(version: string): boolean {
-  return /^\d+(?:\.\d+)*[-.]?(?:snapshot|alpha|beta|rc|m|pre|cr)\d*/i.test(version);
+/** Pre-release stages, earliest first, by the words versions use for them; a release is after all of them. */
+const STAGES: Record<string, number> = { snapshot: 0, alpha: 1, m: 2, milestone: 2, beta: 3, rc: 4, cr: 4 };
+const RELEASE_STAGE = 5;
+
+/** A version's stage and the number after it (`RC2` is 2). */
+function preRelease(version: string): { stage: number; number: number } {
+  const m = /^\d+(?:\.\d+)*[-.]?(snapshot|alpha|beta|rc|milestone|m|cr)(\d*)/i.exec(version);
+  const stage = m?.[1] === undefined ? undefined : STAGES[m[1].toLowerCase()];
+  return stage === undefined ? { stage: RELEASE_STAGE, number: 0 } : { stage, number: Number(m?.[2] || 0) };
 }

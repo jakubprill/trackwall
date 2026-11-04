@@ -1,4 +1,5 @@
 import {
+  type DriftedRepo,
   type EdgeConfidence,
   type EdgeEvidence,
   evidenceLabel,
@@ -51,8 +52,8 @@ export function GraphNodePanel({
   pairs: readonly EdgePair[];
   /** The graph's problems in this repo (`repoProblems`). */
   problems: readonly GraphProblem[];
-  /** The version drifts this repo is part of (`repoDrift`, ADR-196). */
-  drift: readonly VersionDrift[];
+  /** The version drifts this repo is part of, with its own versions (`repoDrift`, ADR-196). */
+  drift: readonly { drift: VersionDrift; own: DriftedRepo }[];
   onSelect: (repo: string) => void;
   onClose: () => void;
 }) {
@@ -110,7 +111,7 @@ export function GraphNodePanel({
           ))}
         </Section>
       )}
-      {drift.length > 0 && <RepoDriftSection repo={node.repo} drift={drift} />}
+      {drift.length > 0 && <RepoDriftSection drift={drift} />}
     </div>
   );
 }
