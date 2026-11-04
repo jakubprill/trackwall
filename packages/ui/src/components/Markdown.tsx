@@ -1,13 +1,15 @@
 import { createMermaidPlugin } from "@streamdown/mermaid";
-import { ExternalLink } from "@trackwall/protocol";
+import { ExternalLink, parseTrackwallLink } from "@trackwall/protocol";
 import { ImageOff } from "lucide-react";
 import { type ComponentProps, type MouseEvent, useState } from "react";
 import rehypeRaw from "rehype-raw";
-import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import rehypeSanitize from "rehype-sanitize";
 import { Streamdown } from "streamdown";
 import { errorMessage } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { useOpenWebLink } from "@/lib/desktop";
+import { MARKDOWN_REMARK_PLUGINS, MARKDOWN_SANITIZE_SCHEMA } from "@/lib/markdown-links";
+import { useOpenTrackwallLink } from "@/lib/trackwall-link";
 import { cn } from "@/lib/utils";
 
 /**
@@ -15,24 +17,14 @@ import { cn } from "@/lib/utils";
  * diagrams in `strict` mode, and an agent's answer in the conversation view (ADR-107), with neither, because a diagram's
  * HTML labels and theme CSS can load addresses and an answer is what a prompt-injected agent writes. Loaded lazily,
  * because Mermaid weighs a few MB. Nothing in the text navigates the window: the container catches every click on a
- * link, also in a diagram's SVG, the daemon opens a web page address in the system browser, and the rest is text. Images
- * are replaced by their description.
+ * link, also in a diagram's SVG, the daemon opens a web page address in the system browser, a `trackwall://` link
+ * switches the view (ADR-52), and the rest is text. Images are replaced by their description.
  */
 export type MarkdownSource = "readme" | "agent";
 const README_PLUGINS = { mermaid: createMermaidPlugin({ config: { theme: "dark" } }) };
 const AGENT_PLUGINS = {};
-/**
- * Our own plugins instead of Streamdown's defaults: sanitization with GitHub's schema with the `user-content-` prefix for
- * `id` and `name` (Streamdown strips it, and the text could then overwrite named elements of the window) and without
- * `rehype-harden`, which without a base URL turns relative links and images into "[blocked]". `metastring` is the code
- * block options Streamdown carries over from the fence (for example `startLine=10`).
- */
-const schema = {
-  ...defaultSchema,
-  attributes: { ...defaultSchema.attributes, code: [...(defaultSchema.attributes?.code ?? []), "metastring"] },
-};
-const README_REHYPE: ComponentProps<typeof Streamdown>["rehypePlugins"] = [rehypeRaw, [rehypeSanitize, schema]];
-const AGENT_REHYPE: ComponentProps<typeof Streamdown>["rehypePlugins"] = [[rehypeSanitize, schema]];
+const README_REHYPE: ComponentProps<typeof Streamdown>["rehypePlugins"] = [rehypeRaw, [rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA]];
+const AGENT_REHYPE: ComponentProps<typeof Streamdown>["rehypePlugins"] = [[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA]];
 const controls = {
   code: { copy: true, download: false },
   table: { copy: true, download: false, fullscreen: true },
@@ -61,6 +53,7 @@ export function Markdown({
   className?: string;
 }) {
   const openLink = useOpenWebLink(conn);
+  const openTrackwallLink = useOpenTrackwallLink();
   const [linkError, setLinkError] = useState<string>();
   const followLink = (e: MouseEvent<HTMLDivElement>) => {
     const anchor = e.target instanceof Element ? e.target.closest("a") : null;
@@ -68,7 +61,9 @@ export function Markdown({
     e.preventDefault();
     if (e.type === "auxclick" && e.button !== MIDDLE_BUTTON) return;
     // A link from a Mermaid diagram is an `<a>` in SVG, often with `xlink:href`.
-    const url = ExternalLink.safeParse(anchor.getAttribute("href") ?? anchor.getAttribute("xlink:href"));
+    const href = anchor.getAttribute("href") ?? anchor.getAttribute("xlink:href");
+    if (href !== null && openTrackwallLink(href)) return;
+    const url = ExternalLink.safeParse(href);
     if (!url.success) return;
     setLinkError(undefined);
     openLink(url.data).catch((err: unknown) => setLinkError(errorMessage(err)));
@@ -85,6 +80,7 @@ export function Markdown({
         mode={streaming ? "streaming" : "static"}
         isAnimating={streaming}
         plugins={source === "readme" ? README_PLUGINS : AGENT_PLUGINS}
+        remarkPlugins={MARKDOWN_REMARK_PLUGINS}
         rehypePlugins={source === "readme" ? README_REHYPE : AGENT_REHYPE}
         controls={controls}
         mermaid={mermaid}
@@ -96,15 +92,22 @@ export function Markdown({
   );
 }
 
-/** A link to a web page looks like a link; a relative one, an anchor and other protocols stay text with the address in a tooltip. */
+/** A link to a web page or a `trackwall://` link looks like a link; a relative one, an anchor and other protocols stay
+ * text with the address in a tooltip. */
 function Link({ href, children }: ComponentProps<"a">) {
-  const url = ExternalLink.safeParse(href);
-  if (!url.success) return <span title={href}>{children}</span>;
+  const url = linkAddress(href);
+  if (url === undefined) return <span title={href}>{children}</span>;
   return (
-    <a href={url.data} title={url.data} className="text-primary underline-offset-4 hover:underline">
+    <a href={url} title={url} className="text-primary underline-offset-4 hover:underline">
       {children}
     </a>
   );
+}
+
+function linkAddress(href: string | undefined): string | undefined {
+  if (href !== undefined && parseTrackwallLink(href)) return href;
+  const web = ExternalLink.safeParse(href);
+  return web.success ? web.data : undefined;
 }
 
 function Image({ alt, src }: ComponentProps<"img">) {

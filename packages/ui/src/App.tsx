@@ -1,3 +1,4 @@
+import type { TrackwallLinkTarget } from "@trackwall/protocol";
 import { FolderGit2, ListTree, Network, Orbit, Settings, SquareTerminal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityBar, type ActivityView } from "@/components/ActivityBar";
@@ -28,6 +29,7 @@ import { agentsInTurn, attentionCount } from "@/lib/session-state";
 import { FIRST_SETTINGS_CATEGORY, type SettingsCategory } from "@/lib/settings-categories";
 import { selectsSupervisor, showingTakesKeyboard, supervisorSummary } from "@/lib/supervisor";
 import { readSupervisorLayout, type SupervisorLayout, saveSupervisorLayout, unfolded } from "@/lib/supervisor-layout";
+import { ShowTrackwallTarget } from "@/lib/trackwall-link";
 import { useAppMenu } from "@/lib/use-app-menu";
 import { useAppUpdate } from "@/lib/use-app-update";
 import { useConnection } from "@/lib/use-connection";
@@ -177,12 +179,17 @@ export function App() {
     else if (open) openInSessions(entrySelection(open));
     return taken;
   };
+  // A `trackwall://` link (ADR-52): from the shell's jump, or clicked in this page in a browser tab.
+  const showLinkTarget = (target: TrackwallLinkTarget) => {
+    if (target.kind === "repo") openRepos(target.id);
+    else openInSessions(target);
+  };
   // Jump from the tray, a notification or the tray panel (ADR-26, ADR-39, ADR-50), from the global shortcut (ADR-50)
   // or from a `trackwall://` link (ADR-52): the shell shows the window first.
   useJumpRequest((jump) => {
     if (jump.kind === "next-waiting") return void openNextWaiting();
-    if (jump.kind !== "repo") return openInSessions(jump);
-    openRepos(jump.id);
+    if (jump.kind === "proposal") return openInSessions(jump);
+    showLinkTarget(jump);
   });
   // In a browser tab the page does what the shell does above: the count in the title and a notification (ADR-146).
   useTabAttention(sessions.data, outcomes.list, openInSessions);
@@ -208,137 +215,146 @@ export function App() {
   );
   return (
     <DaemonPlaceContext.Provider value={daemonPlace}>
-      <CurrentSessionProfile.Provider value={currentSessionProfile(sessions.data)}>
-        <FolderTerminalsLive.Provider value={terminalsLive}>
-          <div className="flex h-screen">
-            <ActivityBar
-              views={VIEWS}
-              active={view}
-              onSelect={setView}
-              newWindow={newWindow}
-              badges={{ sessions: attentionCount(sessions.data) }}
-            />
-            <div className="flex min-w-0 flex-1 flex-col">
-              {appUpdate && <UpdateBanner handle={appUpdate} />}
-              <NotificationOffer />
-              <AwaySummary list={sessions.data} onOpen={openInSessions} />
-              {error && <ErrorBanner message={error} action={{ label: "Try again", onClick: retry }} />}
-              {windowError && <ErrorBanner message={windowError} action={{ label: "Dismiss", onClick: () => setWindowError(undefined) }} />}
-              {conn && dropped && (
-                <FolderDrop
-                  key={dropped.seq}
-                  conn={conn}
-                  paths={dropped.paths}
-                  onOpenRepos={openReposFromDrop}
-                  onDismiss={() => setDropped(undefined)}
-                />
-              )}
-              {/* Alt+N writes an idea down from every view (ADR-133). */}
-              <IdeaCapture conn={conn} />
-              {dragging && conn && (
-                // Over the page, not in its flow: a bar that pushes the page down would move the terminals under the pointer.
-                <p className="bg-card text-muted-foreground pointer-events-none fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md border px-4 py-2 text-sm shadow-lg">
-                  {DROP_HINT}
-                </p>
-              )}
-              <KeyboardElsewhere.Provider value={supervisorFocused}>
-                <main className="hud-grid min-h-0 flex-1 overflow-y-auto">
-                  <ConnectionState connected={conn !== undefined} error={error} tokenRefused={tokenRefused} connect={connectWithAddress} />
-                  {/* One view that throws keeps the view bar and the other views. The key mounts the view afresh, with a fresh boundary, on
+      <ShowTrackwallTarget.Provider value={showLinkTarget}>
+        <CurrentSessionProfile.Provider value={currentSessionProfile(sessions.data)}>
+          <FolderTerminalsLive.Provider value={terminalsLive}>
+            <div className="flex h-screen">
+              <ActivityBar
+                views={VIEWS}
+                active={view}
+                onSelect={setView}
+                newWindow={newWindow}
+                badges={{ sessions: attentionCount(sessions.data) }}
+              />
+              <div className="flex min-w-0 flex-1 flex-col">
+                {appUpdate && <UpdateBanner handle={appUpdate} />}
+                <NotificationOffer />
+                <AwaySummary list={sessions.data} onOpen={openInSessions} />
+                {error && <ErrorBanner message={error} action={{ label: "Try again", onClick: retry }} />}
+                {windowError && (
+                  <ErrorBanner message={windowError} action={{ label: "Dismiss", onClick: () => setWindowError(undefined) }} />
+                )}
+                {conn && dropped && (
+                  <FolderDrop
+                    key={dropped.seq}
+                    conn={conn}
+                    paths={dropped.paths}
+                    onOpenRepos={openReposFromDrop}
+                    onDismiss={() => setDropped(undefined)}
+                  />
+                )}
+                {/* Alt+N writes an idea down from every view (ADR-133). */}
+                <IdeaCapture conn={conn} />
+                {dragging && conn && (
+                  // Over the page, not in its flow: a bar that pushes the page down would move the terminals under the pointer.
+                  <p className="bg-card text-muted-foreground pointer-events-none fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md border px-4 py-2 text-sm shadow-lg">
+                    {DROP_HINT}
+                  </p>
+                )}
+                <KeyboardElsewhere.Provider value={supervisorFocused}>
+                  <main className="hud-grid min-h-0 flex-1 overflow-y-auto">
+                    <ConnectionState
+                      connected={conn !== undefined}
+                      error={error}
+                      tokenRefused={tokenRefused}
+                      connect={connectWithAddress}
+                    />
+                    {/* One view that throws keeps the view bar and the other views. The key mounts the view afresh, with a fresh boundary, on
                 a view change, a reconnect (`epoch`) and every opening of a repo or a Settings category (`visit`). */}
-                  <ErrorBoundary
-                    key={`${view}:${epoch}:${visit}`}
-                    fallback={(message, retry) => <ViewFailed message={message} onRetry={retry} />}
-                  >
-                    {conn && view === "home" && (
-                      <HomeView
-                        conn={conn}
-                        runningLive={runningLive}
-                        eventsLost={eventsLost}
-                        repoWatch={repoWatch}
-                        sessions={sessions}
-                        onOpenInSessions={openInSessions}
-                        onOpenRepo={openRepos}
-                        onOpenDaemon={() => openSettings("diagnostics")}
-                        onOpenSettings={openSettings}
-                      />
-                    )}
-                    {conn && view === "repos" && (
-                      <ReposView
-                        conn={conn}
-                        initialRepo={repo}
-                        repoWatch={repoWatch}
-                        sessions={sessions.data}
-                        runningLive={runningLive}
-                        onOpenInSessions={openInSessions}
-                        onRetry={retry}
-                        onOpenSettings={openSettings}
-                      />
-                    )}
-                    {conn && view === "sessions" && (
-                      <SessionsView
-                        conn={conn}
-                        sessions={sessions}
-                        runningLive={runningLive}
-                        selected={session}
-                        onSelect={openInSessions}
-                        onShowSupervisor={showSupervisor}
-                        onShowImpact={showImpact}
-                        tree={tree}
-                        supervisor={supervisor}
-                        outcomes={outcomes.byTask}
-                        layout={sessionLayout}
-                        onLayout={setSessionLayout}
-                      />
-                    )}
-                    {conn && view === "graph" && (
-                      <GraphView
-                        conn={conn}
-                        warmupLive={warmupLive}
-                        repoWatch={repoWatch}
-                        sessions={sessions.data}
-                        initialImpactTask={impactTask}
-                      />
-                    )}
-                    {conn && view === "plan" && (
-                      <PlanView conn={conn} boardLive={boardLive} sessions={sessions.data} onOpenInSessions={openInSessions} />
-                    )}
-                    {conn && view === "settings" && (
-                      <div className="flex justify-center p-6">
-                        <SettingsView
+                    <ErrorBoundary
+                      key={`${view}:${epoch}:${visit}`}
+                      fallback={(message, retry) => <ViewFailed message={message} onRetry={retry} />}
+                    >
+                      {conn && view === "home" && (
+                        <HomeView
                           conn={conn}
-                          initialCategory={settingsCategory ?? FIRST_SETTINGS_CATEGORY}
-                          update={appUpdate}
-                          warmupLive={warmupLive}
-                          mcpCallsLive={mcpCallsLive}
-                          sessions={sessions.data}
-                          onRetry={retry}
-                          onSaved={() => setView("repos")}
+                          runningLive={runningLive}
+                          eventsLost={eventsLost}
+                          repoWatch={repoWatch}
+                          sessions={sessions}
+                          onOpenInSessions={openInSessions}
+                          onOpenRepo={openRepos}
+                          onOpenDaemon={() => openSettings("diagnostics")}
+                          onOpenSettings={openSettings}
                         />
-                      </div>
-                    )}
-                  </ErrorBoundary>
-                </main>
-              </KeyboardElsewhere.Provider>
+                      )}
+                      {conn && view === "repos" && (
+                        <ReposView
+                          conn={conn}
+                          initialRepo={repo}
+                          repoWatch={repoWatch}
+                          sessions={sessions.data}
+                          runningLive={runningLive}
+                          onOpenInSessions={openInSessions}
+                          onRetry={retry}
+                          onOpenSettings={openSettings}
+                        />
+                      )}
+                      {conn && view === "sessions" && (
+                        <SessionsView
+                          conn={conn}
+                          sessions={sessions}
+                          runningLive={runningLive}
+                          selected={session}
+                          onSelect={openInSessions}
+                          onShowSupervisor={showSupervisor}
+                          onShowImpact={showImpact}
+                          tree={tree}
+                          supervisor={supervisor}
+                          outcomes={outcomes.byTask}
+                          layout={sessionLayout}
+                          onLayout={setSessionLayout}
+                        />
+                      )}
+                      {conn && view === "graph" && (
+                        <GraphView
+                          conn={conn}
+                          warmupLive={warmupLive}
+                          repoWatch={repoWatch}
+                          sessions={sessions.data}
+                          initialImpactTask={impactTask}
+                        />
+                      )}
+                      {conn && view === "plan" && (
+                        <PlanView conn={conn} boardLive={boardLive} sessions={sessions.data} onOpenInSessions={openInSessions} />
+                      )}
+                      {conn && view === "settings" && (
+                        <div className="flex justify-center p-6">
+                          <SettingsView
+                            conn={conn}
+                            initialCategory={settingsCategory ?? FIRST_SETTINGS_CATEGORY}
+                            update={appUpdate}
+                            warmupLive={warmupLive}
+                            mcpCallsLive={mcpCallsLive}
+                            sessions={sessions.data}
+                            onRetry={retry}
+                            onSaved={() => setView("repos")}
+                          />
+                        </div>
+                      )}
+                    </ErrorBoundary>
+                  </main>
+                </KeyboardElsewhere.Provider>
+              </div>
+              {conn && (
+                <KeyboardElsewhere.Provider value={false}>
+                  <SupervisorPanel
+                    key={epoch}
+                    conn={conn}
+                    supervisor={supervisor}
+                    layout={supervisorLayout}
+                    onLayout={chooseSupervisorLayout}
+                    focused={supervisorFocused}
+                    onFocusedChange={setSupervisorFocused}
+                    onOpenInSessions={openInSessions}
+                    onChanged={sessions.reload}
+                  />
+                </KeyboardElsewhere.Provider>
+              )}
             </div>
-            {conn && (
-              <KeyboardElsewhere.Provider value={false}>
-                <SupervisorPanel
-                  key={epoch}
-                  conn={conn}
-                  supervisor={supervisor}
-                  layout={supervisorLayout}
-                  onLayout={chooseSupervisorLayout}
-                  focused={supervisorFocused}
-                  onFocusedChange={setSupervisorFocused}
-                  onOpenInSessions={openInSessions}
-                  onChanged={sessions.reload}
-                />
-              </KeyboardElsewhere.Provider>
-            )}
-          </div>
-        </FolderTerminalsLive.Provider>
-      </CurrentSessionProfile.Provider>
+          </FolderTerminalsLive.Provider>
+        </CurrentSessionProfile.Provider>
+      </ShowTrackwallTarget.Provider>
     </DaemonPlaceContext.Provider>
   );
 }

@@ -1,5 +1,4 @@
 import "@xterm/xterm/css/xterm.css";
-import { isTauri } from "@tauri-apps/api/core";
 import { copyableText, type DaemonSocket, PTY_CLOSE_NOT_FOUND, type PtyClientMessage } from "@trackwall/protocol";
 import { FitAddon } from "@xterm/addon-fit";
 import { SerializeAddon } from "@xterm/addon-serialize";
@@ -30,6 +29,7 @@ import { hyperlinkHandler, trackwallLinkProvider } from "@/lib/terminal-links";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
 import { cssTokens, terminalTheme } from "@/lib/terminal-theme";
 import { browserTimers } from "@/lib/timers";
+import { useOpenTrackwallLink } from "@/lib/trackwall-link";
 import { cn } from "@/lib/utils";
 import { FocusReporter, terminalInFront } from "@/lib/window-focus";
 
@@ -110,6 +110,9 @@ export function PtyTerminal({
   const openLink = useOpenWebLink(conn);
   const openWebLink = useRef(openLink);
   openWebLink.current = openLink;
+  const openTrackwallLink = useOpenTrackwallLink();
+  const openTrackwall = useRef(openTrackwallLink);
+  openTrackwall.current = openTrackwallLink;
 
   useEffect(() => {
     const element = host.current;
@@ -122,13 +125,13 @@ export function PtyTerminal({
     terminal.loadAddon(fit);
     const serializer = new SerializeAddon();
     terminal.loadAddon(serializer);
-    let links: { dispose: () => void } | undefined;
-    if (isTauri()) {
-      links = terminal.registerLinkProvider(trackwallLinkProvider(terminal, IS_MAC));
-      terminal.options.linkHandler = hyperlinkHandler(IS_MAC, (url) => {
+    const links = terminal.registerLinkProvider(trackwallLinkProvider(terminal, IS_MAC, (url) => openTrackwall.current(url)));
+    terminal.options.linkHandler = hyperlinkHandler(IS_MAC, {
+      external: (url) => {
         openWebLink.current(url).catch((err: unknown) => setNotice(`Could not open the link: ${errorMessage(err)}`));
-      });
-    }
+      },
+      trackwall: (url) => openTrackwall.current(url),
+    });
     terminal.open(element);
     // In the capture phase, before xterm.js reports the move to the program and so clears the selection.
     const holdMove = (event: MouseEvent) => {
@@ -285,7 +288,7 @@ export function PtyTerminal({
       document.removeEventListener("visibilitychange", sendFocus);
       focus.dispose();
       input.dispose();
-      links?.dispose();
+      links.dispose();
       socket?.close();
       term.current = undefined;
       updateFocus.current = undefined;
