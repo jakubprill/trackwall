@@ -25,6 +25,7 @@ import {
   type SearchCommitsResult,
   type Session,
   type SessionProfile,
+  type StarredRepos,
   type StatusRead,
   type SupervisorSettings,
   type SyncResult,
@@ -48,6 +49,7 @@ import { describeDroppedFolder } from "./dropped-folder.ts";
 import { isFullPath, NOT_FULL_PROGRAM_PATH } from "./full-path.ts";
 import { dirKey, findRepos, projectsDirUnavailable, type RepoEntry, resolveFolderSetting, takenNames } from "./projects-dir.ts";
 import { moveRepoOut } from "./repo-removal.ts";
+import { withStar } from "./starred-repos.ts";
 import { suggestedProjectsDir } from "./suggested-projects-dir.ts";
 import { SyncRuns } from "./sync-runs.ts";
 import { sessionToolPermissions, supervisorToolPermissions } from "./tool-permissions.ts";
@@ -256,6 +258,19 @@ export class Workspace {
 
   repoHosts(): RepoHost[] {
     return this.deps.file.repoHosts();
+  }
+
+  /** The starred repos (ADR-192); `invalid_config` for a bad key, which the Repos view shows. */
+  starredRepos(): StarredRepos {
+    return this.deps.file.starredRepos();
+  }
+
+  /** A repo no longer in the folder can be starred too: the id is what the user sees, and a clone may bring it back. */
+  setRepoStarred(repo: string, starred: boolean): StarredRepos {
+    const current = this.deps.file.starredRepos();
+    const next = withStar(current, repo, starred);
+    if (next !== current) this.deps.file.setStarredRepos(next);
+    return next;
   }
 
   setRepoHosts(hosts: RepoHost[]): RepoHost[] {
