@@ -9,6 +9,7 @@ const fakeCli = join(import.meta.dir, "..", "fixtures", "fake-hosting-cli.ts");
 export interface FakeHostingConfig {
   repos?: unknown[];
   apiErrors?: Record<string, string>;
+  apiPathErrors?: Record<string, string>;
   apiRaw?: string;
   apiResponses?: Record<string, unknown>;
   cloneErrors?: Record<string, string>;

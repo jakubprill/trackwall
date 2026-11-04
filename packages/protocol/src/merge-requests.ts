@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TaskId } from "./agents.ts";
+import { PromptDelivery, TaskId } from "./agents.ts";
 import { apiEndpoints, Done } from "./api.ts";
 import { RepoHostKind } from "./repo-hosts.ts";
 import { WebAddress } from "./workspace.ts";
@@ -31,16 +31,63 @@ export type PipelineState = z.infer<typeof PipelineState>;
 /** Most failed jobs a pipeline names; the pipeline's page has the rest. */
 export const PIPELINE_FAILED_JOBS_MAX = 10;
 
+/** A job's number on the repo host: GitLab's job id, or the id of a GitHub Actions job (its check run). */
+export const JobId = z.string().regex(/^[1-9][0-9]{0,19}$/);
+
 /**
  * A job of a failed pipeline that failed it: a GitLab job (not one allowed to fail) or a GitHub check or commit
- * status. Its log stays on the repo host: an agent reads it with the user's own MCP server for the host (ADR-154).
+ * status. Trackwall reads the end of its log only when the user asks (ADR-197).
  */
 export const FailedJob = z.object({
   name: z.string(),
   /** The job's page on the repo host; `null` for a commit status that gave none. */
   url: z.string().nullable(),
+  /**
+   * The job whose log Trackwall can read: every GitLab job and a GitHub Actions check; `null` for a check of another app and
+   * a commit status, whose logs live elsewhere.
+   */
+  // An unread `pipeline_failed` update in `agent-queues.json` from before ADR-197 has none.
+  id: JobId.nullable().default(null),
 });
 export type FailedJob = z.infer<typeof FailedJob>;
+
+/** The most lines of a job's log Trackwall shows and hands the agent: the end, where a job says why it failed. */
+export const JOB_LOG_LINES_MAX = 150;
+/** The most characters of those lines, so a line of minified output does not fill the agent's context. */
+export const JOB_LOG_CHARS_MAX = 12_000;
+
+/**
+ * The end of a failed job's log (ADR-197), read from the repo host on request: without colours, GitLab's section
+ * markers and GitHub's timestamps, with the secrets the daemon knows masked, at most `JOB_LOG_LINES_MAX` lines.
+ */
+export const JobLog = z.object({
+  job: FailedJob,
+  text: z.string(),
+  /**
+   * Earlier lines were left out; the job's page has the whole log. With an empty `text`, the log was too long for the
+   * daemon to read its end.
+   */
+  truncated: z.boolean(),
+});
+export type JobLog = z.infer<typeof JobLog>;
+
+/** The most failed jobs whose logs go to the agent with a pipeline fix; the others go by name. */
+export const PIPELINE_FIX_LOGS_MAX = 3;
+
+/**
+ * A pipeline fix (ADR-197): the user's request to the task's agent to fix the failed pipeline of its merge request, with
+ * the end of the failed jobs' logs. The agent reads it with `get_review_comments`, like the user's review (ADR-62).
+ */
+export const PipelineFix = z.object({
+  /** The pipeline's page on the repo host. */
+  pipeline: z.string(),
+  /** The commit it failed on. */
+  commit: z.string(),
+  logs: z.array(JobLog).max(PIPELINE_FIX_LOGS_MAX),
+  /** The other failed jobs, by name: their logs were not read (more than `PIPELINE_FIX_LOGS_MAX`, or none to read). */
+  otherJobs: z.array(z.string()).max(PIPELINE_FAILED_JOBS_MAX),
+});
+export type PipelineFix = z.infer<typeof PipelineFix>;
 
 export const Pipeline = z.object({
   state: PipelineState,
@@ -182,4 +229,14 @@ export const mergeRequestsApi = {
   openForm: endpoint("open-form", MergeRequestDraft, Done),
   /** The address `openForm` opens, with the same refusals, for a page that opens it itself when the daemon has no desktop (ADR-120). */
   formUrl: endpoint("form-url", MergeRequestDraft, z.object({ url: WebAddress })),
+  /**
+   * The end of the log of one job that failed the task's merge request pipeline (ADR-197), read from the repo host now.
+   * `not_found` for a job the daemon does not know as one that failed it.
+   */
+  jobLog: endpoint("job-log", TaskRequest.extend({ job: JobId }), JobLog),
+  /**
+   * Asks the task's agent to fix the failed pipeline of its merge request (ADR-197): the daemon reads the end of the failed
+   * jobs' logs and queues them as a pipeline fix for `get_review_comments`. `bad_request` while the pipeline has not failed.
+   */
+  fixPipeline: endpoint("fix-pipeline", TaskRequest, z.object({ delivery: PromptDelivery })),
 };

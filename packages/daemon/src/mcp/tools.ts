@@ -328,7 +328,7 @@ const runs: ToolRuns = {
   reportResult: async (facade, { summary, checkSteps }, { caller }) => ({
     task: facade.agents.reportSummary(caller, summary, checkSteps),
   }),
-  getReviewComments: async (facade, _args, { caller }) => ({ comments: facade.agents.takeReviewComments(caller) }),
+  getReviewComments: async (facade, _args, { caller }) => facade.agents.takeReviewComments(caller),
   sendMessage: async (facade, { task, text }, { caller }) => facade.agents.sendMessage(caller, task, text),
   askProposer: async (facade, { question }, { caller }) => ({ delivery: facade.agents.askProposer(caller, question) }),
   copyToClipboard: async (facade, { text }, { caller }) => {
