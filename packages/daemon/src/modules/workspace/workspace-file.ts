@@ -11,6 +11,7 @@ import {
   RepoTagRules,
   SandboxSettings,
   SessionProfile,
+  StarredRepos,
   SupervisorSettings,
   ToolPermissionRules,
   WorkspaceKey,
@@ -27,7 +28,7 @@ import { type WorkspaceKeyValues, workspaceKeyValue } from "./workspace-key-valu
 /**
  * `workspace.yaml` (§4.5, ADR-13): the workspace configuration, which the user can edit by hand and keep
  * in a private repo. Read on every use, so a manual edit works without restarting the daemon. A write changes
- * only one key (`projectsDir`, `worktreesDir`, `gitProgram`, `repoHosts`, `javaNavigation`, which the Java navigation install writes, or `localConfigRemote`, which "Push to this remote" for the local config store writes, or `sessionProfile`, or `autoReview`; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `supervisor`, `sandbox` and `agentSecrets` only by hand) and keeps comments and the other keys,
+ * only one key (`projectsDir`, `worktreesDir`, `gitProgram`, `repoHosts`, `starredRepos`, which the star in Repos writes, `javaNavigation`, which the Java navigation install writes, or `localConfigRemote`, which "Push to this remote" for the local config store writes, or `sessionProfile`, or `autoReview`; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `supervisor`, `sandbox` and `agentSecrets` only by hand) and keeps comments and the other keys,
  * including the `repos` list from version 0.2.0, which is no longer read (ADR-18): it is the user's file, so removing it is up to them.
  */
 
@@ -56,6 +57,8 @@ const Keys: { [K in WorkspaceKey]: z.ZodType<WorkspaceKeyValues[K], unknown> } =
     .transform((path) => path ?? null),
   // Repo hosts (ADR-19); a missing key means no repo hosts, because only the user knows the GitLab address.
   repoHosts: RepoHosts.nullish().transform((hosts) => hosts ?? []),
+  // The repos the user starred (ADR-192); a missing key means none.
+  starredRepos: StarredRepos.nullish().transform((ids) => ids ?? []),
   // Repo tag rules (ADR-25); only by hand in the file, because only the user knows team and group names.
   repoTags: RepoTagRules.nullish().transform((rules) => rules ?? {}),
   // Package aliases and manual graph edges (ADR-29); only by hand in the file, like `repoTags`.
@@ -125,6 +128,11 @@ export class WorkspaceFile {
   /** Repo hosts in file order (ADR-19). */
   repoHosts(): RepoHost[] {
     return this.get("repoHosts", Keys.repoHosts);
+  }
+
+  /** The starred repos (`starredRepos`, ADR-192), in the order they were starred. */
+  starredRepos(): StarredRepos {
+    return this.get("starredRepos", Keys.starredRepos);
   }
 
   /** Repo tag rules (`repoTags`, ADR-25): a tag and patterns of the identifier or remote repo address. */
@@ -231,6 +239,11 @@ export class WorkspaceFile {
 
   setLocalConfigRemote(url: string | null): void {
     this.set("localConfigRemote", url);
+  }
+
+  /** No starred repos removes the key, like `setWorktreesDir`. */
+  setStarredRepos(ids: StarredRepos): void {
+    this.set("starredRepos", ids.length === 0 ? null : ids);
   }
 
   setRepoHosts(hosts: RepoHost[]): void {

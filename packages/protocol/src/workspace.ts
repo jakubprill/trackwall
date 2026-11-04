@@ -93,6 +93,16 @@ export type Repo = z.infer<typeof Repo>;
  */
 const ProjectsDir = z.string().nullable();
 
+/** More starred repos than this would make the list's top no shorter than the list. */
+export const MAX_STARRED_REPOS = 1000;
+
+/**
+ * The repos the user starred (`starredRepos` in `workspace.yaml`, ADR-192), which the Repos view lists first; in the order
+ * they were starred. An id whose folder is gone stays until the user unstars it, so a repo cloned again comes back starred.
+ */
+export const StarredRepos = z.array(RepoId).max(MAX_STARRED_REPOS);
+export type StarredRepos = z.infer<typeof StarredRepos>;
+
 export const RepoList = z.object({
   projectsDir: ProjectsDir,
   /** Sorted by directory name. */
@@ -384,6 +394,13 @@ export const workspaceApi = {
   setSessionProfile: endpoint("set-session-profile", z.object({ profile: SessionProfile.nullable() }).strict(), WorkspaceSettings),
   /** Whether a task's changes get an automatic review once its agent reports its result (ADR-182). No MCP tool sets it: it spends the user's credits. */
   setAutoReview: endpoint("set-auto-review", AutoReviewSettings.required(), WorkspaceSettings),
+  /** The starred repos (ADR-192). */
+  starredRepos: endpoint("starred-repos", z.object({}).strict(), StarredRepos),
+  /**
+   * Stars or unstars a repo in `workspace.yaml` and returns the starred repos (ADR-192); the repo need not be in the folder,
+   * so a repo that is gone can still be unstarred. No MCP tool sets it: it is the user's own order of the list.
+   */
+  setRepoStarred: endpoint("set-repo-starred", z.object({ repo: RepoId, starred: z.boolean() }).strict(), StarredRepos),
   overview: endpoint("overview", RepoRequest, RepoOverview),
   tree: endpoint("tree", z.object({ repo: RepoId, path: RepoPath }).strict(), z.array(TreeEntry)),
   file: endpoint(

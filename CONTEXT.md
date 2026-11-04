@@ -138,6 +138,10 @@ A clone of one remote repo into the projects folder, in the background: `running
 **Repo** (`Repo`, `RepoId`):
 One repository of the workspace, identified by a slug from the name of its directory.
 
+**Starred repo** (`starredRepos` in `workspace.yaml`, `StarredRepos`):
+A repo the user marked with a star in "Repos", which the list then shows at the top, ahead of the alphabetical rest (ADR-192). Kept by repo id; only the user stars or unstars.
+_Avoid_: favourite, pinned repo
+
 **Remote address** (`Repo.remote`):
 The address of the main remote (`origin` or the only remote in git, `mainRemote`) as `host/path`, for example `gitlab.example.com/shop/api`, without the protocol and user. It identifies the repo independently of the directory name (ADR-21).
 _Avoid_: repo URL (a URL has a protocol and may carry a token), remote without qualification (that is a name in git, for example `origin`)
