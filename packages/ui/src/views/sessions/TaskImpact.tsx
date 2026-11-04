@@ -1,4 +1,13 @@
-import { agentsApi, type ChangedEndpoint, type ChangedEndpoints, graphApi, type Task } from "@trackwall/protocol";
+import {
+  agentsApi,
+  type ChangedEndpoint,
+  type ChangedEndpoints,
+  contractChange,
+  graphApi,
+  handoffPrompt,
+  reachText,
+  type Task,
+} from "@trackwall/protocol";
 import { Network, RefreshCw, Send, TriangleAlert } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -10,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { taskName } from "@/lib/session-entries";
-import { contractChange, handoffPrompt, IMPACT_POLL_MS, impactPoints, impactSummary, RING_GAP, reachText } from "@/lib/task-impact";
+import { IMPACT_POLL_MS, impactPoints, impactSummary, RING_GAP } from "@/lib/task-impact";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";

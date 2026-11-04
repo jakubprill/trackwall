@@ -330,6 +330,8 @@ export function createFacade(o: FacadeOptions): Facade {
       // `record` logs its own failures, so ending the task does not wait for the write.
       void taskJournal.record({ ...ended, verification: last && { state: last.state, finishedAt: last.finishedAt } });
     },
+    // `graph` is made below; a task's turn ends only after it exists.
+    taskImpact: ({ repo, worktree, base }) => graph.changedEndpoints(repo, worktree, base),
     log: o.log,
   });
   // A removal that failed on a held file, or a crash before it, leaves an ended task's logs behind (ADR-59). Without a

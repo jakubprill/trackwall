@@ -23,9 +23,16 @@ const REMEMBERED_REJECTIONS = 100;
  * removal and the remembered rejections (oldest first).
  */
 export const StoredProposals = z.object({
-  // A proposal saved before ADR-133 has no board item, and one saved before proposed changes (ADR-171) no parts.
+  // A proposal saved before ADR-133 has no board item, one saved before proposed changes (ADR-171) no parts, and one
+  // saved before impact proposals (ADR-198) no `fromImpact`.
   pending: z
-    .array(TaskProposal.extend({ item: TaskProposal.shape.item.default(null), parts: TaskProposal.shape.parts.default(null) }))
+    .array(
+      TaskProposal.extend({
+        item: TaskProposal.shape.item.default(null),
+        parts: TaskProposal.shape.parts.default(null),
+        fromImpact: TaskProposal.shape.fromImpact.default(false),
+      }),
+    )
     .max(MAX_PENDING_PROPOSALS),
   removalDirs: z.record(TaskId, z.string().max(4096).refine(isAbsolute, "a repo folder must be a full path")),
   rejected: z.array(z.object({ id: TaskId, reason: z.string().nullable() })).max(REMEMBERED_REJECTIONS),
@@ -140,6 +147,13 @@ export class TaskProposals {
     if (restore) return;
     this.#pending = this.#pending.filter((p) => p.id !== id);
     this.#removalDirs.delete(id);
+    this.#changed();
+  }
+
+  /** A waiting proposal goes without a rejection, because no session waits for it: an impact proposal its task's agent replaced (ADR-198). */
+  withdraw(id: string): void {
+    if (this.find(id) === undefined) return;
+    this.#pending = this.#pending.filter((p) => p.id !== id);
     this.#changed();
   }
 

@@ -456,6 +456,7 @@ _Avoid_: parent, owner, manager
 
 **Handoff** (`TaskHandoff` in `task-handoff.ts`, `StoredTask.handoff`):
 What a task whose session proposed another task hands that task: the handing task, its repo and branch, and the commit its branch was at when the user approved the proposal, taken from Trackwall's task list and git. Every session of the proposed task is told where to read the work it builds on (ADR-143). When the handing task's branch moves (to a commit with other files, looking past its round commits, ADR-168), the proposed task is asked to call the MCP tool `get_handoff` (`TaskHandoffState`), which lists the commits and files since it last read (ADR-144), and `get_changed_endpoints` with the handing task lists the endpoints its commits changed (ADR-145). The user can also hand a task's work to a repo its change reaches, with "Hand off" in its Impact tab (`handoffFrom`, ADR-147).
+_Avoid_: dependency, upstream, parent task
 
 **Change** (`Task.change`, `TaskChange`, `ChangeId`; "change" in the UI):
 One piece of work across several repos that the user starts at once, or approves on one card when an agent proposes it (`propose_change`, a `TaskProposal` of `kind: change`): one task per repo, its **parts**, all on one branch name from the change's title, each with its place in the **merge order** (`TaskChange.position`), the order their merge requests are to be merged. A change is no record of its own: it is the tasks that carry its id, and it ends with its last part. Each part's session knows its siblings, and builds on the part right before it as a handoff (ADR-171). The merge order is information; nothing waits for it or merges by it (ADR-9). Not a subtask: no part proposed another, so none reports to another; the parts of a proposed change all report to its proposer.
@@ -464,7 +465,10 @@ _Avoid_: multi-repo task, epic; and do not confuse it with a task's changes (its
 **Impact** (`ImpactedRepo`, `impact` in `ChangedEndpoints`, `graph/impact.ts`; in the UI the task's *Impact* tab and *Impact of* in Overview):
 The repos a task's committed API change reaches, in rings: ring 1 calls a changed endpoint, ring 2 calls an endpoint of ring 1 that makes such a call, up to three rings; a repo reached only through code Trackwall could not follow, or through a client without paths, is *maybe* (`sure: false`) (ADR-147).
 _Avoid_: blast radius, ripple, consumers (for the whole set)
-_Avoid_: dependency, upstream, parent task
+
+**Impact proposal** (`TaskProposal.fromImpact`, `impact-proposals.ts`; "Proposed by Trackwall" under the proposal's title):
+A task proposal the daemon makes when a task's turn ends, for each repo of ring 1 of its impact that surely calls an endpoint the task's commits removed or changed: the task's own proposal, so an approved one is its subtask, with the Impact tab's hand-off prompt. A repo is offered each endpoint once (ADR-198).
+_Avoid_: auto-handoff, consumer task
 
 **Task message** (`TaskMessage`, MCP tools `send_message` and `get_messages`; "Messages" in the task panel):
 Text a task's proposer sends to the task's session: a correction, an answer, a change elsewhere to follow. The daemon asks the task's session to read it the way it asks for a review, and the task's agent reads it with `get_messages`. At most 5 to a task until the user takes part again (ADR-68).

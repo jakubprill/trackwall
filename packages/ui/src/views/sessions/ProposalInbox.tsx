@@ -27,6 +27,7 @@ import {
   type SessionSelection,
 } from "@/lib/session-entries";
 import { toggle } from "@/lib/set-toggle";
+import { impactProposalNote } from "@/lib/task-impact";
 import { typedModel } from "@/lib/task-model";
 import { useProposalDecisions } from "@/lib/use-proposal-decisions";
 import { useProviderModels } from "@/lib/use-provider-models";
@@ -190,10 +191,7 @@ export function ProposalInbox({
                   ) : (
                     <ChevronRight className="mt-0.5 size-4 shrink-0" aria-hidden />
                   )}
-                  <span className="flex min-w-0 flex-col">
-                    <span className="text-sm font-medium">{proposalName(p)}</span>
-                    {!expanded && <span className="text-muted-foreground truncate text-xs">{promptOf(p)}</span>}
-                  </span>
+                  <ProposalHeading proposal={p} prompt={promptOf(p)} expanded={expanded} />
                 </button>
               </div>
               {expanded && (
@@ -257,5 +255,17 @@ export function ProposalInbox({
         })}
       </ul>
     </div>
+  );
+}
+
+/** A proposal's name, why Trackwall made it when it did (ADR-198), and its prompt's start while it is closed. */
+function ProposalHeading({ proposal, prompt, expanded }: { proposal: TaskProposal; prompt: string; expanded: boolean }) {
+  const note = impactProposalNote(proposal);
+  return (
+    <span className="flex min-w-0 flex-col">
+      <span className="text-sm font-medium">{proposalName(proposal)}</span>
+      {note && <span className="text-muted-foreground text-xs">{note}</span>}
+      {!expanded && <span className="text-muted-foreground truncate text-xs">{prompt}</span>}
+    </span>
   );
 }

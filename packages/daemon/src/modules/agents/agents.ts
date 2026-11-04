@@ -7,6 +7,7 @@ import {
   type AutoReview,
   type AutoReviewSettings,
   CHANGE_PROMPTS_TOO_LONG,
+  type ChangedEndpoints,
   type ChangePart,
   type ChangeRequest,
   type CreatedChange,
@@ -15,6 +16,7 @@ import {
   type DialogAnswer,
   type EnvironmentCheck,
   type HttpEndpoint,
+  handoffPrompt,
   inTurn,
   isSupervisor,
   type JavaNavigationSettings,
@@ -66,6 +68,7 @@ import { sandboxState, taskSandbox } from "./copilot-sandbox.ts";
 import type { EndedTaskFacts } from "./ended-task.ts";
 import { HandoffWatch } from "./handoff-watch.ts";
 import { appendHookRecord } from "./hook-tail.ts";
+import { type ImpactOffer, ImpactProposals, impactProposalTitle, impactTaskName } from "./impact-proposals.ts";
 import { javaNavigationState } from "./java-language-server.ts";
 import { JavaNavigationServers } from "./java-navigation-servers.ts";
 import { LAST_SUPERVISOR_FILE, LastSupervisorFile } from "./last-supervisor.ts";
@@ -230,6 +233,11 @@ export interface AgentsDeps {
    * facts go to the task journal (ADR-150).
    */
   onTaskRemoved: (ended: EndedTaskFacts) => void;
+  /**
+   * The removed and changed endpoints of a task's commits and the repos they reach (`graph`, ADR-145, ADR-147), which
+   * the end of the task's turn turns into impact proposals (ADR-198).
+   */
+  taskImpact: (task: Task) => Promise<ChangedEndpoints>;
   log: (msg: string) => void;
 }
 
@@ -245,6 +253,7 @@ export class Agents {
   readonly #reviews = new TaskReviews(() => this.#queues.follow());
   readonly #miseTrust = new MiseTrustNotices(() => this.#queues.follow());
   readonly #handoffs: HandoffWatch;
+  readonly #impactProposals: ImpactProposals;
   readonly #rounds: TaskRoundList;
   readonly #coordination: TaskCoordination;
   readonly #supervisor: SupervisorSessions;
@@ -328,6 +337,15 @@ export class Agents {
       log: deps.log,
     });
     this.#handoffs = new HandoffWatch(this.#tasks, (task) => this.#sessions.runningOfTask(task)?.askToRead(), deps.log);
+    this.#impactProposals = new ImpactProposals({
+      task: (id) => this.#tasks.find(id),
+      offered: (id) => this.#tasks.impactProposed(id),
+      markOffered: (id, repo, endpoints) => this.#tasks.markImpactProposed(id, repo, endpoints),
+      workedRepos: (id) => this.#workedRepos(id),
+      impact: deps.taskImpact,
+      propose: (session, offer, changed) => this.#proposeFromImpact(session, offer, changed),
+      log: deps.log,
+    });
     this.#coordination = new TaskCoordination({
       task: (id) => this.task(id),
       findTask: (id) => this.findTask(id),
@@ -499,7 +517,43 @@ export class Agents {
     await this.#deps.repos.repoPath(proposal.repo);
     await this.#assertOnBoard(proposal.item);
     const proposedBy = proposedByOf(caller === null ? null : this.session(caller));
-    return this.#proposals.add({ kind: "task", ...proposal, parts: null, proposedBy });
+    // The agent knows better than the comparison what the repo has to do (ADR-198), so its proposal replaces the
+    // daemon's for the same repo.
+    for (const p of this.#proposals.list())
+      if (p.fromImpact && p.repo === proposal.repo && proposedBy.task !== null && p.proposedBy.task === proposedBy.task)
+        this.#proposals.withdraw(p.id);
+    return this.#proposals.add({ kind: "task", ...proposal, parts: null, fromImpact: false, proposedBy });
+  }
+
+  /** An impact proposal (ADR-198): the task's session proposes a task in a repo that calls what the task's commits changed. */
+  #proposeFromImpact(session: string, { repo, reached }: ImpactOffer, changed: ChangedEndpoints): void {
+    const proposedBy = proposedByOf(this.session(session));
+    if (proposedBy.task === null) throw new Error(`session ${session} runs no task`);
+    const task = this.#tasks.task(proposedBy.task);
+    this.#proposals.add({
+      kind: "task",
+      repo,
+      title: impactProposalTitle(task),
+      prompt: handoffPrompt(changed, impactTaskName(task), reached),
+      model: null,
+      approvals: "ask",
+      item: null,
+      parts: null,
+      fromImpact: true,
+      proposedBy,
+    });
+  }
+
+  /** The repos where task `id`'s work already goes on or came from, which get no impact proposal (ADR-198). */
+  #workedRepos(id: string): Set<string> {
+    const task = this.#tasks.find(id);
+    const repos = new Set<string>(task === undefined ? [] : [task.repo]);
+    const handoff = this.#tasks.handoff(id);
+    if (handoff !== null) repos.add(handoff.repo);
+    for (const part of this.#tasks.change(id)?.parts ?? []) repos.add(part.repo);
+    for (const p of this.#proposals.list()) if (p.proposedBy.task === id) for (const repo of proposalRepos(p)) repos.add(repo);
+    for (const t of this.#tasks.list()) if (t.proposedBy?.task === id) repos.add(t.repo);
+    return repos;
   }
 
   /**
@@ -521,7 +575,14 @@ export class Agents {
     await this.#assertOnBoard(proposal.item);
     const [first] = parts;
     if (first === undefined) throw new Error("a change has parts");
-    return this.#proposals.add({ kind: "change", repo: first.repo, ...proposal, parts, proposedBy: proposedByOf(session) });
+    return this.#proposals.add({
+      kind: "change",
+      repo: first.repo,
+      ...proposal,
+      parts,
+      fromImpact: false,
+      proposedBy: proposedByOf(session),
+    });
   }
 
   /** A proposal to remove a repo from the projects folder (ADR-83), from session `caller` like a task proposal. */
@@ -543,6 +604,7 @@ export class Agents {
         approvals: "ask",
         item: null,
         parts: null,
+        fromImpact: false,
         proposedBy: proposedByOf(session),
       },
       repoDir,
@@ -1378,8 +1440,13 @@ export class Agents {
         if (task !== null) void this.#rounds.turnStarted(task);
       },
       onTurnOver: () => {
-        // The round commit first: it moves the branch, which the tasks it handed work to then hear about (ADR-144).
-        if (task !== null) void this.#rounds.turnOver(task).then(() => this.#handoffs.turnOver(task));
+        // The round commit first: it moves the branch, which the tasks it handed work to then hear about (ADR-144), and
+        // which the impact proposals compare (ADR-198).
+        if (task !== null)
+          void this.#rounds
+            .turnOver(task)
+            .then(() => this.#handoffs.turnOver(task))
+            .then(() => this.#impactProposals.turnOver(task, id));
       },
       onEvent: (event: SessionEvent) => {
         if (event.kind === "turn_ended") this.#miseTrust.turnEnded(trustRecipientOf({ id, task }));
