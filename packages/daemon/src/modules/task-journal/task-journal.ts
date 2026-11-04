@@ -76,7 +76,7 @@ export class TaskJournal {
       .split(/\s+/)
       .filter((w) => w !== "");
     const since = query.since === undefined ? null : Date.parse(`${query.since}T00:00:00Z`);
-    const matching = this.#records()
+    const matching = this.records()
       .filter((r) => query.repos.length === 0 || query.repos.includes(r.repo))
       .filter((r) => since === null || Date.parse(r.endedAt) >= since)
       .map((record) => ({ record, text: searchedText(record) }))
@@ -92,7 +92,8 @@ export class TaskJournal {
     return { tasks, truncated: tasks.length < matching.length };
   }
 
-  #records(): EndedTask[] {
+  /** Every record, oldest ended first; a line that does not parse is skipped. */
+  records(): EndedTask[] {
     return this.#lines().flatMap((line) => {
       try {
         const parsed = EndedTask.safeParse(JSON.parse(line));

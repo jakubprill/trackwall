@@ -25,6 +25,7 @@ import {
   taskOutcomesApi,
   taskRoundsApi,
   terminalsApi,
+  usageReportApi,
   verificationApi,
   workspaceApi,
 } from "@trackwall/protocol";
@@ -127,6 +128,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     return null;
   }),
   route(mcpAuditApi.calls, (f, b) => f.mcpAudit.list(b.task)),
+  route(usageReportApi.week, (f, b) => f.usageReport.week(b.weeksAgo)),
   route(localConfigApi.store, (f) => f.localConfig.store()),
   route(localConfigApi.repo, (f, b) => f.localConfig.repo(b.repo)),
   route(localConfigApi.repos, (f) => f.localConfig.repos()),

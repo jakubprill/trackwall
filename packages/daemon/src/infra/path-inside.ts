@@ -8,3 +8,8 @@ export function isInside(root: string, path: string): boolean {
   const rel = relative(root, path);
   return rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
+
+/** `a` and `b` name the same path, by resolved paths and the system's case rules for them. */
+export function isSamePath(a: string, b: string): boolean {
+  return relative(a, b) === "";
+}
