@@ -11,7 +11,6 @@ import {
   DaemonInfoResult,
   type DayReport,
   dayStartApi,
-  FindEndpointResult,
   GetDayReportResult,
   GetRepoResult,
   ListReposResult,
@@ -20,8 +19,6 @@ import {
   MCP_INSTRUCTIONS,
   mcpTools,
   RepoCardResult,
-  Subgraph,
-  WhoCallsResult,
   workspaceApi,
 } from "@trackwall/protocol";
 import { z } from "zod";
@@ -241,14 +238,22 @@ describe("MCP server over Streamable HTTP", () => {
     await client.close();
   });
 
-  test("who_calls and subgraph_for return edges from the connection graph, and subgraph_for has a default depth of 1", async () => {
+  test("who_calls and subgraph_for answer with text alone, and subgraph_for has a default depth of 1", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const calls = await client.callTool({ name: "who_calls", arguments: { repo: "orders-bff" } });
-    expect(WhoCallsResult.parse(calls.structuredContent)).toEqual({ repo: "orders-bff", edges: [] });
-    const sub = Subgraph.parse((await client.callTool({ name: "subgraph_for", arguments: { repo: "orders-bff" } })).structuredContent);
-    expect(sub.depth).toBe(1);
-    expect(sub.nodes.map((n) => [n.repo, n.remote, n.tags])).toEqual([
-      ["orders-bff", "gitlab.example.com/shop/orders-bff", ["backend", "bff", "java", "no-mise"]],
+    expect(calls.structuredContent).toBeUndefined();
+    expect(calls.content).toEqual([{ type: "text", text: "No repo uses orders-bff." }]);
+    const sub = await client.callTool({ name: "subgraph_for", arguments: { repo: "orders-bff" } });
+    expect(sub.structuredContent).toBeUndefined();
+    expect(sub.content).toEqual([
+      {
+        type: "text",
+        text: [
+          "Subgraph of orders-bff, depth 1: 1 repo, 0 connections.",
+          "## Repos",
+          "orders-bff: remote gitlab.example.com/shop/orders-bff; tags backend, bff, java, no-mise; 1 package",
+        ].join("\n"),
+      },
     ]);
     const unknown = await client.callTool({ name: "who_calls", arguments: { repo: "missing" } });
     expect(unknown.isError).toBe(true);
@@ -258,11 +263,12 @@ describe("MCP server over Streamable HTTP", () => {
     await client.close();
   });
 
-  test("find_endpoint returns endpoints matching the query, and rejects an empty query like any bad argument", async () => {
+  test("find_endpoint answers with text alone, and rejects an empty query like any bad argument", async () => {
     const client = await connectHttpClient(api.port, TOKEN);
     const found = await client.callTool({ name: "find_endpoint", arguments: { query: "/api/orders/42", method: "GET" } });
     // The repo in this test has no controllers; graph-http.test.ts checks endpoints and their clients across several repos.
-    expect(FindEndpointResult.parse(found.structuredContent)).toEqual({ query: "/api/orders/42", endpoints: [], truncated: false });
+    expect(found.structuredContent).toBeUndefined();
+    expect(found.content).toEqual([{ type: "text", text: "No endpoints match /api/orders/42." }]);
     const empty = await client.callTool({ name: "find_endpoint", arguments: { query: "" } });
     expect(empty.isError).toBe(true);
     await client.close();

@@ -608,10 +608,11 @@ export const mcpTools = {
     readOnly: true,
     auditArgs: ["repo"] as const,
     description:
-      "Who uses a repo: connections in the graph pointing to this repo, each with a kind (depends-on: needs it to build; " +
-      "calls: calls it at runtime) and a source (package: a repo uses a package built in this repo; http: a repo's HTTP " +
-      "client calls this repo's app or endpoints; manual: a connection entered by the user), a key (package name, app name or address, note), a confidence (exact, high, medium, low) " +
-      "and evidence (repo, file, line; for http also call–endpoint pairs). Before changing a repo's API or package, " +
+      "Who uses a repo: the connections in the graph into it, one per line as '<from> -> <to>: <kind> by <source> <key> " +
+      "(<confidence>)'. kind is depends-on (needs it to build) or calls (calls it at runtime); source is package (uses a " +
+      "package it builds), http (an HTTP client calls its app or endpoints) or manual (entered by the user); key is the " +
+      "package, app name or address, or note; confidence is exact, high, medium or low. The evidence follows indented, as " +
+      "'from|to <path>:<line>: <detail>' for a file in the repo on that side. Before changing a repo's API or package, " +
       "check whom it affects; find_endpoint tells which endpoints call a specific endpoint.",
     args: z.object({ repo: RepoArg }).strict(),
     result: WhoCallsResult,
@@ -621,11 +622,11 @@ export const mcpTools = {
     readOnly: true,
     auditArgs: ["repo", "depth"] as const,
     description:
-      "Part of the connection graph around a repo: repos up to depth connections away in both directions (what it uses and " +
-      "who uses it) and the connections between them (depends-on or calls; from packages, HTTP, manual), with evidence. A " +
-      "node has tags, Spring Boot app names, the number of endpoints and a problem when the repo card cannot be built. " +
-      "problems lists the HTTP clients of these repos whose target is no repo in the list (unresolved-call-target): an " +
-      "external system, or a repo the user maps under graph.apps.",
+      "Part of the connection graph around a repo: the repos up to depth connections away in both directions (what it " +
+      "uses and who uses it), one line each under '## Repos' with tags, Spring Boot app names, the number of packages " +
+      "and endpoints, or why the repo has no card; the connections between them under '## Connections', written as in " +
+      "who_calls; and under '## Problems' the HTTP clients of these repos whose target is no repo in the list " +
+      "(unresolved-call-target): an external system, or a repo the user maps under graph.apps.",
     args: z
       .object({
         repo: RepoArg,
@@ -642,14 +643,13 @@ export const mcpTools = {
       "HTTP endpoints from Spring controllers and OpenAPI specs in all repos matching the query: a path, also a concrete " +
       "one (/api/orders/42 finds /api/orders/{id}), a whole URL or METHOD /path, matched as the whole path or its end " +
       "(without the context path or with a gateway prefix); or words, each found in the path, handler (Class.method), app " +
-      "name or OpenAPI operationId and summary. Best match first, with match: path, path-end or text. Each " +
-      "with repo, method, full path, source (code, or openapi: only in a spec, e.g. its interface is generated during the " +
-      "build; handler is the controller method named like the operationId, null when none), operation (operationId, " +
-      "summary, spec file and line), request and response types, file and line, plus callers: repos whose HTTP clients call it, with confidence " +
-      "and evidence, each with from: the caller repo's endpoints whose handlers reach that call ([]: none does, e.g. a scheduled job; " +
-      "null: that repo's code was not traced, e.g. it has Kotlin). calls lists the endpoints of other repos this endpoint's handler " +
-      "calls (null when not traced). Follow from and calls repeatedly to see what a change to an endpoint affects. " +
-      `At most ${MAX_FOUND_ENDPOINTS} results (truncated: true when there were more).`,
+      "name or OpenAPI operationId and summary. Best match first, each a block of text: '<METHOD> <path> in <repo> (app " +
+      "<app>), match path|path-end|text' (ANY: any method), then its handler, file and line, request and response types, " +
+      "or 'only in an OpenAPI spec' when the code does not map it (e.g. its interface is generated during the build), and " +
+      "its OpenAPI operation; then a 'caller' line per repo whose HTTP client calls it (client, how, confidence, the call " +
+      "and where it is) with 'from' lines: the caller repo's endpoints whose handlers reach that call (or why none are " +
+      "listed); then 'calls' lines: the endpoints of other repos this endpoint's handler calls. Follow from and calls " +
+      `repeatedly to see what a change to an endpoint affects. At most ${MAX_FOUND_ENDPOINTS} endpoints.`,
     args: z
       .object({
         query: z
