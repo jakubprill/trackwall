@@ -114,15 +114,15 @@ export const MiseRunArgument = z
 export const MiseRunArguments = z.array(MiseRunArgument).max(8);
 export type MiseRunArguments = z.infer<typeof MiseRunArguments>;
 
+/** The build files the convention tasks look for in a repo root, in the order they try them (ADR-157, ADR-201). */
+export const CONVENTION_BUILD_FILES = ["pom.xml", "build.gradle", "build.gradle.kts", "package.json"] as const;
+
 /**
  * The convention tasks file (ADR-157): mise tasks `setup`, `build` and `test` for Maven, Gradle and npm projects that
  * Trackwall writes into the projects folder, where mise reads it for every repo below; a repo's own mise task of the same
  * name wins. `absent`: no file; `current`: the file is the one this Trackwall writes; `changed`: the file differs (the
  * user edited it, or an older Trackwall wrote it), and Trackwall leaves it as it is.
  */
-/** The build files the convention tasks look for in a repo root, in the order they try them (ADR-157, ADR-201). */
-export const CONVENTION_BUILD_FILES = ["pom.xml", "build.gradle", "build.gradle.kts", "package.json"] as const;
-
 export const ConventionTasksState = z.object({
   state: z.enum(["absent", "current", "changed"]),
   /** The file's full path. */

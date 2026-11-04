@@ -13,7 +13,8 @@ export function useReadiness(conn: Connection, refreshKey: string) {
   const remote = useRemote(load, { refreshKey });
   const { reload } = remote;
   const checkAgain = useCallback(() => {
-    void post(conn, readinessApi.all, { fresh: true }).finally(reload);
+    // A failed fresh check still reloads, and the reload shows the error if the daemon is not answering.
+    post(conn, readinessApi.all, { fresh: true }).then(reload, reload);
   }, [conn, reload]);
   return { ...remote, checkAgain };
 }

@@ -104,7 +104,7 @@ function readText(path: string): string | null {
   }
 }
 
-/** `pom.xml, build.gradle, build.gradle.kts or package.json`, said the same way in the scripts and in agent readiness. */
+/** `pom.xml, build.gradle, build.gradle.kts or package.json`, the list agent readiness checks too (ADR-201). */
 function conventionBuildFiles(): string {
   return `${CONVENTION_BUILD_FILES.slice(0, -1).join(", ")} or ${CONVENTION_BUILD_FILES.at(-1)}`;
 }
