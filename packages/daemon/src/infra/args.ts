@@ -3,6 +3,8 @@ import { RELEASE_VERSION } from "@trackwall/protocol";
 
 export interface DaemonArgs {
   port: number;
+  /** The port of the service proxy (§5.6, ADR-189); `null` runs none. */
+  proxyPort: number | null;
   ui: boolean;
   uiDir?: string;
   parent?: number;
@@ -28,6 +30,8 @@ trackwall-daemon container update <version> [--port <n>] [--home <dir>]
   --ui             open the UI in the default browser (mode without Tauri)
   --ui-dir <dir>   directory of the built UI (default: ./ui next to the binary)
   --port <n>       port on 127.0.0.1 (default: random)
+  --proxy-port <n> port on 127.0.0.1 of the proxy that opens running services in a browser at
+                   http://<repo>.localhost:<n>/ (default: none; in a dev container the port after --port)
   --parent <pid>   PID of the Tauri process that started the daemon
   --home <dir>     state directory (default: ~/.trackwall or TRACKWALL_HOME)
   --allow-origin <origin>
@@ -43,6 +47,7 @@ export function parseDaemonArgs(argv: string[]): DaemonArgs {
       ui: { type: "boolean", default: false },
       "ui-dir": { type: "string" },
       port: { type: "string", default: "0" },
+      "proxy-port": { type: "string" },
       parent: { type: "string" },
       home: { type: "string" },
       "allow-origin": { type: "string", multiple: true },
@@ -54,6 +59,8 @@ export function parseDaemonArgs(argv: string[]): DaemonArgs {
   });
   const port = toInt(values.port, "--port");
   if (port < 0 || port > 65535) throw new Error("--port out of range 0-65535");
+  const proxyPort = values["proxy-port"] === undefined ? null : toInt(values["proxy-port"], "--proxy-port");
+  if (proxyPort !== null && (proxyPort < 1 || proxyPort > 65535)) throw new Error("--proxy-port out of range 1-65535");
   const allowOrigins = values["allow-origin"] ?? [];
   for (const origin of allowOrigins) {
     if (!/^http:\/\/(127\.0\.0\.1|localhost):\d{1,5}$/.test(origin)) {
@@ -63,6 +70,7 @@ export function parseDaemonArgs(argv: string[]): DaemonArgs {
   const parent = values.parent === undefined ? undefined : toInt(values.parent, "--parent");
   return {
     port,
+    proxyPort,
     ui: values.ui ?? false,
     uiDir: values["ui-dir"],
     parent,
@@ -97,6 +105,14 @@ const CONTAINER_ACTIONS = [CONTAINER_START, CONTAINER_UPDATE, SUPERVISE_COMMAND,
 const UPDATE_ACTIONS: readonly string[] = [CONTAINER_UPDATE, APPLY_UPDATE_COMMAND];
 /** The port VS Code forwards in the dev container guide. */
 const CONTAINER_DEFAULT_PORT = 7700;
+
+/**
+ * The service proxy's port in a dev container (ADR-189): the one after the daemon's, 7701 with the guide's 7700, so two
+ * containers given ports apart each have their own and the guide forwards both. None after the last port.
+ */
+export function containerProxyPort(port: number): number | null {
+  return port < 65535 ? port + 1 : null;
+}
 /** The command line: the daemon, or a subcommand of the running daemon, which has only the state directory to set. */
 export type CommandLine =
   | { command: "daemon"; args: DaemonArgs }

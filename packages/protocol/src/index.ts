@@ -43,6 +43,7 @@ export * from "./release-files.ts";
 export * from "./repo-hosts.ts";
 export * from "./review.ts";
 export * from "./routines.ts";
+export * from "./service-proxy.ts";
 export * from "./services.ts";
 export * from "./sockets.ts";
 export * from "./sync.ts";

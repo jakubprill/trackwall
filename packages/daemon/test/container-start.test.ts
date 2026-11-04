@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ContainerStartResult } from "@trackwall/protocol";
+import { ContainerStartResult, DaemonInfoResult } from "@trackwall/protocol";
 import { parseCommandLine } from "../src/infra/args.ts";
 import { afterExit, DAEMON_LOG, restartDelayMs, supervisorPidFile } from "../src/infra/container-supervisor.ts";
 import { readDaemonFile } from "../src/infra/discovery.ts";
@@ -64,6 +64,13 @@ describe.each(RUNTIMES)("trackwall-container start under %s (ADR-164)", (_name, 
         expect(first.out.trim().split("\n")).toHaveLength(1);
         expect(first.result).toMatchObject({ ok: true, status: "running", port });
         const before = await waitFor(() => readDaemonFile(home));
+        // The service proxy on the port after the daemon's (ADR-189), unless another program holds it.
+        const info = await loopbackRequest(port, "/api/daemon/info", { token: before.token });
+        const proxyTaken = readFileSync(join(home, DAEMON_LOG), "utf8").includes(`no service proxy: port ${port + 1}`);
+        expect(DaemonInfoResult.parse(JSON.parse(info.body))).toMatchObject({
+          ok: true,
+          data: { serviceProxyPort: proxyTaken ? null : port + 1 },
+        });
 
         const second = await runStart(runtime, home, "--port", String(port));
         expect(second.result).toMatchObject({ ok: true, status: "running", port, daemon: { pid: before.pid } });

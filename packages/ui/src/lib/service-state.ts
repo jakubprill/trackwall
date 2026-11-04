@@ -1,4 +1,4 @@
-import type { Service, SliceMember } from "@trackwall/protocol";
+import { type DaemonInfo, type Service, type SliceMember, serviceProxyAddress } from "@trackwall/protocol";
 import type { StatusTone } from "./repo-status.ts";
 
 /** A service state as a status label (ADR-45): ready is ok, waiting is a warning, a crash or a closed port is an error. */
@@ -43,4 +43,16 @@ export function isServiceLive(service: Service | null): boolean {
 /** The live service of a task that holds the port of `repo`'s root on a lease (ADR-132), if any. */
 export function leaseHolder(services: readonly Service[], repo: string): Service | undefined {
   return services.find((s) => s.repo === repo && s.lease && isServiceLive(s));
+}
+
+/**
+ * Where a ready service opens in the browser: through the daemon's service proxy (ADR-189) when it runs one, which is
+ * the only way into a dev container, otherwise at its port on this computer when the daemon runs here. `undefined` while
+ * the service is not ready, and for a daemon elsewhere without the proxy.
+ */
+export function serviceLink(place: Pick<DaemonInfo, "desktop" | "serviceProxyPort">, service: Service | null): string | undefined {
+  if (service?.state !== "healthy") return undefined;
+  if (place.serviceProxyPort !== null) return serviceProxyAddress(place.serviceProxyPort, service);
+  if (place.desktop && service.port !== null) return `http://localhost:${service.port}/`;
+  return undefined;
 }

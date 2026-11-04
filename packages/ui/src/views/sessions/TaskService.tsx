@@ -8,6 +8,7 @@ import type { Connection } from "@/lib/connection";
 import { isServiceLive, leaseHolder, serviceStateLabel } from "@/lib/service-state";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
+import { TaskOwnService } from "./TaskOwnService.tsx";
 
 /** As the repo's Service panel: often while the task's service runs or starts, rarely otherwise; the list does not ask mise. */
 const POLL_LIVE_MS = 1000;
@@ -23,7 +24,7 @@ const SKIP_WAIT_MS = 5000;
  * it and runs the task's service there, so whatever calls the repo reaches the task's changes; "Give the port back"
  * stops the task's service and the root's starts again. Hidden while neither runs and nothing went wrong, and while
  * another task holds the port. A start that the daemon skipped (the port still taken, the task's mise config not trusted)
- * says why here, since the lease then ends at once.
+ * says why here, since the lease then ends at once. Above it, the task's own service while it is ready (`TaskOwnService`).
  */
 export function TaskService({ conn, task }: { conn: Connection; task: Task }) {
   const load = useCallback(() => post(conn, servicesApi.list, {}), [conn]);
@@ -44,44 +45,49 @@ export function TaskService({ conn, task }: { conn: Connection; task: Task }) {
     () => post(conn, servicesApi.stop, { repo, task: id, dependencies: false }),
     () => remote.reload(),
   );
+  const own = services.find((s) => s.repo === repo && s.task === id) ?? null;
   const holds = holder?.task === id;
   const error = lease.error ?? giveBack.error ?? skipped;
   const busy = lease.pending || giveBack.pending;
-  if (!holds && !error && !busy && (holder || !isServiceLive(root))) return null;
+  const ownService = <TaskOwnService conn={conn} service={own} />;
+  if (!holds && !error && !busy && (holder || !isServiceLive(root))) return ownService;
   const state = serviceStateLabel(holds ? holder : null);
 
   return (
-    <section aria-label="Service on the repo's port" className="flex flex-col gap-2 border-b px-4 py-3">
-      <span className="hud-label">Service on the repo's port</span>
-      <div className="flex items-center gap-3 text-sm">
-        <span className="text-muted-foreground min-w-0 flex-1 text-xs">
+    <>
+      {ownService}
+      <section aria-label="Service on the repo's port" className="flex flex-col gap-2 border-b px-4 py-3">
+        <span className="hud-label">Service on the repo's port</span>
+        <div className="flex items-center gap-3 text-sm">
+          <span className="text-muted-foreground min-w-0 flex-1 text-xs">
+            {holds ? (
+              <StatusLabel tone={state.tone} label={`${state.label}: what calls ${repo} reaches this task`} />
+            ) : isServiceLive(root) ? (
+              `${repo} runs from the repo root on port ${root?.port ?? "?"}; run this task's service there instead`
+            ) : (
+              `${repo}'s service is not running`
+            )}
+          </span>
           {holds ? (
-            <StatusLabel tone={state.tone} label={`${state.label}: what calls ${repo} reaches this task`} />
-          ) : isServiceLive(root) ? (
-            `${repo} runs from the repo root on port ${root?.port ?? "?"}; run this task's service there instead`
+            <Button variant="outline" size="sm" onClick={giveBack.run} disabled={giveBack.pending}>
+              <Square /> Give the port back
+            </Button>
           ) : (
-            `${repo}'s service is not running`
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSkipped(null);
+                lease.run();
+              }}
+              disabled={lease.pending}
+            >
+              <ArrowLeftRight /> Run on the repo's port
+            </Button>
           )}
-        </span>
-        {holds ? (
-          <Button variant="outline" size="sm" onClick={giveBack.run} disabled={giveBack.pending}>
-            <Square /> Give the port back
-          </Button>
-        ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setSkipped(null);
-              lease.run();
-            }}
-            disabled={lease.pending}
-          >
-            <ArrowLeftRight /> Run on the repo's port
-          </Button>
-        )}
-      </div>
-      {error && <p className="text-destructive text-xs whitespace-pre-wrap">{error}</p>}
-    </section>
+        </div>
+        {error && <p className="text-destructive text-xs whitespace-pre-wrap">{error}</p>}
+      </section>
+    </>
   );
 }
