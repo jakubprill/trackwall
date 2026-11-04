@@ -16,7 +16,10 @@ const Config = z.object({
   apiErrors: z.record(z.string(), z.string()).default({}),
   /** A raw `api` response instead of pages from `repos`. */
   apiRaw: z.string().optional(),
-  /** `api` responses by the path without its query, for anything other than the repo list (merge requests, checks). */
+  /**
+   * `api` responses by the path without its query, for anything other than the repo list (merge requests, checks); a
+   * string is written as it is (a job's log), anything else as JSON.
+   */
   apiResponses: z.record(z.string(), z.unknown()).default({}),
   /** Repos whose clone ends in an error with this message. */
   cloneErrors: z.record(z.string(), z.string()).default({}),
@@ -44,7 +47,8 @@ if (command === "api") {
   const path = args.at(-1) ?? "";
   const response = config.apiResponses[path.split("?")[0] ?? ""];
   if (response !== undefined) {
-    process.stdout.write(JSON.stringify(response));
+    // A string is a plain-text answer, such as a job's log.
+    process.stdout.write(typeof response === "string" ? response : JSON.stringify(response));
     process.exit(0);
   }
   const query = new URL(path, "https://host/").searchParams;

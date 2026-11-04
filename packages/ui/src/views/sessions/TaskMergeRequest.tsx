@@ -21,6 +21,7 @@ import type { Connection } from "@/lib/connection";
 import { useOpenWebLink } from "@/lib/desktop";
 import {
   branchPushLabel,
+  canFixPipeline,
   canPush,
   hostLabel,
   type MergeRequestDraftText,
@@ -29,18 +30,20 @@ import {
   pipelineLabel,
 } from "@/lib/merge-request";
 import type { TaskMergeRequestState } from "@/lib/use-task-merge-request";
+import { FailedJobs } from "./FailedJobs";
 
 /**
  * A finished task on its way to a merge request (ADR-77), below the verification: the task branch against the remote
  * with "Push", then the draft the user approves for the repo host's form (title and description from the task and its
- * verification), and once the merge request exists, its state and pipeline with links to them. The section shows only
+ * verification), and once the merge request exists, its state and pipeline with links to them, and the jobs that failed
+ * it with their logs and "Fix" (ADR-195). The section shows only
  * once the task has a commit, since there is nothing to push before.
  */
 export function TaskMergeRequest({
   conn,
   task,
   verification,
-  state: { state, push, pushing, openForm, opening, error },
+  state: { state, push, pushing, openForm, opening, fixPipeline, fixing, fixSent, error },
   change,
 }: {
   conn: Connection;
@@ -71,7 +74,15 @@ export function TaskMergeRequest({
           </Button>
         )}
       </div>
-      {found && state.project && <FoundMergeRequest conn={conn} project={state.project} mergeRequest={found} />}
+      {found && state.project && (
+        <FoundMergeRequest
+          conn={conn}
+          task={task.id}
+          project={state.project}
+          mergeRequest={found}
+          fix={{ run: fixPipeline, pending: fixing, sent: fixSent }}
+        />
+      )}
       <HostNote state={state} />
       {draft && formReady && state.project && (
         <DraftForm
@@ -101,7 +112,19 @@ function HostNote({ state }: { state: State }) {
   return null;
 }
 
-function FoundMergeRequest({ conn, project, mergeRequest }: { conn: Connection; project: HostedProject; mergeRequest: MergeRequest }) {
+function FoundMergeRequest({
+  conn,
+  task,
+  project,
+  mergeRequest,
+  fix,
+}: {
+  conn: Connection;
+  task: string;
+  project: HostedProject;
+  mergeRequest: MergeRequest;
+  fix: { run: () => void; pending: boolean; sent: string | undefined };
+}) {
   const [linkError, setLinkError] = useState<string>();
   const openLink = useOpenWebLink(conn);
   const open = (url: string) => {
@@ -134,29 +157,7 @@ function FoundMergeRequest({ conn, project, mergeRequest }: { conn: Connection; 
         {linkError && <span className="text-destructive truncate">{linkError}</span>}
       </div>
       {failedJobs.length > 0 && (
-        // The logs stay on the repo host: the agent reads them with the user's MCP server for it (ADR-154).
-        <div className="text-muted-foreground flex min-w-0 flex-wrap items-center gap-x-3 text-xs">
-          <span>Failed:</span>
-          {failedJobs.map((job, i) => {
-            const { url } = job;
-            // A check and a commit status on GitHub can share a name.
-            const key = `${i}:${job.name}`;
-            return url === null ? (
-              <span key={key}>{job.name}</span>
-            ) : (
-              <Button
-                key={key}
-                variant="ghost"
-                size="sm"
-                className="h-auto p-0 underline-offset-4 hover:underline"
-                onClick={() => open(url)}
-                title={url}
-              >
-                {job.name}
-              </Button>
-            );
-          })}
-        </div>
+        <FailedJobs conn={conn} task={task} jobs={failedJobs} open={open} fix={canFixPipeline(mergeRequest) ? fix : undefined} />
       )}
     </div>
   );

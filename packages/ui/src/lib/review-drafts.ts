@@ -26,14 +26,14 @@ export function lineComment(anchor: DiffAnchor, diffText: string, text: string):
   return { ...anchor, code: /[\uD800-\uDBFF]$/.test(code) ? code.slice(0, -1) : code, text: text.trim() };
 }
 
-/** What the user is told after sending: when the agent gets the review. */
-export function deliveryMessage(delivery: PromptDelivery): string {
+/** What the user is told after sending `what` (the review, a pipeline fix, ADR-195): when the agent gets it. */
+export function deliveryMessage(delivery: PromptDelivery, what = "your review"): string {
   switch (delivery) {
     case "typed":
-      return "Sent: the agent is reading your review.";
+      return `Sent: the agent is reading ${what}.`;
     case "queued":
-      return "Sent: the agent gets your review once it waits for input again.";
+      return `Sent: the agent gets ${what} once it waits for input again.`;
     case "on_resume":
-      return "Saved: the agent gets your review when you resume the task.";
+      return `Saved: the agent gets ${what} when you resume the task.`;
   }
 }

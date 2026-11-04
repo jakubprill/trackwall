@@ -439,8 +439,12 @@ The request on the repo host to merge a task branch into the task's base branch,
 _Avoid_: pull request (except for GitHub's own pages), PR, MR in product texts
 
 **Pipeline** (`Pipeline`, `PipelineState`):
-What ran on a merge request's last commit, as one state: GitLab's pipeline, or GitHub's check runs and commit statuses summed up worst first (ADR-77). A failed one names its **failed jobs** (`FailedJob`): GitLab's jobs that failed it, GitHub's failed checks and statuses, each with its page; their logs stay on the repo host (ADR-154).
+What ran on a merge request's last commit, as one state: GitLab's pipeline, or GitHub's check runs and commit statuses summed up worst first (ADR-77). A failed one names its **failed jobs** (`FailedJob`): GitLab's jobs that failed it, GitHub's failed checks and statuses, each with its page and, for a GitLab job or a GitHub Actions job, its id, by which the daemon reads the end of its log on request (`JobLog`, ADR-195).
 _Avoid_: CI, build (a build is a mise task), checks
+
+**Pipeline fix** (`PipelineFix`, `merge-requests/fix-pipeline`, "Fix" under a failed pipeline in the task panel):
+The user's request to a task's agent to fix the failed pipeline of the task's merge request, with the end of the failed jobs' logs. Queued like a review and read with `get_review_comments` (ADR-195); the fix goes on the same task branch, so the merge request gets it with the next push.
+_Avoid_: retry, rerun (that is the repo host's button), fix task (no new task is made)
 
 **Followed merge request** (`FollowedMergeRequest`, `MergeRequests.followed`, `checkWatched`):
 A task's merge request as the daemon last read it while following every task in the background (ADR-154), with its project and `pipelineFailedAt`, the moment the daemon saw its pipeline fail after seeing it otherwise. A new `pipelineFailedAt` is a failed pipeline to announce.

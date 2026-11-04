@@ -25,5 +25,8 @@ describe("review comments on a task's changes", () => {
     expect(deliveryMessage("typed")).toBe("Sent: the agent is reading your review.");
     expect(deliveryMessage("queued")).toBe("Sent: the agent gets your review once it waits for input again.");
     expect(deliveryMessage("on_resume")).toBe("Saved: the agent gets your review when you resume the task.");
+    expect(deliveryMessage("queued", "the failed jobs' logs")).toBe(
+      "Sent: the agent gets the failed jobs' logs once it waits for input again.",
+    );
   });
 });

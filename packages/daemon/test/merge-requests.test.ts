@@ -159,7 +159,7 @@ describe.skipIf(process.versions.bun === undefined)("following a task's merge re
       state: "opened",
       head_pipeline: { id: 50, sha, status, web_url: "https://gitlab.example.com/shop/shop/-/pipelines/50" },
     },
-    [JOBS]: [{ name: "unit-tests", web_url: "https://gitlab.example.com/shop/shop/-/jobs/501", allow_failure: false }],
+    [JOBS]: [{ id: 501, name: "unit-tests", web_url: "https://gitlab.example.com/shop/shop/-/jobs/501", allow_failure: false }],
   });
   /** A round of the watch as if `minutes` had passed: every task is due a read again, and the repo host's answers are no longer reused. */
   const roundAfter = (minutes: number) => daemon.facade.mergeRequests.checkWatched(Date.now() + minutes * 60_000);
@@ -192,7 +192,7 @@ describe.skipIf(process.versions.bun === undefined)("following a task's merge re
     const failed = await outcomeOf(task.id);
     expect(failed?.mergeRequest?.pipeline).toMatchObject({
       state: "failed",
-      failedJobs: [{ name: "unit-tests", url: "https://gitlab.example.com/shop/shop/-/jobs/501" }],
+      failedJobs: [{ name: "unit-tests", url: "https://gitlab.example.com/shop/shop/-/jobs/501", id: "501" }],
     });
     expect(failed?.mergeRequest?.pipelineFailedAt).toEqual(expect.any(String));
 
@@ -231,11 +231,61 @@ describe.skipIf(process.versions.bun === undefined)("following a task's merge re
           session: expect.any(String),
           mergeRequest: "https://gitlab.example.com/shop/shop/-/merge_requests/7",
           pipeline: "https://gitlab.example.com/shop/shop/-/pipelines/50",
-          failedJobs: [{ name: "unit-tests", url: "https://gitlab.example.com/shop/shop/-/jobs/501" }],
+          failedJobs: [{ name: "unit-tests", url: "https://gitlab.example.com/shop/shop/-/jobs/501", id: "501" }],
           at: expect.any(String),
         },
       ]);
     } finally {
+      for (const session of agents.sessions().sessions) await agents.stop(session.id);
+    }
+  }, 60_000);
+
+  test("the user reads the end of a failed job's log, masked, and asks the task's agent to fix the pipeline with it", async () => {
+    const agents = daemon.facade.agents;
+    const task = await taskWithCommit("shop", "Round the prices");
+    gitIn(task.worktree, "update-ref", `refs/remotes/origin/${task.branch}`, "HEAD");
+    const sha = gitIn(task.worktree, "rev-parse", "HEAD").trim();
+    process.env.ORDERS_DB_PASSWORD = "hunter2-hunter2";
+    const log = [
+      "\x1b[0Ksection_start:1730700000:step_script\r\x1b[0K\x1b[36;1mExecuting step_script\x1b[0;m",
+      ...Array.from({ length: 200 }, (_, i) => `[INFO] line ${i + 1}`),
+      "[ERROR] PriceTest.rounds expected 10 but was 9 (password hunter2-hunter2)",
+      "\x1b[0Ksection_end:1730700042:step_script\r\x1b[0K",
+      "\x1b[31;1mERROR: Job failed: exit code 1\x1b[0;m",
+      "",
+    ].join("\n");
+    try {
+      hosting.reconfigure({ apiResponses: { ...mr7("running", sha), "projects/shop%2Fshop/jobs/501/trace": log } });
+      await expect(daemon.post(mergeRequestsApi.fixPipeline, { task: task.id })).rejects.toThrow(
+        `branch ${task.branch} has no open merge request whose pipeline failed`,
+      );
+
+      hosting.reconfigure({ apiResponses: { ...mr7("failed", sha), "projects/shop%2Fshop/jobs/501/trace": log } });
+      await roundAfter(1);
+      const job = await daemon.post(mergeRequestsApi.jobLog, { task: task.id, job: "501" });
+      const lines = job.text.split("\n");
+      expect(job.job).toEqual({ name: "unit-tests", url: "https://gitlab.example.com/shop/shop/-/jobs/501", id: "501" });
+      expect(job.truncated).toBe(true);
+      expect(lines).toHaveLength(150);
+      expect(lines.slice(-2)).toEqual(["[ERROR] PriceTest.rounds expected 10 but was 9 (password ***)", "ERROR: Job failed: exit code 1"]);
+      expect(job.text).not.toContain("hunter2");
+      expect(job.text).not.toContain("section_");
+      await expect(daemon.post(mergeRequestsApi.jobLog, { task: task.id, job: "502" })).rejects.toThrow(
+        "job 502 is not one that failed the pipeline",
+      );
+
+      // The task's session is asked to read it, and reads it once with get_review_comments.
+      const { delivery } = await daemon.post(mergeRequestsApi.fixPipeline, { task: task.id });
+      expect(["typed", "queued"]).toContain(delivery);
+      const session = agents.sessions().sessions.find((s) => s.task === task.id);
+      expect(session?.readRequest?.prompt).toContain("The user asks you to fix the failed pipeline of your merge request");
+      expect(agents.takeReviewComments(session?.id ?? "")).toEqual({
+        comments: [],
+        pipelineFix: { pipeline: "https://gitlab.example.com/shop/shop/-/pipelines/50", commit: sha, logs: [job], otherJobs: [] },
+      });
+      expect(agents.takeReviewComments(session?.id ?? "").pipelineFix).toBeNull();
+    } finally {
+      delete process.env.ORDERS_DB_PASSWORD;
       for (const session of agents.sessions().sessions) await agents.stop(session.id);
     }
   }, 60_000);
