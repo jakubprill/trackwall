@@ -5,7 +5,7 @@ import { DomainError } from "../../infra/errors.ts";
 import { ensureTrackwallDir, trackwallDir } from "../../infra/trackwall-dir.ts";
 
 /**
- * Dropped files (§4.23, ADR-199): a file dropped on a terminal from a computer that is not the daemon's (the daemon in a
+ * Dropped files (§4.23, ADR-201): a file dropped on a terminal from a computer that is not the daemon's (the daemon in a
  * dev container) reaches the daemon as its bytes and is saved under `.trackwall/drops` of the projects folder, so that
  * the terminal can paste a path that exists where its program runs. Each file gets a new folder of its own with a random
  * name, so two drops of one name never meet and the name only labels the file; it is made safe to paste first

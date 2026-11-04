@@ -107,7 +107,7 @@ export interface Facade {
   terminals: FolderTerminals;
   /** The files of the projects folder, a repo root or a task's worktree, read only, next to its Shell tab (ADR-188). */
   folderFiles: FolderFiles;
-  /** Files dropped on a terminal from another computer, saved in `.trackwall/drops` (ADR-199). */
+  /** Files dropped on a terminal from another computer, saved in `.trackwall/drops` (ADR-201). */
   droppedFiles: DroppedFiles;
   testReports: TestReports;
   verifications: Verifications;

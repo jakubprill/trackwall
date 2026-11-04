@@ -50,7 +50,7 @@ export async function download(conn: Connection, path: string, body: unknown): P
     : new ApiCallError(envelope.error.code, envelope.error.message);
 }
 
-/** A file dropped on a terminal, sent to the daemon (ADR-199); answers the path of its copy in the projects folder. */
+/** A file dropped on a terminal, sent to the daemon (ADR-201); answers the path of its copy in the projects folder. */
 export async function uploadDrop(conn: Connection, name: string, body: Blob | ArrayBuffer): Promise<string> {
   const { path } = await call(conn, DROP_PATH, DroppedFile, {
     method: "POST",

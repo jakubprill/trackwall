@@ -118,7 +118,7 @@ One directory on the user's disk, set in `workspace.yaml` or in the settings. Ea
 _Avoid_: workspace directory, root, folder (without qualification)
 
 **Trackwall folder** (`TRACKWALL_DIR` = `.trackwall`, `TrackwallFolder`, `trackwallDir`):
-The one hidden folder in the projects folder where Trackwall keeps everything beside the repos, one folder per purpose: `local` (the local config store), `worktrees` (the default task worktrees folder), `lsp`, `scratch` and `removed` (ADR-125), and `drops`, the dropped files (ADR-199). It is not the state folder `~/.trackwall`, which holds Trackwall's own memory and lies outside the projects folder.
+The one hidden folder in the projects folder where Trackwall keeps everything beside the repos, one folder per purpose: `local` (the local config store), `worktrees` (the default task worktrees folder), `lsp`, `scratch` and `removed` (ADR-125), and `drops`, the dropped files (ADR-201). It is not the state folder `~/.trackwall`, which holds Trackwall's own memory and lies outside the projects folder.
 _Avoid_: data folder, `.trackwall-*` folders (their names before ADR-125)
 
 **Dropped folder** (`DroppedFolder`, action `dropped-folder`, UI `FolderDrop`; in Polish *upuszczony folder*):
@@ -126,7 +126,7 @@ A folder or file dropped on the Trackwall window outside a session terminal, des
 _Avoid_: imported repo, added repo
 
 **Dropped file** (`DroppedFile`, `POST /api/terminals/drop`, `droppedFiles` in the facade, `.trackwall/drops`):
-A file dropped on a session terminal or a shell whose daemon runs on another computer (in a container, or reached from a browser): the window sends its bytes, the daemon keeps a copy in a folder of its own under `.trackwall/drops`, and the terminal gets the copy's path pasted (ADR-199). Removed at the next drop a day later. With the daemon on this desktop a dropped file is not copied; its own path is pasted.
+A file dropped on a session terminal or a shell whose daemon runs on another computer (in a container, or reached from a browser): the window sends its bytes, the daemon keeps a copy in a folder of its own under `.trackwall/drops`, and the terminal gets the copy's path pasted (ADR-201). Removed at the next drop a day later. With the daemon on this desktop a dropped file is not copied; its own path is pasted.
 _Avoid_: upload, attachment
 
 **Repo host** (`RepoHost`, `repoHosts` in `workspace.yaml`):

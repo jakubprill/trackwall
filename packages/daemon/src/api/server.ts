@@ -217,7 +217,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
   return fail(res, "not_found", `no route ${req.method} ${path}`);
 }
 
-/** A dropped file (ADR-199); after a refusal the rest of the body is read and dropped, so the answer still reaches the client. */
+/** A dropped file (ADR-201); after a refusal the rest of the body is read and dropped, so the answer still reaches the client. */
 async function receiveDrop(req: IncomingMessage, res: ServerResponse, o: ApiOptions): Promise<void> {
   try {
     const name = droppedName(req);
