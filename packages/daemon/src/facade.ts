@@ -330,6 +330,8 @@ export function createFacade(o: FacadeOptions): Facade {
       // `record` logs its own failures, so ending the task does not wait for the write.
       void taskJournal.record({ ...ended, verification: last && { state: last.state, finishedAt: last.finishedAt } });
     },
+    // `graph` is made below; a task's turn ends only after it exists.
+    taskImpact: (task) => taskImpact(task),
     log: o.log,
   });
   // A removal that failed on a held file, or a crash before it, leaves an ended task's logs behind (ADR-59). Without a
@@ -346,6 +348,7 @@ export function createFacade(o: FacadeOptions): Facade {
   });
   const batch = new Batch({ workspace, mise, log: o.log });
   const graph = new Graph({ cards, workspace });
+  const taskImpact = ({ repo, worktree, base }: Task) => graph.changedEndpoints(repo, worktree, base);
   const taskPort = (repo: string, task: string) => agents.taskOfRepo(task, repo).port;
   const services = new Services({ mise, logs, graph, cards, taskPort, env: o.userEnv, log: o.log, ...SERVICE_TIMING });
   const testReports = new TestReports({ repos: workspace, tasks: agents, logs, env: o.userEnv });
@@ -524,10 +527,7 @@ export function createFacade(o: FacadeOptions): Facade {
     javaNavigation,
     configFiles,
     openLink: o.openUrl,
-    taskChangedEndpoints: async (task) => {
-      const { repo, worktree, base } = agents.task(task);
-      return { task, ...(await graph.changedEndpoints(repo, worktree, base)) };
-    },
+    taskChangedEndpoints: async (task) => ({ task, ...(await taskImpact(agents.task(task))) }),
     runRoutine: async (name, digest, view) => {
       const { repo, prompt, title, model, approvals } = await routines.approved(name, digest);
       return agents.createTask(repo, prompt, { title, model, approvals, view });

@@ -67,6 +67,7 @@ const proposal: TaskProposal = {
   approvals: "ask",
   item: null,
   parts: null,
+  fromImpact: false,
   proposedBy: { session: null, task: null, supervisor: true },
   createdAt: "2026-10-31T10:00:00.000Z",
 };

@@ -1,9 +1,10 @@
 import { isAbsolute } from "node:path";
-import { noIncludedFiles, Task, TaskSummary } from "@trackwall/protocol";
+import { MAX_CHANGED_ENDPOINTS, noIncludedFiles, RepoId, Task, TaskSummary } from "@trackwall/protocol";
 import { z } from "zod";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
 import { readStateFile } from "../../infra/state-file.ts";
 import { ConversationId } from "./acp-messages.ts";
+import { IMPACT_ENDPOINT_KEY_MAX } from "./impact-proposals.ts";
 import { TaskBranch } from "./task-branch.ts";
 import { TaskHandoff } from "./task-handoff.ts";
 import { MAX_MISE_PATH } from "./task-mise-config.ts";
@@ -14,7 +15,7 @@ import { MAX_MISE_PATH } from "./task-mise-config.ts";
  * worktrees folder, the repo and the branch (`taskWorktree`), so neither of them is stored. The file can be edited by hand, and its fields go to git
  * (`branch -D`, `diff <base commit>`), so the schema allows only a task branch and a full commit hash (`CommitHash` in `Task`).
  * Fields added later (title, origin and summary, ADR-39; the trusted mise config, ADR-59; the port and the included
- * files, ADR-61; the task worktrees folder, ADR-84; the model, ADR-98; the approvals mode, ADR-105; the sandbox, ADR-181; Java navigation, ADR-99; the board item, ADR-133; the view and its conversation, ADR-137; the handoff, ADR-143; the summary's check steps, ADR-169; the change, ADR-171) have a default in the file, so tasks saved by an older version are not moved aside as an unreadable file.
+ * files, ADR-61; the task worktrees folder, ADR-84; the model, ADR-98; the approvals mode, ADR-105; the sandbox, ADR-181; Java navigation, ADR-99; the board item, ADR-133; the view and its conversation, ADR-137; the handoff, ADR-143; the summary's check steps, ADR-169; the change, ADR-171; the impact proposals, ADR-198) have a default in the file, so tasks saved by an older version are not moved aside as an unreadable file.
  */
 
 export const StoredTask = Task.omit({ worktree: true }).extend({
@@ -39,6 +40,12 @@ export const StoredTask = Task.omit({ worktree: true }).extend({
   /** The task whose session proposed this one (ADR-143); `null` for a task the user typed or the supervisor or a main session proposed. */
   handoff: TaskHandoff.nullable().default(null),
   change: Task.shape.change.default(null),
+  /**
+   * The endpoints each repo was offered a task for from this task's impact (ADR-198), by repo, as `METHOD path`: an
+   * impact proposal, or the work its agent proposed or the user started there first. A repo is offered again only for
+   * an endpoint not in its list, so a rejected proposal does not come back with the next turn.
+   */
+  impactProposed: z.record(RepoId, z.array(z.string().max(IMPACT_ENDPOINT_KEY_MAX)).max(MAX_CHANGED_ENDPOINTS)).default({}),
   /** `null` in a task saved by an older version: `AgentTasks` gives it a free port when it reads the file. */
   port: Task.shape.port.nullable().default(null),
   included: Task.shape.included.default(noIncludedFiles),
