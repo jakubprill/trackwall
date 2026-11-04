@@ -586,7 +586,7 @@ xterm.js in the Sessions view and the supervisor panel, connected over the WebSo
 _Avoid_: terminal window (a window is the app window)
 
 **Folder terminal** (`FolderTerminal`, `FolderTerminals`, `terminals` module; the "Shell" tab in the UI):
-The user's own shell in a repo root or a task's worktree (its **place**, `TerminalPlace`), which the daemon runs in a PTY and the UI shows like a session terminal (ADR-185). One per place; it keeps running when its tab closes, and ends when the user closes it, ends the task, or the daemon stops. In the UI it is the "Shell" tab, because a task's "Terminal" tab is its session's.
+The user's own shell in the projects folder, a repo root or a task's worktree (its **place**, `TerminalPlace`; the projects folder is `PROJECTS_FOLDER_PLACE`, `repo: null`), which the daemon runs in a PTY and the UI shows like a session terminal (ADR-185). One per place; it keeps running when its tab closes, and ends when the user closes it, ends the task, or the daemon stops. In the UI it is the "Shell" tab, or "Shell" next to the projects folder in "Repos", because a task's "Terminal" tab is its session's.
 _Avoid_: console, terminal on its own in the UI (a task's "Terminal" tab is the session terminal)
 
 **Folder files** (`FolderFiles`, `folderFiles` in the facade, `terminals/files`, `terminals/download`; the "Files on disk" panel of the Shell tab in the UI):
