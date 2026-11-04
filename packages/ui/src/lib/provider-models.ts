@@ -5,11 +5,18 @@ import type { ProviderModel, ProviderModelList } from "@trackwall/protocol";
  * id, and the line under the session profile in Settings that tells whether the list came.
  */
 
-/** The hint beside a suggested model: its context window, rounded to thousands of tokens; empty when the provider did not say. */
+/**
+ * The hint beside a suggested model: its context window rounded to thousands of tokens, and the one format it answers
+ * in once a session found it out (ADR-200); empty when neither is known.
+ */
 export function modelHint(model: ProviderModel): string {
-  if (model.contextWindow === null) return "";
-  const thousands = model.contextWindow / 1000;
-  return `${thousands >= 1000 ? `${thousands / 1000}M` : `${Math.round(thousands)}k`} context`;
+  const parts: string[] = [];
+  if (model.contextWindow !== null) {
+    const thousands = model.contextWindow / 1000;
+    parts.push(`${thousands >= 1000 ? `${thousands / 1000}M` : `${Math.round(thousands)}k`} context`);
+  }
+  if (model.wireApi !== null) parts.push(`${model.wireApi} API`);
+  return parts.join(" · ");
 }
 
 /** The line under the session profile; `null` without a profile or a provider, when there is nothing to list. */

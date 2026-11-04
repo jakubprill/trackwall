@@ -569,6 +569,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
       boardHas: async () => true,
       taskOutcomes: () => [],
       knowledge: async () => ({ entries: [], more: 0 }),
+      wireApi: async () => null,
       onTaskRemoved: () => {},
       taskImpact: () => Promise.reject(new Error("unused")),
       log: () => {},
