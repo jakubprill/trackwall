@@ -3,6 +3,7 @@ import { apiEndpoints, Done } from "./api.ts";
 import { WorkingTreeChanges } from "./changes.ts";
 import { CloneJob, CloneRequest, HostRepos, RepoHosts } from "./repo-hosts.ts";
 import { SyncRun } from "./sync.ts";
+import { TaskModel } from "./task-model.ts";
 
 /**
  * Contract of the `workspace` module (§4.5, §6): the repos of the projects folder and browsing their content from the last
@@ -281,6 +282,10 @@ export const WorkspaceSettings = z.object({
   autoReview: AutoReviewSettings,
   /** Why `autoReview` in `workspace.yaml` cannot be read; saving the setting fixes it. */
   autoReviewProblem: z.string().nullable(),
+  /** `supervisorModel` from `workspace.yaml` (ADR-193): the Copilot CLI model the supervisor runs on; `null` for Copilot CLI's default. */
+  supervisorModel: z.string().nullable(),
+  /** Why `supervisorModel` in `workspace.yaml` cannot be read; the supervisor does not start until it is fixed or saved again. */
+  supervisorModelProblem: z.string().nullable(),
   /** The full path of `workspace.yaml`, so that the user knows which file to edit by hand. */
   configFile: z.string(),
 });
@@ -394,6 +399,12 @@ export const workspaceApi = {
   setSessionProfile: endpoint("set-session-profile", z.object({ profile: SessionProfile.nullable() }).strict(), WorkspaceSettings),
   /** Whether a task's changes get an automatic review once its agent reports its result (ADR-182). No MCP tool sets it: it spends the user's credits. */
   setAutoReview: endpoint("set-auto-review", AutoReviewSettings.required(), WorkspaceSettings),
+  /**
+   * The Copilot CLI model the supervisor runs on from its next start or resume (ADR-193); `null` removes `supervisorModel`
+   * from `workspace.yaml`, so it runs on Copilot CLI's default. No MCP tool sets it: an agent must not choose what the
+   * user's credits are spent on.
+   */
+  setSupervisorModel: endpoint("set-supervisor-model", z.object({ model: TaskModel.nullable() }).strict(), WorkspaceSettings),
   /** The starred repos (ADR-192). */
   starredRepos: endpoint("starred-repos", z.object({}).strict(), StarredRepos),
   /**

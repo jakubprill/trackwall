@@ -1,8 +1,9 @@
 import { z } from "zod";
-import { Task, TaskApprovals, TaskModel, TaskPrompt, TaskTitle, visibleText } from "./agents.ts";
+import { Task, TaskApprovals, TaskPrompt, TaskTitle, visibleText } from "./agents.ts";
 import { apiEndpoints, Done } from "./api.ts";
 import { ContentDigest, fileName } from "./approved-file.ts";
 import { SessionView } from "./conversation.ts";
+import { TaskModel } from "./task-model.ts";
 import { RepoId } from "./workspace.ts";
 
 /**

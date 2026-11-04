@@ -32,6 +32,7 @@ export interface WorkspaceKeyValues {
   agentSecrets: AgentSecrets;
   sessionProfile: string | null;
   autoReview: AutoReviewSettings;
+  supervisorModel: string | null;
   supervisor: SupervisorSettings;
   sandbox: SandboxSettings | null;
   repoTags: RepoTagRules;
@@ -54,6 +55,7 @@ export const workspaceKeyValue: { [K in WorkspaceKey]: (value: WorkspaceKeyValue
   agentSecrets: (names) => (names.length === 0 ? "none" : names.join(", ")),
   sessionProfile: (profile) => profile ?? "none",
   autoReview: (settings) => `afterReport: ${settings.afterReport}`,
+  supervisorModel: (model) => model ?? "Copilot CLI's default",
   supervisor: (settings) => `changesCode: ${settings.changesCode}`,
   sandbox: (settings) =>
     settings === null ? "tasks: auto on Linux, off on macOS, Windows and in a container" : `tasks: ${settings.tasks}`,

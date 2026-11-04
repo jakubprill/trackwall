@@ -21,6 +21,7 @@ import { McpCallsSurface } from "./McpCallsSurface.tsx";
 import { RepoHostsSurface } from "./RepoHostsSurface.tsx";
 import { SessionProfileSurface } from "./SessionProfileSurface.tsx";
 import { StartAtSignInSurface } from "./StartAtSignInSurface.tsx";
+import { SupervisorModelSurface } from "./SupervisorModelSurface.tsx";
 import { UpdatesSurface } from "./UpdatesSurface.tsx";
 import { WorkspaceFolders } from "./WorkspaceFolders.tsx";
 
@@ -99,6 +100,8 @@ function Section({
       return <ConnectCopilotSurface conn={conn} onRetry={onRetry} />;
     case "session-profile":
       return <SessionProfileSurface conn={conn} sessions={sessions} />;
+    case "supervisor-model":
+      return <SupervisorModelSurface conn={conn} />;
     case "auto-review":
       return <AutoReviewSurface conn={conn} />;
     case "java-navigation":

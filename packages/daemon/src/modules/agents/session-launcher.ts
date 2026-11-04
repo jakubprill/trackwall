@@ -19,6 +19,7 @@ import { COPILOT_HOOK_EVENTS, type CopilotHookEvent } from "./copilot-hook-recor
 import { type LspServer, writeCopilotPlugin } from "./copilot-plugin.ts";
 import { CopilotUsageLog } from "./copilot-usage-log.ts";
 import { LiveSession, type LiveSessionOptions, type SessionPty } from "./live-session.ts";
+import { modelArgs } from "./model-args.ts";
 import { withLoopbackNoProxy } from "./no-proxy.ts";
 import type { ConversationLaunch } from "./resumable-sessions.ts";
 import { type SessionMiseEnv, type SessionMiseLaunch, sessionMiseLaunch } from "./session-env.ts";
@@ -112,6 +113,7 @@ export interface LauncherProcs {
 interface LauncherRepos {
   toolPermissions(session: Pick<Session, "repo" | "supervisor">): ToolPermissions;
   supervisorSettings(): SupervisorSettings;
+  supervisorModel(): string | null;
   agentSecrets(): readonly string[];
 }
 
@@ -239,8 +241,9 @@ export class SessionLauncher {
   }
 
   /**
-   * What a start reads of the configuration, each of which can refuse it: Copilot CLI, the tool permissions and what
-   * mise gives the place with the agent secrets (ADR-93). A restart reads it before it stops the session (ADR-119).
+   * What a start reads of the configuration, each of which can refuse it: Copilot CLI, the tool permissions, the
+   * supervisor's model (ADR-193) and what mise gives the place with the agent secrets (ADR-93). A restart reads it before
+   * it stops the session (ADR-119).
    */
   async inputs({ repo, supervisor, task }: Pick<SessionPlace, "repo" | "supervisor" | "task">) {
     const userEnv = await this.#deps.env();
@@ -248,7 +251,10 @@ export class SessionLauncher {
     const copilot = resolveCopilot(this.#deps.copilot, userEnv);
     if ("missing" in copilot) throw new DomainError("agent_unavailable", copilot.message);
     const permissions = this.#deps.repos.toolPermissions({ repo, supervisor });
-    return { copilot, permissions, ...(await this.#miseLaunch({ repo, task }, userEnv)) };
+    // Read at each start, a resume and a restart included, so a change in Settings applies to the next one; a task's or
+    // a repo session's model comes with the start instead (ADR-98, ADR-175).
+    const model = modelArgs(supervisor ? this.#deps.repos.supervisorModel() : null);
+    return { copilot, permissions, model, ...(await this.#miseLaunch({ repo, task }, userEnv)) };
   }
 
   /** What mise would give a session in its place now (ADR-93, ADR-119). */
@@ -281,11 +287,11 @@ export class SessionLauncher {
   /** What every start needs: Copilot CLI, the session directory and token, and the arguments and environment it gets. */
   async #setUp(id: string, place: SessionPlace): Promise<SessionSetup> {
     const { repo, supervisor, task } = place;
-    const { copilot, permissions, miseEnv, mise } = await this.inputs(place);
+    const { copilot, permissions, model, miseEnv, mise } = await this.inputs(place);
     // The MCP server and the hooks are the daemon on `127.0.0.1`, which a proxy of the user must not get (ADR-89).
     const env = withLoopbackNoProxy({ ...mise.env, TERM: "xterm-256color", COLORTERM: "truecolor", ...LOOPBACK_HOOKS_ENV });
     const dir = sessionDir(this.#deps.home, id);
-    const args = ["--additional-mcp-config", `@${join(dir, MCP_CONFIG_FILE)}`, ...toolPermissionArgs(permissions), ...mise.args];
+    const args = ["--additional-mcp-config", `@${join(dir, MCP_CONFIG_FILE)}`, ...toolPermissionArgs(permissions), ...mise.args, ...model];
     return {
       program: copilot.program,
       prefix: copilot.args,
@@ -429,7 +435,7 @@ interface SessionSetup {
   program: string;
   /** Arguments of the program before Copilot CLI's own (`node <copilot>.js`). */
   prefix: readonly string[];
-  /** The MCP config, tool permissions and mise's arguments. */
+  /** The MCP config, tool permissions, mise's arguments and the supervisor's model. */
   args: readonly string[];
   env: NodeJS.ProcessEnv;
   mise: SessionMiseLaunch;

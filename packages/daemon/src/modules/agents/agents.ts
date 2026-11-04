@@ -72,6 +72,7 @@ import { LAST_SUPERVISOR_FILE, LastSupervisorFile } from "./last-supervisor.ts";
 import { ListedSessions } from "./listed-sessions.ts";
 import { LiveSession, type SessionEvent, type SessionWindow } from "./live-session.ts";
 import { MiseTrustNotices, type TrustRecipient, trustRecipientOf } from "./mise-trust-notices.ts";
+import { modelArgs } from "./model-args.ts";
 import { proposedByOf, proposerExists, proposerKeyOf, proposerKind, proposerOf } from "./proposer.ts";
 import { readRequestPrompt } from "./read-request-prompt.ts";
 import {
@@ -131,7 +132,6 @@ export const AGENT_QUEUES_FILE = "agent-queues.json";
 /** Where task worktrees went before ADR-84; tasks from then keep them there until they end. */
 export const LEGACY_WORKTREES_DIR = "worktrees";
 
-/** What `agents` needs from `procs`; wired in the facade. */
 /** What `#launchAs` adds to a start for a repo or free session (ADR-175); nothing for the supervisor. */
 interface LaunchWithOptions {
   start?: SessionStartOptions;
@@ -140,6 +140,7 @@ interface LaunchWithOptions {
   lspServers?: Record<string, LspServer>;
 }
 
+/** What `agents` needs from `procs`; wired in the facade. */
 interface AgentsProcs extends LauncherProcs {
   liveIn(dir: string): boolean;
 }
@@ -158,6 +159,8 @@ interface AgentsRepos {
   toolPermissions(session: Pick<Session, "repo" | "supervisor">): ToolPermissions;
   /** `supervisor` from `workspace.yaml` (ADR-78); `invalid_config` for a bad key. */
   supervisorSettings(): SupervisorSettings;
+  /** `supervisorModel` from `workspace.yaml` (ADR-193): the supervisor's model, `null` for the default; `invalid_config` for a bad key. */
+  supervisorModel(): string | null;
   /** `sandbox` from `workspace.yaml` with its default (ADR-181): which tasks run in Copilot CLI's sandbox; `invalid_config` for a bad key. */
   sandboxSettings(): SandboxSettings;
   /** `agentSecrets` from `workspace.yaml` (ADR-93): the secrets from mise a session's tools get; `invalid_config` for a bad key. */
@@ -294,6 +297,7 @@ export class Agents {
       sessions: this.#sessions,
       lastSupervisor: this.#lastSupervisor,
       projectsDir: () => deps.repos.projectsDir(),
+      check: async (place) => void (await this.#launcher.inputs(place)),
       launch: (spec, place) => this.#launchAs(spec, place),
       close: (id) => this.#close(id),
     });
@@ -443,7 +447,7 @@ export class Agents {
    */
   async #launchWithOptions(spec: SessionLaunch, place: SessionPlace, start: SessionStartOptions): Promise<Session> {
     // Before the session's own arguments, as a task's (ADR-98).
-    const args = start.model === null ? [] : [`--model=${start.model}`];
+    const args = modelArgs(start.model);
     // Only a hand-edited `resumable-sessions.json` gets here with Java navigation in the conversation view.
     if (spec.view === "conversation" && start.javaNavigation)
       this.#deps.log(`session ${spec.id} starts without Java navigation: it needs a terminal`);
@@ -1112,7 +1116,7 @@ export class Agents {
     const left = this.#sessions.resumable(session);
     this.#restarting.add(id);
     try {
-      // What can refuse the start (a bad name in `agentSecrets`, Copilot CLI gone) refuses it before the stop, so the
+      // What can refuse the start (a bad name in `agentSecrets`, a bad `supervisorModel`, Copilot CLI gone) refuses it before the stop, so the
       // session goes on as it was.
       await this.#launcher.inputs(session);
       // The user may have stopped or closed the session meanwhile: it is not started again behind their back.
