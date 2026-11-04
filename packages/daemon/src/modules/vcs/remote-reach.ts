@@ -1,4 +1,6 @@
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { git } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { networkAddress } from "./remote.ts";
@@ -6,7 +8,7 @@ import { networkAddress } from "./remote.ts";
 /**
  * Whether git reaches a repo's main remote with the user's own sign-in (ADR-195): `git ls-remote` of the remote's address,
  * with the environment without prompts a sync's fetch has, so a missing SSH key, an unknown host key or a missing sign-in
- * fails at once instead of hanging. It runs outside the repo, on the address the repo's configuration resolves to, so
+ * fails at once instead of hanging. It runs in a fresh empty folder outside the repo, on the address the repo's configuration resolves to, so
  * only the user's and the system's configuration apply: the doctor runs it whenever Settings opens, and a repo's own
  * configuration, which a task's agent can write, must not run a program then (`core.sshCommand`, a credential helper,
  * `uploadpack`). That is also the sign-in the check is about. It reads only the remote's refs; nothing is written.
@@ -25,10 +27,16 @@ export async function networkRemote(dir: string): Promise<{ url: string; address
 /** Throws git's message when the remote at `url` (an HTTPS or SSH address) does not answer with the user's sign-in. */
 export async function reachRemote(url: string): Promise<void> {
   if (networkAddress(url) === undefined) throw new Error(`${url} is not an HTTPS or SSH address`);
-  const outside = tmpdir();
-  const user = await readConfig(outside);
-  await git(outside, ["ls-remote", "--quiet", "--", url, "HEAD"], {
-    timeoutMs: REACH_TIMEOUT_MS,
-    network: { sshCommand: user.sshCommand },
-  });
+  // A fresh empty folder of the daemon's own, not the temp folder itself: git also reads a `.git` planted right there.
+  const outside = await mkdtemp(join(tmpdir(), "trackwall-reach-"));
+  try {
+    const user = await readConfig(outside);
+    // `url` already went through `insteadOf`; git applies the user's rules to it once more, as it would to a rewritten fetch.
+    await git(outside, ["ls-remote", "--quiet", "--", url, "HEAD"], {
+      timeoutMs: REACH_TIMEOUT_MS,
+      network: { sshCommand: user.sshCommand },
+    });
+  } finally {
+    await rm(outside, { recursive: true, force: true });
+  }
 }
