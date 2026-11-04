@@ -1,7 +1,18 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+  symlinkSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import { ApiEnvelope, DROP_NAME_HEADER, DROP_PATH, DroppedFile, dropTooLarge, MAX_DROP_BYTES } from "@trackwall/protocol";
 import { loopbackRequest } from "../src/infra/loopback.ts";
@@ -47,7 +58,8 @@ function savedPath(res: { body: string }): string {
 describe("a file dropped on a terminal from another computer", () => {
   test("is saved under .trackwall/drops of the projects folder, in a folder of its own, and its path comes back", async () => {
     const path = savedPath(await drop("build log.txt", "BUILD FAILED\n"));
-    expect(dirname(dirname(path))).toBe(join(daemon.projects, ".trackwall", "drops"));
+    // The path is the resolved one: on macOS the temporary folder lies under /private/var.
+    expect(dirname(dirname(path))).toBe(realpathSync(join(daemon.projects, ".trackwall", "drops")));
     expect(path.endsWith("build log.txt")).toBe(true);
     expect(readFileSync(path, "utf8")).toBe("BUILD FAILED\n");
     if (process.platform !== "win32") expect(statSync(path).mode & 0o777).toBe(0o600);
@@ -62,7 +74,7 @@ describe("a file dropped on a terminal from another computer", () => {
   });
 
   test("with a name that is a path stays in its own folder of drops, under a name made safe", async () => {
-    const drops = join(daemon.projects, ".trackwall", "drops");
+    const drops = realpathSync(join(daemon.projects, ".trackwall", "drops"));
     for (const name of ["../escape.txt", "..", "a/b.txt", "a\\b.txt", "evil\u0000.txt"])
       expect(dirname(dirname(savedPath(await drop(name, "x"))))).toBe(drops);
     expect(existsSync(join(daemon.projects, ".trackwall", "escape.txt"))).toBe(false);
@@ -118,7 +130,7 @@ describe("the store of dropped files", () => {
     const fresh = await files.save("fresh.txt", Readable.from([Buffer.from("fresh")]));
     expect(existsSync(old)).toBe(false);
     expect(existsSync(fresh)).toBe(true);
-    expect(readdirSync(drops).sort()).toEqual([dirname(fresh).slice(drops.length + 1), "README.txt", "kept-by-the-user"].sort());
+    expect(readdirSync(drops).sort()).toEqual([basename(dirname(fresh)), "README.txt", "kept-by-the-user"].sort());
   });
 
   test("removes an old drop's own file but never follows a folder in it into a link", async () => {
