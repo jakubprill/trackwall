@@ -784,6 +784,53 @@ export type StartOptions = z.infer<typeof StartOptions>;
 
 const SessionRequest = z.object({ session: SessionId }).strict();
 const TaskRequest = z.object({ task: TaskId }).strict();
+
+/** A worktree fingerprint (ADR-209): a sha256 in hex. */
+const WorktreeFingerprint = z.string().regex(/^[0-9a-f]{64}$/);
+
+/**
+ * What ending a task with its branch kept would delete, as `removeTask` counts it (ADR-210): nothing; uncommitted
+ * changes or commits outside the branch, with the worktree's fingerprint that `removeTask` checks before it deletes
+ * them; or `unknown` when git cannot read it (a folder git does not know as a worktree, a repo gone), which the cleanup
+ * leaves to the task's own "End task".
+ */
+export const TaskWorktreeLoss = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("none") }),
+  z.object({
+    kind: z.literal("work"),
+    uncommitted: z.number().int().nonnegative(),
+    strayCommits: z.number().int().nonnegative(),
+    fingerprint: WorktreeFingerprint,
+  }),
+  z.object({ kind: z.literal("unknown"), reason: z.string() }),
+]);
+export type TaskWorktreeLoss = z.infer<typeof TaskWorktreeLoss>;
+
+/**
+ * The worktree of a task without a running session as the cleanup of old worktrees lists it (ADR-210): how long the
+ * task has been idle and what ending it with its branch kept would delete.
+ */
+export const TaskWorktree = z.object({
+  task: TaskId,
+  repo: RepoId,
+  branch: z.string(),
+  /**
+   * ISO 8601: the newest of the task's start, its worktree's newest commit (a round commit after each turn, ADR-168),
+   * its last report and its listed sessions' starts and ends.
+   */
+  lastActivityAt: z.string(),
+  loss: TaskWorktreeLoss,
+});
+export type TaskWorktree = z.infer<typeof TaskWorktree>;
+
+/** How much disk a task's worktree takes, files git ignores (dependencies, build output) included. */
+export const TaskWorktreeSize = z.object({
+  task: TaskId,
+  bytes: z.number().int().nonnegative(),
+  /** `false` when the count stopped at its limit of files or time, so `bytes` is a lower bound. */
+  complete: z.boolean(),
+});
+export type TaskWorktreeSize = z.infer<typeof TaskWorktreeSize>;
 const ProposalRequest = z.object({ proposal: TaskId }).strict();
 
 export const agentsApi = {
@@ -973,9 +1020,20 @@ export const agentsApi = {
   /**
    * Ending a task: removes the worktree, and without `keepBranch` also the branch. Changes that would be lost (uncommitted
    * files and commits outside the branch, and without `keepBranch` also the task's commits) the daemon deletes only with
-   * `discardChanges`; otherwise `unsaved_changes`.
+   * `discardChanges`; otherwise `unsaved_changes`. With `discardFingerprint` (ADR-210) it deletes them only while the
+   * worktree still has that fingerprint, the one of what the user confirmed; otherwise `unsaved_changes` too.
    */
-  removeTask: endpoint("remove-task", z.object({ task: TaskId, keepBranch: z.boolean(), discardChanges: z.boolean() }).strict(), Done),
+  removeTask: endpoint(
+    "remove-task",
+    z
+      .object({ task: TaskId, keepBranch: z.boolean(), discardChanges: z.boolean(), discardFingerprint: WorktreeFingerprint.optional() })
+      .strict(),
+    Done,
+  ),
+  /** The worktree of every task without a running session, for the cleanup of old worktrees (ADR-210); reads only. */
+  taskWorktrees: endpoint("task-worktrees", z.object({}).strict(), z.array(TaskWorktree)),
+  /** How much disk the task's worktree takes; counts its files, so it may take seconds. */
+  taskWorktreeSize: endpoint("task-worktree-size", TaskRequest, TaskWorktreeSize),
   /**
    * Approving a task proposal (ADR-39): a task with its id, like `create-task`, with the prompt the user may have edited
    * before the start. A failed start leaves the proposal for another try or a rejection.

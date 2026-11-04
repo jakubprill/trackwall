@@ -71,7 +71,7 @@ import { syncRepo } from "./sync.ts";
 import { type RepoUnpushed, readUnpushed } from "./unpushed.ts";
 import { addWorktree, defaultBase, deleteBranch, pendingWork, removeWorktree } from "./worktree.ts";
 import { workingTreeChanges, worktreeChanges } from "./worktree-changes.ts";
-import { worktreeFingerprint } from "./worktree-fingerprint.ts";
+import { discardFingerprint, worktreeFingerprint } from "./worktree-fingerprint.ts";
 import { copyIncludedFiles } from "./worktree-include.ts";
 
 /** A git that does not answer `--version` within this is not one to save as the "Git program" (ADR-112). */
@@ -265,6 +265,10 @@ export class Vcs {
 
   async worktreeFingerprint(dir: string, base: string): Promise<string> {
     return worktreeFingerprint(dir, base, await this.scratch());
+  }
+
+  async discardFingerprint(dir: string, base: string): Promise<string | null> {
+    return discardFingerprint(dir, base, await this.scratch());
   }
 
   // Task rounds (ADR-168, `round-commits.ts`): the agents module runs one task's steps one after another, and the writes

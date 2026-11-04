@@ -103,3 +103,23 @@ describe("the fingerprint of a worktree (ADR-209)", () => {
     SLOW_TEST_TIMEOUT_MS,
   );
 });
+
+describe("what a user confirms deleting when ending a task (ADR-210)", () => {
+  test(
+    "a commit changes it though the worktree's fingerprint stays, so a commit after the confirmation is refused too",
+    async () => {
+      const { dir, base } = worktree();
+      gitIn(dir, "checkout", "--detach");
+      writeFileSync(join(dir, "src/cart.ts"), "export const sum = 2;\n");
+      const contentBefore = await vcs.worktreeFingerprint(dir, base);
+      const confirmed = await vcs.discardFingerprint(dir, base);
+
+      commitFiles(dir, {}, "a commit outside the branch");
+
+      expect(await vcs.worktreeFingerprint(dir, base)).toBe(contentBefore);
+      expect(await vcs.discardFingerprint(dir, base)).not.toBe(confirmed);
+      expect(confirmed).toMatch(/^[0-9a-f]{64}$/);
+    },
+    SLOW_TEST_TIMEOUT_MS,
+  );
+});
