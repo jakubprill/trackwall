@@ -1,4 +1,4 @@
-import { lstat, readdir } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { type UsageReport as Report, USAGE_REPORT_DAYS, type UsageTool, type UsageWork } from "@trackwall/protocol";
 import { conversationsDir, EVENT_LOG_FILE } from "../../infra/copilot-home.ts";
@@ -51,17 +51,13 @@ export class UsageReport {
     let unreadLogs = 0;
     for (const conversation of await conversationDirs(dir)) {
       const file = join(dir, conversation, EVENT_LOG_FILE);
-      const found = await fileState(file);
-      if (found === undefined) continue;
       logs.add(file);
-      // A log last written before the week has nothing in it.
-      if (found.mtimeMs < sums.from) continue;
-      const digest = await this.#digests.of(file, found.size, found.mtimeMs).catch((err: unknown) => {
+      const digest = await this.#digests.of(file, sums.from).catch((err: unknown) => {
         this.#deps.log(`usage report: reading ${file}: ${messageOf(err)}`);
+        unreadLogs++;
         return undefined;
       });
-      if (digest === undefined) unreadLogs++;
-      else await sums.add(digest, async () => workPlace(await recordedPlace(join(dir, conversation)), places));
+      if (digest !== undefined) await sums.add(digest, async () => workPlace(await recordedPlace(join(dir, conversation)), places));
     }
     this.#digests.keepOnly(logs);
     return sums.report(unreadLogs);
@@ -124,17 +120,6 @@ async function conversationDirs(dir: string): Promise<string[]> {
       .sort();
   } catch {
     return [];
-  }
-}
-
-/** A log's size and time; `undefined` for a conversation without one as a regular file. */
-async function fileState(file: string): Promise<{ size: number; mtimeMs: number } | undefined> {
-  try {
-    // Not through a link and never a FIFO an agent could plant there, which would hold the report's read forever.
-    const found = await lstat(file);
-    return found.isFile() ? { size: found.size, mtimeMs: found.mtimeMs } : undefined;
-  } catch {
-    return undefined;
   }
 }
 

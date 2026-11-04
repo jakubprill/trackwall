@@ -51,11 +51,13 @@ describe("the work a Copilot CLI conversation was for, from its folder and branc
     expect(place).toMatchObject({ kind: "task", task: T2, repo: "billing" });
   });
 
-  test("a worktree that moved since is found by its branch when one task has it, and is not guessed among several", () => {
+  test("a worktree that moved since is found by its repo folder, then by its branch when one task has it, and is not guessed among several", () => {
     const moved = { cwd: join(root, "old-worktrees", "shop", "fix-login-3f2a9c"), branch: "trackwall/fix-login-3f2a9c" };
+    const elsewhere = { cwd: join(root, "old-worktrees", "web", "fix-login-3f2a9c"), branch: "trackwall/fix-login-3f2a9c" };
 
-    expect(workPlace(moved, known([task({ id: T1, repo: "shop" })]))).toMatchObject({ kind: "task", task: T1 });
-    expect(workPlace(moved, known([task({ id: T1, repo: "shop" }), task({ id: T2, repo: "billing" })]))).toEqual({
+    expect(workPlace(moved, known([task({ id: T1, repo: "shop" }), task({ id: T2, repo: "billing" })]))).toMatchObject({ task: T1 });
+    expect(workPlace(elsewhere, known([task({ id: T1, repo: "shop", worktree: null })]))).toMatchObject({ kind: "task", task: T1 });
+    expect(workPlace(elsewhere, known([task({ id: T1, repo: "shop" }), task({ id: T2, repo: "billing" })]))).toEqual({
       kind: "task",
       task: null,
       repo: null,

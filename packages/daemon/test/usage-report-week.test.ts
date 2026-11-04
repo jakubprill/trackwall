@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { UsageReport } from "../src/modules/usage-report/usage-report.ts";
@@ -9,12 +9,13 @@ const NOW = Date.parse("2026-11-04T12:00:00.000Z");
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** A Copilot CLI home with a projects folder, and the report over it at `NOW`. */
-function setUp() {
+function setUp(o: { knownProjectsDir?: (projects: string) => string } = {}) {
   const home = mkdtempSync(join(tmpdir(), "trackwall-copilot-home-"));
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
+  const projectsDir = o.knownProjectsDir?.(projects) ?? projects;
   const report = new UsageReport({
     copilotHome: async () => home,
-    places: async () => ({ tasks: [], repos: [], projectsDir: projects, isTaskBranch: () => false }),
+    places: async () => ({ tasks: [], repos: [], projectsDir, isTaskBranch: () => false }),
     now: () => NOW,
     log: () => {},
   });
@@ -26,7 +27,7 @@ function setUp() {
     writeFileSync(join(dir, "events.jsonl"), lines.map((l) => `${l}\n`).join(""));
     return join(dir, "events.jsonl");
   };
-  return { home, report, conversation };
+  return { home, projects, report, conversation };
 }
 
 /** A receipt of `inputTokens` at `at`, with Copilot CLI's identity `key` (`<conversation>:<sequence>`). */
@@ -82,4 +83,15 @@ describe("the weekly usage report over Copilot CLI's event logs (ADR-195)", () =
 
     expect((await report.week(0)).total?.inputTokens).toBe(1);
   });
+
+  test.skipIf(process.platform === "win32")(
+    "a projects folder reached through a link matches the real folder Copilot CLI recorded",
+    async () => {
+      const link = join(mkdtempSync(join(tmpdir(), "trackwall-link-")), "projects");
+      const { report, conversation } = setUp({ knownProjectsDir: (projects) => (symlinkSync(projects, link), link) });
+      conversation("a", [receipt("2026-11-03T08:00:00Z", 1, "a:1")]);
+
+      expect((await report.week(0)).work.map((w) => w.kind)).toEqual(["supervisor"]);
+    },
+  );
 });

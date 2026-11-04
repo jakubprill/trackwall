@@ -28,18 +28,24 @@ export async function recordedPlace(conversationDir: string): Promise<RecordedPl
   try {
     const content = await readRegularFile(join(conversationDir, WORKSPACE_FILE), WORKSPACE_FILE_MAX_BYTES);
     if (content === undefined) return {};
-    return RecordedPlace.safeParse(parseYaml(content.toString("utf8"))).data ?? {};
+    const recorded = RecordedPlace.safeParse(parseYaml(content.toString("utf8"))).data ?? {};
+    // By its real path like the known places (`withRealPaths`): on Windows Copilot CLI keeps the path it started in, a
+    // `subst` drive or a junction as typed.
+    return recorded.cwd === undefined ? recorded : { ...recorded, cwd: await realPathOf(recorded.cwd) };
   } catch {
     return {};
   }
 }
 
-/** A task Trackwall knows, running or in the task journal, with the worktree it has or had. */
+/**
+ * A task Trackwall knows, running or in the task journal, with the worktree it has or had; `null` for an ended one
+ * when the worktrees folder cannot be read now.
+ */
 export interface KnownTask {
   id: string;
   repo: string;
   branch: string;
-  worktree: string;
+  worktree: string | null;
   title: string | null;
   prompt: string;
 }
@@ -74,12 +80,15 @@ export function workPlace(recorded: RecordedPlace, known: KnownPlaces): WorkPlac
 
 /**
  * The task on `branch`, found by its worktree, since the parts of a change share one branch name in several repos
- * (ADR-171); when the worktree folder moved since (another worktrees folder in Settings), by the branch alone, but only
- * when one task has it.
+ * (ADR-171). When the worktrees folder changed since, by the repo, the folder above a task's worktree wherever the
+ * worktrees folder is (ADR-84), and then by the branch alone, but only when one task has it.
  */
 function taskPlace(cwd: string, branch: string, tasks: readonly KnownTask[]): WorkPlace {
   const onBranch = tasks.filter((t) => t.branch === branch);
-  const task = onBranch.find((t) => isSamePath(t.worktree, cwd)) ?? (onBranch.length === 1 ? onBranch[0] : undefined);
+  const task =
+    onBranch.find((t) => t.worktree !== null && isSamePath(t.worktree, cwd)) ??
+    onBranch.find((t) => t.repo === basename(dirname(cwd))) ??
+    (onBranch.length === 1 ? onBranch[0] : undefined);
   if (task === undefined) return { kind: "task", task: null, repo: null, label: branch };
   return { kind: "task", task: task.id, repo: task.repo, label: taskLabel(task) };
 }
@@ -96,7 +105,7 @@ function taskLabel(task: KnownTask): string {
 export async function withRealPaths(known: KnownPlaces): Promise<KnownPlaces> {
   return {
     ...known,
-    tasks: await Promise.all(known.tasks.map(async (t) => ({ ...t, worktree: await realPathOf(t.worktree) }))),
+    tasks: await Promise.all(known.tasks.map(async (t) => ({ ...t, worktree: t.worktree === null ? null : await realPathOf(t.worktree) }))),
     repos: await Promise.all(known.repos.map(async (r) => ({ ...r, path: await realPathOf(r.path) }))),
     projectsDir: known.projectsDir === null ? null : await realPathOf(known.projectsDir),
   };

@@ -1,7 +1,7 @@
-import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
 import { z } from "zod";
 import { type UsageReceipt, usageReceipt } from "../../infra/copilot-usage-receipt.ts";
+import { NotRegularFileError, openRegularFile } from "../../infra/regular-file.ts";
 
 /**
  * What the weekly usage report (ADR-195) takes from one conversation's event log, `events.jsonl` in Copilot CLI's
@@ -106,20 +106,42 @@ interface CachedDigest {
   digest: EventLogDigest;
 }
 
+/** Far more than a long conversation's log; a larger file is not Copilot CLI's log, or not one worth a report's wait. */
+const MAX_LOG_BYTES = 2 * 1024 ** 3;
+
 /**
  * Digests of event logs, kept while their files stay the same size and time: a report reads the week's logs again,
- * and most of them have not changed since the last report. A log is read as a stream, since tool results make it long.
+ * and most of them have not changed since the last report. A log is opened as a regular file only
+ * (`infra/regular-file.ts`): an agent can write into Copilot CLI's home, and a link or a FIFO in a log's place must not
+ * hold the report. It is read as a stream from that same handle, since tool results make it long.
  */
 export class EventLogDigests {
   readonly #cache = new Map<string, CachedDigest>();
 
-  /** The digest of the log of `size` and `mtimeMs`, as the caller found them; throws when the file cannot be read. */
-  async of(file: string, size: number, mtimeMs: number): Promise<EventLogDigest> {
+  /**
+   * The log's digest; `undefined` when there is no log, it is not a regular file, or it was last written before
+   * `writtenSince` (it has nothing newer). Throws when the file cannot be read.
+   */
+  async of(file: string, writtenSince: number): Promise<EventLogDigest | undefined> {
+    const opened = await openRegularFile(file, MAX_LOG_BYTES).catch((err: unknown) => {
+      if (err instanceof NotRegularFileError) return undefined;
+      throw err;
+    });
+    if (opened === undefined) return undefined;
+    const { handle } = opened;
+    const { size, mtimeMs } = await handle.stat().catch(async (err: unknown) => {
+      await handle.close();
+      throw err;
+    });
     const cached = this.#cache.get(file);
-    if (cached !== undefined && cached.size === size && cached.mtimeMs === mtimeMs) return cached.digest;
+    if (mtimeMs < writtenSince || (cached !== undefined && cached.size === size && cached.mtimeMs === mtimeMs)) {
+      await handle.close();
+      return mtimeMs < writtenSince ? undefined : cached?.digest;
+    }
     const reader = new EventLogReader();
-    const lines = createInterface({ input: createReadStream(file, { encoding: "utf8" }), crlfDelay: Number.POSITIVE_INFINITY });
-    for await (const line of lines) reader.line(line);
+    // The stream closes the handle when it ends or fails.
+    const input = handle.createReadStream({ encoding: "utf8" });
+    for await (const line of createInterface({ input, crlfDelay: Number.POSITIVE_INFINITY })) reader.line(line);
     const digest = reader.digest();
     // Kept under the size and time from before the read: a log that grew while it was read is read again next time.
     this.#cache.set(file, { size, mtimeMs, digest });

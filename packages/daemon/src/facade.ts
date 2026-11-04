@@ -566,7 +566,8 @@ export function createFacade(o: FacadeOptions): Facade {
  */
 async function knownPlaces(agents: Agents, taskJournal: TaskJournal, workspace: Workspace): Promise<KnownPlaces> {
   const list = await workspace.entryList();
-  const worktreesDir = await workspace.worktreesDir();
+  // Without a projects folder or with a worktrees folder Settings refuses, ended tasks are matched without their worktree.
+  const worktreesDir = await workspace.worktreesDir().catch(() => null);
   return {
     tasks: [
       ...agents.tasks().map((t) => ({ id: t.id, repo: t.repo, branch: t.branch, worktree: t.worktree, title: t.title, prompt: t.prompt })),
@@ -574,7 +575,7 @@ async function knownPlaces(agents: Agents, taskJournal: TaskJournal, workspace: 
         id: r.task,
         repo: r.repo,
         branch: r.branch,
-        worktree: taskWorktree(worktreesDir, r.repo, r.branch),
+        worktree: worktreesDir === null ? null : taskWorktree(worktreesDir, r.repo, r.branch),
         title: r.title,
         prompt: r.prompt,
       })),
