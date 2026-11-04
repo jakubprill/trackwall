@@ -35,6 +35,8 @@ export class DaemonEvents {
   /** Snapshots from the current connection; they go after a disconnect, because they may already be stale. */
   readonly #latest = new Map<DaemonEventType, DaemonEvent>();
   readonly #listeners = new Set<(event: DaemonEvent) => void>();
+  readonly #lostListeners = new Set<() => void>();
+  #lost = false;
   #socket: EventSocket | undefined;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #delay = RECONNECT_MS;
@@ -66,6 +68,23 @@ export class DaemonEvents {
     };
   }
 
+  /**
+   * The connection dropped, or the first one failed, and no new one has opened yet: mostly the daemon stopped or is
+   * restarting (or the port forward to a daemon in a container dropped), which the UI sees here at once, while a poll would
+   * notice it only at its next request. It clears when a reconnect opens, at most `MAX_RECONNECT_MS` after the daemon is back.
+   */
+  isLost(): boolean {
+    return this.#lost;
+  }
+
+  /** Calls the listener whenever `isLost()` changes. Returns the unsubscribe. */
+  onLostChange(listener: () => void): () => void {
+    this.#lostListeners.add(listener);
+    return () => {
+      this.#lostListeners.delete(listener);
+    };
+  }
+
   close(): void {
     this.#closed = true;
     clearTimeout(this.#timer);
@@ -78,14 +97,22 @@ export class DaemonEvents {
     this.#socket = socket;
     socket.onopen = () => {
       this.#delay = RECONNECT_MS;
+      this.#setLost(false);
     };
     socket.onmessage = (event: MessageEvent<unknown>) => this.#receive(event.data);
     socket.onclose = () => {
       this.#latest.clear();
       if (this.#closed) return;
+      this.#setLost(true);
       this.#timer = setTimeout(() => this.#connect(), this.#delay);
       this.#delay = Math.min(this.#delay * 2, MAX_RECONNECT_MS);
     };
+  }
+
+  #setLost(lost: boolean): void {
+    if (this.#lost === lost) return;
+    this.#lost = lost;
+    for (const listener of this.#lostListeners) listener();
   }
 
   #receive(data: unknown): void {

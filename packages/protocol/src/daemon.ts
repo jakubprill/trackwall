@@ -64,6 +64,11 @@ export const DaemonInfo = z.object({
    * otherwise.
    */
   devContainerFolder: DevContainerFolder.nullable(),
+  /**
+   * The port of the service proxy on `127.0.0.1` (ADR-189), which opens a running service at
+   * `http://<repo>.localhost:<port>/`; `null` when the daemon runs none (outside a dev container by default).
+   */
+  serviceProxyPort: z.number().int().min(1).max(65535).nullable(),
 });
 export type DaemonInfo = z.infer<typeof DaemonInfo>;
 export const DaemonInfoResult = apiResult(DaemonInfo);

@@ -1,3 +1,5 @@
+import { existsSync, realpathSync, statSync } from "node:fs";
+import { resolve } from "node:path";
 import type {
   AgentApproval,
   ConversationEntry,
@@ -15,6 +17,7 @@ import type {
   WaitingMessage,
 } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
+import { isInside } from "../../infra/path-inside.ts";
 import { AcpConnection, AcpError } from "./acp-connection.ts";
 import { AcpConversation, type ConversationChange } from "./acp-conversation.ts";
 import {
@@ -31,10 +34,11 @@ import {
 } from "./acp-messages.ts";
 import { attachmentLabel, checkAttachments, promptBlocks } from "./acp-prompt.ts";
 import { AcpSessionInfo } from "./acp-session-info.ts";
-import { toolCallFiles, toolCallLines, toolCallPatch } from "./acp-tool-call.ts";
+import { toolCallFiles, toolCallLines, toolCallPatch, workingDirectoryNames } from "./acp-tool-call.ts";
 import type { AgentSession } from "./agent-session.ts";
 import { type CopilotHookOutput, situationOutput } from "./copilot-hook-output.ts";
 import type { CopilotHookRecord } from "./copilot-hook-record.ts";
+import type { CopilotUsageLog } from "./copilot-usage-log.ts";
 import { CopyRequestSlot } from "./copy-request.ts";
 import type { SessionEvent } from "./live-session.ts";
 import { ReadRequestClock } from "./read-request.ts";
@@ -110,6 +114,8 @@ export interface AcpSessionOptions {
   onTurnOver: () => void;
   /** Any turn started, also one the user drove: where the worktree is then starts a round (ADR-168). */
   onTurnStart: () => void;
+  /** What the conversation used (ADR-190), read when a conversation is loaded, in the session's cycle and at its end. */
+  usage: CopilotUsageLog;
   log: (msg: string) => void;
 }
 
@@ -132,6 +138,8 @@ export class AcpSession implements AgentSession {
   readonly startedAt = new Date().toISOString();
   readonly environment: SessionEnvironment;
   readonly #o: AcpSessionOptions;
+  /** The session's working directory as given and as resolved (`workingDirectoryNames`), once. */
+  readonly #cwdNames: readonly string[];
   readonly #conversation: AcpConversation;
   /** The agent's mode, context use and commands. */
   readonly #info = new AcpSessionInfo();
@@ -180,7 +188,8 @@ export class AcpSession implements AgentSession {
     this.task = o.task;
     this.environment = o.environment;
     this.#o = o;
-    this.#conversation = new AcpConversation(o.cwd);
+    this.#cwdNames = workingDirectoryNames(o.cwd);
+    this.#conversation = new AcpConversation(this.#cwdNames);
     this.#hasConversation = o.load !== undefined;
     this.#connection = new AcpConnection({
       write: (line) => this.#channel?.write(line),
@@ -248,7 +257,24 @@ export class AcpSession implements AgentSession {
       this.#conversationId = load;
       const loaded = ConfigOptionsResult.safeParse(await connection.request("session/load", { sessionId: load, cwd, mcpServers: [] }));
       this.#infoChanged(this.#info.settings(loaded.data?.configOptions));
+      this.#updateUsage();
     }
+  }
+
+  /**
+   * The full path of a file the conversation names (`path` relative to the working directory, as a tool call's files
+   * are, or absolute), only inside the working directory, by real paths so a link there cannot lead out, and only while
+   * it is there: the path comes from the agent (ADR-107).
+   */
+  fileOf(path: string): string {
+    const cwd = this.#o.cwd;
+    const file = resolve(cwd, path);
+    if (!isInside(cwd, file)) throw new DomainError("bad_request", "the file is outside the session's working directory");
+    if (!existsSync(file)) throw new DomainError("not_found", "the file is not there any more");
+    if (!statSync(file).isFile()) throw new DomainError("bad_request", "the path is not a file");
+    if (!isInside(realpathSync(cwd), realpathSync(file)))
+      throw new DomainError("bad_request", "the file leads outside the session's working directory");
+    return file;
   }
 
   /** Copilot CLI's id of the conversation, which a later start loads (ADR-95, ADR-107). */
@@ -364,10 +390,14 @@ export class AcpSession implements AgentSession {
     if (this.#finished) return false;
     this.#readRequest.observe(this.#o.prompt());
     const run = this.#o.run();
-    if (run?.kind !== "exited") return true;
+    if (run?.kind !== "exited") {
+      if (this.#conversationId !== undefined) this.#o.usage.poll(this.#conversationId, Date.now());
+      return true;
+    }
     this.#finished = true;
     this.#connection.close();
     this.#refuseApprovals();
+    this.#updateUsage();
     const failed = !run.stoppedByUser && run.exitCode !== 0;
     this.#report(failed ? "Error" : "Done", `exit ${run.exitCode ?? run.signal ?? "?"}`, "exit");
     this.#o.onEvent({ kind: "exited", exitCode: run.exitCode, stoppedByUser: run.stoppedByUser });
@@ -394,7 +424,12 @@ export class AcpSession implements AgentSession {
       view: "conversation",
       readRequest: running ? this.#readRequestView() : null,
       copyRequest: running ? this.copyRequest.request : null,
+      usage: this.#o.usage.current(),
     };
+  }
+
+  #updateUsage(): void {
+    if (this.#conversationId !== undefined) this.#o.usage.update(this.#conversationId);
   }
 
   /**
@@ -530,7 +565,7 @@ export class AcpSession implements AgentSession {
       kind: "approval",
       title: toolCall.title ?? "Approval",
       // The files first: an approval's title names the tool ("Edit file"), not what it changes.
-      detail: [...toolCallFiles(toolCall, this.#o.cwd), ...toolCallLines(toolCall)],
+      detail: [...toolCallFiles(toolCall, this.#cwdNames), ...toolCallLines(toolCall)],
       ...approvalPatch(toolCall),
       question: APPROVAL_QUESTION,
       options: options.map((o, i) => ({ key: String(i + 1), label: o.name })),

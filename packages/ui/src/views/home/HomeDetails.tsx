@@ -18,7 +18,7 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
 import { twoDigits } from "@/lib/format";
-import { homeDaemonStatus, homeRepoStatus, pullLabel } from "@/lib/home-model";
+import { homeDaemonStatus, homeRepoStatus, homeServiceStatus, pullLabel } from "@/lib/home-model";
 import { branchLabel } from "@/lib/repo-status";
 import { sessionPlace, sessionStateLabel } from "@/lib/session-state";
 
@@ -92,6 +92,7 @@ export function HomeDetails({
               session={session.id}
               dialog={session.dialog}
               onOpen={() => onOpen(sessionKey(session.id))}
+              takesKeyboard={false}
             />
           )}
           <Button size="sm" onClick={() => onOpen(sessionKey(session.id))}>
@@ -159,6 +160,7 @@ function RepoDetails({
       <Field name="Tasks">
         {tasks.length === 0 ? "none running" : tasks.map((t) => (t.task === null ? t.miseTask : `${t.miseTask} (in a task)`)).join(", ")}
       </Field>
+      <Field name="Service">{homeRepo.service === null ? "not running" : <StatusLabel {...homeServiceStatus(homeRepo.service)} />}</Field>
       <Field name="Sessions">
         {sessions.length === 0
           ? "none"

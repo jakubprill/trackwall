@@ -154,4 +154,23 @@ describe("workspace.yaml", () => {
     writeFileSync(path, "agentSecrets: ['JIRA TOKEN']\n");
     expect(() => new WorkspaceFile(path).agentSecrets()).toThrow(expect.objectContaining({ code: "invalid_config" }));
   });
+
+  test("starredRepos lists the starred repos, none without the key, and no stars removes the key and keeps the rest of the file", () => {
+    const path = tempFile();
+    const file = new WorkspaceFile(path);
+    expect(file.starredRepos()).toEqual([]);
+
+    writeFileSync(path, "# mine\nprojectsDir: /p\n");
+    file.setStarredRepos(["orders-api", "web"]);
+    expect(readFileSync(path, "utf8")).toBe("# mine\nprojectsDir: /p\nstarredRepos:\n  - orders-api\n  - web\n");
+    expect(file.starredRepos()).toEqual(["orders-api", "web"]);
+
+    file.setStarredRepos([]);
+    expect(readFileSync(path, "utf8")).toBe("# mine\nprojectsDir: /p\n");
+
+    writeFileSync(path, "starredRepos: [Orders API]\n");
+    expect(() => file.starredRepos()).toThrow(
+      expect.objectContaining({ code: "invalid_config", message: expect.stringContaining("starredRepos") }),
+    );
+  });
 });

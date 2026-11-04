@@ -1,4 +1,4 @@
-import type { Service, SliceMember } from "@trackwall/protocol";
+import { type DaemonInfo, type Service, type SliceMember, serviceProxyAddress } from "@trackwall/protocol";
 import type { StatusTone } from "./repo-status.ts";
 
 /** A service state as a status label (ADR-45): ready is ok, waiting is a warning, a crash or a closed port is an error. */
@@ -19,6 +19,15 @@ export function serviceStateLabel(service: Service | null): { tone?: StatusTone;
     case "crashed":
       return { tone: "error", label: "crashed" };
   }
+}
+
+/**
+ * A service in the few characters of a graph card (ADR-191): its port once ready, otherwise its state; the full label
+ * (`serviceStateLabel`) is the card's tooltip and in the repo's panel.
+ */
+export function serviceShortLabel(service: Service): { tone?: StatusTone; label: string } {
+  const state = serviceStateLabel(service);
+  return service.state === "healthy" && service.port !== null ? { tone: state.tone, label: `:${service.port}` } : state;
 }
 
 /**
@@ -43,4 +52,28 @@ export function isServiceLive(service: Service | null): boolean {
 /** The live service of a task that holds the port of `repo`'s root on a lease (ADR-132), if any. */
 export function leaseHolder(services: readonly Service[], repo: string): Service | undefined {
   return services.find((s) => s.repo === repo && s.lease && isServiceLive(s));
+}
+
+/**
+ * The service that answers for `repo` on its port (ADR-191), for the graph and Home: a task's service holding the port
+ * on a lease (ADR-132), otherwise the service of the repo's root until it is stopped; `null` while neither runs. A
+ * crashed one counts until it is started again, so a crash stays visible.
+ */
+export function repoService(services: readonly Service[], repo: string): Service | null {
+  const holder = leaseHolder(services, repo);
+  if (holder) return holder;
+  const root = services.find((s) => s.repo === repo && s.task === null);
+  return root === undefined || root.state === "stopped" ? null : root;
+}
+
+/**
+ * Where a ready service opens in the browser: through the daemon's service proxy (ADR-189) when it runs one, which is
+ * the only way into a dev container, otherwise at its port on this computer when the daemon runs here. `undefined` while
+ * the service is not ready, and for a daemon elsewhere without the proxy.
+ */
+export function serviceLink(place: Pick<DaemonInfo, "desktop" | "serviceProxyPort">, service: Service | null): string | undefined {
+  if (service?.state !== "healthy") return undefined;
+  if (place.serviceProxyPort !== null) return serviceProxyAddress(place.serviceProxyPort, service);
+  if (place.desktop && service.port !== null) return `http://localhost:${service.port}/`;
+  return undefined;
 }

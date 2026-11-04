@@ -10,6 +10,10 @@
  * `cancelled`. Like Copilot CLI it keeps a conversation per id once it has had a prompt, which `session/load` replays
  * (one from the terminal mode with nothing to replay), and an id without one is error -32002.
  *
+ * A prompt that starts with `Edit ` asks to edit `README.md` in its working directory instead of running the command,
+ * and its input and result carry the change as `git diff` text, as Copilot CLI's edit tool does in the probe of ADR-107
+ * (`test/acp-tool-call.test.ts` has the same shapes); the file stays as it is.
+ *
  * A prompt that starts with `/review` is an automatic review (ADR-182): the agent asks to run its shell command, then
  * answers with one issue in the format of Copilot CLI's review agent on the first added line of the diff file the prompt
  * names, followed by whether the command was allowed and the arguments it got. With `FAKE_COPILOT_REVIEW_WAIT` set the
@@ -25,9 +29,36 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
+import { recordUsage } from "../support/copilot-usage-receipt.ts";
 
 /** The command of every turn; the tests look for it in the approval and the conversation. */
 export const FAKE_ACP_COMMAND = "echo made-by-agent";
+
+/** The line a prompt that starts with `Edit ` adds to `README.md`, after its first line. */
+export const FAKE_ACP_EDIT_LINE = "Edited by the agent.";
+
+/** A tool the fake calls, as `tool_call` and `session/request_permission` name it. */
+type FakeToolCall = { title: string; kind: string; rawInput: Record<string, string>; locations?: { path: string }[] };
+
+/** The shell command every turn runs, as it is called and what it gives back. */
+const SHELL_TOOL: { call: FakeToolCall; result: Record<string, unknown> } = {
+  call: { title: "Make a file", kind: "execute", rawInput: { command: FAKE_ACP_COMMAND, description: "Make a file" } },
+  result: { content: [toolText("made-by-agent\n")] },
+};
+
+/**
+ * The tool of a turn, as it is called and what it gives back: the shell command, or the edit of `README.md` for a
+ * prompt that starts with `Edit `.
+ */
+function turnTool(prompt: string): typeof SHELL_TOOL {
+  if (!prompt.startsWith("Edit ")) return SHELL_TOOL;
+  const path = join(process.cwd(), "README.md");
+  const diff = `diff --git a/README.md b/README.md\n--- a/README.md\n+++ b/README.md\n@@ -1,1 +1,2 @@\n # shop\n+${FAKE_ACP_EDIT_LINE}\n`;
+  return {
+    call: { title: "Edit file", kind: "edit", rawInput: { fileName: path, diff }, locations: [{ path }] },
+    result: { content: [toolText("File edited.")], rawOutput: { content: "File edited.", detailedContent: diff } },
+  };
+}
 
 const Message = z.object({
   jsonrpc: z.literal("2.0"),
@@ -137,9 +168,9 @@ export function serveAcp(o: FakeAcpOptions): void {
     else
       void (async () => {
         const toolCallId = `call_${++calls}_0`;
-        const rawInput = { command: FAKE_ACP_COMMAND, description: "Make a file" };
-        update(sessionId, { sessionUpdate: "tool_call", toolCallId, title: "Make a file", kind: "execute", status: "pending", rawInput });
-        const allowed = o.allowAllTools || (await permission(sessionId, toolCallId));
+        const tool = turnTool(text);
+        update(sessionId, { sessionUpdate: "tool_call", toolCallId, ...tool.call, status: "pending" });
+        const allowed = o.allowAllTools || (await permission(sessionId, toolCallId, tool.call));
         if (turn.cancelled) return;
         if (!allowed) {
           // As in Copilot CLI, a refused tool ends the turn without another answer.
@@ -152,7 +183,12 @@ export function serveAcp(o: FakeAcpOptions): void {
           turn.end("end_turn");
           return;
         }
-        update(sessionId, { sessionUpdate: "tool_call_update", toolCallId, status: "completed", content: [toolText("made-by-agent\n")] });
+        update(sessionId, {
+          sessionUpdate: "tool_call_update",
+          toolCallId,
+          status: "completed",
+          ...tool.result,
+        });
         const about = firstAnswer
           ? `\n\nMCP: ${o.mcpServers.join(", ")}\nInstructions: ${o.instructionFiles.join(", ")}\n${o.args.map((a) => `Argument: ${a}`).join("\n")}`
           : "";
@@ -168,6 +204,7 @@ export function serveAcp(o: FakeAcpOptions): void {
         turn.end("end_turn");
       })();
     const stopReason = await ended;
+    recordUsage(sessionId);
     turns.delete(sessionId);
     turnsDone += 1;
     update(sessionId, { sessionUpdate: "usage_update", used: 1000 * turnsDone, size: 128_000 });
@@ -176,7 +213,7 @@ export function serveAcp(o: FakeAcpOptions): void {
 
   async function review(sessionId: string, text: string, turn: { end: (stopReason: string) => void; cancelled: boolean }): Promise<void> {
     if (process.env.FAKE_COPILOT_REVIEW_WAIT !== undefined) return;
-    const allowed = o.allowAllTools || (await permission(sessionId, `call_${++calls}_0`));
+    const allowed = o.allowAllTools || (await permission(sessionId, `call_${++calls}_0`, SHELL_TOOL.call));
     if (turn.cancelled) return;
     const diffFile = /in the file `([^`]+)`/.exec(text)?.[1] ?? "";
     const added = firstAddedLine(existsSync(diffFile) ? readFileSync(diffFile, "utf8") : "");
@@ -195,11 +232,11 @@ export function serveAcp(o: FakeAcpOptions): void {
     turn.end("end_turn");
   }
 
-  async function permission(sessionId: string, toolCallId: string): Promise<boolean> {
+  async function permission(sessionId: string, toolCallId: string, tool: FakeToolCall): Promise<boolean> {
     const answer = PermissionAnswer.parse(
       await ask("session/request_permission", {
         sessionId,
-        toolCall: { toolCallId, title: "Make a file", kind: "execute", status: "pending", rawInput: { command: FAKE_ACP_COMMAND } },
+        toolCall: { toolCallId, ...tool, status: "pending" },
         options: [
           { optionId: "allow_once", kind: "allow_once", name: "Allow once" },
           { optionId: "allow_always", kind: "allow_always", name: "Always allow" },

@@ -4,8 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DomainError } from "../src/infra/errors.ts";
 import { readAgentDialog } from "../src/modules/agents/copilot-dialog.ts";
+import { CopilotUsageLog } from "../src/modules/agents/copilot-usage-log.ts";
 import { LiveSession } from "../src/modules/agents/live-session.ts";
-import { screenProcessed } from "./support/live-session.ts";
+import { NO_COPILOT_HOME, screenProcessed } from "./support/live-session.ts";
 
 /** Screens of Copilot CLI 1.0.103 taken from the real binary in tmux (paths replaced, lengths kept). */
 function screen(name: string): string[] {
@@ -149,6 +150,7 @@ async function sessionShowing(
     onEvent: () => {},
     onTurnOver: () => {},
     onTurnStart: () => {},
+    usage: new CopilotUsageLog(NO_COPILOT_HOME),
   });
   sessions.push(session);
   const written: string[] = [];

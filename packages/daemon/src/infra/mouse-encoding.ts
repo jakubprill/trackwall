@@ -1,7 +1,7 @@
 import type headless from "@xterm/headless";
 
 /**
- * How the program in a session asks the terminal to encode mouse reports, which the screen image of
+ * How the program in a terminal (a session's Copilot CLI, a folder terminal's shell) asks the terminal to encode mouse reports, which the screen image of
  * `@xterm/addon-serialize` leaves out: it restores the mouse tracking mode (1000, 1002, 1003) but not its encoding
  * (§4.4, ADR-26). Copilot CLI turns on SGR (1006), and a window that got the image without it encodes the mouse the X10
  * way, which xterm.js sends through `onBinary` instead of `onData`: the wheel, clicks and Copilot CLI's own selection

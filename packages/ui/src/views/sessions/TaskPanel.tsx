@@ -9,8 +9,10 @@ import {
 } from "@trackwall/protocol";
 import { Bot, Box, GitBranch, Layers, Plug, ShieldOff, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
+import { CopilotUsageMark } from "@/components/CopilotUsageMark";
 import { CopyRequestNotice } from "@/components/CopyRequestNotice";
 import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
+import { FolderShell } from "@/components/FolderShell";
 import { ReadRequestNotice } from "@/components/ReadRequestNotice";
 import { SessionScreen } from "@/components/SessionScreen";
 import { StatusLabel } from "@/components/StatusLabel";
@@ -115,6 +117,7 @@ export function TaskPanel({
               {session ? <StatusLabel {...sessionStateLabel(session)} /> : "no session"}
             </span>
             <span className="text-muted-foreground shrink-0 text-xs">{relativeTime(session?.startedAt ?? task.createdAt, new Date())}</span>
+            <CopilotUsageMark usage={session?.usage ?? null} />
           </span>
           <span className="text-muted-foreground truncate text-xs" title={task.prompt}>
             {taskSubtitle(task, sessions)}
@@ -207,7 +210,8 @@ function TaskTabContent({
 }) {
   return (
     <>
-      {shown === "session" && session && <SessionScreen conn={conn} session={session} selected />}
+      {shown === "session" && session && <SessionScreen conn={conn} session={session} selected review={review} />}
+      {shown === "shell" && <FolderShell key={task.id} conn={conn} place={{ repo: task.repo, task: task.id }} folder={task.worktree} />}
       {shown === "changes" && (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <TaskChangesView conn={conn} task={task.id} paused={paused} review={review} />

@@ -130,6 +130,7 @@ function session(fields: Partial<Session>): Session {
     view: "terminal",
     readRequest: null,
     copyRequest: null,
+    usage: null,
     ...fields,
   };
 }

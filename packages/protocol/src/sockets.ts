@@ -1,6 +1,6 @@
 /**
  * The daemon's WebSockets (§5.2): events on `/ws` (ADR-36), session terminals on `/ws/pty/<session>` (ADR-26) and the
- * conversation view on `/ws/conversation/<session>` (ADR-107). A
+ * conversation view on `/ws/conversation/<session>` (ADR-107) and folder terminals on `/ws/terminal/<terminal>` (ADR-185). A
  * socket's address and subprotocol always go together (`DaemonSocket`), so the daemon, the Vite proxy and the UI cannot
  * pair them differently.
  */
@@ -35,10 +35,19 @@ export function conversationSocket(session: string): DaemonSocket {
   return { path: `${CONVERSATION_SOCKET_PREFIX}${session}`, subprotocol: CONVERSATION_SUBPROTOCOL };
 }
 
+/** The path of a folder terminal's WebSocket (ADR-185): `/ws/terminal/<terminal>`; the frames are a session terminal's. */
+export const TERMINAL_SOCKET_PREFIX = "/ws/terminal/";
+export const TERMINAL_SUBPROTOCOL = "trackwall.terminal";
+
+export function terminalSocket(terminal: string): DaemonSocket {
+  return { path: `${TERMINAL_SOCKET_PREFIX}${terminal}`, subprotocol: TERMINAL_SUBPROTOCOL };
+}
+
 /** The daemon socket at this address (without query); `undefined` for an address outside the daemon (for example Vite HMR). */
 export function daemonSocketAt(path: string): DaemonSocket | undefined {
   if (path === EVENTS_SOCKET.path) return EVENTS_SOCKET;
   if (path.startsWith(PTY_SOCKET_PREFIX)) return ptySocket(path.slice(PTY_SOCKET_PREFIX.length));
   if (path.startsWith(CONVERSATION_SOCKET_PREFIX)) return conversationSocket(path.slice(CONVERSATION_SOCKET_PREFIX.length));
+  if (path.startsWith(TERMINAL_SOCKET_PREFIX)) return terminalSocket(path.slice(TERMINAL_SOCKET_PREFIX.length));
   return undefined;
 }

@@ -3,8 +3,9 @@ import headless from "@xterm/headless";
 import { MouseEncoding } from "./mouse-encoding.ts";
 
 /**
- * The session's screen on the daemon side (§4.4, ADR-26): a windowless terminal emulator fed the whole PTY output. A
- * session terminal in the UI that connects during the session (switching sessions, a refresh, a second window) first
+ * A terminal's screen on the daemon side (§4.4, ADR-26; a session's, or a folder terminal's, ADR-185): a windowless
+ * terminal emulator fed the whole PTY output. A terminal in the UI that connects later (switching sessions, a refresh,
+ * a second window) first
  * gets the screen image from this emulator, and then further output. Without it it would have to replay the whole
  * output from the start, and Copilot CLI's TUI works on the alternate screen, which replaying the end of the buffer does not restore.
  *

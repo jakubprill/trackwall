@@ -23,6 +23,7 @@ import {
   servicesApi,
   taskOutcomesApi,
   taskRoundsApi,
+  terminalsApi,
   verificationApi,
   workspaceApi,
 } from "@trackwall/protocol";
@@ -68,6 +69,8 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(workspaceApi.setGitProgram, (f, b) => f.workspace.setGitProgram(b.path)),
   route(workspaceApi.setSessionProfile, (f, b) => f.workspace.setSessionProfile(b.profile)),
   route(workspaceApi.setAutoReview, (f, b) => f.workspace.setAutoReview(b)),
+  route(workspaceApi.starredRepos, (f) => f.workspace.starredRepos()),
+  route(workspaceApi.setRepoStarred, (f, b) => f.workspace.setRepoStarred(b.repo, b.starred)),
   route(workspaceApi.overview, (f, b) => f.workspace.overview(b.repo)),
   route(workspaceApi.tree, (f, b) => f.workspace.tree(b.repo, b.path)),
   route(workspaceApi.file, (f, b) => f.workspace.file(b.repo, b.path)),
@@ -212,8 +215,19 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     f.agents.openTaskEditor(b.task);
     return null;
   }),
+  route(agentsApi.openConversationFile, (f, b) => {
+    f.agents.openConversationFile(b.session, b.path, b.line);
+    return null;
+  }),
   route(agentsApi.removeTask, async (f, b) => {
     await f.agents.removeTask(b.task, b.keepBranch, b.discardChanges);
+    return null;
+  }),
+  route(terminalsApi.start, (f, b) => f.terminals.start(b)),
+  route(terminalsApi.list, (f) => f.terminals.list()),
+  route(terminalsApi.files, (f, b) => f.folderFiles.list(b)),
+  route(terminalsApi.close, async (f, b) => {
+    await f.terminals.close(b.terminal);
     return null;
   }),
   route(agentsApi.approveProposal, (f, b) => f.agents.approveProposal(b.proposal, b.prompt, b.model, b.approvals, b.view)),

@@ -2,13 +2,13 @@ import { agentsApi, countLabel, type TaskChanges } from "@trackwall/protocol";
 import { useCallback } from "react";
 import { ChangesDiff } from "@/components/ChangesDiff";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
+import { reviewAnnotations } from "@/components/LineComments";
 import { Loading } from "@/components/Loading";
+import { ReviewBar } from "@/components/ReviewBar";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { useRemote } from "@/lib/use-remote";
 import type { TaskReview } from "@/lib/use-task-review";
-import { reviewAnnotations } from "./LineComments.tsx";
-import { ReviewBar } from "./ReviewBar.tsx";
 import { TaskAutoReview } from "./TaskAutoReview.tsx";
 
 /**

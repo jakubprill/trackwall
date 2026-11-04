@@ -54,6 +54,7 @@ import {
   type WorkingTreeChanges,
 } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
+import type { ScreenViewer } from "../../infra/terminal-screen.ts";
 import { AcpSession, type ConversationViewer, type ConversationWindow } from "./acp-session.ts";
 import { AgentQueuesFile } from "./agent-queues.ts";
 import type { AgentSession } from "./agent-session.ts";
@@ -104,7 +105,6 @@ import { TaskProposals } from "./task-proposals.ts";
 import { TaskReviews } from "./task-reviews.ts";
 import { type RoundsVcs, TASK_ROUNDS_FILE, TaskRoundList } from "./task-rounds.ts";
 import { AgentTasks, type TaskLaunch, type TaskOptions, type TasksVcs } from "./tasks.ts";
-import type { ScreenViewer } from "./terminal-screen.ts";
 
 /**
  * The `agents` module (§4.4, ADR-26): Copilot CLI sessions started from the UI in a repo from the projects folder,
@@ -178,6 +178,8 @@ interface AgentsRepos {
 
 export interface AgentsDeps {
   procs: AgentsProcs;
+  /** Closes the user's folder terminal in a task's worktree before the task ends (`terminals`, ADR-185). */
+  closeFolderTerminal: (task: string) => Promise<void>;
   repos: AgentsRepos;
   /** Task worktrees and branches (ADR-31), and the round commits in them (ADR-168). */
   vcs: TasksVcs & RoundsVcs;
@@ -209,8 +211,8 @@ export interface AgentsDeps {
    * session is calling.
    */
   sessionMcpServer: (sessionToken: string) => HttpEndpoint;
-  /** Opens a directory in VS Code (a task's worktree). */
-  openEditor: (dir: string) => void;
+  /** Opens VS Code on a folder (a task's worktree), or on a file at `line` (a file of a conversation). */
+  openEditor: (path: string, line?: number) => void;
   /** Whether a board item is on the board (ADR-133): a task or a proposal names only an existing one. */
   boardHas: (item: string) => Promise<boolean>;
   /** The workspace knowledge the user approved for a session in `repo` (`null`: in the projects folder), ADR-170. */
@@ -300,6 +302,7 @@ export class Agents {
       repos: deps.repos,
       file: new TaskFile(join(deps.home, TASKS_FILE), deps.log),
       liveIn: (dir) => deps.procs.liveIn(dir),
+      closeFolderTerminal: (task) => deps.closeFolderTerminal(task),
       legacyWorktreesDir: join(deps.home, LEGACY_WORKTREES_DIR),
       roundCommits: (task) => this.#rounds.roundCommits(task),
       openEditor: deps.openEditor,
@@ -631,7 +634,8 @@ export class Agents {
     const tasks = this.#tasks.list().filter((t) => t.repo === repo);
     if (tasks.length > 0)
       throw new DomainError("bad_request", `end the tasks of ${repo} first (${tasks.length}): their worktrees belong to the repo`);
-    if (this.#deps.procs.liveIn(repoDir)) throw new DomainError("bad_request", `stop the mise tasks and services running in ${repo} first`);
+    if (this.#deps.procs.liveIn(repoDir))
+      throw new DomainError("bad_request", `stop the mise tasks, services and terminals running in ${repo} first`);
   }
 
   rejectProposal(id: string, reason: string | undefined): void {
@@ -935,6 +939,11 @@ export class Agents {
     this.#tasks.openEditor(id);
   }
 
+  /** A file of a session's conversation in VS Code at `line` (ADR-107), only inside the session's working directory. */
+  openConversationFile(id: string, path: string, line: number): void {
+    this.#deps.openEditor(this.#conversationOf(id).fileOf(path), line);
+  }
+
   /**
    * The user hands a task they started to the supervisor (ADR-155): from then on its updates go to the supervisor, which
    * may send it messages, and the supervisor is told at once.
@@ -1007,6 +1016,11 @@ export class Agents {
    * The worktree a mise task of the task runs in, while its mise config is the trusted one, and the task port its runs
    * get; for the `mise` module (ADR-59, ADR-61).
    */
+  /** The worktree of task `id` of `repo` for the user's shell (ADR-185); refused while the task is being ended. */
+  taskWorktreeForShell(id: string, repo: string): string {
+    return this.#tasks.worktreeForShell(id, repo);
+  }
+
   trustedTaskWorktree(id: string, repo: string): Promise<{ worktree: string; port: number }> {
     return this.#tasks.trustedWorktree(id, repo);
   }

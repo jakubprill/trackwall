@@ -21,6 +21,7 @@ const TOPICS: { [T in DaemonEventType]: (facade: Facade) => DaemonEventOf<T> } =
   "board.changed": (facade) => ({ type: "board.changed", payload: { revision: facade.board.revision() } }),
   "mcp.calls.changed": (facade) => ({ type: "mcp.calls.changed", payload: { revision: facade.mcpAudit.revision() } }),
   "task-outcomes.changed": (facade) => ({ type: "task-outcomes.changed", payload: facade.taskOutcomes() }),
+  "terminals.changed": (facade) => ({ type: "terminals.changed", payload: facade.terminals.list() }),
 };
 
 export interface EventListener {

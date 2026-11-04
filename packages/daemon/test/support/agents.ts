@@ -57,6 +57,7 @@ export function makeAgents(
   });
   const opened: string[] = [];
   const agents: Agents = new Agents({
+    closeFolderTerminal: async () => {},
     procs,
     repos: {
       repoPath: async (id) => {
@@ -86,7 +87,7 @@ export function makeAgents(
     miseEnv,
     sessionHook: hookServerFor(() => agents),
     sessionMcpServer: (sessionToken) => ({ url: "http://127.0.0.1:9/mcp", headers: { "x-trackwall-session-token": sessionToken } }),
-    openEditor: (dir) => opened.push(dir),
+    openEditor: (path, line) => opened.push(line === undefined ? path : `${path}:${line}`),
     boardHas: async () => true,
     taskOutcomes: () => [],
     knowledge: async () => ({ entries: [], more: 0 }),

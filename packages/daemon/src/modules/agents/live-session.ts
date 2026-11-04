@@ -12,20 +12,20 @@ import {
   type TaskUpdate,
 } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
+import { type ScreenViewer, TerminalScreen } from "../../infra/terminal-screen.ts";
 import type { AgentSession } from "./agent-session.ts";
 import { type CopilotHookOutput, hookOutputFor, situationOutput } from "./copilot-hook-output.ts";
 import type { CopilotHookEvent, CopilotHookRecord } from "./copilot-hook-record.ts";
 import { approvalRequest } from "./copilot-hooks.ts";
 import { answersDialog, ESCAPE, type SessionKey, sessionKey } from "./copilot-keys.ts";
-
 import { CopilotSessionState, RETYPE_AFTER_MS } from "./copilot-session-state.ts";
+import type { CopilotUsageLog } from "./copilot-usage-log.ts";
 import { CopyRequestSlot } from "./copy-request.ts";
 import { HookTail } from "./hook-tail.ts";
 import { ReadRequestClock } from "./read-request.ts";
 import { SessionAttention } from "./session-attention.ts";
 import { SessionDialogs, selectsOption } from "./session-dialogs.ts";
 import { sessionStuck } from "./session-stuck.ts";
-import { type ScreenViewer, TerminalScreen } from "./terminal-screen.ts";
 
 /**
  * One running (or ended) Copilot CLI session in the daemon (§4.4): the screen for session terminals, the state from hooks,
@@ -150,6 +150,8 @@ export interface LiveSessionOptions {
   onTurnOver: () => void;
   /** Any turn started (hook `userPromptSubmitted`), also one the user drove: where the worktree is then starts a round (ADR-168). */
   onTurnStart: () => void;
+  /** What the conversation used (ADR-190), read at the start, in the session's cycle and at its end. */
+  usage: CopilotUsageLog;
 }
 
 export class LiveSession implements AgentSession {
@@ -173,6 +175,7 @@ export class LiveSession implements AgentSession {
   readonly #screen: TerminalScreen;
   readonly #state: CopilotSessionState;
   readonly #hooks: HookTail;
+  readonly #usage: CopilotUsageLog;
   readonly #decoder = new TextDecoder();
   #terminal: SessionPty | undefined;
   #last: TaskStateChange | null = null;
@@ -251,6 +254,9 @@ export class LiveSession implements AgentSession {
     this.#screen = new TerminalScreen(o.cols, o.rows);
     this.#dialogs = new SessionDialogs(this.#screen);
     this.#hooks = new HookTail(o.hooksFile);
+    this.#usage = o.usage;
+    // A resumed conversation shows what it used before this start.
+    if (o.hasConversation) this.#usage.update(this.conversation);
   }
 
   /** The process terminal; it arrives after the group starts, and output can arrive earlier. */
@@ -440,12 +446,16 @@ export class LiveSession implements AgentSession {
     this.#readPromptBox();
     this.#readRequest.observe(this.#promptText());
     const run = this.#run();
-    if (run?.kind !== "exited") return true;
+    if (run?.kind !== "exited") {
+      this.#usage.poll(this.conversation, Date.now());
+      return true;
+    }
     // A stop by the user is an intended end, not a session error, even though the process ends with a signal.
     // Finished first, so the `Error` a failed exit gives is reported as the exit, not also as an error.
     this.#finished = true;
     // The last hooks may have been written between the read above and the end the process state shows.
     this.#readHooks();
+    this.#usage.update(this.conversation);
     this.#report(this.#state.exit(run.stoppedByUser ? 0 : (run.exitCode ?? 1)));
     this.#hooks.close();
     this.#onEvent({ kind: "exited", exitCode: run.exitCode, stoppedByUser: run.stoppedByUser });
@@ -471,6 +481,7 @@ export class LiveSession implements AgentSession {
       view: "terminal",
       readRequest: run.kind === "running" ? this.#readRequestView() : null,
       copyRequest: run.kind === "running" ? this.copyRequest.request : null,
+      usage: this.#usage.current(),
     };
   }
 

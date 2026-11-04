@@ -8,8 +8,10 @@ import {
   SESSION_MESSAGE_BODY_MAX_BYTES,
   SessionMessage,
   SessionView,
+  TOOL_FILE_PATH_MAX,
   ToolPatch,
 } from "./conversation.ts";
+import { CopilotUsage } from "./copilot-usage.ts";
 import { RunState } from "./procs.ts";
 import { REVIEW_COMMENTS_MAX, ReviewComment } from "./review.ts";
 import { singleLine } from "./single-line.ts";
@@ -177,9 +179,18 @@ export const TaskModel = z
 export const TaskApprovals = z.enum(["ask", "auto"]);
 export type TaskApprovals = z.infer<typeof TaskApprovals>;
 
-/** A task summary from its session (`report_result`, ADR-39): what it did and what is left, for the session that delegated the task. */
+/**
+ * A task summary from its session (`report_result`, ADR-39): what it did and what is left, for the session that delegated
+ * the task and as the merge request's description, which holds `MERGE_REQUEST_DESCRIPTION_MAX` characters together with
+ * the check steps and the verification verdict.
+ */
 export const TASK_SUMMARY_MAX = 4000;
 export const TaskSummaryText = z.string().trim().min(1).max(TASK_SUMMARY_MAX);
+/**
+ * The length a session is asked to aim for, in words, because a model keeps to a word count better than to characters;
+ * well under the limit, so that the check steps and the verdict still fit the merge request's description after it.
+ */
+export const TASK_SUMMARY_WORDS = 300;
 
 /**
  * How to check the change by hand (ADR-169): short steps with what the user should see, such as "Open /orders and press
@@ -434,6 +445,8 @@ export const Session = z.object({
   readRequest: ReadRequest.nullable(),
   /** The agent's latest copy request in a running session (ADR-180), until the user copies or dismisses it; `null` otherwise. */
   copyRequest: CopyRequest.nullable(),
+  /** What the session's conversation used (ADR-190); `null` before its first model call or when its event log cannot be read. */
+  usage: CopilotUsage.nullable(),
 });
 export type Session = z.infer<typeof Session>;
 
@@ -927,6 +940,15 @@ export const agentsApi = {
    */
   sessionJavaNavigation: endpoint("session-java-navigation", SessionRequest, JavaNavigationStatus.nullable()),
   openTaskEditor: endpoint("open-task-editor", TaskRequest, Done),
+  /**
+   * A file of a session's conversation in VS Code at a line (ADR-107): `path` as a tool call names it, inside the
+   * session's working directory.
+   */
+  openConversationFile: endpoint(
+    "open-conversation-file",
+    SessionRequest.extend({ path: z.string().min(1).max(TOOL_FILE_PATH_MAX), line: z.number().int().positive() }),
+    Done,
+  ),
   /**
    * Copies the files the repo root's `.worktreeinclude` names into the task's existing worktree again (ADR-61), with the
    * same rules as at its start; a file the worktree already has stays as it is. Only from the UI, never from MCP.

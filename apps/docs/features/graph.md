@@ -12,7 +12,7 @@ See which repo uses which, through shared packages and HTTP calls, with the line
 ## What you get
 
 - A map of your projects folder: which repo uses another repo's package and which one calls another repo's endpoints.
-- Frontends on the left, gateways and backends in the middle, libraries on the right.
+- Frontends on the left, gateways and backends in the middle, libraries on the right, each with its running service.
 - For every connection, whether one repo calls the other or depends on it to build, how sure Trackwall is, and the file and line that prove it.
 - The HTTP calls that lead nowhere Trackwall knows, so you can tell an external service from a missing link.
 - A place to add the connections Trackwall cannot see.
@@ -22,6 +22,8 @@ See which repo uses which, through shared packages and HTTP calls, with the line
 Open "Overview" and Trackwall draws your repos as a graph, built from their [repo cards](/features/repo-card). A line goes from a repo that uses a package to the repo that builds it (Maven, Gradle or npm), and from a repo whose HTTP client calls another repo's app or endpoints, matched by app name, host, `localhost` port or path.
 
 Every connection says what it is, "calls" (at runtime, over HTTP) or "depends on" (to build, through a package), and has a confidence: certain, almost certain, likely or possible. Click a repo and the panel on the right lists what it uses and who uses it, each with its evidence.
+
+A repo whose [service](/features/services) runs shows it on its box: a green dot and the port, such as `:8081`, once it is ready, otherwise its state, such as "starting" or "crashed". Point at it for the whole state; the panel shows it too. While an agent task runs its copy of the service on the repo's port, the box shows that copy, since it is the one the other services reach.
 
 When a repo's HTTP client calls an app that no repo in your projects folder is, the panel lists it under "Calls without a target", with the file and line of the client and what Trackwall looked for. That is either a service outside your folder, or one of your repos under another name, which an `apps` entry in `workspace.yaml` connects.
 

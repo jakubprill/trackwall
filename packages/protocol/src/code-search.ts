@@ -13,8 +13,8 @@ export const CODE_SEARCH_MAX_CONTEXT = 10;
 /** A match or context line longer than this (minified JS, generated JSON) is cut. */
 export const CODE_SEARCH_LINE_MAX_CHARS = 500;
 /**
- * Most characters of line text (matches and context) in one result; the result goes to the agent twice (text and
- * `structuredContent`), as with the README in `get_repo`.
+ * Most characters of line text (matches and context), or of paths, in one result: what `search_code`'s text, all an
+ * MCP client gets of it (ADR-187), is made from.
  */
 export const CODE_SEARCH_MAX_CHARS = 100_000;
 
@@ -80,6 +80,22 @@ export const CodeSearchFailure = z.object({
 });
 export type CodeSearchFailure = z.infer<typeof CodeSearchFailure>;
 
+/**
+ * What a code search returns: every match line with its context (`lines`), or only the files with matches and how
+ * many lines match in each (`files`), a much shorter first look from which the agent picks the files to read (ADR-187).
+ */
+export const CodeSearchOutput = z.enum(["lines", "files"]);
+export type CodeSearchOutput = z.infer<typeof CodeSearchOutput>;
+
+/** A file with matches, in `files` output: how many of its lines match. */
+export const CodeFile = z.object({
+  repo: RepoId,
+  /** Path in the commit tree, with `/`. */
+  path: z.string(),
+  matches: z.number().int().positive(),
+});
+export type CodeFile = z.infer<typeof CodeFile>;
+
 export const CodeSearchRepo = z.object({
   repo: RepoId,
   /** The commit searched; a repo without commits is not listed. */
@@ -90,10 +106,12 @@ export const CodeSearchRepo = z.object({
 export type CodeSearchRepo = z.infer<typeof CodeSearchRepo>;
 
 export const SearchCodeResult = z.object({
-  /** Matches in the order of the repo list, then by path and line. */
+  /** Matches in the order of the repo list, then by path and line; empty in `files` output. */
   matches: z.array(CodeMatch),
+  /** In `files` output, the files with matches in the order of the repo list, then by path; empty in `lines` output. */
+  files: z.array(CodeFile),
   /**
-   * Not every match may be in the result: more than the limit or `CODE_SEARCH_MAX_CHARS`, a repo's git output was
+   * Not every match (or file) may be in the result: more than the limit or `CODE_SEARCH_MAX_CHARS`, a repo's git output was
    * cut, or some repos were skipped; narrow the query.
    */
   truncated: z.boolean(),

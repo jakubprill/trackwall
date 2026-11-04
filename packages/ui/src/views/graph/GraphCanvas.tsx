@@ -1,6 +1,8 @@
-import { countLabel, type GraphNode, type RepoGraph } from "@trackwall/protocol";
+import { countLabel, type GraphNode, type RepoGraph, type Service } from "@trackwall/protocol";
 import { useMemo } from "react";
+import { StatusLabel } from "@/components/StatusLabel";
 import { type EdgePair, edgePath, type GraphLayout, NODE_HEIGHT, NODE_WIDTH, type NodeBox, neighbourhood } from "@/lib/graph-layout";
+import { repoService, serviceShortLabel, serviceStateLabel } from "@/lib/service-state";
 import { IMPACT_RING_BORDER, IMPACT_RING_STROKE, impactEdgeRing } from "@/lib/task-impact";
 import { cn } from "@/lib/utils";
 
@@ -13,16 +15,19 @@ const NODE_TAGS = 2;
  * The connection graph (ADR-29): repos as HUD cards in columns, edges as SVG curves under them (from the repo that uses to
  * the one that is used), manual edges dashed. Selecting a repo highlights its neighbourhood and dims the rest; a task's
  * impact (ADR-147) lights the repos it reaches in the colour of their ring and the edges between rings, and dims the rest.
+ * A repo whose service runs shows its state on its card, its port once ready (ADR-191).
  */
 export function GraphCanvas({
   graph,
   layout,
+  services,
   selected,
   impact,
   onSelect,
 }: {
   graph: RepoGraph;
   layout: GraphLayout;
+  services: readonly Service[];
   selected: string | undefined;
   /** Each repo a task's change reaches with its ring, the task's repo at 0 (`impactRings`); `undefined` without a task. */
   impact: ReadonlyMap<string, number> | undefined;
@@ -63,6 +68,7 @@ export function GraphCanvas({
                   box={box}
                   node={node}
                   usedBy={incoming.get(box.repo) ?? 0}
+                  service={repoService(services, box.repo)}
                   selected={selected === box.repo}
                   ring={impact?.get(box.repo)}
                   dimmed={near !== undefined ? !near.has(box.repo) : impact !== undefined && !impact.has(box.repo)}
@@ -87,7 +93,10 @@ export function GraphCanvas({
                     selected === repo && "border-primary text-primary",
                   )}
                 >
-                  {repo}
+                  <span className="flex items-center gap-2">
+                    {repo}
+                    <ServiceMark service={repoService(services, repo)} />
+                  </span>
                 </button>
               </li>
             ))}
@@ -148,6 +157,7 @@ function NodeCard({
   box,
   node,
   usedBy,
+  service,
   selected,
   ring,
   dimmed,
@@ -156,6 +166,8 @@ function NodeCard({
   box: NodeBox;
   node: GraphNode;
   usedBy: number;
+  /** The service that answers for the repo (`repoService`), `null` while none runs. */
+  service: Service | null;
   selected: boolean;
   /** The repo's ring in a task's impact, 0 for the task's repo. */
   ring: number | undefined;
@@ -180,6 +192,7 @@ function NodeCard({
     >
       <span className="truncate font-mono text-sm">{node.repo}</span>
       <span className="text-muted-foreground flex min-w-0 items-center gap-2 font-mono text-2xs">
+        <ServiceMark service={service} />
         {usedBy > 0 && (
           <span className="text-primary shrink-0" title={`Used by ${countLabel(usedBy, { one: "repo", other: "repos" })}`}>
             {`← ${usedBy}`}
@@ -193,6 +206,16 @@ function NodeCard({
         </span>
       </span>
     </button>
+  );
+}
+
+/** The repo's running service on its card: a dot in its state colour with its port or state, the full state on hover. */
+function ServiceMark({ service }: { service: Service | null }) {
+  if (service === null) return null;
+  return (
+    <span className="shrink-0" title={`Service ${serviceStateLabel(service).label}`}>
+      <StatusLabel {...serviceShortLabel(service)} />
+    </span>
   );
 }
 

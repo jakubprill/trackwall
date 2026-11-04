@@ -4,7 +4,7 @@ import { type HomeKey, type HomeModel, repoNeedsYou } from "@trackwall/scene/mod
 import { useEffect, useRef } from "react";
 import { errorMessage } from "@/lib/api";
 import { HOME_CAMERA_FOV, HOME_CAMERA_MAX_DISTANCE, homeCameraDistance, homeCameraPosition } from "@/lib/home-camera";
-import { HOME_SESSION_STATUS, homeRepoStatus } from "@/lib/home-model";
+import { HOME_SESSION_STATUS, homeRepoStatus, homeServiceStatus } from "@/lib/home-model";
 import { readHomeSceneSettings } from "@/lib/home-scene-settings";
 import { PacedFrames } from "@/lib/paced-frames";
 import { readScenePalette } from "@/lib/scene-palette";
@@ -180,7 +180,7 @@ function createEngine(
 
 /**
  * The label at an object, a callout the scene places beside it (ADR-104): the repo name, and when something is going on
- * the state and the running mise task, in the state colour; a session's state. The leader line is drawn by `scene-callout`
+ * the state, the running mise task and the running service (ADR-191), in the state colour; a session's state. The leader line is drawn by `scene-callout`
  * in the text colour, so it takes the state colour too.
  */
 function sceneLabel(target: LabelTarget): HTMLElement {
@@ -193,13 +193,17 @@ function sceneLabel(target: LabelTarget): HTMLElement {
   }
   const { repo, tone } = target;
   const status = homeRepoStatus(repo);
-  // A clean or loading repo with a full label has a running task: work going on, in the primary colour like on the scene.
+  // A clean or loading repo with a full label has a running task or service: work going on, in the primary colour like on the scene.
   const color = tone === "quiet" ? "text-muted-foreground" : !repoNeedsYou(repo.state) ? "text-primary" : statusTextClass(status.tone);
   label.className = cn("scene-callout text-2xs", color);
 
   label.append(line(repo.id, tone === "quiet" ? "" : "text-muted-foreground"));
   if (repoNeedsYou(repo.state)) label.append(line(status.label, "text-sm"));
   if (repo.runningTask !== null) label.append(line(`running ${repo.runningTask}`, "text-primary"));
+  if (repo.service !== null) {
+    const service = homeServiceStatus(repo.service);
+    label.append(line(service.label, statusTextClass(service.tone)));
+  }
   return label;
 }
 

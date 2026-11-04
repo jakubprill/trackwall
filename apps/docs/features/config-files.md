@@ -27,6 +27,7 @@ Under `workspace.yaml` a table lists its keys:
 | `projectsDir` | the folder with all your repos | "Settings > Workspace" |
 | `worktreesDir` | where agent tasks get their own copy of a repo | "Settings > Workspace" |
 | `repoHosts` | where the Repos view searches and clones from | "Settings > Repo hosts" |
+| `starredRepos` | the repos you starred, listed first in the Repos view | the star in "Repos" |
 | `toolPermissions` | which tools sessions may use without asking you | by hand |
 | `agentSecrets` | the secrets from mise that the tools of sessions may read | by hand |
 | `sessionProfile` | the mise environment sessions start with, such as another model provider | "Settings > Agents" |

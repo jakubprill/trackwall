@@ -7,7 +7,6 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { Client } from "@modelcontextprotocol/client";
 import {
   CallEndpointResult,
-  FindEndpointResult,
   ListServicesResult,
   LogErrors,
   MiseTaskRunResult,
@@ -224,7 +223,8 @@ describe("a Maven project and a Gradle project", () => {
   });
 
   test("find_endpoint finds the orders endpoint with checkout as its caller, and the checkout endpoint that makes the call", async () => {
-    const found = FindEndpointResult.parse(await call("find_endpoint", { query: "/api/orders/{id}", method: "GET" }));
+    // The MCP tool answers with text (ADR-187); the facts read from the real builds are checked on the result it is made from.
+    const found = await daemon.facade.graph.findEndpoint("/api/orders/{id}", "GET");
 
     expect(
       found.endpoints.map((e) => [
@@ -261,7 +261,7 @@ describe("a Maven project and a Gradle project", () => {
   });
 
   test("find_endpoint finds the endpoint from the OpenAPI spec under its generated path, with the controller implementing the generated interface", async () => {
-    const found = FindEndpointResult.parse(await call("find_endpoint", { query: "GET /orders/42/status" }));
+    const found = await daemon.facade.graph.findEndpoint("GET /orders/42/status", undefined);
     expect(found.endpoints.map((e) => [e.match, e.repo, e.path, e.source, e.handler, e.operation?.summary])).toEqual([
       ["path", "orders", "/orders/{id}/status", "openapi", "OrderStatusController.getOrderStatus", "The delivery status of an order"],
     ]);

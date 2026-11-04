@@ -1,4 +1,4 @@
-import type { HomeRepoState, HomeSessionState } from "./home-model.ts";
+import type { HomeRepoState, HomeServiceState, HomeSessionState } from "./home-model.ts";
 
 /**
  * Scene colours come from the UI tokens (`packages/ui/src/index.css`, ADR-16), read by the UI when the scene is created,
@@ -50,4 +50,15 @@ const SESSION_STATE_COLORS: Record<HomeSessionState, keyof ScenePalette> = {
 
 export function sessionStateColor(state: HomeSessionState, palette: ScenePalette): string {
   return palette[SESSION_STATE_COLORS[state]];
+}
+
+const SERVICE_STATE_COLORS: Record<HomeServiceState, keyof ScenePalette> = {
+  ready: "primary",
+  starting: "muted",
+  failing: "destructive",
+};
+
+/** A service's colour: working like a working session, grey on its way, red when it fails (ADR-191). */
+export function serviceStateColor(state: HomeServiceState, palette: ScenePalette): string {
+  return palette[SERVICE_STATE_COLORS[state]];
 }

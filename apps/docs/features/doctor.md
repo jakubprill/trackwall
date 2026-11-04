@@ -9,7 +9,7 @@ The doctor in Settings checks what Trackwall needs on your computer and says wha
 
 ## What you get
 
-- One list of what Trackwall relies on: your projects folder, your workspace settings file, Git, Copilot CLI, the network your sessions use, the model provider of your session profile, mise, Java navigation once you set it up, and gh or glab for your repo hosts.
+- One list of what Trackwall relies on: your projects folder, free disk space, your workspace settings file, Git, Copilot CLI, the network your sessions use, the model provider of your session profile, mise, Java navigation once you set it up, and gh or glab for your repo hosts.
 - For each problem, the step that fixes it, such as the folder to add to Copilot CLI's trusted folders or the login command.
 - Behind a company proxy, the exact problem between your sessions and GitHub: a proxy that wants a login, or a company certificate Copilot CLI does not trust, with the value that fixes it.
 - A warning when your Copilot CLI is older than the version Trackwall is tested with.
@@ -25,6 +25,7 @@ The checks are:
 | --- | --- |
 | Projects folder | it is set and exists |
 | Projects folder storage | your projects folder is in the Linux file system; the line shows only on Linux, as a warning when the folder is a folder of your computer mounted into a container or WSL (such as `/mnt/c/...` or a Docker bind mount), where git and builds are slow; see [Run in a dev container](/guide/dev-container) |
+| Free disk space | at least 10 GB are free on the disk of your projects folder and on the disk of your home folder, where build caches such as `~/.m2` live; under 10 GB it is a warning, under 2 GB a problem, with what to clear; in a container that disk is the disk of Docker's virtual machine, so the line also says how to free or enlarge it there |
 | Work only in this container | every commit, stash and changed file in your repos and task worktrees is pushed; the line shows only when Trackwall runs in a container, as a warning with how much is only there, since removing the container's volume deletes it; [Home](/features/home) lists the repos |
 | Workspace settings file | every key of `workspace.yaml` can be read; one that cannot is named with its line, and [Config files](/features/config-files) shows them all |
 | Git | `git --version` answers; with a "Git program" chosen in Settings the line names the git it runs, and it warns when the "Git program" from Settings did not answer and git from `PATH` is used instead |

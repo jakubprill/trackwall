@@ -18,6 +18,7 @@ import {
   Repo,
   RepoGraph,
   RepoList,
+  StarredRepos,
   UnpushedWork,
   workspaceApi,
 } from "@trackwall/protocol";
@@ -63,6 +64,7 @@ beforeAll(async () => {
       desktop: true,
       container: null,
       devContainerFolder: null,
+      serviceProxyPort: null,
     }),
     onShutdown: () => {
       shutdowns++;
@@ -248,6 +250,19 @@ describe("api workspace", () => {
       ["shop", "ok"],
       ["api", "ok"],
     ]);
+  });
+
+  test("a starred repo stays starred across requests until it is unstarred, also once its folder is gone (ADR-192)", async () => {
+    const starred = async (body: unknown) =>
+      apiResult(StarredRepos).parse(JSON.parse((await post(workspaceApi.setRepoStarred.path, JSON.stringify(body))).body));
+    expect(await starred({ repo: "shop", starred: true })).toEqual({ ok: true, data: ["shop"] });
+    expect(await starred({ repo: "gone", starred: true })).toEqual({ ok: true, data: ["shop", "gone"] });
+    expect(await starred({ repo: "shop", starred: false })).toEqual({ ok: true, data: ["gone"] });
+
+    const read = apiResult(StarredRepos).parse(JSON.parse((await post(workspaceApi.starredRepos.path, "")).body));
+    expect(read).toEqual({ ok: true, data: ["gone"] });
+    expect(await starred({ repo: "gone", starred: false })).toEqual({ ok: true, data: [] });
+    expect((await post(workspaceApi.setRepoStarred.path, JSON.stringify({ repo: "Not An Id", starred: true }))).status).toBe(400);
   });
 
   test("repos refuses an empty request and one over the limit", async () => {

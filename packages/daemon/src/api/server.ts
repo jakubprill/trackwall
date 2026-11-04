@@ -1,7 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { type ApiResult, DAEMON_INFO_PATH, type DaemonInfo, type ErrorCode, HEALTH_PATH, type Health } from "@trackwall/protocol";
+import {
+  API_BODY_MAX_BYTES,
+  type ApiResult,
+  DAEMON_INFO_PATH,
+  type DaemonInfo,
+  DOWNLOAD_PATH,
+  type ErrorCode,
+  HEALTH_PATH,
+  type Health,
+} from "@trackwall/protocol";
 import type { Facade } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
 import { MCP_PATH, type McpEndpoint, SESSION_TOKEN_HEADER } from "../mcp/endpoint.ts";
@@ -9,9 +18,10 @@ import { readBody } from "./body.ts";
 import { conversationSocketRoute } from "./conversation-socket.ts";
 import type { EventHub } from "./event-hub.ts";
 import { eventSocketRoute } from "./event-socket.ts";
+import { downloadRequest, sendDownload } from "./file-download.ts";
 import { hasValidToken, OriginPolicy } from "./guard.ts";
 import { HOOKS_PATH, handleHook } from "./hooks.ts";
-import { ptySocketRoute } from "./pty-socket.ts";
+import { sessionSocketRoute, terminalSocketRoute } from "./pty-socket.ts";
 import { postRoutes } from "./routes.ts";
 import { attachSockets } from "./sockets.ts";
 import { serveStatic } from "./static.ts";
@@ -52,6 +62,7 @@ const STATUS: Record<ErrorCode, number> = {
   dialog_changed: 409,
   service_unavailable: 409,
   no_desktop: 409,
+  terminal_unavailable: 409,
   internal: 500,
 };
 
@@ -84,7 +95,12 @@ export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer
   const closeSockets = attachSockets(server, {
     token: options.token,
     policy: () => policy,
-    routes: [eventSocketRoute(options.events), ptySocketRoute(options.facade), conversationSocketRoute(options.facade)],
+    routes: [
+      eventSocketRoute(options.events),
+      sessionSocketRoute(options.facade),
+      terminalSocketRoute(options.facade),
+      conversationSocketRoute(options.facade),
+    ],
   });
   return {
     server,
@@ -175,7 +191,7 @@ function authenticate(req: IncomingMessage, sessionScoped: boolean, o: ApiOption
  */
 function journalArea(url: string | undefined): string {
   const path = (url ?? "").split("?")[0] ?? "";
-  if (postRoutes.has(path)) return `api:${path}`;
+  if (postRoutes.has(path) || path === DOWNLOAD_PATH) return `api:${path}`;
   return path.startsWith(HOOKS_PATH) ? "api:hooks" : "api:other";
 }
 
@@ -188,6 +204,8 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
     res.once("finish", () => setImmediate(o.onShutdown));
     return;
   }
+  if (path === DOWNLOAD_PATH && req.method === "POST")
+    return sendDownload(res, await o.facade.folderFiles.download(downloadRequest(await readJson(req, API_BODY_MAX_BYTES))));
   const post = req.method === "POST" ? postRoutes.get(path) : undefined;
   // The token was checked before any of the body is read, so only the daemon's own clients send a large one.
   if (post) return ok(res, await post.run(o.facade, await readJson(req, post.maxBodyBytes)));

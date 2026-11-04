@@ -32,6 +32,8 @@ export const ErrorCode = z.enum([
    * ADR-120); `DaemonInfo.desktop` says so in advance.
    */
   "no_desktop",
+  /** A folder terminal cannot start: this runtime has no PTY (the daemon under Node), or there is no shell to run (ADR-185). */
+  "terminal_unavailable",
   "internal",
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;

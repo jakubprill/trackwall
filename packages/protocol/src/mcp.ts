@@ -19,6 +19,7 @@ import {
   PromptDelivery,
   Session,
   SessionId,
+  TASK_CHECK_STEP_MAX,
   TASK_CHECK_STEPS_MAX,
   TASK_MESSAGE_MAX,
   TASK_MESSAGES_WITHOUT_USER,
@@ -26,6 +27,7 @@ import {
   TASK_PROMPT_MAX,
   TASK_SUMMARY_MAX,
   TASK_SUMMARY_MAX_FILES,
+  TASK_SUMMARY_WORDS,
   TASK_TITLE_MAX,
   Task,
   TaskApprovals,
@@ -44,7 +46,14 @@ import {
 } from "./agents.ts";
 import { APP_CONFIG_KEY_MAX, APP_CONFIG_MAX_ENTRIES, APP_CONFIG_PROFILE_MAX, AppConfig, SPRING_DEFAULT_PROFILE } from "./app-config.ts";
 import { RepoCardResult, TagName } from "./cards.ts";
-import { CODE_SEARCH_LINE_MAX_CHARS, CODE_SEARCH_MAX_MATCHES, CodePathspecs, CodeQuery, SearchCodeResult } from "./code-search.ts";
+import {
+  CODE_SEARCH_LINE_MAX_CHARS,
+  CODE_SEARCH_MAX_MATCHES,
+  CodePathspecs,
+  CodeQuery,
+  CodeSearchOutput,
+  SearchCodeResult,
+} from "./code-search.ts";
 import { COMMIT_SEARCH_MAX_COMMITS, COMMIT_SEARCH_MAX_FILES, CommitQuery, SearchCommitsResult } from "./commit-search.ts";
 import { DAY_REPORT_COMMITS, DayReport } from "./day-start.ts";
 import {
@@ -599,10 +608,11 @@ export const mcpTools = {
     readOnly: true,
     auditArgs: ["repo"] as const,
     description:
-      "Who uses a repo: connections in the graph pointing to this repo, each with a kind (depends-on: needs it to build; " +
-      "calls: calls it at runtime) and a source (package: a repo uses a package built in this repo; http: a repo's HTTP " +
-      "client calls this repo's app or endpoints; manual: a connection entered by the user), a key (package name, app name or address, note), a confidence (exact, high, medium, low) " +
-      "and evidence (repo, file, line; for http also call–endpoint pairs). Before changing a repo's API or package, " +
+      "Who uses a repo: the connections in the graph into it, one per line as '<from> -> <to>: <kind> by <source> <key> " +
+      "(<confidence>)'. kind is depends-on (needs it to build) or calls (calls it at runtime); source is package (uses a " +
+      "package it builds), http (an HTTP client calls its app or endpoints) or manual (entered by the user); key is the " +
+      "package, app name or address, or note; confidence is exact, high, medium or low. The evidence follows indented, as " +
+      "'from|to <path>:<line>: <detail>' for a file in the repo on that side. Before changing a repo's API or package, " +
       "check whom it affects; find_endpoint tells which endpoints call a specific endpoint.",
     args: z.object({ repo: RepoArg }).strict(),
     result: WhoCallsResult,
@@ -612,11 +622,11 @@ export const mcpTools = {
     readOnly: true,
     auditArgs: ["repo", "depth"] as const,
     description:
-      "Part of the connection graph around a repo: repos up to depth connections away in both directions (what it uses and " +
-      "who uses it) and the connections between them (depends-on or calls; from packages, HTTP, manual), with evidence. A " +
-      "node has tags, Spring Boot app names, the number of endpoints and a problem when the repo card cannot be built. " +
-      "problems lists the HTTP clients of these repos whose target is no repo in the list (unresolved-call-target): an " +
-      "external system, or a repo the user maps under graph.apps.",
+      "Part of the connection graph around a repo: the repos up to depth connections away in both directions (what it " +
+      "uses and who uses it), one line each under '## Repos' with remote address, tags, Spring Boot app names, the number of packages " +
+      "and endpoints, or why the repo has no card; the connections between them under '## Connections', written as in " +
+      "who_calls; and under '## Problems' the HTTP clients of these repos whose target is no repo in the list " +
+      "(unresolved-call-target): an external system, or a repo the user maps under graph.apps.",
     args: z
       .object({
         repo: RepoArg,
@@ -633,14 +643,14 @@ export const mcpTools = {
       "HTTP endpoints from Spring controllers and OpenAPI specs in all repos matching the query: a path, also a concrete " +
       "one (/api/orders/42 finds /api/orders/{id}), a whole URL or METHOD /path, matched as the whole path or its end " +
       "(without the context path or with a gateway prefix); or words, each found in the path, handler (Class.method), app " +
-      "name or OpenAPI operationId and summary. Best match first, with match: path, path-end or text. Each " +
-      "with repo, method, full path, source (code, or openapi: only in a spec, e.g. its interface is generated during the " +
-      "build; handler is the controller method named like the operationId, null when none), operation (operationId, " +
-      "summary, spec file and line), request and response types, file and line, plus callers: repos whose HTTP clients call it, with confidence " +
-      "and evidence, each with from: the caller repo's endpoints whose handlers reach that call ([]: none does, e.g. a scheduled job; " +
-      "null: that repo's code was not traced, e.g. it has Kotlin). calls lists the endpoints of other repos this endpoint's handler " +
-      "calls (null when not traced). Follow from and calls repeatedly to see what a change to an endpoint affects. " +
-      `At most ${MAX_FOUND_ENDPOINTS} results (truncated: true when there were more).`,
+      "name or OpenAPI operationId and summary. Best match first, each a block of text: '<METHOD> <path> in <repo> (app " +
+      "<app>), match path|path-end|text' (ANY: any method), then its handler, file and line, request and response types, " +
+      "or 'only in an OpenAPI spec' when the code does not map it (e.g. its interface is generated during the build), and " +
+      "its OpenAPI operation; then a 'caller' line per call from another repo's HTTP client (client, how, confidence, the " +
+      "call, ?: method not known, and where it is) with 'from' lines: the caller repo's endpoints whose handlers reach " +
+      "that call (or why none are listed); then 'calls' lines: the endpoints of other repos this endpoint's handler " +
+      "calls ('calls: not traced' when its code was not followed, unlike 'calls nothing'). Follow from and calls " +
+      `repeatedly to see what a change to an endpoint affects. At most ${MAX_FOUND_ENDPOINTS} endpoints.`,
     args: z
       .object({
         query: z
@@ -660,13 +670,13 @@ export const mcpTools = {
     description:
       "Search code in many repos at once (git grep in each repo's latest commit, not in uncommitted changes): a fixed " +
       "string by default, a POSIX extended regular expression with regex: true (use [0-9] and [[:space:]], not \\d " +
-      "or \\s). Each match has repo, path, line, " +
-      `column, the line text (cut to ${CODE_SEARCH_LINE_MAX_CHARS} characters) and context lines before and after. ` +
-      "Narrow with repos (ids), tags (every given tag) and paths (git pathspecs: *.java in any directory, src/, " +
-      ":!*.test.ts to exclude). searched lists the repos with the commit searched; failed the repos git could not " +
-      "search, with the reason (e.g. an invalid regular expression); skipped the repos not searched because the limit " +
-      "was already reached or time ran out. truncated: true when matches may be missing (also per repo in searched); " +
-      "narrow the query.",
+      "or \\s). The result is grep-like text: a '## <repo> @<commit>' line per repo with matches, then each file's " +
+      `path and its lines as '<line>:<text>' for a match and '<line>-<text>' for context (text cut to ${CODE_SEARCH_LINE_MAX_CHARS} ` +
+      "characters, '--' between groups), and a last line with how many repos were searched. output: \"files\" lists " +
+      "only the files with how many lines match in each: start with it when you do not know how many matches to expect, " +
+      "then read the files you need. Narrow with repos (ids), tags (every given tag) and paths (git pathspecs: *.java " +
+      "in any directory, src/, :!*.test.ts to exclude). The text names the repos git could not search, with the reason " +
+      "(e.g. an invalid regular expression), and says when matches may be missing; then narrow the query.",
     args: z
       .object({
         pattern: CodeQuery.shape.pattern.describe("text to find, or a regular expression with regex: true"),
@@ -675,14 +685,17 @@ export const mcpTools = {
         repos: z.array(RepoId).min(1).max(200).optional().describe(`only these repos (ids from ${LIST_REPOS}); default all`),
         tags: RepoTagsArg.optional().describe('only repos with every one of these tags, without #, e.g. ["java"]'),
         paths: CodeQuery.shape.paths.default([]).describe('only these paths (git pathspecs), e.g. ["*.java", ":!src/test/"]'),
-        context: CodeQuery.shape.context.default(2).describe("context lines before and after each match, default 2"),
+        output: CodeSearchOutput.default("lines").describe(
+          '"lines" (default): match lines with context; "files": only the files and their match counts',
+        ),
+        context: CodeQuery.shape.context.default(0).describe("context lines before and after each match, default 0"),
         limit: z
           .number()
           .int()
           .min(1)
           .max(CODE_SEARCH_MAX_MATCHES)
-          .default(100)
-          .describe(`maximum number of matches (up to ${CODE_SEARCH_MAX_MATCHES}), default 100`),
+          .default(50)
+          .describe(`maximum number of matches, or of files with output: "files" (up to ${CODE_SEARCH_MAX_MATCHES}), default 50`),
       })
       .strict(),
     result: SearchCodeResult,
@@ -697,11 +710,10 @@ export const mcpTools = {
       "renaming a field shows in every repo that used the old name), message searches commit messages (e.g. an issue key), author the author name or e-mail; " +
       "fixed strings by default, POSIX extended regular expressions with regex: true. Narrow with repos (ids), tags " +
       "(every given tag), paths (git pathspecs) and since (YYYY-MM-DD). With no filter it lists the newest commits. " +
-      "Each commit has repo, hash, author, date (committer date), subject and the files it changed (with text, only the files where it " +
-      `changed; at most ${COMMIT_SEARCH_MAX_FILES}, filesTruncated says when there are more). Newest first across all ` +
-      "repos. searched lists the repos with the commit whose history was searched; failed the repos git could not " +
-      "search, with the reason; skipped the repos not searched because time ran out. truncated: true when commits may " +
-      "be missing (also per repo in searched); narrow the query.",
+      "The result is text, newest first across all repos: a line per commit, '<repo> <hash> <day> <author>: <subject>' " +
+      "(committer date), then the files it changed, indented (with text, only the files where it changed; at most " +
+      `${COMMIT_SEARCH_MAX_FILES}), and a last line with how many repos were searched. The text names the repos git ` +
+      "could not search, with the reason, and says when commits may be missing; then narrow the query.",
     args: z
       .object({
         text: CommitQuery.shape.text.describe("text that the commits' changes add or remove, e.g. a field or endpoint name"),
@@ -971,9 +983,16 @@ export const mcpTools = {
       `${LIST_SESSIONS} and the Sessions view). Calling it again replaces the summary and its check steps. Commit your changes on the task branch before reporting.`,
     args: z
       .object({
-        summary: visibleText(TaskSummaryText).describe(`the result in a few sentences, up to ${TASK_SUMMARY_MAX} characters`),
+        summary: visibleText(TaskSummaryText).describe(
+          `the result for the reviewer in about ${TASK_SUMMARY_WORDS} words: it becomes the description of the task's merge ` +
+            `request, together with the check steps; more than ${TASK_SUMMARY_MAX} characters is refused`,
+        ),
         checkSteps: z
-          .array(visibleText(TaskCheckStep))
+          .array(
+            visibleText(TaskCheckStep).describe(
+              `one step on one line, without line breaks or tabs, up to ${TASK_CHECK_STEP_MAX} characters; a longer one is refused`,
+            ),
+          )
           .max(TASK_CHECK_STEPS_MAX)
           .default([])
           .describe(

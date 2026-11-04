@@ -90,6 +90,43 @@ export async function grep(
   return { lines: parseGrep(out, commit), truncated };
 }
 
+/** A file with matches and how many of its lines match (`git grep -c`). */
+export interface GrepCount {
+  path: string;
+  count: number;
+}
+
+/** The files with matches of a code search query in the commit and their match counts, without the lines (ADR-187). */
+export async function grepCounts(
+  dir: string,
+  commit: string,
+  query: CodeQuery,
+  maxBytes: number,
+): Promise<{ files: GrepCount[]; truncated: boolean }> {
+  const options = ["-c", query.regex ? "-E" : "-F", ...(query.ignoreCase ? ["-i"] : [])];
+  const { out, truncated } = await commitGrep(dir, commit, {
+    options,
+    pattern: query.pattern,
+    pathspecs: query.paths,
+    recordEnd: "\n",
+    maxBytes,
+  });
+  return { files: parseGrepCounts(out, commit), truncated };
+}
+
+/** Output of `git grep -c -z <commit>`: `<commit>:<path>\0<count>` per line; a line of any other shape is skipped. */
+export function parseGrepCounts(out: string, commit: string): GrepCount[] {
+  const prefix = `${commit}:`;
+  const files: GrepCount[] = [];
+  for (const raw of out.split("\n")) {
+    if (!raw.startsWith(prefix)) continue;
+    const [path = "", count = "", ...rest] = raw.slice(prefix.length).split("\0");
+    if (path === "" || rest.length > 0 || !/^[1-9]\d*$/.test(count)) continue;
+    files.push({ path, count: Number(count) });
+  }
+  return files;
+}
+
 /**
  * Output of `git grep -n -z --column <commit>`: a match line is `<commit>:<path>\0<line>\0<column>\0<text>`, a
  * context line the same without the column, and `--` separates groups. `-I` looks only at the start of a file, so the

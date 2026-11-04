@@ -36,7 +36,21 @@ export interface HomeRepo {
   count: number;
   /** Name of the running mise task or `null`. */
   runningTask: string | null;
+  /** The repo's running service (ADR-191); `null` while none runs. */
+  service: HomeService | null;
 }
+
+/** The service that answers for a repo on the dashboard (ADR-191), with its port once it has one. */
+export interface HomeService {
+  state: HomeServiceState;
+  port: number | null;
+}
+
+/**
+ * A running service on the dashboard (ADR-191): `ready` answers on its port, `starting` is on its way up or down,
+ * `failing` stopped answering or crashed. A stopped service is no service.
+ */
+export type HomeServiceState = "ready" | "starting" | "failing";
 
 /**
  * A session's state on the dashboard: `attention` is "waiting for you" (`Session.needsAttention`), `idle` is `Input`

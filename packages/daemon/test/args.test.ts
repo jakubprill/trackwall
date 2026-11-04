@@ -1,9 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import { parseCommandLine, parseDaemonArgs } from "../src/infra/args.ts";
+import { containerProxyPort, parseCommandLine, parseDaemonArgs } from "../src/infra/args.ts";
 
 describe("arguments", () => {
   test("defaults", () => {
-    expect(parseDaemonArgs([])).toMatchObject({ port: 0, ui: false, allowOrigins: [], help: false });
+    expect(parseDaemonArgs([])).toMatchObject({ port: 0, proxyPort: null, ui: false, allowOrigins: [], help: false });
+  });
+
+  test("--proxy-port runs the service proxy on that port; 0 and out of range are refused", () => {
+    expect(parseDaemonArgs(["--proxy-port", "7701"]).proxyPort).toBe(7701);
+    expect(() => parseDaemonArgs(["--proxy-port", "0"])).toThrow();
+    expect(() => parseDaemonArgs(["--proxy-port", "70000"])).toThrow();
+  });
+
+  test("in a dev container the service proxy takes the port after the daemon's, and none after the last port", () => {
+    expect(containerProxyPort(7700)).toBe(7701);
+    expect(containerProxyPort(65535)).toBeNull();
   });
 
   test("--parent and --allow-origin", () => {

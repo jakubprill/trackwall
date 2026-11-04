@@ -68,6 +68,7 @@ describe("the Files category", () => {
     expect(report.entries.map(configWriterLabel)).toEqual(["you", "Trackwall", "Trackwall", "Copilot CLI"]);
     expect(workspaceKeyChangedIn("projectsDir")).toBe("Settings › Workspace");
     expect(workspaceKeyChangedIn("repoHosts")).toBe("Settings › Repo hosts");
+    expect(workspaceKeyChangedIn("starredRepos")).toBe("the star in Repos");
     expect(workspaceKeyChangedIn("toolPermissions")).toBe("by hand");
   });
 

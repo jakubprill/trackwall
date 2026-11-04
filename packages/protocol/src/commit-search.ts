@@ -14,10 +14,7 @@ export const COMMIT_SEARCH_MAX_COMMITS = 200;
 export const COMMIT_SEARCH_MAX_FILES = 20;
 /** A subject longer than this (git joins the whole first paragraph of a message into it) is cut. */
 export const COMMIT_SEARCH_SUBJECT_MAX_CHARS = 500;
-/**
- * Most characters of subjects and paths in one result; the result goes to the agent twice (text and
- * `structuredContent`), as in code search.
- */
+/** Most characters of subjects and paths in one result, as in code search: what `search_commits`' text is made from (ADR-187). */
 export const COMMIT_SEARCH_MAX_CHARS = 100_000;
 
 /** One line of text for git, like the pattern of code search: no newline or control character except tab. */

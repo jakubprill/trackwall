@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ConversationEntry, ReviewComment } from "@trackwall/protocol";
 import type { Agents } from "../src/modules/agents/agents.ts";
@@ -168,6 +169,32 @@ describe.skipIf(process.versions.bun === undefined)("a task in the conversation 
     expect(said).toMatchObject({ kind: "user", text: "Fix the login" });
     await restarted.agents.stop(session);
   }, 60_000);
+
+  test("a file of the conversation opens in VS Code at a line, but only inside the task's worktree and while it is there", async () => {
+    const { agents, opened } = startAgents();
+    const task = await agents.createTask("shop", "Edit the README", { view: "conversation", approvals: "auto" });
+    const session = sessionOf(agents, task.id);
+    await turnEnded(agents, session);
+
+    agents.openConversationFile(session, "README.md", 2);
+
+    expect(opened).toEqual([`${join(task.worktree, "README.md")}:2`]);
+    expect(() => agents.openConversationFile(session, join("..", "outside.txt"), 1)).toThrow("outside the session's working directory");
+    expect(() => agents.openConversationFile(session, "missing.ts", 1)).toThrow("not there any more");
+    // A link inside the worktree that leads out (a junction, which Windows lets anyone make) is outside too.
+    const outside = mkdtempSync(join(tmpdir(), "trackwall-outside-"));
+    writeFileSync(join(outside, "secret.txt"), "secret\n");
+    const linked = join(task.worktree, "linked");
+    symlinkSync(outside, linked, "junction");
+    try {
+      expect(() => agents.openConversationFile(session, join("linked", "secret.txt"), 1)).toThrow("leads outside");
+    } finally {
+      rmSync(linked, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+    // The working directory itself is no file to open at a line.
+    expect(() => agents.openConversationFile(session, ".", 1)).toThrow("not a file");
+  });
 
   test("a failed start of a new task leaves neither the task nor its worktree", async () => {
     const dir = makeRepo({ "README.md": "# shop\n" }, "shop");

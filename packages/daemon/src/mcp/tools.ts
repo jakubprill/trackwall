@@ -23,6 +23,10 @@ import { z } from "zod";
 import type { Facade } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
 import { itemSummaries, matchesItem } from "./board-items.ts";
+import { codeSearchText } from "./code-search-text.ts";
+import { commitSearchText } from "./commit-search-text.ts";
+import { findEndpointText } from "./endpoint-text.ts";
+import { subgraphText, whoCallsText } from "./graph-text.ts";
 
 /**
  * The daemon's MCP tools (§5.3, ADR-24): each is a thin mapping onto the facade, so the agent sees the same state as the UI
@@ -83,16 +87,20 @@ type ToolRegistration = (server: McpServer, ctx: ToolContext & { caller: string 
 
 /**
  * A tool from the contract (`mcpTools` in protocol) and its run on the facade; the result must match the contract's
- * type, like the API routes in `api/routes.ts`.
+ * type, like the API routes in `api/routes.ts`. The result goes to the client as JSON, in the text and in
+ * `structuredContent` with the tool's `outputSchema`. A tool with `text` instead returns only what `text` makes of it,
+ * without `structuredContent`: Copilot CLI gives the model the text and, when it differs, the JSON after it, so a short
+ * text is only short without the JSON (ADR-187).
  */
 function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
   tool: McpTool<Args, Result>,
   run: ToolRun<Args, Result>,
+  text?: (result: z.output<Result>) => string,
 ): ToolRegistration {
   // The SDK types the arguments from the schema's type and cannot do it from a generic parameter; so the arguments pass
   // through the tool's schema once more (the SDK already checks them before the call), which gives their exact type without a cast.
   const inputSchema: z.ZodObject = tool.args;
-  const outputSchema: z.ZodObject = tool.result;
+  const outputSchema: z.ZodObject | undefined = text === undefined ? tool.result : undefined;
   const effect = mcpToolEffect(tool);
   return (server, ctx) => {
     server.registerTool(
@@ -119,6 +127,7 @@ function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
           if (effect === "destructive") ctx.log(`${label}: ${JSON.stringify(audited)}`);
           const result = tool.result.parse(await run(ctx.facade, parsed, { caller: ctx.caller, signal: extra.mcpReq.signal }));
           ctx.log(`${label}: ok in ${Date.now() - started} ms`);
+          if (text !== undefined) return { content: [{ type: "text", text: text(result) }] };
           return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };
         } catch (err) {
           ctx.log(`${label}: error in ${Date.now() - started} ms: ${String(err)}`);
@@ -386,11 +395,11 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.getErrors, runs.getErrors),
   defineTool(mcpTools.getTestResults, runs.getTestResults),
   defineTool(mcpTools.getAppConfig, runs.getAppConfig),
-  defineTool(mcpTools.whoCalls, runs.whoCalls),
-  defineTool(mcpTools.subgraphFor, runs.subgraphFor),
-  defineTool(mcpTools.findEndpoint, runs.findEndpoint),
-  defineTool(mcpTools.searchCode, runs.searchCode),
-  defineTool(mcpTools.searchCommits, runs.searchCommits),
+  defineTool(mcpTools.whoCalls, runs.whoCalls, whoCallsText),
+  defineTool(mcpTools.subgraphFor, runs.subgraphFor, subgraphText),
+  defineTool(mcpTools.findEndpoint, runs.findEndpoint, findEndpointText),
+  defineTool(mcpTools.searchCode, runs.searchCode, codeSearchText),
+  defineTool(mcpTools.searchCommits, runs.searchCommits, commitSearchText),
   defineTool(mcpTools.searchTaskHistory, runs.searchTaskHistory),
   defineTool(mcpTools.listSessions, runs.listSessions),
   defineTool(mcpTools.getSession, runs.getSession),

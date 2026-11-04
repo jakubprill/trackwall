@@ -143,6 +143,26 @@ describe("the supervisor in the conversation view with the real Copilot CLI", ()
     await agents.stop(supervisor.id);
   });
 
+  test("a conversation's usage receipts go into the event log under Copilot CLI's own id of the conversation (ADR-190)", async () => {
+    const { agents } = daemon.facade;
+    const supervisor = await startSupervisor();
+    model.reply({ text: "Counted." });
+
+    agents.say(supervisor.id, "count this");
+    await inState(supervisor.id, "Input");
+    const counted = await waitFor(agents, supervisor.id, (s) => s.usage !== null, "the turn's usage", SESSION_MS);
+
+    expect(counted.usage).toEqual({
+      modelCalls: 1,
+      inputTokens: 1,
+      outputTokens: 1,
+      aiCredits: null,
+      aiCreditsPartial: false,
+      premiumRequests: 0,
+    });
+    await agents.stop(supervisor.id);
+  });
+
   test("a file edit's approval and entry carry the file and the change as a patch, and the model's reasoning is a thought", async () => {
     const { agents } = daemon.facade;
     const supervisor = await startSupervisor();

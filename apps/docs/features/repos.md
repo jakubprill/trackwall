@@ -11,7 +11,7 @@ Browse, clone and sync every git repo in your projects folder from one list.
 
 ## What you get
 
-- Every repo of your projects folder in one list, with its branch, its uncommitted changes and how far it is ahead of or behind its remote.
+- Every repo of your projects folder in one list, with its branch, its uncommitted changes and how far it is ahead of or behind its remote, and the repos you starred at the top.
 - The card, files, commits, uncommitted changes (file by file, with the diff) and README of each repo without leaving Trackwall, and VS Code one click away.
 - A search across your GitLab and GitHub hosts that clones the repo you pick in one click.
 - "Sync all": every repo fetched, and every default branch moved forward where that is safe.
@@ -19,7 +19,9 @@ Browse, clone and sync every git repo in your projects folder from one list.
 
 ## How it works
 
-Trackwall works with one projects folder: every git repo directly inside it is on the list in "Repos". A repo you clone into the folder appears by itself. Select a repo and it opens on its [card](/features/repo-card), a summary of what the repo is and provides. The other tabs show its files, its latest commits, its uncommitted changes, its mise tasks and, last, its README (formatted as on GitHub, with tables, task lists, code and Mermaid diagrams).
+Trackwall works with one projects folder: every git repo directly inside it is on the list in "Repos". A repo you clone into the folder appears by itself. Select a repo and it opens on its [card](/features/repo-card), a summary of what the repo is and provides. The other tabs show its files, its latest commits, its uncommitted changes, its mise tasks, a [shell](/features/shell) in its folder and, last, its README (formatted as on GitHub, with tables, task lists, code and Mermaid diagrams).
+
+The list is alphabetical, with your starred repos first. Hover over a repo in the list and click the star on its right to star it; click the filled star to unstar it, and the repo goes back to its place. Stars are kept in `~/.trackwall/workspace.yaml` (`starredRepos`), so they are the same in the app window and in a browser tab, and they stay when Trackwall restarts.
 
 The list shows every repo as soon as you open it. Each one says "loading" until git has read it, and the repo you selected and the ones at the top of the list come first, so you do not wait for the whole folder. If reading fails, the list says so and offers "Retry".
 
@@ -35,8 +37,9 @@ The "+" button above the list searches the GitLab and GitHub hosts you added in 
 
 1. Open "Settings" and choose your projects folder with "Choose…", or drop the folder onto the Trackwall window. When your home folder has a `Dev`, `Projects`, `Code` or `source\repos` folder, Settings offers it with "Use this folder".
 2. Open "Repos" (Ctrl+2, ⌘2 on macOS) and select a repo.
-3. Press "Sync all" to bring every repo up to date.
-4. To clone, press "+", search for the repo and pick it.
+3. Star the repos you open most, so they stay at the top.
+4. Press "Sync all" to bring every repo up to date.
+5. To clone, press "+", search for the repo and pick it.
 
 ## Good to know
 

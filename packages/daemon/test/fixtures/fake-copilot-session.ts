@@ -27,6 +27,7 @@ import { z } from "zod";
 import { ESCAPE } from "../../src/modules/agents/copilot-keys.ts";
 import { stripAnsi } from "../../src/modules/logs/stream-lines.ts";
 import { PARALLEL_TOOLS_PROMPT, PROMPT_PLACEHOLDER, type ReferenceHook, reference } from "../support/copilot-reference.ts";
+import { recordUsage } from "../support/copilot-usage-receipt.ts";
 import { pluginHooks } from "../support/plugin-hooks.ts";
 import { serveAcp } from "./fake-copilot-acp.ts";
 
@@ -299,6 +300,7 @@ function submit(line: string): void {
   // The conversation is kept before the hooks go out: a test that stops the session once the daemon has heard the
   // prompt's hook must find it to resume (on Windows the stop came while the fake still waited for the hook's answer).
   keepConversation();
+  recordUsage(sessionId);
   // Copilot CLI starts the session's hooks only with the first prompt (ADR-69).
   replay(started ? [promptHook] : [startHook, promptHook], line);
   started = true;

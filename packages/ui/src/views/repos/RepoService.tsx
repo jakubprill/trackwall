@@ -1,27 +1,25 @@
 import { type ServiceSlice, servicesApi } from "@trackwall/protocol";
 import { Play, Square } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useContext, useState } from "react";
+import { OpenServiceButton } from "@/components/OpenServiceButton";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { isServiceLive, leaseHolder, memberLabel, serviceStateLabel } from "@/lib/service-state";
+import { DaemonPlaceContext } from "@/lib/desktop";
+import { isServiceLive, leaseHolder, memberLabel, serviceLink, serviceStateLabel } from "@/lib/service-state";
 import { useAction } from "@/lib/use-action";
-import { useRemote } from "@/lib/use-remote";
-
-/** Often while a service runs or starts (the user waits for it to be ready), rarely otherwise; the list does not ask mise. */
-const POLL_LIVE_MS = 1000;
-const POLL_IDLE_MS = 5000;
+import { useServices } from "@/lib/use-services";
 
 /**
  * The repo's service (ADR-45): its mise task `dev` with readiness. "Start with dependencies" brings up the services
  * it calls from the graph first; the panel lists them with their live state. While a task's service holds the repo's
- * port (ADR-132) the panel says so instead of offering a start, which the daemon would refuse.
+ * port (ADR-132) the panel says so instead of offering a start, which the daemon would refuse. A ready service opens in
+ * the browser, through the service proxy when the daemon runs in a dev container (ADR-189).
  */
 export function RepoService({ conn, repo }: { conn: Connection; repo: string }) {
-  const load = useCallback(() => post(conn, servicesApi.list, {}), [conn]);
-  const remote = useRemote(load, { pollMs: (list) => (list?.some(isServiceLive) ? POLL_LIVE_MS : POLL_IDLE_MS) });
+  const remote = useServices(conn);
   const [slice, setSlice] = useState<ServiceSlice>();
   // The services from the repo roots; a task's service (ADR-61) shows in its task's panel through its mise task `dev`.
   const byRepo = new Map((remote.data ?? []).filter((s) => s.task === null).map((s) => [s.repo, s]));
@@ -39,6 +37,7 @@ export function RepoService({ conn, repo }: { conn: Connection; repo: string }) 
     () => post(conn, servicesApi.stop, { repo, task: null, dependencies: true }),
     () => remote.reload(),
   );
+  const link = serviceLink(useContext(DaemonPlaceContext), service);
   const state = serviceStateLabel(service);
   const dependencies = slice?.members.filter((m) => m.repo !== repo) ?? [];
   const error = start.error ?? stop.error;
@@ -50,6 +49,7 @@ export function RepoService({ conn, repo }: { conn: Connection; repo: string }) 
           <span className="min-w-0 flex-1 text-xs">
             <StatusLabel tone={state.tone} label={state.label} />
           </span>
+          {link && <OpenServiceButton conn={conn} link={link} />}
           {holder && !live ? (
             <span className="text-muted-foreground text-xs">
               Port {holder.port} runs a task's service on a lease; give it back in that task's panel

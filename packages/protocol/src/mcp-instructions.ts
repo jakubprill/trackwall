@@ -74,7 +74,8 @@ export const MCP_INSTRUCTIONS = [
     "consumes (packages, HTTP clients), each fact with file and line. Start there instead of reading build files, then " +
     "open the files it points to.",
   `- Find code across repos: ${searchCode.name} searches the latest commit of many repos at once, not uncommitted ` +
-    "changes (narrow with tags, repos and paths); prefer it to walking directories one repo at a time.",
+    "changes (narrow with tags, repos and paths); prefer it to walking directories one repo at a time. When a pattern " +
+    'may match often, ask for output: "files" first and then read the files you need.',
   `- Find who changed something and when: ${searchCommits.name} searches the history of many repos at once for the ` +
     "commits that add or remove a text (a field, an endpoint path), or by message, author, paths and date.",
   `- Learn from earlier work: ${searchTaskHistory.name} finds the tasks the user has ended by words, with their ` +

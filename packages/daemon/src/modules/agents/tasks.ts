@@ -129,6 +129,8 @@ export interface AgentTasksDeps {
   file: TaskFile;
   /** Some process group still works in this directory (`procs.liveIn`): a mise task in the worktree locks its files on Windows. */
   liveIn: (dir: string) => boolean;
+  /** Closes the user's folder terminal in the task's worktree (ADR-185), once nothing else refuses the task's end. */
+  closeFolderTerminal: (task: string) => Promise<void>;
   /** `worktrees/` in the state directory, where tasks saved before ADR-84 (without `worktreesDir`) have their worktrees. */
   legacyWorktreesDir: string;
   /** Task `task`'s round commits that the push has not squashed yet (ADR-168), which a handoff looks past (ADR-144). */
@@ -345,7 +347,10 @@ export class AgentTasks {
       await this.#launch(task, "new");
     } catch (err) {
       // A failed cleanup leaves the task on the list, so that the user can end it themselves.
-      await this.#whileRemoving(id, () => this.#discard(task, false)).then(
+      await this.#whileRemoving(id, async () => {
+        await this.#deps.closeFolderTerminal(id);
+        await this.#discard(task, false);
+      }).then(
         () => this.#save(this.#tasks.filter((t) => t.id !== id)),
         (e: unknown) => this.#deps.log(`cleaning up task ${id}: ${messageOf(e)}`),
       );
@@ -407,6 +412,14 @@ export class AgentTasks {
   /** A task by identifier (`not_found` when it does not exist). */
   task(id: string): Task {
     return view(this.#get(id));
+  }
+
+  /** The worktree of task `id` of `repo` for the user's shell (ADR-185); refused while the task is being ended. */
+  worktreeForShell(id: string, repo: string): string {
+    if (this.#removing.has(id)) throw new DomainError("bad_request", "this task is being ended");
+    const task = this.#get(id);
+    if (task.repo !== repo) throw new DomainError("bad_request", `task ${id} is in ${task.repo}, not in ${repo}`);
+    return task.worktree;
   }
 
   /** A task by identifier or `undefined` when it does not exist (waiting for a proposal that is not a task yet). */
@@ -668,13 +681,17 @@ export class AgentTasks {
     const task = this.#get(id);
     return this.#exclusive(id, async () => {
       this.#refuseRunning(task, "ending it");
-      if (this.#deps.liveIn(task.worktree))
-        throw new DomainError(
-          "bad_request",
-          `a process started by Trackwall still runs in the worktree of task ${task.branch}; stop it before ending the task`,
-        );
       const facts = await this.#whileRemoving(id, async () => {
         if (!discardChanges) await this.#refuseLoss(task, keepBranch);
+        // The user's shell goes with the worktree, after the refusals the user answers (a running session, unsaved
+        // changes): before the check for other processes, which would count it. So an end refused for a mise task or
+        // service still running there has closed the shell. `#removing` refuses a new one meanwhile.
+        await this.#deps.closeFolderTerminal(id);
+        if (this.#deps.liveIn(task.worktree))
+          throw new DomainError(
+            "bad_request",
+            `a process started by Trackwall still runs in the worktree of task ${task.branch}; stop it before ending the task`,
+          );
         const ended = await endedTaskFacts(task, this.#deps.roundCommits(id), keepBranch, new Date(), this.#deps.vcs, this.#deps.log);
         await this.#discard(task, keepBranch);
         return ended;

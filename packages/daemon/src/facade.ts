@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   type AppConfig,
@@ -10,6 +11,7 @@ import {
   type Task,
   type TaskChangedEndpoints,
   type TaskOutcome,
+  type TerminalPlace,
 } from "@trackwall/protocol";
 import { downloadVerified } from "./infra/download.ts";
 import { vscodeUrl } from "./infra/editor-url.ts";
@@ -17,6 +19,7 @@ import { DomainError, messageOf } from "./infra/errors.ts";
 import { runProgram } from "./infra/run-program.ts";
 import { extractTarGz } from "./infra/tar.ts";
 import { ensureTrackwallDir } from "./infra/trackwall-dir.ts";
+import { userShell } from "./infra/user-shell.ts";
 import {
   AGENT_QUEUES_FILE,
   Agents,
@@ -38,6 +41,7 @@ import { ConfigFiles } from "./modules/config-files/config-files.ts";
 import { DayStart } from "./modules/day-start/day-start.ts";
 import { DayStartFile } from "./modules/day-start/day-start-file.ts";
 import { trustedFolderOf, trustedFolders } from "./modules/doctor/copilot-trust.ts";
+import { type DiskSpace, diskSpace } from "./modules/doctor/disk-space.ts";
 import { Doctor } from "./modules/doctor/doctor.ts";
 import { profileEnvironment } from "./modules/doctor/model-provider-check.ts";
 import { SYSTEM_CA_FILES } from "./modules/doctor/network-check.ts";
@@ -58,6 +62,8 @@ import { RuntimeFile } from "./modules/procs/runtime-file.ts";
 import { Routines } from "./modules/routines/routines.ts";
 import { Services } from "./modules/services/services.ts";
 import { TASK_JOURNAL_FILE, TASK_JOURNAL_MAX_RECORDS, TaskJournal } from "./modules/task-journal/task-journal.ts";
+import { FolderFiles } from "./modules/terminals/folder-files.ts";
+import { FolderTerminals } from "./modules/terminals/folder-terminals.ts";
 import { TestReports } from "./modules/test-results/test-reports.ts";
 import { Hosting, type HostingClis } from "./modules/vcs/hosting.ts";
 import { systemTempFolder, Vcs } from "./modules/vcs/vcs.ts";
@@ -93,6 +99,10 @@ export interface Facade {
   /** Short facts about the user's repos in `.trackwall/knowledge` of the projects folder, with their approvals (ADR-170). */
   knowledge: Knowledge;
   services: Services;
+  /** The user's own shells in the projects folder, a repo root or a task's worktree, shown like session terminals (ADR-185). */
+  terminals: FolderTerminals;
+  /** The files of the projects folder, a repo root or a task's worktree, read only, next to its Shell tab (ADR-188). */
+  folderFiles: FolderFiles;
   testReports: TestReports;
   verifications: Verifications;
   /** What ended tasks were and left, searched by `search_task_history` (ADR-150). */
@@ -148,6 +158,7 @@ type AppConfigRequest = MiseTarget & AppConfigQuery;
 
 export type { CopilotHookOutput } from "./modules/agents/copilot-hook-output.ts";
 export type { CopilotHookEvent } from "./modules/agents/copilot-hook-record.ts";
+export type { FileDownload } from "./modules/terminals/folder-files.ts";
 export { HOSTING_CLIS } from "./modules/vcs/hosting.ts";
 
 const WORKSPACE_FILE = "workspace.yaml";
@@ -201,6 +212,8 @@ export interface FacadeOptions {
   tlsProbe?: TlsProbe;
   /** Only for tests, like `tlsProbe`; the daemon leaves it out for `probeConnection` (ADR-179). */
   connectionProbe?: TlsProbe;
+  /** Only for tests, like `tlsProbe`, so that the doctor's report does not depend on the runner's disk; the daemon leaves it out for `diskSpace`. */
+  diskSpace?: (folder: string) => Promise<DiskSpace>;
   /** The folder the daemon serves the UI from: the error journal maps the UI's frames with its source maps (ADR-94). */
   uiDir?: string;
   log: (msg: string) => void;
@@ -233,7 +246,7 @@ export function createFacade(o: FacadeOptions): Facade {
     ),
   );
   const hosting = new Hosting(o.hostingClis);
-  const openEditor = (dir: string) => o.openUrl(vscodeUrl(dir));
+  const openEditor = (path: string, line?: number) => o.openUrl(vscodeUrl(path, line));
   const workspace = new Workspace({
     file: new WorkspaceFile(join(o.home, WORKSPACE_FILE)),
     vcs,
@@ -289,6 +302,8 @@ export function createFacade(o: FacadeOptions): Facade {
   });
   const agents = new Agents({
     procs,
+    // `terminals` needs `agents` for the task worktrees, so it is made below; a task ends only after both.
+    closeFolderTerminal: (task): Promise<void> => terminals.closeTask(task),
     repos: workspace,
     vcs,
     home: o.home,
@@ -387,6 +402,9 @@ export function createFacade(o: FacadeOptions): Facade {
     repoHosts: () => workspace.repoHosts(),
     unpushedWork: () => workspace.unpushedWork(),
     mountTable,
+    diskSpace: o.diskSpace ?? diskSpace,
+    homeDir: homedir(),
+    inContainer: o.inContainer,
     workspaceFile: workspace.configFile(),
     workspaceKeys: () => workspace.workspaceKeys(),
     javaNavigation: javaNavigationReadiness,
@@ -445,6 +463,21 @@ export function createFacade(o: FacadeOptions): Facade {
     });
   }
 
+  const placeFolder = async ({ repo, task }: TerminalPlace): Promise<string> => {
+    if (repo === null) {
+      if (task !== null) throw new DomainError("bad_request", "a task's place names its repo");
+      return workspace.projectsDir();
+    }
+    return task === null ? workspace.repoPath(repo) : agents.taskWorktreeForShell(task, repo);
+  };
+  const terminals: FolderTerminals = new FolderTerminals({
+    procs,
+    folder: placeFolder,
+    env: o.userEnv,
+    shell: (env) => userShell(env),
+    log: o.log,
+  });
+
   return {
     workspace,
     repoWatch,
@@ -460,6 +493,8 @@ export function createFacade(o: FacadeOptions): Facade {
     knowledge,
     agents,
     services,
+    terminals,
+    folderFiles: new FolderFiles({ folder: placeFolder }),
     testReports,
     verifications,
     taskJournal,

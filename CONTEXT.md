@@ -138,6 +138,10 @@ A clone of one remote repo into the projects folder, in the background: `running
 **Repo** (`Repo`, `RepoId`):
 One repository of the workspace, identified by a slug from the name of its directory.
 
+**Starred repo** (`starredRepos` in `workspace.yaml`, `StarredRepos`):
+A repo the user marked with a star in "Repos", which the list then shows at the top, ahead of the alphabetical rest (ADR-192). Kept by repo id; only the user stars or unstars.
+_Avoid_: favourite, pinned repo
+
 **Remote address** (`Repo.remote`):
 The address of the main remote (`origin` or the only remote in git, `mainRemote`) as `host/path`, for example `gitlab.example.com/shop/api`, without the protocol and user. It identifies the repo independently of the directory name (ADR-21).
 _Avoid_: repo URL (a URL has a protocol and may carry a token), remote without qualification (that is a name in git, for example `origin`)
@@ -175,7 +179,7 @@ One verdict on a task's changes (ADR-64): the mise task `test` (`VERIFY_MISE_TAS
 _Avoid_: check, CI, validation (that is a schema at the point of entry)
 
 **Code search** (`searchCode`, MCP tool `search_code`, result `SearchCodeResult`):
-A fixed string or a regular expression in the files of the latest commit of many repos of the projects folder at once, through `git grep` (ADR-40); a match (`CodeMatch`) is a repo, path, line, column and context lines. It does not see uncommitted changes, just like browsing a repo.
+A fixed string or a regular expression in the files of the latest commit of many repos of the projects folder at once, through `git grep` (ADR-40); a match (`CodeMatch`) is a repo, path, line, column and context lines, and with `output: "files"` the result is the files with matches (`CodeFile`) and their match counts instead (ADR-187). It does not see uncommitted changes, just like browsing a repo.
 _Avoid_: grep (the tool underneath), index (there is none)
 
 **Commit search** (`searchCommits`, MCP tool `search_commits`, result `SearchCommitsResult`):
@@ -344,6 +348,10 @@ A TCP connection to the service's port on loopback (`probePort`), with the port 
 **Lease** (`Lease`, `lease` in `start_service` and `services/start`, `Service.lease`):
 A task's service running on the port of the repo root's service, so whatever calls the repo reaches the task's changes (ADR-132). Taking it stops the root's service; it ends when the task's service stops or crashes, and the root's service starts again if it was running. In the UI "Run on the repo's port" and "Give the port back".
 _Avoid_: lock, reservation
+
+**Service proxy** (`openServiceProxy`, `serviceProxyAddress`, `DaemonInfo.serviceProxyPort`):
+The daemon's listener on a port of its own (7701 in a dev container) that opens a ready service in the browser at `http://<repo>.localhost:<port>/`, or `http://<task>.<repo>.localhost:<port>/` for a task's service (ADR-189). In the UI the "Open" button of a service.
+_Avoid_: port forward (that is VS Code's), gateway
 
 **Orphan**:
 A process group from `runtime.json` that the daemon no longer supervises (for example after a crash). Cleaned up at daemon start only when the leader is the same process (the same start time) or is already dead while the group is alive.
@@ -565,17 +573,29 @@ A running session in `Input` the user has already seen (ADR-47): the agent waits
 A running session in the middle of a turn (`Working` or `Stale`) whose agent has taken no step for 15 minutes: no hook, ACP update or key from the user, a key counting only once a hook has come (ADR-151). A hint shown in place of the state, not a state of its own.
 _Avoid_: hung, frozen, stale (that is `Stale`, no output at all)
 
+**Copilot usage** (`CopilotUsage`, `Session.usage`, `CopilotUsageLog`; "AI credits", "premium requests" and tokens in the UI):
+What a session's Copilot CLI conversation used, summed from the receipts Copilot CLI writes after each model call (ADR-190): AI credits when Copilot CLI reported them, otherwise premium requests of the legacy billing, otherwise only tokens. It covers the whole conversation, also before a resume.
+_Avoid_: cost, spend, budget (Trackwall sets no limit)
+
 **While you were away** (`AwaySummary`, `awaySummary`, `AwayItem`; an **absence** is `AwayPeriod`, opened by `absenceAt` after `AWAY_AFTER_MS`):
 The strip above the views after the user comes back to Trackwall from 15 minutes without a key, click, scroll, pointer move or a window brought to the front in any of its windows, listing what changed in the session list since then (ADR-151). The user dismisses it.
 _Avoid_: digest, notifications (those are the system's and the browser's), journal
 
 **Conversation view** (`SessionView` `"conversation"`, `ConversationView`, `AcpSession`, `ConversationEntry`; "conversation view" in the UI, and "Chat (preview)" on the control that turns it on):
-How a session shows when the daemon runs Copilot CLI over the Agent Client Protocol (`copilot --acp`) instead of in a terminal (ADR-107): a list of what the user and the agent said, the agent's **thoughts** (`ThoughtEntry`, the model's reasoning, folded) and the tools the agent called with the files they work on and the change they make (`patch`), a **subagent** a tool started (`ToolEntry.subagent`, its type and what it was asked), its approval and a message box that suggests the agent's **slash commands** (`SlashCommand`, such as `/compact`), with the agent's **mode** (`ConversationMode`, "Agent" or "Plan") as a switch and its **context use** (`ContextUse`, how much of the model's context window the conversation fills) as a meter (together the **conversation info**, `ConversationInfo`); a message can carry **attachments** (`MessageAttachment`: an image, or a text file the agent gets as text), which the conversation shows by name, in the page as text (the agent's answers as sanitized Markdown without HTML or diagrams). The other `SessionView` is `"terminal"`, the session terminal. The supervisor starts in it when the user turns it on in the supervisor panel, and a task when the user picks it for the task (`Task.view`, ADR-137); a conversation goes on in either view. A **waiting message** (`WaitingMessage`) is one the user wrote during a turn, shown at once with "Waiting" until the turn ends and it goes; not to be confused with "Waiting for you", which is the agent waiting for the user.
+How a session shows when the daemon runs Copilot CLI over the Agent Client Protocol (`copilot --acp`) instead of in a terminal (ADR-107): a list of what the user and the agent said, the agent's **thoughts** (`ThoughtEntry`, the model's reasoning, folded) and the tools the agent called with the files they work on and the change they make (`patch`), a **subagent** a tool started (`ToolEntry.subagent`, its type and what it was asked), its approval and a message box that suggests the agent's **slash commands** (`SlashCommand`, such as `/compact`), with the agent's **mode** (`ConversationMode`, "Agent" or "Plan") as a switch and its **context use** (`ContextUse`, how much of the model's context window the conversation fills) as a meter (together the **conversation info**, `ConversationInfo`); a message can carry **attachments** (`MessageAttachment`: an image, or a text file the agent gets as text), which the conversation shows by name, in the page as text (the agent's answers as sanitized Markdown without HTML or diagrams). The other `SessionView` is `"terminal"`, the session terminal. The supervisor starts in it when the user turns it on in the supervisor panel, and a task when the user picks it for the task (`Task.view`, ADR-137); a conversation goes on in either view. A **waiting message** (`WaitingMessage`) is one the user wrote during a turn, shown at once with "Waiting" until the turn ends and it goes; not to be confused with "Waiting for you", which is the agent waiting for the user. The **diff panel** (`ConversationDiffPanel`; "Changes of the turn" in the UI) is the optional panel beside a wide conversation view with the files one agent turn changed and their diffs; "Show diff" beside a tool row opens it and ✕ closes it. A line of its diff has **line actions**: "Comment" (a review comment of the task), "Open in VS Code" at the line and "Ask about this" (the line as a quote in the message). Not to be confused with the task's "Changes" tab, the whole diff of its worktree.
 _Avoid_: chat outside the "Chat (preview)" control and the "Chat" tab it gives a task's panel (named after that control, so the user finds what they turned on), transcript (that is Copilot CLI's own record)
 
 **Session terminal** (`SessionTerminal`):
 xterm.js in the Sessions view and the supervisor panel, connected over the WebSocket `/ws/pty/<session>` to the session's PTY. Several session terminals, also in different windows, can show the same session; the PTY takes the size of the last one that reported it, and a window that comes to the front reports the size of its terminals again (ADR-49).
 _Avoid_: terminal window (a window is the app window)
+
+**Folder terminal** (`FolderTerminal`, `FolderTerminals`, `terminals` module; the "Shell" tab in the UI):
+The user's own shell in the projects folder, a repo root or a task's worktree (its **place**, `TerminalPlace`; the projects folder is `PROJECTS_FOLDER_PLACE`, `repo: null`), which the daemon runs in a PTY and the UI shows like a session terminal (ADR-185). One per place; it keeps running when its tab closes, and ends when the user closes it, ends the task, or the daemon stops. In the UI it is the "Shell" tab, or "Shell" next to the projects folder in "Repos", because a task's "Terminal" tab is its session's.
+_Avoid_: console, terminal on its own in the UI (a task's "Terminal" tab is the session terminal)
+
+**Folder files** (`FolderFiles`, `folderFiles` in the facade, `terminals/files`, `terminals/download`; the "Files on disk" panel of the Shell tab in the UI):
+The files of a folder terminal's place, as they are on disk, listed read only and downloaded one at a time to the user's computer (ADR-188). Paths are names under the place's folder (`PlaceFile`); links are listed and never followed.
+_Avoid_: file browser, file manager (it only lists and downloads); the repo's "Files" tab, which shows the last commit
 
 **Session layout** (`SessionLayout`):
 How the right side of the Sessions view shows entries (ADR-48): `1` is the selected entry alone with its full panel (tabs, Stop, Resume), `2` and `4` a grid page of that many entries, `auto` a grid of the whole list, up to nine per page.
@@ -594,7 +614,7 @@ The small window next to the tray icon, opened by a left click on it, with the t
 _Avoid_: popup, tray menu (that is the menu on a right click)
 
 **Screen image** (`TerminalScreen`):
-The state of a session's screen, which the daemon keeps in a windowless terminal emulator and sends to a session terminal on connection, before further output.
+The state of a session's or a folder terminal's screen, which the daemon keeps in a windowless terminal emulator and sends to a terminal in the UI on connection, before further output.
 _Avoid_: screenshot (that is a picture), output history
 
 **Last screen** (`LastScreens`, `useLastScreens`):

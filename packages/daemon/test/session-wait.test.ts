@@ -44,6 +44,7 @@ const working: Session = {
   view: "terminal",
   readRequest: null,
   copyRequest: null,
+  usage: null,
 };
 
 describe("what wait_for_session sees of a session", () => {
