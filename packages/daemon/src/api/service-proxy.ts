@@ -125,29 +125,48 @@ async function reach(req: IncomingMessage, port: number, o: ServiceProxyOptions)
 
 /**
  * A request made by a page of another site: its `Origin` is not a page behind the proxy, or, for a request a browser
- * sends without `Origin` (an image, a script, a frame), `Sec-Fetch-Site` says another site made it and it does not open
- * the service as a page. A link from another site, Trackwall's Open among them, still opens the service.
+ * sends without `Origin` (an image, a script, a frame), `Sec-Fetch-Site` says another site made it, it does not open the
+ * service as a page, and its `Referer` is not a page behind the proxy either. Each name under `localhost` is a site of
+ * its own to the browser, so a page of one repo's service loading another's script counts as cross-site and is let
+ * through by its `Referer`. A link from another site, Trackwall's Open among them, still opens the service.
  */
 function fromAnotherSite(req: IncomingMessage, port: number): boolean {
   const origin = req.headers.origin;
   if (origin !== undefined) return !isServiceProxyOrigin(origin, port);
   const opensPage = req.headers["sec-fetch-mode"] === "navigate" && req.headers["sec-fetch-dest"] === "document";
-  return req.headers["sec-fetch-site"] === "cross-site" && !opensPage;
+  if (req.headers["sec-fetch-site"] !== "cross-site" || opensPage) return false;
+  return !isServiceProxyOrigin(refererOrigin(req.headers.referer), port);
+}
+
+function refererOrigin(referer: string | undefined): string {
+  if (!referer || !URL.canParse(referer)) return "";
+  return new URL(referer).origin;
 }
 
 async function forward(req: IncomingMessage, res: ServerResponse, port: number, o: ServiceProxyOptions): Promise<void> {
   const reached = await reach(req, port, o);
+  // The browser went away while the service was looked up: nothing to ask it.
+  if (res.destroyed) return;
   if ("status" in reached) return answer(res, reached.status, reached.text);
   const { address } = reached;
   const upstream = request(
     { host: address.host, port: address.port, method: req.method, path: req.url, headers: forwardedHeaders(req) },
     (up) => {
-      res.writeHead(up.statusCode ?? 502, up.statusMessage, responseHeaders(up.headers, address.port, req.headers.host));
+      try {
+        res.writeHead(up.statusCode ?? 502, up.statusMessage, responseHeaders(up.headers, address.port, req.headers.host));
+      } catch (err) {
+        // A header Node will not send: the service's answer goes no further, and the daemon stays up.
+        o.log(`service proxy: the answer of the service on port ${address.port}: ${messageOf(err)}`);
+        up.destroy();
+        return answer(res, 502, "The service answered with a header Trackwall cannot pass on.");
+      }
       // A service that dies halfway ends the browser's answer too, rather than leaving it open.
       pipeline(up, res, () => {});
     },
   );
-  upstream.once("error", (err) => {
+  upstream.on("error", (err) => {
+    // The browser went away first and the request to the service was stopped for it: not the service's failure.
+    if (res.destroyed) return;
     o.log(`service proxy: the service on port ${address.port}: ${err.message}`);
     if (!res.headersSent) answer(res, 502, "The service closed the connection. Look at its log in Trackwall.");
     else res.destroy();
@@ -156,6 +175,9 @@ async function forward(req: IncomingMessage, res: ServerResponse, port: number, 
   res.once("close", () => {
     if (!res.headersSent) upstream.destroy();
   });
+  // An upload the browser gives up halfway is not left half sent to the service.
+  req.once("error", () => upstream.destroy());
+  req.once("aborted", () => upstream.destroy());
   req.pipe(upstream);
 }
 
@@ -165,6 +187,8 @@ async function upgrade(req: IncomingMessage, socket: Socket, head: Buffer, port:
     socket.end(`HTTP/1.1 ${reached.status} ${reached.status === 404 ? "Not Found" : "Refused"}\r\nconnection: close\r\n\r\n`);
     return;
   }
+  // The browser went away while the service was looked up: no connection to the service is opened for it.
+  if (socket.destroyed) return;
   const upstream = connect({ host: reached.address.host, port: reached.address.port });
   upstream.on("error", () => socket.destroy());
   socket.once("close", () => upstream.destroy());

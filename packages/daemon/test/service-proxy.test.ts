@@ -158,7 +158,7 @@ describe("the service proxy (ADR-189, real process groups, fake mise and fake se
   );
 
   test(
-    "an image or a frame another site loads is refused, while a link from another site opens the page and a sibling service's page may call it",
+    "an image or a frame another site loads is refused, while a link from another site opens the page and another service's page may load from it",
     async () => {
       const host = `shop.localhost:${proxyPort}`;
       const image = { "sec-fetch-site": "cross-site", "sec-fetch-mode": "no-cors", "sec-fetch-dest": "image" };
@@ -167,8 +167,10 @@ describe("the service proxy (ADR-189, real process groups, fake mise and fake se
       expect((await viaProxy(host, "/", frame)).status).toBe(403);
       const link = { "sec-fetch-site": "cross-site", "sec-fetch-mode": "navigate", "sec-fetch-dest": "document" };
       expect((await viaProxy(host, "/", link)).status).toBe(200);
-      const sibling = { "sec-fetch-site": "same-site", "sec-fetch-mode": "no-cors", "sec-fetch-dest": "script" };
-      expect((await viaProxy(host, "/app.js", sibling)).status).toBe(200);
+      // Each name under localhost is a site of its own, so another repo's page loading a script is cross-site, with its address as Referer.
+      const sibling = { "sec-fetch-site": "cross-site", "sec-fetch-mode": "no-cors", "sec-fetch-dest": "script" };
+      expect((await viaProxy(host, "/app.js", { ...sibling, referer: `http://web.localhost:${proxyPort}/orders` })).status).toBe(200);
+      expect((await viaProxy(host, "/app.js", { ...sibling, referer: "https://evil.example/" })).status).toBe(403);
     },
     TIMEOUT,
   );
