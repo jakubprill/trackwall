@@ -18,10 +18,10 @@ const PALETTE: ScenePalette = {
 const MODEL: HomeModel = {
   layerCount: 3,
   repos: [
-    { id: "web-shop", layer: 0, state: "behind", count: 1, runningTask: null },
-    { id: "orders-api", layer: 1, state: "clean", count: 0, runningTask: "dev" },
-    { id: "payments-api", layer: 1, state: "changed", count: 3, runningTask: null },
-    { id: "common-dto", layer: 2, state: "clean", count: 0, runningTask: null },
+    { id: "web-shop", layer: 0, state: "behind", count: 1, runningTask: null, service: null },
+    { id: "orders-api", layer: 1, state: "clean", count: 0, runningTask: "dev", service: null },
+    { id: "payments-api", layer: 1, state: "changed", count: 3, runningTask: null, service: null },
+    { id: "common-dto", layer: 2, state: "clean", count: 0, runningTask: null, service: null },
   ],
   sessions: [
     { id: "s1", repo: "orders-api", state: "attention" },
@@ -123,6 +123,41 @@ describe("dashboard scene", () => {
 
     expect(scene.entity("repo:orders-api")?.get(Visual)).not.toBe(orders);
     expect(scene.entity("repo:web-shop")?.get(Visual)).toBe(web);
+  });
+
+  test("a repo whose service starts gets the service ring in both styles, and a new port alone does not rebuild its model", () => {
+    const serving = (service: HomeModel["repos"][number]["service"]): HomeModel => ({
+      ...MODEL,
+      repos: MODEL.repos.map((r) => (r.id === "orders-api" ? { ...r, service } : r)),
+    });
+    for (const style of ["holo", "orbs"] as const) {
+      const scene = new HomeScene(engine, { palette: PALETTE, style, labels: "needs-you", motion: true });
+      scene.apply(MODEL);
+      const without = meshCount("repo:orders-api", scene);
+
+      scene.apply(serving({ state: "ready", port: 8080 }));
+      const ready = scene.entity("repo:orders-api")?.get(Visual);
+      expect(meshCount("repo:orders-api", scene)).toBe(without + 4);
+
+      scene.apply(serving({ state: "ready", port: 8081 }));
+      expect(scene.entity("repo:orders-api")?.get(Visual)).toBe(ready);
+      scene.dispose();
+    }
+  });
+
+  test("a failing service's ring blinks, and a ready one stands still", () => {
+    const scene = new HomeScene(engine, { palette: PALETTE, style: "orbs", labels: "needs-you", motion: true });
+    const repos = (service: HomeModel["repos"][number]["service"]) =>
+      MODEL.repos.map((r) => (r.id === "common-dto" ? { ...r, service } : r));
+    scene.apply({ ...MODEL, repos: repos({ state: "ready", port: 8080 }) });
+    const ready = pose("repo:common-dto", scene);
+    runFor(engine, 0.5);
+    expect(pose("repo:common-dto", scene)).toBe(ready);
+
+    scene.apply({ ...MODEL, repos: repos({ state: "failing", port: 8080 }) });
+    const failing = pose("repo:common-dto", scene);
+    runFor(engine, 0.37);
+    expect(pose("repo:common-dto", scene)).not.toBe(failing);
   });
 
   test("a repo that vanished from the snapshot loses its entity together with its session and connections", () => {
@@ -267,7 +302,7 @@ describe("dashboard scene", () => {
 
   test("connections of repos whose names contain separators do not merge into one", () => {
     const scene = new HomeScene(engine, { palette: PALETTE, style: "holo", labels: "needs-you", motion: true });
-    const repo = (id: string, layer: number) => ({ id, layer, state: "clean" as const, count: 0, runningTask: null });
+    const repo = (id: string, layer: number) => ({ id, layer, state: "clean" as const, count: 0, runningTask: null, service: null });
 
     scene.apply({
       layerCount: 2,

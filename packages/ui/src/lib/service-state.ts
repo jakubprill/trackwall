@@ -22,6 +22,15 @@ export function serviceStateLabel(service: Service | null): { tone?: StatusTone;
 }
 
 /**
+ * A service in the few characters of a graph card (ADR-191): its port once ready, otherwise its state; the full label
+ * (`serviceStateLabel`) is the card's tooltip and in the repo's panel.
+ */
+export function serviceShortLabel(service: Service): { tone?: StatusTone; label: string } {
+  const state = serviceStateLabel(service);
+  return service.state === "healthy" && service.port !== null ? { tone: state.tone, label: `:${service.port}` } : state;
+}
+
+/**
  * A dependency from the result of a start, with its service as it is now (`current`, from the list of services):
  * skipped with the reason, waiting while no service of it is known yet, otherwise its live state.
  */
@@ -43,6 +52,18 @@ export function isServiceLive(service: Service | null): boolean {
 /** The live service of a task that holds the port of `repo`'s root on a lease (ADR-132), if any. */
 export function leaseHolder(services: readonly Service[], repo: string): Service | undefined {
   return services.find((s) => s.repo === repo && s.lease && isServiceLive(s));
+}
+
+/**
+ * The service that answers for `repo` on its port (ADR-191), for the graph and Home: a task's service holding the port
+ * on a lease (ADR-132), otherwise the service of the repo's root until it is stopped; `null` while neither runs. A
+ * crashed one counts until it is started again, so a crash stays visible.
+ */
+export function repoService(services: readonly Service[], repo: string): Service | null {
+  const holder = leaseHolder(services, repo);
+  if (holder) return holder;
+  const root = services.find((s) => s.repo === repo && s.task === null);
+  return root === undefined || root.state === "stopped" ? null : root;
 }
 
 /**

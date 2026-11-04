@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { repoStateColor, type ScenePalette, sessionStateColor } from "../src/palette.ts";
+import { repoStateColor, type ScenePalette, serviceStateColor, sessionStateColor } from "../src/palette.ts";
 
 const palette: ScenePalette = {
   primary: "#000001",
@@ -26,4 +26,10 @@ test("a clean repo has the muted colour, not the idle one, which is nearly the b
 
 test("a repo whose status has not come yet is faint, in the idle colour", () => {
   expect(repoStateColor("loading", palette)).toBe("#000005");
+});
+
+test("a ready service has the colour of work going on, a starting one the muted colour and a failing one the error colour", () => {
+  expect(serviceStateColor("ready", palette)).toBe("#000001");
+  expect(serviceStateColor("starting", palette)).toBe("#000004");
+  expect(serviceStateColor("failing", palette)).toBe("#000003");
 });

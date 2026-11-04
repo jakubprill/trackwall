@@ -12,20 +12,20 @@ See your whole environment in one 3D view, with everything that needs you in one
 ## What you get
 
 - Trackwall, your sessions and your repos in one living picture.
-- A label beside every repo, with what is going on in it (changes, commits to pull, a problem or a running task), and on every session waiting for you or with an error.
+- A label beside every repo, with what is going on in it (changes, commits to pull, a problem, a running task or a running service), and on every session waiting for you or with an error.
 - Two looks to choose from: holograms, or lighter glowing orbs for a slow graphics card.
 - A "Needs you" queue with every waiting session, repo and task proposal, and in a container the work that is only there.
 - One click from anything in the picture to its view.
 
 ## How it works
 
-"Home" opens when Trackwall starts. Trackwall sits in the middle, sessions circle it on the inner track next to their repo, and repos sit on the outer ring, grouped into arcs by layer (entries, gateways, backends, libraries, as in the [connection graph](/features/graph)), with the graph's connections between them. Colour and shape show the state: a ring around each repo fills as its changes or commits to pull pile up, and the floor around Trackwall shows how many sessions are working and how many wait for you. Each repo has a label beside it, joined by a thin line: the name, and when something is going on, what it is, in the state's colour. Labels that would cover each other move apart. Hover over anything to see its name and state in the corner. Repos appear at once, faint and without a label of their own until git has read them.
+"Home" opens when Trackwall starts. Trackwall sits in the middle, sessions circle it on the inner track next to their repo, and repos sit on the outer ring, grouped into arcs by layer (entries, gateways, backends, libraries, as in the [connection graph](/features/graph)), with the graph's connections between them. Colour and shape show the state: a ring around each repo fills as its changes or commits to pull pile up, a second ring of four arcs on the floor shows its running [service](/features/services) (steady while it is ready, breathing while it starts or stops, blinking red when it stops answering or crashes), and the floor around Trackwall shows how many sessions are working and how many wait for you. Each repo has a label beside it, joined by a thin line: the name, and when something is going on, what it is, in the state's colour. Labels that would cover each other move apart. Hover over anything to see its name and state in the corner. Repos appear at once, faint and without a label of their own until git has read them.
 
 The "Needs you" queue on the left lists what waits for you: sessions, repos and [task proposals](/features/main-session). A session shows its window title next to the repo, so two sessions of one repo can be told apart. A session whose finished turn you have already seen turns calm grey and leaves the queue.
 
 When Trackwall runs in a [dev container](/guide/dev-container), the queue also has "Only in this container": every repo with commits that are on no remote, stashes or changed files, task worktrees included, with what is there ("3 commits, 1 stash"). Point at a row to see the branches. Those repos live in the container's Docker volume, and removing the volume or resetting Docker deletes this work, so push it to keep it. The section is not there outside a container or when everything is pushed.
 
-Click an object to select it and turn the camera to it; the panel on the right shows its details: state, branch, running mise task, the repo's sessions. A session asking for approval shows the request there too, and you can [answer it](/features/approvals) without leaving Home. Double-click, or use "Open repo", "Open session" or "Open Diagnostics", to go to its view; "Open Diagnostics" opens "Settings > Diagnostics". With nothing selected, the panel summarises the whole environment.
+Click an object to select it and turn the camera to it; the panel on the right shows its details: state, branch, running mise task, service, the repo's sessions. A session asking for approval shows the request there too, and you can [answer it](/features/approvals) without leaving Home. Double-click, or use "Open repo", "Open session" or "Open Diagnostics", to go to its view; "Open Diagnostics" opens "Settings > Diagnostics". With nothing selected, the panel summarises the whole environment.
 
 ## Use it
 

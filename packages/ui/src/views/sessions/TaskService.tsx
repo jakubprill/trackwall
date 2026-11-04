@@ -1,18 +1,15 @@
 import { servicesApi, type Task } from "@trackwall/protocol";
 import { ArrowLeftRight, Square } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { isServiceLive, leaseHolder, serviceStateLabel } from "@/lib/service-state";
 import { useAction } from "@/lib/use-action";
-import { useRemote } from "@/lib/use-remote";
+import { useServices } from "@/lib/use-services";
 import { TaskOwnService } from "./TaskOwnService.tsx";
 
-/** As the repo's Service panel: often while the task's service runs or starts, rarely otherwise; the list does not ask mise. */
-const POLL_LIVE_MS = 1000;
-const POLL_IDLE_MS = 5000;
 /**
  * How long the start waits before answering: long enough for the daemon to skip it (port still taken, mise config not
  * trusted) and say why, which it decides before running anything. Without dependencies: the root's service ran, so they do.
@@ -27,8 +24,7 @@ const SKIP_WAIT_MS = 5000;
  * says why here, since the lease then ends at once. Above it, the task's own service while it is ready (`TaskOwnService`).
  */
 export function TaskService({ conn, task }: { conn: Connection; task: Task }) {
-  const load = useCallback(() => post(conn, servicesApi.list, {}), [conn]);
-  const remote = useRemote(load, { pollMs: (list) => (list?.some(isServiceLive) ? POLL_LIVE_MS : POLL_IDLE_MS) });
+  const remote = useServices(conn);
   const { repo, id } = task;
   const services = remote.data ?? [];
   const root = services.find((s) => s.repo === repo && s.task === null) ?? null;

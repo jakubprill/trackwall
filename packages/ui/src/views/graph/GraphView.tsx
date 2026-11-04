@@ -12,11 +12,13 @@ import { twoDigits } from "@/lib/format";
 import { repoProblems } from "@/lib/graph-labels";
 import { layoutGraph } from "@/lib/graph-layout";
 import { GRAPH_PACE } from "@/lib/repo-watch";
+import { repoService } from "@/lib/service-state";
 import { taskName } from "@/lib/session-entries";
 import { IMPACT_POLL_MS, impactRings } from "@/lib/task-impact";
 import { useCardWarmup } from "@/lib/use-card-warmup";
 import { useRemote } from "@/lib/use-remote";
 import type { RepoWatchHandle } from "@/lib/use-repo-watch";
+import { useServices } from "@/lib/use-services";
 import { GraphCanvas } from "./GraphCanvas.tsx";
 import { GraphImpactPanel } from "./GraphImpactPanel.tsx";
 import { GraphNodePanel, GraphSummaryPanel } from "./GraphNodePanel.tsx";
@@ -45,6 +47,7 @@ export function GraphView({
   const load = useCallback(() => post(conn, graphApi.graph, {}), [conn]);
   const graph = useRemote(load, repoWatch.options(GRAPH_PACE));
   const warmup = useCardWarmup(conn, warmupLive).data;
+  const services = useServices(conn).data ?? [];
   const [selected, setSelected] = useState<string>();
   const [chosenTask, setChosenTask] = useState(initialImpactTask);
   // An ended task has no impact to show: the view goes back to the plain graph rather than asking again every few seconds.
@@ -95,7 +98,9 @@ export function GraphView({
             <ErrorWithRetry message={impact.error} onRetry={impact.reload} />
           </div>
         )}
-        {data && layout && <GraphCanvas graph={data} layout={layout} selected={node?.repo} impact={rings} onSelect={setSelected} />}
+        {data && layout && (
+          <GraphCanvas graph={data} layout={layout} services={services} selected={node?.repo} impact={rings} onSelect={setSelected} />
+        )}
       </section>
       <aside className="bg-card min-h-0 overflow-y-auto border-l">
         {layout && node && (
@@ -103,6 +108,7 @@ export function GraphView({
             node={node}
             pairs={layout.pairs}
             problems={data ? repoProblems(data, node.repo) : []}
+            service={repoService(services, node.repo)}
             onSelect={setSelected}
             onClose={() => setSelected(undefined)}
           />

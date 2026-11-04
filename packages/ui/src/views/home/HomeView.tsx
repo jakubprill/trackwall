@@ -17,6 +17,7 @@ import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { useRepoList } from "@/lib/use-repo-list";
 import type { RepoWatchHandle } from "@/lib/use-repo-watch";
 import { useRunningMiseTasks } from "@/lib/use-running-mise-tasks";
+import { useServices } from "@/lib/use-services";
 import { useUnpushedWork } from "@/lib/use-unpushed-work";
 import { HomeDetails } from "./HomeDetails.tsx";
 import { HomeHoverCard } from "./HomeHoverCard.tsx";
@@ -26,8 +27,8 @@ import { NeedsYouPanel } from "./NeedsYouPanel.tsx";
  * The "Home" view (ADR-33, §5.5): the first screen. On the left the "Needs you" queue (sessions that are waiting or have
  * an error, task proposals waiting for a decision, and repos that are not clean), in the middle the 3D dashboard in the
  * "Orbit" layout, on the right the details of the selected object. A click selects; a double click or the button in the
- * details goes to the session or repo. The data is the same daemon responses as in other views; sessions and running mise
- * tasks come live from the events WebSocket (ADR-36), and `App` fetches the sessions, because their count is also on the
+ * details goes to the session or repo. The data is the same daemon responses as in other views (services polled as in the
+ * repo's Service panel); sessions and running mise tasks come live from the events WebSocket (ADR-36), and `App` fetches the sessions, because their count is also on the
  * view bar. Outside the canvas the view takes only `@trackwall/scene/model` from the scene (keys and snapshot types), so
  * that three.js and Pawn stay in the lazily loaded chunk.
  */
@@ -68,6 +69,7 @@ export function HomeView({
     repoWatch.options(GRAPH_PACE),
   );
   const running = useRunningMiseTasks(conn, runningLive);
+  const services = useServices(conn);
   const unpushed = useUnpushedWork(conn, repoWatch.options(REPO_LIST_PACE));
   const unpushedList = useMemo(() => unpushedRows(unpushed.data), [unpushed.data]);
   const [selected, setSelected] = useState<HomeKey | null>(null);
@@ -76,7 +78,10 @@ export function HomeView({
 
   const daemonRunning = homeDaemonRunning(repos.error, repos.errorCode, eventsLost);
   const repoList = repos.data?.repos;
-  const work = useMemo(() => daemonWork(eventsLost, sessions.data?.sessions, running.data), [eventsLost, sessions.data, running.data]);
+  const work = useMemo(
+    () => daemonWork(eventsLost, sessions.data?.sessions, running.data, services.data),
+    [eventsLost, sessions.data, running.data, services.data],
+  );
   const sessionList = work.sessions;
   const model = useMemo(
     () =>
@@ -85,9 +90,10 @@ export function HomeView({
         sessions: sessionList ?? [],
         graph: graph.data,
         running: work.running,
+        services: work.services,
         daemonRunning,
       }),
-    [repoList, sessionList, graph.data, work.running, daemonRunning],
+    [repoList, sessionList, graph.data, work.running, work.services, daemonRunning],
   );
   // A selection of an object that vanished from the dashboard snapshot is dropped: it does not come back by itself when a repo
   // or session with that key appears again.

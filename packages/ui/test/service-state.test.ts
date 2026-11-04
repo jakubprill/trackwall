@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import type { Service, SliceMember } from "@trackwall/protocol";
-import { isServiceLive, leaseHolder, memberLabel, serviceLink, serviceStateLabel } from "../src/lib/service-state.ts";
+import {
+  isServiceLive,
+  leaseHolder,
+  memberLabel,
+  repoService,
+  serviceLink,
+  serviceShortLabel,
+  serviceStateLabel,
+} from "../src/lib/service-state.ts";
 
 const RUN = { kind: "running", runId: "r1", startedAt: "2026-10-24T10:00:00.000Z", pid: 42 } as const;
 const service = (state: Service["state"], port: number | null = 8081): Service => ({
@@ -51,6 +59,24 @@ describe("service state in the UI", () => {
 
     expect(leaseHolder([service("stopped"), stopped, elsewhere, leased], "orders")).toBe(leased);
     expect(leaseHolder([service("healthy"), stopped], "orders")).toBeUndefined();
+  });
+});
+
+describe("a repo's service on the graph and Home (ADR-191)", () => {
+  test("the service of a repo is the task's service holding its port, otherwise the root's, and none once stopped", () => {
+    const leased = { ...service("healthy"), task: "t1", lease: true };
+    const ownPort = { ...service("healthy", 9000), task: "t2" };
+
+    expect(repoService([service("stopped"), ownPort, leased], "orders")).toBe(leased);
+    expect(repoService([service("crashed"), ownPort], "orders")).toEqual(service("crashed"));
+    expect(repoService([service("stopped"), ownPort], "orders")).toBeNull();
+    expect(repoService([], "orders")).toBeNull();
+  });
+
+  test("on a graph card a ready service is its port, the rest its state", () => {
+    expect(serviceShortLabel(service("healthy"))).toEqual({ tone: "ok", label: ":8081" });
+    expect(serviceShortLabel(service("healthy", null))).toEqual({ tone: "ok", label: "ready" });
+    expect(serviceShortLabel(service("crashed"))).toEqual({ tone: "error", label: "crashed" });
   });
 });
 

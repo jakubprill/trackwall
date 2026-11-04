@@ -4,8 +4,8 @@ import type { SceneLabelMode } from "./scene-style.ts";
 /**
  * Which objects have a label on the scene (ADR-33, ADR-104); the rest is in the hover preview card and in the UI panels.
  * With the mode `needs-you` only a repo that needs you has a label, the same repos as the "Needs you" queue. With `all`
- * every repo has one, so every repo on the ring can be told apart: a full one with its numbers or its running mise task,
- * and a quiet one with only the name for a clean or loading repo with nothing running. A working
+ * every repo has one, so every repo on the ring can be told apart: a full one with its numbers, its running mise task or
+ * its running service, and a quiet one with only the name for a clean or loading repo with neither running. A working
  * session has no label, because colour and motion say enough. The scene only decides whether and how loud a label is; the
  * UI writes its text (`createLabel`), in the same words as the rest of the application.
  */
@@ -15,7 +15,7 @@ export type RepoLabelTone = "full" | "quiet";
 export function repoLabelTone(repo: HomeRepo, mode: SceneLabelMode): RepoLabelTone | null {
   if (repoNeedsYou(repo.state)) return "full";
   if (mode === "needs-you") return null;
-  return repo.runningTask === null ? "quiet" : "full";
+  return repo.runningTask === null && repo.service === null ? "quiet" : "full";
 }
 
 export function sessionHasLabel(session: HomeSession): boolean {
