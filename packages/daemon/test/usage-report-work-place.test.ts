@@ -8,7 +8,7 @@ const worktrees = join(projects, ".trackwall", "worktrees");
 
 const task = (t: Partial<KnownTask> & Pick<KnownTask, "id" | "repo">): KnownTask => ({
   branch: "trackwall/fix-login-3f2a9c",
-  worktree: null,
+  worktree: join(worktrees, t.repo, "fix-login-3f2a9c"),
   title: null,
   prompt: "Fix the login\nand its test",
   ...t,
@@ -21,7 +21,7 @@ const known = (tasks: KnownTask[]): KnownPlaces => ({
     { id: "billing", path: join(projects, "billing") },
   ],
   projectsDir: projects,
-  taskBranchPrefix: "trackwall/",
+  isTaskBranch: (branch) => branch.startsWith("trackwall/"),
 });
 
 const T1 = "11111111-1111-4111-8111-111111111111";
@@ -38,15 +38,29 @@ describe("the work a Copilot CLI conversation was for, from its folder and branc
       repo: "shop",
       label: "Fix the login",
     });
-    expect(workPlace({ cwd, branch: "trackwall/fix-login-3f2a9c" }, known([task({ id: T1, repo: "shop" })])).label).toBe("Fix the login");
+    expect(workPlace({ cwd, branch: "trackwall/fix-login-3f2a9c" }, known([task({ id: T1, repo: "shop", title: null })])).label).toBe(
+      "Fix the login",
+    );
   });
 
-  test("the parts of a change share a branch, so an ended part is found by the repo folder of its worktree", () => {
+  test("the parts of a change share a branch, so each is found by its worktree", () => {
     const tasks = [task({ id: T1, repo: "shop" }), task({ id: T2, repo: "billing" })];
 
     const place = workPlace({ cwd: join(worktrees, "billing", "fix-login-3f2a9c"), branch: "trackwall/fix-login-3f2a9c" }, known(tasks));
 
     expect(place).toMatchObject({ kind: "task", task: T2, repo: "billing" });
+  });
+
+  test("a worktree that moved since is found by its branch when one task has it, and is not guessed among several", () => {
+    const moved = { cwd: join(root, "old-worktrees", "shop", "fix-login-3f2a9c"), branch: "trackwall/fix-login-3f2a9c" };
+
+    expect(workPlace(moved, known([task({ id: T1, repo: "shop" })]))).toMatchObject({ kind: "task", task: T1 });
+    expect(workPlace(moved, known([task({ id: T1, repo: "shop" }), task({ id: T2, repo: "billing" })]))).toEqual({
+      kind: "task",
+      task: null,
+      repo: null,
+      label: "trackwall/fix-login-3f2a9c",
+    });
   });
 
   test("a task branch Trackwall no longer knows is a task named by its branch", () => {

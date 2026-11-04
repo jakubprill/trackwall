@@ -34,7 +34,7 @@ import {
 } from "./modules/agents/agents.ts";
 import { resolveCopilot } from "./modules/agents/copilot-command.ts";
 import { withMiseVars } from "./modules/agents/session-env.ts";
-import { TASK_BRANCH_PREFIX } from "./modules/agents/task-branch.ts";
+import { TaskBranch, taskWorktree } from "./modules/agents/task-branch.ts";
 import { Batch } from "./modules/batch/batch.ts";
 import { Board } from "./modules/board/board.ts";
 import type { AppConfigQuery } from "./modules/cards/app-config.ts";
@@ -560,19 +560,27 @@ export function createFacade(o: FacadeOptions): Facade {
 
 /**
  * The tasks, repos and projects folder the usage report ties conversations to (ADR-195): running tasks from `agents`,
- * ended ones from the task journal, and the repos without git, which only their folders are needed of.
+ * ended ones from the task journal with the worktree they had, and the repos without git, which only their folders are
+ * needed of. A workspace that cannot be read fails the report, which says why, instead of showing every conversation
+ * outside the projects folder.
  */
 async function knownPlaces(agents: Agents, taskJournal: TaskJournal, workspace: Workspace): Promise<KnownPlaces> {
-  const list = await workspace.entryList().catch(() => ({ projectsDir: null, repos: [] }));
+  const list = await workspace.entryList();
+  const worktreesDir = await workspace.worktreesDir();
   return {
     tasks: [
       ...agents.tasks().map((t) => ({ id: t.id, repo: t.repo, branch: t.branch, worktree: t.worktree, title: t.title, prompt: t.prompt })),
-      ...taskJournal
-        .records()
-        .map((r) => ({ id: r.task, repo: r.repo, branch: r.branch, worktree: null, title: r.title, prompt: r.prompt })),
+      ...taskJournal.records().map((r) => ({
+        id: r.task,
+        repo: r.repo,
+        branch: r.branch,
+        worktree: taskWorktree(worktreesDir, r.repo, r.branch),
+        title: r.title,
+        prompt: r.prompt,
+      })),
     ],
     repos: list.repos.map((r) => ({ id: r.id, path: r.path })),
     projectsDir: list.projectsDir,
-    taskBranchPrefix: TASK_BRANCH_PREFIX,
+    isTaskBranch: (branch) => TaskBranch.safeParse(branch).success,
   };
 }

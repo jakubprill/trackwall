@@ -78,6 +78,17 @@ export function usageReceipt(line: string): UsageReceipt | undefined {
   };
 }
 
+/**
+ * Whether this is the first time `seen` meets the receipt, which it then remembers: a resumed conversation writes its
+ * receipts again under the same identity, and they count once. A receipt without an identity always counts.
+ */
+export function firstSighting(seen: Set<string>, receipt: UsageReceipt): boolean {
+  if (receipt.key === undefined) return true;
+  if (seen.has(receipt.key)) return false;
+  seen.add(receipt.key);
+  return true;
+}
+
 /** Running sums of receipts. */
 export interface UsageTotals {
   modelCalls: number;

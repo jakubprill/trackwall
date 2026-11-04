@@ -3,7 +3,7 @@
 // outside the projects folder, with model calls and tool calls spread over the last six days. The numbers are made
 // up but shaped like a real week: tool definitions are a large part of every call, and a few tools add most results.
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { conversationEventLog } from "../../src/infra/copilot-home.ts";
 
 /** A conversation to write: where it ran, how many model calls it made and which tools it called how often. */
@@ -86,10 +86,10 @@ export function writeDemoUsage(copilotHome: string, conversations: readonly Demo
   conversations.forEach((c, i) => {
     const id = `demo-conversation-${i + 1}`;
     const log = conversationEventLog(copilotHome, id);
-    mkdirSync(join(log, ".."), { recursive: true });
+    mkdirSync(dirname(log), { recursive: true });
     writeFileSync(log, `${lines(id, c, now).join("\n")}\n`);
     const branch = c.branch === null ? "" : `branch: ${c.branch}\n`;
-    writeFileSync(join(log, "..", "workspace.yaml"), `cwd: ${JSON.stringify(c.cwd)}\n${branch}`);
+    writeFileSync(join(dirname(log), "workspace.yaml"), `cwd: ${JSON.stringify(c.cwd)}\n${branch}`);
   });
 }
 

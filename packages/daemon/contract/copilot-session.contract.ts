@@ -590,6 +590,26 @@ describe("an agent task with the real Copilot CLI", () => {
     expect(first?.system).toContain(realpathSync.native(task.worktree));
   });
 
+  test("a task's conversation records the task's worktree and branch, so the weekly usage report counts it under the task, also once it ended (ADR-195)", async () => {
+    const { agents } = daemon.facade;
+    model.reply({ text: "Counting." });
+    const task = await agents.createTask("shop", "count this task");
+    const session = taskSessionOf(task.id);
+    await endOfTurn(session);
+    // Copilot CLI writes the log in batches: the receipt may land after the turn's agentStop.
+    const until = Date.now() + SESSION_MS;
+    const row = async () => (await daemon.facade.usageReport.week(0)).work.find((w) => w.task === task.id);
+    while ((await row()) === undefined) {
+      if (Date.now() > until) throw new Error("the task's conversation never showed in the report");
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    expect(await row()).toMatchObject({ kind: "task", repo: "shop", label: "count this task", conversations: 1 });
+
+    await agents.stop(session);
+    await agents.removeTask(task.id, false, true);
+    expect(await row()).toMatchObject({ kind: "task", repo: "shop", label: "count this task" });
+  });
+
   test("a review sent to a resumed task session goes into its input box before the user types anything", async () => {
     const { agents } = daemon.facade;
     model.reply({ text: "Added the test." });

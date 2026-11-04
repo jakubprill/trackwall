@@ -1,11 +1,11 @@
-import { readdir, stat } from "node:fs/promises";
+import { lstat, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { type UsageReport as Report, USAGE_REPORT_DAYS, type UsageTool, type UsageWork } from "@trackwall/protocol";
 import { conversationsDir, EVENT_LOG_FILE } from "../../infra/copilot-home.ts";
-import { addReceipt, addTotals, NO_USAGE, type UsageTotals, usageOf } from "../../infra/copilot-usage-receipt.ts";
+import { addReceipt, addTotals, firstSighting, NO_USAGE, type UsageTotals, usageOf } from "../../infra/copilot-usage-receipt.ts";
 import { messageOf } from "../../infra/errors.ts";
 import { type EventLogDigest, EventLogDigests, type LoggedToolCall } from "./event-log.ts";
-import { type KnownPlaces, recordedPlace, type WorkPlace, workPlace } from "./work-place.ts";
+import { type KnownPlaces, recordedPlace, type WorkPlace, withRealPaths, workPlace } from "./work-place.ts";
 
 /**
  * The `usage-report` module (ADR-195, §4.25): what Copilot CLI used in one week on this computer, by the work it was
@@ -46,7 +46,7 @@ export class UsageReport {
     const to = this.#deps.now() - weeksAgo * USAGE_REPORT_DAYS * DAY_MS;
     const sums = new WeekSums(to - USAGE_REPORT_DAYS * DAY_MS, to);
     const dir = conversationsDir(await this.#deps.copilotHome());
-    const places = await this.#deps.places();
+    const places = await withRealPaths(await this.#deps.places());
     const logs = new Set<string>();
     let unreadLogs = 0;
     for (const conversation of await conversationDirs(dir)) {
@@ -85,8 +85,7 @@ class WeekSums {
   /** A conversation's model and tool calls of the week; its place is read only when it has model calls in the week. */
   async add(digest: EventLogDigest, place: () => Promise<WorkPlace>): Promise<void> {
     for (const call of digest.toolCalls) if (this.#inWeek(call.at)) addToolCall(this.#tools, call);
-    const receipts = digest.receipts.filter((r) => this.#inWeek(r.at) && (r.key === undefined || !this.#seenReceipts.has(r.key)));
-    for (const r of receipts) if (r.key !== undefined) this.#seenReceipts.add(r.key);
+    const receipts = digest.receipts.filter((r) => this.#inWeek(r.at) && firstSighting(this.#seenReceipts, r));
     if (receipts.length === 0) return;
     const at = await place();
     const key = JSON.stringify([at.kind, at.task, at.repo, at.label]);
@@ -118,17 +117,22 @@ class WeekSums {
 async function conversationDirs(dir: string): Promise<string[]> {
   try {
     const entries = await readdir(dir, { withFileTypes: true });
-    return entries.filter((e) => e.isDirectory()).map((e) => e.name);
+    // Sorted, so a receipt two logs share counts in the same log on every system, whatever order its file system lists.
+    return entries
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name)
+      .sort();
   } catch {
     return [];
   }
 }
 
-/** A log's size and time; `undefined` for a conversation without one. */
+/** A log's size and time; `undefined` for a conversation without one as a regular file. */
 async function fileState(file: string): Promise<{ size: number; mtimeMs: number } | undefined> {
   try {
-    const { size, mtimeMs } = await stat(file);
-    return { size, mtimeMs };
+    // Not through a link and never a FIFO an agent could plant there, which would hold the report's read forever.
+    const found = await lstat(file);
+    return found.isFile() ? { size: found.size, mtimeMs: found.mtimeMs } : undefined;
   } catch {
     return undefined;
   }

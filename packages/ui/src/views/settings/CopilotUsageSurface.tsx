@@ -106,7 +106,7 @@ function RankedList<T>({ title, rows, rowKey, render }: RankedListProps<T>) {
       </ol>
       {rows.length > TOP_ROWS && (
         <Button variant="ghost" size="sm" className="self-start" onClick={() => setAll((a) => !a)}>
-          {all ? "Show the top 10" : `Show all ${rows.length}`}
+          {all ? `Show the top ${TOP_ROWS}` : `Show all ${rows.length}`}
         </Button>
       )}
     </div>

@@ -2,26 +2,21 @@ import { closeSync, openSync, readSync, statSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 import type { CopilotUsage } from "@trackwall/protocol";
 import { conversationEventLog } from "../../infra/copilot-home.ts";
-import { addReceipt, NO_USAGE, type UsageTotals, usageOf, usageReceipt } from "../../infra/copilot-usage-receipt.ts";
+import { addReceipt, firstSighting, NO_USAGE, type UsageTotals, usageOf, usageReceipt } from "../../infra/copilot-usage-receipt.ts";
 
 /**
  * What a session's conversation used (ADR-190, §4.4), from the conversation's event log that Copilot CLI keeps in its
  * home: `session-state/<conversation>/events.jsonl`. After every model call Copilot CLI appends a durable receipt,
  * `session.usage_record` (`infra/copilot-usage-receipt.ts`), with the call's tokens, its model multiplier and, on token
  * billing, its cost in nano AI units (10⁹ of them make one AI credit, as Copilot CLI's `/usage` converts them). A
- * contract test pins where and when the receipt is written. The log is read on demand only (`update`), from where the last read stopped, so a long
- * conversation is read once and every later turn costs only its new lines.
+ * contract test pins where and when the receipt is written. The log is read on demand only (`update`), from where the
+ * last read stopped, so a long conversation is read once and every later turn costs only its new lines.
  */
 
 /** One receipt line added to the sums; `seen` keeps receipts counted once. */
 function add(totals: UsageTotals, line: string, seen: Set<string>): UsageTotals {
   const receipt = usageReceipt(line);
-  if (receipt === undefined) return totals;
-  if (receipt.key !== undefined) {
-    if (seen.has(receipt.key)) return totals;
-    seen.add(receipt.key);
-  }
-  return addReceipt(totals, receipt);
+  return receipt === undefined || !firstSighting(seen, receipt) ? totals : addReceipt(totals, receipt);
 }
 
 /** The sums of whole receipt lines, for a reader that has the log in memory (the tests, a script). */
