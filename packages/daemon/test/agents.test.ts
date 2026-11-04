@@ -571,6 +571,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
       knowledge: async () => ({ entries: [], more: 0 }),
       wireApi: async () => null,
       onTaskRemoved: () => {},
+      taskImpact: () => Promise.reject(new Error("unused")),
       log: () => {},
     });
     await expect(missing.start("shop")).rejects.toMatchObject({ code: "agent_unavailable" });

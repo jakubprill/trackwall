@@ -38,6 +38,7 @@ function proposal(id: string, repo = `repo-${id}`): TaskProposal {
     approvals: "ask",
     item: null,
     parts: null,
+    fromImpact: false,
     createdAt: "2026-10-30T10:00:00Z",
   };
 }
