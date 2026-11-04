@@ -58,6 +58,7 @@ import { DAY_REPORT_COMMITS, DayReport } from "./day-start.ts";
 import {
   FindEndpointResult,
   MAX_CHANGED_ENDPOINTS,
+  MAX_CHANGED_TYPES,
   MAX_FOUND_ENDPOINTS,
   MAX_IMPACT_RINGS,
   MAX_SUBGRAPH_DEPTH,
@@ -858,10 +859,13 @@ export const mcpTools = {
       `ring 1 calling a removed or changed endpoint, ring 2 calling an endpoint of ring 1 whose handler reaches that call, up to ` +
       `ring ${MAX_IMPACT_RINGS}, each with calls (what it calls in the ring before), through (its endpoints that make those calls; ` +
       "null when its card could not trace) and sure (false when only an untraced repo or a client without paths leads there). " +
+      "types: the public Java types of the repo's Maven or Gradle packages the commits remove or change (a visible member " +
+      "removed or with another signature, a new abstract method, another declaration), each with users: the repos that " +
+      "depend on the package and import it; such a repo is in ring 1 with no calls. " +
       `Only committed work counts (head is the commit read): commit ` +
       `first. A changed path is a removed and an added endpoint. Use it before you propose the work that builds on your ` +
       `change, one proposal per caller repo, and to see what the task that handed you your work changed. At most ` +
-      `${MAX_CHANGED_ENDPOINTS} endpoints (truncated: true when there were more). problems: what the card of the base or ` +
+      `${MAX_CHANGED_ENDPOINTS} endpoints and ${MAX_CHANGED_TYPES} types (truncated: true when there were more). problems: what the card of the base or ` +
       "head commit could not read, so a change there may be missing; contractsCompared: false when a card was not fully " +
       "parsed, so only added and removed endpoints are listed. not_found for an unknown or ended task.",
     args: z.object({ task: TaskId.describe(`task id from ${LIST_SESSIONS} or ${GET_SESSION} (the task field)`) }).strict(),

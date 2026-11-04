@@ -9,7 +9,7 @@ import { contractTypeNames, dtoFieldTypeNames, leavesContractsIncomplete, reacha
  * (`leavesContractsIncomplete`), since a card without syntax trees has no types to compare. Callers come from the graph.
  */
 
-export function endpointChanges(before: RepoCard, after: RepoCard): Omit<EndpointChanges, "head" | "problems"> {
+export function endpointChanges(before: RepoCard, after: RepoCard): Omit<EndpointChanges, "head" | "types" | "problems"> {
   const contractsCompared = [before, after].every((card) => !card.problems.some(leavesContractsIncomplete));
   const shared = sharedPlaces([before, after]);
   const old = endpointsByKey(before, shared);

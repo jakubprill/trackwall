@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ChangedEndpoint, ImpactedRepo } from "@trackwall/protocol";
+import type { ChangedEndpoint, ChangedType, ImpactedRepo } from "@trackwall/protocol";
 import { impactEdgeRing, impactPoints, impactProposalNote, impactRings, impactSummary, RING_GAP } from "../src/lib/task-impact.ts";
 
 const caller = (repo: string, client: string, line: number) => ({
@@ -36,10 +36,30 @@ const web: ImpactedRepo = { repo: "shop-web", ring: 2, uses: ["orders-bff"], cal
 
 describe("a task's impact", () => {
   test("the summary counts the changed endpoints and the repos reached, keeping the maybe ones apart", () => {
-    expect(impactSummary({ endpoints: [], impact: [], truncated: false })).toBe("The task's commits change no endpoint.");
-    expect(impactSummary({ endpoints: [getOrder], impact: [], truncated: false })).toBe("1 endpoint changed; no other repo calls them.");
-    expect(impactSummary({ endpoints: [getOrder], impact: [bff, web], truncated: true })).toBe(
+    expect(impactSummary({ endpoints: [], types: [], impact: [], truncated: false })).toBe("The task's commits change no endpoint.");
+    expect(impactSummary({ endpoints: [getOrder], types: [], impact: [], truncated: false })).toBe(
+      "1 endpoint changed; no other repo calls them.",
+    );
+    expect(impactSummary({ endpoints: [getOrder], types: [], impact: [bff, web], truncated: true })).toBe(
       "1 endpoint (more not shown) changed, reaching 1 repo and maybe 1 more.",
+    );
+  });
+
+  test("the summary counts changed public library types next to endpoints (ADR-201)", () => {
+    const money: ChangedType = {
+      change: "removed",
+      package: "com.example.money",
+      type: "com.example.money.Money",
+      declaration: false,
+      members: [],
+      evidence: { path: "src/main/java/com/example/money/Money.java", line: 3 },
+      users: [],
+    };
+    expect(impactSummary({ endpoints: [], types: [money], impact: [], truncated: false })).toBe(
+      "1 public type changed; no other repo uses them.",
+    );
+    expect(impactSummary({ endpoints: [getOrder], types: [money, money], impact: [bff], truncated: false })).toBe(
+      "1 endpoint and 2 public types changed, reaching 1 repo.",
     );
   });
 
@@ -53,7 +73,7 @@ describe("a task's impact", () => {
 
   test("a proposal Trackwall made from the impact says so under its title; an agent's proposal says nothing (ADR-198)", () => {
     expect(impactProposalNote({ repo: "legacy-reports", fromImpact: true })).toBe(
-      "Proposed by Trackwall: legacy-reports calls endpoints this task's commits changed",
+      "Proposed by Trackwall: legacy-reports uses endpoints or public types this task's commits changed",
     );
     expect(impactProposalNote({ repo: "legacy-reports", fromImpact: false })).toBeNull();
   });

@@ -99,6 +99,7 @@ describe.skipIf(process.versions.bun === undefined)(
         head: parentHead,
         contractsCompared: true,
         endpoints: [],
+        types: [],
         truncated: false,
         problems: [],
         impact: [],

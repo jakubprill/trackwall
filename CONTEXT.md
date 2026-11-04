@@ -474,8 +474,12 @@ _Avoid_: multi-repo task, epic; and do not confuse it with a task's changes (its
 The repos a task's committed API change reaches, in rings: ring 1 calls a changed endpoint, ring 2 calls an endpoint of ring 1 that makes such a call, up to three rings; a repo reached only through code Trackwall could not follow, or through a client without paths, is *maybe* (`sure: false`) (ADR-147).
 _Avoid_: blast radius, ripple, consumers (for the whole set)
 
+**Changed library type** (`ChangedType`, `types` in `ChangedEndpoints`, `cards/api-changes.ts`; "Changed library types" in the Impact tab):
+A public Java type of a module that builds a Maven or Gradle package, which a task's commits remove or change so that code using it may break (a visible member removed or with another signature, a new abstract method, another declaration), with the repos that depend on the package and import it (ADR-201).
+_Avoid_: API change (also endpoints), breaking change, public API diff
+
 **Impact proposal** (`TaskProposal.fromImpact`, `impact-proposals.ts`; "Proposed by Trackwall" under the proposal's title):
-A task proposal the daemon makes when a task's turn ends, for each repo of ring 1 of its impact that surely calls an endpoint the task's commits removed or changed: the task's own proposal, so an approved one is its subtask, with the Impact tab's hand-off prompt. A repo is offered each endpoint once (ADR-198).
+A task proposal the daemon makes when a task's turn ends, for each repo of ring 1 of its impact that surely calls an endpoint the task's commits removed or changed, and each repo that imports a changed library type: the task's own proposal, so an approved one is its subtask, with the Impact tab's hand-off prompt. A repo is offered each endpoint and type once (ADR-198, ADR-201).
 _Avoid_: auto-handoff, consumer task
 
 **Task message** (`TaskMessage`, MCP tools `send_message` and `get_messages`; "Messages" in the task panel):

@@ -11,6 +11,7 @@ import {
 } from "@trackwall/protocol";
 import { configOrProblem, DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
+import { type ApiChangesVcs, apiChanges, librarySourceRoots } from "./api-changes.ts";
 import { type AppConfigEnv, type AppConfigQuery, appConfigView } from "./app-config.ts";
 import { CallReads, readCallFiles } from "./call-files.ts";
 import type { CardCache } from "./card-cache.ts";
@@ -31,7 +32,7 @@ import { readWorkingConfig, type WorkingConfigVcs } from "./working-config.ts";
  */
 
 /** What `cards` needs from `vcs`; wired in the facade. */
-interface CardsVcs extends SnapshotVcs, WorkingConfigVcs {
+interface CardsVcs extends SnapshotVcs, WorkingConfigVcs, ApiChangesVcs {
   headCommit(dir: string): Promise<string | null>;
   remote(dir: string): Promise<string | null>;
 }
@@ -147,18 +148,29 @@ export class Cards {
   }
 
   /**
-   * The endpoints the commits of the worktree in `dir`, a worktree of repo `repo`, change against commit `base` (ADR-145),
-   * from the cards of both commits, with both cards' problems; uncommitted work is not in a card (ADR-14).
+   * The endpoints and the public Java types of the repo's packages that the commits of the worktree in `dir`, a worktree
+   * of repo `repo`, change against commit `base` (ADR-145, ADR-201), from the cards of both commits and the changed Java
+   * files of the modules that build a package, with what either could not read; uncommitted work is not in a card (ADR-14).
+   * Without `readTypes` no Java file is read for public types.
    */
-  async endpointChanges(repo: string, dir: string, base: string): Promise<EndpointChanges> {
-    const { head, before, after } = await this.cardsOfWorktree(repo, dir, base).catch((err: unknown) => {
+  async endpointChanges(repo: string, dir: string, base: string, readTypes: boolean): Promise<EndpointChanges> {
+    const { head, before, after, types } = await this.changesOfWorktree(repo, dir, base, readTypes).catch((err: unknown) => {
       throw err instanceof DomainError ? err : new DomainError("repo_unavailable", `${repo}: ${messageOf(err)}`);
     });
     const problems = [
       ...before.problems.map((p) => ({ ...p, commit: "base" as const })),
       ...after.problems.map((p) => ({ ...p, commit: "head" as const })),
+      ...types.problems,
     ];
-    return { head, ...endpointChanges(before, after), problems };
+    return { head, ...endpointChanges(before, after), types: types.types, problems };
+  }
+
+  private async changesOfWorktree(repo: string, dir: string, base: string, readTypes: boolean) {
+    const { head, before, after } = await this.cardsOfWorktree(repo, dir, base);
+    if (!readTypes) return { head, before, after, types: { types: [], problems: [] } };
+    const parsers = withParseBudget(await syntaxParsersOrUnavailable(), CARD_PARSE_BUDGET_MS);
+    const types = await apiChanges(this.deps.vcs, dir, { base, head }, librarySourceRoots([before, after]), parsers);
+    return { head, before, after, types };
   }
 
   /** The cards of commit `base` and of the HEAD of the worktree in `dir`; git's failures as they come. */

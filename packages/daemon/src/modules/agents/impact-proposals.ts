@@ -6,62 +6,76 @@ import {
   handoffPrompt,
   type ImpactedRepo,
   MAX_CHANGED_ENDPOINTS,
+  MAX_CHANGED_TYPES,
   proposalRepos,
   TASK_TITLE_MAX,
   type Task,
   type TaskProposal,
+  typesUsedBy,
 } from "@trackwall/protocol";
 import { messageOf } from "../../infra/errors.ts";
 import { KeyedQueue } from "../../infra/keyed-queue.ts";
 import type { NewProposal } from "./task-proposals.ts";
 
 /**
- * Impact proposals (§4.4, ADR-198): when a turn of a task's session ends, the daemon compares the task's commits with
- * its base, as `get_changed_endpoints` does (ADR-145, ADR-147), and proposes a task to each repo of ring 1 that surely
- * calls an endpoint they removed or changed, unless that repo was offered every such endpoint before. The proposal is
+ * Impact proposals (§4.4, ADR-198, ADR-201): when a turn of a task's session ends, the daemon compares the task's commits
+ * with its base, as `get_changed_endpoints` does (ADR-145, ADR-147), and proposes a task to each repo of ring 1 that
+ * surely calls an endpoint they removed or changed, and to each repo that imports a public library type they removed or
+ * changed, unless that repo was offered every such endpoint and type before. The proposal is
  * the task's own (its session proposes it, ADR-140), so nothing starts until the user approves it, and an approved one
  * is the task's subtask with its handoff (ADR-143). Further rings are left to the subtasks: a repo of ring 2 needs work
  * only when a repo of ring 1 changes its own endpoints, and that subtask's turn then proposes it.
  */
 
-/** The longest endpoint key kept in `tasks.json`: a method and a path, which a card does not cut. */
-export const IMPACT_ENDPOINT_KEY_MAX = 600;
+/** The longest key kept in `tasks.json`: a method and a path, or a type's name, which a card does not cut. */
+export const IMPACT_KEY_MAX = 600;
+/** Most keys kept per repo: one comparison has at most this many endpoints and types. */
+export const IMPACT_KEYS_MAX = MAX_CHANGED_ENDPOINTS + MAX_CHANGED_TYPES;
 
-/** A repo to offer a task, with the endpoints it calls that the task's commits changed. */
+/** A repo to offer a task, with what it uses that the task's commits changed. */
 interface ImpactOffer {
   repo: string;
-  /** `METHOD path` of every removed or changed endpoint the repo calls, the ones offered before included. */
-  endpoints: string[];
+  /**
+   * The keys of every removed or changed endpoint the repo calls (`METHOD path`) and library type it imports
+   * (`type name`), the ones offered before included.
+   */
+  keys: string[];
   reached: ImpactedRepo;
 }
 
 /** How an offered endpoint is remembered: its method and path, which survive a change of its contract. */
 function impactEndpointKey({ method, path }: { method: string | null; path: string }): string {
-  return cutText(`${method ?? "ANY"} ${path}`, IMPACT_ENDPOINT_KEY_MAX);
+  return cutText(`${method ?? "ANY"} ${path}`, IMPACT_KEY_MAX);
+}
+
+/** How an offered library type is remembered: its fully qualified name, which survives a change of its members. */
+function impactTypeKey({ type }: { type: string }): string {
+  return cutText(`type ${type}`, IMPACT_KEY_MAX);
 }
 
 /**
- * The repos to offer a task: ring 1, sure, calling a removed or changed endpoint that is not in what the repo was
- * offered before (`offered`, by repo). A maybe-reached repo stays in the Impact tab for the user to judge.
+ * The repos to offer a task: one of ring 1, sure, calling a removed or changed endpoint, or one importing a removed or
+ * changed library type, with something that is not in what the repo was offered before (`offered`, by repo). A
+ * maybe-reached repo stays in the Impact tab for the user to judge.
  */
 export function impactOffers(
-  changed: Pick<ChangedEndpoints, "endpoints" | "impact">,
+  changed: Pick<ChangedEndpoints, "endpoints" | "types" | "impact">,
   offered: Readonly<Record<string, readonly string[]>>,
 ): ImpactOffer[] {
   return changed.impact.flatMap((reached) => {
-    if (reached.ring !== 1 || !reached.sure) return [];
-    const endpoints = [...new Set(endpointsCalledBy(changed.endpoints, reached.repo).map(impactEndpointKey))];
+    const calls = reached.ring === 1 && reached.sure ? endpointsCalledBy(changed.endpoints, reached.repo).map(impactEndpointKey) : [];
+    const keys = [...new Set([...calls, ...typesUsedBy(changed.types, reached.repo).map(impactTypeKey)])];
     const known = new Set(offered[reached.repo] ?? []);
-    return endpoints.some((e) => !known.has(e)) ? [{ repo: reached.repo, endpoints, reached }] : [];
+    return keys.some((k) => !known.has(k)) ? [{ repo: reached.repo, keys, reached }] : [];
   });
 }
 
 /**
  * What a repo was offered after one more offer: the newest first, since one comparison has at most
- * `MAX_CHANGED_ENDPOINTS`, so an offer is always kept whole and never made again for the same endpoints.
+ * `IMPACT_KEYS_MAX` keys, so an offer is always kept whole and never made again for the same endpoints and types.
  */
 export function offeredAfter(before: readonly string[], offer: readonly string[]): string[] {
-  return [...new Set([...offer, ...before])].slice(0, MAX_CHANGED_ENDPOINTS);
+  return [...new Set([...offer, ...before])].slice(0, IMPACT_KEYS_MAX);
 }
 
 /** What the impact proposals read and write of the task list (`AgentTasks`). */
@@ -71,9 +85,9 @@ interface ImpactTasks {
   list(): Task[];
   handoff(id: string): { repo: string } | null;
   change(id: string): { parts: { repo: string }[] } | null;
-  /** The endpoints each repo was offered from task `id`'s impact. */
+  /** The endpoints and types each repo was offered from task `id`'s impact, by key. */
   impactProposed(id: string): Readonly<Record<string, readonly string[]>>;
-  markImpactProposed(id: string, repo: string, endpoints: readonly string[]): void;
+  markImpactProposed(id: string, repo: string, keys: readonly string[]): void;
 }
 
 /** What the impact proposals do with the proposals waiting for the user (`TaskProposals`). */
@@ -87,7 +101,7 @@ interface ImpactProposalList {
 export interface ImpactProposalDeps {
   tasks: ImpactTasks;
   proposals: ImpactProposalList;
-  /** The removed and changed endpoints of a task's commits with the repos they reach (`AgentsDeps.taskImpact`). */
+  /** The removed and changed endpoints and library types of a task's commits with the repos they reach (`AgentsDeps.taskImpact`). */
   impact: (task: Task) => Promise<ChangedEndpoints>;
   log: (message: string) => void;
 }
@@ -102,7 +116,8 @@ export class ImpactProposals {
   }
 
   /**
-   * A turn of session `session` of task `task` ended, so its commits may now change endpoints other repos call. Never
+   * A turn of session `session` of task `task` ended, so its commits may now change endpoints other repos call or types
+   * they import. Never
    * fails: a failed check is logged, and the next turn checks again.
    */
   turnOver(task: string, session: string): Promise<void> {
@@ -132,7 +147,7 @@ export class ImpactProposals {
     for (const offer of impactOffers(changed, this.#deps.tasks.impactProposed(id))) {
       // A full list refuses the proposal: the check stops before marking it, so the next turn offers it again.
       if (!worked.has(offer.repo)) this.#deps.proposals.add(impactProposal(task, session, offer, changed));
-      this.#deps.tasks.markImpactProposed(id, offer.repo, offer.endpoints);
+      this.#deps.tasks.markImpactProposed(id, offer.repo, offer.keys);
     }
   }
 

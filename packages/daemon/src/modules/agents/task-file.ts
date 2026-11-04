@@ -1,10 +1,10 @@
 import { isAbsolute } from "node:path";
-import { MAX_CHANGED_ENDPOINTS, noIncludedFiles, RepoId, Task, TaskSummary } from "@trackwall/protocol";
+import { noIncludedFiles, RepoId, Task, TaskSummary } from "@trackwall/protocol";
 import { z } from "zod";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
 import { readStateFile } from "../../infra/state-file.ts";
 import { ConversationId } from "./acp-messages.ts";
-import { IMPACT_ENDPOINT_KEY_MAX } from "./impact-proposals.ts";
+import { IMPACT_KEY_MAX, IMPACT_KEYS_MAX } from "./impact-proposals.ts";
 import { TaskBranch } from "./task-branch.ts";
 import { TaskHandoff } from "./task-handoff.ts";
 import { MAX_MISE_PATH } from "./task-mise-config.ts";
@@ -41,11 +41,11 @@ export const StoredTask = Task.omit({ worktree: true }).extend({
   handoff: TaskHandoff.nullable().default(null),
   change: Task.shape.change.default(null),
   /**
-   * The endpoints each repo was offered a task for from this task's impact (ADR-198), by repo, as `METHOD path`: an
-   * impact proposal, or the work its agent proposed or the user started there first. A repo is offered again only for
-   * an endpoint not in its list, so a rejected proposal does not come back with the next turn.
+   * The endpoints and library types each repo was offered a task for from this task's impact (ADR-198, ADR-201), by
+   * repo, as `METHOD path` and `type name`: an impact proposal, or the work its agent proposed or the user started there
+   * first. A repo is offered again only for one not in its list, so a rejected proposal does not come back with the next turn.
    */
-  impactProposed: z.record(RepoId, z.array(z.string().max(IMPACT_ENDPOINT_KEY_MAX)).max(MAX_CHANGED_ENDPOINTS)).default({}),
+  impactProposed: z.record(RepoId, z.array(z.string().max(IMPACT_KEY_MAX)).max(IMPACT_KEYS_MAX)).default({}),
   /** `null` in a task saved by an older version: `AgentTasks` gives it a free port when it reads the file. */
   port: Task.shape.port.nullable().default(null),
   included: Task.shape.included.default(noIncludedFiles),

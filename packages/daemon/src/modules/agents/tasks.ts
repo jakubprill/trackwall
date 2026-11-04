@@ -539,16 +539,16 @@ export class AgentTasks {
     return commit === null ? null : { task: from.id, repo: from.repo, branch: from.branch, commit };
   }
 
-  /** The endpoints each repo was offered a task for from task `id`'s impact (ADR-198); `{}` once the task is gone. */
+  /** The endpoints and types each repo was offered a task for from task `id`'s impact (ADR-198, ADR-201); `{}` once the task is gone. */
   impactProposed(id: string): Readonly<Record<string, readonly string[]>> {
     return this.#tasks.find((t) => t.id === id)?.impactProposed ?? {};
   }
 
-  /** Adds `endpoints` to what `repo` was offered from task `id`'s impact; nothing once the task is gone. */
-  markImpactProposed(id: string, repo: string, endpoints: readonly string[]): void {
+  /** Adds `keys` to what `repo` was offered from task `id`'s impact; nothing once the task is gone. */
+  markImpactProposed(id: string, repo: string, keys: readonly string[]): void {
     const task = this.#tasks.find((t) => t.id === id);
     if (task === undefined) return;
-    const offered = offeredAfter(task.impactProposed[repo] ?? [], endpoints);
+    const offered = offeredAfter(task.impactProposed[repo] ?? [], keys);
     const marked = { ...task, impactProposed: { ...task.impactProposed, [repo]: offered } };
     this.#save(this.#tasks.map((t) => (t.id === id ? marked : t)));
   }

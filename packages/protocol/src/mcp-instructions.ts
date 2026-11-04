@@ -83,7 +83,7 @@ export const MCP_INSTRUCTIONS = [
   `- Before you change an endpoint, a DTO, a package or a config address, check whom it affects: ${findEndpoint.name} ` +
     `shows which endpoints of other repos call an endpoint and which it calls, ${whoCalls.name} which repos depend on a repo, ` +
     `${subgraphFor.name} its neighbourhood. In a task, after you commit, ${getChangedEndpoints.name} lists the endpoints ` +
-    "your commits changed with the repos that call them. " +
+    "and public library types your commits changed with the repos that call or import them. " +
     "Connections with low or medium confidence are hints: confirm them in the code. Name the affected repos in your result.",
   `- Look for an endpoint with ${findEndpoint.name} first: pass the path or URL as you have it, or words for what it does. ` +
     `When it finds nothing, the repo may build its routes in a way the cards do not read: ${searchCode.name} for a fixed ` +

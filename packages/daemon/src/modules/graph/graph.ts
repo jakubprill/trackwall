@@ -14,6 +14,7 @@ import { withCallers } from "./changed-endpoints.ts";
 import { findEndpoints } from "./find-endpoint.ts";
 import type { GraphCardInput, GraphConfigInput } from "./graph-input.ts";
 import type { HttpIndex } from "./http-index.ts";
+import { type LibrarySearch, packageConsumers, withLibraryUsers, withUsers } from "./library-users.ts";
 import { subgraph } from "./subgraph.ts";
 
 /**
@@ -25,13 +26,14 @@ import { subgraph } from "./subgraph.ts";
 /** What `graph` needs from `cards`; wired in the facade. */
 interface GraphCards {
   all(): Promise<{ cards: GraphCardInput[]; tagRulesProblem: string | null }>;
-  endpointChanges(repo: string, dir: string, base: string): Promise<EndpointChanges>;
+  endpointChanges(repo: string, dir: string, base: string, readTypes: boolean): Promise<EndpointChanges>;
 }
 
-/** What `graph` needs from `workspace`: the `graph` entries from `workspace.yaml`. */
+/** What `graph` needs from `workspace`: the `graph` entries from `workspace.yaml`, and code search for imports (ADR-201). */
 interface GraphWorkspace {
   graphConfig(): GraphConfig;
   configFile(): string;
+  searchCode: LibrarySearch;
 }
 
 export interface GraphDeps {
@@ -61,12 +63,25 @@ export class Graph {
   }
 
   /**
-   * The endpoints the commits in `dir`, a worktree of repo `repo`, change against commit `base`, with the repos that call
-   * them (`get_changed_endpoints`, ADR-145).
+   * The endpoints and the public Java types of its packages that the commits in `dir`, a worktree of repo `repo`, change
+   * against commit `base`, with the repos that call or import them (`get_changed_endpoints`, ADR-145, ADR-201).
    */
   async changedEndpoints(repo: string, dir: string, base: string): Promise<ChangedEndpoints> {
-    const [{ changes, ...read }, { http }] = await Promise.all([this.deps.cards.endpointChanges(repo, dir, base), this.current()]);
-    return { repo, base, ...read, ...withCallers(http, repo, changes) };
+    const { graph, http } = await this.current();
+    // Public types matter only to a repo that depends on a package of this one, so without one they are not read.
+    const consumers = packageConsumers(graph, repo);
+    const { changes, types: typeChanges, ...read } = await this.deps.cards.endpointChanges(repo, dir, base, consumers.length > 0);
+    const { endpoints, truncated, impact } = withCallers(http, repo, changes);
+    const types = await withUsers(typeChanges, consumers, (query, repos) => this.deps.workspace.searchCode(query, repos));
+    return {
+      repo,
+      base,
+      ...read,
+      endpoints,
+      types: types.types,
+      truncated: truncated || types.truncated,
+      impact: withLibraryUsers(impact, repo, types.types),
+    };
   }
 
   private async current(): Promise<{ graph: RepoGraph; http: HttpIndex }> {
