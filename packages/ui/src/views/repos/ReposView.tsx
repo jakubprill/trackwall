@@ -1,5 +1,5 @@
 import { NO_MISE_TAG, type Repo, type RepoList, type RepoTag, type RunningMiseTask, type SessionList } from "@trackwall/protocol";
-import { FolderOpen, Plus, RefreshCw } from "lucide-react";
+import { FolderOpen, Plus, RefreshCw, SquareTerminal, Star } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
@@ -12,22 +12,28 @@ import { branchLabel, listNeedsSettings, repoStatusTone } from "@/lib/repo-statu
 import { REPO_LIST_PACE } from "@/lib/repo-watch";
 import type { SessionSelection } from "@/lib/session-entries";
 import type { SettingsCategory } from "@/lib/settings-categories";
+import { starredFirst } from "@/lib/starred-repos";
 import { statusTextClass } from "@/lib/status-tone";
 import { listSyncBadge, type SyncBadge, syncedByPath } from "@/lib/sync-state";
 import { type BatchRunHandle, useBatchRun } from "@/lib/use-batch-run";
 import { useRepoList } from "@/lib/use-repo-list";
 import type { RepoWatchHandle } from "@/lib/use-repo-watch";
+import { type StarredReposHandle, useStarredRepos } from "@/lib/use-starred-repos";
 import { type SyncRunHandle, useSyncRun } from "@/lib/use-sync-run";
 import { useTagFilter } from "@/lib/use-tag-filter";
 import { cn } from "@/lib/utils";
 import { BatchBar, BatchView } from "./BatchView.tsx";
 import { CloneView } from "./CloneView.tsx";
+import { ProjectsFolderShell } from "./ProjectsFolderShell.tsx";
 import { RepoDetail } from "./RepoDetail.tsx";
 import { SyncBar, SyncView } from "./SyncView.tsx";
 import { TagFilter } from "./TagFilter.tsx";
 
-/** What the right side shows: the selected repo, the search for repos to clone, the sync, or the batch command. */
-type Panel = "repo" | "clone" | "sync" | "batch";
+/**
+ * What the right side shows: the selected repo, the search for repos to clone, the sync, the batch command, or the
+ * shell of the projects folder.
+ */
+type Panel = "repo" | "clone" | "sync" | "batch" | "shell";
 
 /** About how many repos the list shows without scrolling: they get their statuses before the rest (ADR-113). */
 const FIRST_SHOWN = 15;
@@ -71,11 +77,14 @@ export function ReposView({
   const needsSettings = listNeedsSettings(list.errorCode);
   const allRepos = needsSettings ? [] : (list.data?.repos ?? []);
   const filter = useTagFilter(conn, allRepos, repoWatch);
-  const repos = filter.repos;
+  const stars = useStarredRepos(conn);
+  const repos = starredFirst(filter.repos, stars.ids);
   const current = repos.find((r) => r.id === selected) ?? repos[0];
   // The selected repo and the top of the list get their statuses first (ADR-113); only remembered, so every render may.
   useEffect(() => list.showFirst(shownFirst(selected, repos)));
-  const canSync = Boolean(list.data?.projectsDir) && !needsSettings;
+  const actionsDir = folderForActions(list.data, needsSettings);
+  const shown = panelShown(panel, actionsDir);
+  const canSync = actionsDir !== null;
   const syncedAgo = sync.run && relativeTime(sync.run.startedAt, new Date());
 
   return (
@@ -97,8 +106,8 @@ export function ReposView({
             </Button>
           </span>
         </div>
-        {canSync && list.data?.projectsDir && (
-          <FolderActions projectsDir={list.data.projectsDir} sync={sync} batch={batch} onShow={setPanel} />
+        {actionsDir !== null && (
+          <FolderActions projectsDir={actionsDir} sync={sync} batch={batch} shellShown={shown === "shell"} onShow={setPanel} />
         )}
         <TagFilter counts={filter.counts} selected={filter.selected} onToggle={filter.toggle} onClear={filter.clear} />
         <nav aria-label="Repo list" className="flex-1 overflow-y-auto px-2 pb-4">
@@ -119,6 +128,7 @@ export function ReposView({
             <EmptyList list={list.data} onOpenSettings={() => onOpenSettings("workspace")} onClone={() => setPanel("clone")} />
           )}
           <NoTagMatch shown={repos.length} all={allRepos.length} />
+          <StarsError error={stars.error} />
           {repos.map((repo, i) => (
             <RepoListItem
               key={repo.id}
@@ -126,7 +136,8 @@ export function ReposView({
               position={i + 1}
               syncBadge={syncedAgo ? listSyncBadge(synced.get(repo.path), syncedAgo) : undefined}
               tags={filter.tags.get(repo.id) ?? []}
-              active={panel === "repo" && repo.id === current?.id}
+              active={shown === "repo" && repo.id === current?.id}
+              stars={stars}
               onSelect={() => {
                 setSelected(repo.id);
                 setPanel("repo");
@@ -136,11 +147,12 @@ export function ReposView({
         </nav>
       </aside>
       <section className="min-h-0 min-w-0 overflow-y-auto">
-        {panel === "clone" && <CloneView conn={conn} onCloned={list.reload} onOpenSettings={onOpenSettings} />}
-        {panel === "sync" && <SyncView sync={sync} canSync={canSync} />}
+        {shown === "clone" && <CloneView conn={conn} onCloned={list.reload} onOpenSettings={onOpenSettings} />}
+        {shown === "sync" && <SyncView sync={sync} canSync={canSync} />}
         {/* A new tag filter is a new group of repos: the panel starts with all of them ticked. */}
-        {panel === "batch" && <BatchView key={filter.selected.join(",")} batch={batch} repos={repos} />}
-        {panel === "repo" && current && (
+        {shown === "batch" && <BatchView key={filter.selected.join(",")} batch={batch} repos={repos} />}
+        {shown === "shell" && actionsDir !== null && <ProjectsFolderShell conn={conn} projectsDir={actionsDir} />}
+        {shown === "repo" && current && (
           <RepoDetail
             key={current.id}
             conn={conn}
@@ -158,10 +170,26 @@ export function ReposView({
   );
 }
 
+/** The panel to show: the shell of a projects folder that is no longer set gives way to the repo. */
+function panelShown(panel: Panel, actionsDir: string | null): Panel {
+  return panel === "shell" && actionsDir === null ? "repo" : panel;
+}
+
+/** The projects folder the actions on all repos work in (sync, batch, shell): none while it is not set or not readable. */
+function folderForActions(list: RepoList | undefined, needsSettings: boolean): string | null {
+  return needsSettings ? null : (list?.projectsDir ?? null);
+}
+
 /** The tag filter rejected all repos. */
 function NoTagMatch({ shown, all }: { shown: number; all: number }) {
   if (shown > 0 || all === 0) return null;
   return <p className="text-muted-foreground px-2 text-sm">No repo has all the selected tags.</p>;
+}
+
+/** Stars that cannot be read or saved: the list stays in its plain order, and this says why. */
+function StarsError({ error }: { error: string | undefined }) {
+  if (!error) return null;
+  return <p className={cn(statusTextClass("error"), "px-2 pb-2 text-xs")}>Stars: {error}</p>;
 }
 
 /** The repo count in the header; with a tag filter also how many there are in total. */
@@ -169,23 +197,36 @@ function repoCount(shown: number, all: number): string {
   return shown === all ? twoDigits(all) : `${twoDigits(shown)}/${twoDigits(all)}`;
 }
 
-/** Under the list header: the projects folder path and actions on all its repos at once. */
+/** Under the list header: the projects folder path with its shell, and actions on all its repos at once. */
 function FolderActions({
   projectsDir,
   sync,
   batch,
+  shellShown,
   onShow,
 }: {
   projectsDir: string;
   sync: SyncRunHandle;
   batch: BatchRunHandle;
-  onShow: (panel: Extract<Panel, "sync" | "batch">) => void;
+  shellShown: boolean;
+  onShow: (panel: Extract<Panel, "sync" | "batch" | "shell">) => void;
 }) {
   return (
     <>
-      <p className="text-muted-foreground truncate px-4 pb-3 font-mono text-xs" title={projectsDir}>
-        {projectsDir}
-      </p>
+      <div className="flex items-center gap-1 pr-2 pb-2 pl-4">
+        <p className="text-muted-foreground min-w-0 flex-1 truncate font-mono text-xs" title={projectsDir}>
+          {projectsDir}
+        </p>
+        <Button
+          variant={shellShown ? "secondary" : "ghost"}
+          size="sm"
+          onClick={() => onShow("shell")}
+          aria-pressed={shellShown}
+          title="A shell in the projects folder, with all its repos"
+        >
+          <SquareTerminal /> Shell
+        </Button>
+      </div>
       <SyncBar sync={sync} onShow={() => onShow("sync")} />
       <BatchBar batch={batch} onShow={() => onShow("batch")} />
     </>
@@ -231,7 +272,8 @@ function ChangeProjectsDir({ onClick }: { onClick: () => void }) {
 
 /**
  * A list row in HUD style (ADR-16): the item number, name, branch, and the state dot and text; the active one has a
- * glowing stroke on the left. The number is only the position in the list, not the repo identifier. Under the state
+ * glowing stroke on the left. The number is only the position in the list, not the repo identifier. The star beside the
+ * row moves the repo to the top (ADR-192): always shown on a starred repo, on the others only on hover. Under the state
  * stands the result of the last sync (`listSyncBadge`)
  * and the repo's tags (reasons in the tooltip); the `no-mise` tag is warning text, because such a repo has nothing to run (ADR-34).
  */
@@ -241,6 +283,7 @@ function RepoListItem({
   syncBadge: badge,
   tags,
   active,
+  stars,
   onSelect,
 }: {
   repo: Repo;
@@ -248,6 +291,7 @@ function RepoListItem({
   syncBadge: SyncBadge | undefined;
   tags: RepoTag[];
   active: boolean;
+  stars: StarredReposHandle;
   onSelect: () => void;
 }) {
   const { status } = repo;
@@ -255,34 +299,60 @@ function RepoListItem({
   const noMise = tags.some((t) => t.name === NO_MISE_TAG);
   const otherTags = tags.filter((t) => t.name !== NO_MISE_TAG);
   return (
+    <div className="group relative">
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-current={active || undefined}
+        className={cn(
+          "flex w-full items-start gap-3 rounded-md border border-transparent py-2 pr-8 pl-2 text-left transition-colors hover:bg-accent",
+          active && "bg-accent border-primary/25 hud-active-edge",
+        )}
+      >
+        <span className="text-muted-foreground text-2xs w-5 shrink-0 pt-0.5 text-right font-mono">{twoDigits(position)}</span>
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="truncate text-sm font-medium">{repo.id}</span>
+          <span className="text-muted-foreground flex min-w-0 items-center gap-2 text-xs">
+            {status.kind === "ok" && <span className="min-w-0 truncate font-mono">{branchLabel(status)}</span>}
+            <StatusLabel tone={state.tone} label={state.label} />
+          </span>
+          {badge && (
+            <span className="text-muted-foreground text-xs" title={badge.message}>
+              <StatusLabel tone={badge.tone} label={badge.label} />
+            </span>
+          )}
+          {tags.length > 0 && (
+            <span
+              className="text-muted-foreground text-2xs truncate font-mono"
+              title={tags.map((t) => `#${t.name}: ${t.reason}`).join("\n")}
+            >
+              {noMise && <span className={cn(statusTextClass("warning"), "mr-2")}>no mise tasks</span>}
+              {otherTags.map((t) => `#${t.name}`).join(" ")}
+            </span>
+          )}
+        </span>
+      </button>
+      <StarButton repo={repo.id} stars={stars} />
+    </div>
+  );
+}
+
+function StarButton({ repo, stars }: { repo: string; stars: StarredReposHandle }) {
+  const starred = stars.ids.includes(repo);
+  return (
     <button
       type="button"
-      onClick={onSelect}
-      aria-current={active || undefined}
       className={cn(
-        "flex w-full items-start gap-3 rounded-md border border-transparent px-2 py-2 text-left transition-colors hover:bg-accent",
-        active && "bg-accent border-primary/25 hud-active-edge",
+        "absolute top-2 right-2 rounded-sm p-0.5",
+        starred ? "text-primary" : "text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
       )}
+      aria-label={starred ? `Unstar ${repo}` : `Star ${repo}`}
+      aria-pressed={starred}
+      title={starred ? "Unstar: back to its place in the list" : "Star: keep it at the top of the list"}
+      disabled={stars.pending}
+      onClick={() => stars.toggle(repo, !starred)}
     >
-      <span className="text-muted-foreground text-2xs w-5 shrink-0 pt-0.5 text-right font-mono">{twoDigits(position)}</span>
-      <span className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="truncate text-sm font-medium">{repo.id}</span>
-        <span className="text-muted-foreground flex min-w-0 items-center gap-2 text-xs">
-          {status.kind === "ok" && <span className="min-w-0 truncate font-mono">{branchLabel(status)}</span>}
-          <StatusLabel tone={state.tone} label={state.label} />
-        </span>
-        {badge && (
-          <span className="text-muted-foreground text-xs" title={badge.message}>
-            <StatusLabel tone={badge.tone} label={badge.label} />
-          </span>
-        )}
-        {tags.length > 0 && (
-          <span className="text-muted-foreground text-2xs truncate font-mono" title={tags.map((t) => `#${t.name}: ${t.reason}`).join("\n")}>
-            {noMise && <span className={cn(statusTextClass("warning"), "mr-2")}>no mise tasks</span>}
-            {otherTags.map((t) => `#${t.name}`).join(" ")}
-          </span>
-        )}
-      </span>
+      <Star className={cn("size-3.5", starred && "fill-current")} />
     </button>
   );
 }

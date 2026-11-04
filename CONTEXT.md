@@ -138,6 +138,10 @@ A clone of one remote repo into the projects folder, in the background: `running
 **Repo** (`Repo`, `RepoId`):
 One repository of the workspace, identified by a slug from the name of its directory.
 
+**Starred repo** (`starredRepos` in `workspace.yaml`, `StarredRepos`):
+A repo the user marked with a star in "Repos", which the list then shows at the top, ahead of the alphabetical rest (ADR-192). Kept by repo id; only the user stars or unstars.
+_Avoid_: favourite, pinned repo
+
 **Remote address** (`Repo.remote`):
 The address of the main remote (`origin` or the only remote in git, `mainRemote`) as `host/path`, for example `gitlab.example.com/shop/api`, without the protocol and user. It identifies the repo independently of the directory name (ADR-21).
 _Avoid_: repo URL (a URL has a protocol and may carry a token), remote without qualification (that is a name in git, for example `origin`)
@@ -586,7 +590,7 @@ xterm.js in the Sessions view and the supervisor panel, connected over the WebSo
 _Avoid_: terminal window (a window is the app window)
 
 **Folder terminal** (`FolderTerminal`, `FolderTerminals`, `terminals` module; the "Shell" tab in the UI):
-The user's own shell in a repo root or a task's worktree (its **place**, `TerminalPlace`), which the daemon runs in a PTY and the UI shows like a session terminal (ADR-185). One per place; it keeps running when its tab closes, and ends when the user closes it, ends the task, or the daemon stops. In the UI it is the "Shell" tab, because a task's "Terminal" tab is its session's.
+The user's own shell in the projects folder, a repo root or a task's worktree (its **place**, `TerminalPlace`; the projects folder is `PROJECTS_FOLDER_PLACE`, `repo: null`), which the daemon runs in a PTY and the UI shows like a session terminal (ADR-185). One per place; it keeps running when its tab closes, and ends when the user closes it, ends the task, or the daemon stops. In the UI it is the "Shell" tab, or "Shell" next to the projects folder in "Repos", because a task's "Terminal" tab is its session's.
 _Avoid_: console, terminal on its own in the UI (a task's "Terminal" tab is the session terminal)
 
 **Folder files** (`FolderFiles`, `folderFiles` in the facade, `terminals/files`, `terminals/download`; the "Files on disk" panel of the Shell tab in the UI):

@@ -8,6 +8,7 @@ import {
   type RepoHost,
   type RepoTagRules,
   type SandboxSettings,
+  type StarredRepos,
   type SupervisorSettings,
   type ToolPermissionRules,
   trackwallDirLabel,
@@ -26,6 +27,7 @@ export interface WorkspaceKeyValues {
   worktreesDir: string | null;
   gitProgram: string | null;
   repoHosts: RepoHost[];
+  starredRepos: StarredRepos;
   toolPermissions: ToolPermissionRules;
   agentSecrets: AgentSecrets;
   sessionProfile: string | null;
@@ -47,6 +49,7 @@ export const workspaceKeyValue: { [K in WorkspaceKey]: (value: WorkspaceKeyValue
   worktreesDir: (dir) => dir ?? `${trackwallDirLabel("worktrees")} in the projects folder`,
   gitProgram: (path) => path ?? "git from PATH",
   repoHosts: (hosts) => (hosts.length === 0 ? "none" : hosts.map((h) => h.host).join(", ")),
+  starredRepos: (ids) => (ids.length === 0 ? "none" : ids.join(", ")),
   toolPermissions: (rules) => (rules.length === 0 ? "none" : countLabel(rules.length, { one: "rule", other: "rules" })),
   agentSecrets: (names) => (names.length === 0 ? "none" : names.join(", ")),
   sessionProfile: (profile) => profile ?? "none",

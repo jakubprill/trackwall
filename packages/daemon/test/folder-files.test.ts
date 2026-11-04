@@ -66,6 +66,13 @@ describe("the files of a place", () => {
     expect((await download({ repo: "shop", task: null, path: "build/report10.txt" })).body).toBe("");
   });
 
+  test("the projects folder lists its repos, and a file in a repo downloads through it", async () => {
+    const root = await daemon.post(terminalsApi.files, { repo: null, task: null, path: "" });
+    expect(root.entries).toContainEqual({ name: "shop", kind: "folder", size: null });
+    expect((await download({ repo: null, task: null, path: "shop/build/libs/shop-1.0.jar" })).body).toBe("PK jar bytes");
+    expect(await errorOf(terminalsApi.files.path, { repo: null, task: null, path: ".." })).toBe("bad_request");
+  });
+
   test("a task's worktree has its own files", async () => {
     const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "change nothing", approvals: "ask" });
     writeFileSync(join(task.worktree, "only-in-task.log"), "task log\n");

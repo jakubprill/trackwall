@@ -92,7 +92,7 @@ export function docsUrl(page: DocsPage): string {
   return `${TRACKWALL_DOCS_URL}features/${page}`;
 }
 
-/** Where a key is changed: its Settings category, or by hand in the file. */
+/** Where a key is changed: its Settings category, the Repos view, or by hand in the file. */
 export function workspaceKeyChangedIn(key: WorkspaceKey): string {
   switch (WORKSPACE_KEYS[key].settings) {
     case "workspace":
@@ -101,6 +101,8 @@ export function workspaceKeyChangedIn(key: WorkspaceKey): string {
       return "Settings › Repo hosts";
     case "agents":
       return "Settings › Agents";
+    case "repos":
+      return "the star in Repos";
     case null:
       return "by hand";
   }

@@ -315,6 +315,7 @@ export const WorkspaceKey = z.enum([
   "worktreesDir",
   "gitProgram",
   "repoHosts",
+  "starredRepos",
   "toolPermissions",
   "sandbox",
   "agentSecrets",
@@ -332,8 +333,8 @@ export type WorkspaceKey = z.infer<typeof WorkspaceKey>;
 export interface WorkspaceKeyInfo {
   purpose: string;
   docs: DocsPage;
-  /** The Settings category that changes the key; `null` for a key only written by hand. */
-  settings: "workspace" | "repo-hosts" | "agents" | null;
+  /** Where the app changes the key: a Settings category, or the Repos view (`repos`); `null` for a key only written by hand. */
+  settings: "workspace" | "repo-hosts" | "agents" | "repos" | null;
 }
 
 export const WORKSPACE_KEYS: Record<WorkspaceKey, WorkspaceKeyInfo> = {
@@ -341,6 +342,7 @@ export const WORKSPACE_KEYS: Record<WorkspaceKey, WorkspaceKeyInfo> = {
   worktreesDir: { purpose: "Where agent tasks get their own copy of a repo.", docs: "tasks", settings: "workspace" },
   gitProgram: { purpose: "Which git Trackwall runs to read your repos.", docs: "repos", settings: "workspace" },
   repoHosts: { purpose: "Where the Repos view searches and clones from.", docs: "repos", settings: "repo-hosts" },
+  starredRepos: { purpose: "The repos you starred, listed first in the Repos view.", docs: "repos", settings: "repos" },
   toolPermissions: { purpose: "Which tools sessions may use without asking you.", docs: "approvals", settings: null },
   sandbox: { purpose: "Which tasks run their commands in Copilot CLI's sandbox.", docs: "approvals", settings: null },
   agentSecrets: { purpose: "The secrets from mise that the tools of sessions may read.", docs: "mise-environment", settings: null },
