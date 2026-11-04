@@ -145,7 +145,7 @@ export interface SessionLauncherDeps {
   /** The workspace knowledge the user approved for a session in `repo` (`null`: in the projects folder), ADR-170. */
   knowledge: (repo: string | null) => Promise<SessionKnowledge>;
   /**
-   * The format a session on `model` must use with the custom provider of its environment (ADR-197), which the start
+   * The format a session on `model` must use with the custom provider of its environment (ADR-200), which the start
    * sets as `COPILOT_PROVIDER_WIRE_API`; `null` leaves the environment as it is.
    */
   wireApi: (model: string, env: NodeJS.ProcessEnv) => Promise<WireApi | null>;
@@ -321,7 +321,7 @@ export class SessionLauncher {
   }
 
   /**
-   * The format of a Copilot CLI's model with a custom provider (ADR-197), set in `env` in place of the one it names: the
+   * The format of a Copilot CLI's model with a custom provider (ADR-200), set in `env` in place of the one it names: the
    * model is the start's `--model` (the configured command's and mise's included), else the environment's
    * `COPILOT_MODEL`. A probe that fails keeps the environment's.
    * A session's start and a task's review (ADR-182) call it; `who` names it in the log.

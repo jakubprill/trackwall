@@ -15,7 +15,7 @@ function provider(statuses: { completions: number | "failed"; responses: number 
   return { sent, call };
 }
 
-describe("which format a model answers in (ADR-197)", () => {
+describe("which format a model answers in (ADR-200)", () => {
   test("one smallest request in each format, with the profile's headers, tells the one that answered", async () => {
     const { sent, call } = provider({ completions: 400, responses: 200 });
 

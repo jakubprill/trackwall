@@ -73,7 +73,7 @@ describe("what Copilot CLI sends a custom provider, which the provider's model l
     expect(model.takeLeftovers()).toEqual({ problems: [], unusedReplies: 0 });
   });
 
-  test("the format of COPILOT_PROVIDER_WIRE_API, which a session's start sets for its model (ADR-197), chooses the path Copilot CLI posts to", async () => {
+  test("the format of COPILOT_PROVIDER_WIRE_API, which a session's start sets for its model (ADR-200), chooses the path Copilot CLI posts to", async () => {
     // The scripted model speaks only Chat Completions, so a request in the Responses API is refused (Copilot CLI tries
     // it again after the 500) and kept as a problem, and no Chat Completions request comes.
     const before = model.requests().length;

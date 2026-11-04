@@ -55,7 +55,7 @@ function env(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   return { COPILOT_PROVIDER_BASE_URL: base, COPILOT_PROVIDER_API_KEY: "k1", ...extra };
 }
 
-describe("the format a session's model is started in (ADR-197)", () => {
+describe("the format a session's model is started in (ADR-200)", () => {
   test("sessions that start together on one model ask the provider once", async () => {
     const { models } = providerModels();
 

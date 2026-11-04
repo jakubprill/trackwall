@@ -84,7 +84,7 @@ async function wireApiOfSession(model: string | null): Promise<string> {
   return shown;
 }
 
-describe("the format of a session's model with a custom provider (ADR-197; real PTY, fake Copilot CLI)", () => {
+describe("the format of a session's model with a custom provider (ADR-200; real PTY, fake Copilot CLI)", () => {
   test("a model that answers only in the Responses API gets it, though the environment names Chat Completions, and is asked once", async () => {
     expect(await wireApiOfSession("gpt-6.1-sol")).toBe("responses");
     expect(await wireApiOfSession("gpt-6.1-sol")).toBe("responses");

@@ -660,7 +660,7 @@ The models the model provider of the session profile offers, from its `GET /mode
 _Avoid_: model catalog (Copilot CLI's own list of GitHub's models), available models
 
 **Wire API** (`WireApi`, `ProviderModel.wireApi`, Copilot CLI's `COPILOT_PROVIDER_WIRE_API`):
-The format Copilot CLI speaks to a custom model provider in, `completions` (Chat Completions) or `responses` (the Responses API). A model of a gateway may answer in only one of them; a session's start sets the one its model answers in, learned by a probe on the model's first use (ADR-197).
+The format Copilot CLI speaks to a custom model provider in, `completions` (Chat Completions) or `responses` (the Responses API). A model of a gateway may answer in only one of them; a session's start sets the one its model answers in, learned by a probe on the model's first use (ADR-200).
 _Avoid_: protocol, API type, format (in names; "format" is fine in prose)
 
 **Secret from mise** (`secretNames`, `SessionEnvironment.secrets`):

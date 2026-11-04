@@ -116,7 +116,7 @@ function answer(res: ServerResponse, reply: ModelReply, callId: string): void {
 const ProbeRequest = z.object({ stream: z.literal(false) });
 
 /**
- * The daemon's probe of a model's format (ADR-197), answered as a provider of Chat Completions only answers it: one
+ * The daemon's probe of a model's format (ADR-200), answered as a provider of Chat Completions only answers it: one
  * non-streaming chat completion, and a 404 on the Responses API. Copilot CLI always streams, so a request without
  * streaming is the probe; it takes no queued reply, so a test's script stays the agent's turns alone.
  */

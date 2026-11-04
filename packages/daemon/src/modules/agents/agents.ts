@@ -221,7 +221,7 @@ export interface AgentsDeps {
   boardHas: (item: string) => Promise<boolean>;
   /** The workspace knowledge the user approved for a session in `repo` (`null`: in the projects folder), ADR-170. */
   knowledge: (repo: string | null) => Promise<SessionKnowledge>;
-  /** The format a session on a model must use with its custom provider (ADR-197), from `provider-models`. */
+  /** The format a session on a model must use with its custom provider (ADR-200), from `provider-models`. */
   wireApi: SessionLauncherDeps["wireApi"];
   /**
    * What each task's work came to, its verification verdict and its merge request with the pipeline (ADR-154), which
@@ -355,7 +355,7 @@ export class Agents {
       },
       launch: async ({ repo, task }) => {
         const { copilot, mise } = await this.#launcher.inputs({ repo, supervisor: false, task });
-        // The reviewer runs on the model of its command or environment, in the format that model answers in (ADR-197).
+        // The reviewer runs on the model of its command or environment, in the format that model answers in (ADR-200).
         const env = { ...mise.env };
         await this.#launcher.setWireApi(`review of task ${task}`, env, modelOfArgs([...copilot.args, ...mise.args]));
         return { program: copilot.program, prefix: copilot.args, env, args: mise.args, secrets: mise.secretValues };
