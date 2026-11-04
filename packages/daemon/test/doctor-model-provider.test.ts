@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { type AddressInfo, createServer as createNetServer, connect as netConnect, type Socket } from "node:net";
+import { proxyFor, shownProxy } from "../src/infra/proxy-env.ts";
 import {
   modelProviderOutcome,
   type ProfileEnvironment,
   profileEnvironment,
   providerTarget,
 } from "../src/modules/doctor/model-provider-check.ts";
-import { proxyFor, shownProxy } from "../src/modules/doctor/proxy-env.ts";
 import { probeConnection, type TlsProbe, type TlsProbeResult } from "../src/modules/doctor/tls-probe.ts";
 
 /** A TCP server that counts the bytes anyone sends it, and whether its connection was closed. */

@@ -651,6 +651,10 @@ _Avoid_: env file, profile (a session profile is the mise environment below)
 The name of a mise environment (`MISE_ENV`) that only sessions are read with, e.g. `byok`, so mise adds `mise.byok.toml` to every config of the session's place, for another model provider of Copilot CLI (ADR-136). Runs and services never get it; a running session shows the change. Set in Settings or by hand, never by an MCP tool.
 _Avoid_: provider setting, MISE_ENV (that is mise's variable)
 
+**Provider models** (`ProviderModelList`, `ProviderModel`, module `provider-models`, action `provider-models/list`):
+The models the model provider of the session profile offers, from its `GET /models`, which the Model fields suggest as the user types; any other id can still be typed (ADR-194). The daemon asks the provider with the profile's key, which never leaves it. Without a session profile there are none.
+_Avoid_: model catalog (Copilot CLI's own list of GitHub's models), available models
+
 **Secret from mise** (`secretNames`, `SessionEnvironment.secrets`):
 A variable of the session environment that mise redacts (`redact = true`, an age-encrypted value) or whose name looks like a secret; its value is masked, and the agent's tools do not get it unless it is in the agent secrets (ADR-93).
 

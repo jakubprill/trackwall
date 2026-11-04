@@ -1,0 +1,34 @@
+import { z } from "zod";
+import { apiEndpoints } from "./api.ts";
+import { TaskModel } from "./task-model.ts";
+
+/**
+ * Contract of the `provider-models` module (ADR-194): the models the model provider of the session profile (ADR-136)
+ * offers, which the Model fields suggest. The daemon asks the provider with the profile's key, which never leaves it.
+ * Every action is `POST /api/provider-models/<action>`.
+ */
+
+/** One model the provider offers, under the id Copilot CLI takes as `--model`. */
+export const ProviderModel = z.object({
+  id: TaskModel,
+  /** The context window in tokens, when the provider says it; `null` when it does not. */
+  contextWindow: z.number().int().positive().nullable(),
+});
+export type ProviderModel = z.infer<typeof ProviderModel>;
+
+export const ProviderModelList = z.object({
+  /** The session profile asked about; `null` without one, when sessions use GitHub's models and nothing is listed. */
+  profile: z.string().nullable(),
+  /** The chat models, sorted by id; empty without a provider or when it could not be asked. */
+  models: z.array(ProviderModel),
+  /** Why nothing could be listed, in one sentence without the provider's address or key; `null` when nothing went wrong. */
+  problem: z.string().nullable(),
+});
+export type ProviderModelList = z.infer<typeof ProviderModelList>;
+
+const endpoint = apiEndpoints("provider-models");
+
+export const providerModelsApi = {
+  /** The provider's models, asked anew after a few minutes; a failure is never kept, so asking again tries again. */
+  list: endpoint("list", z.object({}).strict(), ProviderModelList),
+};

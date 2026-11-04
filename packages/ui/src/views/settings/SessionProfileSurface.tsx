@@ -1,10 +1,11 @@
-import { countLabel, type SessionList, workspaceApi } from "@trackwall/protocol";
+import { countLabel, providerModelsApi, type SessionList, workspaceApi } from "@trackwall/protocol";
 import { useCallback } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import { providerModelsNote } from "@/lib/provider-models";
 import { sessionsOnOtherProfile } from "@/lib/session-profile";
 import { useRemote } from "@/lib/use-remote";
 import { PathForm } from "./PathForm.tsx";
@@ -12,18 +13,23 @@ import { PathForm } from "./PathForm.tsx";
 /**
  * The session profile (ADR-136): the mise environment only Copilot CLI sessions start with, e.g. `byok` for another model
  * provider in `mise.byok.toml`. It applies to the next session start; a running session shows the change with a restart,
- * and this section says how many running sessions keep another profile (ADR-178).
+ * and this section says how many running sessions keep another profile (ADR-178), and whether the provider's models came
+ * for the Model fields to suggest (ADR-194).
  */
 export function SessionProfileSurface({ conn, sessions }: { conn: Connection; sessions: SessionList | undefined }) {
   const load = useCallback(() => post(conn, workspaceApi.settings, {}), [conn]);
   const settings = useRemote(load);
+  const loadModels = useCallback(() => post(conn, providerModelsApi.list, {}), [conn]);
+  const models = useRemote(loadModels);
 
   async function save(profile: string | null) {
     await post(conn, workspaceApi.setSessionProfile, { profile });
     settings.reload();
+    models.reload();
   }
 
   const data = settings.data;
+  const modelsNote = models.data ? providerModelsNote(models.data) : null;
   const outdated = sessions ? sessionsOnOtherProfile(sessions).length : 0;
   return (
     <Surface label="Session profile">
@@ -50,6 +56,9 @@ export function SessionProfileSurface({ conn, sessions }: { conn: Connection; se
           />
         )}
         {data?.sessionProfileProblem && <p className="text-destructive text-xs break-words">{data.sessionProfileProblem}</p>}
+        {modelsNote && (
+          <p className={modelsNote.problem ? "text-warning text-xs break-words" : "text-muted-foreground text-xs"}>{modelsNote.text}</p>
+        )}
         {outdated > 0 && (
           <p className="text-warning text-xs">
             {countLabel(outdated, {

@@ -40,6 +40,7 @@ export * from "./merge-requests.ts";
 export * from "./mise.ts";
 export * from "./plural.ts";
 export * from "./procs.ts";
+export * from "./provider-models.ts";
 export * from "./release-files.ts";
 export * from "./repo-hosts.ts";
 export * from "./review.ts";

@@ -1,4 +1,4 @@
-import { envKey } from "../../infra/env-key.ts";
+import { envKey } from "./env-key.ts";
 
 /**
  * The proxy a Node.js program such as Copilot CLI uses for an address, read from the environment the way Node's

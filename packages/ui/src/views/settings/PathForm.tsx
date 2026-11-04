@@ -1,6 +1,8 @@
 import { isTauri } from "@tauri-apps/api/core";
+import type { ProviderModel } from "@trackwall/protocol";
 import { FolderOpen } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useId, useState } from "react";
+import { ProviderModelOptions } from "@/components/ProviderModelOptions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { errorMessage } from "@/lib/api";
@@ -22,6 +24,7 @@ export function PathForm({
   reset,
   resetLabel = "Use default",
   folder = true,
+  suggestions = [],
 }: {
   label: string;
   placeholder: string;
@@ -36,8 +39,11 @@ export function PathForm({
   resetLabel?: string;
   /** A folder gets the system folder picker, unless the daemon has no desktop here (ADR-130); a program is typed or pasted. */
   folder?: boolean;
+  /** Model ids the field offers as the user types (ADR-194); any other value can still be typed. */
+  suggestions?: readonly ProviderModel[];
 }) {
   const desktop = useDesktop();
+  const listId = useId();
   const [path, setPath] = useState(initialPath);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -82,7 +88,9 @@ export function PathForm({
           placeholder={placeholder}
           aria-label={label}
           className="font-mono text-xs"
+          list={suggestions.length > 0 ? listId : undefined}
         />
+        {suggestions.length > 0 && <ProviderModelOptions id={listId} models={suggestions} />}
         {folder && isTauri() && desktop && (
           <Button type="button" variant="outline" size="sm" onClick={() => void browse()} disabled={busy}>
             <FolderOpen /> Choose…
