@@ -142,7 +142,10 @@ export function typeChanges(before: readonly FileApi[], after: readonly FileApi[
 }
 
 function changedMembers(was: ReadonlyMap<string, string>, is: ReadonlyMap<string, string>): string[] {
-  const gone = [...was].filter(([key, signature]) => is.get(key) !== signature).map(([key]) => key);
+  // A member that only stopped being abstract (an annotation element or interface method given a default) breaks nobody.
+  const gone = [...was]
+    .filter(([key, signature]) => is.get(key) !== signature && `abstract ${is.get(key)}` !== signature)
+    .map(([key]) => key);
   const newlyAbstract = [...is].filter(([key, signature]) => !was.has(key) && signature.startsWith("abstract ")).map(([key]) => key);
   return [...gone, ...newlyAbstract];
 }

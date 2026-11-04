@@ -105,7 +105,7 @@ describe("the users of changed library types (ADR-205)", () => {
       failed: [{ repo: "shop", message: "fatal: bad object HEAD" }],
       skipped: [],
     });
-    expect((await withUsers([money], ["shop"], failing)).truncated).toBe(true);
+    expect(await withUsers([money], ["shop"], failing)).toMatchObject({ truncated: true, failed: true });
   });
 
   test("a name that is not Java identifiers and dots stays out of the pattern, a $ in one is escaped, and the default package is skipped", () => {

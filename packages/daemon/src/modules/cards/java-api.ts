@@ -148,6 +148,15 @@ function modifiers(node: Node, abstract = false): string {
   return [...used, ...(abstract ? ["abstract"] : [])].map((w) => `${w} `).join("");
 }
 
+/** Whether a type modifier changes what users may do, rather than restate what the kind of type implies anyway. */
+function limitsUsers(word: string, kind: string, outer: Outer): boolean {
+  if (word === "static") return outer === "class" && kind === "class_declaration";
+  // An interface is abstract, and a record or an enum final, whether the code says so or not.
+  if (word === "abstract") return !INTERFACE_LIKE.has(kind);
+  if (word === "final") return kind !== "record_declaration" && kind !== "enum_declaration";
+  return true;
+}
+
 function modifierWords(node: Node): Set<string> {
   const mods = node.namedChildren.find((c) => c.type === "modifiers");
   return new Set((mods?.children ?? []).map((c) => c.type));
@@ -160,9 +169,7 @@ function modifierWords(node: Node): Set<string> {
  */
 function header(node: Node, outer: Outer): string {
   const words = modifierWords(node);
-  const limits = ["static", "abstract", "final", "sealed", "non-sealed"].filter(
-    (w) => words.has(w) && (w !== "static" || (outer === "class" && node.type === "class_declaration")),
-  );
+  const limits = ["static", "abstract", "final", "sealed", "non-sealed"].filter((w) => words.has(w) && limitsUsers(w, node.type, outer));
   const head = node.children.filter((c) => c.type !== "modifiers" && !c.type.endsWith("_body")).map(typeText);
   return [...limits, ...head].join(" ");
 }

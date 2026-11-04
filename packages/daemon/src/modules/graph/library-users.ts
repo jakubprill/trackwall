@@ -38,15 +38,17 @@ export function packageConsumers(graph: RepoGraph, repo: string): string[] {
 
 /**
  * The first `MAX_CHANGED_TYPES` changes with the consumers that import each type, and whether something was left out:
- * more changes, more import lines than `IMPORT_LINES_MAX`, or a consumer git could not search.
+ * more changes, more import lines than `IMPORT_LINES_MAX`, or a consumer git could not search (`failed` too, since
+ * that may pass).
  */
 export async function withUsers(
   changes: readonly TypeChange[],
   consumers: readonly string[],
   search: LibrarySearch,
-): Promise<{ types: ChangedType[]; truncated: boolean }> {
+): Promise<{ types: ChangedType[]; truncated: boolean; failed: boolean }> {
   const shown = changes.slice(0, MAX_CHANGED_TYPES);
   let cut = changes.length > shown.length;
+  let failed = false;
   const imports: Import[] = [];
   if (consumers.length > 0)
     for (const pattern of importPatterns(shown)) {
@@ -54,14 +56,15 @@ export async function withUsers(
         { pattern, regex: true, ignoreCase: false, paths: ["*.java"], context: 0, limit: IMPORT_LINES_MAX, output: "lines" },
         consumers,
       );
-      cut ||= found.truncated || found.failed.length > 0;
+      failed ||= found.failed.length > 0;
+      cut ||= found.truncated || failed;
       for (const m of found.matches) {
         const target = IMPORT_LINE.exec(m.text)?.[1];
         if (target !== undefined) imports.push({ repo: m.repo, path: m.path, line: m.line, target });
       }
     }
   const types = shown.map((type) => ({ ...type, users: usersOf(type, imports) }));
-  return { types, truncated: cut };
+  return { types, truncated: cut, failed };
 }
 
 interface Import {

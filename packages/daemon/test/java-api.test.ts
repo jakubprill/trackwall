@@ -188,6 +188,18 @@ describe("which public types a change breaks (ADR-205)", () => {
     expect(changes(before.replace("public static class Point", "public class Point"))).toEqual([["p.Shape.Point", true]]);
   });
 
+  test("abstract written on an interface or final on a record restates its kind, and a default given to an element breaks nobody", () => {
+    const before =
+      "package p;\npublic interface Pricing { int scale(); }\npublic record Price(long cents) {}\npublic @interface Tag { String value(); }";
+    const after = before
+      .replace("public interface", "public abstract interface")
+      .replace("public record", "public final record")
+      .replace("String value();", 'String value() default "";')
+      .replace("int scale();", "default int scale() { return 2; }");
+
+    expect(typeChanges([api("P.java", before)], [api("P.java", after)])).toEqual([]);
+  });
+
   test("a protected nested type counts, and an interface constant is the same with or without static final written", () => {
     const before = "package p;\npublic class Base { protected static class Hook {} public interface Limits { int MAX = 3; } }";
     const after = before.replace("protected static class Hook {}", "").replace("int MAX = 3;", "static final int MAX = 3;");

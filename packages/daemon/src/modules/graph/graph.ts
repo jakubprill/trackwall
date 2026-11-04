@@ -78,9 +78,12 @@ export class Graph {
    * against commit `base`, with the repos that call or import them (`get_changed_endpoints`, ADR-145, ADR-205).
    */
   async changedEndpoints(repo: string, dir: string, base: string): Promise<ChangedEndpoints> {
-    const [{ changes, ...read }, { graph, http }] = await Promise.all([this.deps.cards.endpointChanges(repo, dir, base), this.current()]);
+    const [{ changes, ...read }, { key, graph, http }] = await Promise.all([
+      this.deps.cards.endpointChanges(repo, dir, base),
+      this.current(),
+    ]);
     const { endpoints, truncated, impact } = withCallers(http, repo, changes);
-    const library = await this.libraryUsers(repo, dir, base, read.head, graph);
+    const library = await this.libraryUsers(repo, dir, { base, head: read.head }, { key, graph });
     return {
       repo,
       base,
@@ -101,20 +104,21 @@ export class Graph {
   private async libraryUsers(
     repo: string,
     dir: string,
-    base: string,
-    head: string,
-    graph: RepoGraph,
+    { base, head }: { base: string; head: string },
+    { key: graphVersion, graph }: { key: string; graph: RepoGraph },
   ): Promise<{ types: ChangedType[]; truncated: boolean; problems: ChangeCardProblem[] }> {
     const consumers = packageConsumers(graph, repo);
     if (consumers.length === 0) return { types: [], truncated: false, problems: [] };
     const { types: changes, problems } = await this.deps.cards.libraryTypeChanges(repo, dir, base, head);
-    const key = JSON.stringify([this.last?.key ?? null, consumers, changes]);
-    if (this.lastUsers?.key !== key)
-      this.lastUsers = { key, ...(await withUsers(changes, consumers, (query, repos) => this.deps.workspace.searchCode(query, repos))) };
-    return { types: this.lastUsers.types, truncated: this.lastUsers.truncated, problems };
+    const key = JSON.stringify([graphVersion, consumers, changes]);
+    if (this.lastUsers?.key === key) return { types: this.lastUsers.types, truncated: this.lastUsers.truncated, problems };
+    const found = await withUsers(changes, consumers, (query, repos) => this.deps.workspace.searchCode(query, repos));
+    // A search git failed in a repo may pass next time, so it is not kept.
+    if (!found.failed) this.lastUsers = { key, types: found.types, truncated: found.truncated };
+    return { types: found.types, truncated: found.truncated, problems };
   }
 
-  private async current(): Promise<{ graph: RepoGraph; http: HttpIndex }> {
+  private async current(): Promise<{ key: string; graph: RepoGraph; http: HttpIndex }> {
     const { cards, input } = await this.inputs();
     const key = graphKey(cards, input);
     if (this.last?.key !== key) this.last = { key, ...buildGraphWithIndex(cards, input) };
