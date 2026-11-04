@@ -5,7 +5,7 @@ import { envKey } from "./env-key.ts";
 /**
  * Copilot CLI's home: `COPILOT_HOME` (in any case on Windows) when set and not empty, otherwise `~/.copilot`. The
  * doctor reads its `config.json` (§4.15), and a session's usage and the weekly usage report come from its
- * `session-state` folder (ADR-190, ADR-196).
+ * `session-state` folder (ADR-190, ADR-199).
  */
 export function copilotHome(env: NodeJS.ProcessEnv): string {
   const home = env[envKey(env, "COPILOT_HOME")];

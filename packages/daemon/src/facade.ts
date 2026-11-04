@@ -121,7 +121,7 @@ export interface Facade {
   errorJournal: ErrorJournal;
   /** Every MCP tool call the daemon answered, with its caller, identifier arguments and outcome, on this computer only (ADR-152). */
   mcpAudit: McpAudit;
-  /** What Copilot CLI used in a week, by work and by tool, from its own event logs (ADR-196). */
+  /** What Copilot CLI used in a week, by work and by tool, from its own event logs (ADR-199). */
   usageReport: UsageReport;
   /** Checks of what Trackwall needs on this computer, each with what to do when it fails (ADR-101). */
   doctor: Doctor;
@@ -560,7 +560,7 @@ export function createFacade(o: FacadeOptions): Facade {
 }
 
 /**
- * The tasks, repos and projects folder the usage report ties conversations to (ADR-196): running tasks from `agents`,
+ * The tasks, repos and projects folder the usage report ties conversations to (ADR-199): running tasks from `agents`,
  * ended ones from the task journal with the worktree they had, and the repos without git, which only their folders are
  * needed of. A workspace that cannot be read fails the report, which says why, instead of showing every conversation
  * outside the projects folder.

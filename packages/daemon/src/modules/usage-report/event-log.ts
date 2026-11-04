@@ -4,7 +4,7 @@ import { type UsageReceipt, usageReceipt } from "../../infra/copilot-usage-recei
 import { NotRegularFileError, openRegularFile } from "../../infra/regular-file.ts";
 
 /**
- * What the weekly usage report (ADR-196) takes from one conversation's event log, `events.jsonl` in Copilot CLI's
+ * What the weekly usage report (ADR-199) takes from one conversation's event log, `events.jsonl` in Copilot CLI's
  * home: every model call's receipt (`infra/copilot-usage-receipt.ts`) and every tool call with the tokens its result
  * took (`tool.execution_start` and `tool.execution_complete`, joined by the call's id). The format is Copilot CLI's own
  * and undocumented; a contract test pins the fields read here, and a line of another shape is skipped. Nothing of a

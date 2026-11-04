@@ -4,7 +4,7 @@ import { EventLogReader } from "../src/modules/usage-report/event-log.ts";
 /** An event log line as Copilot CLI writes it, with only the fields the report reads. */
 const event = (type: string, timestamp: string, data: unknown) => JSON.stringify({ type, data, id: "x", timestamp, parentId: null });
 
-describe("what the weekly usage report takes from a conversation's event log (ADR-196)", () => {
+describe("what the weekly usage report takes from a conversation's event log (ADR-199)", () => {
   test("a model call's receipt with its time, tokens and the tokens of the tool definitions it sent", () => {
     const reader = new EventLogReader();
     reader.line(

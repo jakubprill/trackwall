@@ -15,7 +15,7 @@ import { useRemote } from "@/lib/use-remote";
 const TOP_ROWS = 10;
 
 /**
- * The weekly usage report (ADR-196): what Copilot CLI used on this computer in a week, by task and session and by tool,
+ * The weekly usage report (ADR-199): what Copilot CLI used on this computer in a week, by task and session and by tool,
  * the most first, so the user sees where tokens go and can compare a week with the one before.
  */
 export function CopilotUsageSurface({ conn }: { conn: Connection }) {

@@ -7,7 +7,7 @@ import { isInside, isSamePath } from "../../infra/path-inside.ts";
 import { readRegularFile } from "../../infra/regular-file.ts";
 
 /**
- * Which work a Copilot CLI conversation was for (ADR-196), from the folder and git branch Copilot CLI records in the
+ * Which work a Copilot CLI conversation was for (ADR-199), from the folder and git branch Copilot CLI records in the
  * conversation's `workspace.yaml`: a task's worktree on a task branch, the projects folder of the supervisor, a repo's
  * folder, or another folder. The daemon keeps no list of its sessions' conversations after they end, and a task's
  * conversation id differs from the task's id over ACP, so the folder and branch are what ties a conversation to its task.

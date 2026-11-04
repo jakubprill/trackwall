@@ -37,7 +37,7 @@ function receipt(at: string | undefined, inputTokens: number, key?: string): str
   return JSON.stringify({ type: "session.usage_record", timestamp: at, data: { usage: { inputTokens, outputTokens: 1, accounting } } });
 }
 
-describe("the weekly usage report over Copilot CLI's event logs (ADR-196)", () => {
+describe("the weekly usage report over Copilot CLI's event logs (ADR-199)", () => {
   test("a receipt written again in the same log or in another counts once", async () => {
     const { report, conversation } = setUp();
     conversation("a", [receipt("2026-11-03T08:00:00Z", 100, "a:1"), receipt("2026-11-03T08:00:00Z", 100, "a:1")]);

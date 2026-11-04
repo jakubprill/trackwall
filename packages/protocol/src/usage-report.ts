@@ -5,7 +5,7 @@ import { CopilotUsage } from "./copilot-usage.ts";
 import { RepoId } from "./workspace.ts";
 
 /**
- * Contract of the `usage-report` module (ADR-196): what Copilot CLI used in one week on this computer, from the event
+ * Contract of the `usage-report` module (ADR-199): what Copilot CLI used in one week on this computer, from the event
  * logs it keeps for every conversation, by the work it was for and by the tools whose results went to the model, so
  * the user sees where tokens go and can compare one week with another after a change. Every action is
  * `POST /api/usage-report/<action>`.
