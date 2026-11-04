@@ -21,6 +21,7 @@ function session(id: string, needsAttention: boolean, dialog: Session["dialog"] 
     view: "terminal",
     readRequest: null,
     copyRequest: null,
+    usage: null,
   };
 }
 

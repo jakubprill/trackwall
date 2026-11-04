@@ -12,8 +12,8 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
+import { copilotHome } from "../src/infra/copilot-home.ts";
 import { TASK_BRANCH_PREFIX } from "../src/modules/agents/task-branch.ts";
-import { copilotHome } from "../src/modules/doctor/copilot-trust.ts";
 import { type Exploration, measureExploration, spread } from "./exploration/measure.ts";
 
 const { values } = parseArgs({

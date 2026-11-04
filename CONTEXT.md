@@ -573,6 +573,10 @@ A running session in `Input` the user has already seen (ADR-47): the agent waits
 A running session in the middle of a turn (`Working` or `Stale`) whose agent has taken no step for 15 minutes: no hook, ACP update or key from the user, a key counting only once a hook has come (ADR-151). A hint shown in place of the state, not a state of its own.
 _Avoid_: hung, frozen, stale (that is `Stale`, no output at all)
 
+**Copilot usage** (`CopilotUsage`, `Session.usage`, `CopilotUsageLog`; "AI credits", "premium requests" and tokens in the UI):
+What a session's Copilot CLI conversation used, summed from the receipts Copilot CLI writes after each model call (ADR-190): AI credits when Copilot CLI reported them, otherwise premium requests of the legacy billing, otherwise only tokens. It covers the whole conversation, also before a resume.
+_Avoid_: cost, spend, budget (Trackwall sets no limit)
+
 **While you were away** (`AwaySummary`, `awaySummary`, `AwayItem`; an **absence** is `AwayPeriod`, opened by `absenceAt` after `AWAY_AFTER_MS`):
 The strip above the views after the user comes back to Trackwall from 15 minutes without a key, click, scroll, pointer move or a window brought to the front in any of its windows, listing what changed in the session list since then (ADR-151). The user dismisses it.
 _Avoid_: digest, notifications (those are the system's and the browser's), journal

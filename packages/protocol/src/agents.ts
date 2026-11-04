@@ -11,6 +11,7 @@ import {
   TOOL_FILE_PATH_MAX,
   ToolPatch,
 } from "./conversation.ts";
+import { CopilotUsage } from "./copilot-usage.ts";
 import { RunState } from "./procs.ts";
 import { REVIEW_COMMENTS_MAX, ReviewComment } from "./review.ts";
 import { singleLine } from "./single-line.ts";
@@ -444,6 +445,8 @@ export const Session = z.object({
   readRequest: ReadRequest.nullable(),
   /** The agent's latest copy request in a running session (ADR-180), until the user copies or dismisses it; `null` otherwise. */
   copyRequest: CopyRequest.nullable(),
+  /** What the session's conversation used (ADR-190); `null` before its first model call or when its event log cannot be read. */
+  usage: CopilotUsage.nullable(),
 });
 export type Session = z.infer<typeof Session>;
 

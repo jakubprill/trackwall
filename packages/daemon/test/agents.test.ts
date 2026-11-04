@@ -263,6 +263,38 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     await agents.stop(started.id);
   }, 60_000);
 
+  test("a session shows what its conversation used from Copilot CLI's receipts, and a resumed one keeps counting (ADR-190)", async () => {
+    const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
+    const copilotHome = mkdtempSync(join(tmpdir(), "trackwall-copilot-home-"));
+    const env = { ...process.env, COPILOT_HOME: copilotHome, FAKE_COPILOT_NANO_AIU: "2500000000" };
+    const { agents, procs } = makeAgents({ shop: repoDir }, undefined, null, undefined, env);
+    cleanups.push(() => procs.stopAll());
+
+    const started = await agents.start("shop");
+    expect(started.usage).toBeNull();
+    const window = viewer(agents, started.id);
+    await untilInputBox(window, "empty");
+    window.attachment.input("fix the test\r");
+    await waitFor(agents, started.id, (s) => s.state?.state === "Approval", "approval request");
+    window.attachment.input("1");
+    await waitFor(agents, started.id, (s) => s.state?.reason === "hook agentStop", "end of turn");
+    // The session looks at the log in its cycle, every 2 s, not at the end of a turn: Copilot CLI writes it in batches.
+    const ended = await waitFor(agents, started.id, (s) => s.usage !== null, "the turn's usage");
+
+    expect(ended.usage).toEqual({
+      modelCalls: 1,
+      inputTokens: 100,
+      outputTokens: 20,
+      aiCredits: 2.5,
+      aiCreditsPartial: false,
+      premiumRequests: 1,
+    });
+    window.attachment.detach();
+    const resumed = await agents.restart(started.id);
+    expect(resumed.usage).toMatchObject({ modelCalls: 1, aiCredits: 2.5 });
+    await agents.stop(resumed.id);
+  }, 60_000);
+
   test("the supervisor starts in the projects folder, with no repo and the supervisor's instructions", async () => {
     const projectsDir = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
     const { agents, procs, home } = makeAgents({}, undefined, projectsDir);

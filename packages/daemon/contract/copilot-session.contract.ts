@@ -7,6 +7,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { MCP_SERVER_NAME, mcpTools, promptBoxText, type Session, TASK_MESSAGE_RULE } from "@trackwall/protocol";
 import { windowTitleFromOsc } from "../src/modules/agents/copilot-osc.ts";
+import { conversationEventLog } from "../src/modules/agents/copilot-usage-log.ts";
 import { OscParser } from "../src/modules/agents/osc-parser.ts";
 import { readRequestPrompt } from "../src/modules/agents/read-request-prompt.ts";
 import { sessionHooksFile } from "../src/modules/agents/session-launcher.ts";
@@ -155,6 +156,41 @@ describe("a session of the real Copilot CLI", () => {
     const titles = new OscParser().feed(window.text()).flatMap((osc) => windowTitleFromOsc(osc, null) ?? []);
     if (process.platform === "win32") expect(titles[0]).toBe(daemon.copilot);
     expect(done.windowTitle).not.toBe(daemon.copilot);
+  });
+
+  test("each model call leaves a usage receipt in the conversation's event log in Copilot CLI's home, which a resumed conversation goes on counting (ADR-190)", async () => {
+    const { agents } = daemon.facade;
+    const { id, window } = await startSession();
+    model.reply({ text: "Counted." });
+    window.attachment.input("count this\r");
+    await endOfTurn(id);
+    // Copilot CLI writes the log in batches: the receipt may land after the turn's agentStop.
+    const first = await waitFor(agents, id, (s) => s.usage !== null, "the turn's usage", SESSION_MS);
+
+    // The scripted model is the user's own provider (BYOK): tokens it reports, no AI credits and no premium requests.
+    const log = conversationEventLog(join(daemon.home, "copilot-home"), id);
+    expect(readFileSync(log, "utf8")).toContain('"type":"session.usage_record"');
+    expect(first.usage).toEqual({
+      modelCalls: 1,
+      inputTokens: 1,
+      outputTokens: 1,
+      aiCredits: null,
+      aiCreditsPartial: false,
+      premiumRequests: 0,
+    });
+
+    windowOf(id).attachment.detach();
+    windows.delete(id);
+    const resumed = await agents.restart(id);
+    const again = openWindow(resumed.id);
+    await untilLoaded(resumed.id);
+    expect(agents.sessions().sessions.find((s) => s.id === resumed.id)?.usage).toMatchObject({ modelCalls: 1 });
+    await untilInputBox(again, "empty");
+    model.reply({ text: "Counted again." });
+    again.attachment.input("count again\r");
+    await endOfTurn(resumed.id);
+    const second = await waitFor(agents, resumed.id, (s) => s.usage?.modelCalls === 2, "the second turn's usage", SESSION_MS);
+    expect(second.usage).toMatchObject({ inputTokens: 2, outputTokens: 2 });
   });
 
   test("a shell command asks for approval as a permission_prompt notification, the daemon reads the dialog, and its answer runs it", async () => {

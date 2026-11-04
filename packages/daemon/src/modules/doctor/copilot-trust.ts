@@ -1,8 +1,7 @@
 import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
-import { envKey } from "../../infra/env-key.ts";
+import { copilotHome } from "../../infra/copilot-home.ts";
 import { isInside } from "../../infra/path-inside.ts";
 
 /**
@@ -22,12 +21,6 @@ export type TrustedFolders =
   | { kind: "read"; file: string; folders: string[] }
   | { kind: "missing"; file: string }
   | { kind: "unreadable"; file: string; message: string };
-
-/** Copilot CLI's home: `COPILOT_HOME` (in any case on Windows) when set and not empty, otherwise `~/.copilot`. */
-export function copilotHome(env: NodeJS.ProcessEnv): string {
-  const home = env[envKey(env, "COPILOT_HOME")];
-  return home ? home : join(homedir(), ".copilot");
-}
 
 function copilotConfigFile(env: NodeJS.ProcessEnv): string {
   return join(copilotHome(env), "config.json");

@@ -21,6 +21,7 @@ function session(id: string, state: TaskState | null, needsAttention: boolean, e
     view: "terminal",
     readRequest: null,
     copyRequest: null,
+    usage: null,
     ...extra,
   };
 }
