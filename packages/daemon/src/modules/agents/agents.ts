@@ -89,6 +89,7 @@ import {
   type LauncherProcs,
   type SessionCallbacks,
   SessionLauncher,
+  type SessionLauncherDeps,
   type SessionPlace,
   type StartedSession,
   sessionHooksFile,
@@ -220,6 +221,8 @@ export interface AgentsDeps {
   boardHas: (item: string) => Promise<boolean>;
   /** The workspace knowledge the user approved for a session in `repo` (`null`: in the projects folder), ADR-170. */
   knowledge: (repo: string | null) => Promise<SessionKnowledge>;
+  /** The format a session on a model must use with its custom provider (ADR-195), from `provider-models`. */
+  wireApi: SessionLauncherDeps["wireApi"];
   /**
    * What each task's work came to, its verification verdict and its merge request with the pipeline (ADR-154), which
    * `verification` and `merge-requests` keep: the supervisor's situation tells it with each task (ADR-156).
@@ -282,6 +285,7 @@ export class Agents {
       handoff: (task) => this.#tasks.handoff(task),
       change: (task) => this.#tasks.change(task),
       knowledge: deps.knowledge,
+      wireApi: deps.wireApi,
     });
     this.#resumable = new ResumableSessions(join(deps.home, RESUMABLE_SESSIONS_FILE), deps.log);
     this.#lastSupervisor = new LastSupervisorFile(join(deps.home, LAST_SUPERVISOR_FILE), deps.log);
@@ -351,7 +355,10 @@ export class Agents {
       },
       launch: async ({ repo, task }) => {
         const { copilot, mise } = await this.#launcher.inputs({ repo, supervisor: false, task });
-        return { program: copilot.program, prefix: copilot.args, env: mise.env, args: mise.args, secrets: mise.secretValues };
+        // The reviewer runs on the environment's model, in the format that model answers in (ADR-195).
+        const env = { ...mise.env };
+        await this.#launcher.setWireApi(`review of task ${task}`, env, null);
+        return { program: copilot.program, prefix: copilot.args, env, args: mise.args, secrets: mise.secretValues };
       },
       procs: deps.procs,
       settings: () => deps.repos.autoReviewSettings(),

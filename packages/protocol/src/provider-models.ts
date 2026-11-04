@@ -4,15 +4,24 @@ import { TaskModel } from "./task-model.ts";
 
 /**
  * Contract of the `provider-models` module (ADR-194): the models the model provider of the session profile (ADR-136)
- * offers, which the Model fields suggest. The daemon asks the provider with the profile's key, which never leaves it.
+ * offers, which the Model fields suggest, with the format each answers in once known (ADR-195). The daemon asks the provider with the profile's key, which never leaves it.
  * Every action is `POST /api/provider-models/<action>`.
  */
+
+/** The two formats Copilot CLI speaks to a custom provider in (`COPILOT_PROVIDER_WIRE_API`). */
+export const WireApi = z.enum(["completions", "responses"]);
+export type WireApi = z.infer<typeof WireApi>;
 
 /** One model the provider offers, under the id Copilot CLI takes as `--model`. */
 export const ProviderModel = z.object({
   id: TaskModel,
   /** The context window in tokens, when the provider says it; `null` when it does not. */
   contextWindow: z.number().int().positive().nullable(),
+  /**
+   * The one format the model answered in when a session started on it (`COPILOT_PROVIDER_WIRE_API`, ADR-195), which
+   * every session on it now gets; `null` before a session used it, or when it answers in both.
+   */
+  wireApi: WireApi.nullable(),
 });
 export type ProviderModel = z.infer<typeof ProviderModel>;
 

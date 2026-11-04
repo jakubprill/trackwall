@@ -21,8 +21,11 @@ beforeAll(async () => {
 
 afterAll(() => model.close());
 
-/** Runs Copilot CLI once with `-p` against the scripted model, with the provider variables of `provider` on top. */
-async function promptOnce(provider: Record<string, string>): Promise<void> {
+/**
+ * Runs Copilot CLI once with `-p` against the scripted model, with the provider variables of `provider` on top, and
+ * gives its exit code.
+ */
+async function promptOnce(provider: Record<string, string>): Promise<number | null> {
   const home = mkdtempSync(join(tmpdir(), "trackwall-provider-contract-"));
   const inherited = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.toUpperCase().startsWith("COPILOT_")));
   const env = {
@@ -35,8 +38,7 @@ async function promptOnce(provider: Record<string, string>): Promise<void> {
     ...provider,
   };
   const copilot = spawn(await copilotCli(), ["-p", "say hello", "--no-custom-instructions"], { cwd: home, env, stdio: "ignore" });
-  const code = await new Promise<number | null>((resolve) => copilot.once("exit", resolve));
-  expect(code).toBe(0);
+  return new Promise<number | null>((resolve) => copilot.once("exit", resolve));
 }
 
 describe("what Copilot CLI sends a custom provider, which the provider's model list sends too (ADR-194)", () => {
@@ -48,7 +50,7 @@ describe("what Copilot CLI sends a custom provider, which the provider's model l
     };
     model.reply({ text: "Hello." });
 
-    await promptOnce(provider);
+    expect(await promptOnce(provider)).toBe(0);
 
     const sent = model.requests().at(-1)?.headers;
     const daemon = providerRequest({ COPILOT_PROVIDER_BASE_URL: model.url, ...provider }, "byok");
@@ -62,12 +64,24 @@ describe("what Copilot CLI sends a custom provider, which the provider's model l
     const provider = { COPILOT_PROVIDER_API_KEY: "key-sent" };
     model.reply({ text: "Hello." });
 
-    await promptOnce(provider);
+    expect(await promptOnce(provider)).toBe(0);
 
     expect(model.requests().at(-1)?.headers.authorization).toBe("Bearer key-sent");
     expect(providerRequest({ COPILOT_PROVIDER_BASE_URL: model.url, ...provider }, "byok")).toMatchObject({
       headers: { Authorization: "Bearer key-sent" },
     });
     expect(model.takeLeftovers()).toEqual({ problems: [], unusedReplies: 0 });
+  });
+
+  test("the format of COPILOT_PROVIDER_WIRE_API, which a session's start sets for its model (ADR-195), chooses the path Copilot CLI posts to", async () => {
+    // The scripted model speaks only Chat Completions, so a request in the Responses API is refused (Copilot CLI tries
+    // it again after the 500) and kept as a problem, and no Chat Completions request comes.
+    const before = model.requests().length;
+    await promptOnce({ COPILOT_PROVIDER_WIRE_API: "responses" });
+
+    const { problems } = model.takeLeftovers();
+    expect(problems.length).toBeGreaterThan(0);
+    expect(new Set(problems)).toEqual(new Set(["POST /v1/responses"]));
+    expect(model.requests()).toHaveLength(before);
   });
 });

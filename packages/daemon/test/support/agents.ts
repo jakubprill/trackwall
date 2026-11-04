@@ -94,6 +94,7 @@ export function makeAgents(
     boardHas: async () => true,
     taskOutcomes: () => [],
     knowledge: async () => ({ entries: [], more: 0 }),
+    wireApi: async () => null,
     onTaskRemoved: () => {},
     log: () => {},
   });
