@@ -72,7 +72,7 @@ import { LAST_SUPERVISOR_FILE, LastSupervisorFile } from "./last-supervisor.ts";
 import { ListedSessions } from "./listed-sessions.ts";
 import { LiveSession, type SessionEvent, type SessionWindow } from "./live-session.ts";
 import { MiseTrustNotices, type TrustRecipient, trustRecipientOf } from "./mise-trust-notices.ts";
-import { modelArgs } from "./model-args.ts";
+import { modelArgs, modelOfArgs } from "./model-args.ts";
 import { proposedByOf, proposerExists, proposerKeyOf, proposerKind, proposerOf } from "./proposer.ts";
 import { readRequestPrompt } from "./read-request-prompt.ts";
 import {
@@ -355,9 +355,9 @@ export class Agents {
       },
       launch: async ({ repo, task }) => {
         const { copilot, mise } = await this.#launcher.inputs({ repo, supervisor: false, task });
-        // The reviewer runs on the environment's model, in the format that model answers in (ADR-195).
+        // The reviewer runs on the model of its command or environment, in the format that model answers in (ADR-195).
         const env = { ...mise.env };
-        await this.#launcher.setWireApi(`review of task ${task}`, env, null);
+        await this.#launcher.setWireApi(`review of task ${task}`, env, modelOfArgs([...copilot.args, ...mise.args]));
         return { program: copilot.program, prefix: copilot.args, env, args: mise.args, secrets: mise.secretValues };
       },
       procs: deps.procs,

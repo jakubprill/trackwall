@@ -19,7 +19,11 @@ export type WireApiProbe =
 /** The request of each format for `model`. */
 function probeBody(wireApi: WireApi, model: string): { path: string; body: unknown } {
   return wireApi === "completions"
-    ? { path: "/chat/completions", body: { model, messages: [{ role: "user", content: "ping" }], max_tokens: 1, stream: false } }
+    ? // `max_tokens` is refused by reasoning models that do take chat completions, `max_completion_tokens` by none.
+      {
+        path: "/chat/completions",
+        body: { model, messages: [{ role: "user", content: "ping" }], max_completion_tokens: 16, stream: false },
+      }
     : // Some providers refuse fewer than 16 output tokens of the Responses API.
       { path: "/responses", body: { model, input: "ping", max_output_tokens: 16, stream: false } };
 }

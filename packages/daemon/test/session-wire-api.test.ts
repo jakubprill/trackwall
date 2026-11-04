@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
+import { type AutoReview, agentsApi, autoReviewApi } from "@trackwall/protocol";
 import { viewer, waitFor } from "./support/agents.ts";
 import { startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
@@ -16,6 +18,8 @@ const FAKE_COPILOT = [process.execPath, join(import.meta.dir, "fixtures", "fake-
  */
 const RESPONSES_ONLY = new Set(["gpt-6.1-sol"]);
 const requests: string[] = [];
+/** The model the environment names; a test of a review, which runs on it, changes it. */
+let envModel = "claude-opus-5.5";
 let provider: ReturnType<typeof createServer>;
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
 
@@ -52,7 +56,7 @@ beforeAll(async () => {
         COPILOT_PROVIDER_BASE_URL: `http://127.0.0.1:${port}/v1`,
         COPILOT_PROVIDER_API_KEY: "sk-test",
         COPILOT_PROVIDER_WIRE_API: "completions",
-        COPILOT_MODEL: "claude-opus-5.5",
+        COPILOT_MODEL: envModel,
         FAKE_COPILOT_SHOW_ENV: "COPILOT_PROVIDER_WIRE_API",
       }),
     },
@@ -94,5 +98,25 @@ describe("the format of a session's model with a custom provider (ADR-195; real 
   test("without --model the session's COPILOT_MODEL is probed, and a model of Chat Completions keeps it", async () => {
     expect(await wireApiOfSession(null)).toBe("completions");
     expect(requests).toContain("POST /v1/responses claude-opus-5.5");
+  }, 60_000);
+
+  test("a task's review on the environment's model gets that model's format too", async () => {
+    envModel = "gpt-6.1-sol";
+    try {
+      const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "add a cart", approvals: "ask" });
+      mkdirSync(join(task.worktree, "src"), { recursive: true });
+      writeFileSync(join(task.worktree, "src", "cart.ts"), "export const total = 1;\n");
+
+      await daemon.post(autoReviewApi.start, { task: task.id });
+      let review: AutoReview | null = null;
+      const until = Date.now() + 20_000;
+      while (review?.state !== "done" && Date.now() < until) {
+        await new Promise((r) => setTimeout(r, 50));
+        review = await daemon.post(autoReviewApi.get, { task: task.id });
+      }
+      expect(review?.text).toContain("Env COPILOT_PROVIDER_WIRE_API=responses");
+    } finally {
+      envModel = "claude-opus-5.5";
+    }
   }, 60_000);
 });

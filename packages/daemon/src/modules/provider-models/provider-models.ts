@@ -34,6 +34,8 @@ const KEEP_MS = 5 * 60_000;
 const LIST_TIMEOUT_MS = 10_000;
 /** A probe holds up a session's start, so it gives up sooner than the list. */
 const PROBE_TIMEOUT_MS = 5_000;
+/** A probe that told nothing is not repeated for a minute, so a slow or unreachable provider holds up one start, not each. */
+const UNKNOWN_KEEP_MS = 60_000;
 const MAX_BYTES = 4 * 1024 * 1024;
 
 export class ProviderModels {
@@ -43,6 +45,8 @@ export class ProviderModels {
   private readonly formats = new Map<string, readonly WireApi[]>();
   /** Probes under way, so sessions that start together on one model ask once. */
   private readonly probing = new Map<string, Promise<readonly WireApi[] | null>>();
+  /** When a probe that told nothing ended, by provider key and model. */
+  private readonly unknownAt = new Map<string, number>();
 
   constructor(deps: ProviderModelsDeps) {
     this.deps = deps;
@@ -77,24 +81,36 @@ export class ProviderModels {
   /**
    * The format a session on `model` must use with the provider of its environment (ADR-195): the one format the model
    * answered in, probed on its first use and remembered; `null` to leave the session's environment as it is, when it
-   * names no provider over HTTP, the model answered in both formats or in neither, or the provider could not be asked.
+   * names no provider over HTTP, already names that format, the model answered in both formats or in neither, or the
+   * provider could not be asked (then not again for a minute).
    */
   async wireApiFor(model: string, env: NodeJS.ProcessEnv): Promise<WireApi | null> {
     // Only the problems name the profile, and a problem only leaves the session's environment as it is.
     const request = providerRequest(env, "");
     if (request.kind !== "request" || !request.http) return null;
     const key = `${providerKey(request.base, request.headers)}\n${model}`;
-    const known = this.formats.get(key);
-    if (known !== undefined) return only(known);
+    const works = this.formats.get(key) ?? (await this.probeOnce(key, request.base, request.headers, model, env));
+    const wireApi = only(works ?? undefined);
+    return wireApi === request.wireApi ? null : wireApi;
+  }
+
+  /** The formats `model` answered in, asking once for sessions that start together; `null` when nothing was learned. */
+  private probeOnce(key: string, base: URL, headers: Record<string, string>, model: string, env: NodeJS.ProcessEnv) {
+    const unknownAt = this.unknownAt.get(key);
+    if (unknownAt !== undefined && Date.now() - unknownAt < UNKNOWN_KEEP_MS) return Promise.resolve(null);
     let probe = this.probing.get(key);
     if (probe === undefined) {
-      probe = this.probe(request.base, request.headers, model, env).finally(() => this.probing.delete(key));
+      probe = this.probe(base, headers, model, env)
+        .then((works) => {
+          // Kept before the probe leaves `probing`, so no start in between asks again.
+          if (works === null) this.unknownAt.set(key, Date.now());
+          else this.formats.set(key, works);
+          return works;
+        })
+        .finally(() => this.probing.delete(key));
       this.probing.set(key, probe);
     }
-    const works = await probe;
-    if (works === null) return null;
-    this.formats.set(key, works);
-    return only(works);
+    return probe;
   }
 
   private async probe(base: URL, headers: Record<string, string>, model: string, env: NodeJS.ProcessEnv) {

@@ -303,7 +303,7 @@ export class SessionLauncher {
     const { copilot, permissions, model, miseEnv, mise } = await this.inputs(place);
     // The MCP server and the hooks are the daemon on `127.0.0.1`, which a proxy of the user must not get (ADR-89).
     const env = withLoopbackNoProxy({ ...mise.env, TERM: "xterm-256color", COLORTERM: "truecolor", ...LOOPBACK_HOOKS_ENV });
-    await this.setWireApi(`session ${id}`, env, modelOfArgs([...model, ...launchArgs]));
+    await this.setWireApi(`session ${id}`, env, modelOfArgs([...copilot.args, ...mise.args, ...model, ...launchArgs]));
     const dir = sessionDir(this.#deps.home, id);
     const args = ["--additional-mcp-config", `@${join(dir, MCP_CONFIG_FILE)}`, ...toolPermissionArgs(permissions), ...mise.args, ...model];
     return {
@@ -322,7 +322,8 @@ export class SessionLauncher {
 
   /**
    * The format of a Copilot CLI's model with a custom provider (ADR-195), set in `env` in place of the one it names: the
-   * model is the start's `--model`, else the environment's `COPILOT_MODEL`. A probe that fails keeps the environment's.
+   * model is the start's `--model` (the configured command's and mise's included), else the environment's
+   * `COPILOT_MODEL`. A probe that fails keeps the environment's.
    * A session's start and a task's review (ADR-182) call it; `who` names it in the log.
    */
   async setWireApi(who: string, env: NodeJS.ProcessEnv, startModel: string | null): Promise<void> {
@@ -336,9 +337,8 @@ export class SessionLauncher {
       return;
     }
     if (wireApi === null) return;
-    const name = envKey(env, COPILOT_PROVIDER_ENV.wireApi);
-    if (env[name] !== wireApi) this.#deps.log(`${who} talks to its model provider in the ${wireApi} format, which ${model} answers in`);
-    env[name] = wireApi;
+    this.#deps.log(`${who} talks to its model provider in the ${wireApi} format, which ${model} answers in`);
+    env[envKey(env, COPILOT_PROVIDER_ENV.wireApi)] = wireApi;
   }
 
   async #miseLaunch(place: { repo: string | null; task: string | null }, userEnv: NodeJS.ProcessEnv) {

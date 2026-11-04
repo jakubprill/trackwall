@@ -27,7 +27,7 @@ describe("which format a model answers in (ADR-195)", () => {
       {
         url: new URL("https://gateway.example.org/v1/chat/completions"),
         headers: { Authorization: "Bearer k" },
-        body: { model: "gpt-6.1-sol", messages: [{ role: "user", content: "ping" }], max_tokens: 1, stream: false },
+        body: { model: "gpt-6.1-sol", messages: [{ role: "user", content: "ping" }], max_completion_tokens: 16, stream: false },
       },
       {
         url: new URL("https://gateway.example.org/v1/responses"),
