@@ -21,6 +21,7 @@ import { type DiskSpace, gigabytes, LOW_DISK_BYTES, VERY_LOW_DISK_BYTES } from "
 import { folderStorage } from "./folder-storage.ts";
 import { modelProviderOutcome, type ProfileEnvironment } from "./model-provider-check.ts";
 import { networkOutcome, sessionCertificates } from "./network-check.ts";
+import { type RemoteReachRead, remoteOutcome } from "./remote-check.ts";
 import type { TlsProbe } from "./tls-probe.ts";
 import { compareVersions, versionIn } from "./version.ts";
 
@@ -69,6 +70,8 @@ export interface DoctorDeps {
   /** `null` while the projects folder is not set; throws when the workspace settings cannot be read. */
   projectsDir: () => Promise<string | null>;
   repoHosts: () => RepoHost[];
+  /** Whether git reaches each repo host of the projects folder, through one repo per host (`workspace`, ADR-195). */
+  remoteReach: () => Promise<RemoteReachRead[]>;
   /** The work in the projects folder on no remote, read only in a container (`workspace`, ADR-162). */
   unpushedWork: () => Promise<UnpushedWork>;
   /** Free space of the file system a folder is on (`diskSpace`, a fake in tests). */
@@ -125,6 +128,8 @@ export class Doctor {
       "unpushed-work": (ctx) => this.unpushedWork(ctx),
       "workspace-file": () => this.workspaceFile(),
       git: () => this.git(),
+      "git-remotes": async ({ projectsDir }) =>
+        projectsDir.ok && projectsDir.value !== null ? remoteOutcome(await this.deps.remoteReach(), this.deps.inContainer) : null,
       "copilot-cli": (ctx) => this.copilotCli(ctx),
       "copilot-trusted-folder": (ctx) => this.copilotTrustedFolder(ctx),
       "copilot-sandbox": () => this.copilotSandbox(),

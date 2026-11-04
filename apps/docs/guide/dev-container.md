@@ -126,6 +126,24 @@ Copilot CLI in the container reaches an MCP server that runs on your computer at
 
 Tokens for such servers come in through [Environment from mise](/features/mise-environment) like on your computer. Follow that page's steps in the container to create the age key: it lands in `~/.config/mise`, which the `workspace-mise` volume keeps across rebuilds.
 
+## Git and SSH
+
+Trackwall in the container runs git itself: the sync, a task's "Push", cloning and the [doctor](/features/doctor). It does not get the SSH keys or git sign-in of your computer, also not while VS Code is open: what VS Code forwards reaches only its own terminals. So give the container a sign-in of its own, which you can revoke on its own, instead of copying your computer's key into it. The doctor's "Git access to repo hosts" line says whether git reaches each host and, if not, why.
+
+Agents in the container run as the same user and, in a container, outside Copilot CLI's sandbox, so they can use whatever sign-in git has there. Give it only the rights git needs and an end date.
+
+**HTTPS with a token** (recommended). Keep the sign-in of your repo host's CLI in a volume, so it survives a rebuild: add `source=workspace-glab,target=/home/vscode/.config/glab-cli,type=volume` to `mounts` and `/home/vscode/.config/glab-cli` to the `chown` of `postCreateCommand` (for GitHub, `workspace-gh` at `/home/vscode/.config/gh`). The image needs `glab` or `gh`.
+
+1. On your repo host, create a personal access token with an end date and only the scopes `read_api` and `write_repository` (on GitHub: a fine-grained token for your repos with "Contents: Read and write" and "Pull requests: Read").
+2. In Trackwall, open "Shell" next to the projects folder in "Repos" and run `glab auth login --hostname gitlab.example.com` with your host, paste the token, choose HTTPS for git, and let it set up git to use the sign-in. On GitHub, run `gh auth login --hostname github.com`, then `gh auth setup-git`.
+3. Repos cloned over SSH (`git@gitlab.example.com:...`) use the token too after `git config --global url."https://gitlab.example.com/".insteadOf "git@gitlab.example.com:"`.
+
+After a rebuild the token is still in the volume; run step 2's setup of git again (`glab auth login` or `gh auth setup-git`), since git's own settings live in the container.
+
+**An SSH key of the container.** Keep `~/.ssh` in a volume (`source=workspace-ssh,target=/home/vscode/.ssh,type=volume`, and `/home/vscode/.ssh` in the `chown`, followed by `chmod 700 /home/vscode/.ssh`). In the projects folder's Shell, run `ssh-keygen -t ed25519 -C "trackwall container" -f ~/.ssh/id_ed25519`, and add `~/.ssh/id_ed25519.pub` to your account on the repo host with an end date. Trackwall cannot type a passphrase, so leave it empty: the key is then as safe as the container, which is why it should be a key only the container has. Then run `ssh -T git@gitlab.example.com` once and accept the host key after comparing its fingerprint with the one your repo host publishes; git in Trackwall never accepts an unknown host key by itself.
+
+Do not copy your computer's private key into the container, and do not keep the token or key in a repo or in the [backups](#back-up-the-repos) of the repos: if one leaks, revoke it on the repo host and make a new one.
+
 ## Back up the repos
 
 Commits you have not pushed, stashes and task worktrees live only in the `workspace-repos` volume. Before you remove the volume, reset Docker, or move to another computer, copy the volume into one file on your computer:

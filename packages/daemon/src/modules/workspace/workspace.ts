@@ -77,6 +77,16 @@ const PLAIN_TEXT_README = /\.(txt|rst|adoc)$/i;
  * slow to start on Windows and scanned by the antivirus.
  */
 const STATUS_CONCURRENCY = 8;
+
+/** The most repo hosts the doctor asks git to reach: a workspace has one or two, and each answer costs a connection. */
+const MAX_REACHED_HOSTS = 5;
+
+/** Whether git reached a repo host, through one of its repos; `error` is git's message, `null` when it answered. */
+export interface RemoteReach {
+  host: string;
+  repo: string;
+  error: string | null;
+}
 /**
  * How many repos sync at once: a fetch holds a connection to the repo host, and a self-hosted GitLab or a VPN can
  * limit the number of simultaneous SSH connections from one client.
@@ -96,6 +106,7 @@ interface WorkspaceVcs extends CodeSearchVcs, CommitSearchVcs {
   file(dir: string, path: string, maxBytes: number): Promise<FileContent | undefined>;
   changes(dir: string, maxPatchBytes: number): Promise<WorkingTreeChanges>;
   unpushed(dir: string): Promise<RepoUnpushedRead>;
+  reachRemote(dir: string): Promise<string | null>;
 }
 
 /** What `workspace` needs from the repo hosts of the `vcs` module (ADR-19). */
@@ -163,6 +174,31 @@ export class Workspace {
       ),
     );
     return unpushedWork(reads);
+  }
+
+  /**
+   * Whether git reaches each repo host of the projects folder (ADR-195): one repo per host, the first by id, at most
+   * `MAX_REACHED_HOSTS` hosts, since one answer per host says whether the keys or sign-in for it work.
+   */
+  async remoteReach(): Promise<RemoteReach[]> {
+    const { entries } = await this.entries();
+    const byHost = new Map<string, { repo: string; path: string }>();
+    const addresses = await mapLimit(entries, STATUS_CONCURRENCY, (entry) => this.deps.vcs.remote(entry.path).catch(() => null));
+    entries.forEach((entry, i) => {
+      const host = addresses[i]?.split("/")[0];
+      if (host !== undefined && !byHost.has(host) && byHost.size < MAX_REACHED_HOSTS)
+        byHost.set(host, { repo: entry.id, path: entry.path });
+    });
+    const reads = await Promise.all(
+      [...byHost].map(([host, { repo, path }]) =>
+        this.deps.vcs.reachRemote(path).then(
+          (address): RemoteReach | null => (address === null ? null : { host, repo, error: null }),
+          (err: unknown): RemoteReach => ({ host, repo, error: messageOf(err) }),
+        ),
+      ),
+    );
+    // A remote that is no HTTPS or SSH address (a local folder, `git://`) is nothing to sign in to.
+    return reads.filter((read): read is RemoteReach => read !== null);
   }
 
   settings(): WorkspaceSettings {
