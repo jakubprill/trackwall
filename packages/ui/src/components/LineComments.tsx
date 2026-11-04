@@ -15,12 +15,20 @@ import { cn } from "@/lib/utils";
  * is open the diff does not refresh (`TaskChangesView`), so the form stays under the line it was opened on.
  */
 export function reviewAnnotations(review: TaskReview): LineAnnotations {
-  const commented = new Set(review.drafts.map((d) => anchorKey(d.comment)));
+  const commented = commentedLines(review);
   return {
     gutter: (anchor) => <CommentButton anchor={anchor} commented={commented.has(anchorKey(anchor))} review={review} />,
     below: (anchor, line) => review.editing === anchorKey(anchor) && <CommentForm anchor={anchor} line={line} review={review} />,
   };
 }
+
+/** The `anchorKey`s of the lines with a draft comment, which keep their mark. */
+export function commentedLines(review: TaskReview | undefined): ReadonlySet<string> {
+  return new Set(review?.drafts.map((d) => anchorKey(d.comment)));
+}
+
+/** Why a line takes no more comments. */
+export const REVIEW_FULL_TITLE = `A review holds at most ${REVIEW_COMMENTS_MAX} comments; send these first`;
 
 function CommentButton({ anchor, commented, review }: { anchor: DiffAnchor; commented: boolean; review: TaskReview }) {
   return (
@@ -28,9 +36,7 @@ function CommentButton({ anchor, commented, review }: { anchor: DiffAnchor; comm
       type="button"
       className={cn(commented ? "text-primary" : "text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100")}
       aria-label={`Comment on line ${anchor.line} of ${anchor.path}`}
-      title={
-        review.full ? `A review holds at most ${REVIEW_COMMENTS_MAX} comments; send these first` : "Comment on this line for the agent"
-      }
+      title={review.full ? REVIEW_FULL_TITLE : "Comment on this line for the agent"}
       disabled={review.full}
       onClick={() => review.open(anchor)}
     >
@@ -40,7 +46,7 @@ function CommentButton({ anchor, commented, review }: { anchor: DiffAnchor; comm
 }
 
 /** Ctrl+Enter (⌘+Enter on macOS) adds the comment, Esc closes the form. */
-function CommentForm({ anchor, line, review }: { anchor: DiffAnchor; line: DiffLine; review: TaskReview }) {
+export function CommentForm({ anchor, line, review }: { anchor: DiffAnchor; line: DiffLine; review: TaskReview }) {
   const [text, setText] = useState("");
   const add = () => {
     if (text.trim() !== "") review.add(lineComment(anchor, line.text, text));

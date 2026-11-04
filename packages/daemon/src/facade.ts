@@ -246,7 +246,7 @@ export function createFacade(o: FacadeOptions): Facade {
     ),
   );
   const hosting = new Hosting(o.hostingClis);
-  const openEditor = (dir: string) => o.openUrl(vscodeUrl(dir));
+  const openEditor = (path: string, line?: number) => o.openUrl(vscodeUrl(path, line));
   const workspace = new Workspace({
     file: new WorkspaceFile(join(o.home, WORKSPACE_FILE)),
     vcs,

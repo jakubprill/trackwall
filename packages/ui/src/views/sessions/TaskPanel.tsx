@@ -208,7 +208,7 @@ function TaskTabContent({
 }) {
   return (
     <>
-      {shown === "session" && session && <SessionScreen conn={conn} session={session} selected />}
+      {shown === "session" && session && <SessionScreen conn={conn} session={session} selected review={review} />}
       {shown === "shell" && <FolderShell key={task.id} conn={conn} place={{ repo: task.repo, task: task.id }} folder={task.worktree} />}
       {shown === "changes" && (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
