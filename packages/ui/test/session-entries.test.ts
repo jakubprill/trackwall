@@ -75,6 +75,7 @@ function proposal(id: string, createdAt: string, proposer: string | null = null)
     approvals: "ask",
     item: null,
     parts: null,
+    fromImpact: false,
     createdAt,
   };
 }

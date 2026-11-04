@@ -1,4 +1,14 @@
-import { agentsApi, type ChangedEndpoint, type ChangedEndpoints, graphApi, type Task } from "@trackwall/protocol";
+import {
+  agentsApi,
+  type ChangedEndpoint,
+  type ChangedEndpoints,
+  contractChange,
+  graphApi,
+  handingTaskName,
+  handoffPrompt,
+  reachText,
+  type Task,
+} from "@trackwall/protocol";
 import { Network, RefreshCw, Send, TriangleAlert } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -9,8 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { taskName } from "@/lib/session-entries";
-import { contractChange, handoffPrompt, IMPACT_POLL_MS, impactPoints, impactSummary, RING_GAP, reachText } from "@/lib/task-impact";
+import { IMPACT_POLL_MS, impactPoints, impactSummary, RING_GAP } from "@/lib/task-impact";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
@@ -171,7 +180,7 @@ function ReachedRepos({
                 conn={conn}
                 task={task}
                 repo={reached.repo}
-                initialPrompt={handoffPrompt(changed, taskName(task), reached)}
+                initialPrompt={handoffPrompt(changed, handingTaskName(task), reached)}
                 onStarted={(started) => {
                   setHandingTo(undefined);
                   onOpenTask(started.id);

@@ -153,6 +153,7 @@ const proposals: SessionEntry = {
       approvals: "ask",
       item: null,
       parts: null,
+      fromImpact: false,
       createdAt: "",
     },
   ],

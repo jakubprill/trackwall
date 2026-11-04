@@ -95,6 +95,17 @@ export function makeAgents(
     taskOutcomes: () => [],
     knowledge: async () => ({ entries: [], more: 0 }),
     onTaskRemoved: () => {},
+    // Without the graph a task's commits reach no repo, so no impact proposal comes (ADR-198).
+    taskImpact: async ({ repo, base }) => ({
+      repo,
+      base,
+      head: base,
+      contractsCompared: true,
+      endpoints: [],
+      truncated: false,
+      problems: [],
+      impact: [],
+    }),
     log: () => {},
   });
   return { home, procs, agents, opened };
