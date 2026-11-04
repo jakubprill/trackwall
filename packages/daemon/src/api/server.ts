@@ -7,6 +7,7 @@ import {
   DAEMON_INFO_PATH,
   type DaemonInfo,
   DOWNLOAD_PATH,
+  DROP_PATH,
   type ErrorCode,
   HEALTH_PATH,
   type Health,
@@ -19,6 +20,7 @@ import { conversationSocketRoute } from "./conversation-socket.ts";
 import type { EventHub } from "./event-hub.ts";
 import { eventSocketRoute } from "./event-socket.ts";
 import { downloadRequest, sendDownload } from "./file-download.ts";
+import { droppedName } from "./file-drop.ts";
 import { hasValidToken, OriginPolicy } from "./guard.ts";
 import { HOOKS_PATH, handleHook } from "./hooks.ts";
 import { sessionSocketRoute, terminalSocketRoute } from "./pty-socket.ts";
@@ -191,7 +193,7 @@ function authenticate(req: IncomingMessage, sessionScoped: boolean, o: ApiOption
  */
 function journalArea(url: string | undefined): string {
   const path = (url ?? "").split("?")[0] ?? "";
-  if (postRoutes.has(path) || path === DOWNLOAD_PATH) return `api:${path}`;
+  if (postRoutes.has(path) || path === DOWNLOAD_PATH || path === DROP_PATH) return `api:${path}`;
   return path.startsWith(HOOKS_PATH) ? "api:hooks" : "api:other";
 }
 
@@ -206,6 +208,8 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
   }
   if (path === DOWNLOAD_PATH && req.method === "POST")
     return sendDownload(res, await o.facade.folderFiles.download(downloadRequest(await readJson(req, API_BODY_MAX_BYTES))));
+  // The token was checked before; the name before any of the body.
+  if (path === DROP_PATH && req.method === "POST") return ok(res, { path: await o.facade.droppedFiles.save(droppedName(req), req) });
   const post = req.method === "POST" ? postRoutes.get(path) : undefined;
   // The token was checked before any of the body is read, so only the daemon's own clients send a large one.
   if (post) return ok(res, await post.run(o.facade, await readJson(req, post.maxBodyBytes)));

@@ -71,6 +71,43 @@ export const MAX_FOLDER_ENTRIES = 2000;
 /** A download is held in the page's memory before it is saved; larger files go out with `docker cp`. */
 export const MAX_DOWNLOAD_BYTES = 1024 ** 3;
 
+/**
+ * `POST` with the file's bytes as the body (`application/octet-stream`) and its name, percent-encoded, in
+ * `DROP_NAME_HEADER`: a file dropped on a terminal from a computer that is not the daemon's (ADR-196), saved in
+ * `.trackwall/drops` of the projects folder. Answers `{ ok, data: DroppedFile }`. Behind the daemon token like every action.
+ */
+export const DROP_PATH = "/api/terminals/drop";
+export const DROP_NAME_HEADER = "x-trackwall-file-name";
+/**
+ * The desktop app reads a dropped file whole into the window's memory before it sends it, so the limit is lower than a
+ * download's; `MAX_DROP_BYTES` in the shell's `dropped_files.rs` is the same number. Larger files go in with `docker cp`.
+ */
+export const MAX_DROP_BYTES = 256 * 1024 ** 2;
+
+/** A control character (C0 or DEL), which no file name a person dropped should hold. */
+function isControl(char: string): boolean {
+  const code = char.charCodeAt(0);
+  return code < 0x20 || code === 0x7f;
+}
+
+/**
+ * A dropped file's name: one name, not a path, that every system can keep (no `/ \ : * ? " < > |`, no control
+ * character, not `.` or `..`, not ending in a space or a dot), at most 255 characters.
+ */
+export const DroppedFileName = z
+  .string()
+  .min(1)
+  .max(255)
+  .refine(
+    (name) => !/[/\\:*?"<>|]/.test(name) && ![...name].some(isControl),
+    'a file name without / \\ : * ? " < > | or control characters',
+  )
+  .refine((name) => name !== "." && name !== ".." && !/[ .]$/.test(name), "a file name that does not end in a space or a dot");
+
+/** Where the dropped file now is, as the daemon sees it: the path to paste into the terminal. */
+export const DroppedFile = z.object({ path: z.string() });
+export type DroppedFile = z.infer<typeof DroppedFile>;
+
 export const FolderListing = z.object({
   path: PlacePath,
   /** Folders first, then by name. */

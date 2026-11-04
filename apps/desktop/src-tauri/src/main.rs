@@ -12,6 +12,7 @@ mod container_cli;
 mod daemon;
 mod daemon_state;
 mod dev_container;
+mod dropped_files;
 mod error_journal;
 mod folder_picker;
 mod global_shortcut;
@@ -42,7 +43,7 @@ use daemon::Connection;
 use daemon_state::DaemonState;
 use std::sync::Arc;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, RunEvent, Window, WindowEvent};
+use tauri::{AppHandle, DragDropEvent, Manager, RunEvent, Window, WindowEvent};
 use tray_panel::PanelState;
 use window_effect::WindowEffects;
 use windows::Windows;
@@ -141,6 +142,7 @@ fn main() {
         .manage(jump::PendingJump::default())
         .manage(updates::Updates::default())
         .manage(zoom::Zooms::default())
+        .manage(dropped_files::DroppedFiles::default())
         .invoke_handler(tauri::generate_handler![
             daemon_connection,
             retry_daemon,
@@ -162,6 +164,7 @@ fn main() {
             remote_daemon::use_remote_daemon,
             remote_daemon::use_own_daemon,
             clipboard::copy_text,
+            dropped_files::read_dropped_file,
             open_from_tray_panel,
             folder_picker::pick_projects_folder,
             updates::check_update,
@@ -219,6 +222,9 @@ fn main() {
             }
             WindowEvent::CloseRequested { .. } => windows::closed_by_user(window.app_handle(), window.label()),
             WindowEvent::Focused(true) => window.state::<Windows>().focused(window.label()),
+            WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) => {
+                window.state::<dropped_files::DroppedFiles>().dropped(window.label(), paths);
+            }
             WindowEvent::Destroyed => windows::closed(window.app_handle(), window.label()),
             _ => {}
         })
