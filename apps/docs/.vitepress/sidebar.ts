@@ -53,6 +53,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       { text: "Session instructions", link: "/features/session-instructions" },
       { text: "MCP server", link: "/features/mcp" },
       { text: "MCP calls", link: "/features/mcp-calls" },
+      { text: "Copilot usage", link: "/features/copilot-usage" },
     ],
   },
   {

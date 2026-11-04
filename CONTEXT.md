@@ -600,6 +600,10 @@ _Avoid_: hung, frozen, stale (that is `Stale`, no output at all)
 What a session's Copilot CLI conversation used, summed from the receipts Copilot CLI writes after each model call (ADR-190): AI credits when Copilot CLI reported them, otherwise premium requests of the legacy billing, otherwise only tokens. It covers the whole conversation, also before a resume.
 _Avoid_: cost, spend, budget (Trackwall sets no limit)
 
+**Usage report** (`UsageReport`, the `usage-report` module, `usageReportApi`; in the UI *Copilot usage* in Settings › Agents):
+What Copilot CLI used on this computer in a week, from the event logs it keeps for every conversation (ADR-199): the total, one **usage work** row (`UsageWork`: a task, the supervisor, sessions in a repo, or outside the projects folder) per piece of work with its Copilot usage and its **tool definition tokens** (the input tokens that were the tools' definitions, sent with every model call), and one **usage tool** row (`UsageTool`) per tool with its calls, failures and **result tokens**. Do not confuse with the MCP audit, which lists Trackwall's own tool calls one by one without tokens.
+_Avoid_: bill, invoice, cost report
+
 **While you were away** (`AwaySummary`, `awaySummary`, `AwayItem`; an **absence** is `AwayPeriod`, opened by `absenceAt` after `AWAY_AFTER_MS`):
 The strip above the views after the user comes back to Trackwall from 15 minutes without a key, click, scroll, pointer move or a window brought to the front in any of its windows, listing what changed in the session list since then (ADR-151). The user dismisses it.
 _Avoid_: digest, notifications (those are the system's and the browser's), journal

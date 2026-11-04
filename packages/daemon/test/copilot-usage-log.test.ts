@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { appendFileSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { CopilotUsageLog, conversationEventLog, usageOfLines } from "../src/modules/agents/copilot-usage-log.ts";
+import { conversationEventLog } from "../src/infra/copilot-home.ts";
+import { CopilotUsageLog, usageOfLines } from "../src/modules/agents/copilot-usage-log.ts";
 
 /** A receipt line as Copilot CLI writes it (`session.usage_record`), with only the fields the daemon reads. */
 function receipt(usage: Record<string, unknown>): string {

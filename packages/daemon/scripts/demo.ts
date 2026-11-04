@@ -23,6 +23,7 @@ import { createMcpEndpoint, sessionMcpRequest } from "../src/mcp/endpoint.ts";
 import { mcpStdioCommand } from "../src/mcp/stdio-command.ts";
 import { runtimeInfo } from "../src/platform/runtime.ts";
 import { TURNS } from "./demo/turns.ts";
+import { demoWeek, writeDemoUsage } from "./demo/usage.ts";
 import { commitPricingTaskContract, createDemoWorkspace, DEMO_REPOS, writePricingTaskChanges } from "./demo/workspace.ts";
 
 const VERSION = "demo";
@@ -40,6 +41,8 @@ mkdirSync(projectsDir, { recursive: true });
 createDemoWorkspace(projectsDir);
 writeFileSync(join(home, "workspace.yaml"), `projectsDir: ${JSON.stringify(projectsDir)}\n`);
 
+// Copilot CLI's home of the demo, so its usage report shows the demo's week, never the developer's own conversations.
+const copilotHome = join(home, "copilot-home");
 const log = (msg: string) => process.stderr.write(`[demo] ${msg}\n`);
 const facade = createFacade({
   inContainer: false,
@@ -53,7 +56,7 @@ const facade = createFacade({
   sessionHook: (event, sessionToken) => sessionHookRequest(api.port, event, sessionToken),
   sessionMcpServer: (sessionToken) => sessionMcpRequest(api.port, sessionToken),
   hostingClis: HOSTING_CLIS,
-  userEnv,
+  userEnv: async () => ({ ...(await userEnv()), COPILOT_HOME: copilotHome }),
   log,
 });
 const stop = shutdownOnce(async (reason) => {
@@ -148,6 +151,9 @@ async function setTheScene(): Promise<void> {
     .map((member) => `${member.repo}: ${member.problem ?? member.service?.state ?? member.outcome}`);
   if (down.length > 0) throw new Error(`services did not come up (another demo still running?): ${down.join(", ")}`);
   await facade.mise.start({ repo: "orders-api", task: null }, "build");
+  const outside = join(home, "notes");
+  mkdirSync(outside, { recursive: true });
+  writeDemoUsage(copilotHome, demoWeek({ projectsDir, outside, tasks: facade.agents.tasks() }));
 }
 
 for (const signal of SHUTDOWN_SIGNALS) process.on(signal, () => void stop(signal));
