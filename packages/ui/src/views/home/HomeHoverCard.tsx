@@ -1,6 +1,6 @@
 import { type HomeKey, type HomeModel, parseHomeKey } from "@trackwall/scene/model";
 import { StatusLabel } from "@/components/StatusLabel";
-import { HOME_SESSION_STATUS, type HomeStatus, homeDaemonStatus, homeRepoStatus } from "@/lib/home-model";
+import { HOME_SESSION_STATUS, type HomeStatus, homeDaemonStatus, homeRepoStatus, homeServiceStatus } from "@/lib/home-model";
 
 /**
  * A preview of the object under the cursor: name and state in a corner of the scene. Labels on the scene are deliberately
@@ -25,7 +25,11 @@ function hoverPreview(key: HomeKey, model: HomeModel): { kind: string; title: st
     const repo = model.repos.find((r) => r.id === target.id);
     if (!repo) return undefined;
     const status = homeRepoStatus(repo);
-    const label = repo.runningTask ? `${status.label} · ${repo.runningTask} running` : status.label;
+    const label = [
+      status.label,
+      ...(repo.runningTask ? [`${repo.runningTask} running`] : []),
+      ...(repo.service ? [homeServiceStatus(repo.service).label] : []),
+    ].join(" · ");
     return { kind: "Repo", title: repo.id, status: { ...status, label } };
   }
   const session = target?.kind === "session" ? model.sessions.find((s) => s.id === target.id) : undefined;

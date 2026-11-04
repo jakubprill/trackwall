@@ -12,7 +12,7 @@ Start a service together with the services it calls, see when it is ready, and c
 ## What you get
 
 - One button that starts a service and, first, every service it calls.
-- A clear state for each service: starting, ready on its port, not answering or crashed, and "Open" for a ready one, which shows it in your browser, also from a dev container.
+- A clear state for each service: starting, ready on its port, not answering or crashed, and "Open" for a ready one, which shows it in your browser, also from a dev container. Every running service also shows on the [connection graph](/features/graph) and on [Home](/features/home).
 - One button that stops the service and what that start brought up.
 - The same for agents: they can start a service, call its endpoints and read the errors the services logged during the call.
 - An agent task can run its own copy of a service from its worktree, next to yours on its own port, or for a while on your service's port, so your frontend, the other services and your browser reach the task's changes.
@@ -48,6 +48,7 @@ When a service is ready, "Open" shows it in your browser. With Trackwall on your
 - Dependencies come from HTTP calls in the graph, including connections you added by hand, not from shared packages.
 - A `dev` mise task started with its own "Run" button also shows in the panel as the service.
 - The "Service" panel shows the service started from the repo; a service started from a task's worktree shows only in that task.
+- The graph and Home show the service that answers on the repo's port: the repo's own, or a task's copy while it holds that port. A crashed service stays there until you start it again.
 - A service from a task's worktree gets the task's port in `SERVER_PORT` and `PORT`. Spring Boot and most Node servers listen on it without changes; a service that sets its port elsewhere, also in the repo's mise configuration, takes that port instead and cannot run next to the one from the repo.
 - Only one task at a time can hold a repo's port, and only while the repo's port is known: the port its running service uses, or a single `server.port` on its card.
 - If the task's service already runs on the task's own port, stop it first; Trackwall does not stop it for you.

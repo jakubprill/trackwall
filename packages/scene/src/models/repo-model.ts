@@ -1,14 +1,16 @@
 import { Group, Mesh, PlaneGeometry } from "three";
-import type { HomeRepo, HomeRepoState } from "../home-model.ts";
+import type { HomeRepo, HomeRepoState, HomeServiceState } from "../home-model.ts";
 import { repoStateColor, type ScenePalette } from "../palette.ts";
 import type { RepoKind } from "../repo-kind.ts";
 import { box, cylinder, flatArc, flatRing, glass, glow, type HomeVisual, light, outline, solid, tickRing, unpickable } from "./kit.ts";
+import { addServiceRing } from "./service-ring.ts";
 
 /**
  * Repo model in the `holo` style (ADR-33, ADR-104): the solid of its kind (from the layer) as a hologram, a translucent body
  * with light edges and a core glowing in the state colour, on a pad. Around the pad an arc in the state colour grows with
- * the number of changes or commits to pull, and a dial scale turns, fast while a mise task runs. Everything you need to know
- * without reading is colour or shape; the repo name is in the label and the preview card.
+ * the number of changes or commits to pull, a dial scale turns, fast while a mise task runs, and outside it the service
+ * ring shows the repo's running service (ADR-191). Everything you need to know without reading is colour or shape; the
+ * repo name is in the label and the preview card.
  */
 
 /** The level at which the state arc closes; more changes mean "a lot" anyway. */
@@ -17,6 +19,8 @@ export const MAX_REPO_LEVEL = 5;
 const FRONT_Z = 0.236;
 /** Radius of the state arc around the pad. */
 const ARC_RADIUS = 0.7;
+/** Radius of the service ring, outside the dial scale. */
+const SERVICE_RADIUS = 0.97;
 
 /** Everything a repo's look depends on; the scene rebuilds the model only when this value changes. */
 export interface RepoLook {
@@ -25,6 +29,8 @@ export interface RepoLook {
   /** Changes or commits to pull, up to `MAX_REPO_LEVEL`; 0 for the other states. */
   level: number;
   taskRunning: boolean;
+  /** The state of the repo's running service, `null` while none runs (ADR-191). */
+  service: HomeServiceState | null;
 }
 
 export function repoLook(repo: HomeRepo, kind: RepoKind): RepoLook {
@@ -34,6 +40,7 @@ export function repoLook(repo: HomeRepo, kind: RepoKind): RepoLook {
     state: repo.state,
     level: counted ? Math.min(repo.count, MAX_REPO_LEVEL) : 0,
     taskRunning: repo.runningTask !== null,
+    service: repo.service?.state ?? null,
   };
 }
 
@@ -80,10 +87,12 @@ function pad(look: RepoLook, palette: ScenePalette): HomeVisual {
   ticks.position.y = 0.012;
   group.add(ticks);
   const speed = look.taskRunning ? 0.9 : 0.12;
+  const service = look.service === null ? undefined : addServiceRing(group, look.service, palette, SERVICE_RADIUS);
   return {
     object: group,
     animate: (t) => {
       ticks.rotation.y = t * speed;
+      service?.(t);
     },
   };
 }

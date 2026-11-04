@@ -1,6 +1,6 @@
 import { type ServiceSlice, servicesApi } from "@trackwall/protocol";
 import { Play, Square } from "lucide-react";
-import { useCallback, useContext, useState } from "react";
+import { useContext, useState } from "react";
 import { OpenServiceButton } from "@/components/OpenServiceButton";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Surface } from "@/components/Surface";
@@ -10,11 +10,7 @@ import type { Connection } from "@/lib/connection";
 import { DaemonPlaceContext } from "@/lib/desktop";
 import { isServiceLive, leaseHolder, memberLabel, serviceLink, serviceStateLabel } from "@/lib/service-state";
 import { useAction } from "@/lib/use-action";
-import { useRemote } from "@/lib/use-remote";
-
-/** Often while a service runs or starts (the user waits for it to be ready), rarely otherwise; the list does not ask mise. */
-const POLL_LIVE_MS = 1000;
-const POLL_IDLE_MS = 5000;
+import { useServices } from "@/lib/use-services";
 
 /**
  * The repo's service (ADR-45): its mise task `dev` with readiness. "Start with dependencies" brings up the services
@@ -23,8 +19,7 @@ const POLL_IDLE_MS = 5000;
  * the browser, through the service proxy when the daemon runs in a dev container (ADR-189).
  */
 export function RepoService({ conn, repo }: { conn: Connection; repo: string }) {
-  const load = useCallback(() => post(conn, servicesApi.list, {}), [conn]);
-  const remote = useRemote(load, { pollMs: (list) => (list?.some(isServiceLive) ? POLL_LIVE_MS : POLL_IDLE_MS) });
+  const remote = useServices(conn);
   const [slice, setSlice] = useState<ServiceSlice>();
   // The services from the repo roots; a task's service (ADR-61) shows in its task's panel through its mise task `dev`.
   const byRepo = new Map((remote.data ?? []).filter((s) => s.task === null).map((s) => [s.repo, s]));

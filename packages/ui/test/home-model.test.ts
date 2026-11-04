@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import type { GraphEdge, Repo, RepoGraph, Session } from "@trackwall/protocol";
+import type { GraphEdge, Repo, RepoGraph, Service, Session } from "@trackwall/protocol";
 import { repoNeedsYou } from "@trackwall/scene/model";
-import { daemonWork, homeDaemonRunning, homeHasObject, homeModel, homeRepoStatus, homeSessionState } from "../src/lib/home-model.ts";
+import {
+  daemonWork,
+  homeDaemonRunning,
+  homeHasObject,
+  homeModel,
+  homeRepoStatus,
+  homeServiceStatus,
+  homeSessionState,
+} from "../src/lib/home-model.ts";
 
 const running = { kind: "running", runId: "r", startedAt: "2026-10-24T10:00:00Z", pid: 10 } as const;
 
@@ -39,6 +47,10 @@ function session(id: string, repoId: string, over: Partial<Session> = {}): Sessi
   };
 }
 
+function service(repoId: string, state: Service["state"], over: Partial<Service> = {}): Service {
+  return { repo: repoId, task: null, lease: false, state, port: 8080, portSource: "log", run: running, since: "", reason: null, ...over };
+}
+
 function edge(from: string, to: string, source: GraphEdge["source"], key = "k"): GraphEdge {
   const kind = source === "package" ? "depends-on" : "calls";
   return { from, to, kind, source, key, confidence: "exact", evidence: [{ repo: from, path: "pom.xml", line: 1, detail: "dependency" }] };
@@ -59,6 +71,7 @@ describe("dashboard snapshot", () => {
       sessions: [],
       graph: undefined,
       running: [],
+      services: [],
       daemonRunning: true,
     });
 
@@ -76,6 +89,7 @@ describe("dashboard snapshot", () => {
       sessions: [],
       graph: undefined,
       running: [],
+      services: [],
       daemonRunning: true,
     });
 
@@ -88,6 +102,7 @@ describe("dashboard snapshot", () => {
       sessions: [],
       graph: graph([edge("web", "api", "http"), edge("api", "lib", "package"), edge("web", "lib", "package")]),
       running: [],
+      services: [],
       daemonRunning: true,
     });
 
@@ -111,6 +126,7 @@ describe("dashboard snapshot", () => {
         edge("web", "gone", "http"),
       ]),
       running: [],
+      services: [],
       daemonRunning: true,
     });
 
@@ -120,12 +136,54 @@ describe("dashboard snapshot", () => {
     ]);
   });
 
+  test("a repo's service is ready, on its way while it starts or stops, failing when it stops answering or crashes, and none once stopped", () => {
+    const states: Service["state"][] = ["healthy", "starting", "stopping", "unhealthy", "crashed", "stopped"];
+    const model = homeModel({
+      repos: states.map((state) => repo(state)),
+      sessions: [],
+      graph: undefined,
+      running: [],
+      services: states.map((state) => service(state, state)),
+      daemonRunning: true,
+    });
+
+    expect(model.repos.map((r) => r.service)).toEqual([
+      { state: "ready", port: 8080 },
+      { state: "starting", port: 8080 },
+      { state: "starting", port: 8080 },
+      { state: "failing", port: 8080 },
+      { state: "failing", port: 8080 },
+      null,
+    ]);
+  });
+
+  test("a task's service on a repo's port stands for the repo, as it is the one that answers there", () => {
+    const model = homeModel({
+      repos: [repo("api")],
+      sessions: [],
+      graph: undefined,
+      running: [],
+      services: [service("api", "stopped"), service("api", "starting", { task: "t1", lease: true, port: null })],
+      daemonRunning: true,
+    });
+
+    expect(model.repos[0]?.service).toEqual({ state: "starting", port: null });
+  });
+
+  test("a repo's service in one line names its port once ready", () => {
+    expect(homeServiceStatus({ state: "ready", port: 8080 })).toEqual({ tone: "ok", label: "service ready on port 8080" });
+    expect(homeServiceStatus({ state: "ready", port: null })).toEqual({ tone: "ok", label: "service ready" });
+    expect(homeServiceStatus({ state: "starting", port: null })).toEqual({ tone: "warning", label: "service starting" });
+    expect(homeServiceStatus({ state: "failing", port: 8080 })).toEqual({ tone: "error", label: "service failing" });
+  });
+
   test("a running mise task goes to its repo; a session of a repo outside the list does not reach the dashboard", () => {
     const model = homeModel({
       repos: [repo("api")],
       sessions: [session("s1", "api"), session("s2", "gone")],
       graph: undefined,
       running: [{ repo: "api", task: null, miseTask: "dev", run: running }],
+      services: [],
       daemonRunning: false,
     });
 
@@ -159,7 +217,7 @@ describe("session state on the dashboard", () => {
 
 describe("repo state on the dashboard in words", () => {
   test("number of changes and commits to pull as in the repo list; a repo with commits to pull is not clean", () => {
-    const repo = { id: "api", layer: null, runningTask: null };
+    const repo = { id: "api", layer: null, runningTask: null, service: null };
     expect(homeRepoStatus({ ...repo, state: "changed", count: 1 })).toEqual({ tone: "warning", label: "1 change" });
     expect(homeRepoStatus({ ...repo, state: "behind", count: 1 })).toEqual({ tone: "warning", label: "1 commit to pull" });
     expect(homeRepoStatus({ ...repo, state: "behind", count: 3 })).toEqual({ tone: "warning", label: "3 commits to pull" });
@@ -170,7 +228,14 @@ describe("repo state on the dashboard in words", () => {
 
 describe("selection and daemon state on the dashboard", () => {
   test("the selection points to an object from the dashboard snapshot; a repo or session that disappeared is not in it", () => {
-    const model = homeModel({ repos: [repo("api")], sessions: [session("s1", "api")], graph: undefined, running: [], daemonRunning: true });
+    const model = homeModel({
+      repos: [repo("api")],
+      sessions: [session("s1", "api")],
+      graph: undefined,
+      running: [],
+      services: [],
+      daemonRunning: true,
+    });
 
     expect(homeHasObject(model, "repo:api")).toBe(true);
     expect(homeHasObject(model, "session:s1")).toBe(true);
@@ -193,13 +258,14 @@ describe("selection and daemon state on the dashboard", () => {
   test("once the events connection is lost, the daemon's last sessions and running mise tasks are gone", () => {
     const sessions = [session("s1", "api")];
     const tasks = [{ repo: "api", task: null, miseTask: "dev", run: running }];
-    expect(daemonWork(true, sessions, tasks)).toEqual({ sessions: [], running: [] });
+    expect(daemonWork(true, sessions, tasks, [service("api", "healthy")])).toEqual({ sessions: [], running: [], services: [] });
   });
 
-  test("a failed poll alone keeps the last sessions and running mise tasks, and sessions not loaded yet stay unloaded", () => {
+  test("a failed poll alone keeps the last sessions, running mise tasks and services, and sessions not loaded yet stay unloaded", () => {
     const sessions = [session("s1", "api")];
     const tasks = [{ repo: "api", task: null, miseTask: "dev", run: running }];
-    expect(daemonWork(false, sessions, tasks)).toEqual({ sessions, running: tasks });
-    expect(daemonWork(false, undefined, undefined)).toEqual({ sessions: undefined, running: [] });
+    const services = [service("api", "healthy")];
+    expect(daemonWork(false, sessions, tasks, services)).toEqual({ sessions, running: tasks, services });
+    expect(daemonWork(false, undefined, undefined, undefined)).toEqual({ sessions: undefined, running: [], services: [] });
   });
 });

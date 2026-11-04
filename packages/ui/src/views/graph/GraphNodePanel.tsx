@@ -7,15 +7,18 @@ import {
   type GraphProblem,
   pluralNoun,
   type RepoGraph,
+  type Service,
 } from "@trackwall/protocol";
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
+import { StatusLabel } from "@/components/StatusLabel";
 import { Surface } from "@/components/Surface";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { fileName } from "@/lib/file-name";
 import { edgeLabel, problemClient } from "@/lib/graph-labels";
 import type { EdgePair } from "@/lib/graph-layout";
+import { serviceStateLabel } from "@/lib/service-state";
 
 /** Edge confidence for a person (ADR-29, ADR-30; rules at `EdgeConfidence`); `Record` forces an entry for each. */
 const CONFIDENCE_LABELS: Record<EdgeConfidence, string> = {
@@ -34,10 +37,13 @@ export function GraphNodePanel({
   node,
   pairs,
   problems,
+  service,
   onSelect,
   onClose,
 }: {
   node: GraphNode;
+  /** The service that answers for the repo (`repoService`), `null` while none runs. */
+  service: Service | null;
   /** Edges grouped by repo pair, the same as in the drawing (`GraphLayout.pairs`). */
   pairs: readonly EdgePair[];
   /** The graph's problems in this repo (`repoProblems`). */
@@ -59,6 +65,10 @@ export function GraphNodePanel({
           <X />
         </Button>
       </header>
+      <p className="flex items-center gap-2 text-xs">
+        <span className="hud-label">Service</span>
+        <StatusLabel {...serviceStateLabel(service)} />
+      </p>
       {node.problem !== null && <p className="text-warning text-sm break-words">Cannot build the card: {node.problem}</p>}
       {node.apps.length > 0 && (
         <p className="text-muted-foreground truncate font-mono text-xs">
