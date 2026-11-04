@@ -320,6 +320,63 @@ describe("Graph on cards from real git", () => {
     expect((await graph.subgraph("web", 2)).nodes.map((n) => n.repo).sort()).toEqual(["core-lib", "orders", "web"]);
   });
 
+  test("repos on different Java and Spring Boot versions give a version drift with the newest as the target", async () => {
+    const { projects, graph } = await setup();
+    makeRepo(
+      {
+        "pom.xml":
+          "<project>\n  <parent>\n    <groupId>org.springframework.boot</groupId>\n" +
+          "    <artifactId>spring-boot-starter-parent</artifactId>\n    <version>3.2.5</version>\n  </parent>\n" +
+          "  <artifactId>orders</artifactId>\n  <properties>\n    <java.version>17</java.version>\n  </properties>\n</project>\n",
+      },
+      "orders",
+      projects,
+    );
+    makeRepo(
+      {
+        "build.gradle": 'plugins {\n    id "org.springframework.boot" version "3.3.4"\n}\n',
+        "mise.toml": '[tools]\njava = "temurin-21.0.2+13.0.LTS"\n',
+      },
+      "payments",
+      projects,
+    );
+
+    const result = await graph.graph();
+
+    expect(result.drift).toEqual([
+      {
+        kind: "tool",
+        name: "java",
+        target: "21",
+        repos: [
+          { repo: "orders", versions: ["17"], evidence: [{ path: "pom.xml", line: 9, detail: "java 17 (hint)" }] },
+          {
+            repo: "payments",
+            versions: ["21"],
+            evidence: [{ path: "mise.toml", line: 2, detail: "java temurin-21.0.2+13.0.LTS (mise)" }],
+          },
+        ],
+      },
+      {
+        kind: "spring-boot",
+        name: "spring-boot",
+        target: "3.3.4",
+        repos: [
+          {
+            repo: "orders",
+            versions: ["3.2.5"],
+            evidence: [{ path: "pom.xml", line: 2, detail: "org.springframework.boot:spring-boot-starter-parent 3.2.5 (parent)" }],
+          },
+          {
+            repo: "payments",
+            versions: ["3.3.4"],
+            evidence: [{ path: "build.gradle", line: 2, detail: "org.springframework.boot 3.3.4 (plugin)" }],
+          },
+        ],
+      },
+    ]);
+  });
+
   test("a manual edge in workspace.yaml is calls without a kind and depends-on when it says so", async () => {
     const { projects, workspaceFile, graph } = await setup();
     makeRepo({ "package.json": JSON.stringify({ name: "web", private: true }) }, "web", projects);

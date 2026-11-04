@@ -406,6 +406,7 @@ export function createFacade(o: FacadeOptions): Facade {
       }),
     repoHosts: () => workspace.repoHosts(),
     unpushedWork: () => workspace.unpushedWork(),
+    remoteReach: () => workspace.remoteReach(),
     mountTable,
     diskSpace: o.diskSpace ?? diskSpace,
     homeDir: homedir(),
