@@ -27,6 +27,47 @@ export type FolderTerminal = z.infer<typeof FolderTerminal>;
 /** More folder terminals, ended ones too, than a person can watch is a script, not a person; each keeps a screen in memory. */
 export const MAX_FOLDER_TERMINALS = 16;
 
+/**
+ * A file or folder under a place, as a path relative to the place's folder with `/` between names (`""` is the folder
+ * itself). The daemon refuses `.` and `..`, an empty name and a link anywhere on the way (ADR-188).
+ */
+export const PlacePath = z.string().max(4096);
+
+/** What is at a path in a place's folder (`terminals/files`, `terminals/download`). */
+export const PlaceFile = TerminalPlace.extend({ path: PlacePath }).strict();
+export type PlaceFile = z.infer<typeof PlaceFile>;
+
+/** A link is shown but never followed: it may point anywhere, out of the place too. */
+export const FolderEntryKind = z.enum(["folder", "file", "link", "other"]);
+export type FolderEntryKind = z.infer<typeof FolderEntryKind>;
+
+export const FolderEntry = z.object({
+  name: z.string(),
+  kind: FolderEntryKind,
+  /** Bytes of a file; `null` for anything else. */
+  size: z.number().int().nonnegative().nullable(),
+});
+export type FolderEntry = z.infer<typeof FolderEntry>;
+
+/** More entries than this in one folder are cut (`truncated`): a list to browse, not an index (`node_modules`). */
+export const MAX_FOLDER_ENTRIES = 2000;
+/** A download is held in the page's memory before it is saved; larger files go out with `docker cp`. */
+export const MAX_DOWNLOAD_BYTES = 1024 ** 3;
+
+export const FolderListing = z.object({
+  path: PlacePath,
+  /** Folders first, then by name. */
+  entries: z.array(FolderEntry),
+  truncated: z.boolean(),
+});
+export type FolderListing = z.infer<typeof FolderListing>;
+
+/**
+ * `POST` with a `PlaceFile` body: the file's bytes as they are (`application/octet-stream`), not `{ ok, data }`; an error
+ * comes as the usual `{ ok: false, error }` with its status. Behind the daemon token like every action.
+ */
+export const DOWNLOAD_PATH = "/api/terminals/download";
+
 const endpoint = apiEndpoints("terminals");
 
 export const terminalsApi = {
@@ -39,4 +80,6 @@ export const terminalsApi = {
   list: endpoint("list", z.object({}).strict(), z.array(FolderTerminal)),
   /** Ends the terminal's shell and forgets it; returns once the end is confirmed (`stop_unconfirmed` otherwise). */
   close: endpoint("close", z.object({ terminal: TerminalId }).strict(), Done),
+  /** The folder at `path` in the place, read only (ADR-188); `bad_request` for a path that is not a folder of it. */
+  files: endpoint("files", PlaceFile, FolderListing),
 };

@@ -11,6 +11,7 @@ import {
   type Task,
   type TaskChangedEndpoints,
   type TaskOutcome,
+  type TerminalPlace,
 } from "@trackwall/protocol";
 import { downloadVerified } from "./infra/download.ts";
 import { vscodeUrl } from "./infra/editor-url.ts";
@@ -61,6 +62,7 @@ import { RuntimeFile } from "./modules/procs/runtime-file.ts";
 import { Routines } from "./modules/routines/routines.ts";
 import { Services } from "./modules/services/services.ts";
 import { TASK_JOURNAL_FILE, TASK_JOURNAL_MAX_RECORDS, TaskJournal } from "./modules/task-journal/task-journal.ts";
+import { FolderFiles } from "./modules/terminals/folder-files.ts";
 import { FolderTerminals } from "./modules/terminals/folder-terminals.ts";
 import { TestReports } from "./modules/test-results/test-reports.ts";
 import { Hosting, type HostingClis } from "./modules/vcs/hosting.ts";
@@ -99,6 +101,8 @@ export interface Facade {
   services: Services;
   /** The user's own shells in a repo root or a task's worktree, shown like session terminals (ADR-185). */
   terminals: FolderTerminals;
+  /** The files of a repo root or a task's worktree, read only, next to its Shell tab (ADR-188). */
+  folderFiles: FolderFiles;
   testReports: TestReports;
   verifications: Verifications;
   /** What ended tasks were and left, searched by `search_task_history` (ADR-150). */
@@ -154,6 +158,7 @@ type AppConfigRequest = MiseTarget & AppConfigQuery;
 
 export type { CopilotHookOutput } from "./modules/agents/copilot-hook-output.ts";
 export type { CopilotHookEvent } from "./modules/agents/copilot-hook-record.ts";
+export type { FileDownload } from "./modules/terminals/folder-files.ts";
 export { HOSTING_CLIS } from "./modules/vcs/hosting.ts";
 
 const WORKSPACE_FILE = "workspace.yaml";
@@ -458,9 +463,11 @@ export function createFacade(o: FacadeOptions): Facade {
     });
   }
 
+  const placeFolder = async ({ repo, task }: TerminalPlace): Promise<string> =>
+    task === null ? workspace.repoPath(repo) : agents.taskWorktreeForShell(task, repo);
   const terminals: FolderTerminals = new FolderTerminals({
     procs,
-    folder: async ({ repo, task }): Promise<string> => (task === null ? workspace.repoPath(repo) : agents.taskWorktreeForShell(task, repo)),
+    folder: placeFolder,
     env: o.userEnv,
     shell: (env) => userShell(env),
     log: o.log,
@@ -482,6 +489,7 @@ export function createFacade(o: FacadeOptions): Facade {
     agents,
     services,
     terminals,
+    folderFiles: new FolderFiles({ folder: placeFolder }),
     testReports,
     verifications,
     taskJournal,

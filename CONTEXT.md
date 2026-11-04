@@ -581,6 +581,10 @@ _Avoid_: terminal window (a window is the app window)
 The user's own shell in a repo root or a task's worktree (its **place**, `TerminalPlace`), which the daemon runs in a PTY and the UI shows like a session terminal (ADR-185). One per place; it keeps running when its tab closes, and ends when the user closes it, ends the task, or the daemon stops. In the UI it is the "Shell" tab, because a task's "Terminal" tab is its session's.
 _Avoid_: console, terminal on its own in the UI (a task's "Terminal" tab is the session terminal)
 
+**Folder files** (`FolderFiles`, `folderFiles` in the facade, `terminals/files`, `terminals/download`; the "Files on disk" panel of the Shell tab in the UI):
+The files of a folder terminal's place, as they are on disk, listed read only and downloaded one at a time to the user's computer (ADR-188). Paths are names under the place's folder (`PlaceFile`); links are listed and never followed.
+_Avoid_: file browser, file manager (it only lists and downloads); the repo's "Files" tab, which shows the last commit
+
 **Session layout** (`SessionLayout`):
 How the right side of the Sessions view shows entries (ADR-48): `1` is the selected entry alone with its full panel (tabs, Stop, Resume), `2` and `4` a grid page of that many entries, `auto` a grid of the whole list, up to nine per page.
 In the Sessions view the switch is labelled just "Layout".

@@ -1,6 +1,7 @@
 import { type FolderTerminal, type TerminalPlace, terminalSocket, terminalsApi } from "@trackwall/protocol";
-import { RotateCcw, SquareTerminal, X } from "lucide-react";
+import { FolderOpen, RotateCcw, SquareTerminal, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { FolderFiles } from "@/components/FolderFiles";
 import { type PtyKind, PtyTerminal } from "@/components/PtyTerminal";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
@@ -39,6 +40,8 @@ export function FolderShell({ conn, place, folder }: { conn: Connection; place: 
     },
   );
   const terminal = listed.terminal ?? started;
+  // Closed in every new tab, like the diff panel: the terminal is what the tab is for.
+  const [filesOpen, setFilesOpen] = useState(false);
   // Once the list has the shell, it alone says what happens to it (an end, a close in another window).
   useEffect(() => {
     if (listed.terminal) setStarted(undefined);
@@ -73,6 +76,15 @@ export function FolderShell({ conn, place, folder }: { conn: Connection; place: 
           {folder}
         </span>
         {actionError && <span className="text-destructive max-w-xs truncate text-xs">{actionError}</span>}
+        <Button
+          variant={filesOpen ? "secondary" : "outline"}
+          size="sm"
+          onClick={() => setFilesOpen((open) => !open)}
+          aria-pressed={filesOpen}
+          title="The files in this folder as they are now, to download"
+        >
+          <FolderOpen /> Files on disk
+        </Button>
         {!live && (
           <Button variant="outline" size="sm" onClick={() => open.run()} disabled={open.pending}>
             <RotateCcw /> Start again
@@ -88,15 +100,24 @@ export function FolderShell({ conn, place, folder }: { conn: Connection; place: 
           <X /> Close
         </Button>
       </div>
-      <PtyTerminal
-        key={terminal.id}
-        conn={conn}
-        socket={terminalSocket(terminal.id)}
-        screenKey={terminal.id}
-        live={live}
-        selected
-        kind={SHELL}
-      />
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <PtyTerminal
+            key={terminal.id}
+            conn={conn}
+            socket={terminalSocket(terminal.id)}
+            screenKey={terminal.id}
+            live={live}
+            selected
+            kind={SHELL}
+          />
+        </div>
+        {filesOpen && (
+          <div className="flex w-72 max-w-1/2 shrink-0 flex-col">
+            <FolderFiles conn={conn} place={place} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
