@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ConversationEntry } from "@trackwall/protocol";
 import { conversationTurns } from "../src/lib/conversation.ts";
-import { shownDiff, turnFiles } from "../src/lib/diff-panel.ts";
+import { askAboutLine, inFileAsLeft, shownDiff, turnFiles } from "../src/lib/diff-panel.ts";
 
 function edit(id: string, files: string[], patch: string): Extract<ConversationEntry, { kind: "tool" }> {
   return {
@@ -77,11 +77,52 @@ describe("the diff panel of the conversation view", () => {
       ["src/b.ts", 1, 0],
     ]);
     expect(files[1]?.changes[0]?.change.lines.map((l) => l.text)).toEqual(["@@ -7,0 +7,1 @@", "+two"]);
-    expect(turnFiles([edit("tool-2", [], patch)]).map((f) => f.path)).toEqual(["home/me/shop/src/a.ts", "home/me/shop/src/b.ts"]);
+    // A review comment and VS Code get the name the daemon knows, not the patch's absolute path.
+    expect(files[1]?.changes[0]?.change.lines[1]?.anchor).toEqual({ path: "src/b.ts", side: "new", line: 7 });
+    expect(files.map((f) => f.known)).toEqual([true, true]);
+    // Without the daemon's names the patch's paths stay, and their lines are not offered for a comment or VS Code.
+    const unnamed = turnFiles([edit("tool-2", [], patch)]);
+    expect(unnamed.map((f) => [f.path, f.known])).toEqual([
+      ["home/me/shop/src/a.ts", false],
+      ["home/me/shop/src/b.ts", false],
+    ]);
+    // A file outside the working directory keeps its absolute path, which a review or VS Code cannot take either.
+    const config = '--- a/home/me/.config/x.json\n+++ b/home/me/.config/x.json\n@@ -1,1 +1,1 @@\n-{}\n+{ "a": 1 }\n';
+    expect(turnFiles([edit("tool-5", ["/home/me/.config/x.json"], config)]).map((f) => [f.path, f.known])).toEqual([
+      ["/home/me/.config/x.json", false],
+    ]);
+    expect(turnFiles([edit("tool-6", ["C:\\Users\\me\\x.json"], config)]).map((f) => f.known)).toEqual([false]);
     const similar =
       "diff --git a/home/me/shop/data.ts b/home/me/shop/data.ts\n--- a/home/me/shop/data.ts\n+++ b/home/me/shop/data.ts\n@@ -1,1 +1,1 @@\n-x\n+y\n";
     expect(turnFiles([edit("tool-3", ["a.ts", "data.ts"], similar)]).map((f) => f.path)).toEqual(["data.ts"]);
     const binary = "diff --git a/home/me/shop/logo.png b/home/me/shop/logo.png\nBinary files differ\n";
     expect(turnFiles([edit("tool-4", ["logo.png"], binary)])).toEqual([]);
+  });
+
+  test("only the conversation's last change of a file is numbered as the file is now, so a later turn's change of it makes an earlier one past", () => {
+    const turns = conversationTurns([
+      { id: "user-1", kind: "user", text: "Add a discount row", attachments: [] },
+      edit("tool-1", ["src/Summary.tsx"], SUMMARY_PATCH),
+      edit("tool-2", ["src/total.ts"], TOTAL_PATCH),
+      { id: "user-2", kind: "user", text: "Show the discounted total", attachments: [] },
+      edit("tool-3", ["src/Summary.tsx"], SUMMARY_AGAIN),
+    ]);
+
+    expect(shownDiff(turns, { turn: "tool-1", path: "src/Summary.tsx" })?.current).toBeNull();
+    expect(shownDiff(turns, { turn: "tool-1", path: "src/total.ts" })?.current).toBe("tool-2");
+    expect(shownDiff(turns, { turn: "tool-3", path: "src/Summary.tsx" })?.current).toBe("tool-3");
+    const unnamed = conversationTurns([edit("tool-4", [], TOTAL_PATCH)]);
+    expect(shownDiff(unnamed, null)?.current).toBeNull();
+  });
+
+  test("a line of the file as the agent left it takes a comment and opens in VS Code, and any line can be asked about as a quote", () => {
+    expect(inFileAsLeft({ path: "src/a.ts", side: "new", line: 3 })).toBe(true);
+    expect(inFileAsLeft({ path: "src/a.ts", side: "old", line: 3 })).toBe(false);
+    expect(askAboutLine({ path: "src/Summary.tsx", side: "new", line: 14 }, '+  <Row label="Discount" />')).toBe(
+      'About src/Summary.tsx, line 14:\n> <Row label="Discount" />\n\n',
+    );
+    expect(askAboutLine({ path: "src/total.ts", side: "old", line: 4 }, "-return a;")).toBe(
+      "About src/total.ts, removed line 4:\n> return a;\n\n",
+    );
   });
 });

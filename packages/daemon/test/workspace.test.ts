@@ -599,6 +599,7 @@ describe("vscodeUrl", () => {
   test("a path from Windows and from macOS, special characters encoded", () => {
     expect(vscodeUrl("C:\\Users\\jan\\repo #1")).toBe("vscode://file/C:/Users/jan/repo%20%231");
     expect(vscodeUrl("/Users/jan/repo")).toBe("vscode://file/Users/jan/repo");
+    expect(vscodeUrl("/Users/jan/repo/src/a #1.ts", 14)).toBe("vscode://file/Users/jan/repo/src/a%20%231.ts:14");
   });
 });
 

@@ -1,3 +1,5 @@
+import { existsSync, realpathSync, statSync } from "node:fs";
+import { resolve } from "node:path";
 import type {
   AgentApproval,
   ConversationEntry,
@@ -15,6 +17,7 @@ import type {
   WaitingMessage,
 } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
+import { isInside } from "../../infra/path-inside.ts";
 import { AcpConnection, AcpError } from "./acp-connection.ts";
 import { AcpConversation, type ConversationChange } from "./acp-conversation.ts";
 import {
@@ -252,6 +255,22 @@ export class AcpSession implements AgentSession {
       const loaded = ConfigOptionsResult.safeParse(await connection.request("session/load", { sessionId: load, cwd, mcpServers: [] }));
       this.#infoChanged(this.#info.settings(loaded.data?.configOptions));
     }
+  }
+
+  /**
+   * The full path of a file the conversation names (`path` relative to the working directory, as a tool call's files
+   * are, or absolute), only inside the working directory, by real paths so a link there cannot lead out, and only while
+   * it is there: the path comes from the agent (ADR-107).
+   */
+  fileOf(path: string): string {
+    const cwd = this.#o.cwd;
+    const file = resolve(cwd, path);
+    if (!isInside(cwd, file)) throw new DomainError("bad_request", "the file is outside the session's working directory");
+    if (!existsSync(file)) throw new DomainError("not_found", "the file is not there any more");
+    if (!statSync(file).isFile()) throw new DomainError("bad_request", "the path is not a file");
+    if (!isInside(realpathSync(cwd), realpathSync(file)))
+      throw new DomainError("bad_request", "the file leads outside the session's working directory");
+    return file;
   }
 
   /** Copilot CLI's id of the conversation, which a later start loads (ADR-95, ADR-107). */
