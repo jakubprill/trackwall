@@ -201,7 +201,7 @@ function SessionTile({
       onFocus={select}
       onMouseDown={select}
       className={cn(
-        "bg-background flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border outline-none",
+        "flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border outline-none",
         session?.needsAttention && "border-warning shadow-glow-warning",
         selected && "ring-primary ring-2",
       )}
