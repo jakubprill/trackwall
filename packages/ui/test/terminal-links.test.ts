@@ -123,7 +123,7 @@ function fakeTerminal(rows: TerminalRow[]): Terminal {
 
 function linksOn(terminal: Terminal, y: number): Pick<ILink, "text" | "range">[] {
   let links: ILink[] | undefined;
-  trackwallLinkProvider(terminal, false).provideLinks(y, (found) => {
+  trackwallLinkProvider(terminal, false, () => undefined).provideLinks(y, (found) => {
     links = found;
   });
   return (links ?? []).map(({ text, range }) => ({ text, range }));
@@ -143,11 +143,20 @@ test("a link split over two rows is underlined on each row over its own characte
 
 test("a hyperlink to a web address opens in the browser on Ctrl+click only, and one to another scheme never", () => {
   const opened: string[] = [];
-  const handler = hyperlinkHandler(false, (url) => opened.push(url));
+  const handler = hyperlinkHandler(false, { external: (url) => opened.push(url), trackwall: (url) => opened.push(`page ${url}`) });
   const click = (ctrlKey: boolean) => ({ ctrlKey, metaKey: false }) as MouseEvent;
   const range = { start: { x: 1, y: 1 }, end: { x: 24, y: 1 } };
   handler.activate(click(false), "https://example.com/docs", range);
   handler.activate(click(true), "file:///etc/passwd", range);
   handler.activate(click(true), "https://example.com/docs", range);
   expect(opened).toEqual(["https://example.com/docs"]);
+});
+
+test("a named trackwall hyperlink opens in Trackwall on Ctrl+click", () => {
+  const opened: string[] = [];
+  const handler = hyperlinkHandler(false, { external: (url) => opened.push(url), trackwall: (url) => opened.push(`page ${url}`) });
+  const range = { start: { x: 1, y: 1 }, end: { x: 6, y: 1 } };
+  handler.activate({ ctrlKey: false, metaKey: false } as MouseEvent, "trackwall://repo/orders-api", range);
+  handler.activate({ ctrlKey: true, metaKey: false } as MouseEvent, "trackwall://repo/orders-api", range);
+  expect(opened).toEqual(["page trackwall://repo/orders-api"]);
 });

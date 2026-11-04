@@ -18,7 +18,7 @@ const read = (path: string) => readFileSync(join(REPO, path), "utf8");
 const shellSource = read("apps/desktop/src-tauri/src/jump.rs");
 const linkSource = read("apps/desktop/src-tauri/src/link.rs");
 const uiSource = read("packages/ui/src/lib/use-jump-request.ts");
-const terminalLinksSource = read("packages/ui/src/lib/terminal-links.ts");
+const trackwallLinkSource = read("packages/ui/src/lib/trackwall-link.ts");
 
 test("the shell signals a jump under the same event name the UI listens to", () => {
   const shell = /const JUMP_EVENT: &str = "([^"]+)";/.exec(shellSource)?.[1];
@@ -41,9 +41,9 @@ test("the UI takes the jump with the command the shell defines", () => {
   expect(ui).toBe(shell);
 });
 
-test("a link clicked in a session terminal goes to the command the shell defines", () => {
+test("a trackwall link clicked in the page goes to the command the shell defines", () => {
   const shell = /#\[tauri::command\]\s*pub fn (\w+)/.exec(linkSource)?.[1];
-  const ui = /const OPEN_LINK_COMMAND = "([^"]+)";/.exec(terminalLinksSource)?.[1];
+  const ui = /const OPEN_LINK_COMMAND = "([^"]+)";/.exec(trackwallLinkSource)?.[1];
   expect(shell).toBe("open_link");
   expect(ui).toBe(shell);
 });
@@ -74,7 +74,10 @@ test("the kinds of jump targets (`kind`) are the same in the shell and in the UI
   // `Jump` in Rust has `rename_all = "lowercase"`, so the `Proposal` variant is `"proposal"`; `NextWaiting` is renamed.
   const variants = /pub enum Jump \{([^}]*)\}/.exec(shellSource)?.[1] ?? "";
   const shell = [...variants.matchAll(/(?:rename = "([\w-]+)"\)\]\s*(\w+)|^\s*(\w+)\()/gm)].map((m) => m[1] ?? m[3]?.toLowerCase());
-  const ui = [...uiSource.matchAll(/kind: z\.literal\("([\w-]+)"\)/g)].map((m) => m[1]);
+  // The UI's `Jump` starts with the targets of a `trackwall://` link (`TrackwallLinkTarget` in protocol).
+  const kinds = (source: string) => [...source.matchAll(/kind: z\.literal\("([\w-]+)"\)/g)].map((m) => m[1]);
+  expect(uiSource).toContain("...TrackwallLinkTarget.options,");
+  const ui = [...kinds(read("packages/protocol/src/links.ts")), ...kinds(uiSource)];
   expect(shell).toEqual(["repo", "session", "task", "proposal", "next-waiting"]);
   expect(ui).toEqual(shell);
 });
