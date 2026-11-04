@@ -25,6 +25,7 @@ export * from "./events.ts";
 export * from "./evidence.ts";
 export * from "./graph.ts";
 export * from "./http.ts";
+export * from "./impact-handoff.ts";
 export * from "./java-navigation.ts";
 export * from "./knowledge.ts";
 export * from "./links.ts";

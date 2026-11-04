@@ -538,6 +538,12 @@ export const TaskProposal = z.object({
    * for a task and a folder action.
    */
   parts: ChangeParts.nullable(),
+  /**
+   * The daemon proposed it from the impact of the proposing task's commits (ADR-198): the repo calls an endpoint they
+   * removed or changed. `proposedBy` is that task's session, so the proposal and its task sit under that task, but the
+   * prompt came from the comparison, not from its agent.
+   */
+  fromImpact: z.boolean(),
   proposedBy: ProposedBy,
   /** ISO 8601. */
   createdAt: z.string(),

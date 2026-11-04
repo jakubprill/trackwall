@@ -30,6 +30,7 @@ import { approvalArgs } from "./copilot-command.ts";
 import type { LspServer } from "./copilot-plugin.ts";
 import { SANDBOX_ARG } from "./copilot-sandbox.ts";
 import { type EndedTaskFacts, type EndedTaskGit, endedTaskFacts } from "./ended-task.ts";
+import { offeredAfter } from "./impact-proposals.ts";
 import type { JavaNavigationServers } from "./java-navigation-servers.ts";
 import { modelArgs } from "./model-args.ts";
 import { TASK_BRANCH_PREFIX, taskSlug, taskWorktree } from "./task-branch.ts";
@@ -307,6 +308,7 @@ export class AgentTasks {
       summary: null,
       handoff,
       change,
+      impactProposed: {},
       trustedMiseConfig: null,
       port: freeTaskPort([...this.#tasks.map((t) => t.port), ...this.#creatingPorts]),
       included: noIncludedFiles(),
@@ -535,6 +537,20 @@ export class AgentTasks {
       return null;
     });
     return commit === null ? null : { task: from.id, repo: from.repo, branch: from.branch, commit };
+  }
+
+  /** The endpoints each repo was offered a task for from task `id`'s impact (ADR-198); `{}` once the task is gone. */
+  impactProposed(id: string): Readonly<Record<string, readonly string[]>> {
+    return this.#tasks.find((t) => t.id === id)?.impactProposed ?? {};
+  }
+
+  /** Adds `endpoints` to what `repo` was offered from task `id`'s impact; nothing once the task is gone. */
+  markImpactProposed(id: string, repo: string, endpoints: readonly string[]): void {
+    const task = this.#tasks.find((t) => t.id === id);
+    if (task === undefined) return;
+    const offered = offeredAfter(task.impactProposed[repo] ?? [], endpoints);
+    const marked = { ...task, impactProposed: { ...task.impactProposed, [repo]: offered } };
+    this.#save(this.#tasks.map((t) => (t.id === id ? marked : t)));
   }
 
   /**
@@ -856,7 +872,15 @@ function capFiles(files: ChangedFile[]): { files: ChangedFile[]; filesTruncated:
   return { files: files.slice(0, TASK_SUMMARY_MAX_FILES), filesTruncated: files.length > TASK_SUMMARY_MAX_FILES };
 }
 
-function view({ repoDir: _, trustedMiseConfig: __, worktreesDir: ___, conversation: ____, handoff: _____, ...task }: KnownTask): Task {
+function view({
+  repoDir: _,
+  trustedMiseConfig: __,
+  worktreesDir: ___,
+  conversation: ____,
+  handoff: _____,
+  impactProposed: ______,
+  ...task
+}: KnownTask): Task {
   return task;
 }
 

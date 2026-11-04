@@ -63,6 +63,7 @@ function proposal(id: string, repo: string, title: string): TaskProposal {
     approvals: "ask",
     item: null,
     parts: null,
+    fromImpact: false,
     createdAt: AT,
   };
 }
