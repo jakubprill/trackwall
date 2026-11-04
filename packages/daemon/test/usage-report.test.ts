@@ -65,7 +65,7 @@ async function untilReported(task: string): Promise<void> {
   }
 }
 
-describe.skipIf(process.versions.bun === undefined)("the weekly usage report (ADR-195, fake Copilot CLI)", () => {
+describe.skipIf(process.versions.bun === undefined)("the weekly usage report (ADR-196, fake Copilot CLI)", () => {
   test(
     "ranks the week's work by input tokens, ties a task's conversation to the task also after it ended, and ranks tools by result tokens",
     async () => {

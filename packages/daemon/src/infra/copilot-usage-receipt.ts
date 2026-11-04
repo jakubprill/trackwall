@@ -4,7 +4,7 @@ import { z } from "zod";
 /**
  * The receipt Copilot CLI appends to a conversation's event log after every model call, `session.usage_record`
  * (ADR-190), and how receipts add up: one place for the rule, for a session's usage in `agents` and the weekly usage
- * report in `usage-report` (ADR-195). The format is Copilot CLI's own and undocumented; a contract test pins the fields
+ * report in `usage-report` (ADR-196). The format is Copilot CLI's own and undocumented; a contract test pins the fields
  * read here, and anything else in a line is ignored.
  */
 

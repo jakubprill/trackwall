@@ -6,7 +6,7 @@ import { conversationEventLog } from "../../src/infra/copilot-home.ts";
 /**
  * The receipt Copilot CLI appends to a conversation's event log after a model call (ADR-190), in the shape the contract
  * test sees on the real one; the fakes write it for every turn's model call, with the tokens of the tool definitions
- * it sent and one tool call whose result went back to the model (ADR-195), and the conversation's `workspace.yaml` with
+ * it sent and one tool call whose result went back to the model (ADR-196), and the conversation's `workspace.yaml` with
  * its folder and git branch, as Copilot CLI writes them. `nanoAiu` is the call's cost on token billing, which
  * the real Copilot CLI reports only with a GitHub account, so without it the receipt says AI credits are unavailable,
  * as with the contract test's own model (BYOK).

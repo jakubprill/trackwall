@@ -27,7 +27,7 @@ const known = (tasks: KnownTask[]): KnownPlaces => ({
 const T1 = "11111111-1111-4111-8111-111111111111";
 const T2 = "22222222-2222-4222-8222-222222222222";
 
-describe("the work a Copilot CLI conversation was for, from its folder and branch (ADR-195)", () => {
+describe("the work a Copilot CLI conversation was for, from its folder and branch (ADR-196)", () => {
   test("a task by its worktree, named by its title or the first line of its prompt", () => {
     const cwd = join(worktrees, "shop", "fix-login-3f2a9c");
     const tasks = [task({ id: T1, repo: "shop", worktree: cwd, title: "Fix the login" })];

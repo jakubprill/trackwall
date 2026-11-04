@@ -193,7 +193,7 @@ describe("a session of the real Copilot CLI", () => {
     expect(second.usage).toMatchObject({ inputTokens: 2, outputTokens: 2 });
   });
 
-  test("the event log has each model call's tool definition tokens and each tool call's server, outcome and result tokens, which the weekly usage report reads (ADR-195)", async () => {
+  test("the event log has each model call's tool definition tokens and each tool call's server, outcome and result tokens, which the weekly usage report reads (ADR-196)", async () => {
     const { id, window } = await startSession();
     model.reply(
       {
@@ -590,7 +590,7 @@ describe("an agent task with the real Copilot CLI", () => {
     expect(first?.system).toContain(realpathSync.native(task.worktree));
   });
 
-  test("a task's conversation records the task's worktree and branch, so the weekly usage report counts it under the task, also once it ended (ADR-195)", async () => {
+  test("a task's conversation records the task's worktree and branch, so the weekly usage report counts it under the task, also once it ended (ADR-196)", async () => {
     const { agents } = daemon.facade;
     model.reply({ text: "Counting." });
     const task = await agents.createTask("shop", "count this task");

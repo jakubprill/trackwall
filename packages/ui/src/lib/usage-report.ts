@@ -2,7 +2,7 @@ import { countLabel, type UsageReport, type UsageTool, type UsageWork } from "@t
 import { tokenCount } from "./copilot-usage.ts";
 
 /**
- * How Settings shows the weekly usage report (ADR-195): a name for each piece of work, the week's dates, and how much
+ * How Settings shows the weekly usage report (ADR-196): a name for each piece of work, the week's dates, and how much
  * of what the model read was tool definitions, the cost every call pays before any work.
  */
 

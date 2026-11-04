@@ -22,7 +22,7 @@ const work = (w: Partial<UsageWork>): UsageWork => ({
   ...w,
 });
 
-describe("the weekly usage report as Settings shows it (ADR-195)", () => {
+describe("the weekly usage report as Settings shows it (ADR-196)", () => {
   test("a task by its title, the rest by what they were", () => {
     expect(workName(work({ kind: "task", label: "Fix the cart total" }))).toBe("Fix the cart total");
     expect(workName(work({ kind: "supervisor" }))).toBe("Supervisor");

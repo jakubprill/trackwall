@@ -1,4 +1,4 @@
-// A week of Copilot CLI conversations for the demo's "Copilot usage" (ADR-195): the event logs and `workspace.yaml`
+// A week of Copilot CLI conversations for the demo's "Copilot usage" (ADR-196): the event logs and `workspace.yaml`
 // Copilot CLI would have left in its home for the demo's tasks, its repo sessions, the supervisor and one folder
 // outside the projects folder, with model calls and tool calls spread over the last six days. The numbers are made
 // up but shaped like a real week: tool definitions are a large part of every call, and a few tools add most results.

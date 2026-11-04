@@ -18,9 +18,11 @@ import {
 } from "@trackwall/protocol";
 import { trustedFolderOf, trustedFolders } from "./copilot-trust.ts";
 import { type DiskSpace, gigabytes, LOW_DISK_BYTES, VERY_LOW_DISK_BYTES } from "./disk-space.ts";
+import { firstLine } from "./first-line.ts";
 import { folderStorage } from "./folder-storage.ts";
 import { modelProviderOutcome, type ProfileEnvironment } from "./model-provider-check.ts";
 import { networkOutcome, sessionCertificates } from "./network-check.ts";
+import { type RemoteReachRead, remoteOutcome } from "./remote-check.ts";
 import type { TlsProbe } from "./tls-probe.ts";
 import { compareVersions, versionIn } from "./version.ts";
 
@@ -44,8 +46,6 @@ const CONTAINER_DISK_FIX =
   " The container's disk is the disk of Docker's virtual machine: on your computer, `docker system prune` (without `--volumes`, which would delete the repos) removes old images and containers, and the settings of Docker Desktop or Rancher Desktop can make that disk bigger.";
 /** What to do about a repo git could not read in that check. */
 const READ_FIX = "Run git status in that repo in a terminal of the container to see why.";
-/** A program's error in a summary: its first line, cut. */
-const MAX_MESSAGE_CHARS = 200;
 
 export interface DoctorDeps {
   /** The environment sessions and mise tasks start with (`userEnv`). */
@@ -69,6 +69,8 @@ export interface DoctorDeps {
   /** `null` while the projects folder is not set; throws when the workspace settings cannot be read. */
   projectsDir: () => Promise<string | null>;
   repoHosts: () => RepoHost[];
+  /** Whether git reaches each repo host of the projects folder, through one repo per host (`workspace`, ADR-195). */
+  remoteReach: () => Promise<RemoteReachRead[]>;
   /** The work in the projects folder on no remote, read only in a container (`workspace`, ADR-162). */
   unpushedWork: () => Promise<UnpushedWork>;
   /** Free space of the file system a folder is on (`diskSpace`, a fake in tests). */
@@ -125,6 +127,8 @@ export class Doctor {
       "unpushed-work": (ctx) => this.unpushedWork(ctx),
       "workspace-file": () => this.workspaceFile(),
       git: () => this.git(),
+      "git-remotes": async ({ projectsDir }) =>
+        projectsDir.ok && projectsDir.value !== null ? remoteOutcome(await this.deps.remoteReach(), this.deps.inContainer) : null,
       "copilot-cli": (ctx) => this.copilotCli(ctx),
       "copilot-trusted-folder": (ctx) => this.copilotTrustedFolder(ctx),
       "copilot-sandbox": () => this.copilotSandbox(),
@@ -357,11 +361,6 @@ async function settle<T>(call: Promise<T>): Promise<Settled<T>> {
   } catch (err) {
     return { ok: false, message: firstLine(err instanceof Error ? err.message : String(err)) };
   }
-}
-
-function firstLine(text: string): string {
-  const line = text.trim().split(/\r?\n/)[0] ?? "";
-  return line.length > MAX_MESSAGE_CHARS ? `${line.slice(0, MAX_MESSAGE_CHARS - 1)}…` : line;
 }
 
 function ok(summary: string): NonNullable<Outcome> {
