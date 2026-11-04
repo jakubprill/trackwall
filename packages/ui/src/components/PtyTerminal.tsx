@@ -11,7 +11,7 @@ import { copyText } from "@/lib/clipboard";
 import type { Connection } from "@/lib/connection";
 import { daemonSocket } from "@/lib/daemon-socket";
 import { useOpenWebLink } from "@/lib/desktop";
-import { DROP_HOVER_RING, FILE_DROP_TARGET, FileDropEvent } from "@/lib/file-drop";
+import { DROP_HOVER_RING, FILE_DROP_TARGET } from "@/lib/file-drop";
 import { InputBeforeOpen } from "@/lib/input-before-open";
 import { KeyboardElsewhere, keyboardInRegion } from "@/lib/keyboard-elsewhere";
 import { useLastScreens } from "@/lib/last-screens";
@@ -33,6 +33,7 @@ import { opensSearch } from "@/lib/terminal-search";
 import { cssTokens, terminalTheme } from "@/lib/terminal-theme";
 import { browserTimers } from "@/lib/timers";
 import { useOpenTrackwallLink } from "@/lib/trackwall-link";
+import { useTerminalDrop } from "@/lib/use-terminal-drop";
 import { cn } from "@/lib/utils";
 import { FocusReporter, terminalInFront } from "@/lib/window-focus";
 import { TerminalSearch } from "./TerminalSearch.tsx";
@@ -119,6 +120,13 @@ export function PtyTerminal({
   const openTrackwallLink = useOpenTrackwallLink();
   const openTrackwall = useRef(openTrackwallLink);
   openTrackwall.current = openTrackwallLink;
+  useTerminalDrop(frame, conn, {
+    live: () => isLive.current,
+    ended: `The ${noun} has ended, so the dropped path was not pasted.`,
+    // `paste` goes through `onData`, and in bracketed paste mode the agent sees it as pasted text, not keys.
+    paste: (paths) => term.current?.paste(pastedPaths(paths)),
+    notify: setNotice,
+  });
 
   useEffect(() => {
     const element = host.current;
@@ -260,13 +268,6 @@ export function PtyTerminal({
       );
       return false;
     });
-    const takeDrop = (event: Event) => {
-      if (!(event instanceof FileDropEvent)) return;
-      if (!isLive.current) return setNotice(`The ${noun} has ended, so the dropped path was not pasted.`);
-      // `paste` goes through `onData`, and in bracketed paste mode the agent sees it as pasted text, not keys.
-      terminal.paste(pastedPaths(event.paths));
-    };
-    container.addEventListener(FileDropEvent.type, takeDrop);
     const resizer = oncePerFrame(() => {
       const { cols, rows } = terminal;
       fit.fit();
@@ -291,7 +292,6 @@ export function PtyTerminal({
         lastScreens.keep(screenKey, { cols: terminal.cols, screen: serializer.serialize({ scrollback: 0, excludeModes: true }) });
       resizer.dispose();
       resize.disconnect();
-      container.removeEventListener(FileDropEvent.type, takeDrop);
       element.removeEventListener("mousemove", holdMove, { capture: true });
       element.removeEventListener("pointerdown", noteClick, { capture: true });
       copyHandler.dispose();

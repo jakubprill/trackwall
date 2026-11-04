@@ -13,7 +13,7 @@ Open your own shell in the projects folder, a repo or a task's worktree, already
 - The same shell in the desktop app and in the browser page, where Trackwall runs: in a [dev container](/guide/dev-container), a shell in the container.
 - Your shell keeps running while you look at other views, and shows what it printed when you come back.
 - One shell per repo, per task and for the projects folder, so you never wonder which window was the right one.
-- A "Files on disk" panel beside the shell, to download a build's JAR, a log or a test report to your computer, also out of a container.
+- A "Files on disk" panel beside the shell to download a build's JAR, a log or a test report to your computer, and files you drop on the shell land where it runs, also in a container.
 
 ## How it works
 
@@ -32,6 +32,7 @@ A task's "Terminal" tab is still the agent's session; "Shell" is yours. Ending a
 1. Open a repo in "Repos", or a task in "Sessions", and choose its "Shell" tab; or choose "Shell" next to the projects folder in "Repos".
 2. Type. Choose "Close" when you are done.
 3. To take a file out, choose "Files on disk", open its folder and click the file.
+4. To put a file in, drag it from Explorer or Finder onto the shell (or a session's terminal), then use the path that appears, for example `cp <path> .`.
 
 ## Good to know
 
@@ -43,3 +44,4 @@ A task's "Terminal" tab is still the agent's session; "Shell" is yours. Ending a
 - Agents cannot see or type into your shell.
 - Ctrl+Shift+F (Cmd+F on macOS) finds text in the shell, also in what scrolled away; Ctrl+F stays your shell's own key. Ctrl+click (Cmd+click on macOS) on a web address the shell printed, such as the merge request link from `git push`, opens it in your browser.
 - A file of more than 1 GB cannot be downloaded from "Files on disk", since it is held in memory before it is saved; copy it with `docker cp <container name>:<path> .` on your computer instead. A folder with more than 2000 entries shows the first 2000.
+- With Trackwall in a container, or in the browser, a dropped file is copied into `.trackwall/drops` of the projects folder and removed a day later, under its name with any character a shell would read differently turned into `_`. Agents can read it there, so drop only what you would hand them. Only files can be dropped, up to 256 MB each; a larger file or a folder goes in with `docker cp <path> <container name>:<path>`. In the desktop app with Trackwall on your computer, the terminal gets the file's own path and nothing is copied.

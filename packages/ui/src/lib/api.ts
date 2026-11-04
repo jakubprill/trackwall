@@ -1,4 +1,4 @@
-import { ApiEnvelope, type Endpoint, type ErrorCode } from "@trackwall/protocol";
+import { ApiEnvelope, DROP_NAME_HEADER, DROP_PATH, DroppedFile, type Endpoint, type ErrorCode } from "@trackwall/protocol";
 import type { z } from "zod";
 import type { Connection } from "./connection.ts";
 
@@ -48,6 +48,17 @@ export async function download(conn: Connection, path: string, body: unknown): P
   throw envelope.ok
     ? new ApiCallError("bad_response", `unexpected response ${res.status} from ${path}`)
     : new ApiCallError(envelope.error.code, envelope.error.message);
+}
+
+/** A file dropped on a terminal, sent to the daemon (ADR-196); answers the path of its copy in the projects folder. */
+export async function uploadDrop(conn: Connection, name: string, body: Blob | ArrayBuffer): Promise<string> {
+  const { path } = await call(conn, DROP_PATH, DroppedFile, {
+    method: "POST",
+    // A header is ASCII; the daemon decodes the name.
+    headers: { "content-type": "application/octet-stream", [DROP_NAME_HEADER]: encodeURIComponent(name) },
+    body,
+  });
+  return path;
 }
 
 /** A request to the daemon with its token. */
