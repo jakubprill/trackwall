@@ -12,11 +12,10 @@ Run several Copilot CLI agents side by side, each in its own repo, and always kn
 ## What you get
 
 - Several Copilot CLI sessions at once, all in one window: in a repo's own working copy, or as free sessions in your projects folder, tied to no repo.
-- A state for every session: working, waiting for you, asking for approval or idle, and a warning when a working one [may be stuck](/features/while-you-were-away).
+- A state for every session: working, waiting for you, asking for approval or idle, a warning when a working one [may be stuck](/features/while-you-were-away), and what its conversation used: AI credits, or premium requests on the older billing, with the sum of all listed sessions.
 - A nudge when an agent needs you: a flashing taskbar icon with the number waiting, a system notification and an entry in the tray.
 - A grid of terminals, so you can watch up to nine agents at once on a wide monitor.
 - Sessions that keep running when you close the window, and come back with their conversations after Trackwall restarts or updates.
-- What each session's conversation used: AI credits, or premium requests on the older billing, with the sum of all listed sessions.
 
 ## How it works
 
