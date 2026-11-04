@@ -11,6 +11,27 @@ import { proxyPort } from "./proxy-env.ts";
 /** The tunnel's socket, or the proxy's answer when it did not open one (407: it wants a login). */
 export type TunnelResult = { socket: Socket } | { kind: "proxy-refused"; status: number };
 
+/** Socket error codes of a name that cannot be found, and of a host that did not take the connection or did not answer. */
+export const DNS_CODES: ReadonlySet<string> = new Set(["ENOTFOUND", "EAI_AGAIN", "EAI_NONAME", "EAI_FAIL"]);
+export const UNREACHABLE_CODES: ReadonlySet<string> = new Set([
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "ETIMEDOUT",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "EPIPE",
+]);
+
+/** A connection to the target: directly without a proxy, otherwise through its `CONNECT` tunnel. */
+export async function openConnection(
+  target: { host: string; port: number },
+  proxy: URL | null,
+  ca: readonly string[],
+  timeoutMs: number,
+): Promise<TunnelResult> {
+  return proxy === null ? { socket: await connectDirectly(target, timeoutMs) } : openTunnel(proxy, target, ca, timeoutMs);
+}
+
 /** A proxy's answer to `CONNECT` is a few short lines; more is not a proxy. */
 const MAX_PROXY_ANSWER_BYTES = 16 * 1024;
 
@@ -66,7 +87,7 @@ export function openTunnel(
   });
 }
 
-export function connectDirectly(target: { host: string; port: number }, timeoutMs: number): Promise<Socket> {
+function connectDirectly(target: { host: string; port: number }, timeoutMs: number): Promise<Socket> {
   return new Promise((resolve, reject) => {
     const socket = netConnect({ host: target.host, port: target.port });
     const timer = setTimeout(

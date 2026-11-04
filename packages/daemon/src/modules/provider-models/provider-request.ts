@@ -23,6 +23,9 @@ const HEADERS = "COPILOT_PROVIDER_HEADERS";
 
 /** An HTTP field name (RFC 9110 token). */
 const FIELD_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+/** A character that would end a header line or the request head; such a value is never written into the request. */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: the control characters are what the pattern looks for.
+const CONTROL = /[\x00-\x1f\x7f]/;
 /** Fields the request itself sets; one from the profile would make the request say two things. */
 const OWN_FIELDS = new Set(["host", "accept", "accept-encoding", "connection", "content-length", "transfer-encoding"]);
 
@@ -45,6 +48,11 @@ export function providerRequest(env: NodeJS.ProcessEnv, profile: string): Provid
       kind: "unsupported",
       problem: `The key comes from ${API_KEY_COMMAND}, which Trackwall does not run, so it cannot ask the provider for its models.`,
     };
+  if (token !== undefined && CONTROL.test(token))
+    return {
+      kind: "unsupported",
+      problem: `The key of the session profile ${profile} has a line break or another control character in it.`,
+    };
   return { kind: "request", url, headers: { ...extraHeaders(value(HEADERS)), ...(token ? { Authorization: `Bearer ${token}` } : {}) } };
 }
 
@@ -56,7 +64,7 @@ function extraHeaders(text: string | undefined): Record<string, string> {
     if (colon <= 0) continue;
     const name = line.slice(0, colon).trim();
     const value = line.slice(colon + 1).trim();
-    if (!FIELD_NAME.test(name) || OWN_FIELDS.has(name.toLowerCase()) || /[\r\n\0]/.test(value)) continue;
+    if (!FIELD_NAME.test(name) || OWN_FIELDS.has(name.toLowerCase()) || CONTROL.test(value.replace(/\t/g, " "))) continue;
     headers[name] = value;
   }
   return headers;

@@ -1,7 +1,7 @@
 import type { Socket } from "node:net";
-import { connect as tlsConnect } from "node:tls";
+import { checkServerIdentity, type PeerCertificate, connect as tlsConnect } from "node:tls";
 import { proxyFor } from "../../infra/proxy-env.ts";
-import { connectDirectly, openTunnel, serverName } from "../../infra/proxy-tunnel.ts";
+import { DNS_CODES, openConnection, serverName, UNREACHABLE_CODES } from "../../infra/proxy-tunnel.ts";
 
 /**
  * One `GET` to the model provider the way a session's Copilot CLI reaches it (ADR-194): directly or through an HTTP
@@ -23,9 +23,6 @@ export interface ProviderGetOptions {
   maxBytes: number;
 }
 
-const DNS_CODES = new Set(["ENOTFOUND", "EAI_AGAIN", "EAI_NONAME", "EAI_FAIL"]);
-const REFUSED_CODES = new Set(["ECONNREFUSED", "ECONNRESET", "EHOSTUNREACH", "ENETUNREACH", "EPIPE"]);
-
 export async function providerGet(url: URL, headers: Readonly<Record<string, string>>, o: ProviderGetOptions): Promise<ProviderAnswer> {
   const scheme = url.protocol;
   if (scheme !== "http:" && scheme !== "https:") return { kind: "failed", reason: "its address is not an http or https address" };
@@ -38,21 +35,20 @@ export async function providerGet(url: URL, headers: Readonly<Record<string, str
     return { kind: "failed", reason: "the proxy for it is not an HTTP proxy" };
   }
   const deadline = Date.now() + o.timeoutMs;
+  let raw: Socket | null = null;
   let socket: Socket | null = null;
   try {
-    if (proxy === null) socket = await connectDirectly({ host, port }, o.timeoutMs);
-    else {
-      const tunnel = await openTunnel(proxy, { host, port }, o.ca, o.timeoutMs);
-      if ("kind" in tunnel) return { kind: "failed", reason: `the proxy did not open a connection to it (${tunnel.status})` };
-      socket = tunnel.socket;
-    }
-    if (scheme === "https:") socket = await secured(socket, host, o.ca, Math.max(1, deadline - Date.now()));
-    const raw = await exchange(socket, request(url, headers), Math.max(1, deadline - Date.now()), o.maxBytes);
-    return parseAnswer(raw);
+    const opened = await openConnection({ host, port }, proxy, o.ca, o.timeoutMs);
+    if ("kind" in opened) return { kind: "failed", reason: `the proxy did not open a connection to it (${opened.status})` };
+    raw = opened.socket;
+    socket = scheme === "https:" ? await secured(raw, host, o.ca, Math.max(1, deadline - Date.now())) : raw;
+    return parseAnswer(await exchange(socket, request(url, headers), Math.max(1, deadline - Date.now()), o.maxBytes));
   } catch (err) {
     return { kind: "failed", reason: failure(err, proxy !== null) };
   } finally {
+    // The TLS socket does not always end the socket under it (Bun), so both go.
     socket?.destroy();
+    raw?.destroy();
   }
 }
 
@@ -73,11 +69,20 @@ function secured(socket: Socket, host: string, ca: readonly string[], timeoutMs:
   // An error of the socket underneath reaches the caller through the TLS socket; unheard here, it would crash the daemon.
   socket.on("error", () => {});
   return new Promise((resolve, reject) => {
-    const tls = tlsConnect({ socket, ...serverName(host), ca: [...ca] });
+    // Over a tunnel Node would check the certificate against the proxy's name when the host is an IP address (no SNI
+    // then), so the provider's own host is checked explicitly.
+    const tls = tlsConnect({
+      socket,
+      ...serverName(host),
+      ca: [...ca],
+      checkServerIdentity: (_name: string, cert: PeerCertificate) => checkServerIdentity(host, cert),
+    });
     const timer = setTimeout(() => tls.destroy(Object.assign(new Error("no TLS answer in time"), { code: "ETIMEDOUT" })), timeoutMs);
     tls.once("secureConnect", () => {
       clearTimeout(timer);
+      // Until the exchange listens, an error must still be heard, or it would crash the daemon.
       tls.removeAllListeners("error");
+      tls.on("error", () => {});
       resolve(tls);
     });
     tls.once("error", (err: Error) => {
@@ -149,9 +154,10 @@ function dechunked(body: Buffer): Buffer | null {
   for (;;) {
     const lineEnd = body.indexOf("\r\n", at);
     if (lineEnd < 0) return null;
-    // A chunk's size may carry extensions after a semicolon.
-    const size = Number.parseInt(body.subarray(at, lineEnd).toString("latin1").split(";")[0] ?? "", 16);
-    if (Number.isNaN(size)) return null;
+    // A chunk's size may carry extensions after a semicolon; only plain hex digits are a size (no sign, which would loop back).
+    const sizeText = (body.subarray(at, lineEnd).toString("latin1").split(";")[0] ?? "").trim();
+    if (!/^[0-9a-fA-F]{1,8}$/.test(sizeText)) return null;
+    const size = Number.parseInt(sizeText, 16);
     if (size === 0) return Buffer.concat(parts);
     const start = lineEnd + 2;
     if (start + size > body.length) return null;
@@ -165,7 +171,7 @@ function failure(err: unknown, viaProxy: boolean): string {
   if (code === "TOO_LARGE") return "its answer is too large for a list of models";
   if (code === "ETIMEDOUT") return "it did not answer in time";
   if (DNS_CODES.has(code)) return viaProxy ? "the proxy cannot be found" : "its host cannot be found";
-  if (REFUSED_CODES.has(code)) return viaProxy ? "the connection through the proxy failed" : "it does not accept connections";
+  if (UNREACHABLE_CODES.has(code)) return viaProxy ? "the connection through the proxy failed" : "it does not accept connections";
   if (/CERT|SELF_SIGNED|UNABLE_TO/.test(code)) return `its certificate is not trusted (${code})`;
   return "the connection failed";
 }

@@ -1,6 +1,6 @@
 import type { Socket } from "node:net";
 import { type DetailedPeerCertificate, type TLSSocket, connect as tlsConnect } from "node:tls";
-import { connectDirectly, openTunnel, serverName } from "../../infra/proxy-tunnel.ts";
+import { DNS_CODES, openConnection, openTunnel, serverName, UNREACHABLE_CODES } from "../../infra/proxy-tunnel.ts";
 
 /**
  * Opens a connection to a host the way a Node.js program behind the user's proxy would (§4.15) and closes it at once:
@@ -30,9 +30,6 @@ interface TlsProbeOptions {
 
 export type TlsProbe = (target: { host: string; port: number }, o: TlsProbeOptions) => Promise<TlsProbeResult>;
 
-const DNS_CODES = new Set(["ENOTFOUND", "EAI_AGAIN", "EAI_NONAME", "EAI_FAIL"]);
-const UNREACHABLE_CODES = new Set(["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "EHOSTUNREACH", "ENETUNREACH", "EPIPE"]);
-
 export const probeTls: TlsProbe = async (target, o) => {
   const deadline = Date.now() + o.timeoutMs;
   let tunnel: Socket | null = null;
@@ -59,8 +56,7 @@ export const probeTls: TlsProbe = async (target, o) => {
 export const probeConnection: TlsProbe = async (target, o) => {
   let socket: Socket | null = null;
   try {
-    const opened =
-      o.proxy === null ? { socket: await connectDirectly(target, o.timeoutMs) } : await openTunnel(o.proxy, target, o.ca, o.timeoutMs);
+    const opened = await openConnection(target, o.proxy, o.ca, o.timeoutMs);
     if ("kind" in opened) return opened;
     socket = opened.socket;
     return { kind: "ok" };

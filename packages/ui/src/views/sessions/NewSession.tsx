@@ -85,7 +85,7 @@ export function NewSession({
   const change = useChangeForm(conn, onStarted, () => setPrompt(""));
   const { start, firstPart } = formChangeStart(form, repo, choice.worktree, prompt, change.parts, change.title);
   const offers = useStartOffers(conn, repo);
-  const providerModels = useProviderModels(conn);
+  const providerModels = useProviderModels(conn).models;
   const java = javaNavigationInChange(javaNavigationInView(offers.java, choice.view), startsChange(start));
   const javaNavigation = java.kind === "ready" && choice.javaNavigation;
   const { item } = form;

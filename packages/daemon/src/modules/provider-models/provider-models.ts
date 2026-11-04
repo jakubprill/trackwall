@@ -60,9 +60,14 @@ export class ProviderModels {
     if (this.kept?.key === key && now - this.kept.at < KEEP_MS) return this.kept.list;
     const list = this.ask(profile, request.url, request.headers, read.env);
     this.kept = { key, at: now, list };
-    const result = await list;
-    if (result.problem !== null && this.kept?.list === list) this.kept = null;
-    return result;
+    try {
+      const result = await list;
+      if (result.problem !== null && this.kept?.list === list) this.kept = null;
+      return result;
+    } catch (err) {
+      if (this.kept?.list === list) this.kept = null;
+      throw err;
+    }
   }
 
   private async ask(profile: string, url: URL, headers: Record<string, string>, env: NodeJS.ProcessEnv): Promise<ProviderModelList> {

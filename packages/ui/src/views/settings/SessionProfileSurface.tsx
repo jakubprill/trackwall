@@ -1,4 +1,4 @@
-import { countLabel, providerModelsApi, type SessionList, workspaceApi } from "@trackwall/protocol";
+import { countLabel, type SessionList, workspaceApi } from "@trackwall/protocol";
 import { useCallback } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
@@ -7,6 +7,7 @@ import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { providerModelsNote } from "@/lib/provider-models";
 import { sessionsOnOtherProfile } from "@/lib/session-profile";
+import { useProviderModels } from "@/lib/use-provider-models";
 import { useRemote } from "@/lib/use-remote";
 import { PathForm } from "./PathForm.tsx";
 
@@ -19,8 +20,7 @@ import { PathForm } from "./PathForm.tsx";
 export function SessionProfileSurface({ conn, sessions }: { conn: Connection; sessions: SessionList | undefined }) {
   const load = useCallback(() => post(conn, workspaceApi.settings, {}), [conn]);
   const settings = useRemote(load);
-  const loadModels = useCallback(() => post(conn, providerModelsApi.list, {}), [conn]);
-  const models = useRemote(loadModels);
+  const models = useProviderModels(conn).list;
 
   async function save(profile: string | null) {
     await post(conn, workspaceApi.setSessionProfile, { profile });

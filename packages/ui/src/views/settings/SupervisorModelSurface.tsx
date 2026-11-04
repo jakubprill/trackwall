@@ -16,7 +16,7 @@ import { PathForm } from "./PathForm.tsx";
 export function SupervisorModelSurface({ conn }: { conn: Connection }) {
   const load = useCallback(() => post(conn, workspaceApi.settings, {}), [conn]);
   const settings = useRemote(load);
-  const models = useProviderModels(conn);
+  const { models } = useProviderModels(conn);
 
   async function save(model: string | null) {
     await post(conn, workspaceApi.setSupervisorModel, { model });

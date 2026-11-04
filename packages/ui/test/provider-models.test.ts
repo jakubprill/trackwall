@@ -10,7 +10,14 @@ describe("the models of the session profile's provider in the UI (ADR-194)", () 
   });
 
   test("under the session profile, a list says how many models the Model fields suggest", () => {
-    const list = { profile: "byok", models: [{ id: "a", contextWindow: null }, { id: "b", contextWindow: null }], problem: null };
+    const list = {
+      profile: "byok",
+      models: [
+        { id: "a", contextWindow: null },
+        { id: "b", contextWindow: null },
+      ],
+      problem: null,
+    };
     expect(providerModelsNote(list)).toEqual({
       text: "The provider offers 2 models; the Model fields suggest them, and any other id can still be typed.",
       problem: false,

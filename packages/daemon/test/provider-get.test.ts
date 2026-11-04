@@ -53,6 +53,16 @@ describe("reading the provider's answer", () => {
     expect(parseAnswer(Buffer.from(raw))).toEqual({ kind: "answer", status: 200, body: '{"data":[]} ' });
   });
 
+  test("a chunk size with a sign is not a size, so the answer cannot loop back on itself", () => {
+    const raw = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n-6\r\n";
+    expect(parseAnswer(Buffer.from(raw))).toEqual({ kind: "failed", reason: "its answer was cut off" });
+  });
+
+  test("an HTTPS provider at an IP address is checked against that address", async () => {
+    const answer = await providerGet(new URL(`https://127.0.0.1:${port}/v1/models`), {}, { ...OPTIONS, ca: [INSPECTION_CA] });
+    expect(answer).toMatchObject({ kind: "answer", status: 200 });
+  });
+
   test("a body shorter than its Content-Length was cut off", () => {
     const raw = 'HTTP/1.1 200 OK\r\nContent-Length: 20\r\n\r\n{"data":[]}';
     expect(parseAnswer(Buffer.from(raw))).toEqual({ kind: "failed", reason: "its answer was cut off" });
@@ -79,6 +89,15 @@ describe("the models request from the profile's environment", () => {
       url: new URL("https://gateway.example.org/openai/v1/models?tenant=a"),
       headers: { "X-Team": "a", Authorization: "Bearer token" },
     });
+  });
+
+  test("a key with a line break is not written into the request, so it cannot add a header", () => {
+    expect(
+      providerRequest(
+        { COPILOT_PROVIDER_BASE_URL: "https://gateway.example.org/v1", COPILOT_PROVIDER_API_KEY: "key\r\nX-Admin: yes" },
+        "byok",
+      ),
+    ).toEqual({ kind: "unsupported", problem: "The key of the session profile byok has a line break or another control character in it." });
   });
 
   test("an address that is not http or https is a problem of the profile", () => {

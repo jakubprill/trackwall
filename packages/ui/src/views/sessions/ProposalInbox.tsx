@@ -77,7 +77,7 @@ export function ProposalInbox({
   // Whether a proposal started without approvals runs in Copilot CLI's sandbox, or is refused (ADR-181).
   const loadStartOptions = useCallback(() => post(conn, agentsApi.startOptions, {}), [conn]);
   const sandbox = useRemote(loadStartOptions).data?.sandbox;
-  const providerModels = useProviderModels(conn);
+  const providerModels = useProviderModels(conn).models;
   const [prompts, setPrompts] = useState<ReadonlyMap<string, string>>(new Map());
   const [models, setModels] = useState<ReadonlyMap<string, string>>(new Map());
   const [approvals, setApprovals] = useState<ReadonlyMap<string, TaskApprovals>>(new Map());
