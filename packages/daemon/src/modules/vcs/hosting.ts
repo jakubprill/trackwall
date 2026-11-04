@@ -3,8 +3,10 @@ import {
   type HostedProject,
   type HostedRepo,
   hostKey,
+  MAX_REMOTE_REPO_PAGES,
   type MergeRequest,
   type MergeRequestForm,
+  type RemoteRepoMore,
   type RemoteRepoSearch,
   type RepoHost,
   type RepoHostKind,
@@ -12,7 +14,7 @@ import {
 import { runProgram } from "../../infra/run-program.ts";
 import { gitEnv } from "./git.ts";
 import { findMergeRequest, jobLogPath, mergeRequestFormUrl } from "./hosted-merge-request.ts";
-import { githubApi, gitlabApi, type HostedRepoFilter, type HostingApi } from "./hosted-repo.ts";
+import { githubApi, gitlabApi, type HostedRepoFilter, type HostingApi, type ListedRepo } from "./hosted-repo.ts";
 
 /**
  * Repo hosts in the `vcs` module (§4.5, ADR-19): the list of repos available to the user, a clone of the chosen one and the
@@ -59,12 +61,12 @@ const JOB_LOG_MAX_BYTES = 8 * 1024 * 1024;
 export interface HostedRepos {
   /** In the repo host's order (`HostingApi`). */
   repos: HostedRepo[];
-  /** The last fetched page was full: below `maxPages` a `next-page`, at it a `narrow` (`HostRepos`). */
-  more: "none" | "next-page" | "narrow";
+  /** The last fetched page was full: below `MAX_REMOTE_REPO_PAGES` a `next-page`, at it a `narrow` (`HostRepos`). */
+  more: RemoteRepoMore;
 }
 
 interface ReposPage {
-  items: HostedRepo[];
+  items: ListedRepo[];
   received: number;
 }
 
@@ -82,20 +84,22 @@ export class Hosting {
    */
   async repos(host: RepoHost, search: RemoteRepoSearch): Promise<HostedRepos> {
     const api = APIS[host.kind];
-    const onServer = api.searchesOnServer(search.query);
     const { pages, ...filter } = search;
-    const serverFilter = { ...filter, query: onServer ? search.query : "" };
-    const repos: HostedRepo[] = [];
+    const serverFilter = api.serverFilter(filter);
+    const listed: ListedRepo[] = [];
     let full = true;
     let fetched = 0;
     while (full && fetched < api.pages(pages)) {
       fetched++;
       const page = await this.pageCached(host, fetched, serverFilter);
-      repos.push(...page.items);
+      listed.push(...page.items);
       full = page.received === PAGE_SIZE;
     }
-    const more = !full ? "none" : fetched < api.maxPages ? "next-page" : "narrow";
-    return { repos: onServer ? repos : repos.filter((r) => matches(r, search.query)), more };
+    const more = !full ? "none" : fetched < MAX_REMOTE_REPO_PAGES ? "next-page" : "narrow";
+    const repos = uniqueByName(listed)
+      .filter((r) => matches(r, filter, serverFilter))
+      .map(({ language: _, ...repo }) => repo);
+    return { repos, more };
   }
 
   /** A clone of `fullName` into `dest` (a directory that does not exist yet). */
@@ -142,7 +146,7 @@ export class Hosting {
     const key = `${hostKey(host)}\n${page}\n${JSON.stringify(filter)}`;
     const cached = this.cache.get(key);
     if (cached) return cached.fetched;
-    const fetched = this.api(host, api.reposPage(page, PAGE_SIZE, filter), (json) => api.parseReposPage(json, filter));
+    const fetched = this.api(host, api.reposPage(page, PAGE_SIZE, filter), (json) => api.parseReposPage(json));
     this.cache.set(key, { at: now, fetched });
     fetched.catch(() => this.cache.delete(key));
     return fetched;
@@ -169,7 +173,24 @@ export class Hosting {
   }
 }
 
-function matches(repo: HostedRepo, query: string): boolean {
-  const q = query.toLowerCase();
-  return repo.fullName.toLowerCase().includes(q) || (repo.description ?? "").toLowerCase().includes(q);
+/**
+ * Pages cached at different moments of a list ordered by activity can share a repo that moved between them; the first
+ * one stays, so a row appears once.
+ */
+function uniqueByName(repos: ListedRepo[]): ListedRepo[] {
+  const seen = new Set<string>();
+  return repos.filter((r) => !seen.has(r.fullName) && seen.add(r.fullName));
+}
+
+/** The parts of `filter` the repo host did not apply itself (empty in `server`), case-insensitively. */
+function matches(repo: ListedRepo, filter: HostedRepoFilter, server: HostedRepoFilter): boolean {
+  const q = filter.query.toLowerCase();
+  const byQuery = server.query !== "" || repo.fullName.toLowerCase().includes(q) || (repo.description ?? "").toLowerCase().includes(q);
+  const byTopic = server.topic !== "" || filter.topic === "" || repo.topics.some((t) => sameWord(t, filter.topic));
+  const byLanguage = server.language !== "" || filter.language === "" || sameWord(repo.language ?? "", filter.language);
+  return byQuery && byTopic && byLanguage;
+}
+
+function sameWord(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase();
 }

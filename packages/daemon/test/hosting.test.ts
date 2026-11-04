@@ -135,6 +135,25 @@ describe("repo hosts through gh and glab", () => {
     ]);
   });
 
+  test("a repo on two pages, after it moved between their fetches, shows once", async () => {
+    const page = Array.from({ length: 100 }, (_, i) => gitlabProject(`group/repo-${i}`));
+    const { hosting } = fakeHosting({ apiResponses: { projects: page } });
+
+    const result = await hosting.repos(GITLAB, search("", { pages: 2 }));
+
+    expect(result.repos.map((r) => r.fullName)).toEqual(page.map((p) => p.path_with_namespace));
+  });
+
+  test("GitHub does not fetch its pages again for a new topic, language or scope, which the daemon applies", async () => {
+    const { hosting, calls } = fakeHosting({ repos: [githubRepo("me/api", false, { language: "Java", topics: ["orders"] })] });
+
+    await hosting.repos(GITHUB, search(""));
+    await hosting.repos(GITHUB, search("", { topic: "orders" }));
+    await hosting.repos(GITHUB, search("", { language: "Java", scope: "visible" }));
+
+    expect(calls()).toHaveLength(1);
+  });
+
   test("GitHub's stars come from the user's starred list", async () => {
     const { hosting, calls } = fakeHosting({ repos: [githubRepo("someone/tool")] });
 

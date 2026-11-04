@@ -23,6 +23,14 @@ export function pagesOf(shown: ShownPages, key: string): number {
   return shown.searchKey === key ? shown.pages : 1;
 }
 
+/**
+ * "Show more" is on its way: the list on screen has fewer pages than asked for, and the last request did not fail
+ * (after a failure the button is back, so that pressing it again retries).
+ */
+export function loadingMore(shownPages: number | undefined, pages: number, failed: boolean): boolean {
+  return shownPages !== undefined && shownPages < pages && !failed;
+}
+
 /** One page more in the search `key`. */
 export function onePageMore(shown: ShownPages, key: string): ShownPages {
   return { searchKey: key, pages: pagesOf(shown, key) + 1 };

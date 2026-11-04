@@ -44,7 +44,7 @@ The "+" button above the list searches the GitLab and GitHub hosts you added in 
 ## Good to know
 
 - Trackwall needs `git` on your `PATH`. Cloning needs a signed-in `glab` (`glab auth login --hostname <host>`) for GitLab or `gh` (`gh auth login`) for GitHub; Trackwall does not store your token.
-- The search shows at most 1000 repos per host. If what you want is not among them, type more of its name or pick a topic or language. GitHub always lists your own repos, those you collaborate on and those of your organisations, so "My projects" and "All I can see" change only the GitLab results. GitLab searches a name only from 3 characters; a shorter search filters the repos already shown.
+- The search shows at most 1000 repos per host. On GitLab, type at least 3 characters of the name, or pick a topic or language, and GitLab searches all of its projects; on GitHub, Trackwall filters your first 1000 repos. "Show more" adds 100 more on every GitLab host at once. GitHub always lists your own repos, those you collaborate on and those of your organisations, so "My projects" and "All I can see" change only the GitLab results. A search shorter than 3 characters filters the repos already shown.
 - Only repos directly inside the projects folder are listed, and folders whose name starts with a dot are skipped.
 - A commit, checkout, pull or new branch, made in Trackwall or anywhere else, shows in the list within a couple of seconds, and so does a repo cloned into the folder. The count of uncommitted files refreshes about every 30 seconds.
 - Dropping a folder on the window: a listed repo opens in "Repos"; a folder full of repos, or a repo from somewhere else, is offered as the new projects folder.

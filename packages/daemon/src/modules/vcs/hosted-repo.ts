@@ -10,20 +10,24 @@ import { z } from "zod";
 /** A search without `pages`: what one page of the list depends on. */
 export type HostedRepoFilter = Omit<RemoteRepoSearch, "pages">;
 
+/** A repo of a fetched page, with the language the daemon filters by where the repo host does not (`null` when unknown). */
+export type ListedRepo = HostedRepo & { language: string | null };
+
+/** No filter: the parts of a search a repo host leaves to the daemon are emptied from what it is asked. */
+const NO_FILTER: HostedRepoFilter = { query: "", scope: "member", topic: "", language: "", starredOnHost: false };
+
 export interface HostingApi {
-  /** How many pages to fetch for a search that asks for `requested` pages. */
+  /** How many pages to fetch for a search that asks for `requested` pages, at most `MAX_REMOTE_REPO_PAGES`. */
   pages(requested: number): number;
-  /** The most pages it ever fetches; a full last page below it is a `next-page`, at it a `narrow`. */
-  maxPages: number;
-  /** Whether the repo host itself searches repos by `query`; otherwise the daemon filters the fetched pages. */
-  searchesOnServer(query: string): boolean;
-  /** The `<cli> api` path for one page of repos; `query` in `filter` only when `searchesOnServer`. */
-  reposPage(page: number, pageSize: number, filter: HostedRepoFilter): string;
   /**
-   * A page of the API response without archived repos and without those the repo host did not filter out by `filter`
-   * itself; `received` is the number of repos on the page before filtering.
+   * The part of `filter` the repo host applies itself; the daemon applies the rest to the fetched pages. A page depends
+   * only on this part, so a filter applied in the daemon does not fetch the pages again.
    */
-  parseReposPage(json: unknown, filter: HostedRepoFilter): { items: HostedRepo[]; received: number };
+  serverFilter(filter: HostedRepoFilter): HostedRepoFilter;
+  /** The `<cli> api` path for one page of repos matching `filter`, a `serverFilter`. */
+  reposPage(page: number, pageSize: number, filter: HostedRepoFilter): string;
+  /** A page of the API response without archived repos; `received` is the number of repos on the page before filtering. */
+  parseReposPage(json: unknown): { items: ListedRepo[]; received: number };
   /** Environment variables: the repo host for `repo clone`, and turning off prompts, colours and update checks. */
   env(host: string): NodeJS.ProcessEnv;
 }
@@ -32,12 +36,8 @@ export interface HostingApi {
  * Names that cannot be passed safely to `gh` or `glab` (outside `RemoteRepoName`) do not get onto the list:
  * GitHub and GitLab do not create such names, so it is at most a response that does not match the documentation.
  */
-function page(all: HostedRepo[], received: number): { items: HostedRepo[]; received: number } {
+function page(all: ListedRepo[], received: number): { items: ListedRepo[]; received: number } {
   return { items: all.filter((r) => RemoteRepoName.safeParse(r.fullName).success), received };
-}
-
-function sameWord(a: string, b: string): boolean {
-  return a.toLowerCase() === b.toLowerCase();
 }
 
 const GitHubRepos = z.array(
@@ -60,28 +60,24 @@ const GitHubRepos = z.array(
  */
 export const githubApi: HostingApi = {
   pages: () => MAX_REMOTE_REPO_PAGES,
-  maxPages: MAX_REMOTE_REPO_PAGES,
-  searchesOnServer: () => false,
+  serverFilter: (filter) => ({ ...NO_FILTER, starredOnHost: filter.starredOnHost }),
   reposPage: (page, pageSize, filter) =>
     filter.starredOnHost
       ? `user/starred?sort=updated&per_page=${pageSize}&page=${page}`
       : `user/repos?affiliation=owner,collaborator,organization_member&sort=full_name&per_page=${pageSize}&page=${page}`,
-  parseReposPage: (json, filter) => {
+  parseReposPage: (json) => {
     const all = GitHubRepos.parse(json);
-    const kept = all.filter(
-      (r) =>
-        !r.archived &&
-        (filter.topic === "" || (r.topics ?? []).some((t) => sameWord(t, filter.topic))) &&
-        (filter.language === "" || sameWord(r.language ?? "", filter.language)),
-    );
     return page(
-      kept.map((r) => ({
-        fullName: r.full_name,
-        description: r.description || null,
-        webUrl: r.html_url,
-        updatedAt: r.pushed_at,
-        topics: r.topics ?? [],
-      })),
+      all
+        .filter((r) => !r.archived)
+        .map((r) => ({
+          fullName: r.full_name,
+          description: r.description || null,
+          webUrl: r.html_url,
+          updatedAt: r.pushed_at,
+          topics: r.topics ?? [],
+          language: r.language ?? null,
+        })),
       all.length,
     );
   },
@@ -109,8 +105,7 @@ const GITLAB_MIN_SEARCH = 3;
  */
 export const gitlabApi: HostingApi = {
   pages: (requested) => Math.min(requested, MAX_REMOTE_REPO_PAGES),
-  maxPages: MAX_REMOTE_REPO_PAGES,
-  searchesOnServer: (query) => query.length >= GITLAB_MIN_SEARCH,
+  serverFilter: (filter) => ({ ...filter, query: filter.query.length >= GITLAB_MIN_SEARCH ? filter.query : "" }),
   reposPage: (page, pageSize, filter) => {
     const params = new URLSearchParams({
       archived: "false",
@@ -128,6 +123,7 @@ export const gitlabApi: HostingApi = {
       params.set("search", filter.query);
       params.set("search_namespaces", "true");
     }
+    // URLSearchParams writes a space as `+`, which GitLab reads in a path as a plus; a literal `+` is already `%2B`.
     return `projects?${params.toString().replaceAll("+", "%20")}`;
   },
   parseReposPage: (json) => {
@@ -139,6 +135,8 @@ export const gitlabApi: HostingApi = {
         webUrl: p.web_url,
         updatedAt: p.last_activity_at,
         topics: p.topics ?? [],
+        // GitLab filters by language itself (`with_programming_language`), so the daemon never needs it.
+        language: null,
       })),
       all.length,
     );

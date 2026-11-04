@@ -115,6 +115,13 @@ export const RemoteRepo = HostedRepo.extend({
 });
 export type RemoteRepo = z.infer<typeof RemoteRepo>;
 
+/**
+ * What lies beyond a host's list: `none`, a `next-page` that "Show more" fetches, or more than the 10 pages Trackwall
+ * fetches at all (§4.5, `narrow`): on GitLab a search of 3 characters or more then finds the rest.
+ */
+export const RemoteRepoMore = z.enum(["none", "next-page", "narrow"]);
+export type RemoteRepoMore = z.infer<typeof RemoteRepoMore>;
+
 export const HostRepos = z.object({
   host: RepoHost,
   listing: z.discriminatedUnion("kind", [
@@ -122,11 +129,7 @@ export const HostRepos = z.object({
       kind: z.literal("ok"),
       /** Without archived ones, in the repo host's order: GitHub by name, GitLab most recently changed first. */
       repos: z.array(RemoteRepo),
-      /**
-       * What lies beyond the list: `none`, a `next-page` that "Show more" fetches, or more than Trackwall fetches at all
-       * (§4.5), so that only narrowing the search finds the rest (`narrow`).
-       */
-      more: z.enum(["none", "next-page", "narrow"]),
+      more: RemoteRepoMore,
     }),
     /** `gh` or `glab` did not answer: the program is missing, not signed in, no network; details in `message`. */
     z.object({ kind: z.literal("unavailable"), message: z.string() }),

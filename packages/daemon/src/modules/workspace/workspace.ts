@@ -13,6 +13,7 @@ import {
   type JavaNavigationSettings,
   PATCH_MAX_BYTES,
   type RemoteRepoList,
+  type RemoteRepoMore,
   type RemoteRepoSearch,
   type Repo,
   type RepoHost,
@@ -113,7 +114,7 @@ interface WorkspaceVcs extends CodeSearchVcs, CommitSearchVcs {
 
 /** What `workspace` needs from the repo hosts of the `vcs` module (ADR-19). */
 interface WorkspaceHosting {
-  repos(host: RepoHost, search: RemoteRepoSearch): Promise<{ repos: HostedRepo[]; more: "none" | "next-page" | "narrow" }>;
+  repos(host: RepoHost, search: RemoteRepoSearch): Promise<{ repos: HostedRepo[]; more: RemoteRepoMore }>;
   clone(host: RepoHost, fullName: string, dest: string): Promise<void>;
 }
 

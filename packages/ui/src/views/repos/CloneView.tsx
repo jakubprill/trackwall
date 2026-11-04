@@ -21,7 +21,14 @@ import { errorMessage, post } from "@/lib/api";
 import { type CloneState, cloneState } from "@/lib/clone-state";
 import type { Connection } from "@/lib/connection";
 import { relativeTime } from "@/lib/format";
-import { onePageMore, pagesOf, type RemoteRepoFilters, type ShownPages, searchKey } from "@/lib/remote-repo-search";
+import {
+  loadingMore as isLoadingMore,
+  onePageMore,
+  pagesOf,
+  type RemoteRepoFilters,
+  type ShownPages,
+  searchKey,
+} from "@/lib/remote-repo-search";
 import { HOST_KIND_LABEL, loginCommand } from "@/lib/repo-hosts";
 import type { SettingsCategory } from "@/lib/settings-categories";
 import { useDebounced } from "@/lib/use-debounced";
@@ -60,8 +67,10 @@ export function CloneView({
   const key = searchKey(filters);
   const [shown, setShown] = useState<ShownPages>({ searchKey: key, pages: 1 });
   const pages = pagesOf(shown, key);
-  // Read when a request is sent, so that "Show more" fetches again keeping the list on screen (`refreshKey`),
-  // while a new search clears it.
+  // Read when a request is sent, so that "Show more" fetches again keeping the list on screen (`refreshKey`), while a
+  // new search (a new `loadRepos`) clears it. A new search also changes `pages` back to 1, but `useRemote` sends its
+  // request with that key first, so the key change does not fetch a second time. "Show more" applies to every host:
+  // each GitLab host gets one page more.
   const pagesRef = useRef(pages);
   pagesRef.current = pages;
   const loadRepos = useCallback(async (): Promise<RemoteRepoList & { pages: number }> => {
@@ -69,7 +78,7 @@ export function CloneView({
     return { ...(await post(conn, workspaceApi.remoteRepos, { ...filters, pages: asked })), pages: asked };
   }, [conn, filters]);
   const remote = useRemote(loadRepos, { refreshKey: String(pages) });
-  const loadingMore = remote.data !== undefined && remote.data.pages < pages;
+  const loadingMore = isLoadingMore(remote.data?.pages, pages, remote.error !== undefined);
   const showMore = () => setShown(onePageMore(shown, key));
   const loadClones = useCallback(() => post(conn, workspaceApi.clones, {}), [conn]);
   const clones = useRemote(loadClones, { pollMs: CLONES_POLL_MS });
@@ -237,7 +246,7 @@ function HostSection({
       meta={String(listing.repos.length)}
       note={
         listing.more === "narrow"
-          ? "The host has more repos than Trackwall fetches; if something is missing, narrow the search."
+          ? "Trackwall shows the first 1000 repos of this host. On GitLab, type 3 or more characters of a name and GitLab searches all of them."
           : undefined
       }
     >

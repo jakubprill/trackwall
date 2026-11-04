@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { onePageMore, pagesOf, searchKey } from "../src/lib/remote-repo-search.ts";
+import { loadingMore, onePageMore, pagesOf, searchKey } from "../src/lib/remote-repo-search.ts";
 
 const orders = { query: "orders", scope: "member", topic: "", language: "", starredOnHost: false } as const;
 
@@ -18,6 +18,13 @@ describe("Show more in the Add repo view", () => {
     expect(pagesOf(shown, searchKey({ ...orders, topic: "java" }))).toBe(1);
     expect(pagesOf(shown, searchKey({ ...orders, language: "Java" }))).toBe(1);
     expect(pagesOf(shown, searchKey({ ...orders, starredOnHost: true }))).toBe(1);
+  });
+
+  test("Show more is loading until the list has the pages asked for, and a failed request gives the button back", () => {
+    expect(loadingMore(1, 2, false)).toBe(true);
+    expect(loadingMore(2, 2, false)).toBe(false);
+    expect(loadingMore(1, 2, true)).toBe(false);
+    expect(loadingMore(undefined, 1, false)).toBe(false);
   });
 
   test("Show more after a new search fetches its second page, not one after the old search's pages", () => {
