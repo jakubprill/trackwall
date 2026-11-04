@@ -58,8 +58,8 @@ function savedPath(res: { body: string }): string {
 describe("a file dropped on a terminal from another computer", () => {
   test("is saved under .trackwall/drops of the projects folder, in a folder of its own, and its path comes back", async () => {
     const path = savedPath(await drop("build log.txt", "BUILD FAILED\n"));
-    // The path is the resolved one: on macOS the temporary folder lies under /private/var.
-    expect(dirname(dirname(path))).toBe(realpathSync(join(daemon.projects, ".trackwall", "drops")));
+    // The path is the resolved one, as the system resolves it: on macOS under /private/var, on Windows without 8.3 names.
+    expect(dirname(dirname(path))).toBe(realpathSync.native(join(daemon.projects, ".trackwall", "drops")));
     expect(path.endsWith("build log.txt")).toBe(true);
     expect(readFileSync(path, "utf8")).toBe("BUILD FAILED\n");
     if (process.platform !== "win32") expect(statSync(path).mode & 0o777).toBe(0o600);
@@ -74,7 +74,7 @@ describe("a file dropped on a terminal from another computer", () => {
   });
 
   test("with a name that is a path stays in its own folder of drops, under a name made safe", async () => {
-    const drops = realpathSync(join(daemon.projects, ".trackwall", "drops"));
+    const drops = realpathSync.native(join(daemon.projects, ".trackwall", "drops"));
     for (const name of ["../escape.txt", "..", "a/b.txt", "a\\b.txt", "evil\u0000.txt"])
       expect(dirname(dirname(savedPath(await drop(name, "x"))))).toBe(drops);
     expect(existsSync(join(daemon.projects, ".trackwall", "escape.txt"))).toBe(false);
