@@ -1,9 +1,10 @@
 import { z } from "zod";
 
 /**
- * The Copilot CLI model a task's session runs on (ADR-98), and the supervisor's (`supervisorModel`, ADR-193), passed as `--model=<id>` when the task starts and whenever it
- * resumes; `null` for Copilot CLI's own default. The catalog of models depends on the Copilot CLI version and the user's
- * account, so Trackwall checks only the shape of an id (`claude-opus-5.5`, `gpt-5.5`, `auto`) and Copilot CLI the rest.
+ * The Copilot CLI model a task's session runs on (ADR-98), and the supervisor's (`supervisorModel`, ADR-193), passed as
+ * `--model=<id>` whenever the session starts or resumes; `null` for Copilot CLI's own default. The catalog of models
+ * depends on the Copilot CLI version and the user's account, so Trackwall checks only the shape of an id
+ * (`claude-opus-5.5`, `gpt-5.5`, `auto`) and Copilot CLI the rest.
  */
 export const TASK_MODEL_MAX = 64;
 export const TaskModel = z

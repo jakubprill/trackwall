@@ -9,7 +9,8 @@ import { pickFolder } from "@/lib/folder-picker";
 
 /**
  * A path setting saved as one key of `workspace.yaml`: the projects folder (ADR-18), the task worktrees folder (ADR-84) or
- * the git program (ADR-112); also the session profile (ADR-136), a name typed like a program's path.
+ * the git program (ADR-112); also a name typed like a program's path: the session profile (ADR-136) and the supervisor's
+ * model (ADR-193).
  */
 export function PathForm({
   label,

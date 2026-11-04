@@ -28,7 +28,7 @@ export function SupervisorModelSurface({ conn }: { conn: Connection }) {
         <p className="text-muted-foreground text-sm">
           The Copilot CLI model the supervisor runs on, written as Copilot CLI's /model lists it, such as a cheaper one than your default:
           the supervisor mostly reads and proposes tasks, and each task runs on its own model. It applies from the supervisor's next start
-          or restart, in the terminal and in Chat. Empty means Copilot CLI's default model.
+          or restart, in the terminal and in Chat. Copilot CLI's default goes back to the model every other session gets.
         </p>
         {settings.error && <ErrorWithRetry message={settings.error} onRetry={settings.reload} />}
         {!data && !settings.error && <Loading />}
@@ -41,7 +41,7 @@ export function SupervisorModelSurface({ conn }: { conn: Connection }) {
             initialPath={data.supervisorModel ?? ""}
             configFile={data.configFile}
             folder={false}
-            save={(model) => save(model)}
+            save={save}
             resetLabel="Copilot CLI's default"
             reset={data.supervisorModel === null && !data.supervisorModelProblem ? undefined : () => save(null)}
           />

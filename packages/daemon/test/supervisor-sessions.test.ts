@@ -25,8 +25,11 @@ const RESUMED: SessionLaunch = {
   conversation: "left",
 };
 
-/** Supervisors over a list the test fills, whose starts finish only when the test lets them. */
-function makeSupervisors(listed: Session[] = []) {
+/**
+ * Supervisors over a list the test fills, whose starts finish only when the test lets them; `refusal` is what the
+ * configuration refuses a start with.
+ */
+function makeSupervisors(listed: Session[] = [], refusal?: Error) {
   const home = mkdtempSync(join(tmpdir(), "trackwall-supervisor-"));
   homes.push(home);
   const steps: string[] = [];
@@ -35,6 +38,10 @@ function makeSupervisors(listed: Session[] = []) {
     sessions: { views: () => listed, has: (id) => listed.some((s) => s.id === id) },
     lastSupervisor: new LastSupervisorFile(join(home, "last-supervisor.json"), () => {}),
     projectsDir: async () => home,
+    check: async () => {
+      steps.push("check");
+      if (refusal) throw refusal;
+    },
     launch: (spec) => {
       steps.push(`launch ${spec.id}`);
       return new Promise((resolve) =>
@@ -86,5 +93,25 @@ describe("supervisor sessions", () => {
     const started = await starting;
 
     expect(steps).toEqual([`launch ${started.id}`, "close ended"]);
+  });
+
+  test("going on with the ended supervisor's conversation keeps its screen when the configuration refuses the start", async () => {
+    const listed = [supervisorView("left", "exited")];
+    const { supervisors, steps } = makeSupervisors(listed, new Error("supervisorModel: a model id is letters, digits, dots"));
+
+    await expect(supervisors.resume(RESUMED)).rejects.toThrow("supervisorModel");
+
+    expect(steps).toEqual(["check"]);
+    expect(listed.map((s) => s.id)).toEqual(["left"]);
+  });
+
+  test("going on with the ended supervisor's conversation closes it after the check and before the start under its id", async () => {
+    const { supervisors, steps, finishStarts } = makeSupervisors([supervisorView("left", "exited")]);
+
+    const starting = supervisors.resume(RESUMED);
+    await finishStarts();
+    await starting;
+
+    expect(steps).toEqual(["check", "close left", "launch left"]);
   });
 });

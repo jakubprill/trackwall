@@ -132,8 +132,7 @@ export const AGENT_QUEUES_FILE = "agent-queues.json";
 /** Where task worktrees went before ADR-84; tasks from then keep them there until they end. */
 export const LEGACY_WORKTREES_DIR = "worktrees";
 
-/** What `agents` needs from `procs`; wired in the facade. */
-/** What `#launchAs` adds to a start: for a repo or free session what it started with (ADR-175), for the supervisor its model (ADR-193). */
+/** What `#launchAs` adds to a start for a repo or free session (ADR-175); nothing for the supervisor. */
 interface LaunchWithOptions {
   start?: SessionStartOptions;
   /** Before the session's own arguments, as a task's model (ADR-98). */
@@ -141,6 +140,7 @@ interface LaunchWithOptions {
   lspServers?: Record<string, LspServer>;
 }
 
+/** What `agents` needs from `procs`; wired in the facade. */
 interface AgentsProcs extends LauncherProcs {
   liveIn(dir: string): boolean;
 }
@@ -297,8 +297,8 @@ export class Agents {
       sessions: this.#sessions,
       lastSupervisor: this.#lastSupervisor,
       projectsDir: () => deps.repos.projectsDir(),
-      // Read at every start, a resume and a restart included, so a change in Settings applies to the next one (ADR-193).
-      launch: (spec, place) => this.#launchAs(spec, place, { args: modelArgs(deps.repos.supervisorModel()) }),
+      check: async (place) => void (await this.#launcher.inputs(place)),
+      launch: (spec, place) => this.#launchAs(spec, place),
       close: (id) => this.#close(id),
     });
     this.#tasks = new AgentTasks({
@@ -1119,7 +1119,6 @@ export class Agents {
       // What can refuse the start (a bad name in `agentSecrets`, a bad `supervisorModel`, Copilot CLI gone) refuses it before the stop, so the
       // session goes on as it was.
       await this.#launcher.inputs(session);
-      if (supervisor) this.#deps.repos.supervisorModel();
       // The user may have stopped or closed the session meanwhile: it is not started again behind their back.
       if (this.#sessions.find(id) !== session || !this.#sessions.isRunning(session))
         throw new DomainError("bad_request", "the session has ended; start it again instead");

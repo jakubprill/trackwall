@@ -19,6 +19,11 @@ export interface SupervisorSessionsDeps {
   lastSupervisor: LastSupervisorFile;
   /** The projects folder the supervisor runs in; `bad_request` while it is not set. */
   projectsDir: () => Promise<string>;
+  /**
+   * What a start reads of the configuration in `place`, which refuses it with the reason (Copilot CLI missing, a bad
+   * key such as `supervisorModel`, ADR-193); checked before an ended supervisor gives up its place.
+   */
+  check: (place: SessionPlace) => Promise<void>;
   /** A start of either view in `place`, which joins the list. */
   launch: (spec: SessionLaunch, place: SessionPlace) => Promise<Session>;
   /** Closes an ended session, as the user's Close does. */
@@ -36,8 +41,8 @@ export class SupervisorSessions {
 
   /**
    * The running supervisor, or a new one. With `last` it goes on with the newest supervisor's conversation under its id
-   * (ADR-96); that start closes the ended supervisor first, since an id is listed once, so when it fails the last
-   * screen is gone. `view` is a terminal or the conversation view (ADR-107); the last conversation goes on in either.
+   * (ADR-96); that start closes the ended supervisor first, since an id is listed once, so when the start itself fails
+   * the last screen is gone; a configuration that refuses it refuses it before the close. `view` is a terminal or the conversation view (ADR-107); the last conversation goes on in either.
    */
   async start(conversation: SupervisorConversation, view: SessionView): Promise<Session> {
     if (this.#starting) return this.#starting;
@@ -101,10 +106,14 @@ export class SupervisorSessions {
   async #replace(spec: SessionLaunch): Promise<Session> {
     const { sessions } = this.#deps;
     const ended = sessions.views().filter(isSupervisor);
-    const cwd = await this.#deps.projectsDir();
-    // The ended supervisor whose conversation this one goes on with under its id gives up its place before the start.
-    if (sessions.has(spec.id)) this.#deps.close(spec.id);
-    const started = await this.#deps.launch(spec, { repo: null, supervisor: true, cwd, task: null });
+    const place = { repo: null, supervisor: true, cwd: await this.#deps.projectsDir(), task: null };
+    // The ended supervisor whose conversation this one goes on with under its id gives up its place before the start,
+    // and only once nothing in the configuration refuses that start.
+    if (sessions.has(spec.id)) {
+      await this.#deps.check(place);
+      this.#deps.close(spec.id);
+    }
+    const started = await this.#deps.launch(spec, place);
     // One of them may have been dismissed during the start; the start has still succeeded.
     for (const old of ended) if (old.id !== spec.id && sessions.has(old.id)) this.#deps.close(old.id);
     return started;
