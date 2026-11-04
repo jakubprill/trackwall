@@ -29,6 +29,7 @@ The checks are:
 | Work only in this container | every commit, stash and changed file in your repos and task worktrees is pushed; the line shows only when Trackwall runs in a container, as a warning with how much is only there, since removing the container's volume deletes it; [Home](/features/home) lists the repos |
 | Workspace settings file | every key of `workspace.yaml` can be read; one that cannot is named with its line, and [Config files](/features/config-files) shows them all |
 | Git | `git --version` answers; with a "Git program" chosen in Settings the line names the git it runs, and it warns when the "Git program" from Settings did not answer and git from `PATH` is used instead |
+| Git access to repo hosts | git reaches every repo host of your repos, the way a sync does (one repo per host, without asking for a password); a host it cannot reach is named with the reason, such as no SSH key, an unknown host key or no sign-in for HTTPS, and in a dev container the fix points to [Git and SSH](/guide/dev-container#git-and-ssh); shown only when a repo has an HTTPS or SSH remote |
 | Copilot CLI | Trackwall finds it the way it starts sessions, and it is not older than the version Trackwall is tested with |
 | Copilot CLI trusted folder | `trustedFolders` in Copilot CLI's `config.json` covers your projects folder, so Copilot CLI does not ask before working in each repo and task |
 | Copilot CLI sandbox for tasks | Copilot CLI's sandbox can run on this computer, so the tasks `sandbox` in `workspace.yaml` puts in it can start; on Linux it needs the `bubblewrap` package; not shown when no task runs in it, as in a container by default ([Approvals](/features/approvals)) |
@@ -49,7 +50,7 @@ The doctor only looks. It never changes a setting, installs anything or signs yo
 ## Good to know
 
 - After installing a program, restart Trackwall if the doctor still does not find it.
-- A check of gh or glab asks the repo host, so without a network or VPN it shows as not signed in.
+- A check of gh or glab asks the repo host, so without a network or VPN it shows as not signed in. The same goes for git access to repo hosts, which also only reads: it never pushes.
 - Sessions start with the environment Trackwall started with, so after changing `HTTPS_PROXY` or `NODE_EXTRA_CA_CERTS` restart Trackwall and click "Check again". In a dev container, set them in `containerEnv`; see [Run in a dev container](/guide/dev-container).
 - Your own MCP servers and the certificates of Java builds are not checked.
 - The model provider check tells whether something answers at the provider's address, not whether your key or model name is right; a session started with the profile shows that in its terminal.

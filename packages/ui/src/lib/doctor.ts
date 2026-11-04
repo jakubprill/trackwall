@@ -8,6 +8,7 @@ const CHECK_TITLES: Record<DoctorCheckId, string> = {
   "unpushed-work": "Work only in this container",
   "workspace-file": "Workspace settings file",
   git: "Git",
+  "git-remotes": "Git access to repo hosts",
   "copilot-cli": "Copilot CLI",
   "copilot-trusted-folder": "Copilot CLI trusted folder",
   "copilot-sandbox": "Copilot CLI sandbox for tasks",
