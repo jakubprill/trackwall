@@ -12,7 +12,7 @@ import { daemonSocket } from "@/lib/daemon-socket";
 import { useOpenWebLink } from "@/lib/desktop";
 import { DROP_HOVER_RING, FILE_DROP_TARGET, FileDropEvent } from "@/lib/file-drop";
 import { InputBeforeOpen } from "@/lib/input-before-open";
-import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
+import { KeyboardElsewhere, keyboardInRegion } from "@/lib/keyboard-elsewhere";
 import { useLastScreens } from "@/lib/last-screens";
 import { oncePerFrame } from "@/lib/once-per-frame";
 import { pastedPaths } from "@/lib/pasted-paths";
@@ -293,8 +293,10 @@ export function PtyTerminal({
     };
   }, [conn, path, subprotocol, screenKey, noun, copilotCli, lastScreens]);
 
+  // Not when the user already put the keyboard on something else in the panel, such as one of its buttons.
   useEffect(() => {
-    if (focused) term.current?.focus();
+    const element = host.current;
+    if (focused && element && !keyboardInRegion(element, document.activeElement)) term.current?.focus();
     updateFocus.current?.();
   }, [focused]);
 

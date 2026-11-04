@@ -30,8 +30,29 @@ describe("the supervisor in the conversation view (ADR-107)", () => {
     await panel.getByRole("list", { name: "Attachments" }).getByText("notes.txt").waitFor();
     await message.fill("check the build");
     await message.press("Enter");
+    // The approval is answered with the keyboard alone, as in the terminal's dialog: it takes the keyboard from the
+    // emptied message box and the arrows move between its options. Then the keyboard leaves the panel, as when the user
+    // works in a view beside it, and a click on the approval's question followed by Tab lands on its first option
+    // without the message box taking the keyboard back.
     await panel.getByText("Do you want to allow this?").waitFor();
-    await panel.getByRole("button", { name: "Allow once" }).click();
+    const focusIs = (label: string) =>
+      page.waitForFunction((expected) => document.activeElement?.textContent === expected, label, { timeout: 2000 });
+    await focusIs("Allow once");
+    await page.keyboard.press("ArrowDown");
+    await focusIs("Always allow");
+    await page.keyboard.press("ArrowUp");
+    await focusIs("Allow once");
+    await page.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : undefined));
+    await panel.getByText("Do you want to allow this?").click();
+    await page.keyboard.press("Tab");
+    await focusIs("Allow once");
+    // A key answers only once the approval has shown for half a second (an Enter meant for the message must not).
+    await page.waitForTimeout(600);
+    await page.keyboard.press("Enter");
+    // The answered approval gives the keyboard back to the message box.
+    await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "Message to the agent", undefined, {
+      timeout: 2000,
+    });
 
     const conversation = panel.getByRole("log", { name: "Conversation" });
     await conversation.getByText("check the build", { exact: true }).waitFor();
