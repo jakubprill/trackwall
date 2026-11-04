@@ -11,9 +11,9 @@ import type { Connection } from "./connection.ts";
  * folder are hidden. The desktop app can use such a daemon too (ADR-130): it then opens web links and VS Code itself.
  * A desktop until the daemon says otherwise.
  */
-export type DaemonPlace = Pick<DaemonInfo, "desktop" | "container" | "devContainerFolder">;
+export type DaemonPlace = Pick<DaemonInfo, "desktop" | "container" | "devContainerFolder" | "serviceProxyPort">;
 
-const ON_A_DESKTOP: DaemonPlace = { desktop: true, container: null, devContainerFolder: null };
+const ON_A_DESKTOP: DaemonPlace = { desktop: true, container: null, devContainerFolder: null, serviceProxyPort: null };
 
 export const DaemonPlaceContext = createContext(ON_A_DESKTOP);
 
@@ -34,7 +34,7 @@ export function useDesktop(): boolean {
  * daemon's container (ADR-121), through its `devcontainer.json` when the dev container named its folder, otherwise
  * attached to it. `undefined` when the daemon opens it, or when nothing can.
  */
-export function editorLinkFor(place: DaemonPlace, path: string): string | undefined {
+export function editorLinkFor(place: Omit<DaemonPlace, "serviceProxyPort">, path: string): string | undefined {
   if (place.desktop) return undefined;
   if (place.devContainerFolder) return devContainerEditorUrl(place.devContainerFolder, path);
   if (place.container) return containerEditorUrl(place.container, path);
@@ -52,7 +52,8 @@ export function useDaemonPlace(conn: Connection | undefined): DaemonPlace {
     if (!conn) return;
     // Without an answer the page behaves as before: the daemon opens links and says no_desktop when it cannot.
     call(conn, DAEMON_INFO_PATH, DaemonInfo).then(
-      ({ desktop, container, devContainerFolder }) => setPlace({ desktop, container, devContainerFolder }),
+      ({ desktop, container, devContainerFolder, serviceProxyPort }) =>
+        setPlace({ desktop, container, devContainerFolder, serviceProxyPort }),
       () => {},
     );
   }, [conn]);

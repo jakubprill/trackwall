@@ -80,6 +80,7 @@ const api = await startApi({
     desktop: true,
     container: null,
     devContainerFolder: null,
+    serviceProxyPort: null,
   }),
   onShutdown: () => void stop("POST /api/daemon/shutdown"),
   facade,

@@ -23,6 +23,7 @@ import { hasValidToken, OriginPolicy } from "./guard.ts";
 import { HOOKS_PATH, handleHook } from "./hooks.ts";
 import { sessionSocketRoute, terminalSocketRoute } from "./pty-socket.ts";
 import { postRoutes } from "./routes.ts";
+import { type ServiceProxy, startServiceProxy } from "./service-proxy.ts";
 import { attachSockets } from "./sockets.ts";
 import { serveStatic } from "./static.ts";
 
@@ -39,11 +40,16 @@ export interface ApiOptions {
   uiDir?: string;
   /** Extra browser origins with access to the API, e.g. the Vite server during `tauri dev`. */
   allowOrigins?: readonly string[];
+  /** The port of the service proxy (§5.6, ADR-189); none without. Closed together with the API server. */
+  proxyPort?: number;
+  log?: (msg: string) => void;
 }
 
 export interface ApiServer {
   server: Server;
   port: number;
+  /** `null` when none was asked for or its port was taken: the daemon runs on without it. */
+  proxyPort: number | null;
   close: () => Promise<void>;
 }
 
@@ -102,10 +108,13 @@ export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer
       conversationSocketRoute(options.facade),
     ],
   });
+  const proxy = options.proxyPort === undefined ? null : await serviceProxy(options.proxyPort, options);
   return {
     server,
     port: boundPort,
+    proxyPort: proxy?.port ?? null,
     close: async () => {
+      await proxy?.close();
       closeSockets();
       options.events.close();
       await options.mcp.close();
@@ -115,6 +124,17 @@ export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer
       });
     },
   };
+}
+
+/** The service proxy on `port`, or `null` with a line in the log when the port is taken: the API works without it. */
+async function serviceProxy(port: number, o: ApiOptions): Promise<ServiceProxy | null> {
+  const log = o.log ?? (() => {});
+  try {
+    return await startServiceProxy({ port, address: (target) => o.facade.services.address(target), log });
+  } catch (err) {
+    log(`no service proxy: port ${port} could not be opened (${(err as NodeJS.ErrnoException).code ?? String(err)})`);
+    return null;
+  }
 }
 
 async function handle(req: IncomingMessage, res: ServerResponse, o: ApiOptions, policy: OriginPolicy, instance: string): Promise<void> {

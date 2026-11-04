@@ -2,7 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { closeSync, mkdirSync, openSync, renameSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { CONTAINER_COMMAND, SUPERVISE_COMMAND } from "./args.ts";
+import { CONTAINER_COMMAND, containerProxyPort, SUPERVISE_COMMAND } from "./args.ts";
 import { appendNote } from "./container-log.ts";
 import { isAlive, readDaemonFile } from "./discovery.ts";
 import { claimPidFile, pidFileHolder, releasePidFile } from "./pid-file.ts";
@@ -68,7 +68,9 @@ function startDaemon(home: string, port: number, logPath: string): ChildProcess 
   rotateLog(logPath);
   const fd = openSync(logPath, "a", 0o600);
   try {
-    const { exec, args } = selfCommand(["--port", String(port), "--home", home]);
+    const proxyPort = containerProxyPort(port);
+    const proxy = proxyPort === null ? [] : ["--proxy-port", String(proxyPort)];
+    const { exec, args } = selfCommand(["--port", String(port), ...proxy, "--home", home]);
     return spawn(exec, args, { cwd: homedir(), stdio: ["ignore", fd, fd] });
   } finally {
     closeSync(fd);

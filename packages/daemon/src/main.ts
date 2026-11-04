@@ -138,6 +138,8 @@ async function start(
         version: VERSION,
         uiDir,
         allowOrigins: args.allowOrigins,
+        proxyPort: args.proxyPort ?? undefined,
+        log,
         info: () => ({
           version: VERSION,
           pid: process.pid,
@@ -152,6 +154,7 @@ async function start(
           desktop,
           container,
           devContainerFolder: devContainer,
+          serviceProxyPort: api?.proxyPort ?? null,
         }),
         onShutdown: () => void shutdown("POST /api/daemon/shutdown"),
         facade,

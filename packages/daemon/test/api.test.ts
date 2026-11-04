@@ -63,6 +63,7 @@ beforeAll(async () => {
       desktop: true,
       container: null,
       devContainerFolder: null,
+      serviceProxyPort: null,
     }),
     onShutdown: () => {
       shutdowns++;

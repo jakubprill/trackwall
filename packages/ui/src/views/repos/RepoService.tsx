@@ -1,6 +1,7 @@
 import { type ServiceSlice, servicesApi } from "@trackwall/protocol";
 import { Play, Square } from "lucide-react";
 import { useCallback, useState } from "react";
+import { OpenServiceButton } from "@/components/OpenServiceButton";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,8 @@ const POLL_IDLE_MS = 5000;
 /**
  * The repo's service (ADR-45): its mise task `dev` with readiness. "Start with dependencies" brings up the services
  * it calls from the graph first; the panel lists them with their live state. While a task's service holds the repo's
- * port (ADR-132) the panel says so instead of offering a start, which the daemon would refuse.
+ * port (ADR-132) the panel says so instead of offering a start, which the daemon would refuse. A ready service opens in
+ * the browser, through the service proxy when the daemon runs in a dev container (ADR-189).
  */
 export function RepoService({ conn, repo }: { conn: Connection; repo: string }) {
   const load = useCallback(() => post(conn, servicesApi.list, {}), [conn]);
@@ -50,6 +52,7 @@ export function RepoService({ conn, repo }: { conn: Connection; repo: string }) 
           <span className="min-w-0 flex-1 text-xs">
             <StatusLabel tone={state.tone} label={state.label} />
           </span>
+          <OpenServiceButton conn={conn} service={service} />
           {holder && !live ? (
             <span className="text-muted-foreground text-xs">
               Port {holder.port} runs a task's service on a lease; give it back in that task's panel

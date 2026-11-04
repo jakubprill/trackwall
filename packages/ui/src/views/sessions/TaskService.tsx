@@ -1,11 +1,13 @@
 import { servicesApi, type Task } from "@trackwall/protocol";
 import { ArrowLeftRight, Square } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useContext, useState } from "react";
+import { OpenServiceButton } from "@/components/OpenServiceButton";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { isServiceLive, leaseHolder, serviceStateLabel } from "@/lib/service-state";
+import { DaemonPlaceContext } from "@/lib/desktop";
+import { isServiceLive, leaseHolder, serviceLink, serviceStateLabel } from "@/lib/service-state";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 
@@ -23,7 +25,8 @@ const SKIP_WAIT_MS = 5000;
  * it and runs the task's service there, so whatever calls the repo reaches the task's changes; "Give the port back"
  * stops the task's service and the root's starts again. Hidden while neither runs and nothing went wrong, and while
  * another task holds the port. A start that the daemon skipped (the port still taken, the task's mise config not trusted)
- * says why here, since the lease then ends at once.
+ * says why here, since the lease then ends at once. While the task's service is ready, on either port, Open shows it in
+ * the browser (ADR-189).
  */
 export function TaskService({ conn, task }: { conn: Connection; task: Task }) {
   const load = useCallback(() => post(conn, servicesApi.list, {}), [conn]);
@@ -44,10 +47,13 @@ export function TaskService({ conn, task }: { conn: Connection; task: Task }) {
     () => post(conn, servicesApi.stop, { repo, task: id, dependencies: false }),
     () => remote.reload(),
   );
+  const own = services.find((s) => s.repo === repo && s.task === id) ?? null;
+  // Shown also while only the task's own service is ready, for its Open button.
+  const openable = serviceLink(useContext(DaemonPlaceContext), own) !== undefined;
   const holds = holder?.task === id;
   const error = lease.error ?? giveBack.error ?? skipped;
   const busy = lease.pending || giveBack.pending;
-  if (!holds && !error && !busy && (holder || !isServiceLive(root))) return null;
+  if (!holds && !openable && !error && !busy && (holder || !isServiceLive(root))) return null;
   const state = serviceStateLabel(holds ? holder : null);
 
   return (
@@ -63,6 +69,7 @@ export function TaskService({ conn, task }: { conn: Connection; task: Task }) {
             `${repo}'s service is not running`
           )}
         </span>
+        <OpenServiceButton conn={conn} service={own} />
         {holds ? (
           <Button variant="outline" size="sm" onClick={giveBack.run} disabled={giveBack.pending}>
             <Square /> Give the port back

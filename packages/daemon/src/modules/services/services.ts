@@ -28,7 +28,7 @@ import { waitLimited } from "../../infra/wait-limit.ts";
 import { callEndpoint } from "./endpoint-call.ts";
 import { type Lease, Leases } from "./leases.ts";
 import { probePort } from "./port-probe.ts";
-import { ServiceWatch, type WatchedRun } from "./service-watch.ts";
+import { type ServiceAddress, ServiceWatch, type WatchedRun } from "./service-watch.ts";
 import { planSlice, type SlicePlan } from "./slice-plan.ts";
 
 /**
@@ -223,6 +223,21 @@ export class Services {
       limit: CALL_ERRORS,
     });
     return { ...result, errors };
+  }
+
+  /**
+   * Where the service proxy (§5.6, ADR-189) sends a browser's request for `target`: the address its running service
+   * answered on at the last check, with a repo root standing for the task's service that holds its port on a lease
+   * (ADR-132). `service_unavailable` with the reason otherwise. No check of its own, unlike `call`: the watch checks every
+   * 500 ms anyway, and one page asks for dozens of files.
+   */
+  async address(target: MiseTarget): Promise<ServiceAddress> {
+    const reached = target.task === null ? (this.leases.of(target.repo)?.holder ?? target) : target;
+    const watch = (await this.adopt(reached)) ?? this.watches.get(miseTargetKey(reached));
+    const address = watch?.reachable();
+    if (address) return address;
+    const why = watch ? `is ${watch.view().state}` : "has not been started";
+    throw new DomainError("service_unavailable", `the service of ${where(reached)} ${why}`);
   }
 
   /**

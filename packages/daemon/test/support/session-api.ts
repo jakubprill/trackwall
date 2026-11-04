@@ -50,6 +50,8 @@ export interface SessionApiOptions {
    * without approvals on runners without bubblewrap, and the sandbox's own tests choose it.
    */
   sandboxTasks?: SandboxSettings["tasks"] | null;
+  /** The port of the service proxy (ADR-189), `0` for a free one; none by default. */
+  proxyPort?: number;
 }
 
 interface CopilotUnderTest {
@@ -108,11 +110,14 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
       desktop,
       container: options.container ?? null,
       devContainerFolder: options.devContainerFolder ?? null,
+      serviceProxyPort: api.proxyPort,
     }),
     onShutdown: () => {},
     facade,
     mcp: mcp.endpoint,
     events: new EventHub({ facade, log: () => {} }),
+    proxyPort: options.proxyPort,
+    log: options.log,
   });
   // As in main.ts: before the API the leftovers of the previous daemon, after it the sessions it left running.
   void facade.agents.resumeLeftSessions();

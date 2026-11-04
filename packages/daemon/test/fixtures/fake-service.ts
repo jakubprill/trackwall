@@ -3,7 +3,8 @@
 // crash?: boolean, quiet?: boolean, buildDaemon?: number }.
 // It listens on 127.0.0.1 after `delayMs` and logs the port as Spring Boot does (`quiet` leaves the line out). GET and
 // POST answer JSON with the method, path, body, the working directory, `PORT` and `FAKE_API_TOKEN` from the environment
-// (a secret to be masked);
+// (a secret to be masked), `Host` and `X-Forwarded-Host`; `/redirect` redirects to its own address, as a login does; a
+// WebSocket handshake is accepted and its connection echoes;
 // `/boom` logs an exception with a stack trace and answers 500; `/forward/<port><path>` passes the request to another
 // fake service on 127.0.0.1 and answers 502 when that one fails. `crash` logs a startup failure and exits with code 1.
 // `buildDaemon` is the port of a build daemon the test runs, as Gradle's daemon runs `bootRun`: this process only asks it
@@ -55,6 +56,12 @@ const server = createServer((req, res) => {
       upstream.end();
       return;
     }
+    if (req.url === "/redirect") {
+      // Spring Security's redirect to its login page names the service's own address.
+      res.writeHead(302, { location: `http://localhost:${listeningPort()}/login?next=1` });
+      res.end();
+      return;
+    }
     if (req.url === "/boom") {
       console.error("ERROR c.e.orders.OrderController - Request failed");
       console.error("java.lang.NullPointerException: order is null");
@@ -66,18 +73,28 @@ const server = createServer((req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
     const body = Buffer.concat(chunks).toString("utf8");
     const env = { port: process.env.PORT ?? null, token: process.env.FAKE_API_TOKEN ?? null };
-    const answer = { method: req.method, path: req.url, body, cwd: process.cwd(), ...env };
+    const forwarded = { host: req.headers.host ?? null, forwardedHost: req.headers["x-forwarded-host"] ?? null };
+    const answer = { method: req.method, path: req.url, body, cwd: process.cwd(), ...env, ...forwarded };
     res.end(JSON.stringify(answer));
   });
 });
+
+// A WebSocket handshake (a dev server's live reload) is accepted, and the connection echoes what it receives.
+server.on("upgrade", (req, socket) => {
+  socket.write(`HTTP/1.1 101 Switching Protocols\r\nupgrade: websocket\r\nconnection: Upgrade\r\nx-path: ${req.url}\r\n\r\n`);
+  socket.pipe(socket);
+});
+
+function listeningPort(): number {
+  const address = server.address();
+  return typeof address === "object" && address ? address.port : 0;
+}
 
 if (config.buildDaemon !== undefined) askBuildDaemon(config.buildDaemon);
 else
   setTimeout(() => {
     server.listen(config.port ?? Number(process.env.SERVER_PORT ?? 0), "127.0.0.1", () => {
-      const address = server.address();
-      const port = typeof address === "object" && address ? address.port : 0;
-      if (!config.quiet) logStarted(port);
+      if (!config.quiet) logStarted(listeningPort());
     });
   }, config.delayMs ?? 0);
 for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => process.exit(0));
