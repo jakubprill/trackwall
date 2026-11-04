@@ -14,6 +14,7 @@ export * from "./container.ts";
 export * from "./conversation.ts";
 export * from "./copilot-cli-version.ts";
 export * from "./copilot-prompt-box.ts";
+export * from "./copilot-usage.ts";
 export * from "./cut-text.ts";
 export * from "./daemon.ts";
 export * from "./day-start.ts";

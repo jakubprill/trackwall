@@ -9,6 +9,7 @@ import {
 } from "@trackwall/protocol";
 import { Bot, Box, GitBranch, Layers, Plug, ShieldOff, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
+import { CopilotUsageMark } from "@/components/CopilotUsageMark";
 import { CopyRequestNotice } from "@/components/CopyRequestNotice";
 import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
 import { FolderShell } from "@/components/FolderShell";
@@ -116,6 +117,7 @@ export function TaskPanel({
               {session ? <StatusLabel {...sessionStateLabel(session)} /> : "no session"}
             </span>
             <span className="text-muted-foreground shrink-0 text-xs">{relativeTime(session?.startedAt ?? task.createdAt, new Date())}</span>
+            <CopilotUsageMark usage={session?.usage ?? null} />
           </span>
           <span className="text-muted-foreground truncate text-xs" title={task.prompt}>
             {taskSubtitle(task, sessions)}

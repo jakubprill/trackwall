@@ -34,6 +34,7 @@ function session(id: string, repoId: string, over: Partial<Session> = {}): Sessi
     view: "terminal",
     readRequest: null,
     copyRequest: null,
+    usage: null,
     ...over,
   };
 }

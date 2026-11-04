@@ -38,6 +38,7 @@ import { toolCallFiles, toolCallLines, toolCallPatch, workingDirectoryNames } fr
 import type { AgentSession } from "./agent-session.ts";
 import { type CopilotHookOutput, situationOutput } from "./copilot-hook-output.ts";
 import type { CopilotHookRecord } from "./copilot-hook-record.ts";
+import type { CopilotUsageLog } from "./copilot-usage-log.ts";
 import { CopyRequestSlot } from "./copy-request.ts";
 import type { SessionEvent } from "./live-session.ts";
 import { ReadRequestClock } from "./read-request.ts";
@@ -113,6 +114,8 @@ export interface AcpSessionOptions {
   onTurnOver: () => void;
   /** Any turn started, also one the user drove: where the worktree is then starts a round (ADR-168). */
   onTurnStart: () => void;
+  /** What the conversation used (ADR-190), read when a conversation is loaded, in the session's cycle and at its end. */
+  usage: CopilotUsageLog;
   log: (msg: string) => void;
 }
 
@@ -254,6 +257,7 @@ export class AcpSession implements AgentSession {
       this.#conversationId = load;
       const loaded = ConfigOptionsResult.safeParse(await connection.request("session/load", { sessionId: load, cwd, mcpServers: [] }));
       this.#infoChanged(this.#info.settings(loaded.data?.configOptions));
+      this.#updateUsage();
     }
   }
 
@@ -386,10 +390,14 @@ export class AcpSession implements AgentSession {
     if (this.#finished) return false;
     this.#readRequest.observe(this.#o.prompt());
     const run = this.#o.run();
-    if (run?.kind !== "exited") return true;
+    if (run?.kind !== "exited") {
+      if (this.#conversationId !== undefined) this.#o.usage.poll(this.#conversationId, Date.now());
+      return true;
+    }
     this.#finished = true;
     this.#connection.close();
     this.#refuseApprovals();
+    this.#updateUsage();
     const failed = !run.stoppedByUser && run.exitCode !== 0;
     this.#report(failed ? "Error" : "Done", `exit ${run.exitCode ?? run.signal ?? "?"}`, "exit");
     this.#o.onEvent({ kind: "exited", exitCode: run.exitCode, stoppedByUser: run.stoppedByUser });
@@ -416,7 +424,12 @@ export class AcpSession implements AgentSession {
       view: "conversation",
       readRequest: running ? this.#readRequestView() : null,
       copyRequest: running ? this.copyRequest.request : null,
+      usage: this.#o.usage.current(),
     };
+  }
+
+  #updateUsage(): void {
+    if (this.#conversationId !== undefined) this.#o.usage.update(this.#conversationId);
   }
 
   /**

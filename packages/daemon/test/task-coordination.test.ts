@@ -59,6 +59,7 @@ function view(id: string, taskId: string | null, state: TaskState | null, run: S
     view: "terminal",
     readRequest: null,
     copyRequest: null,
+    usage: null,
   };
 }
 

@@ -2,8 +2,10 @@ import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
 import type { ConversationServerMessage, RunState } from "@trackwall/protocol";
 import { AcpSession } from "../src/modules/agents/acp-session.ts";
 import type { CopilotHookRecord } from "../src/modules/agents/copilot-hook-record.ts";
+import { CopilotUsageLog } from "../src/modules/agents/copilot-usage-log.ts";
 import type { SessionEvent } from "../src/modules/agents/live-session.ts";
 import { STUCK_AFTER_MS } from "../src/modules/agents/session-stuck.ts";
+import { NO_COPILOT_HOME } from "./support/live-session.ts";
 
 const RUNNING: RunState = { runId: "r1", startedAt: "2026-10-28T08:00:00.000Z", kind: "running", pid: 1 };
 
@@ -32,6 +34,7 @@ function session(
     onEvent: (event) => events.push(event),
     onTurnOver: () => turnsOver.count++,
     onTurnStart: () => {},
+    usage: new CopilotUsageLog(NO_COPILOT_HOME),
     log: () => {},
   });
   acp.connect({ write: (line) => written.push(JSON.parse(line)) });

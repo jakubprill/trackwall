@@ -31,6 +31,7 @@ function session(id: string, state: Session["state"], run: Session["run"] = runn
     view: "terminal",
     readRequest: null,
     copyRequest: null,
+    usage: null,
   };
 }
 

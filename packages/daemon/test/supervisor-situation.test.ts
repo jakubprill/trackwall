@@ -20,6 +20,7 @@ function session(fields: Partial<Session> & Pick<Session, "id">): Session {
     view: "terminal",
     readRequest: null,
     copyRequest: null,
+    usage: null,
     ...fields,
   };
 }

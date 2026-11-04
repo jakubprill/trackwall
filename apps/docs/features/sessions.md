@@ -16,6 +16,7 @@ Run several Copilot CLI agents side by side, each in its own repo, and always kn
 - A nudge when an agent needs you: a flashing taskbar icon with the number waiting, a system notification and an entry in the tray.
 - A grid of terminals, so you can watch up to nine agents at once on a wide monitor.
 - Sessions that keep running when you close the window, and come back with their conversations after Trackwall restarts or updates.
+- What each session's conversation used: AI credits, or premium requests on the older billing, with the sum of all listed sessions.
 
 ## How it works
 
@@ -30,6 +31,8 @@ You do not have to keep Trackwall in front. When its window is in the background
 The switch above the terminal changes the layout: 1 shows the selected session with its full panel, 2 and 4 show pages of that many terminals, and Auto fits the whole list on screen, up to nine at a time (six sessions on a 34-inch ultrawide are three columns and two rows). The selected tile has the accent ring and takes the keyboard; a tile waiting for you has a warning frame. A task's tile shows in its header what needs you. While the task's mise config waits for your trust (the agent changed it, or it was never trusted), a yellow "Trust mise" chip stays there; click it to read the changed files and press "Trust this config", or open the worktree in VS Code. A verification that runs, passed or failed has a chip too. Everything else the task has to say is a badge: yellow with the number of warnings (such as files another task also changes), grey otherwise. The badge and the verification chip open the task's sections over its terminal, and Esc closes them. A warning that comes up while you watch the grid lies over the terminal as one line, with "Show" and an X. The ⋯ button opens the task menu: its branch, port, model and when it started, and VS Code, Verify, Stop or Resume, "Changes", which opens the task alone on its changes, and "Details". In a narrow tile the header shortens the task's title and shows a working, waiting or ended state as its coloured dot only, with the text in the tooltip. A session that got variables from mise shows a key with their number; hover it for their names, or click it to keep the list open until you click again or press Esc. The key turns yellow when the session got less than its place gives, for example from a config that is not trusted yet. None of these change the terminal's size.
 
 Every session also gets short instructions from Trackwall on how to work with you: a session in a repo hands larger work over as a [task proposal](/features/main-session), and a session of an [agent task](/features/tasks) stays in its own worktree, does not push and finishes with a summary. They also tell the agent which Trackwall it runs in and where this documentation is; [Session instructions](/features/session-instructions) has the details.
+
+Under its state, every session that has talked to the model shows what its conversation used so far, the way Copilot CLI's `/usage` counts it: AI credits, or premium requests if your plan still bills those, or only tokens when the model comes from your own provider. Hover it for the number of model calls and tokens. The task's header shows the same for its session, and under the "Sessions" heading you see the sum of all listed sessions. A resumed session or task keeps counting its conversation from the first prompt. The number appears a moment after a turn ends, since Copilot CLI writes it down in batches.
 
 ## Use it
 
@@ -53,6 +56,7 @@ Alt+1 … Alt+9, Alt+0 and Alt+J work while a terminal has the focus too, and ar
 ## Good to know
 
 - Copilot CLI must be on your `PATH` as `copilot` and signed in.
+- Trackwall only shows what a session used and never stops it. To cap a session, type `/limits set max-ai-credits <number>` in it (at least 30).
 - Each session gets the variables and tokens of your mise config, the line under its header says which, and in the grid a key next to its title lists them: see [Environment from mise](/features/mise-environment).
 - A free session runs in the projects folder, so the trusted folder you set for Copilot CLI and the antivirus exclusion of that folder cover it. It can change any repo there, and it can hand work over as a [task proposal](/features/main-session), but it does not run a repo's mise tasks or services through Trackwall. Unlike the [supervisor](/features/supervisor), you can run several, and it may run commands and change files.
 - The [supervisor](/features/supervisor) is not one of the numbered entries: its heading tops the list with the work it delegated under it, and selecting it opens its panel on the right.

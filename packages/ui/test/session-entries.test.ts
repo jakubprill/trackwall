@@ -32,6 +32,7 @@ function session(id: string, startedAt: string, task: string | null = null): Ses
     view: "terminal",
     readRequest: null,
     copyRequest: null,
+    usage: null,
   };
 }
 

@@ -11,6 +11,7 @@ import {
 } from "@trackwall/protocol";
 import { BellRing, Crown, Lightbulb, Plus, Square, X } from "lucide-react";
 import { useCallback, useRef } from "react";
+import { CopilotUsageMark } from "@/components/CopilotUsageMark";
 import { CopyRequestNotice } from "@/components/CopyRequestNotice";
 import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -22,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import { listedUsage } from "@/lib/copilot-usage";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { relativeTime, twoDigits } from "@/lib/format";
 import { IS_MAC } from "@/lib/platform";
@@ -167,6 +169,7 @@ export function SessionsView({
             <Plus />
           </Button>
         </div>
+        <ListedUsage sessions={list} />
         {next && (
           <div className="px-4 pb-3">
             <Button
@@ -344,7 +347,7 @@ function StartedListItem({
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <RowName name={task?.repo ?? (session && sessionPlace(session))} delegated={delegated} waits={session?.needsAttention === true} />
           {task && <TaskLine task={task} />}
-          <span className="text-muted-foreground text-xs">{session ? <StatusLabel {...sessionStateLabel(session)} /> : "no session"}</span>
+          <RowStatus session={session} />
           <TaskOutcomeMarks outcome={outcome} />
           {session?.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
         </span>
@@ -688,6 +691,28 @@ function LayoutBar({ layout, onLayout, summary }: { layout: SessionLayout; onLay
   );
 }
 
+/** A row's session state and what its conversation used (ADR-190). */
+function RowStatus({ session }: { session: Session | undefined }) {
+  if (session === undefined) return <span className="text-muted-foreground text-xs">no session</span>;
+  return (
+    <span className="text-muted-foreground flex items-center gap-3 text-xs">
+      <StatusLabel {...sessionStateLabel(session)} />
+      <CopilotUsageMark usage={session.usage} />
+    </span>
+  );
+}
+
+/** What the listed sessions used together (ADR-190), under the list's heading; nothing before any of them called a model. */
+function ListedUsage({ sessions }: { sessions: readonly Session[] }) {
+  const usage = listedUsage(sessions);
+  if (usage === null) return null;
+  return (
+    <div className="px-4 pb-2">
+      <CopilotUsageMark usage={usage} prefix="Listed sessions:" />
+    </div>
+  );
+}
+
 /** The header of the selected session (repo, state, what it works on, buttons) and its terminal. Close of an ended session is the X's close (`useSessionClose`). */
 function SessionPanel({
   conn,
@@ -715,6 +740,7 @@ function SessionPanel({
               <StatusLabel {...sessionStateLabel(session)} />
             </span>
             <span className="text-muted-foreground text-xs">{relativeTime(session.startedAt, new Date())}</span>
+            <CopilotUsageMark usage={session.usage} />
           </span>
           {session.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
         </div>

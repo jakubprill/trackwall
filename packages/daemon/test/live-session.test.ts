@@ -4,9 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RunState } from "@trackwall/protocol";
 import type { CopilotHookEvent, CopilotHookRecord } from "../src/modules/agents/copilot-hook-record.ts";
+import { CopilotUsageLog } from "../src/modules/agents/copilot-usage-log.ts";
 import { LiveSession, type SessionEvent } from "../src/modules/agents/live-session.ts";
 import { STUCK_AFTER_MS } from "../src/modules/agents/session-stuck.ts";
-import { screenProcessed } from "./support/live-session.ts";
+import { NO_COPILOT_HOME, screenProcessed } from "./support/live-session.ts";
 
 const sessions: LiveSession[] = [];
 afterEach(() => {
@@ -38,6 +39,7 @@ describe("a Copilot CLI session in the daemon", () => {
       onEvent: () => {},
       onTurnOver: () => {},
       onTurnStart: () => {},
+      usage: new CopilotUsageLog(NO_COPILOT_HOME),
     });
     sessions.push(session);
     session.connect({ write: (data) => written.push(data), resize: () => {} });
@@ -163,6 +165,7 @@ function runningSession(
     onEvent: (event) => events.push(event),
     onTurnOver: () => {},
     onTurnStart: () => {},
+    usage: new CopilotUsageLog(NO_COPILOT_HOME),
   });
   sessions.push(session);
   return { session, hooksFile, typedText, promptsSent, events };

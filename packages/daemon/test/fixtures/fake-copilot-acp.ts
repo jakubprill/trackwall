@@ -29,6 +29,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
+import { recordUsage } from "../support/copilot-usage-receipt.ts";
 
 /** The command of every turn; the tests look for it in the approval and the conversation. */
 export const FAKE_ACP_COMMAND = "echo made-by-agent";
@@ -203,6 +204,7 @@ export function serveAcp(o: FakeAcpOptions): void {
         turn.end("end_turn");
       })();
     const stopReason = await ended;
+    recordUsage(sessionId);
     turns.delete(sessionId);
     turnsDone += 1;
     update(sessionId, { sessionUpdate: "usage_update", used: 1000 * turnsDone, size: 128_000 });

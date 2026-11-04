@@ -21,6 +21,7 @@ function session(state: "Working" | "Input" | null, run: Session["run"] = runnin
     view: "terminal",
     readRequest: null,
     copyRequest: null,
+    usage: null,
   };
 }
 

@@ -9,6 +9,7 @@ import {
   type SupervisorSettings,
   type ToolPermissions,
 } from "@trackwall/protocol";
+import { copilotHome } from "../../infra/copilot-home.ts";
 import { DomainError, messageOf, SpawnFailure } from "../../infra/errors.ts";
 import { waitLimited } from "../../infra/wait-limit.ts";
 import { AcpSession } from "./acp-session.ts";
@@ -16,6 +17,7 @@ import type { AgentSession } from "./agent-session.ts";
 import { resolveCopilot, toolPermissionArgs } from "./copilot-command.ts";
 import { COPILOT_HOOK_EVENTS, type CopilotHookEvent } from "./copilot-hook-record.ts";
 import { type LspServer, writeCopilotPlugin } from "./copilot-plugin.ts";
+import { CopilotUsageLog } from "./copilot-usage-log.ts";
 import { LiveSession, type LiveSessionOptions, type SessionPty } from "./live-session.ts";
 import { withLoopbackNoProxy } from "./no-proxy.ts";
 import type { ConversationLaunch } from "./resumable-sessions.ts";
@@ -174,6 +176,7 @@ export class SessionLauncher {
         program: setup.program,
         environment: setup.mise.environment,
         lspServers,
+        usage: new CopilotUsageLog(copilotHome(setup.env)),
       });
       const start = async () => {
         const { terminal } = await this.#deps.procs.startTerminal({
@@ -216,6 +219,7 @@ export class SessionLauncher {
         environment: setup.mise.environment,
         run: () => this.#deps.procs.state(sessionOwner(id)),
         ...this.#deps.callbacks({ id, supervisor, task }),
+        usage: new CopilotUsageLog(copilotHome(setup.env)),
         log: this.#deps.log,
       });
       const start = async () => {
@@ -339,6 +343,7 @@ export class SessionLauncher {
     program,
     environment,
     lspServers,
+    usage,
   }: SessionFiles): PreparedSession {
     const supervisor = role.kind === "supervisor";
     const hooksFile = join(dir, HOOKS_FILENAME);
@@ -358,6 +363,7 @@ export class SessionLauncher {
       environment,
       run: () => this.#deps.procs.state(sessionOwner(id)),
       ...this.#deps.callbacks({ id, supervisor, task }),
+      usage,
     });
     return { session, instructionsDir };
   }
@@ -436,7 +442,7 @@ interface SessionSetup {
 
 /** The directory of a new session and what follows from it for `LiveSession`. */
 interface SessionFiles
-  extends Pick<LiveSessionOptions, "id" | "repo" | "task" | "promptOnStart" | "hasConversation" | "program" | "environment"> {
+  extends Pick<LiveSessionOptions, "id" | "repo" | "task" | "promptOnStart" | "hasConversation" | "program" | "environment" | "usage"> {
   role: SessionRole;
   knowledge: SessionKnowledge;
   dir: string;
