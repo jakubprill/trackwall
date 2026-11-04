@@ -147,7 +147,7 @@ describe("the supervisor's situation (ADR-148)", () => {
       pipelineFailedAt: null,
       ...fields,
     });
-    const failedJob = (name: string) => ({ name, url: null });
+    const failedJob = (name: string) => ({ name, url: null, id: null });
     const tasks = [
       task({ id: "t3", title: "Fix the cart", createdAt: "2026-10-30T08:03:00.000Z" }),
       task({ id: "t2", title: "Retry a payment", createdAt: "2026-10-30T08:02:00.000Z" }),

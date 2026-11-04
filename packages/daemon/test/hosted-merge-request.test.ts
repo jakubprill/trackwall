@@ -27,7 +27,9 @@ const githubPull = (state: "open" | "closed", mergedAt: string | null) => [
 const checkRuns = (...runs: [string, string | null][]) => ({
   total_count: runs.length,
   check_runs: runs.map(([status, conclusion], i) => ({
+    id: i + 1,
     name: `check ${i + 1}`,
+    app: { slug: "github-actions" },
     status,
     conclusion,
     html_url: `https://github.com/me/shop/runs/${i + 1}`,
@@ -85,9 +87,9 @@ describe("the merge request of a task branch on GitLab", () => {
         [GITLAB_MRS]: [{ iid: 12 }],
         [`${GITLAB_MRS}/12`]: gitlabMr("opened", gitlabPipeline("failed", "https://gitlab.example.com/p/41")),
         [GITLAB_JOBS]: [
-          { name: "unit-tests", web_url: "https://gitlab.example.com/j/1", allow_failure: false },
-          { name: "flaky-e2e", web_url: "https://gitlab.example.com/j/2", allow_failure: true },
-          { name: "lint", web_url: "https://gitlab.example.com/j/3", allow_failure: false },
+          { id: 1, name: "unit-tests", web_url: "https://gitlab.example.com/j/1", allow_failure: false },
+          { id: 2, name: "flaky-e2e", web_url: "https://gitlab.example.com/j/2", allow_failure: true },
+          { id: 3, name: "lint", web_url: "https://gitlab.example.com/j/3", allow_failure: false },
         ],
       },
     });
@@ -97,8 +99,8 @@ describe("the merge request of a task branch on GitLab", () => {
       url: "https://gitlab.example.com/p/41",
       commit: SHA,
       failedJobs: [
-        { name: "unit-tests", url: "https://gitlab.example.com/j/1" },
-        { name: "lint", url: "https://gitlab.example.com/j/3" },
+        { name: "unit-tests", url: "https://gitlab.example.com/j/1", id: "1" },
+        { name: "lint", url: "https://gitlab.example.com/j/3", id: "3" },
       ],
     });
     expect(calls()[2]?.args[3]).toBe(`${GITLAB_JOBS}?scope[]=failed&per_page=20`);
@@ -170,7 +172,7 @@ describe("the pull request of a task branch on GitHub", () => {
     });
     expect((await failedCheck.hosting.mergeRequest(GITHUB, BRANCH))?.pipeline).toMatchObject({
       state: "failed",
-      failedJobs: [{ name: "check 2", url: "https://github.com/me/shop/runs/2" }],
+      failedJobs: [{ name: "check 2", url: "https://github.com/me/shop/runs/2", id: "2" }],
     });
 
     const failedStatus = fakeHosting({
@@ -189,8 +191,29 @@ describe("the pull request of a task branch on GitHub", () => {
     });
     expect((await failedStatus.hosting.mergeRequest(GITHUB, BRANCH))?.pipeline).toMatchObject({
       state: "failed",
-      failedJobs: [{ name: "ci/jenkins", url: null }],
+      failedJobs: [{ name: "ci/jenkins", url: null, id: null }],
     });
+  });
+
+  test("only a GitHub Actions check has a job id to read its log by; another app's check keeps its log itself", async () => {
+    const { hosting } = fakeHosting({
+      apiResponses: {
+        "repos/me/shop/pulls": githubPull("open", null),
+        [`${GITHUB_COMMIT}/check-runs`]: {
+          total_count: 2,
+          check_runs: [
+            { id: 801, name: "build", status: "completed", conclusion: "failure", html_url: "u1", app: { slug: "github-actions" } },
+            { id: 802, name: "sonar", status: "completed", conclusion: "failure", html_url: "u2", app: { slug: "sonarcloud" } },
+          ],
+        },
+        [`${GITHUB_COMMIT}/status`]: NO_STATUSES,
+      },
+    });
+
+    expect((await hosting.mergeRequest(GITHUB, BRANCH))?.pipeline?.failedJobs).toEqual([
+      { name: "build", url: "u1", id: "801" },
+      { name: "sonar", url: "u2", id: null },
+    ]);
   });
 
   test("checks beyond the pages read count as pending, so an unread failure never shows as a pass", async () => {
@@ -199,7 +222,13 @@ describe("the pull request of a task branch on GitHub", () => {
         "repos/me/shop/pulls": githubPull("open", null),
         [`${GITHUB_COMMIT}/check-runs`]: {
           total_count: 900,
-          check_runs: Array.from({ length: 100 }, () => ({ name: "c", status: "completed", conclusion: "success", html_url: null })),
+          check_runs: Array.from({ length: 100 }, (_, i) => ({
+            id: i + 1,
+            name: "c",
+            status: "completed",
+            conclusion: "success",
+            html_url: null,
+          })),
         },
         [`${GITHUB_COMMIT}/status`]: NO_STATUSES,
       },
@@ -262,5 +291,26 @@ describe("the new merge request form", () => {
 
     const noTarget = new URL(fakeHosting().hosting.mergeRequestForm(GITHUB, { ...form, target: null }));
     expect(noTarget.pathname).toBe(`/me/shop/compare/${BRANCH}`);
+  });
+});
+
+describe("the log of a failed job", () => {
+  test("is read as plain text from GitLab's trace and from a GitHub Actions job", async () => {
+    const { hosting, calls } = fakeHosting({
+      apiResponses: {
+        "projects/shop%2Fbackend%2Forders/jobs/501/trace": "ERROR: Job failed: exit code 1\n",
+        "repos/me/shop/actions/jobs/801/logs": "2026-11-04T10:00:00.0000000Z Process completed with exit code 1.\n",
+      },
+    });
+
+    expect(await hosting.jobLog(GITLAB, "501")).toEqual({ raw: "ERROR: Job failed: exit code 1\n", cut: false });
+    expect(await hosting.jobLog(GITHUB, "801")).toEqual({
+      raw: "2026-11-04T10:00:00.0000000Z Process completed with exit code 1.\n",
+      cut: false,
+    });
+    expect(calls().map((call) => call.args.slice(0, 4))).toEqual([
+      ["api", "--hostname", "gitlab.example.com", "projects/shop%2Fbackend%2Forders/jobs/501/trace"],
+      ["api", "--hostname", "github.com", "repos/me/shop/actions/jobs/801/logs"],
+    ]);
   });
 });
