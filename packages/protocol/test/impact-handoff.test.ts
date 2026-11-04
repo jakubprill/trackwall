@@ -3,6 +3,7 @@ import {
   type ChangedEndpoint,
   contractChange,
   endpointsCalledBy,
+  handingTaskName,
   handoffPrompt,
   type ImpactedRepo,
   reachText,
@@ -102,5 +103,11 @@ describe("the prompt of a task handed a change (ADR-147, ADR-198)", () => {
     expect(lines[0]).toBe("The task “Rename everything” in orders-api changes endpoints that orders-bff calls:");
     expect(lines.at(-3)).toMatch(/^- and \d+ more endpoints$/);
     expect(lines.at(-1)).toStartWith("Update orders-bff to the new contract.");
+  });
+
+  test("a hand-off names the handing task by its title, or by the first line of its prompt cut like a title", () => {
+    expect(handingTaskName({ title: "Add a note", prompt: "add a note\nto order lines" })).toBe("Add a note");
+    expect(handingTaskName({ title: null, prompt: "  add a note\nto order lines" })).toBe("add a note");
+    expect(handingTaskName({ title: null, prompt: "x".repeat(200) })).toHaveLength(80);
   });
 });

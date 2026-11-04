@@ -39,6 +39,9 @@ export const StoredProposals = z.object({
 });
 export type StoredProposals = z.infer<typeof StoredProposals>;
 
+/** A proposal to add: `fromImpact` only for the daemon's own impact proposals (ADR-198). */
+export type NewProposal = Omit<TaskProposal, "id" | "createdAt" | "fromImpact"> & { fromImpact?: boolean };
+
 export class TaskProposals {
   /** Newest first. */
   #pending: TaskProposal[] = [];
@@ -96,13 +99,13 @@ export class TaskProposals {
   }
 
   /** A new proposal; a repo removal (`kind: "remove_repo"`) with the folder it names. */
-  add(proposal: Omit<TaskProposal, "id" | "createdAt">, removalDir?: string): TaskProposal {
+  add({ fromImpact = false, ...proposal }: NewProposal, removalDir?: string): TaskProposal {
     if ((proposal.kind === "remove_repo") !== (removalDir !== undefined))
       throw new Error("a repo removal, and only a repo removal, names a folder");
     if (this.#pending.length >= MAX_PENDING_PROPOSALS) {
       throw new DomainError("bad_request", `${MAX_PENDING_PROPOSALS} proposals are already waiting for the user; wait for their decision`);
     }
-    const added: TaskProposal = { id: randomUUID(), ...proposal, createdAt: new Date().toISOString() };
+    const added: TaskProposal = { id: randomUUID(), ...proposal, fromImpact, createdAt: new Date().toISOString() };
     this.#pending = [added, ...this.#pending];
     if (removalDir !== undefined) this.#removalDirs.set(added.id, removalDir);
     this.#changed();

@@ -8,7 +8,6 @@ import {
   HANDED_TO_SUPERVISOR,
   type IncludedFiles,
   type JavaNavigationStatus,
-  MAX_CHANGED_ENDPOINTS,
   mayHandToSupervisor,
   noIncludedFiles,
   PATCH_MAX_BYTES,
@@ -31,6 +30,7 @@ import { approvalArgs } from "./copilot-command.ts";
 import type { LspServer } from "./copilot-plugin.ts";
 import { SANDBOX_ARG } from "./copilot-sandbox.ts";
 import { type EndedTaskFacts, type EndedTaskGit, endedTaskFacts } from "./ended-task.ts";
+import { offeredAfter } from "./impact-proposals.ts";
 import type { JavaNavigationServers } from "./java-navigation-servers.ts";
 import { modelArgs } from "./model-args.ts";
 import { TASK_BRANCH_PREFIX, taskSlug, taskWorktree } from "./task-branch.ts";
@@ -548,7 +548,7 @@ export class AgentTasks {
   markImpactProposed(id: string, repo: string, endpoints: readonly string[]): void {
     const task = this.#tasks.find((t) => t.id === id);
     if (task === undefined) return;
-    const offered = [...new Set([...(task.impactProposed[repo] ?? []), ...endpoints])].slice(0, MAX_CHANGED_ENDPOINTS);
+    const offered = offeredAfter(task.impactProposed[repo] ?? [], endpoints);
     const marked = { ...task, impactProposed: { ...task.impactProposed, [repo]: offered } };
     this.#save(this.#tasks.map((t) => (t.id === id ? marked : t)));
   }

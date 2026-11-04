@@ -1,4 +1,5 @@
-import { TASK_PROMPT_MAX } from "./agents.ts";
+import { TASK_PROMPT_MAX, TASK_TITLE_MAX, type Task } from "./agents.ts";
+import { cutText } from "./cut-text.ts";
 import type { ChangedEndpoint, ChangedEndpoints, ImpactedRepo } from "./graph.ts";
 import { mcpTools } from "./mcp.ts";
 
@@ -7,6 +8,11 @@ import { mcpTools } from "./mcp.ts";
  * Impact tab and of an impact proposal the daemon makes when the task's turn ends, built from the comparison of the
  * task's cards (`get_changed_endpoints`). In `protocol`, because the UI and the daemon build the same prompt.
  */
+
+/** How a hand-off prompt names the handing task: its title, or the first line of its prompt cut like a title. */
+export function handingTaskName(task: Pick<Task, "title" | "prompt">): string {
+  return task.title ?? cutText(task.prompt.trim().split(/\r?\n/, 1)[0] ?? "", TASK_TITLE_MAX);
+}
 
 /** The changed endpoints a repo of ring 1 calls, each with that repo's calls of it. */
 export function endpointsCalledBy(endpoints: readonly ChangedEndpoint[], repo: string): ChangedEndpoint[] {

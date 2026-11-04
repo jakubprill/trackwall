@@ -1,5 +1,19 @@
-import { type ChangedEndpoints, cutText, endpointsCalledBy, type ImpactedRepo, TASK_TITLE_MAX, type Task } from "@trackwall/protocol";
+import {
+  type ChangedEndpoints,
+  cutText,
+  endpointsCalledBy,
+  handingTaskName,
+  handoffPrompt,
+  type ImpactedRepo,
+  MAX_CHANGED_ENDPOINTS,
+  proposalRepos,
+  TASK_TITLE_MAX,
+  type Task,
+  type TaskProposal,
+} from "@trackwall/protocol";
 import { messageOf } from "../../infra/errors.ts";
+import { KeyedQueue } from "../../infra/keyed-queue.ts";
+import type { NewProposal } from "./task-proposals.ts";
 
 /**
  * Impact proposals (§4.4, ADR-198): when a turn of a task's session ends, the daemon compares the task's commits with
@@ -14,7 +28,7 @@ import { messageOf } from "../../infra/errors.ts";
 export const IMPACT_ENDPOINT_KEY_MAX = 600;
 
 /** A repo to offer a task, with the endpoints it calls that the task's commits changed. */
-export interface ImpactOffer {
+interface ImpactOffer {
   repo: string;
   /** `METHOD path` of every removed or changed endpoint the repo calls, the ones offered before included. */
   endpoints: string[];
@@ -42,75 +56,115 @@ export function impactOffers(
   });
 }
 
-/** The title of an impact proposal: the repo whose API changed. */
-export function impactProposalTitle(task: Pick<Task, "repo">): string {
-  return cutText(`Update to the API change in ${task.repo}`, TASK_TITLE_MAX);
+/**
+ * What a repo was offered after one more offer: the newest first, since one comparison has at most
+ * `MAX_CHANGED_ENDPOINTS`, so an offer is always kept whole and never made again for the same endpoints.
+ */
+export function offeredAfter(before: readonly string[], offer: readonly string[]): string[] {
+  return [...new Set([...offer, ...before])].slice(0, MAX_CHANGED_ENDPOINTS);
 }
 
-/** How a proposal's prompt names the task: its title, or the first line of its prompt cut like a title. */
-export function impactTaskName(task: Pick<Task, "title" | "prompt">): string {
-  return task.title ?? cutText(task.prompt.trim().split(/\r?\n/, 1)[0] ?? "", TASK_TITLE_MAX);
-}
-
-/** What the impact proposals need from the task list and the proposals (`Agents`). */
-export interface ImpactProposalDeps {
+/** What the impact proposals read and write of the task list (`AgentTasks`). */
+interface ImpactTasks {
   /** A listed task, `undefined` once it ended. */
-  task: (id: string) => Task | undefined;
+  find(id: string): Task | undefined;
+  list(): Task[];
+  handoff(id: string): { repo: string } | null;
+  change(id: string): { parts: { repo: string }[] } | null;
   /** The endpoints each repo was offered from task `id`'s impact. */
-  offered: (id: string) => Readonly<Record<string, readonly string[]>>;
-  markOffered: (id: string, repo: string, endpoints: readonly string[]) => void;
-  /**
-   * The repos where task `id`'s work already goes on or came from: its own, the handing task's, its change's parts, and
-   * the repos of the proposals and tasks it made. Such a repo is not offered a second task; its endpoints count as offered.
-   */
-  workedRepos: (id: string) => ReadonlySet<string>;
-  /** The removed and changed endpoints of a task's commits with the repos they reach (`Facade.taskChangedEndpoints`). */
+  impactProposed(id: string): Readonly<Record<string, readonly string[]>>;
+  markImpactProposed(id: string, repo: string, endpoints: readonly string[]): void;
+}
+
+/** What the impact proposals do with the proposals waiting for the user (`TaskProposals`). */
+interface ImpactProposalList {
+  list(): TaskProposal[];
+  /** Throws when the list is full (`MAX_PENDING_PROPOSALS`). */
+  add(proposal: NewProposal): TaskProposal;
+  withdraw(id: string): void;
+}
+
+export interface ImpactProposalDeps {
+  tasks: ImpactTasks;
+  proposals: ImpactProposalList;
+  /** The removed and changed endpoints of a task's commits with the repos they reach (`AgentsDeps.taskImpact`). */
   impact: (task: Task) => Promise<ChangedEndpoints>;
-  /** Adds the proposal from session `session` of the task; throws when the list of proposals is full. */
-  propose: (session: string, offer: ImpactOffer, changed: ChangedEndpoints) => void;
   log: (message: string) => void;
 }
 
 export class ImpactProposals {
   readonly #deps: ImpactProposalDeps;
-  /** The check under way per task: turns that end close together are checked one after another, never twice at once. */
-  readonly #checks = new Map<string, Promise<void>>();
+  /** Turns of one task that end close together are checked one after another, so a repo is never proposed twice. */
+  readonly #checks = new KeyedQueue();
 
   constructor(deps: ImpactProposalDeps) {
     this.#deps = deps;
   }
 
-  /** A turn of session `session` of task `task` ended, so its commits may now change endpoints other repos call. */
+  /**
+   * A turn of session `session` of task `task` ended, so its commits may now change endpoints other repos call. Never
+   * fails: a failed check is logged, and the next turn checks again.
+   */
   turnOver(task: string, session: string): Promise<void> {
-    const check = (this.#checks.get(task) ?? Promise.resolve()).then(() => this.#check(task, session));
-    this.#checks.set(task, check);
-    void check.finally(() => {
-      if (this.#checks.get(task) === check) this.#checks.delete(task);
+    return this.#checks.run(task, async () => {
+      try {
+        await this.#check(task, session);
+      } catch (err) {
+        this.#deps.log(`task ${task}: proposing tasks from its impact: ${messageOf(err)}`);
+      }
     });
-    return check;
+  }
+
+  /**
+   * Work for `repos` started or was proposed otherwise from task `task` (its agent's own proposal, a hand-off from the
+   * Impact tab): the impact proposals of that task waiting there go, without a rejection, since nobody waits for them.
+   */
+  replacedBy(task: string, repos: readonly string[]): void {
+    for (const p of this.#deps.proposals.list())
+      if (p.fromImpact && p.proposedBy.task === task && repos.includes(p.repo)) this.#deps.proposals.withdraw(p.id);
   }
 
   async #check(id: string, session: string): Promise<void> {
-    const task = this.#deps.task(id);
+    const task = this.#deps.tasks.find(id);
     if (task === undefined) return;
-    let changed: ChangedEndpoints;
-    try {
-      changed = await this.#deps.impact(task);
-    } catch (err) {
-      this.#deps.log(`task ${id}: reading the impact of its commits: ${messageOf(err)}`);
-      return;
-    }
-    const worked = this.#deps.workedRepos(id);
-    for (const offer of impactOffers(changed, this.#deps.offered(id))) {
-      if (!worked.has(offer.repo)) {
-        try {
-          this.#deps.propose(session, offer, changed);
-        } catch (err) {
-          this.#deps.log(`task ${id}: proposing a task in ${offer.repo} from its impact: ${messageOf(err)}`);
-          return;
-        }
-      }
-      this.#deps.markOffered(id, offer.repo, offer.endpoints);
+    const changed = await this.#deps.impact(task);
+    const worked = this.#workedRepos(task);
+    for (const offer of impactOffers(changed, this.#deps.tasks.impactProposed(id))) {
+      // A full list refuses the proposal: the check stops before marking it, so the next turn offers it again.
+      if (!worked.has(offer.repo)) this.#deps.proposals.add(impactProposal(task, session, offer, changed));
+      this.#deps.tasks.markImpactProposed(id, offer.repo, offer.endpoints);
     }
   }
+
+  /**
+   * The repos where the task's work already goes on or came from: its own, the handing task's, its change's parts, and
+   * the repos of the proposals and tasks it made. Such a repo gets no proposal, and its endpoints count as offered.
+   */
+  #workedRepos(task: Task): Set<string> {
+    const { tasks, proposals } = this.#deps;
+    const repos = new Set([task.repo]);
+    const handoff = tasks.handoff(task.id);
+    if (handoff !== null) repos.add(handoff.repo);
+    for (const part of tasks.change(task.id)?.parts ?? []) repos.add(part.repo);
+    for (const p of proposals.list()) if (p.proposedBy.task === task.id) for (const repo of proposalRepos(p)) repos.add(repo);
+    for (const t of tasks.list()) if (t.proposedBy?.task === task.id) repos.add(t.repo);
+    return repos;
+  }
+}
+
+/** The task's own proposal from session `session` for one offered repo, with the Impact tab's hand-off prompt. */
+function impactProposal(task: Task, session: string, { repo, reached }: ImpactOffer, changed: ChangedEndpoints): NewProposal {
+  return {
+    kind: "task",
+    repo,
+    title: cutText(`Update to the API change in ${task.repo}`, TASK_TITLE_MAX),
+    prompt: handoffPrompt(changed, handingTaskName(task), reached),
+    model: null,
+    approvals: "ask",
+    item: null,
+    parts: null,
+    fromImpact: true,
+    // A task's session is never the supervisor; the task is what proposes (ADR-140), whichever of its sessions runs.
+    proposedBy: { session, supervisor: false, task: task.id },
+  };
 }

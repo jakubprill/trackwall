@@ -4,6 +4,7 @@ import {
   type ChangedEndpoints,
   contractChange,
   graphApi,
+  handingTaskName,
   handoffPrompt,
   reachText,
   type Task,
@@ -18,7 +19,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { taskName } from "@/lib/session-entries";
 import { IMPACT_POLL_MS, impactPoints, impactSummary, RING_GAP } from "@/lib/task-impact";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
@@ -180,7 +180,7 @@ function ReachedRepos({
                 conn={conn}
                 task={task}
                 repo={reached.repo}
-                initialPrompt={handoffPrompt(changed, taskName(task), reached)}
+                initialPrompt={handoffPrompt(changed, handingTaskName(task), reached)}
                 onStarted={(started) => {
                   setHandingTo(undefined);
                   onOpenTask(started.id);

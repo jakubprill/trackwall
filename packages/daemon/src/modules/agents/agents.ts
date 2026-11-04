@@ -16,7 +16,6 @@ import {
   type DialogAnswer,
   type EnvironmentCheck,
   type HttpEndpoint,
-  handoffPrompt,
   inTurn,
   isSupervisor,
   type JavaNavigationSettings,
@@ -68,7 +67,7 @@ import { sandboxState, taskSandbox } from "./copilot-sandbox.ts";
 import type { EndedTaskFacts } from "./ended-task.ts";
 import { HandoffWatch } from "./handoff-watch.ts";
 import { appendHookRecord } from "./hook-tail.ts";
-import { type ImpactOffer, ImpactProposals, impactProposalTitle, impactTaskName } from "./impact-proposals.ts";
+import { ImpactProposals } from "./impact-proposals.ts";
 import { javaNavigationState } from "./java-language-server.ts";
 import { JavaNavigationServers } from "./java-navigation-servers.ts";
 import { LAST_SUPERVISOR_FILE, LastSupervisorFile } from "./last-supervisor.ts";
@@ -337,15 +336,7 @@ export class Agents {
       log: deps.log,
     });
     this.#handoffs = new HandoffWatch(this.#tasks, (task) => this.#sessions.runningOfTask(task)?.askToRead(), deps.log);
-    this.#impactProposals = new ImpactProposals({
-      task: (id) => this.#tasks.find(id),
-      offered: (id) => this.#tasks.impactProposed(id),
-      markOffered: (id, repo, endpoints) => this.#tasks.markImpactProposed(id, repo, endpoints),
-      workedRepos: (id) => this.#workedRepos(id),
-      impact: deps.taskImpact,
-      propose: (session, offer, changed) => this.#proposeFromImpact(session, offer, changed),
-      log: deps.log,
-    });
+    this.#impactProposals = new ImpactProposals({ tasks: this.#tasks, proposals: this.#proposals, impact: deps.taskImpact, log: deps.log });
     this.#coordination = new TaskCoordination({
       task: (id) => this.task(id),
       findTask: (id) => this.findTask(id),
@@ -517,43 +508,9 @@ export class Agents {
     await this.#deps.repos.repoPath(proposal.repo);
     await this.#assertOnBoard(proposal.item);
     const proposedBy = proposedByOf(caller === null ? null : this.session(caller));
-    // The agent knows better than the comparison what the repo has to do (ADR-198), so its proposal replaces the
-    // daemon's for the same repo.
-    for (const p of this.#proposals.list())
-      if (p.fromImpact && p.repo === proposal.repo && proposedBy.task !== null && p.proposedBy.task === proposedBy.task)
-        this.#proposals.withdraw(p.id);
-    return this.#proposals.add({ kind: "task", ...proposal, parts: null, fromImpact: false, proposedBy });
-  }
-
-  /** An impact proposal (ADR-198): the task's session proposes a task in a repo that calls what the task's commits changed. */
-  #proposeFromImpact(session: string, { repo, reached }: ImpactOffer, changed: ChangedEndpoints): void {
-    const proposedBy = proposedByOf(this.session(session));
-    if (proposedBy.task === null) throw new Error(`session ${session} runs no task`);
-    const task = this.#tasks.task(proposedBy.task);
-    this.#proposals.add({
-      kind: "task",
-      repo,
-      title: impactProposalTitle(task),
-      prompt: handoffPrompt(changed, impactTaskName(task), reached),
-      model: null,
-      approvals: "ask",
-      item: null,
-      parts: null,
-      fromImpact: true,
-      proposedBy,
-    });
-  }
-
-  /** The repos where task `id`'s work already goes on or came from, which get no impact proposal (ADR-198). */
-  #workedRepos(id: string): Set<string> {
-    const task = this.#tasks.find(id);
-    const repos = new Set<string>(task === undefined ? [] : [task.repo]);
-    const handoff = this.#tasks.handoff(id);
-    if (handoff !== null) repos.add(handoff.repo);
-    for (const part of this.#tasks.change(id)?.parts ?? []) repos.add(part.repo);
-    for (const p of this.#proposals.list()) if (p.proposedBy.task === id) for (const repo of proposalRepos(p)) repos.add(repo);
-    for (const t of this.#tasks.list()) if (t.proposedBy?.task === id) repos.add(t.repo);
-    return repos;
+    // The agent knows better than the comparison what the repo has to do (ADR-198).
+    if (proposedBy.task !== null) this.#impactProposals.replacedBy(proposedBy.task, [proposal.repo]);
+    return this.#proposals.add({ kind: "task", ...proposal, parts: null, proposedBy });
   }
 
   /**
@@ -580,7 +537,6 @@ export class Agents {
       repo: first.repo,
       ...proposal,
       parts,
-      fromImpact: false,
       proposedBy: proposedByOf(session),
     });
   }
@@ -604,7 +560,6 @@ export class Agents {
         approvals: "ask",
         item: null,
         parts: null,
-        fromImpact: false,
         proposedBy: proposedByOf(session),
       },
       repoDir,
@@ -847,7 +802,10 @@ export class Agents {
     // `task` throws `not_found` for a task that is not on the list, before a worktree exists.
     const proposedBy = handoffFrom === null ? null : { session: null, supervisor: false, task: this.task(handoffFrom).id };
     const origin = { id: randomUUID(), title, proposedBy, model, approvals, javaNavigation, item, view, change: null };
-    return this.#tasks.create(repo, prompt, origin);
+    const task = await this.#tasks.create(repo, prompt, origin);
+    // The user handed the repo the work from the Impact tab, so the daemon's proposal for it is done (ADR-198).
+    if (handoffFrom !== null) this.#impactProposals.replacedBy(handoffFrom, [repo]);
+    return task;
   }
 
   /** A change the user typed (ADR-171): a task per part, see `AgentTasks.createChange`; `item` must be on the board. */

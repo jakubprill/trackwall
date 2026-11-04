@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { ChangedEndpoint, ChangedEndpoints, ImpactedRepo, Task } from "@trackwall/protocol";
-import { type ImpactOffer, ImpactProposals, impactOffers, impactTaskName } from "../src/modules/agents/impact-proposals.ts";
+import { type ChangedEndpoint, type ChangedEndpoints, type ImpactedRepo, MAX_CHANGED_ENDPOINTS, type Task } from "@trackwall/protocol";
+import { ImpactProposals, impactOffers, offeredAfter } from "../src/modules/agents/impact-proposals.ts";
+import { TaskProposals } from "../src/modules/agents/task-proposals.ts";
 
 const caller = (repo: string, path: string) => ({
   repo,
@@ -64,81 +65,108 @@ describe("which repos an impact proposal goes to (ADR-198)", () => {
     ]);
   });
 
-  test("a proposal names the task by its title, or by the first line of its prompt cut like a title", () => {
-    expect(impactTaskName({ title: "Add a note", prompt: "add a note\nto order lines" })).toBe("Add a note");
-    expect(impactTaskName({ title: null, prompt: "  add a note\nto order lines" })).toBe("add a note");
-    expect(impactTaskName({ title: null, prompt: "x".repeat(200) })).toHaveLength(80);
+  test("what a repo was offered keeps the newest offer whole when it outgrows the limit, so that offer is not made again", () => {
+    const old = Array.from({ length: MAX_CHANGED_ENDPOINTS }, (_, i) => `GET /old/${i}`);
+    const offer = ["GET /api/orders/{id}", "GET /old/3"];
+    const after = offeredAfter(old, offer);
+
+    expect(after).toHaveLength(MAX_CHANGED_ENDPOINTS);
+    expect(after.slice(0, 2)).toEqual(offer);
+    expect(impactOffers(changed, { "orders-bff": after }).map((o) => o.repo)).toEqual(["legacy-reports"]);
   });
 });
 
 describe("impact proposals at the end of a task's turn (ADR-198)", () => {
-  const task = { id: "t1", repo: "orders-api", title: "Add a note", prompt: "add a note" } as Task;
+  const task = { id: "t1", repo: "orders-api", title: "Add a note", prompt: "add a note", proposedBy: null } as Task;
 
-  function proposalsWith(worked: string[], propose: (offer: ImpactOffer) => void = () => {}) {
+  function setup({ worked = [] as Task[], markFails = false } = {}) {
     const offered: Record<string, string[]> = {};
-    const proposed: string[] = [];
     const logged: string[] = [];
-    const proposals = new ImpactProposals({
-      task: (id) => (id === task.id ? task : undefined),
-      offered: () => offered,
-      markOffered: (_, repo, endpoints) => {
-        offered[repo] = [...endpoints];
+    const proposals = new TaskProposals(() => {});
+    const impact = new ImpactProposals({
+      tasks: {
+        find: (id) => (id === task.id ? task : undefined),
+        list: () => [task, ...worked],
+        handoff: () => null,
+        change: () => null,
+        impactProposed: () => offered,
+        markImpactProposed: (_, repo, endpoints) => {
+          if (markFails) throw new Error("EBUSY: tasks.json is locked");
+          offered[repo] = [...endpoints];
+        },
       },
-      workedRepos: () => new Set(worked),
+      proposals,
       impact: async () => changed,
-      propose: (session, offer) => {
-        propose(offer);
-        proposed.push(`${session} ${offer.repo}`);
-      },
       log: (message) => logged.push(message),
     });
-    return { proposals, offered, proposed, logged };
+    const proposed = () => proposals.list().map((p) => `${p.proposedBy.session} ${p.repo} ${p.fromImpact}`);
+    return { impact, proposals, proposed, offered, logged };
   }
 
   test("each repo is proposed once from the session whose turn ended; a later turn with the same commits proposes nothing", async () => {
-    const { proposals, proposed, offered } = proposalsWith([]);
-    await proposals.turnOver("t1", "s1");
-    await proposals.turnOver("t1", "s1");
+    const { impact, proposed, offered } = setup();
+    await impact.turnOver("t1", "s1");
+    await impact.turnOver("t1", "s1");
 
-    expect(proposed).toEqual(["s1 orders-bff", "s1 legacy-reports"]);
+    expect(proposed()).toEqual(["s1 legacy-reports true", "s1 orders-bff true"]);
     expect(offered).toEqual({
       "orders-bff": ["GET /api/orders/{id}"],
       "legacy-reports": ["GET /api/orders/{id}", "GET /api/orders/{id}/cancel"],
     });
   });
 
-  test("a repo where the task's work already goes on gets no proposal, but counts as offered", async () => {
-    const { proposals, proposed, offered } = proposalsWith(["orders-bff"]);
-    await proposals.turnOver("t1", "s1");
+  test("a repo with a task the task proposed gets no proposal, but counts as offered", async () => {
+    const subtask = { ...task, id: "t2", repo: "orders-bff", proposedBy: { session: "s1", supervisor: false, task: "t1" } };
+    const { impact, proposed, offered } = setup({ worked: [subtask] });
+    await impact.turnOver("t1", "s1");
 
-    expect(proposed).toEqual(["s1 legacy-reports"]);
+    expect(proposed()).toEqual(["s1 legacy-reports true"]);
     expect(Object.keys(offered)).toEqual(["orders-bff", "legacy-reports"]);
   });
 
-  test("a refused proposal (the list is full) stops the check without counting the repo, so the next turn tries again", async () => {
-    const { proposals, proposed, offered, logged } = proposalsWith([], () => {
-      throw new Error("20 proposals are already waiting for the user; wait for their decision");
-    });
-    await proposals.turnOver("t1", "s1");
+  test("a failed check is logged and the next turn checks again, never leaving an error behind", async () => {
+    const { impact, logged } = setup({ markFails: true });
+    await impact.turnOver("t1", "s1");
+    await impact.turnOver("t1", "s1");
 
-    expect(proposed).toEqual([]);
-    expect(offered).toEqual({});
     expect(logged).toEqual([
-      "task t1: proposing a task in orders-bff from its impact: 20 proposals are already waiting for the user; wait for their decision",
+      "task t1: proposing tasks from its impact: EBUSY: tasks.json is locked",
+      "task t1: proposing tasks from its impact: EBUSY: tasks.json is locked",
     ]);
   });
 
   test("turns that end close together are checked one after another, so a repo is not proposed twice", async () => {
-    const { proposals, proposed } = proposalsWith([]);
-    await Promise.all([proposals.turnOver("t1", "s1"), proposals.turnOver("t1", "s1")]);
+    const { impact, proposed } = setup();
+    await Promise.all([impact.turnOver("t1", "s1"), impact.turnOver("t1", "s1")]);
 
-    expect(proposed).toEqual(["s1 orders-bff", "s1 legacy-reports"]);
+    expect(proposed()).toHaveLength(2);
+  });
+
+  test("work started otherwise in a repo withdraws only that task's impact proposal there", async () => {
+    const { impact, proposals, proposed } = setup();
+    await impact.turnOver("t1", "s1");
+    proposals.add({
+      kind: "task",
+      repo: "orders-bff",
+      title: "Update to the API change in payments",
+      prompt: "follow the new contract",
+      model: null,
+      approvals: "ask",
+      item: null,
+      parts: null,
+      fromImpact: true,
+      proposedBy: { session: "s9", supervisor: false, task: "t9" },
+    });
+
+    impact.replacedBy("t1", ["orders-bff"]);
+
+    expect(proposed()).toEqual(["s9 orders-bff true", "s1 legacy-reports true"]);
   });
 
   test("an ended task proposes nothing", async () => {
-    const { proposals, proposed } = proposalsWith([]);
-    await proposals.turnOver("gone", "s1");
+    const { impact, proposed } = setup();
+    await impact.turnOver("gone", "s1");
 
-    expect(proposed).toEqual([]);
+    expect(proposed()).toEqual([]);
   });
 });

@@ -149,5 +149,23 @@ describe.skipIf(process.versions.bun === undefined)(
       for (const s of [runningSession(subtask.id), session]) await daemon.facade.agents.stop(s);
       for (const t of [subtask.id, task.id]) await daemon.post(agentsApi.removeTask, { task: t, keepBranch: false, discardChanges: true });
     }, 60_000);
+
+    test("handing the repo the work from the Impact tab withdraws the impact proposal waiting there", async () => {
+      const task = await changeOrdersContract();
+      const session = runningSession(task.id);
+      await endTurn(session);
+      await eventually(() => proposals().length > 0, "the impact proposal");
+
+      const handedOn = await daemon.post(agentsApi.createTask, {
+        repo: "legacy-reports",
+        prompt: "cancel reports by POST",
+        approvals: "ask",
+        handoffFrom: task.id,
+      });
+      expect(proposals()).toEqual([]);
+
+      for (const s of [runningSession(handedOn.id), session]) await daemon.facade.agents.stop(s);
+      for (const t of [handedOn.id, task.id]) await daemon.post(agentsApi.removeTask, { task: t, keepBranch: false, discardChanges: true });
+    }, 60_000);
   },
 );
