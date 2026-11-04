@@ -61,6 +61,7 @@ import { Mise } from "./modules/mise/mise.ts";
 import { ProcessGroups } from "./modules/procs/process-groups.ts";
 import { RuntimeFile } from "./modules/procs/runtime-file.ts";
 import { ProviderModels } from "./modules/provider-models/provider-models.ts";
+import { Readiness } from "./modules/readiness/readiness.ts";
 import { Routines } from "./modules/routines/routines.ts";
 import { Services } from "./modules/services/services.ts";
 import { TASK_JOURNAL_FILE, TASK_JOURNAL_MAX_RECORDS, TaskJournal } from "./modules/task-journal/task-journal.ts";
@@ -119,6 +120,8 @@ export interface Facade {
   mcpAudit: McpAudit;
   /** Checks of what Trackwall needs on this computer, each with what to do when it fails (ADR-101). */
   doctor: Doctor;
+  /** How ready each repo is for agents: the gaps that stop or weaken them, from mise, the cards and the graph (ADR-201). */
+  readiness: Readiness;
   /** The models the session profile's model provider offers, which the Model fields suggest (ADR-194). */
   providerModels: ProviderModels;
   /** Installs jdtls and its Java for tasks' Java navigation, from Settings (ADR-123). */
@@ -342,10 +345,20 @@ export function createFacade(o: FacadeOptions): Facade {
     vcs,
     command: o.miseCommand,
     env: o.userEnv,
-    onTrusted: (repo) => agents.miseTrusted({ repo, task: null }),
+    onTrusted: (repo) => {
+      // `readiness` is made below; a trust comes only from a request, after the facade exists.
+      readiness.forget(repo);
+      agents.miseTrusted({ repo, task: null });
+    },
   });
   const batch = new Batch({ workspace, mise, log: o.log });
   const graph = new Graph({ cards, workspace });
+  const readiness = new Readiness({
+    cards: async () => (await cards.all()).cards,
+    graphProblems: async () => (await graph.graph()).problems,
+    mise,
+    now: () => new Date(),
+  });
   const taskPort = (repo: string, task: string) => agents.taskOfRepo(task, repo).port;
   const services = new Services({ mise, logs, graph, cards, taskPort, env: o.userEnv, log: o.log, ...SERVICE_TIMING });
   const testReports = new TestReports({ repos: workspace, tasks: agents, logs, env: o.userEnv });
@@ -520,6 +533,7 @@ export function createFacade(o: FacadeOptions): Facade {
     errorJournal,
     mcpAudit,
     doctor,
+    readiness,
     providerModels,
     javaNavigation,
     configFiles,

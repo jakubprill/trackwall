@@ -24,13 +24,15 @@ import { GraphCanvas } from "./GraphCanvas.tsx";
 import { DriftSection } from "./GraphDrift.tsx";
 import { GraphImpactPanel } from "./GraphImpactPanel.tsx";
 import { GraphNodePanel, GraphSummaryPanel } from "./GraphNodePanel.tsx";
+import { ReadinessSection } from "./GraphReadiness.tsx";
 
 /**
  * The "Overview" view (§4.6, ADR-29): the graph of connections between repos at full width and the details panel of the
  * selected repo on the right. The daemon computes the graph from the repo cards, so a new commit in a repo changes it as soon as
  * the repo watch reports it (ADR-63). While the first graph is computed, the view shows how far the card warm-up is.
  * Choosing a task lights the repos its change reaches, ring by ring, and dims the rest (ADR-147). Without a selected repo, the
- * panel lists the versions the repos disagree on, with a way to align them (ADR-196).
+ * panel says how ready the repos are for agents, with a fix for each gap (ADR-201), and lists the versions the repos disagree
+ * on, with a way to align them (ADR-196).
  */
 export function GraphView({
   conn,
@@ -39,6 +41,7 @@ export function GraphView({
   sessions,
   initialImpactTask,
   onOpenInSessions,
+  onOpenRepo,
 }: {
   conn: Connection;
   warmupLive: LiveFeed<CardWarmupProgress> | undefined;
@@ -49,9 +52,12 @@ export function GraphView({
   initialImpactTask: string | undefined;
   /** Opens a task the view started (aligning a version drift, ADR-196). */
   onOpenInSessions: (selection: SessionSelection) => void;
+  /** Opens a repo in "Repos", where its mise tasks tab trusts its config (agent readiness, ADR-201). */
+  onOpenRepo: (repo: string) => void;
 }) {
   const load = useCallback(() => post(conn, graphApi.graph, {}), [conn]);
-  const graph = useRemote(load, repoWatch.options(GRAPH_PACE));
+  const watch = repoWatch.options(GRAPH_PACE);
+  const graph = useRemote(load, watch);
   const warmup = useCardWarmup(conn, warmupLive).data;
   const services = useServices(conn).data ?? [];
   const [selected, setSelected] = useState<string>();
@@ -123,6 +129,13 @@ export function GraphView({
         {data && layout && !node && changed && <GraphImpactPanel changed={changed} onSelect={setSelected} />}
         {data && layout && !node && !changed && (
           <GraphSummaryPanel graph={data} pairs={layout.pairs}>
+            <ReadinessSection
+              conn={conn}
+              refreshKey={watch.refreshKey}
+              onSelect={setSelected}
+              onOpenRepo={onOpenRepo}
+              onOpenInSessions={onOpenInSessions}
+            />
             <DriftSection conn={conn} drift={data.drift} onSelect={setSelected} onOpenInSessions={onOpenInSessions} />
           </GraphSummaryPanel>
         )}
