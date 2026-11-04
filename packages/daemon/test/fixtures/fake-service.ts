@@ -1,9 +1,11 @@
 // Fake service for the `services` tests (ADR-45), run by `fake-mise.ts` as the mise task `dev` from `servers` in
 // `fake-mise.json`: { port?: number (none: `SERVER_PORT` as Spring Boot reads it, else a free one), delayMs?: number,
-// crash?: boolean, quiet?: boolean, buildDaemon?: number }.
+// crash?: boolean, quiet?: boolean, buildDaemon?: number, announcePort?: number }.
 // It listens on 127.0.0.1 after `delayMs` and logs the port as Spring Boot does (`quiet` leaves the line out). GET and
 // POST answer JSON with the method, path, body, the working directory, `PORT` and `FAKE_API_TOKEN` from the environment
-// (a secret to be masked);
+// (a secret to be masked), `Host`, `X-Forwarded-Host` and `X-Hop`; `/redirect` redirects to its own address, as a login
+// does; `/half` dies halfway through its body; a WebSocket handshake is accepted and its connection echoes; `announcePort`
+// is logged as the port instead of the real one;
 // `/boom` logs an exception with a stack trace and answers 500; `/forward/<port><path>` passes the request to another
 // fake service on 127.0.0.1 and answers 502 when that one fails. `crash` logs a startup failure and exits with code 1.
 // `buildDaemon` is the port of a build daemon the test runs, as Gradle's daemon runs `bootRun`: this process only asks it
@@ -18,6 +20,8 @@ const config = JSON.parse(process.argv[2] ?? "{}") as {
   crash?: boolean;
   quiet?: boolean;
   buildDaemon?: number;
+  /** The port the startup line names instead of the one it listens on, as a service whose log lies would. */
+  announcePort?: number;
 };
 
 const logStarted = (port: number) =>
@@ -55,6 +59,19 @@ const server = createServer((req, res) => {
       upstream.end();
       return;
     }
+    if (req.url === "/half") {
+      // A service that dies while it sends a body.
+      res.writeHead(200, { "content-type": "text/plain", "content-length": "1000" });
+      res.write("only the start");
+      setTimeout(() => req.socket.destroy(), 50);
+      return;
+    }
+    if (req.url === "/redirect") {
+      // Spring Security's redirect to its login page names the service's own address.
+      res.writeHead(302, { location: `http://localhost:${listeningPort()}/login?next=1` });
+      res.end();
+      return;
+    }
     if (req.url === "/boom") {
       console.error("ERROR c.e.orders.OrderController - Request failed");
       console.error("java.lang.NullPointerException: order is null");
@@ -66,18 +83,32 @@ const server = createServer((req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
     const body = Buffer.concat(chunks).toString("utf8");
     const env = { port: process.env.PORT ?? null, token: process.env.FAKE_API_TOKEN ?? null };
-    const answer = { method: req.method, path: req.url, body, cwd: process.cwd(), ...env };
+    const forwarded = {
+      host: req.headers.host ?? null,
+      forwardedHost: req.headers["x-forwarded-host"] ?? null,
+      hop: req.headers["x-hop"] ?? null,
+    };
+    const answer = { method: req.method, path: req.url, body, cwd: process.cwd(), ...env, ...forwarded };
     res.end(JSON.stringify(answer));
   });
 });
+
+// A WebSocket handshake (a dev server's live reload) is accepted, and the connection echoes what it receives.
+server.on("upgrade", (req, socket) => {
+  socket.write(`HTTP/1.1 101 Switching Protocols\r\nupgrade: websocket\r\nconnection: Upgrade\r\nx-path: ${req.url}\r\n\r\n`);
+  socket.pipe(socket);
+});
+
+function listeningPort(): number {
+  const address = server.address();
+  return typeof address === "object" && address ? address.port : 0;
+}
 
 if (config.buildDaemon !== undefined) askBuildDaemon(config.buildDaemon);
 else
   setTimeout(() => {
     server.listen(config.port ?? Number(process.env.SERVER_PORT ?? 0), "127.0.0.1", () => {
-      const address = server.address();
-      const port = typeof address === "object" && address ? address.port : 0;
-      if (!config.quiet) logStarted(port);
+      if (!config.quiet) logStarted(config.announcePort ?? listeningPort());
     });
   }, config.delayMs ?? 0);
 for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => process.exit(0));

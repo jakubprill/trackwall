@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Service, SliceMember } from "@trackwall/protocol";
-import { isServiceLive, leaseHolder, memberLabel, serviceStateLabel } from "../src/lib/service-state.ts";
+import { isServiceLive, leaseHolder, memberLabel, serviceLink, serviceStateLabel } from "../src/lib/service-state.ts";
 
 const RUN = { kind: "running", runId: "r1", startedAt: "2026-10-24T10:00:00.000Z", pid: 42 } as const;
 const service = (state: Service["state"], port: number | null = 8081): Service => ({
@@ -51,5 +51,25 @@ describe("service state in the UI", () => {
 
     expect(leaseHolder([service("stopped"), stopped, elsewhere, leased], "orders")).toBe(leased);
     expect(leaseHolder([service("healthy"), stopped], "orders")).toBeUndefined();
+  });
+});
+
+describe("where a ready service opens in the browser (ADR-189)", () => {
+  const TASK = "0f8fad5b-d9cb-469f-a165-70867728950e";
+
+  test("through the daemon's service proxy when it runs one: the repo's name, or the task's before it", () => {
+    const proxy = { desktop: false, serviceProxyPort: 7701 };
+    expect(serviceLink(proxy, service("healthy"))).toBe("http://orders.localhost:7701/");
+    expect(serviceLink(proxy, { ...service("healthy"), task: TASK })).toBe(`http://${TASK}.orders.localhost:7701/`);
+  });
+
+  test("at its port on this computer when the daemon runs here without the proxy", () => {
+    expect(serviceLink({ desktop: true, serviceProxyPort: null }, service("healthy", 8081))).toBe("http://localhost:8081/");
+  });
+
+  test("nowhere while it is not ready, or from a daemon elsewhere without the proxy", () => {
+    expect(serviceLink({ desktop: true, serviceProxyPort: 7701 }, service("starting"))).toBeUndefined();
+    expect(serviceLink({ desktop: true, serviceProxyPort: null }, null)).toBeUndefined();
+    expect(serviceLink({ desktop: false, serviceProxyPort: null }, service("healthy"))).toBeUndefined();
   });
 });

@@ -676,6 +676,27 @@ describe("services from a task worktree (ADR-61)", () => {
   );
 
   test(
+    "the proxy's address of a repo is the task's service while it holds the lease, and of the task the same; a stopped service has none",
+    async () => {
+      const apiPort = await freePort();
+      const { services } = setup(
+        { api: { ...DEV, servers: { dev: {} } } },
+        { cardPorts: { api: apiPort }, tasks: { [TASK]: { repo: "api", port: await freePort(), config: TASK_DEV } } },
+      );
+      await services.start({ repo: "api", task: TASK, lease: true, dependencies: false, waitMs: 20_000 });
+
+      expect(await services.address({ repo: "api", task: null })).toMatchObject({ port: apiPort });
+      expect(await services.address({ repo: "api", task: TASK })).toMatchObject({ port: apiPort });
+      await services.stop({ repo: "api", task: TASK, dependencies: false });
+      await expect(services.address({ repo: "api", task: null })).rejects.toMatchObject({
+        code: "service_unavailable",
+        message: "the service of api has not been started",
+      });
+    },
+    TIMEOUT,
+  );
+
+  test(
     "a crash of the task's service on the lease gives the port back, and the root's service starts again",
     async () => {
       const rootPort = await freePort();
