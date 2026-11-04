@@ -1,4 +1,4 @@
-import { DroppedFileName, MAX_DROP_BYTES } from "@trackwall/protocol";
+import { dropTooLarge, MAX_DROP_BYTES } from "@trackwall/protocol";
 
 /**
  * Files dropped on a terminal whose daemon runs on another computer, such as in a container (ADR-196): a path of this
@@ -15,6 +15,8 @@ export interface DropSource {
   name: string;
   /** The size when it is known before reading (a browser's `File`); the shell checks it itself. */
   size?: number;
+  /** A browser hands a dropped folder over as a `File` too; the shell refuses one itself. */
+  folder?: boolean;
   read: () => Promise<Blob | ArrayBuffer>;
 }
 
@@ -28,12 +30,23 @@ export function carriesFiles(types: readonly string[]): boolean {
   return types.includes("Files");
 }
 
-/** Why a file cannot be sent before any of it is read, or `undefined`. */
-export function dropRefusal(source: Pick<DropSource, "name" | "size">): string | undefined {
-  if (!DroppedFileName.safeParse(source.name).success) return `${source.name} has a name that cannot be a file name in the container.`;
-  if (source.size !== undefined && source.size > MAX_DROP_BYTES)
-    return `${source.name} is larger than ${MAX_DROP_BYTES / 1024 ** 2} MB; copy it into the container with docker cp instead.`;
+/** The line above the terminal while the files are sent. */
+export function copyingNotice(sources: readonly Pick<DropSource, "name">[]): string {
+  const [only] = sources;
+  return sources.length === 1 && only ? `Copying ${only.name} to Trackwall…` : `Copying ${sources.length} files to Trackwall…`;
+}
+
+/** Why a file cannot be sent before any of it is read, or `undefined`; the daemon makes any name safe itself. */
+export function dropRefusal(source: Pick<DropSource, "name" | "size" | "folder">): string | undefined {
+  if (source.folder) return `${source.name} is a folder; only files can be dropped on a terminal in a container`;
+  if (source.size !== undefined && source.size > MAX_DROP_BYTES) return dropTooLarge(source.name);
   return undefined;
+}
+
+/** The bytes the shell's `read_dropped_file` answers, which reach the page as an `ArrayBuffer`. */
+export function droppedBytes(answer: unknown): ArrayBuffer {
+  if (answer instanceof ArrayBuffer) return answer;
+  throw new Error(`${READ_COMMAND} did not answer with the file's bytes`);
 }
 
 /**

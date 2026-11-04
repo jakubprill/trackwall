@@ -84,25 +84,10 @@ export const DROP_NAME_HEADER = "x-trackwall-file-name";
  */
 export const MAX_DROP_BYTES = 256 * 1024 ** 2;
 
-/** A control character (C0 or DEL), which no file name a person dropped should hold. */
-function isControl(char: string): boolean {
-  const code = char.charCodeAt(0);
-  return code < 0x20 || code === 0x7f;
+/** Why a dropped file is refused for its size, in the daemon and the window alike. */
+export function dropTooLarge(name: string): string {
+  return `${name} is larger than ${MAX_DROP_BYTES / 1024 ** 2} MB; copy it into the container with docker cp instead`;
 }
-
-/**
- * A dropped file's name: one name, not a path, that every system can keep (no `/ \ : * ? " < > |`, no control
- * character, not `.` or `..`, not ending in a space or a dot), at most 255 characters.
- */
-export const DroppedFileName = z
-  .string()
-  .min(1)
-  .max(255)
-  .refine(
-    (name) => !/[/\\:*?"<>|]/.test(name) && ![...name].some(isControl),
-    'a file name without / \\ : * ? " < > | or control characters',
-  )
-  .refine((name) => name !== "." && name !== ".." && !/[ .]$/.test(name), "a file name that does not end in a space or a dot");
 
 /** Where the dropped file now is, as the daemon sees it: the path to paste into the terminal. */
 export const DroppedFile = z.object({ path: z.string() });

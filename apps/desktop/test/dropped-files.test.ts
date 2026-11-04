@@ -14,7 +14,7 @@ test("the UI reads a dropped file by the name and argument the shell registers, 
   expect(command?.[1]).toBe("read_dropped_file");
   expect(read("apps/desktop/src-tauri/src/main.rs")).toContain(`dropped_files::${command?.[1]}`);
   expect(/export const READ_COMMAND = "(\w+)";/.exec(ui)?.[1]).toBe(command?.[1]);
-  expect(read("packages/ui/src/lib/use-terminal-drop.ts")).toContain(`invoke<ArrayBuffer>(READ_COMMAND, { ${command?.[2]} })`);
+  expect(read("packages/ui/src/lib/use-terminal-drop.ts")).toContain(`invoke(READ_COMMAND, { ${command?.[2]} })`);
   expect(shell).toContain(`const MAX_DROP_BYTES: u64 = 256 * 1024 * 1024;`);
   expect(MAX_DROP_BYTES).toBe(256 * 1024 * 1024);
 });

@@ -122,6 +122,7 @@ export function PtyTerminal({
   openTrackwall.current = openTrackwallLink;
   useTerminalDrop(frame, conn, {
     live: () => isLive.current,
+    ended: `The ${noun} has ended, so the dropped path was not pasted.`,
     // `paste` goes through `onData`, and in bracketed paste mode the agent sees it as pasted text, not keys.
     paste: (paths) => term.current?.paste(pastedPaths(paths)),
     notify: setNotice,

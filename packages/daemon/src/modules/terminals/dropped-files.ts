@@ -1,30 +1,51 @@
-import { createWriteStream } from "node:fs";
-import { lstat, mkdtemp, readdir, rm } from "node:fs/promises";
-import { join } from "node:path";
-import type { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
+import { mkdtemp, open, readdir, realpath, rmdir, stat, unlink } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { dropTooLarge } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
-import { ensureTrackwallDir } from "../../infra/trackwall-dir.ts";
+import { ensureTrackwallDir, trackwallDir } from "../../infra/trackwall-dir.ts";
 
 /**
  * Dropped files (§4.23, ADR-196): a file dropped on a terminal from a computer that is not the daemon's (the daemon in a
  * dev container) reaches the daemon as its bytes and is saved under `.trackwall/drops` of the projects folder, so that
  * the terminal can paste a path that exists where its program runs. Each file gets a new folder of its own with a random
- * name, so two drops of one name never meet and no name the page sends can point anywhere else; the name itself is
- * checked by `DroppedFileName` before it gets here. The file is created, never overwritten, and a body over
- * `maxBytes` (`MAX_DROP_BYTES`) is cut off and removed. Drops older than `KEEP_MS` are removed at the next drop. No MCP tool.
+ * name, so two drops of one name never meet and the name only labels the file; it is made safe to paste first
+ * (`savedName`). The file is created, never overwritten, and a body over `maxBytes` (`MAX_DROP_BYTES`) is cut off and
+ * removed. Drops older than `KEEP_MS` are removed at the next drop, one known file at a time, never recursively, since
+ * an agent can write in the projects folder (§8). No MCP tool.
  */
 
-/** A week: long enough to finish what the file was dropped for, short enough not to fill the disk with dumps. */
-const KEEP_MS = 7 * 24 * 60 * 60 * 1000;
+/** A day: long enough to hand the file to an agent, short enough not to leave the user's files lying where agents work. */
+const KEEP_MS = 24 * 60 * 60 * 1000;
 /** The prefix of each drop's folder; anything else in `drops` is left alone. */
 const DROP_PREFIX = "drop-";
+/** Room under the 255 bytes most file systems allow for a name. */
+const MAX_NAME_BYTES = 200;
+/** Device names Windows will not take as a file name, with or without an extension. */
+const WINDOWS_DEVICE = /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(\.|$)/i;
 
 export interface DroppedFilesDeps {
   /** The projects folder; refused (`bad_request`) while it is not set. */
   projectsDir: () => Promise<string>;
   now: () => Date;
   maxBytes: number;
+}
+
+/**
+ * The name a dropped file is saved under: letters, digits, `.`, `_`, `+`, `-` and spaces kept, anything else (a
+ * separator, a quote, `$`, a backtick, a control or bidi character) becomes `_`, so the pasted path is never read as a
+ * command by a shell; no trailing dot or space, no Windows device name, at most `MAX_NAME_BYTES` with the extension kept.
+ */
+export function savedName(dropped: string): string {
+  let name = dropped
+    .normalize("NFC")
+    .replace(/[^\p{L}\p{N}\p{M}._+ -]/gu, "_")
+    .replace(/^ +|[ .]+$/g, "");
+  if (name === "") name = "dropped-file";
+  if (WINDOWS_DEVICE.test(name)) name = `_${name}`;
+  const extension = /\.[^.]{1,16}$/.exec(name)?.[0] ?? "";
+  let stem = [...name.slice(0, name.length - extension.length)];
+  while (stem.length > 1 && Buffer.byteLength(stem.join("") + extension) > MAX_NAME_BYTES) stem = stem.slice(0, -1);
+  return stem.join("") + extension;
 }
 
 export class DroppedFiles {
@@ -34,49 +55,61 @@ export class DroppedFiles {
     this.#deps = deps;
   }
 
-  /** Saves `body` as `name` in a new folder of `.trackwall/drops` and returns its full path. */
-  async save(name: string, body: Readable): Promise<string> {
-    const drops = await ensureTrackwallDir(await this.#deps.projectsDir(), "drops");
+  /** Saves `body` in a new folder of `.trackwall/drops` under `savedName(name)` and returns its full path. */
+  async save(name: string, body: AsyncIterable<Buffer>): Promise<string> {
+    const projects = await this.#deps.projectsDir();
+    const drops = await realpath(await ensureTrackwallDir(projects, "drops"));
     await this.#removeOld(drops);
     const folder = await mkdtemp(join(drops, DROP_PREFIX));
-    const path = join(folder, name);
+    // A link swapped in for `.trackwall` or `drops` after the check above would put the user's file where an agent chose.
+    if (dirname(await realpath(folder)) !== (await realpath(trackwallDir(projects, "drops"))))
+      throw new DomainError("bad_request", `${trackwallDir(projects, "drops")} changed while the file was saved`);
+    const path = join(folder, savedName(name));
     try {
-      await pipeline(body, limited(this.#deps.maxBytes), createWriteStream(path, { flags: "wx", mode: 0o600 }));
+      await this.#write(path, body);
     } catch (err) {
-      await rm(folder, { recursive: true, force: true });
+      await removeDrop(folder);
       throw err;
     }
     return path;
   }
 
-  /** Folders of drops older than `KEEP_MS`, by their own change time; one that cannot be read or removed stays. */
+  async #write(path: string, body: AsyncIterable<Buffer>): Promise<void> {
+    const file = await open(path, "wx", 0o600);
+    try {
+      let size = 0;
+      for await (const chunk of body) {
+        size += chunk.length;
+        if (size > this.#deps.maxBytes) throw new DomainError("bad_request", dropTooLarge("the file"));
+        await file.write(chunk);
+      }
+    } finally {
+      await file.close();
+    }
+  }
+
+  /** Folders of drops older than `KEEP_MS`, by when they were last changed; one that cannot be removed stays. */
   async #removeOld(drops: string): Promise<void> {
     const oldest = this.#deps.now().getTime() - KEEP_MS;
-    const names = await readdir(drops).catch(() => []);
+    const entries = await readdir(drops, { withFileTypes: true }).catch(() => []);
     await Promise.all(
-      names
-        .filter((name) => name.startsWith(DROP_PREFIX))
-        .map(async (name) => {
-          const folder = join(drops, name);
-          const stat = await lstat(folder).catch(() => undefined);
-          if (stat?.isDirectory() && stat.mtimeMs < oldest) await rm(folder, { recursive: true, force: true }).catch(() => {});
+      entries
+        .filter((entry) => entry.isDirectory() && entry.name.startsWith(DROP_PREFIX))
+        .map(async (entry) => {
+          const folder = join(drops, entry.name);
+          const changed = await stat(folder).catch(() => undefined);
+          if (changed && changed.mtimeMs < oldest) await removeDrop(folder);
         }),
     );
   }
 }
 
-/** A step of `pipeline` that passes at most `max` bytes on; one more fails the copy with what to do instead. */
-function limited(max: number): (source: AsyncIterable<Buffer>) => AsyncGenerator<Buffer> {
-  return async function* (source) {
-    let size = 0;
-    for await (const chunk of source) {
-      size += chunk.length;
-      if (size > max)
-        throw new DomainError(
-          "bad_request",
-          `the file is larger than ${max / 1024 ** 2} MB; copy it into the container with docker cp instead`,
-        );
-      yield chunk;
-    }
-  };
+/**
+ * A drop's folder: its files and links unlinked one by one, then the folder, which fails, and is left, if anything else
+ * is in it. No recursive removal, which would follow a folder an agent swapped for a link on the way.
+ */
+async function removeDrop(folder: string): Promise<void> {
+  const entries = await readdir(folder, { withFileTypes: true }).catch(() => []);
+  await Promise.all(entries.filter((entry) => !entry.isDirectory()).map((entry) => unlink(join(folder, entry.name)).catch(() => {})));
+  await rmdir(folder).catch(() => {});
 }

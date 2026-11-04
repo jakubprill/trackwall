@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { MAX_DROP_BYTES } from "@trackwall/protocol";
-import { carriesFiles, droppedFileName, dropRefusal, sendDropped } from "../src/lib/dropped-files.ts";
+import { carriesFiles, copyingNotice, droppedBytes, droppedFileName, dropRefusal, sendDropped } from "../src/lib/dropped-files.ts";
 
 test("a dropped file keeps the last part of its path, whether the computer writes / or \\", () => {
   expect(droppedFileName("/Users/dana/Downloads/build.log")).toBe("build.log");
@@ -13,10 +13,26 @@ test("only a drag that carries files from the system is taken, not dragged text 
   expect(carriesFiles(["text/plain", "text/uri-list"])).toBe(false);
 });
 
-test("a file over the limit or with a name no container can keep is refused before any of it is read", () => {
+test("a file over the limit or a folder is refused before any of it is read; any name goes, the daemon makes it safe", () => {
   expect(dropRefusal({ name: "build.log", size: 10 })).toBeUndefined();
-  expect(dropRefusal({ name: "dump.hprof", size: MAX_DROP_BYTES + 1 })).toContain("docker cp");
-  expect(dropRefusal({ name: "a:b.txt", size: 1 })).toContain("cannot be a file name");
+  expect(dropRefusal({ name: "what?.png", size: 1 })).toBeUndefined();
+  expect(dropRefusal({ name: "dump.hprof", size: MAX_DROP_BYTES + 1 })).toBe(
+    "dump.hprof is larger than 256 MB; copy it into the container with docker cp instead",
+  );
+  expect(dropRefusal({ name: "reports", size: 0, folder: true })).toBe(
+    "reports is a folder; only files can be dropped on a terminal in a container",
+  );
+});
+
+test("the shell's answer counts as a file's bytes only when it is an ArrayBuffer", () => {
+  const bytes = new ArrayBuffer(3);
+  expect(droppedBytes(bytes)).toBe(bytes);
+  expect(() => droppedBytes([1, 2, 3])).toThrow("read_dropped_file did not answer with the file's bytes");
+});
+
+test("the line above the terminal names one file, or counts several", () => {
+  expect(copyingNotice([{ name: "build.log" }])).toBe("Copying build.log to Trackwall…");
+  expect(copyingNotice([{ name: "a.png" }, { name: "b.png" }])).toBe("Copying 2 files to Trackwall…");
 });
 
 test("dropped files are sent in order and the terminal gets the paths of the copies", async () => {

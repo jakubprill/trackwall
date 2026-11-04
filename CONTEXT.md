@@ -126,7 +126,7 @@ A folder or file dropped on the Trackwall window outside a session terminal, des
 _Avoid_: imported repo, added repo
 
 **Dropped file** (`DroppedFile`, `POST /api/terminals/drop`, `droppedFiles` in the facade, `.trackwall/drops`):
-A file dropped on a session terminal or a shell whose daemon runs on another computer (in a container, or reached from a browser): the window sends its bytes, the daemon keeps a copy in a folder of its own under `.trackwall/drops`, and the terminal gets the copy's path pasted (ADR-196). Removed after a week. With the daemon on this desktop a dropped file is not copied; its own path is pasted.
+A file dropped on a session terminal or a shell whose daemon runs on another computer (in a container, or reached from a browser): the window sends its bytes, the daemon keeps a copy in a folder of its own under `.trackwall/drops`, and the terminal gets the copy's path pasted (ADR-196). Removed at the next drop a day later. With the daemon on this desktop a dropped file is not copied; its own path is pasted.
 _Avoid_: upload, attachment
 
 **Repo host** (`RepoHost`, `repoHosts` in `workspace.yaml`):

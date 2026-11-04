@@ -1,14 +1,16 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { type RefObject, useContext, useEffect, useRef } from "react";
-import { uploadDrop } from "./api.ts";
+import { errorMessage, uploadDrop } from "./api.ts";
 import type { Connection } from "./connection.ts";
 import { DaemonPlaceContext } from "./desktop.ts";
-import { carriesFiles, type DropSource, droppedFileName, READ_COMMAND, sendDropped } from "./dropped-files.ts";
+import { carriesFiles, copyingNotice, type DropSource, droppedBytes, droppedFileName, READ_COMMAND, sendDropped } from "./dropped-files.ts";
 import { DROP_HOVER, FileDropEvent } from "./file-drop.ts";
 
 interface TerminalDrop {
   /** Whether the terminal's program still runs and takes the paths. */
   live: () => boolean;
+  /** Shown when the program has ended before the paths could be pasted. */
+  ended: string;
   paste: (paths: readonly string[]) => void;
   /** A line above the terminal, or `undefined` to clear it. */
   notify: (notice: string | undefined) => void;
@@ -32,25 +34,30 @@ export function useTerminalDrop(frame: RefObject<HTMLElement | null>, conn: Conn
     if (!target) return;
     const ended = () => {
       if (handlers.current.live()) return false;
-      handlers.current.notify("The terminal's program has ended, so nothing was pasted.");
+      handlers.current.notify(handlers.current.ended);
       return true;
     };
     const send = (sources: DropSource[]) => {
       if (ended()) return;
       const { notify } = handlers.current;
-      notify(sources.length === 1 ? `Copying ${sources[0]?.name} to the daemon…` : `Copying ${sources.length} files to the daemon…`);
+      notify(copyingNotice(sources));
       sendDropped(sources, (name, body) => uploadDrop(conn, name, body)).then(
         (paths) => {
           notify(undefined);
           if (!ended()) handlers.current.paste(paths);
         },
-        (err: unknown) => notify(`The dropped files were not copied: ${err instanceof Error ? err.message : String(err)}`),
+        (err: unknown) => notify(`Nothing was pasted: ${errorMessage(err)}.`),
       );
     };
     const fromShell = (event: Event) => {
       if (!(event instanceof FileDropEvent)) return;
       if (!local.current)
-        return send(event.paths.map((path) => ({ name: droppedFileName(path), read: () => invoke<ArrayBuffer>(READ_COMMAND, { path }) })));
+        return send(
+          event.paths.map((path) => ({
+            name: droppedFileName(path),
+            read: async () => droppedBytes(await invoke(READ_COMMAND, { path })),
+          })),
+        );
       if (!ended()) handlers.current.paste(event.paths);
     };
     target.addEventListener(FileDropEvent.type, fromShell);
@@ -67,10 +74,16 @@ export function useTerminalDrop(frame: RefObject<HTMLElement | null>, conn: Conn
     };
     const fromBrowser = (event: DragEvent) => {
       target.removeAttribute(DROP_HOVER);
-      const files = [...(event.dataTransfer?.files ?? [])];
-      if (files.length === 0) return;
+      const items = [...(event.dataTransfer?.items ?? [])].filter((item) => item.kind === "file");
+      if (items.length === 0) return;
       event.preventDefault();
-      send(files.map((file) => ({ name: file.name, size: file.size, read: async () => file })));
+      // Each entry is read now: `DataTransfer` is emptied once the drop event is over.
+      const sources = items.flatMap((item): DropSource[] => {
+        const file = item.getAsFile();
+        if (!file) return [];
+        return [{ name: file.name, size: file.size, folder: item.webkitGetAsEntry()?.isDirectory === true, read: async () => file }];
+      });
+      if (sources.length > 0) send(sources);
     };
     target.addEventListener("dragover", over);
     target.addEventListener("dragleave", leave);
