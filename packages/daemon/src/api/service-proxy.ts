@@ -7,7 +7,8 @@ import {
   type ServerResponse,
 } from "node:http";
 import { type AddressInfo, connect, type Socket } from "node:net";
-import { isServiceProxyOrigin, type ProxyTarget, serviceProxyAddress, serviceProxyTarget } from "@trackwall/protocol";
+import { pipeline } from "node:stream";
+import { isServiceProxyOrigin, type MiseTarget, serviceProxyAddress, serviceProxyTarget } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../infra/errors.ts";
 
 /**
@@ -16,17 +17,20 @@ import { DomainError, messageOf } from "../infra/errors.ts";
  * WebSockets included. In a dev container one forwarded port then opens every service on the user's computer.
  *
  * It guarantees: a request reaches only the port of a service Trackwall runs and found answering (`services.address`),
- * never the daemon's API or another port; a `Host` that is not a name under `localhost` on this port is refused, so a
- * page that rebinds its own domain to 127.0.0.1 reaches nothing; a request a page of another site sends (its `Origin`
- * is not a service behind this proxy) is refused, so a site the user visits cannot drive a service through it. No
- * token: the browser opens the address directly, as it would a forwarded port of the service.
+ * never the daemon's API or the proxy itself, even when a service's log names one of their ports; a `Host` that is not a
+ * name under `localhost` on this port is refused, so a page that rebinds its own domain to 127.0.0.1 reaches nothing; a
+ * request a page of another site makes (its `Origin`, or `Sec-Fetch-Site` for an image, a script or a frame) is refused
+ * unless it opens the service as the page itself, as a link does. No token: the browser opens the address directly, as
+ * it would a forwarded port of the service.
  */
 
 export interface ServiceProxyOptions {
   /** `0` picks a free port (tests). */
   port: number;
+  /** The daemon's API port, which no service may stand for. */
+  apiPort: number;
   /** Where the running service of `target` answers; a `DomainError` says why there is none. */
-  address: (target: ProxyTarget) => Promise<{ host: string; port: number }>;
+  address: (target: MiseTarget) => Promise<{ host: string; port: number }>;
   log: (msg: string) => void;
 }
 
@@ -38,7 +42,26 @@ export interface ServiceProxy {
 /** Headers of one connection, not of the request (RFC 9110 §7.6.1); the proxy's own connections set their own. */
 const HOP_BY_HOP = ["connection", "keep-alive", "proxy-connection", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade"];
 
-export async function startServiceProxy(o: ServiceProxyOptions): Promise<ServiceProxy> {
+/** What a refusal says when nothing names a service: how the addresses look. */
+function addressHelp(port: number): string {
+  const example = serviceProxyAddress(port, { repo: "<repo>", task: null });
+  return `Trackwall opens a running service at ${example}, with the repo's name in place of <repo>.`;
+}
+
+/**
+ * The proxy on `o.port`, or `null` with a line in the log when the port cannot be opened (another program holds it): the
+ * daemon runs on without it.
+ */
+export async function openServiceProxy(o: ServiceProxyOptions): Promise<ServiceProxy | null> {
+  try {
+    return await startServiceProxy(o);
+  } catch (err) {
+    o.log(`no service proxy: port ${o.port} could not be opened (${(err as NodeJS.ErrnoException).code ?? messageOf(err)})`);
+    return null;
+  }
+}
+
+async function startServiceProxy(o: ServiceProxyOptions): Promise<ServiceProxy> {
   let port = o.port;
   const upgraded = new Set<Socket>();
   const server = createServer((req, res) => {
@@ -49,6 +72,8 @@ export async function startServiceProxy(o: ServiceProxyOptions): Promise<Service
     });
   });
   server.on("upgrade", (req: IncomingMessage, socket: Socket, head: Buffer) => {
+    // Node takes its own error listener off the socket before `upgrade`: without one, a browser that goes away would end the daemon.
+    socket.on("error", () => socket.destroy());
     upgraded.add(socket);
     socket.once("close", () => upgraded.delete(socket));
     upgrade(req, socket, head, port, o).catch((err: unknown) => {
@@ -75,26 +100,39 @@ export async function startServiceProxy(o: ServiceProxyOptions): Promise<Service
   };
 }
 
+type Reached = { address: { host: string; port: number } } | { status: number; text: string };
+
 /** The service a request may reach, or the status and sentence that refuse it. */
-async function reach(
-  req: IncomingMessage,
-  port: number,
-  o: ServiceProxyOptions,
-): Promise<{ address: { host: string; port: number } } | { status: number; text: string }> {
+async function reach(req: IncomingMessage, port: number, o: ServiceProxyOptions): Promise<Reached> {
   const target = serviceProxyTarget(req.headers.host, port);
-  if (!target) {
-    const example = serviceProxyAddress(port, { repo: "<repo>", task: null });
-    return { status: 404, text: `Trackwall opens a running service at ${example}, with the repo's name in place of <repo>.` };
-  }
-  const origin = req.headers.origin;
-  if (origin !== undefined && !isServiceProxyOrigin(origin, port))
-    return { status: 403, text: "Trackwall passes no request from a page of another site to a service." };
+  if (!target) return { status: 404, text: addressHelp(port) };
+  if (fromAnotherSite(req, port)) return { status: 403, text: "Trackwall passes no request from a page of another site to a service." };
+  let address: { host: string; port: number };
   try {
-    return { address: await o.address(target) };
+    address = await o.address(target);
   } catch (err) {
-    if (err instanceof DomainError) return { status: 502, text: `${upperFirst(err.message)}. Start it in Trackwall, then reload.` };
+    if (err instanceof DomainError)
+      return { status: 502, text: `Trackwall cannot open this service: ${err.message}. Start it in Trackwall, then reload.` };
     throw err;
   }
+  if (address.port === port || address.port === o.apiPort)
+    return {
+      status: 502,
+      text: `The service's log names port ${address.port}, which is Trackwall's own, so Trackwall does not pass requests to it.`,
+    };
+  return { address };
+}
+
+/**
+ * A request made by a page of another site: its `Origin` is not a page behind the proxy, or, for a request a browser
+ * sends without `Origin` (an image, a script, a frame), `Sec-Fetch-Site` says another site made it and it does not open
+ * the service as a page. A link from another site, Trackwall's Open among them, still opens the service.
+ */
+function fromAnotherSite(req: IncomingMessage, port: number): boolean {
+  const origin = req.headers.origin;
+  if (origin !== undefined) return !isServiceProxyOrigin(origin, port);
+  const opensPage = req.headers["sec-fetch-mode"] === "navigate" && req.headers["sec-fetch-dest"] === "document";
+  return req.headers["sec-fetch-site"] === "cross-site" && !opensPage;
 }
 
 async function forward(req: IncomingMessage, res: ServerResponse, port: number, o: ServiceProxyOptions): Promise<void> {
@@ -105,7 +143,8 @@ async function forward(req: IncomingMessage, res: ServerResponse, port: number, 
     { host: address.host, port: address.port, method: req.method, path: req.url, headers: forwardedHeaders(req) },
     (up) => {
       res.writeHead(up.statusCode ?? 502, up.statusMessage, responseHeaders(up.headers, address.port, req.headers.host));
-      up.pipe(res);
+      // A service that dies halfway ends the browser's answer too, rather than leaving it open.
+      pipeline(up, res, () => {});
     },
   );
   upstream.once("error", (err) => {
@@ -113,9 +152,9 @@ async function forward(req: IncomingMessage, res: ServerResponse, port: number, 
     if (!res.headersSent) answer(res, 502, "The service closed the connection. Look at its log in Trackwall.");
     else res.destroy();
   });
-  // The browser went away before the answer ended: the service stops sending too.
+  // A browser that goes away before the answer starts stops the request to the service too (after that, `pipeline` does).
   res.once("close", () => {
-    if (!res.writableFinished) upstream.destroy();
+    if (!res.headersSent) upstream.destroy();
   });
   req.pipe(upstream);
 }
@@ -127,16 +166,15 @@ async function upgrade(req: IncomingMessage, socket: Socket, head: Buffer, port:
     return;
   }
   const upstream = connect({ host: reached.address.host, port: reached.address.port });
+  upstream.on("error", () => socket.destroy());
+  socket.once("close", () => upstream.destroy());
+  upstream.once("close", () => socket.destroy());
   upstream.once("connect", () => {
     upstream.write(upgradeHead(req));
     if (head.length > 0) upstream.write(head);
     upstream.pipe(socket);
     socket.pipe(upstream);
   });
-  upstream.once("error", () => socket.destroy());
-  socket.once("error", () => upstream.destroy());
-  upstream.once("close", () => socket.destroy());
-  socket.once("close", () => upstream.destroy());
 }
 
 /**
@@ -192,11 +230,12 @@ export function throughProxy(location: string, servicePort: number, host: string
   return location;
 }
 
+/** Without the hop-by-hop headers and those `Connection` names, though never `Host`, which picks the service's site. */
 function withoutHopByHop(headers: IncomingHttpHeaders): IncomingHttpHeaders {
   const named = String(headers.connection ?? "")
     .split(",")
     .map((h) => h.trim().toLowerCase())
-    .filter(Boolean);
+    .filter((h) => h !== "" && h !== "host");
   const drop = new Set([...HOP_BY_HOP, ...named]);
   return Object.fromEntries(Object.entries(headers).filter(([name]) => !drop.has(name)));
 }
@@ -204,8 +243,4 @@ function withoutHopByHop(headers: IncomingHttpHeaders): IncomingHttpHeaders {
 function answer(res: ServerResponse, status: number, text: string): void {
   res.writeHead(status, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" });
   res.end(`${text}\n`);
-}
-
-function upperFirst(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1);
 }

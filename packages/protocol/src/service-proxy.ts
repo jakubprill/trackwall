@@ -1,4 +1,5 @@
 import { TaskId } from "./agents.ts";
+import type { MiseTarget } from "./mise.ts";
 import { RepoId } from "./workspace.ts";
 
 /**
@@ -11,14 +12,8 @@ import { RepoId } from "./workspace.ts";
 
 const PROXY_DOMAIN = ".localhost";
 
-/** A service the proxy can reach: a repo root's (`task: null`) or a task's. */
-export interface ProxyTarget {
-  repo: RepoId;
-  task: TaskId | null;
-}
-
 /** The address that opens `target` through the proxy on `proxyPort`. */
-export function serviceProxyAddress(proxyPort: number, { repo, task }: ProxyTarget): string {
+export function serviceProxyAddress(proxyPort: number, { repo, task }: MiseTarget): string {
   return `http://${task === null ? "" : `${task}.`}${repo}${PROXY_DOMAIN}:${proxyPort}/`;
 }
 
@@ -27,7 +22,7 @@ export function serviceProxyAddress(proxyPort: number, { repo, task }: ProxyTarg
  * address such as `127.0.0.1:<port>`, another port, or another domain (a page that rebinds its own name to 127.0.0.1)
  * reaches no service. A repo id may hold dots, so a first label that is a task id, followed by a repo id, names a task.
  */
-export function serviceProxyTarget(host: string | undefined, proxyPort: number): ProxyTarget | null {
+export function serviceProxyTarget(host: string | undefined, proxyPort: number): MiseTarget | null {
   const suffix = `${PROXY_DOMAIN}:${proxyPort}`;
   const lower = host?.toLowerCase();
   if (!lower?.endsWith(suffix)) return null;

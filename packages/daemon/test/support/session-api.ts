@@ -6,6 +6,7 @@ import type { z } from "zod";
 import { EventHub } from "../../src/api/event-hub.ts";
 import { sessionHookRequest } from "../../src/api/hooks.ts";
 import { startApi } from "../../src/api/server.ts";
+import { openServiceProxy } from "../../src/api/service-proxy.ts";
 import { createFacade, type FacadeOptions, HOSTING_CLIS } from "../../src/facade.ts";
 import { desktopOpeners } from "../../src/infra/desktop.ts";
 import { writeDaemonFile } from "../../src/infra/discovery.ts";
@@ -110,16 +111,24 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
       desktop,
       container: options.container ?? null,
       devContainerFolder: options.devContainerFolder ?? null,
-      serviceProxyPort: api.proxyPort,
+      serviceProxyPort: proxy?.port ?? null,
     }),
     onShutdown: () => {},
     facade,
     mcp: mcp.endpoint,
     events: new EventHub({ facade, log: () => {} }),
-    proxyPort: options.proxyPort,
-    log: options.log,
   });
   // As in main.ts: before the API the leftovers of the previous daemon, after it the sessions it left running.
+  // As in main.ts: the service proxy beside the API, when asked for.
+  const proxy =
+    options.proxyPort === undefined
+      ? null
+      : await openServiceProxy({
+          port: options.proxyPort,
+          apiPort: api.port,
+          address: (t) => facade.services.address(t),
+          log: options.log ?? (() => {}),
+        });
   void facade.agents.resumeLeftSessions();
   writeDaemonFile(home, { pid: process.pid, port: api.port, token, startedAt: new Date().toISOString(), version: "0.0.0-test" });
   /** An API action with the token; the result checked by the action's schema. */
@@ -136,9 +145,10 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
     facade.keepForRestart();
     await facade.procs.stopAll();
     facade.agents.close();
+    await proxy?.close();
     await api.close();
   };
-  return { api, facade, home, projects, post, stop, hasListedTools: mcp.hasListedTools };
+  return { api, proxy, facade, home, projects, post, stop, hasListedTools: mcp.hasListedTools };
 }
 
 /** A projects folder with `repos` and a state directory whose workspace points to it. */

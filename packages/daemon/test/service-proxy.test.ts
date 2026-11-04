@@ -1,9 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { writeFileSync } from "node:fs";
 import { request } from "node:http";
 import { type AddressInfo, connect, createServer } from "node:net";
 import { join } from "node:path";
 import { DaemonInfoResult, servicesApi } from "@trackwall/protocol";
-import { throughProxy } from "../src/api/service-proxy.ts";
+import { openServiceProxy, throughProxy } from "../src/api/service-proxy.ts";
 import { loopbackRequest } from "../src/infra/loopback.ts";
 import { startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
@@ -19,12 +20,12 @@ let proxyPort: number;
 
 beforeAll(async () => {
   daemon = await startSessionApi(TOKEN, {
-    repos: { shop: { "fake-mise.json": SERVICE }, warehouse: { "fake-mise.json": SERVICE } },
+    repos: { shop: { "fake-mise.json": SERVICE }, warehouse: { "fake-mise.json": SERVICE }, liar: {} },
     miseCommand: FAKE_MISE,
     proxyPort: 0,
   });
-  if (daemon.api.proxyPort === null) throw new Error("the service proxy did not start");
-  proxyPort = daemon.api.proxyPort;
+  if (!daemon.proxy) throw new Error("the service proxy did not start");
+  proxyPort = daemon.proxy.port;
   const slice = await daemon.post(servicesApi.start, { repo: "shop", task: null, lease: false, dependencies: false, waitMs: 8000 });
   if (!slice.settled) throw new Error("the service of shop did not settle");
 }, SLOW_TEST_TIMEOUT_MS);
@@ -32,6 +33,17 @@ beforeAll(async () => {
 afterAll(async () => {
   await daemon.stop();
 });
+
+/** The first line the proxy answers a WebSocket handshake with, and the rest of what it sends until it closes. */
+async function handshake(host: string, origin: string): Promise<string> {
+  const socket = connect({ host: "127.0.0.1", port: proxyPort });
+  const received: Buffer[] = [];
+  socket.on("data", (c: Buffer) => received.push(c));
+  const closed = new Promise((resolve) => socket.once("close", resolve));
+  socket.write(`GET /live-reload HTTP/1.1\r\nHost: ${host}\r\nOrigin: ${origin}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n`);
+  await closed;
+  return Buffer.concat(received).toString();
+}
 
 /** A request to the proxy as a browser sends it, with the `Host` of the address it opened. */
 function viaProxy(host: string, path: string, headers: Record<string, string> = {}) {
@@ -96,7 +108,9 @@ describe("the service proxy (ADR-189, real process groups, fake mise and fake se
     async () => {
       const warehouse = await viaProxy(`warehouse.localhost:${proxyPort}`, "/");
       expect(warehouse.status).toBe(502);
-      expect(warehouse.body).toBe("The service of warehouse has not been started. Start it in Trackwall, then reload.\n");
+      expect(warehouse.body).toBe(
+        "Trackwall cannot open this service: the service of warehouse has not been started. Start it in Trackwall, then reload.\n",
+      );
       expect((await viaProxy(`nowhere.localhost:${proxyPort}`, "/")).status).toBe(502);
     },
     TIMEOUT,
@@ -134,6 +148,78 @@ describe("the service proxy (ADR-189, real process groups, fake mise and fake se
     TIMEOUT,
   );
 
+  test(
+    "a WebSocket from a page of another site is refused, and one to an address that is no service's",
+    async () => {
+      expect(await handshake(`shop.localhost:${proxyPort}`, "https://evil.example")).toStartWith("HTTP/1.1 403 ");
+      expect(await handshake(`shop.evil.example:${proxyPort}`, `http://shop.evil.example:${proxyPort}`)).toStartWith("HTTP/1.1 404 ");
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "an image or a frame another site loads is refused, while a link from another site opens the page and a sibling service's page may call it",
+    async () => {
+      const host = `shop.localhost:${proxyPort}`;
+      const image = { "sec-fetch-site": "cross-site", "sec-fetch-mode": "no-cors", "sec-fetch-dest": "image" };
+      expect((await viaProxy(host, "/admin/reset", image)).status).toBe(403);
+      const frame = { "sec-fetch-site": "cross-site", "sec-fetch-mode": "navigate", "sec-fetch-dest": "iframe" };
+      expect((await viaProxy(host, "/", frame)).status).toBe(403);
+      const link = { "sec-fetch-site": "cross-site", "sec-fetch-mode": "navigate", "sec-fetch-dest": "document" };
+      expect((await viaProxy(host, "/", link)).status).toBe(200);
+      const sibling = { "sec-fetch-site": "same-site", "sec-fetch-mode": "no-cors", "sec-fetch-dest": "script" };
+      expect((await viaProxy(host, "/app.js", sibling)).status).toBe(200);
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "the headers of the browser's connection stay with the proxy, though a Connection header naming Host keeps it",
+    async () => {
+      const host = `shop.localhost:${proxyPort}`;
+      const page = await viaProxy(host, "/", { connection: "x-hop, host", "x-hop": "for the proxy only" });
+      expect(JSON.parse(page.body)).toMatchObject({ host, hop: null });
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "a service that dies halfway through its answer ends the browser's answer too, short of its length",
+    async () => {
+      const ended = await new Promise<string>((resolve) => {
+        const req = request(
+          { host: "127.0.0.1", port: proxyPort, path: "/half", headers: { host: `shop.localhost:${proxyPort}` } },
+          (res) => {
+            res.on("data", () => {});
+            res.once("end", () => resolve("complete"));
+            res.once("error", () => resolve("cut"));
+            res.once("aborted", () => resolve("cut"));
+          },
+        );
+        req.once("error", () => resolve("cut"));
+        req.end();
+      });
+      expect(ended).toBe("cut");
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "a service whose log names Trackwall's own port gets no request: the proxy answers 502 and says why",
+    async () => {
+      const config = { tasks: [{ name: "dev" }], servers: { dev: { announcePort: daemon.api.port } } };
+      writeFileSync(join(daemon.projects, "liar", "fake-mise.json"), JSON.stringify(config));
+      await daemon.post(servicesApi.start, { repo: "liar", task: null, lease: false, dependencies: false, waitMs: 8000 });
+
+      const answer = await viaProxy(`liar.localhost:${proxyPort}`, "/api/daemon/info");
+      expect(answer.status).toBe(502);
+      expect(answer.body).toBe(
+        `The service's log names port ${daemon.api.port}, which is Trackwall's own, so Trackwall does not pass requests to it.\n`,
+      );
+    },
+    TIMEOUT,
+  );
+
   test("the daemon's info gives the proxy's port, so the page builds the addresses", async () => {
     const res = await loopbackRequest(daemon.api.port, "/api/daemon/info", { token: TOKEN });
     expect(DaemonInfoResult.parse(JSON.parse(res.body))).toMatchObject({ ok: true, data: { serviceProxyPort: proxyPort } });
@@ -150,7 +236,7 @@ describe("the service proxy's port", () => {
       const log: string[] = [];
       const other = await startSessionApi(TOKEN, { repos: { shop: {} }, miseCommand: FAKE_MISE, proxyPort: port, log: (l) => log.push(l) });
       try {
-        expect(other.api.proxyPort).toBeNull();
+        expect(other.proxy).toBeNull();
         expect(log).toContain(`no service proxy: port ${port} could not be opened (EADDRINUSE)`);
       } finally {
         await other.stop();
@@ -159,6 +245,31 @@ describe("the service proxy's port", () => {
     },
     SLOW_TEST_TIMEOUT_MS,
   );
+});
+
+describe("closing the service proxy", () => {
+  test("ends the WebSockets it passes on, so the daemon's stop does not wait for a browser", async () => {
+    const echo = createServer((socket) => socket.pipe(socket));
+    await new Promise<void>((resolve) => echo.listen(0, "127.0.0.1", resolve));
+    const servicePort = (echo.address() as AddressInfo).port;
+    const proxy = await openServiceProxy({
+      port: 0,
+      apiPort: 1,
+      address: async () => ({ host: "127.0.0.1", port: servicePort }),
+      log: () => {},
+    });
+    if (!proxy) throw new Error("the service proxy did not start");
+    const socket = connect({ host: "127.0.0.1", port: proxy.port });
+    const closed = new Promise((resolve) => socket.once("close", resolve));
+    socket.on("error", () => {});
+    socket.write(`GET / HTTP/1.1\r\nHost: shop.localhost:${proxy.port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n`);
+    const echoed = new Promise((resolve) => socket.once("data", resolve));
+    await echoed;
+
+    await proxy.close();
+    await closed;
+    echo.close();
+  });
 });
 
 describe("a redirect through the proxy", () => {

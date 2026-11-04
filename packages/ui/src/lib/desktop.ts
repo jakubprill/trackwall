@@ -34,7 +34,7 @@ export function useDesktop(): boolean {
  * daemon's container (ADR-121), through its `devcontainer.json` when the dev container named its folder, otherwise
  * attached to it. `undefined` when the daemon opens it, or when nothing can.
  */
-export function editorLinkFor(place: Omit<DaemonPlace, "serviceProxyPort">, path: string): string | undefined {
+export function editorLinkFor(place: Pick<DaemonInfo, "desktop" | "container" | "devContainerFolder">, path: string): string | undefined {
   if (place.desktop) return undefined;
   if (place.devContainerFolder) return devContainerEditorUrl(place.devContainerFolder, path);
   if (place.container) return containerEditorUrl(place.container, path);

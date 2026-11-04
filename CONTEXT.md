@@ -345,7 +345,7 @@ A TCP connection to the service's port on loopback (`probePort`), with the port 
 A task's service running on the port of the repo root's service, so whatever calls the repo reaches the task's changes (ADR-132). Taking it stops the root's service; it ends when the task's service stops or crashes, and the root's service starts again if it was running. In the UI "Run on the repo's port" and "Give the port back".
 _Avoid_: lock, reservation
 
-**Service proxy** (`startServiceProxy`, `serviceProxyAddress`, `DaemonInfo.serviceProxyPort`):
+**Service proxy** (`openServiceProxy`, `serviceProxyAddress`, `DaemonInfo.serviceProxyPort`):
 The daemon's listener on a port of its own (7701 in a dev container) that opens a ready service in the browser at `http://<repo>.localhost:<port>/`, or `http://<task>.<repo>.localhost:<port>/` for a task's service (ADR-189). In the UI the "Open" button of a service.
 _Avoid_: port forward (that is VS Code's), gateway
 

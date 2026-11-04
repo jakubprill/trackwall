@@ -7,6 +7,7 @@ import { type ContainerStartResult, type ContainerUpdateResult, releaseFileUrl }
 import { EventHub } from "./api/event-hub.ts";
 import { sessionHookRequest } from "./api/hooks.ts";
 import { type ApiServer, startApi } from "./api/server.ts";
+import { openServiceProxy, type ServiceProxy } from "./api/service-proxy.ts";
 import { isUiDir } from "./api/static.ts";
 import { createErrorJournal, createFacade, type Facade, HOSTING_CLIS } from "./facade.ts";
 import {
@@ -89,6 +90,7 @@ async function start(
   // The state needed to stop is declared before the API starts: shutdown can come as an HTTP request
   // or a signal at any moment after the port opens.
   let api: ApiServer | undefined;
+  let proxy: ServiceProxy | null = null;
   let facade: Facade | undefined;
   let stopWatching = () => {};
   const desktop = hasDesktop({ platform: process.platform, env: process.env, exists: existsSync });
@@ -102,6 +104,7 @@ async function start(
   const shutdown = shutdownOnce(async (reason) => {
     log(`stopping (${reason})`);
     stopWatching();
+    await proxy?.close();
     await stopDaemon(home, facade, api);
   });
 
@@ -138,8 +141,6 @@ async function start(
         version: VERSION,
         uiDir,
         allowOrigins: args.allowOrigins,
-        proxyPort: args.proxyPort ?? undefined,
-        log,
         info: () => ({
           version: VERSION,
           pid: process.pid,
@@ -154,7 +155,7 @@ async function start(
           desktop,
           container,
           devContainerFolder: devContainer,
-          serviceProxyPort: api?.proxyPort ?? null,
+          serviceProxyPort: proxy?.port ?? null,
         }),
         onShutdown: () => void shutdown("POST /api/daemon/shutdown"),
         facade,
@@ -163,6 +164,10 @@ async function start(
       },
       args.port,
     );
+    if (args.proxyPort !== null) {
+      const services = facade.services;
+      proxy = await openServiceProxy({ port: args.proxyPort, apiPort: api.port, address: (t) => services.address(t), log });
+    }
     // After the API: the first comparison hands every repo to the card warm-up, and its git processes must not delay the start.
     facade.repoWatch.start();
     facade.localConfig.start();
