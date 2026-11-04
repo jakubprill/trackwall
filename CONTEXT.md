@@ -674,6 +674,10 @@ _Avoid_: provider setting, MISE_ENV (that is mise's variable)
 The models the model provider of the session profile offers, from its `GET /models`, which the Model fields suggest as the user types; any other id can still be typed (ADR-194). The daemon asks the provider with the profile's key, which never leaves it. Without a session profile there are none.
 _Avoid_: model catalog (Copilot CLI's own list of GitHub's models), available models
 
+**Wire API** (`WireApi`, `ProviderModel.wireApi`, Copilot CLI's `COPILOT_PROVIDER_WIRE_API`):
+The format Copilot CLI speaks to a custom model provider in, `completions` (Chat Completions) or `responses` (the Responses API). A model of a gateway may answer in only one of them; a session's start sets the one its model answers in, learned by a probe on the model's first use (ADR-200).
+_Avoid_: protocol, API type, format (in names; "format" is fine in prose)
+
 **Secret from mise** (`secretNames`, `SessionEnvironment.secrets`):
 A variable of the session environment that mise redacts (`redact = true`, an age-encrypted value) or whose name looks like a secret; its value is masked, and the agent's tools do not get it unless it is in the agent secrets (ADR-93).
 

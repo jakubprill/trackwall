@@ -75,7 +75,7 @@ import { LAST_SUPERVISOR_FILE, LastSupervisorFile } from "./last-supervisor.ts";
 import { ListedSessions } from "./listed-sessions.ts";
 import { LiveSession, type SessionEvent, type SessionWindow } from "./live-session.ts";
 import { MiseTrustNotices, type TrustRecipient, trustRecipientOf } from "./mise-trust-notices.ts";
-import { modelArgs } from "./model-args.ts";
+import { modelArgs, modelOfArgs } from "./model-args.ts";
 import { proposedByOf, proposerExists, proposerKeyOf, proposerKind, proposerOf } from "./proposer.ts";
 import { readRequestPrompt } from "./read-request-prompt.ts";
 import {
@@ -92,6 +92,7 @@ import {
   type LauncherProcs,
   type SessionCallbacks,
   SessionLauncher,
+  type SessionLauncherDeps,
   type SessionPlace,
   type StartedSession,
   sessionHooksFile,
@@ -223,6 +224,8 @@ export interface AgentsDeps {
   boardHas: (item: string) => Promise<boolean>;
   /** The workspace knowledge the user approved for a session in `repo` (`null`: in the projects folder), ADR-170. */
   knowledge: (repo: string | null) => Promise<SessionKnowledge>;
+  /** The format a session on a model must use with its custom provider (ADR-200), from `provider-models`. */
+  wireApi: SessionLauncherDeps["wireApi"];
   /**
    * What each task's work came to, its verification verdict and its merge request with the pipeline (ADR-154), which
    * `verification` and `merge-requests` keep: the supervisor's situation tells it with each task (ADR-156).
@@ -291,6 +294,7 @@ export class Agents {
       handoff: (task) => this.#tasks.handoff(task),
       change: (task) => this.#tasks.change(task),
       knowledge: deps.knowledge,
+      wireApi: deps.wireApi,
     });
     this.#resumable = new ResumableSessions(join(deps.home, RESUMABLE_SESSIONS_FILE), deps.log);
     this.#lastSupervisor = new LastSupervisorFile(join(deps.home, LAST_SUPERVISOR_FILE), deps.log);
@@ -361,7 +365,10 @@ export class Agents {
       },
       launch: async ({ repo, task }) => {
         const { copilot, mise } = await this.#launcher.inputs({ repo, supervisor: false, task });
-        return { program: copilot.program, prefix: copilot.args, env: mise.env, args: mise.args, secrets: mise.secretValues };
+        // The reviewer runs on the model of its command or environment, in the format that model answers in (ADR-200).
+        const env = { ...mise.env };
+        await this.#launcher.setWireApi(`review of task ${task}`, env, modelOfArgs([...copilot.args, ...mise.args]));
+        return { program: copilot.program, prefix: copilot.args, env, args: mise.args, secrets: mise.secretValues };
       },
       procs: deps.procs,
       settings: () => deps.repos.autoReviewSettings(),

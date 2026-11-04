@@ -32,7 +32,7 @@ export function chatModels(body: string): ProviderModel[] | null {
     if (!entry.success || EMBEDDING.test(entry.data.id)) continue;
     const id = TaskModel.safeParse(entry.data.id);
     if (!id.success || models.has(id.data)) continue;
-    models.set(id.data, { id: id.data, contextWindow: entry.data.context_window ?? null });
+    models.set(id.data, { id: id.data, contextWindow: entry.data.context_window ?? null, wireApi: null });
   }
   return [...models.values()].sort((a, b) => a.id.localeCompare(b.id)).slice(0, MAX_MODELS);
 }

@@ -321,6 +321,8 @@ export function createFacade(o: FacadeOptions): Facade {
     openEditor,
     boardHas: (item) => board.has(item),
     knowledge: (repo) => knowledge.forSession(repo),
+    // `providerModels` is made further down; a session starts only after the facade is built.
+    wireApi: (model: string, env: NodeJS.ProcessEnv) => providerModels.wireApiFor(model, env),
     // `verifications` and `mergeRequests` are made below: the outcomes are read only once a supervisor gets a prompt,
     // and a task ends only after both exist.
     taskOutcomes,
@@ -437,6 +439,7 @@ export function createFacade(o: FacadeOptions): Facade {
       return { profile, env: withMiseVars(await o.userEnv(), mised.vars), problem: mised.problem };
     },
     ca: async (env) => (await sessionCertificates(env, SYSTEM_CA_FILES)).ca,
+    log: o.log,
   });
   const configFiles = new ConfigFiles({
     stateDir: { path: o.home, from: o.homeFrom },
