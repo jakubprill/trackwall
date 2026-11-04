@@ -10,7 +10,7 @@ import {
 } from "@trackwall/protocol";
 import { runProgram } from "../../infra/run-program.ts";
 import { gitEnv } from "./git.ts";
-import { findMergeRequest, mergeRequestFormUrl } from "./hosted-merge-request.ts";
+import { findMergeRequest, jobLogPath, mergeRequestFormUrl } from "./hosted-merge-request.ts";
 import { githubApi, gitlabApi, type HostingApi } from "./hosted-repo.ts";
 
 /**
@@ -50,6 +50,9 @@ const CACHE_MS = 60_000;
  * because it is not in a process group (§4.5).
  */
 const CLONE_TIMEOUT_MS = 30 * 60_000;
+
+/** The most of a job's log read: a job that prints more than this is rare, and its page has the end. */
+const JOB_LOG_MAX_BYTES = 8 * 1024 * 1024;
 
 export interface HostedRepos {
   /** In the repo host's order (`HostingApi`). */
@@ -93,6 +96,18 @@ export class Hosting {
     return findMergeRequest((path, schema) => this.api(host, path, (json) => schema.parse(json)), project, branch);
   }
 
+  /**
+   * The log of a failed job as the repo host gives it (ADR-197), up to `JOB_LOG_MAX_BYTES`; `cut` when it was longer, so
+   * the end is missing. Read only on the user's request: logs are large.
+   */
+  async jobLog(project: HostedProject, job: string): Promise<{ raw: string; cut: boolean }> {
+    const host = { kind: project.kind, host: project.host };
+    const { stdout, truncated } = await this.run(host, ["api", "--hostname", host.host, jobLogPath(project, job)], PAGE_TIMEOUT_MS, {
+      maxBytes: JOB_LOG_MAX_BYTES,
+    });
+    return { raw: stdout.toString("utf8"), cut: truncated };
+  }
+
   /** Resolves when `gh` or `glab` is signed in to `host` (`auth status` ends with 0); the doctor asks it (ADR-101). */
   async signedIn(host: RepoHost, timeoutMs: number): Promise<void> {
     await this.run(host, ["auth", "status", "--hostname", host.host], timeoutMs);
@@ -133,12 +148,13 @@ export class Hosting {
     }
   }
 
-  private run(host: RepoHost, args: string[], timeoutMs: number) {
+  private run(host: RepoHost, args: string[], timeoutMs: number, opts: { maxBytes?: number } = {}) {
     const cli = this.clis[host.kind];
     return runProgram(cli.command, [...cli.args, ...args], {
       label: `${HOST_CLI[host.kind]} ${args[0]}`,
       env: { ...gitEnv(), ...APIS[host.kind].env(host.host) },
       timeoutMs,
+      ...opts,
     });
   }
 }

@@ -226,7 +226,7 @@ describe.skipIf(process.versions.bun === undefined)(
         "the typed prompt to read the review and the message",
       );
       window.attachment.detach();
-      expect(after.facade.agents.takeReviewComments(resumed)).toEqual([COMMENT]);
+      expect(after.facade.agents.takeReviewComments(resumed)).toEqual({ comments: [COMMENT], pipelineFix: null });
       expect(after.facade.agents.takeMessages(resumed).map((m) => m.text)).toEqual(["Use the v2 API"]);
       expect(after.facade.agents.sessions().messages.map((m) => m.text)).toEqual(["Use the v2 API"]);
     }, 60_000);

@@ -2,6 +2,8 @@ import {
   countLabel,
   cutText,
   type HostedProject,
+  JOB_LOG_LINES_MAX,
+  type JobLog,
   MERGE_REQUEST_DESCRIPTION_MAX,
   MERGE_REQUEST_TITLE_MAX,
   type MergeRequest,
@@ -105,6 +107,18 @@ export function mergeRequestStatus(mergeRequest: MergeRequest): { tone?: StatusT
 /** `unit-tests, lint`: the jobs that failed the pipeline; empty when it names none. */
 export function failedJobNames(mergeRequest: MergeRequest): string {
   return (mergeRequest.pipeline?.failedJobs ?? []).map((job) => job.name).join(", ");
+}
+
+/** "Fix" asks the task's agent to fix a pipeline only while it failed on an open merge request (ADR-197). */
+export function canFixPipeline(mergeRequest: MergeRequest): boolean {
+  return mergeRequest.state === "open" && mergeRequest.pipeline?.state === "failed";
+}
+
+/** What a job's log excerpt leaves out, in words; `null` when it is the whole log. */
+export function jobLogNote(log: JobLog): string | null {
+  if (!log.truncated) return null;
+  if (log.text === "") return "The log is too long for Trackwall to read its end: open the job's page.";
+  return `The last ${JOB_LOG_LINES_MAX} lines at most: the job's page has the whole log.`;
 }
 
 export function pipelineLabel(state: PipelineState): { tone?: StatusTone; label: string } {

@@ -1,7 +1,7 @@
 import { MCP_SERVER_NAME, mcpTools } from "@trackwall/protocol";
 
 /**
- * The prompt the daemon types into a session when something waits for it (ADR-62, ADR-68): fixed sentences on one line,
+ * The prompt the daemon types into a session when something waits for it (ADR-62, ADR-68, ADR-197): fixed sentences on one line,
  * without anything the Copilot CLI input box treats specially, each naming the tool that returns what waits. The text
  * itself (the user's review, another agent's message, an update) comes from the tool, never as keys; a trust notice
  * (ADR-92) and an undone round (ADR-168) have no text beyond their fixed sentence.
@@ -9,6 +9,7 @@ import { MCP_SERVER_NAME, mcpTools } from "@trackwall/protocol";
 
 const SERVER = `(the ${MCP_SERVER_NAME} MCP server)`;
 const REVIEW = `The user sent a review of your changes in Trackwall: call ${mcpTools.getReviewComments.name} ${SERVER} and address every comment.`;
+const PIPELINE_FIX = `The user asks you to fix the failed pipeline of your merge request: call ${mcpTools.getReviewComments.name} ${SERVER} for the end of the failed jobs' logs.`;
 const MESSAGES = `The session that proposed your task, or the supervisor the user handed it to, sent you a message in Trackwall: call ${mcpTools.getMessages.name} ${SERVER} and follow it as an update of your task.`;
 const HANDOFF = `The task that handed you your work has new commits in Trackwall: call ${mcpTools.getHandoff.name} ${SERVER} and check whether they change what you build on.`;
 const UPDATES = `There is news about the work you delegated in Trackwall: call ${mcpTools.getUpdates.name} ${SERVER} and act on it.`;
@@ -21,6 +22,8 @@ const TRUST_NOTICE = `The user trusted the mise config that refused your last ${
 /** What waits unread for one session. */
 export interface Unread {
   reviewComments: number;
+  /** The user asked the task's agent to fix its merge request's failed pipeline (ADR-197). */
+  pipelineFix: boolean;
   messages: number;
   /** The branch of the task that handed this session's task its work moved since it read it (ADR-144). */
   handoffMoved: boolean;
@@ -34,6 +37,7 @@ export interface Unread {
 /** The prompt for what waits, or `undefined` when nothing does. */
 export function readRequestPrompt({
   reviewComments,
+  pipelineFix,
   messages,
   handoffMoved,
   roundUndone,
@@ -44,6 +48,7 @@ export function readRequestPrompt({
     // First: what the agent reads next may refer to the changes that are gone.
     roundUndone && ROUND_UNDONE,
     reviewComments > 0 && REVIEW,
+    pipelineFix && PIPELINE_FIX,
     messages > 0 && MESSAGES,
     handoffMoved && HANDOFF,
     updates > 0 && UPDATES,
