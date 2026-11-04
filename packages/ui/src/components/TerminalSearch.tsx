@@ -1,6 +1,6 @@
 import type { SearchAddon } from "@xterm/addon-search";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { searchKeyAction } from "@/lib/terminal-search";
@@ -9,8 +9,13 @@ import { searchKeyAction } from "@/lib/terminal-search";
  * The search bar over a terminal (`PtyTerminal`): finds text on the screen and in the scrollback as it is typed, and
  * selects the match, so Ctrl+C or Cmd+C copies it. Closing it clears the match and gives the keyboard back to the terminal.
  */
-export function TerminalSearch({ search, onClose }: { search: SearchAddon; onClose: () => void }) {
+export function TerminalSearch({ search, opened, onClose }: { search: SearchAddon; opened: number; onClose: () => void }) {
   const [query, setQuery] = useState("");
+  const field = useRef<HTMLInputElement>(null);
+  // Every Ctrl+Shift+F or Cmd+F, also with the bar already open, puts the keyboard in the field with its text selected.
+  useEffect(() => {
+    if (opened > 0) field.current?.select();
+  }, [opened]);
   const [missed, setMissed] = useState(false);
   const find = (direction: "previous" | "next", text = query) => {
     if (text === "") return setMissed(false);
@@ -24,13 +29,15 @@ export function TerminalSearch({ search, onClose }: { search: SearchAddon; onClo
   return (
     <div className="bg-overlay absolute top-3 right-4 z-10 flex items-center gap-1 rounded-md border p-1 shadow-lg">
       <Input
-        autoFocus
+        ref={field}
         value={query}
         onChange={(event) => {
           setQuery(event.target.value);
           find("previous", event.target.value);
         }}
         onKeyDown={(event) => {
+          // Enter that ends an input method's composition picks the characters, it does not search.
+          if (event.nativeEvent.isComposing) return;
           const action = searchKeyAction(event);
           if (!action) return;
           event.preventDefault();

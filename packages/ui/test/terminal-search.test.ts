@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { opensSearch, searchKeyAction } from "../src/lib/terminal-search.ts";
 
-const key = (k: string, mods: Partial<Record<"ctrlKey" | "shiftKey" | "altKey" | "metaKey", boolean>> = {}, type = "keydown") => ({
+const key = (code: string, mods: Partial<Record<"ctrlKey" | "shiftKey" | "altKey" | "metaKey", boolean>> = {}, type = "keydown") => ({
   type,
-  key: k,
+  code,
   ctrlKey: false,
   shiftKey: false,
   altKey: false,
@@ -13,19 +13,24 @@ const key = (k: string, mods: Partial<Record<"ctrlKey" | "shiftKey" | "altKey" |
 
 describe("opening the search in a terminal", () => {
   test("Ctrl+Shift+F opens it on Windows and Linux, while Ctrl+F stays the shell's", () => {
-    expect(opensSearch(key("F", { ctrlKey: true, shiftKey: true }), { mac: false })).toBe(true);
-    expect(opensSearch(key("f", { ctrlKey: true }), { mac: false })).toBe(false);
-    expect(opensSearch(key("f", { metaKey: true }), { mac: false })).toBe(false);
+    expect(opensSearch(key("KeyF", { ctrlKey: true, shiftKey: true }), { mac: false })).toBe(true);
+    expect(opensSearch(key("KeyF", { ctrlKey: true }), { mac: false })).toBe(false);
+    expect(opensSearch(key("KeyF", { metaKey: true }), { mac: false })).toBe(false);
   });
 
   test("Cmd+F opens it on macOS, while Ctrl+F stays the shell's", () => {
-    expect(opensSearch(key("f", { metaKey: true }), { mac: true })).toBe(true);
-    expect(opensSearch(key("f", { ctrlKey: true }), { mac: true })).toBe(false);
+    expect(opensSearch(key("KeyF", { metaKey: true }), { mac: true })).toBe(true);
+    expect(opensSearch(key("KeyF", { ctrlKey: true }), { mac: true })).toBe(false);
+  });
+
+  test("the key is found by its place, so a keyboard layout that types another letter there opens it too", () => {
+    expect(opensSearch(key("KeyF", { metaKey: true }), { mac: true })).toBe(true);
+    expect(opensSearch(key("KeyA", { metaKey: true }), { mac: true })).toBe(false);
   });
 
   test("only the key going down opens it, and never with Alt", () => {
-    expect(opensSearch(key("f", { metaKey: true }, "keyup"), { mac: true })).toBe(false);
-    expect(opensSearch(key("f", { ctrlKey: true, shiftKey: true, altKey: true }), { mac: false })).toBe(false);
+    expect(opensSearch(key("KeyF", { metaKey: true }, "keyup"), { mac: true })).toBe(false);
+    expect(opensSearch(key("KeyF", { ctrlKey: true, shiftKey: true, altKey: true }), { mac: false })).toBe(false);
   });
 });
 

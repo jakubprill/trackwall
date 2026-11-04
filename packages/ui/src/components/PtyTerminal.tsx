@@ -109,7 +109,8 @@ export function PtyTerminal({
   const updateFocus = useRef<() => void>(undefined);
   const [notice, setNotice] = useState<string>();
   const [connecting, setConnecting] = useState(false);
-  const [search, setSearch] = useState<SearchAddon>();
+  // `opened` changes at every Ctrl+Shift+F or Cmd+F, so a bar already open takes the keyboard again.
+  const [search, setSearch] = useState<{ addon: SearchAddon; opened: number }>();
   const lastScreens = useLastScreens();
   // Through a ref: whether the daemon has a desktop arrives after the terminal opens, and must not open it again.
   const openLink = useOpenWebLink(conn);
@@ -240,7 +241,7 @@ export function PtyTerminal({
     terminal.attachCustomKeyEventHandler((event) => {
       if (opensSearch(event, { mac: IS_MAC })) {
         event.preventDefault();
-        setSearch(searcher);
+        setSearch((open) => ({ addon: searcher, opened: (open?.opened ?? 0) + 1 }));
         return false;
       }
       if (
@@ -311,7 +312,8 @@ export function PtyTerminal({
   // Not when the user already put the keyboard on something else in the panel, such as one of its buttons.
   useEffect(() => {
     const element = host.current;
-    if (focused && element && !keyboardInRegion(element, document.activeElement)) term.current?.focus();
+    const searching = frame.current?.contains(document.activeElement) && document.activeElement?.tagName === "INPUT";
+    if (focused && element && !searching && !keyboardInRegion(element, document.activeElement)) term.current?.focus();
     updateFocus.current?.();
   }, [focused]);
 
@@ -323,7 +325,8 @@ export function PtyTerminal({
         <div ref={host} className="absolute inset-2 font-mono" />
         {search && (
           <TerminalSearch
-            search={search}
+            search={search.addon}
+            opened={search.opened}
             onClose={() => {
               setSearch(undefined);
               term.current?.focus();

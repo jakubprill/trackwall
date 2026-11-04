@@ -4,10 +4,11 @@
  * Windows and Linux; on macOS Cmd+F, which no program in the terminal gets.
  */
 
-type SearchKey = Pick<KeyboardEvent, "type" | "key" | "ctrlKey" | "shiftKey" | "altKey" | "metaKey">;
+type SearchKey = Pick<KeyboardEvent, "type" | "code" | "ctrlKey" | "shiftKey" | "altKey" | "metaKey">;
 
+/** By the key's place (`code`), not its letter, so it works on any keyboard layout, Cyrillic or Greek too. */
 export function opensSearch(key: SearchKey, { mac }: { mac: boolean }): boolean {
-  if (key.type !== "keydown" || key.altKey || key.key.toLowerCase() !== "f") return false;
+  if (key.type !== "keydown" || key.altKey || key.code !== "KeyF") return false;
   return mac ? key.metaKey && !key.ctrlKey : key.ctrlKey && key.shiftKey && !key.metaKey;
 }
 
