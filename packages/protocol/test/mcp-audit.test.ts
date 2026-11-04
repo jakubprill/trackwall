@@ -1,12 +1,13 @@
 import { expect, test } from "bun:test";
 import { z } from "zod";
-import { SessionId, TaskId, TaskModel } from "../src/agents.ts";
+import { SessionId, TaskId } from "../src/agents.ts";
 import { BoardItemId } from "../src/board.ts";
 import { TagName } from "../src/cards.ts";
 import { KnowledgeName } from "../src/knowledge.ts";
 import { mcpTools } from "../src/mcp.ts";
 import { MiseRunArgument, MiseTaskName } from "../src/mise.ts";
 import { RoutineName } from "../src/routines.ts";
+import { TaskModel } from "../src/task-model.ts";
 import { RepoId } from "../src/workspace.ts";
 
 /**

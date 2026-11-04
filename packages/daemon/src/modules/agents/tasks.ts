@@ -31,6 +31,7 @@ import type { LspServer } from "./copilot-plugin.ts";
 import { SANDBOX_ARG } from "./copilot-sandbox.ts";
 import { type EndedTaskFacts, type EndedTaskGit, endedTaskFacts } from "./ended-task.ts";
 import type { JavaNavigationServers } from "./java-navigation-servers.ts";
+import { modelArgs } from "./model-args.ts";
 import { TASK_BRANCH_PREFIX, taskSlug, taskWorktree } from "./task-branch.ts";
 import type { ChangeFacts } from "./task-change.ts";
 import type { StoredTask, TaskFile } from "./task-file.ts";
@@ -756,13 +757,12 @@ export class AgentTasks {
   async #launch(task: KnownTask, start: "new" | "resume"): Promise<void> {
     // The model, the approvals mode and the sandbox on every start, the first and each resume: Copilot CLI would
     // otherwise resume on its default model, ask again and leave the sandbox (ADR-98, ADR-105, ADR-181).
-    const modelArgs = task.model === null ? [] : [`--model=${task.model}`];
     const sandboxArgs = task.sandbox ? [SANDBOX_ARG] : [];
     const place = {
       repo: task.repo,
       cwd: task.worktree,
       task: task.id,
-      args: [...modelArgs, ...approvalArgs(task.approvals), ...sandboxArgs],
+      args: [...modelArgs(task.model), ...approvalArgs(task.approvals), ...sandboxArgs],
     };
     if (task.view === "terminal") {
       // `=` instead of a separate argument, so that a prompt starting with `-` is not a Copilot CLI option.

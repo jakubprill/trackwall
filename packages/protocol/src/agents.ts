@@ -15,6 +15,7 @@ import { CopilotUsage } from "./copilot-usage.ts";
 import { RunState } from "./procs.ts";
 import { REVIEW_COMMENTS_MAX, ReviewComment } from "./review.ts";
 import { singleLine } from "./single-line.ts";
+import { TaskModel } from "./task-model.ts";
 import { TaskStateChange } from "./task-state.ts";
 import { CommitHash, RepoId, SandboxSettings } from "./workspace.ts";
 
@@ -154,21 +155,6 @@ export function visibleText(text: z.ZodString): z.ZodString {
     message: "the text must not contain invisible characters (format or private-use characters, line separators)",
   });
 }
-
-/**
- * The Copilot CLI model a task's session runs on (ADR-98), passed as `--model=<id>` when the task starts and whenever it
- * resumes; `null` for Copilot CLI's own default. The catalog of models depends on the Copilot CLI version and the user's
- * account, so Trackwall checks only the shape of an id (`claude-opus-5.5`, `gpt-5.5`, `auto`) and Copilot CLI the rest.
- */
-export const TASK_MODEL_MAX = 64;
-export const TaskModel = z
-  .string()
-  .trim()
-  .min(1)
-  .max(TASK_MODEL_MAX)
-  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, {
-    message: "a model id is letters, digits, dots, dashes and underscores, such as claude-opus-5.5",
-  });
 
 /**
  * How a task's sessions answer tool approvals (ADR-105): `ask`, Copilot CLI asks the user before each tool its rules do not

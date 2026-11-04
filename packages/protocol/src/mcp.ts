@@ -37,7 +37,6 @@ import {
   TaskId,
   TaskMessage,
   TaskMessageText,
-  TaskModel,
   TaskPrompt,
   TaskProposal,
   TaskSummaryText,
@@ -96,6 +95,7 @@ import {
 } from "./services.ts";
 import { SyncRepo } from "./sync.ts";
 import { TASK_HISTORY_MAX_COMMITS, TASK_HISTORY_MAX_RESULTS, TaskHistoryQuery, TaskHistoryResult } from "./task-history.ts";
+import { TaskModel } from "./task-model.ts";
 import { TASK_UPDATES_KEPT, TaskUpdate } from "./task-updates.ts";
 import { TEST_RESULTS_MAX_FAILURES, TestResults } from "./test-results.ts";
 import { trackwallDirLabel } from "./trackwall-dir.ts";

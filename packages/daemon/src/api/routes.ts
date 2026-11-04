@@ -68,6 +68,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(workspaceApi.setWorktreesDir, (f, b) => f.workspace.setWorktreesDir(b.path)),
   route(workspaceApi.setGitProgram, (f, b) => f.workspace.setGitProgram(b.path)),
   route(workspaceApi.setSessionProfile, (f, b) => f.workspace.setSessionProfile(b.profile)),
+  route(workspaceApi.setSupervisorModel, (f, b) => f.workspace.setSupervisorModel(b.model)),
   route(workspaceApi.setAutoReview, (f, b) => f.workspace.setAutoReview(b)),
   route(workspaceApi.starredRepos, (f) => f.workspace.starredRepos()),
   route(workspaceApi.setRepoStarred, (f, b) => f.workspace.setRepoStarred(b.repo, b.starred)),

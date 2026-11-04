@@ -172,6 +172,7 @@ export class Workspace {
     const gitProgram = configOrProblem(() => this.deps.file.gitProgram(), null);
     const sessionProfile = configOrProblem(() => this.deps.file.sessionProfile(), null);
     const autoReview = configOrProblem(() => this.deps.file.autoReviewSettings(), { afterReport: false });
+    const supervisorModel = configOrProblem(() => this.deps.file.supervisorModel(), null);
     // What Settings shows is what runs: a hand edit of `gitProgram` applies when Settings reads it (ADR-112).
     this.deps.vcs.useGitProgram(gitProgram.value);
     return {
@@ -185,6 +186,8 @@ export class Workspace {
       sessionProfileProblem: sessionProfile.problem,
       autoReview: autoReview.value,
       autoReviewProblem: autoReview.problem,
+      supervisorModel: supervisorModel.value,
+      supervisorModelProblem: supervisorModel.problem,
       configFile: this.configFile(),
     };
   }
@@ -499,6 +502,20 @@ export class Workspace {
   setAutoReview(settings: AutoReviewSettings): WorkspaceSettings {
     this.deps.file.setAutoReview(settings);
     return this.settings();
+  }
+
+  /** The model the supervisor runs on (ADR-193); `null` for Copilot CLI's default. Takes effect at its next start or resume. */
+  setSupervisorModel(model: string | null): WorkspaceSettings {
+    this.deps.file.setSupervisorModel(model);
+    return this.settings();
+  }
+
+  /**
+   * `supervisorModel` from `workspace.yaml` (ADR-193); `invalid_config` for a bad key, so that a typo never starts the
+   * supervisor on a model the user did not mean.
+   */
+  supervisorModel(): string | null {
+    return this.deps.file.supervisorModel();
   }
 
   /** `autoReview` from `workspace.yaml` (ADR-182); `invalid_config` for a bad key, so that a typo spends no credits. */
