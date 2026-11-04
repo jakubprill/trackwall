@@ -14,13 +14,13 @@ import { type CardState, repoGaps } from "./repo-gaps.ts";
 /**
  * The `readiness` module (§4.25, ADR-201): how ready each repo is for agents, as the gaps that stand in their way. It joins
  * what other modules already know (`mise tasks ls`, the card, the graph's unresolved HTTP clients) and changes nothing.
- * `mise tasks ls` is the one costly part, a program start per repo, so its answer is kept per commit until the user
- * trusts the repo's config in Trackwall (`forget`) or asks for a fresh check, as the UI does after writing the convention
- * tasks; a change made outside Trackwall without a commit (`mise trust` in a terminal, a new `mise.local.toml`) shows
- * after a fresh check.
+ * `mise tasks ls` is the one costly part, a program start per repo, so a list it gave is kept per commit until a fresh
+ * check, which the UI asks for on "Check again" and after writing the convention tasks; a change to the tasks without a
+ * commit (a new `mise.local.toml`) shows after one. Any other answer (untrusted, not installed, an error or a timeout) is
+ * asked again every time, so trusting a config or installing mise shows at once.
  */
 
-/** A repo's card as `cards` gives it. */
+/** A repo's card as `cards` gives it (`Cards.all`), restated here because a module declares what it uses (§4). */
 export type ReadinessCard = { kind: "ok"; repo: string; card: RepoCard | null } | { kind: "unavailable"; repo: string; message: string };
 
 export interface ReadinessDeps {
@@ -38,7 +38,7 @@ const MISE_AT_ONCE = 4;
 
 export class Readiness {
   private readonly deps: ReadinessDeps;
-  /** `mise tasks ls` per repo with the commit it was asked at; a repo without a card is asked every time. */
+  /** The task lists mise gave, per repo with the commit they were asked at; a repo without commits is asked every time. */
   private readonly miseByRepo = new Map<string, { commit: string; tasks: MiseTasks }>();
 
   constructor(deps: ReadinessDeps) {
@@ -64,11 +64,6 @@ export class Readiness {
     return this.readiness(card, problems);
   }
 
-  /** The user trusted the repo's mise config in Trackwall, which changes its answer without a new commit. */
-  forget(repo: string): void {
-    this.miseByRepo.delete(repo);
-  }
-
   private async readiness(card: ReadinessCard, problems: readonly GraphProblem[]): Promise<RepoReadiness> {
     const state: CardState = card.kind === "ok" ? { kind: "ok", card: card.card } : { kind: "unavailable", message: card.message };
     const commit = card.kind === "ok" ? (card.card?.commit ?? null) : null;
@@ -87,7 +82,7 @@ export class Readiness {
     const tasks = await this.deps.mise
       .tasks(repo)
       .catch((err: unknown): MiseTasks => ({ kind: "error", message: messageOf(err), running: [] }));
-    if (commit !== null) this.miseByRepo.set(repo, { commit, tasks });
+    if (commit !== null && tasks.kind === "ok") this.miseByRepo.set(repo, { commit, tasks });
     return tasks;
   }
 }

@@ -1,6 +1,6 @@
-import { miseApi, type ReadinessReport, readinessApi } from "@trackwall/protocol";
+import { miseApi, type ReadinessReport } from "@trackwall/protocol";
 import { RefreshCw } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
@@ -17,48 +17,35 @@ import {
   gapTitle,
   gapWhy,
   LEVEL_LABELS,
+  LEVEL_TONES,
   readinessCounts,
   readinessGroups,
 } from "@/lib/readiness";
 import type { SessionSelection } from "@/lib/session-entries";
 import { useAction } from "@/lib/use-action";
-import { useRemote } from "@/lib/use-remote";
+import type { ReadinessHandle } from "@/lib/use-readiness";
 import { cn } from "@/lib/utils";
-
-const LEVEL_TONES = { blocks: "text-destructive", weakens: "text-warning", info: "text-muted-foreground" } as const;
 
 /**
  * Agent readiness in the "Overview" view (ADR-201): how many repos have nothing that blocks or weakens agents, and every
  * gap once, with the repos it is in and the one fix for all of them. Nothing changes until the user presses a fix; a
- * task's prompt is read and edited first. Fetched again after a repo change (`refreshKey`), and freshly on "Check again",
- * which also asks mise again about the repos whose commit did not change.
+ * task's prompt is read and edited first. `GraphView` holds the data (`useReadiness`), so selecting a repo and closing it
+ * again does not ask mise once more.
  */
 export function ReadinessSection({
   conn,
-  refreshKey,
+  readiness,
   onSelect,
   onOpenRepo,
   onOpenInSessions,
 }: {
   conn: Connection;
-  refreshKey: string;
+  readiness: ReadinessHandle;
   onSelect: (repo: string) => void;
   onOpenRepo: (repo: string) => void;
   onOpenInSessions: (selection: SessionSelection) => void;
 }) {
-  // A fresh check is a one-off: the next load after it asks mise only about repos whose commit changed again.
-  const fresh = useRef(false);
-  const load = useCallback(() => {
-    const body = { fresh: fresh.current };
-    fresh.current = false;
-    return post(conn, readinessApi.all, body);
-  }, [conn]);
-  const remote = useRemote(load, { refreshKey });
-  const checkAgain = () => {
-    fresh.current = true;
-    remote.reload();
-  };
-  const report = remote.data;
+  const { data: report, error, reload, checkAgain } = readiness;
   return (
     <Surface
       label="Agent readiness"
@@ -71,12 +58,12 @@ export function ReadinessSection({
         </span>
       }
     >
-      {remote.error && (
+      {error && (
         <div className="p-3">
-          <ErrorWithRetry message={remote.error} onRetry={remote.reload} />
+          <ErrorWithRetry message={error} onRetry={reload} />
         </div>
       )}
-      {!report && !remote.error && (
+      {!report && !error && (
         <div className="p-3">
           <Loading text="Asking mise about every repo…" />
         </div>

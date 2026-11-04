@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { apiEndpoints } from "./api.ts";
+import { ConventionTasksState } from "./mise.ts";
 import { RepoId } from "./workspace.ts";
 
 /**
@@ -13,7 +14,7 @@ import { RepoId } from "./workspace.ts";
  * `mise-failed` mise could not list the repo's tasks, `no-build-test` no mise task `build` or `test` that can work here,
  * `no-dev` a Spring Boot app without the mise task `dev` a service needs, `tool-unpinned` a tool version the repo asks for
  * outside its mise config, `unresolved-call` an HTTP client the graph cannot join to a repo, `card-incomplete` a card that
- * missed something, `card-unavailable` no card yet or git could not read the repo.
+ * missed something, `card-unavailable` a repo without commits or one git could not read.
  */
 export const ReadinessGapCode = z.enum([
   "mise-missing",
@@ -72,7 +73,7 @@ export const ReadinessReport = z.object({
   /** In the order of the repo list. */
   repos: z.array(RepoReadiness),
   /** Whether the convention tasks file is written, so the UI can offer it for `no-build-test`. */
-  conventionTasks: z.enum(["absent", "current", "changed"]),
+  conventionTasks: ConventionTasksState.shape.state,
   checkedAt: z.string(),
 });
 export type ReadinessReport = z.infer<typeof ReadinessReport>;

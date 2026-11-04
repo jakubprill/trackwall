@@ -4,17 +4,11 @@ import { Surface } from "@/components/Surface";
 import { TaskStartForm } from "@/components/TaskStartForm";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
-import { gapPart, gapPrompt, gapTaskTitle, gapTitle, readinessLine, repoGapFix } from "@/lib/readiness";
+import { gapPart, gapPrompt, gapTaskTitle, gapTitle, LEVEL_TONES, readinessLine, repoGapFix, STATE_TONES } from "@/lib/readiness";
 import type { SessionSelection } from "@/lib/session-entries";
 import { cn } from "@/lib/utils";
 
-const LEVEL_MARKS = {
-  blocks: { mark: "×", tone: "text-destructive" },
-  weakens: { mark: "!", tone: "text-warning" },
-  info: { mark: "·", tone: "text-muted-foreground" },
-} as const;
-
-const STATE_TONES = { ready: "text-success", gaps: "text-warning", blocked: "text-destructive" } as const;
+const LEVEL_MARKS = { blocks: "×", weakens: "!", info: "·" } as const;
 
 /** The card's one line about readiness, in "At a glance" (ADR-201). */
 export function ReadinessFact({ readiness }: { readiness: RepoReadiness | undefined }) {
@@ -75,13 +69,13 @@ function GapItem({
   onOpenInSessions: (selection: SessionSelection) => void;
 }) {
   const [asking, setAsking] = useState(false);
-  const { mark, tone } = LEVEL_MARKS[READINESS_GAP_LEVEL[gap.code]];
+  const level = READINESS_GAP_LEVEL[gap.code];
   const fix = repoGapFix(gap.code);
   return (
     <li className="flex min-w-0 flex-col gap-2 px-3 py-2">
       <div className="grid grid-cols-[1rem_minmax(0,1fr)_auto] items-start gap-2">
-        <span className={cn("text-center font-mono text-sm", tone)} aria-hidden="true">
-          {mark}
+        <span className={cn("text-center font-mono text-sm", LEVEL_TONES[level])} aria-hidden="true">
+          {LEVEL_MARKS[level]}
         </span>
         <span className="flex min-w-0 flex-col">
           <span className="text-sm">{gapTitle(gap.code)}</span>

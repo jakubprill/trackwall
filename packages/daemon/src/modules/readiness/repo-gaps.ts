@@ -1,4 +1,6 @@
 import {
+  BUILD_MISE_TASK,
+  CONVENTION_BUILD_FILES,
   countLabel,
   type MiseTasks,
   type ReadinessGap,
@@ -13,10 +15,7 @@ import {
  * the HTTP clients the graph could not join. A pure function, so every rule is in one place and tested on its own.
  */
 
-/** The mise task an agent builds with next to `test` (the convention tasks, ADR-157, and the Batch command use the same name). */
-const BUILD_MISE_TASK = "build";
-
-/** The card as the `cards` module gives it: `null` while it is still computed, or why git could not read the repo. */
+/** The card as the `cards` module gives it: `null` for a repo without commits, or why git could not read the repo. */
 export type CardState = { kind: "ok"; card: RepoCard | null } | { kind: "unavailable"; message: string };
 
 export interface RepoFacts {
@@ -25,9 +24,6 @@ export interface RepoFacts {
   /** How many HTTP clients of the repo point to no repo in the list (graph problems, ADR-116). */
   unresolvedCalls: number;
 }
-
-/** Build files the convention tasks look for in the working directory, as the card names them (ADR-157). */
-const CONVENTION_BUILD_FILES = ["pom.xml", "build.gradle", "build.gradle.kts", "package.json"];
 
 export function repoGaps(facts: RepoFacts): ReadinessGap[] {
   const card = facts.card.kind === "ok" ? facts.card.card : null;
@@ -50,16 +46,17 @@ function miseGaps(mise: MiseTasks, card: RepoCard | null): ReadinessGap[] {
   const missing = [BUILD_MISE_TASK, VERIFY_MISE_TASK].filter((name) => !mise.tasks.some((t) => t.name === name));
   if (missing.length > 0) return [{ code: "no-build-test", message: `no mise task ${missing.join(" or ")}` }];
   // The convention tasks are listed in every repo of the projects folder, but fail where they find no build file.
-  const conventionOnly = mise.tasks
-    .filter((t) => [BUILD_MISE_TASK, VERIFY_MISE_TASK].includes(t.name))
-    .every((t) => t.origin === "convention");
-  if (conventionOnly && card !== null && !hasConventionBuildFile(card))
-    return [{ code: "no-build-test", message: "the convention tasks find no pom.xml, build.gradle or package.json in the repo root" }];
+  const fromConvention = mise.tasks.filter((t) => [BUILD_MISE_TASK, VERIFY_MISE_TASK].includes(t.name) && t.origin === "convention");
+  if (fromConvention.length > 0 && card !== null && !hasConventionBuildFile(card)) {
+    const names = fromConvention.map((t) => t.name).join(" and ");
+    const which = fromConvention.length === 1 ? `the convention task ${names} finds` : `the convention tasks ${names} find`;
+    return [{ code: "no-build-test", message: `${which} no build file in the repo root` }];
+  }
   return [];
 }
 
 function hasConventionBuildFile(card: RepoCard): boolean {
-  return card.buildFiles.some((f) => CONVENTION_BUILD_FILES.includes(f.path));
+  return card.buildFiles.some((f) => CONVENTION_BUILD_FILES.some((name) => name === f.path));
 }
 
 /** Gaps only the card shows: they need to know what the repo is, so a repo without a card has none of them. */
@@ -96,7 +93,7 @@ function unresolvedGap(count: number): ReadinessGap {
 
 function cardStateGaps(card: CardState): ReadinessGap[] {
   if (card.kind === "unavailable") return [{ code: "card-unavailable", message: firstLine(card.message) }];
-  return card.card === null ? [{ code: "card-unavailable", message: "the card is still being computed" }] : [];
+  return card.card === null ? [{ code: "card-unavailable", message: "the repo has no commits yet, so it has no card" }] : [];
 }
 
 /** mise's and git's messages can run over many lines; a gap is one sentence, and the repo's tab has the rest. */

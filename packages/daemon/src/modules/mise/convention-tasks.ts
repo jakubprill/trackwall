@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { ConventionTasksState } from "@trackwall/protocol";
+import { CONVENTION_BUILD_FILES, type ConventionTasksState } from "@trackwall/protocol";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
 
 /**
@@ -20,7 +20,7 @@ export function conventionTasksPath(projectsDir: string): string {
   return join(projectsDir, ...CONVENTION_TASKS_PATH);
 }
 
-const NO_BUILD = "no pom.xml, build.gradle, build.gradle.kts or package.json here: give this repo its own mise task";
+const NO_BUILD = `no ${conventionBuildFiles()} here: give this repo its own mise task`;
 
 /**
  * The file as this Trackwall writes it. POSIX `sh` scripts in `run` (macOS, Linux, the container) and one-line `cmd.exe`
@@ -102,4 +102,9 @@ function readText(path: string): string | null {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw err;
   }
+}
+
+/** `pom.xml, build.gradle, build.gradle.kts or package.json`, said the same way in the scripts and in agent readiness. */
+function conventionBuildFiles(): string {
+  return `${CONVENTION_BUILD_FILES.slice(0, -1).join(", ")} or ${CONVENTION_BUILD_FILES.at(-1)}`;
 }

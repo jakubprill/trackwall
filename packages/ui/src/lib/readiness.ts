@@ -17,25 +17,63 @@ import {
  * each with its words for a person and the one fix the view offers for it, and the prompt of a task that closes it.
  */
 
-/** A gap in words: what is missing, and why it matters to an agent. */
-const GAP_LABELS: Record<ReadinessGapCode, { title: string; why: string }> = {
-  "mise-missing": { title: "mise is not installed", why: "Agents run builds and tests as mise tasks." },
-  "mise-untrusted": { title: "mise config not trusted", why: "Agents cannot run any mise task here until you trust it." },
-  "mise-failed": { title: "mise cannot list the tasks", why: "Agents cannot run any mise task here." },
-  "no-build-test": { title: "No build or test task", why: "Verify and agents cannot build or test these repos." },
-  "no-dev": { title: "Spring Boot app without a dev task", why: "It cannot start as a service, for you or for an agent." },
-  "tool-unpinned": { title: "Tool versions not pinned in mise", why: "The build uses whatever version this computer has." },
-  "unresolved-call": { title: "HTTP calls without a target", why: "The graph cannot tell an external service from a missing link." },
-  "card-incomplete": { title: "Card incomplete", why: "Agents read the card instead of the build files." },
-  "card-unavailable": { title: "No card yet", why: "Gaps that need the card are not checked." },
+/**
+ * What the Overview offers for a gap: `convention` writes the convention tasks file, `agent` a task with a prompt to read,
+ * `repo` opens the repo, where its mise tasks tab trusts the config after showing it (ADR-157), `graph` selects the repo
+ * on the graph, whose panel lists its calls without a target, `none` nothing to click (install mise, commit something).
+ */
+export type GapFix = "convention" | "agent" | "repo" | "graph" | "none";
+
+/** What a repo's card offers: `mise` its mise tasks tab, which adds tasks and trusts the config; `agent`; `none`. */
+type CardFix = "mise" | "agent" | "none";
+
+/**
+ * Each gap once: what is missing, why it matters to an agent, and its fix in Overview and on a repo's card. `no-build-test`
+ * in Overview is the convention tasks while their file is absent and an agent once it is there (`gapFix`).
+ */
+const GAPS: Record<ReadinessGapCode, { title: string; why: string; overview: GapFix; card: CardFix }> = {
+  "mise-missing": { title: "mise is not installed", why: "Agents run builds and tests as mise tasks.", overview: "none", card: "none" },
+  "mise-untrusted": {
+    title: "mise config not trusted",
+    why: "Agents cannot run any mise task here until you trust it.",
+    overview: "repo",
+    card: "mise",
+  },
+  "mise-failed": { title: "mise cannot list the tasks", why: "Agents cannot run any mise task here.", overview: "repo", card: "mise" },
+  "no-build-test": {
+    title: "No build or test task",
+    why: "Verify and agents cannot build or test these repos.",
+    overview: "convention",
+    card: "mise",
+  },
+  "no-dev": {
+    title: "Spring Boot app without a dev task",
+    why: "It cannot start as a service, for you or for an agent.",
+    overview: "agent",
+    card: "agent",
+  },
+  "tool-unpinned": {
+    title: "Tool versions not pinned in mise",
+    why: "The build uses whatever version this computer has.",
+    overview: "agent",
+    card: "agent",
+  },
+  "unresolved-call": {
+    title: "HTTP calls without a target",
+    why: "The graph cannot tell an external service from a missing link.",
+    overview: "graph",
+    card: "none",
+  },
+  "card-incomplete": { title: "Card incomplete", why: "Agents read the card instead of the build files.", overview: "repo", card: "none" },
+  "card-unavailable": { title: "No card", why: "Gaps that need the card are not checked.", overview: "none", card: "none" },
 };
 
 export function gapTitle(code: ReadinessGapCode): string {
-  return GAP_LABELS[code].title;
+  return GAPS[code].title;
 }
 
 export function gapWhy(code: ReadinessGapCode): string {
-  return GAP_LABELS[code].why;
+  return GAPS[code].why;
 }
 
 export const LEVEL_LABELS: Record<ReadinessLevel, string> = {
@@ -44,31 +82,18 @@ export const LEVEL_LABELS: Record<ReadinessLevel, string> = {
   info: "Good to know, not counted",
 };
 
-/**
- * What the view offers for a gap: `convention` writes the convention tasks file, `agent` a task with a prompt to read,
- * `repo` opens the repo, where its mise tasks tab trusts the config after showing it (ADR-157), `graph` selects the repo
- * on the graph, whose panel lists its calls without a target, `none` nothing to click (install mise, wait for the card).
- */
-export type GapFix = "convention" | "agent" | "repo" | "graph" | "none";
+export const LEVEL_TONES: Record<ReadinessLevel, string> = {
+  blocks: "text-destructive",
+  weakens: "text-warning",
+  info: "text-muted-foreground",
+};
+
+export const STATE_TONES: Record<ReadinessState, string> = { ready: "text-success", gaps: "text-warning", blocked: "text-destructive" };
 
 export function gapFix(code: ReadinessGapCode, conventionTasks: ReadinessReport["conventionTasks"]): GapFix {
-  switch (code) {
-    case "no-build-test":
-      // The convention tasks file covers every Maven, Gradle and npm repo; once it is there, the repos left need their own tasks.
-      return conventionTasks === "absent" ? "convention" : "agent";
-    case "no-dev":
-    case "tool-unpinned":
-      return "agent";
-    case "mise-untrusted":
-    case "mise-failed":
-    case "card-incomplete":
-      return "repo";
-    case "unresolved-call":
-      return "graph";
-    case "mise-missing":
-    case "card-unavailable":
-      return "none";
-  }
+  const fix = GAPS[code].overview;
+  // The convention tasks file covers every Maven, Gradle and npm repo; once it is there, the repos left need their own tasks.
+  return fix === "convention" && conventionTasks !== "absent" ? "agent" : fix;
 }
 
 /** The repos one gap is in, each with its own reason. */
@@ -130,14 +155,8 @@ export function gapPart(repo: { repo: string; message: string }): ChangePart {
   return { repo: repo.repo, note: repo.message.slice(0, CHANGE_PART_NOTE_MAX) };
 }
 
-/**
- * What a repo's card offers for one of its gaps: `mise` opens its mise tasks tab, which trusts the config after showing
- * it and offers the convention tasks (ADR-157); `agent` a task with a prompt to read; `none` the Overview or the doctor
- * has the rest.
- */
-export function repoGapFix(code: ReadinessGapCode): "mise" | "agent" | "none" {
-  if (code === "no-build-test" || code === "mise-untrusted" || code === "mise-failed") return "mise";
-  return code === "no-dev" || code === "tool-unpinned" ? "agent" : "none";
+export function repoGapFix(code: ReadinessGapCode): CardFix {
+  return GAPS[code].card;
 }
 
 /** The card's one line: `ready`, `2 gaps`, `blocked: no build or test task`. */

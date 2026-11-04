@@ -120,6 +120,9 @@ export type MiseRunArguments = z.infer<typeof MiseRunArguments>;
  * name wins. `absent`: no file; `current`: the file is the one this Trackwall writes; `changed`: the file differs (the
  * user edited it, or an older Trackwall wrote it), and Trackwall leaves it as it is.
  */
+/** The build files the convention tasks look for in a repo root, in the order they try them (ADR-157, ADR-201). */
+export const CONVENTION_BUILD_FILES = ["pom.xml", "build.gradle", "build.gradle.kts", "package.json"] as const;
+
 export const ConventionTasksState = z.object({
   state: z.enum(["absent", "current", "changed"]),
   /** The file's full path. */

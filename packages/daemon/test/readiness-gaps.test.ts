@@ -55,9 +55,17 @@ describe("repoGaps: what blocks an agent", () => {
     const mise = tasks(task("setup", "convention"), task("build", "convention"), task("test", "convention"));
 
     expect(repoGaps({ mise, card: { kind: "ok", card: card({ buildFiles: [] }) }, unresolvedCalls: 0 })).toEqual([
-      { code: "no-build-test", message: "the convention tasks find no pom.xml, build.gradle or package.json in the repo root" },
+      { code: "no-build-test", message: "the convention tasks build and test find no build file in the repo root" },
     ]);
     expect(repoGaps({ mise, card: { kind: "ok", card: card() }, unresolvedCalls: 0 })).toEqual([]);
+  });
+
+  test("a repo's own build next to the convention test is still blocked without a build file, because that test fails", () => {
+    const mise = tasks(task("build"), task("test", "convention"));
+
+    expect(repoGaps({ mise, card: { kind: "ok", card: card({ buildFiles: [] }) }, unresolvedCalls: 0 })).toEqual([
+      { code: "no-build-test", message: "the convention task test finds no build file in the repo root" },
+    ]);
   });
 
   test("an untrusted mise config, a missing mise and a mise error each block, with mise's first line as the reason", () => {
@@ -116,7 +124,7 @@ describe("repoGaps: what weakens an agent, and what is only worth knowing", () =
     expect(gaps).toEqual([]);
   });
 
-  test("an incomplete card and a card not computed yet are worth knowing but leave the repo ready", () => {
+  test("an incomplete card and a repo without commits are worth knowing but leave the repo ready", () => {
     const incomplete = repoGaps({
       mise: BUILD_AND_TEST,
       card: { kind: "ok", card: card({ problems: [{ code: "no-endpoints", path: "", message: "no controller found" }] }) },
@@ -125,7 +133,7 @@ describe("repoGaps: what weakens an agent, and what is only worth knowing", () =
     const pending = repoGaps({ mise: BUILD_AND_TEST, card: { kind: "ok", card: null }, unresolvedCalls: 0 });
 
     expect(incomplete).toEqual([{ code: "card-incomplete", message: "no controller found" }]);
-    expect(pending).toEqual([{ code: "card-unavailable", message: "the card is still being computed" }]);
+    expect(pending).toEqual([{ code: "card-unavailable", message: "the repo has no commits yet, so it has no card" }]);
     expect(readinessState(incomplete)).toBe("ready");
     expect(readinessState(pending)).toBe("ready");
   });

@@ -42,7 +42,7 @@ const BUILD_AND_TEST = [{ name: "build" }, { name: "test" }];
 const PACKAGE_JSON = '{ "name": "admin-web", "scripts": { "build": "vite build" } }\n';
 
 describe("readiness of the repos in the projects folder, from the cards, the graph and mise", () => {
-  test("each repo gets the gaps that stand in an agent's way, and trusting a config in Trackwall clears its gap without a fresh check", async () => {
+  test("each repo gets the gaps that stand in an agent's way, and trusting a config clears its gap without a fresh check", async () => {
     const projects = mkdtempSync(join(tmpdir(), "trackwall-readiness-"));
     repoWithMise(projects, "admin-web", { "package.json": PACKAGE_JSON }, { tasks: BUILD_AND_TEST });
     repoWithMise(projects, "notify-worker", { "package.json": PACKAGE_JSON }, { tasks: [{ name: "build" }] });
@@ -64,6 +64,18 @@ describe("readiness of the repos in the projects folder, from the cards, the gra
     const afterTrust = await facade.readiness.all(false);
 
     expect(afterTrust.repos.find((r) => r.repo === "shop-web")).toEqual({ repo: "shop-web", state: "ready", gaps: [] });
+  }, 30_000);
+
+  test("a mise that refused a repo once is asked again, so a trust in a terminal shows without a fresh check", async () => {
+    const projects = mkdtempSync(join(tmpdir(), "trackwall-readiness-refused-"));
+    const dir = repoWithMise(projects, "shop-web", { "package.json": PACKAGE_JSON }, { tasks: BUILD_AND_TEST, untrusted: true });
+    const facade = await facadeOn(projects);
+    expect((await facade.readiness.all(false)).repos[0]?.state).toBe("blocked");
+
+    // `mise trust` typed in a terminal: Trackwall hears nothing of it.
+    writeFileSync(join(dir, "fake-mise.json"), JSON.stringify({ tasks: BUILD_AND_TEST }));
+
+    expect((await facade.readiness.all(false)).repos[0]?.state).toBe("ready");
   }, 30_000);
 
   test("a change mise sees without a new commit shows after a fresh check, and one repo is always asked again", async () => {

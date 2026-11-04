@@ -345,11 +345,7 @@ export function createFacade(o: FacadeOptions): Facade {
     vcs,
     command: o.miseCommand,
     env: o.userEnv,
-    onTrusted: (repo) => {
-      // `readiness` is made below; a trust comes only from a request, after the facade exists.
-      readiness.forget(repo);
-      agents.miseTrusted({ repo, task: null });
-    },
+    onTrusted: (repo) => agents.miseTrusted({ repo, task: null }),
   });
   const batch = new Batch({ workspace, mise, log: o.log });
   const graph = new Graph({ cards, workspace });

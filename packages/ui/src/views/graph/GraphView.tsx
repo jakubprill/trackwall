@@ -16,6 +16,7 @@ import { repoService } from "@/lib/service-state";
 import { type SessionSelection, taskName } from "@/lib/session-entries";
 import { IMPACT_POLL_MS, impactRings } from "@/lib/task-impact";
 import { useCardWarmup } from "@/lib/use-card-warmup";
+import { useReadiness } from "@/lib/use-readiness";
 import { useRemote } from "@/lib/use-remote";
 import type { RepoWatchHandle } from "@/lib/use-repo-watch";
 import { useServices } from "@/lib/use-services";
@@ -58,6 +59,7 @@ export function GraphView({
   const load = useCallback(() => post(conn, graphApi.graph, {}), [conn]);
   const watch = repoWatch.options(GRAPH_PACE);
   const graph = useRemote(load, watch);
+  const readiness = useReadiness(conn, watch.refreshKey);
   const warmup = useCardWarmup(conn, warmupLive).data;
   const services = useServices(conn).data ?? [];
   const [selected, setSelected] = useState<string>();
@@ -131,7 +133,7 @@ export function GraphView({
           <GraphSummaryPanel graph={data} pairs={layout.pairs}>
             <ReadinessSection
               conn={conn}
-              refreshKey={watch.refreshKey}
+              readiness={readiness}
               onSelect={setSelected}
               onOpenRepo={onOpenRepo}
               onOpenInSessions={onOpenInSessions}
