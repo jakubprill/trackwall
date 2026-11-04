@@ -136,6 +136,21 @@ describe("the store of dropped files", () => {
     expect(existsSync(old)).toBe(false);
     expect(readFileSync(join(outside, "precious.txt"), "utf8")).toBe("keep");
   });
+
+  test("never removes the files of a folder an old drop was swapped for a link to", async () => {
+    const projects = mkdtempSync(join(tmpdir(), "trackwall-drops-"));
+    const outside = mkdtempSync(join(tmpdir(), "trackwall-outside-"));
+    writeFileSync(join(outside, "precious.txt"), "keep");
+    const drops = join(projects, ".trackwall", "drops");
+    const now = new Date("2026-11-04T12:00:00Z");
+    const files = new DroppedFiles({ projectsDir: async () => projects, now: () => now, maxBytes: 100 });
+    await files.save("first.txt", Readable.from([Buffer.from("first")]));
+    symlinkSync(outside, join(drops, "drop-planted"), "junction");
+    const longAgo = new Date(now.getTime() - DAY_AND_HOUR_MS);
+    utimesSync(outside, longAgo, longAgo);
+    await files.save("second.txt", Readable.from([Buffer.from("second")]));
+    expect(readFileSync(join(outside, "precious.txt"), "utf8")).toBe("keep");
+  });
 });
 
 describe("the name a dropped file is saved under", () => {
@@ -157,6 +172,13 @@ describe("the name a dropped file is saved under", () => {
     expect(savedName("NUL.txt")).toBe("_NUL.txt");
     expect(savedName("com1")).toBe("_com1");
     expect(savedName("trailing. ")).toBe("trailing");
+  });
+
+  test("is cut quickly however long it came, and never ends in a space or a dot once cut", () => {
+    const started = performance.now();
+    expect(Buffer.byteLength(savedName("x".repeat(100_000)))).toBe(200);
+    expect(performance.now() - started).toBeLessThan(200);
+    expect(savedName(`${"a".repeat(199)} b`)).toBe("a".repeat(199));
   });
 
   test("is cut to 200 bytes with its extension kept", () => {

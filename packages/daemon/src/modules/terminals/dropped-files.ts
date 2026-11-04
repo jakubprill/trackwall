@@ -1,4 +1,4 @@
-import { mkdtemp, open, readdir, realpath, rmdir, stat, unlink } from "node:fs/promises";
+import { lstat, mkdtemp, open, readdir, realpath, rmdir, stat, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { dropTooLarge } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
@@ -36,16 +36,14 @@ export interface DroppedFilesDeps {
  * command by a shell; no trailing dot or space, no Windows device name, at most `MAX_NAME_BYTES` with the extension kept.
  */
 export function savedName(dropped: string): string {
-  let name = dropped
-    .normalize("NFC")
-    .replace(/[^\p{L}\p{N}\p{M}._+ -]/gu, "_")
-    .replace(/^ +|[ .]+$/g, "");
+  const kept = dropped.normalize("NFC").replace(/[^\p{L}\p{N}\p{M}._+ -]/gu, "_");
+  const extension = /\.[^.]{1,16}$/.exec(kept)?.[0] ?? "";
+  // Each character is at least a byte, so no more than `MAX_NAME_BYTES` of them are measured.
+  const stem = [...kept.slice(0, kept.length - extension.length)].slice(0, MAX_NAME_BYTES);
+  while (stem.length > 0 && Buffer.byteLength(stem.join("") + extension) > MAX_NAME_BYTES) stem.pop();
+  let name = (stem.join("") + extension).replace(/^ +|[ .]+$/g, "");
   if (name === "") name = "dropped-file";
-  if (WINDOWS_DEVICE.test(name)) name = `_${name}`;
-  const extension = /\.[^.]{1,16}$/.exec(name)?.[0] ?? "";
-  let stem = [...name.slice(0, name.length - extension.length)];
-  while (stem.length > 1 && Buffer.byteLength(stem.join("") + extension) > MAX_NAME_BYTES) stem = stem.slice(0, -1);
-  return stem.join("") + extension;
+  return WINDOWS_DEVICE.test(name) ? `_${name}` : name;
 }
 
 export class DroppedFiles {
@@ -60,15 +58,16 @@ export class DroppedFiles {
     const projects = await this.#deps.projectsDir();
     const drops = await realpath(await ensureTrackwallDir(projects, "drops"));
     await this.#removeOld(drops);
-    const folder = await mkdtemp(join(drops, DROP_PREFIX));
-    // A link swapped in for `.trackwall` or `drops` after the check above would put the user's file where an agent chose.
-    if (dirname(await realpath(folder)) !== (await realpath(trackwallDir(projects, "drops"))))
+    const made = await mkdtemp(join(drops, DROP_PREFIX));
+    // A link swapped in for `.trackwall` or `drops` after they were resolved would put the user's file where an agent chose.
+    const folder = await realpath(made);
+    if (dirname(folder) !== drops)
       throw new DomainError("bad_request", `${trackwallDir(projects, "drops")} changed while the file was saved`);
     const path = join(folder, savedName(name));
     try {
       await this.#write(path, body);
     } catch (err) {
-      await removeDrop(folder);
+      await removeDrop(drops, folder);
       throw err;
     }
     return path;
@@ -98,17 +97,20 @@ export class DroppedFiles {
         .map(async (entry) => {
           const folder = join(drops, entry.name);
           const changed = await stat(folder).catch(() => undefined);
-          if (changed && changed.mtimeMs < oldest) await removeDrop(folder);
+          if (changed && changed.mtimeMs < oldest) await removeDrop(drops, folder);
         }),
     );
   }
 }
 
 /**
- * A drop's folder: its files and links unlinked one by one, then the folder, which fails, and is left, if anything else
- * is in it. No recursive removal, which would follow a folder an agent swapped for a link on the way.
+ * A drop's folder in the resolved `drops`: its files and links unlinked one by one, then the folder, which fails, and is
+ * left, if anything else is in it. Only a real folder that still resolves to a child of `drops`, and no recursive
+ * removal, so a folder an agent swapped for a link is not followed (§8 names the moment left between check and unlink).
  */
-async function removeDrop(folder: string): Promise<void> {
+async function removeDrop(drops: string, folder: string): Promise<void> {
+  const own = await lstat(folder).catch(() => undefined);
+  if (!own?.isDirectory() || dirname(await realpath(folder).catch(() => "")) !== drops) return;
   const entries = await readdir(folder, { withFileTypes: true }).catch(() => []);
   await Promise.all(entries.filter((entry) => !entry.isDirectory()).map((entry) => unlink(join(folder, entry.name)).catch(() => {})));
   await rmdir(folder).catch(() => {});
