@@ -17,6 +17,7 @@ import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
+import { changeStartedPartly } from "@/lib/change-start";
 import type { Connection } from "@/lib/connection";
 import { type JavaNavigationOffer, javaNavigationInChange, javaNavigationInView, javaNavigationOffer } from "@/lib/java-navigation";
 import {
@@ -283,12 +284,6 @@ function useChangeForm(conn: Connection, onStarted: (selection: SessionSelection
     },
   );
   return { parts, setParts, title, setTitle, partly, create };
-}
-
-/** What started of a change when some parts could not: the user finds the started ones in the list. */
-function changeStartedPartly(started: readonly string[], failed: readonly { repo: string; message: string }[]): string {
-  const lines = failed.map((f) => `${f.repo}: ${f.message}`);
-  return `Started in ${started.join(", ")}; these parts could not start:\n${lines.join("\n")}`;
 }
 
 /** "Start session" for a session, "Create task" for a task, which needs a prompt; both need a model id when a model is typed. */

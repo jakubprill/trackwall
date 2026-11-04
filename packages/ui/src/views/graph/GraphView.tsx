@@ -13,13 +13,15 @@ import { repoProblems } from "@/lib/graph-labels";
 import { layoutGraph } from "@/lib/graph-layout";
 import { GRAPH_PACE } from "@/lib/repo-watch";
 import { repoService } from "@/lib/service-state";
-import { taskName } from "@/lib/session-entries";
+import { type SessionSelection, taskName } from "@/lib/session-entries";
 import { IMPACT_POLL_MS, impactRings } from "@/lib/task-impact";
 import { useCardWarmup } from "@/lib/use-card-warmup";
 import { useRemote } from "@/lib/use-remote";
 import type { RepoWatchHandle } from "@/lib/use-repo-watch";
 import { useServices } from "@/lib/use-services";
+import { repoDrift } from "@/lib/version-drift";
 import { GraphCanvas } from "./GraphCanvas.tsx";
+import { DriftSection } from "./GraphDrift.tsx";
 import { GraphImpactPanel } from "./GraphImpactPanel.tsx";
 import { GraphNodePanel, GraphSummaryPanel } from "./GraphNodePanel.tsx";
 
@@ -27,7 +29,8 @@ import { GraphNodePanel, GraphSummaryPanel } from "./GraphNodePanel.tsx";
  * The "Overview" view (§4.6, ADR-29): the graph of connections between repos at full width and the details panel of the
  * selected repo on the right. The daemon computes the graph from the repo cards, so a new commit in a repo changes it as soon as
  * the repo watch reports it (ADR-63). While the first graph is computed, the view shows how far the card warm-up is.
- * Choosing a task lights the repos its change reaches, ring by ring, and dims the rest (ADR-147).
+ * Choosing a task lights the repos its change reaches, ring by ring, and dims the rest (ADR-147). Without a selected repo, the
+ * panel lists the versions the repos disagree on, with a way to align them (ADR-196).
  */
 export function GraphView({
   conn,
@@ -35,6 +38,7 @@ export function GraphView({
   repoWatch,
   sessions,
   initialImpactTask,
+  onOpenInSessions,
 }: {
   conn: Connection;
   warmupLive: LiveFeed<CardWarmupProgress> | undefined;
@@ -43,6 +47,8 @@ export function GraphView({
   sessions: SessionList | undefined;
   /** The task whose impact the view opens with, from its Impact tab. */
   initialImpactTask: string | undefined;
+  /** Opens a task the view started (aligning a version drift, ADR-196). */
+  onOpenInSessions: (selection: SessionSelection) => void;
 }) {
   const load = useCallback(() => post(conn, graphApi.graph, {}), [conn]);
   const graph = useRemote(load, repoWatch.options(GRAPH_PACE));
@@ -108,13 +114,18 @@ export function GraphView({
             node={node}
             pairs={layout.pairs}
             problems={data ? repoProblems(data, node.repo) : []}
+            drift={data ? repoDrift(data, node.repo) : []}
             service={repoService(services, node.repo)}
             onSelect={setSelected}
             onClose={() => setSelected(undefined)}
           />
         )}
         {data && layout && !node && changed && <GraphImpactPanel changed={changed} onSelect={setSelected} />}
-        {data && layout && !node && !changed && <GraphSummaryPanel graph={data} pairs={layout.pairs} />}
+        {data && layout && !node && !changed && (
+          <GraphSummaryPanel graph={data} pairs={layout.pairs}>
+            <DriftSection conn={conn} drift={data.drift} onSelect={setSelected} onOpenInSessions={onOpenInSessions} />
+          </GraphSummaryPanel>
+        )}
       </aside>
     </div>
   );

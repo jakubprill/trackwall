@@ -77,7 +77,7 @@ function setup(
     onTrusted: () => {},
   });
   const graph = {
-    graph: async () => ({ nodes: [], edges: opts.edges ?? [], problems: [], configProblems: [], configFile: "" }) as RepoGraph,
+    graph: async () => ({ nodes: [], edges: opts.edges ?? [], problems: [], drift: [], configProblems: [], configFile: "" }) as RepoGraph,
   };
   const cards = {
     card: async (repo: string) => {
