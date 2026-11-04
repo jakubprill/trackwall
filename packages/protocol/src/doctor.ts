@@ -17,6 +17,7 @@ export const DoctorCheckId = z.enum([
   "unpushed-work",
   "workspace-file",
   "git",
+  "git-remotes",
   "copilot-cli",
   "copilot-trusted-folder",
   "copilot-sandbox",
