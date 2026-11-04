@@ -10,7 +10,7 @@ import {
   type WaitingMessage,
 } from "@trackwall/protocol";
 import { SendHorizontal, Square } from "lucide-react";
-import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type RefObject, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AgentDialogCard } from "@/components/AgentDialogCard";
 import { AgentModeSwitch } from "@/components/AgentModeSwitch";
 import { ContextMeter } from "@/components/ContextMeter";
@@ -34,7 +34,7 @@ import {
 } from "@/lib/conversation";
 import { daemonSocket } from "@/lib/daemon-socket";
 import { type DiffPick, shownDiff } from "@/lib/diff-panel";
-import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
+import { KeyboardElsewhere, keyboardInRegion } from "@/lib/keyboard-elsewhere";
 import { inTurn, isLive } from "@/lib/session-state";
 import { browserTimers } from "@/lib/timers";
 import { useAction } from "@/lib/use-action";
@@ -83,6 +83,8 @@ export function ConversationView({
   const [diffPick, setDiffPick] = useState<DiffPick | null>(null);
   // The last "Ask about this" of the diff panel, which the message box puts in front of the message.
   const [quote, setQuote] = useState<Quote | null>(null);
+  // Here, not in the message box: an approval answered with the keyboard gives the keyboard back to it.
+  const messageBox = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     let socket: WebSocket | undefined;
@@ -184,7 +186,15 @@ export function ConversationView({
         </div>
         {live && session.dialog && (
           <div className="border-t px-3 py-2">
-            <AgentDialogCard key={`${id}:${session.dialog.id}`} conn={conn} session={id} dialog={session.dialog} onOpen={() => {}} />
+            <AgentDialogCard
+              key={`${id}:${session.dialog.id}`}
+              conn={conn}
+              session={id}
+              dialog={session.dialog}
+              onOpen={() => {}}
+              takesKeyboard={selected && !keyboardElsewhere}
+              onKeyboardLeaves={() => messageBox.current?.focus()}
+            />
           </div>
         )}
         {live && (
@@ -198,6 +208,7 @@ export function ConversationView({
         )}
         {live && (
           <Composer
+            box={messageBox}
             conn={conn}
             session={id}
             working={working}
@@ -235,6 +246,7 @@ interface Quote {
  * its start lists the agent's commands, which ↑, ↓ and Tab or Enter pick and Esc closes.
  */
 function Composer({
+  box,
   conn,
   session,
   working,
@@ -242,6 +254,7 @@ function Composer({
   quote,
   commands,
 }: {
+  box: RefObject<HTMLTextAreaElement | null>;
   conn: Connection;
   session: string;
   working: boolean;
@@ -258,7 +271,6 @@ function Composer({
     setText(withSlashCommand(command));
     setPicked(0);
   };
-  const box = useRef<HTMLTextAreaElement>(null);
   const files = useMessageAttachments();
   const say = useAction(
     (message: string) => post(conn, agentsApi.say, { session, text: message, attachments: files.attachments }),
@@ -271,8 +283,10 @@ function Composer({
     () => post(conn, agentsApi.interrupt, { session }),
     () => {},
   );
+  // Not when the user already put the keyboard on something else in the panel, such as an approval's option.
   useEffect(() => {
-    if (focused) box.current?.focus();
+    const element = box.current;
+    if (focused && element && !keyboardInRegion(element, document.activeElement)) element.focus();
   }, [focused]);
   // The quote the box last took; one given before it mounted (a resumed session) is not taken again.
   const taken = useRef(quote?.id);
