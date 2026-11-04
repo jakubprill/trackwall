@@ -16,7 +16,7 @@ describe("a pipeline's state in words", () => {
   });
 });
 
-describe("a failed job kept from before job logs (ADR-195)", () => {
+describe("a failed job kept from before job logs (ADR-197)", () => {
   test("an unread pipeline_failed update without job ids still loads, so the agent queues are not thrown away", () => {
     const stored = {
       kind: "pipeline_failed",

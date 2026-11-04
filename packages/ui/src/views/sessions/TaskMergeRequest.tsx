@@ -36,7 +36,7 @@ import { FailedJobs } from "./FailedJobs";
  * A finished task on its way to a merge request (ADR-77), below the verification: the task branch against the remote
  * with "Push", then the draft the user approves for the repo host's form (title and description from the task and its
  * verification), and once the merge request exists, its state and pipeline with links to them, and the jobs that failed
- * it with their logs and "Fix" (ADR-195). The section shows only
+ * it with their logs and "Fix" (ADR-197). The section shows only
  * once the task has a commit, since there is nothing to push before.
  */
 export function TaskMergeRequest({

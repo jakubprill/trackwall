@@ -672,7 +672,7 @@ export class Agents {
   }
 
   /**
-   * The user's request that the task's agent fix the failed pipeline of its merge request (ADR-195), queued like a review:
+   * The user's request that the task's agent fix the failed pipeline of its merge request (ADR-197), queued like a review:
    * the task's running session is asked to read it, now or once it waits for input; without one, the session the user resumes is.
    */
   askToFixPipeline(id: string, fix: PipelineFix): PromptDelivery {

@@ -97,7 +97,7 @@ export class Hosting {
   }
 
   /**
-   * The log of a failed job as the repo host gives it (ADR-195), up to `JOB_LOG_MAX_BYTES`; `cut` when it was longer, so
+   * The log of a failed job as the repo host gives it (ADR-197), up to `JOB_LOG_MAX_BYTES`; `cut` when it was longer, so
    * the end is missing. Read only on the user's request: logs are large.
    */
   async jobLog(project: HostedProject, job: string): Promise<{ raw: string; cut: boolean }> {

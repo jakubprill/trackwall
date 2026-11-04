@@ -166,7 +166,7 @@ describe("the merge request and its pipeline", () => {
   });
 });
 
-describe("a failed pipeline in the task panel (ADR-195)", () => {
+describe("a failed pipeline in the task panel (ADR-197)", () => {
   const mergeRequest = (state: "open" | "merged", pipeline: "failed" | "running") => ({
     number: 12,
     title: "Add a discount",

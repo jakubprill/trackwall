@@ -51,7 +51,7 @@ describe("unread review comments of a task", () => {
     expect(after.unread(ended)).toBe(0);
   });
 
-  test("a pipeline fix waits with the comments, a newer one replaces it, and both are read at once (ADR-195)", () => {
+  test("a pipeline fix waits with the comments, a newer one replaces it, and both are read at once (ADR-197)", () => {
     const reviews = new TaskReviews(() => {});
     reviews.add("t1", [comment]);
     reviews.fixPipeline("t1", fix("a".repeat(40)));

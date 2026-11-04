@@ -617,7 +617,7 @@ describe("the prompt the daemon types for what waits", () => {
     );
   });
 
-  test("asks a task to fix its failed pipeline with the logs from get_review_comments, after a review in the same call (ADR-195)", () => {
+  test("asks a task to fix its failed pipeline with the logs from get_review_comments, after a review in the same call (ADR-197)", () => {
     expect(
       readRequestPrompt({
         reviewComments: 1,

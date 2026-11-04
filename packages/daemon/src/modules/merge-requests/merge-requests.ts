@@ -27,7 +27,7 @@ import { ACTIVE_CHECK_MS, nextCheckMs, pipelineFailedNow, type WatchRead } from 
  * permission there beyond what `gh` and `glab` already read with, and a merge request made any other way (by the
  * user, an agent, another MCP server) shows the same. It also follows every task's merge request in the background
  * (ADR-154): the Sessions list shows it, and a pipeline that fails is announced. On the user's request it reads the end
- * of a failed job's log, and hands the failed jobs' logs to the task's agent as a pipeline fix (ADR-195). Kept only in
+ * of a failed job's log, and hands the failed jobs' logs to the task's agent as a pipeline fix (ADR-197). Kept only in
  * memory: the repo host's last answers, and what it last read of each task.
  */
 
@@ -41,7 +41,7 @@ const AFTER_PUSH_MS = 10 * 60_000;
 
 /**
  * What the module needs from `agents`: the tasks, a task, its commits and uncommitted files, the squash of its round
- * commits (ADR-168), and a pipeline fix for its agent (ADR-195).
+ * commits (ADR-168), and a pipeline fix for its agent (ADR-197).
  */
 interface MergeRequestTasks {
   tasks(): Task[];
@@ -76,7 +76,7 @@ export interface MergeRequestsDeps {
   /** The repo hosts from the settings (`workspace`), to tell a GitLab remote from an unknown host. */
   repoHosts: () => RepoHost[];
   openUrl: (url: string) => void;
-  /** The end of a job's log, cleaned and masked like a log line (`logs`, ADR-195); `cut` when the daemon did not read all of it. */
+  /** The end of a job's log, cleaned and masked like a log line (`logs`, ADR-197); `cut` when the daemon did not read all of it. */
   jobLogExcerpt: (raw: string, cut: boolean) => Promise<Omit<JobLog, "job">>;
   /** The pipeline of a task's merge request failed since the read before (`pipelineFailedNow`). */
   onPipelineFailed: (task: Task, mergeRequest: MergeRequest) => void;
@@ -278,7 +278,7 @@ export class MergeRequests {
     return this.#deps.hosting.mergeRequestForm(state.project, { source: task.branch, target: state.targetBranch, title, description });
   }
 
-  /** The end of the log of a job that failed the pipeline of the task's open merge request (ADR-195). */
+  /** The end of the log of a job that failed the pipeline of the task's open merge request (ADR-197). */
   async jobLog(id: string, job: string): Promise<JobLog> {
     const { project, pipeline } = await this.#failedPipeline(id);
     const failed = pipeline.failedJobs.find((j) => j.id === job);
@@ -288,7 +288,7 @@ export class MergeRequests {
   }
 
   /**
-   * The user's request to the task's agent to fix the failed pipeline of its open merge request (ADR-195): the end of the
+   * The user's request to the task's agent to fix the failed pipeline of its open merge request (ADR-197): the end of the
    * logs of the first `PIPELINE_FIX_LOGS_MAX` failed jobs that have one, the others by name, also a job whose log the
    * repo host did not give (gone past its retention, a timeout): the agent still gets the rest.
    */
@@ -347,7 +347,7 @@ export class MergeRequests {
 
 type JobWithLog = FailedJob & { id: string };
 
-/** A GitLab or GitHub Actions job, whose log the daemon can read (ADR-195). */
+/** A GitLab or GitHub Actions job, whose log the daemon can read (ADR-197). */
 function hasLog(job: FailedJob): job is JobWithLog {
   return job.id !== null;
 }

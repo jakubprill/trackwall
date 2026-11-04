@@ -11,7 +11,7 @@ import { useRemote } from "./use-remote.ts";
 /**
  * A task's way to a merge request (ADR-77) for its panel: the branch against the remote and the merge request from it,
  * polled while the panel is open, and the actions that push the branch, open the repo host's form and ask the task's
- * agent to fix a failed pipeline (ADR-195).
+ * agent to fix a failed pipeline (ADR-197).
  */
 export function useTaskMergeRequest(conn: Connection, task: string, paused: boolean) {
   const load = useCallback(() => post(conn, mergeRequestsApi.get, { task }), [conn, task]);

@@ -87,7 +87,7 @@ export class Logs {
     return maskSecrets(text, secretValues(env));
   }
 
-  /** The end of a CI job's log from a repo host (ADR-195), cleaned and masked like a log line with the secrets of `env`. */
+  /** The end of a CI job's log from a repo host (ADR-197), cleaned and masked like a log line with the secrets of `env`. */
   jobLogExcerpt(raw: string, env: NodeJS.ProcessEnv, cut: boolean): JobLogExcerpt {
     return jobLogExcerpt(raw, secretValues(env), cut);
   }

@@ -4,7 +4,7 @@ import { DomainError } from "../../infra/errors.ts";
 
 /**
  * Review comments the user sent on a task's changes and its agent has not read yet (ADR-62), per task, oldest first,
- * and the user's latest pipeline fix (ADR-195), which `get_review_comments` returns with them.
+ * and the user's latest pipeline fix (ADR-197), which `get_review_comments` returns with them.
  * Since ADR-115 they outlive a daemon restart in `agent-queues.json` (`stored`, `restore`), so the resumed task session
  * reads them; every change is reported to `changed`, which writes the file. A comment counts as read once `take`
  * returns it, also when the agent's call is cancelled before the result reaches it.
@@ -15,7 +15,7 @@ export const StoredReviews = z.array(
   z.object({
     task: TaskId,
     comments: z.array(ReviewComment).max(REVIEW_UNREAD_MAX),
-    // A file from before ADR-195 has none.
+    // A file from before ADR-197 has none.
     pipelineFix: PipelineFix.nullable().default(null),
   }),
 );

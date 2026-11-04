@@ -9,7 +9,7 @@ import { useAction } from "@/lib/use-action";
 
 /**
  * The jobs that failed a task's merge request pipeline (ADR-154), each a link to its page, with the end of a job's log
- * read on request and "Fix", which hands the failed jobs' logs to the task's agent (ADR-195).
+ * read on request and "Fix", which hands the failed jobs' logs to the task's agent (ADR-197).
  */
 export function FailedJobs({
   conn,

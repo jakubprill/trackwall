@@ -109,7 +109,7 @@ export function failedJobNames(mergeRequest: MergeRequest): string {
   return (mergeRequest.pipeline?.failedJobs ?? []).map((job) => job.name).join(", ");
 }
 
-/** "Fix" asks the task's agent to fix a pipeline only while it failed on an open merge request (ADR-195). */
+/** "Fix" asks the task's agent to fix a pipeline only while it failed on an open merge request (ADR-197). */
 export function canFixPipeline(mergeRequest: MergeRequest): boolean {
   return mergeRequest.state === "open" && mergeRequest.pipeline?.state === "failed";
 }

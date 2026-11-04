@@ -3,7 +3,7 @@ import { maskSecrets } from "./secret-mask.ts";
 import { stripAnsi, visibleText } from "./stream-lines.ts";
 
 /**
- * The end of a CI job's log from a repo host (§4.12, ADR-195), cleaned and masked like a line of the log buffer before
+ * The end of a CI job's log from a repo host (§4.12, ADR-197), cleaned and masked like a line of the log buffer before
  * the UI or an agent sees it. A job says why it failed at its end, so the excerpt is its last lines.
  */
 

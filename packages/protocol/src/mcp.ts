@@ -224,7 +224,7 @@ export type ReportResultResult = z.infer<typeof ReportResultResult>;
 /** The review comments the user sent that the session had not read yet, oldest first (ADR-62); empty when there are none. */
 export const GetReviewCommentsResult = z.object({
   comments: z.array(ReviewComment),
-  /** The user's request to fix the failed pipeline of the task's merge request, with the end of the failed jobs' logs (ADR-195). */
+  /** The user's request to fix the failed pipeline of the task's merge request, with the end of the failed jobs' logs (ADR-197). */
   pipelineFix: PipelineFix.nullable(),
 });
 export type GetReviewCommentsResult = z.infer<typeof GetReviewCommentsResult>;

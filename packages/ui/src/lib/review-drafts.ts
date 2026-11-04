@@ -26,7 +26,7 @@ export function lineComment(anchor: DiffAnchor, diffText: string, text: string):
   return { ...anchor, code: /[\uD800-\uDBFF]$/.test(code) ? code.slice(0, -1) : code, text: text.trim() };
 }
 
-/** What the user is told after sending `what` (the review, a pipeline fix, ADR-195): when the agent gets it. */
+/** What the user is told after sending `what` (the review, a pipeline fix, ADR-197): when the agent gets it. */
 export function deliveryMessage(delivery: PromptDelivery, what: string): string {
   switch (delivery) {
     case "typed":

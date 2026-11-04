@@ -13,7 +13,7 @@ import { z } from "zod";
 /**
  * How GitHub and GitLab differ for a task's merge request (ADR-77): the address of the new merge request form with its
  * fields filled in, and the API paths and response fields of the merge request from a source branch and its pipeline
- * with the jobs that failed it (ADR-154), and of such a job's log (ADR-195).
+ * with the jobs that failed it (ADR-154), and of such a job's log (ADR-197).
  * Only reads go through the API; the user creates the merge request in the form. Running `gh` and `glab` is in
  * `hosting.ts`, the rest are pure functions.
  */
@@ -29,7 +29,7 @@ const FORM_URL_MAX = 7000;
 
 interface MergeRequestHostApi {
   formUrl(project: HostedProject, form: MergeRequestForm): string;
-  /** The API path of a failed job's log as plain text (ADR-195). */
+  /** The API path of a failed job's log as plain text (ADR-197). */
   jobLogPath(project: HostedProject, job: string): string;
   /** The most recently updated merge request from `branch` in any state; `null` when there is none. */
   find(api: HostApi, project: HostedProject, branch: string): Promise<MergeRequest | null>;
@@ -60,7 +60,7 @@ const GitHubCheckRuns = z.object({
   ),
 });
 
-/** The app whose check runs are Actions jobs, whose id reads their log (ADR-195); another app keeps its logs itself. */
+/** The app whose check runs are Actions jobs, whose id reads their log (ADR-197); another app keeps its logs itself. */
 const GITHUB_ACTIONS_APP = "github-actions";
 type GitHubCheckRun = z.infer<typeof GitHubCheckRuns>["check_runs"][number];
 
