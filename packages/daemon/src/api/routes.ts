@@ -229,8 +229,10 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     f.agents.openConversationFile(b.session, b.path, b.line);
     return null;
   }),
+  route(agentsApi.taskWorktrees, (f) => f.agents.taskWorktrees()),
+  route(agentsApi.taskWorktreeSize, (f, b) => f.agents.taskWorktreeSize(b.task)),
   route(agentsApi.removeTask, async (f, b) => {
-    await f.agents.removeTask(b.task, b.keepBranch, b.discardChanges);
+    await f.agents.removeTask(b.task, b.keepBranch, b.discardChanges, b.discardFingerprint);
     return null;
   }),
   route(terminalsApi.start, (f, b) => f.terminals.start(b)),
