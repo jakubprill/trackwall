@@ -24,9 +24,22 @@ const UpdateBase = z.object({
 });
 
 /**
+ * How much the task changed when it reported (ADR-207): enough for the proposer to tell a report of work from a report of
+ * a question without reading `get_session`; `null` when the changes could not be computed, and in updates kept by older daemons.
+ */
+export const ReportedChanges = z.object({
+  commits: z.number().int().nonnegative(),
+  uncommitted: z.number().int().nonnegative(),
+  /** The changed files listed for an agent, at most `TASK_SUMMARY_MAX_FILES`; `filesTruncated` when there were more. */
+  files: z.number().int().nonnegative(),
+  filesTruncated: z.boolean(),
+});
+export type ReportedChanges = z.infer<typeof ReportedChanges>;
+
+/**
  * `turn_ended`: the task's session finished a turn it worked on and waits for input (done, or asking something; its
  * summary and `get_session` say which); `error`: the session reported an error; `exited`: its process ended;
- * `result_reported`: it called `report_result`; `verified`: a verification of the task has a verdict;
+ * `result_reported`: it called `report_result`, and that turn's end gives no `turn_ended` of its own (ADR-207); `verified`: a verification of the task has a verdict;
  * `pipeline_failed`: the pipeline of the merge request from the task branch failed (ADR-154), with the jobs that failed it,
  * whose logs the proposer or the task's agent reads with the user's own MCP server for the repo host;
  * `proposal_rejected`: the user rejected the proposal, with their reason when they gave one; `repo_removed`: the user
@@ -40,7 +53,12 @@ export const TaskUpdate = z.discriminatedUnion("kind", [
   UpdateBase.extend({ kind: z.literal("turn_ended") }),
   UpdateBase.extend({ kind: z.literal("error") }),
   UpdateBase.extend({ kind: z.literal("exited"), exitCode: z.number().int().nullable(), stoppedByUser: z.boolean() }),
-  UpdateBase.extend({ kind: z.literal("result_reported"), summary: TaskSummaryText }),
+  UpdateBase.extend({
+    kind: z.literal("result_reported"),
+    summary: TaskSummaryText,
+    checkSteps: z.array(z.string()).default([]),
+    changes: ReportedChanges.nullable().default(null),
+  }),
   UpdateBase.extend({
     kind: z.literal("verified"),
     state: VerificationState.exclude(["running"]),

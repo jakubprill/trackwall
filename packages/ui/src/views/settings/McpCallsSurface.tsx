@@ -21,7 +21,7 @@ export function McpCallsSurface({ conn, live }: { conn: Connection; live: LiveFe
         </p>
         {audit.error && <ErrorWithRetry message={audit.error} onRetry={audit.reload} />}
         {!calls && !audit.error && <Loading />}
-        {calls && <McpCallList calls={calls} showCaller />}
+        {calls && <McpCallList calls={calls} showCaller boxed />}
       </div>
     </Surface>
   );

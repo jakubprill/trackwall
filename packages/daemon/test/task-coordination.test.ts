@@ -244,7 +244,7 @@ describe("updates on delegated work", () => {
     expect(coordination.takeUpdates(MAIN)).toEqual({ updates: [], dropped: 0 });
   });
 
-  test("a result, a verdict and a rejection go to the proposer; the supervisor's to the supervisor running now", () => {
+  test("a result, a verdict and a rejection go to the proposer; the supervisor's to the supervisor running now", async () => {
     const { coordination, tasks, asked, running } = setup();
     const reported = {
       ...task("by-main", BY_MAIN),
@@ -254,14 +254,26 @@ describe("updates on delegated work", () => {
     running.delete(SUPERVISOR);
     running.add(NEW_SUPERVISOR);
 
-    coordination.resultReported(reported, TASK_SESSION);
+    await coordination.resultReported(
+      reported,
+      TASK_SESSION,
+      Promise.resolve({ commits: 2, uncommitted: 0, files: 3, filesTruncated: false }),
+    );
     coordination.verificationFinished({ ...verification("by-supervisor"), state: "running" });
     coordination.verificationFinished({ ...verification("by-supervisor"), state: "failed", message: "mise task test exited with code 1" });
     coordination.proposalRejected({ id: "p1", proposedBy: BY_SUPERVISOR }, "Not now");
 
     expect(asked).toEqual([MAIN, NEW_SUPERVISOR, NEW_SUPERVISOR]);
     expect(coordination.takeUpdates(MAIN).updates).toEqual([
-      { kind: "result_reported", task: "by-main", session: TASK_SESSION, summary: "Fixed and tested.", at: "2026-10-25T13:00:00.000Z" },
+      {
+        kind: "result_reported",
+        task: "by-main",
+        session: TASK_SESSION,
+        summary: "Fixed and tested.",
+        checkSteps: [],
+        changes: { commits: 2, uncommitted: 0, files: 3, filesTruncated: false },
+        at: "2026-10-25T13:00:00.000Z",
+      },
     ]);
     expect(coordination.takeUpdates(NEW_SUPERVISOR).updates).toEqual([
       {
@@ -273,6 +285,55 @@ describe("updates on delegated work", () => {
         at: expect.any(String),
       },
       { kind: "proposal_rejected", task: "p1", session: null, reason: "Not now", at: expect.any(String) },
+    ]);
+  });
+
+  test("the end of the turn in which the task reported does not wake the proposer again; its exit and later turns do", async () => {
+    const { coordination, tasks, asked } = setup();
+    const reported = {
+      ...task("by-main", BY_MAIN),
+      summary: { text: "Fixed.", checkSteps: ["Open /login: the form shows"], reportedAt: "2026-10-25T13:00:00.000Z" },
+    };
+    tasks.set("by-main", reported);
+
+    await coordination.resultReported(reported, TASK_SESSION, Promise.resolve(null));
+    coordination.sessionEvent({ id: TASK_SESSION, task: "by-main" }, { kind: "turn_ended" });
+    expect(asked).toEqual([MAIN]);
+    expect(coordination.takeUpdates(MAIN).updates).toEqual([
+      {
+        kind: "result_reported",
+        task: "by-main",
+        session: TASK_SESSION,
+        summary: "Fixed.",
+        checkSteps: ["Open /login: the form shows"],
+        changes: null,
+        at: "2026-10-25T13:00:00.000Z",
+      },
+    ]);
+
+    // The turn may end while git still counts the changes: that end does not wake the proposer either.
+    let counted: (changes: null) => void = () => {};
+    const report = coordination.resultReported(reported, TASK_SESSION, new Promise((resolve) => (counted = resolve)));
+    coordination.sessionEvent({ id: TASK_SESSION, task: "by-main" }, { kind: "turn_ended" });
+    counted(null);
+    await report;
+    expect(coordination.takeUpdates(MAIN).updates.map((update) => update.kind)).toEqual(["result_reported"]);
+
+    // The next turn's end is news again.
+    coordination.sessionEvent({ id: TASK_SESSION, task: "by-main" }, { kind: "turn_ended" });
+    // A report in a turn the user drove (which gives no turn_ended) no longer counts once another turn starts.
+    await coordination.resultReported(reported, TASK_SESSION, Promise.resolve(null));
+    coordination.turnStarted(TASK_SESSION);
+    coordination.sessionEvent({ id: TASK_SESSION, task: "by-main" }, { kind: "turn_ended" });
+    // An exit after a report is news.
+    await coordination.resultReported(reported, TASK_SESSION, Promise.resolve(null));
+    coordination.sessionEvent({ id: TASK_SESSION, task: "by-main" }, { kind: "exited", exitCode: 0, stoppedByUser: false });
+    expect(coordination.takeUpdates(MAIN).updates.map((update) => update.kind)).toEqual([
+      "turn_ended",
+      "result_reported",
+      "turn_ended",
+      "result_reported",
+      "exited",
     ]);
   });
 

@@ -27,7 +27,7 @@ The arrows step back a week at a time, up to twelve weeks, and forward again to 
 
 ## Use it
 
-1. Open "Settings" (Ctrl+, or ⌘, on macOS), choose "Agents" and scroll to "Copilot usage".
+1. Open "Settings" (Ctrl+, or ⌘, on macOS), choose "Agents" and scroll to "Copilot usage", just above "MCP calls".
 2. Read the top of "Tasks and sessions" and "Tools": that is where most of the week went.
 3. Click the left arrow to see the week before, and compare.
 

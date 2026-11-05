@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
-import { GetSessionResult, VerifyTaskResult, verificationApi } from "@trackwall/protocol";
+import { VerifyTaskResult, verificationApi } from "@trackwall/protocol";
 import { z } from "zod";
-import { connectHttpClient, connectSessionClient } from "./support/mcp-client.ts";
+import { connectHttpClient, connectSessionClient, toolText } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
@@ -107,8 +107,10 @@ describe.skipIf(process.versions.bun === undefined)("verify_task (real worktree 
       const { verification } = VerifyTaskResult.parse((await verify(client, { repo: "warehouse", task: task.id })).structuredContent);
       expect(verification).toMatchObject({ state: "passed", exitCode: 0, message: "the run wrote no JUnit test reports", errors: [] });
 
-      const seen = GetSessionResult.parse((await client.callTool({ name: "get_session", arguments: { session } })).structuredContent);
-      expect(seen.verification).toEqual(verification);
+      const seen = toolText(await client.callTool({ name: "get_session", arguments: { session } }));
+      expect(seen).toContain(
+        `\n## Verification: passed (mise task test, finished ${verification.finishedAt}, exit code 0)\nMessage: the run wrote no JUnit test reports`,
+      );
     },
     TIMEOUT,
   );

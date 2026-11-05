@@ -3,12 +3,14 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { filterMcpCalls, MCP_CALL_FILTERS, type McpCallFilter, mcpCallEntry } from "@/lib/mcp-calls";
+import { cn } from "@/lib/utils";
 
 /**
  * The MCP tool calls of the audit (ADR-152), newest first, with a filter for the calls that write or run something and
- * for the failed ones; Settings shows every caller's, a task's panel only its sessions'.
+ * for the failed ones; Settings shows every caller's, a task's panel only its sessions'. `boxed` keeps a long list in its
+ * own scrolling box, so that the sections after it on a page stay a short scroll away.
  */
-export function McpCallList({ calls, showCaller }: { calls: readonly McpCall[]; showCaller: boolean }) {
+export function McpCallList({ calls, showCaller, boxed }: { calls: readonly McpCall[]; showCaller: boolean; boxed: boolean }) {
   const [filter, setFilter] = useState<McpCallFilter>("all");
   const shown = filterMcpCalls(calls, filter);
   const now = new Date();
@@ -28,7 +30,7 @@ export function McpCallList({ calls, showCaller }: { calls: readonly McpCall[]; 
         ))}
       </fieldset>
       {shown.length === 0 && <p className="text-muted-foreground text-sm">No calls.</p>}
-      <ul className="flex flex-col gap-2">
+      <ul className={cn("flex flex-col gap-2", boxed && "max-h-96 overflow-y-auto pr-1")}>
         {shown.map((call, i) => {
           const entry = mcpCallEntry(call, now);
           // Calls carry no id; the same tool can end twice in one millisecond, so the position tells them apart.

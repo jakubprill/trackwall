@@ -2,9 +2,9 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
-import { GetSessionResult, ListSessionsResult } from "@trackwall/protocol";
+import { ListSessionsResult } from "@trackwall/protocol";
 import { removeFolder } from "../src/infra/remove-folder.ts";
-import { connectHttpClient } from "./support/mcp-client.ts";
+import { connectHttpClient, toolText } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
@@ -39,22 +39,22 @@ describe.skipIf(process.versions.bun === undefined)("sessions in MCP tools (real
     expect(inRepo.sessions.map((s) => s.id)).toEqual(list.sessions.map((s) => s.id));
     expect(inRepo.tasks).toEqual([task]);
 
+    // Text only (ADR-187, ADR-207): the changes without the diff, and the prompt only when asked for.
     const detail = await client.callTool({ name: "get_session", arguments: { session: taskSession?.id } });
-    const data = GetSessionResult.parse(detail.structuredContent);
-    expect(data.task).toEqual(task);
-    expect(data.changes).toEqual({
-      files: [{ path: "login.test.ts", change: "added", additions: 2, deletions: 0 }],
-      filesTruncated: false,
-      commits: 0,
-      uncommitted: 1,
-    });
-    expect(data.changesError).toBeNull();
-    expect(detail.structuredContent).not.toHaveProperty("changes.patch");
+    expect(detail.structuredContent).toBeUndefined();
+    const text = toolText(detail);
+    expect(text).toStartWith(`Session ${taskSession?.id} (task ${task.id} in shop): running since `);
+    expect(text).toContain(`\n## Task ${task.id}\nBranch ${task.branch} from main at ${task.base.slice(0, 12)}, `);
+    expect(text).toContain("\nPrompt left out (withPrompt: true adds it).\n## Summary: not reported yet\n");
+    expect(text).toContain("\n## Changes: 0 commits, 1 uncommitted, 1 file\nA login.test.ts +2 -0");
+    expect(text).not.toContain("add a login test");
+    expect(text).not.toContain("diff --git");
+    const withPrompt = await client.callTool({ name: "get_session", arguments: { session: taskSession?.id, withPrompt: true } });
+    expect(toolText(withPrompt)).toContain("\nPrompt:\nadd a login test\n");
 
-    const inRoot = GetSessionResult.parse(
-      (await client.callTool({ name: "get_session", arguments: { session: root.id } })).structuredContent,
-    );
-    expect(inRoot).toMatchObject({ session: { id: root.id, task: null }, task: null, changes: null, changesError: null });
+    const inRoot = toolText(await client.callTool({ name: "get_session", arguments: { session: root.id } }));
+    expect(inRoot).toStartWith(`Session ${root.id} (shop): running since `);
+    expect(inRoot).not.toContain("## Task");
   }, 60_000);
 
   test("an ended session does not give other agents the last lines of its screen", async () => {
@@ -76,12 +76,9 @@ describe.skipIf(process.versions.bun === undefined)("sessions in MCP tools (real
     await daemon.facade.agents.stop(session?.id ?? "");
     await removeFolder(task.worktree);
 
-    const data = GetSessionResult.parse(
-      (await client.callTool({ name: "get_session", arguments: { session: session?.id } })).structuredContent,
-    );
-    expect(data.task).toEqual(task);
-    expect(data.changes).toBeNull();
-    expect(data.changesError).toStartWith("not_found: the worktree of task");
+    const text = toolText(await client.callTool({ name: "get_session", arguments: { session: session?.id } }));
+    expect(text).toContain(`\n## Task ${task.id}\n`);
+    expect(text).toContain("\n## Changes unknown: not_found: the worktree of task");
   }, 60_000);
 
   test("a task's changes for an agent have at most 200 files and say there were more", async () => {
