@@ -189,6 +189,10 @@ _Avoid_: check, CI, validation (that is a schema at the point of entry)
 A verification's verdict given before the task's worktree changed (ADR-209): the **worktree fingerprint** (`worktreeFingerprint`, one hash of the files that differ from the task's base commit and their content) its run started on is no longer the worktree's. It stays outdated until the next verification replaces it.
 _Avoid_: stale (that is `Stale`, a session state), expired, invalid
 
+**Worktree cleanup** (`taskWorktrees`, `TaskWorktree`, `taskWorktreeSize`; UI "Old task worktrees" on the New task page, `WorktreeCleanup.tsx`):
+Ending tasks idle for days to free the disk their worktrees take (ADR-210), each as "End task" with the branch kept; a task that would lose work is removed only after the user confirms it, and only while its worktree's files and HEAD are still what they confirmed.
+_Avoid_: prune (that is `git worktree prune`), garbage collection, purge
+
 **Code search** (`searchCode`, MCP tool `search_code`, result `SearchCodeResult`):
 A fixed string or a regular expression in the files of the latest commit of many repos of the projects folder at once, through `git grep` (ADR-40); a match (`CodeMatch`) is a repo, path, line, column and context lines, and with `output: "files"` the result is the files with matches (`CodeFile`) and their match counts instead (ADR-187). It does not see uncommitted changes, just like browsing a repo.
 _Avoid_: grep (the tool underneath), index (there is none)

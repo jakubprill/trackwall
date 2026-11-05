@@ -52,6 +52,8 @@ import {
   type TaskRounds,
   type TaskSharedFiles,
   type TaskUpdate,
+  type TaskWorktree,
+  type TaskWorktreeSize,
   type ToolPermissions,
   type Verification,
   type WorkingTreeChanges,
@@ -975,6 +977,16 @@ export class Agents {
     return this.#javaNavigation.status(id, view.run.kind === "exited" ? null : new Date(view.startedAt));
   }
 
+  /** Every task's worktree for the cleanup of old worktrees (ADR-210). */
+  taskWorktrees(): Promise<TaskWorktree[]> {
+    return this.#tasks.worktrees(new Date());
+  }
+
+  /** How much disk a task's worktree takes (ADR-210). */
+  taskWorktreeSize(id: string): Promise<TaskWorktreeSize> {
+    return this.#tasks.worktreeSize(id);
+  }
+
   /** One hash of what a task's worktree holds (ADR-209): a verification keeps the one its run started on. */
   taskFingerprint(id: string): Promise<string> {
     return this.#tasks.fingerprint(id);
@@ -1091,12 +1103,12 @@ export class Agents {
     return this.#tasks.trustedWorktree(id, repo);
   }
 
-  async removeTask(id: string, keepBranch: boolean, discardChanges: boolean): Promise<void> {
+  async removeTask(id: string, keepBranch: boolean, discardChanges: boolean, discardFingerprint?: string): Promise<void> {
     // Its reviewer runs in the worktree, which the removal refuses while a process of Trackwall is in it. Without one,
     // the removal starts at once, so a change computation that comes after it refuses.
     const stopping = this.#autoReviews.stop(id);
     if (stopping !== null) await stopping;
-    const ended = await this.#tasks.remove(id, keepBranch, discardChanges);
+    const ended = await this.#tasks.remove(id, keepBranch, discardChanges, discardFingerprint);
     this.#autoReviews.forget(id);
     this.#reviews.take(id);
     this.#miseTrust.forget({ task: id });

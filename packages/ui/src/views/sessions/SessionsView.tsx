@@ -74,6 +74,7 @@ import { SessionGrid } from "./SessionGrid.tsx";
 import { TaskLine } from "./TaskLine.tsx";
 import { TaskOutcomeMarks } from "./TaskOutcomeMarks.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
+import { WorktreeCleanup } from "./WorktreeCleanup.tsx";
 
 /**
  * The Sessions view (§4.4, ADR-26, ADR-31): several Copilot CLI sessions at once, each in a repo from the projects
@@ -223,6 +224,7 @@ export function SessionsView({
               onCancel={entries.length > 0 ? () => onSelect(undefined) : undefined}
             />
             <RoutineList conn={conn} onStarted={started} />
+            <WorktreeCleanup conn={conn} onRemoved={sessions.reload} />
           </div>
         )}
         {current && (
