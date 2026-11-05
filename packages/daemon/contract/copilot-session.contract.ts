@@ -663,6 +663,30 @@ describe("a task's model with the real Copilot CLI (ADR-98)", () => {
   });
 });
 
+describe("another model for a running task with the real Copilot CLI (ADR-206)", () => {
+  test("a task restarted on another model asks the provider for that model and still carries its conversation", async () => {
+    const { agents } = daemon.facade;
+    model.reply({ text: "Listing the endpoints." });
+    const task = await agents.createTask("shop", "list the endpoints");
+    const first = agents.sessions().sessions.find((s) => s.task === task.id);
+    if (first === undefined) throw new Error("the task has no session");
+    await endOfTurn(first.id);
+    expect(model.requests().at(-1)?.model).not.toBe(REVIEW_MODEL);
+
+    const restarted = await agents.restart(first.id, REVIEW_MODEL);
+    await untilLoaded(restarted.id);
+    model.reply({ text: "I will read the review." });
+    agents.sendReview(task.id, [{ path: "README.md", side: "new", line: 1, code: "# shop", text: "Name the endpoints' owners too." }]);
+    await endOfTurn(restarted.id);
+
+    const request = model.requests().at(-1);
+    expect(request).toMatchObject({ model: REVIEW_MODEL });
+    expect(request?.userTexts[0]).toContain("list the endpoints");
+    expect(agents.task(task.id).model).toBe(REVIEW_MODEL);
+    await agents.stop(restarted.id);
+  });
+});
+
 describe("Java navigation of a task with the real Copilot CLI (ADR-99)", () => {
   test("a task with Java navigation offers the model the lsp tool from the session plugin's lspServers, and a task without it does not", async () => {
     const { agents } = daemon.facade;

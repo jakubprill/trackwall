@@ -33,6 +33,7 @@ function session(id: string, startedAt: string, task: string | null = null): Ses
     readRequest: null,
     copyRequest: null,
     usage: null,
+    model: null,
   };
 }
 

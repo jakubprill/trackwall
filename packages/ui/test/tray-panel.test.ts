@@ -22,6 +22,7 @@ function session(id: string, needsAttention: boolean, dialog: Session["dialog"] 
     readRequest: null,
     copyRequest: null,
     usage: null,
+    model: null,
   };
 }
 

@@ -33,6 +33,7 @@ function session(id: string, repo: string | null, run: Session["run"]["kind"] = 
     readRequest: null,
     copyRequest: null,
     usage: null,
+    model: null,
   };
 }
 
