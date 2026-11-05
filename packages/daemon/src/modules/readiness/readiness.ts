@@ -102,7 +102,10 @@ export class Readiness {
     if (tasks.kind !== "ok") return { tasks, config: null };
     // Only a config mise reads can be checked; for any other the gap of `tasks` already says why. A mise that did not
     // answer the check leaves it out and is asked again next time, like a failed list.
-    const config = await this.deps.mise.configCheck(repo).catch(() => null);
+    const config = await this.deps.mise.configCheck(repo).catch((err: unknown) => {
+      if (err instanceof DomainError && err.code === "mise_unavailable") return null;
+      throw err;
+    });
     const mise = { tasks, config };
     if (commit !== null && config !== null) this.miseByRepo.set(repo, { commit, mise });
     return mise;

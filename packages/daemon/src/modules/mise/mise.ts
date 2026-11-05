@@ -344,9 +344,15 @@ export class Mise {
     return { unformatted: formatCheck.unformatted, problems: [...formatCheck.problems, ...problems] };
   }
 
-  /** `mise fmt` in the repo root, on the user's click (only from the UI); the readiness asks for the check again. */
+  /**
+   * `mise fmt` in the repo root, on the user's click (only from the UI); the readiness asks for the check again. Only for a
+   * config mise lists the tasks of: `mise fmt` reads the files as text, but formatting a config the user has not trusted
+   * would rest on that alone.
+   */
   async format(repo: string): Promise<void> {
     const dir = await this.deps.repos.repoPath(repo);
+    const tasks = await this.tasks(repo);
+    if (tasks.kind !== "ok") throw new DomainError("mise_unavailable", `${repo}: ${tasks.message}`);
     this.cliOutput(await runMiseCli(this.deps.command, ["fmt"], dir, await this.deps.env()));
   }
 

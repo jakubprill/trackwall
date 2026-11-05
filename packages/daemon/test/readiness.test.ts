@@ -136,6 +136,8 @@ describe("readiness of the repos in the projects folder, from the cards, the gra
     ]);
 
     await facade.mise.format("admin-web");
+    // A config the user has not trusted is not formatted either: trusting it comes first.
+    await expect(facade.mise.format("shop-web")).rejects.toThrow("not trusted");
 
     expect(readFileSync(join(dir, "calls.log"), "utf8")).toBe("fmt\n");
     expect((await facade.readiness.repo("admin-web")).gaps).toEqual([

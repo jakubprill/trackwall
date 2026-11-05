@@ -1,4 +1,4 @@
-import { relative } from "node:path";
+import { relative, resolve } from "node:path";
 import type { MiseConfigProblem } from "@trackwall/protocol";
 import { z } from "zod";
 import { isInside } from "../../infra/path-inside.ts";
@@ -29,8 +29,10 @@ export type RepoRoots = readonly string[];
 
 /** `file` relative to the repo root it lies in, or `null` for a file outside the repo (the projects folder's, the global). */
 function inRepo(roots: RepoRoots, file: string): string | null {
-  const root = roots.find((r) => isInside(r, file));
-  return root === undefined ? null : relative(root, file);
+  // mise prints full paths today; a relative one would be relative to the repo root it ran in.
+  const path = resolve(roots[0] ?? "", file);
+  const root = roots.find((r) => isInside(r, path));
+  return root === undefined ? null : relative(root, path);
 }
 
 export interface FormatCheck {
