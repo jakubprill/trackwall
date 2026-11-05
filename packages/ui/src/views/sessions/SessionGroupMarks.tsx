@@ -1,4 +1,5 @@
 import { LayoutGrid, X } from "lucide-react";
+import type { EntryGroup } from "@/lib/session-groups";
 import { cn } from "@/lib/utils";
 
 /**
@@ -20,13 +21,13 @@ export function GroupStripe({ colour, className }: { colour: number; className: 
   return <span aria-hidden className={cn("pointer-events-none absolute rounded-full", FILL[colour], className)} />;
 }
 
-/** How many levels a row sits under its group's top row, as ↳1, ↳2: past the third level the indent stops growing. */
+/** How many levels a row sits under its group's top entry, as ↳1, ↳2: past the third level the indent stops growing. */
 export function GroupLevel({ colour, level }: { colour: number; level: number }) {
   if (level === 0) return null;
   return (
     <span className={cn("shrink-0 rounded-sm border px-1 font-mono text-2xs", TONE[colour])}>
       <span aria-hidden>{`↳${level}`}</span>
-      <span className="sr-only">{`${level} ${level === 1 ? "level" : "levels"} under its main session`}</span>
+      <span className="sr-only">{`${level} ${level === 1 ? "level" : "levels"} under the top of its group`}</span>
     </span>
   );
 }
@@ -51,7 +52,8 @@ export function ShowGroupButton({ onClick, className }: { onClick: () => void; c
 }
 
 /** The grid filter to one group on the layout bar, in the group's colour, with an × that shows every entry again. */
-export function GroupFilterChip({ colour, name, size, onClear }: { colour: number; name: string; size: number; onClear: () => void }) {
+export function GroupFilterChip({ group, onClear }: { group: EntryGroup; onClear: () => void }) {
+  const { colour, name, size } = group;
   return (
     <span
       className={cn("flex min-w-0 shrink items-center gap-1 rounded-full border py-px pr-0.5 pl-2.5 text-xs", TONE[colour], CHIP[colour])}

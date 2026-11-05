@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { groupTiles, sessionGroups } from "../src/lib/session-groups.ts";
+import type { Session, Task } from "@trackwall/protocol";
+import { entryId, type SessionRow } from "../src/lib/session-entries.ts";
+import { activeGroup, groupTiles, listGroups, sessionGroups } from "../src/lib/session-groups.ts";
 
 describe("session groups", () => {
   test("a chain three deep is one group: each row knows its level and the row it sits under", () => {
@@ -61,20 +63,46 @@ describe("session groups", () => {
     ]);
   });
 
-  test("the grid filtered to one group shows only its entries, at their places in the list", () => {
-    const group = { id: "orders-api", colour: 0, level: 0, parent: undefined };
-    const groups = [null, group, { ...group, level: 1, parent: 1 }, null];
-    expect(groupTiles(["auth", "orders-api", "payments", "shop"], groups, "orders-api")).toEqual([
-      { entry: "orders-api", position: 2 },
-      { entry: "payments", position: 3 },
+  test("each grouped row knows its group's name, size and the entry it sits under; a row alone has none", () => {
+    const groups = listGroups(LIST);
+    expect(groups.get("payments")).toEqual({ id: "orders", name: "orders-api", colour: 0, level: 1, size: 3, under: "orders-api" });
+    expect(groups.get("notifications")).toMatchObject({ level: 2, under: "payments" });
+    expect(groups.get("orders")).toMatchObject({ level: 0, under: undefined });
+    expect(groups.has("auth")).toBe(false);
+  });
+
+  test("the grid shows one group alone, at the list positions of its entries", () => {
+    const groups = listGroups(LIST);
+    const entries = LIST.map((r) => r.entry);
+    const group = activeGroup("orders", groups, entries[2]);
+    expect(groupTiles(entries, groups, group).map((t) => [entryId(t.entry), t.position])).toEqual([
+      ["orders", 2],
+      ["payments", 3],
+      ["notifications", 4],
     ]);
   });
 
-  test("without a filter, or once its group is gone, the grid shows the whole list", () => {
-    expect(groupTiles(["auth", "shop"], [null, null], null)).toEqual([
-      { entry: "auth", position: 1 },
-      { entry: "shop", position: 2 },
-    ]);
-    expect(groupTiles(["auth", "shop"], [null, null], "orders-api")).toHaveLength(2);
+  test("a selection outside the picked group, or no group picked, shows the whole list", () => {
+    const groups = listGroups(LIST);
+    const entries = LIST.map((r) => r.entry);
+    expect(activeGroup("orders", groups, entries[0])).toBeUndefined();
+    expect(activeGroup(null, groups, entries[2])).toBeUndefined();
+    expect(groupTiles(entries, groups, undefined)).toHaveLength(4);
   });
 });
+
+/** A session in a repo root, with only what a group needs; the rest of `Session` does not matter here. */
+function sessionRow(id: string, repo: string, depth: number): SessionRow {
+  return { entry: { kind: "session", session: { id, repo, supervisor: false } as Session }, depth, children: 0, supervised: false };
+}
+
+function taskRow(id: string, repo: string, depth: number): SessionRow {
+  return { entry: { kind: "task", task: { id, repo } as Task, session: undefined }, depth, children: 0, supervised: false };
+}
+
+const LIST = [
+  sessionRow("auth", "auth-gateway", 0),
+  sessionRow("orders", "orders-api", 0),
+  taskRow("payments", "payments", 1),
+  taskRow("notifications", "notifications", 2),
+];

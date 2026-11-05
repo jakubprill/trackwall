@@ -49,7 +49,7 @@ import {
   type WaitingTarget,
 } from "@/lib/session-entries";
 import { type GridTile, gridPage, SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
-import { groupTiles, type RowGroup, sessionGroups, type TileGroup } from "@/lib/session-groups";
+import { activeGroup, type EntryGroup, groupTiles, listGroups } from "@/lib/session-groups";
 import {
   ariaSessionShortcut,
   SHORTCUT_POSITIONS,
@@ -127,47 +127,26 @@ export function SessionsView({
   const current = findEntry(entries, selected);
   const next = nextWaitingTarget(entries, current, supervisor.sessionWaits);
   const waiting = attentionCount(sessions.data);
-  const groups = sessionGroups(rows.map((r) => ({ id: entryId(r.entry), depth: r.depth, supervised: r.supervised })));
-  const groupOf = (entry: SessionEntry | undefined) => (entry ? groups[entries.indexOf(entry)]?.id : undefined);
+  const groups = listGroups(rows);
+  const groupOf = (entry: SessionEntry | undefined) => (entry ? groups.get(entryId(entry))?.id : undefined);
   // The grid shows one group alone until you clear it, pick layout 1 or select an entry outside the group.
-  const [shownGroup, setShownGroup] = useState<string | null>(null);
+  const [pickedGroup, setPickedGroup] = useState<string | null>(null);
+  const shownGroup = activeGroup(pickedGroup, groups, current);
   const select = (selection: SessionSelection) => {
-    if (shownGroup !== null && groupOf(findEntry(entries, selection)) !== shownGroup) setShownGroup(null);
+    if (pickedGroup !== null && groupOf(findEntry(entries, selection)) !== pickedGroup) setPickedGroup(null);
     onSelect(selection);
   };
   const changeLayout = (next: SessionLayout) => {
-    if (next === "1") setShownGroup(null);
+    if (next === "1") setPickedGroup(null);
     onLayout(next);
   };
-  const showGroup = (row: number) => {
-    const group = groups[row];
-    if (!group) return;
-    setShownGroup(group.id);
-    const entry = rows[row]?.entry;
-    if (entry && groupOf(current) !== group.id) onSelect(entrySelection(entry));
+  const showGroup = (entry: SessionEntry) => {
+    const group = groupOf(entry);
+    if (group === undefined) return;
+    setPickedGroup(group);
+    if (groupOf(current) !== group) onSelect(entrySelection(entry));
     onLayout("auto");
   };
-  // A selection from outside the view (the tray, a link) can land outside the group, and then the grid shows everything.
-  const filter = shownGroup !== null && groupOf(current) === shownGroup ? shownGroup : null;
-  const filterTop = filter === null ? -1 : groups.findIndex((g) => g?.id === filter);
-  const filterTopEntry = rows[filterTop]?.entry;
-  const filterGroup = groups[filterTop];
-  const groupChip = filterTopEntry && filterGroup && (
-    <GroupFilterChip
-      colour={filterGroup.colour}
-      name={entryName(filterTopEntry)}
-      size={groups.filter((g) => g?.id === filter).length}
-      onClear={() => setShownGroup(null)}
-    />
-  );
-  const tileGroups = new Map<string, TileGroup>(
-    rows.flatMap((row, i): [string, TileGroup][] => {
-      const group = groups[i];
-      if (!group) return [];
-      const parent = group.parent === undefined ? undefined : rows[group.parent]?.entry;
-      return [[entryId(row.entry), { colour: group.colour, under: parent && entryName(parent) }]];
-    }),
-  );
   // A stop can take seconds, and a decision on proposals a while, and the user may select another entry meanwhile, so
   // both decide on the selection as it is when they end. `entries` comes from the render of the click (the action keeps
   // that `onDone`), so it still holds the closed entry even when a refreshed list without it arrived before the close ended.
@@ -246,8 +225,8 @@ export function SessionsView({
               position={i + 1}
               active={current !== undefined && entryId(row.entry) === entryId(current)}
               onSelect={() => select(entrySelection(row.entry))}
-              group={groups[i] ?? null}
-              onShowGroup={() => showGroup(i)}
+              group={groups.get(entryId(row.entry)) ?? null}
+              onShowGroup={() => showGroup(row.entry)}
               onSessionClosed={() => sessionClosed(row.entry)}
               onTaskRemoved={taskRemoved}
               outcomes={outcomes}
@@ -277,9 +256,9 @@ export function SessionsView({
           <SelectedEntry
             conn={conn}
             entries={entries}
-            tiles={groupTiles(entries, groups, filter)}
-            groupChip={groupChip}
-            tileGroups={tileGroups}
+            tiles={groupTiles(entries, groups, shownGroup)}
+            groupChip={shownGroup && <GroupFilterChip group={shownGroup} onClear={() => setPickedGroup(null)} />}
+            groups={groups}
             current={current}
             focus={selectedProposal(selected)}
             taskTab={selectedTaskTab(selected)}
@@ -328,7 +307,7 @@ function SessionListItem({
   active: boolean;
   onSelect: () => void;
   /** The row's group of related sessions, `null` for a row alone. */
-  group: RowGroup | null;
+  group: EntryGroup | null;
   onShowGroup: () => void;
   onSessionClosed: () => void;
   onTaskRemoved: (task: string) => void;
@@ -357,12 +336,10 @@ function SessionListItem({
         )}
       </div>
       {group && (
+        // On hover and keyboard focus only, like the X: over the end of the last line, which it would hide for good if it stayed.
         <ShowGroupButton
           onClick={onShowGroup}
-          className={cn(
-            "absolute right-1.5 bottom-1.5 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100",
-            active && "opacity-100",
-          )}
+          className="bg-card absolute right-1.5 bottom-1.5 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100"
         />
       )}
     </div>
@@ -387,7 +364,7 @@ function StartedListItem({
 }: {
   conn: Connection;
   entry: StartedEntry;
-  group: RowGroup | null;
+  group: EntryGroup | null;
   /** Tasks and proposals directly under this entry. */
   delegated: number;
   position: number;
@@ -447,7 +424,7 @@ function SupervisorListItem({ supervisor, onOpen }: { supervisor: SupervisorSumm
         <span className="text-muted-foreground/70 font-mono text-2xs">{sessionShortcutLabel(SUPERVISOR_SHORTCUT, IS_MAC)}</span>
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-1">
-        <RowName name={SUPERVISOR} delegated={supervisor.delegated} waits={supervisor.sessionWaits} />
+        <RowName name={SUPERVISOR} group={null} delegated={supervisor.delegated} waits={supervisor.sessionWaits} />
         <span className="text-muted-foreground text-xs">{session ? <StatusLabel {...sessionStateLabel(session)} /> : "not running"}</span>
       </span>
     </button>
@@ -468,8 +445,8 @@ function RowName({
   waits,
 }: {
   name: string;
-  /** The row's group, for its level under the group's main session; the supervisor heading has none. */
-  group?: RowGroup | null;
+  /** The row's group, for its level under the group's top entry; `null` for a row alone and the supervisor heading. */
+  group: EntryGroup | null;
   delegated: number;
   waits: boolean;
 }) {
@@ -513,7 +490,7 @@ function ProposalsListItem({
   position: number;
   active: boolean;
   onSelect: () => void;
-  group: RowGroup | null;
+  group: EntryGroup | null;
 }) {
   const repos = [...new Set(entry.proposals.flatMap(proposalRepos))].join(", ");
   return (
@@ -553,7 +530,7 @@ function SelectedEntry({
   entries,
   tiles,
   groupChip,
-  tileGroups,
+  groups,
   current,
   focus,
   taskTab,
@@ -577,8 +554,8 @@ function SelectedEntry({
   tiles: readonly GridTile<SessionEntry>[];
   /** The chip of the filter to one group on the layout bar, while it is on. */
   groupChip: ReactNode;
-  /** Each grouped entry's colour and what it sits under, by entry id, for its tile. */
-  tileGroups: ReadonlyMap<string, TileGroup>;
+  /** Each grouped entry's group, by entry id, for its tile. */
+  groups: ReadonlyMap<string, EntryGroup>;
   current: SessionEntry;
   /** The selected task proposal, to open first among the proposals of its session. */
   focus: string | undefined;
@@ -663,7 +640,7 @@ function SelectedEntry({
         outcomes={outcomes}
         messages={messages}
         runningLive={runningLive}
-        groups={tileGroups}
+        groups={groups}
       />
     </>
   );

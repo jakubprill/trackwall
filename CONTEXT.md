@@ -529,7 +529,7 @@ _Avoid_: inbox, mailbox, outbox
 A session or supervising agent that talks to the user and commissions work to other agents with task proposals, then hears about their sessions through task updates (`get_updates`; an agent outside Trackwall waits with `wait_for_session`) and reads the summaries, like a coordinator with threads in Claude (ADR-39). It is a role, not a separate kind of session: any Trackwall session or an agent outside Trackwall (`proposedBy.session: null`); the supervisor is the main session above all repos (ADR-58). In the Sessions view its tasks and proposals sit indented under it, and it carries a "main" badge with their count.
 _Avoid_: orchestrator, planner (ADR-9: a human splits goals); and a session in a repo's root is a *repo session*, not a main session, whether it commissions work or not
 
-**Session group** (`sessionGroups`, `RowGroup`, `groupTiles`; "⊞ group" and the "Group:" chip in the Sessions view):
+**Session group** (`listGroups`, `EntryGroup`, `groupTiles`; "⊞ group" and the "Group:" chip in the Sessions view):
 A top-level entry of the Sessions list with every task and proposal under it, at any depth. A group of two or more has its own colour on its rows and tiles, and the grid can show it alone (ADR-48).
 _Avoid_: workspace, cluster, family
 

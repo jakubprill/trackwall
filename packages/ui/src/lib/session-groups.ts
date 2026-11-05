@@ -5,7 +5,8 @@
  * means "these belong together". The colours go round in list order, and the grid can show one group alone.
  */
 
-import type { GridTile } from "./session-grid.ts";
+import { entryId, entryName, type SessionEntry, type SessionRow } from "./session-entries.ts";
+import { type GridTile, listTiles } from "./session-grid.ts";
 
 /** How many group colours there are (`--group-1` … `--group-4` in `index.css`); after four groups they repeat. */
 const GROUP_COLOURS = 4;
@@ -29,10 +30,65 @@ export interface RowGroup {
   parent: number | undefined;
 }
 
-/** What a grid tile shows of its group: its colour and the name of the entry it sits under (none for the top one). */
-export interface TileGroup {
+/** What a list row and its grid tile show of the row's group. */
+export interface EntryGroup {
+  /** The id of the group's top entry. */
+  id: string;
+  /** The top entry's name, for the filter chip. */
+  name: string;
   colour: number;
+  /** Levels under the group's top entry: 0 for the top entry itself. */
+  level: number;
+  /** How many entries the group has, the top one included. */
+  size: number;
+  /** The name of the entry this one sits directly under; `undefined` for the top entry. */
   under: string | undefined;
+}
+
+/** The group of every grouped row of the Sessions list, by entry id; a row alone is not in the map. */
+export function listGroups(rows: readonly SessionRow[]): Map<string, EntryGroup> {
+  const groups = sessionGroups(rows.map((r) => ({ id: entryId(r.entry), depth: r.depth, supervised: r.supervised })));
+  const byId = new Map(rows.map((r) => [entryId(r.entry), r.entry]));
+  const sizes = new Map<string, number>();
+  for (const group of groups) if (group) sizes.set(group.id, (sizes.get(group.id) ?? 0) + 1);
+  return new Map(
+    rows.flatMap((row, i): [string, EntryGroup][] => {
+      const group = groups[i];
+      const top = group && byId.get(group.id);
+      if (!group || !top) return [];
+      const parent = group.parent === undefined ? undefined : rows[group.parent]?.entry;
+      const under = parent && entryName(parent);
+      return [
+        [
+          entryId(row.entry),
+          { id: group.id, name: entryName(top), colour: group.colour, level: group.level, size: sizes.get(group.id) ?? 0, under },
+        ],
+      ];
+    }),
+  );
+}
+
+/**
+ * The group the grid shows alone: the one the user picked, while the selected entry is in it. A selection that lands
+ * outside it from elsewhere (the tray, a link) shows the whole list again.
+ */
+export function activeGroup(
+  picked: string | null,
+  groups: ReadonlyMap<string, EntryGroup>,
+  selected: SessionEntry | undefined,
+): EntryGroup | undefined {
+  const group = selected && groups.get(entryId(selected));
+  return picked !== null && group?.id === picked ? group : undefined;
+}
+
+/** The grid's tiles: the whole list, or only the entries of `group`, at their list positions. */
+export function groupTiles(
+  entries: readonly SessionEntry[],
+  groups: ReadonlyMap<string, EntryGroup>,
+  group: EntryGroup | undefined,
+): GridTile<SessionEntry>[] {
+  const tiles = listTiles(entries);
+  return group === undefined ? tiles : tiles.filter((t) => groups.get(entryId(t.entry))?.id === group.id);
 }
 
 /**
@@ -67,18 +123,4 @@ function parentOf(rows: readonly GroupedRow[], tops: readonly GroupedRow[], i: n
   const depth = rows[i]?.depth ?? 0;
   for (let j = i - 1; j >= 0 && tops[j] === tops[i]; j--) if (rows[j]?.depth === depth - 1) return j;
   return undefined;
-}
-
-/**
- * The grid's tiles: the whole list, or with a filter only the entries of that group, at their list positions. A filter
- * whose group is gone (its top row closed, or its last task ended) shows the whole list.
- */
-export function groupTiles<Entry>(
-  entries: readonly Entry[],
-  groups: readonly (RowGroup | null)[],
-  filter: string | null,
-): GridTile<Entry>[] {
-  const tiles = entries.map((entry, i) => ({ entry, position: i + 1, group: groups[i]?.id }));
-  const inGroup = tiles.filter((t) => t.group === filter);
-  return (filter === null || inGroup.length === 0 ? tiles : inGroup).map(({ entry, position }) => ({ entry, position }));
 }

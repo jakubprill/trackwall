@@ -7,12 +7,12 @@ import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { IS_MAC } from "@/lib/platform";
-import { entryId, entrySession, proposalsName, type SessionEntry, type SessionSelection } from "@/lib/session-entries";
+import { entryId, entryName, entrySession, type SessionEntry, type SessionSelection } from "@/lib/session-entries";
 import { type GridPage, gridShape } from "@/lib/session-grid";
-import type { TileGroup } from "@/lib/session-groups";
+import type { EntryGroup } from "@/lib/session-groups";
 import { profileChange, useCurrentSessionProfile } from "@/lib/session-profile";
 import { sessionShortcutLabel } from "@/lib/session-shortcut";
-import { PROPOSAL_STATUS, sessionPlace, sessionStateLabel } from "@/lib/session-state";
+import { PROPOSAL_STATUS, sessionStateLabel } from "@/lib/session-state";
 import { useSessionClose } from "@/lib/use-session-close";
 import { useTaskEnding } from "@/lib/use-task-ending";
 import { useTileOverlay } from "@/lib/use-tile-overlay";
@@ -75,7 +75,7 @@ export function SessionGrid({
   messages: readonly TaskMessage[];
   runningLive: LiveFeed<RunningMiseTask[]> | undefined;
   /** The group of each grouped entry, by entry id. */
-  groups: ReadonlyMap<string, TileGroup>;
+  groups: ReadonlyMap<string, EntryGroup>;
 }) {
   const area = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<{ width: number; height: number }>();
@@ -162,7 +162,7 @@ function SessionTile({
   outcomes: ReadonlyMap<string, TaskOutcome>;
   messages: readonly TaskMessage[];
   runningLive: LiveFeed<RunningMiseTask[]> | undefined;
-  group: TileGroup | undefined;
+  group: EntryGroup | undefined;
 }) {
   const session = entrySession(entry);
   const close = useSessionClose(conn, session, onSessionClosed);
@@ -289,11 +289,16 @@ function SessionTile({
 
 /** The tile header after its number: repo, state and what the entry is about (task, proposal or window title). */
 function TileTitle({ entry, under }: { entry: SessionEntry; under: string | undefined }) {
+  const name = (
+    <>
+      <span className="min-w-0 truncate text-xs font-medium">{entryName(entry)}</span>
+      {under && <span className="text-muted-foreground min-w-0 shrink truncate text-xs @max-lg:sr-only">{`under ${under}`}</span>}
+    </>
+  );
   if (entry.kind === "proposals")
     return (
       <>
-        <span className="min-w-0 truncate text-xs font-medium">{proposalsName(entry.proposals)}</span>
-        {under && <span className="text-muted-foreground min-w-0 shrink truncate text-xs @max-lg:sr-only">{`under ${under}`}</span>}
+        {name}
         <span className="shrink-0 text-xs">
           <StatusLabel {...PROPOSAL_STATUS} />
         </span>
@@ -304,8 +309,7 @@ function TileTitle({ entry, under }: { entry: SessionEntry; under: string | unde
   const task = entry.kind === "task" ? entry.task : undefined;
   return (
     <>
-      <span className="min-w-0 truncate text-xs font-medium">{task?.repo ?? (session && sessionPlace(session))}</span>
-      {under && <span className="text-muted-foreground min-w-0 shrink truncate text-xs @max-lg:sr-only">{`under ${under}`}</span>}
+      {name}
       {/* In a narrow tile the state is its dot, with the text as the tooltip. */}
       <span className="text-muted-foreground shrink-0 text-xs" title={session ? sessionStateLabel(session).label : undefined}>
         {session ? <StatusLabel {...sessionStateLabel(session)} labelClassName="@max-lg:sr-only" /> : "no session"}
