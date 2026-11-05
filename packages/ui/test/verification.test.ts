@@ -39,7 +39,7 @@ describe("verification in the task panel", () => {
     expect(verificationLabel(verification("cancelled"))).toEqual({ label: "cancelled" });
   });
 
-  test("an outdated verdict (ADR-207) keeps its word but loses the colour of a pass or a failure", () => {
+  test("an outdated verdict (ADR-209) keeps its word but loses the colour of a pass or a failure", () => {
     expect(verificationLabel({ ...verification("passed"), outdated: true })).toEqual({ label: "passed · outdated" });
     expect(verificationLabel({ ...verification("failed"), outdated: true })).toEqual({ label: "failed · outdated" });
   });

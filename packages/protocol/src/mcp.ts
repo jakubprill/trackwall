@@ -386,6 +386,8 @@ const COPY_TO_CLIPBOARD = "copy_to_clipboard";
 const RESUME_TASK = "resume_task";
 const GET_MESSAGES = "get_messages";
 const GET_UPDATES = "get_updates";
+/** The `get_session` argument that adds the task's prompt, which its proposer already knows (ADR-207). */
+export const GET_SESSION_PROMPT_ARG = "withPrompt";
 const GET_HANDOFF = "get_handoff";
 const WAIT_FOR_SESSION = "wait_for_session";
 const WAIT_FOR_MISE_TASK = "wait_for_mise_task";
@@ -789,16 +791,24 @@ export const mcpTools = {
     readOnly: true,
     auditArgs: ["session"] as const,
     description:
-      `One session from ${LIST_SESSIONS}, its task (null in the repo root and for the supervisor) and, for a task, the changes in its ` +
-      `worktree against the base commit: changed files with added and deleted lines (at most ${TASK_SUMMARY_MAX_FILES}, filesTruncated: ` +
-      "true when there were more), commits on the task branch and the number of uncommitted entries, without the diff " +
-      `itself; ${GET_TASK_CHANGES} adds the diff. changes: null with changesError when they cannot be computed ` +
-      `(e.g. the worktree was deleted or the task is being ended). verification is the task's last ${VERIFY_TASK} result ` +
-      "(passed, failed with the first failed tests and errors, running, cancelled), null before the first one. javaNavigation, " +
-      "for a task or a session in a repo root with Java navigation, says whether its lsp tool can answer: starting, importing (since), stalled (importing " +
-      "past the limit), ready, or failed with jdtls's first error (e.g. a Gradle import that needs a JDK that is missing); " +
-      "lsp answers come back empty until ready.",
-    args: z.object({ session: SessionId.describe(`session id from ${LIST_SESSIONS} (the id field)`) }).strict(),
+      `One session from ${LIST_SESSIONS} as short text lines: its run and state, its task (none in the repo root and for the supervisor) with the ` +
+      `summary and check steps from ${REPORT_RESULT}, and, for a task, the changes in its worktree against the base commit: commits ` +
+      `on the task branch, uncommitted entries and the changed files with added and deleted lines (at most ${TASK_SUMMARY_MAX_FILES}), ` +
+      `without the diff itself; ${GET_TASK_CHANGES} adds the diff. When the changes cannot be computed (e.g. the worktree was deleted ` +
+      `or the task is being ended) it says why. Verification is the task's last ${VERIFY_TASK} result (passed, failed with the first ` +
+      "failed tests and errors, running, cancelled), left out before the first one. Java navigation, for a task or a session in a repo " +
+      "root with it, says whether its lsp tool can answer: starting, importing (since), stalled (importing past the limit), ready, or " +
+      "failed with jdtls's first error (e.g. a Gradle import that needs a JDK that is missing); lsp answers come back empty until ready. " +
+      `The task's prompt is left out unless ${GET_SESSION_PROMPT_ARG} is true: you usually wrote it yourself.`,
+    args: z
+      .object({
+        session: SessionId.describe(`session id from ${LIST_SESSIONS} (the id field)`),
+        [GET_SESSION_PROMPT_ARG]: z
+          .boolean()
+          .default(false)
+          .describe("true adds the task's prompt, for a task you did not propose yourself"),
+      })
+      .strict(),
     result: GetSessionResult,
   },
   getDayReport: {
@@ -1143,7 +1153,8 @@ export const mcpTools = {
     description:
       "Read what happened to the work you delegated since your last call, oldest first: for each task you proposed (the " +
       "supervisor: any supervisor proposed), turn_ended (its session finished a turn and waits; read its summary and " +
-      `${GET_SESSION}), error, exited, result_reported (with the summary), verified (passed, failed or cancelled with ` +
+      `${GET_SESSION}), error, exited, result_reported (with the summary, check steps and how many commits, uncommitted entries ` +
+      `and files it changed, so ${GET_SESSION} is needed only for the files or the verification; the turn it reported in gives no turn_ended), verified (passed, failed or cancelled with ` +
       "a message), pipeline_failed (the pipeline of the merge request from its branch failed: links to both and the jobs " +
       "that failed it; read a job's log with your MCP server for the repo host, if you have one), proposal_rejected (with the user's reason), repo_removed (the user approved your " +
       `${PROPOSE_FOLDER_ACTION}; movedTo is where the repo went), change_started (the user approved your ${PROPOSE_CHANGE}: parts are the ` +

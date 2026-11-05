@@ -26,7 +26,7 @@ const VERIFICATION_MARK: Record<VerificationState, { tone?: StatusTone; label: s
   cancelled: { label: "Verify cancelled", title: "Verification cancelled" },
 };
 
-/** An outdated verdict (ADR-207) says so, without the colour of a pass or a failure of the changes as they are now. */
+/** An outdated verdict (ADR-209) says so, without the colour of a pass or a failure of the changes as they are now. */
 function verificationMark(state: VerificationState, outdated: boolean): Omit<OutcomeMark, "key"> {
   if (!outdated) return VERIFICATION_MARK[state];
   return { label: "Verify outdated", title: verificationOutdatedLabel(state) };

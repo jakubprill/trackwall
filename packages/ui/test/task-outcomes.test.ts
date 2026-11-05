@@ -59,7 +59,7 @@ describe("the marks on a task's row", () => {
     ]);
   });
 
-  test("an outdated verdict (ADR-207) is a mark without the colour of its pass, and the tooltip says why", () => {
+  test("an outdated verdict (ADR-209) is a mark without the colour of its pass, and the tooltip says why", () => {
     expect(outcomeMarks(outcome({ verification: "passed", verificationOutdated: true }))).toEqual([
       { key: "verification", label: "Verify outdated", title: "Verification passed, but the worktree changed since" },
     ]);

@@ -13,7 +13,7 @@ function worktree() {
   return { dir, base: gitIn(dir, "rev-parse", "HEAD").trim() };
 }
 
-describe("the fingerprint of a worktree (ADR-207)", () => {
+describe("the fingerprint of a worktree (ADR-209)", () => {
   test(
     "an edit, a new file and a deleted file each change it, and undoing them gives the first one back",
     async () => {

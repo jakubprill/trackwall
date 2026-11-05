@@ -135,7 +135,7 @@ const VERIFICATION_NOTICE: Record<Verification["state"], { tone: TaskNoticeTone;
 
 function verificationNotices(verification: Verification | null): TaskNotice[] {
   if (!verification) return [];
-  // An outdated verdict is about earlier changes (ADR-207): it says so, without the colour of a pass or a failure.
+  // An outdated verdict is about earlier changes (ADR-209): it says so, without the colour of a pass or a failure.
   if (verification.outdated)
     return [
       {

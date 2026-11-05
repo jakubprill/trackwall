@@ -186,7 +186,7 @@ One verdict on a task's changes (ADR-64): the mise task `test` (`VERIFY_MISE_TAS
 _Avoid_: check, CI, validation (that is a schema at the point of entry)
 
 **Outdated verdict** (`Verification.outdated`, `TaskOutcome.verificationOutdated`, `checkOutdated`; UI "Outdated", "Verify outdated", "passed · outdated"):
-A verification's verdict given before the task's worktree changed (ADR-207): the **worktree fingerprint** (`worktreeFingerprint`, one hash of the files that differ from the task's base commit and their content) its run started on is no longer the worktree's. It stays outdated until the next verification replaces it.
+A verification's verdict given before the task's worktree changed (ADR-209): the **worktree fingerprint** (`worktreeFingerprint`, one hash of the files that differ from the task's base commit and their content) its run started on is no longer the worktree's. It stays outdated until the next verification replaces it.
 _Avoid_: stale (that is `Stale`, a session state), expired, invalid
 
 **Code search** (`searchCode`, MCP tool `search_code`, result `SearchCodeResult`):

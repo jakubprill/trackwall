@@ -61,7 +61,7 @@ function checkStepsSection(steps: readonly string[]): string {
 }
 
 /**
- * `Verification in Trackwall: passed (mise task test, 128 tests · 3 skipped)`; an outdated one (ADR-207) says the changes
+ * `Verification in Trackwall: passed (mise task test, 128 tests · 3 skipped)`; an outdated one (ADR-209) says the changes
  * moved on after it, so the reviewer does not take it for a verdict on what they read.
  */
 function verificationLine(verification: Verification): string {

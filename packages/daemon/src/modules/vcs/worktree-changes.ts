@@ -111,7 +111,7 @@ export function workingTreeChanges(
 
 /**
  * Only the paths of the working directory `dir` that differ from `base`, as `workingTreeChanges` counts them, without
- * the line counts and the diff: the worktree fingerprint (ADR-207) hashes their content itself.
+ * the line counts and the diff: the worktree fingerprint (ADR-209) hashes their content itself.
  */
 export function changedPaths(dir: string, base: string, scratchDir: string): Promise<{ paths: string[]; truncated: boolean }> {
   return withChangesIndex(dir, base, [], scratchDir, async (diff, untrackedTruncated) => {

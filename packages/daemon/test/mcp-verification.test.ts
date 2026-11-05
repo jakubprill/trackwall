@@ -2,10 +2,10 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
-import { GetSessionResult, VerifyTaskResult, verificationApi } from "@trackwall/protocol";
+import { VerifyTaskResult, verificationApi } from "@trackwall/protocol";
 import { z } from "zod";
 import { gitIn } from "./support/git-repo.ts";
-import { connectHttpClient, connectSessionClient } from "./support/mcp-client.ts";
+import { connectHttpClient, connectSessionClient, toolText } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
@@ -109,14 +109,16 @@ describe.skipIf(process.versions.bun === undefined)("verify_task (real worktree 
       const { verification } = VerifyTaskResult.parse((await verify(client, { repo: "warehouse", task: task.id })).structuredContent);
       expect(verification).toMatchObject({ state: "passed", exitCode: 0, message: "the run wrote no JUnit test reports", errors: [] });
 
-      const seen = GetSessionResult.parse((await client.callTool({ name: "get_session", arguments: { session } })).structuredContent);
-      expect(seen.verification).toEqual(verification);
+      const seen = toolText(await client.callTool({ name: "get_session", arguments: { session } }));
+      expect(seen).toContain(
+        `\n## Verification: passed (mise task test, finished ${verification.finishedAt}, exit code 0)\nMessage: the run wrote no JUnit test reports`,
+      );
     },
     TIMEOUT,
   );
 
   test(
-    "an edit in the worktree after the verdict makes it outdated in the task panel, get_session and the task outcomes, until the next verification (ADR-207)",
+    "an edit in the worktree after the verdict makes it outdated in the task panel, get_session and the task outcomes, until the next verification (ADR-209)",
     async () => {
       const task = await daemon.facade.agents.createTask("warehouse", "add a shelf");
       const { client, session } = await sessionClient(task.id);
@@ -134,8 +136,8 @@ describe.skipIf(process.versions.bun === undefined)("verify_task (real worktree 
       await daemon.facade.verifications.checkOutdated();
 
       expect(await daemon.post(verificationApi.get, { task: task.id })).toMatchObject({ state: "passed", outdated: true });
-      const seen = GetSessionResult.parse((await client.callTool({ name: "get_session", arguments: { session } })).structuredContent);
-      expect(seen.verification?.outdated).toBe(true);
+      const seen = toolText(await client.callTool({ name: "get_session", arguments: { session } }));
+      expect(seen).toContain("\n## Verification: passed, but outdated: the worktree changed since (mise task test, finished ");
       expect(daemon.facade.taskOutcomes().find((o) => o.task === task.id)).toMatchObject({
         verification: "passed",
         verificationOutdated: true,

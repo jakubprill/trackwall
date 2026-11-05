@@ -91,7 +91,7 @@ export interface TasksVcs extends HandoffGit, EndedTaskGit {
   deleteBranch(repoDir: string, branch: string): Promise<void>;
   pendingWork(work: TaskWork): Promise<TaskPendingWork>;
   worktreeChanges(dir: string, base: string, maxPatchBytes: number, paths: readonly string[]): Promise<TaskChanges>;
-  /** One hash of what the worktree's files hold beyond `base` (ADR-207). */
+  /** One hash of what the worktree's files hold beyond `base` (ADR-209). */
   worktreeFingerprint(dir: string, base: string): Promise<string>;
 }
 
@@ -646,7 +646,7 @@ export class AgentTasks {
     return this.#readWorktree(id, (task) => this.#deps.vcs.worktreeChanges(task.worktree, task.base, maxPatchBytes, paths));
   }
 
-  /** The fingerprint of what the task's worktree holds (ADR-207), for a verification to tell when its verdict is outdated. */
+  /** The fingerprint of what the task's worktree holds (ADR-209), for a verification to tell when its verdict is outdated. */
   fingerprint(id: string): Promise<string> {
     return this.#readWorktree(id, (task) => this.#deps.vcs.worktreeFingerprint(task.worktree, task.base));
   }

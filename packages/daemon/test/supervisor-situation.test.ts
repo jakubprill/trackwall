@@ -138,7 +138,7 @@ describe("the supervisor's situation (ADR-148)", () => {
     );
   });
 
-  test("a task's line says its verification verdict, outdated or not, and its merge request with the pipeline and failed jobs (ADR-156, ADR-207)", () => {
+  test("a task's line says its verification verdict, outdated or not, and its merge request with the pipeline and failed jobs (ADR-156, ADR-209)", () => {
     const mergeRequest = (fields: Partial<FollowedMergeRequest>): FollowedMergeRequest => ({
       number: 12,
       title: "Add a login test",

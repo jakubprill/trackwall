@@ -4,6 +4,7 @@ import {
   mcpTools,
   type PromptDelivery,
   type ProposedBy,
+  type ReportedChanges,
   type SendMessageResult,
   type Session,
   SessionId,
@@ -89,6 +90,11 @@ export class TaskCoordination {
   readonly #userInSession = new Map<string, number>();
   /** When each task asked its proposer since the user last took part in it (milliseconds since the epoch, ADR-160). */
   readonly #questions = new Map<string, number[]>();
+  /**
+   * Task sessions that called `report_result` in the turn they are in (ADR-207): the end of that turn is no news beyond the
+   * report, so it does not wake the proposer a second time.
+   */
+  readonly #reportedThisTurn = new Set<string>();
 
   constructor(deps: CoordinationDeps) {
     this.#deps = deps;
@@ -207,17 +213,36 @@ export class TaskCoordination {
     return this.#messages.list();
   }
 
-  /** What a task session's agent did goes to the task's proposer. */
+  /** What a task session's agent did goes to the task's proposer; the end of a turn in which it reported goes no further. */
   sessionEvent(session: { id: string; task: string | null }, event: SessionEvent): void {
+    const reported = this.#reportedThisTurn.delete(session.id);
+    if (event.kind === "turn_ended" && reported) return;
     const task = session.task === null ? undefined : this.#deps.findTask(session.task);
     if (task) this.#notify(task.proposedBy, { ...event, task: task.id, session: session.id, at: new Date().toISOString() });
   }
 
-  /** Session `report_result`: the summary goes to the task's proposer. */
-  resultReported(task: Task, session: string): void {
+  /** A turn of session `session` started, the user's too: a report from an earlier turn no longer stands for its end. */
+  turnStarted(session: string): void {
+    this.#reportedThisTurn.delete(session);
+  }
+
+  /**
+   * Session `report_result`: the summary goes to the task's proposer with how much the task changed, once `changes` are
+   * known; the end of this turn is marked at once, since it may come before them.
+   */
+  async resultReported(task: Task, session: string, changes: Promise<ReportedChanges | null>): Promise<void> {
     const summary = task.summary;
     if (!summary) return;
-    this.#notify(task.proposedBy, { kind: "result_reported", task: task.id, session, summary: summary.text, at: summary.reportedAt });
+    this.#reportedThisTurn.add(session);
+    this.#notify(task.proposedBy, {
+      kind: "result_reported",
+      task: task.id,
+      session,
+      summary: summary.text,
+      checkSteps: summary.checkSteps,
+      changes: await changes,
+      at: summary.reportedAt,
+    });
   }
 
   /** A verification with a verdict goes to the task's proposer; one still running or of an ended task does not. */
@@ -298,6 +323,7 @@ export class TaskCoordination {
    */
   sessionClosed(session: Pick<Session, "id" | "supervisor" | "task">): void {
     this.#userInSession.delete(session.id);
+    this.#reportedThisTurn.delete(session.id);
     if (proposerKind(proposerKeyOf(session)).kind === "session") this.#updates.forget(session.id);
   }
 

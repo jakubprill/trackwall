@@ -9,5 +9,5 @@ export function TaskMcpCalls({ conn, task }: { conn: Connection; task: string })
   const audit = useMcpCalls(conn, undefined, task);
   if (audit.error) return <ErrorWithRetry message={audit.error} onRetry={audit.reload} />;
   if (!audit.data) return <Loading />;
-  return <McpCallList calls={audit.data.calls} showCaller={false} />;
+  return <McpCallList calls={audit.data.calls} showCaller={false} boxed={false} />;
 }

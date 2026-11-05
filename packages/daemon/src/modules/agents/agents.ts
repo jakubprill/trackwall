@@ -27,6 +27,7 @@ import {
   type PipelineFix,
   type PromptDelivery,
   proposalRepos,
+  type ReportedChanges,
   type ReviewComment,
   type SandboxSettings,
   type SandboxState,
@@ -675,12 +676,13 @@ export class Agents {
     this.#coordination.proposalRejected(proposal, reason ?? null);
   }
 
-  /** A summary from session `caller` for its own task (`report_result`); it goes to the task's proposer too (ADR-68). */
-  reportSummary(caller: string | null, text: string, checkSteps: string[]): Task {
+  /** A summary from session `caller` for its own task (`report_result`); it goes to the task's proposer too, with how much the task changed (ADR-68, ADR-207). */
+  async reportSummary(caller: string | null, text: string, checkSteps: string[]): Promise<Task> {
     const own = this.#ownTask(caller, "can report a result");
     const reported = this.#tasks.setSummary(own.task, text, checkSteps);
-    this.#coordination.resultReported(reported, own.session);
     this.#autoReviews.afterReport(own.task);
+    // Awaited, so the update is there for the proposer by the time the tool answers.
+    await this.#coordination.resultReported(reported, own.session, this.#reportedChanges(own.task));
     return reported;
   }
 
@@ -973,9 +975,20 @@ export class Agents {
     return this.#javaNavigation.status(id, view.run.kind === "exited" ? null : new Date(view.startedAt));
   }
 
-  /** One hash of what a task's worktree holds (ADR-207): a verification keeps the one its run started on. */
+  /** One hash of what a task's worktree holds (ADR-209): a verification keeps the one its run started on. */
   taskFingerprint(id: string): Promise<string> {
     return this.#tasks.fingerprint(id);
+  }
+
+  /** How much task `id` changed, for its report's update (ADR-207); `null` when git cannot say (a worktree deleted by hand). */
+  #reportedChanges(id: string): Promise<ReportedChanges | null> {
+    return this.taskChangesSummary(id).then(
+      ({ commits, uncommitted, files, filesTruncated }) => ({ commits, uncommitted, files: files.length, filesTruncated }),
+      (err: unknown) => {
+        this.#deps.log(`task ${id}: changes for its report: ${String(err)}`);
+        return null;
+      },
+    );
   }
 
   /** A task's changes without the diff, for an agent (the MCP tool `get_session`). */
@@ -1428,6 +1441,7 @@ export class Agents {
         if (task !== null) this.#rounds.promptSent(task);
       },
       onTurnStart: () => {
+        this.#coordination.turnStarted(id);
         if (task !== null) void this.#rounds.turnStarted(task);
       },
       onTurnOver: () => {

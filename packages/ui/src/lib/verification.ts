@@ -13,7 +13,7 @@ export function verificationPollMs(verification: Verification | null | undefined
 }
 
 /**
- * A verdict given before the worktree's files changed (ADR-207), in the words of the task's notice and its row's tooltip:
+ * A verdict given before the worktree's files changed (ADR-209), in the words of the task's notice and its row's tooltip:
  * it is about earlier changes, so it is neither a pass nor a failure of the changes as they are now.
  */
 export function verificationOutdatedLabel(state: VerificationState): string {

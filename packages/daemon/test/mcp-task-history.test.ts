@@ -39,7 +39,7 @@ describe.skipIf(process.versions.bun === undefined)("the task journal and search
     const head = gitIn(task.worktree, "rev-parse", "HEAD").trim();
     const session = agents.sessions().sessions.find((s) => s.task === task.id);
     if (!session) throw new Error("the task has no session");
-    agents.reportSummary(session.id, "Retries the payment call; the BFF needs no change.", []);
+    await agents.reportSummary(session.id, "Retries the payment call; the BFF needs no change.", []);
     await agents.stop(session.id);
 
     await agents.removeTask(task.id, true, false);
