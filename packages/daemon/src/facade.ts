@@ -63,6 +63,7 @@ import { Mise } from "./modules/mise/mise.ts";
 import { ProcessGroups } from "./modules/procs/process-groups.ts";
 import { RuntimeFile } from "./modules/procs/runtime-file.ts";
 import { ProviderModels } from "./modules/provider-models/provider-models.ts";
+import { Readiness } from "./modules/readiness/readiness.ts";
 import { Routines } from "./modules/routines/routines.ts";
 import { Services } from "./modules/services/services.ts";
 import { TASK_JOURNAL_FILE, TASK_JOURNAL_MAX_RECORDS, TaskJournal } from "./modules/task-journal/task-journal.ts";
@@ -125,6 +126,8 @@ export interface Facade {
   usageReport: UsageReport;
   /** Checks of what Trackwall needs on this computer, each with what to do when it fails (ADR-101). */
   doctor: Doctor;
+  /** How ready each repo is for agents: the gaps that stop or weaken them, from mise, the cards and the graph (ADR-208). */
+  readiness: Readiness;
   /** The models the session profile's model provider offers, which the Model fields suggest (ADR-194). */
   providerModels: ProviderModels;
   /** Installs jdtls and its Java for tasks' Java navigation, from Settings (ADR-123). */
@@ -356,6 +359,12 @@ export function createFacade(o: FacadeOptions): Facade {
   });
   const batch = new Batch({ workspace, mise, log: o.log });
   const graph = new Graph({ cards, workspace });
+  const readiness = new Readiness({
+    cards: async () => (await cards.all()).cards,
+    graphProblems: async () => (await graph.graph()).problems,
+    mise,
+    now: () => new Date(),
+  });
   const taskImpact = ({ repo, worktree, base }: Task) => graph.changedEndpoints(repo, worktree, base);
   const taskPort = (repo: string, task: string) => agents.taskOfRepo(task, repo).port;
   const services = new Services({ mise, logs, graph, cards, taskPort, env: o.userEnv, log: o.log, ...SERVICE_TIMING });
@@ -539,6 +548,7 @@ export function createFacade(o: FacadeOptions): Facade {
     mcpAudit,
     usageReport,
     doctor,
+    readiness,
     providerModels,
     javaNavigation,
     configFiles,

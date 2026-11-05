@@ -82,7 +82,15 @@ export function RepoDetail({
           <RepoStats status={status} onShowChanges={() => setTab("changes")} />
           <RepoActivityBar items={repoActivity(repo.id, sessions, running.data ?? [])} onOpen={openActivity} />
           <TabBar tabs={REPO_TABS} active={tab} onSelect={setTab} />
-          {tab === "card" && <RepoCardView conn={conn} repo={repo.id} head={head} />}
+          {tab === "card" && (
+            <RepoCardView
+              conn={conn}
+              repo={repo.id}
+              head={head}
+              onOpenMiseTasks={() => setTab("mise")}
+              onOpenInSessions={onOpenInSessions}
+            />
+          )}
           {tab === "files" && <RepoFiles conn={conn} repo={repo.id} head={head} />}
           {tab === "commits" && <Loaded remote={overview}>{(o) => <RepoCommits commits={o.commits} />}</Loaded>}
           {tab === "changes" && <RepoChanges conn={conn} repo={repo.id} refreshKey={head} />}

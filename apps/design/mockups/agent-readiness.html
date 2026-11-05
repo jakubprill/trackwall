@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Agent readiness</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<style>
+/* Layout: the app's own dark tokens; the Overview side panel, then the Card tab of one repo, then the notes. Single dark theme on purpose (Trackwall is dark). */
+:root {
+  --bg: var(--background);
+  --fg: var(--foreground);
+  --muted-fg: var(--muted-foreground);
+  --sans: var(--font-sans);
+  --mono: var(--font-mono);
+}
+body { background: var(--bg); color: var(--fg); font-family: var(--sans); }
+.wrap { max-width: 1100px; margin: 0 auto; padding-block: 24px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 24px; }
+h1 { font-size: 20px; margin: 0; text-wrap: balance; }
+h2 { font-size: 15px; margin: 0 0 8px; }
+p, li { line-height: 1.55; color: var(--muted-fg); max-width: 72ch; }
+p strong, li strong { color: var(--fg); font-weight: 600; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.tabs button { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--secondary); color: var(--muted-fg); cursor: pointer; }
+.tabs button[aria-pressed="true"] { color: var(--fg); border-color: var(--primary); }
+.frames { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 860px) { .frames { grid-template-columns: minmax(0, 1fr); } }
+.frame { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cap { font-family: var(--mono); font-size: 11px; letter-spacing: var(--tracking-hud); text-transform: uppercase; color: var(--muted-fg); }
+.aside, .repo { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.repo { background: var(--bg); }
+.surface { border: 1px solid var(--border); border-radius: var(--radius); background: color-mix(in oklch, var(--card) 70%, transparent); overflow: hidden; min-width: 0; }
+.surface > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.hud { font-family: var(--mono); font-size: 11px; letter-spacing: var(--tracking-hud); text-transform: uppercase; color: var(--muted-fg); }
+.meta { font-family: var(--mono); font-size: 12px; color: var(--muted-fg); white-space: nowrap; }
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; }
+.stat b { display: block; font-family: var(--mono); font-size: 18px; font-weight: 400; margin-top: 2px; }
+.score { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid var(--border); }
+.score .big { font-size: 15px; }
+.score .big b { font-family: var(--mono); font-weight: 400; }
+.bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--secondary); }
+.bar i { display: block; }
+.ok { background: var(--success); } .weak { background: var(--warning); } .block { background: var(--destructive); }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted-fg); }
+.legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: 0; background: currentColor; }
+.legend .l-ok::before { background: var(--success); } .legend .l-weak::before { background: var(--warning); } .legend .l-block::before { background: var(--destructive); }
+.group { padding: 6px 12px 2px; font-family: var(--mono); font-size: 11px; letter-spacing: var(--tracking-hud); text-transform: uppercase; }
+.group.g-block { color: var(--destructive); } .group.g-weak { color: var(--warning); } .group.g-info { color: var(--muted-fg); }
+ul.issues { list-style: none; margin: 0; padding: 0; }
+ul.issues > li { padding: 8px 12px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; max-width: none; }
+ul.issues > li:last-child { border-bottom: 0; }
+.issue { color: var(--fg); font-size: 13px; }
+.why { font-size: 12px; color: var(--muted-fg); line-height: 1.45; }
+.repos { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.repos a { font-family: var(--mono); font-size: 12px; color: var(--primary); text-decoration: none; }
+.repos a:hover { text-decoration: underline; }
+.btn { align-self: flex-start; font: inherit; font-size: 13px; padding: 3px 10px; border-radius: var(--radius); border: 1px solid var(--input); background: transparent; color: var(--fg); cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.btn:hover { background: var(--accent); }
+.btn:focus-visible, .tabs button:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.readyline { padding: 8px 12px; font-size: 12px; color: var(--muted-fg); border-top: 1px solid var(--border); }
+.readyline a { font-family: var(--mono); color: var(--primary); text-decoration: none; margin-right: 8px; }
+/* Variant B: one row per repo. */
+.rrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.rrow:last-child { border-bottom: 0; }
+.rrow a { font-family: var(--mono); font-size: 12px; color: var(--primary); text-decoration: none; }
+.rrow .tag { font-size: 12px; font-family: var(--mono); }
+.rrow .what { grid-column: 1 / -1; font-size: 12px; color: var(--muted-fg); }
+.t-block { color: var(--destructive); } .t-weak { color: var(--warning); } .t-ok { color: var(--success); }
+/* The repo Card tab. */
+.repohead { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.repohead b { font-family: var(--mono); font-size: 15px; }
+.repohead span { font-size: 12px; color: var(--muted-fg); }
+.rtabs { display: flex; gap: 14px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--muted-fg); overflow-x: auto; }
+.rtabs span { padding: 6px 0; white-space: nowrap; }
+.rtabs .on { color: var(--fg); box-shadow: inset 0 -2px 0 var(--primary); }
+dl.glance { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 16px; padding: 12px; margin: 0; }
+dl.glance div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+dl.glance dd { margin: 0; font-size: 13px; }
+.mono { font-family: var(--mono); }
+.badge { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 0 6px; border-radius: 4px; background: var(--secondary); color: var(--fg); margin-right: 4px; }
+.status { font-size: 13px; display: flex; gap: 6px; align-items: baseline; }
+.status a { color: var(--primary); text-decoration: none; font-size: 12px; }
+ul.checks { list-style: none; margin: 0; padding: 4px 0; }
+ul.checks li { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 8px; align-items: start; padding: 6px 12px; max-width: none; }
+ul.checks .mark { font-family: var(--mono); font-size: 13px; text-align: center; }
+ul.checks .txt { font-size: 13px; color: var(--fg); }
+ul.checks .txt small { display: block; font-size: 12px; color: var(--muted-fg); }
+.hidden { display: none !important; }
+.notes ul { margin: 0; padding-left: 18px; }
+</style>
+
+<div class="wrap">
+  <h1>Agent readiness</h1>
+  <p>How ready the repos are for agents to build, test and run them: the gaps of every repo, ordered by what they cost an agent, and one count of the repos with nothing that blocks them. Sample data, five repos.</p>
+
+  <div class="tabs" role="group" aria-label="Variant">
+    <button type="button" aria-pressed="true" data-variant="a">A · by gap (recommended)</button>
+    <button type="button" aria-pressed="false" data-variant="b">B · by repo</button>
+  </div>
+
+  <div class="frames">
+    <div class="frame">
+      <span class="cap">Overview · side panel, no repo selected</span>
+      <div class="aside">
+        <span class="hud">Connection graph</span>
+        <div class="stats">
+          <div class="stat"><span class="hud">Repos</span><b>6</b></div>
+          <div class="stat"><span class="hud">Connections</span><b>7</b></div>
+        </div>
+
+        <section class="surface" aria-label="Agent readiness">
+          <header><span class="hud">Agent readiness</span><span class="meta">2 of 6 ready</span></header>
+          <div class="score">
+            <span class="big"><b>2</b> of <b>6</b> repos ready for agents</span>
+            <div class="bar" aria-hidden="true"><i class="ok" style="width:33.3%"></i><i class="weak" style="width:33.3%"></i><i class="block" style="width:33.4%"></i></div>
+            <div class="legend"><span class="l-ok">2 ready</span><span class="l-weak">2 with gaps</span><span class="l-block">2 blocked</span></div>
+          </div>
+
+          <!-- Variant A: one row per gap, the repos it touches under it, and the one fix for all of them. -->
+          <div data-show="a">
+            <div class="group g-block">Blocks agents</div>
+            <ul class="issues">
+              <li>
+                <span class="issue">No <span class="mono">build</span> or <span class="mono">test</span> task</span>
+                <span class="why">Verify and agents cannot build or test these repos.</span>
+                <span class="repos"><a href="#">notify-worker</a></span>
+                <button type="button" class="btn">Add convention tasks</button>
+              </li>
+              <li>
+                <span class="issue">mise config not trusted</span>
+                <span class="why">Agents cannot run any mise task here.</span>
+                <span class="repos"><a href="#">shop-web</a></span>
+                <button type="button" class="btn">Trust shop-web</button>
+              </li>
+            </ul>
+            <div class="group g-weak">Weakens agents</div>
+            <ul class="issues">
+              <li>
+                <span class="issue">Spring Boot app without a <span class="mono">dev</span> task</span>
+                <span class="why">It cannot start as a service, for you or for an agent.</span>
+                <span class="repos"><a href="#">billing-api</a></span>
+                <button type="button" class="btn">Ask an agent to add dev…</button>
+              </li>
+              <li>
+                <span class="issue">Java or Node.js not pinned in mise</span>
+                <span class="why">The build uses whatever version this computer has.</span>
+                <span class="repos"><a href="#">billing-api</a><a href="#">admin-web</a></span>
+                <button type="button" class="btn">Ask an agent to pin them…</button>
+              </li>
+              <li>
+                <span class="issue">HTTP calls without a target</span>
+                <span class="why">The graph cannot tell an external service from a missing link.</span>
+                <span class="repos"><a href="#">admin-web</a> <span class="why">2 calls</span></span>
+                <button type="button" class="btn">Show on the graph</button>
+              </li>
+            </ul>
+            <div class="group g-info">Good to know, not counted</div>
+            <ul class="issues">
+              <li>
+                <span class="issue">Card incomplete</span>
+                <span class="repos"><a href="#">orders-api</a> <span class="why">no endpoints found</span></span>
+              </li>
+              <li>
+                <span class="issue">Not on the default branch, or behind it</span>
+                <span class="repos"><a href="#">payments-api</a> <span class="why">feature/refunds · 3 behind</span></span>
+              </li>
+            </ul>
+            <div class="readyline">Ready: <a href="#">orders-api</a><a href="#">payments-api</a></div>
+          </div>
+
+          <!-- Variant B: one row per repo, worst first, its gaps in one line. -->
+          <div data-show="b" class="hidden">
+            <div class="rrow"><a href="#">notify-worker</a><span class="tag t-block">blocked</span><span class="what">no build or test task</span></div>
+            <div class="rrow"><a href="#">shop-web</a><span class="tag t-block">blocked</span><span class="what">mise config not trusted</span></div>
+            <div class="rrow"><a href="#">billing-api</a><span class="tag t-weak">2 gaps</span><span class="what">no dev task · Java not pinned</span></div>
+            <div class="rrow"><a href="#">admin-web</a><span class="tag t-weak">2 gaps</span><span class="what">Node.js not pinned · 2 HTTP calls without a target</span></div>
+            <div class="rrow"><a href="#">orders-api</a><span class="tag t-ok">ready</span><span class="what">card incomplete</span></div>
+            <div class="rrow"><a href="#">payments-api</a><span class="tag t-ok">ready</span><span class="what">feature/refunds · 3 behind</span></div>
+          </div>
+        </section>
+
+        <section class="surface" aria-label="Version drift">
+          <header><span class="hud">Version drift</span><span class="meta">2</span></header>
+          <div class="readyline" style="border-top:0">Java 17 → 21, Node.js 20 → 22 (unchanged)</div>
+        </section>
+      </div>
+    </div>
+
+    <div class="frame">
+      <span class="cap">Repos · billing-api · Card tab</span>
+      <div class="repo">
+        <div class="repohead"><b>billing-api</b><span>main · clean · up to date</span></div>
+        <div class="rtabs"><span class="on">Card</span><span>Files</span><span>Commits</span><span>Changes</span><span>mise tasks</span><span>README</span></div>
+
+        <section class="surface" aria-label="At a glance">
+          <header><span class="hud">At a glance</span></header>
+          <dl class="glance">
+            <div><dt class="hud">Stack</dt><dd><span class="badge">#java</span><span class="badge">#backend</span><br><span class="why">Spring Boot · Maven</span></dd></div>
+            <div><dt class="hud">Apps</dt><dd class="mono">billing-api :8082</dd></div>
+            <div><dt class="hud">API</dt><dd>9 endpoints · 6 DTOs</dd></div>
+            <div><dt class="hud">Depends on</dt><dd>1 HTTP client · provides 1 package · uses 22 packages</dd></div>
+            <div><dt class="hud">Agent readiness</dt><dd class="status"><span class="t-weak">2 gaps</span><a href="#readiness">see below</a></dd></div>
+          </dl>
+        </section>
+
+        <section class="surface" id="readiness" aria-label="Agent readiness">
+          <header><span class="hud">Agent readiness</span><span class="meta t-weak">2 gaps</span></header>
+          <ul class="checks">
+            <li><span class="mark t-ok">✓</span><span class="txt">setup, build and test<small>convention tasks (Maven wrapper)</small></span><span></span></li>
+            <li><span class="mark t-ok">✓</span><span class="txt">mise config trusted</span><span></span></li>
+            <li><span class="mark t-weak">!</span><span class="txt">No dev task<small>billing-api is a Spring Boot app, so it cannot start as a service.</small></span><button type="button" class="btn">Ask an agent…</button></li>
+            <li><span class="mark t-weak">!</span><span class="txt">Java not pinned in mise<small>pom.xml asks for 21; the build takes the Java of this computer.</small></span><button type="button" class="btn">Ask an agent…</button></li>
+            <li><span class="mark t-ok">✓</span><span class="txt">Every HTTP call has a target</span><span></span></li>
+            <li><span class="mark t-ok">✓</span><span class="txt">Card complete</span><span></span></li>
+          </ul>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <section class="notes">
+    <h2>Notes</h2>
+    <ul>
+      <li><strong>The count is of repos, not of points.</strong> “2 of 6 ready” counts the repos with no gap that blocks or weakens agents, and the bar splits the rest into blocked and with gaps; a percentage of checks passed would hide that one missing <span class="mono">test</span> task stops Verify.</li>
+      <li><strong>A, by gap,</strong> puts one fix under each gap for every repo it touches, the way Version drift does; convention tasks fix every repo in one click. <strong>B, by repo,</strong> reads like a to-do list but repeats the same fix in many rows.</li>
+      <li><strong>Every fix already exists</strong> or starts an agent task with a prompt to read first; nothing starts on its own.</li>
+      <li><strong>Checkout and an incomplete card</strong> are shown but not counted: they change every hour and do not stop an agent.</li>
+      <li><strong>Later:</strong> “proven”, whether the last <span class="mono">test</span> run passed, to tell a configured repo from a working one.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+for (const b of document.querySelectorAll("[data-variant]")) {
+  b.addEventListener("click", () => {
+    for (const o of document.querySelectorAll("[data-variant]")) o.setAttribute("aria-pressed", String(o === b));
+    for (const s of document.querySelectorAll("[data-show]")) s.classList.toggle("hidden", s.dataset.show !== b.dataset.variant);
+  });
+}
+</script>
+</body>
+</html>
