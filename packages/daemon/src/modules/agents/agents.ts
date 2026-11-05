@@ -975,6 +975,11 @@ export class Agents {
     return this.#javaNavigation.status(id, view.run.kind === "exited" ? null : new Date(view.startedAt));
   }
 
+  /** One hash of what a task's worktree holds (ADR-209): a verification keeps the one its run started on. */
+  taskFingerprint(id: string): Promise<string> {
+    return this.#tasks.fingerprint(id);
+  }
+
   /** How much task `id` changed, for its report's update (ADR-207); `null` when git cannot say (a worktree deleted by hand). */
   #reportedChanges(id: string): Promise<ReportedChanges | null> {
     return this.taskChangesSummary(id).then(

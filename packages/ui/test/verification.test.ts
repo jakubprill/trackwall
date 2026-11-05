@@ -16,6 +16,7 @@ const verification = (state: Verification["state"], finishedAt: string | null = 
   failures: [],
   errors: [],
   lastLines: [],
+  outdated: false,
 });
 const failure = (className: string | null, name: string, suite = "shop.CartTest"): TestFailure => ({
   report: "TEST-shop.CartTest.xml",
@@ -36,6 +37,11 @@ describe("verification in the task panel", () => {
     expect(verificationLabel(verification("failed"))).toEqual({ tone: "error", label: "failed" });
     expect(verificationLabel(verification("running"))).toEqual({ tone: "warning", label: "running" });
     expect(verificationLabel(verification("cancelled"))).toEqual({ label: "cancelled" });
+  });
+
+  test("an outdated verdict (ADR-209) keeps its word but loses the colour of a pass or a failure", () => {
+    expect(verificationLabel({ ...verification("passed"), outdated: true })).toEqual({ label: "passed · outdated" });
+    expect(verificationLabel({ ...verification("failed"), outdated: true })).toEqual({ label: "failed · outdated" });
   });
 
   test("a running verification is polled every second, otherwise every five", () => {

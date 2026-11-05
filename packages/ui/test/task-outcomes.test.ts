@@ -29,7 +29,7 @@ function mergeRequest(pipeline: PipelineState | null, extra: Partial<FollowedMer
 }
 
 function outcome(extra: Partial<TaskOutcome>): TaskOutcome {
-  return { task: TASK, repo: "orders-api", verification: null, mergeRequest: null, ...extra };
+  return { task: TASK, repo: "orders-api", verification: null, verificationOutdated: false, mergeRequest: null, ...extra };
 }
 
 describe("the marks on a task's row", () => {
@@ -56,6 +56,12 @@ describe("the marks on a task's row", () => {
     expect(outcomeMarks(outcome({ verification: "running", mergeRequest: mergeRequest(null) }))).toEqual([
       { key: "verification", tone: "warning", label: "Verifying", title: "Verification running" },
       { key: "merge-request", tone: "warning", label: "!12", title: "!12 Add a discount · open" },
+    ]);
+  });
+
+  test("an outdated verdict (ADR-209) is a mark without the colour of its pass, and the tooltip says why", () => {
+    expect(outcomeMarks(outcome({ verification: "passed", verificationOutdated: true }))).toEqual([
+      { key: "verification", label: "Verify outdated", title: "Verification passed, but the worktree changed since" },
     ]);
   });
 

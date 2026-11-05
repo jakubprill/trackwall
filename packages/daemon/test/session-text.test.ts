@@ -56,6 +56,7 @@ const failed: Verification = {
   miseTask: "test",
   state: "failed",
   runId: "run-7",
+  outdated: false,
   startedAt: "2026-11-05T09:21:00.000Z",
   finishedAt: "2026-11-05T09:22:00.000Z",
   exitCode: 1,

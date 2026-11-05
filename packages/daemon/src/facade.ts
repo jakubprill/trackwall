@@ -501,9 +501,12 @@ export function createFacade(o: FacadeOptions): Facade {
   function taskOutcomes(): TaskOutcome[] {
     const followed = mergeRequests.followed();
     return agents.tasks().flatMap((task) => {
-      const verification = verifications.get(task.id)?.state ?? null;
+      const last = verifications.get(task.id);
       const mergeRequest = followed.get(task.id) ?? null;
-      return verification === null && mergeRequest === null ? [] : [{ task: task.id, repo: task.repo, verification, mergeRequest }];
+      if (last === null && mergeRequest === null) return [];
+      return [
+        { task: task.id, repo: task.repo, verification: last?.state ?? null, verificationOutdated: last?.outdated ?? false, mergeRequest },
+      ];
     });
   }
 
