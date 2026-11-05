@@ -6,7 +6,7 @@ import { mapLimit } from "../../infra/map-limit.ts";
 import { changedPaths } from "./worktree-changes.ts";
 
 /**
- * A task worktree's fingerprint (ADR-195): one hash of what its files hold, so a verification can tell that they changed
+ * A task worktree's fingerprint (ADR-207): one hash of what its files hold, so a verification can tell that they changed
  * after its run started. It is the files that differ from the task's base commit, counted as the task's Changes count them
  * (new files with, ignored ones without), each with a hash of its content on disk; every other file is the base commit's.
  * So only content counts: a commit (the agent's own, a round commit after its turn, ADR-168) or a file written again with

@@ -1,6 +1,7 @@
 import { type ProviderModel, type SessionView, TASK_MODEL_MAX, type TaskApprovals } from "@trackwall/protocol";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { ProviderModelOptions } from "@/components/ProviderModelOptions";
+import { UnofferedModelNote } from "@/components/UnofferedModelNote";
 import { Input } from "@/components/ui/input";
 import type { SandboxNote } from "@/lib/sandbox";
 import { typedModel } from "@/lib/task-model";
@@ -177,7 +178,7 @@ function named(label: string, subject: string | undefined): string {
  * A task's model (ADR-98): a pill naming Copilot CLI's default until the user opens it to type a model id; a model the
  * proposer chose, or one remembered for the repo, shows its field at once. The field stays while the user edits it, also
  * when they clear it, and folds back into the pill when left empty. Empty is Copilot CLI's default model. With a session
- * profile's provider, the field suggests its models (ADR-194).
+ * profile's provider, the field suggests its models (ADR-194) and warns about an id it does not offer (ADR-206).
  */
 function ModelPill({
   subject,
@@ -239,6 +240,7 @@ function ModelPill({
       />
       {suggestions.length > 0 && <ProviderModelOptions id={listId} models={suggestions} />}
       {invalid && <span className="text-destructive pr-2 text-xs">A model id, such as claude-opus-5.5</span>}
+      <UnofferedModelNote typed={value} models={suggestions} onPick={onChange} className="max-w-xs pr-2" />
     </span>
   );
 }

@@ -26,14 +26,14 @@ import { waitLimited } from "../../infra/wait-limit.ts";
  * daemon restart (ADR-115) in `verifications.json`, which follows every change while the daemon works and stops
  * following once it stops (`keepForRestart`), so the runs the stop ends do not reach it as failures. A verification keeps
  * the fingerprint of the worktree its run started on, and a periodic check marks its verdict `outdated` once the
- * worktree's files hold something else (ADR-195).
+ * worktree's files hold something else (ADR-207).
  */
 
 export const VERIFICATIONS_FILE = "verifications.json";
 
 /**
  * A verification with the fingerprint of the worktree its run started on, `null` when it could not be read; a file from
- * before fingerprints (ADR-195) has neither field, read as never outdated.
+ * before fingerprints (ADR-207) has neither field, read as never outdated.
  */
 const StoredVerification = Verification.extend({
   outdated: z.boolean().default(false),
@@ -51,7 +51,7 @@ const STOPPED_WITH_DAEMON = "Trackwall stopped during the run, so it has no verd
 interface VerificationTasks {
   task(id: string): { repo: string };
   findTask(id: string): { repo: string } | undefined;
-  /** One hash of what the task's worktree holds beyond its base (ADR-195). */
+  /** One hash of what the task's worktree holds beyond its base (ADR-207). */
   taskFingerprint(id: string): Promise<string>;
 }
 
@@ -151,7 +151,7 @@ export class Verifications {
     this.#file.stopFollowing();
   }
 
-  /** Compares the verified worktrees with their fingerprints every `intervalMs` (ADR-195); `main.ts` starts it after the API. */
+  /** Compares the verified worktrees with their fingerprints every `intervalMs` (ADR-207); `main.ts` starts it after the API. */
   startOutdatedCheck(intervalMs = OUTDATED_CHECK_MS): void {
     if (this.#timer) return;
     this.#timer = setInterval(() => void this.checkOutdated(), intervalMs);
@@ -164,7 +164,7 @@ export class Verifications {
   }
 
   /**
-   * One round of the check (ADR-195): the worktree of every task whose verification has a verdict that is not outdated
+   * One round of the check (ADR-207): the worktree of every task whose verification has a verdict that is not outdated
    * yet, one task after another, against the fingerprint its run started on. A different one marks the verdict
    * `outdated`, which stays until the next verification replaces it, even when the files come back. A worktree that
    * cannot be read (the task is being ended, its worktree is gone) leaves the verdict as it is.

@@ -1,115 +1,28 @@
 import { closeSync, openSync, readSync, statSync } from "node:fs";
-import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import type { CopilotUsage } from "@trackwall/protocol";
-import { z } from "zod";
+import { conversationEventLog } from "../../infra/copilot-home.ts";
+import { addReceipt, firstSighting, NO_USAGE, type UsageTotals, usageOf, usageReceipt } from "../../infra/copilot-usage-receipt.ts";
 
 /**
  * What a session's conversation used (ADR-190, §4.4), from the conversation's event log that Copilot CLI keeps in its
  * home: `session-state/<conversation>/events.jsonl`. After every model call Copilot CLI appends a durable receipt,
- * `session.usage_record`, with the call's tokens, its model multiplier and, on token billing, its cost in nano AI
- * units (10⁹ of them make one AI credit, as Copilot CLI's `/usage` converts them). The format is Copilot CLI's own and
- * undocumented; a contract test pins where and when the receipt is written and the fields read here, and anything else
- * in a line is ignored. The log is read on demand only (`update`), from where the last read stopped, so a long
- * conversation is read once and every later turn costs only its new lines.
+ * `session.usage_record` (`infra/copilot-usage-receipt.ts`), with the call's tokens, its model multiplier and, on token
+ * billing, its cost in nano AI units (10⁹ of them make one AI credit, as Copilot CLI's `/usage` converts them). A
+ * contract test pins where and when the receipt is written. The log is read on demand only (`update`), from where the
+ * last read stopped, so a long conversation is read once and every later turn costs only its new lines.
  */
 
-/** The receipt's type; a line without this text is not parsed at all, since tool results can make lines long. */
-const USAGE_RECORD = "session.usage_record";
-
-const NANO_AIU_PER_AI_CREDIT = 1e9;
-
-const UsageRecord = z.object({
-  type: z.literal(USAGE_RECORD),
-  data: z.object({
-    usage: z.object({
-      inputTokens: z.number().int().nonnegative().default(0),
-      outputTokens: z.number().int().nonnegative().default(0),
-      /** The model multiplier of the call (premium requests of the legacy billing). */
-      cost: z.number().nonnegative().default(0),
-      /** What started the call; absent or `user` for the user's own turn, `sub-agent` and others for the rest. */
-      initiator: z.string().optional(),
-      aiCreditsStatus: z.enum(["complete", "partial", "unavailable"]).optional(),
-      copilotUsage: z.object({ totalNanoAiu: z.number().nonnegative().optional() }).optional(),
-      /** Copilot CLI's own identity of the receipt, the same when a resumed conversation writes it again. */
-      accounting: z.object({ sourceSessionId: z.string(), sequence: z.number().int() }).optional(),
-    }),
-  }),
-});
-
-/** The running sums of one event log. */
-interface Totals {
-  modelCalls: number;
-  inputTokens: number;
-  outputTokens: number;
-  nanoAiu: number;
-  callsWithCredits: number;
-  callsWithoutCredits: number;
-  premiumRequests: number;
-}
-
-const NO_TOTALS: Totals = {
-  modelCalls: 0,
-  inputTokens: 0,
-  outputTokens: 0,
-  nanoAiu: 0,
-  callsWithCredits: 0,
-  callsWithoutCredits: 0,
-  premiumRequests: 0,
-};
-
 /** One receipt line added to the sums; `seen` keeps receipts counted once. */
-function add(totals: Totals, line: string, seen: Set<string>): Totals {
-  if (!line.includes(USAGE_RECORD)) return totals;
-  let json: unknown;
-  try {
-    json = JSON.parse(line);
-  } catch {
-    return totals;
-  }
-  const parsed = UsageRecord.safeParse(json);
-  if (!parsed.success) return totals;
-  const usage = parsed.data.data.usage;
-  if (usage.accounting !== undefined) {
-    const key = `${usage.accounting.sourceSessionId}:${usage.accounting.sequence}`;
-    if (seen.has(key)) return totals;
-    seen.add(key);
-  }
-  const nanoAiu = usage.aiCreditsStatus === "unavailable" ? undefined : usage.copilotUsage?.totalNanoAiu;
-  const own = usage.initiator === undefined || usage.initiator === "user";
-  return {
-    modelCalls: totals.modelCalls + 1,
-    inputTokens: totals.inputTokens + usage.inputTokens,
-    outputTokens: totals.outputTokens + usage.outputTokens,
-    nanoAiu: totals.nanoAiu + (nanoAiu ?? 0),
-    callsWithCredits: totals.callsWithCredits + (nanoAiu === undefined ? 0 : 1),
-    callsWithoutCredits: totals.callsWithoutCredits + (nanoAiu === undefined || usage.aiCreditsStatus === "partial" ? 1 : 0),
-    premiumRequests: totals.premiumRequests + (own ? usage.cost : 0),
-  };
-}
-
-/** The sums as a session shows them; `null` before the first model call. */
-function usageOf(totals: Totals): CopilotUsage | null {
-  if (totals.modelCalls === 0) return null;
-  return {
-    modelCalls: totals.modelCalls,
-    inputTokens: totals.inputTokens,
-    outputTokens: totals.outputTokens,
-    aiCredits: totals.callsWithCredits === 0 ? null : totals.nanoAiu / NANO_AIU_PER_AI_CREDIT,
-    aiCreditsPartial: totals.callsWithCredits > 0 && totals.callsWithoutCredits > 0,
-    premiumRequests: totals.premiumRequests,
-  };
+function add(totals: UsageTotals, line: string, seen: Set<string>): UsageTotals {
+  const receipt = usageReceipt(line);
+  return receipt === undefined || !firstSighting(seen, receipt) ? totals : addReceipt(totals, receipt);
 }
 
 /** The sums of whole receipt lines, for a reader that has the log in memory (the tests, a script). */
 export function usageOfLines(lines: readonly string[]): CopilotUsage | null {
   const seen = new Set<string>();
-  return usageOf(lines.reduce((totals, line) => add(totals, line, seen), NO_TOTALS));
-}
-
-/** The event log of a conversation in Copilot CLI's home. */
-export function conversationEventLog(copilotHome: string, conversation: string): string {
-  return join(copilotHome, "session-state", conversation, "events.jsonl");
+  return usageOf(lines.reduce((totals, line) => add(totals, line, seen), NO_USAGE));
 }
 
 /** How often a running session's cycle looks at its event log: a size check, and a read only of what is new. */
@@ -130,7 +43,7 @@ export class CopilotUsageLog {
   #rest = "";
   /** Keeps a character split between two reads whole. */
   #decoder = new StringDecoder("utf8");
-  #totals: Totals = NO_TOTALS;
+  #totals: UsageTotals = NO_USAGE;
   #seen = new Set<string>();
   #readAt = 0;
 
@@ -182,7 +95,7 @@ export class CopilotUsageLog {
     this.#offset = 0;
     this.#rest = "";
     this.#decoder = new StringDecoder("utf8");
-    this.#totals = NO_TOTALS;
+    this.#totals = NO_USAGE;
     this.#seen = new Set();
   }
 

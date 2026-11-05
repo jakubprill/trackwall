@@ -116,7 +116,7 @@ describe.skipIf(process.versions.bun === undefined)("verify_task (real worktree 
   );
 
   test(
-    "an edit in the worktree after the verdict makes it outdated in the task panel, get_session and the task outcomes, until the next verification (ADR-195)",
+    "an edit in the worktree after the verdict makes it outdated in the task panel, get_session and the task outcomes, until the next verification (ADR-207)",
     async () => {
       const task = await daemon.facade.agents.createTask("warehouse", "add a shelf");
       const { client, session } = await sessionClient(task.id);

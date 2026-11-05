@@ -22,6 +22,7 @@ function session(id: string, needsAttention: boolean, dialog: Session["dialog"] 
     readRequest: null,
     copyRequest: null,
     usage: null,
+    model: null,
   };
 }
 
@@ -36,6 +37,7 @@ const proposal: TaskProposal = {
   approvals: "ask",
   item: null,
   parts: null,
+  fromImpact: false,
   createdAt: "2026-10-24T10:00:00Z",
 };
 

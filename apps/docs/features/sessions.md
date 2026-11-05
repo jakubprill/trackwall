@@ -31,7 +31,7 @@ The switch above the terminal changes the layout: 1 shows the selected session w
 
 Every session also gets short instructions from Trackwall on how to work with you: a session in a repo hands larger work over as a [task proposal](/features/main-session), and a session of an [agent task](/features/tasks) stays in its own worktree, does not push and finishes with a summary. They also tell the agent which Trackwall it runs in and where this documentation is; [Session instructions](/features/session-instructions) has the details.
 
-Under its state, every session that has talked to the model shows what its conversation used so far, the way Copilot CLI's `/usage` counts it: AI credits, or premium requests if your plan still bills those, or only tokens when the model comes from your own provider. Hover it for the number of model calls and tokens. The task's header shows the same for its session, and under the "Sessions" heading you see the sum of all listed sessions. A resumed session or task keeps counting its conversation from the first prompt. The number appears a moment after a turn ends, since Copilot CLI writes it down in batches.
+Under its state, every session that has talked to the model shows what its conversation used so far, the way Copilot CLI's `/usage` counts it: AI credits, or premium requests if your plan still bills those, or only tokens when the model comes from your own provider. Hover it for the number of model calls and tokens. The task's header shows the same for its session, and under the "Sessions" heading you see the sum of all listed sessions. A resumed session or task keeps counting its conversation from the first prompt. The number appears a moment after a turn ends, since Copilot CLI writes it down in batches. What every task, session and tool used in a whole week is in [Copilot usage](/features/copilot-usage).
 
 ## Use it
 
@@ -55,6 +55,7 @@ Alt+1 … Alt+9, Alt+0 and Alt+J work while a terminal has the focus too, and ar
 ## Good to know
 
 - Copilot CLI must be on your `PATH` as `copilot` and signed in.
+- To switch a running session to another model, press **Model** in its header, type or pick the model and press "Restart on this model". The session starts again with the same conversation on that model and keeps it when you restart it later. This is the way to change the model with your own [model provider](/features/mise-environment), where `/model` offers only the model the session started on.
 - Trackwall only shows what a session used and never stops it. To cap a session, type `/limits set max-ai-credits <number>` in it (at least 30).
 - Each session gets the variables and tokens of your mise config, the line under its header says which, and in the grid a key next to its title lists them: see [Environment from mise](/features/mise-environment).
 - A free session runs in the projects folder, so the trusted folder you set for Copilot CLI and the antivirus exclusion of that folder cover it. It can change any repo there, and it can hand work over as a [task proposal](/features/main-session), but it does not run a repo's mise tasks or services through Trackwall. Unlike the [supervisor](/features/supervisor), you can run several, and it may run commands and change files.

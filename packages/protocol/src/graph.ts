@@ -149,12 +149,47 @@ export const GraphProblem = z.object({
 });
 export type GraphProblem = z.infer<typeof GraphProblem>;
 
+/**
+ * What a version drift is about (ADR-196): `tool` a tool version from the mise config or a hint (`ToolRequirement`;
+ * Java compared by its major version), `spring-boot` the Spring Boot version from its parent, BOM or build plugin,
+ * `parent` another Maven parent pom or imported BOM, `plugin` a Maven build plugin or a Gradle plugin.
+ */
+export const DriftKind = z.enum(["tool", "spring-boot", "parent", "plugin"]);
+export type DriftKind = z.infer<typeof DriftKind>;
+
+/** One repo of a version drift: the versions its card gives for the subject and where. */
+export const DriftedRepo = z.object({
+  repo: RepoId,
+  /** The versions as compared: one in most repos, more when modules or files of one repo disagree. */
+  versions: z.array(z.string()).min(1),
+  /** The files and lines that give them, with the value as written there (`java = temurin-21.0.2`). */
+  evidence: z.array(MechanismEvidence).min(1),
+});
+export type DriftedRepo = z.infer<typeof DriftedRepo>;
+
+/**
+ * A version drift (ADR-196): one tool, framework, parent pom or plugin that the repos of the projects folder use in
+ * different versions, from their cards. Only the joined cards show it, like a graph problem.
+ */
+export const VersionDrift = z.object({
+  kind: DriftKind,
+  /** The tool name (`java`, `node`), `spring-boot`, or the package (`org.apache.maven.plugins:maven-surefire-plugin`). */
+  name: z.string(),
+  /** The newest version among the repos, which aligning moves the others to. */
+  target: z.string(),
+  /** At least two repos, in the order of the repo list. */
+  repos: z.array(DriftedRepo).min(2),
+});
+export type VersionDrift = z.infer<typeof VersionDrift>;
+
 /** The whole graph: nodes in the order of the repo list, edges, gaps, and errors in `graph` entries of `workspace.yaml`. */
 export const RepoGraph = z.object({
   nodes: z.array(GraphNode),
   edges: z.array(GraphEdge),
   /** Gaps in the repos' facts found while joining the cards (ADR-116), in the order of the repo list. */
   problems: z.array(GraphProblem),
+  /** Tools, frameworks, parent poms and plugins the repos use in different versions (ADR-196). */
+  drift: z.array(VersionDrift),
   /** A `graph` entry in `workspace.yaml` that cannot be used (for example a repo not in the list), as a sentence for a person. */
   configProblems: z.array(z.string()),
   /** The full path of `workspace.yaml`, where package aliases and manual edges are added. */
@@ -299,6 +334,44 @@ export const ChangedEndpoint = EndpointChange.extend({
 });
 export type ChangedEndpoint = z.infer<typeof ChangedEndpoint>;
 
+/** At most this many changed library types in `get_changed_endpoints`; more is a rename of a package, not one change. */
+export const MAX_CHANGED_TYPES = 50;
+
+/**
+ * A public Java type of a module that builds a Maven or Gradle package, which a task's commits remove or change in a way
+ * that can break the code of another repo using that package (ADR-205). `changed` is a visible member (a public or
+ * protected method, constructor, field or enum constant) removed or with another signature, a new abstract method that
+ * implementations lack, or another declaration (kind, type parameters, supertypes, record components). Added types and
+ * members break nobody, so they are not listed.
+ */
+export const TypeChange = z.object({
+  change: z.enum(["removed", "changed"]),
+  /** The package; `""` in the default package, which no other repo can import. */
+  package: z.string(),
+  /** The fully qualified name, nested types joined with `.` (`com.example.Money.Currency`). */
+  type: z.string(),
+  /** Whether its declaration changed: its kind, type parameters, supertypes or record components. */
+  declaration: z.boolean(),
+  /** The members removed, with another signature, or newly abstract, by name and parameter types (`split(int, String...)`). */
+  members: z.array(z.string()),
+  /** Where it is declared: in the task's head, or in its base for a removed type. */
+  evidence: Evidence,
+});
+export type TypeChange = z.infer<typeof TypeChange>;
+
+/** A repo that imports a changed type, with the first import line found. */
+export const TypeUser = z.object({ repo: RepoId, evidence: Evidence });
+export type TypeUser = z.infer<typeof TypeUser>;
+
+export const ChangedType = TypeChange.extend({
+  /**
+   * The repos that depend on a package of the task's repo in the graph and import the type, its outer type or its whole
+   * package in the HEAD of their root; `[]` when none does.
+   */
+  users: z.array(TypeUser),
+});
+export type ChangedType = z.infer<typeof ChangedType>;
+
 /** A problem of the card of the task's base or head commit. */
 export const ChangeCardProblem = CardProblem.extend({ commit: z.enum(["base", "head"]) });
 export type ChangeCardProblem = z.infer<typeof ChangeCardProblem>;
@@ -360,9 +433,19 @@ export const ChangedEndpoints = EndpointChanges.omit({ changes: true }).extend({
   repo: RepoId,
   base: CommitHash,
   endpoints: z.array(ChangedEndpoint),
-  /** More changed than `MAX_CHANGED_ENDPOINTS`. */
+  /** The removed and changed public types of the repo's packages with the repos that import them (ADR-205). */
+  types: z.array(ChangedType),
+  /** What either card, or the reading of the changed library Java files, could not read, so a change there may be missing. */
+  problems: z.array(ChangeCardProblem),
+  /**
+   * More changed endpoints than `MAX_CHANGED_ENDPOINTS`, or types than `MAX_CHANGED_TYPES`, or a search for their users
+   * that was cut or failed in a repo.
+   */
   truncated: z.boolean(),
-  /** The repos the removed and changed endpoints reach, nearest ring first (ADR-147). */
+  /**
+   * The repos the removed and changed endpoints reach, nearest ring first (ADR-147). A repo that imports a changed type
+   * and is reached by no endpoint is in ring 1 with no calls (ADR-205).
+   */
   impact: z.array(ImpactedRepo),
 });
 export type ChangedEndpoints = z.infer<typeof ChangedEndpoints>;

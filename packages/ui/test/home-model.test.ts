@@ -43,6 +43,7 @@ function session(id: string, repoId: string, over: Partial<Session> = {}): Sessi
     readRequest: null,
     copyRequest: null,
     usage: null,
+    model: null,
     ...over,
   };
 }
@@ -57,7 +58,7 @@ function edge(from: string, to: string, source: GraphEdge["source"], key = "k"):
 }
 
 function graph(edges: GraphEdge[]): RepoGraph {
-  return { nodes: [], edges, problems: [], configProblems: [], configFile: "/home/workspace.yaml" };
+  return { nodes: [], edges, problems: [], drift: [], configProblems: [], configFile: "/home/workspace.yaml" };
 }
 
 function exited(exitCode: number, stoppedByUser = false): Session["run"] {

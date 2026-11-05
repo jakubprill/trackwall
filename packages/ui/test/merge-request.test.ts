@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { MERGE_REQUEST_DESCRIPTION_MAX, type Task, type TaskBranchPush, type Verification } from "@trackwall/protocol";
-import { branchPushLabel, canPush, mergeRequestDraft, mergeRequestStateLabel, pipelineLabel } from "../src/lib/merge-request.ts";
+import {
+  branchPushLabel,
+  canFixPipeline,
+  canPush,
+  jobLogNote,
+  mergeRequestDraft,
+  mergeRequestStateLabel,
+  pipelineLabel,
+} from "../src/lib/merge-request.ts";
 
 const task = (fields: Partial<Task> = {}): Task => ({
   id: "t1",
@@ -84,7 +92,7 @@ describe("the merge request draft", () => {
     );
   });
 
-  test("an outdated verdict says it is about an earlier version of the changes (ADR-195)", () => {
+  test("an outdated verdict says it is about an earlier version of the changes (ADR-207)", () => {
     expect(mergeRequestDraft(task(), { ...verification("passed"), outdated: true }, null).description).toEndWith(
       "\n\nVerification in Trackwall: passed on an earlier version of the changes (mise task test)",
     );
@@ -162,5 +170,30 @@ describe("the merge request and its pipeline", () => {
     expect(pipelineLabel("passed")).toEqual({ tone: "ok", label: "pipeline passed" });
     expect(pipelineLabel("failed")).toEqual({ tone: "error", label: "pipeline failed" });
     expect(pipelineLabel("manual")).toEqual({ tone: "warning", label: "pipeline waits for a manual job" });
+  });
+});
+
+describe("a failed pipeline in the task panel (ADR-197)", () => {
+  const mergeRequest = (state: "open" | "merged", pipeline: "failed" | "running") => ({
+    number: 12,
+    title: "Add a discount",
+    url: "https://gitlab.example.com/shop/-/merge_requests/12",
+    state,
+    pipeline: { state: pipeline, url: "https://gitlab.example.com/shop/-/pipelines/41", commit: "a".repeat(40), failedJobs: [] },
+  });
+
+  test("Fix is offered only for a failed pipeline of an open merge request", () => {
+    expect(canFixPipeline(mergeRequest("open", "failed"))).toBe(true);
+    expect(canFixPipeline(mergeRequest("open", "running"))).toBe(false);
+    expect(canFixPipeline(mergeRequest("merged", "failed"))).toBe(false);
+  });
+
+  test("a job's log says what it leaves out", () => {
+    const job = { name: "unit-tests", url: "https://gitlab.example.com/shop/-/jobs/7", id: "7" };
+    expect(jobLogNote({ job, text: "ERROR: Job failed", truncated: false })).toBeNull();
+    expect(jobLogNote({ job, text: "ERROR: Job failed", truncated: true })).toBe(
+      "The last 150 lines at most: the job's page has the whole log.",
+    );
+    expect(jobLogNote({ job, text: "", truncated: true })).toBe("The log is too long for Trackwall to read its end: open the job's page.");
   });
 });

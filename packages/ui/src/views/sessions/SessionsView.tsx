@@ -10,12 +10,13 @@ import {
   type TaskOutcome,
 } from "@trackwall/protocol";
 import { BellRing, Crown, Lightbulb, Plus, Square, X } from "lucide-react";
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import { CopilotUsageMark } from "@/components/CopilotUsageMark";
 import { CopyRequestNotice } from "@/components/CopyRequestNotice";
 import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
+import { ModelChangeButton, SessionModelChange } from "@/components/ModelChange";
 import { ReadRequestNotice } from "@/components/ReadRequestNotice";
 import { SessionScreen } from "@/components/SessionScreen";
 import { StatusLabel } from "@/components/StatusLabel";
@@ -728,6 +729,7 @@ function SessionPanel({
   const live = isLive(session);
   const stop = useAction(() => post(conn, agentsApi.stop, { session: session.id }), onChanged);
   const close = useSessionClose(conn, session, onClosed);
+  const [changingModel, setChangingModel] = useState(false);
   const error = live ? stop.error : close.error;
   return (
     <>
@@ -745,6 +747,13 @@ function SessionPanel({
           {session.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
         </div>
         {error && <span className="text-destructive max-w-xs truncate text-xs">{error}</span>}
+        {live && (
+          <ModelChangeButton
+            open={changingModel}
+            onToggle={() => setChangingModel(!changingModel)}
+            title="Restart the session on another model"
+          />
+        )}
         {live ? (
           <Button variant="outline" size="sm" onClick={stop.run} disabled={stop.pending || session.run.kind === "stopping"}>
             <Square /> Stop
@@ -756,6 +765,18 @@ function SessionPanel({
         )}
       </header>
       <SessionEnvironment environment={session.environment} />
+      {live && changingModel && (
+        <SessionModelChange
+          key={session.id}
+          conn={conn}
+          session={session}
+          onDone={() => {
+            setChangingModel(false);
+            onChanged();
+          }}
+          onCancel={() => setChangingModel(false)}
+        />
+      )}
       <EnvironmentChangeNotice key={session.id} conn={conn} session={session} onRestarted={onChanged} />
       <ReadRequestNotice key={`read-request-${session.id}`} conn={conn} session={session} onDelivered={onChanged} />
       <CopyRequestNotice key={session.id} conn={conn} session={session} onCleared={onChanged} />

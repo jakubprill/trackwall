@@ -4,7 +4,7 @@ import { proxyFor } from "../../infra/proxy-env.ts";
 import { DNS_CODES, openConnection, serverName, UNREACHABLE_CODES } from "../../infra/proxy-tunnel.ts";
 
 /**
- * One `GET` to the model provider the way a session's Copilot CLI reaches it (ADR-194): directly or through an HTTP
+ * One request to the model provider the way a session's Copilot CLI reaches it (ADR-194, ADR-200): directly or through an HTTP
  * `CONNECT` tunnel of the proxy its environment names (`infra/proxy-env.ts`), over TLS trusting only the certificates
  * given, with `Connection: close` so the answer ends with the connection. HTTP/1.1 is written by hand for the same reason
  * the tunnel is: `http.request` on a socket of one's own differs between Bun and Node. A failure is told by a fixed
@@ -13,7 +13,7 @@ import { DNS_CODES, openConnection, serverName, UNREACHABLE_CODES } from "../../
 
 export type ProviderAnswer = { kind: "answer"; status: number; body: string } | { kind: "failed"; reason: string };
 
-export interface ProviderGetOptions {
+export interface ProviderCallOptions {
   /** The session's environment, for its proxy settings. */
   env: NodeJS.ProcessEnv;
   /** The certificate authorities a session's Node.js trusts, as PEM. */
@@ -23,7 +23,14 @@ export interface ProviderGetOptions {
   maxBytes: number;
 }
 
-export async function providerGet(url: URL, headers: Readonly<Record<string, string>>, o: ProviderGetOptions): Promise<ProviderAnswer> {
+/** A `GET`, or a `POST` of a JSON body. */
+export interface ProviderCall {
+  url: URL;
+  headers: Readonly<Record<string, string>>;
+  body?: unknown;
+}
+
+export async function callProvider({ url, headers, body }: ProviderCall, o: ProviderCallOptions): Promise<ProviderAnswer> {
   const scheme = url.protocol;
   if (scheme !== "http:" && scheme !== "https:") return { kind: "failed", reason: "its address is not an http or https address" };
   const host = url.hostname.replace(/^\[|\]$/g, "");
@@ -42,7 +49,7 @@ export async function providerGet(url: URL, headers: Readonly<Record<string, str
     if ("kind" in opened) return { kind: "failed", reason: `the proxy did not open a connection to it (${opened.status})` };
     raw = opened.socket;
     socket = scheme === "https:" ? await secured(raw, host, o.ca, Math.max(1, deadline - Date.now())) : raw;
-    return parseAnswer(await exchange(socket, request(url, headers), Math.max(1, deadline - Date.now()), o.maxBytes));
+    return parseAnswer(await exchange(socket, request(url, headers, body), Math.max(1, deadline - Date.now()), o.maxBytes));
   } catch (err) {
     return { kind: "failed", reason: failure(err, proxy !== null) };
   } finally {
@@ -52,17 +59,20 @@ export async function providerGet(url: URL, headers: Readonly<Record<string, str
   }
 }
 
-function request(url: URL, headers: Readonly<Record<string, string>>): string {
+function request(url: URL, headers: Readonly<Record<string, string>>, body: unknown): Buffer {
+  const content = body === undefined ? null : Buffer.from(JSON.stringify(body), "utf8");
   const lines = [
-    `GET ${url.pathname}${url.search} HTTP/1.1`,
+    `${content === null ? "GET" : "POST"} ${url.pathname}${url.search} HTTP/1.1`,
     `Host: ${url.host}`,
     "Accept: application/json",
     // Without compression the answer is read as it comes.
     "Accept-Encoding: identity",
     "Connection: close",
+    ...(content === null ? [] : ["Content-Type: application/json", `Content-Length: ${content.length}`]),
     ...Object.entries(headers).map(([name, value]) => `${name}: ${value}`),
   ];
-  return `${lines.join("\r\n")}\r\n\r\n`;
+  const head = Buffer.from(`${lines.join("\r\n")}\r\n\r\n`, "latin1");
+  return content === null ? head : Buffer.concat([head, content]);
 }
 
 function secured(socket: Socket, host: string, ca: readonly string[], timeoutMs: number): Promise<Socket> {
@@ -94,7 +104,7 @@ function secured(socket: Socket, host: string, ca: readonly string[], timeoutMs:
 }
 
 /** Sends the request and reads until the provider closes the connection. */
-function exchange(socket: Socket, text: string, timeoutMs: number, maxBytes: number): Promise<Buffer> {
+function exchange(socket: Socket, text: Buffer, timeoutMs: number, maxBytes: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;

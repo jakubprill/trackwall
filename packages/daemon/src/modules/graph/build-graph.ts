@@ -4,12 +4,13 @@ import { EdgeSet, type Join, missingRepo, repoResolver } from "./graph-join.ts";
 import { addHttpEdges } from "./http-edges.ts";
 import { HttpIndex } from "./http-index.ts";
 import { unresolvedCalls } from "./unresolved-calls.ts";
+import { versionDrift } from "./version-drift.ts";
 
 /**
  * Joining repo cards into the graph (§4.6, ADR-29, ADR-30, ADR-116): a package a repo uses and the repo that builds it
  * (`depends-on`), and an HTTP client and the repo with the app or endpoints it calls (`calls`), give an edge with evidence
  * from both sides. On top of that, package and app aliases and manual edges from `workspace.yaml`, and the clients that
- * point to no repo as the graph's problems. A pure function: the same cards and the same configuration give the same graph.
+ * point to no repo as the graph's problems, and the versions the repos disagree on (ADR-196). A pure function: the same cards and the same configuration give the same graph.
  */
 
 interface Provider {
@@ -33,6 +34,7 @@ export function buildGraphWithIndex(cards: readonly GraphCardInput[], input: Gra
     nodes: cards.map(graphNode),
     edges: join.edges.sorted(),
     problems: unresolvedCalls(http),
+    drift: versionDrift(cards),
     configProblems: join.configProblems,
     configFile: input.file,
   };

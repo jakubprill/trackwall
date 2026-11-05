@@ -375,7 +375,7 @@ describe("verification of a task", () => {
   });
 });
 
-describe("an outdated verdict (ADR-195)", () => {
+describe("an outdated verdict (ADR-207)", () => {
   test("a verdict becomes outdated once the worktree holds other files than when its run started, and stays so", async () => {
     const { verifications, worktree, end } = setup();
     await verifications.start(TASK);

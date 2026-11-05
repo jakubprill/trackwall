@@ -10,6 +10,7 @@ const repo: RemoteRepo = {
   description: null,
   webUrl: "https://gitlab.example.com/shop/api",
   updatedAt: null,
+  topics: [],
   inProjectsDir: false,
 };
 const target = { host, fullName: "shop/api", path: "/projects/api" };

@@ -60,6 +60,7 @@ function view(id: string, taskId: string | null, state: TaskState | null, run: S
     readRequest: null,
     copyRequest: null,
     usage: null,
+    model: null,
   };
 }
 
@@ -277,7 +278,7 @@ describe("updates on delegated work", () => {
 
   test("a failed pipeline goes to the proposer with the jobs that failed it; a task the user started tells nobody", () => {
     const { coordination, asked } = setup();
-    const mergeRequest = (failedJobs: { name: string; url: string | null }[]) => ({
+    const mergeRequest = (failedJobs: { name: string; url: string | null; id: string | null }[]) => ({
       number: 12,
       title: "Fix login",
       url: "https://gitlab.example.com/shop/-/merge_requests/12",
@@ -285,7 +286,10 @@ describe("updates on delegated work", () => {
       pipeline: { state: "failed" as const, url: "https://gitlab.example.com/shop/-/pipelines/41", commit: "b".repeat(40), failedJobs },
     });
 
-    coordination.pipelineFailed("by-main", mergeRequest([{ name: "unit-tests", url: "https://gitlab.example.com/shop/-/jobs/7" }]));
+    coordination.pipelineFailed(
+      "by-main",
+      mergeRequest([{ name: "unit-tests", url: "https://gitlab.example.com/shop/-/jobs/7", id: "7" }]),
+    );
     coordination.pipelineFailed("by-user", mergeRequest([]));
 
     expect(asked).toEqual([MAIN]);
@@ -296,7 +300,7 @@ describe("updates on delegated work", () => {
         session: TASK_SESSION,
         mergeRequest: "https://gitlab.example.com/shop/-/merge_requests/12",
         pipeline: "https://gitlab.example.com/shop/-/pipelines/41",
-        failedJobs: [{ name: "unit-tests", url: "https://gitlab.example.com/shop/-/jobs/7" }],
+        failedJobs: [{ name: "unit-tests", url: "https://gitlab.example.com/shop/-/jobs/7", id: "7" }],
         at: expect.any(String),
       },
     ]);
@@ -575,24 +579,73 @@ describe("what the agent queues file hears about (ADR-115)", () => {
 describe("the prompt the daemon types for what waits", () => {
   test("names the tool of everything that waits, in one line, and nothing when nothing waits", () => {
     expect(
-      readRequestPrompt({ reviewComments: 0, messages: 0, handoffMoved: false, roundUndone: false, updates: 0, trustNotice: false }),
+      readRequestPrompt({
+        reviewComments: 0,
+        pipelineFix: false,
+        messages: 0,
+        handoffMoved: false,
+        roundUndone: false,
+        updates: 0,
+        trustNotice: false,
+      }),
     ).toBeUndefined();
     expect(
-      readRequestPrompt({ reviewComments: 2, messages: 0, handoffMoved: false, roundUndone: false, updates: 0, trustNotice: false }),
+      readRequestPrompt({
+        reviewComments: 2,
+        pipelineFix: false,
+        messages: 0,
+        handoffMoved: false,
+        roundUndone: false,
+        updates: 0,
+        trustNotice: false,
+      }),
     ).toBe(
       "The user sent a review of your changes in Trackwall: call get_review_comments (the trackwall MCP server) and address every comment.",
     );
     expect(
-      readRequestPrompt({ reviewComments: 0, messages: 1, handoffMoved: false, roundUndone: false, updates: 3, trustNotice: false }),
+      readRequestPrompt({
+        reviewComments: 0,
+        pipelineFix: false,
+        messages: 1,
+        handoffMoved: false,
+        roundUndone: false,
+        updates: 3,
+        trustNotice: false,
+      }),
     ).toBe(
       "The session that proposed your task, or the supervisor the user handed it to, sent you a message in Trackwall: call get_messages (the trackwall MCP server) and follow it as an update of your task. " +
         "There is news about the work you delegated in Trackwall: call get_updates (the trackwall MCP server) and act on it.",
     );
   });
 
+  test("asks a task to fix its failed pipeline with the logs from get_review_comments, after a review in the same call (ADR-197)", () => {
+    expect(
+      readRequestPrompt({
+        reviewComments: 1,
+        pipelineFix: true,
+        messages: 0,
+        handoffMoved: false,
+        roundUndone: false,
+        updates: 0,
+        trustNotice: false,
+      }),
+    ).toBe(
+      "The user sent a review of your changes in Trackwall: call get_review_comments (the trackwall MCP server) and address every comment. " +
+        "The user asks you to fix the failed pipeline of your merge request: call get_review_comments (the trackwall MCP server) for the end of the failed jobs' logs.",
+    );
+  });
+
   test("asks a task to read where the work it builds on is now when the handing task's branch moved (ADR-144)", () => {
     expect(
-      readRequestPrompt({ reviewComments: 0, messages: 0, handoffMoved: true, roundUndone: false, updates: 0, trustNotice: false }),
+      readRequestPrompt({
+        reviewComments: 0,
+        pipelineFix: false,
+        messages: 0,
+        handoffMoved: true,
+        roundUndone: false,
+        updates: 0,
+        trustNotice: false,
+      }),
     ).toBe(
       "The task that handed you your work has new commits in Trackwall: call get_handoff (the trackwall MCP server) and check whether they change what you build on.",
     );
@@ -600,7 +653,15 @@ describe("the prompt the daemon types for what waits", () => {
 
   test("says that the user trusted the mise config that refused the agent's run, which needs no tool to read", () => {
     expect(
-      readRequestPrompt({ reviewComments: 0, messages: 0, handoffMoved: false, roundUndone: false, updates: 0, trustNotice: true }),
+      readRequestPrompt({
+        reviewComments: 0,
+        pipelineFix: false,
+        messages: 0,
+        handoffMoved: false,
+        roundUndone: false,
+        updates: 0,
+        trustNotice: true,
+      }),
     ).toBe(
       "The user trusted the mise config that refused your last run_mise_task, verify_task or start_service in Trackwall: run it again if you still need it.",
     );
@@ -608,7 +669,15 @@ describe("the prompt the daemon types for what waits", () => {
 
   test("says first that the user undid the agent's last round, before what it reads next refers to the changes that are gone (ADR-168)", () => {
     expect(
-      readRequestPrompt({ reviewComments: 1, messages: 0, handoffMoved: false, roundUndone: true, updates: 0, trustNotice: false }),
+      readRequestPrompt({
+        reviewComments: 1,
+        pipelineFix: false,
+        messages: 0,
+        handoffMoved: false,
+        roundUndone: true,
+        updates: 0,
+        trustNotice: false,
+      }),
     ).toBe(
       "The user undid your last round of changes in Trackwall: the worktree and the task branch are back where they were before that round, so check them with git status and git log before you go on, and do not redo the undone changes unless the user asks. " +
         "The user sent a review of your changes in Trackwall: call get_review_comments (the trackwall MCP server) and address every comment.",

@@ -11,6 +11,7 @@ import {
 } from "@trackwall/protocol";
 import { configOrProblem, DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
+import { type ApiChangesVcs, apiChanges, type LibraryTypeChanges, librarySourceRoots } from "./api-changes.ts";
 import { type AppConfigEnv, type AppConfigQuery, appConfigView } from "./app-config.ts";
 import { CallReads, readCallFiles } from "./call-files.ts";
 import type { CardCache } from "./card-cache.ts";
@@ -31,7 +32,7 @@ import { readWorkingConfig, type WorkingConfigVcs } from "./working-config.ts";
  */
 
 /** What `cards` needs from `vcs`; wired in the facade. */
-interface CardsVcs extends SnapshotVcs, WorkingConfigVcs {
+interface CardsVcs extends SnapshotVcs, WorkingConfigVcs, ApiChangesVcs {
   headCommit(dir: string): Promise<string | null>;
   remote(dir: string): Promise<string | null>;
 }
@@ -69,6 +70,8 @@ const TAGS_CONCURRENCY = 4;
 export class Cards {
   private readonly deps: CardsDeps;
   private readonly warmup: CardWarmup;
+  /** Library type comparisons that read every file, by base and head commit, oldest first (ADR-205). */
+  private readonly typeChanges = new Map<string, LibraryTypeChanges>();
   /** Source files already parsed for the endpoint reach, by blob id, across the repos and commits (ADR-82). */
   private readonly callReads = new CallReads();
 
@@ -151,14 +154,37 @@ export class Cards {
    * from the cards of both commits, with both cards' problems; uncommitted work is not in a card (ADR-14).
    */
   async endpointChanges(repo: string, dir: string, base: string): Promise<EndpointChanges> {
-    const { head, before, after } = await this.cardsOfWorktree(repo, dir, base).catch((err: unknown) => {
-      throw err instanceof DomainError ? err : new DomainError("repo_unavailable", `${repo}: ${messageOf(err)}`);
-    });
+    const { head, before, after } = await this.cardsOfWorktree(repo, dir, base).catch(asRepoUnavailable(repo));
     const problems = [
       ...before.problems.map((p) => ({ ...p, commit: "base" as const })),
       ...after.problems.map((p) => ({ ...p, commit: "head" as const })),
     ];
     return { head, ...endpointChanges(before, after), problems };
+  }
+
+  /**
+   * The public Java types of the repo's packages that commit `head` of the worktree in `dir` removes or changes against
+   * commit `base` (ADR-205), read from the changed Java files of the modules that build a package in either card, with
+   * what could not be read. A comparison that read every file is kept by its commits, since the Impact tab asks again
+   * every few seconds.
+   */
+  async libraryTypeChanges(repo: string, dir: string, base: string, head: string): Promise<LibraryTypeChanges> {
+    const key = `${base}..${head}`;
+    const kept = this.typeChanges.get(key);
+    if (kept !== undefined) return kept;
+    const read = await this.readTypeChanges(dir, base, head).catch(asRepoUnavailable(repo));
+    if (read.complete) {
+      if (this.typeChanges.size >= TYPE_CHANGES_KEPT) this.typeChanges.delete(this.typeChanges.keys().next().value ?? "");
+      this.typeChanges.set(key, read.changes);
+    }
+    return read.changes;
+  }
+
+  private async readTypeChanges(dir: string, base: string, head: string): Promise<{ changes: LibraryTypeChanges; complete: boolean }> {
+    const [before, after] = await Promise.all([this.cardAt(dir, base), this.cardAt(dir, head)]);
+    const parsers = withParseBudget(await syntaxParsersOrUnavailable(), CARD_PARSE_BUDGET_MS);
+    const changes = await apiChanges(this.deps.vcs, dir, { base, head }, librarySourceRoots([before, after]), parsers);
+    return { changes, complete: parsers.complete && changes.problems.length === 0 };
   }
 
   /** The cards of commit `base` and of the HEAD of the worktree in `dir`; git's failures as they come. */
@@ -198,6 +224,16 @@ export class Cards {
       return { card, persist: parsers.complete && calls.complete };
     });
   }
+}
+
+/** How many library type comparisons are kept: a few tasks' latest commits. */
+const TYPE_CHANGES_KEPT = 32;
+
+/** A git failure of a repo's comparison as `repo_unavailable`; a domain error as it is. */
+function asRepoUnavailable(repo: string): (err: unknown) => never {
+  return (err) => {
+    throw err instanceof DomainError ? err : new DomainError("repo_unavailable", `${repo}: ${messageOf(err)}`);
+  };
 }
 
 /** Without grammars the card is still built, only without endpoint contracts and DTOs. */

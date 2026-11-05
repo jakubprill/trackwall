@@ -54,6 +54,7 @@ import {
 } from "./parse.ts";
 import { pathKey } from "./path-key.ts";
 import { remoteAddress } from "./remote.ts";
+import { networkRemote, reachRemote } from "./remote-reach.ts";
 import {
   commitRound,
   moveBranch,
@@ -166,6 +167,16 @@ export class Vcs {
    */
   unpushed(dir: string): Promise<RepoUnpushed> {
     return readUnpushed(dir, async (worktree) => (await this.status(worktree, "recent")).changes);
+  }
+
+  /** The main remote's HTTPS or SSH address and its `host/path`; `null` for another kind of remote or none (ADR-195). */
+  networkRemote(dir: string): Promise<{ url: string; address: string } | null> {
+    return networkRemote(dir);
+  }
+
+  /** Whether git reaches `url` with the user's sign-in, outside every repo (ADR-195); git's error otherwise. */
+  reachRemote(url: string): Promise<void> {
+    return reachRemote(url);
   }
 
   private async readStatus(dir: string): Promise<TimedStatus> {
@@ -345,8 +356,14 @@ export class Vcs {
   }
 
   /** The paths that differ between two commits, at most `max`; `undefined` when `from` is unknown. */
-  changedPathsBetween(dir: string, from: string, to: string, max: number): Promise<{ paths: string[]; truncated: boolean } | undefined> {
-    return changedPathsBetween(dir, from, to, max);
+  changedPathsBetween(
+    dir: string,
+    from: string,
+    to: string,
+    max: number,
+    pathspecs: readonly string[] = [],
+  ): Promise<{ paths: string[]; truncated: boolean } | undefined> {
+    return changedPathsBetween(dir, from, to, max, pathspecs);
   }
 
   /** The newest `limit` commits of `commit`'s history, newest first. */

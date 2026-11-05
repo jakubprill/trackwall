@@ -9,6 +9,7 @@ import {
   type LogTailRequest,
 } from "@trackwall/protocol";
 import { RotatingJsonlFile } from "../../infra/rotating-jsonl-file.ts";
+import { type JobLogExcerpt, jobLogExcerpt } from "./job-log-excerpt.ts";
 import { collectErrors } from "./log-errors.ts";
 import { logFilePath, otherTaskLogDirs, removeLogDir, sourceParts, TASK_LOG_KIND, taskLogDir } from "./log-file.ts";
 import { atLeast, containsText } from "./log-filter.ts";
@@ -84,6 +85,11 @@ export class Logs {
   /** Text from a process (an HTTP response of a service, ADR-45) masked the same way as its log lines. */
   mask(text: string, env: NodeJS.ProcessEnv): string {
     return maskSecrets(text, secretValues(env));
+  }
+
+  /** The end of a CI job's log from a repo host (ADR-197), cleaned and masked like a log line with the secrets of `env`. */
+  jobLogExcerpt(raw: string, env: NodeJS.ProcessEnv, cut: boolean): JobLogExcerpt {
+    return jobLogExcerpt(raw, secretValues(env), cut);
   }
 
   /** Masking of many texts with the secrets of `env` and the `known` ones, found once. */

@@ -127,7 +127,7 @@ describe("tileNotices", () => {
     expect(tile.others.map((n) => n.label)).toEqual(["1 file also in “Extend add()”", "Merge request"]);
   });
 
-  test("an outdated verdict (ADR-195) keeps a chip of its own, which says it is outdated instead of passed", () => {
+  test("an outdated verdict (ADR-207) keeps a chip of its own, which says it is outdated instead of passed", () => {
     const notices = taskNotices({ ...quiet, verification: { ...verification("passed"), outdated: true } });
     expect(notices[0]).toMatchObject({ tone: "info", label: "Verification passed, but the worktree changed since" });
     expect(tileNotices(notices).chips.map((n) => n.chip)).toEqual(["Outdated"]);

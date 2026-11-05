@@ -22,6 +22,7 @@ function session(id: string, state: TaskState | null, needsAttention: boolean, e
     readRequest: null,
     copyRequest: null,
     usage: null,
+    model: null,
     ...extra,
   };
 }
@@ -38,6 +39,7 @@ function proposal(id: string, repo = `repo-${id}`): TaskProposal {
     approvals: "ask",
     item: null,
     parts: null,
+    fromImpact: false,
     createdAt: "2026-10-30T10:00:00Z",
   };
 }

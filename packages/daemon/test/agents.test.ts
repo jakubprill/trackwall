@@ -550,6 +550,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
         toolPermissions: () => ({ allow: [], deny: [] }),
         supervisorSettings: () => ({ changesCode: false }),
         supervisorModel: () => null,
+        setSupervisorModel: () => {},
         agentSecrets: () => [],
         sessionProfile: () => null,
         autoReviewSettings: () => ({ afterReport: false }),
@@ -569,7 +570,9 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
       boardHas: async () => true,
       taskOutcomes: () => [],
       knowledge: async () => ({ entries: [], more: 0 }),
+      wireApi: async () => null,
       onTaskRemoved: () => {},
+      taskImpact: () => Promise.reject(new Error("unused")),
       log: () => {},
     });
     await expect(missing.start("shop")).rejects.toMatchObject({ code: "agent_unavailable" });

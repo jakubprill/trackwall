@@ -1044,6 +1044,8 @@ describe("the graph and find_endpoint on real git", () => {
         ["added", "POST /api/orders/{id}/cancel", [], []],
       ]);
       expect(changed.endpoints[0]?.before).toEqual({ handler: "OrdersController.get", request: null, response: "OrderDto" });
+      // No repo depends on a package of orders-api, so its public types are not compared (ADR-205).
+      expect(changed.types).toEqual([]);
       // The reports read orders from their own endpoint; the BFF's Kotlin card has no reach, so the shop's frontend,
       // which reaches it by its port, may be hit too.
       expect(changed.impact.map((r) => [r.ring, r.repo, r.uses, r.sure, r.through?.map((e) => `${e.method} ${e.path}`) ?? null])).toEqual([

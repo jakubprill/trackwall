@@ -16,6 +16,7 @@ function proposal(id: string): TaskProposal {
     approvals: "ask",
     item: null,
     parts: null,
+    fromImpact: false,
     createdAt: "2026-10-25T10:00:00Z",
   };
 }

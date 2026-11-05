@@ -11,7 +11,7 @@ import { RepoId } from "./workspace.ts";
  * in the task's worktree and summed up in one verdict from the exit code, the JUnit reports the run wrote (ADR-60) and
  * the errors in its log (ADR-42). One button in the task panel and one MCP tool, so the user and the agent read the
  * same result. The last one of every task is kept, also across a restart (ADR-115), and marked `outdated` once the
- * worktree's files change after its run started (ADR-195). Each action is
+ * worktree's files change after its run started (ADR-207). Each action is
  * `POST /api/verification/<action>`.
  */
 
@@ -67,7 +67,7 @@ export const Verification = z.object({
   /** The end of the run's output when it failed (masked); empty otherwise. */
   lastLines: z.array(z.string()),
   /**
-   * The files in the task's worktree changed after the run started (ADR-195), so the verdict is about an earlier version
+   * The files in the task's worktree changed after the run started (ADR-207), so the verdict is about an earlier version
    * of the task's changes; the next verification replaces it. `false` while running, and for a verification whose start
    * could not read the worktree.
    */

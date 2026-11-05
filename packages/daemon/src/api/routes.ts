@@ -25,6 +25,7 @@ import {
   taskOutcomesApi,
   taskRoundsApi,
   terminalsApi,
+  usageReportApi,
   verificationApi,
   workspaceApi,
 } from "@trackwall/protocol";
@@ -93,7 +94,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(workspaceApi.droppedFolder, (f, b) => f.workspace.droppedFolder(b.path)),
   route(workspaceApi.repoHosts, (f) => f.workspace.repoHosts()),
   route(workspaceApi.setRepoHosts, (f, b) => f.workspace.setRepoHosts(b.repoHosts)),
-  route(workspaceApi.remoteRepos, (f, b) => f.workspace.remoteRepos(b.query)),
+  route(workspaceApi.remoteRepos, (f, b) => f.workspace.remoteRepos(b)),
   route(workspaceApi.clone, (f, b) => f.workspace.clone(b.host, b.fullName)),
   route(workspaceApi.clones, (f) => f.workspace.cloneJobs()),
   route(workspaceApi.sync, (f) => f.workspace.sync()),
@@ -127,6 +128,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     return null;
   }),
   route(mcpAuditApi.calls, (f, b) => f.mcpAudit.list(b.task)),
+  route(usageReportApi.week, (f, b) => f.usageReport.week(b.weeksAgo)),
   route(localConfigApi.store, (f) => f.localConfig.store()),
   route(localConfigApi.repo, (f, b) => f.localConfig.repo(b.repo)),
   route(localConfigApi.repos, (f) => f.localConfig.repos()),
@@ -181,6 +183,8 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(mergeRequestsApi.get, (f, b) => f.mergeRequests.get(b.task)),
   route(mergeRequestsApi.push, (f, b) => f.mergeRequests.push(b.task)),
   route(mergeRequestsApi.formUrl, async (f, b) => ({ url: await f.mergeRequests.formUrl(b) })),
+  route(mergeRequestsApi.jobLog, (f, b) => f.mergeRequests.jobLog(b.task, b.job)),
+  route(mergeRequestsApi.fixPipeline, (f, b) => f.mergeRequests.fixPipeline(b.task)),
   route(mergeRequestsApi.openForm, async (f, b) => {
     await f.mergeRequests.openForm(b);
     return null;
@@ -190,7 +194,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(agentsApi.startSupervisor, (f, b) => f.agents.startSupervisor(b.conversation, b.view)),
   route(agentsApi.stop, (f, b) => f.agents.stop(b.session)),
   route(agentsApi.environmentChange, (f, b) => f.agents.environmentChange(b.session)),
-  route(agentsApi.restart, (f, b) => f.agents.restart(b.session)),
+  route(agentsApi.restart, (f, b) => f.agents.restart(b.session, b.model)),
   route(agentsApi.deliverReadRequest, (f, b) => f.agents.deliverReadRequest(b.session)),
   route(agentsApi.clearCopyRequest, (f, b) => f.agents.clearCopyRequest(b.session, b.request)),
   route(agentsApi.answerDialog, (f, b) => f.agents.answerDialog(b.session, b.dialog, b.answer)),
@@ -201,7 +205,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(agentsApi.createTask, (f, { repo, prompt, handoffFrom, ...options }) => f.agents.createTask(repo, prompt, options, handoffFrom)),
   route(agentsApi.createChange, (f, b) => f.agents.createChange(b)),
   route(agentsApi.startOptions, (f) => f.agents.startOptions()),
-  route(agentsApi.resumeTask, (f, b) => f.agents.resumeTask(b.task)),
+  route(agentsApi.resumeTask, (f, b) => f.agents.resumeTask(b.task, b.model)),
   route(agentsApi.taskChanges, (f, b) => f.agents.taskChanges(b.task)),
   route(agentsApi.sendReview, (f, b) => f.agents.sendReview(b.task, b.comments)),
   route(taskRoundsApi.rounds, (f, b) => f.agents.taskRounds(b.task)),

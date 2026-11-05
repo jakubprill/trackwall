@@ -32,6 +32,7 @@ function session(id: string, state: Session["state"], run: Session["run"] = runn
     readRequest: null,
     copyRequest: null,
     usage: null,
+    model: null,
   };
 }
 
@@ -153,6 +154,7 @@ const proposals: SessionEntry = {
       approvals: "ask",
       item: null,
       parts: null,
+      fromImpact: false,
       createdAt: "",
     },
   ],
