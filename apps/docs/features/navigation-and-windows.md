@@ -43,6 +43,7 @@ A window opens on the monitor, at the size and position its predecessor had. Whe
 | Ctrl+Shift+N | ⌘⇧N | Open the current view in a new window. |
 | Ctrl+= or Ctrl++, Ctrl+- | ⌘=, ⌘- | Zoom this window in or out. |
 | Ctrl+0 | ⌘0 | Back to actual size. |
+| Ctrl+PageDown, Ctrl+PageUp | ⌘⇧], ⌘⇧[ (or ⌃PageDown, ⌃PageUp) | The next or previous tab of a task or a repo, such as "Terminal" and "Shell". |
 
 ## Good to know
 

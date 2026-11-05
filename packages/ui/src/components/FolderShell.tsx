@@ -6,7 +6,7 @@ import { type PtyKind, PtyTerminal } from "@/components/PtyTerminal";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { startsOnOpen } from "@/lib/folder-terminals";
+import { startAfterPause, startsOnOpen } from "@/lib/folder-terminals";
 import { useAction } from "@/lib/use-action";
 import { useFolderTerminal } from "@/lib/use-folder-terminal";
 
@@ -51,8 +51,10 @@ export function FolderShell({ conn, place, folder }: { conn: Connection; place: 
   openRef.current = open.run;
   useEffect(() => {
     if (!startsOnOpen({ loaded: listed.loaded, hasTerminal: terminal !== undefined, alreadyAsked: asked.current })) return;
-    asked.current = true;
-    openRef.current();
+    return startAfterPause(() => {
+      asked.current = true;
+      openRef.current();
+    });
   }, [listed.loaded, terminal]);
 
   const actionError = open.error ?? close.error ?? listed.error;

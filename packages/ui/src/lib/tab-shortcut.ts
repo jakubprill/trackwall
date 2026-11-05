@@ -39,6 +39,12 @@ export function steppedTab<Id extends string>(tabs: readonly { id: Id }[], activ
   return tab.id;
 }
 
+/** The `aria-keyshortcuts` value (modifier names from WAI-ARIA). */
+export function ariaTabShortcut(isMac: boolean): string {
+  const page = "Control+PageDown Control+PageUp";
+  return isMac ? `${page} Meta+Shift+] Meta+Shift+[` : page;
+}
+
 /** The shortcut caption in the system's convention. */
 export function tabShortcutLabel(isMac: boolean): string {
   return isMac ? "⌘⇧] / ⌘⇧[" : "Ctrl+PageDown / Ctrl+PageUp";

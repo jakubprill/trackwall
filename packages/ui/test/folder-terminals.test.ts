@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { type FolderTerminal, PROJECTS_FOLDER_PLACE } from "@trackwall/protocol";
-import { startsOnOpen, terminalAt } from "../src/lib/folder-terminals.ts";
+import { startAfterPause, startsOnOpen, terminalAt } from "../src/lib/folder-terminals.ts";
 
 const RUNNING: FolderTerminal["run"] = { kind: "running", runId: "r1", startedAt: "2026-11-03T10:00:00.000Z", pid: 7 };
 const ROOT: FolderTerminal = { id: "11111111-1111-4111-8111-111111111111", repo: "shop", task: null, run: RUNNING };
@@ -34,5 +34,16 @@ describe("opening a Shell tab", () => {
     expect(startsOnOpen({ loaded: false, hasTerminal: false, alreadyAsked: false })).toBe(false);
     expect(startsOnOpen({ loaded: true, hasTerminal: true, alreadyAsked: false })).toBe(false);
     expect(startsOnOpen({ loaded: true, hasTerminal: false, alreadyAsked: true })).toBe(false);
+  });
+});
+
+describe("passing through a Shell tab", () => {
+  test("a tab left before the pause starts no shell, and one that stays shown starts it once", async () => {
+    let starts = 0;
+    const cancel = startAfterPause(() => starts++, 20);
+    cancel();
+    startAfterPause(() => starts++, 20);
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(starts).toBe(1);
   });
 });

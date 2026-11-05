@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { steppedTab, tabShortcut, tabShortcutLabel } from "../src/lib/tab-shortcut.ts";
+import { ariaTabShortcut, steppedTab, tabShortcut, tabShortcutLabel } from "../src/lib/tab-shortcut.ts";
 
 const none = { code: "", key: "", ctrlKey: false, metaKey: false, altKey: false, shiftKey: false };
 const ctrlPageDown = { ...none, code: "PageDown", key: "PageDown", ctrlKey: true };
@@ -52,5 +52,7 @@ describe("tab shortcuts", () => {
   test("the caption follows the system's convention", () => {
     expect(tabShortcutLabel(false)).toBe("Ctrl+PageDown / Ctrl+PageUp");
     expect(tabShortcutLabel(true)).toBe("⌘⇧] / ⌘⇧[");
+    expect(ariaTabShortcut(false)).toBe("Control+PageDown Control+PageUp");
+    expect(ariaTabShortcut(true)).toBe("Control+PageDown Control+PageUp Meta+Shift+] Meta+Shift+[");
   });
 });

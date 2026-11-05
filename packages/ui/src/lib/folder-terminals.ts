@@ -20,3 +20,15 @@ export function terminalAt(list: readonly FolderTerminal[], place: TerminalPlace
 export function startsOnOpen(state: { loaded: boolean; hasTerminal: boolean; alreadyAsked: boolean }): boolean {
   return state.loaded && !state.hasTerminal && !state.alreadyAsked;
 }
+
+/**
+ * How long the Shell tab stays shown before it starts the place's shell. Ctrl+PageUp and Ctrl+PageDown step through the
+ * tabs (ADR-211), so passing through Shell on the way to the next tab is routine and must not leave a shell running.
+ */
+const SHELL_START_PAUSE_MS = 400;
+
+/** Calls `start` once the tab has stayed shown for `ms`; returns the function that cancels it when the tab goes. */
+export function startAfterPause(start: () => void, ms: number = SHELL_START_PAUSE_MS): () => void {
+  const timer = setTimeout(start, ms);
+  return () => clearTimeout(timer);
+}
