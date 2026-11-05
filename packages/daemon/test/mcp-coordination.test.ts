@@ -1,17 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Client } from "@modelcontextprotocol/client";
-import {
-  agentsApi,
-  GetSessionResult,
-  ListSessionsResult,
-  ProposeTaskResult,
-  ReportResultResult,
-  WaitForSessionResult,
-} from "@trackwall/protocol";
+import { agentsApi, ListSessionsResult, ProposeTaskResult, ReportResultResult, WaitForSessionResult } from "@trackwall/protocol";
 import { loopbackRequest } from "../src/infra/loopback.ts";
 import { MCP_PATH, SESSION_TOKEN_HEADER } from "../src/mcp/endpoint.ts";
 import { viewer, waitFor } from "./support/agents.ts";
-import { connectHttpClient, connectSessionClient } from "./support/mcp-client.ts";
+import { connectHttpClient, connectSessionClient, toolText } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
@@ -133,22 +126,22 @@ describe.skipIf(process.versions.bun === undefined)("main session over MCP (real
         .structuredContent,
     );
     expect(reported.task.summary).toEqual({ text: "Login fixed, test in login.test.ts.", checkSteps: [], reportedAt: expect.any(String) });
-    const detail = GetSessionResult.parse((await call(mainClient, "get_session", { session: taskSession })).structuredContent);
-    expect(detail.task?.summary?.text).toBe("Login fixed, test in login.test.ts.");
+    const detail = toolText(await call(mainClient, "get_session", { session: taskSession }));
+    expect(detail).toMatch(/\n## Summary \(reported [^)]+\)\nLogin fixed, test in login\.test\.ts\.\n## Changes/);
 
     // Check steps are a hint next to the summary (ADR-169); the proposer reads them in get_session, and a report without them clears them.
     const steps = ["Open /login and sign in as demo: the dashboard opens", "Sign in with a wrong password: the form says Wrong password"];
     await call(await clientOfSession(taskSession), "report_result", { summary: "Login fixed.", checkSteps: steps });
-    const withSteps = GetSessionResult.parse((await call(mainClient, "get_session", { session: taskSession })).structuredContent);
-    expect(withSteps.task?.summary).toMatchObject({ text: "Login fixed.", checkSteps: steps });
+    const withSteps = toolText(await call(mainClient, "get_session", { session: taskSession }));
+    expect(withSteps).toContain(`\nLogin fixed.\nCheck steps:\n1. ${steps[0]}\n2. ${steps[1]}\n## Changes`);
     const hidden = await call(await clientOfSession(taskSession), "report_result", {
       summary: "Login fixed.",
       checkSteps: ["Open\u202e/login"],
     });
     expect(hidden.isError).toBe(true);
     await call(await clientOfSession(taskSession), "report_result", { summary: "Login fixed, test in login.test.ts." });
-    const cleared = GetSessionResult.parse((await call(mainClient, "get_session", { session: taskSession })).structuredContent);
-    expect(cleared.task?.summary?.checkSteps).toEqual([]);
+    const cleared = toolText(await call(mainClient, "get_session", { session: taskSession }));
+    expect(cleared).toContain("\nLogin fixed, test in login.test.ts.\n## Changes");
 
     await daemon.facade.agents.stop(taskSession);
     const exited = WaitForSessionResult.parse(

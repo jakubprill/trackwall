@@ -1,5 +1,6 @@
 import { Client, StreamableHTTPClientTransport, type VersionNegotiationOptions } from "@modelcontextprotocol/client";
 import { WAIT_MAX_SECONDS } from "@trackwall/protocol";
+import { z } from "zod";
 import { loopbackRequest } from "../../src/infra/loopback.ts";
 import { MCP_PATH, SESSION_TOKEN_HEADER } from "../../src/mcp/endpoint.ts";
 import { sessionToken } from "./session-token.ts";
@@ -23,6 +24,16 @@ export async function connectHttpClient(
   const client = new Client({ name: "trackwall-test", version: "1" }, { versionNegotiation });
   await client.connect(transport);
   return client;
+}
+
+/** The one text block of a tool result that answers with text only (ADR-187), such as `get_session`. */
+export function toolText(result: { content?: unknown }): string {
+  const [block] = z
+    .array(z.object({ type: z.literal("text"), text: z.string() }))
+    .length(1)
+    .parse(result.content);
+  if (block === undefined) throw new Error("the tool returned no text");
+  return block.text;
 }
 
 /**
