@@ -1,6 +1,5 @@
 import {
   CHANGE_PART_NOTE_MAX,
-  CHANGE_PARTS_MAX,
   type ChangePart,
   type DriftedRepo,
   type DriftKind,
@@ -57,13 +56,6 @@ export function repoDrift(graph: Pick<RepoGraph, "drift">, repo: string): { drif
     const own = drift.repos.find((r) => r.repo === repo);
     return own ? [{ drift, own }] : [];
   });
-}
-
-/** The repos the form starts with: a change has at most `CHANGE_PARTS_MAX` parts, so the first ones in the list. */
-export function initialAlignRepos(drift: VersionDrift): string[] {
-  return reposToAlign(drift)
-    .slice(0, CHANGE_PARTS_MAX)
-    .map((r) => r.repo);
 }
 
 /** The change's title, which also names its branch: `Align Java to 21`. */

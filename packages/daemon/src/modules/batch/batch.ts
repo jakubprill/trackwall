@@ -6,6 +6,7 @@ import {
   type BatchRun,
   type BatchStep,
   type BatchStepState,
+  BUILD_MISE_TASK,
   type RunState,
   type SyncResult,
 } from "@trackwall/protocol";
@@ -31,7 +32,7 @@ const BATCH_CONCURRENCY = 3;
  * A step that is a mise task, and the name of that mise task (the convention from `CONTEXT.md`, "mise task"). Separate from the step name,
  * because the step is an API contract, and the mise task name a repo convention, which may get a setting in `workspace.yaml`.
  */
-const MISE_TASK = { setup: "setup", build: "build" } as const satisfies Partial<Record<BatchStep, string>>;
+const MISE_TASK = { setup: "setup", build: BUILD_MISE_TASK } as const satisfies Partial<Record<BatchStep, string>>;
 
 /** What `batch` needs from `workspace`; wired in the facade (§4). */
 interface BatchWorkspace {
