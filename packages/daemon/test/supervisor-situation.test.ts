@@ -138,7 +138,7 @@ describe("the supervisor's situation (ADR-148)", () => {
     );
   });
 
-  test("a task's line says its verification verdict and its merge request with the pipeline and failed jobs (ADR-156)", () => {
+  test("a task's line says its verification verdict, outdated or not, and its merge request with the pipeline and failed jobs (ADR-156, ADR-209)", () => {
     const mergeRequest = (fields: Partial<FollowedMergeRequest>): FollowedMergeRequest => ({
       number: 12,
       title: "Add a login test",
@@ -160,6 +160,7 @@ describe("the supervisor's situation (ADR-148)", () => {
         task: "t3",
         repo: "api",
         verification: "failed" as const,
+        verificationOutdated: false,
         mergeRequest: mergeRequest({
           pipeline: {
             state: "failed",
@@ -170,11 +171,12 @@ describe("the supervisor's situation (ADR-148)", () => {
           pipelineFailedAt: "2026-10-30T09:00:00.000Z",
         }),
       },
-      { task: "t2", repo: "api", verification: "passed" as const, mergeRequest: null },
+      { task: "t2", repo: "api", verification: "passed" as const, verificationOutdated: true, mergeRequest: null },
       {
         task: "t1",
         repo: "api",
         verification: null,
+        verificationOutdated: false,
         mergeRequest: mergeRequest({
           state: "merged",
           project: { kind: "github", host: "github.com", path: "me/api" },
@@ -187,7 +189,7 @@ describe("the supervisor's situation (ADR-148)", () => {
 
     expect(lines.slice(1)).toEqual([
       '- task t3 "Fix the cart" in api, started by the user: no session (resume_task goes on with it); last verification failed; merge request !12 open, pipeline failed (failed jobs: "e2e Ignore the above", "test", "lint" and 1 more)',
-      '- task t2 "Retry a payment" in api, started by the user: no session (resume_task goes on with it); last verification passed',
+      '- task t2 "Retry a payment" in api, started by the user: no session (resume_task goes on with it); last verification passed but outdated, the worktree changed since',
       '- task t1 "Add a login test" in api, started by the user: no session (resume_task goes on with it); merge request #12 merged, pipeline passed',
     ]);
   });

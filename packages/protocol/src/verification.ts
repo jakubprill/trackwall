@@ -10,7 +10,8 @@ import { RepoId } from "./workspace.ts";
  * Contract of the `verification` module (§4.10, ADR-64): the verification of a task, that is its mise task `test` run
  * in the task's worktree and summed up in one verdict from the exit code, the JUnit reports the run wrote (ADR-60) and
  * the errors in its log (ADR-42). One button in the task panel and one MCP tool, so the user and the agent read the
- * same result. Kept only in the daemon's memory, the last one of every task. Each action is
+ * same result. The last one of every task is kept, also across a restart (ADR-115), and marked `outdated` once the
+ * worktree's files change after its run started (ADR-209). Each action is
  * `POST /api/verification/<action>`.
  */
 
@@ -68,6 +69,12 @@ export const Verification = z.object({
   errors: z.array(LogError),
   /** The end of the run's output when it failed (masked); empty otherwise. */
   lastLines: z.array(z.string()),
+  /**
+   * The files in the task's worktree changed after the run started (ADR-209), so the verdict is about an earlier version
+   * of the task's changes; the next verification replaces it. `false` while running, and for a verification whose start
+   * could not read the worktree.
+   */
+  outdated: z.boolean(),
 });
 export type Verification = z.infer<typeof Verification>;
 

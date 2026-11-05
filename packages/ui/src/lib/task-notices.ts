@@ -10,6 +10,7 @@ import {
 } from "@trackwall/protocol";
 import { mergeRequestStatus } from "./merge-request.ts";
 import type { StatusTone } from "./repo-status.ts";
+import { verificationOutdatedLabel } from "./verification.ts";
 
 /**
  * The notices of a task: one short line for each section above its terminal (ADR-91), for the strip in the one-entry
@@ -134,6 +135,17 @@ const VERIFICATION_NOTICE: Record<Verification["state"], { tone: TaskNoticeTone;
 
 function verificationNotices(verification: Verification | null): TaskNotice[] {
   if (!verification) return [];
+  // An outdated verdict is about earlier changes (ADR-209): it says so, without the colour of a pass or a failure.
+  if (verification.outdated)
+    return [
+      {
+        section: "verification",
+        key: "verification",
+        tone: "info",
+        label: verificationOutdatedLabel(verification.state),
+        chip: "Outdated",
+      },
+    ];
   return [{ section: "verification", key: "verification", ...VERIFICATION_NOTICE[verification.state] }];
 }
 

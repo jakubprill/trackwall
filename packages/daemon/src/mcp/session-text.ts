@@ -137,7 +137,9 @@ function fileLine(file: ChangedFile): string {
 function verificationLines(verification: Verification): string[] {
   const end = verification.finishedAt === null ? `started ${verification.startedAt}` : `finished ${verification.finishedAt}`;
   const exit = verification.exitCode === null ? "" : `, exit code ${verification.exitCode}`;
-  const lines = [`## Verification: ${verification.state} (mise task ${verification.miseTask}, ${end}${exit})`];
+  // An outdated verdict (ADR-209) is for files the worktree no longer holds.
+  const state = verification.outdated ? `${verification.state}, but outdated: the worktree changed since` : verification.state;
+  const lines = [`## Verification: ${state} (mise task ${verification.miseTask}, ${end}${exit})`];
   if (verification.message !== null) lines.push(`Message: ${verification.message}`);
   if (verification.tests !== null) lines.push(testsLine(verification.tests));
   lines.push(...verification.failures.flatMap(failureLines), ...verification.errors.flatMap(errorLines));
