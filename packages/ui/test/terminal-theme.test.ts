@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ANSI_TOKENS, terminalTheme } from "../src/lib/terminal-theme.ts";
+import { ANSI_TOKENS, rgbColour, terminalTheme } from "../src/lib/terminal-theme.ts";
 
 const INDEX_CSS = readFileSync(join(import.meta.dir, "..", "src", "index.css"), "utf8");
 
@@ -21,5 +21,11 @@ describe("session terminal theme", () => {
   test("index.css defines every ANSI token the terminal reads", () => {
     const missing = Object.values(ANSI_TOKENS).filter((token) => !INDEX_CSS.includes(`${token}:`));
     expect(missing).toEqual([]);
+  });
+
+  test("a colour reaches xterm.js as rgb() when opaque and rgba() when translucent, the two forms it parses itself", () => {
+    expect(rgbColour(34, 40, 49, 255)).toBe("rgb(34, 40, 49)");
+    expect(rgbColour(34, 40, 49, 153)).toBe("rgba(34, 40, 49, 0.6)");
+    expect(rgbColour(0, 0, 0, 0)).toBe("rgba(0, 0, 0, 0)");
   });
 });
