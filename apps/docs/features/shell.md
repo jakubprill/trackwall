@@ -25,7 +25,7 @@ The shell keeps running when you switch tabs or views, and Trackwall keeps its s
 
 For work that is no single repo's, such as cloning a repo by hand or looking across all of them, choose "Shell" next to the projects folder's path at the top of the list in "Repos". It opens a shell in the projects folder itself, which in a dev container is the volume with your repos, with "Files on disk" beside it too.
 
-A task's "Terminal" tab is still the agent's session; "Shell" is yours. Ending a task closes its shell first, since nothing may run in a worktree that goes away.
+A task's "Terminal" tab is still the agent's session; "Shell" is yours. Ctrl+PageDown and Ctrl+PageUp (⌘⇧] and ⌘⇧[ on macOS) switch between them, and on to the next tabs, like tabs in a browser, also while you type in either one. Ending a task closes its shell first, since nothing may run in a worktree that goes away.
 
 ## Use it
 

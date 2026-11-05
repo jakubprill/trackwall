@@ -1,6 +1,15 @@
+import { IS_MAC } from "@/lib/platform";
+import { steppedTab, tabShortcut, tabShortcutLabel } from "@/lib/tab-shortcut";
+import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { cn } from "@/lib/utils";
 
-/** A tab bar in a view's content, for example in the Repo view. `ActivityBar` switches the app's views. */
+const SHORTCUT_HINT = `${tabShortcutLabel(IS_MAC)} switch tabs`;
+
+/**
+ * A tab bar in a view's content, for example in the Repo view. `ActivityBar` switches the app's views. Ctrl+PageDown
+ * and Ctrl+PageUp (⌘⇧] and ⌘⇧[ on macOS) step through its tabs from anywhere in the window, a session terminal
+ * included (ADR-211); a view shows one tab bar at a time, so the shortcut has one owner.
+ */
 export function TabBar<Id extends string>({
   tabs,
   active,
@@ -10,8 +19,16 @@ export function TabBar<Id extends string>({
   active: Id;
   onSelect: (id: Id) => void;
 }) {
+  useWindowShortcuts(
+    (event) => tabShortcut(event, IS_MAC),
+    (step) => {
+      const next = steppedTab(tabs, active, step);
+      if (next !== active) onSelect(next);
+      return true;
+    },
+  );
   return (
-    <div role="tablist" className="flex gap-1 border-b">
+    <div role="tablist" title={SHORTCUT_HINT} className="flex gap-1 border-b">
       {tabs.map((t) => (
         <button
           key={t.id}
