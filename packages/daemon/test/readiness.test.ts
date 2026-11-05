@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFacade } from "../src/facade.ts";
@@ -91,6 +91,71 @@ describe("readiness of the repos in the projects folder, from the cards, the gra
     expect((await facade.readiness.all(true)).repos[0]?.state).toBe("ready");
     writeFileSync(join(dir, "fake-mise.json"), JSON.stringify({ tasks: [] }));
     expect((await facade.readiness.repo("admin-web")).state).toBe("blocked");
+  }, 30_000);
+
+  test("mise's check of a config it reads adds its problems and the files it would format, and Format clears the latter", async () => {
+    const projects = mkdtempSync(join(tmpdir(), "trackwall-readiness-config-"));
+    const dir = repoWithMise(
+      projects,
+      "admin-web",
+      { "package.json": PACKAGE_JSON },
+      {
+        tasks: BUILD_AND_TEST,
+        unformatted: ["mise.toml"],
+        unknownFields: ["mise.toml:7:2: taskz (did you mean tasks?)"],
+        validation: [
+          { task: "test", severity: "error", category: "missing-dependency", message: "Dependency 'nope' not found", details: "" },
+        ],
+      },
+    );
+    repoWithMise(
+      projects,
+      "shop-web",
+      { "package.json": PACKAGE_JSON },
+      { tasks: BUILD_AND_TEST, untrusted: true, unformatted: ["mise.toml"] },
+    );
+    const facade = await facadeOn(projects);
+
+    const report = await facade.readiness.all(false);
+
+    expect(report.repos).toEqual([
+      {
+        repo: "admin-web",
+        state: "gaps",
+        gaps: [
+          { code: "mise-invalid", message: "test: Dependency 'nope' not found (and 1 more problem)" },
+          { code: "mise-unformatted", message: "mise fmt would rewrite mise.toml" },
+        ],
+      },
+      // An untrusted config is not checked: mise reads nothing of it, and trusting it comes first.
+      {
+        repo: "shop-web",
+        state: "blocked",
+        gaps: [{ code: "mise-untrusted", message: "mise does not run this repo's tasks until you trust its config" }],
+      },
+    ]);
+
+    await facade.mise.format("admin-web");
+    // A config the user has not trusted is not formatted either: trusting it comes first.
+    await expect(facade.mise.format("shop-web")).rejects.toThrow("not trusted");
+
+    expect(readFileSync(join(dir, "calls.log"), "utf8")).toBe("fmt\n");
+    expect((await facade.readiness.repo("admin-web")).gaps).toEqual([
+      { code: "mise-invalid", message: "test: Dependency 'nope' not found (and 1 more problem)" },
+    ]);
+  }, 30_000);
+
+  test("a mise without fmt --check and tasks validate leaves the check out instead of reporting a problem", async () => {
+    const projects = mkdtempSync(join(tmpdir(), "trackwall-readiness-old-mise-"));
+    repoWithMise(
+      projects,
+      "admin-web",
+      { "package.json": PACKAGE_JSON },
+      { tasks: BUILD_AND_TEST, unformatted: ["mise.toml"], fmtUnsupported: true },
+    );
+    const facade = await facadeOn(projects);
+
+    expect((await facade.readiness.all(false)).repos).toEqual([{ repo: "admin-web", state: "ready", gaps: [] }]);
   }, 30_000);
 
   test("a repo not in the projects folder is not found", async () => {

@@ -323,7 +323,7 @@ A tool, Spring Boot, a Maven parent pom or BOM, or a build plugin that the repos
 _Avoid_: config drift (only versions are compared), outdated (the target is the newest in the folder, not the newest released)
 
 **Agent readiness** (`readiness` module, `RepoReadiness`, gap `ReadinessGap` with code `ReadinessGapCode` and level `ReadinessLevel`; UI "Agent readiness", "N of M ready"):
-How ready a repo is for agents to build, test and run it, as its gaps: each *blocks* agents (no mise task `build` or `test` that works, an untrusted or failing mise config), *weakens* them (a Spring Boot app without `dev`, a tool version outside mise, calls without a target) or is only *good to know* (an incomplete card). A repo is *ready* with nothing that blocks or weakens, *with gaps*, or *blocked* (ADR-208).
+How ready a repo is for agents to build, test and run it, as its gaps: each *blocks* agents (no mise task `build` or `test` that works, an untrusted or failing mise config), *weakens* them (problems mise finds in its config, a Spring Boot app without `dev`, a tool version outside mise, calls without a target) or is only *good to know* (a config `mise fmt` would rewrite, an incomplete card). A repo is *ready* with nothing that blocks or weakens, *with gaps*, or *blocked* (ADR-208).
 _Avoid_: health, score, percentage (the count is of repos, not of checks), readiness of a service (that is a service's state, ready on its port)
 
 **Package alias** (`graph.packages` in `workspace.yaml`):

@@ -50,6 +50,13 @@ describe("agent readiness in Overview", () => {
     expect(gapFix("mise-missing", "absent")).toBe("none");
   });
 
+  test("a config mise would format is fixed by Format in every repo at once, and its problems by an agent", () => {
+    expect(gapFix("mise-unformatted", "absent")).toBe("format");
+    expect(gapFix("mise-invalid", "absent")).toBe("agent");
+    expect(repoGapFix("mise-unformatted")).toBe("format");
+    expect(repoGapFix("mise-invalid")).toBe("agent");
+  });
+
   test("a task closing a gap ends its prompt with the gap as Trackwall found it in that repo", () => {
     expect(gapPart({ repo: "billing-api", message: "not pinned in mise: java 21 from pom.xml" })).toEqual({
       repo: "billing-api",

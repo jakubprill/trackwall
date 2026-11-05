@@ -146,6 +146,10 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(miseApi.writeConventionTasks, (f) => f.mise.writeConventionTasks()),
   route(miseApi.stop, (f, b) => f.mise.stop({ repo: b.repo, task: b.task }, b.miseTask)),
   route(miseApi.trust, (f, b) => f.mise.trust(b.repo)),
+  route(miseApi.format, async (f, b) => {
+    await f.mise.format(b.repo);
+    return {};
+  }),
   route(logsApi.tail, (f, b) => f.logs.tail(b)),
   route(servicesApi.list, (f) => f.services.list()),
   route(servicesApi.start, (f, b) => f.services.start(b)),

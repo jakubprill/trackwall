@@ -61,6 +61,7 @@ export function RepoCardView({
           readiness={readiness.data}
           onOpenMiseTasks={onOpenMiseTasks}
           onOpenInSessions={onOpenInSessions}
+          onFixed={readiness.reload}
         />
       )}
     </CardPanel>

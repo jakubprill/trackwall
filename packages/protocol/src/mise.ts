@@ -130,6 +130,25 @@ export const ConventionTasksState = z.object({
 });
 export type ConventionTasksState = z.infer<typeof ConventionTasksState>;
 
+/**
+ * What mise says about a repo root's own config files beyond listing their tasks (`mise fmt --check` and `mise tasks
+ * validate`): the files its formatter would change, and the problems it finds in them, errors first. An older mise without
+ * one of these commands has nothing to say about it, so an empty check does not prove a config clean.
+ */
+export const MiseConfigProblem = z.object({
+  severity: z.enum(["error", "warning"]),
+  /** One line from mise: `test: Dependency 'nope' not found`, `mise.toml:4:2: unknown field taskz (did you mean tasks?)`. */
+  message: z.string(),
+});
+export type MiseConfigProblem = z.infer<typeof MiseConfigProblem>;
+
+export const MiseConfigCheck = z.object({
+  /** Config files in the repo root that `mise fmt` would rewrite, relative to it (`mise.toml`, `.config/mise.toml`). */
+  unformatted: z.array(z.string()),
+  problems: z.array(MiseConfigProblem),
+});
+export type MiseConfigCheck = z.infer<typeof MiseConfigCheck>;
+
 const endpoint = apiEndpoints("mise");
 
 /** `task`: a mise task in that task's worktree (ADR-59); the repo root without it. */
@@ -156,4 +175,9 @@ export const miseApi = {
    * the UI, never from MCP. A file that is already there is left as it is (`bad_request` when it differs).
    */
   writeConventionTasks: endpoint("write-convention-tasks", z.object({}).strict(), ConventionTasksState),
+  /**
+   * `mise fmt` in the repo root: rewrites its mise config files in mise's own format, which leaves a change for git to see.
+   * The user's click is the consent; only from the UI, never from MCP.
+   */
+  format: endpoint("format", z.object({ repo: RepoId }).strict(), z.object({})),
 };
