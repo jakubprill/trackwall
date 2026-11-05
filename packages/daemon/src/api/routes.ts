@@ -146,6 +146,10 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(miseApi.writeConventionTasks, (f) => f.mise.writeConventionTasks()),
   route(miseApi.stop, (f, b) => f.mise.stop({ repo: b.repo, task: b.task }, b.miseTask)),
   route(miseApi.trust, (f, b) => f.mise.trust(b.repo)),
+  route(miseApi.format, async (f, b) => {
+    await f.mise.format(b.repo);
+    return {};
+  }),
   route(logsApi.tail, (f, b) => f.logs.tail(b)),
   route(servicesApi.list, (f) => f.services.list()),
   route(servicesApi.start, (f, b) => f.services.start(b)),
@@ -229,8 +233,10 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     f.agents.openConversationFile(b.session, b.path, b.line);
     return null;
   }),
+  route(agentsApi.taskWorktrees, (f) => f.agents.taskWorktrees()),
+  route(agentsApi.taskWorktreeSize, (f, b) => f.agents.taskWorktreeSize(b.task)),
   route(agentsApi.removeTask, async (f, b) => {
-    await f.agents.removeTask(b.task, b.keepBranch, b.discardChanges);
+    await f.agents.removeTask(b.task, b.keepBranch, b.discardChanges, b.discardFingerprint);
     return null;
   }),
   route(terminalsApi.start, (f, b) => f.terminals.start(b)),

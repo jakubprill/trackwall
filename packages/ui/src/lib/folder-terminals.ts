@@ -14,9 +14,10 @@ export function terminalAt(list: readonly FolderTerminal[], place: TerminalPlace
 }
 
 /**
- * Whether opening the Shell tab starts the place's shell: once per tab, after the list came and showed none. A start
- * already asked for, one that failed, or a shell the user closed waits for the button instead.
+ * Whether opening the Shell tab asks the daemon for the place's shell: once per tab, and only when a live shell is
+ * already there, so that the daemon can swap a projects folder shell left in the old folder for one in the new
+ * (ADR-185). A place without a live shell waits for "Open a shell": a shell starts only when the user asks (ADR-211).
  */
-export function startsOnOpen(state: { loaded: boolean; hasTerminal: boolean; alreadyAsked: boolean }): boolean {
-  return state.loaded && !state.hasTerminal && !state.alreadyAsked;
+export function reopensOnOpen(state: { loaded: boolean; hasLiveShell: boolean; alreadyAsked: boolean }): boolean {
+  return state.loaded && state.hasLiveShell && !state.alreadyAsked;
 }

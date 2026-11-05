@@ -125,6 +125,71 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     expect(gitIn(dir, "worktree", "list")).not.toContain(task.worktree);
   }, 60_000);
 
+  test("the cleanup of old worktrees lists each task without a running session with its activity, what ending it would delete and its worktree's size (ADR-210)", async () => {
+    const { dir } = cloneOnFeatureBranch();
+    const { agents, procs } = makeAgents({ shop: dir });
+    cleanups.push(() => procs.stopAll());
+    const task = await agents.createTask("shop", "update the README");
+
+    expect(await agents.taskWorktrees()).toEqual([]);
+
+    await agents.stop(sessionOf(agents, task.id));
+    const [clean] = await agents.taskWorktrees();
+    expect(clean).toMatchObject({ task: task.id, repo: "shop", branch: task.branch, loss: { kind: "none" } });
+    // The session's end is its last activity: no commit or report came after it.
+    expect(Date.parse(clean?.lastActivityAt ?? "")).toBeGreaterThanOrEqual(Date.parse(task.createdAt));
+
+    writeFileSync(join(task.worktree, "README.md"), "# shop after the change\n");
+    const [dirty] = await agents.taskWorktrees();
+    expect(dirty?.loss).toMatchObject({ kind: "work", uncommitted: 1, strayCommits: 0 });
+
+    const size = await agents.taskWorktreeSize(task.id);
+    expect(size).toMatchObject({ task: task.id, complete: true });
+    // Two files and git's link file, so more than what README.md alone holds.
+    expect(size.bytes).toBeGreaterThan("# shop after the change\n".length);
+  }, 60_000);
+
+  test("a confirmed end deletes the work the user saw, and refuses work that came after it (ADR-210)", async () => {
+    const { dir } = cloneOnFeatureBranch();
+    const { agents, procs } = makeAgents({ shop: dir });
+    cleanups.push(() => procs.stopAll());
+    const task = await agents.createTask("shop", "update the README");
+    await agents.stop(sessionOf(agents, task.id));
+    writeFileSync(join(task.worktree, "README.md"), "# shop after the change\n");
+    const [seen] = await agents.taskWorktrees();
+    if (seen?.loss.kind !== "work") throw new Error(`expected work to lose, got ${JSON.stringify(seen?.loss)}`);
+
+    writeFileSync(join(task.worktree, "README.md"), "# shop after another change\n");
+    await expect(agents.removeTask(task.id, true, true, seen.loss.fingerprint)).rejects.toMatchObject({
+      code: "unsaved_changes",
+      message: `the worktree of task ${task.branch} changed since what ending it deletes was confirmed; look at it again`,
+    });
+    expect(existsSync(task.worktree)).toBe(true);
+
+    const [again] = await agents.taskWorktrees();
+    if (again?.loss.kind !== "work") throw new Error(`expected work to lose, got ${JSON.stringify(again?.loss)}`);
+    await agents.removeTask(task.id, true, true, again.loss.fingerprint);
+    expect(existsSync(task.worktree)).toBe(false);
+    expect(gitIn(dir, "branch", "--list", task.branch).trim()).not.toBe("");
+  }, 60_000);
+
+  test("ending a task stops the count of its worktree's size instead of waiting for it (ADR-210)", async () => {
+    const { dir } = cloneOnFeatureBranch();
+    const { agents, procs } = makeAgents({ shop: dir });
+    cleanups.push(() => procs.stopAll());
+    const task = await agents.createTask("shop", "update the README");
+    await agents.stop(sessionOf(agents, task.id));
+    for (let i = 0; i < 2000; i++) writeFileSync(join(task.worktree, `generated-${i}.txt`), "x");
+    gitIn(task.worktree, "add", ".");
+    gitIn(task.worktree, "commit", "-m", "generated files");
+
+    const [size] = await Promise.all([agents.taskWorktreeSize(task.id), agents.removeTask(task.id, true, false)]);
+
+    expect(size.complete).toBe(false);
+    expect(existsSync(task.worktree)).toBe(false);
+    await expect(agents.taskWorktreeSize(task.id)).rejects.toThrow(`no task ${task.id}`);
+  }, 60_000);
+
   test("ending a task together with its branch deletes the task's commits only after confirmation", async () => {
     const { dir } = cloneOnFeatureBranch();
     const { agents, procs } = makeAgents({ shop: dir });

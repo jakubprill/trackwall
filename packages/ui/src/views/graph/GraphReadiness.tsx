@@ -3,6 +3,7 @@ import { RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
+import { MiseFormatButton } from "@/components/MiseFormatButton";
 import { Surface } from "@/components/Surface";
 import { TaskStartForm } from "@/components/TaskStartForm";
 import { Button } from "@/components/ui/button";
@@ -186,6 +187,7 @@ function GapRow({
         ))}
       </ul>
       {fix === "convention" && <ConventionButton conn={conn} onDone={onFixed} />}
+      {fix === "format" && <MiseFormatButton conn={conn} repos={gap.repos.map((r) => r.repo)} onDone={onFixed} />}
       {fix === "agent" &&
         (asking ? (
           <TaskStartForm

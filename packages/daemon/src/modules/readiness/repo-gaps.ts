@@ -2,6 +2,7 @@ import {
   BUILD_MISE_TASK,
   CONVENTION_BUILD_FILES,
   countLabel,
+  type MiseConfigCheck,
   type MiseTasks,
   type ReadinessGap,
   ReadinessGapCode,
@@ -20,6 +21,11 @@ export type CardState = { kind: "ok"; card: RepoCard | null } | { kind: "unavail
 
 export interface RepoFacts {
   mise: MiseTasks;
+  /**
+   * mise's check of the repo's own config files; `null` when mise could not read the config, which `mise` then says, or did
+   * not answer the check, which is asked again next time.
+   */
+  config: MiseConfigCheck | null;
   card: CardState;
   /** How many HTTP clients of the repo point to no repo in the list (graph problems, ADR-116). */
   unresolvedCalls: number;
@@ -29,6 +35,7 @@ export function repoGaps(facts: RepoFacts): ReadinessGap[] {
   const card = facts.card.kind === "ok" ? facts.card.card : null;
   const gaps = [
     ...miseGaps(facts.mise, card),
+    ...(facts.config === null ? [] : configGaps(facts.config)),
     ...cardGaps(facts.mise, card),
     ...(facts.unresolvedCalls > 0 ? [unresolvedGap(facts.unresolvedCalls)] : []),
     ...cardStateGaps(facts.card),
@@ -53,6 +60,19 @@ function miseGaps(mise: MiseTasks, card: RepoCard | null): ReadinessGap[] {
     return [{ code: "no-build-test", message: `${which} no build file in the repo root` }];
   }
   return [];
+}
+
+/** What mise finds in the config it reads: a problem weakens agents, a file it would format only says so. */
+function configGaps(config: MiseConfigCheck): ReadinessGap[] {
+  const gaps: ReadinessGap[] = [];
+  const [first, ...rest] = config.problems;
+  if (first !== undefined) {
+    const more = rest.length === 0 ? "" : ` (and ${countLabel(rest.length, { one: "more problem", other: "more problems" })})`;
+    gaps.push({ code: "mise-invalid", message: `${first.message}${more}` });
+  }
+  if (config.unformatted.length > 0)
+    gaps.push({ code: "mise-unformatted", message: `mise fmt would rewrite ${config.unformatted.join(", ")}` });
+  return gaps;
 }
 
 function hasConventionBuildFile(card: RepoCard): boolean {

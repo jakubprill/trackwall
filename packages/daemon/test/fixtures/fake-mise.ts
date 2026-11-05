@@ -14,6 +14,10 @@
 // ls`, and `envError` fails them with that mise error (e.g. a missing age key), `redactedError` only the `--redacted` one.
 // With `MISE_ENV` set (one name or several with commas), `env` also has the variables of `envByMiseEnv[name]` of each
 // name in turn over `env`, as mise reads `mise.<name>.toml` (ADR-136).
+// `fmt --check` fails like mise, naming the files in `unformatted` (relative to the working directory) by full path, and `fmt`
+// clears them and appends `fmt` to `calls.log`. `tasks validate --json` prints `validation` (mise's issues) and fails when
+// one is an error; `unknownFields` (`mise.toml:4:2: taskz (did you mean tasks?)`) go to stderr of `tasks ls` and `tasks
+// validate` as mise's warnings, with the full path. `fmtUnsupported` makes both answer like a mise without these commands.
 import { spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { delimiter, dirname, join, sep } from "node:path";
@@ -33,6 +37,10 @@ const config = (existsSync(configPath) ? JSON.parse(readFileSync(configPath, "ut
   envError?: string;
   redactedError?: string;
   trustFileError?: string;
+  unformatted?: string[];
+  validation?: { task: string; severity: string; category: string; message: string; details: string }[];
+  unknownFields?: string[];
+  fmtUnsupported?: boolean;
 };
 const args = process.argv.slice(2);
 const calls = join(process.cwd(), "calls.log");
@@ -59,9 +67,43 @@ function refuseUntrusted(): void {
   process.exit(1);
 }
 
+function warnUnknownFields(): void {
+  for (const field of config.unknownFields ?? []) console.error(`mise WARN  unknown field in ${join(process.cwd(), field)}`);
+}
+
+function unsupported(command: string): void {
+  if (!config.fmtUnsupported) return;
+  console.error(`error: unrecognized subcommand '${command}'`);
+  process.exit(2);
+}
+
 if (args[0] === "tasks" && args[1] === "ls" && args[2] === "--json") {
   refuseUntrusted();
+  warnUnknownFields();
   console.log(JSON.stringify(config.tasks));
+} else if (args[0] === "tasks" && args[1] === "validate" && args[2] === "--json") {
+  unsupported("validate");
+  refuseUntrusted();
+  warnUnknownFields();
+  const issues = config.validation ?? [];
+  const errors = issues.filter((i) => i.severity === "error").length;
+  console.log(JSON.stringify({ tasks_validated: config.tasks.length, errors, warnings: issues.length - errors, issues }, null, 2));
+  if (errors > 0) {
+    console.error(`mise ERROR Validation failed with ${errors} error(s)`);
+    process.exit(1);
+  }
+} else if (args[0] === "fmt" && args[1] === "--check") {
+  unsupported("fmt");
+  const files = config.unformatted ?? [];
+  if (files.length > 0) {
+    console.error("mise ERROR Following config files are not properly formatted:");
+    for (const file of files) console.error(join(process.cwd(), file));
+    console.error("mise ERROR Version: 2026.11.1 linux-x64 (2026-11-04)");
+    process.exit(1);
+  }
+} else if (args[0] === "fmt" && args[1] === undefined) {
+  appendFileSync(calls, "fmt\n");
+  writeFileSync(configPath, JSON.stringify({ ...config, unformatted: [] }));
 } else if (args[0] === "env" && args.at(-1) === "--json") {
   refuseUntrusted();
   const envError = args[1] === "--redacted" ? (config.redactedError ?? config.envError) : config.envError;

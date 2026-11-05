@@ -4,6 +4,7 @@ import { delimiter } from "node:path";
 import {
   type ConventionTasksState,
   type LogSource,
+  type MiseConfigCheck,
   MiseRunArguments,
   type MiseTarget,
   type MiseTask,
@@ -21,6 +22,7 @@ import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { waitLimited } from "../../infra/wait-limit.ts";
 import { conventionTasksPath, conventionTasksState, writeConventionTasks } from "./convention-tasks.ts";
 import { type MiseCliResult, miseFailure, runMiseCli } from "./mise-cli.ts";
+import { parseFormatCheck, parseValidation } from "./mise-config-check.ts";
 import { type MiseEnv, NO_MISE_ENV, readMiseEnv } from "./mise-env.ts";
 import { type TrackedPaths, taskOrigins } from "./task-origin.ts";
 
@@ -320,6 +322,38 @@ export class Mise {
     const tasks = await this.tasks(repo);
     if (tasks.kind === "ok") this.deps.onTrusted(repo);
     return tasks;
+  }
+
+  /**
+   * What mise says about the repo root's own config files (§4.7, §4.26): the files `mise fmt` would rewrite and the problems
+   * `mise tasks validate` finds. Meant for a config mise already lists the tasks of; an untrusted or broken one gives only
+   * the error `tasks` gives too. `mise_unavailable` when mise did not start or finish, which is not the config's fault.
+   */
+  async configCheck(repo: string): Promise<MiseConfigCheck> {
+    const dir = await this.deps.repos.repoPath(repo);
+    const env = await this.deps.env();
+    const roots = [dir, await realpath(dir).catch(() => dir)];
+    const [format, validation] = await Promise.all([
+      runMiseCli(this.deps.command, ["fmt", "--check"], dir, env),
+      runMiseCli(this.deps.command, ["tasks", "validate", "--json"], dir, env),
+    ]);
+    for (const result of [format, validation]) if (result.kind !== "exited") throw new DomainError("mise_unavailable", result.message);
+    const formatCheck = parseFormatCheck(format, roots);
+    const problems = parseValidation(validation, roots);
+    if (formatCheck === null || problems === null) throw new Error("mise exited but its answer was not read");
+    return { unformatted: formatCheck.unformatted, problems: [...formatCheck.problems, ...problems] };
+  }
+
+  /**
+   * `mise fmt` in the repo root, on the user's click (only from the UI); the readiness asks for the check again. Only for a
+   * config mise lists the tasks of: `mise fmt` reads the files as text, but formatting a config the user has not trusted
+   * would rest on that alone.
+   */
+  async format(repo: string): Promise<void> {
+    const dir = await this.deps.repos.repoPath(repo);
+    const tasks = await this.tasks(repo);
+    if (tasks.kind !== "ok") throw new DomainError("mise_unavailable", `${repo}: ${tasks.message}`);
+    this.cliOutput(await runMiseCli(this.deps.command, ["fmt"], dir, await this.deps.env()));
   }
 
   /** The convention tasks file in the projects folder (ADR-157). */

@@ -6,7 +6,7 @@ import { type PtyKind, PtyTerminal } from "@/components/PtyTerminal";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { startsOnOpen } from "@/lib/folder-terminals";
+import { reopensOnOpen } from "@/lib/folder-terminals";
 import { useAction } from "@/lib/use-action";
 import { useFolderTerminal } from "@/lib/use-folder-terminal";
 
@@ -18,8 +18,9 @@ const SHELL: PtyKind = {
 
 /**
  * The Shell tab of a repo or a task (ADR-185): the user's own shell in the repo root or the task's worktree, in the
- * daemon, so it runs where the daemon runs (in a container, in the container). Opening the tab opens the place's
- * shell, or shows the one already open there; it keeps running when the tab closes, until the user closes it.
+ * daemon, so it runs where the daemon runs (in a container, in the container). The tab shows the shell already open
+ * there, or "Open a shell": a shell starts only when the user asks (ADR-211), since Ctrl+PageDown passes through the
+ * tab on the way to the next one. It keeps running when the tab closes, until the user closes it.
  */
 export function FolderShell({ conn, place, folder }: { conn: Connection; place: TerminalPlace; folder: string }) {
   const listed = useFolderTerminal(conn, place);
@@ -49,13 +50,22 @@ export function FolderShell({ conn, place, folder }: { conn: Connection; place: 
   const asked = useRef(false);
   const openRef = useRef(open.run);
   openRef.current = open.run;
+  const hasLiveShell = listed.terminal !== undefined && listed.terminal.run.kind !== "exited";
   useEffect(() => {
-    if (!startsOnOpen({ loaded: listed.loaded, hasTerminal: terminal !== undefined, alreadyAsked: asked.current })) return;
+    if (!reopensOnOpen({ loaded: listed.loaded, hasLiveShell, alreadyAsked: asked.current })) return;
     asked.current = true;
     openRef.current();
-  }, [listed.loaded, terminal]);
+  }, [listed.loaded, hasLiveShell]);
+  // The button takes the keyboard, so that Ctrl+PageDown and Enter open the shell without the mouse.
+  const openButton = useRef<HTMLButtonElement>(null);
+  const showsOpen = listed.loaded && terminal === undefined;
+  useEffect(() => {
+    if (showsOpen) openButton.current?.focus();
+  }, [showsOpen]);
 
   const actionError = open.error ?? close.error ?? listed.error;
+  // Nothing until the list came, so that a shell already open does not flash "Open a shell" first.
+  if (!terminal && !listed.loaded) return null;
   if (!terminal)
     return (
       <div className="flex flex-col items-start gap-2 p-4">
@@ -63,7 +73,17 @@ export function FolderShell({ conn, place, folder }: { conn: Connection; place: 
           A shell of your own in <span className="font-mono break-all">{folder}</span>.
         </p>
         {actionError && <p className="text-destructive text-sm">{actionError}</p>}
-        <Button variant="outline" size="sm" onClick={() => open.run()} disabled={open.pending}>
+        <Button
+          ref={openButton}
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            // The shell this starts is the tab's own: the list bringing it is no reason to ask again.
+            asked.current = true;
+            open.run();
+          }}
+          disabled={open.pending}
+        >
           <SquareTerminal /> {open.pending ? "Opening…" : "Open a shell"}
         </Button>
       </div>
