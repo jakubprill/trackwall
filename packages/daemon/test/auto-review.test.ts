@@ -98,7 +98,7 @@ describe.skipIf(process.versions.bun === undefined)("an automatic review of a ta
     const task = await taskWithChange("add a tax");
     const session = runningSessionOf(task.id);
 
-    daemon.facade.agents.reportSummary(session, "Added a tax.", []);
+    await daemon.facade.agents.reportSummary(session, "Added a tax.", []);
     await new Promise((r) => setTimeout(r, 300));
     expect(await daemon.post(autoReviewApi.get, { task: task.id })).toBeNull();
 
@@ -106,22 +106,22 @@ describe.skipIf(process.versions.bun === undefined)("an automatic review of a ta
       autoReview: { afterReport: true },
       autoReviewProblem: null,
     });
-    daemon.facade.agents.reportSummary(session, "Added a tax.", []);
+    await daemon.facade.agents.reportSummary(session, "Added a tax.", []);
     const first = await settled(task.id);
     expect(first).toMatchObject({ state: "done", trigger: "report" });
 
     // The same diff is not reviewed again; a changed one is.
-    daemon.facade.agents.reportSummary(session, "Added a tax again.", []);
+    await daemon.facade.agents.reportSummary(session, "Added a tax again.", []);
     await new Promise((r) => setTimeout(r, 300));
     expect(await daemon.post(autoReviewApi.get, { task: task.id })).toEqual(first);
     writeFileSync(join(task.worktree, "src", "tax.ts"), "export const rate = 0.23;\n");
-    daemon.facade.agents.reportSummary(session, "Added the rate.", []);
+    await daemon.facade.agents.reportSummary(session, "Added the rate.", []);
     await new Promise((r) => setTimeout(r, 300));
     const second = await settled(task.id);
     expect(second.diffHash).not.toBe(first.diffHash);
 
     // A click while the report's start gives way for the same diff still reviews it.
-    daemon.facade.agents.reportSummary(session, "Nothing new.", []);
+    await daemon.facade.agents.reportSummary(session, "Nothing new.", []);
     expect(await daemon.facade.agents.startAutoReview(task.id)).toMatchObject({ state: "running", trigger: "user" });
     await settled(task.id);
 
