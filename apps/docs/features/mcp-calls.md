@@ -21,11 +21,11 @@ Every call an agent makes to Trackwall's [MCP server](/features/mcp) is noted wh
 
 Only names are kept from what the agent sent: the repo, the task, the session, the mise task and the arguments it ran with, a board item, a method. Free text is never kept: not a task's prompt, a message, a search pattern, the path, headers or body of an endpoint call. So the list says that the agent sent a `POST` to `shop`, never to which path or with what.
 
-"MCP calls" in "Settings > Agents" shows the calls of every agent, newest first, as they come. The "MCP calls" tab in a task's panel shows only the calls of that task's sessions, also those of a session that has ended, and reads them again every few seconds. "Changes" leaves out the calls that only read, and "Errors" shows only the failed ones.
+"MCP calls" in "Settings > Agents" shows the calls of every agent, newest first, as they come, in a box of its own that scrolls, at the end of the page. The "MCP calls" tab in a task's panel shows only the calls of that task's sessions, also those of a session that has ended, and reads them again every few seconds. "Changes" leaves out the calls that only read, and "Errors" shows only the failed ones.
 
 ## Use it
 
-1. Open "Settings" (Ctrl+, or ⌘, on macOS), choose "Agents" and scroll to "MCP calls".
+1. Open "Settings" (Ctrl+, or ⌘, on macOS), choose "Agents" and scroll to "MCP calls", the last section.
 2. Click "Changes" to see only what agents ran, stopped or wrote.
 3. To see what one task's agent did, open the task in "Sessions" and choose its "MCP calls" tab.
 
