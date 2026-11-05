@@ -49,8 +49,9 @@ Under its state, every session that has talked to the model shows what its conve
 | Alt+J | Jump to the next session or task proposal waiting for you, from any view. |
 | Alt+0 | Open the [supervisor](/features/supervisor) panel, from any view. |
 | Win+Alt+J (⌃⌥J on macOS) | Bring Trackwall forward on the next session waiting for you, from any app. |
+| Ctrl+PageDown / Ctrl+PageUp (⌘⇧] / ⌘⇧[ on macOS) | Open the next or previous tab of a task, such as "Shell" from "Terminal" and back; in "Repos", of a repo. |
 
-Alt+1 … Alt+9, Alt+0 and Alt+J work while a terminal has the focus too, and are not typed into the session; Esc and Ctrl+C go to Copilot CLI as usual and interrupt the agent's turn. On macOS, an Option key that types a character on your keyboard layout (⌥5 for `[` on a German keyboard) stays a character.
+Alt+1 … Alt+9, Alt+0, Alt+J and the tab keys work while a terminal has the focus too, and are not typed into the session; PageUp and PageDown alone still scroll Copilot CLI; Esc and Ctrl+C go to Copilot CLI as usual and interrupt the agent's turn. On macOS, an Option key that types a character on your keyboard layout (⌥5 for `[` on a German keyboard) stays a character.
 
 ## Good to know
 
