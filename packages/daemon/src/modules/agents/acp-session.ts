@@ -100,6 +100,8 @@ export interface AcpSessionOptions {
    */
   firstMessage: string | undefined;
   environment: SessionEnvironment;
+  /** The model it started on (ADR-206); `null` for Copilot CLI's default. */
+  model: string | null;
   run: () => RunState | undefined;
   /** The daemon's prompt for what waits unread for this session (ADR-62, ADR-68); `undefined` when nothing waits. */
   prompt: () => string | undefined;
@@ -137,6 +139,7 @@ export class AcpSession implements AgentSession {
   readonly task: string | null;
   readonly startedAt = new Date().toISOString();
   readonly environment: SessionEnvironment;
+  readonly model: string | null;
   readonly #o: AcpSessionOptions;
   /** The session's working directory as given and as resolved (`workingDirectoryNames`), once. */
   readonly #cwdNames: readonly string[];
@@ -187,6 +190,7 @@ export class AcpSession implements AgentSession {
     this.supervisor = o.supervisor;
     this.task = o.task;
     this.environment = o.environment;
+    this.model = o.model;
     this.#o = o;
     this.#cwdNames = workingDirectoryNames(o.cwd);
     this.#conversation = new AcpConversation(this.#cwdNames);
@@ -425,6 +429,7 @@ export class AcpSession implements AgentSession {
       readRequest: running ? this.#readRequestView() : null,
       copyRequest: running ? this.copyRequest.request : null,
       usage: this.#o.usage.current(),
+      model: this.model,
     };
   }
 

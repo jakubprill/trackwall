@@ -128,6 +128,8 @@ export interface LiveSessionOptions {
   program: string;
   /** What the session got from mise when it started (ADR-93). */
   environment: SessionEnvironment;
+  /** The model it started on (ADR-206); `null` for Copilot CLI's default. */
+  model: string | null;
   /** The state of the session's process group in `procs`; `undefined` before the start. */
   run: () => RunState | undefined;
   /**
@@ -162,6 +164,7 @@ export class LiveSession implements AgentSession {
   readonly task: string | null;
   readonly startedAt = new Date().toISOString();
   readonly environment: SessionEnvironment;
+  readonly model: string | null;
   /** Copilot CLI's id of the conversation, which a later start resumes (ADR-95, ADR-107). */
   readonly conversation: string;
   readonly #run: () => RunState | undefined;
@@ -235,6 +238,7 @@ export class LiveSession implements AgentSession {
     this.supervisor = o.supervisor;
     this.task = o.task;
     this.environment = o.environment;
+    this.model = o.model;
     this.conversation = o.conversation ?? o.id;
     this.#run = o.run;
     this.#promptText = o.prompt;
@@ -482,6 +486,7 @@ export class LiveSession implements AgentSession {
       readRequest: run.kind === "running" ? this.#readRequestView() : null,
       copyRequest: run.kind === "running" ? this.copyRequest.request : null,
       usage: this.#usage.current(),
+      model: this.model,
     };
   }
 

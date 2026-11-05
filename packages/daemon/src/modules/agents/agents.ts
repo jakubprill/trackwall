@@ -868,8 +868,9 @@ export class Agents {
     return javaNavigationState(this.#javaNavigation.readiness());
   }
 
-  resumeTask(id: string): Promise<Task> {
-    return this.#tasks.resume(id);
+  /** The user's Resume; with `model` the task runs on it from now on (ADR-206). */
+  resumeTask(id: string, model?: string | null): Promise<Task> {
+    return this.#tasks.resume(id, model);
   }
 
   /**
@@ -1147,13 +1148,16 @@ export class Agents {
    * (ADR-95): a task's session as Resume does, the supervisor, a free session and a repo session under their id. The
    * new start reads the environment, `agentSecrets` and tool permissions again. A repo or free session gives up its
    * place in the list before the start, since an id is listed once, so a failed start leaves it out of the list;
-   * Copilot CLI still keeps its conversation.
+   * Copilot CLI still keeps its conversation. A `model` (ADR-206; `null` for Copilot CLI's default) is the one the new
+   * start runs on, and a task keeps it; the supervisor's comes from `supervisorModel`, so the UI saves that first.
    */
-  async restart(id: string): Promise<Session> {
+  async restart(id: string, model?: string | null): Promise<Session> {
     const session = this.#sessions.get(id);
     if (this.#restarting.has(id)) throw new DomainError("bad_request", "the session is already restarting");
     if (!this.#sessions.isRunning(session)) throw new DomainError("bad_request", "the session has ended; start it again instead");
     const { supervisor, task } = session;
+    if (supervisor && model !== undefined)
+      throw new DomainError("bad_request", "the supervisor runs on the model in Settings (supervisorModel); save it there and restart");
     const left = this.#sessions.resumable(session);
     this.#restarting.add(id);
     try {
@@ -1165,7 +1169,7 @@ export class Agents {
         throw new DomainError("bad_request", "the session has ended; start it again instead");
       await this.#deps.procs.stop(sessionOwner(id));
       if (task === null && !supervisor) this.#unlist(session);
-      return await this.#resumeLeft(left).catch(async (err: unknown) => {
+      return await this.#resumeLeft(left, model).catch(async (err: unknown) => {
         // Out of the list, it can never be closed, so its jdtls index goes now (ADR-175).
         if (left.javaNavigation) await this.#javaNavigation.remove(id, `session ${id}`);
         throw err;
@@ -1309,10 +1313,11 @@ export class Agents {
     if (javaNavigation) await this.#javaNavigation.remove(id, `session ${id}`);
   }
 
-  async #resumeLeft(left: ResumableSession): Promise<Session> {
+  /** `model`, when given, replaces the model the session or its task ran on (ADR-206). */
+  async #resumeLeft(left: ResumableSession, model?: string | null): Promise<Session> {
     const { repo, task } = left;
     if (task !== null) {
-      await this.#tasks.resume(task);
+      await this.#tasks.resume(task, model);
       return this.#sessionOfTask(task);
     }
     const spec = sessionLaunch(left.view, left);
@@ -1322,8 +1327,8 @@ export class Agents {
       return started;
     }
     const cwd = repo === null ? await this.#deps.repos.projectsDir() : await this.#deps.repos.repoPath(repo);
-    const { model, javaNavigation } = left;
-    const started = await this.#launchWithOptions(spec, { repo, supervisor: false, cwd, task: null }, { model, javaNavigation });
+    const options = { model: model === undefined ? left.model : model, javaNavigation: left.javaNavigation };
+    const started = await this.#launchWithOptions(spec, { repo, supervisor: false, cwd, task: null }, options);
     this.#askToReadLeft(left.session);
     return started;
   }

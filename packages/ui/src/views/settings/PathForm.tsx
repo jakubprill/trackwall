@@ -3,6 +3,7 @@ import type { ProviderModel } from "@trackwall/protocol";
 import { FolderOpen } from "lucide-react";
 import { type FormEvent, useId, useState } from "react";
 import { ProviderModelOptions } from "@/components/ProviderModelOptions";
+import { UnofferedModelNote } from "@/components/UnofferedModelNote";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { errorMessage } from "@/lib/api";
@@ -105,6 +106,7 @@ export function PathForm({
           </Button>
         )}
       </div>
+      <UnofferedModelNote typed={path} models={suggestions} onPick={setPath} />
       {error && <p className="text-destructive text-xs break-words">{error}</p>}
       <p className="text-muted-foreground text-xs break-all">
         {configFile ? (

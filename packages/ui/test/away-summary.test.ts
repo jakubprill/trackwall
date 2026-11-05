@@ -24,6 +24,7 @@ function session(id: string, fields: Partial<Session> = {}): Session {
     readRequest: null,
     copyRequest: null,
     usage: null,
+    model: null,
     ...fields,
   };
 }

@@ -30,3 +30,47 @@ export function providerModelsNote(list: ProviderModelList): { text: string; pro
     problem: false,
   };
 }
+
+/** Copilot CLI's own choice of model, which no provider lists, so a Model field never warns about it. */
+export const COPILOT_AUTO_MODEL = "auto";
+
+/**
+ * A model id the provider does not offer (ADR-206), with the offered id closest to it: a task proposed on an older
+ * model, or a typo, fails only at its first turn, and a task keeps its model, so the field says so before the start.
+ * `null` when there is nothing to warn about: an empty or invalid field, no list, `auto`, or an offered id.
+ */
+export function unofferedModel(typed: string, models: readonly ProviderModel[]): { closest: string | null } | null {
+  const id = typed.trim();
+  if (id === "" || id === COPILOT_AUTO_MODEL || models.length === 0) return null;
+  if (models.some((model) => model.id === id)) return null;
+  let closest: string | null = null;
+  let best = Number.POSITIVE_INFINITY;
+  for (const model of models) {
+    const distance = editDistance(id.toLowerCase(), model.id.toLowerCase());
+    if (distance < best) {
+      best = distance;
+      closest = model.id;
+    }
+  }
+  // Only an id close enough to be the same model under another version or spelling, not just any model of the list.
+  return { closest: closest !== null && best <= Math.max(id.length, closest.length) / 2 ? closest : null };
+}
+
+/** The warning under a Model field, from `unofferedModel`. */
+export function unofferedModelText(typed: string, closest: string | null): string {
+  return `The provider does not offer ${typed.trim()}${closest === null ? "" : `; did you mean ${closest}?`}`;
+}
+
+/** Levenshtein distance: the edits that turn `a` into `b`. */
+function editDistance(a: string, b: string): number {
+  let row = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const next = [i];
+    for (let j = 1; j <= b.length; j++) {
+      const substitution = (row[j - 1] ?? 0) + (a[i - 1] === b[j - 1] ? 0 : 1);
+      next.push(Math.min((row[j] ?? 0) + 1, (next[j - 1] ?? 0) + 1, substitution));
+    }
+    row = next;
+  }
+  return row[b.length] ?? 0;
+}

@@ -22,6 +22,7 @@ function session(id: string, repo: string, state: TaskState, more: Partial<Sessi
     readRequest: null,
     copyRequest: null,
     usage: null,
+    model: null,
     ...more,
   };
 }

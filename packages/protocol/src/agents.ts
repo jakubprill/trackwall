@@ -433,6 +433,11 @@ export const Session = z.object({
   copyRequest: CopyRequest.nullable(),
   /** What the session's conversation used (ADR-190); `null` before its first model call or when its event log cannot be read. */
   usage: CopilotUsage.nullable(),
+  /**
+   * The model the session started on (ADR-206): its `--model` (the configured command's, mise's or the start's), else
+   * `COPILOT_MODEL` of its environment; `null` for Copilot CLI's default.
+   */
+  model: z.string().nullable(),
 });
 export type Session = z.infer<typeof Session>;
 
@@ -822,9 +827,11 @@ export const agentsApi = {
   /**
    * Stops a running session and starts it again with the same conversation (ADR-119), in the same place and view, so it
    * gets the environment, `agentSecrets` and tool permissions of now. A task's session resumes as Resume does; the
-   * returned session is the new one. An ended session is `bad_request`.
+   * returned session is the new one. An ended session is `bad_request`. With `model` it starts again on that model
+   * (ADR-202; `null` for Copilot CLI's default), which a task keeps for its later resumes and a repo or free session for
+   * its later restarts; the supervisor's model is `supervisorModel` in Settings, so `model` for it is `bad_request`.
    */
-  restart: endpoint("restart", SessionRequest, Session),
+  restart: endpoint("restart", SessionRequest.extend({ model: TaskModel.nullable().optional() }), Session),
   /**
    * A message from the user to a session in the conversation view (ADR-107): its next prompt, sent at once when the agent
    * waits, otherwise after its turn, with the images and text files the user attached. A session in a terminal gets what
@@ -910,8 +917,11 @@ export const agentsApi = {
       .refine(({ prompt, parts }) => changePromptsFit(prompt, parts), CHANGE_PROMPTS_TOO_LONG),
     CreatedChange,
   ),
-  /** A new session for a task that has no running session, in the task's view: it goes on with the task's conversation. */
-  resumeTask: endpoint("resume-task", TaskRequest, Task),
+  /**
+   * A new session for a task that has no running session, in the task's view: it goes on with the task's conversation.
+   * With `model` the task runs on that model from now on (ADR-202; `null` for Copilot CLI's default).
+   */
+  resumeTask: endpoint("resume-task", TaskRequest.extend({ model: TaskModel.nullable().optional() }), Task),
   taskChanges: endpoint("task-changes", TaskRequest, TaskChanges),
   /**
    * Sends review comments on the task's changes to its session (ADR-62): the agent reads them with
