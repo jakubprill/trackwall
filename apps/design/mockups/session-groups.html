@@ -10,15 +10,11 @@
 <style>
 /*
  * Proposal text on top, then a clickable mock of the Sessions view: the list on the left with every group of related
- * sessions in its own colour, the layout bar and the grid on the right. The group colours are new custom properties,
+ * sessions in its own colour, the layout bar and the grid on the right. The group colours are the app's group tokens,
  * kept apart from the state colours (cyan, green, yellow, red), which already mean something.
  */
 :root {
   --term: oklch(0.12 0.008 240);
-  --group-violet: oklch(0.72 0.14 300);
-  --group-pink: oklch(0.74 0.13 350);
-  --group-blue: oklch(0.7 0.12 262);
-  --group-coral: oklch(0.72 0.12 45);
 }
 body { line-height: 1.5; }
 .wrap { max-width: 1240px; margin: 0 auto; padding-block: 28px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 24px; }
@@ -112,7 +108,7 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
       </div>
     </div>
     <div class="legend">
-      <span>Hover a row and click <b>⊞ group</b>, or pick it from a tile's menu: the grid shows that group only.</span>
+      <span>Hover a row and click <b>⊞ group</b>: the grid shows that group only.</span>
       <span>Click a row outside the filter: the filter goes away, so the selected entry is always on screen.</span>
     </div>
   </section>
@@ -131,11 +127,11 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
     <div>
       <h2>2. Only this group in the grid</h2>
       <ol>
-        <li>A row of a group has <b>⊞ group</b> on hover, and a tile's menu has "Only this group". The grid switches to Auto with the group's entries only, in list order.</li>
+        <li>A row of a group has <b>⊞ group</b> on hover. The grid switches to Auto with the group's entries only, in list order.</li>
         <li>The layout bar shows the filter as a chip in the group's colour with an × to clear it. The list stays full; rows outside the group dim.</li>
         <li>Selecting an entry outside the group clears the filter. Numbers and Alt+digit keep pointing at list positions.</li>
         <li>For a second monitor, a new window (already there) with this filter does the job of a "workspace" without saving one.</li>
-        <li>In code: the group and its colour index from <code>sessionRows</code> in <code>lib/session-entries.ts</code>, the filter in <code>lib/session-grid.ts</code>, both with unit tests; four colour tokens in <code>index.css</code>. No daemon change.</li>
+        <li>In code: the group and its colour index from <code>sessionRows</code> in <code>lib/session-entries.ts</code>, the filter in <code>lib/session-grid.ts</code>, both with unit tests; four colour tokens (<code>--group-1</code> to <code>--group-4</code>) in <code>index.css</code>. No daemon change.</li>
       </ol>
     </div>
   </section>
@@ -151,7 +147,7 @@ const entries = [
   { id: "e", repo: "web-shop", kind: "task", sub: "Cart totals rounding", state: "working", depth: 1, group: "d", parent: "web-shop" },
   { id: "f", repo: "auth-gateway", kind: "session", sub: "session in repo", state: "idle", depth: 0, group: "f" },
 ];
-const COLOURS = ["var(--group-violet)", "var(--group-pink)", "var(--group-blue)", "var(--group-coral)"];
+const COLOURS = ["var(--group-1)", "var(--group-2)", "var(--group-3)", "var(--group-4)"];
 const STATE = { idle: ["probably idle", ""], working: ["working", "ok"], approval: ["waiting for approval", "w"] };
 const SCREEN = {
   a: ['<span class="p">●</span> Proposed 1 task: payments', "Waiting for the task's result.", "> _"],
