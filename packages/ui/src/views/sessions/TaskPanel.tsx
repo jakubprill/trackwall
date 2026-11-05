@@ -135,6 +135,7 @@ export function TaskPanel({
             onToggle={() => setChangingModel(!changingModel)}
             disabled={removing}
             title={liveSession ? "Restart the session on another model" : "Resume the task on another model"}
+            iconOnly
           />
           {mayHandToSupervisor(task) && (
             <HandToSupervisorButton conn={conn} task={task} disabled={confirmingRemoval} onHanded={onChanged} />
