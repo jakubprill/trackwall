@@ -44,8 +44,48 @@ export function terminalTheme(token: (name: string) => string): ITheme {
   };
 }
 
-/** The tokens of `root` as `terminalTheme` reads them. */
+/** The attribute the desktop shell sets on `<html>` once the window has its background effect (ADR-11). */
+const WINDOW_EFFECT_ATTRIBUTE = "data-window-effect";
+
+/**
+ * The tokens of `root` as `terminalTheme` reads them, each colour in a form xterm.js parses. xterm.js parses only hex,
+ * `rgb()` and `rgba()` itself, and any other colour through a canvas, which it refuses when the colour is not opaque, and
+ * then silently paints its own default instead: the translucent `--secondary` (ANSI black, under Copilot CLI's prompt
+ * box and the user's messages) and `--accent` (the selection) of a window with a background effect became xterm.js's
+ * opaque grey. So every colour goes through a canvas here and reaches xterm.js as `rgb()` or `rgba()`.
+ */
 export function cssTokens(root: HTMLElement): (name: string) => string {
   const style = getComputedStyle(root);
-  return (name) => style.getPropertyValue(name).trim();
+  const colour = canvasColour();
+  return (name) => colour(style.getPropertyValue(name).trim());
+}
+
+/** A CSS colour as `rgb()` or `rgba()`, read back from a canvas; anything the canvas does not take stays as it is. */
+function canvasColour(): (css: string) => string {
+  const context = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+  return (css) => {
+    if (!context || css === "" || !CSS.supports("color", css)) return css;
+    context.clearRect(0, 0, 1, 1);
+    context.fillStyle = css;
+    context.fillRect(0, 0, 1, 1);
+    const [red = 0, green = 0, blue = 0, alpha = 0] = context.getImageData(0, 0, 1, 1).data;
+    return rgbColour(red, green, blue, alpha);
+  };
+}
+
+/** Channels of 0–255 as xterm.js parses them: `rgb()` when opaque, otherwise `rgba()` with the alpha from 0 to 1. */
+export function rgbColour(red: number, green: number, blue: number, alpha: number): string {
+  if (alpha === 255) return `rgb(${red}, ${green}, ${blue})`;
+  return `rgba(${red}, ${green}, ${blue}, ${Math.round((alpha / 255) * 1000) / 1000})`;
+}
+
+/**
+ * Calls `changed` whenever the desktop shell sets or removes the window effect on `root`. The shell sets it after the
+ * page has loaded, often after a terminal has opened, and the effect changes the tokens (`--fill-alpha`), so a terminal
+ * reads its theme again then instead of keeping the opaque colours until it is opened anew. Returns the unsubscribe.
+ */
+export function watchWindowEffect(root: HTMLElement, changed: () => void): () => void {
+  const observer = new MutationObserver(changed);
+  observer.observe(root, { attributes: true, attributeFilter: [WINDOW_EFFECT_ATTRIBUTE] });
+  return () => observer.disconnect();
 }
