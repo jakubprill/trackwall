@@ -313,7 +313,7 @@ export class SessionLauncher {
       program: copilot.program,
       prefix: copilot.args,
       args,
-      model: runModel(env, startModel),
+      model: modelOfArgs([...model, ...launchArgs]),
       env,
       mise,
       miseEnv,
@@ -331,7 +331,7 @@ export class SessionLauncher {
    * A session's start and a task's review (ADR-182) call it; `who` names it in the log.
    */
   async setWireApi(who: string, env: NodeJS.ProcessEnv, startModel: string | null): Promise<void> {
-    const model = runModel(env, startModel);
+    const model = startModel ?? (env[envKey(env, COPILOT_PROVIDER_ENV.model)]?.trim() || null);
     if (model === null) return;
     let wireApi: WireApi | null;
     try {
@@ -478,7 +478,7 @@ interface SessionSetup {
   prefix: readonly string[];
   /** The MCP config, tool permissions, mise's arguments and the supervisor's model. */
   args: readonly string[];
-  /** The model the session runs on (ADR-206); `null` for Copilot CLI's default. */
+  /** The model Trackwall starts the session on (ADR-206); `null` when it passes none. */
   model: string | null;
   env: NodeJS.ProcessEnv;
   mise: SessionMiseLaunch;
@@ -524,9 +524,4 @@ function domainError(repo: string | null, err: unknown): unknown {
   if (!(err instanceof SpawnFailure)) return err;
   const place = repo ?? "the projects folder";
   return new DomainError(err.reason === "cwd_invalid" ? "repo_unavailable" : "agent_unavailable", `${place}: ${err.message}`);
-}
-
-/** The model a Copilot CLI start runs on: the start's `--model`, else the environment's `COPILOT_MODEL`; `null` for its default. */
-function runModel(env: NodeJS.ProcessEnv, startModel: string | null): string | null {
-  return startModel ?? (env[envKey(env, COPILOT_PROVIDER_ENV.model)]?.trim() || null);
 }

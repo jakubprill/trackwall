@@ -128,7 +128,7 @@ export interface LiveSessionOptions {
   program: string;
   /** What the session got from mise when it started (ADR-93). */
   environment: SessionEnvironment;
-  /** The model it started on (ADR-206); `null` for Copilot CLI's default. */
+  /** The model Trackwall started it on (ADR-206); `null` when it passed none. */
   model: string | null;
   /** The state of the session's process group in `procs`; `undefined` before the start. */
   run: () => RunState | undefined;

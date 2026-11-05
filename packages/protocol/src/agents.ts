@@ -434,8 +434,9 @@ export const Session = z.object({
   /** What the session's conversation used (ADR-190); `null` before its first model call or when its event log cannot be read. */
   usage: CopilotUsage.nullable(),
   /**
-   * The model the session started on (ADR-206): its `--model` (the configured command's, mise's or the start's), else
-   * `COPILOT_MODEL` of its environment; `null` for Copilot CLI's default.
+   * The model Trackwall started the session on (ADR-206), as its `--model`: a task's, a repo or free session's or the
+   * supervisor's; `null` when Trackwall passed none, and Copilot CLI took its default or a model from the configured
+   * command or mise.
    */
   model: z.string().nullable(),
 });
@@ -828,8 +829,8 @@ export const agentsApi = {
    * Stops a running session and starts it again with the same conversation (ADR-119), in the same place and view, so it
    * gets the environment, `agentSecrets` and tool permissions of now. A task's session resumes as Resume does; the
    * returned session is the new one. An ended session is `bad_request`. With `model` it starts again on that model
-   * (ADR-202; `null` for Copilot CLI's default), which a task keeps for its later resumes and a repo or free session for
-   * its later restarts; the supervisor's model is `supervisorModel` in Settings, so `model` for it is `bad_request`.
+   * (ADR-206; `null` for Copilot CLI's default), which a task keeps for its later resumes, a repo or free session for
+   * its later restarts and the supervisor as `supervisorModel` in `workspace.yaml`, saved before the restart.
    */
   restart: endpoint("restart", SessionRequest.extend({ model: TaskModel.nullable().optional() }), Session),
   /**
@@ -919,7 +920,7 @@ export const agentsApi = {
   ),
   /**
    * A new session for a task that has no running session, in the task's view: it goes on with the task's conversation.
-   * With `model` the task runs on that model from now on (ADR-202; `null` for Copilot CLI's default).
+   * With `model` the task runs on that model from now on (ADR-206; `null` for Copilot CLI's default).
    */
   resumeTask: endpoint("resume-task", TaskRequest.extend({ model: TaskModel.nullable().optional() }), Task),
   taskChanges: endpoint("task-changes", TaskRequest, TaskChanges),

@@ -363,12 +363,9 @@ export class AgentTasks {
 
   /**
    * A new session for a task without a running session, which goes on with the task's conversation: in a terminal
-   * Copilot CLI keeps it under the task's UUID, in the conversation view under the id it chose (ADR-137).
-   */
-  /**
-   * A new session that goes on with the task's conversation. With `model` (ADR-206; `null` for Copilot CLI's default)
-   * the task runs on it from now on, saved before the start, so a start that fails keeps the user's choice for the next
-   * Resume: a task stuck on a model its provider does not serve gets out of it.
+   * Copilot CLI keeps it under the task's UUID, in the conversation view under the id it chose (ADR-137). With `model`
+   * (ADR-206; `null` for Copilot CLI's default) the task runs on it from now on, saved before the start, so a start that
+   * fails keeps the user's choice for the next Resume: a task stuck on a model its provider does not serve gets out of it.
    */
   resume(id: string, model?: string | null): Promise<Task> {
     const task = this.#get(id);

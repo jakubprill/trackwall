@@ -1,12 +1,13 @@
-import { type Session, TASK_MODEL_MAX } from "@trackwall/protocol";
+import { agentsApi, type Session, TASK_MODEL_MAX } from "@trackwall/protocol";
 import { Bot } from "lucide-react";
 import { type FormEvent, useId, useState } from "react";
 import { ProviderModelOptions } from "@/components/ProviderModelOptions";
 import { UnofferedModelNote } from "@/components/UnofferedModelNote";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { restartOnModel, restartOnModelNote } from "@/lib/model-change";
+import { restartOnModelNote } from "@/lib/model-change";
 import { typedModel } from "@/lib/task-model";
 import { useAction } from "@/lib/use-action";
 import { useProviderModels } from "@/lib/use-provider-models";
@@ -78,7 +79,7 @@ export function ModelChangeStrip({
   );
 }
 
-/** The strip for a running session: a restart on the model, the supervisor's through Settings (`restartOnModel`). */
+/** The strip for a running session: a restart on the model, which the daemon keeps for the session, its task or the supervisor. */
 export function SessionModelChange({
   conn,
   session,
@@ -96,9 +97,39 @@ export function SessionModelChange({
       current={session.model}
       verb="Restart"
       note={restartOnModelNote(session)}
-      apply={(model) => restartOnModel(conn, session, model)}
+      apply={(model) => post(conn, agentsApi.restart, { session: session.id, model })}
       onDone={onDone}
       onCancel={onCancel}
     />
+  );
+}
+
+/** The button that opens and closes the strip, in a panel's header: with its label, or as an icon in a narrow one. */
+export function ModelChangeButton({
+  open,
+  onToggle,
+  title,
+  iconOnly = false,
+  disabled = false,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  title: string;
+  iconOnly?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <Button
+      variant={iconOnly ? "ghost" : "outline"}
+      size={iconOnly ? "icon" : "sm"}
+      onClick={onToggle}
+      disabled={disabled}
+      aria-expanded={open}
+      aria-label={iconOnly ? title : undefined}
+      title={title}
+    >
+      <Bot />
+      {!iconOnly && "Model"}
+    </Button>
   );
 }

@@ -1,9 +1,9 @@
 import { agentsApi, countLabel, type Session } from "@trackwall/protocol";
-import { BellRing, Bot, Crown, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Square } from "lucide-react";
+import { BellRing, Crown, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Square } from "lucide-react";
 import { type FocusEvent, useEffect, useRef, useState } from "react";
 import { CopyRequestNotice } from "@/components/CopyRequestNotice";
 import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
-import { SessionModelChange } from "@/components/ModelChange";
+import { ModelChangeButton, SessionModelChange } from "@/components/ModelChange";
 import { ReadRequestNotice } from "@/components/ReadRequestNotice";
 import { SessionScreen } from "@/components/SessionScreen";
 import { StatusLabel } from "@/components/StatusLabel";
@@ -222,16 +222,12 @@ function SupervisorHeader({
         {waitingProposals > 0 && <ProposalsWaiting count={waitingProposals} />}
         <span className="ml-auto flex shrink-0 items-center gap-1">
           {running && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setChangingModel(!changingModel)}
-              aria-expanded={changingModel}
-              aria-label="Restart the supervisor on another model"
+            <ModelChangeButton
+              open={changingModel}
+              onToggle={() => setChangingModel(!changingModel)}
               title="Restart the supervisor on another model"
-            >
-              <Bot />
-            </Button>
+              iconOnly
+            />
           )}
           {running && (
             <Button

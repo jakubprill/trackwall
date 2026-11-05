@@ -100,7 +100,7 @@ export interface AcpSessionOptions {
    */
   firstMessage: string | undefined;
   environment: SessionEnvironment;
-  /** The model it started on (ADR-206); `null` for Copilot CLI's default. */
+  /** The model Trackwall started it on (ADR-206); `null` when it passed none. */
   model: string | null;
   run: () => RunState | undefined;
   /** The daemon's prompt for what waits unread for this session (ADR-62, ADR-68); `undefined` when nothing waits. */

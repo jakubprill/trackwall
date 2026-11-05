@@ -165,6 +165,8 @@ interface AgentsRepos {
   supervisorSettings(): SupervisorSettings;
   /** `supervisorModel` from `workspace.yaml` (ADR-193): the supervisor's model, `null` for the default; `invalid_config` for a bad key. */
   supervisorModel(): string | null;
+  /** Writes `supervisorModel` (ADR-193), `null` removing it: a restart of the supervisor on another model (ADR-206). */
+  setSupervisorModel(model: string | null): unknown;
   /** `sandbox` from `workspace.yaml` with its default (ADR-181): which tasks run in Copilot CLI's sandbox; `invalid_config` for a bad key. */
   sandboxSettings(): SandboxSettings;
   /** `agentSecrets` from `workspace.yaml` (ADR-93): the secrets from mise a session's tools get; `invalid_config` for a bad key. */
@@ -1149,15 +1151,15 @@ export class Agents {
    * new start reads the environment, `agentSecrets` and tool permissions again. A repo or free session gives up its
    * place in the list before the start, since an id is listed once, so a failed start leaves it out of the list;
    * Copilot CLI still keeps its conversation. A `model` (ADR-206; `null` for Copilot CLI's default) is the one the new
-   * start runs on, and a task keeps it; the supervisor's comes from `supervisorModel`, so the UI saves that first.
+   * start runs on and the session keeps: a task in `tasks.json`, the supervisor as `supervisorModel`, which every start
+   * of it reads, saved first, so like a task's it stays the user's choice when the start then fails.
    */
   async restart(id: string, model?: string | null): Promise<Session> {
     const session = this.#sessions.get(id);
     if (this.#restarting.has(id)) throw new DomainError("bad_request", "the session is already restarting");
     if (!this.#sessions.isRunning(session)) throw new DomainError("bad_request", "the session has ended; start it again instead");
     const { supervisor, task } = session;
-    if (supervisor && model !== undefined)
-      throw new DomainError("bad_request", "the supervisor runs on the model in Settings (supervisorModel); save it there and restart");
+    if (supervisor && model !== undefined) this.#deps.repos.setSupervisorModel(model);
     const left = this.#sessions.resumable(session);
     this.#restarting.add(id);
     try {

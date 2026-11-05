@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { COPILOT_AUTO_MODEL, modelHint, providerModelsNote, unofferedModel, unofferedModelText } from "../src/lib/provider-models.ts";
+import { COPILOT_AUTO_MODEL, modelHint, providerModelsNote, unofferedModel } from "../src/lib/provider-models.ts";
 
 describe("the models of the session profile's provider in the UI (ADR-194)", () => {
   test("a suggested model's hint is its context window in thousands or millions of tokens, and its format once known", () => {
@@ -42,14 +42,10 @@ describe("a model id the provider does not offer (ADR-206)", () => {
 
   test("an id the provider does not list is named with the offered id closest to it", () => {
     expect(unofferedModel("claude-sonnet-4.5", models)).toEqual({ closest: "claude-sonnet-5.5" });
-    expect(unofferedModelText("claude-sonnet-4.5", "claude-sonnet-5.5")).toBe(
-      "The provider does not offer claude-sonnet-4.5; did you mean claude-sonnet-5.5?",
-    );
   });
 
   test("an id like none of the offered ones is named without a guess", () => {
     expect(unofferedModel("o4", models)).toEqual({ closest: null });
-    expect(unofferedModelText("o4", null)).toBe("The provider does not offer o4");
   });
 
   test("an offered id, auto, an empty field and a provider without a list give no warning", () => {

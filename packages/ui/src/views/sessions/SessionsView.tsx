@@ -9,14 +9,14 @@ import {
   type TaskMessage,
   type TaskOutcome,
 } from "@trackwall/protocol";
-import { BellRing, Bot, Crown, Lightbulb, Plus, Square, X } from "lucide-react";
+import { BellRing, Crown, Lightbulb, Plus, Square, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { CopilotUsageMark } from "@/components/CopilotUsageMark";
 import { CopyRequestNotice } from "@/components/CopyRequestNotice";
 import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
-import { SessionModelChange } from "@/components/ModelChange";
+import { ModelChangeButton, SessionModelChange } from "@/components/ModelChange";
 import { ReadRequestNotice } from "@/components/ReadRequestNotice";
 import { SessionScreen } from "@/components/SessionScreen";
 import { StatusLabel } from "@/components/StatusLabel";
@@ -748,15 +748,11 @@ function SessionPanel({
         </div>
         {error && <span className="text-destructive max-w-xs truncate text-xs">{error}</span>}
         {live && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setChangingModel(!changingModel)}
-            aria-expanded={changingModel}
+          <ModelChangeButton
+            open={changingModel}
+            onToggle={() => setChangingModel(!changingModel)}
             title="Restart the session on another model"
-          >
-            <Bot /> Model
-          </Button>
+          />
         )}
         {live ? (
           <Button variant="outline" size="sm" onClick={stop.run} disabled={stop.pending || session.run.kind === "stopping"}>

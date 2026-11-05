@@ -13,6 +13,7 @@ import { CopilotUsageMark } from "@/components/CopilotUsageMark";
 import { CopyRequestNotice } from "@/components/CopyRequestNotice";
 import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
 import { FolderShell } from "@/components/FolderShell";
+import { ModelChangeButton } from "@/components/ModelChange";
 import { ReadRequestNotice } from "@/components/ReadRequestNotice";
 import { SessionScreen } from "@/components/SessionScreen";
 import { StatusLabel } from "@/components/StatusLabel";
@@ -129,16 +130,12 @@ export function TaskPanel({
           <VerifyButton state={details.verification} disabled={confirmingRemoval} />
           <TaskEditorButton conn={conn} task={task} label="VS Code" />
           <CopyIncludedFilesButton conn={conn} task={task} onCopied={onChanged} />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setChangingModel(!changingModel)}
-            disabled={confirmingRemoval}
-            aria-expanded={changingModel}
+          <ModelChangeButton
+            open={changingModel}
+            onToggle={() => setChangingModel(!changingModel)}
+            disabled={removing}
             title={liveSession ? "Restart the session on another model" : "Resume the task on another model"}
-          >
-            <Bot /> Model
-          </Button>
+          />
           {mayHandToSupervisor(task) && (
             <HandToSupervisorButton conn={conn} task={task} disabled={confirmingRemoval} onHanded={onChanged} />
           )}

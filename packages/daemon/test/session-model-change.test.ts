@@ -49,6 +49,7 @@ describe.skipIf(process.versions.bun === undefined)("another model for a session
 
     const restarted = await daemon.post(agentsApi.restart, { session: first, model: "claude-sonnet-5.5" });
 
+    expect(restarted.model).toBe("claude-sonnet-5.5");
     const screen = await argumentsOf(restarted.id, "--resume=");
     expect(screen).toContain("Argument: --model=claude-sonnet-5.5");
     expect(screen).not.toContain("--model=claude-sonnet-4.5");
@@ -74,12 +75,14 @@ describe.skipIf(process.versions.bun === undefined)("another model for a session
 
     expect(resumed.model).toBeNull();
     expect(await argumentsOf(runningSessionOf(task.id), "--resume=")).not.toContain("--model=");
+    expect(daemon.facade.agents.session(runningSessionOf(task.id)).model).toBeNull();
     await daemon.post(agentsApi.stop, { session: runningSessionOf(task.id) });
     await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
   }, 60_000);
 
   test("a repo session restarted on another model keeps it for its next plain restart", async () => {
     const session = await daemon.post(agentsApi.start, { repo: "shop", prompt: "explain the build", model: "gpt-5.5" });
+    expect(session.model).toBe("gpt-5.5");
     await started(session.id);
 
     await daemon.post(agentsApi.restart, { session: session.id, model: "claude-opus-5.5" });
@@ -93,14 +96,15 @@ describe.skipIf(process.versions.bun === undefined)("another model for a session
     await daemon.post(agentsApi.stop, { session: session.id });
   }, 60_000);
 
-  test("a model for the supervisor's restart is refused and the supervisor goes on, since its model is the one in Settings", async () => {
+  test("the supervisor restarted on another model saves it as its model in Settings, so its next start keeps it", async () => {
     const supervisor = await daemon.facade.agents.startSupervisor("new", "terminal");
     await started(supervisor.id);
 
-    const refused = daemon.post(agentsApi.restart, { session: supervisor.id, model: "gpt-5.5" });
+    const restarted = await daemon.post(agentsApi.restart, { session: supervisor.id, model: "gpt-5-mini" });
 
-    await expect(refused).rejects.toThrow("the supervisor runs on the model in Settings");
-    expect(daemon.facade.agents.session(supervisor.id).run.kind).toBe("running");
-    await daemon.post(agentsApi.stop, { session: supervisor.id });
+    expect(restarted.model).toBe("gpt-5-mini");
+    expect(await argumentsOf(restarted.id, "--session-id=")).toContain("Argument: --model=gpt-5-mini");
+    expect(daemon.facade.workspace.supervisorModel()).toBe("gpt-5-mini");
+    await daemon.post(agentsApi.stop, { session: restarted.id });
   }, 60_000);
 });

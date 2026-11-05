@@ -56,11 +56,6 @@ export function unofferedModel(typed: string, models: readonly ProviderModel[]):
   return { closest: closest !== null && best <= Math.max(id.length, closest.length) / 2 ? closest : null };
 }
 
-/** The warning under a Model field, from `unofferedModel`. */
-export function unofferedModelText(typed: string, closest: string | null): string {
-  return `The provider does not offer ${typed.trim()}${closest === null ? "" : `; did you mean ${closest}?`}`;
-}
-
 /** Levenshtein distance: the edits that turn `a` into `b`. */
 function editDistance(a: string, b: string): number {
   let row = Array.from({ length: b.length + 1 }, (_, j) => j);
