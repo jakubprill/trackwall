@@ -90,6 +90,6 @@ Every task also gets a port of its own, shown in the task's header. Every mise t
 - Trackwall keeps the last verification of each task, also when it restarts or updates; one that was still running then shows as cancelled, so press "Verify" again.
 - After running the tests in its worktree, the agent reads which tests failed and why from the reports your build tools write there, instead of scrolling the build log.
 - An agent can also propose a task for you to start: see [Main session and task proposals](/features/main-session).
-- The "Shell" tab opens your own shell in the task's worktree: see [Shell](/features/shell).
+- The "Shell" tab opens your own shell in the task's worktree: see [Shell](/features/shell). Ctrl+PageDown and Ctrl+PageUp (⌘⇧] and ⌘⇧[ on macOS) step through the task's tabs, so "Terminal" and "Shell" are one key apart.
 - The "Impact" tab shows which repos the endpoints and library classes the task's commits change reach, and hands each of them a task; the repos that call a changed endpoint or import a changed class get a task proposed when the agent finishes a turn: see [Impact of a task](/features/impact).
 - When Trackwall runs in a [dev container](/guide/dev-container), "VS Code" opens the worktree in VS Code inside the container (with the Dev Containers extension), and the merge request form opens in a new tab of your browser.
