@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sessions: groups of related sessions</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<style>
+/*
+ * Proposal text on top, then a clickable mock of the Sessions view: the list on the left with every group of related
+ * sessions in its own colour, the layout bar and the grid on the right. The group colours are new custom properties,
+ * kept apart from the state colours (cyan, green, yellow, red), which already mean something.
+ */
+:root {
+  --term: oklch(0.12 0.008 240);
+  --group-violet: oklch(0.72 0.14 300);
+  --group-pink: oklch(0.74 0.13 350);
+  --group-blue: oklch(0.7 0.12 262);
+  --group-coral: oklch(0.72 0.12 45);
+}
+body { line-height: 1.5; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 28px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 24px; }
+h1 { font-size: 22px; margin: 0; text-wrap: balance; }
+h2 { font-size: 15px; margin: 0 0 8px; }
+.lede { color: var(--muted-foreground); max-width: 75ch; margin: 6px 0 0; }
+.label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+.cols > div { min-width: 0; }
+ol, ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; color: var(--muted-foreground); }
+ol b, ul b { color: var(--foreground); }
+code { font-family: var(--font-mono); font-size: 12px; color: var(--primary); }
+.controls { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.seg button { background: none; border: 0; color: var(--muted-foreground); font: 12px var(--font-mono); padding: 3px 10px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--primary); }
+button:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+
+/* mock */
+.app { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; display: grid; grid-template-columns: 290px 1fr; height: 640px; background: var(--background); }
+@media (max-width: 800px) { .app { grid-template-columns: 1fr; height: auto; } .list { max-height: 340px; } .grid { min-height: 560px; } }
+.list { background: var(--overlay); border-right: 1px solid var(--border); overflow-y: auto; padding: 10px 8px; display: flex; flex-direction: column; gap: 6px; }
+.group { display: flex; flex-direction: column; gap: 2px; border-radius: 8px; }
+.v-frame .group.multi { border: 1px solid color-mix(in oklch, var(--g) 55%, transparent); background: color-mix(in oklch, var(--g) 6%, transparent); padding: 2px; }
+.row { position: relative; display: flex; gap: 10px; padding: 7px 8px; border-radius: 6px; border: 1px solid transparent; cursor: pointer; background: none; color: inherit; text-align: left; font: inherit; width: 100%; }
+.row:hover { background: var(--accent); }
+.row.sel { background: var(--accent); border-color: color-mix(in oklch, var(--primary) 25%, transparent); }
+.row.out { opacity: .38; }
+.v-stripe .group.multi .row::before { content: ""; position: absolute; left: 0; top: 4px; bottom: 4px; width: 3px; border-radius: 2px; background: var(--g); }
+.indent { display: flex; flex-shrink: 0; align-self: stretch; }
+.indent i { width: 12px; border-left: 1px solid color-mix(in oklch, var(--g, var(--border)) 45%, transparent); margin-left: 4px; }
+.pos { width: 26px; flex-shrink: 0; text-align: right; font-family: var(--font-mono); font-size: 10px; color: var(--muted-foreground); padding-top: 2px; line-height: 1.3; }
+.body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.rname { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; min-width: 0; }
+.rname span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lvl { font-family: var(--font-mono); font-size: 10px; font-weight: 500; color: var(--g, var(--muted-foreground)); border: 1px solid color-mix(in oklch, var(--g, var(--border)) 50%, transparent); border-radius: 4px; padding: 0 4px; white-space: nowrap; }
+.badge { font-family: var(--font-mono); font-size: 10px; font-weight: 500; color: var(--muted-foreground); background: var(--secondary); border-radius: 4px; padding: 0 5px; white-space: nowrap; }
+.rsub { font-size: 11px; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st { font-size: 11px; color: var(--muted-foreground); }
+.st.w { color: var(--warning); }
+.st.ok { color: var(--success); }
+.only { position: absolute; right: 4px; bottom: 6px; background: none; border: 1px solid transparent; border-radius: 4px; color: var(--muted-foreground); font: 11px var(--font-mono); padding: 0 4px; cursor: pointer; opacity: 0; }
+.row:hover .only, .row.sel .only, .only:focus-visible { opacity: 1; }
+.only:hover { border-color: var(--border); color: var(--foreground); }
+
+.right { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; border-bottom: 1px solid var(--border); padding: 6px 12px; }
+.filter { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--g); color: var(--g); background: color-mix(in oklch, var(--g) 10%, transparent); border-radius: 999px; padding: 0 4px 0 10px; font-size: 12px; }
+.filter button { background: none; border: 0; color: inherit; cursor: pointer; font-size: 13px; padding: 0 4px; }
+.sum { font-size: 12px; color: var(--muted-foreground); }
+.grid { flex: 1; display: grid; gap: 8px; padding: 8px; min-height: 0; }
+.tile { border: 1px solid var(--border); border-radius: 6px; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; background: var(--term); }
+.tile.grouped { border-color: color-mix(in oklch, var(--g) 55%, transparent); }
+.tile.sel { box-shadow: 0 0 0 2px var(--primary); }
+.tile.wait { border-color: var(--warning); }
+.th { display: flex; align-items: center; gap: 8px; padding: 4px 8px; background: var(--card); border-bottom: 1px solid var(--border); font-size: 12px; min-width: 0; }
+.tile.grouped .th { box-shadow: inset 0 3px 0 var(--g); padding-top: 6px; }
+.num { font-family: var(--font-mono); font-size: 10px; background: var(--secondary); color: var(--muted-foreground); border-radius: 3px; padding: 0 4px; }
+.tile.sel .num { background: var(--primary); color: var(--primary-foreground); }
+.th b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crumb { color: var(--muted-foreground); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.th .spacer { flex: 1; }
+.tb { flex: 1; padding: 6px 8px; font: 11px/1.5 var(--font-mono); color: var(--muted-foreground); overflow: hidden; }
+.tb .p { color: var(--success); }
+.tb .a { color: var(--warning); }
+.full { flex: 1; display: grid; grid-template-rows: auto 1fr; min-height: 0; }
+.note { font-size: 12px; color: var(--muted-foreground); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted-foreground); margin-top: 8px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="label">Trackwall · Sessions view · proposal · 2026-11-05</div>
+    <h1>See which sessions belong together</h1>
+    <p class="lede">A session that proposes a task, whose session proposes another, makes a chain. The list already puts the chain under its main session, but an indent of one step and a thin grey line are easy to miss, and the grid shows nothing of it. Here every group (a main session and everything under it) gets its own colour, in the list and on its tiles, and one click shows only that group in the grid.</p>
+  </header>
+
+  <div class="controls">
+    <span class="label">List variant</span>
+    <div class="seg" id="variant"></div>
+    <span class="label">Layout</span>
+    <div class="seg" id="layout"></div>
+  </div>
+
+  <section aria-label="Mockup">
+    <div class="app">
+      <nav class="list" id="list" aria-label="Sessions list"></nav>
+      <div class="right">
+        <div class="bar" id="bar"></div>
+        <div class="grid" id="grid"></div>
+      </div>
+    </div>
+    <div class="legend">
+      <span>Hover a row and click <b>⊞ group</b>, or pick it from a tile's menu: the grid shows that group only.</span>
+      <span>Click a row outside the filter: the filter goes away, so the selected entry is always on screen.</span>
+    </div>
+  </section>
+
+  <section class="cols">
+    <div>
+      <h2>1. A colour for each group</h2>
+      <ol>
+        <li>A group is a main session with every task and proposal under it, at any depth. A session alone has no colour, so colour always means "these belong together".</li>
+        <li><b>Stripe</b> (recommended): a coloured bar along each row of the group, and the level as <code>↳1</code>, <code>↳2</code> next to the name, since a third level no longer moves right.</li>
+        <li><b>Frame</b>: one coloured outline around the whole group. Clearer at a glance, but it costs a little width and nests badly with the selected row.</li>
+        <li>In the grid a tile of a group has a coloured top edge and says what it sits under (<code>under payments</code>), so a chain reads even when its tiles are apart.</li>
+        <li>Four colours that are not state colours (violet, pink, blue, coral), given in list order and reused after four groups. A group keeps its colour while it is on the list.</li>
+      </ol>
+    </div>
+    <div>
+      <h2>2. Only this group in the grid</h2>
+      <ol>
+        <li>A row of a group has <b>⊞ group</b> on hover, and a tile's menu has "Only this group". The grid switches to Auto with the group's entries only, in list order.</li>
+        <li>The layout bar shows the filter as a chip in the group's colour with an × to clear it. The list stays full; rows outside the group dim.</li>
+        <li>Selecting an entry outside the group clears the filter. Numbers and Alt+digit keep pointing at list positions.</li>
+        <li>For a second monitor, a new window (already there) with this filter does the job of a "workspace" without saving one.</li>
+        <li>In code: the group and its colour index from <code>sessionRows</code> in <code>lib/session-entries.ts</code>, the filter in <code>lib/session-grid.ts</code>, both with unit tests; four colour tokens in <code>index.css</code>. No daemon change.</li>
+      </ol>
+    </div>
+  </section>
+</div>
+
+<script>
+// Sample data: one chain three deep (like orders-api → payments → notifications), a second group and a lone session.
+const entries = [
+  { id: "a", repo: "orders-api", kind: "session", sub: "session in repo", state: "idle", depth: 0, group: "a" },
+  { id: "b", repo: "payments", kind: "task", sub: "Add idempotency key to refunds", state: "working", depth: 1, group: "a", parent: "orders-api" },
+  { id: "c", repo: "notifications", kind: "task", sub: "Send refund e-mail template", state: "approval", depth: 2, group: "a", parent: "payments" },
+  { id: "d", repo: "web-shop", kind: "task", sub: "Rebase onto main", state: "idle", depth: 0, group: "d" },
+  { id: "e", repo: "web-shop", kind: "task", sub: "Cart totals rounding", state: "working", depth: 1, group: "d", parent: "web-shop" },
+  { id: "f", repo: "auth-gateway", kind: "session", sub: "session in repo", state: "idle", depth: 0, group: "f" },
+];
+const COLOURS = ["var(--group-violet)", "var(--group-pink)", "var(--group-blue)", "var(--group-coral)"];
+const STATE = { idle: ["probably idle", ""], working: ["working", "ok"], approval: ["waiting for approval", "w"] };
+const SCREEN = {
+  a: ['<span class="p">●</span> Proposed 1 task: payments', "Waiting for the task's result.", "> _"],
+  b: ['<span class="p">●</span> Edit RefundService.java (+18 −3)', '<span class="p">●</span> mvn test · 42 passed', "Proposing a follow-up in notifications…"],
+  c: ['<span class="a">?</span> Allow write to templates/refund.html?', "  1. Yes   2. Yes, always   3. No"],
+  d: ['<span class="p">●</span> git rebase origin/main · done', "> _"],
+  e: ['<span class="p">●</span> Edit cart-totals.ts (+6 −2)', '<span class="p">●</span> pnpm test · running'],
+  f: ["> _"],
+};
+let variant = "stripe", layout = "auto", only = null, selected = "c";
+
+const members = (g) => entries.filter((e) => e.group === g);
+const multi = (g) => members(g).length > 1;
+const groupIds = [...new Set(entries.map((e) => e.group))].filter(multi);
+const colour = (g) => (multi(g) ? COLOURS[groupIds.indexOf(g) % COLOURS.length] : null);
+const position = (e) => entries.indexOf(e) + 1;
+const shown = () => entries.filter((e) => only === null || e.group === only);
+
+function seg(el, options, value, set) {
+  el.innerHTML = "";
+  for (const [key, text] of options) {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = text; b.setAttribute("aria-pressed", String(key === value));
+    b.onclick = () => { set(key); render(); };
+    el.append(b);
+  }
+}
+
+function row(e) {
+  const g = colour(e.group);
+  const [label, tone] = STATE[e.state];
+  const indent = Array.from({ length: Math.min(e.depth, 3) }, () => "<i></i>").join("");
+  const under = entries.filter((x) => x.parent === e.repo && x.group === e.group && x.depth === e.depth + 1).length;
+  const lvl = e.depth > 0 && variant === "stripe" ? `<span class="lvl">↳${e.depth}</span>` : "";
+  const main = under > 0 ? `<span class="badge">main · ${under}</span>` : "";
+  const out = only !== null && e.group !== only ? " out" : "";
+  return `<div role="button" tabindex="0" class="row${e.id === selected ? " sel" : ""}${out}" data-id="${e.id}" ${g ? `style="--g:${g}"` : ""}>
+    <span class="pos">${String(position(e)).padStart(2, "0")}<br>Alt+${position(e)}</span>
+    ${indent ? `<span class="indent">${indent}</span>` : ""}
+    <span class="body">
+      <span class="rname"><span>${e.repo}</span>${lvl}${main}</span>
+      ${e.kind === "task" ? `<span class="rsub">${e.sub}</span>` : ""}
+      <span class="st ${tone}">${label}</span>
+    </span>
+    ${g ? `<button type="button" class="only" data-only="${e.group}" title="Show only this group in the grid">⊞ group</button>` : ""}
+  </div>`;
+}
+
+function tile(e) {
+  const g = colour(e.group);
+  const [label, tone] = STATE[e.state];
+  const cls = ["tile", g && "grouped", e.id === selected && "sel", e.state === "approval" && "wait"].filter(Boolean).join(" ");
+  return `<div class="${cls}" data-id="${e.id}" ${g ? `style="--g:${g}"` : ""}>
+    <div class="th"><span class="num">Alt+${position(e)}</span><b>${e.repo}</b>
+      ${e.parent ? `<span class="crumb">under ${e.parent}</span>` : ""}
+      <span class="st ${tone}">${label}</span><span class="spacer"></span><span class="crumb">⋯</span></div>
+    <div class="tb">${SCREEN[e.id].join("<br>")}</div>
+  </div>`;
+}
+
+function render() {
+  document.querySelector(".app").className = `app v-${variant}`;
+  seg(document.getElementById("variant"), [["stripe", "Stripe (recommended)"], ["frame", "Frame"]], variant, (v) => (variant = v));
+  seg(document.getElementById("layout"), [["1", "1"], ["4", "4"], ["auto", "Auto"]], layout, (v) => { layout = v; if (v !== "auto") only = null; });
+
+  const list = document.getElementById("list");
+  list.innerHTML = [...new Set(entries.map((e) => e.group))]
+    .map((g) => `<div class="group${multi(g) ? " multi" : ""}" ${colour(g) ? `style="--g:${colour(g)}"` : ""}>${members(g).map(row).join("")}</div>`)
+    .join("");
+
+  const bar = document.getElementById("bar");
+  const tiles = layout === "1" ? entries.filter((e) => e.id === selected) : layout === "4" ? entries.slice(0, 4) : shown();
+  const head = only !== null ? entries.find((e) => e.group === only) : null;
+  bar.innerHTML = `<span class="label">Layout</span><span class="sum">${layout === "auto" ? "Auto" : layout}</span>` +
+    (head ? `<span class="filter" style="--g:${colour(only)}">Group: ${head.repo} · ${members(only).length}<button type="button" id="clear" aria-label="Show every entry">×</button></span>` : "") +
+    `<span class="sum">${tiles.length} of ${entries.length} ${layout === "4" ? "· page 1 of 2" : ""}</span>`;
+  const clear = document.getElementById("clear");
+  if (clear) clear.onclick = () => { only = null; render(); };
+
+  const grid = document.getElementById("grid");
+  const cols = tiles.length <= 1 ? 1 : tiles.length <= 4 ? 2 : 3;
+  grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+  grid.style.gridTemplateRows = `repeat(${Math.ceil(tiles.length / cols)}, minmax(0, 1fr))`;
+  grid.innerHTML = tiles.map(tile).join("");
+
+  for (const el of list.querySelectorAll(".row")) {
+    const pick = () => { const e = entries.find((x) => x.id === el.dataset.id); selected = e.id; if (only !== null && e.group !== only) only = null; render(); };
+    el.onclick = pick;
+    el.onkeydown = (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pick(); } };
+  }
+  for (const b of list.querySelectorAll(".only")) b.onclick = (ev) => { ev.stopPropagation(); only = b.dataset.only; layout = "auto"; render(); };
+  for (const t of grid.querySelectorAll(".tile")) t.onclick = () => { selected = t.dataset.id; render(); };
+}
+render();
+</script>
+</body>
+</html>
