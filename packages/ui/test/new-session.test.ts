@@ -29,6 +29,7 @@ function session(id: string, over: Partial<Session>): Session {
     readRequest: null,
     copyRequest: null,
     usage: null,
+    model: null,
     ...over,
   };
 }

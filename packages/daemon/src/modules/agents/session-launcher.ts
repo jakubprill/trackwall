@@ -185,6 +185,7 @@ export class SessionLauncher {
         conversation,
         program: setup.program,
         environment: setup.mise.environment,
+        model: setup.model,
         lspServers,
         usage: new CopilotUsageLog(copilotHome(setup.env)),
       });
@@ -227,6 +228,7 @@ export class SessionLauncher {
         load,
         firstMessage,
         environment: setup.mise.environment,
+        model: setup.model,
         run: () => this.#deps.procs.state(sessionOwner(id)),
         ...this.#deps.callbacks({ id, supervisor, task }),
         usage: new CopilotUsageLog(copilotHome(setup.env)),
@@ -303,13 +305,15 @@ export class SessionLauncher {
     const { copilot, permissions, model, miseEnv, mise } = await this.inputs(place);
     // The MCP server and the hooks are the daemon on `127.0.0.1`, which a proxy of the user must not get (ADR-89).
     const env = withLoopbackNoProxy({ ...mise.env, TERM: "xterm-256color", COLORTERM: "truecolor", ...LOOPBACK_HOOKS_ENV });
-    await this.setWireApi(`session ${id}`, env, modelOfArgs([...copilot.args, ...mise.args, ...model, ...launchArgs]));
+    const startModel = modelOfArgs([...copilot.args, ...mise.args, ...model, ...launchArgs]);
+    await this.setWireApi(`session ${id}`, env, startModel);
     const dir = sessionDir(this.#deps.home, id);
     const args = ["--additional-mcp-config", `@${join(dir, MCP_CONFIG_FILE)}`, ...toolPermissionArgs(permissions), ...mise.args, ...model];
     return {
       program: copilot.program,
       prefix: copilot.args,
       args,
+      model: modelOfArgs([...model, ...launchArgs]),
       env,
       mise,
       miseEnv,
@@ -383,6 +387,7 @@ export class SessionLauncher {
     conversation,
     program,
     environment,
+    model,
     lspServers,
     usage,
   }: SessionFiles): PreparedSession {
@@ -402,6 +407,7 @@ export class SessionLauncher {
       conversation,
       program,
       environment,
+      model,
       run: () => this.#deps.procs.state(sessionOwner(id)),
       ...this.#deps.callbacks({ id, supervisor, task }),
       usage,
@@ -472,6 +478,8 @@ interface SessionSetup {
   prefix: readonly string[];
   /** The MCP config, tool permissions, mise's arguments and the supervisor's model. */
   args: readonly string[];
+  /** The model Trackwall starts the session on (ADR-206); `null` when it passes none. */
+  model: string | null;
   env: NodeJS.ProcessEnv;
   mise: SessionMiseLaunch;
   miseEnv: SessionMiseEnv;
@@ -483,7 +491,10 @@ interface SessionSetup {
 
 /** The directory of a new session and what follows from it for `LiveSession`. */
 interface SessionFiles
-  extends Pick<LiveSessionOptions, "id" | "repo" | "task" | "promptOnStart" | "hasConversation" | "program" | "environment" | "usage"> {
+  extends Pick<
+    LiveSessionOptions,
+    "id" | "repo" | "task" | "promptOnStart" | "hasConversation" | "program" | "environment" | "model" | "usage"
+  > {
   role: SessionRole;
   knowledge: SessionKnowledge;
   dir: string;

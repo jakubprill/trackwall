@@ -75,6 +75,7 @@ export function makeAgents(
       toolPermissions: () => toolPermissions,
       supervisorSettings: () => supervisor,
       supervisorModel,
+      setSupervisorModel: () => {},
       agentSecrets: () => [],
       sessionProfile: () => null,
       autoReviewSettings: autoReview,

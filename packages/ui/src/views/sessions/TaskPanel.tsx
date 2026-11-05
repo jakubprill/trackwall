@@ -13,6 +13,7 @@ import { CopilotUsageMark } from "@/components/CopilotUsageMark";
 import { CopyRequestNotice } from "@/components/CopyRequestNotice";
 import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
 import { FolderShell } from "@/components/FolderShell";
+import { ModelChangeButton } from "@/components/ModelChange";
 import { ReadRequestNotice } from "@/components/ReadRequestNotice";
 import { SessionScreen } from "@/components/SessionScreen";
 import { StatusLabel } from "@/components/StatusLabel";
@@ -32,6 +33,7 @@ import { TaskChangesView } from "./TaskChangesView.tsx";
 import { scrollToSection, TaskDetails } from "./TaskDetails.tsx";
 import { TaskImpact } from "./TaskImpact.tsx";
 import { TaskMcpCalls } from "./TaskMcpCalls.tsx";
+import { TaskModelChange } from "./TaskModelChange.tsx";
 import { TaskNoticeStrip } from "./TaskNotices.tsx";
 import { TaskRemoval } from "./TaskRemoval.tsx";
 import { TaskRounds } from "./TaskRounds.tsx";
@@ -84,6 +86,7 @@ export function TaskPanel({
   const liveSession = session && isLive(session) ? session : undefined;
   const [tab, setTab] = useState<TaskTab>(initialTab);
   const [removing, setRemoving] = useState(false);
+  const [changingModel, setChangingModel] = useState(false);
   const review = useTaskReview(conn, task.id);
   const confirmingRemoval = removing && !liveSession;
   const details = useTaskDetails({ conn, task, tasks, outcomes, messages, runningLive, paused: confirmingRemoval });
@@ -127,6 +130,13 @@ export function TaskPanel({
           <VerifyButton state={details.verification} disabled={confirmingRemoval} />
           <TaskEditorButton conn={conn} task={task} label="VS Code" />
           <CopyIncludedFilesButton conn={conn} task={task} onCopied={onChanged} />
+          <ModelChangeButton
+            open={changingModel}
+            onToggle={() => setChangingModel(!changingModel)}
+            disabled={removing}
+            title={liveSession ? "Restart the session on another model" : "Resume the task on another model"}
+            iconOnly
+          />
           {mayHandToSupervisor(task) && (
             <HandToSupervisorButton conn={conn} task={task} disabled={confirmingRemoval} onHanded={onChanged} />
           )}
@@ -151,6 +161,20 @@ export function TaskPanel({
         </div>
       </header>
       <SessionEnvironment environment={session?.environment} />
+      {changingModel && (
+        <TaskModelChange
+          key={liveSession?.id ?? "resume"}
+          conn={conn}
+          task={task}
+          liveSession={liveSession}
+          onDone={() => {
+            setChangingModel(false);
+            setTab("session");
+            onChanged();
+          }}
+          onCancel={() => setChangingModel(false)}
+        />
+      )}
       <EnvironmentChangeNotice key={session?.id} conn={conn} session={session} onRestarted={onChanged} />
       <ReadRequestNotice key={`read-request-${session?.id}`} conn={conn} session={session} onDelivered={onChanged} />
       {session && <CopyRequestNotice key={session.id} conn={conn} session={session} onCleared={onChanged} />}
