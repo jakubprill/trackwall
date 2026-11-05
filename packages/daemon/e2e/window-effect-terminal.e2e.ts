@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { CDPSession, Page } from "playwright";
+import type { Page } from "playwright";
 import { showSessions, useTrackwall, waitForTerminal } from "./support/trackwall-ui.ts";
 
 const trackwall = useTrackwall();
@@ -15,23 +15,19 @@ async function ansiBlackBackground(page: Page): Promise<string> {
 }
 
 /**
- * The system's "Reduce transparency" as the page sees it. Playwright has no option for it, so through CDP, with one CDP
- * session per page kept open: an override ends with the session that set it. It is set either way, because the host's
- * setting decides otherwise: GitHub's macOS runners turn it on, and Chromium follows it, so the page there keeps its
- * surfaces opaque even with a window effect (`index.css`).
+ * Sets the system's "Reduce transparency" as `page` sees it. Playwright has no option for it, so through CDP, in one CDP
+ * session kept for the page: an override ends with the session that set it. The test sets it either way, because the
+ * host's setting decides otherwise: GitHub's macOS runners turn it on, and Chromium follows it, so the page there keeps
+ * its surfaces opaque even with a window effect (`index.css`).
  */
-async function reduceTransparency(page: Page, value: "reduce" | "no-preference"): Promise<void> {
-  let cdp = cdpSessions.get(page);
-  if (!cdp) {
-    cdp = await page.context().newCDPSession(page);
-    cdpSessions.set(page, cdp);
-  }
-  await cdp.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-transparency", value }] });
-  const matches = await page.evaluate((query) => matchMedia(query).matches, `(prefers-reduced-transparency: ${value})`);
-  if (!matches) throw new Error(`Chromium did not take prefers-reduced-transparency: ${value}`);
+async function systemTransparency(page: Page): Promise<(value: "reduce" | "no-preference") => Promise<void>> {
+  const cdp = await page.context().newCDPSession(page);
+  return async (value) => {
+    await cdp.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-transparency", value }] });
+    const matches = await page.evaluate((query) => matchMedia(query).matches, `(prefers-reduced-transparency: ${value})`);
+    if (!matches) throw new Error(`Chromium did not take prefers-reduced-transparency: ${value}`);
+  };
 }
-
-const cdpSessions = new WeakMap<Page, CDPSession>();
 
 /** Sets or removes the window effect on `<html>`, as the desktop shell does once the page has loaded (ADR-11). */
 async function windowEffect(page: Page, effect: string | undefined): Promise<void> {
@@ -44,7 +40,8 @@ async function windowEffect(page: Page, effect: string | undefined): Promise<voi
 describe("a session terminal in a window with a background effect", () => {
   test("follows the window effect that the desktop shell sets after the page has loaded, with translucent colours unless the system reduces transparency", async () => {
     const page = await trackwall().open();
-    await reduceTransparency(page, "reduce");
+    const transparency = await systemTransparency(page);
+    await transparency("reduce");
     await showSessions(page);
     await page.getByRole("button", { name: "Own worktree", pressed: true }).click();
     await page.getByRole("button", { name: "Start session" }).click();
@@ -59,7 +56,7 @@ describe("a session terminal in a window with a background effect", () => {
 
     // Without it, here after the terminal has opened.
     await windowEffect(page, undefined);
-    await reduceTransparency(page, "no-preference");
+    await transparency("no-preference");
     await windowEffect(page, "mica");
     await page.waitForFunction((before) => {
       const style = [...document.querySelectorAll(".xterm style")].map((element) => element.textContent).join("\n");
