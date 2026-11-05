@@ -176,8 +176,8 @@ export const miseApi = {
    */
   writeConventionTasks: endpoint("write-convention-tasks", z.object({}).strict(), ConventionTasksState),
   /**
-   * `mise fmt` in the repo root: rewrites its mise config files in mise's own format, which leaves a change for git to see,
-   * and returns the check after it. The user's click is the consent; only from the UI, never from MCP.
+   * `mise fmt` in the repo root: rewrites its mise config files in mise's own format, which leaves a change for git to see.
+   * The user's click is the consent; only from the UI, never from MCP.
    */
-  format: endpoint("format", z.object({ repo: RepoId }).strict(), MiseConfigCheck),
+  format: endpoint("format", z.object({ repo: RepoId }).strict(), z.object({})),
 };

@@ -325,26 +325,29 @@ export class Mise {
   }
 
   /**
-   * What mise says about the repo root's own config files (§4.26): the files `mise fmt` would rewrite and the problems
+   * What mise says about the repo root's own config files (§4.7, §4.26): the files `mise fmt` would rewrite and the problems
    * `mise tasks validate` finds. Meant for a config mise already lists the tasks of; an untrusted or broken one gives only
-   * the error `tasks` gives too.
+   * the error `tasks` gives too. `mise_unavailable` when mise did not start or finish, which is not the config's fault.
    */
   async configCheck(repo: string): Promise<MiseConfigCheck> {
     const dir = await this.deps.repos.repoPath(repo);
     const env = await this.deps.env();
+    const roots = [dir, await realpath(dir).catch(() => dir)];
     const [format, validation] = await Promise.all([
       runMiseCli(this.deps.command, ["fmt", "--check"], dir, env),
       runMiseCli(this.deps.command, ["tasks", "validate", "--json"], dir, env),
     ]);
-    const formatCheck = parseFormatCheck(format, dir);
-    return { unformatted: formatCheck.unformatted, problems: [...formatCheck.problems, ...parseValidation(validation, dir)] };
+    for (const result of [format, validation]) if (result.kind !== "exited") throw new DomainError("mise_unavailable", result.message);
+    const formatCheck = parseFormatCheck(format, roots);
+    const problems = parseValidation(validation, roots);
+    if (formatCheck === null || problems === null) throw new Error("mise exited but its answer was not read");
+    return { unformatted: formatCheck.unformatted, problems: [...formatCheck.problems, ...problems] };
   }
 
-  /** `mise fmt` in the repo root, on the user's click (only from the UI), then the check again. */
-  async format(repo: string): Promise<MiseConfigCheck> {
+  /** `mise fmt` in the repo root, on the user's click (only from the UI); the readiness asks for the check again. */
+  async format(repo: string): Promise<void> {
     const dir = await this.deps.repos.repoPath(repo);
     this.cliOutput(await runMiseCli(this.deps.command, ["fmt"], dir, await this.deps.env()));
-    return this.configCheck(repo);
   }
 
   /** The convention tasks file in the projects folder (ADR-157). */

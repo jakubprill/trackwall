@@ -42,7 +42,10 @@ interface MiseFacts {
   config: MiseConfigCheck | null;
 }
 
-/** mise starts per repo at once: enough to check a hundred repos in seconds without crowding a slow Windows machine. */
+/**
+ * Repos asked at once: enough to check a hundred repos in seconds without crowding a slow Windows machine. Each runs
+ * `mise tasks ls`, then `fmt --check` and `tasks validate` side by side, so up to 8 mise programs run at a time.
+ */
 const MISE_AT_ONCE = 4;
 
 export class Readiness {
@@ -97,12 +100,11 @@ export class Readiness {
       .tasks(repo)
       .catch((err: unknown): MiseTasks => ({ kind: "error", message: messageOf(err), running: [] }));
     if (tasks.kind !== "ok") return { tasks, config: null };
-    // Only a config mise reads can be checked; for any other the gap of `tasks` already says why.
-    const config = await this.deps.mise
-      .configCheck(repo)
-      .catch((err: unknown): MiseConfigCheck => ({ unformatted: [], problems: [{ severity: "error", message: messageOf(err) }] }));
+    // Only a config mise reads can be checked; for any other the gap of `tasks` already says why. A mise that did not
+    // answer the check leaves it out and is asked again next time, like a failed list.
+    const config = await this.deps.mise.configCheck(repo).catch(() => null);
     const mise = { tasks, config };
-    if (commit !== null) this.miseByRepo.set(repo, { commit, mise });
+    if (commit !== null && config !== null) this.miseByRepo.set(repo, { commit, mise });
     return mise;
   }
 }

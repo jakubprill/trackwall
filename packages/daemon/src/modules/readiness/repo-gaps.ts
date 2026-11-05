@@ -21,7 +21,10 @@ export type CardState = { kind: "ok"; card: RepoCard | null } | { kind: "unavail
 
 export interface RepoFacts {
   mise: MiseTasks;
-  /** mise's check of the repo's own config files; `null` when mise could not read the config, which `mise` then says. */
+  /**
+   * mise's check of the repo's own config files; `null` when mise could not read the config, which `mise` then says, or did
+   * not answer the check, which is asked again next time.
+   */
   config: MiseConfigCheck | null;
   card: CardState;
   /** How many HTTP clients of the repo point to no repo in the list (graph problems, ADR-116). */

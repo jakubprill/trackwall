@@ -4,23 +4,27 @@ import { parseFormatCheck, parseValidation } from "../src/modules/mise/mise-conf
 
 // The outputs below are mise 2026.11.1's, captured on real configs, with the repo's path in place of the temporary one.
 const ROOT = resolve("projects", "orders-api");
+/** The root as given, and as mise prints it after the system resolved a link in it (macOS's `/var` is `/private/var`). */
+const RESOLVED = resolve("private", "projects", "orders-api");
+const ROOTS = [ROOT, RESOLVED];
 const VERSION_LINES =
   "mise ERROR Version: 2026.11.1 linux-x64 (2026-11-04)\nmise ERROR Run with --verbose or MISE_VERBOSE=1 for more information\n";
 
 describe("parseFormatCheck: the files mise fmt --check would rewrite", () => {
   test("a formatted config gives no files and no problem", () => {
-    expect(parseFormatCheck({ kind: "exited", code: 0, stdout: "", stderr: "" }, ROOT)).toEqual({ unformatted: [], problems: [] });
+    expect(parseFormatCheck({ kind: "exited", code: 0, stdout: "", stderr: "" }, ROOTS)).toEqual({ unformatted: [], problems: [] });
   });
 
-  test("the files mise names by full path come back relative to the repo root", () => {
+  test("the files mise names by full path come back relative to the repo root, as given or resolved, without files above it", () => {
     const stderr = [
       "mise ERROR Following config files are not properly formatted:",
-      join(ROOT, ".config", "mise.toml"),
+      join(RESOLVED, ".config", "mise.toml"),
       join(ROOT, "mise.toml"),
+      join(ROOT, "..", "mise.toml"),
       VERSION_LINES,
     ].join("\n");
 
-    expect(parseFormatCheck({ kind: "exited", code: 1, stdout: "", stderr }, ROOT)).toEqual({
+    expect(parseFormatCheck({ kind: "exited", code: 1, stdout: "", stderr }, ROOTS)).toEqual({
       unformatted: [join(".config", "mise.toml"), "mise.toml"],
       problems: [],
     });
@@ -29,13 +33,13 @@ describe("parseFormatCheck: the files mise fmt --check would rewrite", () => {
   test("a mise without fmt --check is not a problem of the repo", () => {
     const stderr = "error: unexpected argument '--check' found\n\nUsage: mise fmt [OPTIONS]\n";
 
-    expect(parseFormatCheck({ kind: "exited", code: 2, stdout: "", stderr }, ROOT)).toEqual({ unformatted: [], problems: [] });
+    expect(parseFormatCheck({ kind: "exited", code: 2, stdout: "", stderr }, ROOTS)).toEqual({ unformatted: [], problems: [] });
   });
 
   test("any other failure is one problem with mise's first line", () => {
     const stderr = `mise ERROR TOML parse error at line 2, column 11\n  |\n2 | java = "21\n${VERSION_LINES}`;
 
-    expect(parseFormatCheck({ kind: "exited", code: 1, stdout: "", stderr }, ROOT)).toEqual({
+    expect(parseFormatCheck({ kind: "exited", code: 1, stdout: "", stderr }, ROOTS)).toEqual({
       unformatted: [],
       problems: [{ severity: "error", message: "TOML parse error at line 2, column 11" }],
     });
@@ -68,7 +72,7 @@ describe("parseValidation: what mise tasks validate --json and mise's warnings f
       VERSION_LINES,
     ].join("\n");
 
-    expect(parseValidation({ kind: "exited", code: 1, stdout, stderr }, ROOT)).toEqual([
+    expect(parseValidation({ kind: "exited", code: 1, stdout, stderr }, ROOTS)).toEqual([
       { severity: "error", message: "test: Failed to build task dependency graph: task not found: nope" },
       { severity: "error", message: "test: Invalid timeout format: 'abc'" },
       { severity: "warning", message: "lint: Task is hidden and unused" },
@@ -79,18 +83,16 @@ describe("parseValidation: what mise tasks validate --json and mise's warnings f
   test("a clean config gives no problem", () => {
     const stdout = JSON.stringify({ tasks_validated: 1, errors: 0, warnings: 0, issues: [] });
 
-    expect(parseValidation({ kind: "exited", code: 0, stdout, stderr: "" }, ROOT)).toEqual([]);
+    expect(parseValidation({ kind: "exited", code: 0, stdout, stderr: "" }, ROOTS)).toEqual([]);
   });
 
   test("a mise without tasks validate is not a problem of the repo", () => {
     const stderr = "error: unrecognized subcommand 'validate'\n\nUsage: mise tasks [OPTIONS] [COMMAND]\n";
 
-    expect(parseValidation({ kind: "exited", code: 2, stdout: "", stderr }, ROOT)).toEqual([]);
+    expect(parseValidation({ kind: "exited", code: 2, stdout: "", stderr }, ROOTS)).toEqual([]);
   });
 
-  test("a mise that did not finish is one problem with its reason", () => {
-    expect(parseValidation({ kind: "failed", message: "mise tasks did not finish within 15 s" }, ROOT)).toEqual([
-      { severity: "error", message: "mise tasks did not finish within 15 s" },
-    ]);
+  test("a mise that did not finish has no answer to read, which is mise's failure and not the config's", () => {
+    expect(parseValidation({ kind: "failed", message: "mise tasks did not finish within 15 s" }, ROOTS)).toBeNull();
   });
 });

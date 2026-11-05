@@ -135,15 +135,12 @@ describe("readiness of the repos in the projects folder, from the cards, the gra
       },
     ]);
 
-    expect(await facade.mise.format("admin-web")).toEqual({
-      unformatted: [],
-      problems: [
-        { severity: "error", message: "test: Dependency 'nope' not found" },
-        { severity: "warning", message: "mise.toml:7:2: unknown field taskz (did you mean tasks?)" },
-      ],
-    });
+    await facade.mise.format("admin-web");
+
     expect(readFileSync(join(dir, "calls.log"), "utf8")).toBe("fmt\n");
-    expect((await facade.readiness.repo("admin-web")).gaps.map((g) => g.code)).toEqual(["mise-invalid"]);
+    expect((await facade.readiness.repo("admin-web")).gaps).toEqual([
+      { code: "mise-invalid", message: "test: Dependency 'nope' not found (and 1 more problem)" },
+    ]);
   }, 30_000);
 
   test("a mise without fmt --check and tasks validate leaves the check out instead of reporting a problem", async () => {
