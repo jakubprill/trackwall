@@ -7,11 +7,12 @@ import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { IS_MAC } from "@/lib/platform";
-import { entryId, entrySession, proposalsName, type SessionEntry, type SessionSelection } from "@/lib/session-entries";
+import { entryId, entryName, entrySession, type SessionEntry, type SessionSelection } from "@/lib/session-entries";
 import { type GridPage, gridShape } from "@/lib/session-grid";
+import type { EntryGroup } from "@/lib/session-groups";
 import { profileChange, useCurrentSessionProfile } from "@/lib/session-profile";
 import { sessionShortcutLabel } from "@/lib/session-shortcut";
-import { PROPOSAL_STATUS, sessionPlace, sessionStateLabel } from "@/lib/session-state";
+import { PROPOSAL_STATUS, sessionStateLabel } from "@/lib/session-state";
 import { useSessionClose } from "@/lib/use-session-close";
 import { useTaskEnding } from "@/lib/use-task-ending";
 import { useTileOverlay } from "@/lib/use-tile-overlay";
@@ -19,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { ProposalTile } from "./ProposalTile.tsx";
 import { EndTaskButton, SessionCloseButton, SessionCloseConfirmation, TaskEnding } from "./SessionClose.tsx";
 import { useSessionEnvironmentTile } from "./SessionEnvironmentTile.tsx";
+import { GroupStripe } from "./SessionGroupMarks.tsx";
 import { TaskLine } from "./TaskLine.tsx";
 import { useTaskTileMenu } from "./TaskTileMenu.tsx";
 import { useTaskTileNotices } from "./TaskTileNotices.tsx";
@@ -29,6 +31,7 @@ import { useTaskTileNotices } from "./TaskTileNotices.tsx";
  * selects it; a task without a session has no terminal, so its tile leads to the full panel and its X ends the task
  * (`TaskRemoval`), and task proposals (ADR-39) show their prompts with “Start task” and “Reject…” (ADR-55). A tile
  * with a session also closes it (`useSessionClose`) and shows what it got from mise (`useSessionEnvironmentTile`).
+ * A tile of a group of related sessions has the group's colour along its top and names the entry it sits under.
  * Tiles appear once the area is measured, so that no terminal reports a size to its session from a layout that is
  * about to change.
  */
@@ -49,6 +52,7 @@ export function SessionGrid({
   outcomes,
   messages,
   runningLive,
+  groups,
 }: {
   conn: Connection;
   page: GridPage<SessionEntry>;
@@ -70,6 +74,8 @@ export function SessionGrid({
   outcomes: ReadonlyMap<string, TaskOutcome>;
   messages: readonly TaskMessage[];
   runningLive: LiveFeed<RunningMiseTask[]> | undefined;
+  /** The group of each grouped entry, by entry id. */
+  groups: ReadonlyMap<string, EntryGroup>;
 }) {
   const area = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<{ width: number; height: number }>();
@@ -111,6 +117,7 @@ export function SessionGrid({
             outcomes={outcomes}
             messages={messages}
             runningLive={runningLive}
+            group={groups.get(entryId(entry))}
           />
         ))}
     </div>
@@ -135,6 +142,7 @@ function SessionTile({
   outcomes,
   messages,
   runningLive,
+  group,
 }: {
   conn: Connection;
   entry: SessionEntry;
@@ -154,6 +162,7 @@ function SessionTile({
   outcomes: ReadonlyMap<string, TaskOutcome>;
   messages: readonly TaskMessage[];
   runningLive: LiveFeed<RunningMiseTask[]> | undefined;
+  group: EntryGroup | undefined;
 }) {
   const session = entrySession(entry);
   const close = useSessionClose(conn, session, onSessionClosed);
@@ -207,7 +216,8 @@ function SessionTile({
       )}
     >
       {/* A container, so that a narrow tile shortens what its header says instead of cutting its buttons off. */}
-      <header className="bg-card @container flex min-w-0 items-center gap-2 border-b px-2 py-1">
+      <header className="bg-card @container relative flex min-w-0 items-center gap-2 border-b px-2 py-1">
+        {group && <GroupStripe colour={group.colour} className="inset-x-0 top-0 h-0.5" />}
         <span
           className={cn(
             "text-2xs shrink-0 rounded-sm px-1 font-mono",
@@ -216,7 +226,7 @@ function SessionTile({
         >
           {sessionShortcutLabel({ kind: "position", position }, IS_MAC) ?? position}
         </span>
-        <TileTitle entry={entry} />
+        <TileTitle entry={entry} under={group?.under} />
         {notices.chips}
         {environment.badge}
         {menu.button}
@@ -278,11 +288,17 @@ function SessionTile({
 }
 
 /** The tile header after its number: repo, state and what the entry is about (task, proposal or window title). */
-function TileTitle({ entry }: { entry: SessionEntry }) {
+function TileTitle({ entry, under }: { entry: SessionEntry; under: string | undefined }) {
+  const name = (
+    <>
+      <span className="min-w-0 truncate text-xs font-medium">{entryName(entry)}</span>
+      {under && <span className="text-muted-foreground min-w-0 shrink truncate text-xs @max-lg:sr-only">{`under ${under}`}</span>}
+    </>
+  );
   if (entry.kind === "proposals")
     return (
       <>
-        <span className="min-w-0 truncate text-xs font-medium">{proposalsName(entry.proposals)}</span>
+        {name}
         <span className="shrink-0 text-xs">
           <StatusLabel {...PROPOSAL_STATUS} />
         </span>
@@ -293,7 +309,7 @@ function TileTitle({ entry }: { entry: SessionEntry }) {
   const task = entry.kind === "task" ? entry.task : undefined;
   return (
     <>
-      <span className="min-w-0 truncate text-xs font-medium">{task?.repo ?? (session && sessionPlace(session))}</span>
+      {name}
       {/* In a narrow tile the state is its dot, with the text as the tooltip. */}
       <span className="text-muted-foreground shrink-0 text-xs" title={session ? sessionStateLabel(session).label : undefined}>
         {session ? <StatusLabel {...sessionStateLabel(session)} labelClassName="@max-lg:sr-only" /> : "no session"}

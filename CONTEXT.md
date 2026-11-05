@@ -529,6 +529,10 @@ _Avoid_: inbox, mailbox, outbox
 A session or supervising agent that talks to the user and commissions work to other agents with task proposals, then hears about their sessions through task updates (`get_updates`; an agent outside Trackwall waits with `wait_for_session`) and reads the summaries, like a coordinator with threads in Claude (ADR-39). It is a role, not a separate kind of session: any Trackwall session or an agent outside Trackwall (`proposedBy.session: null`); the supervisor is the main session above all repos (ADR-58). In the Sessions view its tasks and proposals sit indented under it, and it carries a "main" badge with their count.
 _Avoid_: orchestrator, planner (ADR-9: a human splits goals); and a session in a repo's root is a *repo session*, not a main session, whether it commissions work or not
 
+**Session group** (`listGroups`, `EntryGroup`, `groupTiles`; "⊞ group" and the "Group:" chip in the Sessions view):
+A top-level entry of the Sessions list with every task and proposal under it, at any depth. A group of two or more has its own colour on its rows and tiles, and the grid can show it alone (ADR-48).
+_Avoid_: workspace, cluster, family
+
 **Repo session** (`start {repo}` without its own worktree, `kind: "repo"` of the session instructions, `SessionStartOptions`; in the UI a session of a repo without "Own worktree"):
 A Trackwall session in the root of one repo, the user's own working copy, without a task (ADR-100, ADR-175): it has the model, the conversation view and Java navigation a task has, always asks before a tool, and has no review, Changes tab or Verify. Its instructions keep the checkout as it is unless the user asks, because the graph, the impact of every task's change and the repo's service read the branch checked out in the root. Like any session it can be a main session, when it proposes tasks.
 _Avoid_: main session (that word names the role of commissioning work), root session

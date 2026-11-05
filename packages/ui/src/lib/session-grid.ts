@@ -13,9 +13,14 @@ const MAX_TILES = 9;
 const TILE_ASPECT = 1.6;
 
 /** A tile: an entry of the list with its position (from 1), which its number and shortcut refer to. */
-interface GridTile<Entry> {
+export interface GridTile<Entry> {
   entry: Entry;
   position: number;
+}
+
+/** The whole list as tiles, each at its own position. */
+export function listTiles<Entry>(entries: readonly Entry[]): GridTile<Entry>[] {
+  return entries.map((entry, i) => ({ entry, position: i + 1 }));
 }
 
 export interface GridPage<Entry> {
@@ -32,14 +37,16 @@ export function tilesPerPage(layout: SessionLayout, entries: number): number {
   return Number(layout);
 }
 
-/** The page with the selected entry; with no selected entry (−1) the first page. */
-export function gridPage<Entry>(layout: SessionLayout, entries: readonly Entry[], selected: number): GridPage<Entry> {
-  const slots = tilesPerPage(layout, entries.length);
-  const pages = Math.max(Math.ceil(entries.length / slots), 1);
+/**
+ * The page with the selected tile, by its index in `tiles`; with no selected tile (−1) the first page. The tiles are
+ * the whole list (`listTiles`) or a part of it, such as one group of related sessions, and keep their list positions.
+ */
+export function gridPage<Entry>(layout: SessionLayout, tiles: readonly GridTile<Entry>[], selected: number): GridPage<Entry> {
+  const slots = tilesPerPage(layout, tiles.length);
+  const pages = Math.max(Math.ceil(tiles.length / slots), 1);
   const page = Math.min(Math.floor(Math.max(selected, 0) / slots), pages - 1);
   const start = page * slots;
-  const tiles = entries.slice(start, start + slots).map((entry, i) => ({ entry, position: start + i + 1 }));
-  return { tiles, slots, page, pages };
+  return { tiles: tiles.slice(start, start + slots), slots, page, pages };
 }
 
 /**
