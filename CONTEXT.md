@@ -185,6 +185,10 @@ _Avoid_: test run (that is the mise task that wrote the reports), coverage
 One verdict on a task's changes (ADR-64): the mise task `test` (`VERIFY_MISE_TASK`) run in the task's worktree, then `passed` (exit code 0 and no failed test in the test reports the run wrote), `failed` (with the first failed tests and log errors) or `cancelled`; `running` until the run ends. The last one of each task is kept, also across a daemon restart (`verifications.json`, ADR-115); one whose run the restart ended comes back `cancelled`.
 _Avoid_: check, CI, validation (that is a schema at the point of entry)
 
+**Outdated verdict** (`Verification.outdated`, `TaskOutcome.verificationOutdated`, `checkOutdated`; UI "Outdated", "Verify outdated", "passed · outdated"):
+A verification's verdict given before the task's worktree changed (ADR-209): the **worktree fingerprint** (`worktreeFingerprint`, one hash of the files that differ from the task's base commit and their content) its run started on is no longer the worktree's. It stays outdated until the next verification replaces it.
+_Avoid_: stale (that is `Stale`, a session state), expired, invalid
+
 **Code search** (`searchCode`, MCP tool `search_code`, result `SearchCodeResult`):
 A fixed string or a regular expression in the files of the latest commit of many repos of the projects folder at once, through `git grep` (ADR-40); a match (`CodeMatch`) is a repo, path, line, column and context lines, and with `output: "files"` the result is the files with matches (`CodeFile`) and their match counts instead (ADR-187). It does not see uncommitted changes, just like browsing a repo.
 _Avoid_: grep (the tool underneath), index (there is none)
@@ -313,6 +317,10 @@ _Avoid_: error (the graph is still built), dangling call
 **Version drift** (`VersionDrift`, `RepoGraph.drift`, kind `DriftKind`; UI "Version drift", "Align to <version>"):
 A tool, Spring Boot, a Maven parent pom or BOM, or a build plugin that the repos of the projects folder use in different versions, found from their cards with the file and line of each (ADR-196). Its target is the newest of those versions, and aligning starts a task or a change in the repos off it.
 _Avoid_: config drift (only versions are compared), outdated (the target is the newest in the folder, not the newest released)
+
+**Agent readiness** (`readiness` module, `RepoReadiness`, gap `ReadinessGap` with code `ReadinessGapCode` and level `ReadinessLevel`; UI "Agent readiness", "N of M ready"):
+How ready a repo is for agents to build, test and run it, as its gaps: each *blocks* agents (no mise task `build` or `test` that works, an untrusted or failing mise config), *weakens* them (a Spring Boot app without `dev`, a tool version outside mise, calls without a target) or is only *good to know* (an incomplete card). A repo is *ready* with nothing that blocks or weakens, *with gaps*, or *blocked* (ADR-208).
+_Avoid_: health, score, percentage (the count is of repos, not of checks), readiness of a service (that is a service's state, ready on its port)
 
 **Package alias** (`graph.packages` in `workspace.yaml`):
 A package name and the repo that provides it, when that repo's card does not show it (a package built outside the build files, a different name in the artifact repository). It works only for a package no repo on the list builds.
@@ -462,7 +470,7 @@ A task's merge request as the daemon last read it while following every task in 
 _Avoid_: tracked, watched merge request (the watch is the reading, not the merge request)
 
 **Task outcome** (`TaskOutcome`, `taskOutcomesApi`, `/ws` topic `task-outcomes.changed`; the marks on a task's row in Sessions):
-What a task's work came to: the state of its last verification and its followed merge request (ADR-154). The Sessions list shows it on the task's row ("Verified", "Verify failed", `!12` in the pipeline's colour).
+What a task's work came to: the state of its last verification and its followed merge request (ADR-154). The Sessions list shows it on the task's row ("Verified", "Verify failed", "Verify outdated", `!12` in the pipeline's colour).
 _Avoid_: task status (that is the session's state), result (that is the summary from `report_result`)
 
 **Proposer** (`Task.proposedBy`, `proposerOf` in `proposer.ts`):

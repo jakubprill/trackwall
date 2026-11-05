@@ -69,7 +69,8 @@ export function supervisorSituation(
 
 function taskLine({ task, session, outcome }: { task: Task; session: Session | undefined; outcome: TaskOutcome | undefined }): string {
   const reported = task.summary === null ? "" : `; reported a result at ${task.summary.reportedAt}`;
-  const verified = outcome?.verification ? `; last verification ${outcome.verification}` : "";
+  const outdated = outcome?.verificationOutdated ? " but outdated, the worktree changed since" : "";
+  const verified = outcome?.verification ? `; last verification ${outcome.verification}${outdated}` : "";
   const merge = outcome?.mergeRequest ? `; ${mergeRequestText(outcome.mergeRequest)}` : "";
   return `- task ${task.id} ${quoted(task.title ?? task.prompt)} in ${task.repo}, ${origin(task.proposedBy)}: ${taskStatus(session)}${reported}${verified}${merge}`;
 }

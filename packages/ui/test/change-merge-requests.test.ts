@@ -63,6 +63,7 @@ describe("the parts of a change", () => {
       task: "t1",
       repo: "payments",
       verification: null,
+      verificationOutdated: false,
       mergeRequest: mergeRequest("group/payments", 12, "open"),
     };
 

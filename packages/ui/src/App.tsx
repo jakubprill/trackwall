@@ -314,6 +314,7 @@ export function App() {
                           sessions={sessions.data}
                           initialImpactTask={impactTask}
                           onOpenInSessions={openInSessions}
+                          onOpenRepo={openRepos}
                         />
                       )}
                       {conn && view === "plan" && (
