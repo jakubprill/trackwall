@@ -22,8 +22,8 @@ export function GraphImpactPanel({ changed, onSelect }: { changed: ChangedEndpoi
         ))}
       </ul>
       <p className="text-muted-foreground text-xs">
-        Ring 1 calls an endpoint the task's commits change; each further ring calls an endpoint of the ring inside it whose handler makes
-        such a call. Hand a reached repo its own task from the task's Impact tab.
+        Ring 1 calls an endpoint the task's commits change or imports a public library type they change; each further ring calls an endpoint
+        of the ring inside it whose handler makes such a call. Hand a reached repo its own task from the task's Impact tab.
       </p>
     </div>
   );

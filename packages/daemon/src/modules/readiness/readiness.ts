@@ -12,7 +12,7 @@ import { mapLimit } from "../../infra/map-limit.ts";
 import { type CardState, repoGaps } from "./repo-gaps.ts";
 
 /**
- * The `readiness` module (§4.25, ADR-201): how ready each repo is for agents, as the gaps that stand in their way. It joins
+ * The `readiness` module (§4.26, ADR-208): how ready each repo is for agents, as the gaps that stand in their way. It joins
  * what other modules already know (`mise tasks ls`, the card, the graph's unresolved HTTP clients) and changes nothing.
  * `mise tasks ls` is the one costly part, a program start per repo, so a list it gave is kept per commit until a fresh
  * check, which the UI asks for on "Check again" and after writing the convention tasks; a change to the tasks without a

@@ -107,8 +107,8 @@ describe("provider models: what the session profile's provider offers (ADR-194)"
     expect(await facade.providerModels.list()).toEqual({
       profile: "byok",
       models: [
-        { id: "claude-opus-5.5", contextWindow: 200000 },
-        { id: "gpt-6.1-sol", contextWindow: 400000 },
+        { id: "claude-opus-5.5", contextWindow: 200000, wireApi: null },
+        { id: "gpt-6.1-sol", contextWindow: 400000, wireApi: null },
       ],
       problem: null,
     });

@@ -31,7 +31,7 @@ import { ReadinessFact, RepoReadinessSection } from "./RepoReadiness.tsx";
 /**
  * The "Card" tab (§4.6, ADR-25, ADR-30), with "At a glance" on top (ADR-103): facts from the build, configuration and
  * code files in the last commit, each with evidence (file and line), and the repo's tags with reasons, and its agent readiness
- * (ADR-201). A new HEAD in the list fetches the card and the readiness anew.
+ * (ADR-208). A new HEAD in the list fetches the card and the readiness anew.
  */
 export function RepoCardView({
   conn,

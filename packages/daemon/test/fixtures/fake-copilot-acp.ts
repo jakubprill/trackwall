@@ -16,7 +16,7 @@
  *
  * A prompt that starts with `/review` is an automatic review (ADR-182): the agent asks to run its shell command, then
  * answers with one issue in the format of Copilot CLI's review agent on the first added line of the diff file the prompt
- * names, followed by whether the command was allowed and the arguments it got. With `FAKE_COPILOT_REVIEW_WAIT` set the
+ * names, followed by whether the command was allowed, the arguments it got and the variables `FAKE_COPILOT_SHOW_ENV` names. With `FAKE_COPILOT_REVIEW_WAIT` set the
  * review never ends on its own.
  *
  * Like Copilot CLI it answers `session/new` with the agent's modes (Agent, Plan, Autopilot), offers two slash commands
@@ -227,7 +227,12 @@ export function serveAcp(o: FakeAcpOptions): void {
           "**Suggested fix:** Look at it again.",
         ].join("\n")
       : "No significant issues found in the reviewed changes.";
-    const about = [`Shell: ${allowed ? "allowed" : "refused"}`, ...o.args.map((a) => `Argument: ${a}`)].join("\n");
+    const shownEnv = (process.env.FAKE_COPILOT_SHOW_ENV ?? "").split(",").filter((name) => name !== "");
+    const about = [
+      `Shell: ${allowed ? "allowed" : "refused"}`,
+      ...o.args.map((a) => `Argument: ${a}`),
+      ...shownEnv.map((name) => `Env ${name}=${process.env[name] ?? ""}`),
+    ].join("\n");
     update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: `${issue}\n\n${about}` } });
     turn.end("end_turn");
   }

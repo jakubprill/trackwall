@@ -4,7 +4,7 @@ import { ConventionTasksState } from "./mise.ts";
 import { RepoId } from "./workspace.ts";
 
 /**
- * Contract of the `readiness` module (ADR-201): how ready each repo is for agents to build, test and run it, as the gaps
+ * Contract of the `readiness` module (ADR-208): how ready each repo is for agents to build, test and run it, as the gaps
  * that stand in their way, each with what it costs an agent. It only reads the cards, the graph and `mise tasks ls`; it
  * changes nothing. Every action is `POST /api/readiness/<action>`.
  */

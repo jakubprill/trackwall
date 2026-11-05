@@ -21,6 +21,7 @@ function session(fields: Partial<Session> & Pick<Session, "id">): Session {
     readRequest: null,
     copyRequest: null,
     usage: null,
+    model: null,
     ...fields,
   };
 }
@@ -73,6 +74,7 @@ describe("the supervisor's situation (ADR-148)", () => {
       approvals: "ask",
       item: null,
       parts: null,
+      fromImpact: false,
       proposedBy: { session: "s-task", supervisor: false, task: "t1" },
       createdAt: "2026-10-30T09:10:00.000Z",
     };
@@ -231,6 +233,7 @@ describe("the supervisor's situation (ADR-148)", () => {
       approvals: "ask",
       item: null,
       parts: null,
+      fromImpact: false,
       proposedBy: { session: SUPERVISOR, supervisor: true, task: null },
       createdAt: "2026-10-30T09:10:00.000Z",
     };

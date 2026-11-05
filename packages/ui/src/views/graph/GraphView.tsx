@@ -32,7 +32,7 @@ import { ReadinessSection } from "./GraphReadiness.tsx";
  * selected repo on the right. The daemon computes the graph from the repo cards, so a new commit in a repo changes it as soon as
  * the repo watch reports it (ADR-63). While the first graph is computed, the view shows how far the card warm-up is.
  * Choosing a task lights the repos its change reaches, ring by ring, and dims the rest (ADR-147). Without a selected repo, the
- * panel says how ready the repos are for agents, with a fix for each gap (ADR-201), and lists the versions the repos disagree
+ * panel says how ready the repos are for agents, with a fix for each gap (ADR-208), and lists the versions the repos disagree
  * on, with a way to align them (ADR-196).
  */
 export function GraphView({
@@ -53,7 +53,7 @@ export function GraphView({
   initialImpactTask: string | undefined;
   /** Opens a task the view started (aligning a version drift, ADR-196). */
   onOpenInSessions: (selection: SessionSelection) => void;
-  /** Opens a repo in "Repos", where its mise tasks tab trusts its config (agent readiness, ADR-201). */
+  /** Opens a repo in "Repos", where its mise tasks tab trusts its config (agent readiness, ADR-208). */
   onOpenRepo: (repo: string) => void;
 }) {
   const load = useCallback(() => post(conn, graphApi.graph, {}), [conn]);

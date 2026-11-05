@@ -3,6 +3,7 @@ import { BellRing, Crown, Maximize2, Minimize2, PanelRightClose, PanelRightOpen,
 import { type FocusEvent, useEffect, useRef, useState } from "react";
 import { CopyRequestNotice } from "@/components/CopyRequestNotice";
 import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
+import { ModelChangeButton, SessionModelChange } from "@/components/ModelChange";
 import { ReadRequestNotice } from "@/components/ReadRequestNotice";
 import { SessionScreen } from "@/components/SessionScreen";
 import { StatusLabel } from "@/components/StatusLabel";
@@ -208,6 +209,7 @@ function SupervisorHeader({
 }) {
   const { session, waitingProposals } = supervisor;
   const stop = useAction((id: string) => post(conn, agentsApi.stop, { session: id }), onChanged);
+  const [changingModel, setChangingModel] = useState(false);
   const wide = layout === "wide";
   return (
     <header className="flex flex-col gap-1 border-b px-4 py-2">
@@ -219,6 +221,14 @@ function SupervisorHeader({
         </span>
         {waitingProposals > 0 && <ProposalsWaiting count={waitingProposals} />}
         <span className="ml-auto flex shrink-0 items-center gap-1">
+          {running && (
+            <ModelChangeButton
+              open={changingModel}
+              onToggle={() => setChangingModel(!changingModel)}
+              title="Restart the supervisor on another model"
+              iconOnly
+            />
+          )}
           {running && (
             <Button
               variant="outline"
@@ -245,6 +255,18 @@ function SupervisorHeader({
         </span>
       </div>
       {running && stop.error && <span className="text-destructive text-xs">{stop.error}</span>}
+      {running && changingModel && (
+        <SessionModelChange
+          key={running.id}
+          conn={conn}
+          session={running}
+          onDone={() => {
+            setChangingModel(false);
+            onChanged();
+          }}
+          onCancel={() => setChangingModel(false)}
+        />
+      )}
     </header>
   );
 }

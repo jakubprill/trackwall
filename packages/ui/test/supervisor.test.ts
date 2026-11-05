@@ -33,6 +33,7 @@ function session(id: string, repo: string | null, run: Session["run"]["kind"] = 
     readRequest: null,
     copyRequest: null,
     usage: null,
+    model: null,
   };
 }
 
@@ -72,6 +73,7 @@ function proposal(id: string, proposedBy: TaskProposal["proposedBy"]): TaskPropo
     approvals: "ask",
     item: null,
     parts: null,
+    fromImpact: false,
     proposedBy,
     createdAt: "2026-10-25T10:10:00Z",
   };

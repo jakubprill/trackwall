@@ -30,6 +30,7 @@ import { approvalArgs } from "./copilot-command.ts";
 import type { LspServer } from "./copilot-plugin.ts";
 import { SANDBOX_ARG } from "./copilot-sandbox.ts";
 import { type EndedTaskFacts, type EndedTaskGit, endedTaskFacts } from "./ended-task.ts";
+import { offeredAfter } from "./impact-proposals.ts";
 import type { JavaNavigationServers } from "./java-navigation-servers.ts";
 import { modelArgs } from "./model-args.ts";
 import { TASK_BRANCH_PREFIX, taskSlug, taskWorktree } from "./task-branch.ts";
@@ -307,6 +308,7 @@ export class AgentTasks {
       summary: null,
       handoff,
       change,
+      impactProposed: {},
       trustedMiseConfig: null,
       port: freeTaskPort([...this.#tasks.map((t) => t.port), ...this.#creatingPorts]),
       included: noIncludedFiles(),
@@ -361,16 +363,26 @@ export class AgentTasks {
 
   /**
    * A new session for a task without a running session, which goes on with the task's conversation: in a terminal
-   * Copilot CLI keeps it under the task's UUID, in the conversation view under the id it chose (ADR-137).
+   * Copilot CLI keeps it under the task's UUID, in the conversation view under the id it chose (ADR-137). With `model`
+   * (ADR-206; `null` for Copilot CLI's default) the task runs on it from now on, saved before the start, so a start that
+   * fails keeps the user's choice for the next Resume: a task stuck on a model its provider does not serve gets out of it.
    */
-  resume(id: string): Promise<Task> {
+  resume(id: string, model?: string | null): Promise<Task> {
     const task = this.#get(id);
     return this.#exclusive(id, async () => {
       this.#refuseRunning(task, "resuming");
       this.#closeSessions(task);
-      await this.#launch(task, "resume");
-      return view(task);
+      const resumed = model === undefined || model === task.model ? task : this.#withModel(task, model);
+      await this.#launch(resumed, "resume");
+      return view(resumed);
     });
+  }
+
+  #withModel(task: KnownTask, model: string | null): KnownTask {
+    const changed = { ...task, model };
+    this.#save(this.#tasks.map((t) => (t.id === task.id ? changed : t)));
+    this.#deps.log(`task ${task.id} runs on ${model ?? "Copilot CLI's default model"} from now on`);
+    return changed;
   }
 
   /**
@@ -535,6 +547,20 @@ export class AgentTasks {
       return null;
     });
     return commit === null ? null : { task: from.id, repo: from.repo, branch: from.branch, commit };
+  }
+
+  /** The endpoints and types each repo was offered a task for from task `id`'s impact (ADR-198, ADR-205); `{}` once the task is gone. */
+  impactProposed(id: string): Readonly<Record<string, readonly string[]>> {
+    return this.#tasks.find((t) => t.id === id)?.impactProposed ?? {};
+  }
+
+  /** Adds `keys` to what `repo` was offered from task `id`'s impact; nothing once the task is gone. */
+  markImpactProposed(id: string, repo: string, keys: readonly string[]): void {
+    const task = this.#tasks.find((t) => t.id === id);
+    if (task === undefined) return;
+    const offered = offeredAfter(task.impactProposed[repo] ?? [], keys);
+    const marked = { ...task, impactProposed: { ...task.impactProposed, [repo]: offered } };
+    this.#save(this.#tasks.map((t) => (t.id === id ? marked : t)));
   }
 
   /**
@@ -856,7 +882,15 @@ function capFiles(files: ChangedFile[]): { files: ChangedFile[]; filesTruncated:
   return { files: files.slice(0, TASK_SUMMARY_MAX_FILES), filesTruncated: files.length > TASK_SUMMARY_MAX_FILES };
 }
 
-function view({ repoDir: _, trustedMiseConfig: __, worktreesDir: ___, conversation: ____, handoff: _____, ...task }: KnownTask): Task {
+function view({
+  repoDir: _,
+  trustedMiseConfig: __,
+  worktreesDir: ___,
+  conversation: ____,
+  handoff: _____,
+  impactProposed: ______,
+  ...task
+}: KnownTask): Task {
   return task;
 }
 

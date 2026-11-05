@@ -11,7 +11,7 @@ import {
 } from "@trackwall/protocol";
 
 /**
- * A repo's gaps for agents (§4.25, ADR-201), from what the daemon already knows: `mise tasks ls`, the card of its commit and
+ * A repo's gaps for agents (§4.26, ADR-208), from what the daemon already knows: `mise tasks ls`, the card of its commit and
  * the HTTP clients the graph could not join. A pure function, so every rule is in one place and tested on its own.
  */
 

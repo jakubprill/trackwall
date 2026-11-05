@@ -60,6 +60,7 @@ function view(id: string, taskId: string | null, state: TaskState | null, run: S
     readRequest: null,
     copyRequest: null,
     usage: null,
+    model: null,
   };
 }
 

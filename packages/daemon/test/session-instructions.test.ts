@@ -97,7 +97,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     );
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain(
-      "When that work builds on your change (a caller of an endpoint you changed, a reader of a message or field you changed), commit your change first and then propose it, one proposal per repo: get_changed_endpoints with task `1b4e28ba-2fa1-11d2-883f-0016d3cca427` lists the endpoints your commits changed and the repos that call them, and find_endpoint and who_calls name the callers of anything else you changed.",
+      "When your turn ends, Trackwall proposes a task to each repo that calls an endpoint or imports a public library type your commits removed or changed (get_changed_endpoints with task `1b4e28ba-2fa1-11d2-883f-0016d3cca427` lists them); your own proposal for such a repo replaces Trackwall's, so make one only when the repo needs more than following the new contract. Other work that builds on your change (a reader of a message or field you changed, a caller find_endpoint or who_calls names) you propose yourself after you commit, one proposal per repo.",
     );
     expect(text).not.toContain("Your task was handed to you by");
   });

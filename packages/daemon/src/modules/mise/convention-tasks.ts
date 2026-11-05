@@ -104,7 +104,7 @@ function readText(path: string): string | null {
   }
 }
 
-/** `pom.xml, build.gradle, build.gradle.kts or package.json`, the list agent readiness checks too (ADR-201). */
+/** `pom.xml, build.gradle, build.gradle.kts or package.json`, the list agent readiness checks too (ADR-208). */
 function conventionBuildFiles(): string {
   return `${CONVENTION_BUILD_FILES.slice(0, -1).join(", ")} or ${CONVENTION_BUILD_FILES.at(-1)}`;
 }

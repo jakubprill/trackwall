@@ -5,7 +5,7 @@ import type { Connection } from "./connection.ts";
 import { useRemote } from "./use-remote.ts";
 
 /**
- * The agent readiness of every repo for "Overview" (ADR-201), fetched again after a repo change (`refreshKey`).
+ * The agent readiness of every repo for "Overview" (ADR-208), fetched again after a repo change (`refreshKey`).
  * `checkAgain` first asks the daemon for a fresh check, which asks mise again about repos whose commit did not change.
  */
 export function useReadiness(conn: Connection, refreshKey: string) {

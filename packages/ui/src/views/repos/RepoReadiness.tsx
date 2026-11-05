@@ -10,14 +10,14 @@ import { cn } from "@/lib/utils";
 
 const LEVEL_MARKS = { blocks: "×", weakens: "!", info: "·" } as const;
 
-/** The card's one line about readiness, in "At a glance" (ADR-201). */
+/** The card's one line about readiness, in "At a glance" (ADR-208). */
 export function ReadinessFact({ readiness }: { readiness: RepoReadiness | undefined }) {
   if (readiness === undefined) return <span className="text-muted-foreground text-sm">checking…</span>;
   return <span className={cn("text-sm", STATE_TONES[readiness.state])}>{readinessLine(readiness)}</span>;
 }
 
 /**
- * "Agent readiness" on a repo's card (ADR-201): its gaps, each with what the repo can do about it here: its mise tasks
+ * "Agent readiness" on a repo's card (ADR-208): its gaps, each with what the repo can do about it here: its mise tasks
  * tab, or a task for an agent with a prompt to read first.
  */
 export function RepoReadinessSection({

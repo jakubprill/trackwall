@@ -16,7 +16,7 @@ export interface StartCandidate {
 
 /**
  * A prompt to read and edit and the repos to send it to, from a view that proposes work (aligning a version drift,
- * ADR-196; closing a readiness gap, ADR-201): a task for one repo, a change with one task per repo for more (ADR-171),
+ * ADR-196; closing a readiness gap, ADR-208): a task for one repo, a change with one task per repo for more (ADR-171),
  * at most `CHANGE_PARTS_MAX` ticked. Each part's prompt ends with its note. Nothing starts until the user presses Start.
  */
 export function TaskStartForm({

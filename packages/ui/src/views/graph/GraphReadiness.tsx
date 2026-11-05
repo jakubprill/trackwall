@@ -27,7 +27,7 @@ import type { ReadinessHandle } from "@/lib/use-readiness";
 import { cn } from "@/lib/utils";
 
 /**
- * Agent readiness in the "Overview" view (ADR-201): how many repos have nothing that blocks or weakens agents, and every
+ * Agent readiness in the "Overview" view (ADR-208): how many repos have nothing that blocks or weakens agents, and every
  * gap once, with the repos it is in and the one fix for all of them. Nothing changes until the user presses a fix; a
  * task's prompt is read and edited first. `GraphView` holds the data (`useReadiness`), so selecting a repo and closing it
  * again does not ask mise once more.

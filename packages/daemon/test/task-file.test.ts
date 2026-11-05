@@ -26,6 +26,7 @@ const stored = {
   summary: { text: "Fixed, test added.", checkSteps: [], reportedAt: "2026-10-24T10:00:00.000Z" },
   handoff: null,
   change: null,
+  impactProposed: { "orders-bff": ["GET /api/orders/{id}"] },
   trustedMiseConfig: { "mise.toml": "b".repeat(64) },
   port: 41003,
   included: { files: [".env", "config/application-local.yml"], problems: ["data.db is not a regular file (a link or a special file)"] },
@@ -131,6 +132,14 @@ describe("tasks.json", () => {
     writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
 
     expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, item: null }]);
+  });
+
+  test("a task saved before impact proposals comes back having offered no repo a task, so its next turn may offer them (ADR-198)", () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
+    const { impactProposed: _, ...old } = stored;
+    writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
+
+    expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, impactProposed: {} }]);
   });
 
   test("a summary saved before check steps comes back without steps, so the panel shows only its text (ADR-169)", () => {

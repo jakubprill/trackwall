@@ -17,7 +17,7 @@ import { RepoId } from "./workspace.ts";
 /** The mise task a verification runs; the same kind of convention as `setup` and `build` in the batch command (ADR-27). */
 export const VERIFY_MISE_TASK = "test";
 
-/** The mise task that builds a repo without its tests: the Batch command's build step and agent readiness (ADR-27, ADR-201). */
+/** The mise task that builds a repo without its tests: the Batch command's build step and agent readiness (ADR-27, ADR-208). */
 export const BUILD_MISE_TASK = "build";
 /** Most failed tests a verification keeps; the rest is in `get_test_results`. */
 export const VERIFICATION_MAX_FAILURES = 5;

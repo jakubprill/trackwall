@@ -20,7 +20,7 @@ describe("Settings categories", () => {
     expect(settingsCategory("agents").sections).toContain("copilot-cli");
   });
 
-  test("the session profile, the supervisor's model and the automatic review are under Agents, next to connecting Copilot CLI, and the MCP calls agents made last", () => {
+  test("the session profile, the supervisor's model and the automatic review are under Agents, next to connecting Copilot CLI, then the MCP calls agents made and what Copilot CLI used", () => {
     expect(settingsCategory("agents").sections).toEqual([
       "copilot-cli",
       "session-profile",
@@ -28,6 +28,7 @@ describe("Settings categories", () => {
       "auto-review",
       "java-navigation",
       "mcp-calls",
+      "copilot-usage",
     ]);
   });
 

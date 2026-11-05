@@ -142,6 +142,13 @@ One repository of the workspace, identified by a slug from the name of its direc
 A repo the user marked with a star in "Repos", which the list then shows at the top, ahead of the alphabetical rest (ADR-192). Kept by repo id; only the user stars or unstars.
 _Avoid_: favourite, pinned repo
 
+**Starred on the host** (`starredOnHost` in `RemoteRepoSearch`; in the UI *Starred on the host*):
+A repo the user starred on GitLab or GitHub itself; the "Add repo" search can show only those (ADR-201). Not a starred repo, which is Trackwall's own mark.
+_Avoid_: starred (alone, in the search), favourite
+
+**Search scope** (`RemoteRepoScope`: `member`, `visible`; in the UI *My projects*, *All I can see*):
+Which GitLab projects the "Add repo" search covers: those the user is a member of, also through a group, or every project the user can see (ADR-201). GitHub's list does not change with it.
+
 **Remote address** (`Repo.remote`):
 The address of the main remote (`origin` or the only remote in git, `mainRemote`) as `host/path`, for example `gitlab.example.com/shop/api`, without the protocol and user. It identifies the repo independently of the directory name (ADR-21).
 _Avoid_: repo URL (a URL has a protocol and may carry a token), remote without qualification (that is a name in git, for example `origin`)
@@ -308,7 +315,7 @@ A tool, Spring Boot, a Maven parent pom or BOM, or a build plugin that the repos
 _Avoid_: config drift (only versions are compared), outdated (the target is the newest in the folder, not the newest released)
 
 **Agent readiness** (`readiness` module, `RepoReadiness`, gap `ReadinessGap` with code `ReadinessGapCode` and level `ReadinessLevel`; UI "Agent readiness", "N of M ready"):
-How ready a repo is for agents to build, test and run it, as its gaps: each *blocks* agents (no mise task `build` or `test` that works, an untrusted or failing mise config), *weakens* them (a Spring Boot app without `dev`, a tool version outside mise, calls without a target) or is only *good to know* (an incomplete card). A repo is *ready* with nothing that blocks or weakens, *with gaps*, or *blocked* (ADR-201).
+How ready a repo is for agents to build, test and run it, as its gaps: each *blocks* agents (no mise task `build` or `test` that works, an untrusted or failing mise config), *weakens* them (a Spring Boot app without `dev`, a tool version outside mise, calls without a target) or is only *good to know* (an incomplete card). A repo is *ready* with nothing that blocks or weakens, *with gaps*, or *blocked* (ADR-208).
 _Avoid_: health, score, percentage (the count is of repos, not of checks), readiness of a service (that is a service's state, ready on its port)
 
 **Package alias** (`graph.packages` in `workspace.yaml`):
@@ -468,6 +475,7 @@ _Avoid_: parent, owner, manager
 
 **Handoff** (`TaskHandoff` in `task-handoff.ts`, `StoredTask.handoff`):
 What a task whose session proposed another task hands that task: the handing task, its repo and branch, and the commit its branch was at when the user approved the proposal, taken from Trackwall's task list and git. Every session of the proposed task is told where to read the work it builds on (ADR-143). When the handing task's branch moves (to a commit with other files, looking past its round commits, ADR-168), the proposed task is asked to call the MCP tool `get_handoff` (`TaskHandoffState`), which lists the commits and files since it last read (ADR-144), and `get_changed_endpoints` with the handing task lists the endpoints its commits changed (ADR-145). The user can also hand a task's work to a repo its change reaches, with "Hand off" in its Impact tab (`handoffFrom`, ADR-147).
+_Avoid_: dependency, upstream, parent task
 
 **Change** (`Task.change`, `TaskChange`, `ChangeId`; "change" in the UI):
 One piece of work across several repos that the user starts at once, or approves on one card when an agent proposes it (`propose_change`, a `TaskProposal` of `kind: change`): one task per repo, its **parts**, all on one branch name from the change's title, each with its place in the **merge order** (`TaskChange.position`), the order their merge requests are to be merged. A change is no record of its own: it is the tasks that carry its id, and it ends with its last part. Each part's session knows its siblings, and builds on the part right before it as a handoff (ADR-171). The merge order is information; nothing waits for it or merges by it (ADR-9). Not a subtask: no part proposed another, so none reports to another; the parts of a proposed change all report to its proposer.
@@ -476,7 +484,14 @@ _Avoid_: multi-repo task, epic; and do not confuse it with a task's changes (its
 **Impact** (`ImpactedRepo`, `impact` in `ChangedEndpoints`, `graph/impact.ts`; in the UI the task's *Impact* tab and *Impact of* in Overview):
 The repos a task's committed API change reaches, in rings: ring 1 calls a changed endpoint, ring 2 calls an endpoint of ring 1 that makes such a call, up to three rings; a repo reached only through code Trackwall could not follow, or through a client without paths, is *maybe* (`sure: false`) (ADR-147).
 _Avoid_: blast radius, ripple, consumers (for the whole set)
-_Avoid_: dependency, upstream, parent task
+
+**Changed library type** (`ChangedType`, `types` in `ChangedEndpoints`, `cards/api-changes.ts`; "Changed library types" in the Impact tab):
+A public Java type of a module that builds a Maven or Gradle package, which a task's commits remove or change so that code using it may break (a visible member removed or with another signature, a new abstract method, another declaration), with the repos that depend on the package and import it (ADR-205).
+_Avoid_: API change (also endpoints), breaking change, public API diff
+
+**Impact proposal** (`TaskProposal.fromImpact`, `impact-proposals.ts`; "Proposed by Trackwall" under the proposal's title):
+A task proposal the daemon makes when a task's turn ends, for each repo of ring 1 of its impact that surely calls an endpoint the task's commits removed or changed, and each repo that imports a changed library type: the task's own proposal, so an approved one is its subtask, with the Impact tab's hand-off prompt. A repo is offered each endpoint and type once (ADR-198, ADR-205).
+_Avoid_: auto-handoff, consumer task
 
 **Task message** (`TaskMessage`, MCP tools `send_message` and `get_messages`; "Messages" in the task panel):
 Text a task's proposer sends to the task's session: a correction, an answer, a change elsewhere to follow. The daemon asks the task's session to read it the way it asks for a review, and the task's agent reads it with `get_messages`. At most 5 to a task until the user takes part again (ADR-68).
@@ -593,6 +608,10 @@ _Avoid_: hung, frozen, stale (that is `Stale`, no output at all)
 What a session's Copilot CLI conversation used, summed from the receipts Copilot CLI writes after each model call (ADR-190): AI credits when Copilot CLI reported them, otherwise premium requests of the legacy billing, otherwise only tokens. It covers the whole conversation, also before a resume.
 _Avoid_: cost, spend, budget (Trackwall sets no limit)
 
+**Usage report** (`UsageReport`, the `usage-report` module, `usageReportApi`; in the UI *Copilot usage* in Settings › Agents):
+What Copilot CLI used on this computer in a week, from the event logs it keeps for every conversation (ADR-199): the total, one **usage work** row (`UsageWork`: a task, the supervisor, sessions in a repo, or outside the projects folder) per piece of work with its Copilot usage and its **tool definition tokens** (the input tokens that were the tools' definitions, sent with every model call), and one **usage tool** row (`UsageTool`) per tool with its calls, failures and **result tokens**. Do not confuse with the MCP audit, which lists Trackwall's own tool calls one by one without tokens.
+_Avoid_: bill, invoice, cost report
+
 **While you were away** (`AwaySummary`, `awaySummary`, `AwayItem`; an **absence** is `AwayPeriod`, opened by `absenceAt` after `AWAY_AFTER_MS`):
 The strip above the views after the user comes back to Trackwall from 15 minutes without a key, click, scroll, pointer move or a window brought to the front in any of its windows, listing what changed in the session list since then (ADR-151). The user dismisses it.
 _Avoid_: digest, notifications (those are the system's and the browser's), journal
@@ -666,6 +685,10 @@ _Avoid_: provider setting, MISE_ENV (that is mise's variable)
 **Provider models** (`ProviderModelList`, `ProviderModel`, module `provider-models`, action `provider-models/list`):
 The models the model provider of the session profile offers, from its `GET /models`, which the Model fields suggest as the user types; any other id can still be typed (ADR-194). The daemon asks the provider with the profile's key, which never leaves it. Without a session profile there are none.
 _Avoid_: model catalog (Copilot CLI's own list of GitHub's models), available models
+
+**Wire API** (`WireApi`, `ProviderModel.wireApi`, Copilot CLI's `COPILOT_PROVIDER_WIRE_API`):
+The format Copilot CLI speaks to a custom model provider in, `completions` (Chat Completions) or `responses` (the Responses API). A model of a gateway may answer in only one of them; a session's start sets the one its model answers in, learned by a probe on the model's first use (ADR-200).
+_Avoid_: protocol, API type, format (in names; "format" is fine in prose)
 
 **Secret from mise** (`secretNames`, `SessionEnvironment.secrets`):
 A variable of the session environment that mise redacts (`redact = true`, an age-encrypted value) or whose name looks like a secret; its value is masked, and the agent's tools do not get it unless it is in the agent secrets (ADR-93).

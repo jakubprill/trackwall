@@ -13,7 +13,7 @@ import {
 } from "@trackwall/protocol";
 
 /**
- * Agent readiness in "Overview" and on a repo's card (ADR-201): the gaps of the repos grouped by what they cost an agent,
+ * Agent readiness in "Overview" and on a repo's card (ADR-208): the gaps of the repos grouped by what they cost an agent,
  * each with its words for a person and the one fix the view offers for it, and the prompt of a task that closes it.
  */
 

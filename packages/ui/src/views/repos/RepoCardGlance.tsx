@@ -4,7 +4,7 @@ import { Surface } from "@/components/Surface";
 import { Badge } from "@/components/ui/badge";
 import { cardGlance } from "@/lib/card-glance";
 
-/** "At a glance" on top of the "Card" tab (ADR-103): the card in a few lines, and its agent readiness (ADR-201); the sections below have the evidence. */
+/** "At a glance" on top of the "Card" tab (ADR-103): the card in a few lines, and its agent readiness (ADR-208); the sections below have the evidence. */
 export function RepoCardGlance({ card, tags, readiness }: { card: RepoCard; tags: readonly RepoTag[]; readiness: ReactNode }) {
   const glance = cardGlance(card);
   return (

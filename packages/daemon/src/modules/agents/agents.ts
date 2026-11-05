@@ -7,6 +7,7 @@ import {
   type AutoReview,
   type AutoReviewSettings,
   CHANGE_PROMPTS_TOO_LONG,
+  type ChangedEndpoints,
   type ChangePart,
   type ChangeRequest,
   type CreatedChange,
@@ -67,13 +68,14 @@ import { sandboxState, taskSandbox } from "./copilot-sandbox.ts";
 import type { EndedTaskFacts } from "./ended-task.ts";
 import { HandoffWatch } from "./handoff-watch.ts";
 import { appendHookRecord } from "./hook-tail.ts";
+import { ImpactProposals } from "./impact-proposals.ts";
 import { javaNavigationState } from "./java-language-server.ts";
 import { JavaNavigationServers } from "./java-navigation-servers.ts";
 import { LAST_SUPERVISOR_FILE, LastSupervisorFile } from "./last-supervisor.ts";
 import { ListedSessions } from "./listed-sessions.ts";
 import { LiveSession, type SessionEvent, type SessionWindow } from "./live-session.ts";
 import { MiseTrustNotices, type TrustRecipient, trustRecipientOf } from "./mise-trust-notices.ts";
-import { modelArgs } from "./model-args.ts";
+import { modelArgs, modelOfArgs } from "./model-args.ts";
 import { proposedByOf, proposerExists, proposerKeyOf, proposerKind, proposerOf } from "./proposer.ts";
 import { readRequestPrompt } from "./read-request-prompt.ts";
 import {
@@ -90,6 +92,7 @@ import {
   type LauncherProcs,
   type SessionCallbacks,
   SessionLauncher,
+  type SessionLauncherDeps,
   type SessionPlace,
   type StartedSession,
   sessionHooksFile,
@@ -162,6 +165,8 @@ interface AgentsRepos {
   supervisorSettings(): SupervisorSettings;
   /** `supervisorModel` from `workspace.yaml` (ADR-193): the supervisor's model, `null` for the default; `invalid_config` for a bad key. */
   supervisorModel(): string | null;
+  /** Writes `supervisorModel` (ADR-193), `null` removing it: a restart of the supervisor on another model (ADR-206). */
+  setSupervisorModel(model: string | null): unknown;
   /** `sandbox` from `workspace.yaml` with its default (ADR-181): which tasks run in Copilot CLI's sandbox; `invalid_config` for a bad key. */
   sandboxSettings(): SandboxSettings;
   /** `agentSecrets` from `workspace.yaml` (ADR-93): the secrets from mise a session's tools get; `invalid_config` for a bad key. */
@@ -221,6 +226,8 @@ export interface AgentsDeps {
   boardHas: (item: string) => Promise<boolean>;
   /** The workspace knowledge the user approved for a session in `repo` (`null`: in the projects folder), ADR-170. */
   knowledge: (repo: string | null) => Promise<SessionKnowledge>;
+  /** The format a session on a model must use with its custom provider (ADR-200), from `provider-models`. */
+  wireApi: SessionLauncherDeps["wireApi"];
   /**
    * What each task's work came to, its verification verdict and its merge request with the pipeline (ADR-154), which
    * `verification` and `merge-requests` keep: the supervisor's situation tells it with each task (ADR-156).
@@ -231,6 +238,11 @@ export interface AgentsDeps {
    * facts go to the task journal (ADR-150).
    */
   onTaskRemoved: (ended: EndedTaskFacts) => void;
+  /**
+   * The removed and changed endpoints of a task's commits and the repos they reach (`graph`, ADR-145, ADR-147), which
+   * the end of the task's turn turns into impact proposals (ADR-198).
+   */
+  taskImpact: (task: Task) => Promise<ChangedEndpoints>;
   log: (msg: string) => void;
 }
 
@@ -246,6 +258,7 @@ export class Agents {
   readonly #reviews = new TaskReviews(() => this.#queues.follow());
   readonly #miseTrust = new MiseTrustNotices(() => this.#queues.follow());
   readonly #handoffs: HandoffWatch;
+  readonly #impactProposals: ImpactProposals;
   readonly #rounds: TaskRoundList;
   readonly #coordination: TaskCoordination;
   readonly #supervisor: SupervisorSessions;
@@ -283,6 +296,7 @@ export class Agents {
       handoff: (task) => this.#tasks.handoff(task),
       change: (task) => this.#tasks.change(task),
       knowledge: deps.knowledge,
+      wireApi: deps.wireApi,
     });
     this.#resumable = new ResumableSessions(join(deps.home, RESUMABLE_SESSIONS_FILE), deps.log);
     this.#lastSupervisor = new LastSupervisorFile(join(deps.home, LAST_SUPERVISOR_FILE), deps.log);
@@ -329,6 +343,7 @@ export class Agents {
       log: deps.log,
     });
     this.#handoffs = new HandoffWatch(this.#tasks, (task) => this.#sessions.runningOfTask(task)?.askToRead(), deps.log);
+    this.#impactProposals = new ImpactProposals({ tasks: this.#tasks, proposals: this.#proposals, impact: deps.taskImpact, log: deps.log });
     this.#coordination = new TaskCoordination({
       task: (id) => this.task(id),
       findTask: (id) => this.findTask(id),
@@ -352,7 +367,10 @@ export class Agents {
       },
       launch: async ({ repo, task }) => {
         const { copilot, mise } = await this.#launcher.inputs({ repo, supervisor: false, task });
-        return { program: copilot.program, prefix: copilot.args, env: mise.env, args: mise.args, secrets: mise.secretValues };
+        // The reviewer runs on the model of its command or environment, in the format that model answers in (ADR-200).
+        const env = { ...mise.env };
+        await this.#launcher.setWireApi(`review of task ${task}`, env, modelOfArgs([...copilot.args, ...mise.args]));
+        return { program: copilot.program, prefix: copilot.args, env, args: mise.args, secrets: mise.secretValues };
       },
       procs: deps.procs,
       settings: () => deps.repos.autoReviewSettings(),
@@ -500,6 +518,8 @@ export class Agents {
     await this.#deps.repos.repoPath(proposal.repo);
     await this.#assertOnBoard(proposal.item);
     const proposedBy = proposedByOf(caller === null ? null : this.session(caller));
+    // The agent knows better than the comparison what the repo has to do (ADR-198).
+    if (proposedBy.task !== null) this.#impactProposals.replacedBy(proposedBy.task, [proposal.repo]);
     return this.#proposals.add({ kind: "task", ...proposal, parts: null, proposedBy });
   }
 
@@ -522,7 +542,13 @@ export class Agents {
     await this.#assertOnBoard(proposal.item);
     const [first] = parts;
     if (first === undefined) throw new Error("a change has parts");
-    return this.#proposals.add({ kind: "change", repo: first.repo, ...proposal, parts, proposedBy: proposedByOf(session) });
+    return this.#proposals.add({
+      kind: "change",
+      repo: first.repo,
+      ...proposal,
+      parts,
+      proposedBy: proposedByOf(session),
+    });
   }
 
   /** A proposal to remove a repo from the projects folder (ADR-83), from session `caller` like a task proposal. */
@@ -799,7 +825,10 @@ export class Agents {
     // `task` throws `not_found` for a task that is not on the list, before a worktree exists.
     const proposedBy = handoffFrom === null ? null : { session: null, supervisor: false, task: this.task(handoffFrom).id };
     const origin = { id: randomUUID(), title, proposedBy, model, approvals, javaNavigation, item, view, change: null };
-    return this.#tasks.create(repo, prompt, origin);
+    const task = await this.#tasks.create(repo, prompt, origin);
+    // The user handed the repo the work from the Impact tab, so the daemon's proposal for it is done (ADR-198).
+    if (handoffFrom !== null) this.#impactProposals.replacedBy(handoffFrom, [repo]);
+    return task;
   }
 
   /** A change the user typed (ADR-171): a task per part, see `AgentTasks.createChange`; `item` must be on the board. */
@@ -841,8 +870,9 @@ export class Agents {
     return javaNavigationState(this.#javaNavigation.readiness());
   }
 
-  resumeTask(id: string): Promise<Task> {
-    return this.#tasks.resume(id);
+  /** The user's Resume; with `model` the task runs on it from now on (ADR-206). */
+  resumeTask(id: string, model?: string | null): Promise<Task> {
+    return this.#tasks.resume(id, model);
   }
 
   /**
@@ -1120,13 +1150,16 @@ export class Agents {
    * (ADR-95): a task's session as Resume does, the supervisor, a free session and a repo session under their id. The
    * new start reads the environment, `agentSecrets` and tool permissions again. A repo or free session gives up its
    * place in the list before the start, since an id is listed once, so a failed start leaves it out of the list;
-   * Copilot CLI still keeps its conversation.
+   * Copilot CLI still keeps its conversation. A `model` (ADR-206; `null` for Copilot CLI's default) is the one the new
+   * start runs on and the session keeps: a task in `tasks.json`, the supervisor as `supervisorModel`, which every start
+   * of it reads, saved first, so like a task's it stays the user's choice when the start then fails.
    */
-  async restart(id: string): Promise<Session> {
+  async restart(id: string, model?: string | null): Promise<Session> {
     const session = this.#sessions.get(id);
     if (this.#restarting.has(id)) throw new DomainError("bad_request", "the session is already restarting");
     if (!this.#sessions.isRunning(session)) throw new DomainError("bad_request", "the session has ended; start it again instead");
     const { supervisor, task } = session;
+    if (supervisor && model !== undefined) this.#deps.repos.setSupervisorModel(model);
     const left = this.#sessions.resumable(session);
     this.#restarting.add(id);
     try {
@@ -1138,7 +1171,7 @@ export class Agents {
         throw new DomainError("bad_request", "the session has ended; start it again instead");
       await this.#deps.procs.stop(sessionOwner(id));
       if (task === null && !supervisor) this.#unlist(session);
-      return await this.#resumeLeft(left).catch(async (err: unknown) => {
+      return await this.#resumeLeft(left, model).catch(async (err: unknown) => {
         // Out of the list, it can never be closed, so its jdtls index goes now (ADR-175).
         if (left.javaNavigation) await this.#javaNavigation.remove(id, `session ${id}`);
         throw err;
@@ -1282,10 +1315,11 @@ export class Agents {
     if (javaNavigation) await this.#javaNavigation.remove(id, `session ${id}`);
   }
 
-  async #resumeLeft(left: ResumableSession): Promise<Session> {
+  /** `model`, when given, replaces the model the session or its task ran on (ADR-206). */
+  async #resumeLeft(left: ResumableSession, model?: string | null): Promise<Session> {
     const { repo, task } = left;
     if (task !== null) {
-      await this.#tasks.resume(task);
+      await this.#tasks.resume(task, model);
       return this.#sessionOfTask(task);
     }
     const spec = sessionLaunch(left.view, left);
@@ -1295,8 +1329,8 @@ export class Agents {
       return started;
     }
     const cwd = repo === null ? await this.#deps.repos.projectsDir() : await this.#deps.repos.repoPath(repo);
-    const { model, javaNavigation } = left;
-    const started = await this.#launchWithOptions(spec, { repo, supervisor: false, cwd, task: null }, { model, javaNavigation });
+    const options = { model: model === undefined ? left.model : model, javaNavigation: left.javaNavigation };
+    const started = await this.#launchWithOptions(spec, { repo, supervisor: false, cwd, task: null }, options);
     this.#askToReadLeft(left.session);
     return started;
   }
@@ -1392,8 +1426,15 @@ export class Agents {
         if (task !== null) void this.#rounds.turnStarted(task);
       },
       onTurnOver: () => {
-        // The round commit first: it moves the branch, which the tasks it handed work to then hear about (ADR-144).
-        if (task !== null) void this.#rounds.turnOver(task).then(() => this.#handoffs.turnOver(task));
+        // The round commit first: it moves the branch, which the tasks it handed work to then hear about (ADR-144), and
+        // which the impact proposals compare (ADR-198).
+        if (task !== null)
+          void this.#rounds
+            .turnOver(task)
+            .then(() => this.#handoffs.turnOver(task))
+            // A failed handoff check does not hold back the impact proposals.
+            .catch((err: unknown) => this.#deps.log(`task ${task}: after its turn: ${String(err)}`))
+            .then(() => this.#impactProposals.turnOver(task, id));
       },
       onEvent: (event: SessionEvent) => {
         if (event.kind === "turn_ended") this.#miseTrust.turnEnded(trustRecipientOf({ id, task }));
