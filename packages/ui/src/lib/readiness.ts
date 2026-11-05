@@ -20,12 +20,13 @@ import {
 /**
  * What the Overview offers for a gap: `convention` writes the convention tasks file, `agent` a task with a prompt to read,
  * `repo` opens the repo, where its mise tasks tab trusts the config after showing it (ADR-157), `graph` selects the repo
- * on the graph, whose panel lists its calls without a target, `none` nothing to click (install mise, commit something).
+ * on the graph, whose panel lists its calls without a target, `format` runs `mise fmt` in each repo, `none` nothing to
+ * click (install mise, commit something).
  */
-export type GapFix = "convention" | "agent" | "repo" | "graph" | "none";
+export type GapFix = "convention" | "agent" | "repo" | "graph" | "format" | "none";
 
-/** What a repo's card offers: `mise` its mise tasks tab, which adds tasks and trusts the config; `agent`; `none`. */
-type CardFix = "mise" | "agent" | "none";
+/** What a repo's card offers: `mise` its mise tasks tab, which adds tasks and trusts the config; `agent`; `format`; `none`. */
+type CardFix = "mise" | "agent" | "format" | "none";
 
 /**
  * Each gap once: what is missing, why it matters to an agent, and its fix in Overview and on a repo's card. `no-build-test`
@@ -46,6 +47,12 @@ const GAPS: Record<ReadinessGapCode, { title: string; why: string; overview: Gap
     overview: "convention",
     card: "mise",
   },
+  "mise-invalid": {
+    title: "Problems in the mise config",
+    why: "A mise task with a broken definition fails when an agent runs it, and a mistyped field is silently ignored.",
+    overview: "agent",
+    card: "agent",
+  },
   "no-dev": {
     title: "Spring Boot app without a dev task",
     why: "It cannot start as a service, for you or for an agent.",
@@ -63,6 +70,12 @@ const GAPS: Record<ReadinessGapCode, { title: string; why: string; overview: Gap
     why: "The graph cannot tell an external service from a missing link.",
     overview: "graph",
     card: "none",
+  },
+  "mise-unformatted": {
+    title: "mise config not formatted",
+    why: "Formatted the same way in every repo, mise configs are easier to compare and review.",
+    overview: "format",
+    card: "format",
   },
   "card-incomplete": { title: "Card incomplete", why: "Agents read the card instead of the build files.", overview: "repo", card: "none" },
   "card-unavailable": { title: "No card", why: "Gaps that need the card are not checked.", overview: "none", card: "none" },
@@ -137,6 +150,8 @@ const AGENT_PROMPTS: Partial<Record<ReadinessGapCode, string>> = {
     "Add the mise tasks build and test to this repo's mise.toml, so that agents and Verify can build it and run its tests. Use the repo's own build tool and wrapper, keep build without tests, and run both tasks to show they pass.",
   "no-dev":
     "Add a mise task dev to this repo's mise.toml that starts its Spring Boot app locally on the port its configuration gives, so that it can start as a service. Do not change the app itself. Start the task once to show the app comes up.",
+  "mise-invalid":
+    "Fix the problems mise finds in this repo's mise config: run mise tasks validate and read mise's warnings about unknown fields, then correct each task definition or field without changing what the tasks do. Run mise tasks validate again to show it reports nothing.",
   "tool-unpinned":
     "Pin the tool versions this repo needs in its mise.toml [tools], taking each version from where the build already asks for it, so that every machine and agent builds with the same versions. Do not change the versions themselves. Run the build to show it still passes.",
 };

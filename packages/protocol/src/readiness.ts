@@ -14,16 +14,20 @@ import { RepoId } from "./workspace.ts";
  * `mise-failed` mise could not list the repo's tasks, `no-build-test` no mise task `build` or `test` that can work here,
  * `no-dev` a Spring Boot app without the mise task `dev` a service needs, `tool-unpinned` a tool version the repo asks for
  * outside its mise config, `unresolved-call` an HTTP client the graph cannot join to a repo, `card-incomplete` a card that
- * missed something, `card-unavailable` a repo without commits or one git could not read.
+ * missed something, `card-unavailable` a repo without commits or one git could not read, `mise-invalid` a problem `mise tasks
+ * validate` or mise's own warnings find in the repo's mise config (a missing dependency, an unknown field), `mise-unformatted`
+ * a mise config `mise fmt` would rewrite.
  */
 export const ReadinessGapCode = z.enum([
   "mise-missing",
   "mise-untrusted",
   "mise-failed",
   "no-build-test",
+  "mise-invalid",
   "no-dev",
   "tool-unpinned",
   "unresolved-call",
+  "mise-unformatted",
   "card-incomplete",
   "card-unavailable",
 ]);
@@ -43,9 +47,11 @@ export const READINESS_GAP_LEVEL: Record<ReadinessGapCode, ReadinessLevel> = {
   "mise-untrusted": "blocks",
   "mise-failed": "blocks",
   "no-build-test": "blocks",
+  "mise-invalid": "weakens",
   "no-dev": "weakens",
   "tool-unpinned": "weakens",
   "unresolved-call": "weakens",
+  "mise-unformatted": "info",
   "card-incomplete": "info",
   "card-unavailable": "info",
 };

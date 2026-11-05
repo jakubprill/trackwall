@@ -1,5 +1,6 @@
 import { READINESS_GAP_LEVEL, type ReadinessGap, type RepoReadiness } from "@trackwall/protocol";
 import { useState } from "react";
+import { MiseFormatButton } from "@/components/MiseFormatButton";
 import { Surface } from "@/components/Surface";
 import { TaskStartForm } from "@/components/TaskStartForm";
 import { Button } from "@/components/ui/button";
@@ -18,18 +19,21 @@ export function ReadinessFact({ readiness }: { readiness: RepoReadiness | undefi
 
 /**
  * "Agent readiness" on a repo's card (ADR-208): its gaps, each with what the repo can do about it here: its mise tasks
- * tab, or a task for an agent with a prompt to read first.
+ * tab, "Format" for a config mise would format, or a task for an agent with a prompt to read first.
  */
 export function RepoReadinessSection({
   conn,
   readiness,
   onOpenMiseTasks,
   onOpenInSessions,
+  onFixed,
 }: {
   conn: Connection;
   readiness: RepoReadiness;
   onOpenMiseTasks: () => void;
   onOpenInSessions: (selection: SessionSelection) => void;
+  /** After a fix that changed the repo here (Format), so the readiness is asked again. */
+  onFixed: () => void;
 }) {
   return (
     <Surface label="Agent readiness" meta={<span className={STATE_TONES[readiness.state]}>{readinessLine(readiness)}</span>}>
@@ -47,6 +51,7 @@ export function RepoReadinessSection({
               gap={gap}
               onOpenMiseTasks={onOpenMiseTasks}
               onOpenInSessions={onOpenInSessions}
+              onFixed={onFixed}
             />
           ))}
         </ul>
@@ -61,12 +66,14 @@ function GapItem({
   gap,
   onOpenMiseTasks,
   onOpenInSessions,
+  onFixed,
 }: {
   conn: Connection;
   repo: string;
   gap: ReadinessGap;
   onOpenMiseTasks: () => void;
   onOpenInSessions: (selection: SessionSelection) => void;
+  onFixed: () => void;
 }) {
   const [asking, setAsking] = useState(false);
   const level = READINESS_GAP_LEVEL[gap.code];
@@ -86,6 +93,7 @@ function GapItem({
             Open mise tasks
           </Button>
         )}
+        {fix === "format" && <MiseFormatButton conn={conn} repos={[repo]} onDone={onFixed} />}
         {fix === "agent" && !asking && (
           <Button variant="outline" size="sm" onClick={() => setAsking(true)}>
             Ask an agent…
