@@ -17,7 +17,7 @@ See which tasks, sessions and tools used the most of Copilot in a week, and comp
 
 ## How it works
 
-Copilot CLI writes down what every model call used and every tool call it made, in a log it keeps for each conversation on your computer. "Copilot usage" in "Settings > Agents" reads those logs for the last seven days when you open it, and adds them up.
+Copilot CLI writes down what every model call used and every tool call it made, in a log it keeps for each conversation on your computer. "Copilot usage" in "Settings > Usage" reads those logs for the last seven days when you open it, and adds them up. The week's total comes first as a few numbers, then the two lists, side by side when the window is wide enough.
 
 "Tasks and sessions" lists the work the calls were for, the one that read the most tokens first. A task shows by its title, also after you ended it. A session in a repo's folder shows as "Sessions in" and the repo, the supervisor as "Supervisor", and Copilot CLI you ran in a folder outside your projects folder as one line of its own. Under each you see the tokens in, how many of them were tool definitions, and the tokens out; on the right, what it cost, the same way a session's [usage](/features/sessions) shows.
 
@@ -27,7 +27,7 @@ The arrows step back a week at a time, up to twelve weeks, and forward again to 
 
 ## Use it
 
-1. Open "Settings" (Ctrl+, or ⌘, on macOS), choose "Agents" and scroll to "Copilot usage", just above "MCP calls".
+1. Open "Settings" (Ctrl+, or ⌘, on macOS) and choose "Usage": "Copilot usage" is at the top.
 2. Read the top of "Tasks and sessions" and "Tools": that is where most of the week went.
 3. Click the left arrow to see the week before, and compare.
 

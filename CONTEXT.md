@@ -45,7 +45,7 @@ A screen of the app in the UI (Home, Repos, Sessions, Overview, Plan, Settings),
 _Avoid_: tab (for a whole screen)
 
 **Settings category** (`SettingsCategory`, `SETTINGS_CATEGORIES`; its sections `SettingsSection`):
-A group of Settings listed on the left of the Settings view: Workspace, Repo hosts, Agents, App and Diagnostics (ADR-102). Each holds a few sections, such as the projects folder or the daemon's state.
+A group of Settings listed on the left of the Settings view: Workspace, Repo hosts, Agents, Usage, App, Files and Diagnostics (ADR-102, ADR-212). Each holds a few sections, such as the projects folder or the daemon's state.
 _Avoid_: tab (that is `TabBar`), page
 
 **Tab** (`TabBar`):
@@ -620,7 +620,7 @@ _Avoid_: hung, frozen, stale (that is `Stale`, no output at all)
 What a session's Copilot CLI conversation used, summed from the receipts Copilot CLI writes after each model call (ADR-190): AI credits when Copilot CLI reported them, otherwise premium requests of the legacy billing, otherwise only tokens. It covers the whole conversation, also before a resume.
 _Avoid_: cost, spend, budget (Trackwall sets no limit)
 
-**Usage report** (`UsageReport`, the `usage-report` module, `usageReportApi`; in the UI *Copilot usage* in Settings › Agents):
+**Usage report** (`UsageReport`, the `usage-report` module, `usageReportApi`; in the UI *Copilot usage* in Settings › Usage):
 What Copilot CLI used on this computer in a week, from the event logs it keeps for every conversation (ADR-199): the total, one **usage work** row (`UsageWork`: a task, the supervisor, sessions in a repo, or outside the projects folder) per piece of work with its Copilot usage and its **tool definition tokens** (the input tokens that were the tools' definitions, sent with every model call), and one **usage tool** row (`UsageTool`) per tool with its calls, failures and **result tokens**. Do not confuse with the MCP audit, which lists Trackwall's own tool calls one by one without tokens.
 _Avoid_: bill, invoice, cost report
 
@@ -817,7 +817,7 @@ _Avoid_: exception (only one kind of error), problem (that is the repo card and 
 Trackwall's own errors on this computer: the daemon's unexpected errors, the UI's and the desktop shell's, in `logs/errors.json` (ADR-94). Each is a **Trackwall error** (`TrackwallError`): source (`daemon`, `shell`, `ui`), area, kind, anonymized message, frames in Trackwall's code, count. Do not confuse with an error from logs (`LogError`), which comes from the output of the user's processes.
 _Avoid_: crash log, telemetry, bug report (nothing is sent)
 
-**MCP audit** (`McpAudit`, the `mcp-audit` module, `mcpAuditApi`; in the UI *MCP calls* in Settings › Agents and in a task's panel):
+**MCP audit** (`McpAudit`, the `mcp-audit` module, `mcpAuditApi`; in the UI *MCP calls* in Settings › Usage and in a task's panel):
 Every MCP tool call the daemon answered, in `logs/mcp-calls.jsonl` (ADR-152). Each is an **MCP call** (`McpCall`): the tool, its effect (`read`, `write`, `destructive`), the **caller** (`McpCaller`: the session with its repo and task as they were at the call; `null` for an agent outside Trackwall), the identifier arguments the tool's contract names (`auditArgs`), the outcome and the duration. Free text an agent sends is never in it. Do not confuse with the daemon log, which also has a line per call.
 _Avoid_: access log, history (of a task, that is its handoff and summary), tool log
 

@@ -1,7 +1,8 @@
 /**
  * The categories of Settings (ADR-102), in the order of its list. Each holds the sections that belong together, so the
  * view shows a few at a time instead of one long column, and what you set, the state you glance at and the diagnostics
- * for when something does not work stay apart.
+ * for when something does not work stay apart. A category of reports rather than settings is `wide` (ADR-212): its
+ * sections take the whole width, as their tables and lists side by side need it.
  */
 export const SETTINGS_CATEGORIES = [
   {
@@ -9,24 +10,35 @@ export const SETTINGS_CATEGORIES = [
     label: "Workspace",
     description: "Where your repos and task worktrees live, which git reads them, and the backup of their local config.",
     sections: ["folders", "local-config-store"],
+    wide: false,
   },
   {
     id: "repo-hosts",
     label: "Repo hosts",
     description: "The GitLab and GitHub hosts the Repos view searches and clones from.",
     sections: ["repo-hosts"],
+    wide: false,
   },
   {
     id: "agents",
     label: "Agents",
-    description: "What Copilot CLI gets from Trackwall, what it used, and what agents did with it.",
-    sections: ["copilot-cli", "session-profile", "supervisor-model", "auto-review", "java-navigation", "copilot-usage", "mcp-calls"],
+    description: "What Copilot CLI gets from Trackwall, and how its sessions start.",
+    sections: ["copilot-cli", "session-profile", "supervisor-model", "auto-review", "java-navigation"],
+    wide: false,
+  },
+  {
+    id: "usage",
+    label: "Usage",
+    description: "What Copilot CLI used on this computer, and every call agents made to Trackwall's tools.",
+    sections: ["copilot-usage", "mcp-calls"],
+    wide: true,
   },
   {
     id: "app",
     label: "App",
     description: "The desktop app on this computer, and Trackwall in a browser tab.",
     sections: ["start-at-sign-in", "remote-daemon", "browser-notifications", "updates", "home-scene"],
+    wide: false,
   },
   {
     id: "files",
@@ -34,12 +46,14 @@ export const SETTINGS_CATEGORIES = [
     description:
       "Every file and folder Trackwall reads or writes on this computer: what it is for, where it is and what is in it. Trackwall changes them only through Settings; the rest you edit by hand.",
     sections: ["config-files", "local-config-repos"],
+    wide: false,
   },
   {
     id: "diagnostics",
     label: "Diagnostics",
     description: "Where to look when something does not work.",
     sections: ["doctor", "daemon", "trackwall-errors"],
+    wide: false,
   },
 ] as const;
 
