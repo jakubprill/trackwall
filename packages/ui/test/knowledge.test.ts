@@ -1,6 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import type { KnowledgeListEntry } from "@trackwall/protocol";
-import { knowledgeOrder, knowledgeWarnings, mayBelongInRepo, parseRepos } from "../src/lib/knowledge.ts";
+import type { KnowledgeListEntry, Task } from "@trackwall/protocol";
+import {
+  kindCounts,
+  knowledgeAuthor,
+  knowledgeOrder,
+  knowledgeRepos,
+  knowledgeSections,
+  knowledgeWarnings,
+  mayBelongInRepo,
+  NO_KNOWLEDGE_FILTER,
+  parseRepos,
+  shownEntry,
+} from "../src/lib/knowledge.ts";
 
 function entry(name: string, approved: boolean): KnowledgeListEntry {
   return {
@@ -56,5 +67,72 @@ describe("workspace knowledge in Plan (ADR-170)", () => {
   test("repos are typed as ids separated by commas or spaces", () => {
     expect(parseRepos(" orders, billing  shop ,")).toEqual(["orders", "billing", "shop"]);
     expect(parseRepos("")).toEqual([]);
+  });
+});
+
+describe("workspace knowledge to review (ADR-216)", () => {
+  const billing = {
+    ...entry("billing-invoices", false),
+    kind: "pitfall" as const,
+    repos: ["billing"],
+    text: "billing creates an invoice per payment.succeeded event, so a retried payment can bill twice.",
+  };
+  const queue = {
+    ...entry("payments-queue", false),
+    kind: "relation" as const,
+    repos: ["payments", "billing"],
+    text: "payments publishes payment.succeeded on the queue billing reads.",
+  };
+  const jdk = { ...entry("java-jdk", true), text: "Every Java repo builds with JDK 21 from mise." };
+  const entries = [jdk, queue, billing];
+
+  test("entries waiting for approval come apart from the approved ones, each by name", () => {
+    const { toApprove, approved } = knowledgeSections(entries, NO_KNOWLEDGE_FILTER);
+    expect(toApprove.map((e) => e.name)).toEqual(["billing-invoices", "payments-queue"]);
+    expect(approved.map((e) => e.name)).toEqual(["java-jdk"]);
+  });
+
+  test("the search finds every word in the text, name or repos, ignoring case", () => {
+    const found = (query: string) => {
+      const { toApprove, approved } = knowledgeSections(entries, { ...NO_KNOWLEDGE_FILTER, query });
+      return [...toApprove, ...approved].map((e) => e.name);
+    };
+    expect(found("Payment.Succeeded billing")).toEqual(["billing-invoices", "payments-queue"]);
+    expect(found("invoice twice")).toEqual(["billing-invoices"]);
+    expect(found("jdk")).toEqual(["java-jdk"]);
+    expect(found("kafka")).toEqual([]);
+  });
+
+  test("a repo filter keeps the entries about that repo and those for the whole workspace", () => {
+    const { toApprove, approved } = knowledgeSections(entries, { ...NO_KNOWLEDGE_FILTER, repo: "payments" });
+    expect([...toApprove, ...approved].map((e) => e.name)).toEqual(["payments-queue", "java-jdk"]);
+    expect(knowledgeRepos(entries)).toEqual(["billing", "payments"]);
+  });
+
+  test("the kind filter counts each kind among what the search and the repo let through", () => {
+    expect(kindCounts(entries, { ...NO_KNOWLEDGE_FILTER, kind: "pitfall" })).toEqual({
+      all: 3,
+      "how-to": 1,
+      relation: 1,
+      exception: 0,
+      pitfall: 1,
+    });
+    expect(kindCounts(entries, { ...NO_KNOWLEDGE_FILTER, repo: "billing", query: "invoice" }).all).toBe(1);
+  });
+
+  test("an entry not yet approved that claims the user wrote it reads as written outside Trackwall", () => {
+    const task = { id: "4c1d1f0e-0000-4000-8000-000000000001", repo: "billing", title: "Retry the payment call" } as Task;
+    const fromTask = { ...billing, writtenBy: { kind: "agent" as const, task: task.id } };
+    expect(knowledgeAuthor(fromTask, [task])).toBe("agent in Retry the payment call");
+    expect(knowledgeAuthor(fromTask, [])).toBe("an agent");
+    expect(knowledgeAuthor(jdk, [])).toBe("you");
+    expect(knowledgeAuthor(billing, [])).toBe("written outside Trackwall");
+  });
+
+  test("the right column shows the selected entry while it is listed, else the first waiting for approval", () => {
+    expect(shownEntry(entries, "java-jdk")?.name).toBe("java-jdk");
+    expect(shownEntry(entries, "removed")?.name).toBe("billing-invoices");
+    expect(shownEntry(entries, undefined)?.name).toBe("billing-invoices");
+    expect(shownEntry([], undefined)).toBeUndefined();
   });
 });

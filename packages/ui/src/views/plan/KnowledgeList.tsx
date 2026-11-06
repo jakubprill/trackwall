@@ -1,170 +1,235 @@
-import { KnowledgeKind, type KnowledgeListEntry, knowledgeApi, trackwallDirLabel } from "@trackwall/protocol";
-import { Check } from "lucide-react";
-import { useCallback, useState } from "react";
+import { KnowledgeKind, type KnowledgeList as KnowledgeListData, type KnowledgeListEntry, type Task } from "@trackwall/protocol";
+import { Plus, Search, TriangleAlert } from "lucide-react";
+import { useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
-import { RemoveForGood } from "@/components/RemoveForGood";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { KIND_LABELS, knowledgeOrder, knowledgeWarnings, mayBelongInRepo, parseRepos } from "@/lib/knowledge";
-import { reloadOnRefusal } from "@/lib/reload-on-refusal";
-import { useAction } from "@/lib/use-action";
-import { useRemote } from "@/lib/use-remote";
-
-const KNOWLEDGE_POLL_MS = 10_000;
+import { relativeTime } from "@/lib/format";
+import {
+  KIND_LABELS,
+  type KnowledgeFilter,
+  kindCounts,
+  knowledgeAuthor,
+  knowledgeRepos,
+  knowledgeSections,
+  knowledgeWarnings,
+  NO_KNOWLEDGE_FILTER,
+} from "@/lib/knowledge";
+import type { RemoteHandle } from "@/lib/use-remote";
+import { cn } from "@/lib/utils";
+import { KnowledgeForm } from "./KnowledgeForm.tsx";
 
 /**
- * Workspace knowledge in Plan (ADR-170): short facts about the user's repos that every later session in those repos reads
- * in its instructions. An agent's proposal shows first, open, with its evidence and what to check, and counts only once
- * the user approves that version; the user's own entries, written here, count as written.
+ * Workspace knowledge in Plan (ADR-170, ADR-216): short facts about the user's repos that every later session in those
+ * repos reads in its instructions. The middle lists them as compact rows, those waiting for the user's approval apart from
+ * the approved ones, with a search and filters by kind and repo; the selected entry opens in the right column
+ * (`KnowledgePanel`), where it is approved after its evidence and warnings were read. "New entry" opens the form.
  */
-export function KnowledgeList({ conn }: { conn: Connection }) {
-  const load = useCallback(() => post(conn, knowledgeApi.list, {}), [conn]);
-  // A proposal an agent writes while Plan is open shows within the poll.
-  const list = useRemote(load, { pollMs: KNOWLEDGE_POLL_MS });
-  if (list.error) return <ErrorWithRetry message={list.error} onRetry={list.reload} />;
-  if (!list.data) return null;
-  const { entries, problems } = list.data;
+export function KnowledgeList({
+  conn,
+  knowledge,
+  tasks,
+  selected,
+  onSelect,
+}: {
+  conn: Connection;
+  knowledge: RemoteHandle<KnowledgeListData>;
+  tasks: readonly Task[];
+  selected: string | undefined;
+  onSelect: (name: string) => void;
+}) {
+  if (knowledge.error) return <ErrorWithRetry message={knowledge.error} onRetry={knowledge.reload} />;
+  if (!knowledge.data) return null;
   return (
-    <section aria-label="Workspace knowledge" className="flex max-w-3xl flex-col gap-3 p-4">
-      <h3 className="hud-label">Workspace knowledge</h3>
+    <KnowledgeSections
+      conn={conn}
+      list={knowledge.data}
+      tasks={tasks}
+      selected={selected}
+      onSelect={onSelect}
+      onChanged={knowledge.reload}
+    />
+  );
+}
+
+function KnowledgeSections({
+  conn,
+  list,
+  tasks,
+  selected,
+  onSelect,
+  onChanged,
+}: {
+  conn: Connection;
+  list: KnowledgeListData;
+  tasks: readonly Task[];
+  selected: string | undefined;
+  onSelect: (name: string) => void;
+  onChanged: () => void;
+}) {
+  const [filter, setFilter] = useState<KnowledgeFilter>(NO_KNOWLEDGE_FILTER);
+  const [writing, setWriting] = useState(false);
+  const { entries, problems } = list;
+  const { toApprove, approved } = knowledgeSections(entries, filter);
+  const now = new Date();
+  const section = (label: string, shown: readonly KnowledgeListEntry[]) =>
+    shown.length > 0 && (
+      <section aria-label={label} className="flex flex-col gap-1">
+        <h4 className="hud-label">
+          {label} · {shown.length}
+        </h4>
+        <ul className="bg-card divide-y rounded-md border">
+          {shown.map((entry) => (
+            <KnowledgeRow
+              key={entry.name}
+              entry={entry}
+              author={knowledgeAuthor(entry, tasks)}
+              now={now}
+              selected={entry.name === selected}
+              onSelect={() => onSelect(entry.name)}
+            />
+          ))}
+        </ul>
+      </section>
+    );
+  return (
+    <section aria-label="Workspace knowledge" className="flex flex-col gap-4 p-4">
+      <header className="flex flex-wrap items-center gap-3">
+        <h2 className="text-lg font-medium">Workspace knowledge</h2>
+        <span className="text-muted-foreground text-sm">Facts every session in these repos reads first.</span>
+        <Button size="sm" variant="outline" className="ml-auto" aria-expanded={writing} onClick={() => setWriting(!writing)}>
+          <Plus /> New entry
+        </Button>
+      </header>
       <p className="text-muted-foreground max-w-prose text-xs">
-        Facts about your repos that agents read at the start of every session in those repos: how to run or test something, links between
-        repos the graph does not show, exceptions to a rule, pitfalls. Agents propose them; only the version you approve reaches a session.
+        How to run or test something, links between repos the graph does not show, exceptions to a rule, pitfalls. Agents propose them; only
+        the version you approve reaches a session.
       </p>
-      {knowledgeOrder(entries).map((entry) => (
-        <KnowledgeRow key={`${entry.name}-${entry.digest}`} conn={conn} entry={entry} onChanged={list.reload} />
-      ))}
+      {writing && (
+        <KnowledgeForm
+          conn={conn}
+          onCancel={() => setWriting(false)}
+          onWritten={(name) => {
+            setWriting(false);
+            onChanged();
+            onSelect(name);
+          }}
+        />
+      )}
+      {entries.length === 0 ? (
+        <p className="text-muted-foreground text-sm">
+          No knowledge yet. Write an entry, or an agent proposes one when it learns something.
+        </p>
+      ) : (
+        <>
+          <KnowledgeFilters entries={entries} filter={filter} onFilter={setFilter} />
+          {toApprove.length + approved.length === 0 && <p className="text-muted-foreground text-sm">Nothing matches.</p>}
+          {section("Needs your approval", toApprove)}
+          {section("Approved", approved)}
+        </>
+      )}
       {problems.map((problem) => (
         <p key={problem.file} className="text-destructive text-xs">
           <span className="font-mono">{problem.file}</span>: {problem.message}
         </p>
       ))}
-      <KnowledgeForm conn={conn} onWritten={list.reload} />
     </section>
   );
 }
 
-function KnowledgeRow({ conn, entry, onChanged }: { conn: Connection; entry: KnowledgeListEntry; onChanged: () => void }) {
-  const approve = useAction(
-    () => reloadOnRefusal(post(conn, knowledgeApi.approve, { name: entry.name, digest: entry.digest }), onChanged),
-    onChanged,
-  );
-  const warnings = entry.approved ? [] : knowledgeWarnings(entry);
+function KnowledgeFilters({
+  entries,
+  filter,
+  onFilter,
+}: {
+  entries: readonly KnowledgeListEntry[];
+  filter: KnowledgeFilter;
+  onFilter: (filter: KnowledgeFilter) => void;
+}) {
+  const counts = kindCounts(entries, filter);
+  const repos = knowledgeRepos(entries);
   return (
-    <div className="bg-card flex flex-col gap-2 rounded-md border p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="outline">{KIND_LABELS[entry.kind]}</Badge>
-        <span className="text-muted-foreground font-mono text-xs">
-          {entry.repos.length === 0 ? "whole workspace" : entry.repos.join(", ")}
-        </span>
-        {/* Who wrote an entry is in its file, which anything can write, so it counts only once the user approved it. */}
-        {entry.approved && entry.writtenBy.kind === "agent" && <span className="text-muted-foreground text-xs">proposed by an agent</span>}
-        {!entry.approved && <Badge>needs your approval</Badge>}
-      </div>
-      <p className="text-sm whitespace-pre-wrap">{entry.text}</p>
-      {!entry.approved && entry.evidence !== "" && (
-        <p className="text-muted-foreground text-xs whitespace-pre-wrap">
-          <span className="hud-label">Evidence</span> {entry.evidence}
-        </p>
-      )}
-      {warnings.map((warning) => (
-        <p key={warning} className="text-warning text-xs">
-          {warning}
-        </p>
-      ))}
-      {!entry.approved && mayBelongInRepo(entry) && (
-        <p className="text-muted-foreground text-xs">
-          This is about one repo. If its team would agree, it may belong in that repo's own agent instructions instead, where everyone reads
-          it.
-        </p>
-      )}
-      <div className="flex flex-wrap items-center gap-2">
-        {!entry.approved && (
-          <Button size="sm" onClick={() => approve.run()} disabled={approve.pending}>
-            <Check /> Approve this version
-          </Button>
-        )}
-        <span className="text-muted-foreground font-mono text-xs">{`${trackwallDirLabel("knowledge")}/${entry.name}.md`}</span>
-        <RemoveForGood
-          remove={() => post(conn, knowledgeApi.remove, { name: entry.name })}
-          disabled={approve.pending}
-          onRemoved={onChanged}
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="relative w-64">
+        <Search aria-hidden className="text-muted-foreground absolute top-1/2 left-2 size-4 -translate-y-1/2" />
+        <Input
+          aria-label="Search facts"
+          placeholder="Search facts…"
+          value={filter.query}
+          onChange={(e) => onFilter({ ...filter, query: e.target.value })}
+          className="pl-8"
         />
       </div>
-      {approve.error && <p className="text-destructive text-xs whitespace-pre-wrap">{approve.error}</p>}
+      <fieldset aria-label="Kind" className="flex rounded-md border">
+        {(["all", ...KnowledgeKind.options] as const).map((kind) => (
+          <Button
+            key={kind}
+            variant={kind === filter.kind ? "secondary" : "ghost"}
+            size="sm"
+            aria-pressed={kind === filter.kind}
+            onClick={() => onFilter({ ...filter, kind })}
+          >
+            {kind === "all" ? "All" : KIND_LABELS[kind]} <span className="text-muted-foreground font-mono text-xs">{counts[kind]}</span>
+          </Button>
+        ))}
+      </fieldset>
+      {repos.length > 0 && (
+        <select
+          aria-label="Repo"
+          value={filter.repo}
+          onChange={(e) => onFilter({ ...filter, repo: e.target.value })}
+          className="border-input bg-card h-8 rounded-md border px-2 text-sm"
+        >
+          <option value="any">Repo: any</option>
+          {repos.map((repo) => (
+            <option key={repo} value={repo}>
+              {repo}
+            </option>
+          ))}
+        </select>
+      )}
     </div>
   );
 }
 
-/** A new entry typed by the user, approved as written; a name already on the list replaces that entry. */
-function KnowledgeForm({ conn, onWritten }: { conn: Connection; onWritten: () => void }) {
-  const [name, setName] = useState("");
-  const [kind, setKind] = useState<KnowledgeKind>("how-to");
-  const [repos, setRepos] = useState("");
-  const [text, setText] = useState("");
-  const write = useAction(
-    () => post(conn, knowledgeApi.write, { name: name.trim(), kind, repos: parseRepos(repos), text, evidence: "" }),
-    () => {
-      setName("");
-      setRepos("");
-      setText("");
-      onWritten();
-    },
-  );
+/** An entry as one row: its kind, the fact on up to two lines, and its repos, author and age; a mark when it has a warning. */
+function KnowledgeRow({
+  entry,
+  author,
+  now,
+  selected,
+  onSelect,
+}: {
+  entry: KnowledgeListEntry;
+  author: string;
+  now: Date;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const warned = !entry.approved && knowledgeWarnings(entry).length > 0;
   return (
-    <form
-      aria-label="New knowledge entry"
-      className="flex flex-col gap-2 rounded-md border border-dashed p-3"
-      onSubmit={(e) => {
-        e.preventDefault();
-        write.run();
-      }}
-    >
-      <h4 className="hud-label">New entry</h4>
-      <div className="flex flex-wrap gap-2">
-        <Input
-          aria-label="Name"
-          placeholder="name, e.g. orders-integration-tests"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="w-72"
-        />
-        <select
-          aria-label="Kind"
-          value={kind}
-          onChange={(e) => setKind(KnowledgeKind.parse(e.target.value))}
-          className="border-input bg-card h-8 rounded-md border px-2 text-sm"
-        >
-          {KnowledgeKind.options.map((option) => (
-            <option key={option} value={option}>
-              {KIND_LABELS[option]}
-            </option>
-          ))}
-        </select>
-        <Input
-          aria-label="Repos"
-          placeholder="repos (empty: whole workspace)"
-          value={repos}
-          onChange={(e) => setRepos(e.target.value)}
-          className="w-64"
-        />
-      </div>
-      <Textarea
-        aria-label="Fact"
-        placeholder="Integration tests run with mise run test-it; mise run test skips them."
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-      />
-      <div>
-        <Button size="sm" type="submit" disabled={write.pending || name.trim() === "" || text.trim() === ""}>
-          Save
-        </Button>
-      </div>
-      {write.error && <p className="text-destructive text-xs whitespace-pre-wrap">{write.error}</p>}
-    </form>
+    <li className={cn(selected && "bg-accent text-accent-foreground")}>
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-current={selected ? "true" : undefined}
+        className="flex w-full items-start gap-3 px-3 py-2 text-left"
+      >
+        <Badge variant="outline" className="w-24 shrink-0 justify-center">
+          {KIND_LABELS[entry.kind]}
+        </Badge>
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="line-clamp-2 text-sm">{entry.text}</span>
+          <span className="text-muted-foreground flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="font-mono">{entry.repos.length === 0 ? "whole workspace" : entry.repos.join(" ")}</span>
+            <span>· {author}</span>
+            <span>· {relativeTime(entry.updatedAt, now)}</span>
+          </span>
+        </span>
+        {warned && <TriangleAlert aria-label="Check before approving" className="text-warning size-4 shrink-0" />}
+      </button>
+    </li>
   );
 }

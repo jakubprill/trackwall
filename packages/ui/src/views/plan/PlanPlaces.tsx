@@ -1,4 +1,4 @@
-import { type BoardItem, boardApi } from "@trackwall/protocol";
+import { type BoardItem, boardApi, type KnowledgeListEntry } from "@trackwall/protocol";
 import { BookOpen, FolderKanban, Inbox } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 export function PlanPlaces({
   conn,
   items,
+  knowledge,
   taskIndex,
   place,
   onPlace,
@@ -25,6 +26,8 @@ export function PlanPlaces({
 }: {
   conn: Connection;
   items: readonly BoardItem[];
+  /** The workspace knowledge, for the count of entries waiting for the user's approval. */
+  knowledge: readonly KnowledgeListEntry[];
   taskIndex: ItemTaskIndex;
   place: PlanPlace;
   onPlace: (place: PlanPlace) => void;
@@ -65,7 +68,13 @@ export function PlanPlaces({
     <nav aria-label="Inbox and projects" className="flex min-h-0 flex-col gap-3 overflow-y-auto pb-3">
       <ul>
         {row("inbox", { kind: "inbox" }, "Inbox", <Inbox className="size-4 shrink-0" />, <Count n={inboxIdeas(items).open.length} />)}
-        {row("knowledge", { kind: "knowledge" }, "Workspace knowledge", <BookOpen className="size-4 shrink-0" />)}
+        {row(
+          "knowledge",
+          { kind: "knowledge" },
+          "Workspace knowledge",
+          <BookOpen className="size-4 shrink-0" />,
+          <ToApprove n={knowledge.filter((entry) => !entry.approved).length} />,
+        )}
       </ul>
       <div className="flex flex-col gap-1">
         <h3 className="hud-label px-4">Projects</h3>
@@ -104,6 +113,15 @@ export function PlanPlaces({
       )}
     </nav>
   );
+}
+
+/** Entries an agent proposed that wait for the user, in the warning tone, since none reaches a session before. */
+function ToApprove({ n }: { n: number }) {
+  return n > 0 ? (
+    <span className="text-warning font-mono text-xs" title={`${n} to approve`}>
+      {n}
+    </span>
+  ) : null;
 }
 
 function Count({ n }: { n: number }) {

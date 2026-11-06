@@ -1,4 +1,4 @@
-import type { KnowledgeEntry, KnowledgeKind, KnowledgeListEntry } from "@trackwall/protocol";
+import type { KnowledgeEntry, KnowledgeKind, KnowledgeListEntry, Task } from "@trackwall/protocol";
 
 /**
  * The logic of workspace knowledge in Plan (ADR-170): the kinds' names, the order of the list, and what the user should
@@ -48,4 +48,67 @@ export function parseRepos(text: string): string[] {
     .split(/[\s,]+/)
     .map((repo) => repo.trim())
     .filter((repo) => repo !== "");
+}
+
+/** What the list of knowledge shows (ADR-216): the words to find, one kind or all, one repo or any. */
+export interface KnowledgeFilter {
+  query: string;
+  kind: KnowledgeKind | "all";
+  /** A repo id, or `"any"`; an entry for the whole workspace is about every repo. */
+  repo: string;
+}
+
+export const NO_KNOWLEDGE_FILTER: KnowledgeFilter = { query: "", kind: "all", repo: "any" };
+
+/** Whether an entry passes the filter: every word of the query in its text, name or repos, ignoring case. */
+function matchesKnowledge(entry: KnowledgeListEntry, filter: KnowledgeFilter): boolean {
+  if (filter.kind !== "all" && entry.kind !== filter.kind) return false;
+  if (filter.repo !== "any" && entry.repos.length > 0 && !entry.repos.includes(filter.repo)) return false;
+  const haystack = [entry.text, entry.name, ...entry.repos].join(" ").toLowerCase();
+  return filter.query
+    .toLowerCase()
+    .split(/\s+/)
+    .every((word) => haystack.includes(word));
+}
+
+/** The entries the filter lets through, split into those waiting for the user's approval and the approved, each by name. */
+export function knowledgeSections(
+  entries: readonly KnowledgeListEntry[],
+  filter: KnowledgeFilter,
+): { toApprove: KnowledgeListEntry[]; approved: KnowledgeListEntry[] } {
+  const shown = knowledgeOrder(entries).filter((entry) => matchesKnowledge(entry, filter));
+  return { toApprove: shown.filter((entry) => !entry.approved), approved: shown.filter((entry) => entry.approved) };
+}
+
+/** How many entries of each kind the search and the repo let through, for the counts on the kind filter. */
+export function kindCounts(entries: readonly KnowledgeListEntry[], filter: KnowledgeFilter): Record<KnowledgeKind | "all", number> {
+  const counts: Record<KnowledgeKind | "all", number> = { all: 0, "how-to": 0, relation: 0, exception: 0, pitfall: 0 };
+  for (const entry of entries) {
+    if (!matchesKnowledge(entry, { ...filter, kind: "all" })) continue;
+    counts.all += 1;
+    counts[entry.kind] += 1;
+  }
+  return counts;
+}
+
+/** The repos the entries name, sorted, for the repo filter. */
+export function knowledgeRepos(entries: readonly KnowledgeListEntry[]): string[] {
+  return [...new Set(entries.flatMap((entry) => entry.repos))].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Who wrote an entry, as its row says it. The author is in the entry's file, which anything can write: an entry not yet
+ * approved that claims the user wrote it was written outside Trackwall, since the user's own entry is approved as
+ * written. An agent's names the task it worked on while that task is listed.
+ */
+export function knowledgeAuthor(entry: KnowledgeListEntry, tasks: readonly Task[]): string {
+  if (entry.writtenBy.kind === "user") return entry.approved ? "you" : "written outside Trackwall";
+  const id = entry.writtenBy.task;
+  const task = id === null ? undefined : tasks.find((t) => t.id === id);
+  return task ? `agent in ${task.title ?? task.repo}` : "an agent";
+}
+
+/** The entry the right column shows: the selected one while listed, else the first waiting for approval, else the first. */
+export function shownEntry(entries: readonly KnowledgeListEntry[], selected: string | undefined): KnowledgeListEntry | undefined {
+  return entries.find((entry) => entry.name === selected) ?? knowledgeOrder(entries)[0];
 }
