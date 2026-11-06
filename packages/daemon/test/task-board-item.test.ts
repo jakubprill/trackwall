@@ -12,7 +12,7 @@ async function settled(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-describe("how the work of tasks moves their board item (ADR-212)", () => {
+describe("how the work of tasks moves their board item (ADR-213)", () => {
   test("an item goes to review only when every open task on it is in review, and never with no task on it", async () => {
     const moves: [string, TaskWorkColumn][] = [];
     let tasks: Task[] = [onItem(true), onItem(false)];

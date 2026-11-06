@@ -147,7 +147,7 @@ describe("the board (ADR-133)", () => {
     expect(readdirSync(elsewhere)).toEqual([]);
   });
 
-  test("the work of tasks moves an item to in progress and in review, but never out of done or dropped, nor a project (ADR-212)", async () => {
+  test("the work of tasks moves an item to in progress and in review, but never out of done or dropped, nor a project (ADR-213)", async () => {
     const { board: b } = board();
     const project = await b.create({ ...NEW, kind: "project", title: "Order history", column: "ready" }, USER);
     const item = await b.create({ ...NEW, kind: "item", title: "Endpoint in the BFF", parent: project.id, column: "ready" }, USER);

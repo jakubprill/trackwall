@@ -86,7 +86,7 @@ describe.skipIf(process.versions.bun === undefined)("the board over MCP (ADR-133
     await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
   }, 60_000);
 
-  test("a task on an item moves it to In progress, its report_result to In review, and the user's review back; Done stays the user's (ADR-212)", async () => {
+  test("a task on an item moves it to In progress, its report_result to In review, and the user's review back; Done stays the user's (ADR-213)", async () => {
     const item = await daemon.post(boardApi.create, { kind: "item", title: "Order list endpoint", column: "ready", repos: ["shop"] });
     const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "add the endpoint", approvals: "ask", item: item.id });
     await waitForColumn(item.id, "in_progress");
@@ -114,7 +114,7 @@ describe.skipIf(process.versions.bun === undefined)("the board over MCP (ADR-133
     await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
   }, 60_000);
 
-  test("an item with two tasks goes to In review once both have reported, or once the one still at work ends (ADR-212)", async () => {
+  test("an item with two tasks goes to In review once both have reported, or once the one still at work ends (ADR-213)", async () => {
     const item = await daemon.post(boardApi.create, { kind: "item", title: "Discount in cart and checkout", column: "ready" });
     const first = await daemon.post(agentsApi.createTask, {
       repo: "shop",
@@ -174,7 +174,7 @@ describe.skipIf(process.versions.bun === undefined)("the board over MCP (ADR-133
       approvals: "ask",
     });
     expect(task.item).toBe(item.id);
-    // The user started the work by approving it, so the idea is now in progress (ADR-212).
+    // The user started the work by approving it, so the idea is now in progress (ADR-213).
     await waitForColumn(item.id, "in_progress");
     await daemon.facade.agents.stop(sessionOf(task.id));
     await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });

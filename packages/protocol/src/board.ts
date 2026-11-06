@@ -23,13 +23,13 @@ export type BoardItemKind = z.infer<typeof BoardItemKind>;
 
 /**
  * Where an item stands. A project uses `done` and `dropped` for "archived". The user sets any column; the work of the
- * item's tasks moves it to `in_progress` and `review` (`TaskWorkColumn`, ADR-212).
+ * item's tasks moves it to `in_progress` and `review` (`TaskWorkColumn`, ADR-213).
  */
 export const BoardColumn = z.enum(["ideas", "ready", "in_progress", "review", "done", "dropped"]);
 export type BoardColumn = z.infer<typeof BoardColumn>;
 
 /**
- * The columns the work of an item's tasks moves it to (ADR-212): `in_progress` when the user starts a task on it or gives
+ * The columns the work of an item's tasks moves it to (ADR-213): `in_progress` when the user starts a task on it or gives
  * its agent work again, `review` when every open task on it has handed its work over. Only the daemon moves an item
  * there, never an agent's `update_item`, and never out of `done` or `dropped`.
  */

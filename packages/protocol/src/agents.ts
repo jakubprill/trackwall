@@ -492,7 +492,7 @@ export const Task = z.object({
   /** The last summary from the task session (`report_result`); `null` until it has reported one. */
   summary: TaskSummary.nullable(),
   /**
-   * Whether the agent has handed the work over for review (ADR-212): its `report_result` sets it, and the user's review
+   * Whether the agent has handed the work over for review (ADR-213): its `report_result` sets it, and the user's review
    * or "Fix" of a failed pipeline, which give the agent work again, clear it. The task's board item follows it.
    */
   inReview: z.boolean(),

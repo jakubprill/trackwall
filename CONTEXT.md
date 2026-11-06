@@ -760,7 +760,7 @@ Optional steps of a summary for checking the change by hand, each with what to d
 _Avoid_: test plan, acceptance (those decide something; check steps decide nothing)
 
 **In review** (`Task.inReview`, "In review" on the Sessions list, column `review` of a board item):
-A task whose agent has handed its work over with `report_result` and got nothing new since: the user's review, "Fix" of a failed pipeline or its proposer's message takes it out of review until the agent reports again. The task's board item goes to "In review" once every open task on it is in review (ADR-212). One step before the user accepts the work; only the user ends a task or marks its item "Done".
+A task whose agent has handed its work over with `report_result` and got nothing new since: the user's review, "Fix" of a failed pipeline or its proposer's message takes it out of review until the agent reports again. The task's board item goes to "In review" once every open task on it is in review (ADR-213). One step before the user accepts the work; only the user ends a task or marks its item "Done".
 _Avoid_: ready, finished, done (those are the user's), awaiting approval (that is a tool approval)
 
 ## Plan
@@ -793,7 +793,7 @@ An item not filed under a project yet, written down so it is not lost: with Alt+
 _Avoid_: draft, note
 
 **Board column** (`BoardColumn`: `ideas`, `ready`, `in_progress`, `review`, `done`, `dropped`; "Column" in the UI, `COLUMN_LABELS`):
-How far an item is: "Idea", "Ready", "In progress", "In review", "Done", "Dropped". An agent moves an item only between `ideas` and `ready`; the item's tasks move it to "In progress" and "In review" (`TaskWorkColumn`, ADR-212), and only the user sets "Done" and "Dropped".
+How far an item is: "Idea", "Ready", "In progress", "In review", "Done", "Dropped". An agent moves an item only between `ideas` and `ready`; the item's tasks move it to "In progress" and "In review" (`TaskWorkColumn`, ADR-213), and only the user sets "Done" and "Dropped".
 _Avoid_: status (a repo's is `RepoStatus`), state (a session's)
 
 **Task item** (`Task.item`, `TaskProposal.item`):

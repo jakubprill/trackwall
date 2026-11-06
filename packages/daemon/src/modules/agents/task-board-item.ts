@@ -2,7 +2,7 @@ import type { BoardItem, Task, TaskWorkColumn } from "@trackwall/protocol";
 import { messageOf } from "../../infra/errors.ts";
 
 /**
- * How the work of tasks moves their board item (ADR-212, §4.18): to "In progress" when a task starts on it or its agent
+ * How the work of tasks moves their board item (ADR-213, §4.18): to "In progress" when a task starts on it or its agent
  * gets work again, to "In review" once every open task on it has handed its work over with `report_result`. Only these
  * events move it, never an agent's request, and `board` keeps an item the user closed where it is. The moves run in the
  * background, in order (the board writes one at a time), so a task's start, report or review never waits for the

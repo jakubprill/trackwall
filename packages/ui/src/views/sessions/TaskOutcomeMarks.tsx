@@ -3,7 +3,7 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { outcomeMarks } from "@/lib/task-outcomes";
 
 /**
- * Whether a task is in review (ADR-212), its verdict and merge request on its row in the Sessions list (ADR-154), each
+ * Whether a task is in review (ADR-213), its verdict and merge request on its row in the Sessions list (ADR-154), each
  * with its story as a tooltip.
  */
 export function TaskOutcomeMarks({ outcome, inReview }: { outcome: TaskOutcome | undefined; inReview: boolean }) {

@@ -65,7 +65,7 @@ describe("the marks on a task's row", () => {
     ]);
   });
 
-  test("a task whose agent handed its work over says In review before its verdict (ADR-212)", () => {
+  test("a task whose agent handed its work over says In review before its verdict (ADR-213)", () => {
     expect(outcomeMarks(outcome({ verification: "passed" }), true).map((mark) => [mark.key, mark.label])).toEqual([
       ["review", "In review"],
       ["verification", "Verified"],

@@ -32,7 +32,7 @@ function verificationMark(state: VerificationState, outdated: boolean): Omit<Out
   return { label: "Verify outdated", title: verificationOutdatedLabel(state) };
 }
 
-/** A task whose agent handed its work over (ADR-212), until the user gives it work again. */
+/** A task whose agent handed its work over (ADR-213), until the user gives it work again. */
 const IN_REVIEW_MARK: OutcomeMark = {
   key: "review",
   label: "In review",

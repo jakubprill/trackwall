@@ -228,7 +228,7 @@ export interface AgentsDeps {
   openEditor: (path: string, line?: number) => void;
   /** Whether a board item is on the board (ADR-133): a task or a proposal names only an existing one. */
   boardHas: (item: string) => Promise<boolean>;
-  /** Moves a board item as the work of its tasks goes (ADR-212), `Board.followTasks`. */
+  /** Moves a board item as the work of its tasks goes (ADR-213), `Board.followTasks`. */
   followTasks: TaskBoardItemDeps["move"];
   /** The workspace knowledge the user approved for a session in `repo` (`null`: in the projects folder), ADR-170. */
   knowledge: (repo: string | null) => Promise<SessionKnowledge>;
@@ -333,7 +333,7 @@ export class Agents {
       roundCommits: (task) => this.#rounds.roundCommits(task),
       openEditor: deps.openEditor,
       log: deps.log,
-      // The item a task starts on is in progress from then (ADR-212); every way a task starts goes through here.
+      // The item a task starts on is in progress from then (ADR-213); every way a task starts goes through here.
       onCreated: (task) => this.#boardItems.started(task),
       javaNavigation: this.#javaNavigation,
       sandbox: async (approvals) => taskSandbox(sandboxState(deps.repos.sandboxSettings(), await deps.env()), approvals),
@@ -725,7 +725,7 @@ export class Agents {
     return this.#sessions.runningOfTask(id)?.askToRead() ?? "on_resume";
   }
 
-  /** Task `id`'s agent got work again, so its work is no longer waiting for review (ADR-212). */
+  /** Task `id`'s agent got work again, so its work is no longer waiting for review (ADR-213). */
   #backToWork(id: string): void {
     if (this.#tasks.takeOutOfReview(id)) this.#boardItems.backToWork(this.#tasks.task(id));
   }

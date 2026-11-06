@@ -135,7 +135,7 @@ describe("tasks.json", () => {
     expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, item: null }]);
   });
 
-  test("a task saved before In review comes back not in review, so the Sessions list does not claim a hand-over (ADR-212)", () => {
+  test("a task saved before In review comes back not in review, so the Sessions list does not claim a hand-over (ADR-213)", () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
     const { inReview: _, ...old } = stored;
     writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));

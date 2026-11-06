@@ -601,14 +601,14 @@ export class AgentTasks {
    */
   setSummary(id: string, text: string, checkSteps: string[]): Task {
     const reportedAt = new Date().toISOString();
-    // A summary hands the work over for review (ADR-212).
+    // A summary hands the work over for review (ADR-213).
     const summarized = { ...this.#get(id), summary: { text, checkSteps, reportedAt }, inReview: true };
     this.#save(this.#tasks.map((t) => (t.id === id ? summarized : t)));
     return view(summarized);
   }
 
   /**
-   * The task's agent got work again (the user's review or "Fix" of its pipeline, its proposer's message, ADR-212), so its work is no longer
+   * The task's agent got work again (the user's review or "Fix" of its pipeline, its proposer's message, ADR-213), so its work is no longer
    * waiting for review; `false` when it was not.
    */
   takeOutOfReview(id: string): boolean {

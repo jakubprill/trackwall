@@ -275,7 +275,7 @@ describe.skipIf(process.versions.bun === undefined)("following a task's merge re
         "job 502 is not one that failed the pipeline",
       );
 
-      // A report hands the task over for review, and the Fix gives its agent work again (ADR-212).
+      // A report hands the task over for review, and the Fix gives its agent work again (ADR-213).
       const reporter = agents.sessions().sessions.find((s) => s.task === task.id);
       await agents.reportSummary(reporter?.id ?? null, "Rounded the prices.", []);
       expect(agents.task(task.id).inReview).toBe(true);

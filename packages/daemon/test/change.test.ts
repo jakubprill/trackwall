@@ -143,7 +143,7 @@ describe.skipIf(process.versions.bun === undefined)("a change across several rep
       ["shop-web", 2],
     ]);
     expect(failed.map((f) => f.repo)).toEqual(["billing"]);
-    // The parts that started share the item: it went to in progress once, the second start changed nothing (ADR-212).
+    // The parts that started share the item: it went to in progress once, the second start changed nothing (ADR-213).
     const until = Date.now() + 5_000;
     while ((await daemon.facade.board.item(item.id)).column !== "in_progress" && Date.now() < until) await Bun.sleep(20);
     expect((await daemon.facade.board.item(item.id)).column).toBe("in_progress");

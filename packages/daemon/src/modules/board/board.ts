@@ -124,7 +124,7 @@ export class Board {
   }
 
   /**
-   * The work of the item's tasks moves it to `column` (ADR-212), when `taskWorkMoves` allows it from where it is;
+   * The work of the item's tasks moves it to `column` (ADR-213), when `taskWorkMoves` allows it from where it is;
    * an item no longer on the board, a project, or one the user closed stays as it is, and the answer is `null`.
    */
   followTasks(id: string, column: TaskWorkColumn): Promise<BoardItem | null> {
@@ -183,7 +183,7 @@ export class Board {
 }
 
 /**
- * Where the work of an item's tasks may move it from (ADR-212): never out of `done` or `dropped`, which only the user
+ * Where the work of an item's tasks may move it from (ADR-213): never out of `done` or `dropped`, which only the user
  * sets, and not to the column it is already in.
  */
 const TASK_WORK_FROM: Record<TaskWorkColumn, ReadonlySet<BoardColumn>> = {
