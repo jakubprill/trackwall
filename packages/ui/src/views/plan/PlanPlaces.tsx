@@ -6,6 +6,7 @@ import { post } from "@/lib/api";
 import { isClosed, type PlanPlace, projectsOf } from "@/lib/board-tree";
 import type { Connection } from "@/lib/connection";
 import { inboxIdeas } from "@/lib/inbox-triage";
+import { toApproveCount } from "@/lib/knowledge";
 import { type ItemTaskIndex, progressBelow, progressLabel, tasksWaiting } from "@/lib/plan-progress";
 import { STATUS_DOT_CLASS } from "@/lib/status-tone";
 import { useAction } from "@/lib/use-action";
@@ -73,7 +74,7 @@ export function PlanPlaces({
           { kind: "knowledge" },
           "Workspace knowledge",
           <BookOpen className="size-4 shrink-0" />,
-          <ToApprove n={knowledge.filter((entry) => !entry.approved).length} />,
+          <Count n={toApproveCount(knowledge)} tone="warning" />,
         )}
       </ul>
       <div className="flex flex-col gap-1">
@@ -115,17 +116,9 @@ export function PlanPlaces({
   );
 }
 
-/** Entries an agent proposed that wait for the user, in the warning tone, since none reaches a session before. */
-function ToApprove({ n }: { n: number }) {
-  return n > 0 ? (
-    <span className="text-warning font-mono text-xs" title={`${n} to approve`}>
-      {n}
-    </span>
-  ) : null;
-}
-
-function Count({ n }: { n: number }) {
-  return n > 0 ? <span className="text-muted-foreground font-mono text-xs">{n}</span> : null;
+/** A count on a place, left out at zero; in the warning tone for entries waiting for approval, none of which reaches a session before. */
+function Count({ n, tone }: { n: number; tone?: "warning" }) {
+  return n > 0 ? <span className={cn("font-mono text-xs", tone === "warning" ? "text-warning" : "text-muted-foreground")}>{n}</span> : null;
 }
 
 /** A project's line on the left (ADR-215): a dot while one of its tasks waits for the user, and "2/9" done. */

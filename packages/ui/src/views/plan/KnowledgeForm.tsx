@@ -28,6 +28,7 @@ export function KnowledgeForm({
   );
   return (
     <form
+      id="new-knowledge-entry"
       aria-label="New knowledge entry"
       className="flex flex-col gap-2 rounded-md border border-dashed p-3"
       onSubmit={(e) => {

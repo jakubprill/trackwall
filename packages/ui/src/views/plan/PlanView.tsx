@@ -47,7 +47,7 @@ export function PlanView({
   const [selected, setSelected] = useState<string>();
   const [starting, setStarting] = useState<string>();
   const [inboxFilter, setInboxFilter] = useState<InboxFilter>("all");
-  const { knowledge, entries, entry, select: selectEntry } = useKnowledge(conn, place.kind === "knowledge");
+  const { knowledge, entries, entry, select: selectEntry, filter, setFilter } = useKnowledge(conn, place.kind === "knowledge");
   const tasks = sessions?.tasks ?? [];
   const items = board.data?.items ?? [];
   const taskIndex = useMemo(
@@ -94,7 +94,15 @@ export function PlanView({
       <section className="flex min-h-0 min-w-0 flex-col overflow-y-auto">
         <BoardState board={board} />
         {place.kind === "knowledge" ? (
-          <KnowledgeList conn={conn} knowledge={knowledge} tasks={tasks} selected={entry?.name} onSelect={selectEntry} />
+          <KnowledgeList
+            conn={conn}
+            knowledge={knowledge}
+            tasks={tasks}
+            selected={entry?.name}
+            onSelect={selectEntry}
+            filter={filter}
+            onFilter={setFilter}
+          />
         ) : startingItem ? (
           <NewSession
             key={startingItem.id}
@@ -139,7 +147,7 @@ export function PlanView({
       <aside className="min-h-0 overflow-y-auto border-l">
         {entry ? (
           <KnowledgePanel
-            key={`${entry.name}-${entry.digest}`}
+            key={entry.name}
             conn={conn}
             entry={entry}
             tasks={tasks}
@@ -174,7 +182,7 @@ function NothingSelected({ place }: { place: PlanPlace }) {
   return (
     <p className="text-muted-foreground p-4 text-sm">
       {place.kind === "knowledge"
-        ? "Select an entry to read its evidence and approve it."
+        ? "Nothing to review: no workspace knowledge yet."
         : "Select an item to see its plan and start a task on it."}
     </p>
   );

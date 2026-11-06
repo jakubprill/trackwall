@@ -68,6 +68,7 @@ function matchesKnowledge(entry: KnowledgeListEntry, filter: KnowledgeFilter): b
   return filter.query
     .toLowerCase()
     .split(/\s+/)
+    .filter((word) => word !== "")
     .every((word) => haystack.includes(word));
 }
 
@@ -91,9 +92,18 @@ export function kindCounts(entries: readonly KnowledgeListEntry[], filter: Knowl
   return counts;
 }
 
-/** The repos the entries name, sorted, for the repo filter. */
-export function knowledgeRepos(entries: readonly KnowledgeListEntry[]): string[] {
-  return [...new Set(entries.flatMap((entry) => entry.repos))].sort((a, b) => a.localeCompare(b));
+/**
+ * The repos the entries name, sorted, for the repo filter; a chosen repo stays even after its last entry went, so the
+ * filter still shows why the list is empty.
+ */
+export function knowledgeRepos(entries: readonly KnowledgeListEntry[], chosen: string): string[] {
+  const repos = entries.flatMap((entry) => entry.repos);
+  return [...new Set(chosen === "any" ? repos : [...repos, chosen])].sort((a, b) => a.localeCompare(b));
+}
+
+/** How many entries wait for the user's approval, for the left column and the list's heading alike. */
+export function toApproveCount(entries: readonly KnowledgeListEntry[]): number {
+  return entries.filter((entry) => !entry.approved).length;
 }
 
 /**

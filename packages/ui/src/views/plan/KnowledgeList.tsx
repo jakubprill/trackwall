@@ -15,7 +15,6 @@ import {
   knowledgeRepos,
   knowledgeSections,
   knowledgeWarnings,
-  NO_KNOWLEDGE_FILTER,
 } from "@/lib/knowledge";
 import type { RemoteHandle } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
@@ -33,24 +32,33 @@ export function KnowledgeList({
   tasks,
   selected,
   onSelect,
+  filter,
+  onFilter,
 }: {
   conn: Connection;
   knowledge: RemoteHandle<KnowledgeListData>;
   tasks: readonly Task[];
   selected: string | undefined;
   onSelect: (name: string) => void;
+  filter: KnowledgeFilter;
+  onFilter: (filter: KnowledgeFilter) => void;
 }) {
-  if (knowledge.error) return <ErrorWithRetry message={knowledge.error} onRetry={knowledge.reload} />;
-  if (!knowledge.data) return null;
+  // A failed poll keeps the list, the search and a half-written entry; only a list never read gives way to the error.
+  if (!knowledge.data) return knowledge.error ? <ErrorWithRetry message={knowledge.error} onRetry={knowledge.reload} /> : null;
   return (
-    <KnowledgeSections
-      conn={conn}
-      list={knowledge.data}
-      tasks={tasks}
-      selected={selected}
-      onSelect={onSelect}
-      onChanged={knowledge.reload}
-    />
+    <>
+      {knowledge.error && <p className="text-destructive px-4 pt-4 text-xs whitespace-pre-wrap">{knowledge.error}</p>}
+      <KnowledgeSections
+        conn={conn}
+        list={knowledge.data}
+        tasks={tasks}
+        selected={selected}
+        onSelect={onSelect}
+        filter={filter}
+        onFilter={onFilter}
+        onChanged={knowledge.reload}
+      />
+    </>
   );
 }
 
@@ -60,6 +68,8 @@ function KnowledgeSections({
   tasks,
   selected,
   onSelect,
+  filter,
+  onFilter,
   onChanged,
 }: {
   conn: Connection;
@@ -67,9 +77,10 @@ function KnowledgeSections({
   tasks: readonly Task[];
   selected: string | undefined;
   onSelect: (name: string) => void;
+  filter: KnowledgeFilter;
+  onFilter: (filter: KnowledgeFilter) => void;
   onChanged: () => void;
 }) {
-  const [filter, setFilter] = useState<KnowledgeFilter>(NO_KNOWLEDGE_FILTER);
   const [writing, setWriting] = useState(false);
   const { entries, problems } = list;
   const { toApprove, approved } = knowledgeSections(entries, filter);
@@ -99,7 +110,14 @@ function KnowledgeSections({
       <header className="flex flex-wrap items-center gap-3">
         <h2 className="text-lg font-medium">Workspace knowledge</h2>
         <span className="text-muted-foreground text-sm">Facts every session in these repos reads first.</span>
-        <Button size="sm" variant="outline" className="ml-auto" aria-expanded={writing} onClick={() => setWriting(!writing)}>
+        <Button
+          size="sm"
+          variant="outline"
+          className="ml-auto"
+          aria-expanded={writing}
+          aria-controls="new-knowledge-entry"
+          onClick={() => setWriting(!writing)}
+        >
           <Plus /> New entry
         </Button>
       </header>
@@ -124,7 +142,7 @@ function KnowledgeSections({
         </p>
       ) : (
         <>
-          <KnowledgeFilters entries={entries} filter={filter} onFilter={setFilter} />
+          <KnowledgeFilters entries={entries} filter={filter} onFilter={onFilter} />
           {toApprove.length + approved.length === 0 && <p className="text-muted-foreground text-sm">Nothing matches.</p>}
           {section("Needs your approval", toApprove)}
           {section("Approved", approved)}
@@ -149,7 +167,7 @@ function KnowledgeFilters({
   onFilter: (filter: KnowledgeFilter) => void;
 }) {
   const counts = kindCounts(entries, filter);
-  const repos = knowledgeRepos(entries);
+  const repos = knowledgeRepos(entries, filter.repo);
   return (
     <div className="flex flex-wrap items-center gap-2">
       <div className="relative w-64">

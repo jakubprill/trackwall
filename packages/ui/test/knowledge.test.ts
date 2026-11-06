@@ -11,6 +11,7 @@ import {
   NO_KNOWLEDGE_FILTER,
   parseRepos,
   shownEntry,
+  toApproveCount,
 } from "../src/lib/knowledge.ts";
 
 function entry(name: string, approved: boolean): KnowledgeListEntry {
@@ -90,6 +91,12 @@ describe("workspace knowledge to review (ADR-216)", () => {
     const { toApprove, approved } = knowledgeSections(entries, NO_KNOWLEDGE_FILTER);
     expect(toApprove.map((e) => e.name)).toEqual(["billing-invoices", "payments-queue"]);
     expect(approved.map((e) => e.name)).toEqual(["java-jdk"]);
+    expect(toApproveCount(entries)).toBe(2);
+  });
+
+  test("spaces around the search do not hide anything", () => {
+    const { toApprove, approved } = knowledgeSections(entries, { ...NO_KNOWLEDGE_FILTER, query: "  jdk  " });
+    expect([...toApprove, ...approved].map((e) => e.name)).toEqual(["java-jdk"]);
   });
 
   test("the search finds every word in the text, name or repos, ignoring case", () => {
@@ -106,7 +113,11 @@ describe("workspace knowledge to review (ADR-216)", () => {
   test("a repo filter keeps the entries about that repo and those for the whole workspace", () => {
     const { toApprove, approved } = knowledgeSections(entries, { ...NO_KNOWLEDGE_FILTER, repo: "payments" });
     expect([...toApprove, ...approved].map((e) => e.name)).toEqual(["payments-queue", "java-jdk"]);
-    expect(knowledgeRepos(entries)).toEqual(["billing", "payments"]);
+    expect(knowledgeRepos(entries, "any")).toEqual(["billing", "payments"]);
+  });
+
+  test("a chosen repo stays in the repo filter after its last entry went, so the empty list is explained", () => {
+    expect(knowledgeRepos([jdk], "billing")).toEqual(["billing"]);
   });
 
   test("the kind filter counts each kind among what the search and the repo let through", () => {
@@ -134,5 +145,11 @@ describe("workspace knowledge to review (ADR-216)", () => {
     expect(shownEntry(entries, "removed")?.name).toBe("billing-invoices");
     expect(shownEntry(entries, undefined)?.name).toBe("billing-invoices");
     expect(shownEntry([], undefined)).toBeUndefined();
+  });
+
+  test("an entry once shown stays shown after it is approved and when a proposal that sorts before it arrives", () => {
+    const approvedNow = { ...billing, approved: true };
+    const arrived = { ...entry("aaa-first", false), text: "A new proposal." };
+    expect(shownEntry([jdk, queue, approvedNow, arrived], "billing-invoices")?.name).toBe("billing-invoices");
   });
 });
