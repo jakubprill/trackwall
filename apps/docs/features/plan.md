@@ -22,7 +22,9 @@ Press Alt+N anywhere in Trackwall to write an idea. Enter saves it into the inbo
 
 To split an item, type into the line under its notes ("Split: a new item under this one") and press Enter. In the outline, Tab puts the selected item under the one above it, Shift+Tab takes it out a level, and Alt+↑ and Alt+↓ move it among its neighbours. Click the arrow in front of an item to fold what is under it.
 
-"Start task" on an item opens the task form with the item's first repo and a prompt that starts with where the item sits ("Part of: Checkout redesign › Pay later") followed by its title and notes. Change anything you like and start it. The task shows in "Sessions" as usual, and under "Tasks" of the item. An agent working on that task can read its item and the items around it, and when it writes down something for later, the new item lands under its task's item, marked as written by an agent.
+"Start task" on an item opens the task form with the item's first repo and a prompt that starts with where the item sits ("Part of: Checkout redesign › Pay later") followed by its title and notes. Change anything you like and start it. The task shows in "Sessions" as usual, and under "Tasks" of the item, and the item moves to "In progress". An agent working on that task can read its item and the items around it, and when it writes down something for later, the new item lands under its task's item, marked as written by an agent.
+
+The item then follows its tasks. When the agent says it is done (it reports its summary), the item moves to "In review", or, with several tasks on the item, once every one of them has reported. When you send the agent a review or press "Fix" on a failed pipeline, or the session that proposed the task sends it a message, the item goes back to "In progress". Ending the one task still at work while the others wait for review moves the item to "In review" too. Marking it "Done" or "Dropped" stays with you, and an item you closed stays where you put it. You can still set any column yourself.
 
 ## Use it
 
@@ -44,7 +46,7 @@ To split an item, type into the line under its notes ("Split: a new item under t
 ## Good to know
 
 - Each item is a Markdown file in `.trackwall/board/` of your projects folder, next to your repos, so it survives a rebuilt container and you can read it in an editor. Removing an item deletes its file, and nothing keeps a copy.
-- Nothing in "Plan" starts work by itself. Agents can write ideas and items and move them between "Idea" and "Ready", but only you create projects, move items in the outline, start tasks or mark something done.
+- Nothing in "Plan" starts work by itself. Agents can write ideas and items and move them between "Idea" and "Ready", and their task's item goes to "In review" when they report, but only you create projects, move items in the outline, start tasks or mark something done.
 - An item with items under it cannot be removed; move or remove those first. "Archive project" moves a finished project under "Archived".
 - The agent tools are listed on the [MCP server](/features/mcp) page.
 - On a Mac keyboard layout where ⌥N types a character, the key types it as usual and the shortcut stays off.

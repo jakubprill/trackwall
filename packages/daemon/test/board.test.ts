@@ -146,4 +146,42 @@ describe("the board (ADR-133)", () => {
     await expect(b.create({ ...NEW, kind: "item", title: "An idea" }, USER)).rejects.toThrow("is not a folder (a link?)");
     expect(readdirSync(elsewhere)).toEqual([]);
   });
+
+  test("the work of tasks moves an item to in progress and in review, but never out of done or dropped, nor a project (ADR-213)", async () => {
+    const { board: b } = board();
+    const project = await b.create({ ...NEW, kind: "project", title: "Order history", column: "ready" }, USER);
+    const item = await b.create({ ...NEW, kind: "item", title: "Endpoint in the BFF", parent: project.id, column: "ready" }, USER);
+
+    expect((await b.followTasks(item.id, "in_progress"))?.column).toBe("in_progress");
+    expect((await b.followTasks(item.id, "review"))?.column).toBe("review");
+    expect((await b.followTasks(item.id, "in_progress"))?.column).toBe("in_progress");
+    const revision = b.revision();
+    expect(await b.followTasks(item.id, "in_progress")).toBeNull();
+    // Nothing moved, so the Plan view is not told to reload.
+    expect(b.revision()).toBe(revision);
+
+    await b.update(item.id, { column: "done" });
+    expect(await b.followTasks(item.id, "in_progress")).toBeNull();
+    expect(await b.followTasks(item.id, "review")).toBeNull();
+    await b.update(item.id, { column: "dropped" });
+    expect(await b.followTasks(item.id, "review")).toBeNull();
+    expect((await b.item(item.id)).column).toBe("dropped");
+
+    expect(await b.followTasks(project.id, "in_progress")).toBeNull();
+    expect((await b.item(project.id)).column).toBe("ready");
+    expect(await b.followTasks("5b0c6a7e-0000-4000-8000-0000000000ff", "review")).toBeNull();
+  });
+
+  test("a read beside the daemon's own writes in the background still finds every item (ADR-213)", async () => {
+    const { board: b } = board();
+    const items = [];
+    for (let i = 0; i < 30; i++) items.push(await b.create({ ...NEW, kind: "item", title: `Item ${i}`, column: "ready" }, USER));
+    const moves = [];
+    for (let round = 0; round < 10; round++)
+      for (const item of items) moves.push(b.followTasks(item.id, round % 2 === 0 ? "in_progress" : "review"));
+    const counts: number[] = [];
+    for (let i = 0; i < 20; i++) counts.push((await b.board()).items.length);
+    await Promise.all(moves);
+    expect(counts).toEqual(Array.from({ length: 20 }, () => 30));
+  });
 });

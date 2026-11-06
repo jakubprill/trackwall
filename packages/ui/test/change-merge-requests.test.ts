@@ -31,6 +31,7 @@ const part = (id: string, repo: string, position: number | null): Task => ({
   item: null,
   view: "terminal",
   summary: null,
+  inReview: false,
   port: 41000,
   included: { files: [], problems: [] },
   change: position === null ? null : { id: CHANGE, position },

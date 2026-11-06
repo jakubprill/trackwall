@@ -58,6 +58,7 @@ function task(id: string, createdAt: string): Task {
     item: null,
     view: "terminal",
     summary: null,
+    inReview: false,
     port: 41000,
     included: { files: [], problems: [] },
     change: null,

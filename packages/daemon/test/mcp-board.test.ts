@@ -31,6 +31,15 @@ async function outsideAgent(): Promise<Client> {
   return client;
 }
 
+/** The board item follows a review in the background, so its column is waited for. */
+async function waitForColumn(item: string, column: string): Promise<void> {
+  const until = Date.now() + 5_000;
+  while ((await daemon.facade.board.item(item)).column !== column) {
+    if (Date.now() > until) throw new Error(`item ${item} did not move to ${column}`);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+
 function sessionOf(task: string): string {
   const session = daemon.facade.agents.sessions().sessions.find((s) => s.task === task && s.run.kind === "running");
   if (!session) throw new Error(`task ${task} has no running session`);
@@ -77,6 +86,79 @@ describe.skipIf(process.versions.bun === undefined)("the board over MCP (ADR-133
     await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
   }, 60_000);
 
+  test("a task on an item moves it to In progress, its report_result to In review, and the user's review back; Done stays the user's (ADR-213)", async () => {
+    const item = await daemon.post(boardApi.create, { kind: "item", title: "Order list endpoint", column: "ready", repos: ["shop"] });
+    const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "add the endpoint", approvals: "ask", item: item.id });
+    await waitForColumn(item.id, "in_progress");
+    expect(task.inReview).toBe(false);
+
+    const session = sessionOf(task.id);
+    await waitFor(daemon.facade.agents, session, (s) => s.state !== null, "sessionStart");
+    const agent = await connectSessionClient(daemon.api.port, daemon.home, session);
+    clients.push(agent);
+    await expect(call(agent, "update_item", { item: item.id, column: "review" })).rejects.toThrow();
+    await call(agent, "report_result", { summary: "Added GET /orders with a test." });
+    expect(daemon.facade.agents.task(task.id).inReview).toBe(true);
+    await waitForColumn(item.id, "review");
+
+    const comment = { path: "README.md", side: "new" as const, line: 1, code: "# shop", text: "Page the list" };
+    await daemon.post(agentsApi.sendReview, { task: task.id, comments: [comment] });
+    expect(daemon.facade.agents.task(task.id).inReview).toBe(false);
+    await waitForColumn(item.id, "in_progress");
+
+    await daemon.post(boardApi.update, { item: item.id, column: "done" });
+    await call(agent, "report_result", { summary: "Paged the list." });
+    expect((await daemon.facade.board.item(item.id)).column).toBe("done");
+
+    await daemon.facade.agents.stop(session);
+    await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
+  }, 60_000);
+
+  test("an item with two tasks goes to In review once both have reported, or once the one still at work ends (ADR-213)", async () => {
+    const item = await daemon.post(boardApi.create, { kind: "item", title: "Discount in cart and checkout", column: "ready" });
+    const first = await daemon.post(agentsApi.createTask, {
+      repo: "shop",
+      prompt: "discount in the cart",
+      approvals: "ask",
+      item: item.id,
+    });
+    const second = await daemon.post(agentsApi.createTask, {
+      repo: "shop",
+      prompt: "discount at checkout",
+      approvals: "ask",
+      item: item.id,
+    });
+    const agents = [];
+    for (const task of [first, second]) {
+      const session = sessionOf(task.id);
+      await waitFor(daemon.facade.agents, session, (s) => s.state !== null, "sessionStart");
+      const agent = await connectSessionClient(daemon.api.port, daemon.home, session);
+      clients.push(agent);
+      agents.push({ agent, session, task });
+    }
+    const [one, two] = agents;
+    if (one === undefined || two === undefined) throw new Error("two task sessions were expected");
+
+    await waitForColumn(item.id, "in_progress");
+    await call(one.agent, "report_result", { summary: "The cart shows the discount." });
+    await call(two.agent, "report_result", { summary: "Checkout applies the discount." });
+    await waitForColumn(item.id, "review");
+
+    await daemon.post(agentsApi.sendReview, {
+      task: two.task.id,
+      comments: [{ path: "README.md", side: "new" as const, line: 1, code: "# shop", text: "Round the discount" }],
+    });
+    await waitForColumn(item.id, "in_progress");
+    await daemon.facade.agents.stop(two.session);
+    await daemon.post(agentsApi.removeTask, { task: two.task.id, keepBranch: false, discardChanges: true });
+    await waitForColumn(item.id, "review");
+
+    for (const { session, task } of [one]) {
+      await daemon.facade.agents.stop(session);
+      await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
+    }
+  }, 60_000);
+
   test("a task proposed for an item keeps the item once the user starts it", async () => {
     const item = await daemon.post(boardApi.create, { kind: "item", title: "Health endpoint" });
     const agent = await outsideAgent();
@@ -92,6 +174,8 @@ describe.skipIf(process.versions.bun === undefined)("the board over MCP (ADR-133
       approvals: "ask",
     });
     expect(task.item).toBe(item.id);
+    // The user started the work by approving it, so the idea is now in progress (ADR-213).
+    await waitForColumn(item.id, "in_progress");
     await daemon.facade.agents.stop(sessionOf(task.id));
     await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
   }, 60_000);

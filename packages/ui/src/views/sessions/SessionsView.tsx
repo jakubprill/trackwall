@@ -397,7 +397,7 @@ function StartedListItem({
           <RowName name={entryName(entry)} group={group} delegated={delegated} waits={session?.needsAttention === true} />
           {task && <TaskLine task={task} />}
           <RowStatus session={session} />
-          <TaskOutcomeMarks outcome={outcome} />
+          <TaskOutcomeMarks outcome={outcome} inReview={task?.inReview === true} />
           {session?.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
         </span>
       </button>

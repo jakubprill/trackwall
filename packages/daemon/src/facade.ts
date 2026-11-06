@@ -329,6 +329,7 @@ export function createFacade(o: FacadeOptions): Facade {
     sessionMcpServer: o.sessionMcpServer,
     openEditor,
     boardHas: (item) => board.has(item),
+    followTasks: (item, column) => board.followTasks(item, column),
     knowledge: (repo) => knowledge.forSession(repo),
     // `providerModels` is made further down; a session starts only after the facade is built.
     wireApi: (model: string, env: NodeJS.ProcessEnv) => providerModels.wireApiFor(model, env),
