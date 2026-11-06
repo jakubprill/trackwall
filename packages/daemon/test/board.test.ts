@@ -171,4 +171,17 @@ describe("the board (ADR-133)", () => {
     expect((await b.item(project.id)).column).toBe("ready");
     expect(await b.followTasks("5b0c6a7e-0000-4000-8000-0000000000ff", "review")).toBeNull();
   });
+
+  test("a read beside the daemon's own writes in the background still finds every item (ADR-213)", async () => {
+    const { board: b } = board();
+    const items = [];
+    for (let i = 0; i < 30; i++) items.push(await b.create({ ...NEW, kind: "item", title: `Item ${i}`, column: "ready" }, USER));
+    const moves = [];
+    for (let round = 0; round < 10; round++)
+      for (const item of items) moves.push(b.followTasks(item.id, round % 2 === 0 ? "in_progress" : "review"));
+    const counts: number[] = [];
+    for (let i = 0; i < 20; i++) counts.push((await b.board()).items.length);
+    await Promise.all(moves);
+    expect(counts).toEqual(Array.from({ length: 20 }, () => 30));
+  });
 });

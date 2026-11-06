@@ -58,8 +58,8 @@ export interface NewBoardItem {
 export class Board {
   readonly #deps: BoardDeps;
   #revision = 0;
-  /** The write in progress: a write reads the board, so two at once would each miss the other's item. */
-  #writing: Promise<unknown> = Promise.resolve();
+  /** The read or write in progress: a write reads the board, so two at once would each miss the other's item. */
+  #turn: Promise<unknown> = Promise.resolve();
 
   constructor(deps: BoardDeps) {
     this.#deps = deps;
@@ -70,8 +70,12 @@ export class Board {
     return this.#revision;
   }
 
-  async board(): Promise<{ items: BoardItem[]; problems: BoardProblem[] }> {
-    return readBoard(await this.#dir());
+  /**
+   * Read in turn with the daemon's own writes: a file replaced while it is read is refused as changed (`readRegularFile`),
+   * so a read beside a write in the background (an item following its tasks, ADR-213) would lose that item.
+   */
+  board(): Promise<{ items: BoardItem[]; problems: BoardProblem[] }> {
+    return this.#inTurn(async () => readBoard(await this.#dir()));
   }
 
   async item(id: string): Promise<BoardItem> {
@@ -171,13 +175,17 @@ export class Board {
    * means it wrote nothing, so the revision stays.
    */
   #write<T>(change: (items: BoardItem[], dir: string) => Promise<T>): Promise<T> {
-    const run = this.#writing.then(async () => {
+    return this.#inTurn(async () => {
       const dir = await this.#dir();
       const result = await change((await readBoard(dir)).items, dir);
       if (result !== null) this.#revision++;
       return result;
     });
-    this.#writing = run.catch(() => {});
+  }
+
+  #inTurn<T>(step: () => Promise<T>): Promise<T> {
+    const run = this.#turn.then(step);
+    this.#turn = run.catch(() => {});
     return run;
   }
 }
