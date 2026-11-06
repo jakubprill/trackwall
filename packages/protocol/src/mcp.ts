@@ -999,7 +999,8 @@ export const mcpTools = {
     description:
       "Report the result of your task: what you did, what is left and what the user or the session that proposed the " +
       `task should check. Only for a session that runs a task in Trackwall; the summary is saved to your own task (shown in ${GET_SESSION}, ` +
-      `${LIST_SESSIONS} and the Sessions view). Calling it again replaces the summary and its check steps. Commit your changes on the task branch before reporting.`,
+      `${LIST_SESSIONS} and the Sessions view). Calling it again replaces the summary and its check steps. It hands your work over for review: your task's board ` +
+      "item moves to in review once every task on it has reported, and only the user moves it to done. Commit your changes on the task branch before reporting.",
     args: z
       .object({
         summary: visibleText(TaskSummaryText).describe(

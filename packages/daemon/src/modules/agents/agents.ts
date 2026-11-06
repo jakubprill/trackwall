@@ -107,6 +107,7 @@ import { SessionTokens } from "./session-tokens.ts";
 import { outcome, sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
 import { SupervisorSessions } from "./supervisor-sessions.ts";
 import { supervisorSituation } from "./supervisor-situation.ts";
+import { TaskBoardItem, type TaskBoardItemDeps } from "./task-board-item.ts";
 import { TaskCoordination } from "./task-coordination.ts";
 import { TaskFile } from "./task-file.ts";
 import { TaskProposals } from "./task-proposals.ts";
@@ -227,6 +228,8 @@ export interface AgentsDeps {
   openEditor: (path: string, line?: number) => void;
   /** Whether a board item is on the board (ADR-133): a task or a proposal names only an existing one. */
   boardHas: (item: string) => Promise<boolean>;
+  /** Moves a board item as the work of its tasks goes (ADR-212), `Board.followTasks`. */
+  followTasks: TaskBoardItemDeps["move"];
   /** The workspace knowledge the user approved for a session in `repo` (`null`: in the projects folder), ADR-170. */
   knowledge: (repo: string | null) => Promise<SessionKnowledge>;
   /** The format a session on a model must use with its custom provider (ADR-200), from `provider-models`. */
@@ -275,6 +278,7 @@ export class Agents {
   readonly #launcher: SessionLauncher;
   readonly #javaNavigation: JavaNavigationServers;
   readonly #autoReviews: AutoReviews;
+  readonly #boardItems: TaskBoardItem;
 
   constructor(deps: AgentsDeps) {
     this.#deps = deps;
@@ -359,6 +363,7 @@ export class Agents {
       changed: () => this.#queues.follow(),
       log: deps.log,
     });
+    this.#boardItems = new TaskBoardItem({ move: deps.followTasks, tasks: () => this.#tasks.list(), log: deps.log });
     this.#autoReviews = new AutoReviews({
       tasks: {
         task: (id) => this.#tasks.task(id),
@@ -587,8 +592,9 @@ export class Agents {
   async approveProposal(id: string, prompt: string, model: string | null, approvals: TaskApprovals, view: SessionView): Promise<Task> {
     if (this.#proposals.get(id).kind !== "task") throw new DomainError("bad_request", `proposal ${id} is not a task`);
     const { repo, title, proposedBy, item } = this.#proposals.take(id);
+    let task: Task;
     try {
-      return await this.#tasks.create(repo, prompt, {
+      task = await this.#tasks.create(repo, prompt, {
         id,
         title,
         proposedBy,
@@ -602,6 +608,8 @@ export class Agents {
     } finally {
       this.#proposals.release(id, this.#tasks.find(id) === undefined);
     }
+    await this.#boardItems.started([task]);
+    return task;
   }
 
   /**
@@ -629,6 +637,7 @@ export class Agents {
     }
     this.#proposals.release(id, false);
     this.#coordination.changeStarted(id, proposedBy, created);
+    await this.#boardItems.started(created.tasks);
     return created;
   }
 
@@ -683,6 +692,7 @@ export class Agents {
     const own = this.#ownTask(caller, "can report a result");
     const reported = this.#tasks.setSummary(own.task, text, checkSteps);
     this.#autoReviews.afterReport(own.task);
+    await this.#boardItems.handedOver(reported);
     // Awaited, so the update is there for the proposer by the time the tool answers.
     await this.#coordination.resultReported(reported, own.session, this.#reportedChanges(own.task));
     return reported;
@@ -696,6 +706,7 @@ export class Agents {
     // Only to refuse an unknown or ended task (`not_found`).
     this.#tasks.task(id);
     const unread = this.#reviews.add(id, comments);
+    this.#resumed(id);
     this.#coordination.reviewed(id);
     const running = this.#sessions.runningOfTask(id);
     return { unread, delivery: running ? running.askToRead() : "on_resume" };
@@ -709,8 +720,17 @@ export class Agents {
     // Only to refuse an unknown or ended task (`not_found`).
     this.#tasks.task(id);
     this.#reviews.fixPipeline(id, fix);
+    this.#resumed(id);
     this.#coordination.reviewed(id);
     return this.#sessions.runningOfTask(id)?.askToRead() ?? "on_resume";
+  }
+
+  /**
+   * The user gave task `id`'s agent work again, so its work is no longer waiting for review (ADR-212). The board item
+   * follows in the background: the review reaches the agent without waiting for the projects folder.
+   */
+  #resumed(id: string): void {
+    if (this.#tasks.takeOutOfReview(id)) void this.#boardItems.resumed(this.#tasks.task(id));
   }
 
   /** The prompt for what waits unread for a session: its task's review comments and messages, and its updates. */
@@ -832,6 +852,7 @@ export class Agents {
     const task = await this.#tasks.create(repo, prompt, origin);
     // The user handed the repo the work from the Impact tab, so the daemon's proposal for it is done (ADR-198).
     if (handoffFrom !== null) this.#impactProposals.replacedBy(handoffFrom, [repo]);
+    await this.#boardItems.started([task]);
     return task;
   }
 
@@ -839,7 +860,17 @@ export class Agents {
   async createChange({ title, prompt, parts, approvals, model, item, view }: ChangeRequest): Promise<CreatedChange> {
     await this.#assertOnBoard(item);
     const prompts = parts.map((part) => ({ repo: part.repo, prompt: changePartPrompt(prompt, part) }));
-    return this.#tasks.createChange(prompts, { title, proposedBy: null, model, approvals, javaNavigation: false, item, view });
+    const created = await this.#tasks.createChange(prompts, {
+      title,
+      proposedBy: null,
+      model,
+      approvals,
+      javaNavigation: false,
+      item,
+      view,
+    });
+    await this.#boardItems.started(created.tasks);
+    return created;
   }
 
   /**

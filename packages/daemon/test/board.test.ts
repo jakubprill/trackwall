@@ -146,4 +146,26 @@ describe("the board (ADR-133)", () => {
     await expect(b.create({ ...NEW, kind: "item", title: "An idea" }, USER)).rejects.toThrow("is not a folder (a link?)");
     expect(readdirSync(elsewhere)).toEqual([]);
   });
+
+  test("the work of tasks moves an item to in progress and in review, but never out of done or dropped, nor a project (ADR-212)", async () => {
+    const { board: b } = board();
+    const project = await b.create({ ...NEW, kind: "project", title: "Order history", column: "ready" }, USER);
+    const item = await b.create({ ...NEW, kind: "item", title: "Endpoint in the BFF", parent: project.id, column: "ready" }, USER);
+
+    expect((await b.followTasks(item.id, "in_progress"))?.column).toBe("in_progress");
+    expect((await b.followTasks(item.id, "review"))?.column).toBe("review");
+    expect((await b.followTasks(item.id, "in_progress"))?.column).toBe("in_progress");
+    expect(await b.followTasks(item.id, "in_progress")).toBeNull();
+
+    await b.update(item.id, { column: "done" });
+    expect(await b.followTasks(item.id, "in_progress")).toBeNull();
+    expect(await b.followTasks(item.id, "review")).toBeNull();
+    await b.update(item.id, { column: "dropped" });
+    expect(await b.followTasks(item.id, "review")).toBeNull();
+    expect((await b.item(item.id)).column).toBe("dropped");
+
+    expect(await b.followTasks(project.id, "in_progress")).toBeNull();
+    expect((await b.item(project.id)).column).toBe("ready");
+    expect(await b.followTasks("5b0c6a7e-0000-4000-8000-0000000000ff", "review")).toBeNull();
+  });
 });

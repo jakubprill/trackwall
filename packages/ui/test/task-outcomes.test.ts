@@ -34,7 +34,7 @@ function outcome(extra: Partial<TaskOutcome>): TaskOutcome {
 
 describe("the marks on a task's row", () => {
   test("the verdict, then the merge request's number in the tone of its pipeline, with the story as the tooltip", () => {
-    expect(outcomeMarks(outcome({ verification: "passed", mergeRequest: mergeRequest("failed") }))).toEqual([
+    expect(outcomeMarks(outcome({ verification: "passed", mergeRequest: mergeRequest("failed") }), false)).toEqual([
       { key: "verification", tone: "ok", label: "Verified", title: "Verification passed" },
       {
         key: "merge-request",
@@ -47,26 +47,34 @@ describe("the marks on a task's row", () => {
 
   test("a pull request on GitHub is #12; once merged its tone is the merge, not the last pipeline", () => {
     const merged = mergeRequest("failed", { state: "merged", project: { kind: "github", host: "github.com", path: "me/shop" } });
-    expect(outcomeMarks(outcome({ mergeRequest: merged }))).toEqual([
+    expect(outcomeMarks(outcome({ mergeRequest: merged }), false)).toEqual([
       { key: "merge-request", tone: "ok", label: "#12", title: "#12 Add a discount · merged · pipeline failed: unit-tests, lint" },
     ]);
   });
 
   test("a running verification and an open merge request without a pipeline", () => {
-    expect(outcomeMarks(outcome({ verification: "running", mergeRequest: mergeRequest(null) }))).toEqual([
+    expect(outcomeMarks(outcome({ verification: "running", mergeRequest: mergeRequest(null) }), false)).toEqual([
       { key: "verification", tone: "warning", label: "Verifying", title: "Verification running" },
       { key: "merge-request", tone: "warning", label: "!12", title: "!12 Add a discount · open" },
     ]);
   });
 
   test("an outdated verdict (ADR-209) is a mark without the colour of its pass, and the tooltip says why", () => {
-    expect(outcomeMarks(outcome({ verification: "passed", verificationOutdated: true }))).toEqual([
+    expect(outcomeMarks(outcome({ verification: "passed", verificationOutdated: true }), false)).toEqual([
       { key: "verification", label: "Verify outdated", title: "Verification passed, but the worktree changed since" },
     ]);
   });
 
+  test("a task whose agent handed its work over says In review before its verdict (ADR-212)", () => {
+    expect(outcomeMarks(outcome({ verification: "passed" }), true).map((mark) => [mark.key, mark.label])).toEqual([
+      ["review", "In review"],
+      ["verification", "Verified"],
+    ]);
+    expect(outcomeMarks(undefined, true).map((mark) => mark.label)).toEqual(["In review"]);
+  });
+
   test("a task without an outcome has no marks", () => {
-    expect(outcomeMarks(undefined)).toEqual([]);
+    expect(outcomeMarks(undefined, false)).toEqual([]);
   });
 });
 

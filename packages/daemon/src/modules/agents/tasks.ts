@@ -315,6 +315,7 @@ export class AgentTasks {
       view: sessionView,
       conversation: null,
       summary: null,
+      inReview: false,
       handoff,
       change,
       impactProposed: {},
@@ -595,9 +596,22 @@ export class AgentTasks {
    * earlier one, steps included, and survives a daemon restart.
    */
   setSummary(id: string, text: string, checkSteps: string[]): Task {
-    const summarized = { ...this.#get(id), summary: { text, checkSteps, reportedAt: new Date().toISOString() } };
+    const reportedAt = new Date().toISOString();
+    // A summary hands the work over for review (ADR-212).
+    const summarized = { ...this.#get(id), summary: { text, checkSteps, reportedAt }, inReview: true };
     this.#save(this.#tasks.map((t) => (t.id === id ? summarized : t)));
     return view(summarized);
+  }
+
+  /**
+   * The user gave the task's agent work again (a review, a "Fix" of its pipeline, ADR-212), so its work is no longer
+   * waiting for review; `false` when it was not.
+   */
+  takeOutOfReview(id: string): boolean {
+    const task = this.#get(id);
+    if (!task.inReview) return false;
+    this.#save(this.#tasks.map((t) => (t.id === id ? { ...task, inReview: false } : t)));
+    return true;
   }
 
   changes(id: string): Promise<TaskChanges> {

@@ -11,6 +11,7 @@ import {
   type BoardItemKind,
   type BoardProblem,
   childrenOf,
+  type TaskWorkColumn,
 } from "@trackwall/protocol";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
 import { DomainError, messageOf } from "../../infra/errors.ts";
@@ -122,6 +123,20 @@ export class Board {
     });
   }
 
+  /**
+   * The work of the item's tasks moves it to `column` (ADR-212), when `taskWorkMoves` allows it from where it is;
+   * an item no longer on the board, a project, or one the user closed stays as it is, and the answer is `null`.
+   */
+  followTasks(id: string, column: TaskWorkColumn): Promise<BoardItem | null> {
+    return this.#write(async (items, dir) => {
+      const current = items.find((it) => it.id === id);
+      if (current === undefined || current.kind === "project" || !taskWorkMoves(current.column, column)) return null;
+      const item: BoardItem = { ...current, column, updatedAt: new Date().toISOString() };
+      save(dir, item);
+      return item;
+    });
+  }
+
   move(id: string, parent: string | null, before: string | null): Promise<BoardItem> {
     return this.#write(async (items, dir) => {
       const current = found(items, id);
@@ -162,6 +177,19 @@ export class Board {
     this.#writing = run.catch(() => {});
     return run;
   }
+}
+
+/**
+ * Where the work of an item's tasks may move it from (ADR-212): never out of `done` or `dropped`, which only the user
+ * sets, and not to the column it is already in.
+ */
+const TASK_WORK_FROM: Record<TaskWorkColumn, ReadonlySet<BoardColumn>> = {
+  in_progress: new Set(["ideas", "ready", "review"]),
+  review: new Set(["ideas", "ready", "in_progress"]),
+};
+
+function taskWorkMoves(current: BoardColumn, column: TaskWorkColumn): boolean {
+  return TASK_WORK_FROM[column].has(current);
 }
 
 async function readItem(path: string, id: string): Promise<{ item: BoardItem } | { problem: string }> {
