@@ -568,6 +568,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
       sessionMcpServer: () => ({ url: "http://127.0.0.1:9/mcp", headers: {} }),
       openEditor: () => {},
       boardHas: async () => true,
+      followTasks: async () => null,
       taskOutcomes: () => [],
       knowledge: async () => ({ entries: [], more: 0 }),
       wireApi: async () => null,

@@ -120,7 +120,7 @@ export const boardMcpTools = {
     description:
       "Change a board item's title, body, repos or link, or move it between ideas and ready, for example after the user " +
       "agreed on its plan with you. Only the fields given change. Projects, other columns, moving in the tree and removing " +
-      "are the user's, in Trackwall's Plan view.",
+      "are the user's, in Trackwall's Plan view; your task's own item moves to in review when you call report_result.",
     args: z
       .object({
         item: ItemArg,
