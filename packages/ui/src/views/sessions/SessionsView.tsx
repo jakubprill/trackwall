@@ -20,6 +20,7 @@ import { ModelChangeButton, SessionModelChange } from "@/components/ModelChange"
 import { ReadRequestNotice } from "@/components/ReadRequestNotice";
 import { SessionScreen } from "@/components/SessionScreen";
 import { StatusLabel } from "@/components/StatusLabel";
+import { TaskOutcomeMarks } from "@/components/TaskOutcomeMarks";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
@@ -59,6 +60,7 @@ import {
 } from "@/lib/session-shortcut";
 import { attentionCount, isLive, PROPOSAL_STATUS, SUPERVISOR, sessionPlace, sessionStateLabel } from "@/lib/session-state";
 import type { SupervisorSummary } from "@/lib/supervisor";
+import { outcomeMarks } from "@/lib/task-outcomes";
 import { useAction } from "@/lib/use-action";
 import type { RemoteHandle } from "@/lib/use-remote";
 import { useSessionClose } from "@/lib/use-session-close";
@@ -75,7 +77,6 @@ import { SessionEnvironment } from "./SessionEnvironment.tsx";
 import { SessionGrid } from "./SessionGrid.tsx";
 import { GroupFilterChip, GroupLevel, GroupStripe, ShowGroupButton } from "./SessionGroupMarks.tsx";
 import { TaskLine } from "./TaskLine.tsx";
-import { TaskOutcomeMarks } from "./TaskOutcomeMarks.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
 import { WorktreeCleanup } from "./WorktreeCleanup.tsx";
 
@@ -397,7 +398,7 @@ function StartedListItem({
           <RowName name={entryName(entry)} group={group} delegated={delegated} waits={session?.needsAttention === true} />
           {task && <TaskLine task={task} />}
           <RowStatus session={session} />
-          <TaskOutcomeMarks outcome={outcome} inReview={task?.inReview === true} />
+          <TaskOutcomeMarks marks={outcomeMarks(outcome, task?.inReview === true)} />
           {session?.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
         </span>
       </button>

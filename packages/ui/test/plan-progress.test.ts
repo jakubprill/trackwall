@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import type { BoardItem, Session, Task, TaskOutcome } from "@trackwall/protocol";
-import { hiddenAsDone, itemTasks, progressBelow, progressLabel, tasksBelow, tasksWaiting } from "../src/lib/plan-progress.ts";
+import {
+  hiddenAsDone,
+  itemTaskIndex,
+  itemTasks,
+  progressBelow,
+  progressLabel,
+  rowTask,
+  tasksBelow,
+  tasksWaiting,
+} from "../src/lib/plan-progress.ts";
 
 function item(id: string, fields: Partial<BoardItem> = {}): BoardItem {
   return {
@@ -68,9 +77,15 @@ const noOutcomes = new Map<string, TaskOutcome>();
 describe("how far a project of Plan is and what its tasks do (ADR-215)", () => {
   test("a project counts every item below it by column, and a dropped item is not work to be done", () => {
     const progress = progressBelow(items, "p");
-    expect(progress.byColumn).toEqual({ ideas: 0, ready: 1, in_progress: 1, review: 1, done: 2, dropped: 1 });
-    expect([progress.done, progress.total]).toEqual([2, 5]);
-    expect(progressLabel(progress)).toBe("2 of 5 done");
+    expect(progress.byColumn).toEqual({ ideas: 0, ready: 0, in_progress: 1, review: 1, done: 3, dropped: 1 });
+    expect([progress.done, progress.total]).toEqual([3, 5]);
+    expect(progressLabel(progress)).toBe("3 of 5 done");
+  });
+
+  test("an item below a done or dropped item counts in that item's column, as Hide done hides it with it", () => {
+    const old = item("old", { parent: "remind" });
+    expect(progressBelow([...items, old], "p").byColumn).toMatchObject({ ready: 0, done: 3, dropped: 2 });
+    expect(progressBelow([...items, old], "remind").byColumn).toMatchObject({ ready: 1, dropped: 0 });
   });
 
   test("an item counts only what lies below it, and one with nothing to do has no label", () => {
@@ -81,20 +96,22 @@ describe("how far a project of Plan is and what its tasks do (ADR-215)", () => {
   test("an item's tasks come newest first, each with its newest session's state and whether it waits for the user", () => {
     const older = task("older", { item: "accept", createdAt: "2026-11-04T09:00:00.000Z" });
     const newer = task("newer", { item: "accept", inReview: true });
+    // The session list goes from the newest.
     const sessions = [
-      session("first", {
-        task: "older",
-        startedAt: "2026-11-04T09:00:00.000Z",
-        run: { kind: "exited", exitCode: 0, stoppedByUser: true },
-      } as Partial<Session>),
       session("second", {
         task: "older",
         startedAt: "2026-11-05T10:00:00.000Z",
         needsAttention: true,
         state: { state: "Input", confidence: "high" },
       } as Partial<Session>),
+      session("first", {
+        task: "older",
+        startedAt: "2026-11-04T09:00:00.000Z",
+        run: { kind: "exited", exitCode: 0, stoppedByUser: true },
+      } as Partial<Session>),
     ];
-    const listed = itemTasks("accept", { tasks: [older, task("other"), newer], sessions, outcomes: noOutcomes });
+    const index = itemTaskIndex({ tasks: [older, task("other"), newer], sessions, outcomes: noOutcomes });
+    const listed = itemTasks("accept", index);
     expect(listed.map((t) => [t.task.id, t.state.label, t.waitsForYou, t.marks.map((m) => m.label)])).toEqual([
       ["newer", "no session", true, ["In review"]],
       ["older", "waiting for you", true, []],
@@ -107,12 +124,25 @@ describe("how far a project of Plan is and what its tasks do (ADR-215)", () => {
       task("b", { item: "pay" }),
       task("c", { item: "elsewhere", inReview: true }),
     ];
-    expect(tasksWaiting(items, "p", { tasks, sessions: [session("s", { task: "b" })], outcomes: noOutcomes })).toBe(1);
+    expect(tasksWaiting(items, "p", itemTaskIndex({ tasks, sessions: [session("s", { task: "b" })], outcomes: noOutcomes }))).toBe(1);
   });
 
   test("an item's tasks below are those on the items it is split into, at any depth, not its own", () => {
     const tasks = [task("own", { item: "pay" }), task("child", { item: "accept" }), task("elsewhere", { item: "show" })];
-    expect(tasksBelow(items, "pay", { tasks, sessions: [], outcomes: noOutcomes }).map((t) => t.task.id)).toEqual(["child"]);
+    expect(tasksBelow(items, "pay", itemTaskIndex({ tasks, sessions: [], outcomes: noOutcomes })).map((t) => t.task.id)).toEqual(["child"]);
+  });
+
+  test("a row shows a task that waits for the user before a newer one that is working", () => {
+    const waiting = task("waiting", { item: "pay", createdAt: "2026-11-04T09:00:00.000Z" });
+    const working = task("working", { item: "pay" });
+    const index = itemTaskIndex({
+      tasks: [waiting, working],
+      sessions: [session("s1", { task: "working" }), session("s2", { task: "waiting", needsAttention: true })],
+      outcomes: noOutcomes,
+    });
+    expect(itemTasks("pay", index).map((t) => t.task.id)).toEqual(["working", "waiting"]);
+    expect(rowTask(itemTasks("pay", index))?.task.id).toBe("waiting");
+    expect(rowTask([])).toBeUndefined();
   });
 
   test("Hide done hides done and dropped items and what lies below them, never the project", () => {

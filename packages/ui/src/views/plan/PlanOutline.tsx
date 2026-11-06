@@ -1,28 +1,29 @@
 import { type BoardItem, boardApi, childrenOf, countLabel } from "@trackwall/protocol";
-import { Bot, ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
-import { useState } from "react";
+import { Bot, ChevronDown, ChevronRight } from "lucide-react";
+import { useMemo, useState } from "react";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
-import { COLUMN_LABELS, type ItemMove, isArchived, type OutlineRow, outline, rowKeyMove } from "@/lib/board-tree";
+import { COLUMN_LABELS, type ItemMove, isClosed, type OutlineRow, outline, rowKeyMove } from "@/lib/board-tree";
 import type { Connection } from "@/lib/connection";
-import { useOpenWebLink } from "@/lib/desktop";
 import {
   hiddenAsDone,
   type ItemTask,
+  type ItemTaskIndex,
   itemTasks,
   PROGRESS_COLUMNS,
   type Progress,
   progressBelow,
   progressLabel,
-  type TaskActivity,
+  rowTask,
   tasksWaiting,
 } from "@/lib/plan-progress";
 import { useAction } from "@/lib/use-action";
 import { cn } from "@/lib/utils";
 import { NewItemLine } from "./NewItemLine.tsx";
 import { ProgressBar } from "./ProgressBar.tsx";
+import { TicketLink } from "./TicketLink.tsx";
 
 /**
  * The middle of Plan for a project: how far it is (ADR-215), and its items as an outline, each with its repos, the state
@@ -33,7 +34,7 @@ import { ProgressBar } from "./ProgressBar.tsx";
 export function PlanOutline({
   conn,
   items,
-  activity,
+  taskIndex,
   project,
   selected,
   onSelect,
@@ -41,7 +42,7 @@ export function PlanOutline({
 }: {
   conn: Connection;
   items: readonly BoardItem[];
-  activity: TaskActivity;
+  taskIndex: ItemTaskIndex;
   project: BoardItem;
   selected: string | undefined;
   onSelect: (id: string | undefined) => void;
@@ -50,6 +51,12 @@ export function PlanOutline({
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
   const [hideDone, setHideDone] = useState(false);
   const move = useAction((id: string, to: ItemMove) => post(conn, boardApi.move, { item: id, ...to }), onChanged);
+  // Counted once per board change, not on every render of every row.
+  const progress = useMemo(
+    () => new Map([project.id, ...outline(items, project.id).map((row) => row.item.id)].map((id) => [id, progressBelow(items, id)])),
+    [items, project.id],
+  );
+  const progressOf = (id: string) => progress.get(id) ?? progressBelow(items, id);
   const rows = outline(items, project.id, folded).filter((row) => !hideDone || !hiddenAsDone(items, row.item));
   const toggle = (id: string) => {
     const next = new Set(folded);
@@ -60,8 +67,8 @@ export function PlanOutline({
     <div className="flex flex-col gap-3 p-4">
       <ProjectHeader conn={conn} project={project} onChanged={onChanged} />
       <ProjectProgress
-        progress={progressBelow(items, project.id)}
-        waiting={tasksWaiting(items, project.id, activity)}
+        progress={progressOf(project.id)}
+        waiting={tasksWaiting(items, project.id, taskIndex)}
         hideDone={hideDone}
         onHideDone={setHideDone}
       />
@@ -72,8 +79,8 @@ export function PlanOutline({
             key={row.item.id}
             row={row}
             hasChildren={childrenOf(items, row.item.id).length > 0}
-            progress={progressBelow(items, row.item.id)}
-            tasks={itemTasks(row.item.id, activity)}
+            progress={progressOf(row.item.id)}
+            tasks={itemTasks(row.item.id, taskIndex)}
             folded={folded.has(row.item.id)}
             selected={row.item.id === selected}
             onToggle={() => toggle(row.item.id)}
@@ -105,18 +112,12 @@ export function PlanOutline({
 }
 
 function ProjectHeader({ conn, project, onChanged }: { conn: Connection; project: BoardItem; onChanged: () => void }) {
-  const archived = isArchived(project);
+  const archived = isClosed(project);
   const archive = useAction(() => post(conn, boardApi.update, { item: project.id, column: archived ? "ready" : "done" }), onChanged);
-  const openLink = useOpenWebLink(conn);
-  const link = project.link;
   return (
     <header className="flex flex-wrap items-center gap-2">
       <h2 className="text-lg font-medium">{project.title}</h2>
-      {link && (
-        <Button variant="outline" size="sm" onClick={() => void openLink(link)} title={link}>
-          Ticket <ExternalLink />
-        </Button>
-      )}
+      <TicketLink conn={conn} link={project.link} />
       <span className="flex-1" />
       <Button variant="ghost" size="sm" disabled={archive.pending} onClick={() => archive.run()}>
         {archived ? "Restore project" : "Archive project"}
@@ -232,15 +233,15 @@ function Row({
   );
 }
 
-/** The newest task's state and outcome on a row, with how many more tasks the item has; nothing without a task. */
+/** A task's state and outcome on a row (one waiting for the user first), with how many more tasks the item has. */
 function RowTask({ tasks }: { tasks: readonly ItemTask[] }) {
-  const [newest, ...older] = tasks;
-  if (!newest) return null;
-  const words = [newest.state.label, ...newest.marks.map((mark) => mark.label)];
+  const shown = rowTask(tasks);
+  if (!shown) return null;
+  const words = [shown.state.label, ...shown.marks.map((mark) => mark.label)];
   return (
-    <span className="flex shrink-0 items-center gap-2 text-xs" title={newest.marks.map((mark) => mark.title).join("\n") || undefined}>
-      <StatusLabel tone={newest.waitsForYou ? "warning" : newest.state.tone} label={words.join(" · ")} />
-      {older.length > 0 && <span className="text-muted-foreground">+{older.length}</span>}
+    <span className="flex shrink-0 items-center gap-2 text-xs" title={shown.marks.map((mark) => mark.title).join("\n") || undefined}>
+      <StatusLabel tone={shown.waitsForYou ? "warning" : shown.state.tone} label={words.join(" · ")} />
+      {tasks.length > 1 && <span className="text-muted-foreground">+{tasks.length - 1}</span>}
     </span>
   );
 }

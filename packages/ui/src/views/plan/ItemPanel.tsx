@@ -5,10 +5,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { post } from "@/lib/api";
-import { COLUMN_LABELS, ideaFields, projectOf, projectsOf } from "@/lib/board-tree";
+import { COLUMN_LABELS, ideaFields, isClosed, projectOf, projectsOf } from "@/lib/board-tree";
 import type { Connection } from "@/lib/connection";
 import { filingChoices, isOpenIdea } from "@/lib/inbox-triage";
-import { itemTasks, progressBelow, progressLabel, type TaskActivity, tasksBelow } from "@/lib/plan-progress";
+import { type ItemTaskIndex, itemTasks, progressBelow, progressLabel, tasksBelow } from "@/lib/plan-progress";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
@@ -25,7 +25,7 @@ export function ItemPanel({
   conn,
   items,
   item,
-  activity,
+  taskIndex,
   onStartTask,
   onOpenTask,
   onRemoved,
@@ -35,8 +35,8 @@ export function ItemPanel({
   conn: Connection;
   items: readonly BoardItem[];
   item: BoardItem;
-  /** The tasks, sessions and outcomes, for the state of the tasks started on this item. */
-  activity: TaskActivity;
+  /** The tasks of each item with their state. */
+  taskIndex: ItemTaskIndex;
   onStartTask: () => void;
   onOpenTask: (task: string) => void;
   onRemoved: () => void;
@@ -104,8 +104,8 @@ export function ItemPanel({
       <SplitLine conn={conn} item={item} onChanged={onChanged} />
       {!isProject && (
         <ItemTasks
-          tasks={itemTasks(item.id, activity)}
-          below={tasksBelow(items, item.id, activity)}
+          tasks={itemTasks(item.id, taskIndex)}
+          below={tasksBelow(items, item.id, taskIndex)}
           onStartTask={onStartTask}
           onOpenTask={onOpenTask}
         />
@@ -162,14 +162,7 @@ function ItemSplit({ items, item }: { items: readonly BoardItem[]; item: BoardIt
       <ul className="flex flex-col gap-0.5 text-sm">
         {children.map((child) => (
           <li key={child.id} className="flex items-center gap-2">
-            <span
-              className={cn(
-                "min-w-0 flex-1 truncate",
-                (child.column === "done" || child.column === "dropped") && "text-muted-foreground line-through",
-              )}
-            >
-              {child.title}
-            </span>
+            <span className={cn("min-w-0 flex-1 truncate", isClosed(child) && "text-muted-foreground line-through")}>{child.title}</span>
             <span className="text-muted-foreground shrink-0 text-xs">{COLUMN_LABELS[child.column]}</span>
           </li>
         ))}

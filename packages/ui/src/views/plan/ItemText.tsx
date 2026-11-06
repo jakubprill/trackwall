@@ -1,5 +1,5 @@
 import { ancestorsOf, type BoardItem, type BoardItemChange, boardApi } from "@trackwall/protocol";
-import { ExternalLink, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { Suspense, useState } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LazyMarkdown } from "@/components/LazyMarkdown";
@@ -8,8 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { useOpenWebLink } from "@/lib/desktop";
 import { useAction } from "@/lib/use-action";
+import { TicketLink } from "./TicketLink.tsx";
 
 /**
  * An item's text in the right column of Plan (ADR-215): read first, with where it sits in its project, its title, its
@@ -58,16 +58,6 @@ export function ItemText({
   );
 }
 
-function TicketLink({ conn, link }: { conn: Connection; link: string | null }) {
-  const openLink = useOpenWebLink(conn);
-  if (link === null) return null;
-  return (
-    <Button variant="outline" size="sm" className="w-fit max-w-full" title={link} onClick={() => void openLink(link)}>
-      <span className="truncate">Ticket</span> <ExternalLink />
-    </Button>
-  );
-}
-
 /** Until the Markdown chunk has loaded, or if it fails, the notes are plain text. */
 function Notes({ conn, text }: { conn: Connection; text: string }) {
   const plain = <p className="text-sm whitespace-pre-wrap break-words">{text}</p>;
@@ -97,13 +87,15 @@ function ItemTextForm({
   const [title, setTitle] = useState(item.title);
   const [body, setBody] = useState(item.body);
   const [link, setLink] = useState(item.link ?? "");
+  const change = { title: title.trim(), body, link: link.trim() === "" ? null : link.trim() };
+  const changed = change.title !== item.title || change.body !== item.body || change.link !== item.link;
   return (
     <form
       aria-label="Edit the item"
       className="flex flex-col gap-2"
       onSubmit={(e) => {
         e.preventDefault();
-        onSave({ title: title.trim(), body, link: link.trim() === "" ? null : link.trim() });
+        onSave(change);
       }}
     >
       <Input aria-label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -121,7 +113,7 @@ function ItemTextForm({
         onChange={(e) => setLink(e.target.value)}
       />
       <div className="flex gap-2">
-        <Button type="submit" disabled={pending || title.trim() === ""}>
+        <Button type="submit" disabled={pending || !changed || change.title === ""}>
           Save
         </Button>
         <Button type="button" variant="ghost" onClick={onCancel}>

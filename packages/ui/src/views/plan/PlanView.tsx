@@ -1,6 +1,6 @@
-import type { BoardItem, BoardRevision, SessionList, TaskOutcome } from "@trackwall/protocol";
+import type { BoardItem, BoardRevision, SessionList, Task, TaskOutcome } from "@trackwall/protocol";
 import { RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { ideaShortcutLabel } from "@/lib/idea-shortcut";
 import { type InboxFilter, ideaAfter, shownIdeas } from "@/lib/inbox-triage";
-import type { TaskActivity } from "@/lib/plan-progress";
+import { type ItemTaskIndex, itemTaskIndex } from "@/lib/plan-progress";
 import { IS_MAC } from "@/lib/platform";
 import type { SessionSelection } from "@/lib/session-entries";
 import { useBoard } from "@/lib/use-board";
@@ -46,7 +46,10 @@ export function PlanView({
   const [starting, setStarting] = useState<string>();
   const [inboxFilter, setInboxFilter] = useState<InboxFilter>("all");
   const items = board.data?.items ?? [];
-  const activity: TaskActivity = { tasks: sessions?.tasks ?? [], sessions: sessions?.sessions ?? [], outcomes };
+  const taskIndex = useMemo(
+    () => itemTaskIndex({ tasks: sessions?.tasks ?? [], sessions: sessions?.sessions ?? [], outcomes }),
+    [sessions, outcomes],
+  );
   // The inbox opens on its newest idea, so sorting starts without a click and the right column is never empty there.
   const firstIdea = place.kind === "inbox" ? shownIdeas(items, inboxFilter)[0] : undefined;
   const shown = selected ?? firstIdea?.id;
@@ -75,7 +78,7 @@ export function PlanView({
           </Button>
         </header>
         {board.data && (
-          <PlanPlaces conn={conn} items={items} activity={activity} place={place} onPlace={choosePlace} onChanged={board.reload} />
+          <PlanPlaces conn={conn} items={items} taskIndex={taskIndex} place={place} onPlace={choosePlace} onChanged={board.reload} />
         )}
       </aside>
       <section className="flex min-h-0 min-w-0 flex-col overflow-y-auto">
@@ -103,7 +106,8 @@ export function PlanView({
             <PlaceItems
               conn={conn}
               items={items}
-              activity={activity}
+              tasks={sessions?.tasks ?? []}
+              taskIndex={taskIndex}
               place={place}
               inboxFilter={inboxFilter}
               onInboxFilter={(filter) => {
@@ -129,7 +133,7 @@ export function PlanView({
             conn={conn}
             items={items}
             item={item}
-            activity={activity}
+            taskIndex={taskIndex}
             onStartTask={() => setStarting(item.id)}
             onOpenTask={(task) => onOpenInSessions({ kind: "task", id: task })}
             onRemoved={() => setSelected(undefined)}
@@ -170,7 +174,8 @@ function BoardState({ board }: { board: ReturnType<typeof useBoard> }) {
 function PlaceItems({
   conn,
   items,
-  activity,
+  tasks,
+  taskIndex,
   place,
   inboxFilter,
   onInboxFilter,
@@ -182,7 +187,8 @@ function PlaceItems({
 }: {
   conn: Connection;
   items: readonly BoardItem[];
-  activity: TaskActivity;
+  tasks: readonly Task[];
+  taskIndex: ItemTaskIndex;
   place: PlanPlace;
   inboxFilter: InboxFilter;
   onInboxFilter: (filter: InboxFilter) => void;
@@ -198,7 +204,7 @@ function PlaceItems({
       <InboxTriage
         conn={conn}
         items={items}
-        tasks={activity.tasks}
+        tasks={tasks}
         filter={inboxFilter}
         onFilter={onInboxFilter}
         selected={selected}
@@ -214,7 +220,7 @@ function PlaceItems({
     <PlanOutline
       conn={conn}
       items={items}
-      activity={activity}
+      taskIndex={taskIndex}
       project={project}
       selected={selected}
       onSelect={onSelectInTree}

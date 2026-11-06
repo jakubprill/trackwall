@@ -1,5 +1,5 @@
 import { type BoardItem, childrenOf, type Task } from "@trackwall/protocol";
-import { isArchived, outline, projectsOf } from "./board-tree.ts";
+import { isClosed, outline, projectsOf } from "./board-tree.ts";
 
 /**
  * The inbox of Plan as a place to sort ideas (ADR-214): the open ideas newest first in groups by the day they were
@@ -94,7 +94,7 @@ export interface FilingChoice {
  */
 export function filingChoices(items: readonly BoardItem[], idea: BoardItem): FilingChoice[] {
   return projectsOf(items)
-    .filter((project) => !isArchived(project))
+    .filter((project) => !isClosed(project))
     .map((project) => ({ project, sharedRepos: reposInProject(items, project.id).filter((repo) => idea.repos.includes(repo)) }))
     .sort((x, y) => y.sharedRepos.length - x.sharedRepos.length);
 }

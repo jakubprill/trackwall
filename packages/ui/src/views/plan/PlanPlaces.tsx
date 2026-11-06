@@ -3,10 +3,11 @@ import { BookOpen, FolderKanban, Inbox } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { post } from "@/lib/api";
-import { isArchived, type PlanPlace, projectsOf } from "@/lib/board-tree";
+import { isClosed, type PlanPlace, projectsOf } from "@/lib/board-tree";
 import type { Connection } from "@/lib/connection";
 import { inboxIdeas } from "@/lib/inbox-triage";
-import { progressBelow, progressLabel, type TaskActivity, tasksWaiting } from "@/lib/plan-progress";
+import { type ItemTaskIndex, progressBelow, progressLabel, tasksWaiting } from "@/lib/plan-progress";
+import { STATUS_DOT_CLASS } from "@/lib/status-tone";
 import { useAction } from "@/lib/use-action";
 import { cn } from "@/lib/utils";
 
@@ -17,14 +18,14 @@ import { cn } from "@/lib/utils";
 export function PlanPlaces({
   conn,
   items,
-  activity,
+  taskIndex,
   place,
   onPlace,
   onChanged,
 }: {
   conn: Connection;
   items: readonly BoardItem[];
-  activity: TaskActivity;
+  taskIndex: ItemTaskIndex;
   place: PlanPlace;
   onPlace: (place: PlanPlace) => void;
   onChanged: () => void;
@@ -39,8 +40,8 @@ export function PlanPlaces({
     },
   );
   const projects = projectsOf(items);
-  const active = projects.filter((p) => !isArchived(p));
-  const archived = projects.filter(isArchived);
+  const active = projects.filter((p) => !isClosed(p));
+  const archived = projects.filter(isClosed);
   const isPlace = (candidate: PlanPlace) =>
     candidate.kind === place.kind && (candidate.kind !== "project" || (place.kind === "project" && place.id === candidate.id));
   const row = (key: string, target: PlanPlace, label: string, icon: ReactNode, count?: ReactNode) => (
@@ -75,7 +76,7 @@ export function PlanPlaces({
               { kind: "project", id: p.id },
               p.title,
               <FolderKanban className="size-4 shrink-0" />,
-              <ProjectGlance items={items} project={p.id} activity={activity} />,
+              <ProjectGlance items={items} project={p.id} taskIndex={taskIndex} />,
             ),
           )}
         </ul>
@@ -110,9 +111,9 @@ function Count({ n }: { n: number }) {
 }
 
 /** A project's line on the left (ADR-215): a dot while one of its tasks waits for the user, and "2/9" done. */
-function ProjectGlance({ items, project, activity }: { items: readonly BoardItem[]; project: string; activity: TaskActivity }) {
+function ProjectGlance({ items, project, taskIndex }: { items: readonly BoardItem[]; project: string; taskIndex: ItemTaskIndex }) {
   const progress = progressBelow(items, project);
-  const waiting = tasksWaiting(items, project, activity);
+  const waiting = tasksWaiting(items, project, taskIndex);
   return (
     <>
       {waiting > 0 && (
@@ -120,7 +121,7 @@ function ProjectGlance({ items, project, activity }: { items: readonly BoardItem
           role="img"
           aria-label="A task waits for you"
           title="A task waits for you"
-          className="bg-warning size-1.5 shrink-0 rounded-full"
+          className={cn("size-1.5 shrink-0 rounded-full", STATUS_DOT_CLASS.warning)}
         />
       )}
       {progress.total > 0 && (

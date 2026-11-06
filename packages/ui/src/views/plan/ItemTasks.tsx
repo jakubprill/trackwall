@@ -1,5 +1,6 @@
 import { GitBranch } from "lucide-react";
 import { StatusLabel } from "@/components/StatusLabel";
+import { TaskOutcomeMarks } from "@/components/TaskOutcomeMarks";
 import { Button } from "@/components/ui/button";
 import type { ItemTask } from "@/lib/plan-progress";
 
@@ -53,11 +54,7 @@ function TaskCards({ tasks, onOpenTask }: { tasks: readonly ItemTask[]; onOpenTa
           <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
             <span className="font-mono">{task.repo}</span>
             <StatusLabel tone={waitsForYou ? "warning" : state.tone} label={state.label} />
-            {marks.map((mark) => (
-              <span key={mark.key} title={mark.title}>
-                <StatusLabel tone={mark.tone} label={mark.label} />
-              </span>
-            ))}
+            <TaskOutcomeMarks marks={marks} />
           </div>
         </li>
       ))}

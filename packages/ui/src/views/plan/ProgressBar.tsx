@@ -1,5 +1,4 @@
 import type { BoardColumn } from "@trackwall/protocol";
-import { COLUMN_LABELS } from "@/lib/board-tree";
 import { type Progress, progressLabel } from "@/lib/plan-progress";
 import { cn } from "@/lib/utils";
 
@@ -17,12 +16,7 @@ export function ProgressBar({ progress, className }: { progress: Progress; class
   return (
     <span role="img" aria-label={label} title={label} className={cn("bg-secondary flex h-1.5 overflow-hidden rounded-full", className)}>
       {SEGMENTS.map(({ column, className: segment }) => (
-        <span
-          key={column}
-          title={`${COLUMN_LABELS[column]} ${progress.byColumn[column]}`}
-          className={segment}
-          style={{ width: `${(progress.byColumn[column] / progress.total) * 100}%` }}
-        />
+        <span key={column} className={segment} style={{ width: `${(progress.byColumn[column] / progress.total) * 100}%` }} />
       ))}
     </span>
   );
