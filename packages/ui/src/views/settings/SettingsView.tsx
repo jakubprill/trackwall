@@ -16,6 +16,7 @@ import { DoctorSurface } from "./DoctorSurface.tsx";
 import { ErrorJournalSurface } from "./ErrorJournalSurface.tsx";
 import { HomeSceneSurface } from "./HomeSceneSurface.tsx";
 import { JavaNavigationSurface } from "./JavaNavigationSurface.tsx";
+import { KeepScreenOnSurface } from "./KeepScreenOnSurface.tsx";
 import { LocalConfigReposSurface } from "./LocalConfigReposSurface.tsx";
 import { LocalConfigStoreSurface } from "./LocalConfigStoreSurface.tsx";
 import { McpCallsSurface } from "./McpCallsSurface.tsx";
@@ -114,6 +115,8 @@ function Section({
       return <CopilotUsageSurface conn={conn} />;
     case "start-at-sign-in":
       return <StartAtSignInSurface />;
+    case "keep-screen-on":
+      return <KeepScreenOnSurface />;
     case "remote-daemon":
       return <RemoteDaemonSurface />;
     case "browser-notifications":
