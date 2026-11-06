@@ -1,29 +1,31 @@
-import { BoardColumn, type BoardItem, type BoardItemChange, boardApi, type Task, workspaceApi } from "@trackwall/protocol";
-import { ExternalLink, GitBranch, Trash2, X } from "lucide-react";
+import { BoardColumn, type BoardItem, type BoardItemChange, boardApi, childrenOf, workspaceApi } from "@trackwall/protocol";
+import { Trash2, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
 import { COLUMN_LABELS, ideaFields, projectOf, projectsOf } from "@/lib/board-tree";
 import type { Connection } from "@/lib/connection";
-import { useOpenWebLink } from "@/lib/desktop";
 import { filingChoices, isOpenIdea } from "@/lib/inbox-triage";
+import { itemTasks, progressBelow, progressLabel, type TaskActivity, tasksBelow } from "@/lib/plan-progress";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
+import { cn } from "@/lib/utils";
 import { FilingChoices } from "./FilingChoices.tsx";
+import { ItemTasks } from "./ItemTasks.tsx";
+import { ItemText } from "./ItemText.tsx";
 
 /**
- * The selected item of Plan: its text to edit, its column, repos and ticket link, where it is filed, a line to split it,
- * and the tasks started on it with "Start task", which opens the task form with the item's repo and prompt (ADR-133).
- * Who wrote it shows, since an agent may have written it while working.
+ * The selected item of Plan: its text to read and edit (ADR-215), its column and repos, where it is filed, the items it
+ * is split into with a line to split it further, and the tasks started on it with their state and "Start task", which
+ * opens the task form with the item's repo and prompt (ADR-133). Who wrote it shows, since an agent may have written it.
  */
 export function ItemPanel({
   conn,
   items,
   item,
-  tasks,
+  activity,
   onStartTask,
   onOpenTask,
   onRemoved,
@@ -33,8 +35,8 @@ export function ItemPanel({
   conn: Connection;
   items: readonly BoardItem[];
   item: BoardItem;
-  /** The tasks started on this item. */
-  tasks: readonly Task[];
+  /** The tasks, sessions and outcomes, for the state of the tasks started on this item. */
+  activity: TaskActivity;
   onStartTask: () => void;
   onOpenTask: (task: string) => void;
   onRemoved: () => void;
@@ -59,7 +61,7 @@ export function ItemPanel({
         {isProject ? "Project" : item.parent === null ? "Idea" : "Item"}
         {item.createdBy.kind === "agent" && <span className="text-muted-foreground normal-case"> · written by an agent</span>}
       </p>
-      <ItemText conn={conn} item={item} pending={update.pending} onSave={update.run} />
+      <ItemText conn={conn} items={items} item={item} onChanged={onChanged} />
       <label className="flex items-center gap-2 text-sm">
         <span className="text-muted-foreground w-16">Column</span>
         <select
@@ -98,64 +100,19 @@ export function ItemPanel({
         </label>
       )}
       {!isProject && <ItemRepos conn={conn} repos={item.repos} onChange={(repos) => update.run({ repos })} />}
+      <ItemSplit items={items} item={item} />
       <SplitLine conn={conn} item={item} onChanged={onChanged} />
-      {!isProject && <ItemTasks tasks={tasks} onStartTask={onStartTask} onOpenTask={onOpenTask} />}
+      {!isProject && (
+        <ItemTasks
+          tasks={itemTasks(item.id, activity)}
+          below={tasksBelow(items, item.id, activity)}
+          onStartTask={onStartTask}
+          onOpenTask={onOpenTask}
+        />
+      )}
       {error && <p className="text-destructive text-sm whitespace-pre-wrap">{error}</p>}
       <RemoveItem conn={conn} item={item} onRemoved={onRemoved} onChanged={onChanged} />
     </div>
-  );
-}
-
-/** Title, body and link, saved together with "Save" once one of them differs from the item. */
-function ItemText({
-  conn,
-  item,
-  pending,
-  onSave,
-}: {
-  conn: Connection;
-  item: BoardItem;
-  pending: boolean;
-  onSave: (change: BoardItemChange) => void;
-}) {
-  const [title, setTitle] = useState(item.title);
-  const [body, setBody] = useState(item.body);
-  const [link, setLink] = useState(item.link ?? "");
-  const openLink = useOpenWebLink(conn);
-  const edited = title.trim() !== item.title || body !== item.body || link.trim() !== (item.link ?? "");
-  return (
-    <>
-      <Input aria-label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
-      <Textarea
-        aria-label="Plan and notes"
-        placeholder="The plan, notes, what done means (Markdown)"
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        rows={8}
-      />
-      <div className="flex items-center gap-1">
-        <Input
-          aria-label="Link to the ticket"
-          placeholder="Link to the ticket, e.g. https://…"
-          value={link}
-          onChange={(e) => setLink(e.target.value)}
-        />
-        {item.link && (
-          <Button variant="ghost" size="icon" aria-label="Open the ticket" onClick={() => void openLink(item.link ?? "")}>
-            <ExternalLink />
-          </Button>
-        )}
-      </div>
-      {edited && (
-        <Button
-          className="w-fit"
-          disabled={pending || title.trim() === ""}
-          onClick={() => onSave({ title: title.trim(), body, link: link.trim() === "" ? null : link.trim() })}
-        >
-          Save
-        </Button>
-      )}
-    </>
   );
 }
 
@@ -195,6 +152,32 @@ function ItemRepos({ conn, repos, onChange }: { conn: Connection; repos: readonl
   );
 }
 
+/** The items right under this one with their columns, under "Split · 1 of 4 done"; nothing for an item not split yet. */
+function ItemSplit({ items, item }: { items: readonly BoardItem[]; item: BoardItem }) {
+  const children = childrenOf(items, item.id);
+  if (children.length === 0) return null;
+  return (
+    <section aria-label="Split" className="flex flex-col gap-1">
+      <h4 className="hud-label">Split · {progressLabel(progressBelow(items, item.id)) ?? "all dropped"}</h4>
+      <ul className="flex flex-col gap-0.5 text-sm">
+        {children.map((child) => (
+          <li key={child.id} className="flex items-center gap-2">
+            <span
+              className={cn(
+                "min-w-0 flex-1 truncate",
+                (child.column === "done" || child.column === "dropped") && "text-muted-foreground line-through",
+              )}
+            >
+              {child.title}
+            </span>
+            <span className="text-muted-foreground shrink-0 text-xs">{COLUMN_LABELS[child.column]}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 /** A line that splits the item: what is typed becomes an item under it (under a project, an item at its top level). */
 function SplitLine({ conn, item, onChanged }: { conn: Connection; item: BoardItem; onChanged: () => void }) {
   const [text, setText] = useState("");
@@ -221,39 +204,6 @@ function SplitLine({ conn, item, onChanged }: { conn: Connection; item: BoardIte
       />
       {add.error && <p className="text-destructive text-sm">{add.error}</p>}
     </>
-  );
-}
-
-function ItemTasks({
-  tasks,
-  onStartTask,
-  onOpenTask,
-}: {
-  tasks: readonly Task[];
-  onStartTask: () => void;
-  onOpenTask: (task: string) => void;
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-muted-foreground text-sm">Tasks</span>
-      {tasks.length === 0 && <p className="text-muted-foreground text-xs">No task started on it yet.</p>}
-      <ul className="flex flex-col">
-        {tasks.map((task) => (
-          <li key={task.id}>
-            <button
-              type="button"
-              onClick={() => onOpenTask(task.id)}
-              className="hover:bg-accent w-full truncate rounded-sm px-1 py-0.5 text-left text-sm"
-            >
-              <span className="font-mono text-xs">{task.repo}</span> {task.title ?? task.prompt.split("\n")[0]}
-            </button>
-          </li>
-        ))}
-      </ul>
-      <Button className="w-fit" onClick={onStartTask}>
-        <GitBranch /> Start task
-      </Button>
-    </div>
   );
 }
 

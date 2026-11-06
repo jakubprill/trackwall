@@ -6,6 +6,7 @@ import { post } from "@/lib/api";
 import { isArchived, type PlanPlace, projectsOf } from "@/lib/board-tree";
 import type { Connection } from "@/lib/connection";
 import { inboxIdeas } from "@/lib/inbox-triage";
+import { progressBelow, progressLabel, type TaskActivity, tasksWaiting } from "@/lib/plan-progress";
 import { useAction } from "@/lib/use-action";
 import { cn } from "@/lib/utils";
 
@@ -16,12 +17,14 @@ import { cn } from "@/lib/utils";
 export function PlanPlaces({
   conn,
   items,
+  activity,
   place,
   onPlace,
   onChanged,
 }: {
   conn: Connection;
   items: readonly BoardItem[];
+  activity: TaskActivity;
   place: PlanPlace;
   onPlace: (place: PlanPlace) => void;
   onChanged: () => void;
@@ -40,7 +43,7 @@ export function PlanPlaces({
   const archived = projects.filter(isArchived);
   const isPlace = (candidate: PlanPlace) =>
     candidate.kind === place.kind && (candidate.kind !== "project" || (place.kind === "project" && place.id === candidate.id));
-  const row = (key: string, target: PlanPlace, label: string, icon: ReactNode, count?: number) => (
+  const row = (key: string, target: PlanPlace, label: string, icon: ReactNode, count?: ReactNode) => (
     <li key={key}>
       <button
         type="button"
@@ -53,19 +56,29 @@ export function PlanPlaces({
       >
         {icon}
         <span className="min-w-0 flex-1 truncate">{label}</span>
-        {count !== undefined && count > 0 && <span className="text-muted-foreground font-mono text-xs">{count}</span>}
+        {count}
       </button>
     </li>
   );
   return (
     <nav aria-label="Inbox and projects" className="flex min-h-0 flex-col gap-3 overflow-y-auto pb-3">
       <ul>
-        {row("inbox", { kind: "inbox" }, "Inbox", <Inbox className="size-4 shrink-0" />, inboxIdeas(items).open.length)}
+        {row("inbox", { kind: "inbox" }, "Inbox", <Inbox className="size-4 shrink-0" />, <Count n={inboxIdeas(items).open.length} />)}
         {row("knowledge", { kind: "knowledge" }, "Workspace knowledge", <BookOpen className="size-4 shrink-0" />)}
       </ul>
       <div className="flex flex-col gap-1">
         <h3 className="hud-label px-4">Projects</h3>
-        <ul>{active.map((p) => row(p.id, { kind: "project", id: p.id }, p.title, <FolderKanban className="size-4 shrink-0" />))}</ul>
+        <ul>
+          {active.map((p) =>
+            row(
+              p.id,
+              { kind: "project", id: p.id },
+              p.title,
+              <FolderKanban className="size-4 shrink-0" />,
+              <ProjectGlance items={items} project={p.id} activity={activity} />,
+            ),
+          )}
+        </ul>
         <div className="px-4 pt-1">
           <Input
             aria-label="New project"
@@ -89,5 +102,32 @@ export function PlanPlaces({
         </div>
       )}
     </nav>
+  );
+}
+
+function Count({ n }: { n: number }) {
+  return n > 0 ? <span className="text-muted-foreground font-mono text-xs">{n}</span> : null;
+}
+
+/** A project's line on the left (ADR-215): a dot while one of its tasks waits for the user, and "2/9" done. */
+function ProjectGlance({ items, project, activity }: { items: readonly BoardItem[]; project: string; activity: TaskActivity }) {
+  const progress = progressBelow(items, project);
+  const waiting = tasksWaiting(items, project, activity);
+  return (
+    <>
+      {waiting > 0 && (
+        <span
+          role="img"
+          aria-label="A task waits for you"
+          title="A task waits for you"
+          className="bg-warning size-1.5 shrink-0 rounded-full"
+        />
+      )}
+      {progress.total > 0 && (
+        <span className="text-muted-foreground font-mono text-xs" title={progressLabel(progress)}>
+          {progress.done}/{progress.total}
+        </span>
+      )}
+    </>
   );
 }

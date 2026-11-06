@@ -318,7 +318,13 @@ export function App() {
                         />
                       )}
                       {conn && view === "plan" && (
-                        <PlanView conn={conn} boardLive={boardLive} sessions={sessions.data} onOpenInSessions={openInSessions} />
+                        <PlanView
+                          conn={conn}
+                          boardLive={boardLive}
+                          sessions={sessions.data}
+                          outcomes={outcomes.byTask}
+                          onOpenInSessions={openInSessions}
+                        />
                       )}
                       {conn && view === "settings" && (
                         <div className="flex justify-center p-6">
