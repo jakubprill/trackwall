@@ -42,13 +42,14 @@ type SettingsProps = {
 /**
  * Settings (ADR-102): the list of categories on the left and the sections of the chosen one on the right; in a narrow
  * window, for example next to the supervisor panel, the list becomes a row above the sections. Each setting is also a
- * key in `workspace.yaml`, which can be edited by hand (ADR-13, ADR-18, ADR-84).
+ * key in `workspace.yaml`, which can be edited by hand (ADR-13, ADR-18, ADR-84). The view is as wide as a wide category
+ * needs (ADR-212), so the list stays in one place when the user moves between categories.
  */
 export function SettingsView({ initialCategory, ...props }: SettingsProps & { initialCategory: SettingsCategory }) {
   const [current, setCurrent] = useState(initialCategory);
   const category = settingsCategory(current);
   return (
-    <div className="@container w-full max-w-4xl">
+    <div className="@container w-full max-w-6xl">
       <div className="flex flex-col gap-4 @3xl:flex-row @3xl:items-start @3xl:gap-6">
         <nav aria-label="Settings categories" className="flex shrink-0 gap-1 overflow-x-auto @3xl:w-44 @3xl:flex-col">
           {SETTINGS_CATEGORIES.map((c) => (
@@ -66,7 +67,7 @@ export function SettingsView({ initialCategory, ...props }: SettingsProps & { in
             </button>
           ))}
         </nav>
-        <div className="flex w-full max-w-xl min-w-0 flex-col gap-4">
+        <div className={cn("flex w-full min-w-0 flex-col gap-4", !category.wide && "max-w-xl")}>
           <header className="flex flex-col gap-1">
             <h1 className="text-lg font-semibold">{category.label}</h1>
             <p className="text-muted-foreground text-sm">{category.description}</p>
