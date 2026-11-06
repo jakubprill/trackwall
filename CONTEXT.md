@@ -59,6 +59,10 @@ _Avoid_: screen (that is a monitor), tab (that is `TabBar`), terminal window (th
 Trackwall started by the system's own start entry when the user signs in, with every window hidden until the user opens it (ADR-65). `autostart` is the identifier in code; UI and documentation say "start at sign-in".
 _Avoid_: launch at login, startup (that is the daemon's start)
 
+**Keep the screen on** (`keep_screen_on.rs`, `KeepScreenOn`, `ScreenOn`, `keep_screen_on`, `set_keep_screen_on`; in the UI *Keep the screen on*):
+The desktop shell's setting that asks the system to keep the display on: `off` (the default), `while-agents-work` (while a running session is in the middle of a turn and not stuck) or `always` (while the app runs) (ADR-218). The system's request is a display power request on Windows and a power assertion on macOS; nothing simulates input.
+_Avoid_: keep awake, caffeinate, prevent sleep (the computer's sleep is a side effect), screen saver
+
 **Waiting badge** (`badge.rs`, `Badge`, `TrayIcons`):
 The number of sessions and task proposals waiting for the user on the app's icons: the Dock badge, the taskbar overlay on Windows and a dot on the tray icon (ADR-65).
 _Avoid_: notification (that is the system notification, ADR-50)

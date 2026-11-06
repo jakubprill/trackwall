@@ -39,9 +39,10 @@ describe("Settings categories", () => {
     expect(settingsCategory("app").sections).toContain("home-scene");
   });
 
-  test("where the desktop app's daemon runs is under App, after starting at sign-in, and notifications in the browser after it", () => {
+  test("keeping the screen on is under App, after starting at sign-in, then where the daemon runs and notifications in the browser", () => {
     expect(settingsCategory("app").sections).toEqual([
       "start-at-sign-in",
+      "keep-screen-on",
       "remote-daemon",
       "browser-notifications",
       "updates",

@@ -14,6 +14,7 @@ use crate::badge::{Badge, TrayIcons};
 use crate::daemon::{self, SessionsError};
 use crate::daemon_state::DaemonState;
 use crate::jump::Jump;
+use crate::keep_screen_on::ScreenOn;
 use crate::notification;
 use crate::pipelines::{parse_failed, PipelineFailures};
 use crate::windows::Windows;
@@ -109,6 +110,8 @@ pub struct Snapshot {
     /// Ids of proposals and tasks: a proposal being approved is already a task, and after a failed start it comes back
     /// as a proposal with the same id, which is not new.
     known: HashSet<String>,
+    /// Whether an agent is in the middle of a turn, for keeping the screen on (`keep_screen_on.rs`).
+    pub agents_working: bool,
 }
 
 /// Only the fields of the `POST /api/agents/sessions` reply that the tray needs (`SessionList` in protocol).
@@ -138,6 +141,9 @@ struct Session {
     run: Run,
     state: Option<StateChange>,
     needs_attention: bool,
+    /// A session that may be stuck (ADR-151), `null` otherwise; only whether it is set counts here.
+    #[serde(default)]
+    stuck: Option<serde_json::Value>,
 }
 
 #[derive(Deserialize)]
@@ -155,15 +161,23 @@ pub fn parse_sessions(body: &str) -> Option<Snapshot> {
     let reply: Reply = serde_json::from_str(body).ok()?;
     let mut states = States::new();
     let mut waiting = Vec::new();
+    let mut agents_working = false;
     for s in reply.data.sessions.into_iter().filter(|s| s.run.kind == "running") {
         let state = s.state.map(|c| c.state);
+        agents_working |= in_a_turn(state, s.stuck.is_some());
         if s.needs_attention {
             waiting.push(Waiting { id: s.id.clone(), repo: s.repo, supervisor: s.supervisor, state });
         }
         states.insert(s.id, state);
     }
     let known = reply.data.proposals.iter().map(|p| p.id.clone()).chain(reply.data.tasks.into_iter().map(|t| t.id)).collect();
-    Some(Snapshot { states, waiting, proposals: reply.data.proposals, known })
+    Some(Snapshot { states, waiting, proposals: reply.data.proposals, known, agents_working })
+}
+
+/// A session in the middle of a turn (`Working`, or `Stale` with no output for a while), unless it may be stuck: a
+/// command that hangs for hours does not keep the screen on with it.
+fn in_a_turn(state: Option<TaskState>, stuck: bool) -> bool {
+    matches!(state, Some(TaskState::Working | TaskState::Stale)) && !stuck
 }
 
 /// Sessions that just finished working and wait: `Working` or `Stale` before. A session after start waits for its first
@@ -357,6 +371,7 @@ pub fn watch(app: AppHandle, state: Arc<DaemonState>, tray_id: &'static str, tra
                         show_in_tray(&app, tray_id, &[], &[]);
                     }
                     badge.update(&app, tray_id, &tray_icons, 0);
+                    ScreenOn::agents_working(&app, false);
                 }
                 continue;
             };
@@ -375,6 +390,7 @@ pub fn watch(app: AppHandle, state: Arc<DaemonState>, tray_id: &'static str, tra
                 show_in_tray(&app, tray_id, &now.waiting, &now.proposals);
             }
             badge.update(&app, tray_id, &tray_icons, now.waiting.len() + now.proposals.len());
+            ScreenOn::agents_working(&app, now.agents_working);
             last = Some(now);
         }
     });
@@ -412,6 +428,25 @@ mod tests {
 
     fn waiting(id: &str, state: TaskState) -> Waiting {
         Waiting { id: id.into(), repo: Some(format!("repo-{id}")), supervisor: false, state: Some(state) }
+    }
+
+    #[test]
+    fn agents_work_while_a_running_session_is_in_the_middle_of_a_turn() {
+        let working = |sessions: &str| parse_sessions(&body(sessions, "")).expect("a valid reply").agents_working;
+        assert!(!working(""));
+        assert!(working(&session("a", "running", Some("Working"))));
+        assert!(working(&session("a", "running", Some("Stale"))));
+        assert!(!working(&session("a", "running", Some("Input"))));
+        assert!(!working(&session("a", "running", None)));
+        assert!(!working(&session("a", "exited", Some("Working"))));
+        assert!(working(&[session("a", "running", Some("Done")), session("b", "running", Some("Working"))].join(",")));
+    }
+
+    #[test]
+    fn a_session_that_may_be_stuck_does_not_count_as_working() {
+        let stuck =
+            session("a", "running", Some("Working")).replace(r#""needsAttention""#, r#""stuck":{"lastStepAt":"x"},"needsAttention""#);
+        assert!(!parse_sessions(&body(&stuck, "")).expect("a valid reply").agents_working);
     }
 
     #[test]
