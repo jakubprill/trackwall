@@ -789,7 +789,7 @@ A root of the board for one business project; its items hang under it as a tree.
 _Avoid_: repo, workspace
 
 **Idea** (an item with `parent: null`; the "Inbox" in the UI):
-An item not filed under a project yet, written down so it is not lost: with Alt+N from any view (`IdeaCapture`), in the inbox, or by an agent outside a task. The inbox is the list of ideas.
+An item not filed under a project yet, written down so it is not lost: with Alt+N from any view (`IdeaCapture`), in the inbox, or by an agent outside a task. The inbox is the list of ideas. Sorting an idea (`InboxTriage`, ADR-214) files it in a project, starts a task on it, or drops it: a **dropped idea** (`column: dropped`, "Dropped" in the UI) stays on the board, folded below the open ones, until it is restored or removed.
 _Avoid_: draft, note
 
 **Board column** (`BoardColumn`: `ideas`, `ready`, `in_progress`, `review`, `done`, `dropped`; "Column" in the UI, `COLUMN_LABELS`):

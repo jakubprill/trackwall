@@ -16,9 +16,17 @@ Write ideas down before they slip away, split business projects into tasks and s
 
 ## How it works
 
-"Plan" has three columns. On the left are the "Inbox" with the ideas you have not filed yet, your [workspace knowledge](/features/knowledge), your active projects, and a line to add a project. In the middle is the selected place: the inbox's ideas, or a project's items as an outline. On the right is the selected item: its title, its plan and notes, a link to its ticket, its column ("Idea", "Ready", "In progress", "In review", "Done", "Dropped"), the repos it is about, and the tasks started on it.
+"Plan" has three columns. On the left are the "Inbox" with the number of ideas still to sort, your [workspace knowledge](/features/knowledge), your active projects, and a line to add a project. In the middle is the selected place: the inbox's ideas, or a project's items as an outline. On the right is the selected item: its title, its plan and notes, a link to its ticket, its column ("Idea", "Ready", "In progress", "In review", "Done", "Dropped"), the repos it is about, and the tasks started on it.
 
-Press Alt+N anywhere in Trackwall to write an idea. Enter saves it into the inbox, and the keyboard goes back where it was. When you are ready to deal with an idea, select it and choose a project under "Filed in"; it becomes an item at the top of that project.
+Press Alt+N anywhere in Trackwall to write an idea. Enter saves it into the inbox, and the keyboard goes back where it was. You can also type an idea into the line at the top of the inbox.
+
+The inbox is where you sort ideas. It shows the newest first, grouped into "Today", "This week" and "Older", and each idea says who wrote it (you, or an agent and the task it was working on), when, the repos it is about and the first line of its notes. "All", "From agents" and "Mine" narrow the list. The newest idea is selected when you open the inbox, so the right column shows it at once. On the selected idea:
+
+- "File in…" lists your active projects; pick one and the idea becomes an item at the end of that project. Projects that already have items in the idea's repos come first and say so ("also works in shop-bff"). The same list is in the right column under "File in a project".
+- "Start task" opens the task form for the idea, as on any item.
+- "Drop" puts the idea under "Dropped" at the bottom of the inbox, folded. Open it to read a dropped idea again or "Restore" it.
+
+After you file or drop an idea, the next one is selected, so you can sort the whole inbox from the keyboard: J and K (or ↓ and ↑) move, F opens "File in…" and a digit picks the project, S starts a task and D drops.
 
 To split an item, type into the line under its notes ("Split: a new item under this one") and press Enter. In the outline, Tab puts the selected item under the one above it, Shift+Tab takes it out a level, and Alt+↑ and Alt+↓ move it among its neighbours. Click the arrow in front of an item to fold what is under it.
 
@@ -30,7 +38,7 @@ The item then follows its tasks. When the agent says it is done (it reports its 
 
 1. Press Alt+N, type an idea and press Enter.
 2. Open "Plan" (Ctrl+5) and add a project in the line under "Projects".
-3. Select the idea in "Inbox" and choose the project under "Filed in".
+3. Open "Inbox", press F on the idea and the number of the project.
 4. Split it in the line under its notes, and pick a repo under "Repos".
 5. Press "Start task" on the item you want an agent to do, check the prompt and start it.
 
@@ -40,6 +48,10 @@ The item then follows its tasks. When the agent says it is done (it reports its 
 |---|---|---|
 | Alt+N | ⌥N | Write an idea into the inbox, from any view. |
 | Ctrl+5 | ⌘5 | Open "Plan". |
+| J, K or ↓, ↑ | J, K or ↓, ↑ | In the inbox: select the next or the previous idea. |
+| F, then 1–9 | F, then 1–9 | In the inbox: file the selected idea in the project with that number. |
+| S | S | In the inbox: start a task on the selected idea. |
+| D | D | In the inbox: drop the selected idea. |
 | Tab, Shift+Tab | Tab, ⇧Tab | On a selected item in the outline: put it under the one above, or take it out a level. |
 | Alt+↑, Alt+↓ | ⌥↑, ⌥↓ | Move the selected item up or down among its neighbours. |
 

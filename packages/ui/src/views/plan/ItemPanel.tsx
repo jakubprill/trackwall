@@ -9,8 +9,10 @@ import { post } from "@/lib/api";
 import { COLUMN_LABELS, ideaFields, projectOf, projectsOf } from "@/lib/board-tree";
 import type { Connection } from "@/lib/connection";
 import { useOpenWebLink } from "@/lib/desktop";
+import { filingChoices, isOpenIdea } from "@/lib/inbox-triage";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
+import { FilingChoices } from "./FilingChoices.tsx";
 
 /**
  * The selected item of Plan: its text to edit, its column, repos and ticket link, where it is filed, a line to split it,
@@ -25,6 +27,7 @@ export function ItemPanel({
   onStartTask,
   onOpenTask,
   onRemoved,
+  onFiled,
   onChanged,
 }: {
   conn: Connection;
@@ -35,11 +38,20 @@ export function ItemPanel({
   onStartTask: () => void;
   onOpenTask: (task: string) => void;
   onRemoved: () => void;
+  /** An idea of the inbox was filed in a project, so it left the inbox. */
+  onFiled: () => void;
   onChanged: () => void;
 }) {
-  const update = useAction((change: BoardItemChange) => post(conn, boardApi.update, { item: item.id, ...change }), onChanged);
-  const move = useAction((parent: string | null) => post(conn, boardApi.move, { item: item.id, parent, before: null }), onChanged);
   const isProject = item.kind === "project";
+  const isIdea = isOpenIdea(item);
+  const update = useAction((change: BoardItemChange) => post(conn, boardApi.update, { item: item.id, ...change }), onChanged);
+  const move = useAction(
+    (parent: string | null) => post(conn, boardApi.move, { item: item.id, parent, before: null }),
+    () => {
+      if (isIdea) onFiled();
+      onChanged();
+    },
+  );
   const error = update.error ?? move.error;
   return (
     <div className="flex flex-col gap-3 p-4">
@@ -62,7 +74,13 @@ export function ItemPanel({
           ))}
         </select>
       </label>
-      {!isProject && (
+      {isIdea && (
+        <div className="flex flex-col gap-1">
+          <span className="text-muted-foreground text-sm">File in a project</span>
+          <FilingChoices choices={filingChoices(items, item)} numbered={false} disabled={move.pending} onFile={move.run} />
+        </div>
+      )}
+      {!isProject && item.parent !== null && (
         <label className="flex items-center gap-2 text-sm">
           <span className="text-muted-foreground w-16">Filed in</span>
           <select
