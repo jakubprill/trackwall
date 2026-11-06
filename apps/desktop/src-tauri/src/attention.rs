@@ -143,7 +143,7 @@ struct Session {
     needs_attention: bool,
     /// A session that may be stuck (ADR-151), `null` otherwise; only whether it is set counts here.
     #[serde(default)]
-    stuck: Option<serde_json::Value>,
+    stuck: Option<serde::de::IgnoredAny>,
 }
 
 #[derive(Deserialize)]

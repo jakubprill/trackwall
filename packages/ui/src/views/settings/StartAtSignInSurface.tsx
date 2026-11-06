@@ -1,13 +1,10 @@
-import { useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
-import { errorMessage } from "@/lib/api";
 import { inDesktopShell } from "@/lib/app-window";
 import { autostartEnabled, setAutostart } from "@/lib/autostart";
-import { currentRun } from "@/lib/background-run";
 import { IS_MAC } from "@/lib/platform";
-import { useRemote } from "@/lib/use-remote";
+import { useShellSetting } from "@/lib/use-shell-setting";
 
 const SIGN_IN = IS_MAC ? "log in to your Mac" : "sign in to Windows";
 
@@ -27,28 +24,8 @@ export function StartAtSignInSurface() {
 }
 
 function StartAtSignInSwitch() {
-  const load = useCallback(() => autostartEnabled(), []);
-  const remote = useRemote(load);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-  // What the system answered to a change, shown until a read sent after it lands, so the box does not jump back.
-  const [answer, setAnswer] = useState<{ run: boolean; afterLoad: number }>();
-  const enabled = currentRun(answer, remote);
-
-  async function change(wanted: boolean) {
-    setBusy(true);
-    setError(undefined);
-    try {
-      const now = await setAutostart(wanted);
-      setAnswer({ run: now, afterLoad: remote.sentLoads() });
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      // The system's entry is the record: read it again, also after a refusal.
-      remote.reload();
-      setBusy(false);
-    }
-  }
+  // The system's entry is the record, so the hook reads it again after every change.
+  const { remote, value: enabled, busy, error, change } = useShellSetting(autostartEnabled, setAutostart);
 
   if (remote.error !== undefined) return <ErrorWithRetry message={remote.error} onRetry={remote.reload} />;
   if (enabled == null) return <Loading />;

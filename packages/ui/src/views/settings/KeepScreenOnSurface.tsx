@@ -1,12 +1,9 @@
-import { useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
-import { errorMessage } from "@/lib/api";
 import { inDesktopShell } from "@/lib/app-window";
-import { currentRun } from "@/lib/background-run";
-import { KEEP_SCREEN_ON_CHOICES, type KeepScreenOn, keepScreenOn, setKeepScreenOn } from "@/lib/keep-screen-on";
-import { useRemote } from "@/lib/use-remote";
+import { KEEP_SCREEN_ON_CHOICES, keepScreenOn, setKeepScreenOn } from "@/lib/keep-screen-on";
+import { useShellSetting } from "@/lib/use-shell-setting";
 
 /** Keeping the screen on (ADR-218), held by the desktop shell with the system's own power request. */
 export function KeepScreenOnSurface() {
@@ -28,27 +25,7 @@ export function KeepScreenOnSurface() {
 }
 
 function KeepScreenOnChoice() {
-  const load = useCallback(() => keepScreenOn(), []);
-  const remote = useRemote(load);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-  // What the shell answered to a change, shown until a read sent after it lands, so the choice does not jump back.
-  const [answer, setAnswer] = useState<{ run: KeepScreenOn; afterLoad: number }>();
-  const setting = currentRun(answer, remote);
-
-  async function change(wanted: KeepScreenOn) {
-    setBusy(true);
-    setError(undefined);
-    try {
-      const now = await setKeepScreenOn(wanted);
-      setAnswer({ run: now, afterLoad: remote.sentLoads() });
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      remote.reload();
-      setBusy(false);
-    }
-  }
+  const { remote, value: setting, busy, error, change } = useShellSetting(keepScreenOn, setKeepScreenOn);
 
   if (remote.error !== undefined) return <ErrorWithRetry message={remote.error} onRetry={remote.reload} />;
   if (setting == null) return <Loading />;

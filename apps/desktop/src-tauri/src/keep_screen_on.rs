@@ -54,38 +54,48 @@ fn wanted(setting: KeepScreenOn, agents_working: bool) -> bool {
     }
 }
 
-#[derive(Default)]
-struct Inner {
+/// The state behind the lock; `R` is the system's request, a stand-in in the tests.
+struct Inner<R> {
     setting: KeepScreenOn,
     agents_working: bool,
     /// What the last change asked for; a request the system refused is not asked again until this changes, so a poll
     /// every few seconds does not fill the error journal.
     asked: bool,
-    held: Option<system::DisplayRequest>,
+    /// Set when the shell quits: from then on nothing takes a request, also not a late change from a window.
+    released: bool,
+    held: Option<R>,
 }
 
-impl Inner {
-    fn apply(&mut self) {
-        let now = wanted(self.setting, self.agents_working);
+impl<R> Default for Inner<R> {
+    fn default() -> Self {
+        Inner { setting: KeepScreenOn::Off, agents_working: false, asked: false, released: false, held: None }
+    }
+}
+
+impl<R> Inner<R> {
+    /// Takes the request with `take` or ends it when the wish changes; the system's refusal is the error.
+    fn apply(&mut self, take: impl FnOnce() -> Result<R, String>) -> Result<(), String> {
+        let now = wanted(self.setting, self.agents_working) && !self.released;
         if now == self.asked {
-            return;
+            return Ok(());
         }
         self.asked = now;
-        if !now {
-            self.held = None;
-            return;
+        self.held = None;
+        if now {
+            self.held = Some(take()?);
         }
-        match system::DisplayRequest::new(REASON) {
-            Ok(request) => self.held = Some(request),
-            Err(err) => crate::report_error!("keeping the screen on: {err}"),
-        }
+        Ok(())
     }
+}
+
+fn take_request() -> Result<system::DisplayRequest, String> {
+    system::DisplayRequest::new(REASON).map_err(|err| format!("keeping the screen on: {err}"))
 }
 
 /// The setting, whether agents work, and the request held for them. Managed from the start and loaded in `setup`.
 #[derive(Default)]
 pub struct ScreenOn {
-    inner: Mutex<Inner>,
+    inner: Mutex<Inner<system::DisplayRequest>>,
     file: OnceLock<PathBuf>,
 }
 
@@ -96,7 +106,7 @@ impl ScreenOn {
         let screen_on = app.state::<ScreenOn>();
         let mut inner = lock(&screen_on.inner);
         inner.setting = json_file::load(&path, parse);
-        inner.apply();
+        report(inner.apply(take_request));
         let _ = screen_on.file.set(path);
     }
 
@@ -105,15 +115,21 @@ impl ScreenOn {
         let screen_on = app.state::<ScreenOn>();
         let mut inner = lock(&screen_on.inner);
         inner.agents_working = working;
-        inner.apply();
+        report(inner.apply(take_request));
     }
 
-    /// Ends the request before the app quits, rather than leaving it to the end of the process.
+    /// Ends the request before the app quits, rather than leaving it to the end of the process, for good.
     pub fn release(app: &AppHandle) {
         let screen_on = app.state::<ScreenOn>();
         let mut inner = lock(&screen_on.inner);
-        inner.setting = KeepScreenOn::Off;
-        inner.apply();
+        inner.released = true;
+        report(inner.apply(take_request));
+    }
+}
+
+fn report(applied: Result<(), String>) {
+    if let Err(err) = applied {
+        crate::report_error!("{err}");
     }
 }
 
@@ -123,7 +139,7 @@ pub fn keep_screen_on(app: AppHandle) -> KeepScreenOn {
     lock(&app.state::<ScreenOn>().inner).setting
 }
 
-/// Saves the setting, applies it at once and answers what is saved now.
+/// Saves the setting and applies it at once; a request the system refused is the error, so Settings shows it.
 #[tauri::command]
 pub fn set_keep_screen_on(app: AppHandle, setting: KeepScreenOn) -> Result<KeepScreenOn, String> {
     let screen_on = app.state::<ScreenOn>();
@@ -131,20 +147,18 @@ pub fn set_keep_screen_on(app: AppHandle, setting: KeepScreenOn) -> Result<KeepS
     let mut inner = lock(&screen_on.inner);
     json_file::save(path, &Saved { keep_screen_on: setting }).map_err(|e| format!("saving the setting: {e}"))?;
     inner.setting = setting;
-    inner.apply();
+    inner.apply(take_request)?;
     Ok(inner.setting)
 }
 
 #[cfg(windows)]
 mod system {
     use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
-    use windows_sys::Win32::System::Power::{
-        PowerClearRequest, PowerCreateRequest, PowerRequestDisplayRequired, PowerRequestSystemRequired, PowerSetRequest,
-    };
+    use windows_sys::Win32::System::Power::{PowerClearRequest, PowerCreateRequest, PowerRequestDisplayRequired, PowerSetRequest};
     use windows_sys::Win32::System::SystemServices::POWER_REQUEST_CONTEXT_VERSION;
     use windows_sys::Win32::System::Threading::{POWER_REQUEST_CONTEXT_SIMPLE_STRING, REASON_CONTEXT, REASON_CONTEXT_0};
 
-    /// A power request that keeps the display, and with it the computer, on; cleared and closed on drop. Unlike
+    /// A power request that keeps the display on (which also keeps the computer from idle sleep); cleared and closed on drop. Unlike
     /// `SetThreadExecutionState` it belongs to no thread, so any thread can take and end it.
     pub struct DisplayRequest(HANDLE);
 
@@ -165,11 +179,9 @@ mod system {
                 return Err(format!("the system refused a power request: {}", std::io::Error::last_os_error()));
             }
             let request = DisplayRequest(handle);
-            for kind in [PowerRequestDisplayRequired, PowerRequestSystemRequired] {
-                // SAFETY: `handle` is the open request created above.
-                if unsafe { PowerSetRequest(handle, kind) } == 0 {
-                    return Err(format!("the system refused to keep the screen on: {}", std::io::Error::last_os_error()));
-                }
+            // SAFETY: `handle` is the open request created above.
+            if unsafe { PowerSetRequest(handle, PowerRequestDisplayRequired) } == 0 {
+                return Err(format!("the system refused to keep the screen on: {}", std::io::Error::last_os_error()));
             }
             Ok(request)
         }
@@ -177,10 +189,9 @@ mod system {
 
     impl Drop for DisplayRequest {
         fn drop(&mut self) {
-            // SAFETY: the handle is open until here; clearing a type that was never set fails harmlessly.
+            // SAFETY: the handle is open until here; clearing a request that was never set fails harmlessly.
             unsafe {
                 PowerClearRequest(self.0, PowerRequestDisplayRequired);
-                PowerClearRequest(self.0, PowerRequestSystemRequired);
                 CloseHandle(self.0);
             }
         }
@@ -299,18 +310,72 @@ mod tests {
         assert!(wanted(KeepScreenOn::Always, true));
     }
 
+    /// A stand-in request that counts how many were taken and how many are still held.
+    struct Counted<'a>(&'a std::cell::Cell<i32>);
+
+    impl Drop for Counted<'_> {
+        fn drop(&mut self) {
+            self.0.set(self.0.get() - 1);
+        }
+    }
+
+    fn take<'a>(taken: &'a std::cell::Cell<u32>, held: &'a std::cell::Cell<i32>) -> impl FnOnce() -> Result<Counted<'a>, String> {
+        move || {
+            taken.set(taken.get() + 1);
+            held.set(held.get() + 1);
+            Ok(Counted(held))
+        }
+    }
+
     #[test]
-    fn the_system_is_asked_once_per_change_not_on_every_poll() {
+    fn the_system_is_asked_once_when_agents_start_working_and_the_request_ends_when_they_stop() {
+        let (taken, held) = (std::cell::Cell::new(0), std::cell::Cell::new(0));
         let mut inner = Inner { setting: KeepScreenOn::WhileAgentsWork, ..Inner::default() };
         inner.agents_working = true;
-        inner.apply();
-        assert!(inner.asked);
-        inner.apply();
-        assert!(inner.asked);
+        for _ in 0..3 {
+            inner.apply(take(&taken, &held)).expect("granted");
+        }
+        assert_eq!((taken.get(), held.get()), (1, 1));
         inner.agents_working = false;
-        inner.apply();
-        assert!(!inner.asked);
-        assert!(inner.held.is_none());
+        inner.apply(take(&taken, &held)).expect("granted");
+        assert_eq!((taken.get(), held.get()), (1, 0));
+    }
+
+    #[test]
+    fn switching_from_always_to_while_agents_work_keeps_the_request_while_they_work() {
+        let (taken, held) = (std::cell::Cell::new(0), std::cell::Cell::new(0));
+        let mut inner = Inner { setting: KeepScreenOn::Always, agents_working: true, ..Inner::default() };
+        inner.apply(take(&taken, &held)).expect("granted");
+        inner.setting = KeepScreenOn::WhileAgentsWork;
+        inner.apply(take(&taken, &held)).expect("granted");
+        assert_eq!((taken.get(), held.get()), (1, 1));
+    }
+
+    #[test]
+    fn a_refused_request_is_the_error_once_and_not_asked_again_on_every_poll() {
+        let mut inner: Inner<()> = Inner { setting: KeepScreenOn::Always, ..Inner::default() };
+        let asks = std::cell::Cell::new(0);
+        let refuse = || {
+            asks.set(asks.get() + 1);
+            Err("refused".to_owned())
+        };
+        assert_eq!(inner.apply(refuse), Err("refused".to_owned()));
+        assert_eq!(inner.apply(refuse), Ok(()));
+        assert_eq!(asks.get(), 1);
+    }
+
+    #[test]
+    fn after_the_shell_quits_no_change_takes_a_request_again() {
+        let (taken, held) = (std::cell::Cell::new(0), std::cell::Cell::new(0));
+        let mut inner = Inner { setting: KeepScreenOn::Always, ..Inner::default() };
+        inner.apply(take(&taken, &held)).expect("granted");
+        inner.released = true;
+        inner.apply(take(&taken, &held)).expect("granted");
+        assert_eq!(held.get(), 0);
+        inner.agents_working = true;
+        inner.setting = KeepScreenOn::WhileAgentsWork;
+        inner.apply(take(&taken, &held)).expect("granted");
+        assert_eq!((taken.get(), held.get()), (1, 0));
     }
 
     #[cfg(any(windows, target_os = "macos"))]
@@ -323,12 +388,11 @@ mod tests {
     #[cfg(any(windows, target_os = "macos"))]
     #[test]
     fn agents_starting_and_finishing_take_and_end_the_request() {
-        let mut inner = Inner { setting: KeepScreenOn::WhileAgentsWork, ..Inner::default() };
-        inner.agents_working = true;
-        inner.apply();
+        let mut inner = Inner { setting: KeepScreenOn::WhileAgentsWork, agents_working: true, ..Inner::default() };
+        inner.apply(take_request).expect("the system takes the request");
         assert!(inner.held.is_some());
         inner.agents_working = false;
-        inner.apply();
+        inner.apply(take_request).expect("ending needs no request");
         assert!(inner.held.is_none());
     }
 }
