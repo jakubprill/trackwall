@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
+import { StatTile } from "@/components/StatTile";
 import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
@@ -15,8 +16,9 @@ import { useRemote } from "@/lib/use-remote";
 const TOP_ROWS = 10;
 
 /**
- * The weekly usage report (ADR-199): what Copilot CLI used on this computer in a week, by task and session and by tool,
- * the most first, so the user sees where tokens go and can compare a week with the one before.
+ * The weekly usage report (ADR-199) in Settings › Usage (ADR-212): what Copilot CLI used on this computer in a week,
+ * its total as a few numbers, then by task and session and by tool, the most first, side by side when there is room, so
+ * the user sees where tokens go and can compare a week with the one before.
  */
 export function CopilotUsageSurface({ conn }: { conn: Connection }) {
   const [weeksAgo, setWeeksAgo] = useState(0);
@@ -26,7 +28,7 @@ export function CopilotUsageSurface({ conn }: { conn: Connection }) {
   const share = week?.total ? toolDefinitionShare(week.total.inputTokens, week.toolDefinitionTokens) : null;
   return (
     <Surface label="Copilot usage" meta={week ? weekRange(week) : undefined}>
-      <div className="flex flex-col gap-4 p-4">
+      <div className="@container flex flex-col gap-4 p-4">
         <p className="text-muted-foreground text-sm">
           What Copilot CLI used on this computer in a week, from the logs it keeps for every conversation: by task and session, and by tool,
           the most first. It counts every conversation, also those Trackwall did not start.
@@ -54,23 +56,36 @@ export function CopilotUsageSurface({ conn }: { conn: Connection }) {
         {week && week.total === null && <p className="text-sm">No model calls this week.</p>}
         {week?.total && (
           <>
-            <p className="text-sm" title={usageDetails(week.total)}>
-              {usageLabel(week.total)} in total, {tokenCount(week.total.inputTokens)} tokens in and {tokenCount(week.total.outputTokens)}{" "}
-              out
-              {share !== null && share > 0 && `; ${share}% of the tokens in were tool definitions, sent with every model call`}.
-            </p>
-            <RankedList
-              title="Tasks and sessions"
-              rows={week.work}
-              rowKey={(w) => JSON.stringify([w.kind, w.task, w.repo, w.label])}
-              render={(work) => <WorkRow work={work} />}
-            />
-            <RankedList
-              title="Tools"
-              rows={week.tools}
-              rowKey={(t) => JSON.stringify([t.server, t.tool])}
-              render={(tool) => <ToolRow tool={tool} />}
-            />
+            <dl className="grid grid-cols-2 gap-2 @3xl:grid-cols-4">
+              <StatTile label="Used" title={usageDetails(week.total)}>
+                <Big>{usageLabel(week.total)}</Big>
+              </StatTile>
+              <StatTile label="Tokens in">
+                <Big>{tokenCount(week.total.inputTokens)}</Big>
+              </StatTile>
+              <StatTile label="Tokens out">
+                <Big>{tokenCount(week.total.outputTokens)}</Big>
+              </StatTile>
+              {share !== null && share > 0 && (
+                <StatTile label="Tool definitions" title="Tool definitions are sent with every model call, used or not">
+                  <Big>{share}%</Big> of tokens in
+                </StatTile>
+              )}
+            </dl>
+            <div className="grid gap-6 @3xl:grid-cols-2">
+              <RankedList
+                title="Tasks and sessions"
+                rows={week.work}
+                rowKey={(w) => JSON.stringify([w.kind, w.task, w.repo, w.label])}
+                render={(work) => <WorkRow work={work} />}
+              />
+              <RankedList
+                title="Tools"
+                rows={week.tools}
+                rowKey={(t) => JSON.stringify([t.server, t.tool])}
+                render={(tool) => <ToolRow tool={tool} />}
+              />
+            </div>
           </>
         )}
         {week && week.unreadLogs > 0 && (
@@ -81,6 +96,11 @@ export function CopilotUsageSurface({ conn }: { conn: Connection }) {
       </div>
     </Surface>
   );
+}
+
+/** A number of the week's total, larger than the text around it. */
+function Big({ children }: { children: ReactNode }) {
+  return <span className="font-mono text-lg font-semibold">{children}</span>;
 }
 
 interface RankedListProps<T> {

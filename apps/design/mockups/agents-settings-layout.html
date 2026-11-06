@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Agents settings layout</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<style>
+/* Three ways to lay out Settings › Agents so that a long MCP call list no longer pushes Copilot usage three screens down. */
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--background); color: var(--foreground);
+  font: 15px/1.6 var(--font-sans);
+  padding: 40px max(16px, env(safe-area-inset-left, 0px)) 80px max(16px, env(safe-area-inset-right, 0px));
+}
+.page { max-width: 1480px; margin: 0 auto; display: flex; flex-direction: column; gap: 56px; }
+.prose { max-width: 72ch; display: flex; flex-direction: column; gap: 8px; }
+h1, h2, h3 { margin: 0; font-weight: 600; text-wrap: balance; }
+h1 { font-size: 2rem; } h2 { font-size: 1.35rem; } p { margin: 0; }
+.hud { font: 500 11px/16px var(--font-mono); letter-spacing: var(--tracking-hud); text-transform: uppercase; color: var(--muted-foreground); }
+.lede { color: var(--muted-foreground); }
+.scroll { overflow-x: auto; }
+
+/* The app window */
+.window { width: 1440px; height: 900px; display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--background); font: 13px/1.5 var(--font-sans); }
+.rail { width: 48px; flex: none; border-right: 1px solid var(--border); }
+.cats { width: 176px; flex: none; padding: 24px 8px; display: flex; flex-direction: column; gap: 4px; }
+.cat { padding: 6px 12px; border-radius: 6px; color: var(--muted-foreground); font-size: 14px; display: flex; justify-content: space-between; }
+.cat.on { background: var(--secondary); color: var(--foreground); }
+.cat .new { font: 10px/20px var(--font-mono); color: var(--primary); }
+.content { flex: 1; min-width: 0; padding: 24px 32px 24px 24px; display: flex; flex-direction: column; gap: 14px; overflow: hidden; }
+.head h3 { font-size: 18px; } .head p { color: var(--muted-foreground); font-size: 14px; }
+
+.surface { border: 1px solid var(--border); border-radius: 8px; background: var(--card); min-width: 0; display: flex; flex-direction: column; }
+.surface > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--border); }
+.body { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.desc { color: var(--muted-foreground); font-size: 13px; }
+.mono { font-family: var(--font-mono); }
+.muted { color: var(--muted-foreground); }
+.small { font-size: 12px; }
+.btn { height: 26px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--border); color: var(--foreground); font-size: 12px; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; background: transparent; }
+.btn.on { background: var(--secondary); border-color: transparent; }
+.btn.ghost { border-color: transparent; color: var(--muted-foreground); }
+.btn.link { border: 0; padding: 0; color: var(--primary); height: auto; }
+.row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.input { height: 26px; border: 1px solid var(--input); border-radius: 6px; padding: 0 8px; color: var(--muted-foreground); font-size: 12px; display: inline-flex; align-items: center; min-width: 160px; }
+.badge { font: 11px/18px var(--font-mono); padding: 0 6px; border-radius: 4px; background: var(--secondary); color: var(--secondary-foreground); }
+.badge.bad { background: color-mix(in oklch, var(--destructive) 25%, transparent); color: var(--destructive); }
+.dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; background: var(--success); }
+.dot.warn { background: var(--warning); }
+
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.stat { border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; }
+.stat b { display: block; font: 600 20px/1.3 var(--font-mono); }
+.stat span { color: var(--muted-foreground); font-size: 12px; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; min-height: 0; }
+.ranked { list-style: none; margin: 0; padding: 0; }
+.ranked li { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--border); align-items: baseline; }
+.ranked li:last-child { border-bottom: 0; }
+.ranked .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ranked .sub { display: block; color: var(--muted-foreground); font-size: 11.5px; }
+.ranked .val { font: 11.5px var(--font-mono); color: var(--muted-foreground); white-space: nowrap; }
+
+table.calls { width: 100%; border-collapse: collapse; font-size: 12px; }
+.calls th { text-align: left; font: 500 10.5px/16px var(--font-mono); letter-spacing: var(--tracking-hud); text-transform: uppercase; color: var(--muted-foreground); padding: 4px 8px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--card); }
+.calls td { padding: 4px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
+.calls td.err { color: var(--destructive); }
+.box { overflow: hidden; border: 1px solid var(--border); border-radius: 6px; flex: 1; min-height: 0; position: relative; }
+.box::after { content: ""; position: absolute; right: 3px; top: 26px; width: 4px; height: 60px; border-radius: 2px; background: var(--muted-foreground); opacity: .5; }
+
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); }
+.tab { padding: 6px 12px; color: var(--muted-foreground); font-size: 13px; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tab.on { color: var(--foreground); border-color: var(--primary); }
+.tab .count { font: 11px var(--font-mono); color: var(--muted-foreground); margin-left: 4px; }
+
+.setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 14px; border-bottom: 1px solid var(--border); }
+.setting:last-child { border-bottom: 0; }
+.setting .k { font-size: 13px; } .setting .v { color: var(--muted-foreground); font-size: 12px; }
+.drawer { position: absolute; right: 0; top: 0; bottom: 0; width: 620px; background: var(--card); border-left: 1px solid var(--border); box-shadow: -20px 0 40px oklch(0 0 0 / 40%); display: flex; flex-direction: column; }
+.drawer[hidden] { display: none; }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; max-width: 1440px; }
+.notes div { border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; font-size: 14px; }
+.notes b { display: block; margin-bottom: 4px; }
+</style>
+
+<main class="page">
+  <section class="prose">
+    <span class="hud">Settings › Agents</span>
+    <h1>Agents settings layout</h1>
+    <p class="lede">Today Agents is one column of seven sections, about three and a half screens tall: the Copilot CLI setup with the list of every tool, four settings, Copilot usage with two top-10 lists, and the MCP call list. The column is 576 px wide in a window three times as wide. Three ways to bring the usage report and the calls within one screen.</p>
+  </section>
+
+  <section class="prose"><span class="hud">Variant A · chosen and built (ADR-212)</span><h2>A new “Usage” category beside Agents</h2>
+    <p class="lede">Agents keeps what you set; Usage holds what agents used and did, wide, with the two lists side by side and the calls as a dense table in their own scroll box.</p></section>
+  <div class="scroll"><div class="window" id="variant-a" data-cats="Usage"><div class="rail"></div><div class="cats"></div><div class="content">
+    <div class="head"><h3>Usage</h3><p>What Copilot CLI used on this computer, and every call agents made to Trackwall's tools.</p></div>
+    <div class="surface"><header><span class="hud">Copilot usage</span><span class="muted small mono">Oct 30 – Nov 6</span></header>
+      <div class="body">
+        <div class="row"><span class="btn">‹</span><span class="btn">›</span><span class="small">Last 7 days</span><span class="btn ghost" style="margin-left:auto">Refresh</span></div>
+        <div class="stats"><div class="stat"><b>1,699</b><span>AI credits</span></div><div class="stat"><b>5.2M</b><span>tokens in</span></div><div class="stat"><b>95.2k</b><span>tokens out</span></div><div class="stat"><b>54%</b><span>of tokens in were tool definitions</span></div></div>
+        <div class="two"><div><span class="hud">Tasks and sessions</span><ol class="ranked" data-list="work" data-n="6"></ol><span class="btn link small">Show all 8</span></div>
+          <div><span class="hud">Tools</span><ol class="ranked" data-list="tools" data-n="6"></ol><span class="btn link small">Show all 24</span></div></div>
+      </div></div>
+    <div class="surface" style="flex:1;min-height:0"><header><span class="hud">MCP calls</span><span class="muted small mono">500 kept</span></header>
+      <div class="body" style="flex:1">
+        <div class="row"><span class="btn on">All</span><span class="btn ghost">Changes</span><span class="btn ghost">Errors · 16</span><span class="input">Tool: any ▾</span><span class="input">Repo or task: any ▾</span></div>
+        <div class="box"><table class="calls" data-calls="14"></table></div>
+      </div></div>
+  </div></div></div>
+
+  <section class="prose"><span class="hud">Variant A · the Agents category after the split</span>
+    <p class="lede">Agents is left with the setup, and the long list of tool names folds behind a link, so the five settings fit on one screen too.</p></section>
+  <div class="scroll"><div class="window" id="variant-a-agents" data-cats="Agents"><div class="rail"></div><div class="cats"></div><div class="content" style="max-width:704px">
+    <div class="head"><h3>Agents</h3><p>What Copilot CLI gets from Trackwall.</p></div>
+    <div class="surface"><header><span class="hud">Copilot CLI</span></header><div class="body">
+      <p class="desc">Gives the agent a map of the repos in your projects folder through 57 tools. <span class="btn link">Show the tools</span> Run this once in a terminal, then restart Copilot CLI:</p>
+      <div class="input mono" style="height:auto;padding:6px 8px;color:var(--foreground)">copilot mcp add trackwall -- trackwall-daemon mcp-stdio</div>
+      <span class="btn link small">Or add an entry to ~/.copilot/mcp-config.json ▸</span></div></div>
+    <div class="surface"><header><span class="hud">Session profile</span></header><div class="body"><p class="desc">A mise environment that only sessions start with.</p><div class="row"><span class="btn on">default</span><span class="btn ghost">byok</span></div></div></div>
+    <div class="surface"><header><span class="hud">Supervisor model</span></header><div class="body"><div class="row"><span class="input" style="flex:1">claude-sonnet-4.5 ▾</span><span class="btn">Save</span></div></div></div>
+    <div class="surface"><header><span class="hud">Auto-review</span></header><div class="body"><p class="desc">A second session reviews a task's changes before you do.</p><div class="row"><span class="btn on">On</span></div></div></div>
+    <div class="surface"><header><span class="hud">Java navigation</span></header><div class="body"><p class="desc">Lets agents jump to Java definitions and callers.</p><div class="row"><span class="dot"></span><span class="small">Ready</span></div></div></div>
+  </div></div></div>
+
+  <section class="prose"><span class="hud">Variant B</span><h2>Tabs inside Agents</h2>
+    <p class="lede">The category stays; three tabs under its title: Setup, Copilot usage, MCP calls. One tab at a time, so nothing pushes anything down. It adds a second row of navigation under the first.</p></section>
+  <div class="scroll"><div class="window" id="variant-b" data-cats="Agents"><div class="rail"></div><div class="cats"></div><div class="content">
+    <div class="head"><h3>Agents</h3><p>What Copilot CLI gets from Trackwall, what it used, and what agents did with it.</p></div>
+    <div class="tabs"><span class="tab">Setup</span><span class="tab on">Copilot usage<span class="count">1,699 credits</span></span><span class="tab">MCP calls<span class="count">500</span></span></div>
+    <div class="surface" style="flex:1;min-height:0"><div class="body">
+      <div class="row"><span class="btn">‹</span><span class="btn">›</span><span class="small">Last 7 days</span><span class="btn ghost" style="margin-left:auto">Refresh</span></div>
+      <p class="small">1,699 AI credits in total, 5.2M tokens in and 95.2k out; 54% of the tokens in were tool definitions, sent with every model call.</p>
+      <div class="two"><div><span class="hud">Tasks and sessions</span><ol class="ranked" data-list="work" data-n="8"></ol></div>
+        <div><span class="hud">Tools</span><ol class="ranked" data-list="tools" data-n="10"></ol><span class="btn link small">Show all 24</span></div></div>
+    </div></div>
+  </div></div></div>
+
+  <section class="prose"><span class="hud">Variant C</span><h2>An overview page with a drawer for the calls</h2>
+    <p class="lede">Agents becomes a dashboard: numbers on top, settings as one line each with their state (click to open), the usage on the right, and the last five calls with “Open all calls”, which slides the full list in from the side.</p></section>
+  <div class="scroll"><div class="window" id="variant-c" data-cats="Agents" style="position:relative"><div class="rail"></div><div class="cats"></div><div class="content">
+    <div class="head"><h3>Agents</h3><p>What Copilot CLI gets from Trackwall, what it used, and what agents did with it.</p></div>
+    <div class="stats" style="grid-template-columns:repeat(5,1fr)"><div class="stat"><b>1,699</b><span>AI credits, 7 days</span></div><div class="stat"><b>5.2M</b><span>tokens in</span></div><div class="stat"><b>54%</b><span>tool definitions</span></div><div class="stat"><b>312</b><span>MCP calls today</span></div><div class="stat"><b style="color:var(--destructive)">16</b><span>failed calls</span></div></div>
+    <div class="two" style="grid-template-columns: 5fr 7fr; flex:1">
+      <div style="display:flex;flex-direction:column;gap:14px;min-height:0">
+        <div class="surface"><header><span class="hud">Setup</span></header>
+          <div class="setting"><span class="k">Copilot CLI</span><span class="v"><span class="dot"></span> connected · 57 tools ›</span></div>
+          <div class="setting"><span class="k">Session profile</span><span class="v">default ›</span></div>
+          <div class="setting"><span class="k">Supervisor model</span><span class="v">claude-sonnet-4.5 ›</span></div>
+          <div class="setting"><span class="k">Auto-review</span><span class="v">on ›</span></div>
+          <div class="setting"><span class="k">Java navigation</span><span class="v"><span class="dot"></span> ready ›</span></div></div>
+        <div class="surface" style="flex:1"><header><span class="hud">Last MCP calls</span><span class="btn link small">Open all 500 calls</span></header><div class="body"><table class="calls compact" data-calls="5"></table></div></div>
+      </div>
+      <div class="surface"><header><span class="hud">Copilot usage</span><span class="muted small mono">Last 7 days ‹ ›</span></header><div class="body">
+        <span class="hud">Tasks and sessions</span><ol class="ranked" data-list="work" data-n="5"></ol>
+        <span class="hud">Tools</span><ol class="ranked" data-list="tools" data-n="5"></ol></div></div>
+    </div>
+  </div>
+  <div class="drawer" id="variant-c-drawer" hidden><header style="display:flex;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border)"><span class="hud">MCP calls · 500</span><span class="btn ghost">✕</span></header>
+    <div class="body" style="flex:1"><div class="row"><span class="btn on">All</span><span class="btn ghost">Changes</span><span class="btn ghost">Errors</span></div><div class="box"><table class="calls" data-calls="30"></table></div></div></div>
+  </div></div>
+
+  <section class="notes">
+    <div><b>Why A</b>Settings already separates what you set from the state you glance at (each category holds one kind). Usage is a report, not a setting; it gets its own entry in the list you already know, and the room to be wide. No new kind of navigation.</div>
+    <div><b>Why not B</b>Tabs under a category are a second level of navigation, which the settings layout chose against; the setup tab would still be long, and a tab hides that usage exists.</div>
+    <div><b>Why not C</b>The most to build, and settings shrunk to one line each need a click to change anything. The drawer is a third way of showing a list in Settings.</div>
+  </section>
+</main>
+
+<script>
+const CATS = ["Workspace", "Repo hosts", "Agents", "Usage", "App", "Files", "Diagnostics"];
+const WORK = [["Hide reviews from customers who have been deleted", "1.9M in · 42% tool definitions", "611 AI credits"], ["Publish a price-changed event when a price changes", "984.5k in · 53% tool definitions", "322 AI credits"], ["Supervisor", "769.5k in · 55% tool definitions", "253 AI credits"], ["Tell the customer about a retried payment", "577.5k in · 61% tool definitions", "192 AI credits"], ["Sessions in orders-api", "374k in · 69% tool definitions", "125 AI credits"], ["Retry the payment call", "301.5k in · 70% tool definitions", "101 AI credits"], ["Sessions in payments", "178.5k in · 79% tool definitions", "60.2 AI credits"], ["Copilot CLI outside the projects folder", "105k in · 90% tool definitions", "35.1 AI credits"]];
+const TOOLS = [["view", "37 calls", "55.5k tokens"], ["trackwall / search_code", "14 calls", "44.8k tokens"], ["tracker / get_issue", "6 calls", "10.8k tokens"], ["trackwall / get_task_changes", "3 calls", "7.8k tokens"], ["grep", "8 calls", "5.6k tokens"], ["trackwall / get_repo", "5 calls", "4.5k tokens"], ["trackwall / list_repos", "3 calls", "3.3k tokens"], ["trackwall / find_endpoint", "5 calls", "3.3k tokens"], ["trackwall / get_session", "9 calls", "3.1k tokens"], ["edit", "11 calls", "2.9k tokens"]];
+const CALL_TOOLS = ["get_session", "get_updates", "search_code", "get_task_changes", "report_result", "list_repos", "run_mise_task", "get_repo_card", "find_endpoint", "send_message"];
+const REPOS = ["orders-api", "pricing", "payments", "notifications", "admin-bff"];
+for (const win of document.querySelectorAll(".window")) {
+  const cats = win.querySelector(".cats");
+  for (const c of CATS) {
+    if (c === "Usage" && win.id !== "variant-a" && win.id !== "variant-a-agents") continue;
+    const el = document.createElement("div");
+    el.className = "cat" + (c === win.dataset.cats ? " on" : "");
+    el.innerHTML = c + (c === "Usage" ? '<span class="new">new</span>' : "");
+    cats.appendChild(el);
+  }
+}
+for (const ol of document.querySelectorAll("ol[data-list]")) {
+  const rows = (ol.dataset.list === "work" ? WORK : TOOLS).slice(0, Number(ol.dataset.n));
+  ol.innerHTML = rows.map(([n, s, v]) => `<li><span class="name${ol.dataset.list === "tools" ? " mono" : ""}">${n}<span class="sub">${s}</span></span><span class="val">${v}</span></li>`).join("");
+}
+for (const t of document.querySelectorAll("table[data-calls]")) {
+  const n = Number(t.dataset.calls);
+  const compact = t.classList.contains("compact");
+  let html = compact ? "" : "<tr><th>When</th><th>Tool</th><th>Effect</th><th>Agent</th><th>Arguments</th><th>Result</th></tr>";
+  for (let i = 0; i < n; i++) {
+    const tool = CALL_TOOLS[i % CALL_TOOLS.length];
+    const effect = i % 7 === 3 ? '<span class="badge">write</span>' : i % 11 === 6 ? '<span class="badge bad">runs code</span>' : "";
+    const who = i % 5 === 0 ? "Supervisor" : `Task in ${REPOS[i % 5]}`;
+    const err = i % 9 === 4;
+    const when = i < 2 ? "just now" : `${i * 2} min ago`;
+    html += compact
+      ? `<tr><td class="mono">${tool}</td><td class="muted">${who}</td><td class="muted">${when}</td></tr>`
+      : `<tr><td class="muted">${when}</td><td class="mono">${tool}</td><td>${effect}</td><td class="muted">${who}</td><td class="mono muted">${i % 2 ? `repo: ${REPOS[i % 5]}` : ""}</td><td class="${err ? "err" : "muted"}">${err ? "not_found: no such task" : "ok"}</td></tr>`;
+  }
+  t.innerHTML = html;
+}
+</script>
+</body>
+</html>
