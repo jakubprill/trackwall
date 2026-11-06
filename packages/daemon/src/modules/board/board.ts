@@ -166,8 +166,10 @@ export class Board {
     return ensureTrackwallDir(await this.#deps.projectsDir(), "board");
   }
 
-  /** One write at a time, on the board as it is now; a failed write does not stop the next one. */
-  /** One write after another; `null` from `change` means it wrote nothing, so the revision stays. */
+  /**
+   * One write at a time, on the board as it is now; a failed write does not stop the next one, and `null` from `change`
+   * means it wrote nothing, so the revision stays.
+   */
   #write<T>(change: (items: BoardItem[], dir: string) => Promise<T>): Promise<T> {
     const run = this.#writing.then(async () => {
       const dir = await this.#dir();

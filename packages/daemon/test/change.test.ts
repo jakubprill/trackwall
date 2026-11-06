@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
-import { agentsApi, GetHandoffResult, GetUpdatesResult, ProposeTaskResult } from "@trackwall/protocol";
+import { agentsApi, boardApi, GetHandoffResult, GetUpdatesResult, ProposeTaskResult } from "@trackwall/protocol";
 import { sessionDir } from "../src/modules/agents/session-launcher.ts";
 import { TaskFile } from "../src/modules/agents/task-file.ts";
 import { commitFiles, gitIn } from "./support/git-repo.ts";
@@ -129,17 +129,25 @@ describe.skipIf(process.versions.bun === undefined)("a change across several rep
   }, 60_000);
 
   test("a part that cannot start is named while the others run, and two parts in one repo are refused before any starts", async () => {
+    const item = await daemon.post(boardApi.create, { kind: "item", title: "Refunds", column: "ready" });
+    const revision = daemon.facade.board.revision();
     const { tasks, failed } = await daemon.post(agentsApi.createChange, {
       title: "Refund API",
       prompt: "Add refunds",
       parts: [{ repo: "payments" }, { repo: "billing" }, { repo: "shop-web" }],
       approvals: "ask",
+      item: item.id,
     });
     expect(tasks.map((t) => [t.repo, t.change?.position])).toEqual([
       ["payments", 0],
       ["shop-web", 2],
     ]);
     expect(failed.map((f) => f.repo)).toEqual(["billing"]);
+    // The parts that started share the item: it went to in progress once, the second start changed nothing (ADR-212).
+    const until = Date.now() + 5_000;
+    while ((await daemon.facade.board.item(item.id)).column !== "in_progress" && Date.now() < until) await Bun.sleep(20);
+    expect((await daemon.facade.board.item(item.id)).column).toBe("in_progress");
+    expect(daemon.facade.board.revision()).toBe(revision + 1);
     // shop-web builds on payments, the part before it that started.
     expect(instructionsOf(runningSession(tasks[1]?.id ?? ""))).toContain(
       `the part before it, the task \`${tasks[0]?.id ?? ""}\` in the repo \`payments\``,

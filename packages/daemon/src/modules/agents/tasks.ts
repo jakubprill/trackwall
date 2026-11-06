@@ -147,7 +147,7 @@ export interface AgentTasksDeps {
   /** Task `task`'s round commits that the push has not squashed yet (ADR-168), which a handoff looks past (ADR-144). */
   roundCommits: (task: string) => ReadonlySet<string>;
   openEditor: (dir: string) => void;
-  /** A task was created and saved: from the form, a proposal, a routine, a handoff or a part of a change. */
+  /** A task was created and its first session started: from the form, a proposal, a routine, a handoff or a part of a change. */
   onCreated: (task: Task) => void;
   log: (msg: string) => void;
 }
@@ -336,7 +336,6 @@ export class AgentTasks {
       task.trustedMiseConfig = await this.#initialMiseConfig(task);
       // Saved before the session starts: the worktree is already on disk and must not disappear from the list if the daemon crashes.
       this.#save([task, ...this.#tasks]);
-      this.#deps.onCreated(view(task));
       if (launch === "launch") await this.#launchNew(task);
       // Held before `#exclusive` lets go of it, so nothing acts on the part until `#launchHeld`.
       else this.#held.add(id);
@@ -361,6 +360,8 @@ export class AgentTasks {
     const { id } = task;
     try {
       await this.#launch(task, "new");
+      // Only a task whose first session started counts: one that could not start is ended again below.
+      this.#deps.onCreated(view(task));
     } catch (err) {
       // A failed cleanup leaves the task on the list, so that the user can end it themselves.
       await this.#whileRemoving(id, async () => {
@@ -607,7 +608,7 @@ export class AgentTasks {
   }
 
   /**
-   * The user gave the task's agent work again (a review, a "Fix" of its pipeline, ADR-212), so its work is no longer
+   * The task's agent got work again (the user's review or "Fix" of its pipeline, its proposer's message, ADR-212), so its work is no longer
    * waiting for review; `false` when it was not.
    */
   takeOutOfReview(id: string): boolean {
