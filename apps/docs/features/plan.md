@@ -30,6 +30,8 @@ After you file or drop an idea, the next one is selected, so you can sort the wh
 
 A project shows how far it is at the top: "2 of 9 done", a bar coloured by what is done, in review and in progress, the number of items in each column, and how many of its tasks wait for you. "Hide done" hides what is done or dropped, with what it was split into, and the count takes those as done or dropped too. Each row shows the item's repos, what its task is doing now (a task waiting for you comes before a newer one) ("working", "waiting for you", "In review", "Verified", a merge request such as "!42"), and on an item split into others how many of them are done ("1/4"). In the left column every project shows the same count and a dot while one of its tasks waits for you.
 
+"Board" at the top of a project shows the same project as columns: "Idea", "Ready", "In progress", "In review" and "Done". Each card is an item not split further, with the item it was split from above its title, its repos and what its task is doing. A card follows its tasks into "In progress" and "In review" by itself; drag it to another column, or press Alt+← and Alt+→ on it, to move it yourself. Dropped items are counted under the board, an item below a done one sits under "Done" with it, and "Hide done" hides the "Done" column. The board stays on when you switch projects. "Outline" brings the tree back, where you split and rearrange the work.
+
 On the right you read the selected item first: where it sits in its project, its title, its notes formatted as Markdown and a "Ticket" button when it has a link. "Edit" turns them into fields, and "Save" or "Cancel" turns them back. Below are the items it is split into with their columns, and its tasks as cards with their state, verdict and merge request, each with "Open"; an item split into others also lists the tasks started on those under "Tasks below".
 
 To split an item, type into the line under its notes ("Split: a new item under this one") and press Enter. In the outline, Tab puts the selected item under the one above it, Shift+Tab takes it out a level, and Alt+↑ and Alt+↓ move it among its neighbours. Click the arrow in front of an item to fold what is under it.
@@ -58,6 +60,7 @@ The item then follows its tasks. When the agent says it is done (it reports its 
 | D | D | In the inbox: drop the selected idea. |
 | Tab, Shift+Tab | Tab, ⇧Tab | On a selected item in the outline: put it under the one above, or take it out a level. |
 | Alt+↑, Alt+↓ | ⌥↑, ⌥↓ | Move the selected item up or down among its neighbours. |
+| Alt+←, Alt+→ | ⌥←, ⌥→ | On a card of the board: move it to the column on the left or right. |
 
 ## Good to know
 

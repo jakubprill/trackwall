@@ -16,13 +16,14 @@ import {
   type Progress,
   progressBelow,
   progressLabel,
-  rowTask,
   tasksWaiting,
 } from "@/lib/plan-progress";
 import { useAction } from "@/lib/use-action";
 import { cn } from "@/lib/utils";
 import { NewItemLine } from "./NewItemLine.tsx";
 import { ProgressBar } from "./ProgressBar.tsx";
+import { ProjectBoard } from "./ProjectBoard.tsx";
+import { RowTask } from "./RowTask.tsx";
 import { TicketLink } from "./TicketLink.tsx";
 
 /**
@@ -50,6 +51,7 @@ export function PlanOutline({
 }) {
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
   const [hideDone, setHideDone] = useState(false);
+  const [layout, setLayout] = useState<ProjectLayout>("outline");
   const move = useAction((id: string, to: ItemMove) => post(conn, boardApi.move, { item: id, ...to }), onChanged);
   // Counted once per board change, not on every render of every row.
   const progress = useMemo(
@@ -65,34 +67,49 @@ export function PlanOutline({
   };
   return (
     <div className="flex flex-col gap-3 p-4">
-      <ProjectHeader conn={conn} project={project} onChanged={onChanged} />
+      <ProjectHeader conn={conn} project={project} layout={layout} onLayout={setLayout} onChanged={onChanged} />
       <ProjectProgress
         progress={progressOf(project.id)}
         waiting={tasksWaiting(items, project.id, taskIndex)}
         hideDone={hideDone}
         onHideDone={setHideDone}
       />
-      {move.error && <p className="text-destructive text-sm">{move.error}</p>}
-      <ul className="flex flex-col">
-        {rows.map((row) => (
-          <Row
-            key={row.item.id}
-            row={row}
-            hasChildren={childrenOf(items, row.item.id).length > 0}
-            progress={progressOf(row.item.id)}
-            tasks={itemTasks(row.item.id, taskIndex)}
-            folded={folded.has(row.item.id)}
-            selected={row.item.id === selected}
-            onToggle={() => toggle(row.item.id)}
-            onSelect={() => onSelect(row.item.id)}
-            onKeyMove={(press) => {
-              const to = rowKeyMove(press, items, row.item);
-              if (to) move.run(row.item.id, to);
-              return to !== undefined;
-            }}
-          />
-        ))}
-      </ul>
+      {layout === "board" ? (
+        <ProjectBoard
+          conn={conn}
+          items={items}
+          project={project.id}
+          taskIndex={taskIndex}
+          hideDone={hideDone}
+          selected={selected}
+          onSelect={onSelect}
+          onChanged={onChanged}
+        />
+      ) : (
+        <>
+          {move.error && <p className="text-destructive text-sm">{move.error}</p>}
+          <ul className="flex flex-col">
+            {rows.map((row) => (
+              <Row
+                key={row.item.id}
+                row={row}
+                hasChildren={childrenOf(items, row.item.id).length > 0}
+                progress={progressOf(row.item.id)}
+                tasks={itemTasks(row.item.id, taskIndex)}
+                folded={folded.has(row.item.id)}
+                selected={row.item.id === selected}
+                onToggle={() => toggle(row.item.id)}
+                onSelect={() => onSelect(row.item.id)}
+                onKeyMove={(press) => {
+                  const to = rowKeyMove(press, items, row.item);
+                  if (to) move.run(row.item.id, to);
+                  return to !== undefined;
+                }}
+              />
+            ))}
+          </ul>
+        </>
+      )}
       <NewItemLine
         conn={conn}
         parent={project.id}
@@ -102,7 +119,7 @@ export function PlanOutline({
           onSelect(id);
         }}
       />
-      {rows.length > 0 && (
+      {layout === "outline" && rows.length > 0 && (
         <p className="text-muted-foreground text-xs">
           On a selected row: Tab puts it under the one above, Shift+Tab takes it out, Alt+↑ and Alt+↓ move it.
         </p>
@@ -111,7 +128,27 @@ export function PlanOutline({
   );
 }
 
-function ProjectHeader({ conn, project, onChanged }: { conn: Connection; project: BoardItem; onChanged: () => void }) {
+/** How the middle shows a project: the tree to split the work, or the board of its items not split further (ADR-217). */
+type ProjectLayout = "outline" | "board";
+
+const LAYOUTS: readonly { layout: ProjectLayout; label: string }[] = [
+  { layout: "outline", label: "Outline" },
+  { layout: "board", label: "Board" },
+];
+
+function ProjectHeader({
+  conn,
+  project,
+  layout,
+  onLayout,
+  onChanged,
+}: {
+  conn: Connection;
+  project: BoardItem;
+  layout: ProjectLayout;
+  onLayout: (layout: ProjectLayout) => void;
+  onChanged: () => void;
+}) {
   const archived = isClosed(project);
   const archive = useAction(() => post(conn, boardApi.update, { item: project.id, column: archived ? "ready" : "done" }), onChanged);
   return (
@@ -119,6 +156,19 @@ function ProjectHeader({ conn, project, onChanged }: { conn: Connection; project
       <h2 className="text-lg font-medium">{project.title}</h2>
       <TicketLink conn={conn} link={project.link} />
       <span className="flex-1" />
+      <fieldset aria-label="Show the project as" className="flex rounded-md border">
+        {LAYOUTS.map((option) => (
+          <Button
+            key={option.layout}
+            variant={option.layout === layout ? "secondary" : "ghost"}
+            size="sm"
+            aria-pressed={option.layout === layout}
+            onClick={() => onLayout(option.layout)}
+          >
+            {option.label}
+          </Button>
+        ))}
+      </fieldset>
       <Button variant="ghost" size="sm" disabled={archive.pending} onClick={() => archive.run()}>
         {archived ? "Restore project" : "Archive project"}
       </Button>
@@ -230,18 +280,5 @@ function Row({
         </Badge>
       </button>
     </li>
-  );
-}
-
-/** A task's state and outcome on a row (one waiting for the user first), with how many more tasks the item has. */
-function RowTask({ tasks }: { tasks: readonly ItemTask[] }) {
-  const shown = rowTask(tasks);
-  if (!shown) return null;
-  const words = [shown.state.label, ...shown.marks.map((mark) => mark.label)];
-  return (
-    <span className="flex shrink-0 items-center gap-2 text-xs" title={shown.marks.map((mark) => mark.title).join("\n") || undefined}>
-      <StatusLabel tone={shown.waitsForYou ? "warning" : shown.state.tone} label={words.join(" · ")} />
-      {tasks.length > 1 && <span className="text-muted-foreground">+{tasks.length - 1}</span>}
-    </span>
   );
 }
