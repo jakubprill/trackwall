@@ -35,7 +35,11 @@ export function progressBelow(items: readonly BoardItem[], parent: string): Prog
   return { total: Object.values(byColumn).reduce((sum, n) => sum + n, 0) - byColumn.dropped, done: byColumn.done, byColumn };
 }
 
-function countedColumn(items: readonly BoardItem[], item: BoardItem, parent: string): BoardColumn {
+/**
+ * The column an item below `parent` counts in: its own, or that of the nearest done or dropped item between it and
+ * `parent`, since closing an item closes what it was split into (ADR-215).
+ */
+export function countedColumn(items: readonly BoardItem[], item: BoardItem, parent: string): BoardColumn {
   const above = ancestorsOf(items, item);
   return above.slice(above.findIndex((it) => it.id === parent) + 1).find(isClosed)?.column ?? item.column;
 }
