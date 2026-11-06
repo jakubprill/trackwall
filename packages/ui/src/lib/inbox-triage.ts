@@ -1,5 +1,5 @@
 import { type BoardItem, childrenOf, type Task } from "@trackwall/protocol";
-import { isArchived, projectsOf } from "./board-tree.ts";
+import { isArchived, outline, projectsOf } from "./board-tree.ts";
 
 /**
  * The inbox of Plan as a place to sort ideas (ADR-214): the open ideas newest first in groups by the day they were
@@ -23,8 +23,19 @@ export function inboxIdeas(items: readonly BoardItem[]): { open: BoardItem[]; dr
   return { open: ideas.filter((it) => it.column !== "dropped"), dropped: ideas.filter((it) => it.column === "dropped") };
 }
 
+// By the instant, not the text: a file edited by hand may write its time with an offset. A time that does not parse goes last.
 function newestFirst(a: BoardItem, b: BoardItem): number {
-  return b.createdAt.localeCompare(a.createdAt);
+  return (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0);
+}
+
+/** The open ideas the inbox lists under `filter`, in the order it shows them. */
+export function shownIdeas(items: readonly BoardItem[], filter: InboxFilter): BoardItem[] {
+  return inboxIdeas(items).open.filter((idea) => matchesFilter(idea, filter));
+}
+
+/** Whether `item` is an open idea of the inbox, which is filed with "File in"; a dropped one is restored first. */
+export function isOpenIdea(item: BoardItem): boolean {
+  return item.kind === "item" && item.parent === null && item.column !== "dropped";
 }
 
 export function matchesFilter(idea: BoardItem, filter: InboxFilter): boolean {
@@ -38,7 +49,7 @@ export const IDEA_AGE_LABELS: Record<IdeaAge, string> = { today: "Today", week: 
 
 const WEEK_DAYS = 7;
 
-/** Today by the local calendar, this week within the last seven local days, older before that. */
+/** Today by the local calendar, "this week" within the last seven local days (not the calendar week), older before that. */
 export function ideaAge(createdAt: string, now: Date): IdeaAge {
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const written = new Date(createdAt);
@@ -82,28 +93,14 @@ export interface FilingChoice {
  * first), then the rest in the order of the left column.
  */
 export function filingChoices(items: readonly BoardItem[], idea: BoardItem): FilingChoice[] {
-  const choices = projectsOf(items)
+  return projectsOf(items)
     .filter((project) => !isArchived(project))
-    .map((project) => ({ project, sharedRepos: reposInProject(items, project.id).filter((repo) => idea.repos.includes(repo)) }));
-  return choices
-    .map((choice, at) => ({ choice, at }))
-    .sort((x, y) => y.choice.sharedRepos.length - x.choice.sharedRepos.length || x.at - y.at)
-    .map(({ choice }) => choice);
+    .map((project) => ({ project, sharedRepos: reposInProject(items, project.id).filter((repo) => idea.repos.includes(repo)) }))
+    .sort((x, y) => y.sharedRepos.length - x.sharedRepos.length);
 }
 
 function reposInProject(items: readonly BoardItem[], project: string): string[] {
-  const repos = new Set<string>();
-  const seen = new Set<string>([project]);
-  const walk = (parent: string) => {
-    for (const item of childrenOf(items, parent)) {
-      if (seen.has(item.id)) continue;
-      seen.add(item.id);
-      for (const repo of item.repos) repos.add(repo);
-      walk(item.id);
-    }
-  };
-  walk(project);
-  return [...repos];
+  return [...new Set(outline(items, project).flatMap((row) => row.item.repos))];
 }
 
 /** What a key on a focused inbox row does; `undefined` for any other key, which the row leaves alone. */

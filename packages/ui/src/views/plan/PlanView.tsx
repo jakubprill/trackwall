@@ -8,7 +8,7 @@ import { type PlanPlace, projectOf, startPrompt } from "@/lib/board-tree";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { ideaShortcutLabel } from "@/lib/idea-shortcut";
-import { type InboxFilter, inboxIdeas, matchesFilter } from "@/lib/inbox-triage";
+import { type InboxFilter, ideaAfter, shownIdeas } from "@/lib/inbox-triage";
 import { IS_MAC } from "@/lib/platform";
 import type { SessionSelection } from "@/lib/session-entries";
 import { useBoard } from "@/lib/use-board";
@@ -43,7 +43,7 @@ export function PlanView({
   const [inboxFilter, setInboxFilter] = useState<InboxFilter>("all");
   const items = board.data?.items ?? [];
   // The inbox opens on its newest idea, so sorting starts without a click and the right column is never empty there.
-  const firstIdea = place.kind === "inbox" ? inboxIdeas(items).open.find((idea) => matchesFilter(idea, inboxFilter)) : undefined;
+  const firstIdea = place.kind === "inbox" ? shownIdeas(items, inboxFilter)[0] : undefined;
   const shown = selected ?? firstIdea?.id;
   const item = items.find((it) => it.id === shown);
   const startingItem = items.find((it) => it.id === starting);
@@ -126,7 +126,7 @@ export function PlanView({
             onStartTask={() => setStarting(item.id)}
             onOpenTask={(task) => onOpenInSessions({ kind: "task", id: task })}
             onRemoved={() => setSelected(undefined)}
-            onFiled={() => setSelected(undefined)}
+            onFiled={() => setSelected(ideaAfter(shownIdeas(items, inboxFilter), item.id))}
             onChanged={board.reload}
           />
         ) : (

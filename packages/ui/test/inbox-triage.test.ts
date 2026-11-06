@@ -7,8 +7,10 @@ import {
   ideaAuthor,
   ideaGroups,
   inboxIdeas,
+  isOpenIdea,
   matchesFilter,
   noteLine,
+  shownIdeas,
   stepIdea,
   triageKey,
 } from "../src/lib/inbox-triage.ts";
@@ -140,5 +142,22 @@ describe("the inbox as a place to sort ideas (ADR-214)", () => {
     expect(ideaAfter(ideas, "b")).toBe("c");
     expect(ideaAfter(ideas, "c")).toBe("b");
     expect(ideaAfter([item("a")], "a")).toBeUndefined();
+  });
+
+  test("an idea written by hand with an offset sorts by its instant, and the shown list follows the filter in that order", () => {
+    const items = [
+      item("utc", { createdAt: "2026-11-06T08:00:00.000Z" }),
+      item("offset", { createdAt: "2026-11-06T10:30:00+02:00", createdBy: { kind: "agent", task: null } }),
+      item("later", { createdAt: "2026-11-06T09:00:00.000Z" }),
+    ];
+    expect(shownIdeas(items, "all").map((it) => it.id)).toEqual(["later", "offset", "utc"]);
+    expect(shownIdeas(items, "mine").map((it) => it.id)).toEqual(["later", "utc"]);
+  });
+
+  test("only an open idea is filed with File in: not a dropped idea, an item in a project or a project", () => {
+    expect(isOpenIdea(item("idea"))).toBe(true);
+    expect(isOpenIdea(item("dropped", { column: "dropped" }))).toBe(false);
+    expect(isOpenIdea(item("filed", { parent: "p" }))).toBe(false);
+    expect(isOpenIdea(item("p", { kind: "project", column: "ready" }))).toBe(false);
   });
 });

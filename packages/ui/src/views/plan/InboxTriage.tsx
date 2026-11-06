@@ -17,6 +17,7 @@ import {
   inboxIdeas,
   matchesFilter,
   noteLine,
+  shownIdeas,
   stepIdea,
   type TriageKey,
   triageKey,
@@ -55,7 +56,7 @@ export function InboxTriage({
   const [filing, setFiling] = useState<string>();
   const rowButtons = useRef(new Map<string, HTMLButtonElement>());
   const { open, dropped } = inboxIdeas(items);
-  const shown = open.filter((idea) => matchesFilter(idea, filter));
+  const shown = shownIdeas(items, filter);
   const now = new Date();
   // Once an idea leaves the list, the next one is selected and keeps the keyboard, so sorting goes on without the mouse.
   const leave = (id: string) => {
@@ -82,7 +83,11 @@ export function InboxTriage({
     onSelect(id);
     if (id !== undefined) rowButtons.current.get(id)?.focus();
   };
+  const filingIdea = items.find((it) => it.id === filing);
+  const choices = filingIdea ? filingChoices(items, filingIdea) : [];
   const run = (idea: BoardItem, key: TriageKey) => {
+    // Moving is always free; an action waits for the one in flight, so a key pressed twice sends one request.
+    if (pending && key.kind !== "next" && key.kind !== "previous") return;
     switch (key.kind) {
       case "next":
       case "previous":
@@ -94,7 +99,7 @@ export function InboxTriage({
       case "drop":
         return setColumn.run(idea.id, "dropped");
       case "file-in": {
-        const choice = filingChoices(items, idea)[key.choice];
+        const choice = choices[key.choice];
         if (choice) file.run(idea.id, choice.project.id);
       }
     }
@@ -107,6 +112,8 @@ export function InboxTriage({
         parent={null}
         label="Write an idea and press Enter"
         onAdded={(id) => {
+          // The user's own idea would be hidden under "From agents".
+          if (filter === "agents") onFilter("all");
           onChanged();
           onSelect(id);
         }}
@@ -149,12 +156,7 @@ export function InboxTriage({
                 }
                 filing={
                   filing === idea.id && (
-                    <FilingChoices
-                      choices={filingChoices(items, idea)}
-                      numbered
-                      disabled={pending}
-                      onFile={(project) => file.run(idea.id, project)}
-                    />
+                    <FilingChoices choices={choices} numbered disabled={pending} onFile={(project) => file.run(idea.id, project)} />
                   )
                 }
               />

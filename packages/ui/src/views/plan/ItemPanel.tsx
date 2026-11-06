@@ -9,7 +9,7 @@ import { post } from "@/lib/api";
 import { COLUMN_LABELS, ideaFields, projectOf, projectsOf } from "@/lib/board-tree";
 import type { Connection } from "@/lib/connection";
 import { useOpenWebLink } from "@/lib/desktop";
-import { filingChoices } from "@/lib/inbox-triage";
+import { filingChoices, isOpenIdea } from "@/lib/inbox-triage";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 import { FilingChoices } from "./FilingChoices.tsx";
@@ -43,7 +43,7 @@ export function ItemPanel({
   onChanged: () => void;
 }) {
   const isProject = item.kind === "project";
-  const isIdea = !isProject && item.parent === null;
+  const isIdea = isOpenIdea(item);
   const update = useAction((change: BoardItemChange) => post(conn, boardApi.update, { item: item.id, ...change }), onChanged);
   const move = useAction(
     (parent: string | null) => post(conn, boardApi.move, { item: item.id, parent, before: null }),
@@ -80,7 +80,7 @@ export function ItemPanel({
           <FilingChoices choices={filingChoices(items, item)} numbered={false} disabled={move.pending} onFile={move.run} />
         </div>
       )}
-      {!isProject && !isIdea && (
+      {!isProject && item.parent !== null && (
         <label className="flex items-center gap-2 text-sm">
           <span className="text-muted-foreground w-16">Filed in</span>
           <select
