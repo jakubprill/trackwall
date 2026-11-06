@@ -53,4 +53,16 @@ describe("which format a model answers in (ADR-200)", () => {
     expect(await probeWireApis(BASE, {}, "m", provider({ completions: 503, responses: 200 }).call)).toEqual({ kind: "unknown" });
     expect(await probeWireApis(BASE, {}, "m", provider({ completions: 400, responses: 429 }).call)).toEqual({ kind: "unknown" });
   });
+
+  test("a refusal of Chat Completions that names the Responses API decides, though the Responses probe was refused or not answered", async () => {
+    const refusal = JSON.stringify({ error: { message: "This model only supports the Responses API" } });
+    for (const responses of [{ status: 400, body: '{"error":{"message":"Unsupported parameter"}}' }, null]) {
+      const call = async (request: ProviderCall): Promise<ProviderAnswer> => {
+        if (!request.url.pathname.endsWith("/responses")) return { kind: "answer", status: 400, body: refusal };
+        return responses === null ? { kind: "failed", reason: "it did not answer in time" } : { kind: "answer", ...responses };
+      };
+
+      expect(await probeWireApis(BASE, {}, "gpt-6-luna", call)).toEqual({ kind: "answered", works: ["responses"] });
+    }
+  });
 });

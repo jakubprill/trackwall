@@ -28,6 +28,17 @@ function probeBody(wireApi: WireApi, model: string): { path: string; body: unkno
       { path: "/responses", body: { model, input: "ping", max_output_tokens: 16, stream: false } };
 }
 
+/**
+ * A refusal of Chat Completions that names the Responses API ("this model only supports the Responses API"), the
+ * provider's own word on the format: it decides even when the probe of the Responses API was refused for one of its
+ * parameters or could not be read.
+ */
+const NAMES_RESPONSES_API = /responses api/i;
+
+function refusesForResponses(answer: ProviderAnswer): boolean {
+  return answer.kind === "answer" && answer.status >= 400 && answer.status < 500 && NAMES_RESPONSES_API.test(answer.body);
+}
+
 export async function probeWireApis(
   base: URL,
   headers: Readonly<Record<string, string>>,
@@ -40,6 +51,8 @@ export async function probeWireApis(
       return { wireApi, answer: await call({ url: providerUrl(base, path), headers, body }) };
     }),
   );
+  if (answers.some(({ wireApi, answer }) => wireApi === "completions" && refusesForResponses(answer)))
+    return { kind: "answered", works: ["responses"] };
   if (answers.some(({ answer }) => answer.kind === "failed")) return { kind: "unknown" };
   // A 5xx or a 429 says nothing about the format; only a 2xx and a 4xx other than a rate limit do.
   const decided = answers.every(({ answer }) => answer.kind === "answer" && answer.status < 500 && answer.status !== 429);
