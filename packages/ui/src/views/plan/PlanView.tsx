@@ -1,6 +1,6 @@
-import type { BoardItem, BoardRevision, SessionList, Task } from "@trackwall/protocol";
+import type { BoardItem, BoardRevision, SessionList, Task, TaskOutcome } from "@trackwall/protocol";
 import { RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { ideaShortcutLabel } from "@/lib/idea-shortcut";
 import { type InboxFilter, ideaAfter, shownIdeas } from "@/lib/inbox-triage";
+import { type ItemTaskIndex, itemTaskIndex } from "@/lib/plan-progress";
 import { IS_MAC } from "@/lib/platform";
 import type { SessionSelection } from "@/lib/session-entries";
 import { useBoard } from "@/lib/use-board";
@@ -29,11 +30,14 @@ export function PlanView({
   conn,
   boardLive,
   sessions,
+  outcomes,
   onOpenInSessions,
 }: {
   conn: Connection;
   boardLive: LiveFeed<BoardRevision> | undefined;
   sessions: SessionList | undefined;
+  /** Every task's outcome by task (ADR-154), for the state of an item's tasks. */
+  outcomes: ReadonlyMap<string, TaskOutcome>;
   onOpenInSessions: (selection: SessionSelection) => void;
 }) {
   const board = useBoard(conn, boardLive);
@@ -42,6 +46,10 @@ export function PlanView({
   const [starting, setStarting] = useState<string>();
   const [inboxFilter, setInboxFilter] = useState<InboxFilter>("all");
   const items = board.data?.items ?? [];
+  const taskIndex = useMemo(
+    () => itemTaskIndex({ tasks: sessions?.tasks ?? [], sessions: sessions?.sessions ?? [], outcomes }),
+    [sessions, outcomes],
+  );
   // The inbox opens on its newest idea, so sorting starts without a click and the right column is never empty there.
   const firstIdea = place.kind === "inbox" ? shownIdeas(items, inboxFilter)[0] : undefined;
   const shown = selected ?? firstIdea?.id;
@@ -69,7 +77,9 @@ export function PlanView({
             <RefreshCw />
           </Button>
         </header>
-        {board.data && <PlanPlaces conn={conn} items={items} place={place} onPlace={choosePlace} onChanged={board.reload} />}
+        {board.data && (
+          <PlanPlaces conn={conn} items={items} taskIndex={taskIndex} place={place} onPlace={choosePlace} onChanged={board.reload} />
+        )}
       </aside>
       <section className="flex min-h-0 min-w-0 flex-col overflow-y-auto">
         <BoardState board={board} />
@@ -97,6 +107,7 @@ export function PlanView({
               conn={conn}
               items={items}
               tasks={sessions?.tasks ?? []}
+              taskIndex={taskIndex}
               place={place}
               inboxFilter={inboxFilter}
               onInboxFilter={(filter) => {
@@ -122,7 +133,7 @@ export function PlanView({
             conn={conn}
             items={items}
             item={item}
-            tasks={(sessions?.tasks ?? []).filter((t) => t.item === item.id)}
+            taskIndex={taskIndex}
             onStartTask={() => setStarting(item.id)}
             onOpenTask={(task) => onOpenInSessions({ kind: "task", id: task })}
             onRemoved={() => setSelected(undefined)}
@@ -164,6 +175,7 @@ function PlaceItems({
   conn,
   items,
   tasks,
+  taskIndex,
   place,
   inboxFilter,
   onInboxFilter,
@@ -176,6 +188,7 @@ function PlaceItems({
   conn: Connection;
   items: readonly BoardItem[];
   tasks: readonly Task[];
+  taskIndex: ItemTaskIndex;
   place: PlanPlace;
   inboxFilter: InboxFilter;
   onInboxFilter: (filter: InboxFilter) => void;
@@ -207,7 +220,7 @@ function PlaceItems({
     <PlanOutline
       conn={conn}
       items={items}
-      tasks={tasks}
+      taskIndex={taskIndex}
       project={project}
       selected={selected}
       onSelect={onSelectInTree}
