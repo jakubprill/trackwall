@@ -29,11 +29,11 @@ function probeBody(wireApi: WireApi, model: string): { path: string; body: unkno
 }
 
 /**
- * A refusal of Chat Completions that names the Responses API ("this model only supports the Responses API"), the
+ * A refusal of Chat Completions because the model "only supports the Responses API", the
  * provider's own word on the format: it decides even when the probe of the Responses API was refused for one of its
  * parameters or could not be read.
  */
-const NAMES_RESPONSES_API = /responses api/i;
+const NAMES_RESPONSES_API = /only supports? (the )?responses api/i;
 
 function refusesForResponses(answer: ProviderAnswer): boolean {
   return answer.kind === "answer" && answer.status >= 400 && answer.status < 500 && NAMES_RESPONSES_API.test(answer.body);

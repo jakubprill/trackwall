@@ -65,4 +65,14 @@ describe("which format a model answers in (ADR-200)", () => {
       expect(await probeWireApis(BASE, {}, "gpt-6-luna", call)).toEqual({ kind: "answered", works: ["responses"] });
     }
   });
+
+  test("a refusal that only mentions the Responses API in passing decides nothing", async () => {
+    const call = async (): Promise<ProviderAnswer> => ({
+      kind: "answer",
+      status: 404,
+      body: JSON.stringify({ error: { message: "Model not found; see the Responses API docs" } }),
+    });
+
+    expect(await probeWireApis(BASE, {}, "m", call)).toEqual({ kind: "answered", works: [] });
+  });
 });
