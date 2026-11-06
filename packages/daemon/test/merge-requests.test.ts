@@ -275,8 +275,13 @@ describe.skipIf(process.versions.bun === undefined)("following a task's merge re
         "job 502 is not one that failed the pipeline",
       );
 
+      // A report hands the task over for review, and the Fix gives its agent work again (ADR-212).
+      const reporter = agents.sessions().sessions.find((s) => s.task === task.id);
+      await agents.reportSummary(reporter?.id ?? null, "Rounded the prices.", []);
+      expect(agents.task(task.id).inReview).toBe(true);
       // The task's session is asked to read it, and reads it once with get_review_comments.
       const { delivery } = await daemon.post(mergeRequestsApi.fixPipeline, { task: task.id });
+      expect(agents.task(task.id).inReview).toBe(false);
       expect(["typed", "queued"]).toContain(delivery);
       const session = agents.sessions().sessions.find((s) => s.task === task.id);
       expect(session?.readRequest?.prompt).toContain("The user asks you to fix the failed pipeline of your merge request");

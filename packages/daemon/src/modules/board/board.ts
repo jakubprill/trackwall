@@ -167,11 +167,12 @@ export class Board {
   }
 
   /** One write at a time, on the board as it is now; a failed write does not stop the next one. */
+  /** One write after another; `null` from `change` means it wrote nothing, so the revision stays. */
   #write<T>(change: (items: BoardItem[], dir: string) => Promise<T>): Promise<T> {
     const run = this.#writing.then(async () => {
       const dir = await this.#dir();
       const result = await change((await readBoard(dir)).items, dir);
-      this.#revision++;
+      if (result !== null) this.#revision++;
       return result;
     });
     this.#writing = run.catch(() => {});

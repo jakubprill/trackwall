@@ -147,6 +147,8 @@ export interface AgentTasksDeps {
   /** Task `task`'s round commits that the push has not squashed yet (ADR-168), which a handoff looks past (ADR-144). */
   roundCommits: (task: string) => ReadonlySet<string>;
   openEditor: (dir: string) => void;
+  /** A task was created and saved: from the form, a proposal, a routine, a handoff or a part of a change. */
+  onCreated: (task: Task) => void;
   log: (msg: string) => void;
 }
 
@@ -334,6 +336,7 @@ export class AgentTasks {
       task.trustedMiseConfig = await this.#initialMiseConfig(task);
       // Saved before the session starts: the worktree is already on disk and must not disappear from the list if the daemon crashes.
       this.#save([task, ...this.#tasks]);
+      this.#deps.onCreated(view(task));
       if (launch === "launch") await this.#launchNew(task);
       // Held before `#exclusive` lets go of it, so nothing acts on the part until `#launchHeld`.
       else this.#held.add(id);

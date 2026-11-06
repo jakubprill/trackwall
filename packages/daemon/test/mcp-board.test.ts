@@ -89,7 +89,7 @@ describe.skipIf(process.versions.bun === undefined)("the board over MCP (ADR-133
   test("a task on an item moves it to In progress, its report_result to In review, and the user's review back; Done stays the user's (ADR-212)", async () => {
     const item = await daemon.post(boardApi.create, { kind: "item", title: "Order list endpoint", column: "ready", repos: ["shop"] });
     const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "add the endpoint", approvals: "ask", item: item.id });
-    expect((await daemon.facade.board.item(item.id)).column).toBe("in_progress");
+    await waitForColumn(item.id, "in_progress");
     expect(task.inReview).toBe(false);
 
     const session = sessionOf(task.id);
@@ -98,8 +98,8 @@ describe.skipIf(process.versions.bun === undefined)("the board over MCP (ADR-133
     clients.push(agent);
     await expect(call(agent, "update_item", { item: item.id, column: "review" })).rejects.toThrow();
     await call(agent, "report_result", { summary: "Added GET /orders with a test." });
-    expect((await daemon.facade.board.item(item.id)).column).toBe("review");
     expect(daemon.facade.agents.task(task.id).inReview).toBe(true);
+    await waitForColumn(item.id, "review");
 
     const comment = { path: "README.md", side: "new" as const, line: 1, code: "# shop", text: "Page the list" };
     await daemon.post(agentsApi.sendReview, { task: task.id, comments: [comment] });
@@ -114,7 +114,7 @@ describe.skipIf(process.versions.bun === undefined)("the board over MCP (ADR-133
     await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
   }, 60_000);
 
-  test("an item with two tasks goes to In review only once both have reported (ADR-212)", async () => {
+  test("an item with two tasks goes to In review once both have reported, or once the one still at work ends (ADR-212)", async () => {
     const item = await daemon.post(boardApi.create, { kind: "item", title: "Discount in cart and checkout", column: "ready" });
     const first = await daemon.post(agentsApi.createTask, {
       repo: "shop",
@@ -139,12 +139,21 @@ describe.skipIf(process.versions.bun === undefined)("the board over MCP (ADR-133
     const [one, two] = agents;
     if (one === undefined || two === undefined) throw new Error("two task sessions were expected");
 
+    await waitForColumn(item.id, "in_progress");
     await call(one.agent, "report_result", { summary: "The cart shows the discount." });
-    expect((await daemon.facade.board.item(item.id)).column).toBe("in_progress");
     await call(two.agent, "report_result", { summary: "Checkout applies the discount." });
-    expect((await daemon.facade.board.item(item.id)).column).toBe("review");
+    await waitForColumn(item.id, "review");
 
-    for (const { session, task } of agents) {
+    await daemon.post(agentsApi.sendReview, {
+      task: two.task.id,
+      comments: [{ path: "README.md", side: "new" as const, line: 1, code: "# shop", text: "Round the discount" }],
+    });
+    await waitForColumn(item.id, "in_progress");
+    await daemon.facade.agents.stop(two.session);
+    await daemon.post(agentsApi.removeTask, { task: two.task.id, keepBranch: false, discardChanges: true });
+    await waitForColumn(item.id, "review");
+
+    for (const { session, task } of [one]) {
       await daemon.facade.agents.stop(session);
       await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
     }
@@ -166,7 +175,7 @@ describe.skipIf(process.versions.bun === undefined)("the board over MCP (ADR-133
     });
     expect(task.item).toBe(item.id);
     // The user started the work by approving it, so the idea is now in progress (ADR-212).
-    expect((await daemon.facade.board.item(item.id)).column).toBe("in_progress");
+    await waitForColumn(item.id, "in_progress");
     await daemon.facade.agents.stop(sessionOf(task.id));
     await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
   }, 60_000);

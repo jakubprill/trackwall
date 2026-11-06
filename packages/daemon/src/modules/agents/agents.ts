@@ -333,6 +333,8 @@ export class Agents {
       roundCommits: (task) => this.#rounds.roundCommits(task),
       openEditor: deps.openEditor,
       log: deps.log,
+      // The item a task starts on is in progress from then (ADR-212); every way a task starts goes through here.
+      onCreated: (task) => this.#boardItems.started(task),
       javaNavigation: this.#javaNavigation,
       sandbox: async (approvals) => taskSandbox(sandboxState(deps.repos.sandboxSettings(), await deps.env()), approvals),
       sessions: {
@@ -608,7 +610,6 @@ export class Agents {
     } finally {
       this.#proposals.release(id, this.#tasks.find(id) === undefined);
     }
-    await this.#boardItems.started([task]);
     return task;
   }
 
@@ -637,7 +638,6 @@ export class Agents {
     }
     this.#proposals.release(id, false);
     this.#coordination.changeStarted(id, proposedBy, created);
-    await this.#boardItems.started(created.tasks);
     return created;
   }
 
@@ -692,7 +692,7 @@ export class Agents {
     const own = this.#ownTask(caller, "can report a result");
     const reported = this.#tasks.setSummary(own.task, text, checkSteps);
     this.#autoReviews.afterReport(own.task);
-    await this.#boardItems.handedOver(reported);
+    this.#boardItems.handedOver(reported);
     // Awaited, so the update is there for the proposer by the time the tool answers.
     await this.#coordination.resultReported(reported, own.session, this.#reportedChanges(own.task));
     return reported;
@@ -706,7 +706,7 @@ export class Agents {
     // Only to refuse an unknown or ended task (`not_found`).
     this.#tasks.task(id);
     const unread = this.#reviews.add(id, comments);
-    this.#resumed(id);
+    this.#backToWork(id);
     this.#coordination.reviewed(id);
     const running = this.#sessions.runningOfTask(id);
     return { unread, delivery: running ? running.askToRead() : "on_resume" };
@@ -720,17 +720,14 @@ export class Agents {
     // Only to refuse an unknown or ended task (`not_found`).
     this.#tasks.task(id);
     this.#reviews.fixPipeline(id, fix);
-    this.#resumed(id);
+    this.#backToWork(id);
     this.#coordination.reviewed(id);
     return this.#sessions.runningOfTask(id)?.askToRead() ?? "on_resume";
   }
 
-  /**
-   * The user gave task `id`'s agent work again, so its work is no longer waiting for review (ADR-212). The board item
-   * follows in the background: the review reaches the agent without waiting for the projects folder.
-   */
-  #resumed(id: string): void {
-    if (this.#tasks.takeOutOfReview(id)) void this.#boardItems.resumed(this.#tasks.task(id));
+  /** Task `id`'s agent got work again, so its work is no longer waiting for review (ADR-212). */
+  #backToWork(id: string): void {
+    if (this.#tasks.takeOutOfReview(id)) this.#boardItems.backToWork(this.#tasks.task(id));
   }
 
   /** The prompt for what waits unread for a session: its task's review comments and messages, and its updates. */
@@ -756,7 +753,10 @@ export class Agents {
    * reads it with `get_messages`.
    */
   sendMessage(caller: string | null, task: string, text: string): SendMessageResult {
-    return this.#coordination.send(caller, task, text);
+    const sent = this.#coordination.send(caller, task, text);
+    // The proposer steering the task gives its agent work again, like the user's review.
+    this.#backToWork(task);
+    return sent;
   }
 
   /** A question from session `caller`'s own task to the task's proposer (`ask_proposer`, ADR-160). */
@@ -852,7 +852,6 @@ export class Agents {
     const task = await this.#tasks.create(repo, prompt, origin);
     // The user handed the repo the work from the Impact tab, so the daemon's proposal for it is done (ADR-198).
     if (handoffFrom !== null) this.#impactProposals.replacedBy(handoffFrom, [repo]);
-    await this.#boardItems.started([task]);
     return task;
   }
 
@@ -869,7 +868,6 @@ export class Agents {
       item,
       view,
     });
-    await this.#boardItems.started(created.tasks);
     return created;
   }
 
@@ -1139,7 +1137,10 @@ export class Agents {
     // the removal starts at once, so a change computation that comes after it refuses.
     const stopping = this.#autoReviews.stop(id);
     if (stopping !== null) await stopping;
+    const { item } = this.#tasks.task(id);
     const ended = await this.#tasks.remove(id, keepBranch, discardChanges, discardFingerprint);
+    // The task that was still at work may have been the last one on its item not in review.
+    if (item !== null) this.#boardItems.settle(item);
     this.#autoReviews.forget(id);
     this.#reviews.take(id);
     this.#miseTrust.forget({ task: id });

@@ -155,7 +155,10 @@ describe("the board (ADR-133)", () => {
     expect((await b.followTasks(item.id, "in_progress"))?.column).toBe("in_progress");
     expect((await b.followTasks(item.id, "review"))?.column).toBe("review");
     expect((await b.followTasks(item.id, "in_progress"))?.column).toBe("in_progress");
+    const revision = b.revision();
     expect(await b.followTasks(item.id, "in_progress")).toBeNull();
+    // Nothing moved, so the Plan view is not told to reload.
+    expect(b.revision()).toBe(revision);
 
     await b.update(item.id, { column: "done" });
     expect(await b.followTasks(item.id, "in_progress")).toBeNull();

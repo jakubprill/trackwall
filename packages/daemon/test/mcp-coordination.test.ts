@@ -143,6 +143,10 @@ describe.skipIf(process.versions.bun === undefined)("main session over MCP (real
     await call(await clientOfSession(taskSession), "report_result", { summary: "Login fixed, test in login.test.ts." });
     const cleared = toolText(await call(mainClient, "get_session", { session: taskSession }));
     expect(cleared).toContain("\nLogin fixed, test in login.test.ts.\n## Changes");
+    // The report handed the task over for review; the proposer steering it gives its agent work again (ADR-212).
+    expect(daemon.facade.agents.task(task.id).inReview).toBe(true);
+    await call(mainClient, "send_message", { task: task.id, text: "Also cover a locked account." });
+    expect(daemon.facade.agents.task(task.id).inReview).toBe(false);
 
     await daemon.facade.agents.stop(taskSession);
     const exited = WaitForSessionResult.parse(

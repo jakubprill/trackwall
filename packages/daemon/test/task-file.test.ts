@@ -77,7 +77,6 @@ describe("tasks.json", () => {
         view: "terminal",
         conversation: null,
         summary: null,
-        inReview: false,
         handoff: null,
         trustedMiseConfig: null,
         port: null,
@@ -134,6 +133,14 @@ describe("tasks.json", () => {
     writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
 
     expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, item: null }]);
+  });
+
+  test("a task saved before In review comes back not in review, so the Sessions list does not claim a hand-over (ADR-212)", () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
+    const { inReview: _, ...old } = stored;
+    writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
+
+    expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, inReview: false }]);
   });
 
   test("a task saved before impact proposals comes back having offered no repo a task, so its next turn may offer them (ADR-198)", () => {
