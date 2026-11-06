@@ -3,32 +3,23 @@ import { Bot, ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { post } from "@/lib/api";
-import {
-  COLUMN_LABELS,
-  type ItemMove,
-  ideaFields,
-  isArchived,
-  type OutlineRow,
-  outline,
-  type PlanPlace,
-  rowKeyMove,
-} from "@/lib/board-tree";
+import { COLUMN_LABELS, type ItemMove, isArchived, type OutlineRow, outline, rowKeyMove } from "@/lib/board-tree";
 import type { Connection } from "@/lib/connection";
 import { useAction } from "@/lib/use-action";
 import { cn } from "@/lib/utils";
+import { NewItemLine } from "./NewItemLine.tsx";
 
 /**
- * The middle of Plan: the inbox's ideas, or a project's items as an outline. On a focused row Tab puts the item under the
- * one above it and Shift+Tab takes it out a level, Alt+↑ and Alt+↓ move it among its siblings; the line at the bottom
- * adds an item at the top level of the project, or an idea.
+ * The middle of Plan for a project: its items as an outline. On a focused row Tab puts the item under the one above it
+ * and Shift+Tab takes it out a level, Alt+↑ and Alt+↓ move it among its siblings; the line at the bottom adds an item at
+ * the top level of the project. The inbox has a view of its own (`InboxTriage`).
  */
 export function PlanOutline({
   conn,
   items,
   tasks,
-  place,
+  project,
   selected,
   onSelect,
   onChanged,
@@ -36,16 +27,14 @@ export function PlanOutline({
   conn: Connection;
   items: readonly BoardItem[];
   tasks: readonly Task[];
-  place: PlanPlace;
+  project: BoardItem;
   selected: string | undefined;
   onSelect: (id: string | undefined) => void;
   onChanged: () => void;
 }) {
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
-  const project = place.kind === "project" ? items.find((it) => it.id === place.id) : undefined;
   const move = useAction((id: string, to: ItemMove) => post(conn, boardApi.move, { item: id, ...to }), onChanged);
-  if (place.kind === "project" && !project) return <p className="text-muted-foreground p-4 text-sm">This project is gone.</p>;
-  const rows = project ? outline(items, project.id, folded) : childrenOf(items, null).map((item) => ({ item, depth: 0 }));
+  const rows = outline(items, project.id, folded);
   const toggle = (id: string) => {
     const next = new Set(folded);
     if (!next.delete(id)) next.add(id);
@@ -53,10 +42,7 @@ export function PlanOutline({
   };
   return (
     <div className="flex flex-col gap-3 p-4">
-      {project ? <ProjectHeader conn={conn} project={project} onChanged={onChanged} /> : <h2 className="text-lg font-medium">Inbox</h2>}
-      {!project && rows.length === 0 && (
-        <p className="text-muted-foreground text-sm">No ideas waiting. Write one below, or ask an agent to note something for later.</p>
-      )}
+      <ProjectHeader conn={conn} project={project} onChanged={onChanged} />
       {move.error && <p className="text-destructive text-sm">{move.error}</p>}
       <ul className="flex flex-col">
         {rows.map((row) => (
@@ -79,13 +65,14 @@ export function PlanOutline({
       </ul>
       <NewItemLine
         conn={conn}
-        parent={project?.id ?? null}
+        parent={project.id}
+        label="New item in this project"
         onAdded={(id) => {
           onChanged();
           onSelect(id);
         }}
       />
-      {project && rows.length > 0 && (
+      {rows.length > 0 && (
         <p className="text-muted-foreground text-xs">
           On a selected row: Tab puts it under the one above, Shift+Tab takes it out, Alt+↑ and Alt+↓ move it.
         </p>
@@ -158,34 +145,5 @@ function Row({
         <Badge variant="outline">{COLUMN_LABELS[item.column]}</Badge>
       </button>
     </li>
-  );
-}
-
-/** The line that adds an item under `parent`: a project's top level, or with `null` an idea in the inbox. */
-function NewItemLine({ conn, parent, onAdded }: { conn: Connection; parent: string | null; onAdded: (id: string) => void }) {
-  const [title, setTitle] = useState("");
-  const add = useAction(
-    (fields: { title: string; body: string }) => post(conn, boardApi.create, { kind: "item", parent, ...fields }),
-    (item) => {
-      setTitle("");
-      onAdded(item.id);
-    },
-  );
-  const fields = ideaFields(title);
-  const label = parent === null ? "New idea" : "New item in this project";
-  return (
-    <>
-      <Input
-        aria-label={label}
-        placeholder={label}
-        value={title}
-        disabled={add.pending}
-        onChange={(e) => setTitle(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && fields) add.run(fields);
-        }}
-      />
-      {add.error && <p className="text-destructive text-sm">{add.error}</p>}
-    </>
   );
 }

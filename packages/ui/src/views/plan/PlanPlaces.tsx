@@ -1,15 +1,16 @@
-import { type BoardItem, boardApi, childrenOf } from "@trackwall/protocol";
+import { type BoardItem, boardApi } from "@trackwall/protocol";
 import { BookOpen, FolderKanban, Inbox } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { post } from "@/lib/api";
 import { isArchived, type PlanPlace, projectsOf } from "@/lib/board-tree";
 import type { Connection } from "@/lib/connection";
+import { inboxIdeas } from "@/lib/inbox-triage";
 import { useAction } from "@/lib/use-action";
 import { cn } from "@/lib/utils";
 
 /**
- * The left column of Plan: the inbox with its count, the workspace knowledge (ADR-170), the active business projects, a
+ * The left column of Plan: the inbox with the count of ideas still to sort, the workspace knowledge (ADR-170), the active business projects, a
  * line for a new one, the archived.
  */
 export function PlanPlaces({
@@ -59,7 +60,7 @@ export function PlanPlaces({
   return (
     <nav aria-label="Inbox and projects" className="flex min-h-0 flex-col gap-3 overflow-y-auto pb-3">
       <ul>
-        {row("inbox", { kind: "inbox" }, "Inbox", <Inbox className="size-4 shrink-0" />, childrenOf(items, null).length)}
+        {row("inbox", { kind: "inbox" }, "Inbox", <Inbox className="size-4 shrink-0" />, inboxIdeas(items).open.length)}
         {row("knowledge", { kind: "knowledge" }, "Workspace knowledge", <BookOpen className="size-4 shrink-0" />)}
       </ul>
       <div className="flex flex-col gap-1">
