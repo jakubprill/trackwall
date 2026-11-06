@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { type BoardItem, childrenOf, TASK_PROMPT_MAX } from "@trackwall/protocol";
-import { ideaFields, indentMove, outdentMove, outline, projectOf, shiftMove, startPrompt } from "../src/lib/board-tree.ts";
+import { ideaFields, indentMove, outdentMove, outline, placeOfSelected, projectOf, shiftMove, startPrompt } from "../src/lib/board-tree.ts";
 
 function item(id: string, fields: Partial<BoardItem> = {}): BoardItem {
   return {
@@ -50,6 +50,13 @@ describe("the Plan view's tree (ADR-133)", () => {
     expect(outline(loop, "p").map((row) => row.item.id)).toEqual(["z"]);
     expect(projectOf(loop, item("x", { parent: "y" }))).toBeUndefined();
     expect(projectOf(items, a1)?.id).toBe("p");
+  });
+
+  test("selecting an item of another project shows that project, and one of the project shown or of the inbox stays", () => {
+    expect(placeOfSelected(items, { kind: "inbox" }, "a1")).toEqual({ kind: "project", id: "p" });
+    expect(placeOfSelected(items, { kind: "project", id: "p" }, "a1")).toBeUndefined();
+    expect(placeOfSelected(items, { kind: "inbox" }, "idea")).toBeUndefined();
+    expect(placeOfSelected(items, { kind: "inbox" }, undefined)).toBeUndefined();
   });
 
   test("Tab puts an item under the one above it, Shift+Tab takes it out right after its parent, and not past the project", () => {

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
-import { type PlanPlace, projectOf, startPrompt } from "@/lib/board-tree";
+import { type PlanPlace, placeOfSelected, startPrompt } from "@/lib/board-tree";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { ideaShortcutLabel } from "@/lib/idea-shortcut";
@@ -13,10 +13,12 @@ import { type ItemTaskIndex, itemTaskIndex } from "@/lib/plan-progress";
 import { IS_MAC } from "@/lib/platform";
 import type { SessionSelection } from "@/lib/session-entries";
 import { useBoard } from "@/lib/use-board";
+import { useKnowledge } from "@/lib/use-knowledge";
 import { NewSession } from "@/views/sessions/NewSession";
 import { InboxTriage } from "./InboxTriage.tsx";
 import { ItemPanel } from "./ItemPanel.tsx";
 import { KnowledgeList } from "./KnowledgeList.tsx";
+import { KnowledgePanel } from "./KnowledgePanel.tsx";
 import { PlanOutline } from "./PlanOutline.tsx";
 import { PlanPlaces } from "./PlanPlaces.tsx";
 
@@ -45,6 +47,8 @@ export function PlanView({
   const [selected, setSelected] = useState<string>();
   const [starting, setStarting] = useState<string>();
   const [inboxFilter, setInboxFilter] = useState<InboxFilter>("all");
+  const { knowledge, entries, entry, select: selectEntry, filter, setFilter } = useKnowledge(conn, place.kind === "knowledge");
+  const tasks = sessions?.tasks ?? [];
   const items = board.data?.items ?? [];
   const taskIndex = useMemo(
     () => itemTaskIndex({ tasks: sessions?.tasks ?? [], sessions: sessions?.sessions ?? [], outcomes }),
@@ -53,19 +57,17 @@ export function PlanView({
   // The inbox opens on its newest idea, so sorting starts without a click and the right column is never empty there.
   const firstIdea = place.kind === "inbox" ? shownIdeas(items, inboxFilter)[0] : undefined;
   const shown = selected ?? firstIdea?.id;
-  const item = items.find((it) => it.id === shown);
+  const item = place.kind === "knowledge" ? undefined : items.find((it) => it.id === shown);
   const startingItem = items.find((it) => it.id === starting);
   const choosePlace = (next: PlanPlace) => {
     setPlace(next);
     setSelected(undefined);
     setStarting(undefined);
   };
-  // An item opened from elsewhere in the tree (a new idea filed under a project) shows its project.
   const select = (id: string | undefined) => {
     setSelected(id);
-    const it = items.find((candidate) => candidate.id === id);
-    const project = it && projectOf(items, it);
-    if (project && (place.kind !== "project" || place.id !== project.id)) setPlace({ kind: "project", id: project.id });
+    const next = placeOfSelected(items, place, id);
+    if (next) setPlace(next);
   };
 
   return (
@@ -78,13 +80,29 @@ export function PlanView({
           </Button>
         </header>
         {board.data && (
-          <PlanPlaces conn={conn} items={items} taskIndex={taskIndex} place={place} onPlace={choosePlace} onChanged={board.reload} />
+          <PlanPlaces
+            conn={conn}
+            items={items}
+            knowledge={entries}
+            taskIndex={taskIndex}
+            place={place}
+            onPlace={choosePlace}
+            onChanged={board.reload}
+          />
         )}
       </aside>
       <section className="flex min-h-0 min-w-0 flex-col overflow-y-auto">
         <BoardState board={board} />
         {place.kind === "knowledge" ? (
-          <KnowledgeList conn={conn} />
+          <KnowledgeList
+            conn={conn}
+            knowledge={knowledge}
+            tasks={tasks}
+            selected={entry?.name}
+            onSelect={selectEntry}
+            filter={filter}
+            onFilter={setFilter}
+          />
         ) : startingItem ? (
           <NewSession
             key={startingItem.id}
@@ -106,7 +124,7 @@ export function PlanView({
             <PlaceItems
               conn={conn}
               items={items}
-              tasks={sessions?.tasks ?? []}
+              tasks={tasks}
               taskIndex={taskIndex}
               place={place}
               inboxFilter={inboxFilter}
@@ -127,7 +145,19 @@ export function PlanView({
         </p>
       </section>
       <aside className="min-h-0 overflow-y-auto border-l">
-        {item ? (
+        {entry ? (
+          <KnowledgePanel
+            key={entry.name}
+            conn={conn}
+            entry={entry}
+            tasks={tasks}
+            onChanged={knowledge.reload}
+            onRemoved={() => {
+              selectEntry(undefined);
+              knowledge.reload();
+            }}
+          />
+        ) : item ? (
           <ItemPanel
             key={item.id}
             conn={conn}
@@ -141,10 +171,20 @@ export function PlanView({
             onChanged={board.reload}
           />
         ) : (
-          <p className="text-muted-foreground p-4 text-sm">Select an item to see its plan and start a task on it.</p>
+          <NothingSelected place={place} />
         )}
       </aside>
     </div>
+  );
+}
+
+function NothingSelected({ place }: { place: PlanPlace }) {
+  return (
+    <p className="text-muted-foreground p-4 text-sm">
+      {place.kind === "knowledge"
+        ? "Nothing to review: no workspace knowledge yet."
+        : "Select an item to see its plan and start a task on it."}
+    </p>
   );
 }
 
