@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { BoardItem } from "@trackwall/protocol";
-import { cardKeyMove, projectBoard } from "../src/lib/project-board.ts";
+import { canMoveCard, cardKeyMove, projectBoard } from "../src/lib/project-board.ts";
 
 function item(id: string, fields: Partial<BoardItem> = {}): BoardItem {
   return {
@@ -65,7 +65,30 @@ describe("a project of Plan as a board (ADR-217)", () => {
     expect(projectBoard(items, "p").columns.review[0]?.closedAbove).toBe(false);
   });
 
-  test("Alt+← and Alt+→ move a card one column and stop at either end; other keys are left alone", () => {
+  test("the user moves a card to any other column, but not one below a closed item, which moves with it", () => {
+    const board = projectBoard(items, "p");
+    const [accept] = board.columns.review;
+    const [note] = board.columns.done;
+    if (!accept || !note) throw new Error("the board lacks its cards");
+    expect(canMoveCard(accept, "done")).toBe(true);
+    expect(canMoveCard(accept, "ideas")).toBe(true);
+    expect(canMoveCard(accept, "review")).toBe(false);
+    expect(canMoveCard(note, "ready")).toBe(false);
+    expect(board.cards.get("accept")).toBe(accept);
+  });
+
+  test("an item whose every part was dropped is a card of its own again", () => {
+    const board = projectBoard([...items, item("lone", { order: 4 }), item("gone", { parent: "lone", column: "dropped" })], "p");
+    expect(ids(board.columns.ready)).toEqual(["lone"]);
+    expect(board.dropped).toBe(2);
+  });
+
+  test("hand-edited files with a cycle show each item at most once", () => {
+    const loop = [item("p", { kind: "project", parent: null }), item("x", { parent: "y" }), item("y", { parent: "x" }), item("z")];
+    expect(ids(projectBoard(loop, "p").columns.ready)).toEqual(["z"]);
+  });
+
+  test("Alt+← and Alt+→ move a card one column and stop at either end, where the key is still taken; other keys are left alone", () => {
     const key = (k: string, mods: Partial<Pick<KeyboardEvent, "altKey" | "ctrlKey" | "metaKey">> = {}) => ({
       key: k,
       altKey: true,
@@ -75,8 +98,8 @@ describe("a project of Plan as a board (ADR-217)", () => {
     });
     expect(cardKeyMove(key("ArrowRight"), "ready")).toBe("in_progress");
     expect(cardKeyMove(key("ArrowLeft"), "ready")).toBe("ideas");
-    expect(cardKeyMove(key("ArrowLeft"), "ideas")).toBeUndefined();
-    expect(cardKeyMove(key("ArrowRight"), "done")).toBeUndefined();
+    expect(cardKeyMove(key("ArrowLeft"), "ideas")).toBeNull();
+    expect(cardKeyMove(key("ArrowRight"), "done")).toBeNull();
     expect(cardKeyMove(key("ArrowRight", { altKey: false }), "ready")).toBeUndefined();
     expect(cardKeyMove(key("ArrowRight", { ctrlKey: true }), "ready")).toBeUndefined();
     expect(cardKeyMove(key("ArrowUp"), "ready")).toBeUndefined();

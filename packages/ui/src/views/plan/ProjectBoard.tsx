@@ -1,16 +1,22 @@
 import { type BoardItem, boardApi } from "@trackwall/protocol";
-import { type DragEvent, useEffect, useRef, useState } from "react";
+import { type DragEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { post } from "@/lib/api";
 import { COLUMN_LABELS } from "@/lib/board-tree";
 import type { Connection } from "@/lib/connection";
 import { type ItemTaskIndex, itemTasks } from "@/lib/plan-progress";
-import { BOARD_COLUMNS, type BoardCard, type BoardViewColumn, cardKeyMove, projectBoard } from "@/lib/project-board";
+import {
+  BOARD_COLUMNS,
+  type BoardCard,
+  type BoardViewColumn,
+  CARD_DRAG_TYPE,
+  canMoveCard,
+  cardKeyMove,
+  projectBoard,
+} from "@/lib/project-board";
 import { useAction } from "@/lib/use-action";
 import { cn } from "@/lib/utils";
 import { RowTask } from "./RowTask.tsx";
-
-const CARD_TYPE = "application/x-trackwall-board-item";
 
 /**
  * A project of Plan as a board (ADR-217): its items not split further as cards in columns, each with the item it was split
@@ -38,43 +44,52 @@ export function ProjectBoard({
   onChanged: () => void;
 }) {
   const [over, setOver] = useState<BoardViewColumn>();
-  // The card moved from the keyboard keeps the focus in its new column, so it can move on.
+  // The card moved from the keyboard keeps the focus in its new column, once, so it can move on.
   const [follow, setFollow] = useState<string>();
+  const [moved, setMoved] = useState("");
   const move = useAction(
-    async (id: string, column: BoardViewColumn) => {
-      await post(conn, boardApi.update, { item: id, column });
-      return id;
+    async (card: BoardCard, column: BoardViewColumn) => {
+      await post(conn, boardApi.update, { item: card.item.id, column });
+      return { id: card.item.id, text: `${card.item.title} moved to ${COLUMN_LABELS[column]}.` };
     },
-    (id) => {
-      setFollow(id);
+    (done) => {
+      setFollow(done.id);
+      setMoved(done.text);
       onChanged();
     },
   );
-  const board = projectBoard(items, project);
+  // Recounted on a board change, not on every drag over a column or selection.
+  const board = useMemo(() => projectBoard(items, project), [items, project]);
   const columns = BOARD_COLUMNS.filter((column) => !hideDone || column !== "done");
+  const tryMove = (card: BoardCard | undefined, to: BoardViewColumn) => {
+    if (card && !move.pending && canMoveCard(card, to)) move.run(card, to);
+  };
   const drop = (column: BoardViewColumn) => (e: DragEvent) => {
     e.preventDefault();
     setOver(undefined);
-    const id = e.dataTransfer.getData(CARD_TYPE);
-    const card = Object.values(board.columns)
-      .flat()
-      .find((c) => c.item.id === id);
-    if (card && !card.closedAbove && card.item.column !== column) move.run(id, column);
+    tryMove(board.cards.get(e.dataTransfer.getData(CARD_DRAG_TYPE)), column);
   };
   return (
     <div className="flex flex-col gap-2">
       {move.error && <p className="text-destructive text-sm whitespace-pre-wrap">{move.error}</p>}
+      <p aria-live="polite" className="sr-only">
+        {moved}
+      </p>
       <div className="grid auto-cols-[minmax(11rem,1fr)] grid-flow-col gap-2 overflow-x-auto">
         {columns.map((column) => (
           <section
             key={column}
             aria-label={COLUMN_LABELS[column]}
             onDragOver={(e) => {
-              if (!e.dataTransfer.types.includes(CARD_TYPE)) return;
+              if (!e.dataTransfer.types.includes(CARD_DRAG_TYPE)) return;
               e.preventDefault();
               setOver(column);
             }}
-            onDragLeave={() => setOver(undefined)}
+            onDragLeave={(e) => {
+              // Entering a card or the heading inside the column is not leaving it.
+              if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return;
+              setOver(undefined);
+            }}
             onDrop={drop(column)}
             className={cn("bg-secondary/40 flex min-h-40 flex-col gap-2 rounded-md border p-2", over === column && "border-primary")}
           >
@@ -89,9 +104,11 @@ export function ProjectBoard({
                 taskIndex={taskIndex}
                 selected={card.item.id === selected}
                 focused={card.item.id === follow}
+                onFocused={() => setFollow(undefined)}
                 disabled={move.pending}
                 onSelect={() => onSelect(card.item.id)}
-                onMove={(to) => move.run(card.item.id, to)}
+                onMove={(to) => tryMove(card, to)}
+                onDragEnd={() => setOver(undefined)}
               />
             ))}
           </section>
@@ -112,44 +129,53 @@ function Card({
   taskIndex,
   selected,
   focused,
+  onFocused,
   disabled,
   onSelect,
   onMove,
+  onDragEnd,
 }: {
   card: BoardCard;
   column: BoardViewColumn;
   taskIndex: ItemTaskIndex;
   selected: boolean;
-  /** Takes the focus when it shows up, in the column it was just moved to. */
+  /** Takes the focus when it shows up in the column it was just moved to. */
   focused: boolean;
+  onFocused: () => void;
   disabled: boolean;
   onSelect: () => void;
   onMove: (to: BoardViewColumn) => void;
+  onDragEnd: () => void;
 }) {
-  // A card below a done or dropped item moves with that item, in the outline.
-  const movable = !closedAbove && !disabled;
   const button = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    if (focused) button.current?.focus();
-  }, [focused]);
+    if (!focused) return;
+    button.current?.focus();
+    onFocused();
+  }, [focused, onFocused]);
+  const closedWith = `Closed with ${splitFrom?.title ?? "the item above it"}; it moves with that item in the outline.`;
   return (
     <button
       ref={button}
       type="button"
-      draggable={movable}
+      // A card below a done or dropped item moves with that item, in the outline.
+      draggable={!closedAbove && !disabled}
       onDragStart={(e) => {
-        e.dataTransfer.setData(CARD_TYPE, item.id);
+        e.dataTransfer.setData(CARD_DRAG_TYPE, item.id);
         e.dataTransfer.effectAllowed = "move";
       }}
+      onDragEnd={onDragEnd}
       onClick={onSelect}
       onKeyDown={(e) => {
-        const to = movable ? cardKeyMove(e.nativeEvent, column) : undefined;
-        if (!to) return;
+        const to = cardKeyMove(e.nativeEvent, column);
+        if (to === undefined) return;
+        // Alt+← is also the browser's Back: the board keeps it even where the card cannot move.
         e.preventDefault();
-        onMove(to);
+        if (to !== null) onMove(to);
       }}
       aria-current={selected ? "true" : undefined}
-      title={closedAbove ? `Closed with ${splitFrom?.title ?? "the item above it"}` : undefined}
+      aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight"
+      title={closedAbove ? closedWith : undefined}
       className={cn(
         "bg-card hover:bg-accent flex flex-col gap-1.5 rounded-md border px-2.5 py-2 text-left text-sm",
         selected && "bg-accent text-accent-foreground border-primary",
@@ -158,6 +184,7 @@ function Card({
     >
       {splitFrom && <span className="text-muted-foreground truncate text-xs">{splitFrom.title}</span>}
       <span className="break-words">{item.title}</span>
+      {closedAbove && <span className="sr-only">{closedWith}</span>}
       {item.repos.length > 0 && (
         <span className="flex flex-wrap gap-1">
           {item.repos.map((repo) => (
