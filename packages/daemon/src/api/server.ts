@@ -10,7 +10,6 @@ import {
   type ErrorCode,
   HEALTH_PATH,
   type Health,
-  viewerApi,
 } from "@trackwall/protocol";
 import type { Facade } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
@@ -20,7 +19,7 @@ import { conversationSocketRoute } from "./conversation-socket.ts";
 import type { EventHub } from "./event-hub.ts";
 import { eventSocketRoute } from "./event-socket.ts";
 import { downloadRequest, sendDownload } from "./file-download.ts";
-import { hasValidToken, hasViewerToken, OriginPolicy } from "./guard.ts";
+import { bearerToken, OriginPolicy, tokenMatches } from "./guard.ts";
 import { HOOKS_PATH, handleHook } from "./hooks.ts";
 import { sessionSocketRoute, terminalSocketRoute } from "./pty-socket.ts";
 import { postRoutes } from "./routes.ts";
@@ -169,8 +168,7 @@ interface ProtectedRoute {
 
 /** The routes behind the token: the API, MCP and the session plugin's hooks (ADR-88); `undefined` for any other path. */
 function protectedRoute(req: IncomingMessage, res: ServerResponse, path: string, o: ApiOptions): ProtectedRoute | undefined {
-  if (path === viewerApi.sessions.path) return { opensWith: "viewer", run: () => handleApi(req, res, path, o) };
-  if (path.startsWith("/api/")) return { opensWith: "daemon", run: () => handleApi(req, res, path, o) };
+  if (path.startsWith("/api/")) return { opensWith: postRoutes.get(path)?.opensWith ?? "daemon", run: () => handleApi(req, res, path, o) };
   if (path === MCP_PATH) return { opensWith: "session", run: (session) => o.mcp.handle(req, res, session) };
   if (path.startsWith(HOOKS_PATH)) {
     return {
@@ -191,7 +189,9 @@ function protectedRoute(req: IncomingMessage, res: ServerResponse, path: string,
 function authenticate(req: IncomingMessage, opensWith: RouteTokens, o: ApiOptions): { session: string | null } | { refused: string } {
   const sessionToken = opensWith === "session" ? req.headers[SESSION_TOKEN_HEADER] : undefined;
   if (sessionToken === undefined) {
-    const opened = hasValidToken(req, o.token) || (opensWith === "viewer" && hasViewerToken(req, o.facade.viewerAccess));
+    const given = bearerToken(req);
+    const opened =
+      given !== undefined && (tokenMatches(given, o.token) || (opensWith === "viewer" && o.facade.viewerAccess.accepts(given)));
     return opened ? { session: null } : { refused: "missing or invalid token" };
   }
   const session = typeof sessionToken === "string" ? o.facade.agents.callerSession(sessionToken) : undefined;

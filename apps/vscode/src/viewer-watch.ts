@@ -36,8 +36,11 @@ export function watchSessions(o: {
     running = true;
     clearTimeout(timer);
     try {
-      const result = await read(o.folder());
+      const result = await read(o.folder()).catch((err: unknown): ViewerRead => ({ kind: "unavailable", reason: String(err) }));
       if (!disposed) o.onRead(result);
+    } catch (err) {
+      // A failure of VS Code's API while it shows the result must not end the loop as an unhandled rejection.
+      console.error(`[trackwall] cannot show the sessions: ${String(err)}`);
     } finally {
       running = false;
       next();

@@ -69,7 +69,8 @@ export function statusBarState(read: ViewerRead): StatusBarState | undefined {
   if (read.kind === "off") return undefined;
   if (read.kind === "unavailable") return { text: "$(debug-disconnect) Trackwall", tooltip: `Trackwall: ${read.reason}`, warning: false };
   const { sessions, proposals } = read.list;
-  const waiting = sessions.filter((s) => s.live && s.needsAttention).length + proposals;
+  // As the desktop app's badge and a browser tab's title count (`waitingInTab`): only a running session waits for you.
+  const waiting = sessions.filter((s) => s.needsAttention).length + proposals;
   if (waiting > 0) {
     const parts = [
       ...(waiting - proposals > 0 ? [countLabel(waiting - proposals, SESSIONS)] : []),

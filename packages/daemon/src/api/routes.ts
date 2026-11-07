@@ -44,16 +44,20 @@ interface PostHandler {
   run: (facade: Facade, body: unknown) => Promise<unknown>;
   /** The largest body the server reads for the action, which it checks before it holds the body in memory. */
   maxBodyBytes: number;
+  /** Which token besides the daemon token opens the action: the viewer token for the viewer's session list (ADR-221), otherwise none. */
+  opensWith: "daemon" | "viewer";
 }
 
 function route<Req extends z.ZodType, Data extends z.ZodType>(
   endpoint: Endpoint<Req, Data>,
   run: (facade: Facade, body: z.output<Req>) => z.input<Data> | Promise<z.input<Data>>,
+  opensWith: PostHandler["opensWith"] = "daemon",
 ): [string, PostHandler] {
   return [
     endpoint.path,
     {
       maxBodyBytes: endpoint.maxBodyBytes ?? API_BODY_MAX_BYTES,
+      opensWith,
       run: async (facade, body) => {
         const parsed = endpoint.request.safeParse(body);
         if (!parsed.success) throw new DomainError("bad_request", z.prettifyError(parsed.error));
@@ -186,7 +190,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(verificationApi.start, (f, b) => f.verifications.start(b.task)),
   route(verificationApi.get, (f, b) => f.verifications.get(b.task)),
   route(verificationApi.cancel, (f, b) => f.verifications.cancel(b.task)),
-  route(viewerApi.sessions, (f) => viewerSessionList(f.agents.sessions())),
+  route(viewerApi.sessions, (f) => viewerSessionList(f.agents.sessions()), "viewer"),
   route(viewerApi.state, (f) => f.viewerAccess.state()),
   route(viewerApi.setEnabled, (f, b) => f.viewerAccess.setEnabled(b.enabled)),
   route(autoReviewApi.start, (f, b) => f.agents.startAutoReview(b.task)),

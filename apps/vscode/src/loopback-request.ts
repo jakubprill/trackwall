@@ -10,6 +10,7 @@ import { connect } from "node:net";
 const LOOPBACK_HOST = "127.0.0.1";
 /** A viewer's answers are a few kilobytes; more is not the daemon. */
 const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
+/** The whole request, answer included: a program that took the port and answers a byte at a time does not hold the look. */
 const TIMEOUT_MS = 3000;
 
 export interface LoopbackResponse {
@@ -35,8 +36,13 @@ export function loopbackRequest(
     const socket = connect({ host: LOOPBACK_HOST, port });
     const chunks: Buffer[] = [];
     let received = 0;
-    socket.setTimeout(TIMEOUT_MS, () => socket.destroy(new Error(`no answer from ${LOOPBACK_HOST}:${port} within ${TIMEOUT_MS} ms`)));
-    socket.once("connect", () => socket.end(Buffer.concat([Buffer.from(`${head.join("\r\n")}\r\n\r\n`, "latin1"), body])));
+    const deadline = setTimeout(
+      () => socket.destroy(new Error(`no answer from ${LOOPBACK_HOST}:${port} within ${TIMEOUT_MS} ms`)),
+      TIMEOUT_MS,
+    );
+    socket.once("close", () => clearTimeout(deadline));
+    // `write`, not `end`: Bun's server drops the answer of a client that half-closes; `Connection: close` ends the socket.
+    socket.once("connect", () => socket.write(Buffer.concat([Buffer.from(`${head.join("\r\n")}\r\n\r\n`, "latin1"), body])));
     socket.on("data", (chunk: Buffer) => {
       received += chunk.length;
       if (received > MAX_RESPONSE_BYTES) return void socket.destroy(new Error("the answer is too large"));
@@ -61,12 +67,14 @@ export function parseResponse(raw: Buffer): LoopbackResponse {
   const lines = raw.subarray(0, end).toString("latin1").split("\r\n");
   const status = /^HTTP\/1\.[01] (\d{3})/.exec(lines[0] ?? "")?.[1];
   if (status === undefined) throw new Error("the answer is not HTTP/1.1");
-  const headers = new Map(
-    lines.slice(1).map((line) => {
-      const colon = line.indexOf(":");
-      return [line.slice(0, colon).trim().toLowerCase(), line.slice(colon + 1).trim()] as const;
-    }),
-  );
+  const headers = new Map<string, string>();
+  for (const line of lines.slice(1)) {
+    const colon = line.indexOf(":");
+    if (colon <= 0) throw new Error("the answer has a damaged header");
+    const name = line.slice(0, colon).trim().toLowerCase();
+    if (headers.has(name)) throw new Error(`the answer repeats its ${name} header`);
+    headers.set(name, line.slice(colon + 1).trim());
+  }
   const rest = raw.subarray(end + 4);
   if (headers.get("transfer-encoding")?.toLowerCase() === "chunked")
     return { status: Number(status), body: dechunk(rest).toString("utf8") };
@@ -82,8 +90,9 @@ function dechunk(raw: Buffer): Buffer {
   for (;;) {
     const lineEnd = raw.indexOf("\r\n", at);
     if (lineEnd < 0) throw new Error("the answer was cut off");
-    const size = Number.parseInt(raw.subarray(at, lineEnd).toString("latin1").split(";")[0] ?? "", 16);
-    if (!Number.isInteger(size) || size < 0) throw new Error("the answer has a damaged chunk");
+    const sizeText = raw.subarray(at, lineEnd).toString("latin1").split(";")[0]?.trim() ?? "";
+    if (!/^[0-9a-f]{1,8}$/i.test(sizeText)) throw new Error("the answer has a damaged chunk");
+    const size = Number.parseInt(sizeText, 16);
     if (size === 0) return Buffer.concat(parts);
     const start = lineEnd + 2;
     if (raw.length < start + size + 2) throw new Error("the answer was cut off");

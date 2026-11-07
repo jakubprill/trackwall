@@ -83,6 +83,15 @@ describe("one look at the daemon", () => {
     expect(await readSessions(folder)).toEqual({ kind: "unavailable", reason: "missing or invalid token" });
   });
 
+  test("a viewer.json of a Trackwall that has stopped says so in plain words", async () => {
+    const closed = createServer();
+    await new Promise<void>((resolve) => closed.listen(0, "127.0.0.1", resolve));
+    const free = (closed.address() as AddressInfo).port;
+    await new Promise<void>((resolve) => closed.close(() => resolve()));
+    const folder = folderWith(JSON.stringify({ port: free, token: TOKEN, instance: "start-1" }));
+    expect(await readSessions(folder)).toEqual({ kind: "unavailable", reason: "Trackwall is not running" });
+  });
+
   test("a damaged viewer.json is unavailable, not off", async () => {
     expect(await readSessions(folderWith("{ not json"))).toEqual({ kind: "unavailable", reason: "viewer.json is not JSON" });
     expect(await readSessions(folderWith(JSON.stringify({ port: "x" })))).toEqual({

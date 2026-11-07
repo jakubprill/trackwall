@@ -36,14 +36,17 @@ export class ViewerAccess {
     }
   }
 
+  /** On while a token works or while the file is still there, so a file that could not be removed shows as on, not off. */
   state(): ViewerAccessState {
-    return { enabled: this.#hash !== undefined, file: this.#file };
+    return { enabled: this.#hash !== undefined || existsSync(this.#file), file: this.#file };
   }
 
   setEnabled(enabled: boolean): ViewerAccessState {
     if (!enabled) {
+      // The token is refused first; a file that cannot be removed fails the request, and Settings still shows access on,
+      // since the next daemon start would issue a token into it again.
       this.#hash = undefined;
-      rmSync(this.#file, { force: true });
+      rmSync(this.#file, { force: true, maxRetries: 3, retryDelay: 100 });
       return this.state();
     }
     if (!this.#daemon) throw new DomainError("bad_request", "the daemon's API is not listening yet");

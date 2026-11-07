@@ -4,8 +4,8 @@ import { readViewerFile } from "./viewer-file.ts";
 
 /**
  * One look at the daemon, as the side bar and the status bar show it. The token goes out only after `/api/health` on the
- * file's port answers with the file's daemon start, so a file left by a daemon that has ended never sends it to whatever
- * listens on that port now (ADR-161, ADR-221).
+ * file's port answers with the file's daemon start, so a file left by a daemon that has ended does not send it to another
+ * program that took the port by chance (ADR-161, ADR-221).
  */
 export type ViewerRead =
   /** No `viewer.json`: Trackwall is not running here, or viewer access is off. */
@@ -33,6 +33,8 @@ export async function readSessions(folder: string, request = loopbackRequest): P
       ? { kind: "connected", list: list.data }
       : { kind: "unavailable", reason: "Trackwall sent a session list this extension does not know" };
   } catch (err) {
-    return { kind: "unavailable", reason: (err as Error).message };
+    // A refused connection is the usual case: Trackwall wrote the file and has stopped since.
+    const refused = (err as NodeJS.ErrnoException).code === "ECONNREFUSED";
+    return { kind: "unavailable", reason: refused ? "Trackwall is not running" : (err as Error).message };
   }
 }

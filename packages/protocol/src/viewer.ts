@@ -2,8 +2,7 @@ import { z } from "zod";
 import { SessionId, type SessionList, TaskId } from "./agents.ts";
 import { apiEndpoints } from "./api.ts";
 import { cutText } from "./cut-text.ts";
-import { handingTaskName } from "./impact-handoff.ts";
-import { sessionPlace, sessionStateLabel } from "./session-label.ts";
+import { StatusTone, sessionPlace, sessionStateLabel } from "./session-label.ts";
 
 /**
  * Viewer access (ADR-221): a read-only client on this computer, today the VS Code extension, sees the sessions and what
@@ -19,10 +18,12 @@ export const VIEWER_FILE = "viewer.json";
 /** `viewer.json`: written by the daemon, user-only, when viewer access is on, and again at each daemon start with a new token. */
 export const ViewerFile = z.object({
   port: z.number().int().min(1).max(65535),
-  token: z.string().min(32),
+  /** 32 random bytes in base64url, as the daemon makes it; nothing else, since the extension writes it into a header by hand. */
+  token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
   /**
-   * The daemon start that issued the token (`Health.instance`): a viewer sends the token only after `/api/health` on the
-   * port answers with the same instance, so a file left by a daemon that has ended never sends it to whatever listens there now.
+   * The daemon start that issued the token (`Health.instance`, which is public): a viewer sends the token only after
+   * `/api/health` on the port answers with the same instance, so a file left by a daemon that has ended does not send it
+   * to another program that took the port by chance. The token of an ended start is dead anyway: the daemon kept its hash in memory.
    */
   instance: z.string().min(1),
 });
@@ -32,7 +33,7 @@ export type ViewerFile = z.infer<typeof ViewerFile>;
 export const VIEWER_TEXT_MAX = 200;
 
 export const ViewerStatus = z.object({
-  tone: z.enum(["ok", "warning", "error"]).nullable(),
+  tone: StatusTone.nullable(),
   /** The state in the words of the UI (`sessionStateLabel`): "asking for approval", "working", "idle"… */
   label: z.string(),
 });
@@ -45,7 +46,10 @@ export const ViewerSession = z.object({
   /** The window title the agent set: what it is working on; `null` before it set one. */
   windowTitle: z.string().max(VIEWER_TEXT_MAX).nullable(),
   task: TaskId.nullable(),
-  /** The task's title, or the first line of its prompt cut like a title; `null` for a session in a repo root or the projects folder. */
+  /**
+   * The task's title from its proposal; `null` for a task the user typed, whose prompt stays in Trackwall, and for a session
+   * in a repo root or the projects folder.
+   */
   taskName: z.string().max(VIEWER_TEXT_MAX).nullable(),
   status: ViewerStatus,
   /** Waiting for you (`Session.needsAttention`, ADR-47). */
@@ -74,16 +78,18 @@ export const ViewerAccessState = z.object({
 export type ViewerAccessState = z.infer<typeof ViewerAccessState>;
 
 const endpoint = apiEndpoints("viewer");
+/** The viewer's request is `{}`; the one action a token other than the daemon's opens reads no more than that. */
+const VIEWER_BODY_MAX_BYTES = 1024;
 
 export const viewerApi = {
   /** The sessions as a viewer sees them; the only action a viewer token opens (the daemon token opens it too). */
-  sessions: endpoint("sessions", z.object({}).strict(), ViewerSessionList),
+  sessions: endpoint("sessions", z.object({}).strict(), ViewerSessionList, { maxBodyBytes: VIEWER_BODY_MAX_BYTES }),
   state: endpoint("state", z.object({}).strict(), ViewerAccessState),
   /** Turns viewer access on (a new token in `viewer.json`) or off (the file removed, the token refused at once). */
   setEnabled: endpoint("set-enabled", z.object({ enabled: z.boolean() }).strict(), ViewerAccessState),
 } as const;
 
-/** The session list cut down for a viewer: each session's state in the UI's words and nothing a session or the user wrote, besides titles. */
+/** The session list cut down for a viewer: each session's state in the UI's words, and of what a session or the user wrote only the titles. */
 export function viewerSessionList(list: Pick<SessionList, "sessions" | "tasks" | "proposals">): ViewerSessionList {
   const tasks = new Map(list.tasks.map((t) => [t.id, t]));
   return {
@@ -96,7 +102,7 @@ export function viewerSessionList(list: Pick<SessionList, "sessions" | "tasks" |
         supervisor: s.supervisor,
         windowTitle: s.windowTitle === null ? null : cutText(s.windowTitle, VIEWER_TEXT_MAX),
         task: s.task,
-        taskName: task === undefined ? null : cutText(handingTaskName(task), VIEWER_TEXT_MAX),
+        taskName: task?.title == null ? null : cutText(task.title, VIEWER_TEXT_MAX),
         status: { tone: status.tone ?? null, label: status.label },
         needsAttention: s.needsAttention,
         live: s.run.kind !== "exited",

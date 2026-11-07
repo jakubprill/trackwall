@@ -29,7 +29,9 @@ function session(over: Partial<Session>): Session {
 
 const TASK_ID = "22222222-2222-4222-8222-222222222222";
 // Only the fields the viewer reads; the rest of a task never reaches it.
-const task = { id: TASK_ID, repo: "shop", title: null, prompt: "Fix the checkout total\n\nThe tax is added twice." } as Task;
+const task = { id: TASK_ID, repo: "shop", title: "Fix the checkout total", prompt: "The tax is added twice for ACME's orders." } as Task;
+const TYPED_TASK_ID = "44444444-4444-4444-8444-444444444444";
+const typedTask = { id: TYPED_TASK_ID, repo: "shop", title: null, prompt: "Rotate the key sk-live-123 in billing" } as Task;
 
 describe("the viewer's session list", () => {
   test("names each session's state in the UI's words, with its place and task name", () => {
@@ -76,6 +78,15 @@ describe("the viewer's session list", () => {
       proposals: 2,
     });
     expect(ViewerSessionList.safeParse(list).success).toBe(true);
+  });
+
+  test("names a task by its proposal's title only: the prompt of a task the user typed stays in Trackwall", () => {
+    const list = viewerSessionList({ sessions: [session({ task: TYPED_TASK_ID })], tasks: [task, typedTask], proposals: [] });
+    expect(list.sessions[0]?.taskName).toBeNull();
+    expect(JSON.stringify(list)).not.toContain("sk-live");
+    expect(JSON.stringify(viewerSessionList({ sessions: [session({ task: TASK_ID })], tasks: [task], proposals: [] }))).not.toContain(
+      "ACME",
+    );
   });
 
   test("leaves out the agent dialog and copy request, and cuts a long window title to the schema's limit", () => {

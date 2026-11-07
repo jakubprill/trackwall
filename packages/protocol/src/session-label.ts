@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { isSupervisor, type Session } from "./agents.ts";
 import type { TaskStateChange } from "./task-state.ts";
 
@@ -10,7 +11,8 @@ import type { TaskStateChange } from "./task-state.ts";
  */
 
 /** A state's tone; the UI's `lib/status-tone.ts` picks the colour for a tone, and the tokens are in `index.css` (ADR-16). */
-export type StatusTone = "ok" | "warning" | "error";
+export const StatusTone = z.enum(["ok", "warning", "error"]);
+export type StatusTone = z.infer<typeof StatusTone>;
 
 /** A state in one line: the tone of its dot (none for a state that is neither good nor bad) and the text next to it. */
 export interface StatusLabel {

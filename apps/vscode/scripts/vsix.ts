@@ -16,6 +16,7 @@ const SourceManifest = z
     publisher: z.string(),
     engines: z.object({ vscode: z.string() }),
     extensionKind: z.array(z.string()),
+    categories: z.array(z.string()),
   })
   .loose();
 
@@ -38,7 +39,7 @@ export function vsixManifest(manifest: Record<string, unknown>): string {
     <Identity Language="en-US" Id="${EXTENSION_NAME}" Version="${xml(m.version)}" Publisher="${xml(m.publisher)}" />
     <DisplayName>${xml(m.displayName)}</DisplayName>
     <Description xml:space="preserve">${xml(m.description)}</Description>
-    <Categories>Other</Categories>
+    <Categories>${xml(m.categories.join(","))}</Categories>
     <GalleryFlags>Public</GalleryFlags>
     <Properties>
       <Property Id="Microsoft.VisualStudio.Code.Engine" Value="${xml(m.engines.vscode)}" />

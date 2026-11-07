@@ -18,7 +18,7 @@ See in VS Code which Trackwall session waits for you while you read other code, 
 
 The extension asks Trackwall on this computer what the sessions are doing, every two seconds while VS Code has the focus and every ten seconds while it does not. A session that asks for approval, waits for your plan or waits for your next prompt shows under "Waiting for you", and the status bar item turns yellow with how many wait.
 
-Trackwall shares only what a glance needs: where each session works, its state, the title the agent gave its window and the task's name. What the agent asks you to approve, its terminal and your messages stay in Trackwall. To answer, click the session: Trackwall's window opens on it.
+Trackwall shares only what a glance needs: where each session works, its state, the title the agent gave its window and the title of a proposed task. What the agent asks you to approve, its terminal, your prompts and your messages stay in Trackwall. To answer, click the session: Trackwall's window opens on it.
 
 The extension gets its own read-only token from Trackwall, separate from the one Trackwall's window uses. Trackwall writes it into `viewer.json` in its state folder while "VS Code extension" is on, gives it a new one at each start, and refuses it as soon as you turn the setting off.
 

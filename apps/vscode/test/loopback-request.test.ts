@@ -58,6 +58,20 @@ describe("a request to the daemon on 127.0.0.1", () => {
   });
 });
 
+test("a program that answers a byte at a time is cut off after 3 s, so it cannot hold the look for good", async () => {
+  const slow = createServer((_req, res) => {
+    res.writeHead(200);
+    const drip = setInterval(() => res.write("x"), 200);
+    res.on("close", () => clearInterval(drip));
+  });
+  await new Promise<void>((resolve) => slow.listen(0, "127.0.0.1", resolve));
+  const started = Date.now();
+  await expect(loopbackRequest((slow.address() as AddressInfo).port, "/api/health", { method: "GET" })).rejects.toThrow("within 3000 ms");
+  expect(Date.now() - started).toBeLessThan(5000);
+  slow.closeAllConnections();
+  await new Promise<void>((resolve) => slow.close(() => resolve()));
+}, 10_000);
+
 describe("reading the daemon's answer", () => {
   test("a body shorter than its Content-Length is an error, not a short answer", () => {
     expect(() => parseResponse(Buffer.from("HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\n{}"))).toThrow("cut off");
@@ -70,6 +84,13 @@ describe("reading the daemon's answer", () => {
 
   test("a chunked answer without its last chunk is an error", () => {
     expect(() => parseResponse(Buffer.from('HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n{"ok"\r\n'))).toThrow("cut off");
+  });
+
+  test("a damaged chunk size or a repeated length is refused instead of read in part", () => {
+    expect(() => parseResponse(Buffer.from("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n1g\r\n{}\r\n0\r\n\r\n"))).toThrow(
+      "damaged chunk",
+    );
+    expect(() => parseResponse(Buffer.from("HTTP/1.1 200 OK\r\nContent-Length: 2\r\nContent-Length: 3\r\n\r\n{}"))).toThrow("repeats");
   });
 
   test("something that is not HTTP is refused", () => {
