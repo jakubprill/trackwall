@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { agentsApi } from "@trackwall/protocol";
+import { agentsApi, promptBoxLayout } from "@trackwall/protocol";
 import { viewer, waitFor } from "./support/agents.ts";
-import { untilInputBox } from "./support/screen-lines.ts";
+import { screenLines, untilInputBox } from "./support/screen-lines.ts";
 import { FAKE_COPILOT, ONE_REPO, startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
@@ -28,9 +28,12 @@ const TYPED_REVIEW = "Thinking about: The user sent a review of your changes in 
 describe.skipIf(process.versions.bun === undefined)("Copilot CLI's framed input box (real PTY and git, fake Copilot CLI)", () => {
   test("a new session waits for you in the framed input box before its first prompt", async () => {
     const started = await daemon.facade.agents.start("shop");
+    const window = viewer(daemon.facade.agents, started.id);
     const ready = await waitFor(daemon.facade.agents, started.id, (s) => s.state !== null, "the first state");
 
+    expect(promptBoxLayout(await screenLines(window))).toBe("framed");
     expect(ready.state).toMatchObject({ state: "Input", source: "screen", reason: "screen input box before the first prompt" });
+    window.attachment.detach();
     await daemon.facade.agents.stop(started.id);
   }, 30_000);
 
@@ -46,6 +49,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI's framed input 
     window.attachment.input("1");
     await waitFor(daemon.facade.agents, session.id, (s) => s.state?.reason === "hook agentStop", "the end of the turn");
     await untilInputBox(window, "empty");
+    expect(promptBoxLayout(await screenLines(window))).toBe("framed");
 
     const review = { path: "README.md", side: "new" as const, line: 1, code: "# shop", text: "Name the port" };
     expect(await daemon.post(agentsApi.sendReview, { task: task.id, comments: [review] })).toEqual({ delivery: "typed", unread: 1 });

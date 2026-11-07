@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { promptBoxOnScreen, promptBoxText } from "@trackwall/protocol";
+import { promptBoxLayout, promptBoxOnScreen, promptBoxText } from "@trackwall/protocol";
 import { CopilotSessionState, RETYPE_AFTER_MS } from "../src/modules/agents/copilot-session-state.ts";
 
 /**
@@ -64,7 +64,10 @@ describe("Copilot CLI 1.0.107's framed input box, read from the screen (ADR-220)
   const framedWithText = framed.map((l) => (l === "┃" ? "┃ read the review" : l));
 
   test("the empty framed box over the footer with hints is the input box, in a wide and a narrow terminal, and after a turn", () => {
+    expect(promptBoxLayout(framed)).toBe("framed");
+    expect(promptBoxLayout(box)).toBe("ruled");
     expect(promptBoxOnScreen(framed)).toBe("empty");
+    expect(promptBoxOnScreen([`╻${"▄".repeat(20)}`, "┃", `╹${"▀".repeat(20)}`, " Interactive · Manual Approval"])).toBe("empty");
     expect(promptBoxOnScreen(screen("prompt-box-framed-72"))).toBe("empty");
     // The prompt of the turn above is framed too, without the rail, so only the box at the bottom counts.
     expect(promptBoxText(screen("prompt-box-framed-after-turn-120"))).toBe("");
@@ -89,13 +92,22 @@ describe("Copilot CLI 1.0.107's framed input box, read from the screen (ADR-220)
   });
 
   test("the framed box over a status line is not ready: Copilot CLI is still loading, or working", () => {
+    expect(promptBoxLayout(screen("prompt-box-framed-working-120"))).toBe("framed");
     expect(promptBoxOnScreen(screen("prompt-box-framed-loading-120"))).toBeUndefined();
     expect(promptBoxOnScreen(screen("prompt-box-framed-working-120"))).toBeUndefined();
   });
 
-  test("a frame without its rail, its top or a line inside is not the input box", () => {
+  test("the command menu on its own rail above the framed box is not in it: the box holds the command Enter picks", () => {
+    expect(promptBoxText(screen("prompt-box-framed-menu-120"))).toBe("/collect-debug-logs");
+  });
+
+  test("an approval dialog of a session with the framed box is not the input box", () => {
+    expect(promptBoxLayout(screen("dialog-shell-framed-120"))).toBeUndefined();
+    expect(promptBoxOnScreen(screen("dialog-shell-framed-120"))).toBeUndefined();
+  });
+
+  test("only a whole frame is the input box: not without its top, with nothing inside, with a line off the rail, or a past prompt's frame", () => {
     const footer = " Interactive · Manual Approval";
-    expect(promptBoxOnScreen([`╻${"▄".repeat(20)}`, "┃", `╹${"▀".repeat(20)}`, footer])).toBe("empty");
     expect(promptBoxOnScreen(["┃", `╹${"▀".repeat(20)}`, footer])).toBeUndefined();
     expect(promptBoxOnScreen([`╻${"▄".repeat(20)}`, `╹${"▀".repeat(20)}`, footer])).toBeUndefined();
     expect(promptBoxOnScreen([`╻${"▄".repeat(20)}`, "┃", "  more text", `╹${"▀".repeat(20)}`, footer])).toBeUndefined();

@@ -15,7 +15,8 @@
  * agent's tool) and prints its PID, so that the test can check that stopping the session ends the whole group. The
  * helper starts only after input from the user, because on Windows the leader joins the job a moment after the start.
  * Like Copilot CLI it keeps a conversation per session id once the session has had a prompt (a marker file in the
- * temporary directory), and refuses `--resume=<id>` of an id without one (ADR-95). `--version` alone prints the version,
+ * temporary directory), and refuses `--resume=<id>` of an id without one (ADR-95). With `COPILOT_PROMPT_FRAME=1` it
+ * frames its input box as Copilot CLI does with that feature on (ADR-220). `--version` alone prints the version,
  * and `--acp` runs the ACP mode of `fake-copilot-acp.ts` (ADR-107).
  */
 import { spawn } from "node:child_process";
@@ -111,13 +112,16 @@ const fire = pluginHooks(process.argv, "s1");
 const real = reference();
 
 /**
- * The input box as Copilot CLI 1.0.107 draws it with its `PROMPT_FRAME` feature on (ADR-220): framed in half blocks with
- * a rail on the left instead of between two rules with `❯`. The real binary also needs the terminal to answer its
- * colour queries; the fake takes `COPILOT_PROMPT_FRAME=1` alone. The footer stays as in the reference.
+ * The input box as Copilot CLI draws it with its `PROMPT_FRAME` feature on (ADR-220, `copilot-prompt-frame.contract.ts`):
+ * framed in half blocks with a rail on the left instead of between two rules with `❯`, as wide as the rules, over the
+ * same footer. The real binary also needs the terminal to answer its colour queries; the fake takes
+ * `COPILOT_PROMPT_FRAME=1` alone.
  */
 function framedBox(ruled: readonly string[]): string[] {
+  const footer = ruled.at(-1);
   const width = ruled[0]?.length ?? 0;
-  return [`╻${"▄".repeat(width - 1)}`, "┃", `╹${"▀".repeat(width - 1)}`, ...ruled.slice(3)];
+  if (footer === undefined || width === 0) throw new Error("the reference's input box has no rule or no footer");
+  return [`╻${"▄".repeat(width - 1)}`, "┃", `╹${"▀".repeat(width - 1)}`, footer];
 }
 const promptBox = process.env.COPILOT_PROMPT_FRAME === "1" ? framedBox(real.promptBox) : real.promptBox;
 const title = (text: string) => process.stdout.write(`\x1b]0;${text}\x07`);

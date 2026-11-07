@@ -6,7 +6,7 @@
  * Approval · / commands …`, shortened in a narrow terminal). While Copilot CLI is still loading, and while it works, the
  * footer is a status line instead, an animated bullet (● ◉ ◎ ○) and a word (`Loading: …`, `Working · …`), and the input
  * box may already be drawn, so the footer decides. The box comes in two layouts, and Copilot CLI picks one per session:
- * - ruled: a line starting with `❯` between two rules across the whole width (`─`), the only one in 1.0.103;
+ * - ruled: a line starting with `❯` between two rules across the whole width (`─`), the default;
  * - framed (seen on 1.0.107, ADR-220): a rail on the left, `╻` over lines starting with `┃` over `╹`, its top a row of `▄` and
  *   its bottom a row of `▀`, with no `❯`. Copilot CLI draws it when its `PROMPT_FRAME` feature is on for the account
  *   (or `COPILOT_PROMPT_FRAME=1`) and the terminal answered its query for the background colour, as the session
@@ -29,16 +29,40 @@ const MAX_BOX_LINES = 12;
  * The input box at the bottom of the visible lines (top to bottom) of an idle Copilot CLI: the text in it (`""` when
  * empty, the user's or a prompt not taken, its wrapped lines joined with single spaces), or `undefined` when the screen
  * does not end with the box over the hints footer. A text longer than the terminal is wrapped inside the box, its next
- * lines indented under the first.
+ * lines indented under the first (in the framed box, each on the rail).
  */
 export function promptBoxText(lines: readonly string[]): string | undefined {
-  const shown = lines.map((l) => l.trim());
-  while (shown.at(-1) === "") shown.pop();
+  const shown = trimmedLines(lines);
   const footer = shown.at(-1) ?? "";
   if (footer === "" || STATUS.test(footer)) return undefined;
+  const layout = layoutOver(shown);
+  if (layout === "ruled") return ruledBoxText(shown);
+  if (layout === "framed") return framedBoxText(shown);
+  return undefined;
+}
+
+export type PromptBoxLayout = "ruled" | "framed";
+
+/**
+ * The layout of the box Copilot CLI draws at the bottom of the screen over its footer, whether the footer has hints or a
+ * status line, or `undefined` when the line over the footer ends neither layout.
+ */
+export function promptBoxLayout(lines: readonly string[]): PromptBoxLayout | undefined {
+  return layoutOver(trimmedLines(lines));
+}
+
+/** The lines trimmed, without the empty ones at the bottom. */
+function trimmedLines(lines: readonly string[]): string[] {
+  const shown = lines.map((l) => l.trim());
+  while (shown.at(-1) === "") shown.pop();
+  return shown;
+}
+
+/** The layout whose bottom is the line over the footer (`shown` trimmed). */
+function layoutOver(shown: readonly string[]): PromptBoxLayout | undefined {
   const bottom = shown.at(-2) ?? "";
-  if (RULE.test(bottom)) return ruledBoxText(shown);
-  if (FRAME_BOTTOM.test(bottom)) return framedBoxText(shown);
+  if (RULE.test(bottom)) return "ruled";
+  if (FRAME_BOTTOM.test(bottom)) return "framed";
   return undefined;
 }
 
