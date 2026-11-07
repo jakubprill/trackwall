@@ -813,7 +813,7 @@ An item not filed under a project yet, written down so it is not lost: with Alt+
 _Avoid_: draft, note
 
 **Board column** (`BoardColumn`: `ideas`, `ready`, `in_progress`, `review`, `done`, `dropped`; "Column" in the UI, `COLUMN_LABELS`):
-How far an item is: "Idea", "Ready", "In progress", "In review", "Done", "Dropped". An agent moves an item only between `ideas` and `ready`; the item's tasks move it to "In progress" and "In review" (`TaskWorkColumn`, ADR-213), and only the user sets "Done" and "Dropped".
+How far an item is: "Idea", "Ready", "In progress", "In review", "Done", "Dropped". An agent moves an item only between `ideas` and `ready`; the item's tasks move it to "In progress" and "In review", and back to "Ready" when the last task on an item still in progress is removed (`TaskWorkColumn`, ADR-213), and only the user sets "Done" and "Dropped".
 _Avoid_: status (a repo's is `RepoStatus`), state (a session's)
 
 **Task item** (`Task.item`, `TaskProposal.item`):

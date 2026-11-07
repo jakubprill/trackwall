@@ -195,6 +195,8 @@ export class Board {
  * sets, and not to the column it is already in.
  */
 const TASK_WORK_FROM: Record<TaskWorkColumn, ReadonlySet<BoardColumn>> = {
+  // Only work that stopped before it was handed over goes back (ADR-213): an item in review keeps the work to review.
+  ready: new Set(["in_progress"]),
   in_progress: new Set(["ideas", "ready", "review"]),
   review: new Set(["ideas", "ready", "in_progress"]),
 };
