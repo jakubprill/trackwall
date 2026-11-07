@@ -317,6 +317,7 @@ export function createFacade(o: FacadeOptions): Facade {
     },
   });
   const agents = new Agents({
+    inContainer: o.inContainer,
     procs,
     // `terminals` needs `agents` for the task worktrees, so it is made below; a task ends only after both.
     closeFolderTerminal: (task): Promise<void> => terminals.closeTask(task),

@@ -15,7 +15,7 @@ Approve or stop an agent's command from the tray panel or the Home dashboard, an
 - One click to answer: the same options Copilot CLI offers in its terminal, or "Stop the agent".
 - The agent's questions in the same places, so you know what it asks before you open its session.
 - Commands you always allow, or never allow, written once for your repos instead of answered in every session.
-- Agent tasks that run without approvals kept in Copilot CLI's sandbox, so a command cannot touch your other repos or your credentials (on Linux by default, on macOS and Windows when you turn it on).
+- Agent tasks that run without approvals kept in Copilot CLI's sandbox, so a command cannot touch your other repos or your credentials (on Linux by default, also in a dev container set up for it, on macOS and Windows when you turn it on).
 
 ## How it works
 
@@ -35,7 +35,7 @@ toolPermissions:
     deny: ["shell(git push)"]
 ```
 
-On Linux, an [agent task](/features/tasks) started with "No approvals" runs its commands in Copilot CLI's sandbox; on macOS and Windows you turn it on yourself. Each shell command, and every build or script it starts, runs under your system's own isolation: it can write only in the task's worktree (and the repo's git folder and the system's temporary folder), and it cannot read your other repos or credential folders such as `~/.ssh`. The task can still commit, and `git push` still works, so keep a deny rule for that. The New session form tells you under the options that the task will run in the sandbox, and the task's header says "Sandbox". You choose which tasks run in it with `sandbox` in `workspace.yaml`:
+On Linux, an [agent task](/features/tasks) started with "No approvals" runs its commands in Copilot CLI's sandbox, in a container once it is set up for it; on macOS and Windows you turn it on yourself. Each shell command, and every build or script it starts, runs under your system's own isolation: it can write only in the task's worktree (and the repo's git folder and the system's temporary folder), and it cannot read your other repos or credential folders such as `~/.ssh`. The task can still commit, and `git push` still works, so keep a deny rule for that. The New session form tells you under the options that the task will run in the sandbox, and the task's header says "Sandbox". You choose which tasks run in it with `sandbox` in `workspace.yaml`:
 
 ```yaml
 sandbox:
@@ -61,8 +61,8 @@ sandbox:
 - Trackwall reads requests in the layout of Copilot CLI 1.0.103. A request it cannot read is still in the terminal and still makes the session "asking for approval", it only has no buttons.
 - A request taller than the session's terminal, such as the arguments of an MCP tool on a small screen, loses its top in the terminal. Trackwall still shows its buttons, with Copilot CLI's short description ("Use MCP tool: …") as the heading and only the part of the request the terminal shows.
 - Agents connected to the [MCP server](/features/mcp) never see these requests and cannot answer them.
-- The sandbox needs your system's isolation: built into macOS and Windows, and the `bubblewrap` package on Linux (with `slirp4netns`, `iproute2` and `iptables`). Where it cannot run, Trackwall refuses to start a task that should run in it and says what to install; the [doctor](/features/doctor) shows the same. Set `sandbox.tasks: off` to start such tasks without it.
-- In a container the sandbox is off unless you set `sandbox`: the container already keeps the agent away from your computer, and Docker does not let the sandbox start there.
+- The sandbox needs your system's isolation: built into macOS and Windows, and the `bubblewrap` package on Linux (with `slirp4netns`, `iproute2` and `iptables`). Where it cannot run, or cannot make its namespaces, Trackwall refuses to start a task that should run in it and says why; the [doctor](/features/doctor) shows the same. Set `sandbox.tasks: off` to start such tasks without it.
+- In a container the sandbox is off until the container can run it: Docker does not let it start by default, and the container already keeps the agent away from your computer, though not from your other repos and sign-ins in it. The [dev container guide](/guide/dev-container#copilot-cli-s-sandbox) gives the container the sandbox; Trackwall then puts tasks without approvals in it by itself, and until then the [doctor](/features/doctor) warns.
 - On macOS it is off unless you set `sandbox`. Git in the sandbox cannot read your `~/.gitconfig`, so add that file to `readonlyPaths` in the `sandbox` settings of Copilot CLI's `settings.json` first, or the task cannot commit. In the terminal, Copilot CLI may first ask whether to install its certificate authority, which it uses to give git and `gh` your sign-in without showing it to the command; answer it once in the task's terminal.
 - On Windows it is off unless you set `sandbox`, and it needs a Windows version with BaseContainer. On an older one Copilot CLI refuses every command of the task and says so.
 - A task keeps the sandbox it started with for every resume; a change of `sandbox` applies to tasks you start after it.

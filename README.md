@@ -68,7 +68,7 @@ To run Trackwall in a container instead, see [Run in a dev container](https://ja
 
 - **Copilot CLI only.** Sessions, tasks and the supervisor run Copilot CLI; other agents can use the MCP tools, but get no sessions or approvals in the app.
 - **Windows and macOS** for the desktop app. On Linux, Trackwall runs in a dev container.
-- **Agents run as you.** An agent's commands run with your rights, as in your own terminal. An agent task without approvals can run in Copilot CLI's sandbox: on by default on Linux outside a container, and on Windows and macOS when you turn it on. In a dev container the container keeps agents away from your computer instead.
+- **Agents run as you.** An agent's commands run with your rights, as in your own terminal. An agent task without approvals can run in Copilot CLI's sandbox: on by default on Linux, also in a dev container set up for it, and on Windows and macOS when you turn it on. In any other dev container only the container keeps agents away from your computer, not from your other repos and sign-ins in it.
 - **The card and the graph know Maven, Gradle and npm builds, Spring Boot, and HTTP endpoints and clients in Java and Kotlin.** Other stacks get their mise tasks but no endpoints or connections, and messaging such as Kafka does not show in the graph.
 - **One person, one computer.** No shared server or team view.
 
