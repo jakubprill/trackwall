@@ -915,7 +915,9 @@ describe("a task from a stack trace with the real Copilot CLI (ADR-222)", () => 
     const task = await daemon.facade.createTask(request);
     await endOfTurn(taskSessionOf(task.id));
 
-    expect(model.requests()[0]?.userTexts.join("\n")).toContain(task.prompt);
+    // The model is shared by the tests: this task's first request is the one with its prompt.
+    const first = model.requests().find((r) => r.userTexts.some((text) => text.includes("Fix the order total")));
+    expect(first?.userTexts.join("\n")).toContain(task.prompt);
     expect(task.prompt).toContain(`\n${trace}\n`);
     expect(agents.task(task.id).summary?.reproTest).toEqual(reproTest);
     await agents.stop(taskSessionOf(task.id));
