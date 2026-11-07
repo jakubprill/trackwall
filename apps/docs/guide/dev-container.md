@@ -164,7 +164,15 @@ Docker does not let the sandbox start by default, so Trackwall leaves it off in 
    ]
    ```
 
-3. Rebuild the container.
+3. On a Mac with Colima, or any Docker whose virtual machine uses AppArmor, Docker's own AppArmor profile also stops the sandbox. Download [trackwall-sandbox.apparmor.txt](/dev-container/trackwall-sandbox.apparmor.txt), which is that profile plus the namespaces and mounts the sandbox needs, and install it in the virtual machine once. It stays there until you delete the virtual machine (`colima delete`):
+
+   ```sh
+   colima ssh -- sudo tee /etc/apparmor.d/trackwall-sandbox < trackwall-sandbox.apparmor.txt > /dev/null
+   colima ssh -- sudo apparmor_parser -r /etc/apparmor.d/trackwall-sandbox
+   ```
+
+   Then add `"--security-opt", "apparmor=trackwall-sandbox"` to `runArgs`. Rancher Desktop on Windows needs none of this, since its virtual machine has no AppArmor.
+4. Rebuild the container.
 
 From then on Trackwall sees that the sandbox can run and puts tasks without approvals in it, as on a Linux computer: the New session form says so under the options. `sandbox.tasks` in `workspace.yaml` still chooses otherwise, as described in [Approvals](/features/approvals).
 
@@ -176,7 +184,8 @@ What each part does, and what it costs:
 - Together, the profile and `systempaths=unconfined` let programs in the container make namespaces of their own. These reach only what the program's user can, but they expose more of the kernel to a bug. Leave all three out if you prefer to rely on the container alone.
 - Keep `TRACKWALL_HOME` in your home folder, as above. The sandbox lets commands read the system's temporary folder, so Trackwall's state there would be readable.
 - The sandbox covers the agent's own commands. A build, the tests or a service that Trackwall runs for the task, such as Verify, still runs outside it, on files the agent may have changed.
-- On a computer whose Docker uses AppArmor, the doctor may still say that bubblewrap cannot make its namespaces. Check that the doctor shows the sandbox as on after the rebuild.
+- The AppArmor profile keeps Docker's own limits, including no writes to `/proc/sys`, so on Colima root in the container cannot use it even without `no-new-privileges`. Do not use `apparmor=unconfined` instead: it drops those limits, and on Ubuntu's virtual machine the sandbox still cannot set up its network.
+- Check that the doctor shows the sandbox as on after the rebuild. If it says that bubblewrap cannot make its namespaces, it names what refused them.
 
 ## Back up the repos
 
