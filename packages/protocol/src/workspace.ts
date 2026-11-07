@@ -211,7 +211,8 @@ export type AutoReviewSettings = z.infer<typeof AutoReviewSettings>;
  * `sandbox` in `workspace.yaml` (ADR-181), by hand only: which tasks run their commands in Copilot CLI's sandbox
  * (`--sandbox`), where a shell command may write only in the task's worktree and cannot see the other repos or the
  * credential folders. `auto` covers the tasks that run without approvals (ADR-105), `all` every task, `off` none. Without
- * the key it is `auto` on Linux and `off` in a container (the isolation there), on macOS and on Windows, until checked there.
+ * the key it is `auto` on Linux, in a container only where the sandbox can make its namespaces (ADR-219), and `off` in
+ * other containers (the isolation there), on macOS and on Windows, until checked there.
  */
 export const SandboxSettings = z.object({ tasks: z.enum(["auto", "all", "off"]) }).strict();
 export type SandboxSettings = z.infer<typeof SandboxSettings>;

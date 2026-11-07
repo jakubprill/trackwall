@@ -67,7 +67,7 @@ import { AutoReviews } from "./auto-reviews.ts";
 import type { CopilotHookOutput } from "./copilot-hook-output.ts";
 import { CopilotHookEvent } from "./copilot-hook-record.ts";
 import type { LspServer } from "./copilot-plugin.ts";
-import { sandboxState, taskSandbox } from "./copilot-sandbox.ts";
+import { daemonSandboxHost, type SandboxHost, sandboxState, taskSandbox } from "./copilot-sandbox.ts";
 import type { EndedTaskFacts } from "./ended-task.ts";
 import { HandoffWatch } from "./handoff-watch.ts";
 import { appendHookRecord } from "./hook-tail.ts";
@@ -171,8 +171,8 @@ interface AgentsRepos {
   supervisorModel(): string | null;
   /** Writes `supervisorModel` (ADR-193), `null` removing it: a restart of the supervisor on another model (ADR-206). */
   setSupervisorModel(model: string | null): unknown;
-  /** `sandbox` from `workspace.yaml` with its default (ADR-181): which tasks run in Copilot CLI's sandbox; `invalid_config` for a bad key. */
-  sandboxSettings(): SandboxSettings;
+  /** `sandbox` from `workspace.yaml` (ADR-181), `null` without the key: which tasks run in Copilot CLI's sandbox; `invalid_config` for a bad key. */
+  sandboxSettings(): SandboxSettings | null;
   /** `agentSecrets` from `workspace.yaml` (ADR-93): the secrets from mise a session's tools get; `invalid_config` for a bad key. */
   agentSecrets(): readonly string[];
   /** `autoReview` from `workspace.yaml` (ADR-182): whether a task gets a review once its agent reports; `invalid_config` for a bad key. */
@@ -191,6 +191,8 @@ interface AgentsRepos {
 
 export interface AgentsDeps {
   procs: AgentsProcs;
+  /** The daemon runs in a container (`FacadeOptions.inContainer`), where the sandbox is off by default unless it can run (ADR-219). */
+  inContainer: boolean;
   /** Closes the user's folder terminal in a task's worktree before the task ends (`terminals`, ADR-185). */
   closeFolderTerminal: (task: string) => Promise<void>;
   repos: AgentsRepos;
@@ -279,9 +281,12 @@ export class Agents {
   readonly #javaNavigation: JavaNavigationServers;
   readonly #autoReviews: AutoReviews;
   readonly #boardItems: TaskBoardItem;
+  /** Where the daemon runs, for Copilot CLI's sandbox (ADR-219). */
+  readonly #sandboxHost: SandboxHost;
 
   constructor(deps: AgentsDeps) {
     this.#deps = deps;
+    this.#sandboxHost = daemonSandboxHost(deps.inContainer);
     this.#javaNavigation = new JavaNavigationServers({
       projectsDir: () => deps.repos.projectsDir(),
       settings: () => deps.repos.javaNavigation(),
@@ -336,7 +341,7 @@ export class Agents {
       // The item a task starts on is in progress from then (ADR-213); every way a task starts goes through here.
       onCreated: (task) => this.#boardItems.started(task),
       javaNavigation: this.#javaNavigation,
-      sandbox: async (approvals) => taskSandbox(sandboxState(deps.repos.sandboxSettings(), await deps.env()), approvals),
+      sandbox: async (approvals) => taskSandbox(await this.sandboxState(), approvals),
       sessions: {
         launch: (spec) => this.#launchTask(spec),
         of: (task) => this.#sessions.views().filter((s) => s.task === task),
@@ -895,7 +900,7 @@ export class Agents {
 
   /** Which tasks run in Copilot CLI's sandbox, and why it cannot run here (ADR-181); `invalid_config` for a bad `sandbox` key. */
   async sandboxState(): Promise<SandboxState> {
-    return sandboxState(this.#deps.repos.sandboxSettings(), await this.#deps.env());
+    return sandboxState(this.#deps.repos.sandboxSettings(), await this.#deps.env(), this.#sandboxHost);
   }
 
   /** Whether Java navigation can start now, or why not (ADR-99); `null` without `javaNavigation` in `workspace.yaml`. */

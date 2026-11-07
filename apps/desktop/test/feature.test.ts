@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { featureFiles } from "../scripts/feature.ts";
 
@@ -49,4 +51,23 @@ describe("the Dev Container Feature (ADR-164)", () => {
     expect(() => featureFiles(templates, { ...values, sha256: { x64: "not-a-sum", arm64: "" } })).toThrow("unexpected SHA-256");
     expect(() => featureFiles({ json: "@OTHER@", install: "" }, values)).toThrow("no value for @OTHER@");
   });
+  test("offers the sandbox's programs as an option, off unless the user asks (ADR-219)", () => {
+    expect(JSON.parse(featureFiles(templates, values).json).options.sandbox).toMatchObject({ type: "boolean", default: false });
+    expect(featureFiles(templates, values).install).toContain(
+      "apt-get install -y -qq --no-install-recommends bubblewrap slirp4netns iproute2 iptables util-linux",
+    );
+  });
+
+  test.skipIf(process.platform === "win32")(
+    "stops the image build on a sandbox value that is not true or false, before it installs anything",
+    () => {
+      const install = join(mkdtempSync(join(tmpdir(), "trackwall-feature-")), "install.sh");
+      writeFileSync(install, featureFiles(templates, values).install);
+      const run = spawnSync("sh", [install], { env: { ...process.env, SANDBOX: "yes" }, encoding: "utf8" });
+      expect({ status: run.status, stderr: run.stderr }).toEqual({
+        status: 1,
+        stderr: "trackwall feature: sandbox must be true or false, got 'yes'\n",
+      });
+    },
+  );
 });

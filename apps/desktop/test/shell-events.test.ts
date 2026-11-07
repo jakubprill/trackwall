@@ -184,7 +184,7 @@ test("the View menu has the activity bar's views with their names and shortcuts,
     m[2],
     m[3],
   ]);
-  expect(ui.map((v) => v[0])).toEqual(["home", "repos", "sessions", "graph", "plan", "settings"]);
+  expect(ui.map((v) => v[0])).toEqual(["home", "repos", "sessions", "graph", "plan", "flow", "settings"]);
   expect(shell).toEqual(ui);
 });
 

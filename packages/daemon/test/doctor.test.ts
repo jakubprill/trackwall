@@ -4,12 +4,12 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { type DoctorCheckId, type DoctorStatus, TESTED_COPILOT_CLI_VERSION } from "@trackwall/protocol";
 import { createFacade } from "../src/facade.ts";
+import { defaultSandboxTasks } from "../src/modules/agents/copilot-sandbox.ts";
 import { trustedFolderOf } from "../src/modules/doctor/copilot-trust.ts";
 import { copilotVersionOutcome, Doctor, type DoctorDeps } from "../src/modules/doctor/doctor.ts";
 import { folderStorage } from "../src/modules/doctor/folder-storage.ts";
 import type { TlsProbe } from "../src/modules/doctor/tls-probe.ts";
 import { compareVersions, versionIn } from "../src/modules/doctor/version.ts";
-import { defaultSandboxTasks } from "../src/modules/workspace/workspace.ts";
 import { fakeHostingClis } from "./support/hosting.ts";
 import { sandboxProgramsFolder } from "./support/sandbox-programs.ts";
 
@@ -38,7 +38,7 @@ function fakeDeps(overrides: Partial<DoctorDeps>): DoctorDeps {
     workspaceFile: join(tmpdir(), "trackwall-doctor-no-such-workspace.yaml"),
     workspaceKeys: () => ({ keys: [], unknown: [] }),
     javaNavigation: () => null,
-    sandbox: async () => ({ tasks: "off", problem: null }),
+    sandbox: async () => ({ tasks: "off", problem: null, chosen: true }),
     probeTls: async () => ({ kind: "ok" }),
     profileEnvironment: async () => null,
     probeConnection: async () => ({ kind: "ok" }),
@@ -101,7 +101,7 @@ const trusting = '{"trustedFolders":["<projects>"]}';
 
 /** The sandbox check's row as this system gives it without the key: only where tasks run in the sandbox by default (ADR-181). */
 const sandboxRow: [DoctorCheckId, DoctorStatus][] =
-  defaultSandboxTasks(false, process.platform) === "off" ? [] : [["copilot-sandbox", "ok"]];
+  defaultSandboxTasks(false, process.platform, true) === "off" ? [] : [["copilot-sandbox", "ok"]];
 
 describe("doctor: the model provider of the session profile (ADR-179)", () => {
   test("with a session profile whose mise environment sets a provider, the doctor only connects to its host and shows neither the address nor the key", async () => {
@@ -316,16 +316,16 @@ describe("the check of Copilot CLI's sandbox (ADR-181)", () => {
     (await new Doctor(fakeDeps({ sandbox })).run()).checks.find((c) => c.id === "copilot-sandbox");
 
   test("it says which tasks run in the sandbox where it can run, and is left out where no task does", async () => {
-    expect(await sandboxCheck(async () => ({ tasks: "auto", problem: null }))).toEqual({
+    expect(await sandboxCheck(async () => ({ tasks: "auto", problem: null, chosen: true }))).toEqual({
       id: "copilot-sandbox",
       status: "ok",
       summary: "Tasks without approvals run their commands in Copilot CLI's sandbox.",
       fix: null,
     });
-    expect((await sandboxCheck(async () => ({ tasks: "all", problem: null })))?.summary).toBe(
+    expect((await sandboxCheck(async () => ({ tasks: "all", problem: null, chosen: true })))?.summary).toBe(
       "Every task runs its commands in Copilot CLI's sandbox.",
     );
-    expect(await sandboxCheck(async () => ({ tasks: "off", problem: null }))).toBeUndefined();
+    expect(await sandboxCheck(async () => ({ tasks: "off", problem: null, chosen: true }))).toBeUndefined();
   });
 
   test("where the sandbox cannot run it fails, naming what is missing and the two ways out", async () => {
@@ -333,6 +333,7 @@ describe("the check of Copilot CLI's sandbox (ADR-181)", () => {
       await sandboxCheck(async () => ({
         tasks: "auto",
         problem: "bubblewrap (bwrap), which Copilot CLI's sandbox runs on, is not in PATH",
+        chosen: true,
       })),
     ).toEqual({
       id: "copilot-sandbox",
@@ -341,6 +342,32 @@ describe("the check of Copilot CLI's sandbox (ADR-181)", () => {
         "Copilot CLI's sandbox cannot run here: bubblewrap (bwrap), which Copilot CLI's sandbox runs on, is not in PATH, so Trackwall refuses to start tasks without approvals.",
       fix: "Install it (on Linux the bubblewrap package, with slirp4netns, iproute2 and iptables), or set sandbox.tasks to off in workspace.yaml.",
     });
+  });
+
+  const refused = "bubblewrap cannot make the sandbox's namespaces here (bwrap: No permissions to create new namespace)";
+  const inContainerCheck = async (sandbox: DoctorDeps["sandbox"]) =>
+    (await new Doctor(fakeDeps({ sandbox, inContainer: true })).run()).checks.find((c) => c.id === "copilot-sandbox");
+
+  test("in a container where the sandbox cannot run it warns that tasks without approvals have the container's full access, and says how to give it the sandbox (ADR-219)", async () => {
+    expect(await inContainerCheck(async () => ({ tasks: "off", problem: refused, chosen: false }))).toEqual({
+      id: "copilot-sandbox",
+      status: "warn",
+      summary: `Tasks without approvals run their commands with the container's full access: Copilot CLI's sandbox cannot run in this container (${refused}).`,
+      fix: expect.stringMatching(
+        /^Give the container the sandbox: .*"Copilot CLI's sandbox" in the dev container guide.*, or set sandbox\.tasks to off in workspace\.yaml to keep it so\.$/,
+      ),
+    });
+  });
+
+  test("off by the user's own choice, or outside a container, it says nothing", async () => {
+    expect(await inContainerCheck(async () => ({ tasks: "off", problem: refused, chosen: true }))).toBeUndefined();
+    expect(await sandboxCheck(async () => ({ tasks: "off", problem: refused, chosen: false }))).toBeUndefined();
+  });
+
+  test("a sandbox the user turned on in a container that refuses it fails, pointing at the guide rather than at a package", async () => {
+    expect((await inContainerCheck(async () => ({ tasks: "auto", problem: refused, chosen: true })))?.fix).toMatch(
+      /^Give the container the sandbox: .*, or set sandbox\.tasks to off in workspace\.yaml\.$/,
+    );
   });
 });
 
