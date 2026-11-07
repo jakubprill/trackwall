@@ -18,7 +18,7 @@ import { WorktreesDirSurface } from "./WorktreesDirSurface.tsx";
 export function WorkspaceFolders({ conn, onRetry, onSaved }: { conn: Connection; onRetry: () => void; onSaved: () => void }) {
   const load = useCallback(() => post(conn, workspaceApi.settings, {}), [conn]);
   const settings = useRemote(load);
-  const projectsDir = { ...PROJECTS_DIR, placeholder: daemonExamplePaths(useDesktop()).projectsDir };
+  const example = daemonExamplePaths(useDesktop()).projectsDir;
 
   async function saveProjectsDir(path: string) {
     await post(conn, workspaceApi.setProjectsDir, { path });
@@ -57,14 +57,17 @@ export function WorkspaceFolders({ conn, onRetry, onSaved }: { conn: Connection;
           {settings.data && (
             <PathForm
               key={settings.data.projectsDir ?? ""}
-              {...projectsDir}
+              {...PROJECTS_DIR}
+              placeholder={example}
               initialPath={settings.data.projectsDir ?? ""}
               configFile={settings.data.configFile}
               save={(path) => saveProjectsDir(path)}
             />
           )}
           {/* A bad `projectsDir` typed by hand into `workspace.yaml` is fixed with this very form. */}
-          {settings.errorCode === "invalid_config" && <PathForm {...projectsDir} initialPath="" save={(path) => saveProjectsDir(path)} />}
+          {settings.errorCode === "invalid_config" && (
+            <PathForm {...PROJECTS_DIR} placeholder={example} initialPath="" save={(path) => saveProjectsDir(path)} />
+          )}
         </div>
       </Surface>
       {settings.data && <WorktreesDirSurface settings={settings.data} save={saveWorktreesDir} />}

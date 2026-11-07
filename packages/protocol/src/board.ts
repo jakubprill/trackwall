@@ -23,7 +23,7 @@ export type BoardItemKind = z.infer<typeof BoardItemKind>;
 
 /**
  * Where an item stands. A project uses `done` and `dropped` for "archived". The user sets any column; the work of the
- * item's tasks moves it to `in_progress` and `review` (`TaskWorkColumn`, ADR-213).
+ * item's tasks moves it to `in_progress` and `review`, and back to `ready` (`TaskWorkColumn`, ADR-213).
  */
 export const BoardColumn = z.enum(["ideas", "ready", "in_progress", "review", "done", "dropped"]);
 export type BoardColumn = z.infer<typeof BoardColumn>;
