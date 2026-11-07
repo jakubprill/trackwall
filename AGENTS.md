@@ -97,7 +97,7 @@ The repo is meant to be published as open source (header of `docs/architecture.m
   - the test `apps/desktop/test/layout.test.ts`: the contents of the `src/` root of the daemon and the UI, and the view folders;
   - the test `apps/desktop/test/biome-config.test.ts`: the ban on `bun` imports and the global `Bun` applies everywhere in the daemon outside `platform/` (Biome does not merge override options, so the ban is repeated in several places);
   - Biome's `noRestrictedGlobals` and the test `apps/desktop/test/ui-dialogs.test.ts`: no `alert` or `confirm` in the UI, which the Tauri dialog plugin replaces (ADR-51);
-  - the test `apps/desktop/test/ui-drag.test.ts`: no HTML5 drag and drop in the UI, which the desktop window takes for dropping files and never delivers to the page (ADR-51, ADR-217);
+  - the test `apps/desktop/test/ui-drag.test.ts`: no HTML5 drag and drop in the UI, which the desktop window takes for dropping files and never delivers to the page (ADR-51, ADR-217), except a browser's file drop on a terminal, listened to only outside the app (ADR-226);
   - the test `apps/docs/test/pages.test.ts`: every feature page follows `apps/docs/TEMPLATE.md` (frontmatter, title and lede, sections), is in the sidebar under its title, the home page cards repeat the page descriptions, and no page of the site cites an ADR or links into `docs/`;
   - the test `apps/docs/test/theme.test.ts`: the documentation site's dark theme, fonts and logo are copies of the app's tokens and icon (ADR-16, ADR-56);
   - the test `packages/ui/test/sibling-keys.test.ts`: no two children of one JSX parent share a `key` (React keeps stale copies of such children); strips that mount again with each session go through `components/SessionNotices.tsx`;

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   type AppConfig,
   type agentsApi,
+  MAX_DROP_BYTES,
   type MiseTarget,
   type RoutineDigest,
   type RoutineName,
@@ -71,6 +72,7 @@ import { Readiness } from "./modules/readiness/readiness.ts";
 import { Routines } from "./modules/routines/routines.ts";
 import { Services } from "./modules/services/services.ts";
 import { TASK_JOURNAL_FILE, TASK_JOURNAL_MAX_RECORDS, TaskJournal } from "./modules/task-journal/task-journal.ts";
+import { DroppedFiles } from "./modules/terminals/dropped-files.ts";
 import { FolderFiles } from "./modules/terminals/folder-files.ts";
 import { FolderTerminals } from "./modules/terminals/folder-terminals.ts";
 import { TestReports } from "./modules/test-results/test-reports.ts";
@@ -114,6 +116,8 @@ export interface Facade {
   terminals: FolderTerminals;
   /** The files of the projects folder, a repo root or a task's worktree, read only, next to its Shell tab (ADR-188). */
   folderFiles: FolderFiles;
+  /** Files dropped on a terminal from another computer, saved in `.trackwall/drops` (ADR-226). */
+  droppedFiles: DroppedFiles;
   testReports: TestReports;
   verifications: Verifications;
   /** What ended tasks were and left, searched by `search_task_history` (ADR-150). */
@@ -556,6 +560,7 @@ export function createFacade(o: FacadeOptions): Facade {
     services,
     terminals,
     folderFiles: new FolderFiles({ folder: placeFolder }),
+    droppedFiles: new DroppedFiles({ projectsDir: () => workspace.projectsDir(), now: () => new Date(), maxBytes: MAX_DROP_BYTES }),
     testReports,
     verifications,
     taskJournal,
