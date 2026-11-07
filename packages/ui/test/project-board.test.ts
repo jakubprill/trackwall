@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { BoardItem } from "@trackwall/protocol";
 import { canMoveCard, cardKeyMove, projectBoard } from "../src/lib/project-board.ts";
+import { columnNamed, isCardDrag } from "../src/lib/use-card-drag.ts";
 
 function item(id: string, fields: Partial<BoardItem> = {}): BoardItem {
   return {
@@ -103,5 +104,20 @@ describe("a project of Plan as a board (ADR-217)", () => {
     expect(cardKeyMove(key("ArrowRight", { altKey: false }), "ready")).toBeUndefined();
     expect(cardKeyMove(key("ArrowRight", { ctrlKey: true }), "ready")).toBeUndefined();
     expect(cardKeyMove(key("ArrowUp"), "ready")).toBeUndefined();
+  });
+
+  test("a pressed card is dragged once the pointer goes 4 pixels in any direction, and clicked below that", () => {
+    expect(isCardDrag({ x: 100, y: 100 }, { x: 103, y: 100 })).toBe(false);
+    expect(isCardDrag({ x: 100, y: 100 }, { x: 102, y: 102 })).toBe(false);
+    expect(isCardDrag({ x: 100, y: 100 }, { x: 104, y: 100 })).toBe(true);
+    expect(isCardDrag({ x: 100, y: 100 }, { x: 97, y: 96 })).toBe(true);
+  });
+
+  test("the column under a dragged card is read from its element's name, and anything else is no column", () => {
+    expect(columnNamed("in_progress")).toBe("in_progress");
+    expect(columnNamed("dropped")).toBeUndefined();
+    expect(columnNamed("")).toBeUndefined();
+    expect(columnNamed(null)).toBeUndefined();
+    expect(columnNamed(undefined)).toBeUndefined();
   });
 });
