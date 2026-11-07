@@ -3,26 +3,56 @@ import { StringDecoder } from "node:string_decoder";
 import type { CopilotUsage } from "@trackwall/protocol";
 import { conversationEventLog } from "../../infra/copilot-home.ts";
 import { addReceipt, firstSighting, NO_USAGE, type UsageTotals, usageOf, usageReceipt } from "../../infra/copilot-usage-receipt.ts";
+import { modelChangeOf } from "./copilot-model-change.ts";
 
 /**
  * What a session's conversation used (ADR-190, §4.4), from the conversation's event log that Copilot CLI keeps in its
  * home: `session-state/<conversation>/events.jsonl`. After every model call Copilot CLI appends a durable receipt,
  * `session.usage_record` (`infra/copilot-usage-receipt.ts`), with the call's tokens, its model multiplier and, on token
  * billing, its cost in nano AI units (10⁹ of them make one AI credit, as Copilot CLI's `/usage` converts them). A
- * contract test pins where and when the receipt is written. The log is read on demand only (`update`), from where the
- * last read stopped, so a long conversation is read once and every later turn costs only its new lines.
+ * contract test pins where and when the receipt is written. The same log names the model the conversation runs on
+ * (ADR-225): each receipt the model of its call, and `session.model_change` the model set at a start, a resume or by
+ * `/model`, so a model Copilot CLI took instead of the requested one shows. The log is read on demand only (`update`),
+ * from where the last read stopped, so a long conversation is read once and every later turn costs only its new lines.
  */
 
-/** One receipt line added to the sums; `seen` keeps receipts counted once. */
-function add(totals: UsageTotals, line: string, seen: Set<string>): UsageTotals {
-  const receipt = usageReceipt(line);
-  return receipt === undefined || !firstSighting(seen, receipt) ? totals : addReceipt(totals, receipt);
+/** What the log says so far: the usage sums and the model in use. */
+interface LogState {
+  totals: UsageTotals;
+  /** The latest own receipt's model or model change's model, in the log's order; `null` before either. */
+  modelInUse: string | null;
 }
 
-/** The sums of whole receipt lines, for a reader that has the log in memory (the tests, a script). */
-export function usageOfLines(lines: readonly string[]): CopilotUsage | null {
+const NOTHING_READ: LogState = { totals: NO_USAGE, modelInUse: null };
+
+/**
+ * One line of the log added to what it says; `seen` keeps receipts counted once. A receipt written again (a resumed
+ * conversation) counts no usage and names no model, since the model change of the resume comes before it.
+ */
+function add(state: LogState, line: string, seen: Set<string>): LogState {
+  const receipt = usageReceipt(line);
+  if (receipt === undefined) {
+    const changed = modelChangeOf(line);
+    return changed === undefined ? state : { ...state, modelInUse: changed };
+  }
+  if (!firstSighting(seen, receipt)) return state;
+  return { totals: addReceipt(state.totals, receipt), modelInUse: receipt.ownModel ?? state.modelInUse };
+}
+
+/** What whole lines of a log say, for a reader that has the log in memory (the tests, a script). */
+function stateOfLines(lines: readonly string[]): LogState {
   const seen = new Set<string>();
-  return usageOf(lines.reduce((totals, line) => add(totals, line, seen), NO_USAGE));
+  return lines.reduce((state, line) => add(state, line, seen), NOTHING_READ);
+}
+
+/** The usage sums of whole receipt lines. */
+export function usageOfLines(lines: readonly string[]): CopilotUsage | null {
+  return usageOf(stateOfLines(lines).totals);
+}
+
+/** The model in use after whole lines of a log (ADR-225). */
+export function modelInUseOfLines(lines: readonly string[]): string | null {
+  return stateOfLines(lines).modelInUse;
 }
 
 /** How often a running session's cycle looks at its event log: a size check, and a read only of what is new. */
@@ -43,7 +73,7 @@ export class CopilotUsageLog {
   #rest = "";
   /** Keeps a character split between two reads whole. */
   #decoder = new StringDecoder("utf8");
-  #totals: UsageTotals = NO_USAGE;
+  #state: LogState = NOTHING_READ;
   #seen = new Set<string>();
   #readAt = 0;
 
@@ -63,7 +93,12 @@ export class CopilotUsageLog {
 
   /** The usage after the last update; `null` before the first model call. */
   current(): CopilotUsage | null {
-    return usageOf(this.#totals);
+    return usageOf(this.#state.totals);
+  }
+
+  /** The model the conversation runs on after the last update (ADR-225); `null` before the log names one. */
+  modelInUse(): string | null {
+    return this.#state.modelInUse;
   }
 
   /**
@@ -86,7 +121,7 @@ export class CopilotUsageLog {
       this.#offset += chunk.length;
       const lines = (this.#rest + this.#decoder.write(chunk)).split("\n");
       this.#rest = lines.pop() ?? "";
-      for (const line of lines) this.#totals = add(this.#totals, line, this.#seen);
+      for (const line of lines) this.#state = add(this.#state, line, this.#seen);
     }
   }
 
@@ -95,7 +130,7 @@ export class CopilotUsageLog {
     this.#offset = 0;
     this.#rest = "";
     this.#decoder = new StringDecoder("utf8");
-    this.#totals = NO_USAGE;
+    this.#state = NOTHING_READ;
     this.#seen = new Set();
   }
 

@@ -34,6 +34,7 @@ function session(id: string, repo: string | null, run: Session["run"]["kind"] = 
     copyRequest: null,
     usage: null,
     model: null,
+    modelInUse: null,
   };
 }
 

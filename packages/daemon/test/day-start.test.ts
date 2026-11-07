@@ -132,6 +132,7 @@ function session(fields: Partial<Session>): Session {
     copyRequest: null,
     usage: null,
     model: null,
+    modelInUse: null,
     ...fields,
   };
 }

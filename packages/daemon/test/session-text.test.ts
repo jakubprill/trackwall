@@ -11,6 +11,7 @@ const session: AgentSession = {
   supervisor: false,
   startedAt: "2026-11-05T09:00:00.000Z",
   model: "gpt-5.1",
+  modelInUse: "gpt-5.1",
   run: { kind: "running", runId: "run-1", startedAt: "2026-11-05T09:00:00.000Z", pid: 4242 },
   state: { state: "Input", source: "hook", confidence: "exact", at: "2026-11-05T09:20:00.000Z", reason: "agentStop" },
   windowTitle: null,
@@ -204,6 +205,21 @@ describe("get_session text", () => {
         `Session ${SESSION_ID} (supervisor): exited at 2026-11-05T10:00:00.000Z (exit code 0, stopped by the user)`,
         "Environment: profile work",
       ].join("\n"),
+    );
+  });
+
+  test("names the model Copilot CLI took when it is not the one the session was started on (ADR-225)", () => {
+    const result: GetSessionResult = {
+      session: { ...session, model: "claude-sonnet-5.5", modelInUse: "gpt-6-luna", task: null, usage: null, needsAttention: false },
+      task: null,
+      changes: null,
+      changesError: null,
+      verification: null,
+      javaNavigation: null,
+    };
+
+    expect(sessionText(result, false).split("\n")[0]).toBe(
+      `Session ${SESSION_ID} (shop) on gpt-6-luna instead of claude-sonnet-5.5: running since 2026-11-05T09:00:00.000Z`,
     );
   });
 });

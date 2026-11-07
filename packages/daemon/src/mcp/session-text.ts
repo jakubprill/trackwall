@@ -9,7 +9,7 @@ import type {
   TestFailure,
   Verification,
 } from "@trackwall/protocol";
-import { countLabel, GET_SESSION_PROMPT_ARG, reproTestLine } from "@trackwall/protocol";
+import { countLabel, GET_SESSION_PROMPT_ARG, modelSwitch, reproTestLine } from "@trackwall/protocol";
 
 const COMMITS = { one: "commit", other: "commits" };
 const FILES = { one: "file", other: "files" };
@@ -40,10 +40,17 @@ export function sessionText(result: GetSessionResult, withPrompt: boolean): stri
   return lines.join("\n");
 }
 
+/** The model after the session's head: the one Trackwall asked for, and the one Copilot CLI took when it differs (ADR-225). */
+function modelText(session: AgentSession): string {
+  const switched = modelSwitch(session);
+  if (switched !== null) return ` on ${switched.inUse} instead of ${switched.requested}`;
+  return session.model === null ? "" : ` on ${session.model}`;
+}
+
 function sessionLines(session: AgentSession): string[] {
   const where = session.supervisor ? "supervisor" : session.task !== null ? `task ${session.task}` : (session.repo ?? "no repo");
   const repo = session.task !== null && session.repo !== null ? ` in ${session.repo}` : "";
-  const model = session.model === null ? "" : ` on ${session.model}`;
+  const model = modelText(session);
   const lines = [`Session ${session.id} (${where}${repo})${model}: ${runLabel(session.run)}`];
   if (session.state !== null) {
     const { state, source, confidence, at, reason } = session.state;

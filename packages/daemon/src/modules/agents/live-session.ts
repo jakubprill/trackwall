@@ -487,6 +487,7 @@ export class LiveSession implements AgentSession {
       copyRequest: run.kind === "running" ? this.copyRequest.request : null,
       usage: this.#usage.current(),
       model: this.model,
+      modelInUse: this.#usage.modelInUse(),
     };
   }
 

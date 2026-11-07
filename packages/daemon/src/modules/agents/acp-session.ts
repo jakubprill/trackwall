@@ -430,6 +430,7 @@ export class AcpSession implements AgentSession {
       copyRequest: running ? this.copyRequest.request : null,
       usage: this.#o.usage.current(),
       model: this.model,
+      modelInUse: this.#o.usage.modelInUse(),
     };
   }
 

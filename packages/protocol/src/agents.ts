@@ -489,8 +489,31 @@ export const Session = z.object({
    * command or mise.
    */
   model: z.string().nullable(),
+  /**
+   * The model Copilot CLI runs the session's conversation on (ADR-225), from its event log: the model of its latest own
+   * model call, or of its latest model change before any call; `null` before the log names one. It differs from `model`
+   * when Copilot CLI fell back to another one (an account without the model) or `/model` switched it.
+   */
+  modelInUse: z.string().nullable(),
 });
 export type Session = z.infer<typeof Session>;
+
+/**
+ * Copilot CLI's own choice of model, which `--model auto` asks for: the model in use then differs on purpose. Copilot
+ * CLI's word, not Trackwall's.
+ */
+export const COPILOT_AUTO_MODEL = "auto";
+
+/**
+ * The session runs on another model than Trackwall started it on (ADR-225): Copilot CLI took another one without
+ * stopping, because the account does not offer the requested model or `/model` switched it. `null` when Trackwall passed
+ * no model or `auto`, when the log names none yet, or when they agree.
+ */
+export function modelSwitch(session: Pick<Session, "model" | "modelInUse">): { requested: string; inUse: string } | null {
+  const { model, modelInUse } = session;
+  if (model === null || modelInUse === null || model === COPILOT_AUTO_MODEL || model === modelInUse) return null;
+  return { requested: model, inUse: modelInUse };
+}
 
 /** The supervisor (ADR-58): it runs in the projects folder, above all repos. */
 export function isSupervisor(session: Pick<Session, "supervisor">): boolean {

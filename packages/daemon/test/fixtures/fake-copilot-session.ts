@@ -263,6 +263,8 @@ function begin(): void {
   started = initialPrompt !== undefined;
   if (started) {
     keepConversation();
+    // Copilot CLI sends a prompt given at the start to the model at once, like a typed one.
+    recordUsage(sessionId);
     replay([startHook]);
   }
 }

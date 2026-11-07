@@ -1173,7 +1173,9 @@ export class Agents {
     const place = { repo, supervisor: false, cwd, task };
     if (start.view === "terminal") {
       const { promptOnStart, lspServers } = start;
-      await this.#launch({ ...place, args, promptOnStart, hasConversation: true, lspServers });
+      // The conversation is under the task's id (`--session-id`/`--resume`), not the session's: its usage and model in use
+      // (ADR-190, ADR-225) come from that conversation's event log.
+      await this.#launch({ ...place, args, promptOnStart, hasConversation: true, conversation: task, lspServers });
       return undefined;
     }
     const started = await this.#launcher.conversation({
