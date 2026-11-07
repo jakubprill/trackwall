@@ -107,7 +107,7 @@ function FlowWall({ groups, now }: { groups: readonly FlowGroup[]; now: Date }) 
         <tbody>
           {groups.map((group) => (
             <tr key={group.key} className="border-b align-top">
-              <th scope="row" className="border-l-4 px-3 py-2 text-left font-normal">
+              <th scope="row" className="px-3 py-2 text-left font-normal">
                 <span className="flex flex-col gap-1">
                   <span className="line-clamp-2 font-semibold break-words" title={group.name}>
                     {group.name}
@@ -135,12 +135,11 @@ function FlowWall({ groups, now }: { groups: readonly FlowGroup[]; now: Date }) 
 
 function Card({ card, now }: { card: FlowCard; now: Date }) {
   const open = useOpenTrackwallLink();
-  const time = card.since ? elapsedLabel(card.since, now) : "";
+  const time = elapsedLabel(card.since, now);
   return (
     <button
       type="button"
       onClick={() => open(trackwallLink(card.target.kind, card.target.id))}
-      title={`Open ${card.name}`}
       className={cn(
         "bg-card hover:bg-accent flex min-w-0 flex-col gap-0.5 rounded-md border px-2 py-1.5 text-left",
         card.column === "stuck" && "border-destructive",

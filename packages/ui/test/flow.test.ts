@@ -92,6 +92,30 @@ describe("the column of a task on the wall (ADR-224)", () => {
     });
   });
 
+  test("a task in review without a report the UI knows counts from its last state change, not from nowhere", () => {
+    const idle = session("s", {
+      task: "t",
+      state: { state: "Input", confidence: "high", at: "2026-11-07T10:20:00.000Z" },
+    } as Partial<Session>);
+    expect(onlyCard(input({ tasks: [task("t", { inReview: true })], sessions: [idle] }))?.since).toBe("2026-11-07T10:20:00.000Z");
+  });
+
+  test("a session of no task takes the same columns: waiting when its finished turn is unseen, idle once seen", () => {
+    const free = (needsAttention: boolean) =>
+      session("free", {
+        repo: null,
+        windowTitle: "Docs",
+        needsAttention,
+        state: { state: "Input", confidence: "high", at: "2026-11-07T10:20:00.000Z" },
+      } as Partial<Session>);
+    expect(onlyCard(input({ sessions: [free(true)] }))).toMatchObject({
+      column: "waiting",
+      name: "Docs",
+      target: { kind: "session", id: "free" },
+    });
+    expect(onlyCard(input({ sessions: [free(false)] }))).toMatchObject({ column: "idle", detail: "idle" });
+  });
+
   test("a finished turn the user has not seen waits for the user", () => {
     const finished = session("s", {
       task: "t",
@@ -227,6 +251,19 @@ describe("the groups on the wall (ADR-224)", () => {
     expect(groups.map((g) => [g.kind, g.name, g.cards.map((c) => c.name).sort()])).toEqual([
       ["proposer", "payments · Retry payments", ["child"]],
       ["none", "No group", ["outside", "parent"]],
+    ]);
+  });
+
+  test("a change's row is named after its earliest part in the row, when the first part is in a project's row", () => {
+    const checkoutItems = [item("checkout", { kind: "project", parent: null }), item("form")];
+    const parts = [
+      task("first", { title: "Part on the plan", item: "form", change: { id: "c1", position: 0 } }),
+      task("third", { title: "Third part", change: { id: "c1", position: 2 } }),
+      task("second", { title: "Second part", change: { id: "c1", position: 1 } }),
+    ];
+    expect(flowGroups(input({ tasks: parts }, checkoutItems)).map((g) => [g.kind, g.name])).toEqual([
+      ["project", "checkout"],
+      ["change", "Second part"],
     ]);
   });
 
