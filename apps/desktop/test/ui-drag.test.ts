@@ -10,7 +10,9 @@ test("the UI uses no HTML5 drag and drop, which the desktop window never deliver
   const dir = join(REPO, "packages/ui/src");
   const files = readdirSync(dir, { recursive: true, encoding: "utf8" }).filter((f) => /\.(ts|tsx)$/.test(f));
   const drags = files.filter((f) =>
-    /\bdraggable\b|\bdataTransfer\b|\bonDrag(?:Start|Over|Enter|Leave|End)?\b/.test(readFileSync(join(dir, f), "utf8")),
+    /\bdraggable\b|\bdataTransfer\b|\bDragEvent\b|\bonDrag(?:Start|Over|Enter|Leave|End)?\b|addEventListener\(\s*["'](?:drag\w*|drop)["']/.test(
+      readFileSync(join(dir, f), "utf8"),
+    ),
   );
   expect(files.length).toBeGreaterThan(0);
   expect(drags).toEqual([]);

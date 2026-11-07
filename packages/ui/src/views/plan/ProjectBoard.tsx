@@ -5,17 +5,9 @@ import { post } from "@/lib/api";
 import { COLUMN_LABELS } from "@/lib/board-tree";
 import type { Connection } from "@/lib/connection";
 import { type ItemTaskIndex, itemTasks } from "@/lib/plan-progress";
-import {
-  BOARD_COLUMN_ATTRIBUTE,
-  BOARD_COLUMNS,
-  type BoardCard,
-  type BoardViewColumn,
-  canMoveCard,
-  cardKeyMove,
-  projectBoard,
-} from "@/lib/project-board";
+import { BOARD_COLUMNS, type BoardCard, type BoardViewColumn, canMoveCard, cardKeyMove, projectBoard } from "@/lib/project-board";
 import { useAction } from "@/lib/use-action";
-import { useCardDrag } from "@/lib/use-card-drag";
+import { columnProps, useCardDrag } from "@/lib/use-card-drag";
 import { cn } from "@/lib/utils";
 import { RowTask } from "./RowTask.tsx";
 
@@ -45,7 +37,9 @@ export function ProjectBoard({
   onChanged: () => void;
 }) {
   // A moved card takes the focus once it shows up in its new column, after the board is read again, so it can move on.
-  const [follow, setFollow] = useState<{ id: string; column: BoardViewColumn }>();
+  // The board it was moved on is kept: once another board has rendered, the card had its chance (it may sit in a hidden
+  // column, or the daemon may have put it elsewhere), and a later board does not take the focus to it.
+  const [follow, setFollow] = useState<{ id: string; column: BoardViewColumn; on: readonly BoardItem[] }>();
   const [moved, setMoved] = useState("");
   const move = useAction(
     async (card: BoardCard, column: BoardViewColumn) => {
@@ -53,11 +47,17 @@ export function ProjectBoard({
       return { id: card.item.id, column, text: `${card.item.title} moved to ${COLUMN_LABELS[column]}.` };
     },
     (done) => {
-      setFollow({ id: done.id, column: done.column });
+      setFollow({ id: done.id, column: done.column, on: itemsRef.current });
       setMoved(done.text);
       onChanged();
     },
   );
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  // Runs after the cards' own effects, so a card that showed up in its column has taken the focus by then.
+  useEffect(() => {
+    if (follow && follow.on !== items) setFollow(undefined);
+  }, [follow, items]);
   // Recounted on a board change, not on every drag over a column or selection.
   const board = useMemo(() => projectBoard(items, project), [items, project]);
   const columns = BOARD_COLUMNS.filter((column) => !hideDone || column !== "done");
@@ -65,6 +65,7 @@ export function ProjectBoard({
     if (card && !move.pending && canMoveCard(card, to)) move.run(card, to);
   };
   const { drag, press, clickEndsDrag } = useCardDrag((id, column) => tryMove(board.cards.get(id), column));
+  const dragged = drag && board.cards.get(drag.card);
   return (
     <div className="flex flex-col gap-2">
       {move.error && <p className="text-destructive text-sm whitespace-pre-wrap">{move.error}</p>}
@@ -76,8 +77,12 @@ export function ProjectBoard({
           <section
             key={column}
             aria-label={COLUMN_LABELS[column]}
-            {...{ [BOARD_COLUMN_ATTRIBUTE]: column }}
-            className={cn("bg-secondary/40 flex min-h-40 flex-col gap-2 rounded-md border p-2", drag?.over === column && "border-primary")}
+            {...columnProps(column)}
+            className={cn(
+              "bg-secondary/40 flex min-h-40 flex-col gap-2 rounded-md border p-2",
+              // Only where the drop would move the card.
+              dragged && drag.over === column && !move.pending && canMoveCard(dragged, column) && "border-primary",
+            )}
           >
             <h3 className="hud-label flex items-center gap-2 px-1">
               {COLUMN_LABELS[column]} <span className="text-muted-foreground font-mono">{board.columns[column].length}</span>
@@ -171,7 +176,8 @@ function Card({
       aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight"
       title={closedAbove ? closedWith : undefined}
       className={cn(
-        "bg-card hover:bg-accent flex flex-col gap-1.5 rounded-md border px-2.5 py-2 text-left text-sm",
+        // No text selection on a card: in WKWebView one can turn into a native drag, which the window takes (ADR-217).
+        "bg-card hover:bg-accent flex flex-col gap-1.5 rounded-md border px-2.5 py-2 text-left text-sm select-none",
         selected && "bg-accent text-accent-foreground border-primary",
         closedAbove && "opacity-60",
         dragged && "opacity-50",

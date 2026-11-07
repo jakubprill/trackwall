@@ -28,26 +28,6 @@ export interface ProjectBoard {
 }
 
 /**
- * The attribute that names a column on its element, so a dragged card finds the column under the pointer. A card is
- * dragged with pointer events, not HTML5 drag and drop: the desktop shell takes every native drag over its window for
- * dropping files (ADR-51), so in WKWebView and WebView2 the page never sees a `dragover` or `drop` (ADR-217).
- */
-export const BOARD_COLUMN_ATTRIBUTE = "data-board-column";
-
-/** How far, in CSS pixels, a pressed card goes before it is dragged rather than clicked. */
-const CARD_DRAG_DISTANCE = 4;
-
-/** Whether the pointer, pressed on a card at `from`, has gone far enough to drag it. */
-export function isCardDrag(from: { x: number; y: number }, to: { x: number; y: number }): boolean {
-  return Math.hypot(to.x - from.x, to.y - from.y) >= CARD_DRAG_DISTANCE;
-}
-
-/** The column named by `BOARD_COLUMN_ATTRIBUTE` of the element under the pointer, `undefined` off the columns. */
-export function columnNamed(value: string | null | undefined): BoardViewColumn | undefined {
-  return BOARD_COLUMNS.find((column) => column === value);
-}
-
-/**
  * The project's items with nothing below them but dropped items, in outline order, each in the column it counts in: an
  * item whose every part was dropped is work of its own again.
  */

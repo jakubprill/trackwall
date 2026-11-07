@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { BoardItem } from "@trackwall/protocol";
-import { canMoveCard, cardKeyMove, columnNamed, isCardDrag, projectBoard } from "../src/lib/project-board.ts";
+import { canMoveCard, cardKeyMove, projectBoard } from "../src/lib/project-board.ts";
+import { columnNamed, isCardDrag } from "../src/lib/use-card-drag.ts";
 
 function item(id: string, fields: Partial<BoardItem> = {}): BoardItem {
   return {
