@@ -10,10 +10,9 @@ import { startRealCopilotDaemon } from "./support/real-copilot.ts";
 import { type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
 
 // What Copilot CLI sends over ACP for the agent's plan (ADR-107): the conversation view would show the plan above the
-// conversation (the design gallery's `conversation-review.html`), but Copilot CLI keeps the agent's todos in its
-// session's SQL database and sends ACP's `plan` update only empty, with the title of the todo in progress as the
-// model's reasoning. The daemon drops `plan`, so this test reads Copilot CLI's output through `acp-tap.ts`. When it
-// fails because a plan came with entries, the plan can be built.
+// conversation (the design gallery's `conversation-review.html`). Up to Copilot CLI 1.0.105 the `plan` update came
+// only empty; since 1.0.107 it carries the agent's todos as plan entries, so the plan can be built. The daemon still
+// drops `plan`, so this test reads Copilot CLI's output through `acp-tap.ts`.
 
 const SESSION_MS = 60_000;
 setDefaultTimeout(4 * SESSION_MS);
@@ -53,7 +52,7 @@ function updatesOf(kind: string): unknown[] {
     });
 }
 
-test("the agent's todos reach ACP as an empty plan and the title of the todo in progress as a thought, not as plan entries", async () => {
+test("the agent's todos reach ACP as plan entries with their titles and states, and the title of the todo in progress as a thought", async () => {
   const { agents } = daemon.facade;
   const supervisor = await agents.startSupervisor("new", "conversation");
   await waitFor(agents, supervisor.id, (s) => s.state?.state === "Input", "Input", SESSION_MS);
@@ -81,8 +80,14 @@ test("the agent's todos reach ACP as an empty plan and the title of the todo in 
   await waitFor(agents, supervisor.id, (s) => s.state?.reason === "stop end_turn", "end of turn", SESSION_MS);
 
   const plans = updatesOf("plan");
-  expect(plans.length).toBeGreaterThan(0);
-  expect(plans).toEqual(plans.map(() => ({ sessionUpdate: "plan", entries: [] })));
+  expect(plans.at(-1)).toEqual({
+    sessionUpdate: "plan",
+    entries: [
+      { content: "Reading the code", priority: "medium", status: "completed" },
+      { content: "Writing the test", priority: "medium", status: "in_progress" },
+      { content: "Fixing the total", priority: "medium", status: "pending" },
+    ],
+  });
   // An update can come after the prompt's result (`acp-session.contract.ts`), so the thought is waited for.
   const thoughts = () => [...entries.values()].filter((e) => e.kind === "thought").map((e) => e.text);
   const deadline = Date.now() + 5_000;

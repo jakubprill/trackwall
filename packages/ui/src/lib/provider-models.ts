@@ -32,27 +32,22 @@ export function providerModelsNote(list: ProviderModelList): { text: string; pro
 }
 
 /**
- * Copilot CLI's `auto`: without a custom provider Copilot picks the model, and with one it sends `auto` to the provider
- * as the model id, so it works only where the provider knows it. A Model field never warns about it.
+ * The suggestions of a Model field: the provider's models. Not Copilot CLI's `auto`: since Copilot CLI 1.0.107 a session
+ * with a custom provider refuses it before any request (the contract test `provider-request.contract.ts`), so it is
+ * suggested only where the provider lists it, like any other id.
  */
-export const COPILOT_AUTO_MODEL = "auto";
-
-/** The suggestions of a Model field: `auto` first, then the provider's models, each id once. */
 export function modelSuggestions(models: readonly ProviderModel[]): { id: string; hint: string }[] {
-  return [
-    { id: COPILOT_AUTO_MODEL, hint: "sent to the provider as auto, which it must know" },
-    ...models.filter((model) => model.id !== COPILOT_AUTO_MODEL).map((model) => ({ id: model.id, hint: modelHint(model) })),
-  ];
+  return models.map((model) => ({ id: model.id, hint: modelHint(model) }));
 }
 
 /**
  * A model id the provider does not offer (ADR-206), with the offered id closest to it: a task proposed on an older
  * model, or a typo, fails only at its first turn, and a task keeps its model, so the field says so before the start.
- * `null` when there is nothing to warn about: an empty or invalid field, no list, `auto`, or an offered id.
+ * `null` when there is nothing to warn about: an empty or invalid field, no list, or an offered id.
  */
 export function unofferedModel(typed: string, models: readonly ProviderModel[]): { closest: string | null } | null {
   const id = typed.trim();
-  if (id === "" || id === COPILOT_AUTO_MODEL || models.length === 0) return null;
+  if (id === "" || models.length === 0) return null;
   if (models.some((model) => model.id === id)) return null;
   let closest: string | null = null;
   let best = Number.POSITIVE_INFINITY;
