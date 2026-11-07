@@ -11,6 +11,7 @@ import {
   type BoardItemKind,
   type BoardProblem,
   childrenOf,
+  type TaskWorkColumn,
 } from "@trackwall/protocol";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
 import { DomainError, messageOf } from "../../infra/errors.ts";
@@ -57,8 +58,8 @@ export interface NewBoardItem {
 export class Board {
   readonly #deps: BoardDeps;
   #revision = 0;
-  /** The write in progress: a write reads the board, so two at once would each miss the other's item. */
-  #writing: Promise<unknown> = Promise.resolve();
+  /** The read or write in progress: a write reads the board, so two at once would each miss the other's item. */
+  #turn: Promise<unknown> = Promise.resolve();
 
   constructor(deps: BoardDeps) {
     this.#deps = deps;
@@ -69,8 +70,12 @@ export class Board {
     return this.#revision;
   }
 
-  async board(): Promise<{ items: BoardItem[]; problems: BoardProblem[] }> {
-    return readBoard(await this.#dir());
+  /**
+   * Read in turn with the daemon's own writes: a file replaced while it is read is refused as changed (`readRegularFile`),
+   * so a read beside a write in the background (an item following its tasks, ADR-213) would lose that item.
+   */
+  board(): Promise<{ items: BoardItem[]; problems: BoardProblem[] }> {
+    return this.#inTurn(async () => readBoard(await this.#dir()));
   }
 
   async item(id: string): Promise<BoardItem> {
@@ -122,6 +127,20 @@ export class Board {
     });
   }
 
+  /**
+   * The work of the item's tasks moves it to `column` (ADR-213), when `taskWorkMoves` allows it from where it is;
+   * an item no longer on the board, a project, or one the user closed stays as it is, and the answer is `null`.
+   */
+  followTasks(id: string, column: TaskWorkColumn): Promise<BoardItem | null> {
+    return this.#write(async (items, dir) => {
+      const current = items.find((it) => it.id === id);
+      if (current === undefined || current.kind === "project" || !taskWorkMoves(current.column, column)) return null;
+      const item: BoardItem = { ...current, column, updatedAt: new Date().toISOString() };
+      save(dir, item);
+      return item;
+    });
+  }
+
   move(id: string, parent: string | null, before: string | null): Promise<BoardItem> {
     return this.#write(async (items, dir) => {
       const current = found(items, id);
@@ -151,17 +170,39 @@ export class Board {
     return ensureTrackwallDir(await this.#deps.projectsDir(), "board");
   }
 
-  /** One write at a time, on the board as it is now; a failed write does not stop the next one. */
+  /**
+   * One write at a time, on the board as it is now; a failed write does not stop the next one, and `null` from `change`
+   * means it wrote nothing, so the revision stays.
+   */
   #write<T>(change: (items: BoardItem[], dir: string) => Promise<T>): Promise<T> {
-    const run = this.#writing.then(async () => {
+    return this.#inTurn(async () => {
       const dir = await this.#dir();
       const result = await change((await readBoard(dir)).items, dir);
-      this.#revision++;
+      if (result !== null) this.#revision++;
       return result;
     });
-    this.#writing = run.catch(() => {});
+  }
+
+  #inTurn<T>(step: () => Promise<T>): Promise<T> {
+    const run = this.#turn.then(step);
+    this.#turn = run.catch(() => {});
     return run;
   }
+}
+
+/**
+ * Where the work of an item's tasks may move it from (ADR-213): never out of `done` or `dropped`, which only the user
+ * sets, and not to the column it is already in.
+ */
+const TASK_WORK_FROM: Record<TaskWorkColumn, ReadonlySet<BoardColumn>> = {
+  // Only work that stopped before it was handed over goes back (ADR-213): an item in review keeps the work to review.
+  ready: new Set(["in_progress"]),
+  in_progress: new Set(["ideas", "ready", "review"]),
+  review: new Set(["ideas", "ready", "in_progress"]),
+};
+
+function taskWorkMoves(current: BoardColumn, column: TaskWorkColumn): boolean {
+  return TASK_WORK_FROM[column].has(current);
 }
 
 async function readItem(path: string, id: string): Promise<{ item: BoardItem } | { problem: string }> {

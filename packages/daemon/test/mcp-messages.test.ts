@@ -110,7 +110,15 @@ describe.skipIf(process.versions.bun === undefined)(
 
       await call(taskClient, "report_result", { summary: "Kept the old endpoint, login fixed." });
       expect(GetUpdatesResult.parse((await call(main.client, "get_updates")).structuredContent).updates).toEqual([
-        { kind: "result_reported", task: task.id, session, summary: "Kept the old endpoint, login fixed.", at: expect.any(String) },
+        {
+          kind: "result_reported",
+          task: task.id,
+          session,
+          summary: "Kept the old endpoint, login fixed.",
+          checkSteps: [],
+          changes: { commits: 0, uncommitted: 0, files: 0, filesTruncated: false },
+          at: expect.any(String),
+        },
       ]);
 
       window.attachment.detach();
@@ -162,7 +170,15 @@ describe.skipIf(process.versions.bun === undefined)(
       const childClient = await clientOfSession(childSession);
       await call(childClient, "report_result", { summary: "Moved the DTOs." });
       expect(GetUpdatesResult.parse((await call(resumedClient, "get_updates")).structuredContent).updates).toEqual([
-        { kind: "result_reported", task: child.id, session: childSession, summary: "Moved the DTOs.", at: expect.any(String) },
+        {
+          kind: "result_reported",
+          task: child.id,
+          session: childSession,
+          summary: "Moved the DTOs.",
+          checkSteps: [],
+          changes: { commits: 0, uncommitted: 0, files: 0, filesTruncated: false },
+          at: expect.any(String),
+        },
       ]);
       // The task's own session, the main session and the session of another task are still not its proposer.
       for (const client of [childClient, main.client])

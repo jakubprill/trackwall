@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { VersionDrift } from "@trackwall/protocol";
-import { alignPart, alignPrompt, alignTitle, driftSubject, initialAlignRepos, repoDrift, reposToAlign } from "../src/lib/version-drift.ts";
+import { initialParts } from "../src/lib/change-start.ts";
+import { alignPart, alignPrompt, alignTitle, driftSubject, repoDrift, reposToAlign } from "../src/lib/version-drift.ts";
 
 const BILLING = {
   repo: "billing",
@@ -44,7 +45,7 @@ describe("version drift in the Overview view", () => {
     expect(reposToAlign(JAVA).map((r) => r.repo)).toEqual(["orders", "billing"]);
   });
 
-  test("the form starts with at most six repos, a change's limit", () => {
+  test("the form starts with at most six of the repos to align, a change's limit", () => {
     const many: VersionDrift = {
       ...SUREFIRE,
       repos: Array.from({ length: 8 }, (_, i) => ({
@@ -54,7 +55,7 @@ describe("version drift in the Overview view", () => {
       })),
     };
 
-    expect(initialAlignRepos(many)).toEqual(["repo-1", "repo-2", "repo-3", "repo-4", "repo-5", "repo-6"]);
+    expect(initialParts(reposToAlign(many)).map((r) => r.repo)).toEqual(["repo-1", "repo-2", "repo-3", "repo-4", "repo-5", "repo-6"]);
   });
 
   test("the change is titled by the subject and target, and each part says what its repo has and where", () => {

@@ -30,7 +30,7 @@ import {
 import { hyperlinkHandler, trackwallLinkProvider, webLinkHandler } from "@/lib/terminal-links";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
 import { opensSearch } from "@/lib/terminal-search";
-import { cssTokens, terminalTheme } from "@/lib/terminal-theme";
+import { cssTokens, terminalTheme, watchWindowEffect } from "@/lib/terminal-theme";
 import { browserTimers } from "@/lib/timers";
 import { useOpenTrackwallLink } from "@/lib/trackwall-link";
 import { useTerminalDrop } from "@/lib/use-terminal-drop";
@@ -132,9 +132,11 @@ export function PtyTerminal({
     const element = host.current;
     const container = frame.current;
     if (!element || !container) return;
-    const terminal = new Terminal(
-      sessionTerminalOptions(terminalTheme(cssTokens(document.documentElement)), getComputedStyle(element).fontFamily),
-    );
+    const theme = () => terminalTheme(cssTokens(document.documentElement));
+    const terminal = new Terminal(sessionTerminalOptions(theme(), getComputedStyle(element).fontFamily));
+    const stopWatchingEffect = watchWindowEffect(document.documentElement, () => {
+      terminal.options.theme = theme();
+    });
     const fit = new FitAddon();
     terminal.loadAddon(fit);
     const serializer = new SerializeAddon();
@@ -292,6 +294,7 @@ export function PtyTerminal({
         lastScreens.keep(screenKey, { cols: terminal.cols, screen: serializer.serialize({ scrollback: 0, excludeModes: true }) });
       resizer.dispose();
       resize.disconnect();
+      stopWatchingEffect();
       element.removeEventListener("mousemove", holdMove, { capture: true });
       element.removeEventListener("pointerdown", noteClick, { capture: true });
       copyHandler.dispose();

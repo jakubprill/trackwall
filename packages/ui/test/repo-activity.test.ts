@@ -22,6 +22,8 @@ function session(id: string, repo: string, state: TaskState, more: Partial<Sessi
     readRequest: null,
     copyRequest: null,
     usage: null,
+    model: null,
+    modelInUse: null,
     ...more,
   };
 }
@@ -45,6 +47,7 @@ function task(id: string, repo: string, title: string): Task {
     item: null,
     view: "terminal",
     summary: null,
+    inReview: false,
     port: 41000,
     included: { files: [], problems: [] },
     change: null,

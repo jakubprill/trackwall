@@ -8,8 +8,11 @@ import {
   type SessionKnowledge,
   type SupervisorSettings,
   type ToolPermissions,
+  type WireApi,
 } from "@trackwall/protocol";
 import { copilotHome } from "../../infra/copilot-home.ts";
+import { COPILOT_PROVIDER_ENV } from "../../infra/copilot-provider-env.ts";
+import { envKey } from "../../infra/env-key.ts";
 import { DomainError, messageOf, SpawnFailure } from "../../infra/errors.ts";
 import { waitLimited } from "../../infra/wait-limit.ts";
 import { AcpSession } from "./acp-session.ts";
@@ -18,8 +21,9 @@ import { resolveCopilot, toolPermissionArgs } from "./copilot-command.ts";
 import { COPILOT_HOOK_EVENTS, type CopilotHookEvent } from "./copilot-hook-record.ts";
 import { type LspServer, writeCopilotPlugin } from "./copilot-plugin.ts";
 import { CopilotUsageLog } from "./copilot-usage-log.ts";
+import { JAVA_LSP_SERVER } from "./java-language-server.ts";
 import { LiveSession, type LiveSessionOptions, type SessionPty } from "./live-session.ts";
-import { modelArgs } from "./model-args.ts";
+import { modelArgs, modelOfArgs } from "./model-args.ts";
 import { withLoopbackNoProxy } from "./no-proxy.ts";
 import type { ConversationLaunch } from "./resumable-sessions.ts";
 import { type SessionMiseEnv, type SessionMiseLaunch, sessionMiseLaunch } from "./session-env.ts";
@@ -141,6 +145,11 @@ export interface SessionLauncherDeps {
   change: (task: string) => ChangeFacts | null;
   /** The workspace knowledge the user approved for a session in `repo` (`null`: in the projects folder), ADR-170. */
   knowledge: (repo: string | null) => Promise<SessionKnowledge>;
+  /**
+   * The format a session on `model` must use with the custom provider of its environment (ADR-200), which the start
+   * sets as `COPILOT_PROVIDER_WIRE_API`; `null` leaves the environment as it is.
+   */
+  wireApi: (model: string, env: NodeJS.ProcessEnv) => Promise<WireApi | null>;
   log: (msg: string) => void;
 }
 
@@ -164,7 +173,7 @@ export class SessionLauncher {
    * arguments; `promptOnStart` when the arguments carry the first message (`--interactive`), so the session works from the start.
    */
   terminal({ id, args, promptOnStart, hasConversation, conversation, lspServers = {}, ...place }: TerminalLaunch): Promise<StartedSession> {
-    return this.#start(id, place, (setup) => {
+    return this.#start(id, place, args, (setup) => {
       const { session, instructionsDir } = this.#prepare({
         id,
         ...place,
@@ -177,6 +186,7 @@ export class SessionLauncher {
         conversation,
         program: setup.program,
         environment: setup.mise.environment,
+        model: setup.model,
         lspServers,
         usage: new CopilotUsageLog(copilotHome(setup.env)),
       });
@@ -205,7 +215,7 @@ export class SessionLauncher {
    */
   conversation({ id, load, firstMessage, args = [], ...place }: ConversationStart): Promise<StartedSession> {
     const { repo, supervisor, task, cwd } = place;
-    return this.#start(id, place, (setup) => {
+    return this.#start(id, place, args, (setup) => {
       const instructionsDir = this.#writeSessionFiles(id, setup.role, setup.knowledge, setup.dir, setup.token, {
         events: CONVERSATION_HOOK_EVENTS,
         lspServers: {},
@@ -219,6 +229,7 @@ export class SessionLauncher {
         load,
         firstMessage,
         environment: setup.mise.environment,
+        model: setup.model,
         run: () => this.#deps.procs.state(sessionOwner(id)),
         ...this.#deps.callbacks({ id, supervisor, task }),
         usage: new CopilotUsageLog(copilotHome(setup.env)),
@@ -268,8 +279,13 @@ export class SessionLauncher {
    * session can fail after its process started, in the handshake), the token revoked and the session directory removed.
    * A failed process start is the repo's error (`domainError`); a failed write of the session's files is thrown as it is.
    */
-  async #start(id: string, place: SessionPlace, open: (setup: SessionSetup) => OpenedSession): Promise<StartedSession> {
-    const setup = await this.#setUp(id, place);
+  async #start(
+    id: string,
+    place: SessionPlace,
+    launchArgs: readonly string[],
+    open: (setup: SessionSetup) => OpenedSession,
+  ): Promise<StartedSession> {
+    const setup = await this.#setUp(id, place, launchArgs);
     let opened: OpenedSession | undefined;
     try {
       opened = open(setup);
@@ -285,17 +301,20 @@ export class SessionLauncher {
   }
 
   /** What every start needs: Copilot CLI, the session directory and token, and the arguments and environment it gets. */
-  async #setUp(id: string, place: SessionPlace): Promise<SessionSetup> {
+  async #setUp(id: string, place: SessionPlace, launchArgs: readonly string[]): Promise<SessionSetup> {
     const { repo, supervisor, task } = place;
     const { copilot, permissions, model, miseEnv, mise } = await this.inputs(place);
     // The MCP server and the hooks are the daemon on `127.0.0.1`, which a proxy of the user must not get (ADR-89).
     const env = withLoopbackNoProxy({ ...mise.env, TERM: "xterm-256color", COLORTERM: "truecolor", ...LOOPBACK_HOOKS_ENV });
+    const startModel = modelOfArgs([...copilot.args, ...mise.args, ...model, ...launchArgs]);
+    await this.setWireApi(`session ${id}`, env, startModel);
     const dir = sessionDir(this.#deps.home, id);
     const args = ["--additional-mcp-config", `@${join(dir, MCP_CONFIG_FILE)}`, ...toolPermissionArgs(permissions), ...mise.args, ...model];
     return {
       program: copilot.program,
       prefix: copilot.args,
       args,
+      model: modelOfArgs([...model, ...launchArgs]),
       env,
       mise,
       miseEnv,
@@ -304,6 +323,27 @@ export class SessionLauncher {
       dir,
       token: this.#deps.tokens.issue(id),
     };
+  }
+
+  /**
+   * The format of a Copilot CLI's model with a custom provider (ADR-200), set in `env` in place of the one it names: the
+   * model is the start's `--model` (the configured command's and mise's included), else the environment's
+   * `COPILOT_MODEL`. A probe that fails keeps the environment's.
+   * A session's start and a task's review (ADR-182) call it; `who` names it in the log.
+   */
+  async setWireApi(who: string, env: NodeJS.ProcessEnv, startModel: string | null): Promise<void> {
+    const model = startModel ?? (env[envKey(env, COPILOT_PROVIDER_ENV.model)]?.trim() || null);
+    if (model === null) return;
+    let wireApi: WireApi | null;
+    try {
+      wireApi = await this.#deps.wireApi(model, env);
+    } catch (err) {
+      this.#deps.log(`${who} keeps the format of its environment: ${messageOf(err)}`);
+      return;
+    }
+    if (wireApi === null) return;
+    this.#deps.log(`${who} talks to its model provider in the ${wireApi} format, which ${model} answers in`);
+    env[envKey(env, COPILOT_PROVIDER_ENV.wireApi)] = wireApi;
   }
 
   async #miseLaunch(place: { repo: string | null; task: string | null }, userEnv: NodeJS.ProcessEnv) {
@@ -348,6 +388,7 @@ export class SessionLauncher {
     conversation,
     program,
     environment,
+    model,
     lspServers,
     usage,
   }: SessionFiles): PreparedSession {
@@ -367,6 +408,7 @@ export class SessionLauncher {
       conversation,
       program,
       environment,
+      model,
       run: () => this.#deps.procs.state(sessionOwner(id)),
       ...this.#deps.callbacks({ id, supervisor, task }),
       usage,
@@ -394,7 +436,7 @@ export class SessionLauncher {
     // User-only: the server's headers carry the session token (§8).
     const mcpConfig = copilotHttpMcpServers(this.#deps.sessionMcpServer(token));
     writeFileSync(join(dir, MCP_CONFIG_FILE), JSON.stringify(mcpConfig, null, 2), { mode: 0o600 });
-    const instructionsDir = writeSessionInstructions(dir, this.#deps.version, role, knowledge);
+    const instructionsDir = writeSessionInstructions(dir, this.#deps.version, role, knowledge, JAVA_LSP_SERVER in plugin.lspServers);
     if (instructionsDir === null)
       this.#deps.log(`session ${id} starts without Trackwall instructions: the session directory path has a comma`);
     return instructionsDir;
@@ -422,7 +464,7 @@ export interface TerminalLaunch extends SessionPlace {
   id: string;
   /** Copilot CLI already keeps a conversation under the id: the arguments carry the first message or resume it (ADR-95). */
   hasConversation: boolean;
-  /** Copilot CLI's id of the conversation when it is not the session id (ADR-107). */
+  /** Copilot CLI's id of the conversation when it is not the session id: one of the conversation view (ADR-107), or a task's (ADR-225). */
   conversation?: string;
   args: readonly string[];
   promptOnStart: boolean;
@@ -437,6 +479,8 @@ interface SessionSetup {
   prefix: readonly string[];
   /** The MCP config, tool permissions, mise's arguments and the supervisor's model. */
   args: readonly string[];
+  /** The model Trackwall starts the session on (ADR-206); `null` when it passes none. */
+  model: string | null;
   env: NodeJS.ProcessEnv;
   mise: SessionMiseLaunch;
   miseEnv: SessionMiseEnv;
@@ -448,7 +492,10 @@ interface SessionSetup {
 
 /** The directory of a new session and what follows from it for `LiveSession`. */
 interface SessionFiles
-  extends Pick<LiveSessionOptions, "id" | "repo" | "task" | "promptOnStart" | "hasConversation" | "program" | "environment" | "usage"> {
+  extends Pick<
+    LiveSessionOptions,
+    "id" | "repo" | "task" | "promptOnStart" | "hasConversation" | "program" | "environment" | "model" | "usage"
+  > {
   role: SessionRole;
   knowledge: SessionKnowledge;
   dir: string;

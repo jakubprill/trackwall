@@ -11,6 +11,7 @@ import {
   type MergeRequestState,
   type PipelineState,
   pipelineStateText,
+  reproTestLine,
   type Task,
   type TaskBranchPush,
   type Verification,
@@ -39,10 +40,11 @@ export function mergeRequestDraft(task: Task, verification: Verification | null,
   const title = (task.title ?? task.prompt.split("\n", 1)[0] ?? "").trim();
   const body = (task.summary?.text ?? task.prompt).trim();
   const checks = task.summary && task.summary.checkSteps.length > 0 ? `\n\n${checkStepsSection(task.summary.checkSteps)}` : "";
+  const repro = task.summary?.reproTest ? `\n\n${reproTestLine(task.summary.reproTest)}` : "";
   const verdict = verification && verification.state !== "running" ? `\n\n${verificationLine(verification)}` : "";
   return {
     title: cutText(title, MERGE_REQUEST_TITLE_MAX),
-    description: withBlock(changeBlock, `${body}${checks}${verdict}`),
+    description: withBlock(changeBlock, `${body}${checks}${repro}${verdict}`),
   };
 }
 
@@ -60,10 +62,14 @@ function checkStepsSection(steps: readonly string[]): string {
   return ["How to check:", ...steps.map((step, index) => `${index + 1}. ${step}`)].join("\n");
 }
 
-/** `Verification in Trackwall: passed (mise task test, 128 tests · 3 skipped)`. */
+/**
+ * `Verification in Trackwall: passed (mise task test, 128 tests · 3 skipped)`; an outdated one (ADR-209) says the changes
+ * moved on after it, so the reviewer does not take it for a verdict on what they read.
+ */
 function verificationLine(verification: Verification): string {
   const tests = verification.tests && verification.tests.reports > 0 ? `, ${testCountsLabel(verification.tests.totals)}` : "";
-  return `Verification in Trackwall: ${verification.state} (mise task ${verification.miseTask}${tests})`;
+  const outdated = verification.outdated ? " on an earlier version of the changes" : "";
+  return `Verification in Trackwall: ${verification.state}${outdated} (mise task ${verification.miseTask}${tests})`;
 }
 
 /** `2 commits · 1 not pushed · 3 files not committed`, or the warning that the remote moved on. */

@@ -26,6 +26,7 @@ function session(
     load: o.load,
     firstMessage: o.firstMessage,
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
+    model: null,
     run: () => run,
     prompt: o.prompt ?? (() => undefined),
     situation: o.situation ?? (() => undefined),

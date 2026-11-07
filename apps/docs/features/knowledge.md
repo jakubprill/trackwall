@@ -18,17 +18,19 @@ Keep short facts about your repos that every agent reads at the start, so no ses
 
 Workspace knowledge is a list of short entries in "Plan", under "Workspace knowledge" on the left. Each entry is one fact of one kind: **How to** (how to build, run or test something), **Relation** (a link between repos that the [connection graph](/features/graph) does not show, such as a queue or a shared database), **Exception** (where a repo departs from a rule it would otherwise follow) or **Pitfall** (a trap, such as a test that needs something first). An entry is about some repos, or about your whole workspace when it names none.
 
-When an agent finds out something that cost it work, for example that `mise run test` skips the integration tests and `mise run test-it` runs them, it can propose an entry. The proposal shows at the top of the list with "needs your approval", the agent's evidence, and hints for what to look at twice: a web address, text that reads like an instruction to agents rather than a fact, or something that looks like a secret. Read it and press "Approve this version", or remove it.
+When an agent finds out something that cost it work, for example that `mise run test` skips the integration tests and `mise run test-it` runs them, it can propose an entry. The list shows the proposals under "Needs your approval", apart from the approved entries, one line each: its kind, the fact, its repos, who wrote it and when, and a warning mark when something needs a second look. The left column counts the proposals next to "Workspace knowledge". Select one to read it in full on the right, with the agent's evidence and hints for what to look at twice: a web address, text that reads like an instruction to agents rather than a fact, or something that looks like a secret. Press "Approve this version" there, or remove it. You approve one entry at a time, after reading it: there is no "Approve all", since every entry reaches your agents.
+
+Search the facts by any words in them, their name or repos, and narrow the list to one kind or one repo; an entry about your whole workspace shows for every repo.
 
 Every [Copilot CLI session](/features/sessions) and [agent task](/features/tasks) you start afterwards gets the approved entries about its repo, and the ones about your whole workspace, in its [session instructions](/features/session-instructions). The [supervisor](/features/supervisor) gets the ones about the whole workspace. Agents can read the rest with the `list_knowledge` tool of the [MCP server](/features/mcp).
 
-You can also write an entry yourself with the form under the list. Your own entries count as soon as you save them.
+You can also write an entry yourself with "New entry" at the top of the list. Your own entries count as soon as you save them.
 
 ## Use it
 
 1. Open "Plan" and choose "Workspace knowledge" on the left.
-2. Read the proposals at the top and press "Approve this version" on the ones that are right.
-3. To add a fact yourself, fill in a name, a kind, the repos and the fact, and press "Save".
+2. Select a proposal under "Needs your approval", read it and its evidence on the right, and press "Approve this version" when it is right.
+3. To add a fact yourself, press "New entry", fill in a name, a kind, the repos and the fact, and press "Save".
 4. Start a session or a task in a repo: its agent starts with what you approved.
 
 ## Good to know

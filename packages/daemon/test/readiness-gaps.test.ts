@@ -1,0 +1,186 @@
+import { describe, expect, test } from "bun:test";
+import type { MiseTask, MiseTasks, RepoCard } from "@trackwall/protocol";
+import { readinessState } from "@trackwall/protocol";
+import { repoGaps } from "../src/modules/readiness/repo-gaps.ts";
+
+function task(name: string, origin: MiseTask["origin"] = "repo"): MiseTask {
+  return { name, description: "", source: null, origin, usage: null, run: null };
+}
+
+function tasks(...list: MiseTask[]): MiseTasks {
+  return { kind: "ok", tasks: list };
+}
+
+const BUILD_AND_TEST = tasks(task("build"), task("test"));
+
+function card(overrides: Partial<RepoCard> = {}): RepoCard {
+  return {
+    commit: "a".repeat(40),
+    buildFiles: [{ path: "pom.xml", tool: "maven", name: "orders-api", memberOf: null }],
+    provides: [],
+    consumes: [],
+    dtos: [],
+    tools: [],
+    mise: { configFiles: [], tasks: [], complete: true },
+    mechanisms: [],
+    reachTraced: true,
+    problems: [],
+    ...overrides,
+  };
+}
+
+describe("repoGaps: what blocks an agent", () => {
+  test("a repo with build and test from its own mise config, a pinned tool and nothing else missing is ready", () => {
+    const gaps = repoGaps({
+      mise: BUILD_AND_TEST,
+      card: {
+        kind: "ok",
+        card: card({ tools: [{ tool: "java", version: "21", source: "mise", evidence: { path: "mise.toml", line: 2 } }] }),
+      },
+      config: null,
+      unresolvedCalls: 0,
+    });
+
+    expect(gaps).toEqual([]);
+    expect(readinessState(gaps)).toBe("ready");
+  });
+
+  test("a repo without a mise task test is blocked, because Verify runs test", () => {
+    const gaps = repoGaps({
+      mise: tasks(task("build"), task("lint")),
+      card: { kind: "ok", card: card() },
+      config: null,
+      unresolvedCalls: 0,
+    });
+
+    expect(gaps).toEqual([{ code: "no-build-test", message: "no mise task test" }]);
+    expect(readinessState(gaps)).toBe("blocked");
+  });
+
+  test("the convention tasks do not count in a repo without a build file in its root, where they would fail", () => {
+    const mise = tasks(task("setup", "convention"), task("build", "convention"), task("test", "convention"));
+
+    expect(repoGaps({ mise, card: { kind: "ok", card: card({ buildFiles: [] }) }, config: null, unresolvedCalls: 0 })).toEqual([
+      { code: "no-build-test", message: "the convention tasks build and test find no build file in the repo root" },
+    ]);
+    expect(repoGaps({ mise, card: { kind: "ok", card: card() }, config: null, unresolvedCalls: 0 })).toEqual([]);
+  });
+
+  test("a repo's own build next to the convention test is still blocked without a build file, because that test fails", () => {
+    const mise = tasks(task("build"), task("test", "convention"));
+
+    expect(repoGaps({ mise, card: { kind: "ok", card: card({ buildFiles: [] }) }, config: null, unresolvedCalls: 0 })).toEqual([
+      { code: "no-build-test", message: "the convention task test finds no build file in the repo root" },
+    ]);
+  });
+
+  test("an untrusted mise config, a missing mise and a mise error each block, with mise's first line as the reason", () => {
+    const card0 = { kind: "ok" as const, card: card() };
+    expect(
+      repoGaps({ mise: { kind: "untrusted", message: "not trusted", running: [] }, card: card0, config: null, unresolvedCalls: 0 }),
+    ).toEqual([{ code: "mise-untrusted", message: "mise does not run this repo's tasks until you trust its config" }]);
+    expect(repoGaps({ mise: { kind: "not_installed", message: "", running: [] }, card: card0, config: null, unresolvedCalls: 0 })).toEqual([
+      { code: "mise-missing", message: "mise is not installed, so no mise task can run" },
+    ]);
+    expect(
+      repoGaps({
+        mise: { kind: "error", message: "mise ERROR invalid TOML\n  at line 3", running: [] },
+        card: card0,
+        config: null,
+        unresolvedCalls: 0,
+      }),
+    ).toEqual([{ code: "mise-failed", message: "mise ERROR invalid TOML" }]);
+  });
+});
+
+describe("repoGaps: what weakens an agent, and what is only worth knowing", () => {
+  test("a Spring Boot app without dev, Java only from pom.xml and two clients without a target are three gaps, in a fixed order", () => {
+    const gaps = repoGaps({
+      mise: BUILD_AND_TEST,
+      card: {
+        kind: "ok",
+        card: card({
+          provides: [
+            { kind: "app", name: "orders-api", port: 8081, module: "", evidence: { path: "src/main/resources/application.yml", line: 3 } },
+          ],
+          tools: [{ tool: "java", version: "21", source: "hint", evidence: { path: "pom.xml", line: 9 } }],
+        }),
+      },
+      config: null,
+      unresolvedCalls: 2,
+    });
+
+    expect(gaps).toEqual([
+      { code: "no-dev", message: "orders-api cannot start as a service: no mise task dev" },
+      { code: "tool-unpinned", message: "not pinned in mise: java 21 from pom.xml" },
+      { code: "unresolved-call", message: "2 HTTP clients without a repo to call in the list" },
+    ]);
+    expect(readinessState(gaps)).toBe("gaps");
+  });
+
+  test("a tool pinned in mise is not unpinned because pom.xml names it too", () => {
+    const gaps = repoGaps({
+      mise: BUILD_AND_TEST,
+      card: {
+        kind: "ok",
+        card: card({
+          tools: [
+            { tool: "java", version: "21", source: "hint", evidence: { path: "pom.xml", line: 9 } },
+            { tool: "java", version: "temurin-21", source: "mise", evidence: { path: "mise.toml", line: 2 } },
+          ],
+        }),
+      },
+      config: null,
+      unresolvedCalls: 0,
+    });
+
+    expect(gaps).toEqual([]);
+  });
+
+  test("an incomplete card and a repo without commits are worth knowing but leave the repo ready", () => {
+    const incomplete = repoGaps({
+      mise: BUILD_AND_TEST,
+      card: { kind: "ok", card: card({ problems: [{ code: "no-endpoints", path: "", message: "no controller found" }] }) },
+      config: null,
+      unresolvedCalls: 0,
+    });
+    const pending = repoGaps({ mise: BUILD_AND_TEST, card: { kind: "ok", card: null }, config: null, unresolvedCalls: 0 });
+
+    expect(incomplete).toEqual([{ code: "card-incomplete", message: "no controller found" }]);
+    expect(pending).toEqual([{ code: "card-unavailable", message: "the repo has no commits yet, so it has no card" }]);
+    expect(readinessState(incomplete)).toBe("ready");
+    expect(readinessState(pending)).toBe("ready");
+  });
+});
+
+describe("repoGaps: what mise finds in the config it reads", () => {
+  test("a problem mise tasks validate finds weakens agents, with the first one named and the rest counted", () => {
+    const gaps = repoGaps({
+      mise: BUILD_AND_TEST,
+      config: {
+        unformatted: [],
+        problems: [
+          { severity: "error", message: "test: Dependency 'compile' not found" },
+          { severity: "warning", message: "mise.toml:4:2: unknown field taskz (did you mean tasks?)" },
+        ],
+      },
+      card: { kind: "ok", card: card() },
+      unresolvedCalls: 0,
+    });
+
+    expect(gaps).toEqual([{ code: "mise-invalid", message: "test: Dependency 'compile' not found (and 1 more problem)" }]);
+    expect(readinessState(gaps)).toBe("gaps");
+  });
+
+  test("a config mise fmt would rewrite is worth knowing but leaves the repo ready", () => {
+    const gaps = repoGaps({
+      mise: BUILD_AND_TEST,
+      config: { unformatted: ["mise.toml", "mise.local.toml"], problems: [] },
+      card: { kind: "ok", card: card() },
+      unresolvedCalls: 0,
+    });
+
+    expect(gaps).toEqual([{ code: "mise-unformatted", message: "mise fmt would rewrite mise.toml, mise.local.toml" }]);
+    expect(readinessState(gaps)).toBe("ready");
+  });
+});

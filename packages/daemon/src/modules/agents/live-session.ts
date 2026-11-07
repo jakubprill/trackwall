@@ -117,17 +117,20 @@ export interface LiveSessionOptions {
   hooksFile: string;
   /** Copilot CLI got the prompt as its first message (`--interactive`), so it works right after the start. */
   promptOnStart: boolean;
-  /** Copilot CLI already keeps a conversation under the session's id (a first message, or a resumed conversation; ADR-95). */
+  /** Copilot CLI already keeps the conversation (a first message, or a resumed conversation; ADR-95). */
   hasConversation: boolean;
   /**
    * Copilot CLI's id of the conversation: the session id (`--session-id`), unless the session resumed one started in
-   * the conversation view, where Copilot CLI picked the id (ADR-107).
+   * the conversation view, where Copilot CLI picked the id (ADR-107), or it is a task's, whose conversation is under the
+   * task's id (ADR-225).
    */
   conversation?: string;
   /** The Copilot CLI program the session runs, the full path from `findCopilot`. */
   program: string;
   /** What the session got from mise when it started (ADR-93). */
   environment: SessionEnvironment;
+  /** The model Trackwall started it on (ADR-206); `null` when it passed none. */
+  model: string | null;
   /** The state of the session's process group in `procs`; `undefined` before the start. */
   run: () => RunState | undefined;
   /**
@@ -162,6 +165,7 @@ export class LiveSession implements AgentSession {
   readonly task: string | null;
   readonly startedAt = new Date().toISOString();
   readonly environment: SessionEnvironment;
+  readonly model: string | null;
   /** Copilot CLI's id of the conversation, which a later start resumes (ADR-95, ADR-107). */
   readonly conversation: string;
   readonly #run: () => RunState | undefined;
@@ -235,6 +239,7 @@ export class LiveSession implements AgentSession {
     this.supervisor = o.supervisor;
     this.task = o.task;
     this.environment = o.environment;
+    this.model = o.model;
     this.conversation = o.conversation ?? o.id;
     this.#run = o.run;
     this.#promptText = o.prompt;
@@ -255,8 +260,8 @@ export class LiveSession implements AgentSession {
     this.#dialogs = new SessionDialogs(this.#screen);
     this.#hooks = new HookTail(o.hooksFile);
     this.#usage = o.usage;
-    // A resumed conversation shows what it used before this start.
-    if (o.hasConversation) this.#usage.update(this.conversation);
+    // A resumed conversation shows what it used before this start, and the model of this start only.
+    if (o.hasConversation) this.#usage.readBeforeStart(this.conversation);
   }
 
   /** The process terminal; it arrives after the group starts, and output can arrive earlier. */
@@ -482,6 +487,8 @@ export class LiveSession implements AgentSession {
       readRequest: run.kind === "running" ? this.#readRequestView() : null,
       copyRequest: run.kind === "running" ? this.copyRequest.request : null,
       usage: this.#usage.current(),
+      model: this.model,
+      modelInUse: this.#usage.modelInUse(),
     };
   }
 

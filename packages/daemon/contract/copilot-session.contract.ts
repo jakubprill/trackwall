@@ -5,9 +5,17 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { MCP_SERVER_NAME, mcpTools, promptBoxText, type Session, TASK_MESSAGE_RULE } from "@trackwall/protocol";
+import {
+  agentsApi,
+  MCP_SERVER_NAME,
+  mcpTools,
+  promptBoxText,
+  type Session,
+  TASK_MESSAGE_RULE,
+  type UsageReport,
+} from "@trackwall/protocol";
+import { conversationEventLog } from "../src/infra/copilot-home.ts";
 import { windowTitleFromOsc } from "../src/modules/agents/copilot-osc.ts";
-import { conversationEventLog } from "../src/modules/agents/copilot-usage-log.ts";
 import { OscParser } from "../src/modules/agents/osc-parser.ts";
 import { readRequestPrompt } from "../src/modules/agents/read-request-prompt.ts";
 import { sessionHooksFile } from "../src/modules/agents/session-launcher.ts";
@@ -17,7 +25,7 @@ import { screenLines, untilInputBox } from "../test/support/screen-lines.ts";
 import { hookRecords, startRealCopilotDaemon } from "./support/real-copilot.ts";
 import { type Recorder, startRecorder } from "./support/recorder.ts";
 import { commitEscapeScript, ESCAPE_COMMAND, sandboxRefusedEverything } from "./support/sandbox-escape.ts";
-import { type ModelRequest, type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
+import { type ModelRequest, SCRIPTED_MODEL, type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
 import { USER_MCP_ISSUES, USER_MCP_SERVER, USER_MCP_TOOL } from "./support/user-mcp-server.ts";
 
 const USER_MCP_SERVER_SCRIPT = join(import.meta.dir, "support", "user-mcp-server.ts");
@@ -191,6 +199,56 @@ describe("a session of the real Copilot CLI", () => {
     await endOfTurn(resumed.id);
     const second = await waitFor(agents, resumed.id, (s) => s.usage?.modelCalls === 2, "the second turn's usage", SESSION_MS);
     expect(second.usage).toMatchObject({ inputTokens: 2, outputTokens: 2 });
+  });
+
+  test("the event log has each model call's tool definition tokens and each tool call's server, outcome and result tokens, which the weekly usage report reads (ADR-199)", async () => {
+    const { id, window } = await startSession();
+    model.reply(
+      {
+        parallel: [
+          { tool: copilotToolName(mcpTools.listRepos.name), arguments: {} },
+          { tool: "view", arguments: { path: join(daemon.projects, "shop") } },
+          // A read-only tool that refuses its argument: an error, without an approval request.
+          { tool: copilotToolName(mcpTools.getTaskChanges.name), arguments: { task: "no-such-task" } },
+        ],
+      },
+      { text: "Listed." },
+    );
+    // Other tests' conversations are in the same Copilot CLI home, so the turn shows as what it adds to the report.
+    const before = await daemon.facade.usageReport.week(0);
+    window.attachment.input("list the repos\r");
+    await endOfTurn(id);
+
+    const tool = (report: UsageReport, name: string) =>
+      report.tools.find((t) => t.tool === name) ?? { server: null, calls: 0, failures: 0, resultTokens: 0 };
+    const added = (report: UsageReport, name: string) => {
+      const [now, then] = [tool(report, name), tool(before, name)];
+      return {
+        server: now.server,
+        calls: now.calls - then.calls,
+        failures: now.failures - then.failures,
+        resultTokens: now.resultTokens - then.resultTokens,
+      };
+    };
+    const shop = (report: UsageReport) => report.work.find((w) => w.kind === "repo" && w.repo === "shop");
+    // Copilot CLI writes the log in batches, so the tool calls may land after the turn's agentStop.
+    const until = Date.now() + SESSION_MS;
+    let report = await daemon.facade.usageReport.week(0);
+    while (
+      added(report, mcpTools.getTaskChanges.name).calls === 0 ||
+      (shop(report)?.usage.modelCalls ?? 0) < (shop(before)?.usage.modelCalls ?? 0) + 2
+    ) {
+      if (Date.now() > until) throw new Error(`the report never had the turn: ${JSON.stringify(report)}`);
+      await new Promise((r) => setTimeout(r, 200));
+      report = await daemon.facade.usageReport.week(0);
+    }
+    // The definitions of every tool the model was offered go with every call.
+    expect(report.toolDefinitionTokens - before.toolDefinitionTokens).toBeGreaterThan(1000);
+    expect(added(report, mcpTools.listRepos.name)).toMatchObject({ server: MCP_SERVER_NAME, calls: 1, failures: 0 });
+    expect(added(report, mcpTools.listRepos.name).resultTokens).toBeGreaterThan(0);
+    expect(added(report, "view")).toMatchObject({ server: null, calls: 1, failures: 0 });
+    expect(added(report, "view").resultTokens).toBeGreaterThan(0);
+    expect(added(report, mcpTools.getTaskChanges.name)).toEqual({ server: MCP_SERVER_NAME, calls: 1, failures: 1, resultTokens: 0 });
   });
 
   test("a shell command asks for approval as a permission_prompt notification, the daemon reads the dialog, and its answer runs it", async () => {
@@ -540,6 +598,26 @@ describe("an agent task with the real Copilot CLI", () => {
     expect(first?.system).toContain(realpathSync.native(task.worktree));
   });
 
+  test("a task's conversation records the task's worktree and branch, so the weekly usage report counts it under the task, also once it ended (ADR-199)", async () => {
+    const { agents } = daemon.facade;
+    model.reply({ text: "Counting." });
+    const task = await agents.createTask("shop", "count this task");
+    const session = taskSessionOf(task.id);
+    await endOfTurn(session);
+    // Copilot CLI writes the log in batches: the receipt may land after the turn's agentStop.
+    const until = Date.now() + SESSION_MS;
+    const row = async () => (await daemon.facade.usageReport.week(0)).work.find((w) => w.task === task.id);
+    while ((await row()) === undefined) {
+      if (Date.now() > until) throw new Error("the task's conversation never showed in the report");
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    expect(await row()).toMatchObject({ kind: "task", repo: "shop", label: "count this task", conversations: 1 });
+
+    await agents.stop(session);
+    await agents.removeTask(task.id, false, true);
+    expect(await row()).toMatchObject({ kind: "task", repo: "shop", label: "count this task" });
+  });
+
   test("a review sent to a resumed task session goes into its input box before the user types anything", async () => {
     const { agents } = daemon.facade;
     model.reply({ text: "Added the test." });
@@ -590,6 +668,37 @@ describe("a task's model with the real Copilot CLI (ADR-98)", () => {
     await endOfTurn(resumed.id);
     expect(model.requests().at(-1)).toMatchObject({ model: REVIEW_MODEL });
     await agents.stop(resumed.id);
+  });
+});
+
+describe("another model for a running task with the real Copilot CLI (ADR-206)", () => {
+  test("a task restarted on another model asks the provider for that model and still carries its conversation, and the event log names the model in use (ADR-225)", async () => {
+    const { agents } = daemon.facade;
+    model.reply({ text: "Listing the endpoints." });
+    const task = await agents.createTask("shop", "list the endpoints");
+    const first = agents.sessions().sessions.find((s) => s.task === task.id);
+    if (first === undefined) throw new Error("the task has no session");
+    await endOfTurn(first.id);
+    expect(model.requests().at(-1)?.model).not.toBe(REVIEW_MODEL);
+    // The receipt of the call names its model; Copilot CLI writes the log in batches, so it may land after the turn.
+    await waitFor(agents, first.id, (s) => s.modelInUse === SCRIPTED_MODEL, "the model of the first call", SESSION_MS);
+
+    const restarted = await agents.restart(first.id, REVIEW_MODEL);
+    await untilLoaded(restarted.id);
+    // The resume's model change names the new model before any call, after the old receipts in the log.
+    await waitFor(agents, restarted.id, (s) => s.modelInUse === REVIEW_MODEL, "the model set at the resume", SESSION_MS);
+    model.reply({ text: "I will read the review." });
+    agents.sendReview(task.id, [{ path: "README.md", side: "new", line: 1, code: "# shop", text: "Name the endpoints' owners too." }]);
+    await endOfTurn(restarted.id);
+
+    const request = model.requests().at(-1);
+    expect(request).toMatchObject({ model: REVIEW_MODEL });
+    // Since Copilot CLI 1.0.107 a resumed conversation can carry a system reminder of its own among the user's messages.
+    expect(request?.userTexts).toContainEqual(expect.stringContaining("list the endpoints"));
+    expect(agents.task(task.id).model).toBe(REVIEW_MODEL);
+    await waitFor(agents, restarted.id, (s) => s.usage?.modelCalls === 2, "the receipt of the call on the new model", SESSION_MS);
+    expect(agents.session(restarted.id).modelInUse).toBe(REVIEW_MODEL);
+    await agents.stop(restarted.id);
   });
 });
 
@@ -782,6 +891,43 @@ describe("a review of a task's changes with the real Copilot CLI (ADR-62)", () =
 
     expect(hookRecords(daemon.home, session.id).map((r) => r.event)).not.toContain("notification");
     expect(model.requests().at(-1)?.toolResults.join("\n")).toContain("Call it @login-test");
+  });
+});
+
+describe("a task from a stack trace with the real Copilot CLI (ADR-222)", () => {
+  test("the model gets the trace in the task's first prompt unchanged, and report_result keeps the reproduction test it names", async () => {
+    const { agents } = daemon.facade;
+    // Tabs, backticks, `$` and quotes, as a pasted Java trace has them: the prompt is one argument, never a shell's.
+    const trace = [
+      'Exception in thread "main" java.lang.IllegalStateException: order `42` has no lines',
+      "\tat com.example.shop.order.OrderService.lambda$total$0(OrderService.java:57)",
+      "\t... 3 more",
+    ].join("\n");
+    const reproTest = {
+      file: "src/test/java/com/example/shop/order/OrderServiceTest.java",
+      name: "OrderServiceTest#totalOfOrderWithoutLines",
+      failure: "IllegalStateException at OrderService.java:57",
+    };
+    model.reply(
+      { tool: copilotToolName(mcpTools.reportResult.name), arguments: { summary: "Reproduced it and fixed the total.", reproTest } },
+      { text: "Reported." },
+    );
+    const request = agentsApi.createTask.request.parse({
+      repo: "shop",
+      prompt: "Fix the order total",
+      approvals: "auto",
+      stackTrace: trace,
+    });
+    const task = await daemon.facade.createTask(request);
+    await endOfTurn(taskSessionOf(task.id));
+
+    // The model is shared by the tests: this task's first request is the one with its prompt.
+    const first = model.requests().find((r) => r.userTexts.some((text) => text.includes("Fix the order total")));
+    expect(first?.userTexts.join("\n")).toContain(task.prompt);
+    expect(task.prompt).toContain(`\n${trace}\n`);
+    expect(agents.task(task.id).summary?.reproTest).toEqual(reproTest);
+    await agents.stop(taskSessionOf(task.id));
+    await agents.removeTask(task.id, false, true);
   });
 });
 

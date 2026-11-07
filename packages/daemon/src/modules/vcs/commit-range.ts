@@ -76,15 +76,19 @@ export async function commitsBetween(dir: string, from: string, to: string, limi
   return { total, commits };
 }
 
-/** The paths that differ between two commits, at most `max` of them; `undefined` when `from` is not in the repo. */
+/**
+ * The paths that differ between two commits, at most `max` of them, only under `pathspecs` when given (git pathspecs,
+ * where `*` also matches `/`); `undefined` when `from` is not in the repo.
+ */
 export async function changedPathsBetween(
   dir: string,
   from: string,
   to: string,
   max: number,
+  pathspecs: readonly string[] = [],
 ): Promise<{ paths: string[]; truncated: boolean } | undefined> {
   if ((await existingCommit(dir, from)) === undefined) return undefined;
-  const { stdout } = await git(dir, ["diff", "--name-only", "-z", "--no-renames", from, to, "--"]);
+  const { stdout } = await git(dir, ["diff", "--name-only", "-z", "--no-renames", from, to, "--", ...pathspecs]);
   const paths = stdout
     .toString("utf8")
     .split("\0")

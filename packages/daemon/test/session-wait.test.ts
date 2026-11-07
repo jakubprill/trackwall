@@ -45,6 +45,8 @@ const working: Session = {
   readRequest: null,
   copyRequest: null,
   usage: null,
+  model: null,
+  modelInUse: null,
 };
 
 describe("what wait_for_session sees of a session", () => {

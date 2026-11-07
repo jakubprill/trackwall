@@ -113,6 +113,26 @@ function answer(res: ServerResponse, reply: ModelReply, callId: string): void {
   res.end(`${chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join("")}data: [DONE]\n\n`);
 }
 
+const ProbeRequest = z.object({ stream: z.literal(false) });
+
+/**
+ * The daemon's probe of a model's format (ADR-200), answered as a provider of Chat Completions only answers it: one
+ * non-streaming chat completion, and a 404 on the Responses API. Copilot CLI always streams, so a request without
+ * streaming is the probe; it takes no queued reply, so a test's script stays the agent's turns alone.
+ */
+function formatProbe(req: IncomingMessage, body: string, res: ServerResponse): boolean {
+  if (req.method !== "POST" || !jsonOf(ProbeRequest).safeParse(body).success) return false;
+  if (req.url?.endsWith("/responses")) {
+    res.writeHead(404, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: { message: "scripted model: no Responses API" } }));
+    return true;
+  }
+  if (!req.url?.endsWith("/chat/completions")) return false;
+  res.writeHead(200, { "content-type": "application/json" });
+  res.end(JSON.stringify({ id: "probe", object: "chat.completion", model: SCRIPTED_MODEL, choices: [] }));
+  return true;
+}
+
 /** The model name Copilot CLI sends (`COPILOT_MODEL`); outside its catalog, so it uses default token limits. */
 export const SCRIPTED_MODEL = "trackwall-scripted-model";
 
@@ -137,6 +157,7 @@ export async function startScriptedModel() {
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(Buffer.from(chunk));
+    if (formatProbe(req, Buffer.concat(chunks).toString("utf8"), res)) return;
     if (req.method !== "POST" || !req.url?.endsWith("/chat/completions")) return refuse(res, `${req.method} ${req.url}`);
     const parsed = jsonOf(Request).safeParse(Buffer.concat(chunks).toString("utf8"));
     if (!parsed.success) return refuse(res, `a request it cannot read: ${parsed.error.message}`);

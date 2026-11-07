@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plan: inbox, projects and knowledge</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<style>
+body{padding:32px 16px 64px}
+.page{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:40px}
+.page > header h1{font-size:24px;font-weight:500;margin:0 0 8px}
+.page > header p,.shot > p{color:var(--muted-foreground);max-width:760px;line-height:1.55;margin:0 0 12px}
+.shot h2{font-size:17px;font-weight:500;margin:0 0 6px;display:flex;gap:10px;align-items:center}
+.state{font-family:var(--font-mono);font-size:11px;border:1px solid var(--border);border-radius:4px;padding:1px 6px;color:var(--muted-foreground)}
+.state.built{color:var(--success)}
+.frame{max-width:none}
+@media (max-width:1000px){.frame{zoom:.18}}
+
+.frame{width:1920px;height:1080px;overflow:hidden;font-size:14px;zoom:.5;border:1px solid var(--border);
+ background-image:linear-gradient(var(--grid-line) 1px,transparent 1px),linear-gradient(90deg,var(--grid-line) 1px,transparent 1px);background-size:24px 24px}
+.app{display:grid;grid-template-columns:48px 224px 1fr 48px;height:1080px}
+.app.three{grid-template-columns:48px 224px 1fr 400px 48px}
+.bar{border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:22px;padding-top:16px;background:var(--background)}
+.bar i{width:18px;height:18px;border:1.6px solid var(--muted-foreground);border-radius:4px;display:block;opacity:.8}
+.bar i.on{border-color:var(--primary);box-shadow:-15px 0 0 -6px var(--primary)}
+.sup{border-left:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding-top:16px;gap:18px;background:var(--background)}
+.sup i{width:16px;height:16px;border:1.6px solid var(--muted-foreground);border-radius:3px}
+.places{border-right:1px solid var(--border);padding:16px 0;display:flex;flex-direction:column;gap:2px;background:color-mix(in oklch,var(--background) 80%,transparent)}
+.hud{font-family:var(--font-mono);letter-spacing:var(--tracking-hud);text-transform:uppercase;font-size:11px;color:var(--muted-foreground)}
+.places .hud{padding:6px 16px}
+.pl{display:flex;align-items:center;gap:10px;padding:7px 16px;color:var(--foreground)}
+.pl.on{background:var(--accent)}
+.pl .n{margin-left:auto;font-size:12px;color:var(--muted-foreground)}
+.pl .n.w{color:var(--primary-foreground);background:var(--primary);border-radius:9px;padding:0 7px;font-weight:600}
+.pl .prog{margin-left:auto;width:42px;height:4px;border-radius:2px;background:var(--secondary);overflow:hidden}
+.pl .prog b{display:block;height:100%;background:var(--success)}
+.ico{width:14px;height:14px;border:1.5px solid currentColor;border-radius:3px;opacity:.75;flex:none}
+.main{display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--border)}
+.head{display:flex;align-items:center;gap:14px;padding:16px 24px 12px}
+.head h1{font-size:20px;font-weight:500;margin:0}
+.muted{color:var(--muted-foreground)}
+.xs{font-size:12px}.sm{font-size:13px}
+.mono{font-family:var(--font-mono)}
+.chip{font-family:var(--font-mono);font-size:11px;border:1px solid var(--border);border-radius:4px;padding:1px 6px;color:var(--foreground);white-space:nowrap;background:var(--muted)}
+.chip.repo{color:var(--muted-foreground)}
+.chip.p{background:color-mix(in oklch,var(--primary) 16%,transparent);border-color:color-mix(in oklch,var(--primary) 40%,transparent);color:var(--primary)}
+.chip.ok{background:color-mix(in oklch,var(--success) 14%,transparent);border-color:color-mix(in oklch,var(--success) 40%,transparent);color:var(--success)}
+.chip.wa{background:color-mix(in oklch,var(--warning) 14%,transparent);border-color:color-mix(in oklch,var(--warning) 40%,transparent);color:var(--warning)}
+.chip.bad{background:color-mix(in oklch,var(--destructive) 14%,transparent);border-color:color-mix(in oklch,var(--destructive) 40%,transparent);color:var(--destructive)}
+.chip.g{color:var(--group-1);border-color:color-mix(in oklch,var(--group-1) 40%,transparent)}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block;background:var(--success)}
+.dot.wa{background:var(--warning)}.dot.p{background:var(--primary)}.dot.m{background:var(--muted-foreground)}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--input);border-radius:var(--radius);padding:5px 11px;font-size:13px;color:var(--foreground);background:var(--background);white-space:nowrap}
+.btn.pri{background:var(--primary);color:var(--primary-foreground);border-color:transparent;font-weight:500}
+.btn.gh{border-color:transparent;background:transparent}
+.btn.sm{padding:3px 8px;font-size:12px}
+.kbd{font-family:var(--font-mono);font-size:10.5px;border:1px solid var(--border);border-bottom-width:2px;border-radius:3px;padding:0 4px;color:var(--muted-foreground)}
+.seg{display:inline-flex;border:1px solid var(--input);border-radius:var(--radius);overflow:hidden}
+.seg span{padding:4px 12px;font-size:13px;color:var(--muted-foreground)}
+.seg span.on{background:var(--secondary);color:var(--foreground)}
+.input{border:1px solid var(--input);border-radius:var(--radius);padding:8px 12px;color:var(--muted-foreground);background:var(--background)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius)}
+.panel{display:flex;flex-direction:column;gap:14px;padding:18px 20px;overflow:hidden;background:color-mix(in oklch,var(--background) 85%,transparent)}
+.new{position:absolute;font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;color:var(--primary-foreground);background:var(--warning);padding:1px 5px;border-radius:3px}
+.callout{position:relative}
+.callout > .tag{display:none}
+
+</style>
+<div class="page">
+<header><h1>Plan: inbox, projects and knowledge</h1>
+<p>Plan left most of the screen empty: rows showed only a title and the same column badge, and the right column said only “Select an item”. Four changes, each its own pull request, in this order: A, B, D, C. Sample data only.</p></header>
+<section class="shot"><h2>A. Inbox as a place to sort ideas <span class="state built">built</span></h2><p>Newest first by day, who wrote each idea and from which task, its repos and notes; File in, Start task and Drop on the selected idea, also as F, S and D with J and K to move; projects that already work in the idea's repos offered first; dropped ideas fold below. The right column opens on the newest idea.</p>
+<div class="frame"><div class="app three">
+<nav class="bar"><i></i><i></i><i></i><i></i><i></i><i class="on"></i><div style="flex:1"></div><i style="border-radius:50%"></i></nav>
+<aside class="places">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:0 16px 8px"><span class="hud" style="padding:0">Plan</span><span class="kbd">Alt+N</span></div>
+<div class="pl on"><span class="ico"></span>Inbox<span class="n w">5</span></div>
+<div class="pl"><span class="ico"></span>Knowledge<span class="n" style="color:var(--warning)">5 to approve</span></div>
+<div>
+<div class="hud" style="margin-top:10px">Projects</div>
+<div class="pl"><span class="ico"></span>Checkout redesign<span class="n">2/9</span></div>
+<div class="pl" style="padding-top:0;padding-bottom:6px;gap:8px"><span style="width:14px"></span><span class="prog" style="margin:0;width:50px"><b style="width:22%"></b></span><span class="xs" style="color:var(--warning)">● 1 waits for you</span></div>
+<div class="pl"><span class="ico"></span>Price changes<span class="n">0/2</span></div>
+<div class="pl" style="padding-top:0;padding-bottom:6px;gap:8px"><span style="width:14px"></span><span class="prog" style="margin:0;width:50px"><b style="width:0%"></b></span><span class="xs muted">● 1 working</span></div>
+</div>
+<div class="pl muted"><span class="ico" style="border-style:dashed"></span>New project…</div>
+<div class="hud" style="margin-top:10px">Archived</div>
+<div class="pl muted"><span class="ico"></span>Old reviews cleanup</div>
+</aside><section class="main">
+<div class="head"><h1>Inbox</h1><span class="muted">5 ideas to sort</span><div style="flex:1"></div>
+<span class="seg"><span class="on">All 5</span><span>From agents 1</span><span>Mine 4</span></span></div>
+<div style="padding:0 24px 14px" class="callout"><div class="input" style="display:flex;align-items:center;gap:10px;color:var(--muted-foreground)">Write an idea and press Enter<span style="flex:1"></span><span class="kbd">Enter</span></div></div>
+<div style="padding:0 24px;display:flex;flex-direction:column;gap:16px">
+<div class="callout">
+<div class="hud" style="padding:4px 0 8px">Today</div>
+<div class="card" style="overflow:hidden">
+<div style="background:var(--accent);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;flex-direction:column;gap:5px">
+<div style="display:flex;align-items:center;gap:10px"><span style="font-size:15px">Cache product prices in shop-bff for 30 s</span><div style="display:flex;gap:6px;margin-left:auto"><span class="btn sm">File in… <span class="kbd">F</span></span><span class="btn sm">Start task <span class="kbd">S</span></span><span class="btn sm gh muted">Drop <span class="kbd">D</span></span></div></div>
+<div style="display:flex;align-items:center;gap:8px"><span class="muted xs">you</span><span class="muted xs">· 2 h ago</span><span class="chip repo">shop-bff</span></div>
+<div class="muted sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:900px">The product page calls pricing on every render; a short cache would cut the p95 by half.</div>
+</div>
+<div style="border-bottom:1px solid var(--border);padding:12px 16px;display:flex;flex-direction:column;gap:5px">
+<div style="display:flex;align-items:center;gap:10px"><span style="font-size:15px">Flaky test: InventoryControllerTest.reservesStock on Windows</span></div>
+<div style="display:flex;align-items:center;gap:8px"><span class="chip g">agent</span> <span class="muted xs">from task <u>Hide reviews from customers who…</u></span><span class="muted xs">· 40 min ago</span><span class="chip repo">inventory</span></div>
+<div class="muted sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:900px">Failed twice with “address already in use”, passed after stopping the inventory service.</div>
+</div>
+</div></div>
+<div><div class="hud" style="padding:4px 0 8px">This week</div>
+<div class="card" style="overflow:hidden">
+<div style="border-bottom:1px solid var(--border);padding:12px 16px;display:flex;flex-direction:column;gap:5px">
+<div style="display:flex;align-items:center;gap:10px"><span style="font-size:15px">Ask the team whether refunds go through billing or payments</span></div>
+<div style="display:flex;align-items:center;gap:8px"><span class="muted xs">you</span><span class="muted xs">· yesterday</span></div>
+
+</div>
+<div style="border-bottom:1px solid var(--border);padding:12px 16px;display:flex;flex-direction:column;gap:5px">
+<div style="display:flex;align-items:center;gap:10px"><span style="font-size:15px">Show the delivery estimate on the cart page</span></div>
+<div style="display:flex;align-items:center;gap:8px"><span class="muted xs">you</span><span class="muted xs">· 2 days ago</span><span class="chip repo">shop-web</span><span class="chip repo">shipping</span></div>
+<div class="muted sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:900px">shipping already has /api/shipments/estimate; shop-bff does not expose it yet.</div>
+</div>
+<div style="border-bottom:1px solid var(--border);padding:12px 16px;display:flex;flex-direction:column;gap:5px">
+<div style="display:flex;align-items:center;gap:10px"><span style="font-size:15px">Remove the old /v1/orders endpoint after the mobile release</span></div>
+<div style="display:flex;align-items:center;gap:8px"><span class="muted xs">you</span><span class="muted xs">· 3 days ago</span><span class="chip repo">orders-api</span></div>
+
+</div>
+</div></div>
+</div>
+<div style="flex:1"></div>
+<div class="callout" style="margin:0 24px 16px"><div class="muted xs" style="display:flex;gap:16px;padding:8px 4px">
+<span><span class="kbd">J</span> <span class="kbd">K</span> next / previous</span><span><span class="kbd">F</span> file in a project</span><span><span class="kbd">S</span> start a task</span><span><span class="kbd">D</span> drop</span><span><span class="kbd">Alt+N</span> new idea from any view</span></div></div>
+</section><aside class="panel callout" style="outline-offset:-6px">
+<div class="hud">Idea · 1 of 5</div>
+<div style="font-size:18px;font-weight:500">Cache product prices in shop-bff for 30 s</div>
+<div class="muted xs">Written by you · today 07:12 · <u>Edit</u></div>
+<div class="sm" style="line-height:1.55">The product page calls pricing on every render; a short cache would cut the p95 by half.</div>
+<div style="display:flex;gap:6px;align-items:center"><span class="muted xs" style="width:56px">Repos</span><span class="chip repo">shop-bff</span><span class="chip repo" style="border-style:dashed">+ repo</span></div>
+<div class="card" style="padding:12px;display:flex;flex-direction:column;gap:8px">
+<div class="sm" style="font-weight:500">File in a project</div>
+<div class="btn" style="justify-content:space-between">Checkout redesign <span class="xs muted">also works in shop-bff</span></div>
+<div class="btn">Price changes</div>
+</div>
+<div class="card" style="padding:12px;display:flex;flex-direction:column;gap:8px">
+<div class="sm" style="font-weight:500">Or do it now</div>
+<div style="display:flex;gap:8px"><span class="btn pri">Start task</span><span class="muted xs" style="align-self:center">in shop-bff, prompt from the note</span></div>
+</div>
+<div style="flex:1"></div>
+<div style="display:flex;gap:8px"><span class="btn gh muted">Drop idea</span><span class="btn gh muted">Remove</span></div>
+</aside>
+<aside class="sup"><i></i><i style="border-radius:50% 50% 3px 3px"></i></aside></div></div></section><section class="shot"><h2>B. A project's outline with progress and live tasks <span class="state built">built</span></h2><p>Progress and column counts on top, the live state of each item's task on its row, the selected item to read first with its split and its tasks, Start task at the bottom.</p>
+<div class="frame"><div class="app three">
+<nav class="bar"><i></i><i></i><i></i><i></i><i></i><i class="on"></i><div style="flex:1"></div><i style="border-radius:50%"></i></nav>
+<aside class="places">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:0 16px 8px"><span class="hud" style="padding:0">Plan</span><span class="kbd">Alt+N</span></div>
+<div class="pl"><span class="ico"></span>Inbox<span class="n w">5</span></div>
+<div class="pl"><span class="ico"></span>Knowledge<span class="n" style="color:var(--warning)">5 to approve</span></div>
+<div class="callout">
+<div class="hud" style="margin-top:10px">Projects</div>
+<div class="pl on"><span class="ico"></span>Checkout redesign<span class="n">2/9</span></div>
+<div class="pl" style="padding-top:0;padding-bottom:6px;gap:8px"><span style="width:14px"></span><span class="prog" style="margin:0;width:50px"><b style="width:22%"></b></span><span class="xs" style="color:var(--warning)">● 1 waits for you</span></div>
+<div class="pl"><span class="ico"></span>Price changes<span class="n">0/2</span></div>
+<div class="pl" style="padding-top:0;padding-bottom:6px;gap:8px"><span style="width:14px"></span><span class="prog" style="margin:0;width:50px"><b style="width:0%"></b></span><span class="xs muted">● 1 working</span></div>
+</div>
+<div class="pl muted"><span class="ico" style="border-style:dashed"></span>New project…</div>
+<div class="hud" style="margin-top:10px">Archived</div>
+<div class="pl muted"><span class="ico"></span>Old reviews cleanup</div>
+</aside><section class="main"><div class="head" style="flex-wrap:wrap"><h1>Checkout redesign</h1><span class="chip p">SHOP-120 ↗</span>
+<div style="flex:1"></div><span class="seg callout" style="overflow:visible"><span class="on">Outline</span><span>Board</span></span><span class="btn gh muted">⋯</span></div>
+<div class="callout" style="margin:0 24px 14px;padding:10px 14px;display:flex;align-items:center;gap:18px" >
+<span class="sm"><b>2</b> of 9 done</span><span style="flex:0 0 260px;height:6px;background:var(--secondary);border-radius:3px;overflow:hidden;display:flex"><b style="width:22%;background:var(--success)"></b><b style="width:11%;background:var(--warning)"></b><b style="width:22%;background:var(--primary)"></b></span>
+<span class="xs muted">Idea 2 · Ready 3 · In progress 2 · <span style="color:var(--warning)">In review 1</span> · Done 1</span>
+<span style="flex:1"></span><span class="xs" style="display:inline-flex;gap:6px;align-items:center"><span class="dot wa"></span>1 task waiting for you</span><span class="btn sm gh muted">Hide done</span></div>
+<div style="padding:0 16px" class="callout">
+<div style="background:var(--accent);display:flex;align-items:center;gap:10px;padding:7px 12px 7px 12px;border-radius:4px">
+<span class="muted" style="width:12px">▾</span><span style="font-weight:500;">Pay later</span><span class="xs muted" style="display:inline-flex;align-items:center;gap:6px">0/4<span class="prog" style="display:inline-block;width:40px;height:4px;background:var(--secondary);border-radius:2px;overflow:hidden"><b style="display:block;height:100%;width:0%;background:var(--success)"></b></span></span>
+<span style="flex:1"></span><span class="chip repo">payments</span><span class="chip repo">orders-api</span><span style="min-width:250px"></span><span class="chip p" style="min-width:86px;text-align:center">In progress</span></div>
+<div style="display:flex;align-items:center;gap:10px;padding:7px 12px 7px 36px;border-radius:4px">
+<span class="muted" style="width:12px"></span><span style="">Accept PAY_LATER in POST /api/payments</span>
+<span style="flex:1"></span><span class="chip repo">payments</span><span class="xs" style="display:inline-flex;align-items:center;gap:6px;min-width:250px"><span class="dot wa"></span>MR !42 · Verify passed</span><span class="chip wa" style="min-width:86px;text-align:center">In review</span></div>
+<div style="display:flex;align-items:center;gap:10px;padding:7px 12px 7px 36px;border-radius:4px">
+<span class="muted" style="width:12px"></span><span style="">Retry the payment call</span>
+<span style="flex:1"></span><span class="chip repo">payments</span><span class="xs" style="display:inline-flex;align-items:center;gap:6px;min-width:250px"><span class="dot "></span>working · Alt+2</span><span class="chip p" style="min-width:86px;text-align:center">In progress</span></div>
+<div style="display:flex;align-items:center;gap:10px;padding:7px 12px 7px 36px;border-radius:4px">
+<span class="muted" style="width:12px"></span><span style="">Reminder e-mail after 10 days</span>
+<span style="flex:1"></span><span class="chip repo">notifications</span><span style="min-width:250px"></span><span class="chip " style="min-width:86px;text-align:center">Ready</span></div>
+<div style="display:flex;align-items:center;gap:10px;padding:7px 12px 7px 36px;border-radius:4px">
+<span class="muted" style="width:12px"></span><span style="">Block a second open pay-later order</span><span class="chip g">agent</span>
+<span style="flex:1"></span><span class="chip repo">orders-api</span><span style="min-width:250px"></span><span class="chip " style="min-width:86px;text-align:center">Idea</span></div>
+<div style="display:flex;align-items:center;gap:10px;padding:7px 12px 7px 12px;border-radius:4px">
+<span class="muted" style="width:12px">▾</span><span style="font-weight:500;">One-page checkout</span><span class="xs muted" style="display:inline-flex;align-items:center;gap:6px">0/2<span class="prog" style="display:inline-block;width:40px;height:4px;background:var(--secondary);border-radius:2px;overflow:hidden"><b style="display:block;height:100%;width:0%;background:var(--success)"></b></span></span>
+<span style="flex:1"></span><span class="chip repo">shop-web</span><span class="chip repo">shop-bff</span><span style="min-width:250px"></span><span class="chip " style="min-width:86px;text-align:center">Ready</span></div>
+<div style="display:flex;align-items:center;gap:10px;padding:7px 12px 7px 36px;border-radius:4px">
+<span class="muted" style="width:12px"></span><span style="">Merge address and delivery steps</span>
+<span style="flex:1"></span><span class="chip repo">shop-web</span><span style="min-width:250px"></span><span class="chip " style="min-width:86px;text-align:center">Ready</span></div>
+<div style="display:flex;align-items:center;gap:10px;padding:7px 12px 7px 36px;border-radius:4px">
+<span class="muted" style="width:12px"></span><span style="">Validate the address in shop-bff</span>
+<span style="flex:1"></span><span class="chip repo">shop-bff</span><span style="min-width:250px"></span><span class="chip " style="min-width:86px;text-align:center">Idea</span></div>
+<div style="display:flex;align-items:center;gap:10px;padding:7px 12px 7px 12px;border-radius:4px">
+<span class="muted" style="width:12px"></span><span style="text-decoration:line-through;color:var(--muted-foreground);">Show retries on the order page</span>
+<span style="flex:1"></span><span class="chip repo">admin-web</span><span class="xs" style="display:inline-flex;align-items:center;gap:6px;min-width:250px"><span class="dot m"></span>task ended · branch merged</span><span class="chip ok" style="min-width:86px;text-align:center">Done</span></div>
+</div>
+<div style="padding:10px 24px"><div class="input">New item in this project</div></div>
+<div style="flex:1"></div>
+<div class="muted xs" style="padding:0 24px 16px">On a selected row: Tab puts it under the one above, Shift+Tab takes it out, Alt+↑ and Alt+↓ move it.</div>
+</section><aside class="panel callout" style="outline-offset:-6px">
+<div class="xs muted">Checkout redesign ›</div>
+<div style="display:flex;align-items:center;gap:8px"><div style="font-size:18px;font-weight:500">Pay later</div><span style="flex:1"></span><span class="btn sm gh muted">✎ Edit</span></div>
+<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"><span class="chip p">In progress ▾</span><span class="chip repo">payments</span><span class="chip repo">orders-api</span><span class="chip repo" style="border-style:dashed">+ repo</span><span class="chip" style="border-style:dashed;color:var(--muted-foreground)">+ ticket link</span></div>
+<div class="sm" style="line-height:1.6">Customers can pay within 14 days.
+<ul style="margin:6px 0 0;padding-left:18px"><li>Accept <code class="mono">PAY_LATER</code> as a method</li><li>Reminder e-mail after 10 days</li><li>Block a second pay-later order while one is open</li></ul></div>
+<div><div class="hud" style="margin-bottom:6px">Split · 0 of 4 done · 2 in work</div>
+<div class="sm" style="display:flex;flex-direction:column;gap:4px">
+<div><span class="dot wa"></span> Accept PAY_LATER in POST /api/payments</div>
+<div><span class="dot p"></span> Retry the payment call</div>
+<div class="muted"><span class="dot m" style="background:transparent;border:1px solid var(--muted-foreground)"></span> Reminder e-mail after 10 days</div>
+<div class="muted"><span class="dot m" style="background:transparent;border:1px solid var(--muted-foreground)"></span> Block a second open pay-later order</div>
+<div class="input" style="padding:5px 10px;margin-top:4px">Split: a new item under this one</div></div></div>
+<div><div class="hud" style="margin-bottom:6px">Tasks on it and below</div>
+<div class="card" style="padding:10px 12px;display:flex;flex-direction:column;gap:4px;margin-bottom:6px">
+<div style="display:flex;gap:8px;align-items:center"><span class="dot wa"></span><span class="sm">Accept PAY_LATER in POST /api/payments</span><span style="flex:1"></span><span class="btn sm">Open</span></div>
+<div class="xs muted">payments · waiting for your review · Verify passed · MR !42</div></div>
+<div class="card" style="padding:10px 12px;display:flex;flex-direction:column;gap:4px">
+<div style="display:flex;gap:8px;align-items:center"><span class="dot"></span><span class="sm">Retry the payment call</span><span style="flex:1"></span><span class="btn sm">Open</span></div>
+<div class="xs muted">payments · working for 12 min · 3 rounds</div></div></div>
+<div style="flex:1"></div>
+<div style="display:flex;gap:8px;align-items:center;border-top:1px solid var(--border);padding-top:12px"><span class="btn pri">Start task</span><span class="xs muted">payments · prompt from the plan</span><span style="flex:1"></span><span class="btn gh muted sm">Remove</span></div>
+</aside>
+<aside class="sup"><i></i><i style="border-radius:50% 50% 3px 3px"></i></aside></div></div></section><section class="shot"><h2>C. A project as a board <span class="state built">built</span></h2><p>The leaf items in columns; a card follows its task into In progress and In review, and only the user moves it to Done or Dropped. As built, without "Group by": each card names the item it was split from.</p>
+<div class="frame"><div class="app three">
+<nav class="bar"><i></i><i></i><i></i><i></i><i></i><i class="on"></i><div style="flex:1"></div><i style="border-radius:50%"></i></nav>
+<aside class="places">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:0 16px 8px"><span class="hud" style="padding:0">Plan</span><span class="kbd">Alt+N</span></div>
+<div class="pl"><span class="ico"></span>Inbox<span class="n w">5</span></div>
+<div class="pl"><span class="ico"></span>Knowledge<span class="n" style="color:var(--warning)">5 to approve</span></div>
+<div>
+<div class="hud" style="margin-top:10px">Projects</div>
+<div class="pl on"><span class="ico"></span>Checkout redesign<span class="n">2/9</span></div>
+<div class="pl" style="padding-top:0;padding-bottom:6px;gap:8px"><span style="width:14px"></span><span class="prog" style="margin:0;width:50px"><b style="width:22%"></b></span><span class="xs" style="color:var(--warning)">● 1 waits for you</span></div>
+<div class="pl"><span class="ico"></span>Price changes<span class="n">0/2</span></div>
+<div class="pl" style="padding-top:0;padding-bottom:6px;gap:8px"><span style="width:14px"></span><span class="prog" style="margin:0;width:50px"><b style="width:0%"></b></span><span class="xs muted">● 1 working</span></div>
+</div>
+<div class="pl muted"><span class="ico" style="border-style:dashed"></span>New project…</div>
+<div class="hud" style="margin-top:10px">Archived</div>
+<div class="pl muted"><span class="ico"></span>Old reviews cleanup</div>
+</aside><section class="main">
+<div class="head"><h1>Checkout redesign</h1><span class="chip p">SHOP-120 ↗</span><span class="xs muted">2 of 9 done</span>
+<div style="flex:1"></div><span class="muted xs">Group by</span><span class="seg"><span class="on">None</span><span>Business item</span><span>Repo</span></span><span class="seg"><span>Outline</span><span class="on">Board</span></span></div>
+<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;padding:4px 24px 24px">
+<div class="" style="display:flex;flex-direction:column;gap:8px;min-width:0">
+<div style="display:flex;align-items:center;gap:8px;padding:2px 2px 6px;border-bottom:2px solid var(--muted-foreground)"><span class="sm" style="font-weight:500">Idea</span><span class="xs muted">2</span></div><div class="card" style="padding:10px 12px;display:flex;flex-direction:column;gap:6px">
+<div class="xs muted">Pay later</div><div class="sm" style="font-weight:500">Block a second open pay-later order</div>
+<div style="display:flex;gap:5px;flex-wrap:wrap"><span class="chip repo">orders-api</span><span class="chip g">agent</span></div></div><div class="card" style="padding:10px 12px;display:flex;flex-direction:column;gap:6px">
+<div class="xs muted">One-page checkout</div><div class="sm" style="font-weight:500">Validate the address in shop-bff</div>
+<div style="display:flex;gap:5px;flex-wrap:wrap"><span class="chip repo">shop-bff</span></div></div></div>
+<div class="" style="display:flex;flex-direction:column;gap:8px;min-width:0">
+<div style="display:flex;align-items:center;gap:8px;padding:2px 2px 6px;border-bottom:2px solid var(--secondary)"><span class="sm" style="font-weight:500">Ready</span><span class="xs muted">2</span></div><div class="card" style="padding:10px 12px;display:flex;flex-direction:column;gap:6px">
+<div class="xs muted">Pay later</div><div class="sm" style="font-weight:500">Reminder e-mail after 10 days</div>
+<div style="display:flex;gap:5px;flex-wrap:wrap"><span class="chip repo">notifications</span></div></div><div class="card" style="padding:10px 12px;display:flex;flex-direction:column;gap:6px">
+<div class="xs muted">One-page checkout</div><div class="sm" style="font-weight:500">Merge address and delivery steps</div>
+<div style="display:flex;gap:5px;flex-wrap:wrap"><span class="chip repo">shop-web</span></div></div></div>
+<div class="callout" style="display:flex;flex-direction:column;gap:8px;min-width:0">
+<div style="display:flex;align-items:center;gap:8px;padding:2px 2px 6px;border-bottom:2px solid var(--primary)"><span class="sm" style="font-weight:500">In progress</span><span class="xs muted">1</span></div><div class="card" style="padding:10px 12px;display:flex;flex-direction:column;gap:6px">
+<div class="xs muted">Pay later</div><div class="sm" style="font-weight:500">Retry the payment call</div>
+<div style="display:flex;gap:5px;flex-wrap:wrap"><span class="chip repo">payments</span></div><div class="xs" style="display:flex;gap:6px;align-items:center"><span class="dot "></span>working · 12 min · Alt+2</div></div></div>
+<div class="callout" style="display:flex;flex-direction:column;gap:8px;min-width:0">
+<div style="display:flex;align-items:center;gap:8px;padding:2px 2px 6px;border-bottom:2px solid var(--warning)"><span class="sm" style="font-weight:500">In review</span><span class="xs muted">1</span></div><div class="card" style="outline:1.5px solid var(--primary);padding:10px 12px;display:flex;flex-direction:column;gap:6px">
+<div class="xs muted">Pay later</div><div class="sm" style="font-weight:500">Accept PAY_LATER in POST /api/payments</div>
+<div style="display:flex;gap:5px;flex-wrap:wrap"><span class="chip repo">payments</span></div><div class="xs" style="display:flex;gap:6px;align-items:center"><span class="dot wa"></span>waiting for you · Verify passed · MR !42</div></div></div>
+<div class="" style="display:flex;flex-direction:column;gap:8px;min-width:0">
+<div style="display:flex;align-items:center;gap:8px;padding:2px 2px 6px;border-bottom:2px solid var(--success)"><span class="sm" style="font-weight:500">Done</span><span class="xs muted">1</span></div><div class="card" style="padding:10px 12px;display:flex;flex-direction:column;gap:6px">
+<div class="xs muted">Project</div><div class="sm" style="font-weight:500">Show retries on the order page</div>
+<div style="display:flex;gap:5px;flex-wrap:wrap"><span class="chip repo">admin-web</span></div><div class="xs" style="display:flex;gap:6px;align-items:center"><span class="dot m"></span>merged 2 days ago</div></div></div>
+</div>
+<div class="muted xs" style="padding:0 24px">A card moves to “In progress” when its task starts and to “In review” when the task waits for your review. Only you move a card to Done or Dropped. Drag a card between columns, or press S on a card to start its task.</div>
+</section><aside class="panel">
+<div class="xs muted">Checkout redesign › Pay later ›</div>
+<div style="display:flex;align-items:center;gap:8px"><div style="font-size:18px;font-weight:500">Accept PAY_LATER in POST /api/payments</div></div>
+<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"><span class="chip wa">In review ▾</span><span class="chip repo">payments</span></div>
+<div class="sm" style="line-height:1.6">Add <code class="mono">PAY_LATER</code> to the payment methods; the order stays unpaid with a due date 14 days ahead.</div>
+<div><div class="hud" style="margin-bottom:6px">Task</div>
+<div class="card" style="padding:10px 12px;display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;gap:8px;align-items:center"><span class="dot wa"></span><span class="sm">waiting for your review</span><span style="flex:1"></span><span class="btn sm">Open</span></div>
+<div class="xs muted">payments · Verify passed 5 min ago · MR !42 · 2 rounds</div>
+<div class="xs" style="line-height:1.5">“Added PAY_LATER with a due date; the controller test covers both methods.”</div>
+<div style="display:flex;gap:6px"><span class="btn sm">Changes</span><span class="btn sm">Push</span></div></div></div>
+<div style="flex:1"></div>
+<div style="display:flex;gap:8px;align-items:center;border-top:1px solid var(--border);padding-top:12px"><span class="btn">Mark done</span><span class="xs muted">only you close an item</span></div>
+</aside>
+<aside class="sup"><i></i><i style="border-radius:50% 50% 3px 3px"></i></aside></div></div></section><section class="shot"><h2>D. Workspace knowledge to review <span class="state built">built</span></h2><p>Search and filters, entries that need approval apart from approved ones, compact rows, the selected entry's evidence and author in the right column. No Approve all, since every entry reaches the sessions' instructions; as built, Approve is only in the right column, next to the evidence, not on the rows.</p>
+<div class="frame"><div class="app three">
+<nav class="bar"><i></i><i></i><i></i><i></i><i></i><i class="on"></i><div style="flex:1"></div><i style="border-radius:50%"></i></nav>
+<aside class="places">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:0 16px 8px"><span class="hud" style="padding:0">Plan</span><span class="kbd">Alt+N</span></div>
+<div class="pl"><span class="ico"></span>Inbox<span class="n w">5</span></div>
+<div class="pl on"><span class="ico"></span>Knowledge<span class="n" style="color:var(--warning)">5 to approve</span></div>
+<div>
+<div class="hud" style="margin-top:10px">Projects</div>
+<div class="pl"><span class="ico"></span>Checkout redesign<span class="n">2/9</span></div>
+<div class="pl" style="padding-top:0;padding-bottom:6px;gap:8px"><span style="width:14px"></span><span class="prog" style="margin:0;width:50px"><b style="width:22%"></b></span><span class="xs" style="color:var(--warning)">● 1 waits for you</span></div>
+<div class="pl"><span class="ico"></span>Price changes<span class="n">0/2</span></div>
+<div class="pl" style="padding-top:0;padding-bottom:6px;gap:8px"><span style="width:14px"></span><span class="prog" style="margin:0;width:50px"><b style="width:0%"></b></span><span class="xs muted">● 1 working</span></div>
+</div>
+<div class="pl muted"><span class="ico" style="border-style:dashed"></span>New project…</div>
+<div class="hud" style="margin-top:10px">Archived</div>
+<div class="pl muted"><span class="ico"></span>Old reviews cleanup</div>
+</aside><section class="main">
+<div class="head"><h1>Workspace knowledge</h1><span class="muted sm">Facts every session in these repos reads first. <u>How it works</u></span><div style="flex:1"></div><span class="btn">+ New entry</span></div>
+<div class="callout" style="margin:0 24px 14px;display:flex;gap:10px;align-items:center">
+<div class="input" style="flex:0 0 340px;padding:6px 12px">Search facts…</div>
+<span class="seg"><span class="on">All 7</span><span>How to 2</span><span>Relation 2</span><span>Exception 1</span><span>Pitfall 2</span></span>
+<span class="btn">Repo: any ▾</span></div>
+<div style="padding:0 24px;display:flex;flex-direction:column;gap:16px">
+<div class="callout">
+<div style="display:flex;align-items:center;gap:10px;padding:0 0 8px"><span class="hud" style="color:var(--warning)">Needs your approval · 5</span></div>
+<div class="card" style="overflow:hidden">
+<div style="background:var(--accent);display:grid;grid-template-columns:92px 1fr auto;gap:14px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)">
+<span class="chip" style="text-align:center">Pitfall</span>
+<div style="display:flex;flex-direction:column;gap:4px;min-width:0"><div class="sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">billing creates an invoice per payment.succeeded event, so a retried payment can bill twice.</div>
+<div style="display:flex;gap:6px;align-items:center"><span class="chip repo">billing</span><span class="xs muted">· agent · task Retry the payment call · 2 h ago</span></div></div>
+<div style="display:flex;gap:6px;align-items:center"><span class="btn sm">✓ Approve</span><span class="btn sm gh muted">✕</span></div></div>
+<div style="display:grid;grid-template-columns:92px 1fr auto;gap:14px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)">
+<span class="chip" style="text-align:center">Pitfall</span>
+<div style="display:flex;flex-direction:column;gap:4px;min-width:0"><div class="sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">InventoryControllerTest.reservesStock fails on Windows when the port 8083 is taken; stop the inventory service first.</div>
+<div style="display:flex;gap:6px;align-items:center"><span class="chip repo">inventory</span><span class="xs muted">· agent · task Hide reviews… · yesterday</span></div></div>
+<div style="display:flex;gap:6px;align-items:center"><span class="btn sm">✓ Approve</span><span class="btn sm gh muted">✕</span></div></div>
+<div style="display:grid;grid-template-columns:92px 1fr auto;gap:14px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)">
+<span class="chip" style="text-align:center">Relation</span>
+<div style="display:flex;flex-direction:column;gap:4px;min-width:0"><div class="sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">payments publishes payment.succeeded on the queue that notifications and billing read; the graph does not see it.</div>
+<div style="display:flex;gap:6px;align-items:center"><span class="chip repo">payments</span><span class="chip repo">notifications</span><span class="chip repo">billing</span><span class="xs muted">· agent · yesterday</span></div></div>
+<div style="display:flex;gap:6px;align-items:center"><span class="btn sm">✓ Approve</span><span class="btn sm gh muted">✕</span></div></div>
+<div style="display:grid;grid-template-columns:92px 1fr auto;gap:14px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)">
+<span class="chip" style="text-align:center">How to</span>
+<div style="display:flex;flex-direction:column;gap:4px;min-width:0"><div class="sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Reindex search locally with mise run reindex after changing a product; the dev profile does not do it on its own.</div>
+<div style="display:flex;gap:6px;align-items:center"><span class="chip repo">search</span><span class="xs muted">· agent · 2 days ago</span></div></div>
+<div style="display:flex;gap:6px;align-items:center"><span class="btn sm">✓ Approve</span><span class="btn sm gh muted">✕</span></div></div>
+<div style="display:grid;grid-template-columns:92px 1fr auto;gap:14px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)">
+<span class="chip" style="text-align:center">How to</span>
+<div style="display:flex;flex-direction:column;gap:4px;min-width:0"><div class="sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Every Java repo builds with JDK 21 from mise; a different JDK breaks the Gradle toolchain check.</div>
+<div style="display:flex;gap:6px;align-items:center"><span class="chip repo">whole workspace</span><span class="xs muted">· agent · 3 days ago</span></div></div>
+<div style="display:flex;gap:6px;align-items:center"><span class="btn sm">✓ Approve</span><span class="btn sm gh muted">✕</span></div></div>
+</div></div>
+<div><div class="hud" style="padding:0 0 8px">Approved · 2</div>
+<div class="card" style="overflow:hidden">
+<div style="display:grid;grid-template-columns:92px 1fr auto;gap:14px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)">
+<span class="chip" style="text-align:center">Relation</span>
+<div style="display:flex;flex-direction:column;gap:4px;min-width:0"><div class="sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Deploy orders-api before payments: payments reads the order's currency from it.</div>
+<div style="display:flex;gap:6px;align-items:center"><span class="chip repo">orders-api</span><span class="chip repo">payments</span><span class="xs muted">· you · 5 days ago</span></div></div>
+<div style="display:flex;gap:6px;align-items:center"><span class="xs muted">read by sessions</span></div></div>
+<div style="display:grid;grid-template-columns:92px 1fr auto;gap:14px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)">
+<span class="chip" style="text-align:center">Exception</span>
+<div style="display:flex;flex-direction:column;gap:4px;min-width:0"><div class="sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">admin-web has no server-side rendering, unlike shop-web; do not add a Node server to it.</div>
+<div style="display:flex;gap:6px;align-items:center"><span class="chip repo">admin-web</span><span class="xs muted">· you · 6 days ago</span></div></div>
+<div style="display:flex;gap:6px;align-items:center"><span class="xs muted">read by sessions</span></div></div>
+</div></div></div></section><aside class="panel callout" style="outline-offset:-6px">
+<div style="display:flex;gap:6px;align-items:center"><span class="chip">Pitfall</span><span class="chip wa">needs your approval</span></div>
+<div style="font-size:16px;line-height:1.5">billing creates an invoice per payment.succeeded event, so a retried payment can bill twice.</div>
+<div style="display:flex;gap:6px;align-items:center"><span class="muted xs" style="width:70px">About</span><span class="chip repo">billing</span></div>
+<div style="display:flex;gap:6px;align-items:flex-start"><span class="muted xs" style="width:70px;flex:none">Evidence</span><span class="sm">BillingListener.java line 40</span></div>
+<div style="display:flex;gap:6px;align-items:center"><span class="muted xs" style="width:70px">Written by</span><span class="sm">agent in task <u>Retry the payment call</u>, 2 h ago</span></div>
+<div style="display:flex;gap:6px;align-items:center"><span class="muted xs" style="width:70px">Reaches</span><span class="sm">every new session in billing</span></div>
+<div class="card xs muted" style="padding:10px 12px;line-height:1.5">This is about one repo. If its team would agree, it may belong in that repo's own agent instructions instead, where everyone reads it.</div>
+<div style="display:flex;gap:8px"><span class="btn pri">✓ Approve this version</span><span class="btn">✎ Edit, then approve</span></div>
+<div style="flex:1"></div>
+<div style="display:flex;gap:8px;align-items:center;border-top:1px solid var(--border);padding-top:12px"><span class="mono xs muted">.trackwall/knowledge/billing-invoice-once.md</span><span style="flex:1"></span><span class="btn gh muted sm">Remove</span></div>
+</aside>
+<aside class="sup"><i></i><i style="border-radius:50% 50% 3px 3px"></i></aside></div></div></section>
+</div>
+</body>
+</html>

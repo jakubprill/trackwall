@@ -3,7 +3,7 @@ import { DROP_NAME_HEADER, dropTooLarge, MAX_DROP_BYTES } from "@trackwall/proto
 import { DomainError } from "../infra/errors.ts";
 
 /**
- * `POST /api/terminals/drop` (ADR-201, §5.2): a file dropped on a terminal from another computer, as its bytes, with its
+ * `POST /api/terminals/drop` (ADR-226, §5.2): a file dropped on a terminal from another computer, as its bytes, with its
  * name percent-encoded in `DROP_NAME_HEADER`. The name and the declared length are checked before any of the body is
  * read; the body itself streams to `droppedFiles`, which stops at the limit too.
  */

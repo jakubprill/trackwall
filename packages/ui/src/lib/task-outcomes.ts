@@ -2,6 +2,7 @@ import { type FollowedMergeRequest, mergeRequestNumber, type TaskOutcome, type V
 import { failedJobNames, mergeRequestStateLabel, mergeRequestStatus, pipelineLabel } from "./merge-request.ts";
 import type { StatusTone } from "./repo-status.ts";
 import { type BrowserNotice, TAG_PREFIX } from "./tab-attention.ts";
+import { verificationOutdatedLabel } from "./verification.ts";
 
 /**
  * What a task's work came to, at a glance (ADR-154): the marks on its row in the Sessions list, and the notification
@@ -12,7 +13,7 @@ import { type BrowserNotice, TAG_PREFIX } from "./tab-attention.ts";
 
 /** One mark on a task's row: a word or a number with a tone, and the whole story as its tooltip. */
 export interface OutcomeMark {
-  key: "verification" | "merge-request";
+  key: "review" | "verification" | "merge-request";
   tone?: StatusTone;
   label: string;
   title: string;
@@ -25,11 +26,27 @@ const VERIFICATION_MARK: Record<VerificationState, { tone?: StatusTone; label: s
   cancelled: { label: "Verify cancelled", title: "Verification cancelled" },
 };
 
-/** The verdict first, then the merge request: `!12` with the pipeline's tone while it is open, the merge request's own once merged or closed. */
-export function outcomeMarks(outcome: TaskOutcome | undefined): OutcomeMark[] {
-  if (!outcome) return [];
-  const marks: OutcomeMark[] = [];
-  if (outcome.verification) marks.push({ key: "verification", ...VERIFICATION_MARK[outcome.verification] });
+/** An outdated verdict (ADR-209) says so, without the colour of a pass or a failure of the changes as they are now. */
+function verificationMark(state: VerificationState, outdated: boolean): Omit<OutcomeMark, "key"> {
+  if (!outdated) return VERIFICATION_MARK[state];
+  return { label: "Verify outdated", title: verificationOutdatedLabel(state) };
+}
+
+/** A task whose agent handed its work over (ADR-213), until the user gives it work again. */
+const IN_REVIEW_MARK: OutcomeMark = {
+  key: "review",
+  label: "In review",
+  title: "The agent handed its work over for your review; a review or a Fix gives it work again",
+};
+
+/**
+ * "In review" first when the agent handed its work over, then the verdict, then the merge request: `!12` with the
+ * pipeline's tone while it is open, the merge request's own once merged or closed.
+ */
+export function outcomeMarks(outcome: TaskOutcome | undefined, inReview: boolean): OutcomeMark[] {
+  const marks: OutcomeMark[] = inReview ? [IN_REVIEW_MARK] : [];
+  if (!outcome) return marks;
+  if (outcome.verification) marks.push({ key: "verification", ...verificationMark(outcome.verification, outcome.verificationOutdated) });
   const mr = outcome.mergeRequest;
   if (mr)
     marks.push({

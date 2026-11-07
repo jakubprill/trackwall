@@ -32,6 +32,8 @@ function session(id: string, state: Session["state"], run: Session["run"] = runn
     readRequest: null,
     copyRequest: null,
     usage: null,
+    model: null,
+    modelInUse: null,
   };
 }
 

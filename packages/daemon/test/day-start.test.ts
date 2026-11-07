@@ -131,6 +131,8 @@ function session(fields: Partial<Session>): Session {
     readRequest: null,
     copyRequest: null,
     usage: null,
+    model: null,
+    modelInUse: null,
     ...fields,
   };
 }
@@ -153,6 +155,7 @@ function task(fields: Partial<Task> & Pick<Task, "base">): Task {
     item: null,
     view: "terminal",
     summary: null,
+    inReview: false,
     port: 41000,
     included: { files: [], problems: [] },
     change: null,
@@ -278,7 +281,7 @@ describe("the day start", () => {
       });
       const ended = session({ id: "8a6e0c7e-3b0f-4a43-9d0e-6e7fd0a0c003", task: "8a6e0c7e-3b0f-4a43-9d0e-6e7fd0a0c004" });
       const tasks = [
-        task({ base, summary: { text: "Added the test", checkSteps: [], reportedAt: "2026-10-25T18:00:00.000Z" } }),
+        task({ base, summary: { text: "Added the test", checkSteps: [], reproTest: null, reportedAt: "2026-10-25T18:00:00.000Z" } }),
         task({ id: "8a6e0c7e-3b0f-4a43-9d0e-6e7fd0a0c004", base: head(upstream), title: "Fix the cart" }),
       ];
       const { dayStart, projects } = setup({ tasks, sessions: [working, { ...ended, run: exitedRun }] });

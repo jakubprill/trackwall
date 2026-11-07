@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { apiEndpoints, Done } from "./api.ts";
 import { WorkingTreeChanges } from "./changes.ts";
-import { CloneJob, CloneRequest, HostRepos, RepoHosts } from "./repo-hosts.ts";
+import { CloneJob, CloneRequest, HostRepos, RemoteRepoSearch, RepoHosts } from "./repo-hosts.ts";
 import { SyncRun } from "./sync.ts";
 import { TaskModel } from "./task-model.ts";
 
@@ -211,7 +211,8 @@ export type AutoReviewSettings = z.infer<typeof AutoReviewSettings>;
  * `sandbox` in `workspace.yaml` (ADR-181), by hand only: which tasks run their commands in Copilot CLI's sandbox
  * (`--sandbox`), where a shell command may write only in the task's worktree and cannot see the other repos or the
  * credential folders. `auto` covers the tasks that run without approvals (ADR-105), `all` every task, `off` none. Without
- * the key it is `auto` on Linux and `off` in a container (the isolation there), on macOS and on Windows, until checked there.
+ * the key it is `auto` on Linux, in a container only where the sandbox can make its namespaces (ADR-219), and `off` in
+ * other containers (the isolation there), on macOS and on Windows, until checked there.
  */
 export const SandboxSettings = z.object({ tasks: z.enum(["auto", "all", "off"]) }).strict();
 export type SandboxSettings = z.infer<typeof SandboxSettings>;
@@ -446,7 +447,7 @@ export const workspaceApi = {
    * name (GitLab on its side from 3 characters, also in the group path; shorter ones and GitHub are filtered by the daemon),
    * empty gives the most recently changed (GitLab) or all of them (GitHub).
    */
-  remoteRepos: endpoint("remote-repos", z.object({ query: z.string().trim().max(100) }).strict(), RemoteRepoList),
+  remoteRepos: endpoint("remote-repos", RemoteRepoSearch, RemoteRepoList),
   /** Starts cloning and returns it at once in the `running` state; progress through `clones`. */
   clone: endpoint("clone", CloneRequest, CloneJob),
   /** Clones into the current projects folder since the daemon started, in the order they began. */

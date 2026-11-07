@@ -45,7 +45,7 @@ A screen of the app in the UI (Home, Repos, Sessions, Overview, Plan, Settings),
 _Avoid_: tab (for a whole screen)
 
 **Settings category** (`SettingsCategory`, `SETTINGS_CATEGORIES`; its sections `SettingsSection`):
-A group of Settings listed on the left of the Settings view: Workspace, Repo hosts, Agents, App and Diagnostics (ADR-102). Each holds a few sections, such as the projects folder or the daemon's state.
+A group of Settings listed on the left of the Settings view: Workspace, Repo hosts, Agents, Usage, App, Files and Diagnostics (ADR-102, ADR-212). Each holds a few sections, such as the projects folder or the daemon's state.
 _Avoid_: tab (that is `TabBar`), page
 
 **Tab** (`TabBar`):
@@ -58,6 +58,10 @@ _Avoid_: screen (that is a monitor), tab (that is `TabBar`), terminal window (th
 **Start at sign-in** (`autostart.rs`, `autostart_enabled`, `set_autostart`, the `--autostart` argument; in the UI *Start at sign-in*):
 Trackwall started by the system's own start entry when the user signs in, with every window hidden until the user opens it (ADR-65). `autostart` is the identifier in code; UI and documentation say "start at sign-in".
 _Avoid_: launch at login, startup (that is the daemon's start)
+
+**Keep the screen on** (`keep_screen_on.rs`, `KeepScreenOn`, `ScreenOn`, `keep_screen_on`, `set_keep_screen_on`; in the UI *Keep the screen on*):
+The desktop shell's setting that asks the system to keep the display on: `off` (the default), `while-agents-work` (while a running session is in the middle of a turn and not stuck) or `always` (while the app runs) (ADR-218). The system's request is a display power request on Windows and a power assertion on macOS; nothing simulates input.
+_Avoid_: keep awake, caffeinate, prevent sleep (the computer's sleep is a side effect), screen saver
 
 **Waiting badge** (`badge.rs`, `Badge`, `TrayIcons`):
 The number of sessions and task proposals waiting for the user on the app's icons: the Dock badge, the taskbar overlay on Windows and a dot on the tray icon (ADR-65).
@@ -118,7 +122,7 @@ One directory on the user's disk, set in `workspace.yaml` or in the settings. Ea
 _Avoid_: workspace directory, root, folder (without qualification)
 
 **Trackwall folder** (`TRACKWALL_DIR` = `.trackwall`, `TrackwallFolder`, `trackwallDir`):
-The one hidden folder in the projects folder where Trackwall keeps everything beside the repos, one folder per purpose: `local` (the local config store), `worktrees` (the default task worktrees folder), `lsp`, `scratch` and `removed` (ADR-125), and `drops`, the dropped files (ADR-201). It is not the state folder `~/.trackwall`, which holds Trackwall's own memory and lies outside the projects folder.
+The one hidden folder in the projects folder where Trackwall keeps everything beside the repos, one folder per purpose: `local` (the local config store), `worktrees` (the default task worktrees folder), `lsp`, `scratch` and `removed` (ADR-125), and `drops`, the dropped files (ADR-226). It is not the state folder `~/.trackwall`, which holds Trackwall's own memory and lies outside the projects folder.
 _Avoid_: data folder, `.trackwall-*` folders (their names before ADR-125)
 
 **Dropped folder** (`DroppedFolder`, action `dropped-folder`, UI `FolderDrop`; in Polish *upuszczony folder*):
@@ -126,7 +130,7 @@ A folder or file dropped on the Trackwall window outside a session terminal, des
 _Avoid_: imported repo, added repo
 
 **Dropped file** (`DroppedFile`, `POST /api/terminals/drop`, `droppedFiles` in the facade, `.trackwall/drops`):
-A file dropped on a session terminal or a shell whose daemon runs on another computer (in a container, or reached from a browser): the window sends its bytes, the daemon keeps a copy in a folder of its own under `.trackwall/drops`, and the terminal gets the copy's path pasted (ADR-201). Removed at the next drop a day later. With the daemon on this desktop a dropped file is not copied; its own path is pasted.
+A file dropped on a session terminal or a shell whose daemon runs on another computer (in a container, or reached from a browser): the window sends its bytes, the daemon keeps a copy in a folder of its own under `.trackwall/drops`, and the terminal gets the copy's path pasted (ADR-226). Removed at the next drop a day later. With the daemon on this desktop a dropped file is not copied; its own path is pasted.
 _Avoid_: upload, attachment
 
 **Repo host** (`RepoHost`, `repoHosts` in `workspace.yaml`):
@@ -145,6 +149,13 @@ One repository of the workspace, identified by a slug from the name of its direc
 **Starred repo** (`starredRepos` in `workspace.yaml`, `StarredRepos`):
 A repo the user marked with a star in "Repos", which the list then shows at the top, ahead of the alphabetical rest (ADR-192). Kept by repo id; only the user stars or unstars.
 _Avoid_: favourite, pinned repo
+
+**Starred on the host** (`starredOnHost` in `RemoteRepoSearch`; in the UI *Starred on the host*):
+A repo the user starred on GitLab or GitHub itself; the "Add repo" search can show only those (ADR-201). Not a starred repo, which is Trackwall's own mark.
+_Avoid_: starred (alone, in the search), favourite
+
+**Search scope** (`RemoteRepoScope`: `member`, `visible`; in the UI *My projects*, *All I can see*):
+Which GitLab projects the "Add repo" search covers: those the user is a member of, also through a group, or every project the user can see (ADR-201). GitHub's list does not change with it.
 
 **Remote address** (`Repo.remote`):
 The address of the main remote (`origin` or the only remote in git, `mainRemote`) as `host/path`, for example `gitlab.example.com/shop/api`, without the protocol and user. It identifies the repo independently of the directory name (ADR-21).
@@ -181,6 +192,14 @@ _Avoid_: test run (that is the mise task that wrote the reports), coverage
 **Verification** (`Verification`, module `verification`, `verificationApi`, MCP tool `verify_task`; UI "Verify" and the "Verification" section of the task panel):
 One verdict on a task's changes (ADR-64): the mise task `test` (`VERIFY_MISE_TASK`) run in the task's worktree, then `passed` (exit code 0 and no failed test in the test reports the run wrote), `failed` (with the first failed tests and log errors) or `cancelled`; `running` until the run ends. The last one of each task is kept, also across a daemon restart (`verifications.json`, ADR-115); one whose run the restart ended comes back `cancelled`.
 _Avoid_: check, CI, validation (that is a schema at the point of entry)
+
+**Outdated verdict** (`Verification.outdated`, `TaskOutcome.verificationOutdated`, `checkOutdated`; UI "Outdated", "Verify outdated", "passed · outdated"):
+A verification's verdict given before the task's worktree changed (ADR-209): the **worktree fingerprint** (`worktreeFingerprint`, one hash of the files that differ from the task's base commit and their content) its run started on is no longer the worktree's. It stays outdated until the next verification replaces it.
+_Avoid_: stale (that is `Stale`, a session state), expired, invalid
+
+**Worktree cleanup** (`taskWorktrees`, `TaskWorktree`, `taskWorktreeSize`; UI "Old task worktrees" on the New task page, `WorktreeCleanup.tsx`):
+Ending tasks idle for days to free the disk their worktrees take (ADR-210), each as "End task" with the branch kept; a task that would lose work is removed only after the user confirms it, and only while its worktree's files and HEAD are still what they confirmed.
+_Avoid_: prune (that is `git worktree prune`), garbage collection, purge
 
 **Code search** (`searchCode`, MCP tool `search_code`, result `SearchCodeResult`):
 A fixed string or a regular expression in the files of the latest commit of many repos of the projects folder at once, through `git grep` (ADR-40); a match (`CodeMatch`) is a repo, path, line, column and context lines, and with `output: "files"` the result is the files with matches (`CodeFile`) and their match counts instead (ADR-187). It does not see uncommitted changes, just like browsing a repo.
@@ -311,6 +330,10 @@ _Avoid_: error (the graph is still built), dangling call
 A tool, Spring Boot, a Maven parent pom or BOM, or a build plugin that the repos of the projects folder use in different versions, found from their cards with the file and line of each (ADR-196). Its target is the newest of those versions, and aligning starts a task or a change in the repos off it.
 _Avoid_: config drift (only versions are compared), outdated (the target is the newest in the folder, not the newest released)
 
+**Agent readiness** (`readiness` module, `RepoReadiness`, gap `ReadinessGap` with code `ReadinessGapCode` and level `ReadinessLevel`; UI "Agent readiness", "N of M ready"):
+How ready a repo is for agents to build, test and run it, as its gaps: each *blocks* agents (no mise task `build` or `test` that works, an untrusted or failing mise config), *weakens* them (problems mise finds in its config, a Spring Boot app without `dev`, a tool version outside mise, calls without a target) or is only *good to know* (a config `mise fmt` would rewrite, an incomplete card). A repo is *ready* with nothing that blocks or weakens, *with gaps*, or *blocked* (ADR-208).
+_Avoid_: health, score, percentage (the count is of repos, not of checks), readiness of a service (that is a service's state, ready on its port)
+
 **Package alias** (`graph.packages` in `workspace.yaml`):
 A package name and the repo that provides it, when that repo's card does not show it (a package built outside the build files, a different name in the artifact repository). It works only for a package no repo on the list builds.
 
@@ -398,12 +421,16 @@ _Avoid_: window title (that is a session's `windowTitle`)
 The Copilot CLI model a task's session runs on, as Copilot CLI names it (`claude-opus-5.5`), passed as `--model` on every start and resume of the task's session; `null` for Copilot CLI's default. Optional: a proposer names it when the user asked for a model, and the user may change it before the start (ADR-98).
 _Avoid_: LLM, engine, agent (for the model)
 
+**Model in use** (`Session.modelInUse`, `modelSwitch`; the strip "Runs on …, not …" in the UI):
+The model Copilot CLI actually runs a session's conversation on, from the conversation's event log (ADR-225): the model of its latest own call, or of its latest model change. It differs from the task model or the session's `--model` when Copilot CLI fell back to another one (an account without the model) or `/model` switched it.
+_Avoid_: actual model, real model, effective model
+
 **Task approvals** (`Task.approvals`, `TaskProposal.approvals`, `TaskApprovals`: `ask` | `auto`; "No approvals" on the start pill and on the task):
 Whether a task's agent asks the user before tools: `ask` (the default) as every session does, `auto` runs every tool without asking (`--allow-all-tools`) on every start and resume, deny rules still refusing. Only for a task in its own worktree; the user turns on the "No approvals" pill when starting the task, and a proposer may suggest it on a proposal (ADR-105).
 _Avoid_: YOLO, autopilot (Copilot CLI's own modes, not what Trackwall passes), auto-approve
 
 **Sandbox** (`sandbox` in `workspace.yaml`, `SandboxSettings`, `Task.sandbox`, `SandboxState`, `copilot-sandbox.ts`; "Sandbox" on the task):
-Copilot CLI's sandbox (`--sandbox`): a task's shell commands run under the system's isolation, writing only in the worktree, the repo's git directory and the temporary folder. `sandbox.tasks` says which tasks: `auto` (the default on Linux; `off` on macOS, Windows and in a container) those without approvals, `all` every task, `off` none; a task keeps the answer from its start (ADR-181).
+Copilot CLI's sandbox (`--sandbox`): a task's shell commands run under the system's isolation, writing only in the worktree, the repo's git directory and the temporary folder. `sandbox.tasks` says which tasks: `auto` (the default on Linux, in a container only where bubblewrap can make its namespaces, ADR-219; `off` on macOS, Windows and other containers) those without approvals, `all` every task, `off` none; a task keeps the answer from its start (ADR-181).
 _Avoid_: container, jail, isolation mode (the container is the dev container; Trackwall has no isolation of its own)
 
 **Java navigation** (`Task.javaNavigation`, `javaNavigation` in `workspace.yaml`, `JavaNavigationSettings`; "Java navigation" on the start pill):
@@ -459,7 +486,7 @@ A task's merge request as the daemon last read it while following every task in 
 _Avoid_: tracked, watched merge request (the watch is the reading, not the merge request)
 
 **Task outcome** (`TaskOutcome`, `taskOutcomesApi`, `/ws` topic `task-outcomes.changed`; the marks on a task's row in Sessions):
-What a task's work came to: the state of its last verification and its followed merge request (ADR-154). The Sessions list shows it on the task's row ("Verified", "Verify failed", `!12` in the pipeline's colour).
+What a task's work came to: the state of its last verification and its followed merge request (ADR-154). The Sessions list shows it on the task's row ("Verified", "Verify failed", "Verify outdated", `!12` in the pipeline's colour).
 _Avoid_: task status (that is the session's state), result (that is the summary from `report_result`)
 
 **Proposer** (`Task.proposedBy`, `proposerOf` in `proposer.ts`):
@@ -478,8 +505,12 @@ _Avoid_: multi-repo task, epic; and do not confuse it with a task's changes (its
 The repos a task's committed API change reaches, in rings: ring 1 calls a changed endpoint, ring 2 calls an endpoint of ring 1 that makes such a call, up to three rings; a repo reached only through code Trackwall could not follow, or through a client without paths, is *maybe* (`sure: false`) (ADR-147).
 _Avoid_: blast radius, ripple, consumers (for the whole set)
 
+**Changed library type** (`ChangedType`, `types` in `ChangedEndpoints`, `cards/api-changes.ts`; "Changed library types" in the Impact tab):
+A public Java type of a module that builds a Maven or Gradle package, which a task's commits remove or change so that code using it may break (a visible member removed or with another signature, a new abstract method, another declaration), with the repos that depend on the package and import it (ADR-205).
+_Avoid_: API change (also endpoints), breaking change, public API diff
+
 **Impact proposal** (`TaskProposal.fromImpact`, `impact-proposals.ts`; "Proposed by Trackwall" under the proposal's title):
-A task proposal the daemon makes when a task's turn ends, for each repo of ring 1 of its impact that surely calls an endpoint the task's commits removed or changed: the task's own proposal, so an approved one is its subtask, with the Impact tab's hand-off prompt. A repo is offered each endpoint once (ADR-198).
+A task proposal the daemon makes when a task's turn ends, for each repo of ring 1 of its impact that surely calls an endpoint the task's commits removed or changed, and each repo that imports a changed library type: the task's own proposal, so an approved one is its subtask, with the Impact tab's hand-off prompt. A repo is offered each endpoint and type once (ADR-198, ADR-205).
 _Avoid_: auto-handoff, consumer task
 
 **Task message** (`TaskMessage`, MCP tools `send_message` and `get_messages`; "Messages" in the task panel):
@@ -509,6 +540,14 @@ _Avoid_: inbox, mailbox, outbox
 **Main session** (`proposedBy` of a task and a proposal):
 A session or supervising agent that talks to the user and commissions work to other agents with task proposals, then hears about their sessions through task updates (`get_updates`; an agent outside Trackwall waits with `wait_for_session`) and reads the summaries, like a coordinator with threads in Claude (ADR-39). It is a role, not a separate kind of session: any Trackwall session or an agent outside Trackwall (`proposedBy.session: null`); the supervisor is the main session above all repos (ADR-58). In the Sessions view its tasks and proposals sit indented under it, and it carries a "main" badge with their count.
 _Avoid_: orchestrator, planner (ADR-9: a human splits goals); and a session in a repo's root is a *repo session*, not a main session, whether it commissions work or not
+
+**Session group** (`listGroups`, `EntryGroup`, `groupTiles`; "⊞ group" and the "Group:" chip in the Sessions view):
+A top-level entry of the Sessions list with every task and proposal under it, at any depth. A group of two or more has its own colour on its rows and tiles, and the grid can show it alone (ADR-48).
+_Avoid_: workspace, cluster, family
+
+**Flow** (`views/flow/`, `flowGroups`, `FlowGroup`, `FlowCard`, `FlowColumn`; the "Flow" view, Ctrl+6):
+The view for a second monitor that shows every task, session and task proposal in a row per group of work (a project of Plan, a change, the supervisor, a session with the tasks it proposed, "No group") and a column per state: "Working", "Waits for you", "In review", "Stuck", "Idle" (ADR-224). It changes nothing; a card opens its task or session. Its rows are made from groups that already exist, not a kind of group of its own.
+_Avoid_: dashboard (that is Home), board (that is a project of Plan as columns), batch, epic
 
 **Repo session** (`start {repo}` without its own worktree, `kind: "repo"` of the session instructions, `SessionStartOptions`; in the UI a session of a repo without "Own worktree"):
 A Trackwall session in the root of one repo, the user's own working copy, without a task (ADR-100, ADR-175): it has the model, the conversation view and Java navigation a task has, always asks before a tool, and has no review, Changes tab or Verify. Its instructions keep the checkout as it is unless the user asks, because the graph, the impact of every task's change and the repo's service read the branch checked out in the root. Like any session it can be a main session, when it proposes tasks.
@@ -597,6 +636,10 @@ _Avoid_: hung, frozen, stale (that is `Stale`, no output at all)
 What a session's Copilot CLI conversation used, summed from the receipts Copilot CLI writes after each model call (ADR-190): AI credits when Copilot CLI reported them, otherwise premium requests of the legacy billing, otherwise only tokens. It covers the whole conversation, also before a resume.
 _Avoid_: cost, spend, budget (Trackwall sets no limit)
 
+**Usage report** (`UsageReport`, the `usage-report` module, `usageReportApi`; in the UI *Copilot usage* in Settings › Usage):
+What Copilot CLI used on this computer in a week, from the event logs it keeps for every conversation (ADR-199): the total, one **usage work** row (`UsageWork`: a task, the supervisor, sessions in a repo, or outside the projects folder) per piece of work with its Copilot usage and its **tool definition tokens** (the input tokens that were the tools' definitions, sent with every model call), and one **usage tool** row (`UsageTool`) per tool with its calls, failures and **result tokens**. Do not confuse with the MCP audit, which lists Trackwall's own tool calls one by one without tokens.
+_Avoid_: bill, invoice, cost report
+
 **While you were away** (`AwaySummary`, `awaySummary`, `AwayItem`; an **absence** is `AwayPeriod`, opened by `absenceAt` after `AWAY_AFTER_MS`):
 The strip above the views after the user comes back to Trackwall from 15 minutes without a key, click, scroll, pointer move or a window brought to the front in any of its windows, listing what changed in the session list since then (ADR-151). The user dismisses it.
 _Avoid_: digest, notifications (those are the system's and the browser's), journal
@@ -671,6 +714,10 @@ _Avoid_: provider setting, MISE_ENV (that is mise's variable)
 The models the model provider of the session profile offers, from its `GET /models`, which the Model fields suggest as the user types; any other id can still be typed (ADR-194). The daemon asks the provider with the profile's key, which never leaves it. Without a session profile there are none.
 _Avoid_: model catalog (Copilot CLI's own list of GitHub's models), available models
 
+**Wire API** (`WireApi`, `ProviderModel.wireApi`, Copilot CLI's `COPILOT_PROVIDER_WIRE_API`):
+The format Copilot CLI speaks to a custom model provider in, `completions` (Chat Completions) or `responses` (the Responses API). A model of a gateway may answer in only one of them; a session's start sets the one its model answers in, learned by a probe on the model's first use (ADR-200).
+_Avoid_: protocol, API type, format (in names; "format" is fine in prose)
+
 **Secret from mise** (`secretNames`, `SessionEnvironment.secrets`):
 A variable of the session environment that mise redacts (`redact = true`, an age-encrypted value) or whose name looks like a secret; its value is masked, and the agent's tools do not get it unless it is in the agent secrets (ADR-93).
 
@@ -728,6 +775,22 @@ The result a task session reports with the `report_result` tool: what it did, wh
 Optional steps of a summary for checking the change by hand, each with what to do and what the user should see (ADR-169). Only a hint: the user may follow them or not, and nothing waits for them.
 _Avoid_: test plan, acceptance (those decide something; check steps decide nothing)
 
+**Stack trace** (`StackTrace`, `create-task` field `stackTrace`, `parseJavaStackTrace`; "Stack trace" on the New task form):
+The text of an error with its frames that the user pastes into a new task (ADR-222). The daemon reads its Java frames, finds their files among the repo's tracked files (**frames in this repo**, `repoFrames`) and puts both into the task's prompt with the rule to reproduce the error in a test first.
+_Avoid_: log, error (an **error** is a block from a log, ADR-42), stack (a set of services)
+
+**Reproduction test** (`TaskSummary.reproTest`, `ReproTest`, `report_result` argument `reproTest`):
+The test a task's agent says it wrote first and that failed the way the task's stack trace shows: its file, name and failure before the fix (ADR-222). The agent's word, shown as such: Trackwall has not run it.
+_Avoid_: regression test, proof (Trackwall proves nothing about it yet), repro (in prose)
+
+**Evidence of a change** (ADR-222):
+What a task's result brings to show the change is right beyond the agent's summary, such as its reproduction test. The theme of ADR-222, not an identifier in code.
+_Avoid_: evidence (alone: that is the file and line of a fact on a repo card)
+
+**In review** (`Task.inReview`, "In review" on the Sessions list, column `review` of a board item):
+A task whose agent has handed its work over with `report_result` and got nothing new since: the user's review, "Fix" of a failed pipeline or its proposer's message takes it out of review until the agent reports again. The task's board item goes to "In review" once every open task on it is in review (ADR-213). One step before the user accepts the work; only the user ends a task or marks its item "Done".
+_Avoid_: ready, finished, done (those are the user's), awaiting approval (that is a tool approval)
+
 ## Plan
 
 **Workspace knowledge** (module `knowledge`, `knowledgeApi`, MCP tools `list_knowledge` and `propose_knowledge`; "Workspace knowledge" in Plan):
@@ -754,11 +817,11 @@ A root of the board for one business project; its items hang under it as a tree.
 _Avoid_: repo, workspace
 
 **Idea** (an item with `parent: null`; the "Inbox" in the UI):
-An item not filed under a project yet, written down so it is not lost: with Alt+N from any view (`IdeaCapture`), in the inbox, or by an agent outside a task. The inbox is the list of ideas.
+An item not filed under a project yet, written down so it is not lost: with Alt+N from any view (`IdeaCapture`), in the inbox, or by an agent outside a task. The inbox is the list of ideas. Sorting an idea (`InboxTriage`, ADR-214) files it in a project, starts a task on it, or drops it: a **dropped idea** (`column: dropped`, "Dropped" in the UI) stays on the board, folded below the open ones, until it is restored or removed.
 _Avoid_: draft, note
 
 **Board column** (`BoardColumn`: `ideas`, `ready`, `in_progress`, `review`, `done`, `dropped`; "Column" in the UI, `COLUMN_LABELS`):
-How far an item is: "Idea", "Ready", "In progress", "In review", "Done", "Dropped". An agent moves an item only between `ideas` and `ready`.
+How far an item is: "Idea", "Ready", "In progress", "In review", "Done", "Dropped". An agent moves an item only between `ideas` and `ready`; the item's tasks move it to "In progress" and "In review", and back to "Ready" when the last task on an item still in progress is removed (`TaskWorkColumn`, ADR-213), and only the user sets "Done" and "Dropped".
 _Avoid_: status (a repo's is `RepoStatus`), state (a session's)
 
 **Task item** (`Task.item`, `TaskProposal.item`):
@@ -786,7 +849,7 @@ _Avoid_: exception (only one kind of error), problem (that is the repo card and 
 Trackwall's own errors on this computer: the daemon's unexpected errors, the UI's and the desktop shell's, in `logs/errors.json` (ADR-94). Each is a **Trackwall error** (`TrackwallError`): source (`daemon`, `shell`, `ui`), area, kind, anonymized message, frames in Trackwall's code, count. Do not confuse with an error from logs (`LogError`), which comes from the output of the user's processes.
 _Avoid_: crash log, telemetry, bug report (nothing is sent)
 
-**MCP audit** (`McpAudit`, the `mcp-audit` module, `mcpAuditApi`; in the UI *MCP calls* in Settings › Agents and in a task's panel):
+**MCP audit** (`McpAudit`, the `mcp-audit` module, `mcpAuditApi`; in the UI *MCP calls* in Settings › Usage and in a task's panel):
 Every MCP tool call the daemon answered, in `logs/mcp-calls.jsonl` (ADR-152). Each is an **MCP call** (`McpCall`): the tool, its effect (`read`, `write`, `destructive`), the **caller** (`McpCaller`: the session with its repo and task as they were at the call; `null` for an agent outside Trackwall), the identifier arguments the tool's contract names (`auditArgs`), the outcome and the duration. Free text an agent sends is never in it. Do not confuse with the daemon log, which also has a line per call.
 _Avoid_: access log, history (of a task, that is its handoff and summary), tool log
 

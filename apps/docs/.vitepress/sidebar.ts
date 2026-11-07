@@ -39,6 +39,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       { text: "Supervisor", link: "/features/supervisor" },
       { text: "Start my day", link: "/features/start-my-day" },
       { text: "Plan", link: "/features/plan" },
+      { text: "Flow", link: "/features/flow" },
       { text: "Copilot CLI sessions", link: "/features/sessions" },
       { text: "While you were away", link: "/features/while-you-were-away" },
       { text: "Approvals outside the terminal", link: "/features/approvals" },
@@ -53,6 +54,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       { text: "Session instructions", link: "/features/session-instructions" },
       { text: "MCP server", link: "/features/mcp" },
       { text: "MCP calls", link: "/features/mcp-calls" },
+      { text: "Copilot usage", link: "/features/copilot-usage" },
     ],
   },
   {
@@ -62,6 +64,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       { text: "Navigation and windows", link: "/features/navigation-and-windows" },
       { text: "trackwall:// links", link: "/features/links" },
       { text: "Start at sign-in", link: "/features/start-at-sign-in" },
+      { text: "Keep the screen on", link: "/features/keep-screen-on" },
       { text: "Notifications in the browser", link: "/features/browser-notifications" },
       { text: "App updates", link: "/features/updates" },
       { text: "Config files", link: "/features/config-files" },

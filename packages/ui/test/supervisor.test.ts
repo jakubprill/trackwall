@@ -33,6 +33,8 @@ function session(id: string, repo: string | null, run: Session["run"]["kind"] = 
     readRequest: null,
     copyRequest: null,
     usage: null,
+    model: null,
+    modelInUse: null,
   };
 }
 
@@ -55,6 +57,7 @@ function task(id: string, proposedBy: Task["proposedBy"]): Task {
     item: null,
     view: "terminal",
     summary: null,
+    inReview: false,
     port: 41000,
     included: { files: [], problems: [] },
     change: null,

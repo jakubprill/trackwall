@@ -12,6 +12,7 @@ import {
   noIncludedFiles,
   PATCH_MAX_BYTES,
   type ProposedBy,
+  type ReportedSummary,
   type Session,
   type SessionView,
   TASK_SUMMARY_MAX_FILES,
@@ -23,6 +24,9 @@ import {
   type TaskHandoffState,
   type TaskMiseConfig,
   type TaskSharedFiles,
+  type TaskWorktree,
+  type TaskWorktreeLoss,
+  type TaskWorktreeSize,
 } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
@@ -39,6 +43,7 @@ import type { StoredTask, TaskFile } from "./task-file.ts";
 import { type HandoffFacts, type HandoffGit, handoffState, type TaskHandoff } from "./task-handoff.ts";
 import { type MiseSnapshot, miseConfigChanges, miseConfigDigest, readMiseConfig, reviewMiseConfig } from "./task-mise-config.ts";
 import { freeTaskPort, withTaskPorts } from "./task-port.ts";
+import { folderSize, lastActivity } from "./task-worktrees.ts";
 
 /**
  * Agent tasks (§4.4, ADR-31): a prompt for Copilot CLI in its own worktree on a new branch from the repo's default
@@ -91,6 +96,11 @@ export interface TasksVcs extends HandoffGit, EndedTaskGit {
   deleteBranch(repoDir: string, branch: string): Promise<void>;
   pendingWork(work: TaskWork): Promise<TaskPendingWork>;
   worktreeChanges(dir: string, base: string, maxPatchBytes: number, paths: readonly string[]): Promise<TaskChanges>;
+  /** The newest commits of HEAD in `dir`: the cleanup reads when the task last committed (ADR-210). */
+  log(dir: string, limit: number): Promise<{ date: string }[]>;
+  /** One hash of what the worktree's files hold beyond `base` (ADR-209). */
+  worktreeFingerprint(dir: string, base: string): Promise<string>;
+  discardFingerprint(dir: string, base: string): Promise<string | null>;
 }
 
 /**
@@ -99,7 +109,13 @@ export interface TasksVcs extends HandoffGit, EndedTaskGit {
  * message of a new conversation, or the conversation to go on with is loaded.
  */
 export type TaskLaunch = { repo: string; cwd: string; task: string; args: readonly string[] } & (
-  | { view: "terminal"; promptOnStart: boolean; lspServers: Record<string, LspServer> }
+  | {
+      view: "terminal";
+      promptOnStart: boolean;
+      lspServers: Record<string, LspServer>;
+      /** Copilot CLI's id of the conversation, the task's id that `--session-id` and `--resume` name, not the session's. */
+      conversation: string;
+    }
   | { view: "conversation"; load: string | undefined; firstMessage: string | undefined }
 );
 
@@ -138,6 +154,8 @@ export interface AgentTasksDeps {
   /** Task `task`'s round commits that the push has not squashed yet (ADR-168), which a handoff looks past (ADR-144). */
   roundCommits: (task: string) => ReadonlySet<string>;
   openEditor: (dir: string) => void;
+  /** A task was created and its first session started: from the form, a proposal, a routine, a handoff or a part of a change. */
+  onCreated: (task: Task) => void;
   log: (msg: string) => void;
 }
 
@@ -306,6 +324,7 @@ export class AgentTasks {
       view: sessionView,
       conversation: null,
       summary: null,
+      inReview: false,
       handoff,
       change,
       impactProposed: {},
@@ -348,6 +367,8 @@ export class AgentTasks {
     const { id } = task;
     try {
       await this.#launch(task, "new");
+      // Only a task whose first session started counts: one that could not start is ended again below.
+      this.#deps.onCreated(view(task));
     } catch (err) {
       // A failed cleanup leaves the task on the list, so that the user can end it themselves.
       await this.#whileRemoving(id, async () => {
@@ -363,16 +384,26 @@ export class AgentTasks {
 
   /**
    * A new session for a task without a running session, which goes on with the task's conversation: in a terminal
-   * Copilot CLI keeps it under the task's UUID, in the conversation view under the id it chose (ADR-137).
+   * Copilot CLI keeps it under the task's UUID, in the conversation view under the id it chose (ADR-137). With `model`
+   * (ADR-206; `null` for Copilot CLI's default) the task runs on it from now on, saved before the start, so a start that
+   * fails keeps the user's choice for the next Resume: a task stuck on a model its provider does not serve gets out of it.
    */
-  resume(id: string): Promise<Task> {
+  resume(id: string, model?: string | null): Promise<Task> {
     const task = this.#get(id);
     return this.#exclusive(id, async () => {
       this.#refuseRunning(task, "resuming");
       this.#closeSessions(task);
-      await this.#launch(task, "resume");
-      return view(task);
+      const resumed = model === undefined || model === task.model ? task : this.#withModel(task, model);
+      await this.#launch(resumed, "resume");
+      return view(resumed);
     });
+  }
+
+  #withModel(task: KnownTask, model: string | null): KnownTask {
+    const changed = { ...task, model };
+    this.#save(this.#tasks.map((t) => (t.id === task.id ? changed : t)));
+    this.#deps.log(`task ${task.id} runs on ${model ?? "Copilot CLI's default model"} from now on`);
+    return changed;
   }
 
   /**
@@ -539,16 +570,16 @@ export class AgentTasks {
     return commit === null ? null : { task: from.id, repo: from.repo, branch: from.branch, commit };
   }
 
-  /** The endpoints each repo was offered a task for from task `id`'s impact (ADR-198); `{}` once the task is gone. */
+  /** The endpoints and types each repo was offered a task for from task `id`'s impact (ADR-198, ADR-205); `{}` once the task is gone. */
   impactProposed(id: string): Readonly<Record<string, readonly string[]>> {
     return this.#tasks.find((t) => t.id === id)?.impactProposed ?? {};
   }
 
-  /** Adds `endpoints` to what `repo` was offered from task `id`'s impact; nothing once the task is gone. */
-  markImpactProposed(id: string, repo: string, endpoints: readonly string[]): void {
+  /** Adds `keys` to what `repo` was offered from task `id`'s impact; nothing once the task is gone. */
+  markImpactProposed(id: string, repo: string, keys: readonly string[]): void {
     const task = this.#tasks.find((t) => t.id === id);
     if (task === undefined) return;
-    const offered = offeredAfter(task.impactProposed[repo] ?? [], endpoints);
+    const offered = offeredAfter(task.impactProposed[repo] ?? [], keys);
     const marked = { ...task, impactProposed: { ...task.impactProposed, [repo]: offered } };
     this.#save(this.#tasks.map((t) => (t.id === id ? marked : t)));
   }
@@ -572,13 +603,26 @@ export class AgentTasks {
   }
 
   /**
-   * A summary from the task session (`report_result`, ADR-39) with its check steps (ADR-169); a later one replaces the
-   * earlier one, steps included, and survives a daemon restart.
+   * A summary from the task session (`report_result`, ADR-39) with its check steps (ADR-169) and its reproduction test
+   * (ADR-222); a later one replaces the earlier one, steps and test included, and survives a daemon restart.
    */
-  setSummary(id: string, text: string, checkSteps: string[]): Task {
-    const summarized = { ...this.#get(id), summary: { text, checkSteps, reportedAt: new Date().toISOString() } };
+  setSummary(id: string, report: ReportedSummary): Task {
+    const reportedAt = new Date().toISOString();
+    // A summary hands the work over for review (ADR-213).
+    const summarized = { ...this.#get(id), summary: { ...report, reportedAt }, inReview: true };
     this.#save(this.#tasks.map((t) => (t.id === id ? summarized : t)));
     return view(summarized);
+  }
+
+  /**
+   * The task's agent got work again (the user's review or "Fix" of its pipeline, its proposer's message, ADR-213), so its work is no longer
+   * waiting for review; `false` when it was not.
+   */
+  takeOutOfReview(id: string): boolean {
+    const task = this.#get(id);
+    if (!task.inReview) return false;
+    this.#save(this.#tasks.map((t) => (t.id === id ? { ...task, inReview: false } : t)));
+    return true;
   }
 
   changes(id: string): Promise<TaskChanges> {
@@ -631,9 +675,71 @@ export class AgentTasks {
   }
 
   #readChanges(id: string, maxPatchBytes: number, paths: readonly string[]): Promise<TaskChanges> {
+    return this.#readWorktree(id, (task) => this.#deps.vcs.worktreeChanges(task.worktree, task.base, maxPatchBytes, paths));
+  }
+
+  /**
+   * The worktree of every task without a running session for the cleanup of old worktrees (ADR-210): its last activity
+   * and what ending it with its branch kept would delete, read as the end reads it. A task being ended is left out.
+   */
+  async worktrees(now: Date): Promise<TaskWorktree[]> {
+    const listed = this.#tasks.filter(
+      (task) => !this.#removing.has(task.id) && this.#deps.sessions.of(task.id).every((session) => session.run.kind === "exited"),
+    );
+    return mapLimit(listed, SHARED_FILES_CONCURRENCY, async (task) => {
+      const [loss, commits] = await Promise.all([
+        this.#loss(task),
+        existsSync(task.worktree) ? this.#tracked(task, this.#deps.vcs.log(task.worktree, 1)).catch(() => []) : [],
+      ]);
+      const lastActivityAt = lastActivity(task, this.#deps.sessions.of(task.id), commits[0]?.date ?? null, now);
+      return { task: task.id, repo: task.repo, branch: task.branch, lastActivityAt, loss };
+    });
+  }
+
+  /**
+   * What ending the task with its branch kept would delete, with the fingerprint the end checks before it deletes it.
+   * The fingerprint is read first, so work that comes before the counts is refused at the end rather than unnamed.
+   */
+  async #loss(task: KnownTask): Promise<TaskWorktreeLoss> {
+    try {
+      const fingerprint = await this.#tracked(task, this.#deps.vcs.discardFingerprint(task.worktree, task.base));
+      const pending = await this.#tracked(task, this.#deps.vcs.pendingWork(task));
+      if (pending.unregisteredDir) return { kind: "unknown", reason: "a folder git does not know as a worktree" };
+      if (pending.uncommitted === 0 && pending.strayCommits === 0) return { kind: "none" };
+      if (fingerprint === null) return { kind: "unknown", reason: "too many changed files to name here" };
+      return { kind: "work", uncommitted: pending.uncommitted, strayCommits: pending.strayCommits, fingerprint };
+    } catch (err) {
+      return { kind: "unknown", reason: messageOf(err) };
+    }
+  }
+
+  /**
+   * How much disk the task's worktree takes, ignored files included (ADR-210); `not_found` once it is gone. Ending the
+   * task stops the count, so the end does not wait for it.
+   */
+  async worktreeSize(id: string): Promise<TaskWorktreeSize> {
+    return await this.#readWorktree(id, async (task) => ({
+      task: id,
+      ...(await folderSize(task.worktree, { stop: () => this.#removing.has(id) })),
+    }));
+  }
+
+  /** The fingerprint of what the task's worktree holds (ADR-209), for a verification to tell when its verdict is outdated. */
+  fingerprint(id: string): Promise<string> {
+    return this.#readWorktree(id, (task) => this.#deps.vcs.worktreeFingerprint(task.worktree, task.base));
+  }
+
+  /** A git read of the task's worktree, which ending the task waits for before it deletes the worktree. */
+  #readWorktree<T>(id: string, read: (task: KnownTask) => Promise<T>): Promise<T> {
     if (this.#removing.has(id)) throw new DomainError("bad_request", "this task is already being ended");
     const task = this.#existingWorktree(id);
-    const reading = asRepoUnavailable(task.branch, this.#deps.vcs.worktreeChanges(task.worktree, task.base, maxPatchBytes, paths));
+    return this.#tracked(task, read(task));
+  }
+
+  /** `work` among the task's reads, which ending the task waits for before it deletes the worktree. */
+  #tracked<T>(task: KnownTask, work: Promise<T>): Promise<T> {
+    const { id } = task;
+    const reading = asRepoUnavailable(task.branch, work);
     const reads = this.#reading.get(id) ?? new Set();
     this.#reading.set(id, reads.add(reading));
     void reading
@@ -694,8 +800,10 @@ export class AgentTasks {
    * `unsaved_changes` with what would be lost. Returns the facts of the ended task for the task journal (ADR-150),
    * read from its worktree before it goes.
    */
-  remove(id: string, keepBranch: boolean, discardChanges: boolean): Promise<EndedTaskFacts> {
+  remove(id: string, keepBranch: boolean, discardChanges: boolean, discardFingerprint?: string): Promise<EndedTaskFacts> {
     const task = this.#get(id);
+    if (discardFingerprint !== undefined && !(keepBranch && discardChanges))
+      throw new DomainError("bad_request", "a confirmed fingerprint goes only with discarding changes and keeping the branch");
     return this.#exclusive(id, async () => {
       this.#refuseRunning(task, "ending it");
       const facts = await this.#whileRemoving(id, async () => {
@@ -709,6 +817,8 @@ export class AgentTasks {
             "bad_request",
             `a process started by Trackwall still runs in the worktree of task ${task.branch}; stop it before ending the task`,
           );
+        // Last before the deletion: after the shell, which could still write, is closed.
+        if (discardFingerprint !== undefined) await this.#refuseChangedSince(task, discardFingerprint);
         const ended = await endedTaskFacts(task, this.#deps.roundCommits(id), keepBranch, new Date(), this.#deps.vcs, this.#deps.log);
         await this.#discard(task, keepBranch);
         return ended;
@@ -741,6 +851,23 @@ export class AgentTasks {
       !keepBranch && pending.branchCommits > 0 && `commits on branch ${task.branch} (${pending.branchCommits})`,
     ].filter((s) => s !== false);
     if (lost.length > 0) throw new DomainError("unsaved_changes", `ending the task would delete: ${lost.join(", ")}`);
+  }
+
+  /**
+   * The user confirmed deleting the work of a worktree with this fingerprint of its files and HEAD (ADR-210): work that
+   * Trackwall can see came after (an edit, a commit outside the branch), or a folder git no longer knows as a worktree,
+   * is refused. An editor outside Trackwall writing between this check and the deletion is not seen (§8).
+   */
+  async #refuseChangedSince(task: KnownTask, confirmed: string): Promise<void> {
+    const pending = await asRepoUnavailable(task.branch, this.#deps.vcs.pendingWork(task));
+    const current = pending.unregisteredDir
+      ? null
+      : await asRepoUnavailable(task.branch, this.#deps.vcs.discardFingerprint(task.worktree, task.base));
+    if (current !== confirmed)
+      throw new DomainError(
+        "unsaved_changes",
+        `the worktree of task ${task.branch} changed since what ending it deletes was confirmed; look at it again`,
+      );
   }
 
   /** The worktree (with uncommitted and ignored files) and, without `keepBranch`, the branch. */
@@ -790,6 +917,7 @@ export class AgentTasks {
         args: [...place.args, ...args],
         promptOnStart: start === "new",
         lspServers,
+        conversation: task.id,
       });
       return;
     }

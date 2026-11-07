@@ -5,6 +5,7 @@ import {
   ancestorsOf,
   childrenOf,
   compareSiblings,
+  GET_SESSION_PROMPT_ARG,
   isSupervisor,
   type McpCaller,
   type McpCallOutcome,
@@ -27,6 +28,7 @@ import { codeSearchText } from "./code-search-text.ts";
 import { commitSearchText } from "./commit-search-text.ts";
 import { findEndpointText } from "./endpoint-text.ts";
 import { subgraphText, whoCallsText } from "./graph-text.ts";
+import { sessionText } from "./session-text.ts";
 
 /**
  * The daemon's MCP tools (§5.3, ADR-24): each is a thin mapping onto the facade, so the agent sees the same state as the UI
@@ -95,7 +97,7 @@ type ToolRegistration = (server: McpServer, ctx: ToolContext & { caller: string 
 function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
   tool: McpTool<Args, Result>,
   run: ToolRun<Args, Result>,
-  text?: (result: z.output<Result>) => string,
+  text?: (result: z.output<Result>, args: z.output<Args>) => string,
 ): ToolRegistration {
   // The SDK types the arguments from the schema's type and cannot do it from a generic parameter; so the arguments pass
   // through the tool's schema once more (the SDK already checks them before the call), which gives their exact type without a cast.
@@ -127,7 +129,7 @@ function defineTool<Args extends z.ZodObject, Result extends z.ZodObject>(
           if (effect === "destructive") ctx.log(`${label}: ${JSON.stringify(audited)}`);
           const result = tool.result.parse(await run(ctx.facade, parsed, { caller: ctx.caller, signal: extra.mcpReq.signal }));
           ctx.log(`${label}: ok in ${Date.now() - started} ms`);
-          if (text !== undefined) return { content: [{ type: "text", text: text(result) }] };
+          if (text !== undefined) return { content: [{ type: "text", text: text(result, parsed) }] };
           return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };
         } catch (err) {
           ctx.log(`${label}: error in ${Date.now() - started} ms: ${String(err)}`);
@@ -325,8 +327,8 @@ const runs: ToolRuns = {
     return { item };
   },
   updateItem: async (facade, { item, ...change }) => ({ item: await facade.board.updateByAgent(item, change) }),
-  reportResult: async (facade, { summary, checkSteps }, { caller }) => ({
-    task: facade.agents.reportSummary(caller, summary, checkSteps),
+  reportResult: async (facade, { summary, checkSteps, reproTest }, { caller }) => ({
+    task: await facade.agents.reportSummary(caller, { text: summary, checkSteps, reproTest: reproTest ?? null }),
   }),
   getReviewComments: async (facade, _args, { caller }) => facade.agents.takeReviewComments(caller),
   sendMessage: async (facade, { task, text }, { caller }) => facade.agents.sendMessage(caller, task, text),
@@ -402,7 +404,7 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.searchCommits, runs.searchCommits, commitSearchText),
   defineTool(mcpTools.searchTaskHistory, runs.searchTaskHistory),
   defineTool(mcpTools.listSessions, runs.listSessions),
-  defineTool(mcpTools.getSession, runs.getSession),
+  defineTool(mcpTools.getSession, runs.getSession, (result, args) => sessionText(result, args[GET_SESSION_PROMPT_ARG])),
   defineTool(mcpTools.getDayReport, runs.getDayReport),
   defineTool(mcpTools.getTaskChanges, runs.getTaskChanges),
   defineTool(mcpTools.getChangedEndpoints, runs.getChangedEndpoints),

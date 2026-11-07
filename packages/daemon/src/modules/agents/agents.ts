@@ -27,6 +27,8 @@ import {
   type PipelineFix,
   type PromptDelivery,
   proposalRepos,
+  type ReportedChanges,
+  type ReportedSummary,
   type ReviewComment,
   type SandboxSettings,
   type SandboxState,
@@ -51,6 +53,8 @@ import {
   type TaskRounds,
   type TaskSharedFiles,
   type TaskUpdate,
+  type TaskWorktree,
+  type TaskWorktreeSize,
   type ToolPermissions,
   type Verification,
   type WorkingTreeChanges,
@@ -64,7 +68,7 @@ import { AutoReviews } from "./auto-reviews.ts";
 import type { CopilotHookOutput } from "./copilot-hook-output.ts";
 import { CopilotHookEvent } from "./copilot-hook-record.ts";
 import type { LspServer } from "./copilot-plugin.ts";
-import { sandboxState, taskSandbox } from "./copilot-sandbox.ts";
+import { daemonSandboxHost, type SandboxHost, sandboxState, taskSandbox } from "./copilot-sandbox.ts";
 import type { EndedTaskFacts } from "./ended-task.ts";
 import { HandoffWatch } from "./handoff-watch.ts";
 import { appendHookRecord } from "./hook-tail.ts";
@@ -75,7 +79,7 @@ import { LAST_SUPERVISOR_FILE, LastSupervisorFile } from "./last-supervisor.ts";
 import { ListedSessions } from "./listed-sessions.ts";
 import { LiveSession, type SessionEvent, type SessionWindow } from "./live-session.ts";
 import { MiseTrustNotices, type TrustRecipient, trustRecipientOf } from "./mise-trust-notices.ts";
-import { modelArgs } from "./model-args.ts";
+import { modelArgs, modelOfArgs } from "./model-args.ts";
 import { proposedByOf, proposerExists, proposerKeyOf, proposerKind, proposerOf } from "./proposer.ts";
 import { readRequestPrompt } from "./read-request-prompt.ts";
 import {
@@ -92,6 +96,7 @@ import {
   type LauncherProcs,
   type SessionCallbacks,
   SessionLauncher,
+  type SessionLauncherDeps,
   type SessionPlace,
   type StartedSession,
   sessionHooksFile,
@@ -103,6 +108,7 @@ import { SessionTokens } from "./session-tokens.ts";
 import { outcome, sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
 import { SupervisorSessions } from "./supervisor-sessions.ts";
 import { supervisorSituation } from "./supervisor-situation.ts";
+import { TaskBoardItem, type TaskBoardItemDeps } from "./task-board-item.ts";
 import { TaskCoordination } from "./task-coordination.ts";
 import { TaskFile } from "./task-file.ts";
 import { TaskProposals } from "./task-proposals.ts";
@@ -164,8 +170,10 @@ interface AgentsRepos {
   supervisorSettings(): SupervisorSettings;
   /** `supervisorModel` from `workspace.yaml` (ADR-193): the supervisor's model, `null` for the default; `invalid_config` for a bad key. */
   supervisorModel(): string | null;
-  /** `sandbox` from `workspace.yaml` with its default (ADR-181): which tasks run in Copilot CLI's sandbox; `invalid_config` for a bad key. */
-  sandboxSettings(): SandboxSettings;
+  /** Writes `supervisorModel` (ADR-193), `null` removing it: a restart of the supervisor on another model (ADR-206). */
+  setSupervisorModel(model: string | null): unknown;
+  /** `sandbox` from `workspace.yaml` (ADR-181), `null` without the key: which tasks run in Copilot CLI's sandbox; `invalid_config` for a bad key. */
+  sandboxSettings(): SandboxSettings | null;
   /** `agentSecrets` from `workspace.yaml` (ADR-93): the secrets from mise a session's tools get; `invalid_config` for a bad key. */
   agentSecrets(): readonly string[];
   /** `autoReview` from `workspace.yaml` (ADR-182): whether a task gets a review once its agent reports; `invalid_config` for a bad key. */
@@ -184,6 +192,8 @@ interface AgentsRepos {
 
 export interface AgentsDeps {
   procs: AgentsProcs;
+  /** The daemon runs in a container (`FacadeOptions.inContainer`), where the sandbox is off by default unless it can run (ADR-219). */
+  inContainer: boolean;
   /** Closes the user's folder terminal in a task's worktree before the task ends (`terminals`, ADR-185). */
   closeFolderTerminal: (task: string) => Promise<void>;
   repos: AgentsRepos;
@@ -221,8 +231,12 @@ export interface AgentsDeps {
   openEditor: (path: string, line?: number) => void;
   /** Whether a board item is on the board (ADR-133): a task or a proposal names only an existing one. */
   boardHas: (item: string) => Promise<boolean>;
+  /** Moves a board item as the work of its tasks goes (ADR-213), `Board.followTasks`. */
+  followTasks: TaskBoardItemDeps["move"];
   /** The workspace knowledge the user approved for a session in `repo` (`null`: in the projects folder), ADR-170. */
   knowledge: (repo: string | null) => Promise<SessionKnowledge>;
+  /** The format a session on a model must use with its custom provider (ADR-200), from `provider-models`. */
+  wireApi: SessionLauncherDeps["wireApi"];
   /**
    * What each task's work came to, its verification verdict and its merge request with the pipeline (ADR-154), which
    * `verification` and `merge-requests` keep: the supervisor's situation tells it with each task (ADR-156).
@@ -267,9 +281,13 @@ export class Agents {
   readonly #launcher: SessionLauncher;
   readonly #javaNavigation: JavaNavigationServers;
   readonly #autoReviews: AutoReviews;
+  readonly #boardItems: TaskBoardItem;
+  /** Where the daemon runs, for Copilot CLI's sandbox (ADR-219). */
+  readonly #sandboxHost: SandboxHost;
 
   constructor(deps: AgentsDeps) {
     this.#deps = deps;
+    this.#sandboxHost = daemonSandboxHost(deps.inContainer);
     this.#javaNavigation = new JavaNavigationServers({
       projectsDir: () => deps.repos.projectsDir(),
       settings: () => deps.repos.javaNavigation(),
@@ -291,6 +309,7 @@ export class Agents {
       handoff: (task) => this.#tasks.handoff(task),
       change: (task) => this.#tasks.change(task),
       knowledge: deps.knowledge,
+      wireApi: deps.wireApi,
     });
     this.#resumable = new ResumableSessions(join(deps.home, RESUMABLE_SESSIONS_FILE), deps.log);
     this.#lastSupervisor = new LastSupervisorFile(join(deps.home, LAST_SUPERVISOR_FILE), deps.log);
@@ -320,8 +339,10 @@ export class Agents {
       roundCommits: (task) => this.#rounds.roundCommits(task),
       openEditor: deps.openEditor,
       log: deps.log,
+      // The item a task starts on is in progress from then (ADR-213); every way a task starts goes through here.
+      onCreated: (task) => this.#boardItems.started(task),
       javaNavigation: this.#javaNavigation,
-      sandbox: async (approvals) => taskSandbox(sandboxState(deps.repos.sandboxSettings(), await deps.env()), approvals),
+      sandbox: async (approvals) => taskSandbox(await this.sandboxState(), approvals),
       sessions: {
         launch: (spec) => this.#launchTask(spec),
         of: (task) => this.#sessions.views().filter((s) => s.task === task),
@@ -350,6 +371,7 @@ export class Agents {
       changed: () => this.#queues.follow(),
       log: deps.log,
     });
+    this.#boardItems = new TaskBoardItem({ move: deps.followTasks, tasks: () => this.#tasks.list(), log: deps.log });
     this.#autoReviews = new AutoReviews({
       tasks: {
         task: (id) => this.#tasks.task(id),
@@ -361,7 +383,10 @@ export class Agents {
       },
       launch: async ({ repo, task }) => {
         const { copilot, mise } = await this.#launcher.inputs({ repo, supervisor: false, task });
-        return { program: copilot.program, prefix: copilot.args, env: mise.env, args: mise.args, secrets: mise.secretValues };
+        // The reviewer runs on the model of its command or environment, in the format that model answers in (ADR-200).
+        const env = { ...mise.env };
+        await this.#launcher.setWireApi(`review of task ${task}`, env, modelOfArgs([...copilot.args, ...mise.args]));
+        return { program: copilot.program, prefix: copilot.args, env, args: mise.args, secrets: mise.secretValues };
       },
       procs: deps.procs,
       settings: () => deps.repos.autoReviewSettings(),
@@ -575,8 +600,9 @@ export class Agents {
   async approveProposal(id: string, prompt: string, model: string | null, approvals: TaskApprovals, view: SessionView): Promise<Task> {
     if (this.#proposals.get(id).kind !== "task") throw new DomainError("bad_request", `proposal ${id} is not a task`);
     const { repo, title, proposedBy, item } = this.#proposals.take(id);
+    let task: Task;
     try {
-      return await this.#tasks.create(repo, prompt, {
+      task = await this.#tasks.create(repo, prompt, {
         id,
         title,
         proposedBy,
@@ -590,6 +616,7 @@ export class Agents {
     } finally {
       this.#proposals.release(id, this.#tasks.find(id) === undefined);
     }
+    return task;
   }
 
   /**
@@ -666,12 +693,17 @@ export class Agents {
     this.#coordination.proposalRejected(proposal, reason ?? null);
   }
 
-  /** A summary from session `caller` for its own task (`report_result`); it goes to the task's proposer too (ADR-68). */
-  reportSummary(caller: string | null, text: string, checkSteps: string[]): Task {
+  /**
+   * A summary from session `caller` for its own task (`report_result`), with its check steps and the test it says
+   * reproduces the task's error (ADR-222); it goes to the task's proposer too, with how much the task changed (ADR-68, ADR-207).
+   */
+  async reportSummary(caller: string | null, report: ReportedSummary): Promise<Task> {
     const own = this.#ownTask(caller, "can report a result");
-    const reported = this.#tasks.setSummary(own.task, text, checkSteps);
-    this.#coordination.resultReported(reported, own.session);
+    const reported = this.#tasks.setSummary(own.task, report);
     this.#autoReviews.afterReport(own.task);
+    this.#boardItems.handedOver(reported);
+    // Awaited, so the update is there for the proposer by the time the tool answers.
+    await this.#coordination.resultReported(reported, own.session, this.#reportedChanges(own.task));
     return reported;
   }
 
@@ -683,6 +715,7 @@ export class Agents {
     // Only to refuse an unknown or ended task (`not_found`).
     this.#tasks.task(id);
     const unread = this.#reviews.add(id, comments);
+    this.#backToWork(id);
     this.#coordination.reviewed(id);
     const running = this.#sessions.runningOfTask(id);
     return { unread, delivery: running ? running.askToRead() : "on_resume" };
@@ -696,8 +729,14 @@ export class Agents {
     // Only to refuse an unknown or ended task (`not_found`).
     this.#tasks.task(id);
     this.#reviews.fixPipeline(id, fix);
+    this.#backToWork(id);
     this.#coordination.reviewed(id);
     return this.#sessions.runningOfTask(id)?.askToRead() ?? "on_resume";
+  }
+
+  /** Task `id`'s agent got work again, so its work is no longer waiting for review (ADR-213). */
+  #backToWork(id: string): void {
+    if (this.#tasks.takeOutOfReview(id)) this.#boardItems.backToWork(this.#tasks.task(id));
   }
 
   /** The prompt for what waits unread for a session: its task's review comments and messages, and its updates. */
@@ -723,7 +762,10 @@ export class Agents {
    * reads it with `get_messages`.
    */
   sendMessage(caller: string | null, task: string, text: string): SendMessageResult {
-    return this.#coordination.send(caller, task, text);
+    const sent = this.#coordination.send(caller, task, text);
+    // The proposer steering the task gives its agent work again, like the user's review.
+    this.#backToWork(task);
+    return sent;
   }
 
   /** A question from session `caller`'s own task to the task's proposer (`ask_proposer`, ADR-160). */
@@ -826,7 +868,16 @@ export class Agents {
   async createChange({ title, prompt, parts, approvals, model, item, view }: ChangeRequest): Promise<CreatedChange> {
     await this.#assertOnBoard(item);
     const prompts = parts.map((part) => ({ repo: part.repo, prompt: changePartPrompt(prompt, part) }));
-    return this.#tasks.createChange(prompts, { title, proposedBy: null, model, approvals, javaNavigation: false, item, view });
+    const created = await this.#tasks.createChange(prompts, {
+      title,
+      proposedBy: null,
+      model,
+      approvals,
+      javaNavigation: false,
+      item,
+      view,
+    });
+    return created;
   }
 
   /**
@@ -853,7 +904,7 @@ export class Agents {
 
   /** Which tasks run in Copilot CLI's sandbox, and why it cannot run here (ADR-181); `invalid_config` for a bad `sandbox` key. */
   async sandboxState(): Promise<SandboxState> {
-    return sandboxState(this.#deps.repos.sandboxSettings(), await this.#deps.env());
+    return sandboxState(this.#deps.repos.sandboxSettings(), await this.#deps.env(), this.#sandboxHost);
   }
 
   /** Whether Java navigation can start now, or why not (ADR-99); `null` without `javaNavigation` in `workspace.yaml`. */
@@ -861,8 +912,9 @@ export class Agents {
     return javaNavigationState(this.#javaNavigation.readiness());
   }
 
-  resumeTask(id: string): Promise<Task> {
-    return this.#tasks.resume(id);
+  /** The user's Resume; with `model` the task runs on it from now on (ADR-206). */
+  resumeTask(id: string, model?: string | null): Promise<Task> {
+    return this.#tasks.resume(id, model);
   }
 
   /**
@@ -961,6 +1013,32 @@ export class Agents {
     if (!this.#sessions.startOf(id).javaNavigation) return null;
     const view = this.#sessions.view(session);
     return this.#javaNavigation.status(id, view.run.kind === "exited" ? null : new Date(view.startedAt));
+  }
+
+  /** Every task's worktree for the cleanup of old worktrees (ADR-210). */
+  taskWorktrees(): Promise<TaskWorktree[]> {
+    return this.#tasks.worktrees(new Date());
+  }
+
+  /** How much disk a task's worktree takes (ADR-210). */
+  taskWorktreeSize(id: string): Promise<TaskWorktreeSize> {
+    return this.#tasks.worktreeSize(id);
+  }
+
+  /** One hash of what a task's worktree holds (ADR-209): a verification keeps the one its run started on. */
+  taskFingerprint(id: string): Promise<string> {
+    return this.#tasks.fingerprint(id);
+  }
+
+  /** How much task `id` changed, for its report's update (ADR-207); `null` when git cannot say (a worktree deleted by hand). */
+  #reportedChanges(id: string): Promise<ReportedChanges | null> {
+    return this.taskChangesSummary(id).then(
+      ({ commits, uncommitted, files, filesTruncated }) => ({ commits, uncommitted, files: files.length, filesTruncated }),
+      (err: unknown) => {
+        this.#deps.log(`task ${id}: changes for its report: ${String(err)}`);
+        return null;
+      },
+    );
   }
 
   /** A task's changes without the diff, for an agent (the MCP tool `get_session`). */
@@ -1063,12 +1141,15 @@ export class Agents {
     return this.#tasks.trustedWorktree(id, repo);
   }
 
-  async removeTask(id: string, keepBranch: boolean, discardChanges: boolean): Promise<void> {
+  async removeTask(id: string, keepBranch: boolean, discardChanges: boolean, discardFingerprint?: string): Promise<void> {
     // Its reviewer runs in the worktree, which the removal refuses while a process of Trackwall is in it. Without one,
     // the removal starts at once, so a change computation that comes after it refuses.
     const stopping = this.#autoReviews.stop(id);
     if (stopping !== null) await stopping;
-    const ended = await this.#tasks.remove(id, keepBranch, discardChanges);
+    const { item } = this.#tasks.task(id);
+    const ended = await this.#tasks.remove(id, keepBranch, discardChanges, discardFingerprint);
+    // The task that was still at work may have been the last one on its item not in review, or the last one on it.
+    if (item !== null) this.#boardItems.removed(item);
     this.#autoReviews.forget(id);
     this.#reviews.take(id);
     this.#miseTrust.forget({ task: id });
@@ -1091,8 +1172,8 @@ export class Agents {
   async #launchTask({ repo, cwd, task, args, ...start }: TaskLaunch): Promise<string | undefined> {
     const place = { repo, supervisor: false, cwd, task };
     if (start.view === "terminal") {
-      const { promptOnStart, lspServers } = start;
-      await this.#launch({ ...place, args, promptOnStart, hasConversation: true, lspServers });
+      const { promptOnStart, lspServers, conversation } = start;
+      await this.#launch({ ...place, args, promptOnStart, hasConversation: true, conversation, lspServers });
       return undefined;
     }
     const started = await this.#launcher.conversation({
@@ -1140,13 +1221,16 @@ export class Agents {
    * (ADR-95): a task's session as Resume does, the supervisor, a free session and a repo session under their id. The
    * new start reads the environment, `agentSecrets` and tool permissions again. A repo or free session gives up its
    * place in the list before the start, since an id is listed once, so a failed start leaves it out of the list;
-   * Copilot CLI still keeps its conversation.
+   * Copilot CLI still keeps its conversation. A `model` (ADR-206; `null` for Copilot CLI's default) is the one the new
+   * start runs on and the session keeps: a task in `tasks.json`, the supervisor as `supervisorModel`, which every start
+   * of it reads, saved first, so like a task's it stays the user's choice when the start then fails.
    */
-  async restart(id: string): Promise<Session> {
+  async restart(id: string, model?: string | null): Promise<Session> {
     const session = this.#sessions.get(id);
     if (this.#restarting.has(id)) throw new DomainError("bad_request", "the session is already restarting");
     if (!this.#sessions.isRunning(session)) throw new DomainError("bad_request", "the session has ended; start it again instead");
     const { supervisor, task } = session;
+    if (supervisor && model !== undefined) this.#deps.repos.setSupervisorModel(model);
     const left = this.#sessions.resumable(session);
     this.#restarting.add(id);
     try {
@@ -1158,7 +1242,7 @@ export class Agents {
         throw new DomainError("bad_request", "the session has ended; start it again instead");
       await this.#deps.procs.stop(sessionOwner(id));
       if (task === null && !supervisor) this.#unlist(session);
-      return await this.#resumeLeft(left).catch(async (err: unknown) => {
+      return await this.#resumeLeft(left, model).catch(async (err: unknown) => {
         // Out of the list, it can never be closed, so its jdtls index goes now (ADR-175).
         if (left.javaNavigation) await this.#javaNavigation.remove(id, `session ${id}`);
         throw err;
@@ -1302,10 +1386,11 @@ export class Agents {
     if (javaNavigation) await this.#javaNavigation.remove(id, `session ${id}`);
   }
 
-  async #resumeLeft(left: ResumableSession): Promise<Session> {
+  /** `model`, when given, replaces the model the session or its task ran on (ADR-206). */
+  async #resumeLeft(left: ResumableSession, model?: string | null): Promise<Session> {
     const { repo, task } = left;
     if (task !== null) {
-      await this.#tasks.resume(task);
+      await this.#tasks.resume(task, model);
       return this.#sessionOfTask(task);
     }
     const spec = sessionLaunch(left.view, left);
@@ -1315,8 +1400,8 @@ export class Agents {
       return started;
     }
     const cwd = repo === null ? await this.#deps.repos.projectsDir() : await this.#deps.repos.repoPath(repo);
-    const { model, javaNavigation } = left;
-    const started = await this.#launchWithOptions(spec, { repo, supervisor: false, cwd, task: null }, { model, javaNavigation });
+    const options = { model: model === undefined ? left.model : model, javaNavigation: left.javaNavigation };
+    const started = await this.#launchWithOptions(spec, { repo, supervisor: false, cwd, task: null }, options);
     this.#askToReadLeft(left.session);
     return started;
   }
@@ -1409,6 +1494,7 @@ export class Agents {
         if (task !== null) this.#rounds.promptSent(task);
       },
       onTurnStart: () => {
+        this.#coordination.turnStarted(id);
         if (task !== null) void this.#rounds.turnStarted(task);
       },
       onTurnOver: () => {

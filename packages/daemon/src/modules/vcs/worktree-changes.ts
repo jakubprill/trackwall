@@ -82,28 +82,14 @@ async function copyIndex(index: string, copy: string): Promise<void> {
  * The working directory `dir` against `base` (a commit or a tree), only under `paths` (git pathspecs; none is the whole
  * tree). The temporary index lies in `scratchDir`.
  */
-export async function workingTreeChanges(
+export function workingTreeChanges(
   dir: string,
   base: string,
   maxPatchBytes: number,
   paths: readonly string[],
   scratchDir: string,
 ): Promise<WorkingTreeChanges> {
-  const out = (await git(dir, ["rev-parse", "--git-path", "index", "--show-object-format"])).stdout.toString("utf8").trim();
-  const [indexPath, objectFormat] = out.split(/\r?\n/);
-  const emptyBlob = objectFormat === undefined ? undefined : EMPTY_BLOB.get(objectFormat);
-  if (!indexPath || emptyBlob === undefined) throw new Error(`git rev-parse did not give the index path and a known object format: ${out}`);
-  const index = resolve(dir, indexPath);
-  const tmp = resolve(scratchDir, `index-${randomUUID()}`);
-  try {
-    await copyIndex(index, tmp);
-    const untrackedTruncated = await addUntracked(dir, tmp, emptyBlob, paths);
-    const diff = (args: string[], maxBytes?: number) =>
-      git(dir, ["diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", ...args, base, "--", ...paths], {
-        indexFile: tmp,
-        timeoutMs: CHANGES_TIMEOUT_MS,
-        maxBytes,
-      });
+  return withChangesIndex(dir, base, paths, scratchDir, async (diff, untrackedTruncated) => {
     // All at once, but each to the end: the temporary index can be removed only when no git reads it.
     const work = [
       diff(["--name-status", "-z"]),
@@ -120,6 +106,56 @@ export async function workingTreeChanges(
       // A cut file list (tens of thousands of new files without `.gitignore`) is an incomplete result too.
       truncated: patch.truncated || names.truncated || stats.truncated || untrackedTruncated,
     };
+  });
+}
+
+/**
+ * Only the paths of the working directory `dir` that differ from `base`, as `workingTreeChanges` counts them, without
+ * the line counts and the diff: the worktree fingerprint (ADR-209) hashes their content itself.
+ */
+export function changedPaths(dir: string, base: string, scratchDir: string): Promise<{ paths: string[]; truncated: boolean }> {
+  return withChangesIndex(dir, base, [], scratchDir, async (diff, untrackedTruncated) => {
+    const names = await diff(["--name-only", "-z"]);
+    // The last entry of a cut list may have an incomplete path.
+    const paths = names.stdout
+      .toString("utf8")
+      .split("\0")
+      .filter((path) => path !== "");
+    return { paths: paths.slice(0, names.truncated ? -1 : undefined), truncated: names.truncated || untrackedTruncated };
+  });
+}
+
+/** A `git diff` of the working directory against the base, through the temporary index, with these arguments. */
+type IndexDiff = (args: string[], maxBytes?: number) => Promise<RunOutput>;
+
+/**
+ * `read` with diffs of `dir` against `base` (a commit or a tree), only under `paths` (git pathspecs; none is the whole
+ * tree), through a temporary index in `scratchDir` with the new files added, removed once `read` is done; `read` also
+ * gets whether the list of new files was cut.
+ */
+async function withChangesIndex<T>(
+  dir: string,
+  base: string,
+  paths: readonly string[],
+  scratchDir: string,
+  read: (diff: IndexDiff, untrackedTruncated: boolean) => Promise<T>,
+): Promise<T> {
+  const out = (await git(dir, ["rev-parse", "--git-path", "index", "--show-object-format"])).stdout.toString("utf8").trim();
+  const [indexPath, objectFormat] = out.split(/\r?\n/);
+  const emptyBlob = objectFormat === undefined ? undefined : EMPTY_BLOB.get(objectFormat);
+  if (!indexPath || emptyBlob === undefined) throw new Error(`git rev-parse did not give the index path and a known object format: ${out}`);
+  const index = resolve(dir, indexPath);
+  const tmp = resolve(scratchDir, `index-${randomUUID()}`);
+  try {
+    await copyIndex(index, tmp);
+    const untrackedTruncated = await addUntracked(dir, tmp, emptyBlob, paths);
+    const diff: IndexDiff = (args, maxBytes) =>
+      git(dir, ["diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", ...args, base, "--", ...paths], {
+        indexFile: tmp,
+        timeoutMs: CHANGES_TIMEOUT_MS,
+        maxBytes,
+      });
+    return await read(diff, untrackedTruncated);
   } finally {
     // A leftover of a git killed after the time limit; a file in the scratch folder is not worth hiding the error for.
     await Promise.all([tmp, `${tmp}.lock`].map((file) => rm(file, { force: true }).catch(() => {})));

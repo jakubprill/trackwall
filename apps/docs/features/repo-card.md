@@ -12,14 +12,16 @@ See what a repo is made of, read from its build and configuration files, without
 ## What you get
 
 - The packages a repo builds and the packages it uses, from Maven, Gradle and npm.
-- Its Spring Boot apps with their ports, its HTTP endpoints with request and response types, and the fields of those types.
-- The HTTP clients it uses and the addresses they call.
+- Its Spring Boot apps with their ports, its HTTP endpoints with request and response types and their fields, and the HTTP clients it uses with the addresses they call.
 - The tools and frameworks it needs, such as mise, Node, Spring Boot, Feign, Kafka, Helm or React.
+- Whether agents can build, test and run the repo, and what to do about anything in their way.
 - Tags on the repo list, such as `java`, `frontend` or `library`, and a filter by tag.
 
 ## How it works
 
-Select a repo: it opens on its "Card" tab. Trackwall reads the build and configuration files of the latest commit and lists what it finds, every fact with the file and line it comes from. Nothing is built or run, so the card is there even for a repo you have never set up. "At a glance" at the top sums it up in four lines: the stack, the apps and their ports, how many endpoints and DTOs, and what the repo depends on.
+Select a repo: it opens on its "Card" tab. Trackwall reads the build and configuration files of the latest commit and lists what it finds, every fact with the file and line it comes from. Nothing is built or run, so the card is there even for a repo you have never set up. "At a glance" at the top sums it up in five lines: the stack, the apps and their ports, how many endpoints and DTOs, what the repo depends on, and its agent readiness: "ready", how many gaps weaken agents, or what blocks them.
+
+Under it, "Agent readiness" lists the repo's gaps, the same ones as in the [connection graph](/features/graph): no `build` or `test` task, an untrusted mise config, problems mise finds in it, a config `mise fmt` would rewrite, a Spring Boot app without `dev`, tool versions outside mise. "Open mise tasks" takes you to the tab that adds tasks and trusts the config, "Format" runs `mise fmt` in the repo, and "Ask an agent…" starts a task with a prompt you can edit first.
 
 The card covers the packages the repo provides and uses, required tools (`mise.toml`, `.tool-versions`, `.nvmrc`, build wrappers), frameworks, Spring Boot apps and their ports, HTTP endpoints from controllers and OpenAPI specs with their request and response types, the fields of those types (Java records and classes, Kotlin `data class`, enums), and HTTP clients (Feign, `@HttpExchange`, WebClient, RestClient, RestTemplate) with the addresses from `application*.yml` in every profile, from `.env` and from the frontend's dev proxy.
 

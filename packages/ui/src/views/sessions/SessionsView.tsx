@@ -10,15 +10,15 @@ import {
   type TaskOutcome,
 } from "@trackwall/protocol";
 import { BellRing, Crown, Lightbulb, Plus, Square, X } from "lucide-react";
-import { useCallback, useRef } from "react";
+import { type ReactNode, useCallback, useRef, useState } from "react";
 import { CopilotUsageMark } from "@/components/CopilotUsageMark";
-import { CopyRequestNotice } from "@/components/CopyRequestNotice";
-import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
-import { ReadRequestNotice } from "@/components/ReadRequestNotice";
+import { ModelChangeButton, SessionModelChange } from "@/components/ModelChange";
+import { SessionNotices } from "@/components/SessionNotices";
 import { SessionScreen } from "@/components/SessionScreen";
 import { StatusLabel } from "@/components/StatusLabel";
+import { TaskOutcomeMarks } from "@/components/TaskOutcomeMarks";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
@@ -29,6 +29,7 @@ import { relativeTime, twoDigits } from "@/lib/format";
 import { IS_MAC } from "@/lib/platform";
 import {
   entryId,
+  entryName,
   entrySelection,
   findEntry,
   nextWaitingTarget,
@@ -46,7 +47,8 @@ import {
   type TaskTab,
   type WaitingTarget,
 } from "@/lib/session-entries";
-import { gridPage, SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
+import { type GridTile, gridPage, SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
+import { activeGroup, type EntryGroup, groupTiles, listGroups } from "@/lib/session-groups";
 import {
   ariaSessionShortcut,
   SHORTCUT_POSITIONS,
@@ -56,6 +58,7 @@ import {
 } from "@/lib/session-shortcut";
 import { attentionCount, isLive, PROPOSAL_STATUS, SUPERVISOR, sessionPlace, sessionStateLabel } from "@/lib/session-state";
 import type { SupervisorSummary } from "@/lib/supervisor";
+import { outcomeMarks } from "@/lib/task-outcomes";
 import { useAction } from "@/lib/use-action";
 import type { RemoteHandle } from "@/lib/use-remote";
 import { useSessionClose } from "@/lib/use-session-close";
@@ -70,9 +73,10 @@ import { RoutineList } from "./RoutineList.tsx";
 import { EndTaskButton, SessionCloseButton, SessionCloseConfirmation, TaskEnding } from "./SessionClose.tsx";
 import { SessionEnvironment } from "./SessionEnvironment.tsx";
 import { SessionGrid } from "./SessionGrid.tsx";
+import { GroupFilterChip, GroupLevel, GroupStripe, ShowGroupButton } from "./SessionGroupMarks.tsx";
 import { TaskLine } from "./TaskLine.tsx";
-import { TaskOutcomeMarks } from "./TaskOutcomeMarks.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
+import { WorktreeCleanup } from "./WorktreeCleanup.tsx";
 
 /**
  * The Sessions view (§4.4, ADR-26, ADR-31): several Copilot CLI sessions at once, each in a repo from the projects
@@ -122,6 +126,26 @@ export function SessionsView({
   const current = findEntry(entries, selected);
   const next = nextWaitingTarget(entries, current, supervisor.sessionWaits);
   const waiting = attentionCount(sessions.data);
+  const groups = listGroups(rows);
+  const groupOf = (entry: SessionEntry | undefined) => (entry ? groups.get(entryId(entry))?.id : undefined);
+  // The grid shows one group alone until you clear it, pick layout 1 or select an entry outside the group.
+  const [pickedGroup, setPickedGroup] = useState<string | null>(null);
+  const shownGroup = activeGroup(pickedGroup, groups, current);
+  const select = (selection: SessionSelection) => {
+    if (pickedGroup !== null && groupOf(findEntry(entries, selection)) !== pickedGroup) setPickedGroup(null);
+    onSelect(selection);
+  };
+  const changeLayout = (next: SessionLayout) => {
+    if (next === "1") setPickedGroup(null);
+    onLayout(next);
+  };
+  const showGroup = (entry: SessionEntry) => {
+    const group = groupOf(entry);
+    if (group === undefined) return;
+    setPickedGroup(group);
+    if (groupOf(current) !== group) onSelect(entrySelection(entry));
+    onLayout("auto");
+  };
   // A stop can take seconds, and a decision on proposals a while, and the user may select another entry meanwhile, so
   // both decide on the selection as it is when they end. `entries` comes from the render of the click (the action keeps
   // that `onDone`), so it still holds the closed entry even when a refreshed list without it arrived before the close ended.
@@ -142,7 +166,7 @@ export function SessionsView({
     sessions.reload();
   };
   const started = (selection: SessionSelection) => {
-    onSelect(selection);
+    select(selection);
     sessions.reload();
   };
   // Taken also with no entry at that position, so that the key never reaches a session terminal by accident.
@@ -153,7 +177,7 @@ export function SessionsView({
     },
     ({ position }) => {
       const entry = entries[position - 1];
-      if (entry) onSelect(entrySelection(entry));
+      if (entry) select(entrySelection(entry));
       return true;
     },
   );
@@ -165,7 +189,7 @@ export function SessionsView({
           <h2 className="hud-label">
             Sessions {sessions.data && <span className="text-primary">{`// ${twoDigits(entries.length)}`}</span>}
           </h2>
-          <Button variant="ghost" size="icon" onClick={() => onSelect({ kind: "new" })} aria-label="New task or Copilot CLI session">
+          <Button variant="ghost" size="icon" onClick={() => select({ kind: "new" })} aria-label="New task or Copilot CLI session">
             <Plus />
           </Button>
         </div>
@@ -176,7 +200,7 @@ export function SessionsView({
               variant="outline"
               size="sm"
               className="w-full"
-              onClick={() => (next.kind === "supervisor" ? onShowSupervisor() : onSelect(entrySelection(next)))}
+              onClick={() => (next.kind === "supervisor" ? onShowSupervisor() : select(entrySelection(next)))}
               aria-keyshortcuts={ariaSessionShortcut(NEXT_WAITING)}
             >
               <BellRing /> {nextWaitingLabel(next, waiting)}
@@ -199,7 +223,9 @@ export function SessionsView({
               row={row}
               position={i + 1}
               active={current !== undefined && entryId(row.entry) === entryId(current)}
-              onSelect={() => onSelect(entrySelection(row.entry))}
+              onSelect={() => select(entrySelection(row.entry))}
+              group={groups.get(entryId(row.entry)) ?? null}
+              onShowGroup={() => showGroup(row.entry)}
               onSessionClosed={() => sessionClosed(row.entry)}
               onTaskRemoved={taskRemoved}
               outcomes={outcomes}
@@ -219,22 +245,26 @@ export function SessionsView({
               conn={conn}
               sessions={sessions.data.sessions}
               onStarted={started}
-              onCancel={entries.length > 0 ? () => onSelect(undefined) : undefined}
+              onCancel={entries.length > 0 ? () => select(undefined) : undefined}
             />
             <RoutineList conn={conn} onStarted={started} />
+            <WorktreeCleanup conn={conn} onRemoved={sessions.reload} />
           </div>
         )}
         {current && (
           <SelectedEntry
             conn={conn}
             entries={entries}
+            tiles={groupTiles(entries, groups, shownGroup)}
+            groupChip={shownGroup && <GroupFilterChip group={shownGroup} onClear={() => setPickedGroup(null)} />}
+            groups={groups}
             current={current}
             focus={selectedProposal(selected)}
             taskTab={selectedTaskTab(selected)}
             currentSelection={currentSelection}
             layout={layout}
-            onLayout={onLayout}
-            onSelect={onSelect}
+            onLayout={changeLayout}
+            onSelect={select}
             sessions={list}
             tasks={tasks}
             outcomes={outcomes}
@@ -264,6 +294,8 @@ function SessionListItem({
   position,
   active,
   onSelect,
+  group,
+  onShowGroup,
   onSessionClosed,
   onTaskRemoved,
   outcomes,
@@ -273,26 +305,40 @@ function SessionListItem({
   position: number;
   active: boolean;
   onSelect: () => void;
+  /** The row's group of related sessions, `null` for a row alone. */
+  group: EntryGroup | null;
+  onShowGroup: () => void;
   onSessionClosed: () => void;
   onTaskRemoved: (task: string) => void;
   outcomes: ReadonlyMap<string, TaskOutcome>;
 }) {
   const { entry, depth } = row;
   return (
-    <div className={cn(INDENT[Math.min(depth, INDENT.length - 1)], depth > 0 && "border-l pl-1")}>
-      {entry.kind === "proposals" ? (
-        <ProposalsListItem entry={entry} position={position} active={active} onSelect={onSelect} />
-      ) : (
-        <StartedListItem
-          conn={conn}
-          entry={entry}
-          delegated={row.children}
-          position={position}
-          active={active}
-          onSelect={onSelect}
-          onSessionClosed={onSessionClosed}
-          onTaskRemoved={onTaskRemoved}
-          outcome={entry.kind === "task" ? outcomes.get(entry.task.id) : undefined}
+    <div className="group/row relative">
+      {group && <GroupStripe colour={group.colour} className="top-1 bottom-1 left-0 w-1" />}
+      <div className={cn(INDENT[Math.min(depth, INDENT.length - 1)], depth > 0 && "border-l pl-1")}>
+        {entry.kind === "proposals" ? (
+          <ProposalsListItem entry={entry} position={position} active={active} onSelect={onSelect} group={group} />
+        ) : (
+          <StartedListItem
+            conn={conn}
+            entry={entry}
+            group={group}
+            delegated={row.children}
+            position={position}
+            active={active}
+            onSelect={onSelect}
+            onSessionClosed={onSessionClosed}
+            onTaskRemoved={onTaskRemoved}
+            outcome={entry.kind === "task" ? outcomes.get(entry.task.id) : undefined}
+          />
+        )}
+      </div>
+      {group && (
+        // On hover and keyboard focus only, like the X: over the end of the last line, which it would hide for good if it stayed.
+        <ShowGroupButton
+          onClick={onShowGroup}
+          className="bg-card absolute right-1.5 bottom-1.5 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100"
         />
       )}
     </div>
@@ -306,6 +352,7 @@ function SessionListItem({
 function StartedListItem({
   conn,
   entry,
+  group,
   delegated,
   position,
   active,
@@ -316,6 +363,7 @@ function StartedListItem({
 }: {
   conn: Connection;
   entry: StartedEntry;
+  group: EntryGroup | null;
   /** Tasks and proposals directly under this entry. */
   delegated: number;
   position: number;
@@ -345,10 +393,10 @@ function StartedListItem({
       >
         <PositionLabel position={position} />
         <span className="flex min-w-0 flex-1 flex-col gap-1">
-          <RowName name={task?.repo ?? (session && sessionPlace(session))} delegated={delegated} waits={session?.needsAttention === true} />
+          <RowName name={entryName(entry)} group={group} delegated={delegated} waits={session?.needsAttention === true} />
           {task && <TaskLine task={task} />}
           <RowStatus session={session} />
-          <TaskOutcomeMarks outcome={outcome} />
+          <TaskOutcomeMarks marks={outcomeMarks(outcome, task?.inReview === true)} />
           {session?.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
         </span>
       </button>
@@ -375,7 +423,7 @@ function SupervisorListItem({ supervisor, onOpen }: { supervisor: SupervisorSumm
         <span className="text-muted-foreground/70 font-mono text-2xs">{sessionShortcutLabel(SUPERVISOR_SHORTCUT, IS_MAC)}</span>
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-1">
-        <RowName name={SUPERVISOR} delegated={supervisor.delegated} waits={supervisor.sessionWaits} />
+        <RowName name={SUPERVISOR} group={null} delegated={supervisor.delegated} waits={supervisor.sessionWaits} />
         <span className="text-muted-foreground text-xs">{session ? <StatusLabel {...sessionStateLabel(session)} /> : "not running"}</span>
       </span>
     </button>
@@ -389,10 +437,22 @@ const ROW_BUTTON =
  * The first line of a session, task or supervisor row: its name, the "main" badge with the work delegated under it
  * (the supervisor is the main session above all repos) and a bell while it waits for you.
  */
-function RowName({ name, delegated, waits }: { name: string | null | undefined; delegated: number; waits: boolean }) {
+function RowName({
+  name,
+  group,
+  delegated,
+  waits,
+}: {
+  name: string;
+  /** The row's group, for its level under the group's top entry; `null` for a row alone and the supervisor heading. */
+  group: EntryGroup | null;
+  delegated: number;
+  waits: boolean;
+}) {
   return (
     <span className="flex min-w-0 items-center gap-2">
       <span className="truncate text-sm font-medium">{name}</span>
+      {group && <GroupLevel colour={group.colour} level={group.level} />}
       {delegated > 0 && (
         <Badge aria-label={`main session, ${countLabel(delegated, { one: "task or proposal", other: "tasks and proposals" })} under it`}>
           {`main · ${delegated}`}
@@ -423,11 +483,13 @@ function ProposalsListItem({
   position,
   active,
   onSelect,
+  group,
 }: {
   entry: ProposalsEntry;
   position: number;
   active: boolean;
   onSelect: () => void;
+  group: EntryGroup | null;
 }) {
   const repos = [...new Set(entry.proposals.flatMap(proposalRepos))].join(", ");
   return (
@@ -448,6 +510,7 @@ function ProposalsListItem({
           <span className="truncate text-sm font-medium">
             {entry.proposals.length === 1 ? proposalKindLabel(entry.proposals[0]) : proposalsName(entry.proposals)}
           </span>
+          {group && <GroupLevel colour={group.colour} level={group.level} />}
         </span>
         <span className="text-muted-foreground truncate text-xs">
           {entry.proposals.length === 1 ? proposalsName(entry.proposals) : repos}
@@ -464,6 +527,9 @@ function ProposalsListItem({
 function SelectedEntry({
   conn,
   entries,
+  tiles,
+  groupChip,
+  groups,
   current,
   focus,
   taskTab,
@@ -483,6 +549,12 @@ function SelectedEntry({
 }: {
   conn: Connection;
   entries: readonly SessionEntry[];
+  /** The grid's tiles: the whole list, or one group of it (`groupTiles`). */
+  tiles: readonly GridTile<SessionEntry>[];
+  /** The chip of the filter to one group on the layout bar, while it is on. */
+  groupChip: ReactNode;
+  /** Each grouped entry's group, by entry id, for its tile. */
+  groups: ReadonlyMap<string, EntryGroup>;
   current: SessionEntry;
   /** The selected task proposal, to open first among the proposals of its session. */
   focus: string | undefined;
@@ -532,15 +604,17 @@ function SelectedEntry({
   const selected = entryId(current);
   const page = gridPage(
     layout,
-    entries,
-    entries.findIndex((e) => entryId(e) === selected),
+    tiles,
+    tiles.findIndex((t) => entryId(t.entry) === selected),
   );
+  const shown = tiles.length === entries.length ? `${entries.length} in the list` : `${tiles.length} of ${entries.length} in the list`;
   return (
     <>
       <LayoutBar
         layout={layout}
         onLayout={onLayout}
-        summary={`${entries.length} in the list${page.pages > 1 ? ` · page ${page.page + 1} of ${page.pages}` : ""}`}
+        filter={groupChip}
+        summary={`${shown}${page.pages > 1 ? ` · page ${page.page + 1} of ${page.pages}` : ""}`}
       />
       <SessionGrid
         conn={conn}
@@ -565,6 +639,7 @@ function SelectedEntry({
         outcomes={outcomes}
         messages={messages}
         runningLive={runningLive}
+        groups={groups}
       />
     </>
   );
@@ -663,7 +738,17 @@ function nextWaitingLabel(next: WaitingTarget, waiting: number): string {
 const LAYOUT_LABELS: Record<SessionLayout, string> = { "1": "1", "2": "2", "4": "4", auto: "Auto" };
 
 /** The layout switch above the right side: one entry with its full panel, or a grid of 2, 4 or all entries. */
-function LayoutBar({ layout, onLayout, summary }: { layout: SessionLayout; onLayout: (layout: SessionLayout) => void; summary?: string }) {
+function LayoutBar({
+  layout,
+  onLayout,
+  filter,
+  summary,
+}: {
+  layout: SessionLayout;
+  onLayout: (layout: SessionLayout) => void;
+  filter?: ReactNode;
+  summary?: string;
+}) {
   return (
     <div className="flex items-center gap-3 border-b px-4 py-1.5">
       <span className="hud-label shrink-0">Layout</span>
@@ -683,7 +768,8 @@ function LayoutBar({ layout, onLayout, summary }: { layout: SessionLayout; onLay
           </button>
         ))}
       </fieldset>
-      {summary && <span className="text-muted-foreground text-xs">{summary}</span>}
+      {filter}
+      {summary && <span className="text-muted-foreground shrink-0 text-xs">{summary}</span>}
       <span className="text-muted-foreground ml-auto min-w-0 truncate font-mono text-2xs">
         {`${sessionShortcutLabel({ kind: "position", position: 1 }, IS_MAC)}…${SHORTCUT_POSITIONS} select · ${sessionShortcutLabel(NEXT_WAITING, IS_MAC)} next waiting`}
       </span>
@@ -728,6 +814,7 @@ function SessionPanel({
   const live = isLive(session);
   const stop = useAction(() => post(conn, agentsApi.stop, { session: session.id }), onChanged);
   const close = useSessionClose(conn, session, onClosed);
+  const [changingModel, setChangingModel] = useState(false);
   const error = live ? stop.error : close.error;
   return (
     <>
@@ -745,6 +832,13 @@ function SessionPanel({
           {session.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
         </div>
         {error && <span className="text-destructive max-w-xs truncate text-xs">{error}</span>}
+        {live && (
+          <ModelChangeButton
+            open={changingModel}
+            onToggle={() => setChangingModel(!changingModel)}
+            title="Restart the session on another model"
+          />
+        )}
         {live ? (
           <Button variant="outline" size="sm" onClick={stop.run} disabled={stop.pending || session.run.kind === "stopping"}>
             <Square /> Stop
@@ -756,9 +850,19 @@ function SessionPanel({
         )}
       </header>
       <SessionEnvironment environment={session.environment} />
-      <EnvironmentChangeNotice key={session.id} conn={conn} session={session} onRestarted={onChanged} />
-      <ReadRequestNotice key={`read-request-${session.id}`} conn={conn} session={session} onDelivered={onChanged} />
-      <CopyRequestNotice key={session.id} conn={conn} session={session} onCleared={onChanged} />
+      {live && changingModel && (
+        <SessionModelChange
+          key={session.id}
+          conn={conn}
+          session={session}
+          onDone={() => {
+            setChangingModel(false);
+            onChanged();
+          }}
+          onCancel={() => setChangingModel(false)}
+        />
+      )}
+      <SessionNotices conn={conn} session={session} onChanged={onChanged} />
       <SessionScreen conn={conn} session={session} selected />
     </>
   );

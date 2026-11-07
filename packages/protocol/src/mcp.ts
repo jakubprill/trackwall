@@ -17,6 +17,9 @@ import {
   HANDOFF_FILES_MAX,
   JavaNavigationStatus,
   PromptDelivery,
+  REPRO_TEST_FAILURE_MAX,
+  REPRO_TEST_NAME_MAX,
+  ReproTest,
   Session,
   SessionId,
   TASK_CHECK_STEP_MAX,
@@ -58,6 +61,7 @@ import { DAY_REPORT_COMMITS, DayReport } from "./day-start.ts";
 import {
   FindEndpointResult,
   MAX_CHANGED_ENDPOINTS,
+  MAX_CHANGED_TYPES,
   MAX_FOUND_ENDPOINTS,
   MAX_IMPACT_RINGS,
   MAX_SUBGRAPH_DEPTH,
@@ -385,6 +389,8 @@ const COPY_TO_CLIPBOARD = "copy_to_clipboard";
 const RESUME_TASK = "resume_task";
 const GET_MESSAGES = "get_messages";
 const GET_UPDATES = "get_updates";
+/** The `get_session` argument that adds the task's prompt, which its proposer already knows (ADR-207). */
+export const GET_SESSION_PROMPT_ARG = "withPrompt";
 const GET_HANDOFF = "get_handoff";
 const WAIT_FOR_SESSION = "wait_for_session";
 const WAIT_FOR_MISE_TASK = "wait_for_mise_task";
@@ -788,16 +794,24 @@ export const mcpTools = {
     readOnly: true,
     auditArgs: ["session"] as const,
     description:
-      `One session from ${LIST_SESSIONS}, its task (null in the repo root and for the supervisor) and, for a task, the changes in its ` +
-      `worktree against the base commit: changed files with added and deleted lines (at most ${TASK_SUMMARY_MAX_FILES}, filesTruncated: ` +
-      "true when there were more), commits on the task branch and the number of uncommitted entries, without the diff " +
-      `itself; ${GET_TASK_CHANGES} adds the diff. changes: null with changesError when they cannot be computed ` +
-      `(e.g. the worktree was deleted or the task is being ended). verification is the task's last ${VERIFY_TASK} result ` +
-      "(passed, failed with the first failed tests and errors, running, cancelled), null before the first one. javaNavigation, " +
-      "for a task or a session in a repo root with Java navigation, says whether its lsp tool can answer: starting, importing (since), stalled (importing " +
-      "past the limit), ready, or failed with jdtls's first error (e.g. a Gradle import that needs a JDK that is missing); " +
-      "lsp answers come back empty until ready.",
-    args: z.object({ session: SessionId.describe(`session id from ${LIST_SESSIONS} (the id field)`) }).strict(),
+      `One session from ${LIST_SESSIONS} as short text lines: its run and state, its task (none in the repo root and for the supervisor) with the ` +
+      `summary and check steps from ${REPORT_RESULT}, and, for a task, the changes in its worktree against the base commit: commits ` +
+      `on the task branch, uncommitted entries and the changed files with added and deleted lines (at most ${TASK_SUMMARY_MAX_FILES}), ` +
+      `without the diff itself; ${GET_TASK_CHANGES} adds the diff. When the changes cannot be computed (e.g. the worktree was deleted ` +
+      `or the task is being ended) it says why. Verification is the task's last ${VERIFY_TASK} result (passed, failed with the first ` +
+      "failed tests and errors, running, cancelled), left out before the first one. Java navigation, for a task or a session in a repo " +
+      "root with it, says whether its lsp tool can answer: starting, importing (since), stalled (importing past the limit), ready, or " +
+      "failed with jdtls's first error (e.g. a Gradle import that needs a JDK that is missing); an lsp call waits while jdtls imports, and its answers are empty after a failed or stalled import. " +
+      `The task's prompt is left out unless ${GET_SESSION_PROMPT_ARG} is true: you usually wrote it yourself.`,
+    args: z
+      .object({
+        session: SessionId.describe(`session id from ${LIST_SESSIONS} (the id field)`),
+        [GET_SESSION_PROMPT_ARG]: z
+          .boolean()
+          .default(false)
+          .describe("true adds the task's prompt, for a task you did not propose yourself"),
+      })
+      .strict(),
     result: GetSessionResult,
   },
   getDayReport: {
@@ -858,10 +872,13 @@ export const mcpTools = {
       `ring 1 calling a removed or changed endpoint, ring 2 calling an endpoint of ring 1 whose handler reaches that call, up to ` +
       `ring ${MAX_IMPACT_RINGS}, each with calls (what it calls in the ring before), through (its endpoints that make those calls; ` +
       "null when its card could not trace) and sure (false when only an untraced repo or a client without paths leads there). " +
+      "types: the public Java types of the repo's Maven or Gradle packages the commits remove or change (a visible member " +
+      "removed or with another signature, a new abstract method, another declaration), each with users: the repos that " +
+      "depend on the package and import it; such a repo no endpoint reaches joins ring 1 with no calls. " +
       `Only committed work counts (head is the commit read): commit ` +
       `first. A changed path is a removed and an added endpoint. Use it before you propose the work that builds on your ` +
       `change, one proposal per caller repo, and to see what the task that handed you your work changed. At most ` +
-      `${MAX_CHANGED_ENDPOINTS} endpoints (truncated: true when there were more). problems: what the card of the base or ` +
+      `${MAX_CHANGED_ENDPOINTS} endpoints and ${MAX_CHANGED_TYPES} types (truncated: true when there were more). problems: what the card of the base or ` +
       "head commit could not read, so a change there may be missing; contractsCompared: false when a card was not fully " +
       "parsed, so only added and removed endpoints are listed. not_found for an unknown or ended task.",
     args: z.object({ task: TaskId.describe(`task id from ${LIST_SESSIONS} or ${GET_SESSION} (the task field)`) }).strict(),
@@ -985,7 +1002,8 @@ export const mcpTools = {
     description:
       "Report the result of your task: what you did, what is left and what the user or the session that proposed the " +
       `task should check. Only for a session that runs a task in Trackwall; the summary is saved to your own task (shown in ${GET_SESSION}, ` +
-      `${LIST_SESSIONS} and the Sessions view). Calling it again replaces the summary and its check steps. Commit your changes on the task branch before reporting.`,
+      `${LIST_SESSIONS} and the Sessions view). Calling it again replaces the summary and its check steps. It hands your work over for review: your task's board ` +
+      "item moves to in review once every open task on it is waiting for review, and only the user moves it to done. Commit your changes on the task branch before reporting.",
     args: z
       .object({
         summary: visibleText(TaskSummaryText).describe(
@@ -1004,6 +1022,22 @@ export const mcpTools = {
             `how the user can check the change by hand, when they can try it (a page, an endpoint, a command): up to ${TASK_CHECK_STEPS_MAX} ` +
               'short steps in order, each with what to do and what they should see, such as "Open /orders and press Save: a toast says Saved". ' +
               "Only a hint shown next to the summary; leave it out when there is nothing to try by hand.",
+          ),
+        reproTest: ReproTest.extend({
+          file: ReproTest.shape.file.describe(
+            "the test's file, relative to the repo root, e.g. src/test/java/com/example/shop/OrderServiceTest.java",
+          ),
+          name: ReproTest.shape.name.describe(
+            `the test as its build tool names it, up to ${REPRO_TEST_NAME_MAX} characters, e.g. OrderServiceTest#totalOfEmptyOrder`,
+          ),
+          failure: ReproTest.shape.failure.describe(
+            `how it failed before your fix, on one line of up to ${REPRO_TEST_FAILURE_MAX} characters, e.g. NullPointerException at OrderService.java:42`,
+          ),
+        })
+          .optional()
+          .describe(
+            "the test you wrote first that reproduces the error your task was given (a stack trace), which failed before your " +
+              "fix and passes after it; leave it out when you wrote no such test, and say why in the summary.",
           ),
       })
       .strict(),
@@ -1139,7 +1173,8 @@ export const mcpTools = {
     description:
       "Read what happened to the work you delegated since your last call, oldest first: for each task you proposed (the " +
       "supervisor: any supervisor proposed), turn_ended (its session finished a turn and waits; read its summary and " +
-      `${GET_SESSION}), error, exited, result_reported (with the summary), verified (passed, failed or cancelled with ` +
+      `${GET_SESSION}), error, exited, result_reported (with the summary, check steps and how many commits, uncommitted entries ` +
+      `and files it changed, so ${GET_SESSION} is needed only for the files or the verification; the turn it reported in gives no turn_ended), verified (passed, failed or cancelled with ` +
       "a message), pipeline_failed (the pipeline of the merge request from its branch failed: links to both and the jobs " +
       "that failed it; read a job's log with your MCP server for the repo host, if you have one), proposal_rejected (with the user's reason), repo_removed (the user approved your " +
       `${PROPOSE_FOLDER_ACTION}; movedTo is where the repo went), change_started (the user approved your ${PROPOSE_CHANGE}: parts are the ` +

@@ -10,6 +10,7 @@ import {
   type Task,
   type TaskProposal,
 } from "@trackwall/protocol";
+import { sessionPlace } from "./session-state.ts";
 
 /**
  * Entries of the list in the "Sessions" view (§4.4, ADR-31): a session in a repo root, or a task with its last session if
@@ -381,6 +382,13 @@ const PROPOSAL_KIND_LABELS: Record<ProposalKind, string> = {
   change: "Change proposal",
   remove_repo: "Repo removal",
 };
+
+/** What an entry is called on the list: the repo of a task or session, or what a group of proposals is about. */
+export function entryName(entry: SessionEntry): string {
+  if (entry.kind === "proposals") return proposalsName(entry.proposals);
+  if (entry.kind === "task") return entry.task.repo;
+  return sessionPlace(entry.session);
+}
 
 /** The name of a group of proposals (ADR-55): the proposal's name for one, a count for more. */
 export function proposalsName(proposals: ProposalsEntry["proposals"]): string {

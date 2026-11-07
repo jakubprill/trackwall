@@ -22,6 +22,8 @@ function session(id: string, state: TaskState | null, needsAttention: boolean, e
     readRequest: null,
     copyRequest: null,
     usage: null,
+    model: null,
+    modelInUse: null,
     ...extra,
   };
 }

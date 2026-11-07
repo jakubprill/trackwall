@@ -10,10 +10,9 @@ import {
 import { Bot, Box, GitBranch, Layers, Plug, ShieldOff, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { CopilotUsageMark } from "@/components/CopilotUsageMark";
-import { CopyRequestNotice } from "@/components/CopyRequestNotice";
-import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
 import { FolderShell } from "@/components/FolderShell";
-import { ReadRequestNotice } from "@/components/ReadRequestNotice";
+import { ModelChangeButton } from "@/components/ModelChange";
+import { SessionNotices } from "@/components/SessionNotices";
 import { SessionScreen } from "@/components/SessionScreen";
 import { StatusLabel } from "@/components/StatusLabel";
 import { TabBar } from "@/components/TabBar";
@@ -32,6 +31,7 @@ import { TaskChangesView } from "./TaskChangesView.tsx";
 import { scrollToSection, TaskDetails } from "./TaskDetails.tsx";
 import { TaskImpact } from "./TaskImpact.tsx";
 import { TaskMcpCalls } from "./TaskMcpCalls.tsx";
+import { TaskModelChange } from "./TaskModelChange.tsx";
 import { TaskNoticeStrip } from "./TaskNotices.tsx";
 import { TaskRemoval } from "./TaskRemoval.tsx";
 import { TaskRounds } from "./TaskRounds.tsx";
@@ -84,6 +84,7 @@ export function TaskPanel({
   const liveSession = session && isLive(session) ? session : undefined;
   const [tab, setTab] = useState<TaskTab>(initialTab);
   const [removing, setRemoving] = useState(false);
+  const [changingModel, setChangingModel] = useState(false);
   const review = useTaskReview(conn, task.id);
   const confirmingRemoval = removing && !liveSession;
   const details = useTaskDetails({ conn, task, tasks, outcomes, messages, runningLive, paused: confirmingRemoval });
@@ -127,6 +128,13 @@ export function TaskPanel({
           <VerifyButton state={details.verification} disabled={confirmingRemoval} />
           <TaskEditorButton conn={conn} task={task} label="VS Code" />
           <CopyIncludedFilesButton conn={conn} task={task} onCopied={onChanged} />
+          <ModelChangeButton
+            open={changingModel}
+            onToggle={() => setChangingModel(!changingModel)}
+            disabled={removing}
+            title={liveSession ? "Restart the session on another model" : "Resume the task on another model"}
+            iconOnly
+          />
           {mayHandToSupervisor(task) && (
             <HandToSupervisorButton conn={conn} task={task} disabled={confirmingRemoval} onHanded={onChanged} />
           )}
@@ -151,9 +159,21 @@ export function TaskPanel({
         </div>
       </header>
       <SessionEnvironment environment={session?.environment} />
-      <EnvironmentChangeNotice key={session?.id} conn={conn} session={session} onRestarted={onChanged} />
-      <ReadRequestNotice key={`read-request-${session?.id}`} conn={conn} session={session} onDelivered={onChanged} />
-      {session && <CopyRequestNotice key={session.id} conn={conn} session={session} onCleared={onChanged} />}
+      {changingModel && (
+        <TaskModelChange
+          key={liveSession?.id ?? "resume"}
+          conn={conn}
+          task={task}
+          liveSession={liveSession}
+          onDone={() => {
+            setChangingModel(false);
+            setTab("session");
+            onChanged();
+          }}
+          onCancel={() => setChangingModel(false)}
+        />
+      )}
+      <SessionNotices conn={conn} session={session} onChanged={onChanged} />
       {confirmingRemoval && <TaskRemoval conn={conn} task={task} onRemoved={onRemoved} onCancel={() => setRemoving(false)} />}
       <TaskNoticeStrip
         notices={details.notices}

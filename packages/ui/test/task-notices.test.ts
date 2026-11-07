@@ -26,6 +26,7 @@ const verification = (state: Verification["state"]): Verification => ({
   failures: [],
   errors: [],
   lastLines: [],
+  outdated: false,
 });
 
 describe("taskNotices", () => {
@@ -37,7 +38,7 @@ describe("taskNotices", () => {
     const notices = taskNotices({
       task: {
         included: { files: [".env"], problems: [] },
-        summary: { text: "Added a discount.", checkSteps: [], reportedAt: "2026-10-27T06:00:00.000Z" },
+        summary: { text: "Added a discount.", checkSteps: [], reproTest: null, reportedAt: "2026-10-27T06:00:00.000Z" },
       },
       messages: [{ readAt: "2026-10-27T06:01:00.000Z" }, { readAt: null }],
       sharedWith: [{ task: "t2", name: "Extend add()", files: 2 }],
@@ -96,7 +97,7 @@ describe("taskNotices", () => {
 describe("newWarnings", () => {
   const notices = taskNotices({
     ...quiet,
-    task: { ...quiet.task, summary: { text: "Done.", checkSteps: [], reportedAt: "2026-10-27T06:00:00.000Z" } },
+    task: { ...quiet.task, summary: { text: "Done.", checkSteps: [], reproTest: null, reportedAt: "2026-10-27T06:00:00.000Z" } },
     sharedWith: [
       { task: "t2", name: "Extend add()", files: 1 },
       { task: "t3", name: "Rename cart", files: 3 },
@@ -124,6 +125,12 @@ describe("tileNotices", () => {
     );
     expect(tile.chips.map((n) => n.chip)).toEqual(["Trust mise", "Failed"]);
     expect(tile.others.map((n) => n.label)).toEqual(["1 file also in “Extend add()”", "Merge request"]);
+  });
+
+  test("an outdated verdict (ADR-209) keeps a chip of its own, which says it is outdated instead of passed", () => {
+    const notices = taskNotices({ ...quiet, verification: { ...verification("passed"), outdated: true } });
+    expect(notices[0]).toMatchObject({ tone: "info", label: "Verification passed, but the worktree changed since" });
+    expect(tileNotices(notices).chips.map((n) => n.chip)).toEqual(["Outdated"]);
   });
 
   test("mise that cannot run in the worktree keeps its chip, without asking for trust", () => {

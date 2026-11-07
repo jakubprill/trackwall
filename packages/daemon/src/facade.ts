@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   type AppConfig,
+  type agentsApi,
   MAX_DROP_BYTES,
   type MiseTarget,
   type RoutineDigest,
@@ -14,6 +15,8 @@ import {
   type TaskOutcome,
   type TerminalPlace,
 } from "@trackwall/protocol";
+import type { z } from "zod";
+import { copilotHome } from "./infra/copilot-home.ts";
 import { downloadVerified } from "./infra/download.ts";
 import { vscodeUrl } from "./infra/editor-url.ts";
 import { DomainError, messageOf } from "./infra/errors.ts";
@@ -34,6 +37,9 @@ import {
 } from "./modules/agents/agents.ts";
 import { resolveCopilot } from "./modules/agents/copilot-command.ts";
 import { withMiseVars } from "./modules/agents/session-env.ts";
+import { STACK_TRACE_LIST_MAX_BYTES, STACK_TRACE_SOURCE_GLOBS } from "./modules/agents/stack-trace-frames.ts";
+import { promptWithStackTrace } from "./modules/agents/stack-trace-prompt.ts";
+import { TaskBranch, taskWorktree } from "./modules/agents/task-branch.ts";
 import { Batch } from "./modules/batch/batch.ts";
 import { Board } from "./modules/board/board.ts";
 import type { AppConfigQuery } from "./modules/cards/app-config.ts";
@@ -62,6 +68,7 @@ import { Mise } from "./modules/mise/mise.ts";
 import { ProcessGroups } from "./modules/procs/process-groups.ts";
 import { RuntimeFile } from "./modules/procs/runtime-file.ts";
 import { ProviderModels } from "./modules/provider-models/provider-models.ts";
+import { Readiness } from "./modules/readiness/readiness.ts";
 import { Routines } from "./modules/routines/routines.ts";
 import { Services } from "./modules/services/services.ts";
 import { TASK_JOURNAL_FILE, TASK_JOURNAL_MAX_RECORDS, TaskJournal } from "./modules/task-journal/task-journal.ts";
@@ -69,6 +76,8 @@ import { DroppedFiles } from "./modules/terminals/dropped-files.ts";
 import { FolderFiles } from "./modules/terminals/folder-files.ts";
 import { FolderTerminals } from "./modules/terminals/folder-terminals.ts";
 import { TestReports } from "./modules/test-results/test-reports.ts";
+import { UsageReport } from "./modules/usage-report/usage-report.ts";
+import type { KnownPlaces } from "./modules/usage-report/work-place.ts";
 import { Hosting, type HostingClis } from "./modules/vcs/hosting.ts";
 import { systemTempFolder, Vcs } from "./modules/vcs/vcs.ts";
 import { VERIFICATIONS_FILE, Verifications } from "./modules/verification/verifications.ts";
@@ -107,7 +116,7 @@ export interface Facade {
   terminals: FolderTerminals;
   /** The files of the projects folder, a repo root or a task's worktree, read only, next to its Shell tab (ADR-188). */
   folderFiles: FolderFiles;
-  /** Files dropped on a terminal from another computer, saved in `.trackwall/drops` (ADR-201). */
+  /** Files dropped on a terminal from another computer, saved in `.trackwall/drops` (ADR-226). */
   droppedFiles: DroppedFiles;
   testReports: TestReports;
   verifications: Verifications;
@@ -121,8 +130,12 @@ export interface Facade {
   errorJournal: ErrorJournal;
   /** Every MCP tool call the daemon answered, with its caller, identifier arguments and outcome, on this computer only (ADR-152). */
   mcpAudit: McpAudit;
+  /** What Copilot CLI used in a week, by work and by tool, from its own event logs (ADR-199). */
+  usageReport: UsageReport;
   /** Checks of what Trackwall needs on this computer, each with what to do when it fails (ADR-101). */
   doctor: Doctor;
+  /** How ready each repo is for agents: the gaps that stop or weaken them, from mise, the cards and the graph (ADR-208). */
+  readiness: Readiness;
   /** The models the session profile's model provider offers, which the Model fields suggest (ADR-194). */
   providerModels: ProviderModels;
   /** Installs jdtls and its Java for tasks' Java navigation, from Settings (ADR-123). */
@@ -145,6 +158,12 @@ export interface Facade {
    */
   runRoutine: (name: RoutineName, digest: RoutineDigest, view: SessionView) => Promise<Task>;
   /**
+   * A task the user typed (`agents.createTask`), and with a pasted stack trace (ADR-222) its prompt gets the trace with
+   * the secrets of the repo's environment masked (`mise` and `logs`, as a log is), the frames found among the repo's
+   * tracked files from `vcs` in the repo root from `workspace`, and the rule to reproduce the error in a test first.
+   */
+  createTask: (request: CreateTaskRequest) => Promise<Task>;
+  /**
    * The Spring configuration of a repo root or a task's worktree in one profile's view (ADR-153), for `get_app_config`:
    * the place from `workspace` or `agents`, the environment of a run there from `mise`, its masking from `logs`, the files and the view from `cards`.
    */
@@ -160,6 +179,8 @@ export interface Facade {
    */
   keepForRestart: () => void;
 }
+
+type CreateTaskRequest = z.infer<typeof agentsApi.createTask.request>;
 
 /** Where to read the configuration (a task of `repo` when `task` is set), the profile, and an optional key prefix. */
 type AppConfigRequest = MiseTarget & AppConfigQuery;
@@ -309,6 +330,7 @@ export function createFacade(o: FacadeOptions): Facade {
     },
   });
   const agents = new Agents({
+    inContainer: o.inContainer,
     procs,
     // `terminals` needs `agents` for the task worktrees, so it is made below; a task ends only after both.
     closeFolderTerminal: (task): Promise<void> => terminals.closeTask(task),
@@ -324,7 +346,10 @@ export function createFacade(o: FacadeOptions): Facade {
     sessionMcpServer: o.sessionMcpServer,
     openEditor,
     boardHas: (item) => board.has(item),
+    followTasks: (item, column) => board.followTasks(item, column),
     knowledge: (repo) => knowledge.forSession(repo),
+    // `providerModels` is made further down; a session starts only after the facade is built.
+    wireApi: (model: string, env: NodeJS.ProcessEnv) => providerModels.wireApiFor(model, env),
     // `verifications` and `mergeRequests` are made below: the outcomes are read only once a supervisor gets a prompt,
     // and a task ends only after both exist.
     taskOutcomes,
@@ -352,6 +377,12 @@ export function createFacade(o: FacadeOptions): Facade {
   });
   const batch = new Batch({ workspace, mise, log: o.log });
   const graph = new Graph({ cards, workspace });
+  const readiness = new Readiness({
+    cards: async () => (await cards.all()).cards,
+    graphProblems: async () => (await graph.graph()).problems,
+    mise,
+    now: () => new Date(),
+  });
   const taskImpact = ({ repo, worktree, base }: Task) => graph.changedEndpoints(repo, worktree, base);
   const taskPort = (repo: string, task: string) => agents.taskOfRepo(task, repo).port;
   const services = new Services({ mise, logs, graph, cards, taskPort, env: o.userEnv, log: o.log, ...SERVICE_TIMING });
@@ -384,6 +415,12 @@ export function createFacade(o: FacadeOptions): Facade {
   });
   const errorJournal = createErrorJournal({ ...o, workspace });
   const mcpAudit = new McpAudit({ dir: join(o.home, LOGS_DIR), log: o.log });
+  const usageReport = new UsageReport({
+    copilotHome: async () => copilotHome(await o.userEnv()),
+    places: () => knownPlaces(agents, taskJournal, workspace),
+    now: Date.now,
+    log: o.log,
+  });
   const javaNavigationReadiness = () => agents.javaNavigationState();
   const javaNavigation = new JavaNavigation({
     repos: workspace,
@@ -441,6 +478,7 @@ export function createFacade(o: FacadeOptions): Facade {
       return { profile, env: withMiseVars(await o.userEnv(), mised.vars), problem: mised.problem };
     },
     ca: async (env) => (await sessionCertificates(env, SYSTEM_CA_FILES)).ca,
+    log: o.log,
   });
   const configFiles = new ConfigFiles({
     stateDir: { path: o.home, from: o.homeFrom },
@@ -481,9 +519,12 @@ export function createFacade(o: FacadeOptions): Facade {
   function taskOutcomes(): TaskOutcome[] {
     const followed = mergeRequests.followed();
     return agents.tasks().flatMap((task) => {
-      const verification = verifications.get(task.id)?.state ?? null;
+      const last = verifications.get(task.id);
       const mergeRequest = followed.get(task.id) ?? null;
-      return verification === null && mergeRequest === null ? [] : [{ task: task.id, repo: task.repo, verification, mergeRequest }];
+      if (last === null && mergeRequest === null) return [];
+      return [
+        { task: task.id, repo: task.repo, verification: last?.state ?? null, verificationOutdated: last?.outdated ?? false, mergeRequest },
+      ];
     });
   }
 
@@ -527,7 +568,9 @@ export function createFacade(o: FacadeOptions): Facade {
     dayStart,
     errorJournal,
     mcpAudit,
+    usageReport,
     doctor,
+    readiness,
     providerModels,
     javaNavigation,
     configFiles,
@@ -536,6 +579,17 @@ export function createFacade(o: FacadeOptions): Facade {
     runRoutine: async (name, digest, view) => {
       const { repo, prompt, title, model, approvals } = await routines.approved(name, digest);
       return agents.createTask(repo, prompt, { title, model, approvals, view });
+    },
+    createTask: async ({ repo, prompt, stackTrace, handoffFrom, ...options }) => {
+      if (stackTrace === null) return agents.createTask(repo, prompt, options, handoffFrom);
+      const dir = await workspace.repoPath(repo);
+      const [tracked, run] = await Promise.all([
+        vcs.trackedFiles(dir, STACK_TRACE_SOURCE_GLOBS, STACK_TRACE_LIST_MAX_BYTES),
+        mise.runEnv({ repo, task: null }),
+      ]);
+      // A message in a trace may carry a secret (a password in a JDBC URL), which must not reach the task session.
+      const masked = logs.masker(run.env, run.secretValues)(stackTrace);
+      return agents.createTask(repo, promptWithStackTrace(prompt, masked, tracked), options, handoffFrom);
     },
     appConfig: async ({ repo, task, profile, key }) => {
       const dir = task === null ? await workspace.repoPath(repo) : agents.taskOfRepo(task, repo).worktree;
@@ -549,5 +603,33 @@ export function createFacade(o: FacadeOptions): Facade {
       agents.keepRunningSessionsForResume();
       verifications.keepForRestart();
     },
+  };
+}
+
+/**
+ * The tasks, repos and projects folder the usage report ties conversations to (ADR-199): running tasks from `agents`,
+ * ended ones from the task journal with the worktree they had, and the repos without git, which only their folders are
+ * needed of. A workspace that cannot be read fails the report, which says why, instead of showing every conversation
+ * outside the projects folder.
+ */
+async function knownPlaces(agents: Agents, taskJournal: TaskJournal, workspace: Workspace): Promise<KnownPlaces> {
+  const list = await workspace.entryList();
+  // Without a projects folder or with a worktrees folder Settings refuses, ended tasks are matched without their worktree.
+  const worktreesDir = await workspace.worktreesDir().catch(() => null);
+  return {
+    tasks: [
+      ...agents.tasks().map((t) => ({ id: t.id, repo: t.repo, branch: t.branch, worktree: t.worktree, title: t.title, prompt: t.prompt })),
+      ...taskJournal.records().map((r) => ({
+        id: r.task,
+        repo: r.repo,
+        branch: r.branch,
+        worktree: worktreesDir === null ? null : taskWorktree(worktreesDir, r.repo, r.branch),
+        title: r.title,
+        prompt: r.prompt,
+      })),
+    ],
+    repos: list.repos.map((r) => ({ id: r.id, path: r.path })),
+    projectsDir: list.projectsDir,
+    isTaskBranch: (branch) => TaskBranch.safeParse(branch).success,
   };
 }

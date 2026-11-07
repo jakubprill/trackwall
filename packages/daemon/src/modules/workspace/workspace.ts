@@ -13,6 +13,8 @@ import {
   type JavaNavigationSettings,
   PATCH_MAX_BYTES,
   type RemoteRepoList,
+  type RemoteRepoMore,
+  type RemoteRepoSearch,
   type Repo,
   type RepoHost,
   type RepoList,
@@ -112,7 +114,7 @@ interface WorkspaceVcs extends CodeSearchVcs, CommitSearchVcs {
 
 /** What `workspace` needs from the repo hosts of the `vcs` module (ADR-19). */
 interface WorkspaceHosting {
-  repos(host: RepoHost, query: string): Promise<{ repos: HostedRepo[]; truncated: boolean }>;
+  repos(host: RepoHost, search: RemoteRepoSearch): Promise<{ repos: HostedRepo[]; more: RemoteRepoMore }>;
   clone(host: RepoHost, fullName: string, dest: string): Promise<void>;
 }
 
@@ -318,12 +320,12 @@ export class Workspace {
   }
 
   /**
-   * Repos matching `query` from every repo host at once; a repo host that does not answer does not take away the others' lists.
+   * Repos matching `search` from every repo host at once; a repo host that does not answer does not take away the others' lists.
    */
-  async remoteRepos(query: string): Promise<RemoteRepoList> {
+  async remoteRepos(search: RemoteRepoSearch): Promise<RemoteRepoList> {
     const projectsDir = this.deps.file.projectsDir();
     const taken = projectsDir === null ? () => false : await takenNames(projectsDir);
-    const hosts = await Promise.all(this.deps.file.repoHosts().map((host) => this.hostRepos(host, query, taken)));
+    const hosts = await Promise.all(this.deps.file.repoHosts().map((host) => this.hostRepos(host, search, taken)));
     return { projectsDir, hosts };
   }
 
@@ -576,12 +578,12 @@ export class Workspace {
   }
 
   /**
-   * Which tasks run in Copilot CLI's sandbox (`sandbox` in `workspace.yaml`, ADR-181); `invalid_config` for a bad key, so
-   * that a typo never takes a task out of the sandbox. Without the key tasks without approvals do, except in a container,
-   * which is their isolation there and where the sandbox cannot run (Docker does not let it make its namespaces).
+   * Which tasks run in Copilot CLI's sandbox (`sandbox` in `workspace.yaml`, ADR-181), `null` without the key, whose
+   * default depends on whether the sandbox can run here (`defaultSandboxTasks` in `agents`); `invalid_config` for a bad
+   * key, so that a typo never takes a task out of the sandbox.
    */
-  sandboxSettings(): SandboxSettings {
-    return this.deps.file.sandboxSettings() ?? { tasks: defaultSandboxTasks(this.deps.inContainer, process.platform) };
+  sandboxSettings(): SandboxSettings | null {
+    return this.deps.file.sandboxSettings();
   }
 
   /**
@@ -656,14 +658,14 @@ export class Workspace {
     return { ...entry, remote, status };
   }
 
-  private async hostRepos(host: RepoHost, query: string, taken: (name: string) => boolean): Promise<HostRepos> {
+  private async hostRepos(host: RepoHost, search: RemoteRepoSearch, taken: (name: string) => boolean): Promise<HostRepos> {
     try {
-      const { repos, truncated } = await this.deps.hosting.repos(host, query);
+      const { repos, more } = await this.deps.hosting.repos(host, search);
       const withDirs = repos.map((repo) => {
         const dir = cloneDir(repo.fullName);
         return { ...repo, dir, inProjectsDir: taken(dir) };
       });
-      return { host, listing: { kind: "ok", repos: withDirs, truncated } };
+      return { host, listing: { kind: "ok", repos: withDirs, more } };
     } catch (err) {
       return { host, listing: { kind: "unavailable", message: messageOf(err) } };
     }
@@ -699,14 +701,4 @@ function cloneDir(fullName: string): string {
   const dir = fullName.split("/").at(-1);
   if (!dir) throw new Error(`full repo name has no final segment: "${fullName}"`);
   return dir;
-}
-
-/**
- * `sandbox.tasks` without the key (ADR-181): `auto` only on a Linux computer. In a container the container is the
- * isolation and bubblewrap cannot run; on macOS git in the sandbox cannot read `~/.gitconfig` and the terminal stops at
- * Copilot CLI's question about its certificate authority; on Windows the sandbox needs a Windows with BaseContainer.
- * There the user turns it on once they have checked it.
- */
-export function defaultSandboxTasks(inContainer: boolean, platform: NodeJS.Platform): SandboxSettings["tasks"] {
-  return !inContainer && platform === "linux" ? "auto" : "off";
 }

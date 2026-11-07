@@ -159,7 +159,15 @@ describe("the /ws event source", () => {
     warmup = { running: true, done: 3, total: 10 };
     board = 1;
     mcpCalls = 1;
-    outcomes = [{ task: "3f2a9c1e-0000-4000-8000-000000000000", repo: "shop", verification: "passed", mergeRequest: null }];
+    outcomes = [
+      {
+        task: "3f2a9c1e-0000-4000-8000-000000000000",
+        repo: "shop",
+        verification: "passed",
+        verificationOutdated: false,
+        mergeRequest: null,
+      },
+    ];
     await tick();
 
     expect(client.events.slice(8)).toEqual([

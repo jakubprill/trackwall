@@ -22,11 +22,20 @@ export const BoardItemKind = z.enum(["project", "item"]);
 export type BoardItemKind = z.infer<typeof BoardItemKind>;
 
 /**
- * Where an item stands. A project uses `done` and `dropped` for "archived". Since ADR-133 only stored; later stages
- * derive `in_progress` and `review` from the item's tasks.
+ * Where an item stands. A project uses `done` and `dropped` for "archived". The user sets any column; the work of the
+ * item's tasks moves it to `in_progress` and `review`, and back to `ready` (`TaskWorkColumn`, ADR-213).
  */
 export const BoardColumn = z.enum(["ideas", "ready", "in_progress", "review", "done", "dropped"]);
 export type BoardColumn = z.infer<typeof BoardColumn>;
+
+/**
+ * The columns the work of an item's tasks moves it to (ADR-213): `in_progress` when the user starts a task on it or gives
+ * its agent work again, `review` when every open task on it has handed its work over, and back to `ready` when the user
+ * removes the last task on it while it is still in progress (ADR-213). Only the daemon moves an item there by itself,
+ * never an agent's `update_item`, and never out of `done` or `dropped`.
+ */
+export const TaskWorkColumn = z.enum(["ready", "in_progress", "review"]);
+export type TaskWorkColumn = z.infer<typeof TaskWorkColumn>;
 
 /** The columns an agent may move an item between: the user decides when work starts, ends or is dropped. */
 export const AgentBoardColumn = z.enum(["ideas", "ready"]);

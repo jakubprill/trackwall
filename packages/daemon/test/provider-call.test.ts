@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createServer as createHttpsServer, type Server } from "node:https";
 import type { AddressInfo } from "node:net";
 import { chatModels } from "../src/modules/provider-models/model-list.ts";
-import { parseAnswer, providerGet } from "../src/modules/provider-models/provider-get.ts";
+import { callProvider, parseAnswer } from "../src/modules/provider-models/provider-call.ts";
 import { providerRequest } from "../src/modules/provider-models/provider-request.ts";
 import { INSPECTION_CA, LOCALHOST_CERT, LOCALHOST_KEY } from "./fixtures/tls-certificates.ts";
 
@@ -24,9 +24,8 @@ const OPTIONS = { env: {}, timeoutMs: 5_000, maxBytes: 64 * 1024 };
 
 describe("the request to the provider (ADR-194)", () => {
   test("over HTTPS it trusts the certificates a session trusts and reads the answer", async () => {
-    const answer = await providerGet(
-      new URL(`https://localhost:${port}/v1/models`),
-      { Authorization: "Bearer k" },
+    const answer = await callProvider(
+      { url: new URL(`https://localhost:${port}/v1/models`), headers: { Authorization: "Bearer k" } },
       { ...OPTIONS, ca: [INSPECTION_CA] },
     );
     expect(answer).toEqual({
@@ -37,12 +36,18 @@ describe("the request to the provider (ADR-194)", () => {
   });
 
   test("a certificate no given authority signed is a failure that names its code, and the request is not sent", async () => {
-    const answer = await providerGet(new URL(`https://localhost:${port}/v1/models`), { Authorization: "Bearer k" }, { ...OPTIONS, ca: [] });
+    const answer = await callProvider(
+      { url: new URL(`https://localhost:${port}/v1/models`), headers: { Authorization: "Bearer k" } },
+      { ...OPTIONS, ca: [] },
+    );
     expect(answer).toEqual({ kind: "failed", reason: "its certificate is not trusted (SELF_SIGNED_CERT_IN_CHAIN)" });
   });
 
   test("an answer larger than the limit is cut", async () => {
-    const answer = await providerGet(new URL(`https://localhost:${port}/v1/models`), {}, { ...OPTIONS, ca: [INSPECTION_CA], maxBytes: 16 });
+    const answer = await callProvider(
+      { url: new URL(`https://localhost:${port}/v1/models`), headers: {} },
+      { ...OPTIONS, ca: [INSPECTION_CA], maxBytes: 16 },
+    );
     expect(answer).toEqual({ kind: "failed", reason: "its answer is too large for a list of models" });
   });
 });
@@ -59,7 +64,10 @@ describe("reading the provider's answer", () => {
   });
 
   test("an HTTPS provider at an IP address is checked against that address", async () => {
-    const answer = await providerGet(new URL(`https://127.0.0.1:${port}/v1/models`), {}, { ...OPTIONS, ca: [INSPECTION_CA] });
+    const answer = await callProvider(
+      { url: new URL(`https://127.0.0.1:${port}/v1/models`), headers: {} },
+      { ...OPTIONS, ca: [INSPECTION_CA] },
+    );
     expect(answer).toMatchObject({ kind: "answer", status: 200 });
   });
 
@@ -86,8 +94,10 @@ describe("the models request from the profile's environment", () => {
     );
     expect(request).toEqual({
       kind: "request",
-      url: new URL("https://gateway.example.org/openai/v1/models?tenant=a"),
+      base: new URL("https://gateway.example.org/openai/v1?tenant=a"),
       headers: { "X-Team": "a", Authorization: "Bearer token" },
+      wireApi: "completions",
+      http: true,
     });
   });
 
@@ -121,8 +131,8 @@ describe("the chat models of a /models answer", () => {
       ],
     });
     expect(chatModels(body)).toEqual([
-      { id: "a-model", contextWindow: null },
-      { id: "b-model", contextWindow: 1000 },
+      { id: "a-model", contextWindow: null, wireApi: null },
+      { id: "b-model", contextWindow: 1000, wireApi: null },
     ]);
   });
 

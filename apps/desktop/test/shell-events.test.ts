@@ -57,6 +57,26 @@ test("the UI copies through the clipboard command the shell defines, which takes
   expect(ui).toContain(`invoke(COPY_TEXT_COMMAND, { ${shell?.[2]} })`);
 });
 
+test("the UI reads and saves keeping the screen on with the commands and the values the shell defines", () => {
+  const shell = read("apps/desktop/src-tauri/src/keep_screen_on.rs");
+  const ui = read("packages/ui/src/lib/keep-screen-on.ts");
+  const commands = [...shell.matchAll(/#\[tauri::command\]\s*pub fn (\w+)/g)].map((m) => m[1]);
+  expect(commands).toEqual(["keep_screen_on", "set_keep_screen_on"]);
+  expect(/const GET_COMMAND = "([^"]+)";/.exec(ui)?.[1]).toBe(commands[0]);
+  expect(/const SET_COMMAND = "([^"]+)";/.exec(ui)?.[1]).toBe(commands[1]);
+  expect(shell).toContain("pub fn set_keep_screen_on(app: AppHandle, setting: KeepScreenOn)");
+  expect(ui).toContain("invoke<unknown>(SET_COMMAND, { setting })");
+  // serde's kebab-case names of the enum's variants are the values of the UI's enum.
+  const variants = /pub enum KeepScreenOn \{([^}]*)\}/.exec(shell)?.[1] ?? "";
+  const kebab = [...variants.matchAll(/^\s*(\w+),/gm)].map((m) => (m[1] ?? "").replace(/(?<!^)([A-Z])/g, "-$1").toLowerCase());
+  const values = /z\.enum\(\[([^\]]*)\]\)/
+    .exec(ui)?.[1]
+    ?.match(/"[^"]+"/g)
+    ?.map((v) => v.slice(1, -1));
+  expect(kebab).toEqual(["off", "while-agents-work", "always"]);
+  expect(values).toEqual(kebab);
+});
+
 test("the shell never reads the clipboard", () => {
   const shell = read("apps/desktop/src-tauri/src/clipboard.rs");
   expect(shell.match(/#\[tauri::command\]/g)).toHaveLength(1);
@@ -164,7 +184,7 @@ test("the View menu has the activity bar's views with their names and shortcuts,
     m[2],
     m[3],
   ]);
-  expect(ui.map((v) => v[0])).toEqual(["home", "repos", "sessions", "graph", "plan", "settings"]);
+  expect(ui.map((v) => v[0])).toEqual(["home", "repos", "sessions", "graph", "plan", "flow", "settings"]);
   expect(shell).toEqual(ui);
 });
 

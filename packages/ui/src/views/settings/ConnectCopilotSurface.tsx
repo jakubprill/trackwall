@@ -10,9 +10,7 @@ import type { Connection } from "@/lib/connection";
 import { copilotMcpAddCommand, copilotMcpConfig, copilotMcpConfigPath } from "@/lib/copilot-mcp";
 import { useRemote } from "@/lib/use-remote";
 
-const TOOL_NAMES = Object.values(mcpTools)
-  .map((t) => t.name)
-  .join(", ");
+const TOOL_NAMES = Object.values(mcpTools).map((t) => t.name);
 
 /**
  * How to connect the Trackwall MCP server to Copilot CLI (§5.3, ADR-24): a command to copy and the same entry in JSON.
@@ -47,11 +45,21 @@ function ConnectCopilot({ info }: { info: DaemonInfo }) {
     <Surface label="Copilot CLI" note="The tools are read-only. Trackwall must be running when Copilot CLI starts.">
       <div className="flex flex-col gap-3 p-4 text-sm">
         <p className="text-muted-foreground">
-          Gives the agent a map of the repos in your projects folder ({TOOL_NAMES}). Run this once in a terminal, then restart Copilot CLI:
+          Gives the agent a map of the repos in your projects folder through {TOOL_NAMES.length} tools. Run this once in a terminal, then
+          restart Copilot CLI:
         </p>
         <CopyableCode text={command} />
-        <p className="text-muted-foreground">Or add this entry to {copilotMcpConfigPath(info.platform)}:</p>
-        <CopyableCode text={copilotMcpConfig(info.mcpStdioCommand)} />
+        {/* Folded (ADR-212): the list and the JSON entry are long, and most people need neither once connected. */}
+        <details>
+          <summary className="text-muted-foreground cursor-pointer">Or add an entry to {copilotMcpConfigPath(info.platform)}</summary>
+          <div className="pt-2">
+            <CopyableCode text={copilotMcpConfig(info.mcpStdioCommand)} />
+          </div>
+        </details>
+        <details>
+          <summary className="text-muted-foreground cursor-pointer">The {TOOL_NAMES.length} tools</summary>
+          <p className="text-muted-foreground pt-2 font-mono text-xs">{TOOL_NAMES.join(", ")}</p>
+        </details>
       </div>
     </Surface>
   );

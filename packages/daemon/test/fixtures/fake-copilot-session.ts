@@ -15,7 +15,8 @@
  * agent's tool) and prints its PID, so that the test can check that stopping the session ends the whole group. The
  * helper starts only after input from the user, because on Windows the leader joins the job a moment after the start.
  * Like Copilot CLI it keeps a conversation per session id once the session has had a prompt (a marker file in the
- * temporary directory), and refuses `--resume=<id>` of an id without one (ADR-95). `--version` alone prints the version,
+ * temporary directory), and refuses `--resume=<id>` of an id without one (ADR-95). With `COPILOT_PROMPT_FRAME=1` it
+ * frames its input box as Copilot CLI does with that feature on (ADR-220). `--version` alone prints the version,
  * and `--acp` runs the ACP mode of `fake-copilot-acp.ts` (ADR-107).
  */
 import { spawn } from "node:child_process";
@@ -27,7 +28,7 @@ import { z } from "zod";
 import { ESCAPE } from "../../src/modules/agents/copilot-keys.ts";
 import { stripAnsi } from "../../src/modules/logs/stream-lines.ts";
 import { PARALLEL_TOOLS_PROMPT, PROMPT_PLACEHOLDER, type ReferenceHook, reference } from "../support/copilot-reference.ts";
-import { recordUsage } from "../support/copilot-usage-receipt.ts";
+import { recordModelChange, recordUsage } from "../support/copilot-usage-receipt.ts";
 import { pluginHooks } from "../support/plugin-hooks.ts";
 import { serveAcp } from "./fake-copilot-acp.ts";
 
@@ -109,6 +110,20 @@ if (process.argv.includes("--acp")) {
 
 const fire = pluginHooks(process.argv, "s1");
 const real = reference();
+
+/**
+ * The input box as Copilot CLI draws it with its `PROMPT_FRAME` feature on (ADR-220, `copilot-prompt-frame.contract.ts`):
+ * framed in half blocks with a rail on the left instead of between two rules with `❯`, as wide as the rules, over the
+ * same footer. The real binary also needs the terminal to answer its colour queries; the fake takes
+ * `COPILOT_PROMPT_FRAME=1` alone.
+ */
+function framedBox(ruled: readonly string[]): string[] {
+  const footer = ruled.at(-1);
+  const width = ruled[0]?.length ?? 0;
+  if (footer === undefined || width === 0) throw new Error("the reference's input box has no rule or no footer");
+  return [`╻${"▄".repeat(width - 1)}`, "┃", `╹${"▀".repeat(width - 1)}`, footer];
+}
+const promptBox = process.env.COPILOT_PROMPT_FRAME === "1" ? framedBox(real.promptBox) : real.promptBox;
 const title = (text: string) => process.stdout.write(`\x1b]0;${text}\x07`);
 const draw = (lines: readonly string[]) => process.stdout.write(`${lines.join("\r\n")}\r\n`);
 
@@ -244,10 +259,14 @@ function begin(): void {
   process.stdout.write(`Directory:\r\n${shortLines(process.cwd())}\r\n`);
   for (const arg of taskArgs) process.stdout.write(`Argument: ${arg}\r\n`);
   for (const name of shownEnv) process.stdout.write(`Env ${name}=${toolEnv(name)}\r\n`);
-  draw(real.promptBox);
+  // Copilot CLI sets the conversation's model at every start and resume (`copilot-session.contract.ts`).
+  if (initialPrompt !== undefined || resumes) recordModelChange(sessionId);
+  draw(promptBox);
   started = initialPrompt !== undefined;
   if (started) {
     keepConversation();
+    // Copilot CLI sends a prompt given at the start to the model at once, like a typed one.
+    recordUsage(sessionId);
     replay([startHook]);
   }
 }
@@ -285,7 +304,7 @@ let lastAnswer: string | undefined;
  */
 function copyLastAnswer(): void {
   if (lastAnswer !== undefined) process.stdout.write(`\x1b]52;c;${Buffer.from(lastAnswer).toString("base64")}\x07`);
-  draw(real.promptBox);
+  draw(promptBox);
 }
 
 function submit(line: string): void {
@@ -334,7 +353,7 @@ function endTurn(outputs: HookOutputs): void {
   redrawing = true;
   setTimeout(() => {
     redrawing = false;
-    draw(real.promptBox);
+    draw(promptBox);
   }, REDRAW_MS);
 }
 

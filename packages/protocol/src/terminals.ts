@@ -73,7 +73,7 @@ export const MAX_DOWNLOAD_BYTES = 1024 ** 3;
 
 /**
  * `POST` with the file's bytes as the body (`application/octet-stream`) and its name, percent-encoded, in
- * `DROP_NAME_HEADER`: a file dropped on a terminal from a computer that is not the daemon's (ADR-201), saved in
+ * `DROP_NAME_HEADER`: a file dropped on a terminal from a computer that is not the daemon's (ADR-226), saved in
  * `.trackwall/drops` of the projects folder. Answers `{ ok, data: DroppedFile }`. Behind the daemon token like every action.
  */
 export const DROP_PATH = "/api/terminals/drop";

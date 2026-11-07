@@ -1,26 +1,35 @@
-import { type BoardItem, boardApi, childrenOf } from "@trackwall/protocol";
+import { type BoardItem, boardApi, type KnowledgeListEntry } from "@trackwall/protocol";
 import { BookOpen, FolderKanban, Inbox } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { post } from "@/lib/api";
-import { isArchived, type PlanPlace, projectsOf } from "@/lib/board-tree";
+import { isClosed, type PlanPlace, projectsOf } from "@/lib/board-tree";
 import type { Connection } from "@/lib/connection";
+import { inboxIdeas } from "@/lib/inbox-triage";
+import { toApproveCount } from "@/lib/knowledge";
+import { type ItemTaskIndex, progressBelow, progressLabel, tasksWaiting } from "@/lib/plan-progress";
+import { STATUS_DOT_CLASS } from "@/lib/status-tone";
 import { useAction } from "@/lib/use-action";
 import { cn } from "@/lib/utils";
 
 /**
- * The left column of Plan: the inbox with its count, the workspace knowledge (ADR-170), the active business projects, a
+ * The left column of Plan: the inbox with the count of ideas still to sort, the workspace knowledge (ADR-170), the active business projects, a
  * line for a new one, the archived.
  */
 export function PlanPlaces({
   conn,
   items,
+  knowledge,
+  taskIndex,
   place,
   onPlace,
   onChanged,
 }: {
   conn: Connection;
   items: readonly BoardItem[];
+  /** The workspace knowledge, for the count of entries waiting for the user's approval. */
+  knowledge: readonly KnowledgeListEntry[];
+  taskIndex: ItemTaskIndex;
   place: PlanPlace;
   onPlace: (place: PlanPlace) => void;
   onChanged: () => void;
@@ -35,11 +44,11 @@ export function PlanPlaces({
     },
   );
   const projects = projectsOf(items);
-  const active = projects.filter((p) => !isArchived(p));
-  const archived = projects.filter(isArchived);
+  const active = projects.filter((p) => !isClosed(p));
+  const archived = projects.filter(isClosed);
   const isPlace = (candidate: PlanPlace) =>
     candidate.kind === place.kind && (candidate.kind !== "project" || (place.kind === "project" && place.id === candidate.id));
-  const row = (key: string, target: PlanPlace, label: string, icon: ReactNode, count?: number) => (
+  const row = (key: string, target: PlanPlace, label: string, icon: ReactNode, count?: ReactNode) => (
     <li key={key}>
       <button
         type="button"
@@ -52,19 +61,35 @@ export function PlanPlaces({
       >
         {icon}
         <span className="min-w-0 flex-1 truncate">{label}</span>
-        {count !== undefined && count > 0 && <span className="text-muted-foreground font-mono text-xs">{count}</span>}
+        {count}
       </button>
     </li>
   );
   return (
     <nav aria-label="Inbox and projects" className="flex min-h-0 flex-col gap-3 overflow-y-auto pb-3">
       <ul>
-        {row("inbox", { kind: "inbox" }, "Inbox", <Inbox className="size-4 shrink-0" />, childrenOf(items, null).length)}
-        {row("knowledge", { kind: "knowledge" }, "Workspace knowledge", <BookOpen className="size-4 shrink-0" />)}
+        {row("inbox", { kind: "inbox" }, "Inbox", <Inbox className="size-4 shrink-0" />, <Count n={inboxIdeas(items).open.length} />)}
+        {row(
+          "knowledge",
+          { kind: "knowledge" },
+          "Workspace knowledge",
+          <BookOpen className="size-4 shrink-0" />,
+          <Count n={toApproveCount(knowledge)} tone="warning" />,
+        )}
       </ul>
       <div className="flex flex-col gap-1">
         <h3 className="hud-label px-4">Projects</h3>
-        <ul>{active.map((p) => row(p.id, { kind: "project", id: p.id }, p.title, <FolderKanban className="size-4 shrink-0" />))}</ul>
+        <ul>
+          {active.map((p) =>
+            row(
+              p.id,
+              { kind: "project", id: p.id },
+              p.title,
+              <FolderKanban className="size-4 shrink-0" />,
+              <ProjectGlance items={items} project={p.id} taskIndex={taskIndex} />,
+            ),
+          )}
+        </ul>
         <div className="px-4 pt-1">
           <Input
             aria-label="New project"
@@ -88,5 +113,33 @@ export function PlanPlaces({
         </div>
       )}
     </nav>
+  );
+}
+
+/** A count on a place, left out at zero; in the warning tone for entries waiting for approval, none of which reaches a session before. */
+function Count({ n, tone }: { n: number; tone?: "warning" }) {
+  return n > 0 ? <span className={cn("font-mono text-xs", tone === "warning" ? "text-warning" : "text-muted-foreground")}>{n}</span> : null;
+}
+
+/** A project's line on the left (ADR-215): a dot while one of its tasks waits for the user, and "2/9" done. */
+function ProjectGlance({ items, project, taskIndex }: { items: readonly BoardItem[]; project: string; taskIndex: ItemTaskIndex }) {
+  const progress = progressBelow(items, project);
+  const waiting = tasksWaiting(items, project, taskIndex);
+  return (
+    <>
+      {waiting > 0 && (
+        <span
+          role="img"
+          aria-label="A task waits for you"
+          title="A task waits for you"
+          className={cn("size-1.5 shrink-0 rounded-full", STATUS_DOT_CLASS.warning)}
+        />
+      )}
+      {progress.total > 0 && (
+        <span className="text-muted-foreground font-mono text-xs" title={progressLabel(progress)}>
+          {progress.done}/{progress.total}
+        </span>
+      )}
+    </>
   );
 }

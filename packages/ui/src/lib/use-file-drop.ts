@@ -8,7 +8,7 @@ import { IS_WINDOWS } from "./platform.ts";
  * Listens to files dragged onto the Tauri window (ADR-51): marks the drop target under the pointer while dragging
  * and, on drop, sends it a `FileDropEvent`. A drop outside every target goes to `onUnhandled`, but only with the daemon
  * on this desktop (`local`, ADR-130): a folder of this computer means nothing to a daemon elsewhere, while a terminal
- * still takes files by sending copies (ADR-201). Returns whether files are being dragged over the window, for the hint
+ * still takes files by sending copies (ADR-226). Returns whether files are being dragged over the window, for the hint
  * that names both, so also only with `local`; outside Tauri always `false`, because a browser gives the page no paths.
  */
 export function useFileDrop(local: boolean, onUnhandled: (paths: DroppedPaths) => void): boolean {

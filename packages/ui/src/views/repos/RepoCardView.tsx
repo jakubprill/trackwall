@@ -11,6 +11,8 @@ import {
   pluralNoun,
   type RepoCard,
   type RepoCardResult,
+  type RepoReadiness,
+  readinessApi,
   type ToolRequirement,
 } from "@trackwall/protocol";
 import { type ReactNode, useCallback } from "react";
@@ -21,27 +23,57 @@ import { Badge } from "@/components/ui/badge";
 import { post } from "@/lib/api";
 import { CARD_PROBLEM_LABELS, HTTP_CLIENT_LABELS, MECHANISM_LABELS } from "@/lib/card";
 import type { Connection } from "@/lib/connection";
+import type { SessionSelection } from "@/lib/session-entries";
 import { useRemote } from "@/lib/use-remote";
 import { RepoCardGlance } from "./RepoCardGlance.tsx";
+import { ReadinessFact, RepoReadinessSection } from "./RepoReadiness.tsx";
 
 /**
  * The "Card" tab (§4.6, ADR-25, ADR-30), with "At a glance" on top (ADR-103): facts from the build, configuration and
- * code files in the last commit, each with evidence (file and line), and the repo's tags with reasons. A new HEAD in the
- * list fetches the card anew.
+ * code files in the last commit, each with evidence (file and line), and the repo's tags with reasons, and its agent readiness
+ * (ADR-208). A new HEAD in the list fetches the card and the readiness anew.
  */
-export function RepoCardView({ conn, repo, head }: { conn: Connection; repo: string; head: string }) {
+export function RepoCardView({
+  conn,
+  repo,
+  head,
+  onOpenMiseTasks,
+  onOpenInSessions,
+}: {
+  conn: Connection;
+  repo: string;
+  head: string;
+  onOpenMiseTasks: () => void;
+  onOpenInSessions: (selection: SessionSelection) => void;
+}) {
   const load = useCallback(() => post(conn, cardsApi.card, { repo }), [conn, repo]);
   const remote = useRemote(load, { refreshKey: head });
+  const loadReadiness = useCallback(() => post(conn, readinessApi.repo, { repo }), [conn, repo]);
+  const readiness = useRemote(loadReadiness, { refreshKey: head });
   if (remote.error) return <ErrorWithRetry message={remote.error} onRetry={remote.reload} />;
   if (!remote.data) return <Loading />;
-  return <CardPanel result={remote.data} />;
+  return (
+    <CardPanel result={remote.data} readiness={readiness.data}>
+      {readiness.error && <ErrorWithRetry message={readiness.error} onRetry={readiness.reload} />}
+      {readiness.data && (
+        <RepoReadinessSection
+          conn={conn}
+          readiness={readiness.data}
+          onOpenMiseTasks={onOpenMiseTasks}
+          onOpenInSessions={onOpenInSessions}
+          onFixed={readiness.reload}
+        />
+      )}
+    </CardPanel>
+  );
 }
 
-function CardPanel({ result }: { result: RepoCardResult }) {
+function CardPanel({ result, readiness, children }: { result: RepoCardResult; readiness: RepoReadiness | undefined; children: ReactNode }) {
   const { card, tags } = result;
   return (
     <div className="flex flex-col gap-4">
-      {card && <RepoCardGlance card={card} tags={tags} />}
+      {card && <RepoCardGlance card={card} tags={tags} readiness={<ReadinessFact readiness={readiness} />} />}
+      {children}
       <Surface label="Tags" meta={tags.length}>
         {tags.length === 0 ? (
           <Empty>No tags. Add your own tags with the repoTags key in workspace.yaml.</Empty>

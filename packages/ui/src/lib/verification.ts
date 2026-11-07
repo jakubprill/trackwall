@@ -1,4 +1,4 @@
-import { countLabel, type TestCounts, type TestFailure, type Verification } from "@trackwall/protocol";
+import { countLabel, type TestCounts, type TestFailure, type Verification, type VerificationState } from "@trackwall/protocol";
 import { formatUptime } from "./format.ts";
 import type { StatusTone } from "./repo-status.ts";
 
@@ -12,8 +12,17 @@ export function verificationPollMs(verification: Verification | null | undefined
   return verification?.state === "running" ? 1000 : 5000;
 }
 
-/** The verdict next to the section's title. */
+/**
+ * A verdict given before the worktree's files changed (ADR-209), in the words of the task's notice and its row's tooltip:
+ * it is about earlier changes, so it is neither a pass nor a failure of the changes as they are now.
+ */
+export function verificationOutdatedLabel(state: VerificationState): string {
+  return `Verification ${state}, but the worktree changed since`;
+}
+
+/** The verdict next to the section's title; an outdated one without the colour of a pass or a failure. */
 export function verificationLabel(verification: Verification): { tone?: StatusTone; label: string } {
+  if (verification.outdated) return { label: `${verification.state} · outdated` };
   switch (verification.state) {
     case "running":
       return { tone: "warning", label: "running" };

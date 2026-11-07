@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { type ChangedEndpoint, type ChangedEndpoints, type ImpactedRepo, MAX_CHANGED_ENDPOINTS, type Task } from "@trackwall/protocol";
-import { ImpactProposals, impactOffers, offeredAfter } from "../src/modules/agents/impact-proposals.ts";
+import type { ChangedEndpoint, ChangedEndpoints, ChangedType, ImpactedRepo, Task } from "@trackwall/protocol";
+import { IMPACT_KEYS_MAX, ImpactProposals, impactOffers, offeredAfter } from "../src/modules/agents/impact-proposals.ts";
 import { MAX_PENDING_PROPOSALS, TaskProposals } from "../src/modules/agents/task-proposals.ts";
 
 const caller = (repo: string, path: string) => ({
@@ -44,14 +44,15 @@ const changed: ChangedEndpoints = {
     endpoint("removed", "/api/orders/{id}/cancel", ["legacy-reports"]),
     endpoint("added", "/api/orders/{id}/close", []),
   ],
+  types: [],
   truncated: false,
   problems: [],
   impact: [reached("orders-bff", 1), reached("legacy-reports", 1), reached("admin-web", 1, false), reached("shop-web", 2)],
 };
 
-describe("which repos an impact proposal goes to (ADR-198)", () => {
+describe("which repos an impact proposal goes to (ADR-198, ADR-205)", () => {
   test("a repo of ring 1 that surely calls a removed or changed endpoint is offered every such endpoint it calls", () => {
-    expect(impactOffers(changed, {}).map((o) => [o.repo, o.endpoints])).toEqual([
+    expect(impactOffers(changed, {}).map((o) => [o.repo, o.keys])).toEqual([
       ["orders-bff", ["GET /api/orders/{id}"]],
       ["legacy-reports", ["GET /api/orders/{id}", "GET /api/orders/{id}/cancel"]],
     ]);
@@ -60,19 +61,43 @@ describe("which repos an impact proposal goes to (ADR-198)", () => {
   test("a repo offered all of them before gets nothing, and one with a newly changed endpoint is offered all again", () => {
     const offered = { "orders-bff": ["GET /api/orders/{id}"], "legacy-reports": ["GET /api/orders/{id}"] };
 
-    expect(impactOffers(changed, offered).map((o) => [o.repo, o.endpoints])).toEqual([
+    expect(impactOffers(changed, offered).map((o) => [o.repo, o.keys])).toEqual([
       ["legacy-reports", ["GET /api/orders/{id}", "GET /api/orders/{id}/cancel"]],
     ]);
   });
 
   test("what a repo was offered keeps the newest offer whole when it outgrows the limit, so that offer is not made again", () => {
-    const old = Array.from({ length: MAX_CHANGED_ENDPOINTS }, (_, i) => `GET /old/${i}`);
+    const old = Array.from({ length: IMPACT_KEYS_MAX }, (_, i) => `GET /old/${i}`);
     const offer = ["GET /api/orders/{id}", "GET /old/3"];
     const after = offeredAfter(old, offer);
 
-    expect(after).toHaveLength(MAX_CHANGED_ENDPOINTS);
+    expect(after).toHaveLength(IMPACT_KEYS_MAX);
     expect(after.slice(0, 2)).toEqual(offer);
     expect(impactOffers(changed, { "orders-bff": after }).map((o) => o.repo)).toEqual(["legacy-reports"]);
+  });
+
+  test("a repo importing a removed or changed library type is offered it, in any ring, and once offered only a newly changed type offers it again (ADR-205)", () => {
+    const money: ChangedType = {
+      change: "changed",
+      package: "com.example.money",
+      type: "com.example.money.Money",
+      declaration: false,
+      members: ["split(int)"],
+      evidence: { path: "money/src/main/java/com/example/money/Money.java", line: 5 },
+      users: [
+        { repo: "shop-web", evidence: { path: "src/main/java/Cart.java", line: 3 } },
+        { repo: "orders-bff", evidence: { path: "src/main/java/Totals.java", line: 3 } },
+      ],
+    };
+    const withTypes = { ...changed, types: [money] };
+
+    expect(impactOffers(withTypes, {}).map((o) => [o.repo, o.keys])).toEqual([
+      ["orders-bff", ["GET /api/orders/{id}", "type com.example.money.Money"]],
+      ["legacy-reports", ["GET /api/orders/{id}", "GET /api/orders/{id}/cancel"]],
+      ["shop-web", ["type com.example.money.Money"]],
+    ]);
+    const offered = { "orders-bff": ["GET /api/orders/{id}"], "shop-web": ["type com.example.money.Money"] };
+    expect(impactOffers(withTypes, offered).map((o) => o.repo)).toEqual(["orders-bff", "legacy-reports"]);
   });
 });
 
@@ -90,9 +115,9 @@ describe("impact proposals at the end of a task's turn (ADR-198)", () => {
         handoff: () => null,
         change: () => null,
         impactProposed: () => offered,
-        markImpactProposed: (_, repo, endpoints) => {
+        markImpactProposed: (_, repo, keys) => {
           if (markFails) throw new Error("EBUSY: tasks.json is locked");
-          offered[repo] = [...endpoints];
+          offered[repo] = [...keys];
         },
       },
       proposals,

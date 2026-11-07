@@ -67,10 +67,25 @@ export function noIncludedFiles(): IncludedFiles {
 
 /**
  * The task prompt. It goes to Copilot CLI as one argument (`--interactive=<prompt>`), and the Windows command line holds
- * 32,767 characters together with the rest of the command.
+ * 32,767 characters together with the rest of the command. A task from a stack trace (ADR-222) adds the shortened trace
+ * and its frames to it, up to about 21,000 characters in all.
  */
 export const TASK_PROMPT_MAX = 8000;
 export const TaskPrompt = z.string().trim().min(1).max(TASK_PROMPT_MAX);
+/**
+ * A stack trace the user pasted into a new task (ADR-222): the daemon reads its frames, finds their files among the
+ * repo's tracked files and puts both into the task's prompt, with the rule to reproduce the error in a test first. It
+ * is text from a log, copied rather than typed, so it may carry characters nobody sees (`visibleText`) or a terminal's
+ * escape sequences, which it must not. It may be longer than a prompt, as a Spring trace often is: the daemon quotes a
+ * shortened copy that keeps every `Caused by:` (unless the lines other than frames are too long alone, then it is cut at the end), so the prompt stays one argument of Copilot CLI (`TASK_PROMPT_MAX`), and
+ * reads the frames from the whole of it. `create-task` reads a body of up to `CREATE_TASK_BODY_MAX_BYTES` for it.
+ */
+export const STACK_TRACE_MAX = 32_000;
+/** A trace and a prompt at their limits, every character three bytes in UTF-8 or escaped in JSON, with room to spare. */
+export const CREATE_TASK_BODY_MAX_BYTES = 256 * 1024;
+export const StackTrace = visibleText(z.string().trim().min(1).max(STACK_TRACE_MAX)).refine((text) => !/[^\P{Cc}\n\r\t]/u.test(text), {
+  message: "the stack trace must not contain control characters other than line breaks and tabs",
+});
 /** The longest reason for rejecting a task proposal (ADR-55): a few sentences for the session that proposed it. */
 export const REJECTION_REASON_MAX = 1000;
 
@@ -187,9 +202,44 @@ export const TASK_CHECK_STEP_MAX = 300;
 export const TASK_CHECK_STEPS_MAX = 8;
 export const TaskCheckStep = singleLine(z.string().trim().min(1).max(TASK_CHECK_STEP_MAX), "a check step");
 
-/** The last summary from the task session (`report_result`, ADR-39) with its check steps (ADR-169), empty when it gave none. */
-export const TaskSummary = z.object({ text: z.string(), checkSteps: z.array(z.string()), reportedAt: z.string() });
+/**
+ * The test a task's agent says reproduces the error it was given (ADR-222): the test's file, relative to the repo root,
+ * its name and how it failed before the fix. Only the agent's word: the daemon neither opens the file nor runs the test
+ * yet, so the panel shows it as the agent's claim. Text from an agent the user reads, so without invisible characters.
+ */
+export const REPRO_TEST_FILE_MAX = 500;
+export const REPRO_TEST_NAME_MAX = 200;
+export const REPRO_TEST_FAILURE_MAX = 300;
+export const ReproTestFile = visibleText(
+  singleLine(z.string().trim().min(1).max(REPRO_TEST_FILE_MAX), "a test file").refine(
+    (path) => !/^(?:[A-Za-z]:|[\\/~])/.test(path) && !path.split(/[\\/]/).includes(".."),
+    { message: "the test file must be a path relative to the repo root, without .." },
+  ),
+);
+export const ReproTestName = visibleText(singleLine(z.string().trim().min(1).max(REPRO_TEST_NAME_MAX), "a test name"));
+export const ReproTestFailure = visibleText(singleLine(z.string().trim().min(1).max(REPRO_TEST_FAILURE_MAX), "a test failure"));
+export const ReproTest = z.object({ file: ReproTestFile, name: ReproTestName, failure: ReproTestFailure }).strict();
+export type ReproTest = z.infer<typeof ReproTest>;
+
+/** The reproduction test as one line worded as the agent's claim, for `get_session` and the merge request's description. */
+export function reproTestLine(test: ReproTest): string {
+  return `Reproduction test (the agent's word): ${test.name} in ${test.file}, failed before the fix with: ${test.failure}`;
+}
+
+/**
+ * The last summary from the task session (`report_result`, ADR-39) with its check steps (ADR-169), empty when it gave
+ * none, and the test it says reproduces the error (ADR-222), `null` when it named none.
+ */
+export const TaskSummary = z.object({
+  text: z.string(),
+  checkSteps: z.array(z.string()),
+  reproTest: ReproTest.nullable(),
+  reportedAt: z.string(),
+});
+
 export type TaskSummary = z.infer<typeof TaskSummary>;
+/** What a task session reports with `report_result`; the daemon adds the time. */
+export type ReportedSummary = Omit<TaskSummary, "reportedAt">;
 
 /**
  * Who proposed the task (ADR-39): a Trackwall session by its session token, or `null` for an agent outside Trackwall
@@ -433,8 +483,37 @@ export const Session = z.object({
   copyRequest: CopyRequest.nullable(),
   /** What the session's conversation used (ADR-190); `null` before its first model call or when its event log cannot be read. */
   usage: CopilotUsage.nullable(),
+  /**
+   * The model Trackwall started the session on (ADR-206), as its `--model`: a task's, a repo or free session's or the
+   * supervisor's; `null` when Trackwall passed none, and Copilot CLI took its default or a model from the configured
+   * command or mise.
+   */
+  model: z.string().nullable(),
+  /**
+   * The model Copilot CLI runs the session's conversation on (ADR-225), from its event log: the model of its latest own
+   * model call, or of its latest model change before any call; `null` before the log names one. It differs from `model`
+   * when Copilot CLI fell back to another one (an account without the model) or `/model` switched it.
+   */
+  modelInUse: z.string().nullable(),
 });
 export type Session = z.infer<typeof Session>;
+
+/**
+ * Copilot CLI's own choice of model, which `--model auto` asks for: the model in use then differs on purpose. Copilot
+ * CLI's word, not Trackwall's.
+ */
+export const COPILOT_AUTO_MODEL = "auto";
+
+/**
+ * The session runs on another model than Trackwall started it on (ADR-225): Copilot CLI took another one without
+ * stopping, because the account does not offer the requested model or `/model` switched it. `null` when Trackwall passed
+ * no model or `auto`, when the log names none yet, or when they agree.
+ */
+export function modelSwitch(session: Pick<Session, "model" | "modelInUse">): { requested: string; inUse: string } | null {
+  const { model, modelInUse } = session;
+  if (model === null || modelInUse === null || model === COPILOT_AUTO_MODEL || model === modelInUse) return null;
+  return { requested: model, inUse: modelInUse };
+}
 
 /** The supervisor (ADR-58): it runs in the projects folder, above all repos. */
 export function isSupervisor(session: Pick<Session, "supervisor">): boolean {
@@ -485,6 +564,11 @@ export const Task = z.object({
   view: SessionView,
   /** The last summary from the task session (`report_result`); `null` until it has reported one. */
   summary: TaskSummary.nullable(),
+  /**
+   * Whether the agent has handed the work over for review (ADR-213): its `report_result` sets it, and the user's review
+   * or "Fix" of a failed pipeline, which give the agent work again, clear it. The task's board item follows it.
+   */
+  inReview: z.boolean(),
   /** The task port (ADR-61): `TASK_PORT_ENV` in every mise task run in the worktree, and the port of the task's service. */
   port: TaskPort,
   included: IncludedFiles,
@@ -763,9 +847,11 @@ export type JavaNavigationStatus = z.infer<typeof JavaNavigationStatus>;
 
 /**
  * Copilot CLI's sandbox as a new task would get it (ADR-181): `tasks`, which tasks `sandbox` in `workspace.yaml` puts in
- * it, and `problem`, why it cannot run on this computer (no `bwrap` on Linux), which refuses to start those tasks; `null` when it can.
+ * it; `problem`, why it cannot run on this computer (no `bwrap` on Linux, or bubblewrap unable to make its namespaces,
+ * ADR-219), which refuses to start those tasks, `null` when it can; and `chosen`, whether `tasks` comes from
+ * `workspace.yaml` rather than the default.
  */
-export const SandboxState = z.object({ tasks: SandboxSettings.shape.tasks, problem: z.string().nullable() });
+export const SandboxState = z.object({ tasks: SandboxSettings.shape.tasks, problem: z.string().nullable(), chosen: z.boolean() });
 export type SandboxState = z.infer<typeof SandboxState>;
 
 /** Whether a task with approvals mode `approvals` runs in the sandbox under `tasks` (ADR-181); the daemon's and the form's one rule. */
@@ -778,6 +864,53 @@ export type StartOptions = z.infer<typeof StartOptions>;
 
 const SessionRequest = z.object({ session: SessionId }).strict();
 const TaskRequest = z.object({ task: TaskId }).strict();
+
+/** A worktree fingerprint (ADR-209): a sha256 in hex. */
+const WorktreeFingerprint = z.string().regex(/^[0-9a-f]{64}$/);
+
+/**
+ * What ending a task with its branch kept would delete, as `removeTask` counts it (ADR-210): nothing; uncommitted
+ * changes or commits outside the branch, with the worktree's fingerprint that `removeTask` checks before it deletes
+ * them; or `unknown` when git cannot read it (a folder git does not know as a worktree, a repo gone), which the cleanup
+ * leaves to the task's own "End task".
+ */
+export const TaskWorktreeLoss = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("none") }),
+  z.object({
+    kind: z.literal("work"),
+    uncommitted: z.number().int().nonnegative(),
+    strayCommits: z.number().int().nonnegative(),
+    fingerprint: WorktreeFingerprint,
+  }),
+  z.object({ kind: z.literal("unknown"), reason: z.string() }),
+]);
+export type TaskWorktreeLoss = z.infer<typeof TaskWorktreeLoss>;
+
+/**
+ * The worktree of a task without a running session as the cleanup of old worktrees lists it (ADR-210): how long the
+ * task has been idle and what ending it with its branch kept would delete.
+ */
+export const TaskWorktree = z.object({
+  task: TaskId,
+  repo: RepoId,
+  branch: z.string(),
+  /**
+   * ISO 8601: the newest of the task's start, its worktree's newest commit (a round commit after each turn, ADR-168),
+   * its last report and its listed sessions' starts and ends.
+   */
+  lastActivityAt: z.string(),
+  loss: TaskWorktreeLoss,
+});
+export type TaskWorktree = z.infer<typeof TaskWorktree>;
+
+/** How much disk a task's worktree takes, files git ignores (dependencies, build output) included. */
+export const TaskWorktreeSize = z.object({
+  task: TaskId,
+  bytes: z.number().int().nonnegative(),
+  /** `false` when the count stopped at its limit of files or time, so `bytes` is a lower bound. */
+  complete: z.boolean(),
+});
+export type TaskWorktreeSize = z.infer<typeof TaskWorktreeSize>;
 const ProposalRequest = z.object({ proposal: TaskId }).strict();
 
 export const agentsApi = {
@@ -822,9 +955,11 @@ export const agentsApi = {
   /**
    * Stops a running session and starts it again with the same conversation (ADR-119), in the same place and view, so it
    * gets the environment, `agentSecrets` and tool permissions of now. A task's session resumes as Resume does; the
-   * returned session is the new one. An ended session is `bad_request`.
+   * returned session is the new one. An ended session is `bad_request`. With `model` it starts again on that model
+   * (ADR-206; `null` for Copilot CLI's default), which a task keeps for its later resumes, a repo or free session for
+   * its later restarts and the supervisor as `supervisorModel` in `workspace.yaml`, saved before the restart.
    */
-  restart: endpoint("restart", SessionRequest, Session),
+  restart: endpoint("restart", SessionRequest.extend({ model: TaskModel.nullable().optional() }), Session),
   /**
    * A message from the user to a session in the conversation view (ADR-107): its next prompt, sent at once when the agent
    * waits, otherwise after its turn, with the images and text files the user attached. A session in a terminal gets what
@@ -866,7 +1001,8 @@ export const agentsApi = {
    * Creates a worktree on a new branch from the default branch and starts Copilot CLI in it with the prompt (ADR-31);
    * with `item`, the task works on that board item (ADR-133), `not_found` when there is none. `view` is a terminal or
    * the conversation view for every session of the task (ADR-137); Java navigation needs a terminal (`bad_request`).
-   * With `handoffFrom`, another task hands it its work (ADR-147).
+   * With `handoffFrom`, another task hands it its work (ADR-147). With `stackTrace` the prompt gets the trace, its frames
+   * found among the repo's tracked files and the rule to reproduce the error in a test first (ADR-222).
    */
   createTask: endpoint(
     "create-task",
@@ -884,9 +1020,11 @@ export const agentsApi = {
          * the new task is its subtask, as if its session had proposed it (ADR-140, ADR-143); `not_found` when there is none.
          */
         handoffFrom: TaskId.nullable().default(null),
+        stackTrace: StackTrace.nullable().default(null),
       })
       .strict(),
     Task,
+    { maxBodyBytes: CREATE_TASK_BODY_MAX_BYTES },
   ),
   /**
    * Starts a change (ADR-171): one task per repo, in the order of `parts`, which is the order their merge requests are to
@@ -910,8 +1048,11 @@ export const agentsApi = {
       .refine(({ prompt, parts }) => changePromptsFit(prompt, parts), CHANGE_PROMPTS_TOO_LONG),
     CreatedChange,
   ),
-  /** A new session for a task that has no running session, in the task's view: it goes on with the task's conversation. */
-  resumeTask: endpoint("resume-task", TaskRequest, Task),
+  /**
+   * A new session for a task that has no running session, in the task's view: it goes on with the task's conversation.
+   * With `model` the task runs on that model from now on (ADR-206; `null` for Copilot CLI's default).
+   */
+  resumeTask: endpoint("resume-task", TaskRequest.extend({ model: TaskModel.nullable().optional() }), Task),
   taskChanges: endpoint("task-changes", TaskRequest, TaskChanges),
   /**
    * Sends review comments on the task's changes to its session (ADR-62): the agent reads them with
@@ -962,9 +1103,20 @@ export const agentsApi = {
   /**
    * Ending a task: removes the worktree, and without `keepBranch` also the branch. Changes that would be lost (uncommitted
    * files and commits outside the branch, and without `keepBranch` also the task's commits) the daemon deletes only with
-   * `discardChanges`; otherwise `unsaved_changes`.
+   * `discardChanges`; otherwise `unsaved_changes`. With `discardFingerprint` (ADR-210) it deletes them only while the
+   * worktree still has that fingerprint, the one of what the user confirmed; otherwise `unsaved_changes` too.
    */
-  removeTask: endpoint("remove-task", z.object({ task: TaskId, keepBranch: z.boolean(), discardChanges: z.boolean() }).strict(), Done),
+  removeTask: endpoint(
+    "remove-task",
+    z
+      .object({ task: TaskId, keepBranch: z.boolean(), discardChanges: z.boolean(), discardFingerprint: WorktreeFingerprint.optional() })
+      .strict(),
+    Done,
+  ),
+  /** The worktree of every task without a running session, for the cleanup of old worktrees (ADR-210); reads only. */
+  taskWorktrees: endpoint("task-worktrees", z.object({}).strict(), z.array(TaskWorktree)),
+  /** How much disk the task's worktree takes; counts its files, so it may take seconds. */
+  taskWorktreeSize: endpoint("task-worktree-size", TaskRequest, TaskWorktreeSize),
   /**
    * Approving a task proposal (ADR-39): a task with its id, like `create-task`, with the prompt the user may have edited
    * before the start. A failed start leaves the proposal for another try or a rejection.

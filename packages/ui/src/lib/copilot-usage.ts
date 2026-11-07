@@ -17,7 +17,7 @@ function amount(n: number): string {
 }
 
 /** 950, 1.2k, 3.4M. */
-function tokens(n: number): string {
+export function tokenCount(n: number): string {
   if (n < 1000) return String(n);
   if (n < 1_000_000) return `${Math.round(n / 100) / 10}k`;
   return `${Math.round(n / 100_000) / 10}M`;
@@ -31,14 +31,14 @@ export function usageLabel(usage: CopilotUsage): string {
   }
   if (usage.premiumRequests > 0)
     return `${amount(usage.premiumRequests)} ${usage.premiumRequests === 1 ? PREMIUM_REQUESTS.one : PREMIUM_REQUESTS.other}`;
-  return `${tokens(usage.inputTokens + usage.outputTokens)} tokens`;
+  return `${tokenCount(usage.inputTokens + usage.outputTokens)} tokens`;
 }
 
 /** The tooltip: the calls and tokens behind the label, and why there are no credits when there are none. */
 export function usageDetails(usage: CopilotUsage): string {
   const lines = [
     `${countLabel(usage.modelCalls, MODEL_CALLS)} in this conversation`,
-    `${tokens(usage.inputTokens)} tokens in, ${tokens(usage.outputTokens)} out`,
+    `${tokenCount(usage.inputTokens)} tokens in, ${tokenCount(usage.outputTokens)} out`,
   ];
   if (usage.aiCreditsPartial) lines.push("Some calls did not report AI credits, so the total may be higher");
   if (usage.aiCredits === null && usage.premiumRequests === 0)

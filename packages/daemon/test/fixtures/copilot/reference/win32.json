@@ -1,5 +1,5 @@
 {
-  "copilotVersion": "1.0.103",
+  "copilotVersion": "1.0.107",
   "platform": "win32",
   "promptBox": [
     "────────────────────────────────────────────────────────────────────────────────────────────────────",
@@ -58,7 +58,7 @@
         "payload": {
           "toolName": "powershell"
         },
-        "omitted": ["cwd", "toolArgs", "toolResult"]
+        "omitted": ["cwd", "toolArgs", "toolCallId", "toolResult"]
       },
       {
         "event": "agentStop",

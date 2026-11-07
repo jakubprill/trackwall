@@ -1,5 +1,5 @@
 import type { TrackwallLinkTarget } from "@trackwall/protocol";
-import { FolderGit2, ListTree, Network, Orbit, Settings, SquareTerminal } from "lucide-react";
+import { Columns3, FolderGit2, ListTree, Network, Orbit, Settings, SquareTerminal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityBar, type ActivityView } from "@/components/ActivityBar";
 import { AwaySummary } from "@/components/AwaySummary";
@@ -14,7 +14,7 @@ import { PageTokenForm } from "@/components/PageTokenForm";
 import { RemoteDaemonSurface } from "@/components/RemoteDaemonSurface";
 import { SupervisorPanel } from "@/components/SupervisorPanel";
 import { UpdateBanner } from "@/components/UpdateBanner";
-import { inDesktopShell, openWindow, reportShown, START_PARAMS, showViewMenu, startFromLocation } from "@/lib/app-window";
+import { inDesktopShell, reportShown, START_PARAMS, startFromLocation } from "@/lib/app-window";
 import { DaemonPlaceContext, useDaemonPlace } from "@/lib/desktop";
 import { DROP_HINT } from "@/lib/dropped-folder";
 import type { DroppedPaths } from "@/lib/file-drop";
@@ -36,6 +36,7 @@ import { useConnection } from "@/lib/use-connection";
 import { useDaemonEvents, useDaemonLost } from "@/lib/use-daemon-events";
 import { useFileDrop } from "@/lib/use-file-drop";
 import { useJumpRequest } from "@/lib/use-jump-request";
+import { useNewWindow } from "@/lib/use-new-window";
 import { useRepoWatch } from "@/lib/use-repo-watch";
 import { useSessionTree } from "@/lib/use-session-tree";
 import { useSessions } from "@/lib/use-sessions";
@@ -43,6 +44,7 @@ import { useTabAttention } from "@/lib/use-tab-attention";
 import { useTaskOutcomes } from "@/lib/use-task-outcomes";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { zoomStepOf, zoomWindow } from "@/lib/zoom-shortcut";
+import { FlowView } from "@/views/flow/FlowView";
 import { GraphView } from "@/views/graph/GraphView";
 import { HomeView } from "@/views/home/HomeView";
 import { PlanView } from "@/views/plan/PlanView";
@@ -59,12 +61,13 @@ const VIEWS = [
   { id: "sessions", label: "Sessions", icon: SquareTerminal, shortcut: "3", placement: "top" },
   { id: "graph", label: "Overview", icon: Network, shortcut: "4", placement: "top" },
   { id: "plan", label: "Plan", icon: ListTree, shortcut: "5", placement: "top" },
+  { id: "flow", label: "Flow", icon: Columns3, shortcut: "6", placement: "top" },
   { id: "settings", label: "Settings", icon: Settings, shortcut: ",", placement: "bottom" },
 ] as const satisfies readonly ActivityView<string>[];
 type View = (typeof VIEWS)[number]["id"];
 const VIEW_IDS = VIEWS.map((v) => v.id);
 /** The views that show sessions or tasks, which keep the session list fresh while open. */
-const VIEWS_WITH_SESSIONS: readonly View[] = ["home", "sessions", "plan", "graph"];
+const VIEWS_WITH_SESSIONS: readonly View[] = ["home", "sessions", "plan", "graph", "flow"];
 
 export function App() {
   // A repo opened from the dashboard belongs to the navigation, not to the view: any other navigation to "Repos" starts without it;
@@ -108,18 +111,7 @@ export function App() {
     },
     [openRepos],
   );
-  const [windowError, setWindowError] = useState<string>();
-  const newWindow = useMemo(() => {
-    if (!inDesktopShell()) return undefined;
-    const open = (id: View) => {
-      setWindowError(undefined);
-      openWindow(id).catch((err: unknown) => setWindowError(`Could not open a new window: ${String(err)}`));
-    };
-    const showMenu = (id: View) => {
-      showViewMenu(() => open(id)).catch((err: unknown) => setWindowError(`Could not show the menu: ${String(err)}`));
-    };
-    return { open, showMenu };
-  }, []);
+  const { newWindow, windowError, dismissWindowError } = useNewWindow<View>();
   useEffect(() => {
     reportShown(view, sessionLayout).catch(() => {
       // Without the report a session from the tray opens in the last focused window, the next start opens this
@@ -230,10 +222,8 @@ export function App() {
                 {appUpdate && <UpdateBanner handle={appUpdate} />}
                 <NotificationOffer />
                 <AwaySummary list={sessions.data} onOpen={openInSessions} />
-                {error && <ErrorBanner message={error} action={{ label: "Try again", onClick: retry }} />}
-                {windowError && (
-                  <ErrorBanner message={windowError} action={{ label: "Dismiss", onClick: () => setWindowError(undefined) }} />
-                )}
+                <ErrorBanner message={error} action={{ label: "Try again", onClick: retry }} />
+                <ErrorBanner message={windowError} action={{ label: "Dismiss", onClick: dismissWindowError }} />
                 {conn && dropped && (
                   <FolderDrop
                     key={dropped.seq}
@@ -314,10 +304,27 @@ export function App() {
                           sessions={sessions.data}
                           initialImpactTask={impactTask}
                           onOpenInSessions={openInSessions}
+                          onOpenRepo={openRepos}
                         />
                       )}
                       {conn && view === "plan" && (
-                        <PlanView conn={conn} boardLive={boardLive} sessions={sessions.data} onOpenInSessions={openInSessions} />
+                        <PlanView
+                          conn={conn}
+                          boardLive={boardLive}
+                          sessions={sessions.data}
+                          outcomes={outcomes.byTask}
+                          onOpenInSessions={openInSessions}
+                        />
+                      )}
+                      {conn && view === "flow" && (
+                        <FlowView
+                          conn={conn}
+                          boardLive={boardLive}
+                          sessions={sessions.data}
+                          sessionsError={sessions.error}
+                          onRetry={sessions.reload}
+                          outcomes={outcomes.byTask}
+                        />
                       )}
                       {conn && view === "settings" && (
                         <div className="flex justify-center p-6">

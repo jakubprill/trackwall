@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { MAX_DROP_BYTES } from "@trackwall/protocol";
 import { REPO } from "../scripts/lib.ts";
 
-// The shell (Rust) and the UI (TypeScript) share no code, so this test guards the command that reads a dropped file (ADR-201).
+// The shell (Rust) and the UI (TypeScript) share no code, so this test guards the command that reads a dropped file (ADR-226).
 const read = (path: string) => readFileSync(join(REPO, path), "utf8");
 
 test("the UI reads a dropped file by the name and argument the shell registers, with the same size limit", () => {

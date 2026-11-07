@@ -16,8 +16,8 @@ const CHECK_MS = 15_000;
  * The strip under a running session's header when mise would give it another environment than it started with
  * (ADR-119), e.g. a new token in `mise.toml` or a name added to `agentSecrets`, with the restart that applies it. The
  * strip shows too when the session started with another session profile than sessions get now (ADR-178), which needs
- * no mise run. It stays while the restart runs and when it fails, since the stop already ended the session it checked. Mount it
- * with the session's id as its `key`, so a restart's error does not stay next to a task's next session.
+ * no mise run. It stays while the restart runs and when it fails, since the stop already ended the session it checked.
+ * `SessionNotices` mounts it again with each session, so a restart's error does not stay next to a task's next session.
  */
 export function EnvironmentChangeNotice({
   conn,

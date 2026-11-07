@@ -20,11 +20,13 @@ import {
   mergeRequestsApi,
   miseApi,
   providerModelsApi,
+  readinessApi,
   routinesApi,
   servicesApi,
   taskOutcomesApi,
   taskRoundsApi,
   terminalsApi,
+  usageReportApi,
   verificationApi,
   workspaceApi,
 } from "@trackwall/protocol";
@@ -93,7 +95,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(workspaceApi.droppedFolder, (f, b) => f.workspace.droppedFolder(b.path)),
   route(workspaceApi.repoHosts, (f) => f.workspace.repoHosts()),
   route(workspaceApi.setRepoHosts, (f, b) => f.workspace.setRepoHosts(b.repoHosts)),
-  route(workspaceApi.remoteRepos, (f, b) => f.workspace.remoteRepos(b.query)),
+  route(workspaceApi.remoteRepos, (f, b) => f.workspace.remoteRepos(b)),
   route(workspaceApi.clone, (f, b) => f.workspace.clone(b.host, b.fullName)),
   route(workspaceApi.clones, (f) => f.workspace.cloneJobs()),
   route(workspaceApi.sync, (f) => f.workspace.sync()),
@@ -103,6 +105,8 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(cardsApi.warmup, (f) => f.cards.warmupProgress()),
   route(graphApi.graph, (f) => f.graph.graph()),
   route(graphApi.changedEndpoints, (f, b) => f.taskChangedEndpoints(b.task)),
+  route(readinessApi.all, (f, b) => f.readiness.all(b.fresh)),
+  route(readinessApi.repo, (f, b) => f.readiness.repo(b.repo)),
   route(taskOutcomesApi.list, (f) => f.taskOutcomes()),
   route(doctorApi.run, (f) => f.doctor.run()),
   route(providerModelsApi.list, (f) => f.providerModels.list()),
@@ -127,6 +131,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     return null;
   }),
   route(mcpAuditApi.calls, (f, b) => f.mcpAudit.list(b.task)),
+  route(usageReportApi.week, (f, b) => f.usageReport.week(b.weeksAgo)),
   route(localConfigApi.store, (f) => f.localConfig.store()),
   route(localConfigApi.repo, (f, b) => f.localConfig.repo(b.repo)),
   route(localConfigApi.repos, (f) => f.localConfig.repos()),
@@ -141,6 +146,10 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(miseApi.writeConventionTasks, (f) => f.mise.writeConventionTasks()),
   route(miseApi.stop, (f, b) => f.mise.stop({ repo: b.repo, task: b.task }, b.miseTask)),
   route(miseApi.trust, (f, b) => f.mise.trust(b.repo)),
+  route(miseApi.format, async (f, b) => {
+    await f.mise.format(b.repo);
+    return {};
+  }),
   route(logsApi.tail, (f, b) => f.logs.tail(b)),
   route(servicesApi.list, (f) => f.services.list()),
   route(servicesApi.start, (f, b) => f.services.start(b)),
@@ -192,7 +201,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(agentsApi.startSupervisor, (f, b) => f.agents.startSupervisor(b.conversation, b.view)),
   route(agentsApi.stop, (f, b) => f.agents.stop(b.session)),
   route(agentsApi.environmentChange, (f, b) => f.agents.environmentChange(b.session)),
-  route(agentsApi.restart, (f, b) => f.agents.restart(b.session)),
+  route(agentsApi.restart, (f, b) => f.agents.restart(b.session, b.model)),
   route(agentsApi.deliverReadRequest, (f, b) => f.agents.deliverReadRequest(b.session)),
   route(agentsApi.clearCopyRequest, (f, b) => f.agents.clearCopyRequest(b.session, b.request)),
   route(agentsApi.answerDialog, (f, b) => f.agents.answerDialog(b.session, b.dialog, b.answer)),
@@ -200,10 +209,10 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(agentsApi.interrupt, (f, b) => f.agents.interrupt(b.session)),
   route(agentsApi.setMode, (f, b) => f.agents.setMode(b.session, b.mode)),
   route(agentsApi.dismiss, (f, b) => f.agents.dismiss(b.session)),
-  route(agentsApi.createTask, (f, { repo, prompt, handoffFrom, ...options }) => f.agents.createTask(repo, prompt, options, handoffFrom)),
+  route(agentsApi.createTask, (f, b) => f.createTask(b)),
   route(agentsApi.createChange, (f, b) => f.agents.createChange(b)),
   route(agentsApi.startOptions, (f) => f.agents.startOptions()),
-  route(agentsApi.resumeTask, (f, b) => f.agents.resumeTask(b.task)),
+  route(agentsApi.resumeTask, (f, b) => f.agents.resumeTask(b.task, b.model)),
   route(agentsApi.taskChanges, (f, b) => f.agents.taskChanges(b.task)),
   route(agentsApi.sendReview, (f, b) => f.agents.sendReview(b.task, b.comments)),
   route(taskRoundsApi.rounds, (f, b) => f.agents.taskRounds(b.task)),
@@ -224,8 +233,10 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     f.agents.openConversationFile(b.session, b.path, b.line);
     return null;
   }),
+  route(agentsApi.taskWorktrees, (f) => f.agents.taskWorktrees()),
+  route(agentsApi.taskWorktreeSize, (f, b) => f.agents.taskWorktreeSize(b.task)),
   route(agentsApi.removeTask, async (f, b) => {
-    await f.agents.removeTask(b.task, b.keepBranch, b.discardChanges);
+    await f.agents.removeTask(b.task, b.keepBranch, b.discardChanges, b.discardFingerprint);
     return null;
   }),
   route(terminalsApi.start, (f, b) => f.terminals.start(b)),

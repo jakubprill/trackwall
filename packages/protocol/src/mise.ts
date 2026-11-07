@@ -114,6 +114,9 @@ export const MiseRunArgument = z
 export const MiseRunArguments = z.array(MiseRunArgument).max(8);
 export type MiseRunArguments = z.infer<typeof MiseRunArguments>;
 
+/** The build files the convention tasks look for in a repo root, in the order they try them (ADR-157, ADR-208). */
+export const CONVENTION_BUILD_FILES = ["pom.xml", "build.gradle", "build.gradle.kts", "package.json"] as const;
+
 /**
  * The convention tasks file (ADR-157): mise tasks `setup`, `build` and `test` for Maven, Gradle and npm projects that
  * Trackwall writes into the projects folder, where mise reads it for every repo below; a repo's own mise task of the same
@@ -126,6 +129,25 @@ export const ConventionTasksState = z.object({
   path: z.string(),
 });
 export type ConventionTasksState = z.infer<typeof ConventionTasksState>;
+
+/**
+ * What mise says about a repo root's own config files beyond listing their tasks (`mise fmt --check` and `mise tasks
+ * validate`): the files its formatter would change, and the problems it finds in them, errors first. An older mise without
+ * one of these commands has nothing to say about it, so an empty check does not prove a config clean.
+ */
+export const MiseConfigProblem = z.object({
+  severity: z.enum(["error", "warning"]),
+  /** One line from mise: `test: Dependency 'nope' not found`, `mise.toml:4:2: unknown field taskz (did you mean tasks?)`. */
+  message: z.string(),
+});
+export type MiseConfigProblem = z.infer<typeof MiseConfigProblem>;
+
+export const MiseConfigCheck = z.object({
+  /** Config files in the repo root that `mise fmt` would rewrite, relative to it (`mise.toml`, `.config/mise.toml`). */
+  unformatted: z.array(z.string()),
+  problems: z.array(MiseConfigProblem),
+});
+export type MiseConfigCheck = z.infer<typeof MiseConfigCheck>;
 
 const endpoint = apiEndpoints("mise");
 
@@ -153,4 +175,9 @@ export const miseApi = {
    * the UI, never from MCP. A file that is already there is left as it is (`bad_request` when it differs).
    */
   writeConventionTasks: endpoint("write-convention-tasks", z.object({}).strict(), ConventionTasksState),
+  /**
+   * `mise fmt` in the repo root: rewrites its mise config files in mise's own format, which leaves a change for git to see.
+   * The user's click is the consent; only from the UI, never from MCP.
+   */
+  format: endpoint("format", z.object({ repo: RepoId }).strict(), z.object({})),
 };

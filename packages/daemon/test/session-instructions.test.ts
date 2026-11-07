@@ -22,6 +22,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
         change: null,
       },
       NO_KNOWLEDGE,
+      false,
     );
     expect(dir).toBe(join(sessionDir, "instructions"));
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
@@ -57,6 +58,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
         change: null,
       },
       NO_KNOWLEDGE,
+      false,
     );
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain(
@@ -75,6 +77,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
       "0.4.1",
       { kind: "task", repo: "shop", task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427", handoff: null, change: null },
       NO_KNOWLEDGE,
+      false,
     );
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain("so write it for the reviewer in about 300 words: more than 4000 characters is refused.");
@@ -94,10 +97,11 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
         change: null,
       },
       NO_KNOWLEDGE,
+      false,
     );
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain(
-      "When your turn ends, Trackwall proposes a task to each repo that calls an endpoint your commits removed or changed (get_changed_endpoints with task `1b4e28ba-2fa1-11d2-883f-0016d3cca427` lists them); your own proposal for such a repo replaces Trackwall's, so make one only when the repo needs more than following the new contract. Other work that builds on your change (a reader of a message or field you changed, a caller find_endpoint or who_calls names) you propose yourself after you commit, one proposal per repo.",
+      "When your turn ends, Trackwall proposes a task to each repo that calls an endpoint or imports a public library type your commits removed or changed (get_changed_endpoints with task `1b4e28ba-2fa1-11d2-883f-0016d3cca427` lists them); your own proposal for such a repo replaces Trackwall's, so make one only when the repo needs more than following the new contract. Other work that builds on your change (a reader of a message or field you changed, a caller find_endpoint or who_calls names) you propose yourself after you commit, one proposal per repo.",
     );
     expect(text).not.toContain("Your task was handed to you by");
   });
@@ -122,6 +126,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
           change: null,
         },
         NO_KNOWLEDGE,
+        false,
       );
       return readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     };
@@ -148,6 +153,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
         "0.5.14",
         { kind: "task", repo: "orders-api", task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427", handoff, change },
         NO_KNOWLEDGE,
+        false,
       );
       return readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     };
@@ -176,7 +182,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     const roles: SessionRole[] = [{ kind: "repo", repo: "shop" }, { kind: "supervisor", changesCode: false }, { kind: "free" }];
     for (const role of roles) {
       const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
-      writeSessionInstructions(sessionDir, "0.4.1", role, NO_KNOWLEDGE);
+      writeSessionInstructions(sessionDir, "0.4.1", role, NO_KNOWLEDGE, false);
       const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
       expect(text).not.toContain(TASK_MESSAGE_RULE);
     }
@@ -184,7 +190,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
 
   test("every session learns which Trackwall version started it and where the user sees it", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
-    writeSessionInstructions(sessionDir, "0.3.0", { kind: "repo", repo: "shop" }, NO_KNOWLEDGE);
+    writeSessionInstructions(sessionDir, "0.3.0", { kind: "repo", repo: "shop" }, NO_KNOWLEDGE, false);
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain("Trackwall 0.3.0 started this Copilot CLI session");
     expect(text).toContain("The user sees this session in Trackwall's Sessions view");
@@ -192,7 +198,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
 
   test("a session in the repo root is a repo session that keeps the user's checkout and does not get the task rules", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
-    writeSessionInstructions(sessionDir, "0.3.0", { kind: "repo", repo: "shop" }, NO_KNOWLEDGE);
+    writeSessionInstructions(sessionDir, "0.3.0", { kind: "repo", repo: "shop" }, NO_KNOWLEDGE, false);
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain("You are a repo session in the root of the repo `shop`");
     expect(text).toContain("Do not switch this working copy's branch, commit, push or merge unless they ask");
@@ -201,7 +207,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
 
   test("the supervisor in the projects folder coordinates through proposals and does not get the task rules", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
-    writeSessionInstructions(sessionDir, "0.3.0", { kind: "supervisor", changesCode: false }, NO_KNOWLEDGE);
+    writeSessionInstructions(sessionDir, "0.3.0", { kind: "supervisor", changesCode: false }, NO_KNOWLEDGE, false);
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain("The user sees this session in the supervisor panel on the right of every Trackwall view");
     expect(text).toContain("You are the supervisor: the one session above all others, in the projects folder");
@@ -222,7 +228,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
 
   test("the supervisor answers short, with the conclusion first, because the user reads it in a side panel", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
-    writeSessionInstructions(sessionDir, "0.5.0", { kind: "supervisor", changesCode: false }, NO_KNOWLEDGE);
+    writeSessionInstructions(sessionDir, "0.5.0", { kind: "supervisor", changesCode: false }, NO_KNOWLEDGE, false);
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain(
       "The user reads you in a side panel next to their work, so answer short: the conclusion or the decision you need first",
@@ -232,7 +238,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
 
   test("the supervisor proposes no task for a request outside one repo, and sends a follow-up to the running task instead of a new one (ADR-81)", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
-    writeSessionInstructions(sessionDir, "0.5.0", { kind: "supervisor", changesCode: false }, NO_KNOWLEDGE);
+    writeSessionInstructions(sessionDir, "0.5.0", { kind: "supervisor", changesCode: false }, NO_KNOWLEDGE, false);
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain(
       "Before you delegate, work out what the request changes. A task is a new git worktree of one repo on a new branch",
@@ -252,7 +258,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
 
   test("the supervisor is told that each prompt ends with the situation, which covers the work the user started too (ADR-148)", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
-    writeSessionInstructions(sessionDir, "0.5.12", { kind: "supervisor", changesCode: false }, NO_KNOWLEDGE);
+    writeSessionInstructions(sessionDir, "0.5.12", { kind: "supervisor", changesCode: false }, NO_KNOWLEDGE, false);
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain(
       "Each prompt you get ends with Trackwall's situation: every task with who started it, what its session does, its last verification and its merge request with the pipeline",
@@ -264,7 +270,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
 
   test("a supervisor the user lets change code is told so, and still hands repo changes to tasks (ADR-78)", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
-    writeSessionInstructions(sessionDir, "0.4.1", { kind: "supervisor", changesCode: true }, NO_KNOWLEDGE);
+    writeSessionInstructions(sessionDir, "0.4.1", { kind: "supervisor", changesCode: true }, NO_KNOWLEDGE, false);
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain("You coordinate: hand each piece of work to an agent with propose_task");
     expect(text).toContain("The user lets you run commands and change files yourself; keep that to what they ask you for");
@@ -277,7 +283,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
 
   test("a free session in the projects folder works with the user in any repo, without the supervisor's or the task rules (ADR-100)", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
-    writeSessionInstructions(sessionDir, "0.5.5", { kind: "free" }, NO_KNOWLEDGE);
+    writeSessionInstructions(sessionDir, "0.5.5", { kind: "free" }, NO_KNOWLEDGE, false);
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain("The user sees this session in Trackwall's Sessions view");
     expect(text).toContain("You are a free session in the projects folder that holds the user's repos, not in one repo");
@@ -288,9 +294,24 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     expect(text).toContain(MCP_INSTRUCTIONS);
   });
 
+  test("a session with Java navigation learns that lsp waits for jdtls's import and how to see its state; one without does not", () => {
+    const withJava = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
+    writeSessionInstructions(withJava, "0.5.22", { kind: "repo", repo: "shop" }, NO_KNOWLEDGE, true);
+    const text = readFileSync(join(withJava, "instructions", "trackwall.instructions.md"), "utf8");
+    expect(text).toContain("## Java navigation");
+    expect(text).toContain("Until the import ends, an `lsp` call waits for it, so read files with your other tools in the meantime");
+    expect(text).toContain(
+      'An empty answer ("No definition found", no references) during the import, or after a failed one, says nothing about the code',
+    );
+    expect(text).toContain("get_session with your own session id (the caller in list_sessions) tells how jdtls is doing");
+    const withoutJava = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
+    writeSessionInstructions(withoutJava, "0.5.22", { kind: "repo", repo: "shop" }, NO_KNOWLEDGE, false);
+    expect(readFileSync(join(withoutJava, "instructions", "trackwall.instructions.md"), "utf8")).not.toContain("Java navigation");
+  });
+
   test("a session directory with a comma in its path gets no file, because the variable splits on commas", () => {
     const sessionDir = join(mkdtempSync(join(tmpdir(), "trackwall-instructions-")), "a,b");
-    expect(writeSessionInstructions(sessionDir, "0.3.0", { kind: "repo", repo: "shop" }, NO_KNOWLEDGE)).toBeNull();
+    expect(writeSessionInstructions(sessionDir, "0.3.0", { kind: "repo", repo: "shop" }, NO_KNOWLEDGE, false)).toBeNull();
     expect(existsSync(sessionDir)).toBe(false);
   });
 

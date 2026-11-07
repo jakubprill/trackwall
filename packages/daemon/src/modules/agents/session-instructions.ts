@@ -21,8 +21,8 @@ import type { HandoffFacts } from "./task-handoff.ts";
  * repository instruction, because the daemon adds its directory to `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` in the session
  * environment. It changes neither the user's repo nor `~/.copilot`. The content is the session's environment (the
  * Trackwall version and where the user sees the session), its role (the supervisor or a free session in the projects
- * folder, a repo session in the repo root or a task session in a worktree) and the shared MCP instruction (`MCP_INSTRUCTIONS`), which
- * Copilot CLI does not take from the MCP server.
+ * folder, a repo session in the repo root or a task session in a worktree), how its Java navigation behaves when it has
+ * one (ADR-99) and the shared MCP instruction (`MCP_INSTRUCTIONS`), which Copilot CLI does not take from the MCP server.
  */
 
 /** Copilot CLI 1.0.103 variable with instruction directories separated by commas (checked with `copilot instruction list`). */
@@ -52,11 +52,12 @@ export function writeSessionInstructions(
   version: string,
   role: SessionRole,
   knowledge: SessionKnowledge,
+  javaNavigation: boolean,
 ): string | null {
   const dir = join(sessionDir, INSTRUCTIONS_DIR);
   if (dir.includes(",")) return null;
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, INSTRUCTIONS_FILE), sessionInstructions(version, role, knowledge));
+  writeFileSync(join(dir, INSTRUCTIONS_FILE), sessionInstructions(version, role, knowledge, javaNavigation));
   return dir;
 }
 
@@ -67,7 +68,7 @@ export function withInstructionsDir(env: NodeJS.ProcessEnv, dir: string): NodeJS
   return { ...env, [key]: own ? `${own},${dir}` : dir };
 }
 
-function sessionInstructions(version: string, role: SessionRole, knowledge: SessionKnowledge): string {
+function sessionInstructions(version: string, role: SessionRole, knowledge: SessionKnowledge, javaNavigation: boolean): string {
   return [
     // `applyTo: "**"`: the instruction applies to every file, i.e. to the whole session, like `.github/instructions` in a repo.
     "---",
@@ -83,6 +84,7 @@ function sessionInstructions(version: string, role: SessionRole, knowledge: Sess
     "",
     ...sessionRole(role),
     "",
+    ...(javaNavigation ? JAVA_NAVIGATION_SECTION : []),
     ...knowledgeSection(knowledge),
     "## Trackwall tools",
     "",
@@ -90,6 +92,17 @@ function sessionInstructions(version: string, role: SessionRole, knowledge: Sess
     "",
   ].join("\n");
 }
+
+/**
+ * The Mac measurement of 2026-11-07: the first `lsp` call waited the whole cold import (about 70 s) without a word, and a
+ * call during indexing answered "No definition found", which an agent takes for a fact about the code.
+ */
+const JAVA_NAVIGATION_SECTION = [
+  "## Java navigation",
+  "",
+  `Copilot CLI's \`lsp\` tool answers for Java files from Eclipse JDT Language Server (jdtls), which starts in the background with this session and first imports the project with its build tool: a minute or more on the first start, longer for a large project or a slow build, and only seconds on later starts. Until the import ends, an \`lsp\` call waits for it, so read files with your other tools in the meantime instead of waiting idle. An empty answer ("No definition found", no references) during the import, or after a failed one, says nothing about the code: check the line and column, and ${mcpTools.getSession.name} with your own session id (the caller in ${mcpTools.listSessions.name}) tells how jdtls is doing (\`javaNavigation\`: starting, importing, stalled, ready or failed with jdtls's message). When the import failed or stalled, work without \`lsp\` and say so in your result.`,
+  "",
+];
 
 function sessionRole(role: SessionRole): string[] {
   if (role.kind === "supervisor") return supervisorRole(role.changesCode);
@@ -144,7 +157,7 @@ function taskRole({ repo, task, handoff, change }: Extract<SessionRole, { kind: 
     `- Run your changes with ${mcpTools.startService.name} and task \`${task}\`: the repo's service starts from this worktree on the task's own port (mise tasks here get it as ${TASK_PORT_ENV.join(" and ")}), next to the one from the repo root; ${mcpTools.callEndpoint.name} and ${mcpTools.stopService.name} take the same task.`,
     "- Commit your changes on the task branch. Do not switch branches, push, merge or open merge requests unless the task asks for it: the user pushes the branch and opens its merge request from Trackwall.",
     "- When a turn of yours ends, Trackwall commits what you left uncommitted as a `WIP round <n>` commit on the task branch, so the user can see and undo each round, and squashes those commits into yours before the push. Leave them as they are: do not amend, squash, rebase or reset them away.",
-    `- Work that belongs to another repo is not yours: propose it with ${mcpTools.proposeTask.name} and say so in your result. When your turn ends, Trackwall proposes a task to each repo that calls an endpoint your commits removed or changed (${mcpTools.getChangedEndpoints.name} with task \`${task}\` lists them); your own proposal for such a repo replaces Trackwall's, so make one only when the repo needs more than following the new contract. Other work that builds on your change (a reader of a message or field you changed, a caller ${mcpTools.findEndpoint.name} or ${mcpTools.whoCalls.name} names) you propose yourself after you commit, one proposal per repo. Trackwall tells the new task that your task handed it the work and how to read your changes, so your prompt says what changed in the contract and what the other repo has to do, not how your code does it.`,
+    `- Work that belongs to another repo is not yours: propose it with ${mcpTools.proposeTask.name} and say so in your result. When your turn ends, Trackwall proposes a task to each repo that calls an endpoint or imports a public library type your commits removed or changed (${mcpTools.getChangedEndpoints.name} with task \`${task}\` lists them); your own proposal for such a repo replaces Trackwall's, so make one only when the repo needs more than following the new contract. Other work that builds on your change (a reader of a message or field you changed, a caller ${mcpTools.findEndpoint.name} or ${mcpTools.whoCalls.name} names) you propose yourself after you commit, one proposal per repo. Trackwall tells the new task that your task handed it the work and how to read your changes, so your prompt says what changed in the contract and what the other repo has to do, not how your code does it.`,
     `- Before you report that you are done, call ${mcpTools.verifyTask.name} with repo \`${repo}\` and task \`${task}\`: it runs the repo's mise task ${VERIFY_MISE_TASK} in this worktree, and the user sees its verdict in the task's panel. Fix what fails and call it again. If the repo has no mise task ${VERIFY_MISE_TASK}, do not add one (a changed mise config needs the user's trust); say so in your result.`,
     `- When you are done, or stuck and need the user, call ${mcpTools.reportResult.name}: what you did, what is left and what to check, or the question you need answered. Call it again if the result changes. Your result becomes the description of the task's merge request, which the user opens from Trackwall, so write it for the reviewer in about ${TASK_SUMMARY_WORDS} words: more than ${TASK_SUMMARY_MAX} characters is refused. When the user can try the change by hand (a page, an endpoint, a command), add checkSteps: a few short steps, each on one line of up to ${TASK_CHECK_STEP_MAX} characters, with what to do and what they should see. They are only a hint for the user, so leave them out when there is nothing to try.`,
     `- When you need a decision from the session that proposed your task (or the supervisor the user handed it to) to go on, ask it with ${mcpTools.askProposer.name} and end your turn: its answer comes as a message. If no session answers your task (the user started it), the tool says so; then ask the user.`,

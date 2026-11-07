@@ -19,7 +19,7 @@ interface TerminalDrop {
 /**
  * Files dropped on a terminal's frame. With the daemon on this desktop the terminal gets their paths (ADR-51); with a
  * daemon elsewhere, and always in a browser, which gives the page no paths, it gets the paths of the copies the daemon
- * kept (ADR-201, `dropped-files.ts`). The desktop app's drops come as a `FileDropEvent` (`use-file-drop.ts`); a
+ * kept (ADR-226, `dropped-files.ts`). The desktop app's drops come as a `FileDropEvent` (`use-file-drop.ts`); a
  * browser's as the page's own drag events.
  */
 export function useTerminalDrop(frame: RefObject<HTMLElement | null>, conn: Connection, drop: TerminalDrop): void {

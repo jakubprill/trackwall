@@ -43,6 +43,8 @@ function session(id: string, repoId: string, over: Partial<Session> = {}): Sessi
     readRequest: null,
     copyRequest: null,
     usage: null,
+    model: null,
+    modelInUse: null,
     ...over,
   };
 }

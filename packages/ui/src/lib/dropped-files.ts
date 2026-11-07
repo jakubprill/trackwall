@@ -1,7 +1,7 @@
 import { dropTooLarge, MAX_DROP_BYTES } from "@trackwall/protocol";
 
 /**
- * Files dropped on a terminal whose daemon runs on another computer, such as in a container (ADR-201): a path of this
+ * Files dropped on a terminal whose daemon runs on another computer, such as in a container (ADR-226): a path of this
  * computer means nothing there, so the window sends each file's bytes to the daemon, which keeps a copy in the projects
  * folder, and the terminal gets the copies' paths instead. The desktop app reads a dropped file through the shell's
  * `read_dropped_file`, which reads only a file just dropped on that window; a browser hands the page the files themselves.

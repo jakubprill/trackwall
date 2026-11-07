@@ -127,6 +127,17 @@ const SHOTS: Record<string, (page: Page) => Promise<void>> = {
     await page.getByText("Ring 1 calls an endpoint").waitFor();
     await settle(page, 2000);
   },
+  flow: async (page) => {
+    await page.keyboard.press("Control+6");
+    await page.getByRole("columnheader", { name: "Waits for you" }).waitFor();
+    await settle(page);
+  },
+  "copilot-usage": async (page) => {
+    await page.keyboard.press("Control+,");
+    await page.getByRole("button", { name: "Usage", exact: true }).click();
+    await page.getByText("Tasks and sessions").waitFor();
+    await settle(page);
+  },
   overview: async (page) => {
     // The graph of twenty repos is wider than the other views.
     await page.setViewportSize({ width: 2400, height: 420 });

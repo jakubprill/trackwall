@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { type FolderTerminal, PROJECTS_FOLDER_PLACE } from "@trackwall/protocol";
-import { startsOnOpen, terminalAt } from "../src/lib/folder-terminals.ts";
+import { reopensOnOpen, terminalAt } from "../src/lib/folder-terminals.ts";
 
 const RUNNING: FolderTerminal["run"] = { kind: "running", runId: "r1", startedAt: "2026-11-03T10:00:00.000Z", pid: 7 };
 const ROOT: FolderTerminal = { id: "11111111-1111-4111-8111-111111111111", repo: "shop", task: null, run: RUNNING };
@@ -26,13 +26,13 @@ describe("a place's folder terminal", () => {
 });
 
 describe("opening a Shell tab", () => {
-  test("starts the place's shell once the list came and shows none", () => {
-    expect(startsOnOpen({ loaded: true, hasTerminal: false, alreadyAsked: false })).toBe(true);
+  test("starts no shell where none runs, so a tab passed by with Ctrl+PageDown leaves nothing running", () => {
+    expect(reopensOnOpen({ loaded: true, hasLiveShell: false, alreadyAsked: false })).toBe(false);
   });
 
-  test("waits for the list, keeps the shell that is there, and never starts a second time in the same tab", () => {
-    expect(startsOnOpen({ loaded: false, hasTerminal: false, alreadyAsked: false })).toBe(false);
-    expect(startsOnOpen({ loaded: true, hasTerminal: true, alreadyAsked: false })).toBe(false);
-    expect(startsOnOpen({ loaded: true, hasTerminal: false, alreadyAsked: true })).toBe(false);
+  test("asks the daemon once for a live shell, which it hands back or moves to a changed projects folder", () => {
+    expect(reopensOnOpen({ loaded: true, hasLiveShell: true, alreadyAsked: false })).toBe(true);
+    expect(reopensOnOpen({ loaded: true, hasLiveShell: true, alreadyAsked: true })).toBe(false);
+    expect(reopensOnOpen({ loaded: false, hasLiveShell: false, alreadyAsked: false })).toBe(false);
   });
 });

@@ -68,6 +68,11 @@ function VerificationDetails({ verification }: { verification: Verification }) {
   const showLastLines = verification.state === "failed" && failures.length === 0 && errors.length === 0 && lastLines.length > 0;
   return (
     <>
+      {verification.outdated && (
+        <p className="text-xs">
+          The worktree's files changed after this run started, so this verdict is about earlier changes. Verify again.
+        </p>
+      )}
       {tests && tests.reports > 0 && <p className="text-sm">{testCountsLabel(tests.totals)}</p>}
       {message && <p className="text-muted-foreground text-xs">{message}</p>}
       {failures.length > 0 && (

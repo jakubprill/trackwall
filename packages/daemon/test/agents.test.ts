@@ -535,6 +535,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     await expect(agents.start("other")).rejects.toMatchObject({ code: "not_found" });
 
     const missing = new Agents({
+      inContainer: false,
       closeFolderTerminal: async () => {},
       procs: {
         startTerminal: () => Promise.reject(new Error("should not start")),
@@ -550,6 +551,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
         toolPermissions: () => ({ allow: [], deny: [] }),
         supervisorSettings: () => ({ changesCode: false }),
         supervisorModel: () => null,
+        setSupervisorModel: () => {},
         agentSecrets: () => [],
         sessionProfile: () => null,
         autoReviewSettings: () => ({ afterReport: false }),
@@ -567,8 +569,10 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
       sessionMcpServer: () => ({ url: "http://127.0.0.1:9/mcp", headers: {} }),
       openEditor: () => {},
       boardHas: async () => true,
+      followTasks: async () => null,
       taskOutcomes: () => [],
       knowledge: async () => ({ entries: [], more: 0 }),
+      wireApi: async () => null,
       onTaskRemoved: () => {},
       taskImpact: () => Promise.reject(new Error("unused")),
       log: () => {},

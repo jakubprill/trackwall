@@ -36,6 +36,11 @@
   --input: oklch(0.85 0.04 220 / 18%);
   --ring: oklch(0.82 0.12 210 / 70%);
   --grid-line: oklch(0.85 0.04 220 / 4%);
+  /* Groups of related sessions (ADR-48): hues apart from the state colours, so a colour never reads as a state. */
+  --group-1: oklch(0.72 0.14 300);
+  --group-2: oklch(0.74 0.13 350);
+  --group-3: oklch(0.7 0.12 262);
+  --group-4: oklch(0.72 0.12 45);
   /*
    * The 16 ANSI colours of the session terminals (`lib/terminal-theme.ts`): Copilot CLI draws its TUI with them, so
    * they follow the HUD. Red, green, yellow and cyan are the state and accent colours, white is muted text; blue and
@@ -126,6 +131,10 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-border: var(--border);
+  --color-group-1: var(--group-1);
+  --color-group-2: var(--group-2);
+  --color-group-3: var(--group-3);
+  --color-group-4: var(--group-4);
   --color-input: var(--input);
   --color-ring: var(--ring);
 }
