@@ -1,15 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { promptBoxOnScreen, promptBoxText } from "@trackwall/protocol";
+import { promptBoxLayout, promptBoxOnScreen, promptBoxText } from "@trackwall/protocol";
 import { CopilotSessionState, RETYPE_AFTER_MS } from "../src/modules/agents/copilot-session-state.ts";
 
-/** Screens of Copilot CLI 1.0.103 taken from the real binary in the daemon's emulator (the repo path replaced). */
+/**
+ * Screens taken from the real binary in the daemon's emulator (the repo path replaced): Copilot CLI 1.0.103's ruled box,
+ * and 1.0.107's framed box (`prompt-box-framed-*`, with `COPILOT_PROMPT_FRAME=1` and the colour queries answered).
+ */
 function screen(name: string): string[] {
   return readFileSync(join(import.meta.dir, "fixtures", "copilot", `${name}.txt`), "utf8").split("\n");
 }
 
 const box = screen("prompt-box-120");
+const summary = (changes: { state: string; source: string; confidence: string; reason: string }[]) =>
+  changes.map((c) => `${c.state} ${c.source} ${c.confidence} ${c.reason}`);
 const withText = box.map((l) => (l.trim() === "❯" ? "❯ read the review" : l));
 
 describe("Copilot CLI waiting in its input box, read from the screen (ADR-69)", () => {
@@ -54,9 +59,71 @@ describe("Copilot CLI waiting in its input box, read from the screen (ADR-69)", 
   });
 });
 
+describe("Copilot CLI 1.0.107's framed input box, read from the screen (ADR-220)", () => {
+  const framed = screen("prompt-box-framed-120");
+  const framedWithText = framed.map((l) => (l === "┃" ? "┃ read the review" : l));
+
+  test("the empty framed box over the footer with hints is the input box, in a wide and a narrow terminal, and after a turn", () => {
+    expect(promptBoxLayout(framed)).toBe("framed");
+    expect(promptBoxLayout(box)).toBe("ruled");
+    expect(promptBoxOnScreen(framed)).toBe("empty");
+    expect(promptBoxOnScreen([`╻${"▄".repeat(20)}`, "┃", `╹${"▀".repeat(20)}`, " Interactive · Manual Approval"])).toBe("empty");
+    expect(promptBoxOnScreen(screen("prompt-box-framed-72"))).toBe("empty");
+    // The prompt of the turn above is framed too, without the rail, so only the box at the bottom counts.
+    expect(promptBoxText(screen("prompt-box-framed-after-turn-120"))).toBe("");
+  });
+
+  test("text in the framed box has no ❯, and a text that wraps is read whole from every line of the rail", () => {
+    // As Copilot CLI 1.0.107 drew it at 100 columns in a contract test run.
+    const wrapped = [
+      " /src/shop [⎇ main]",
+      `╻${"▄".repeat(99)}`,
+      "┃ read the review and also a very long text that wraps over the end of the line of the terminal so",
+      "┃ we see how the frame wraps it",
+      `╹${"▀".repeat(99)}`,
+      " Interactive · Manual Approval · @ files/sessions · # issues               trackwall-scripted-model",
+    ];
+
+    expect(promptBoxText(framedWithText)).toBe("read the review");
+    expect(promptBoxOnScreen(framedWithText)).toBe("text");
+    expect(promptBoxText(wrapped)).toBe(
+      "read the review and also a very long text that wraps over the end of the line of the terminal so we see how the frame wraps it",
+    );
+  });
+
+  test("the framed box over a status line is not ready: Copilot CLI is still loading, or working", () => {
+    expect(promptBoxLayout(screen("prompt-box-framed-working-120"))).toBe("framed");
+    expect(promptBoxOnScreen(screen("prompt-box-framed-loading-120"))).toBeUndefined();
+    expect(promptBoxOnScreen(screen("prompt-box-framed-working-120"))).toBeUndefined();
+  });
+
+  test("the command menu on its own rail above the framed box is not in it: the box holds the command Enter picks", () => {
+    expect(promptBoxText(screen("prompt-box-framed-menu-120"))).toBe("/collect-debug-logs");
+  });
+
+  test("an approval dialog of a session with the framed box is not the input box", () => {
+    expect(promptBoxLayout(screen("dialog-shell-framed-120"))).toBeUndefined();
+    expect(promptBoxOnScreen(screen("dialog-shell-framed-120"))).toBeUndefined();
+  });
+
+  test("only a whole frame is the input box: not without its top, with nothing inside, with a line off the rail, or a past prompt's frame", () => {
+    const footer = " Interactive · Manual Approval";
+    expect(promptBoxOnScreen(["┃", `╹${"▀".repeat(20)}`, footer])).toBeUndefined();
+    expect(promptBoxOnScreen([`╻${"▄".repeat(20)}`, `╹${"▀".repeat(20)}`, footer])).toBeUndefined();
+    expect(promptBoxOnScreen([`╻${"▄".repeat(20)}`, "┃", "  more text", `╹${"▀".repeat(20)}`, footer])).toBeUndefined();
+    expect(promptBoxOnScreen([` ${"▄".repeat(20)}`, "  ❯ hello", ` ${"▀".repeat(20)}`, footer])).toBeUndefined();
+  });
+
+  test("a session with no state yet waits for you in the framed box, and the daemon may type into it", () => {
+    const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: false, program: null });
+
+    expect(session.inPromptBox(() => framed)).toBe(true);
+    expect(session.inPromptBox(() => framedWithText)).toBe(false);
+    expect(summary(session.screen(() => framed))).toEqual(["Input screen medium screen input box before the first prompt"]);
+  });
+});
+
 describe("a new session's state from its input box (ADR-69)", () => {
-  const summary = (changes: { state: string; source: string; confidence: string; reason: string }[]) =>
-    changes.map((c) => `${c.state} ${c.source} ${c.confidence} ${c.reason}`);
   const record = (event: "sessionStart" | "agentStop" | "userPromptSubmitted") => ({ event, receivedAt: 0, payload: {}, omitted: [] });
 
   test("the input box, with or without text, is waiting for you only before the session has a state", () => {

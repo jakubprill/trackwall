@@ -108,6 +108,13 @@ describe("Enter on Copilot CLI's /copy", () => {
     expect(entersCopyCommand(enter, box("/copy"))).toBe(true);
   });
 
+  test("in the framed input box, which has no ❯, /copy asks too", () => {
+    // Copilot CLI's framed box (ADR-220): the rail on the left, between a row of ▄ and a row of ▀.
+    const framed = (text: string) => () => [" ● Here is the answer", `╻${"▄".repeat(39)}`, `┃ ${text}`, `╹${"▀".repeat(39)}`, footer];
+    expect(entersCopyCommand(enter, framed("/copy"))).toBe(true);
+    expect(entersCopyCommand(enter, framed("/collect-debug-logs"))).toBe(false);
+  });
+
   test("with the command menu open, the box shows the command Enter picks, so typing /co counts too", () => {
     const menu = () => ["┃ ❯ /copy                 Copy the last response to the clipboard", rule, "❯ /copy", rule, footer];
     expect(entersCopyCommand(enter, menu)).toBe(true);
