@@ -85,7 +85,10 @@ describe("the column of a task on the wall (ADR-224)", () => {
       needsAttention: true,
       state: { state: "Input", confidence: "high", at: "2026-11-07T10:20:00.000Z" },
     } as Partial<Session>);
-    const reported = task("t", { inReview: true, summary: { text: "done", checkSteps: [], reportedAt: "2026-11-07T10:19:00.000Z" } });
+    const reported = task("t", {
+      inReview: true,
+      summary: { text: "done", checkSteps: [], reproTest: null, reportedAt: "2026-11-07T10:19:00.000Z" },
+    });
     expect(onlyCard(input({ tasks: [reported], sessions: [finished] }))).toMatchObject({
       column: "review",
       since: "2026-11-07T10:19:00.000Z",
