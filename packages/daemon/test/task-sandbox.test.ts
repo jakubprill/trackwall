@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { agentsApi, doctorApi } from "@trackwall/protocol";
 import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
-import { defaultSandboxTasks, Workspace } from "../src/modules/workspace/workspace.ts";
+import { Workspace } from "../src/modules/workspace/workspace.ts";
 import { WorkspaceFile } from "../src/modules/workspace/workspace-file.ts";
 import { viewer, waitFor } from "./support/agents.ts";
 import { fakeHosting } from "./support/hosting.ts";
@@ -60,16 +60,8 @@ describe("sandbox in workspace.yaml and its default (ADR-181)", () => {
     });
   }
 
-  test("without the key tasks without approvals run in the sandbox only on a Linux computer outside a container", () => {
-    expect(defaultSandboxTasks(false, "linux")).toBe("auto");
-    expect(defaultSandboxTasks(true, "linux")).toBe("off");
-    expect(defaultSandboxTasks(false, "darwin")).toBe("off");
-    expect(defaultSandboxTasks(false, "win32")).toBe("off");
-  });
-
-  test("the workspace gives that default without the key, and the key wins on every system", () => {
-    expect(workspace(null, false).sandboxSettings()).toEqual({ tasks: defaultSandboxTasks(false, process.platform) });
-    expect(workspace(null, true).sandboxSettings()).toEqual({ tasks: "off" });
+  test("the workspace gives the key as it is, and nothing without it, whose default depends on this computer", () => {
+    expect(workspace(null, false).sandboxSettings()).toBeNull();
     expect(workspace("sandbox:\n  tasks: off\n", false).sandboxSettings()).toEqual({ tasks: "off" });
     expect(workspace("sandbox:\n  tasks: all\n", true).sandboxSettings()).toEqual({ tasks: "all" });
   });
@@ -88,7 +80,7 @@ describe.skipIf(process.versions.bun === undefined)("a task in Copilot CLI's san
       const path = `${sandboxProgramsFolder()}${delimiter}${process.env.PATH ?? ""}`;
       daemon = await startSessionApi(TOKEN, { ...ONE_REPO, sandboxTasks: "auto", copilot: fakeCopilotWithPath(path) });
       const options = await daemon.post(agentsApi.startOptions, {});
-      expect(options.sandbox).toEqual({ tasks: "auto", problem: null });
+      expect(options.sandbox).toEqual({ tasks: "auto", problem: null, chosen: true });
 
       const auto = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "map the endpoints", approvals: "auto" });
       expect(auto.sandbox).toBe(true);
@@ -130,3 +122,54 @@ describe.skipIf(process.versions.bun === undefined)("a task in Copilot CLI's san
     SLOW_TEST_TIMEOUT_MS,
   );
 });
+
+describe.if(process.platform === "linux")(
+  "Copilot CLI's sandbox in a container (ADR-219, the facade with a real bubblewrap process)",
+  () => {
+    /** The sandbox's programs, with a `bwrap` that ends with `exitCode`, as bubblewrap does when it cannot make its namespaces. */
+    function programsWithBwrap(exitCode: number): string {
+      const dir = sandboxProgramsFolder();
+      writeFileSync(join(dir, "bwrap"), `#!/bin/sh\necho 'bwrap: No permissions to create new namespace' >&2\nexit ${exitCode}\n`);
+      return `${dir}${delimiter}${process.env.PATH ?? ""}`;
+    }
+
+    test(
+      "where bubblewrap can make its namespaces, tasks without approvals run in the sandbox without the key",
+      async () => {
+        daemon = await startSessionApi(TOKEN, {
+          ...ONE_REPO,
+          inContainer: true,
+          sandboxTasks: null,
+          copilot: fakeCopilotWithPath(programsWithBwrap(0)),
+        });
+        expect((await daemon.post(agentsApi.startOptions, {})).sandbox).toEqual({ tasks: "auto", problem: null, chosen: false });
+        const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "map the endpoints", approvals: "auto" });
+        expect(task.sandbox).toBe(true);
+      },
+      SLOW_TEST_TIMEOUT_MS,
+    );
+
+    test(
+      "where it cannot, tasks run without it as before, and the doctor warns that the container is then their only isolation",
+      async () => {
+        daemon = await startSessionApi(TOKEN, {
+          ...ONE_REPO,
+          inContainer: true,
+          sandboxTasks: null,
+          copilot: fakeCopilotWithPath(programsWithBwrap(1)),
+        });
+        const problem = "bubblewrap cannot make the sandbox's namespaces here (bwrap: No permissions to create new namespace)";
+        expect((await daemon.post(agentsApi.startOptions, {})).sandbox).toEqual({ tasks: "off", problem, chosen: false });
+        const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "map the endpoints", approvals: "auto" });
+        expect(task.sandbox).toBe(false);
+
+        const report = await daemon.post(doctorApi.run, {});
+        expect(report.checks.find((c) => c.id === "copilot-sandbox")).toMatchObject({
+          status: "warn",
+          summary: `Tasks without approvals run their commands with the container's full access: Copilot CLI's sandbox cannot run in this container (${problem}).`,
+        });
+      },
+      SLOW_TEST_TIMEOUT_MS,
+    );
+  },
+);

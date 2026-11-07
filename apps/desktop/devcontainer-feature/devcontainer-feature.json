@@ -9,6 +9,11 @@
       "type": "string",
       "default": "7700",
       "description": "The port Trackwall listens on, which the container forwards to the same number on your computer."
+    },
+    "sandbox": {
+      "type": "boolean",
+      "default": false,
+      "description": "Install the programs Copilot CLI's sandbox runs on (bubblewrap, slirp4netns, iproute2, iptables), so that tasks without approvals run their commands in it once the container gets the seccomp profile from the dev container guide."
     }
   },
   "init": true,

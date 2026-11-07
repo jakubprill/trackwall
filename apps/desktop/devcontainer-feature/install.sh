@@ -23,6 +23,28 @@ case "$PORT" in
 esac
 [ "$PORT" -ge 1 ] && [ "$PORT" -le 65535 ] || fail "port out of range 1-65535: $PORT"
 
+# The "sandbox" option (ADR-219): the programs Copilot CLI's sandbox runs on in Linux, so that tasks without approvals can
+# run their commands in it. They make namespaces only once the container gets the seccomp profile of the dev container
+# guide; the daemon checks that at every start and keeps the sandbox off by default until then.
+SANDBOX="${SANDBOX:-false}"
+case "$SANDBOX" in
+true | false) ;;
+*) fail "sandbox must be true or false, got '$SANDBOX'" ;;
+esac
+if [ "$SANDBOX" = true ]; then
+  if command -v apt-get > /dev/null 2>&1; then
+    apt-get update -qq
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends bubblewrap slirp4netns iproute2 iptables util-linux > /dev/null
+    rm -rf /var/lib/apt/lists/*
+  elif command -v apk > /dev/null 2>&1; then
+    apk add --no-cache -q bubblewrap slirp4netns iproute2 iptables util-linux
+  elif command -v dnf > /dev/null 2>&1; then
+    dnf install -y -q bubblewrap slirp4netns iproute iptables-nft util-linux
+  else
+    fail "the sandbox option needs apt-get, apk or dnf; install bubblewrap, slirp4netns, iproute2 and iptables in the image instead"
+  fi
+fi
+
 # The user VS Code works as; Trackwall runs as that user, with its state in that user's home.
 USER_NAME="${_REMOTE_USER:-root}"
 case "$USER_NAME" in

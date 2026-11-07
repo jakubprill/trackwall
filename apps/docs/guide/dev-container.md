@@ -130,7 +130,7 @@ Tokens for such servers come in through [Environment from mise](/features/mise-e
 
 Trackwall in the container runs git itself: the sync, a task's "Push", cloning and the [doctor](/features/doctor). It does not get the SSH keys or git sign-in of your computer, also not while VS Code is open: what VS Code forwards reaches only its own terminals. So give the container a sign-in of its own, which you can revoke on its own, instead of copying your computer's key into it. The doctor's "Git access to repo hosts" line says whether git reaches each host and, if not, why.
 
-Agents in the container run as the same user and, in a container, outside Copilot CLI's sandbox, so they can use whatever sign-in git has there. Give it only the rights git needs and an end date.
+Agents in the container run as the same user, so they can use whatever sign-in git has there, unless a task runs in [Copilot CLI's sandbox](#copilot-cli-s-sandbox), which hides it from the task's commands. Give it only the rights git needs and an end date.
 
 **HTTPS with a token** (recommended). Keep the sign-in of your repo host's CLI in a volume, so it survives a rebuild: add `source=workspace-glab,target=/home/vscode/.config/glab-cli,type=volume` to `mounts` and `/home/vscode/.config/glab-cli` to the `chown` of `postCreateCommand` (for GitHub, `workspace-gh` at `/home/vscode/.config/gh`). The image needs `glab` or `gh`. The CLI keeps the token as plain text in that volume, readable by anything in the container.
 
@@ -143,6 +143,35 @@ After a rebuild the token is still in the volume, but git's own settings are not
 **An SSH key of the container.** Keep `~/.ssh` in a volume (`source=workspace-ssh,target=/home/vscode/.ssh,type=volume`, and `/home/vscode/.ssh` in the `chown`, followed by `chmod 700 /home/vscode/.ssh`). In the projects folder's Shell, run `ssh-keygen -t ed25519 -C "trackwall container" -f ~/.ssh/id_ed25519`, and add `~/.ssh/id_ed25519.pub` to your account on the repo host; GitLab lets you give it an end date, GitHub does not, so on GitHub prefer the token. Trackwall cannot type a passphrase, so leave it empty: the key is then as safe as the container, which is why it should be a key only the container has. Then connect once with `ssh -T git@gitlab.example.com` and accept the host key after comparing its fingerprint with the one your repo host publishes; git in Trackwall never accepts an unknown host key by itself.
 
 Do not copy your computer's private key into the container, and do not keep the token or key in a repo or in the [backups](#back-up-the-repos) of the repos: if one leaks, revoke it on the repo host and make a new one.
+
+## Copilot CLI's sandbox
+
+A task without approvals runs every command without asking, and its prompt may come from an agent that read something untrusted. On its own, such a task in the container can read all your repos in the volume, the git sign-in, Copilot CLI's sign-in and Trackwall's own token. In Copilot CLI's sandbox, its commands see only the task's worktree: no other repos and none of those files.
+
+Docker does not let the sandbox start by default, so Trackwall leaves it off in a container, and the [doctor](/features/doctor) says so. To turn it on:
+
+1. Download [sandbox-seccomp.json](/dev-container/sandbox-seccomp.json) into the `.devcontainer` folder, next to `devcontainer.json`. It is Docker's own default seccomp profile, with one rule added that lets the sandbox make its namespaces.
+2. Add the Feature's `sandbox` option, and the profile, in `devcontainer.json`:
+
+   ```jsonc
+   "features": {
+     "https://github.com/jakubprill/trackwall/releases/download/v<version>/devcontainer-feature-trackwall.tgz": { "sandbox": true }
+   },
+   "runArgs": [
+     "--security-opt", "seccomp=${localWorkspaceFolder}/.devcontainer/sandbox-seccomp.json",
+     "--security-opt", "systempaths=unconfined"
+   ]
+   ```
+
+3. Rebuild the container.
+
+From then on Trackwall sees at its start that the sandbox can run and puts tasks without approvals in it, as on a Linux computer: the New session form says so under the options. `sandbox.tasks` in `workspace.yaml` still chooses otherwise, as described in [Approvals](/features/approvals).
+
+- The `sandbox` option installs bubblewrap, slirp4netns, iproute2 and iptables with the image's package manager (`apt-get`, `apk` or `dnf`). With another one, install them in your image yourself.
+- `systempaths=unconfined` lets the sandbox mount its own `/proc`, which Docker otherwise hides parts of. Together with the profile, it lets programs in the container make namespaces of their own. Those reach only what the program's own user can, but they give the system kernel more surface. Leave both out if you prefer to rely on the container alone.
+- Keep `TRACKWALL_HOME` in your home folder, as above. The sandbox lets commands read the system's temporary folder, so Trackwall's state there would be readable.
+- The sandbox covers the agent's own commands. A build, the tests or a service that Trackwall runs for the task, such as Verify, still runs outside it, on files the agent may have changed.
+- On a computer whose Docker uses AppArmor, the doctor may still say that bubblewrap cannot make its namespaces. Then the container needs `--security-opt apparmor=unconfined` too, which weakens it further. Check that the doctor shows the sandbox as on after the rebuild.
 
 ## Back up the repos
 
