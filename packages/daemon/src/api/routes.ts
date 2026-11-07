@@ -28,6 +28,8 @@ import {
   terminalsApi,
   usageReportApi,
   verificationApi,
+  viewerApi,
+  viewerSessionList,
   workspaceApi,
 } from "@trackwall/protocol";
 import { z } from "zod";
@@ -184,6 +186,9 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(verificationApi.start, (f, b) => f.verifications.start(b.task)),
   route(verificationApi.get, (f, b) => f.verifications.get(b.task)),
   route(verificationApi.cancel, (f, b) => f.verifications.cancel(b.task)),
+  route(viewerApi.sessions, (f) => viewerSessionList(f.agents.sessions())),
+  route(viewerApi.state, (f) => f.viewerAccess.state()),
+  route(viewerApi.setEnabled, (f, b) => f.viewerAccess.setEnabled(b.enabled)),
   route(autoReviewApi.start, (f, b) => f.agents.startAutoReview(b.task)),
   route(autoReviewApi.get, (f, b) => f.agents.autoReview(b.task)),
   route(autoReviewApi.cancel, (f, b) => f.agents.cancelAutoReview(b.task)),

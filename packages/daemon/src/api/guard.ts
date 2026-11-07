@@ -53,3 +53,9 @@ export function tokenMatches(givenToken: string, token: string): boolean {
   const expected = Buffer.from(token);
   return given.length === expected.length && timingSafeEqual(given, expected);
 }
+
+/** The viewer token in `Authorization: Bearer` (ADR-221); viewer access compares it in constant time and refuses all while it is off. */
+export function hasViewerToken(req: IncomingMessage, access: { accepts: (token: string) => boolean }): boolean {
+  const header = req.headers.authorization;
+  return header?.startsWith("Bearer ") === true && access.accepts(header.slice("Bearer ".length));
+}

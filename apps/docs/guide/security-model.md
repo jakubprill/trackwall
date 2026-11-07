@@ -16,6 +16,7 @@ Trackwall runs coding agents on your computer, with your files and your tokens. 
 - A request from a web page on another address is refused, even with the token, so a website you visit cannot talk to Trackwall through your browser.
 - A website cannot show Trackwall's page inside its own, so it cannot trick you into a click on an approval there.
 - A session gets its own token, which opens only the MCP server and its own hooks, never the rest of the daemon.
+- The [VS Code extension](/features/vscode-extension) gets its own read-only token too, and only after you turn it on: it shows what the sessions are doing and opens nothing else.
 
 ## You are the gate
 

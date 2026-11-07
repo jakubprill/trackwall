@@ -129,6 +129,7 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
           address: (t) => facade.services.address(t),
           log: options.log ?? (() => {}),
         });
+  facade.viewerAccess.open({ port: api.port, instance: api.instance });
   void facade.agents.resumeLeftSessions();
   writeDaemonFile(home, { pid: process.pid, port: api.port, token, startedAt: new Date().toISOString(), version: "0.0.0-test" });
   /** An API action with the token; the result checked by the action's schema. */

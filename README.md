@@ -17,7 +17,7 @@ Trackwall builds that knowledge once, from the code itself, and gives the same p
 
 - **Keeps every repo in view.** Point it at your projects folder: it browses, clones and syncs every repo there, and builds a card of each one (stack, apps and ports, endpoints, packages, how to run it) from its files.
 - **Draws the connection graph.** Which repo uses which, through shared packages and HTTP calls, each connection with the file and line that proves it, and which versions of Java, Spring Boot and build plugins the repos disagree on.
-- **Runs Copilot CLI sessions side by side**, each in its own repo, and tells you which one is waiting for you or asking for approval, also from the tray.
+- **Runs Copilot CLI sessions side by side**, each in its own repo, and tells you which one is waiting for you or asking for approval, also from the tray and from VS Code.
 - **Gives agents tasks on their own branch and worktree.** You review the diff, comment on lines and run its tests before anything lands.
 - **Lends your agents the same picture** through its MCP server: code search across every repo, who calls an endpoint, logs and errors, services.
 - **Starts services with the services they call**, in order, and waits until each one answers.

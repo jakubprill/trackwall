@@ -10,6 +10,7 @@ import {
   type ErrorCode,
   HEALTH_PATH,
   type Health,
+  viewerApi,
 } from "@trackwall/protocol";
 import type { Facade } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
@@ -19,7 +20,7 @@ import { conversationSocketRoute } from "./conversation-socket.ts";
 import type { EventHub } from "./event-hub.ts";
 import { eventSocketRoute } from "./event-socket.ts";
 import { downloadRequest, sendDownload } from "./file-download.ts";
-import { hasValidToken, OriginPolicy } from "./guard.ts";
+import { hasValidToken, hasViewerToken, OriginPolicy } from "./guard.ts";
 import { HOOKS_PATH, handleHook } from "./hooks.ts";
 import { sessionSocketRoute, terminalSocketRoute } from "./pty-socket.ts";
 import { postRoutes } from "./routes.ts";
@@ -44,6 +45,8 @@ export interface ApiOptions {
 export interface ApiServer {
   server: Server;
   port: number;
+  /** This start's random id, which `GET /api/health` reports (ADR-161) and viewer access writes next to its token (ADR-221). */
+  instance: string;
   close: () => Promise<void>;
 }
 
@@ -105,6 +108,7 @@ export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer
   return {
     server,
     port: boundPort,
+    instance,
     close: async () => {
       closeSockets();
       options.events.close();
@@ -143,28 +147,34 @@ async function handle(req: IncomingMessage, res: ServerResponse, o: ApiOptions, 
   if (path === HEALTH_PATH && req.method === "GET") return ok<Health>(res, { status: "ok", version: o.version, instance });
   const route = protectedRoute(req, res, path, o);
   if (route) {
-    const caller = authenticate(req, route.sessionScoped, o);
+    const caller = authenticate(req, route.opensWith, o);
     return "refused" in caller ? fail(res, "unauthorized", caller.refused) : route.run(caller.session);
   }
   if (o.uiDir && (req.method === "GET" || req.method === "HEAD")) return serveStatic(o.uiDir, path, res);
   return fail(res, "not_found", `no route ${req.method} ${path}`);
 }
 
+/**
+ * Which token besides the daemon token opens a route: a session token on a route a session uses (ADR-138), the viewer
+ * token on the viewer's session list (ADR-221), or none.
+ */
+type RouteTokens = "daemon" | "session" | "viewer";
+
 /** A route behind the token and how `authenticate` treats it. */
 interface ProtectedRoute {
-  /** A route a session uses, which its session token alone opens (ADR-138); the rest take only the daemon token. */
-  sessionScoped: boolean;
+  opensWith: RouteTokens;
   /** Handles the request from the calling Trackwall session, `null` for the daemon token without a session token. */
   run: (session: string | null) => Promise<void> | void;
 }
 
 /** The routes behind the token: the API, MCP and the session plugin's hooks (ADR-88); `undefined` for any other path. */
 function protectedRoute(req: IncomingMessage, res: ServerResponse, path: string, o: ApiOptions): ProtectedRoute | undefined {
-  if (path.startsWith("/api/")) return { sessionScoped: false, run: () => handleApi(req, res, path, o) };
-  if (path === MCP_PATH) return { sessionScoped: true, run: (session) => o.mcp.handle(req, res, session) };
+  if (path === viewerApi.sessions.path) return { opensWith: "viewer", run: () => handleApi(req, res, path, o) };
+  if (path.startsWith("/api/")) return { opensWith: "daemon", run: () => handleApi(req, res, path, o) };
+  if (path === MCP_PATH) return { opensWith: "session", run: (session) => o.mcp.handle(req, res, session) };
   if (path.startsWith(HOOKS_PATH)) {
     return {
-      sessionScoped: true,
+      opensWith: "session",
       run: (session) => handleHook(req, res, path, session, (...args) => o.facade.agents.receiveHook(...args)),
     };
   }
@@ -175,11 +185,15 @@ function protectedRoute(req: IncomingMessage, res: ServerResponse, path: string,
  * Who calls a protected route, once, before the route reads the body. The daemon token opens every route; on a
  * session-scoped route a session token the daemon issued is enough and says which session calls (ADR-39), so the files
  * of a session, which its agent can read, hold no token for the API (ADR-138). An unknown session token there is
- * refused even with the daemon token, so an ended session does not look like an agent outside Trackwall.
+ * refused even with the daemon token, so an ended session does not look like an agent outside Trackwall. The viewer
+ * token opens the viewer's session list alone and only while viewer access is on (ADR-221).
  */
-function authenticate(req: IncomingMessage, sessionScoped: boolean, o: ApiOptions): { session: string | null } | { refused: string } {
-  const sessionToken = sessionScoped ? req.headers[SESSION_TOKEN_HEADER] : undefined;
-  if (sessionToken === undefined) return hasValidToken(req, o.token) ? { session: null } : { refused: "missing or invalid token" };
+function authenticate(req: IncomingMessage, opensWith: RouteTokens, o: ApiOptions): { session: string | null } | { refused: string } {
+  const sessionToken = opensWith === "session" ? req.headers[SESSION_TOKEN_HEADER] : undefined;
+  if (sessionToken === undefined) {
+    const opened = hasValidToken(req, o.token) || (opensWith === "viewer" && hasViewerToken(req, o.facade.viewerAccess));
+    return opened ? { session: null } : { refused: "missing or invalid token" };
+  }
   const session = typeof sessionToken === "string" ? o.facade.agents.callerSession(sessionToken) : undefined;
   return session === undefined ? { refused: "unknown session token: this Trackwall session has ended" } : { session };
 }

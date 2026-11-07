@@ -20,6 +20,7 @@ Repo layout, running from source and tools for people who develop Trackwall. Pro
 | `apps/docs` | the feature documentation site (VitePress, ADR-56): `guide/` (start and "How it works" pages) and one page per feature in `features/` written from `TEMPLATE.md`, the sidebar (and the groups of "All features") in `.vitepress/sidebar.ts`, the Trackwall look, the zoom of screenshots on a click and the Mermaid diagrams of ```` ```mermaid ```` blocks in `.vitepress/theme/` (with `.vitepress/mermaid-fence.ts`); the talk in `talk.md` and its Polish translation in `pl/talk.md` (slides a presenter moves through with the keyboard, linked from no menu, listed in `.vitepress/talk-pages.ts`); the screenshots in `public/screenshots/`, taken by `scripts/screenshots.ts` from the demo daemon; the build also writes `llms.txt`, `llms-full.txt` and a Markdown copy of every page for AI tools; `.github/workflows/pages.yml` publishes it on GitHub Pages |
 | `apps/design` | the design gallery (ADR-176): `index.html` lists every UI mockup by view with its state and a live preview, `mockups/` holds one static page per mockup, `tokens.css` the app's tokens they use (a test keeps them equal to `packages/ui/src/index.css`); open `index.html` straight from disk, or at `/design/` of the published documentation site |
 | `apps/desktop` | the Tauri 2 shell: windows (the main one and extra ones, translucent, ADR-11, ADR-49), tray and tray panel, system notifications and the global shortcut (ADR-50), starting and stopping the daemon |
+| `apps/vscode` | the VS Code extension (ADR-221): `src/` the extension (`extension.ts` its entry, the rest without VS Code's API where it can be, so `test/` reads it as data), `scripts/build.ts` its bundle in `dist/`, `scripts/package.ts` the `.vsix` in `out/` |
 
 ## Running from source
 
@@ -112,6 +113,17 @@ pnpm portable        # out/trackwall-<version>-windows-x64.zip or out/trackwall-
 Windows: the zip contains `trackwall.exe`, `trackwall-daemon.exe` and `ui/`. Unpacking it and running `trackwall.exe` is enough; state goes to `%USERPROFILE%\.trackwall`. Without WebView2, `trackwall.exe` shows a message, and `trackwall-daemon.exe --ui` opens Trackwall in the browser. The files are not signed, so SmartScreen shows a warning (signing with Azure Trusted Signing is planned before publication, §9 of the architecture).
 
 macOS: the zip contains an unsigned `Trackwall.app`; open it the first time with right click > Open or `xattr -dr com.apple.quarantine Trackwall.app`.
+
+## VS Code extension
+
+The extension in `apps/vscode` is one CommonJS bundle with `@trackwall/protocol` inside, packed into a `.vsix` by the repo's own script:
+
+```sh
+pnpm --filter @trackwall/vscode package   # apps/vscode/out/trackwall-<version>.vsix
+code --install-extension apps/vscode/out/trackwall-0.1.0.vsix
+```
+
+Then turn on "VS Code extension" in Settings › App of the Trackwall you run (with `pnpm dev`, its state folder is `.trackwall-dev` in the repo: set "Trackwall: State Folder" in VS Code to it). The extension has its own version in `apps/vscode/package.json`, not the release's; it is not published to the Marketplace.
 
 ## Linux archive
 

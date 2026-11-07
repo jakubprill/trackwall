@@ -65,6 +65,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       { text: "Start at sign-in", link: "/features/start-at-sign-in" },
       { text: "Keep the screen on", link: "/features/keep-screen-on" },
       { text: "Notifications in the browser", link: "/features/browser-notifications" },
+      { text: "VS Code extension", link: "/features/vscode-extension" },
       { text: "App updates", link: "/features/updates" },
       { text: "Config files", link: "/features/config-files" },
       { text: "Doctor", link: "/features/doctor" },
