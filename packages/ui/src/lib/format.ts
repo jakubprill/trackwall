@@ -18,6 +18,18 @@ export function relativeTime(iso: string, now: Date): string {
   return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
+/** How long something has been as it is, for a card on the wall (ADR-224): "just now", "12 min", "2 h 5 min", "3 days". */
+export function elapsedLabel(since: string, now: Date): string {
+  const minutes = Math.floor((now.getTime() - new Date(since).getTime()) / 60_000);
+  if (Number.isNaN(minutes)) return "";
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return minutes % 60 === 0 ? `${hours} h` : `${hours} h ${minutes % 60} min`;
+  const days = Math.floor(hours / 24);
+  return days === 1 ? "1 day" : `${days} days`;
+}
+
 /** The daemon's uptime: seconds, minutes, or hours with minutes. */
 export function formatUptime(ms: number): string {
   const s = Math.floor(ms / 1000);
