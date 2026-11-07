@@ -417,6 +417,10 @@ _Avoid_: window title (that is a session's `windowTitle`)
 The Copilot CLI model a task's session runs on, as Copilot CLI names it (`claude-opus-5.5`), passed as `--model` on every start and resume of the task's session; `null` for Copilot CLI's default. Optional: a proposer names it when the user asked for a model, and the user may change it before the start (ADR-98).
 _Avoid_: LLM, engine, agent (for the model)
 
+**Model in use** (`Session.modelInUse`, `modelSwitch`; the strip "Runs on …, not …" in the UI):
+The model Copilot CLI actually runs a session's conversation on, from the conversation's event log (ADR-225): the model of its latest own call, or of its latest model change. It differs from the task model or the session's `--model` when Copilot CLI fell back to another one (an account without the model) or `/model` switched it.
+_Avoid_: actual model, real model, effective model
+
 **Task approvals** (`Task.approvals`, `TaskProposal.approvals`, `TaskApprovals`: `ask` | `auto`; "No approvals" on the start pill and on the task):
 Whether a task's agent asks the user before tools: `ask` (the default) as every session does, `auto` runs every tool without asking (`--allow-all-tools`) on every start and resume, deny rules still refusing. Only for a task in its own worktree; the user turns on the "No approvals" pill when starting the task, and a proposer may suggest it on a proposal (ADR-105).
 _Avoid_: YOLO, autopilot (Copilot CLI's own modes, not what Trackwall passes), auto-approve

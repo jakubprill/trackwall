@@ -1172,8 +1172,8 @@ export class Agents {
   async #launchTask({ repo, cwd, task, args, ...start }: TaskLaunch): Promise<string | undefined> {
     const place = { repo, supervisor: false, cwd, task };
     if (start.view === "terminal") {
-      const { promptOnStart, lspServers } = start;
-      await this.#launch({ ...place, args, promptOnStart, hasConversation: true, lspServers });
+      const { promptOnStart, lspServers, conversation } = start;
+      await this.#launch({ ...place, args, promptOnStart, hasConversation: true, conversation, lspServers });
       return undefined;
     }
     const started = await this.#launcher.conversation({

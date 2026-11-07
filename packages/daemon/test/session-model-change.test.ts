@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { agentsApi } from "@trackwall/protocol";
+import { join } from "node:path";
+import { agentsApi, modelSwitch } from "@trackwall/protocol";
 import { viewer, waitFor } from "./support/agents.ts";
-import { startSessionApi } from "./support/session-api.ts";
+import { FAKE_COPILOT, ONE_REPO, startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
 // Another model for a running session or a task (ADR-206): a restart or a Resume on it, through the API the UI calls.
@@ -106,5 +107,50 @@ describe.skipIf(process.versions.bun === undefined)("another model for a session
     expect(await argumentsOf(restarted.id, "--session-id=")).toContain("Argument: --model=gpt-5-mini");
     expect(daemon.facade.workspace.supervisorModel()).toBe("gpt-5-mini");
     await daemon.post(agentsApi.stop, { session: restarted.id });
+  }, 60_000);
+
+  test("a task asked for a model the account does not offer shows the one Copilot CLI took instead, and a restart on an offered model clears the switch (ADR-225)", async () => {
+    // The fake falls back to the account's first model as Copilot CLI does (no error, the turn runs) and writes its receipts
+    // to the event log in its own home, like Copilot CLI.
+    const account = await startSessionApi("d".repeat(43), {
+      ...ONE_REPO,
+      copilot: {
+        command: FAKE_COPILOT.command,
+        env: ({ home }) => ({
+          ...process.env,
+          COPILOT_HOME: join(home, "copilot-home"),
+          FAKE_COPILOT_ACCOUNT_MODELS: "gpt-6-luna,claude-opus-5.5",
+        }),
+      },
+    });
+    try {
+      const { agents } = account.facade;
+      const task = await account.post(agentsApi.createTask, {
+        repo: "shop",
+        prompt: "describe the repo",
+        approvals: "auto",
+        model: "claude-sonnet-5.5",
+      });
+      const session = agents.sessions().sessions.find((s) => s.task === task.id);
+      if (session === undefined) throw new Error("the task started no session");
+
+      const switched = await waitFor(agents, session.id, (s) => s.modelInUse !== null, "the model in use", 30_000);
+
+      expect(switched.model).toBe("claude-sonnet-5.5");
+      expect(switched.modelInUse).toBe("gpt-6-luna");
+      expect(modelSwitch(switched)).toEqual({ requested: "claude-sonnet-5.5", inUse: "gpt-6-luna" });
+      // The task's conversation is under the task's id, not the session's, and its usage comes from there too (ADR-190).
+      expect(switched.usage).toMatchObject({ modelCalls: 1 });
+
+      // The old receipts in the log name gpt-6-luna, which must not count against the new model.
+      const restarted = await account.post(agentsApi.restart, { session: session.id, model: "claude-opus-5.5" });
+      expect(restarted.model).toBe("claude-opus-5.5");
+      expect(modelSwitch(restarted)).toBeNull();
+      const resumed = await waitFor(agents, restarted.id, (s) => s.modelInUse !== null, "the model set at the resume", 30_000);
+      expect(resumed.modelInUse).toBe("claude-opus-5.5");
+      await account.post(agentsApi.stop, { session: restarted.id });
+    } finally {
+      await account.stop();
+    }
   }, 60_000);
 });

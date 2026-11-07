@@ -23,6 +23,7 @@ function session(state: "Working" | "Input" | null, run: Session["run"] = runnin
     copyRequest: null,
     usage: null,
     model: null,
+    modelInUse: null,
   };
 }
 

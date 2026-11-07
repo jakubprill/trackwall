@@ -25,7 +25,7 @@ import { screenLines, untilInputBox } from "../test/support/screen-lines.ts";
 import { hookRecords, startRealCopilotDaemon } from "./support/real-copilot.ts";
 import { type Recorder, startRecorder } from "./support/recorder.ts";
 import { commitEscapeScript, ESCAPE_COMMAND, sandboxRefusedEverything } from "./support/sandbox-escape.ts";
-import { type ModelRequest, type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
+import { type ModelRequest, SCRIPTED_MODEL, type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
 import { USER_MCP_ISSUES, USER_MCP_SERVER, USER_MCP_TOOL } from "./support/user-mcp-server.ts";
 
 const USER_MCP_SERVER_SCRIPT = join(import.meta.dir, "support", "user-mcp-server.ts");
@@ -672,7 +672,7 @@ describe("a task's model with the real Copilot CLI (ADR-98)", () => {
 });
 
 describe("another model for a running task with the real Copilot CLI (ADR-206)", () => {
-  test("a task restarted on another model asks the provider for that model and still carries its conversation", async () => {
+  test("a task restarted on another model asks the provider for that model and still carries its conversation, and the event log names the model in use (ADR-225)", async () => {
     const { agents } = daemon.facade;
     model.reply({ text: "Listing the endpoints." });
     const task = await agents.createTask("shop", "list the endpoints");
@@ -680,9 +680,13 @@ describe("another model for a running task with the real Copilot CLI (ADR-206)",
     if (first === undefined) throw new Error("the task has no session");
     await endOfTurn(first.id);
     expect(model.requests().at(-1)?.model).not.toBe(REVIEW_MODEL);
+    // The receipt of the call names its model; Copilot CLI writes the log in batches, so it may land after the turn.
+    await waitFor(agents, first.id, (s) => s.modelInUse === SCRIPTED_MODEL, "the model of the first call", SESSION_MS);
 
     const restarted = await agents.restart(first.id, REVIEW_MODEL);
     await untilLoaded(restarted.id);
+    // The resume's model change names the new model before any call, after the old receipts in the log.
+    await waitFor(agents, restarted.id, (s) => s.modelInUse === REVIEW_MODEL, "the model set at the resume", SESSION_MS);
     model.reply({ text: "I will read the review." });
     agents.sendReview(task.id, [{ path: "README.md", side: "new", line: 1, code: "# shop", text: "Name the endpoints' owners too." }]);
     await endOfTurn(restarted.id);
@@ -692,6 +696,8 @@ describe("another model for a running task with the real Copilot CLI (ADR-206)",
     // Since Copilot CLI 1.0.107 a resumed conversation can carry a system reminder of its own among the user's messages.
     expect(request?.userTexts).toContainEqual(expect.stringContaining("list the endpoints"));
     expect(agents.task(task.id).model).toBe(REVIEW_MODEL);
+    await waitFor(agents, restarted.id, (s) => s.usage?.modelCalls === 2, "the receipt of the call on the new model", SESSION_MS);
+    expect(agents.session(restarted.id).modelInUse).toBe(REVIEW_MODEL);
     await agents.stop(restarted.id);
   });
 });

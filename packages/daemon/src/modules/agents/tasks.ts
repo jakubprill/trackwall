@@ -109,7 +109,13 @@ export interface TasksVcs extends HandoffGit, EndedTaskGit {
  * message of a new conversation, or the conversation to go on with is loaded.
  */
 export type TaskLaunch = { repo: string; cwd: string; task: string; args: readonly string[] } & (
-  | { view: "terminal"; promptOnStart: boolean; lspServers: Record<string, LspServer> }
+  | {
+      view: "terminal";
+      promptOnStart: boolean;
+      lspServers: Record<string, LspServer>;
+      /** Copilot CLI's id of the conversation, the task's id that `--session-id` and `--resume` name, not the session's. */
+      conversation: string;
+    }
   | { view: "conversation"; load: string | undefined; firstMessage: string | undefined }
 );
 
@@ -911,6 +917,7 @@ export class AgentTasks {
         args: [...place.args, ...args],
         promptOnStart: start === "new",
         lspServers,
+        conversation: task.id,
       });
       return;
     }

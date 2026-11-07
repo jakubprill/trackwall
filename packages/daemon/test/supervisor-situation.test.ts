@@ -22,6 +22,7 @@ function session(fields: Partial<Session> & Pick<Session, "id">): Session {
     copyRequest: null,
     usage: null,
     model: null,
+    modelInUse: null,
     ...fields,
   };
 }
