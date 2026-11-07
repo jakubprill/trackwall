@@ -2,15 +2,23 @@
  * Copilot CLI's input box, read from a session's screen (§4.4, ADR-69, ADR-180): what it holds, for the daemon and the
  * session terminal alike. Copilot CLI 1.0.103 sends
  * no hook until the first prompt: `sessionStart` comes together with it. So a new session that is ready for input is
- * told only by its screen: at the bottom the input box (a line starting with `❯` between two rules across the whole
- * width) and under it the footer with hints (`Interactive · Manual Approval · / commands …`, shortened in a narrow
- * terminal). While Copilot CLI is still loading, and while it works, the footer is a status line instead, an animated
- * bullet (● ◉ ◎ ○) and a word (`Loading: …`, `Working · …`), and the input box may already be drawn, so the footer
- * decides. The daemon's tests read screens of the real binary; the contract tests check this reading on the pinned
- * version.
+ * told only by its screen: at the bottom the input box and under it the footer with hints (`Interactive · Manual
+ * Approval · / commands …`, shortened in a narrow terminal). While Copilot CLI is still loading, and while it works, the
+ * footer is a status line instead, an animated bullet (● ◉ ◎ ○) and a word (`Loading: …`, `Working · …`), and the input
+ * box may already be drawn, so the footer decides. The box comes in two layouts, and Copilot CLI picks one per session:
+ * - ruled: a line starting with `❯` between two rules across the whole width (`─`), the only one in 1.0.103;
+ * - framed (seen on 1.0.107, ADR-220): a rail on the left, `╻` over lines starting with `┃` over `╹`, its top a row of `▄` and
+ *   its bottom a row of `▀`, with no `❯`. Copilot CLI draws it when its `PROMPT_FRAME` feature is on for the account
+ *   (or `COPILOT_PROMPT_FRAME=1`) and the terminal answered its query for the background colour, as the session
+ *   terminal's xterm.js does.
+ * The daemon's tests read screens of the real binary; the contract tests check this reading on the pinned version.
  */
 
 const RULE = /^─+$/;
+/** The framed box's top and bottom, each with its end of the rail. */
+const FRAME_TOP = /^╻▄+$/;
+const FRAME_BOTTOM = /^╹▀+$/;
+const FRAME_RAIL = "┃";
 /** The footer as a status line: any one-character bullet frame, then the word. */
 const STATUS = /^\S\s+(Loading|Working)\b/;
 
@@ -27,18 +35,43 @@ export function promptBoxText(lines: readonly string[]): string | undefined {
   const shown = lines.map((l) => l.trim());
   while (shown.at(-1) === "") shown.pop();
   const footer = shown.at(-1) ?? "";
-  if (footer === "" || STATUS.test(footer) || !RULE.test(shown.at(-2) ?? "")) return undefined;
+  if (footer === "" || STATUS.test(footer)) return undefined;
+  const bottom = shown.at(-2) ?? "";
+  if (RULE.test(bottom)) return ruledBoxText(shown);
+  if (FRAME_BOTTOM.test(bottom)) return framedBoxText(shown);
+  return undefined;
+}
+
+/** The ruled box over the footer (`shown` trimmed): a `❯` line under a rule, its wrapped lines up to the bottom rule. */
+function ruledBoxText(shown: readonly string[]): string | undefined {
   for (let first = shown.length - 3; first >= Math.max(1, shown.length - 2 - MAX_BOX_LINES); first--) {
     const line = shown.at(first) ?? "";
     if (RULE.test(line)) return undefined;
     if (!line.startsWith("❯")) continue;
     if (!RULE.test(shown.at(first - 1) ?? "")) return undefined;
-    return [line.slice(1), ...shown.slice(first + 1, -2)]
-      .map((part) => part.trim())
-      .filter((part) => part !== "")
-      .join(" ");
+    return joinBoxLines([line.slice(1), ...shown.slice(first + 1, -2)]);
   }
   return undefined;
+}
+
+/** The framed box over the footer (`shown` trimmed): every line between its top and bottom starts with the rail. */
+function framedBoxText(shown: readonly string[]): string | undefined {
+  const inside: string[] = [];
+  for (let at = shown.length - 3; at >= Math.max(0, shown.length - 3 - MAX_BOX_LINES); at--) {
+    const line = shown.at(at) ?? "";
+    if (FRAME_TOP.test(line)) return inside.length === 0 ? undefined : joinBoxLines(inside);
+    if (!line.startsWith(FRAME_RAIL)) return undefined;
+    inside.unshift(line.slice(FRAME_RAIL.length));
+  }
+  return undefined;
+}
+
+/** The box's text: its wrapped lines joined with single spaces, `""` when they hold nothing. */
+function joinBoxLines(parts: readonly string[]): string {
+  return parts
+    .map((part) => part.trim())
+    .filter((part) => part !== "")
+    .join(" ");
 }
 
 /** The input box at the bottom of the screen: `empty`, with `text` in it, or `undefined` (`promptBoxText`). */

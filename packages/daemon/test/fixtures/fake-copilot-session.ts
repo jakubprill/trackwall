@@ -109,6 +109,17 @@ if (process.argv.includes("--acp")) {
 
 const fire = pluginHooks(process.argv, "s1");
 const real = reference();
+
+/**
+ * The input box as Copilot CLI 1.0.107 draws it with its `PROMPT_FRAME` feature on (ADR-220): framed in half blocks with
+ * a rail on the left instead of between two rules with `❯`. The real binary also needs the terminal to answer its
+ * colour queries; the fake takes `COPILOT_PROMPT_FRAME=1` alone. The footer stays as in the reference.
+ */
+function framedBox(ruled: readonly string[]): string[] {
+  const width = ruled[0]?.length ?? 0;
+  return [`╻${"▄".repeat(width - 1)}`, "┃", `╹${"▀".repeat(width - 1)}`, ...ruled.slice(3)];
+}
+const promptBox = process.env.COPILOT_PROMPT_FRAME === "1" ? framedBox(real.promptBox) : real.promptBox;
 const title = (text: string) => process.stdout.write(`\x1b]0;${text}\x07`);
 const draw = (lines: readonly string[]) => process.stdout.write(`${lines.join("\r\n")}\r\n`);
 
@@ -244,7 +255,7 @@ function begin(): void {
   process.stdout.write(`Directory:\r\n${shortLines(process.cwd())}\r\n`);
   for (const arg of taskArgs) process.stdout.write(`Argument: ${arg}\r\n`);
   for (const name of shownEnv) process.stdout.write(`Env ${name}=${toolEnv(name)}\r\n`);
-  draw(real.promptBox);
+  draw(promptBox);
   started = initialPrompt !== undefined;
   if (started) {
     keepConversation();
@@ -285,7 +296,7 @@ let lastAnswer: string | undefined;
  */
 function copyLastAnswer(): void {
   if (lastAnswer !== undefined) process.stdout.write(`\x1b]52;c;${Buffer.from(lastAnswer).toString("base64")}\x07`);
-  draw(real.promptBox);
+  draw(promptBox);
 }
 
 function submit(line: string): void {
@@ -334,7 +345,7 @@ function endTurn(outputs: HookOutputs): void {
   redrawing = true;
   setTimeout(() => {
     redrawing = false;
-    draw(real.promptBox);
+    draw(promptBox);
   }, REDRAW_MS);
 }
 
