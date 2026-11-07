@@ -121,3 +121,19 @@ export function formChangeStart(
 export function startsChange(start: NewSessionStart): boolean {
   return start.kind === "change" || start.kind === "needs-title";
 }
+
+/**
+ * Whether the form offers a stack trace (ADR-222): only for one task in its own worktree, whose agent writes a failing
+ * test first; not for a session, which has no review of its changes, nor for a change across repos.
+ */
+export function offersStackTrace(start: NewSessionStart): boolean {
+  return start.kind === "task" || start.kind === "needs-prompt";
+}
+
+/**
+ * The pasted stack trace to send with the task: only while its field is open, so a trace the user folded away and no
+ * longer sees does not go into the prompt; `null` also when the field is empty or only blank.
+ */
+export function stackTraceToSend(text: string, open: boolean): string | null {
+  return !open || text.trim() === "" ? null : text;
+}

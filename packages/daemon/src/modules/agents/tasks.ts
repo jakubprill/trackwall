@@ -12,6 +12,7 @@ import {
   noIncludedFiles,
   PATCH_MAX_BYTES,
   type ProposedBy,
+  type ReportedSummary,
   type Session,
   type SessionView,
   TASK_SUMMARY_MAX_FILES,
@@ -596,13 +597,13 @@ export class AgentTasks {
   }
 
   /**
-   * A summary from the task session (`report_result`, ADR-39) with its check steps (ADR-169); a later one replaces the
-   * earlier one, steps included, and survives a daemon restart.
+   * A summary from the task session (`report_result`, ADR-39) with its check steps (ADR-169) and its reproduction test
+   * (ADR-222); a later one replaces the earlier one, steps and test included, and survives a daemon restart.
    */
-  setSummary(id: string, text: string, checkSteps: string[]): Task {
+  setSummary(id: string, report: ReportedSummary): Task {
     const reportedAt = new Date().toISOString();
     // A summary hands the work over for review (ADR-213).
-    const summarized = { ...this.#get(id), summary: { text, checkSteps, reportedAt }, inReview: true };
+    const summarized = { ...this.#get(id), summary: { ...report, reportedAt }, inReview: true };
     this.#save(this.#tasks.map((t) => (t.id === id ? summarized : t)));
     return view(summarized);
   }

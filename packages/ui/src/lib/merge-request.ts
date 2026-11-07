@@ -11,6 +11,7 @@ import {
   type MergeRequestState,
   type PipelineState,
   pipelineStateText,
+  reproTestLine,
   type Task,
   type TaskBranchPush,
   type Verification,
@@ -39,10 +40,11 @@ export function mergeRequestDraft(task: Task, verification: Verification | null,
   const title = (task.title ?? task.prompt.split("\n", 1)[0] ?? "").trim();
   const body = (task.summary?.text ?? task.prompt).trim();
   const checks = task.summary && task.summary.checkSteps.length > 0 ? `\n\n${checkStepsSection(task.summary.checkSteps)}` : "";
+  const repro = task.summary?.reproTest ? `\n\n${reproTestLine(task.summary.reproTest)}` : "";
   const verdict = verification && verification.state !== "running" ? `\n\n${verificationLine(verification)}` : "";
   return {
     title: cutText(title, MERGE_REQUEST_TITLE_MAX),
-    description: withBlock(changeBlock, `${body}${checks}${verdict}`),
+    description: withBlock(changeBlock, `${body}${checks}${repro}${verdict}`),
   };
 }
 
