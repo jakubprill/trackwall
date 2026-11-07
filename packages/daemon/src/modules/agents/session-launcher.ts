@@ -464,7 +464,7 @@ export interface TerminalLaunch extends SessionPlace {
   id: string;
   /** Copilot CLI already keeps a conversation under the id: the arguments carry the first message or resume it (ADR-95). */
   hasConversation: boolean;
-  /** Copilot CLI's id of the conversation when it is not the session id (ADR-107). */
+  /** Copilot CLI's id of the conversation when it is not the session id: one of the conversation view (ADR-107), or a task's (ADR-225). */
   conversation?: string;
   args: readonly string[];
   promptOnStart: boolean;

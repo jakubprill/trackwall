@@ -109,14 +109,18 @@ describe.skipIf(process.versions.bun === undefined)("another model for a session
     await daemon.post(agentsApi.stop, { session: restarted.id });
   }, 60_000);
 
-  test("a task asked for a model the account does not offer shows the one Copilot CLI took instead, and a restart on it clears the switch (ADR-225)", async () => {
+  test("a task asked for a model the account does not offer shows the one Copilot CLI took instead, and a restart on an offered model clears the switch (ADR-225)", async () => {
     // The fake falls back to the account's first model as Copilot CLI does (no error, the turn runs) and writes its receipts
     // to the event log in its own home, like Copilot CLI.
     const account = await startSessionApi("d".repeat(43), {
       ...ONE_REPO,
       copilot: {
         command: FAKE_COPILOT.command,
-        env: ({ home }) => ({ ...process.env, COPILOT_HOME: join(home, "copilot-home"), FAKE_COPILOT_ACCOUNT_MODELS: "gpt-6-luna" }),
+        env: ({ home }) => ({
+          ...process.env,
+          COPILOT_HOME: join(home, "copilot-home"),
+          FAKE_COPILOT_ACCOUNT_MODELS: "gpt-6-luna,claude-opus-5.5",
+        }),
       },
     });
     try {
@@ -138,9 +142,12 @@ describe.skipIf(process.versions.bun === undefined)("another model for a session
       // The task's conversation is under the task's id, not the session's, and its usage comes from there too (ADR-190).
       expect(switched.usage).toMatchObject({ modelCalls: 1 });
 
-      const restarted = await account.post(agentsApi.restart, { session: session.id, model: "gpt-6-luna" });
-      expect(restarted.model).toBe("gpt-6-luna");
+      // The old receipts in the log name gpt-6-luna, which must not count against the new model.
+      const restarted = await account.post(agentsApi.restart, { session: session.id, model: "claude-opus-5.5" });
+      expect(restarted.model).toBe("claude-opus-5.5");
       expect(modelSwitch(restarted)).toBeNull();
+      const resumed = await waitFor(agents, restarted.id, (s) => s.modelInUse !== null, "the model set at the resume", 30_000);
+      expect(resumed.modelInUse).toBe("claude-opus-5.5");
       await account.post(agentsApi.stop, { session: restarted.id });
     } finally {
       await account.stop();

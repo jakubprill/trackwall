@@ -36,7 +36,9 @@ function add(state: LogState, line: string, seen: Set<string>): LogState {
     return changed === undefined ? state : { ...state, modelInUse: changed };
   }
   if (!firstSighting(seen, receipt)) return state;
-  return { totals: addReceipt(state.totals, receipt), modelInUse: receipt.ownModel ?? state.modelInUse };
+  // A receipt without an identity (older Copilot CLI) cannot be told from one a resume writes again, so it names no model.
+  const model = receipt.key === undefined ? undefined : receipt.ownModel;
+  return { totals: addReceipt(state.totals, receipt), modelInUse: model ?? state.modelInUse };
 }
 
 /** What whole lines of a log say, for a reader that has the log in memory (the tests, a script). */
@@ -99,6 +101,16 @@ export class CopilotUsageLog {
   /** The model the conversation runs on after the last update (ADR-225); `null` before the log names one. */
   modelInUse(): string | null {
     return this.#state.modelInUse;
+  }
+
+  /**
+   * Reads what a conversation this session goes on with used before its start, and forgets the model in use the log
+   * named then: a restart on another model would otherwise show the old one until Copilot CLI writes the start's model
+   * change, and warn about a switch that is not there (ADR-225).
+   */
+  readBeforeStart(conversation: string): void {
+    this.update(conversation);
+    this.#state = { ...this.#state, modelInUse: null };
   }
 
   /**

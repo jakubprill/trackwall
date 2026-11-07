@@ -77,3 +77,23 @@ export function recordUsage(conversation: string | undefined): void {
   const cost = process.env.FAKE_COPILOT_NANO_AIU;
   appendUsageReceipt({ copilotHome, conversation, model: modelInUse(), ...(cost === undefined ? {} : { nanoAiu: Number(cost) }) });
 }
+
+/**
+ * The model change Copilot CLI writes to the conversation's event log at every start and resume (ADR-225), with the
+ * model the fake runs on, in `COPILOT_HOME` when the test set it.
+ */
+export function recordModelChange(conversation: string | undefined): void {
+  const copilotHome = process.env.COPILOT_HOME;
+  if (copilotHome === undefined || copilotHome === "" || conversation === undefined) return;
+  const file = conversationEventLog(copilotHome, conversation);
+  mkdirSync(dirname(file), { recursive: true });
+  const model = modelInUse();
+  const event = {
+    type: "session.model_change",
+    data: { source: "startup", newModel: model, previousModel: model },
+    id: crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
+    parentId: null,
+  };
+  appendFileSync(file, `${JSON.stringify(event)}\n`);
+}

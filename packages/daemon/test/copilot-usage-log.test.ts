@@ -156,6 +156,25 @@ describe("the usage log of a session", () => {
     expect(log.modelInUse()).toBeNull();
   });
 
+  test("a session going on with a conversation keeps its usage but takes the model in use only from its own start (ADR-225)", () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-usage-"));
+    const file = conversationEventLog(home, "conv-1");
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(
+      file,
+      `${modelChange("gpt-5.5")}\n${receipt({ model: "gpt-5.5", inputTokens: 3, outputTokens: 1, accounting: { sourceSessionId: "conv-1", sequence: 1 } })}\n`,
+    );
+    const log = new CopilotUsageLog(home);
+
+    log.readBeforeStart("conv-1");
+    expect(log.current()).toMatchObject({ modelCalls: 1, inputTokens: 3 });
+    expect(log.modelInUse()).toBeNull();
+
+    appendFileSync(file, `${modelChange("claude-opus-5.5")}\n`);
+    log.update("conv-1");
+    expect(log.modelInUse()).toBe("claude-opus-5.5");
+  });
+
   test("a missing log leaves the usage as it was", () => {
     const log = new CopilotUsageLog(join(tmpdir(), "trackwall-no-such-copilot-home"));
 

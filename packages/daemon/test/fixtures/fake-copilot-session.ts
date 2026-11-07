@@ -28,7 +28,7 @@ import { z } from "zod";
 import { ESCAPE } from "../../src/modules/agents/copilot-keys.ts";
 import { stripAnsi } from "../../src/modules/logs/stream-lines.ts";
 import { PARALLEL_TOOLS_PROMPT, PROMPT_PLACEHOLDER, type ReferenceHook, reference } from "../support/copilot-reference.ts";
-import { recordUsage } from "../support/copilot-usage-receipt.ts";
+import { recordModelChange, recordUsage } from "../support/copilot-usage-receipt.ts";
 import { pluginHooks } from "../support/plugin-hooks.ts";
 import { serveAcp } from "./fake-copilot-acp.ts";
 
@@ -259,6 +259,8 @@ function begin(): void {
   process.stdout.write(`Directory:\r\n${shortLines(process.cwd())}\r\n`);
   for (const arg of taskArgs) process.stdout.write(`Argument: ${arg}\r\n`);
   for (const name of shownEnv) process.stdout.write(`Env ${name}=${toolEnv(name)}\r\n`);
+  // Copilot CLI sets the conversation's model at every start and resume (`copilot-session.contract.ts`).
+  if (initialPrompt !== undefined || resumes) recordModelChange(sessionId);
   draw(promptBox);
   started = initialPrompt !== undefined;
   if (started) {
