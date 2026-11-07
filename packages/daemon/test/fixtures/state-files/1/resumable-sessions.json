@@ -1,0 +1,20 @@
+{
+  "sessions": [
+    {
+      "session": "9b1e7d2a-0000-4000-8000-000000000000",
+      "repo": null,
+      "supervisor": true,
+      "task": null,
+      "hasConversation": true,
+      "view": "terminal"
+    },
+    {
+      "session": "5d6e7f80-0000-4000-8000-000000000000",
+      "repo": "shop",
+      "supervisor": false,
+      "task": "3f2a9c1e-0000-4000-8000-000000000000",
+      "hasConversation": true,
+      "view": "terminal"
+    }
+  ]
+}

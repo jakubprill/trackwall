@@ -14,7 +14,7 @@ import {
 } from "@trackwall/protocol";
 import { z } from "zod";
 import { DomainError, messageOf } from "../../infra/errors.ts";
-import { FollowedStateFile } from "../../infra/state-file.ts";
+import { FollowedStateFile, stateFormat } from "../../infra/state-file.ts";
 import { waitLimited } from "../../infra/wait-limit.ts";
 
 /**
@@ -43,6 +43,8 @@ const StoredVerification = Verification.extend({
 /** What `verifications.json` keeps: the last verification of each task. */
 const StoredVerifications = z.object({ verifications: z.array(StoredVerification) });
 type StoredVerifications = z.infer<typeof StoredVerifications>;
+/** `verifications.json` (ADR-64, ADR-223). */
+export const VERIFICATIONS_FORMAT = stateFormat(StoredVerifications);
 
 /** Why a verification the previous daemon left running has no verdict: its run ended with that daemon. */
 const STOPPED_WITH_DAEMON = "Trackwall stopped during the run, so it has no verdict; verify again";
@@ -115,7 +117,7 @@ export class Verifications {
 
   constructor(deps: VerificationsDeps) {
     this.#deps = deps;
-    this.#file = new FollowedStateFile(deps.file, StoredVerifications, {
+    this.#file = new FollowedStateFile(deps.file, VERIFICATIONS_FORMAT, {
       broken: (problem, aside) => deps.log(`${deps.file}: ${problem}; file moved to ${aside}, the tasks start without verifications`),
       log: deps.log,
     });

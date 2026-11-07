@@ -161,7 +161,7 @@ describe("listed sessions", () => {
     const resumable = JSON.parse(readFileSync(join(home, "resumable-sessions.json"), "utf8"));
     expect(resumable.sessions.map((s: { session: string }) => s.session)).toEqual(["main", "boss"]);
     const last = JSON.parse(readFileSync(join(home, "last-supervisor.json"), "utf8"));
-    expect(last).toEqual({ session: "boss", hasConversation: true });
+    expect(last).toEqual({ version: 1, session: "boss", hasConversation: true });
   });
 
   test("the environment a session started with is compared with what mise gives it now", () => {

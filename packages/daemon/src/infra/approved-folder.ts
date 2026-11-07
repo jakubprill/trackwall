@@ -7,7 +7,7 @@ import { writeFileAtomic } from "./atomic-write.ts";
 import { DomainError, messageOf } from "./errors.ts";
 import { mapLimit } from "./map-limit.ts";
 import { readRegularFile } from "./regular-file.ts";
-import { readStateFile } from "./state-file.ts";
+import { readStateFile, type StateFormat, stateFormat, writeStateFile } from "./state-file.ts";
 
 /**
  * A folder of named Markdown files that an agent may write and that count only in the exact content the user approved
@@ -57,11 +57,18 @@ export interface FolderProblem {
 const READ_AT_ONCE = 16;
 type StoredApprovals = { approved: Record<string, string> };
 
+/** The approvals file of one kind of file (ADR-170, ADR-173, ADR-223): the digest the user approved, by name. */
+export function approvalsFormat(name: z.ZodString): StateFormat<StoredApprovals> {
+  return stateFormat(z.object({ approved: z.record(name, ContentDigest) }));
+}
+
 export class ApprovedFolder<T> {
   readonly #deps: ApprovedFolderDeps<T>;
+  readonly #approvalsFormat: StateFormat<StoredApprovals>;
 
   constructor(deps: ApprovedFolderDeps<T>) {
     this.#deps = deps;
+    this.#approvalsFormat = approvalsFormat(deps.format.name);
   }
 
   /** Every file by name, each with whether its content is the approved one; a file that holds nothing is a problem. */
@@ -148,14 +155,14 @@ export class ApprovedFolder<T> {
   #approvals(): StoredApprovals {
     const { approvalsFile, format, log } = this.#deps;
     return (
-      readStateFile(approvalsFile, z.object({ approved: z.record(format.name, ContentDigest) }), (problem, aside) =>
+      readStateFile(approvalsFile, this.#approvalsFormat, (problem, aside) =>
         log(`${format.what} approvals were unreadable (${problem}), moved to ${aside}; every ${format.what} waits for approval again`),
       ) ?? { approved: {} }
     );
   }
 
   #writeApprovals(approvals: StoredApprovals): void {
-    writeFileAtomic(this.#deps.approvalsFile, `${JSON.stringify(approvals, null, 2)}\n`);
+    writeStateFile(this.#deps.approvalsFile, this.#approvalsFormat, approvals);
   }
 }
 

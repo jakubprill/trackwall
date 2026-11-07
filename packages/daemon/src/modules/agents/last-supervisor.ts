@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { writeFileAtomic } from "../../infra/atomic-write.ts";
-import { readStateFile } from "../../infra/state-file.ts";
+import { readStateFile, stateFormat, writeStateFile } from "../../infra/state-file.ts";
 import { ConversationId } from "./acp-messages.ts";
 
 /**
@@ -18,6 +17,8 @@ export const LastSupervisor = z.object({
   conversation: ConversationId.optional(),
 });
 export type LastSupervisor = z.infer<typeof LastSupervisor>;
+/** `last-supervisor.json` (ADR-96, ADR-223). */
+export const LAST_SUPERVISOR_FORMAT = stateFormat(LastSupervisor);
 
 /** The newest supervisor in the state directory, which a start with `last` goes on with (ADR-96). */
 export const LAST_SUPERVISOR_FILE = "last-supervisor.json";
@@ -38,7 +39,7 @@ export class LastSupervisorFile {
     // `undefined` until read: a missing file is read once, not at every call.
     if (this.#last !== undefined) return this.#last;
     this.#last =
-      readStateFile(this.#path, LastSupervisor, (problem, aside) =>
+      readStateFile(this.#path, LAST_SUPERVISOR_FORMAT, (problem, aside) =>
         this.#log(`${this.#path}: ${problem}; file moved to ${aside}, no supervisor conversation is resumed`),
       ) ?? null;
     return this.#last;
@@ -49,7 +50,7 @@ export class LastSupervisorFile {
     const known = this.read();
     if (known?.session === last.session && known.hasConversation === last.hasConversation && known.conversation === last.conversation)
       return;
-    writeFileAtomic(this.#path, `${JSON.stringify(last, null, 2)}\n`);
+    writeStateFile(this.#path, LAST_SUPERVISOR_FORMAT, last);
     this.#last = last;
   }
 }
