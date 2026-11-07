@@ -56,6 +56,7 @@ function task(id: string, proposedBy: Task["proposedBy"]): Task {
     item: null,
     view: "terminal",
     summary: null,
+    inReview: false,
     port: 41000,
     included: { files: [], problems: [] },
     change: null,

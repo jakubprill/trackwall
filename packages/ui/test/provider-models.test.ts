@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { COPILOT_AUTO_MODEL, modelHint, providerModelsNote, unofferedModel } from "../src/lib/provider-models.ts";
+import { COPILOT_AUTO_MODEL, modelHint, modelSuggestions, providerModelsNote, unofferedModel } from "../src/lib/provider-models.ts";
 
 describe("the models of the session profile's provider in the UI (ADR-194)", () => {
   test("a suggested model's hint is its context window in thousands or millions of tokens, and its format once known", () => {
@@ -53,5 +53,19 @@ describe("a model id the provider does not offer (ADR-206)", () => {
     expect(unofferedModel(COPILOT_AUTO_MODEL, models)).toBeNull();
     expect(unofferedModel("  ", models)).toBeNull();
     expect(unofferedModel("claude-sonnet-4.5", [])).toBeNull();
+  });
+});
+
+describe("the suggestions of a Model field", () => {
+  test("auto comes first, once, even when the provider lists it, with what it means under a custom provider", () => {
+    expect(
+      modelSuggestions([
+        { id: "auto", contextWindow: null, wireApi: null },
+        { id: "gpt-6-luna", contextWindow: 400_000, wireApi: "responses" },
+      ]),
+    ).toEqual([
+      { id: "auto", hint: "sent to the provider as auto, which it must know" },
+      { id: "gpt-6-luna", hint: "400k context · responses API" },
+    ]);
   });
 });

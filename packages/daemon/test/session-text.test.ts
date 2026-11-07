@@ -45,6 +45,7 @@ const task: Task = {
     checkSteps: ["Open /login and type a wrong password: the form says Wrong password"],
     reportedAt: "2026-11-05T09:19:00.000Z",
   },
+  inReview: true,
   port: 41001,
   included: { files: [], problems: [] },
   change: null,

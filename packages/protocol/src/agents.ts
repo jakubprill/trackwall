@@ -491,6 +491,11 @@ export const Task = z.object({
   view: SessionView,
   /** The last summary from the task session (`report_result`); `null` until it has reported one. */
   summary: TaskSummary.nullable(),
+  /**
+   * Whether the agent has handed the work over for review (ADR-213): its `report_result` sets it, and the user's review
+   * or "Fix" of a failed pipeline, which give the agent work again, clear it. The task's board item follows it.
+   */
+  inReview: z.boolean(),
   /** The task port (ADR-61): `TASK_PORT_ENV` in every mise task run in the worktree, and the port of the task's service. */
   port: TaskPort,
   included: IncludedFiles,

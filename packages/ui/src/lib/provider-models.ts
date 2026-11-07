@@ -31,8 +31,19 @@ export function providerModelsNote(list: ProviderModelList): { text: string; pro
   };
 }
 
-/** Copilot CLI's own choice of model, which no provider lists, so a Model field never warns about it. */
+/**
+ * Copilot CLI's `auto`: without a custom provider Copilot picks the model, and with one it sends `auto` to the provider
+ * as the model id, so it works only where the provider knows it. A Model field never warns about it.
+ */
 export const COPILOT_AUTO_MODEL = "auto";
+
+/** The suggestions of a Model field: `auto` first, then the provider's models, each id once. */
+export function modelSuggestions(models: readonly ProviderModel[]): { id: string; hint: string }[] {
+  return [
+    { id: COPILOT_AUTO_MODEL, hint: "sent to the provider as auto, which it must know" },
+    ...models.filter((model) => model.id !== COPILOT_AUTO_MODEL).map((model) => ({ id: model.id, hint: modelHint(model) })),
+  ];
+}
 
 /**
  * A model id the provider does not offer (ADR-206), with the offered id closest to it: a task proposed on an older

@@ -45,7 +45,7 @@ A screen of the app in the UI (Home, Repos, Sessions, Overview, Plan, Settings),
 _Avoid_: tab (for a whole screen)
 
 **Settings category** (`SettingsCategory`, `SETTINGS_CATEGORIES`; its sections `SettingsSection`):
-A group of Settings listed on the left of the Settings view: Workspace, Repo hosts, Agents, App and Diagnostics (ADR-102). Each holds a few sections, such as the projects folder or the daemon's state.
+A group of Settings listed on the left of the Settings view: Workspace, Repo hosts, Agents, Usage, App, Files and Diagnostics (ADR-102, ADR-212). Each holds a few sections, such as the projects folder or the daemon's state.
 _Avoid_: tab (that is `TabBar`), page
 
 **Tab** (`TabBar`):
@@ -58,6 +58,10 @@ _Avoid_: screen (that is a monitor), tab (that is `TabBar`), terminal window (th
 **Start at sign-in** (`autostart.rs`, `autostart_enabled`, `set_autostart`, the `--autostart` argument; in the UI *Start at sign-in*):
 Trackwall started by the system's own start entry when the user signs in, with every window hidden until the user opens it (ADR-65). `autostart` is the identifier in code; UI and documentation say "start at sign-in".
 _Avoid_: launch at login, startup (that is the daemon's start)
+
+**Keep the screen on** (`keep_screen_on.rs`, `KeepScreenOn`, `ScreenOn`, `keep_screen_on`, `set_keep_screen_on`; in the UI *Keep the screen on*):
+The desktop shell's setting that asks the system to keep the display on: `off` (the default), `while-agents-work` (while a running session is in the middle of a turn and not stuck) or `always` (while the app runs) (ADR-218). The system's request is a display power request on Windows and a power assertion on macOS; nothing simulates input.
+_Avoid_: keep awake, caffeinate, prevent sleep (the computer's sleep is a side effect), screen saver
 
 **Waiting badge** (`badge.rs`, `Badge`, `TrayIcons`):
 The number of sessions and task proposals waiting for the user on the app's icons: the Dock badge, the taskbar overlay on Windows and a dot on the tray icon (ADR-65).
@@ -620,7 +624,7 @@ _Avoid_: hung, frozen, stale (that is `Stale`, no output at all)
 What a session's Copilot CLI conversation used, summed from the receipts Copilot CLI writes after each model call (ADR-190): AI credits when Copilot CLI reported them, otherwise premium requests of the legacy billing, otherwise only tokens. It covers the whole conversation, also before a resume.
 _Avoid_: cost, spend, budget (Trackwall sets no limit)
 
-**Usage report** (`UsageReport`, the `usage-report` module, `usageReportApi`; in the UI *Copilot usage* in Settings › Agents):
+**Usage report** (`UsageReport`, the `usage-report` module, `usageReportApi`; in the UI *Copilot usage* in Settings › Usage):
 What Copilot CLI used on this computer in a week, from the event logs it keeps for every conversation (ADR-199): the total, one **usage work** row (`UsageWork`: a task, the supervisor, sessions in a repo, or outside the projects folder) per piece of work with its Copilot usage and its **tool definition tokens** (the input tokens that were the tools' definitions, sent with every model call), and one **usage tool** row (`UsageTool`) per tool with its calls, failures and **result tokens**. Do not confuse with the MCP audit, which lists Trackwall's own tool calls one by one without tokens.
 _Avoid_: bill, invoice, cost report
 
@@ -759,6 +763,10 @@ The result a task session reports with the `report_result` tool: what it did, wh
 Optional steps of a summary for checking the change by hand, each with what to do and what the user should see (ADR-169). Only a hint: the user may follow them or not, and nothing waits for them.
 _Avoid_: test plan, acceptance (those decide something; check steps decide nothing)
 
+**In review** (`Task.inReview`, "In review" on the Sessions list, column `review` of a board item):
+A task whose agent has handed its work over with `report_result` and got nothing new since: the user's review, "Fix" of a failed pipeline or its proposer's message takes it out of review until the agent reports again. The task's board item goes to "In review" once every open task on it is in review (ADR-213). One step before the user accepts the work; only the user ends a task or marks its item "Done".
+_Avoid_: ready, finished, done (those are the user's), awaiting approval (that is a tool approval)
+
 ## Plan
 
 **Workspace knowledge** (module `knowledge`, `knowledgeApi`, MCP tools `list_knowledge` and `propose_knowledge`; "Workspace knowledge" in Plan):
@@ -785,11 +793,11 @@ A root of the board for one business project; its items hang under it as a tree.
 _Avoid_: repo, workspace
 
 **Idea** (an item with `parent: null`; the "Inbox" in the UI):
-An item not filed under a project yet, written down so it is not lost: with Alt+N from any view (`IdeaCapture`), in the inbox, or by an agent outside a task. The inbox is the list of ideas.
+An item not filed under a project yet, written down so it is not lost: with Alt+N from any view (`IdeaCapture`), in the inbox, or by an agent outside a task. The inbox is the list of ideas. Sorting an idea (`InboxTriage`, ADR-214) files it in a project, starts a task on it, or drops it: a **dropped idea** (`column: dropped`, "Dropped" in the UI) stays on the board, folded below the open ones, until it is restored or removed.
 _Avoid_: draft, note
 
 **Board column** (`BoardColumn`: `ideas`, `ready`, `in_progress`, `review`, `done`, `dropped`; "Column" in the UI, `COLUMN_LABELS`):
-How far an item is: "Idea", "Ready", "In progress", "In review", "Done", "Dropped". An agent moves an item only between `ideas` and `ready`.
+How far an item is: "Idea", "Ready", "In progress", "In review", "Done", "Dropped". An agent moves an item only between `ideas` and `ready`; the item's tasks move it to "In progress" and "In review" (`TaskWorkColumn`, ADR-213), and only the user sets "Done" and "Dropped".
 _Avoid_: status (a repo's is `RepoStatus`), state (a session's)
 
 **Task item** (`Task.item`, `TaskProposal.item`):
@@ -817,7 +825,7 @@ _Avoid_: exception (only one kind of error), problem (that is the repo card and 
 Trackwall's own errors on this computer: the daemon's unexpected errors, the UI's and the desktop shell's, in `logs/errors.json` (ADR-94). Each is a **Trackwall error** (`TrackwallError`): source (`daemon`, `shell`, `ui`), area, kind, anonymized message, frames in Trackwall's code, count. Do not confuse with an error from logs (`LogError`), which comes from the output of the user's processes.
 _Avoid_: crash log, telemetry, bug report (nothing is sent)
 
-**MCP audit** (`McpAudit`, the `mcp-audit` module, `mcpAuditApi`; in the UI *MCP calls* in Settings › Agents and in a task's panel):
+**MCP audit** (`McpAudit`, the `mcp-audit` module, `mcpAuditApi`; in the UI *MCP calls* in Settings › Usage and in a task's panel):
 Every MCP tool call the daemon answered, in `logs/mcp-calls.jsonl` (ADR-152). Each is an **MCP call** (`McpCall`): the tool, its effect (`read`, `write`, `destructive`), the **caller** (`McpCaller`: the session with its repo and task as they were at the call; `null` for an agent outside Trackwall), the identifier arguments the tool's contract names (`auditArgs`), the outcome and the duration. Free text an agent sends is never in it. Do not confuse with the daemon log, which also has a line per call.
 _Avoid_: access log, history (of a task, that is its handoff and summary), tool log
 
