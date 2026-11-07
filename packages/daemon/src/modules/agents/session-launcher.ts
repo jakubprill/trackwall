@@ -21,6 +21,7 @@ import { resolveCopilot, toolPermissionArgs } from "./copilot-command.ts";
 import { COPILOT_HOOK_EVENTS, type CopilotHookEvent } from "./copilot-hook-record.ts";
 import { type LspServer, writeCopilotPlugin } from "./copilot-plugin.ts";
 import { CopilotUsageLog } from "./copilot-usage-log.ts";
+import { JAVA_LSP_SERVER } from "./java-language-server.ts";
 import { LiveSession, type LiveSessionOptions, type SessionPty } from "./live-session.ts";
 import { modelArgs, modelOfArgs } from "./model-args.ts";
 import { withLoopbackNoProxy } from "./no-proxy.ts";
@@ -435,7 +436,7 @@ export class SessionLauncher {
     // User-only: the server's headers carry the session token (§8).
     const mcpConfig = copilotHttpMcpServers(this.#deps.sessionMcpServer(token));
     writeFileSync(join(dir, MCP_CONFIG_FILE), JSON.stringify(mcpConfig, null, 2), { mode: 0o600 });
-    const instructionsDir = writeSessionInstructions(dir, this.#deps.version, role, knowledge);
+    const instructionsDir = writeSessionInstructions(dir, this.#deps.version, role, knowledge, JAVA_LSP_SERVER in plugin.lspServers);
     if (instructionsDir === null)
       this.#deps.log(`session ${id} starts without Trackwall instructions: the session directory path has a comma`);
     return instructionsDir;

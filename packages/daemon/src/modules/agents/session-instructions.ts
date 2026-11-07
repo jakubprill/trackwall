@@ -21,8 +21,8 @@ import type { HandoffFacts } from "./task-handoff.ts";
  * repository instruction, because the daemon adds its directory to `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` in the session
  * environment. It changes neither the user's repo nor `~/.copilot`. The content is the session's environment (the
  * Trackwall version and where the user sees the session), its role (the supervisor or a free session in the projects
- * folder, a repo session in the repo root or a task session in a worktree) and the shared MCP instruction (`MCP_INSTRUCTIONS`), which
- * Copilot CLI does not take from the MCP server.
+ * folder, a repo session in the repo root or a task session in a worktree), how its Java navigation behaves when it has
+ * one (ADR-99) and the shared MCP instruction (`MCP_INSTRUCTIONS`), which Copilot CLI does not take from the MCP server.
  */
 
 /** Copilot CLI 1.0.103 variable with instruction directories separated by commas (checked with `copilot instruction list`). */
@@ -52,11 +52,12 @@ export function writeSessionInstructions(
   version: string,
   role: SessionRole,
   knowledge: SessionKnowledge,
+  javaNavigation: boolean,
 ): string | null {
   const dir = join(sessionDir, INSTRUCTIONS_DIR);
   if (dir.includes(",")) return null;
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, INSTRUCTIONS_FILE), sessionInstructions(version, role, knowledge));
+  writeFileSync(join(dir, INSTRUCTIONS_FILE), sessionInstructions(version, role, knowledge, javaNavigation));
   return dir;
 }
 
@@ -67,7 +68,7 @@ export function withInstructionsDir(env: NodeJS.ProcessEnv, dir: string): NodeJS
   return { ...env, [key]: own ? `${own},${dir}` : dir };
 }
 
-function sessionInstructions(version: string, role: SessionRole, knowledge: SessionKnowledge): string {
+function sessionInstructions(version: string, role: SessionRole, knowledge: SessionKnowledge, javaNavigation: boolean): string {
   return [
     // `applyTo: "**"`: the instruction applies to every file, i.e. to the whole session, like `.github/instructions` in a repo.
     "---",
@@ -83,6 +84,7 @@ function sessionInstructions(version: string, role: SessionRole, knowledge: Sess
     "",
     ...sessionRole(role),
     "",
+    ...(javaNavigation ? JAVA_NAVIGATION_SECTION : []),
     ...knowledgeSection(knowledge),
     "## Trackwall tools",
     "",
@@ -90,6 +92,17 @@ function sessionInstructions(version: string, role: SessionRole, knowledge: Sess
     "",
   ].join("\n");
 }
+
+/**
+ * The Mac measurement of 2026-11-07: the first `lsp` call waited the whole cold import (about 70 s) without a word, and a
+ * call during indexing answered "No definition found", which an agent takes for a fact about the code.
+ */
+const JAVA_NAVIGATION_SECTION = [
+  "## Java navigation",
+  "",
+  `Copilot CLI's \`lsp\` tool answers for Java files from Eclipse JDT Language Server (jdtls), which starts in the background with this session and first imports the project with its build tool: a minute or more on the first start, longer for a large project or a slow build, and only seconds on later starts. Until the import ends, an \`lsp\` call waits for it, so read files with your other tools in the meantime instead of waiting idle. An empty answer ("No definition found", no references) during the import, or after a failed one, says nothing about the code: check the line and column, and ${mcpTools.getSession.name} with your own session id (the caller in ${mcpTools.listSessions.name}) tells how jdtls is doing (\`javaNavigation\`: starting, importing, stalled, ready or failed with jdtls's message). When the import failed or stalled, work without \`lsp\` and say so in your result.`,
+  "",
+];
 
 function sessionRole(role: SessionRole): string[] {
   if (role.kind === "supervisor") return supervisorRole(role.changesCode);
