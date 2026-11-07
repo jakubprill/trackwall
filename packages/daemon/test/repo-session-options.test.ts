@@ -108,6 +108,9 @@ describe.skipIf(process.versions.bun === undefined)(
 
       const data = join(projects, ".trackwall", "lsp", session.id);
       expect(pluginManifest(home, session.id).lspServers?.java?.args.slice(-2)).toEqual(["-data", join(data, "workspace")]);
+      expect(readFileSync(join(home, "sessions", session.id, "instructions", "trackwall.instructions.md"), "utf8")).toContain(
+        "## Java navigation",
+      );
       expect(await agents.sessionJavaNavigation(session.id)).toEqual({ kind: "starting" });
       await waitFor(agents, session.id, (s) => s.state !== null, "sessionStart");
       // What jdtls would have written while it indexed the repo.
@@ -133,6 +136,9 @@ describe.skipIf(process.versions.bun === undefined)(
       const session = await agents.start("shop");
 
       expect(pluginManifest(home, session.id).lspServers).toBeUndefined();
+      expect(readFileSync(join(home, "sessions", session.id, "instructions", "trackwall.instructions.md"), "utf8")).not.toContain(
+        "## Java navigation",
+      );
       expect(await agents.sessionJavaNavigation(session.id)).toBeNull();
     }, 60_000);
 

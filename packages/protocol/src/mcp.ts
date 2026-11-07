@@ -801,7 +801,7 @@ export const mcpTools = {
       `or the task is being ended) it says why. Verification is the task's last ${VERIFY_TASK} result (passed, failed with the first ` +
       "failed tests and errors, running, cancelled), left out before the first one. Java navigation, for a task or a session in a repo " +
       "root with it, says whether its lsp tool can answer: starting, importing (since), stalled (importing past the limit), ready, or " +
-      "failed with jdtls's first error (e.g. a Gradle import that needs a JDK that is missing); lsp answers come back empty until ready. " +
+      "failed with jdtls's first error (e.g. a Gradle import that needs a JDK that is missing); an lsp call waits while jdtls imports, and its answers are empty after a failed or stalled import. " +
       `The task's prompt is left out unless ${GET_SESSION_PROMPT_ARG} is true: you usually wrote it yourself.`,
     args: z
       .object({
