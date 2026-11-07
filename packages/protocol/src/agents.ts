@@ -187,9 +187,53 @@ export const TASK_CHECK_STEP_MAX = 300;
 export const TASK_CHECK_STEPS_MAX = 8;
 export const TaskCheckStep = singleLine(z.string().trim().min(1).max(TASK_CHECK_STEP_MAX), "a check step");
 
-/** The last summary from the task session (`report_result`, ADR-39) with its check steps (ADR-169), empty when it gave none. */
-export const TaskSummary = z.object({ text: z.string(), checkSteps: z.array(z.string()), reportedAt: z.string() });
+/**
+ * The test a task's agent says reproduces the error it was given (ADR-222): the test's file, relative to the repo root,
+ * its name and how it failed before the fix. Only the agent's word: the daemon neither opens the file nor runs the test
+ * yet, so the panel shows it as the agent's claim.
+ */
+export const REPRO_TEST_FILE_MAX = 500;
+export const REPRO_TEST_NAME_MAX = 200;
+export const REPRO_TEST_FAILURE_MAX = 300;
+export const ReproTestFile = singleLine(z.string().trim().min(1).max(REPRO_TEST_FILE_MAX), "a test file").refine(
+  (path) => !/^(?:[A-Za-z]:|[\\/~])/.test(path) && !path.split(/[\\/]/).includes(".."),
+  { message: "the test file must be a path relative to the repo root, without .." },
+);
+export const ReproTestName = singleLine(z.string().trim().min(1).max(REPRO_TEST_NAME_MAX), "a test name");
+export const ReproTestFailure = singleLine(z.string().trim().min(1).max(REPRO_TEST_FAILURE_MAX), "a test failure");
+export const ReproTest = z.object({ file: ReproTestFile, name: ReproTestName, failure: ReproTestFailure }).strict();
+export type ReproTest = z.infer<typeof ReproTest>;
+
+/** The reproduction test as one line worded as the agent's claim, for `get_session` and the merge request's description. */
+export function reproTestLine(test: ReproTest): string {
+  return `Reproduction test (the agent's word): ${test.name} in ${test.file}, failed before the fix with: ${test.failure}`;
+}
+
+/**
+ * The last summary from the task session (`report_result`, ADR-39) with its check steps (ADR-169), empty when it gave
+ * none, and the test it says reproduces the error (ADR-222), `null` when it named none.
+ */
+export const TaskSummary = z.object({
+  text: z.string(),
+  checkSteps: z.array(z.string()),
+  reproTest: ReproTest.nullable(),
+  reportedAt: z.string(),
+});
+
+/**
+ * A stack trace the user pasted into a new task (ADR-222): the daemon reads its frames, finds their files among the
+ * repo's tracked files and puts both into the task's prompt, with the rule to reproduce the error in a test first. It
+ * is text from a log, copied rather than typed, so it may carry characters nobody sees (`visibleText`) or a terminal's
+ * escape sequences, which it must not; and it is bounded, because the prompt goes to Copilot CLI as one argument
+ * (`TASK_PROMPT_MAX`).
+ */
+export const STACK_TRACE_MAX = 8000;
+export const StackTrace = visibleText(z.string().trim().min(1).max(STACK_TRACE_MAX)).refine((text) => !/[^\P{Cc}\n\r\t]/u.test(text), {
+  message: "the stack trace must not contain control characters other than line breaks and tabs",
+});
 export type TaskSummary = z.infer<typeof TaskSummary>;
+/** What a task session reports with `report_result`; the daemon adds the time. */
+export type ReportedSummary = Omit<TaskSummary, "reportedAt">;
 
 /**
  * Who proposed the task (ADR-39): a Trackwall session by its session token, or `null` for an agent outside Trackwall
@@ -926,7 +970,8 @@ export const agentsApi = {
    * Creates a worktree on a new branch from the default branch and starts Copilot CLI in it with the prompt (ADR-31);
    * with `item`, the task works on that board item (ADR-133), `not_found` when there is none. `view` is a terminal or
    * the conversation view for every session of the task (ADR-137); Java navigation needs a terminal (`bad_request`).
-   * With `handoffFrom`, another task hands it its work (ADR-147).
+   * With `handoffFrom`, another task hands it its work (ADR-147). With `stackTrace` the prompt gets the trace, its frames
+   * found among the repo's tracked files and the rule to reproduce the error in a test first (ADR-222).
    */
   createTask: endpoint(
     "create-task",
@@ -944,6 +989,7 @@ export const agentsApi = {
          * the new task is its subtask, as if its session had proposed it (ADR-140, ADR-143); `not_found` when there is none.
          */
         handoffFrom: TaskId.nullable().default(null),
+        stackTrace: StackTrace.nullable().default(null),
       })
       .strict(),
     Task,

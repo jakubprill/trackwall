@@ -27,7 +27,9 @@ import {
   formChangeStart,
   type NewSessionStart,
   newSessionForm,
+  offersStackTrace,
   sessionsInSameFolder,
+  stackTraceToSend,
   startsChange,
 } from "@/lib/new-session";
 import { tagsByRepo } from "@/lib/repo-tags";
@@ -39,6 +41,7 @@ import { useAction } from "@/lib/use-action";
 import { useProviderModels } from "@/lib/use-provider-models";
 import { useRemote } from "@/lib/use-remote";
 import { ChangeParts } from "./ChangeParts.tsx";
+import { StackTraceField } from "./StackTraceField.tsx";
 import { StartOptions } from "./StartOptions.tsx";
 
 /** The place choice's value for the projects folder; a repo id is never empty. */
@@ -53,7 +56,7 @@ const PROJECTS_FOLDER = "";
  * can run without asking for approvals (ADR-105). The options are a row of pills under the prompt (`StartOptions`); the worktree, the model, Java navigation and the view come back as the user last started from that
  * place, the approvals mode always starts at asking. Started from a board item (ADR-133), the form comes with the item's
  * repo and prompt, and the task works on the item. A task with more repos added is a change (ADR-171): a task per repo
- * on one branch name.
+ * on one branch name. A task can come with a stack trace (ADR-222), whose error its agent reproduces in a test first.
  */
 export function NewSession({
   conn,
@@ -77,6 +80,8 @@ export function NewSession({
   const [edited, setEdited] = useState<ReadonlyMap<string, StartChoice>>(new Map());
   const [prompt, setPrompt] = useState(form.prompt);
   const [approvals, setApprovals] = useState<TaskApprovals>("ask");
+  const [stackTrace, setStackTrace] = useState("");
+  const [stackTraceOpen, setStackTraceOpen] = useState(false);
   const chosen = place ?? firstListedRepo(form.repos, repos.data?.repos) ?? repos.data?.repos[0]?.id ?? PROJECTS_FOLDER;
   const repo = chosen === PROJECTS_FOLDER ? null : chosen;
   const remembered = useMemo(() => readStartChoice(() => window.localStorage, chosen), [chosen]);
@@ -92,7 +97,16 @@ export function NewSession({
   const { item } = form;
   const createTask = useAction(
     (repo: string, prompt: string) =>
-      post(conn, agentsApi.createTask, { repo, prompt, approvals, model: model ?? null, javaNavigation, item, view: choice.view }),
+      post(conn, agentsApi.createTask, {
+        repo,
+        prompt,
+        approvals,
+        model: model ?? null,
+        javaNavigation,
+        item,
+        view: choice.view,
+        stackTrace: stackTraceToSend(stackTrace),
+      }),
     (task) => onStarted({ kind: "task", id: task.id }),
   );
   const startSession = useAction(
@@ -128,6 +142,14 @@ export function NewSession({
             onChange={(e) => setPrompt(e.target.value)}
             maxLength={TASK_PROMPT_MAX}
             rows={5}
+          />
+          <StackTraceField
+            shown={offersStackTrace(start)}
+            value={stackTrace}
+            open={stackTraceOpen}
+            disabled={pending}
+            onChange={setStackTrace}
+            onOpen={setStackTraceOpen}
           />
           <StartOptions
             worktree={

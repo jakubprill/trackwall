@@ -5,7 +5,15 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { MCP_SERVER_NAME, mcpTools, promptBoxText, type Session, TASK_MESSAGE_RULE, type UsageReport } from "@trackwall/protocol";
+import {
+  agentsApi,
+  MCP_SERVER_NAME,
+  mcpTools,
+  promptBoxText,
+  type Session,
+  TASK_MESSAGE_RULE,
+  type UsageReport,
+} from "@trackwall/protocol";
 import { conversationEventLog } from "../src/infra/copilot-home.ts";
 import { windowTitleFromOsc } from "../src/modules/agents/copilot-osc.ts";
 import { OscParser } from "../src/modules/agents/osc-parser.ts";
@@ -877,6 +885,41 @@ describe("a review of a task's changes with the real Copilot CLI (ADR-62)", () =
 
     expect(hookRecords(daemon.home, session.id).map((r) => r.event)).not.toContain("notification");
     expect(model.requests().at(-1)?.toolResults.join("\n")).toContain("Call it @login-test");
+  });
+});
+
+describe("a task from a stack trace with the real Copilot CLI (ADR-222)", () => {
+  test("the model gets the trace in the task's first prompt unchanged, and report_result keeps the reproduction test it names", async () => {
+    const { agents } = daemon.facade;
+    // Tabs, backticks, `$` and quotes, as a pasted Java trace has them: the prompt is one argument, never a shell's.
+    const trace = [
+      'Exception in thread "main" java.lang.IllegalStateException: order `42` has no lines',
+      "\tat com.example.shop.order.OrderService.lambda$total$0(OrderService.java:57)",
+      "\t... 3 more",
+    ].join("\n");
+    const reproTest = {
+      file: "src/test/java/com/example/shop/order/OrderServiceTest.java",
+      name: "OrderServiceTest#totalOfOrderWithoutLines",
+      failure: "IllegalStateException at OrderService.java:57",
+    };
+    model.reply(
+      { tool: copilotToolName(mcpTools.reportResult.name), arguments: { summary: "Reproduced it and fixed the total.", reproTest } },
+      { text: "Reported." },
+    );
+    const request = agentsApi.createTask.request.parse({
+      repo: "shop",
+      prompt: "Fix the order total",
+      approvals: "auto",
+      stackTrace: trace,
+    });
+    const task = await daemon.facade.createTask(request);
+    await endOfTurn(taskSessionOf(task.id));
+
+    expect(model.requests()[0]?.userTexts.join("\n")).toContain(task.prompt);
+    expect(task.prompt).toContain(`\n${trace}\n`);
+    expect(agents.task(task.id).summary?.reproTest).toEqual(reproTest);
+    await agents.stop(taskSessionOf(task.id));
+    await agents.removeTask(task.id, false, true);
   });
 });
 

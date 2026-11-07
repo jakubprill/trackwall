@@ -43,6 +43,7 @@ const task: Task = {
   summary: {
     text: "The form now says Wrong password.",
     checkSteps: ["Open /login and type a wrong password: the form says Wrong password"],
+    reproTest: null,
     reportedAt: "2026-11-05T09:19:00.000Z",
   },
   inReview: true,

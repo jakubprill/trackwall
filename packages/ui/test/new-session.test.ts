@@ -8,7 +8,9 @@ import {
   mayAddPart,
   newSessionForm,
   newSessionStart,
+  offersStackTrace,
   sessionsInSameFolder,
+  stackTraceToSend,
 } from "../src/lib/new-session.ts";
 
 function session(id: string, over: Partial<Session>): Session {
@@ -184,5 +186,22 @@ describe("a task with more repos is a change (ADR-171)", () => {
     expect(mayAddPart(added(5), 20)).toBe(false);
     // With two other repos in the projects folder, a third row would have no repo left to pick.
     expect(mayAddPart(added(2), 2)).toBe(false);
+  });
+});
+
+describe("the stack trace of a new task (ADR-222)", () => {
+  test("is offered for a task in its own worktree, also before its prompt is typed, but not for a session or a change", () => {
+    expect(offersStackTrace(newSessionStart("shop", true, "Fix the order total"))).toBe(true);
+    expect(offersStackTrace(newSessionStart("shop", true, ""))).toBe(true);
+    expect(offersStackTrace(newSessionStart("shop", false, "Fix the order total"))).toBe(false);
+    expect(offersStackTrace({ kind: "change", title: "Refunds", prompt: "Add refunds", parts: [] })).toBe(false);
+    expect(offersStackTrace({ kind: "needs-title" })).toBe(false);
+  });
+
+  test("goes with the task as pasted, and an empty or blank field sends none", () => {
+    const trace = "java.lang.NullPointerException\n\tat com.example.shop.Order.total(Order.java:42)\n";
+    expect(stackTraceToSend(trace)).toBe(trace);
+    expect(stackTraceToSend("")).toBeNull();
+    expect(stackTraceToSend(" \n\t ")).toBeNull();
   });
 });

@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   type AppConfig,
+  type agentsApi,
   type MiseTarget,
   type RoutineDigest,
   type RoutineName,
@@ -13,6 +14,7 @@ import {
   type TaskOutcome,
   type TerminalPlace,
 } from "@trackwall/protocol";
+import type { z } from "zod";
 import { copilotHome } from "./infra/copilot-home.ts";
 import { downloadVerified } from "./infra/download.ts";
 import { vscodeUrl } from "./infra/editor-url.ts";
@@ -34,6 +36,8 @@ import {
 } from "./modules/agents/agents.ts";
 import { resolveCopilot } from "./modules/agents/copilot-command.ts";
 import { withMiseVars } from "./modules/agents/session-env.ts";
+import { STACK_TRACE_LIST_MAX_BYTES, STACK_TRACE_SOURCE_GLOBS } from "./modules/agents/stack-trace-frames.ts";
+import { promptWithStackTrace } from "./modules/agents/stack-trace-prompt.ts";
 import { TaskBranch, taskWorktree } from "./modules/agents/task-branch.ts";
 import { Batch } from "./modules/batch/batch.ts";
 import { Board } from "./modules/board/board.ts";
@@ -150,6 +154,12 @@ export interface Facade {
    */
   runRoutine: (name: RoutineName, digest: RoutineDigest, view: SessionView) => Promise<Task>;
   /**
+   * A task the user typed (`agents.createTask`), and with a pasted stack trace (ADR-222) its prompt gets the trace, the
+   * frames found among the repo's tracked files from `vcs` in the repo root from `workspace`, and the rule to reproduce
+   * the error in a test first.
+   */
+  createTask: (request: CreateTaskRequest) => Promise<Task>;
+  /**
    * The Spring configuration of a repo root or a task's worktree in one profile's view (ADR-153), for `get_app_config`:
    * the place from `workspace` or `agents`, the environment of a run there from `mise`, its masking from `logs`, the files and the view from `cards`.
    */
@@ -165,6 +175,8 @@ export interface Facade {
    */
   keepForRestart: () => void;
 }
+
+type CreateTaskRequest = z.infer<typeof agentsApi.createTask.request>;
 
 /** Where to read the configuration (a task of `repo` when `task` is set), the profile, and an optional key prefix. */
 type AppConfigRequest = MiseTarget & AppConfigQuery;
@@ -561,6 +573,11 @@ export function createFacade(o: FacadeOptions): Facade {
     runRoutine: async (name, digest, view) => {
       const { repo, prompt, title, model, approvals } = await routines.approved(name, digest);
       return agents.createTask(repo, prompt, { title, model, approvals, view });
+    },
+    createTask: async ({ repo, prompt, stackTrace, handoffFrom, ...options }) => {
+      if (stackTrace === null) return agents.createTask(repo, prompt, options, handoffFrom);
+      const tracked = await vcs.trackedFiles(await workspace.repoPath(repo), STACK_TRACE_SOURCE_GLOBS, STACK_TRACE_LIST_MAX_BYTES);
+      return agents.createTask(repo, promptWithStackTrace(prompt, stackTrace, tracked), options, handoffFrom);
     },
     appConfig: async ({ repo, task, profile, key }) => {
       const dir = task === null ? await workspace.repoPath(repo) : agents.taskOfRepo(task, repo).worktree;

@@ -28,6 +28,7 @@ import {
   type PromptDelivery,
   proposalRepos,
   type ReportedChanges,
+  type ReportedSummary,
   type ReviewComment,
   type SandboxSettings,
   type SandboxState,
@@ -687,10 +688,13 @@ export class Agents {
     this.#coordination.proposalRejected(proposal, reason ?? null);
   }
 
-  /** A summary from session `caller` for its own task (`report_result`); it goes to the task's proposer too, with how much the task changed (ADR-68, ADR-207). */
-  async reportSummary(caller: string | null, text: string, checkSteps: string[]): Promise<Task> {
+  /**
+   * A summary from session `caller` for its own task (`report_result`), with its check steps and the test it says
+   * reproduces the task's error (ADR-222); it goes to the task's proposer too, with how much the task changed (ADR-68, ADR-207).
+   */
+  async reportSummary(caller: string | null, report: ReportedSummary): Promise<Task> {
     const own = this.#ownTask(caller, "can report a result");
-    const reported = this.#tasks.setSummary(own.task, text, checkSteps);
+    const reported = this.#tasks.setSummary(own.task, report);
     this.#autoReviews.afterReport(own.task);
     this.#boardItems.handedOver(reported);
     // Awaited, so the update is there for the proposer by the time the tool answers.

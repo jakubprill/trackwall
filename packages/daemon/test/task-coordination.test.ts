@@ -249,7 +249,7 @@ describe("updates on delegated work", () => {
     const { coordination, tasks, asked, running } = setup();
     const reported = {
       ...task("by-main", BY_MAIN),
-      summary: { text: "Fixed and tested.", checkSteps: [], reportedAt: "2026-10-25T13:00:00.000Z" },
+      summary: { text: "Fixed and tested.", checkSteps: [], reproTest: null, reportedAt: "2026-10-25T13:00:00.000Z" },
     };
     tasks.set("by-main", reported);
     running.delete(SUPERVISOR);
@@ -293,7 +293,7 @@ describe("updates on delegated work", () => {
     const { coordination, tasks, asked } = setup();
     const reported = {
       ...task("by-main", BY_MAIN),
-      summary: { text: "Fixed.", checkSteps: ["Open /login: the form shows"], reportedAt: "2026-10-25T13:00:00.000Z" },
+      summary: { text: "Fixed.", checkSteps: ["Open /login: the form shows"], reproTest: null, reportedAt: "2026-10-25T13:00:00.000Z" },
     };
     tasks.set("by-main", reported);
 

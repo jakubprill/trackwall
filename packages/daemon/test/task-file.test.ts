@@ -23,7 +23,7 @@ const stored = {
   item: "7c4d1e2f-0000-4000-8000-000000000000",
   view: "conversation" as const,
   conversation: "c0ffee-1",
-  summary: { text: "Fixed, test added.", checkSteps: [], reportedAt: "2026-10-24T10:00:00.000Z" },
+  summary: { text: "Fixed, test added.", checkSteps: [], reproTest: null, reportedAt: "2026-10-24T10:00:00.000Z" },
   inReview: true,
   handoff: null,
   change: null,
@@ -157,7 +157,7 @@ describe("tasks.json", () => {
     writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
 
     expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([
-      { ...old, summary: { text: "Fixed, test added.", checkSteps: [], reportedAt: "2026-10-24T10:00:00.000Z" } },
+      { ...old, summary: { text: "Fixed, test added.", checkSteps: [], reproTest: null, reportedAt: "2026-10-24T10:00:00.000Z" } },
     ]);
   });
 

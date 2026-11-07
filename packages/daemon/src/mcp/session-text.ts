@@ -9,7 +9,7 @@ import type {
   TestFailure,
   Verification,
 } from "@trackwall/protocol";
-import { countLabel, GET_SESSION_PROMPT_ARG } from "@trackwall/protocol";
+import { countLabel, GET_SESSION_PROMPT_ARG, reproTestLine } from "@trackwall/protocol";
 
 const COMMITS = { one: "commit", other: "commits" };
 const FILES = { one: "file", other: "files" };
@@ -115,7 +115,13 @@ function proposerLabel(proposedBy: Task["proposedBy"]): string {
 function summaryLines(summary: Task["summary"]): string[] {
   if (summary === null) return ["## Summary: not reported yet"];
   const steps = summary.checkSteps.map((step, i) => `${i + 1}. ${step}`);
-  return [`## Summary (reported ${summary.reportedAt})`, summary.text, ...(steps.length > 0 ? ["Check steps:", ...steps] : [])];
+  const repro = summary.reproTest;
+  return [
+    `## Summary (reported ${summary.reportedAt})`,
+    summary.text,
+    ...(steps.length > 0 ? ["Check steps:", ...steps] : []),
+    ...(repro === null ? [] : [reproTestLine(repro)]),
+  ];
 }
 
 function changesLines(changes: TaskChangesSummary | null, error: string | null): string[] {

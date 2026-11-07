@@ -763,6 +763,18 @@ The result a task session reports with the `report_result` tool: what it did, wh
 Optional steps of a summary for checking the change by hand, each with what to do and what the user should see (ADR-169). Only a hint: the user may follow them or not, and nothing waits for them.
 _Avoid_: test plan, acceptance (those decide something; check steps decide nothing)
 
+**Stack trace** (`StackTrace`, `create-task` field `stackTrace`, `parseJavaStackTrace`; "Stack trace" on the New task form):
+The text of an error with its frames that the user pastes into a new task (ADR-222). The daemon reads its Java frames, finds their files among the repo's tracked files (**frames in this repo**, `repoFrames`) and puts both into the task's prompt with the rule to reproduce the error in a test first.
+_Avoid_: log, error (an **error** is a block from a log, ADR-42), stack (a set of services)
+
+**Reproduction test** (`TaskSummary.reproTest`, `ReproTest`, `report_result` argument `reproTest`):
+The test a task's agent says it wrote first and that failed the way the task's stack trace shows: its file, name and failure before the fix (ADR-222). The agent's word, shown as such: Trackwall has not run it.
+_Avoid_: regression test, proof (Trackwall proves nothing about it yet), repro (in prose)
+
+**Evidence of a change** (ADR-222):
+What a task's result brings to show the change is right beyond the agent's summary, such as its reproduction test. The theme of ADR-222, not an identifier in code.
+_Avoid_: evidence (alone: that is the file and line of a fact on a repo card)
+
 **In review** (`Task.inReview`, "In review" on the Sessions list, column `review` of a board item):
 A task whose agent has handed its work over with `report_result` and got nothing new since: the user's review, "Fix" of a failed pipeline or its proposer's message takes it out of review until the agent reports again. The task's board item goes to "In review" once every open task on it is in review (ADR-213). One step before the user accepts the work; only the user ends a task or marks its item "Done".
 _Avoid_: ready, finished, done (those are the user's), awaiting approval (that is a tool approval)
