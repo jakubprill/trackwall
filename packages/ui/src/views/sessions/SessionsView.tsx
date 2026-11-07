@@ -12,12 +12,10 @@ import {
 import { BellRing, Crown, Lightbulb, Plus, Square, X } from "lucide-react";
 import { type ReactNode, useCallback, useRef, useState } from "react";
 import { CopilotUsageMark } from "@/components/CopilotUsageMark";
-import { CopyRequestNotice } from "@/components/CopyRequestNotice";
-import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { ModelChangeButton, SessionModelChange } from "@/components/ModelChange";
-import { ReadRequestNotice } from "@/components/ReadRequestNotice";
+import { SessionNotices } from "@/components/SessionNotices";
 import { SessionScreen } from "@/components/SessionScreen";
 import { StatusLabel } from "@/components/StatusLabel";
 import { TaskOutcomeMarks } from "@/components/TaskOutcomeMarks";
@@ -864,9 +862,7 @@ function SessionPanel({
           onCancel={() => setChangingModel(false)}
         />
       )}
-      <EnvironmentChangeNotice key={session.id} conn={conn} session={session} onRestarted={onChanged} />
-      <ReadRequestNotice key={`read-request-${session.id}`} conn={conn} session={session} onDelivered={onChanged} />
-      <CopyRequestNotice key={session.id} conn={conn} session={session} onCleared={onChanged} />
+      <SessionNotices conn={conn} session={session} onChanged={onChanged} />
       <SessionScreen conn={conn} session={session} selected />
     </>
   );

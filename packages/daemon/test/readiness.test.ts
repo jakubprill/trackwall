@@ -158,6 +158,14 @@ describe("readiness of the repos in the projects folder, from the cards, the gra
     expect((await facade.readiness.all(false)).repos).toEqual([{ repo: "admin-web", state: "ready", gaps: [] }]);
   }, 30_000);
 
+  test("a repo without a mise config of its own, whose tasks come from the projects folder, has no gap in its config", async () => {
+    const projects = mkdtempSync(join(tmpdir(), "trackwall-readiness-no-config-"));
+    repoWithMise(projects, "admin-web", { "package.json": PACKAGE_JSON }, { tasks: BUILD_AND_TEST, noConfig: true });
+    const facade = await facadeOn(projects);
+
+    expect((await facade.readiness.all(false)).repos).toEqual([{ repo: "admin-web", state: "ready", gaps: [] }]);
+  }, 30_000);
+
   test("a repo not in the projects folder is not found", async () => {
     const facade = await facadeOn(mkdtempSync(join(tmpdir(), "trackwall-readiness-empty-")));
 

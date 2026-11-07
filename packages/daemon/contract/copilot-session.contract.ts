@@ -681,7 +681,8 @@ describe("another model for a running task with the real Copilot CLI (ADR-206)",
 
     const request = model.requests().at(-1);
     expect(request).toMatchObject({ model: REVIEW_MODEL });
-    expect(request?.userTexts[0]).toContain("list the endpoints");
+    // Since Copilot CLI 1.0.107 a resumed conversation can carry a system reminder of its own among the user's messages.
+    expect(request?.userTexts).toContainEqual(expect.stringContaining("list the endpoints"));
     expect(agents.task(task.id).model).toBe(REVIEW_MODEL);
     await agents.stop(restarted.id);
   });
