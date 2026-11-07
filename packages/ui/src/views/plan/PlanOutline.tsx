@@ -1,6 +1,7 @@
 import { type BoardItem, boardApi, childrenOf, countLabel } from "@trackwall/protocol";
 import { Bot, ChevronDown, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
+import { ProgressBar } from "@/components/ProgressBar";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,7 +22,6 @@ import {
 import { useAction } from "@/lib/use-action";
 import { cn } from "@/lib/utils";
 import { NewItemLine } from "./NewItemLine.tsx";
-import { ProgressBar } from "./ProgressBar.tsx";
 import { ProjectBoard } from "./ProjectBoard.tsx";
 import { RowTask } from "./RowTask.tsx";
 import { TicketLink } from "./TicketLink.tsx";

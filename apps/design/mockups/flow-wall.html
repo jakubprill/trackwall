@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flow: the work of every group on one wall</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<style>
+/*
+ * Proposal text on top, then a mock of a new view, Flow, meant for a second monitor: one row per group of tasks (a
+ * project of Plan, a change across repos, the supervisor's tasks, tasks of no group) and one column per state. Read from
+ * across the room, so the cards are large and say how long each has been in its state; a card standing too long turns
+ * red. Groups take the app's group tokens, states the state tokens, as everywhere else.
+ */
+body { line-height: 1.5; }
+.wrap { max-width: 1400px; margin: 0 auto; padding-block: 28px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 24px; }
+h1 { font-size: 22px; margin: 0; text-wrap: balance; }
+h2 { font-size: 15px; margin: 0 0 8px; }
+.lede { color: var(--muted-foreground); max-width: 80ch; margin: 6px 0 0; }
+.label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+.cols > div { min-width: 0; }
+ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; color: var(--muted-foreground); }
+ul b { color: var(--foreground); }
+.controls { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.seg button { background: none; border: 0; color: var(--muted-foreground); font: 12px var(--font-mono); padding: 3px 10px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--primary); }
+button:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+
+/* mock */
+.app { border: 1px solid var(--border); border-radius: 8px; background: var(--background); overflow-x: auto; }
+.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 24px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.top b { font-size: 18px; }
+.kpi { font-family: var(--font-mono); font-size: 13px; color: var(--muted-foreground); }
+.kpi strong { font-size: 20px; color: var(--foreground); margin-right: 4px; }
+.kpi.you strong { color: var(--warning); }
+.kpi.bad strong { color: var(--destructive); }
+.kpi.ok strong { color: var(--success); }
+.board { display: grid; grid-template-columns: 200px repeat(5, minmax(170px, 1fr)); min-width: 1060px; }
+.colh { position: sticky; top: 0; padding: 8px 10px; border-bottom: 1px solid var(--border); background: var(--card); font: 12px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); }
+.colh.you { color: var(--warning); }
+.colh.bad { color: var(--destructive); }
+.colh.ok { color: var(--success); }
+.lane { padding: 10px; border-bottom: 1px solid var(--border); box-shadow: inset 4px 0 0 var(--g, var(--border)); display: flex; flex-direction: column; gap: 4px; }
+.lane b { font-size: 15px; }
+.lane small { font-size: 12px; color: var(--muted-foreground); }
+.bar { height: 6px; border-radius: 3px; background: var(--secondary); overflow: hidden; margin-top: 4px; }
+.bar i { display: block; height: 100%; background: var(--success); }
+.cell { padding: 8px; border-bottom: 1px solid var(--border); border-left: 1px solid var(--grid-line); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cell.fold { color: var(--muted-foreground); font-size: 13px; }
+.cardx { border: 1px solid var(--border); border-left: 3px solid var(--g, var(--border)); border-radius: 6px; background: var(--card); padding: 6px 8px; display: flex; flex-direction: column; gap: 2px; cursor: pointer; text-align: left; color: inherit; font: inherit; }
+.cardx:hover { background: var(--accent); }
+.cardx .t { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cardx .r { font-size: 12px; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cardx .d { font: 13px var(--font-mono); color: var(--muted-foreground); }
+.cardx.you .d { color: var(--warning); }
+.cardx.late { border-color: var(--destructive); }
+.cardx.late .d { color: var(--destructive); font-weight: 600; }
+.wall-l .cardx .t { font-size: 17px; }
+.wall-l .cardx .d { font-size: 15px; }
+.wall-l .lane b { font-size: 18px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="label">Proposal · Flow</span>
+    <h1>Flow: the work of every group on one wall</h1>
+    <p class="lede">A view for a second monitor that answers three questions without a click: what are the agents doing, what waits for me, and what has been standing too long. It adds no new kind of group: a project of Plan already is a batch or an epic, a change across repos already groups its parts, and the supervisor's tasks already form a group on the Sessions list. Flow only lays them all side by side.</p>
+  </header>
+
+  <div class="cols">
+    <div>
+      <h2>What it shows</h2>
+      <ul>
+        <li><b>One row per group</b>: each project of Plan with tasks, each change across repos, the supervisor's tasks, then tasks of no group. A row shows how far the group is.</li>
+        <li><b>One column per state</b>: Working, Waits for you (a question or an approval), In review, Stuck (an error, a failed pipeline or Verify, no activity for a long time), Done today.</li>
+        <li><b>Time in the state</b> on every card. A card past its limit turns red, so a stuck agent shows from across the room.</li>
+        <li><b>A click</b> opens the task in the window that shows Sessions, as the tray does, so the wall keeps its view.</li>
+      </ul>
+    </div>
+    <div>
+      <h2>What it does not do</h2>
+      <ul>
+        <li><b>No editing.</b> Columns are states the daemon already knows; moving work stays in Plan and Sessions.</li>
+        <li><b>No new data.</b> It is computed in the UI from the session list, the tasks, the board and the task outcomes it already holds, like the progress of a project in Plan.</li>
+        <li><b>No order of its own for In review.</b> That queue will follow the risk of the change's evidence once it exists.</li>
+        <li><b>No terminals.</b> The session grid stays the place to watch an agent type.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="controls">
+    <span class="label">Text size</span>
+    <div class="seg" role="group" aria-label="Text size">
+      <button type="button" aria-pressed="true" data-size="m">Desk</button>
+      <button type="button" aria-pressed="false" data-size="l">Wall</button>
+    </div>
+  </div>
+
+  <div class="app" id="app">
+    <div class="top">
+      <b>Flow</b>
+      <span class="kpi"><strong>6</strong>working</span>
+      <span class="kpi you"><strong>3</strong>wait for you</span>
+      <span class="kpi"><strong>2</strong>in review</span>
+      <span class="kpi bad"><strong>2</strong>stuck</span>
+      <span class="kpi ok"><strong>5</strong>done today</span>
+    </div>
+    <div class="board">
+      <div class="colh">Group</div>
+      <div class="colh">Working</div>
+      <div class="colh you">Waits for you</div>
+      <div class="colh">In review</div>
+      <div class="colh bad">Stuck</div>
+      <div class="colh ok">Done today</div>
+
+      <div class="lane" style="--g: var(--group-1)"><b>Checkout redesign</b><small>Plan project · 4 of 9 items</small><div class="bar"><i style="width: 44%"></i></div></div>
+      <div class="cell" style="--g: var(--group-1)">
+        <button class="cardx" type="button"><span class="t">Split the payment form</span><span class="r">shop-web</span><span class="d">12 min</span></button>
+        <button class="cardx" type="button"><span class="t">Address lookup endpoint</span><span class="r">orders-api</span><span class="d">4 min</span></button>
+      </div>
+      <div class="cell" style="--g: var(--group-1)">
+        <button class="cardx you" type="button"><span class="t">Coupon rules</span><span class="r">pricing · approval: run mvn verify</span><span class="d">2 min</span></button>
+      </div>
+      <div class="cell" style="--g: var(--group-1)">
+        <button class="cardx" type="button"><span class="t">Cart totals rounding</span><span class="r">pricing · Verify passed</span><span class="d">35 min</span></button>
+      </div>
+      <div class="cell fold" style="--g: var(--group-1)">–</div>
+      <div class="cell fold" style="--g: var(--group-1)">2 items</div>
+
+      <div class="lane" style="--g: var(--group-2)"><b>Rename customer id</b><small>Change · 3 repos</small><div class="bar"><i style="width: 33%"></i></div></div>
+      <div class="cell" style="--g: var(--group-2)">
+        <button class="cardx" type="button"><span class="t">Part 2</span><span class="r">orders-api</span><span class="d">18 min</span></button>
+      </div>
+      <div class="cell" style="--g: var(--group-2)">
+        <button class="cardx you" type="button"><span class="t">Part 3</span><span class="r">shop-web · asks: keep the old field?</span><span class="d">9 min</span></button>
+      </div>
+      <div class="cell fold" style="--g: var(--group-2)">–</div>
+      <div class="cell fold" style="--g: var(--group-2)">–</div>
+      <div class="cell fold" style="--g: var(--group-2)">Part 1</div>
+
+      <div class="lane" style="--g: var(--group-3)"><b>Supervisor</b><small>proposed tasks · 5</small><div class="bar"><i style="width: 40%"></i></div></div>
+      <div class="cell" style="--g: var(--group-3)">
+        <button class="cardx" type="button"><span class="t">Bump Spring Boot</span><span class="r">billing</span><span class="d">7 min</span></button>
+      </div>
+      <div class="cell fold" style="--g: var(--group-3)">–</div>
+      <div class="cell" style="--g: var(--group-3)">
+        <button class="cardx" type="button"><span class="t">Flaky test in reports</span><span class="r">reports · review running</span><span class="d">3 min</span></button>
+      </div>
+      <div class="cell" style="--g: var(--group-3)">
+        <button class="cardx late" type="button"><span class="t">Fix NPE in invoices</span><span class="r">billing · pipeline failed</span><span class="d">48 min</span></button>
+      </div>
+      <div class="cell fold" style="--g: var(--group-3)">1 task</div>
+
+      <div class="lane"><b>No group</b><small>tasks and sessions · 4</small></div>
+      <div class="cell">
+        <button class="cardx" type="button"><span class="t">Docs for the import</span><span class="r">catalog</span><span class="d">22 min</span></button>
+        <button class="cardx" type="button"><span class="t">Main session</span><span class="r">gateway</span><span class="d">1 min</span></button>
+      </div>
+      <div class="cell">
+        <button class="cardx you" type="button"><span class="t">Log format</span><span class="r">gateway · approval: edit pom.xml</span><span class="d">1 min</span></button>
+      </div>
+      <div class="cell fold">–</div>
+      <div class="cell">
+        <button class="cardx late" type="button"><span class="t">Cache warm-up</span><span class="r">catalog · no activity</span><span class="d">31 min</span></button>
+      </div>
+      <div class="cell fold">2 tasks</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const app = document.getElementById("app");
+for (const button of document.querySelectorAll("[data-size]")) {
+  button.addEventListener("click", () => {
+    for (const other of document.querySelectorAll("[data-size]")) other.setAttribute("aria-pressed", String(other === button));
+    app.classList.toggle("wall-l", button.dataset.size === "l");
+  });
+}
+</script>
+</body>
+</html>
