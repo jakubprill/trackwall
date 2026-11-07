@@ -10,10 +10,48 @@ export const MCP_CALL_FILTERS: readonly { id: McpCallFilter; label: string }[] =
   { id: "errors", label: "Errors" },
 ];
 
-export function filterMcpCalls(calls: readonly McpCall[], filter: McpCallFilter): McpCall[] {
-  if (filter === "changes") return calls.filter((c) => c.effect !== "read");
-  if (filter === "errors") return calls.filter((c) => c.outcome.kind === "error");
-  return [...calls];
+/**
+ * What the list shows: the kind of call, and in Settings also one tool and one agent (`null` for any), as
+ * `mcpCallChoices` names them.
+ */
+export interface McpCallQuery {
+  show: McpCallFilter;
+  tool: string | null;
+  caller: string | null;
+}
+
+export function filterMcpCalls(calls: readonly McpCall[], query: McpCallQuery): McpCall[] {
+  return calls.filter(
+    (c) =>
+      showsKind(c, query.show) &&
+      (query.tool === null || c.tool === query.tool) &&
+      (query.caller === null || callerLabel(c.caller) === query.caller),
+  );
+}
+
+function showsKind(call: McpCall, show: McpCallFilter): boolean {
+  if (show === "changes") return call.effect !== "read";
+  if (show === "errors") return call.outcome.kind === "error";
+  return true;
+}
+
+/**
+ * The tools and agents the calls name, each once and in alphabetical order, for the filters of Settings; a chosen one
+ * stays even after the audit dropped its last call, so the filter still shows why the list is empty.
+ */
+export function mcpCallChoices(calls: readonly McpCall[], query: McpCallQuery): { tools: string[]; callers: string[] } {
+  const sorted = (values: Iterable<string>, chosen: string | null) =>
+    [...new Set([...values, ...(chosen === null ? [] : [chosen])])].sort((a, b) => a.localeCompare(b));
+  return {
+    tools: sorted(
+      calls.map((c) => c.tool),
+      query.tool,
+    ),
+    callers: sorted(
+      calls.map((c) => callerLabel(c.caller)),
+      query.caller,
+    ),
+  };
 }
 
 /** What a tool that is not only reading does, next to its name; a read says nothing. */
@@ -37,6 +75,11 @@ export function mcpCallEntry(call: McpCall, now: Date) {
     error: call.outcome.kind === "ok" ? null : `${call.outcome.code}: ${call.outcome.message}`,
     when: `${relativeTime(call.at, now)} · ${call.durationMs} ms`,
   };
+}
+
+/** A React key for a call: calls carry no id, and the same tool can end twice in one millisecond, so the position tells them apart. */
+export function mcpCallKey(call: McpCall, index: number): string {
+  return `${call.at}-${call.tool}-${index}`;
 }
 
 /** Who called, as it was at the call: the session's place survives the session. */

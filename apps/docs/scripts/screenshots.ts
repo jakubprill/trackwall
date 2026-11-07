@@ -129,8 +129,8 @@ const SHOTS: Record<string, (page: Page) => Promise<void>> = {
   },
   "copilot-usage": async (page) => {
     await page.keyboard.press("Control+,");
-    await page.getByRole("button", { name: "Agents", exact: true }).click();
-    await page.getByText("Tasks and sessions").scrollIntoViewIfNeeded();
+    await page.getByRole("button", { name: "Usage", exact: true }).click();
+    await page.getByText("Tasks and sessions").waitFor();
     await settle(page);
   },
   overview: async (page) => {

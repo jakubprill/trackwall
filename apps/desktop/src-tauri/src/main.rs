@@ -18,6 +18,7 @@ mod global_shortcut;
 mod host_folder;
 mod json_file;
 mod jump;
+mod keep_screen_on;
 mod link;
 mod lock;
 mod notification;
@@ -141,6 +142,7 @@ fn main() {
         .manage(jump::PendingJump::default())
         .manage(updates::Updates::default())
         .manage(zoom::Zooms::default())
+        .manage(keep_screen_on::ScreenOn::default())
         .invoke_handler(tauri::generate_handler![
             daemon_connection,
             retry_daemon,
@@ -169,6 +171,8 @@ fn main() {
             updates::cancel_update,
             autostart::autostart_enabled,
             autostart::set_autostart,
+            keep_screen_on::keep_screen_on,
+            keep_screen_on::set_keep_screen_on,
             zoom::zoom_window
         ])
         .setup(move |app| {
@@ -183,6 +187,7 @@ fn main() {
             }
             zoom::Zooms::load(app.handle());
             zoom::apply_to_main(app.handle());
+            keep_screen_on::ScreenOn::load(app.handle());
             let window = app.get_webview_window(windows::MAIN).ok_or("missing window main from tauri.conf.json")?;
             app.state::<WindowEffects>().apply(&window);
             let tray_icons = build_tray(app.handle())?;
@@ -316,6 +321,8 @@ fn quit_app(app: &AppHandle) {
 
 /// Hides the windows and the tray icon, so that a closing shell no longer takes clicks.
 fn hide_shell(app: &AppHandle) {
+    // A closing shell no longer keeps the screen on, also while the daemon takes its time to stop.
+    keep_screen_on::ScreenOn::release(app);
     for window in app.webview_windows().values() {
         let _ = window.hide();
     }

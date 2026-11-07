@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { FIRST_SETTINGS_CATEGORY, SETTINGS_CATEGORIES, settingsCategory } from "../src/lib/settings-categories.ts";
 
 describe("Settings categories", () => {
-  test("the list shows Workspace, Repo hosts, Agents, App, Files and Diagnostics in this order", () => {
-    expect(SETTINGS_CATEGORIES.map((c) => c.label)).toEqual(["Workspace", "Repo hosts", "Agents", "App", "Files", "Diagnostics"]);
+  test("the list shows Workspace, Repo hosts, Agents, Usage, App, Files and Diagnostics in this order", () => {
+    expect(SETTINGS_CATEGORIES.map((c) => c.label)).toEqual(["Workspace", "Repo hosts", "Agents", "Usage", "App", "Files", "Diagnostics"]);
   });
 
   test("Files shows every config file, then the local config of every repo", () => {
@@ -20,25 +20,29 @@ describe("Settings categories", () => {
     expect(settingsCategory("agents").sections).toContain("copilot-cli");
   });
 
-  test("the session profile, the supervisor's model and the automatic review are under Agents, next to connecting Copilot CLI, then what Copilot CLI used and, last because it is long, the MCP calls agents made", () => {
+  test("Agents holds only settings: connecting Copilot CLI, the session profile, the supervisor's model, the automatic review and Java navigation", () => {
     expect(settingsCategory("agents").sections).toEqual([
       "copilot-cli",
       "session-profile",
       "supervisor-model",
       "auto-review",
       "java-navigation",
-      "copilot-usage",
-      "mcp-calls",
     ]);
+  });
+
+  test("what Copilot CLI used and the MCP calls agents made have a category of their own, Usage, the only one as wide as the view", () => {
+    expect(settingsCategory("usage").sections).toEqual(["copilot-usage", "mcp-calls"]);
+    expect(SETTINGS_CATEGORIES.filter((c) => c.wide).map((c) => c.id)).toEqual(["usage"]);
   });
 
   test("how Home draws its scene is under App, with the other settings of this computer", () => {
     expect(settingsCategory("app").sections).toContain("home-scene");
   });
 
-  test("where the desktop app's daemon runs is under App, after starting at sign-in, and notifications in the browser after it", () => {
+  test("keeping the screen on is under App, after starting at sign-in, then where the daemon runs and notifications in the browser", () => {
     expect(settingsCategory("app").sections).toEqual([
       "start-at-sign-in",
+      "keep-screen-on",
       "remote-daemon",
       "browser-notifications",
       "updates",

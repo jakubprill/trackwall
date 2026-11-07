@@ -13,7 +13,7 @@ import { verificationOutdatedLabel } from "./verification.ts";
 
 /** One mark on a task's row: a word or a number with a tone, and the whole story as its tooltip. */
 export interface OutcomeMark {
-  key: "verification" | "merge-request";
+  key: "review" | "verification" | "merge-request";
   tone?: StatusTone;
   label: string;
   title: string;
@@ -32,10 +32,20 @@ function verificationMark(state: VerificationState, outdated: boolean): Omit<Out
   return { label: "Verify outdated", title: verificationOutdatedLabel(state) };
 }
 
-/** The verdict first, then the merge request: `!12` with the pipeline's tone while it is open, the merge request's own once merged or closed. */
-export function outcomeMarks(outcome: TaskOutcome | undefined): OutcomeMark[] {
-  if (!outcome) return [];
-  const marks: OutcomeMark[] = [];
+/** A task whose agent handed its work over (ADR-213), until the user gives it work again. */
+const IN_REVIEW_MARK: OutcomeMark = {
+  key: "review",
+  label: "In review",
+  title: "The agent handed its work over for your review; a review or a Fix gives it work again",
+};
+
+/**
+ * "In review" first when the agent handed its work over, then the verdict, then the merge request: `!12` with the
+ * pipeline's tone while it is open, the merge request's own once merged or closed.
+ */
+export function outcomeMarks(outcome: TaskOutcome | undefined, inReview: boolean): OutcomeMark[] {
+  const marks: OutcomeMark[] = inReview ? [IN_REVIEW_MARK] : [];
+  if (!outcome) return marks;
   if (outcome.verification) marks.push({ key: "verification", ...verificationMark(outcome.verification, outcome.verificationOutdated) });
   const mr = outcome.mergeRequest;
   if (mr)

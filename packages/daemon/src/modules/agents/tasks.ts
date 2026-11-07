@@ -147,6 +147,8 @@ export interface AgentTasksDeps {
   /** Task `task`'s round commits that the push has not squashed yet (ADR-168), which a handoff looks past (ADR-144). */
   roundCommits: (task: string) => ReadonlySet<string>;
   openEditor: (dir: string) => void;
+  /** A task was created and its first session started: from the form, a proposal, a routine, a handoff or a part of a change. */
+  onCreated: (task: Task) => void;
   log: (msg: string) => void;
 }
 
@@ -315,6 +317,7 @@ export class AgentTasks {
       view: sessionView,
       conversation: null,
       summary: null,
+      inReview: false,
       handoff,
       change,
       impactProposed: {},
@@ -357,6 +360,8 @@ export class AgentTasks {
     const { id } = task;
     try {
       await this.#launch(task, "new");
+      // Only a task whose first session started counts: one that could not start is ended again below.
+      this.#deps.onCreated(view(task));
     } catch (err) {
       // A failed cleanup leaves the task on the list, so that the user can end it themselves.
       await this.#whileRemoving(id, async () => {
@@ -595,9 +600,22 @@ export class AgentTasks {
    * earlier one, steps included, and survives a daemon restart.
    */
   setSummary(id: string, text: string, checkSteps: string[]): Task {
-    const summarized = { ...this.#get(id), summary: { text, checkSteps, reportedAt: new Date().toISOString() } };
+    const reportedAt = new Date().toISOString();
+    // A summary hands the work over for review (ADR-213).
+    const summarized = { ...this.#get(id), summary: { text, checkSteps, reportedAt }, inReview: true };
     this.#save(this.#tasks.map((t) => (t.id === id ? summarized : t)));
     return view(summarized);
+  }
+
+  /**
+   * The task's agent got work again (the user's review or "Fix" of its pipeline, its proposer's message, ADR-213), so its work is no longer
+   * waiting for review; `false` when it was not.
+   */
+  takeOutOfReview(id: string): boolean {
+    const task = this.#get(id);
+    if (!task.inReview) return false;
+    this.#save(this.#tasks.map((t) => (t.id === id ? { ...task, inReview: false } : t)));
+    return true;
   }
 
   changes(id: string): Promise<TaskChanges> {

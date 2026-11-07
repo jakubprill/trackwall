@@ -107,6 +107,7 @@ import { SessionTokens } from "./session-tokens.ts";
 import { outcome, sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "./session-wait.ts";
 import { SupervisorSessions } from "./supervisor-sessions.ts";
 import { supervisorSituation } from "./supervisor-situation.ts";
+import { TaskBoardItem, type TaskBoardItemDeps } from "./task-board-item.ts";
 import { TaskCoordination } from "./task-coordination.ts";
 import { TaskFile } from "./task-file.ts";
 import { TaskProposals } from "./task-proposals.ts";
@@ -227,6 +228,8 @@ export interface AgentsDeps {
   openEditor: (path: string, line?: number) => void;
   /** Whether a board item is on the board (ADR-133): a task or a proposal names only an existing one. */
   boardHas: (item: string) => Promise<boolean>;
+  /** Moves a board item as the work of its tasks goes (ADR-213), `Board.followTasks`. */
+  followTasks: TaskBoardItemDeps["move"];
   /** The workspace knowledge the user approved for a session in `repo` (`null`: in the projects folder), ADR-170. */
   knowledge: (repo: string | null) => Promise<SessionKnowledge>;
   /** The format a session on a model must use with its custom provider (ADR-200), from `provider-models`. */
@@ -275,6 +278,7 @@ export class Agents {
   readonly #launcher: SessionLauncher;
   readonly #javaNavigation: JavaNavigationServers;
   readonly #autoReviews: AutoReviews;
+  readonly #boardItems: TaskBoardItem;
 
   constructor(deps: AgentsDeps) {
     this.#deps = deps;
@@ -329,6 +333,8 @@ export class Agents {
       roundCommits: (task) => this.#rounds.roundCommits(task),
       openEditor: deps.openEditor,
       log: deps.log,
+      // The item a task starts on is in progress from then (ADR-213); every way a task starts goes through here.
+      onCreated: (task) => this.#boardItems.started(task),
       javaNavigation: this.#javaNavigation,
       sandbox: async (approvals) => taskSandbox(sandboxState(deps.repos.sandboxSettings(), await deps.env()), approvals),
       sessions: {
@@ -359,6 +365,7 @@ export class Agents {
       changed: () => this.#queues.follow(),
       log: deps.log,
     });
+    this.#boardItems = new TaskBoardItem({ move: deps.followTasks, tasks: () => this.#tasks.list(), log: deps.log });
     this.#autoReviews = new AutoReviews({
       tasks: {
         task: (id) => this.#tasks.task(id),
@@ -587,8 +594,9 @@ export class Agents {
   async approveProposal(id: string, prompt: string, model: string | null, approvals: TaskApprovals, view: SessionView): Promise<Task> {
     if (this.#proposals.get(id).kind !== "task") throw new DomainError("bad_request", `proposal ${id} is not a task`);
     const { repo, title, proposedBy, item } = this.#proposals.take(id);
+    let task: Task;
     try {
-      return await this.#tasks.create(repo, prompt, {
+      task = await this.#tasks.create(repo, prompt, {
         id,
         title,
         proposedBy,
@@ -602,6 +610,7 @@ export class Agents {
     } finally {
       this.#proposals.release(id, this.#tasks.find(id) === undefined);
     }
+    return task;
   }
 
   /**
@@ -683,6 +692,7 @@ export class Agents {
     const own = this.#ownTask(caller, "can report a result");
     const reported = this.#tasks.setSummary(own.task, text, checkSteps);
     this.#autoReviews.afterReport(own.task);
+    this.#boardItems.handedOver(reported);
     // Awaited, so the update is there for the proposer by the time the tool answers.
     await this.#coordination.resultReported(reported, own.session, this.#reportedChanges(own.task));
     return reported;
@@ -696,6 +706,7 @@ export class Agents {
     // Only to refuse an unknown or ended task (`not_found`).
     this.#tasks.task(id);
     const unread = this.#reviews.add(id, comments);
+    this.#backToWork(id);
     this.#coordination.reviewed(id);
     const running = this.#sessions.runningOfTask(id);
     return { unread, delivery: running ? running.askToRead() : "on_resume" };
@@ -709,8 +720,14 @@ export class Agents {
     // Only to refuse an unknown or ended task (`not_found`).
     this.#tasks.task(id);
     this.#reviews.fixPipeline(id, fix);
+    this.#backToWork(id);
     this.#coordination.reviewed(id);
     return this.#sessions.runningOfTask(id)?.askToRead() ?? "on_resume";
+  }
+
+  /** Task `id`'s agent got work again, so its work is no longer waiting for review (ADR-213). */
+  #backToWork(id: string): void {
+    if (this.#tasks.takeOutOfReview(id)) this.#boardItems.backToWork(this.#tasks.task(id));
   }
 
   /** The prompt for what waits unread for a session: its task's review comments and messages, and its updates. */
@@ -736,7 +753,10 @@ export class Agents {
    * reads it with `get_messages`.
    */
   sendMessage(caller: string | null, task: string, text: string): SendMessageResult {
-    return this.#coordination.send(caller, task, text);
+    const sent = this.#coordination.send(caller, task, text);
+    // The proposer steering the task gives its agent work again, like the user's review.
+    this.#backToWork(task);
+    return sent;
   }
 
   /** A question from session `caller`'s own task to the task's proposer (`ask_proposer`, ADR-160). */
@@ -839,7 +859,16 @@ export class Agents {
   async createChange({ title, prompt, parts, approvals, model, item, view }: ChangeRequest): Promise<CreatedChange> {
     await this.#assertOnBoard(item);
     const prompts = parts.map((part) => ({ repo: part.repo, prompt: changePartPrompt(prompt, part) }));
-    return this.#tasks.createChange(prompts, { title, proposedBy: null, model, approvals, javaNavigation: false, item, view });
+    const created = await this.#tasks.createChange(prompts, {
+      title,
+      proposedBy: null,
+      model,
+      approvals,
+      javaNavigation: false,
+      item,
+      view,
+    });
+    return created;
   }
 
   /**
@@ -1108,7 +1137,10 @@ export class Agents {
     // the removal starts at once, so a change computation that comes after it refuses.
     const stopping = this.#autoReviews.stop(id);
     if (stopping !== null) await stopping;
+    const { item } = this.#tasks.task(id);
     const ended = await this.#tasks.remove(id, keepBranch, discardChanges, discardFingerprint);
+    // The task that was still at work may have been the last one on its item not in review.
+    if (item !== null) this.#boardItems.settle(item);
     this.#autoReviews.forget(id);
     this.#reviews.take(id);
     this.#miseTrust.forget({ task: id });

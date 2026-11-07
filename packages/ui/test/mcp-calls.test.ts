@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { McpCall } from "@trackwall/protocol";
-import { callerLabel, filterMcpCalls, mcpCallEntry } from "../src/lib/mcp-calls.ts";
+import { callerLabel, filterMcpCalls, mcpCallChoices, mcpCallEntry } from "../src/lib/mcp-calls.ts";
 
 const TASK = "3f2a9c1e-0000-4000-8000-000000000000";
 const SESSION = "7c1e2d3a-0000-4000-8000-000000000000";
@@ -61,8 +61,30 @@ describe("the MCP calls list (ADR-152)", () => {
 
   test("Changes leaves out reads, Errors leaves out calls that ended well", () => {
     const calls = [READ, RUN, FAILED];
-    expect(filterMcpCalls(calls, "all")).toEqual(calls);
-    expect(filterMcpCalls(calls, "changes")).toEqual([RUN]);
-    expect(filterMcpCalls(calls, "errors")).toEqual([FAILED]);
+    expect(filterMcpCalls(calls, { show: "all", tool: null, caller: null })).toEqual(calls);
+    expect(filterMcpCalls(calls, { show: "changes", tool: null, caller: null })).toEqual([RUN]);
+    expect(filterMcpCalls(calls, { show: "errors", tool: null, caller: null })).toEqual([FAILED]);
+  });
+
+  test("a chosen tool and a chosen agent narrow the list, also together with Errors", () => {
+    const calls = [READ, RUN, FAILED];
+    expect(filterMcpCalls(calls, { show: "all", tool: "get_repo", caller: null })).toEqual([READ, FAILED]);
+    expect(filterMcpCalls(calls, { show: "all", tool: null, caller: "Task in shop" })).toEqual([RUN]);
+    expect(filterMcpCalls(calls, { show: "errors", tool: "get_repo", caller: "Agent outside Trackwall" })).toEqual([FAILED]);
+    expect(filterMcpCalls(calls, { show: "all", tool: "run_mise_task", caller: "Supervisor" })).toEqual([]);
+  });
+
+  test("the filters offer every tool and every agent of the calls once, in alphabetical order", () => {
+    expect(mcpCallChoices([RUN, READ, FAILED], { show: "all", tool: null, caller: null })).toEqual({
+      tools: ["get_repo", "run_mise_task"],
+      callers: ["Agent outside Trackwall", "Task in shop"],
+    });
+  });
+
+  test("a chosen tool and agent stay among the choices after the audit dropped their last call", () => {
+    expect(mcpCallChoices([READ], { show: "all", tool: "run_mise_task", caller: "Supervisor" })).toEqual({
+      tools: ["get_repo", "run_mise_task"],
+      callers: ["Agent outside Trackwall", "Supervisor"],
+    });
   });
 });

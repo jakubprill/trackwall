@@ -27,8 +27,8 @@ export function projectsOf(items: readonly BoardItem[]): BoardItem[] {
   return items.filter((it) => it.kind === "project").sort(compareSiblings);
 }
 
-/** A project is archived once done or dropped; the left column lists those apart. */
-export function isArchived(item: BoardItem): boolean {
+/** Done or dropped: a closed project is archived and listed apart on the left, a closed item is what "Hide done" hides. */
+export function isClosed(item: BoardItem): boolean {
   return item.column === "done" || item.column === "dropped";
 }
 
@@ -60,6 +60,17 @@ export function outline(items: readonly BoardItem[], project: string, folded: Re
 /** The project an item lies in; `undefined` for an idea in the inbox and its children. */
 export function projectOf(items: readonly BoardItem[], item: BoardItem): BoardItem | undefined {
   return [...ancestorsOf(items, item), item].find((it) => it.kind === "project");
+}
+
+/**
+ * The place to show once an item is selected: the project it lies in when that is not the place shown already (a new idea
+ * filed under a project), else `undefined` to stay.
+ */
+export function placeOfSelected(items: readonly BoardItem[], place: PlanPlace, id: string | undefined): PlanPlace | undefined {
+  const item = items.find((candidate) => candidate.id === id);
+  const project = item && projectOf(items, item);
+  if (!project || (place.kind === "project" && place.id === project.id)) return undefined;
+  return { kind: "project", id: project.id };
 }
 
 /** Tab: under the sibling just above, as its last child; `undefined` for the first sibling, which has none above. */
