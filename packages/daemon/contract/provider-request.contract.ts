@@ -84,4 +84,13 @@ describe("what Copilot CLI sends a custom provider, which the provider's model l
     expect(new Set(problems)).toEqual(new Set(["POST /v1/responses"]));
     expect(model.requests()).toHaveLength(before);
   });
+
+  test("with a custom provider, the model auto is not Copilot CLI's own choice: it goes to the provider as the model id", async () => {
+    model.reply({ text: "Hello." });
+
+    expect(await promptOnce({ COPILOT_MODEL: "auto" })).toBe(0);
+
+    expect(model.requests().at(-1)?.model).toBe("auto");
+    expect(model.takeLeftovers()).toEqual({ problems: [], unusedReplies: 0 });
+  });
 });
