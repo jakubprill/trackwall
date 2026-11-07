@@ -195,10 +195,11 @@ interface WorkFacts {
  * which waits for someone to act on it; otherwise it is at rest.
  */
 function columnOf(session: Session | undefined, work: WorkFacts): Pick<FlowCard, "column" | "since" | "detail"> {
-  const detail = session ? sessionStateLabel(session).label : "no session";
+  const state = session && sessionStateLabel(session);
+  const detail = state?.label ?? "no session";
   const at = session?.state?.at ?? work.since;
   if (session?.stuck) return { column: "stuck", since: session.stuck.lastStepAt, detail };
-  if (session && sessionStateLabel(session).tone === "error") return { column: "stuck", since: at, detail };
+  if (state?.tone === "error") return { column: "stuck", since: at, detail };
   if (session?.needsAttention && session.state?.state !== "Input") return { column: "waiting", since: at, detail };
   if (session && inTurn(session)) return { column: "working", since: at, detail };
   if (work.review) return { column: "review", since: work.review.reportedAt ?? at, detail: "handed over" };
