@@ -30,10 +30,11 @@ export type BoardColumn = z.infer<typeof BoardColumn>;
 
 /**
  * The columns the work of an item's tasks moves it to (ADR-213): `in_progress` when the user starts a task on it or gives
- * its agent work again, `review` when every open task on it has handed its work over. Only the daemon moves an item
- * there, never an agent's `update_item`, and never out of `done` or `dropped`.
+ * its agent work again, `review` when every open task on it has handed its work over, and back to `ready` when the user
+ * removes the last task on it while it is still in progress (ADR-213). Only the daemon moves an item there by itself,
+ * never an agent's `update_item`, and never out of `done` or `dropped`.
  */
-export const TaskWorkColumn = z.enum(["in_progress", "review"]);
+export const TaskWorkColumn = z.enum(["ready", "in_progress", "review"]);
 export type TaskWorkColumn = z.infer<typeof TaskWorkColumn>;
 
 /** The columns an agent may move an item between: the user decides when work starts, ends or is dropped. */

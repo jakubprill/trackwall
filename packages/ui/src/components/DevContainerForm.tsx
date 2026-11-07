@@ -15,6 +15,7 @@ import {
   startDevContainer,
   updateDevContainer,
 } from "@/lib/dev-container";
+import { LOCAL_EXAMPLE_PATHS } from "@/lib/platform";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 
@@ -58,7 +59,7 @@ function DevContainerFields({ saved, initial, onSaved }: { saved: DevContainer |
       <div className="flex flex-wrap gap-2">
         <Input
           aria-label="Dev container folder on this computer"
-          placeholder="C:\Users\me\Dev\workspace"
+          placeholder={LOCAL_EXAMPLE_PATHS.devContainerFolder}
           className="min-w-64 flex-1 font-mono text-xs"
           value={folder}
           onChange={(e) => setFolder(e.target.value)}
@@ -108,7 +109,7 @@ function StartButton() {
   const waiting = start.pending || update.pending || starting.data === true;
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Button
           size="sm"
           disabled={waiting}
@@ -120,7 +121,14 @@ function StartButton() {
           {waiting && !update.pending ? "Starting…" : "Start the dev container and connect"}
         </Button>
         {otherVersion && (
-          <Button size="sm" variant="outline" disabled={waiting} onClick={() => update.run()}>
+          // A version makes the label long: it wraps instead of leaving the card in a narrow window.
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-auto min-h-8 max-w-full whitespace-normal py-1"
+            disabled={waiting}
+            onClick={() => update.run()}
+          >
             {update.pending ? "Updating…" : `Update Trackwall in the container to ${otherVersion.app}`}
           </Button>
         )}

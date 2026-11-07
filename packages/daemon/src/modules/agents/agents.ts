@@ -1139,8 +1139,8 @@ export class Agents {
     if (stopping !== null) await stopping;
     const { item } = this.#tasks.task(id);
     const ended = await this.#tasks.remove(id, keepBranch, discardChanges, discardFingerprint);
-    // The task that was still at work may have been the last one on its item not in review.
-    if (item !== null) this.#boardItems.settle(item);
+    // The task that was still at work may have been the last one on its item not in review, or the last one on it.
+    if (item !== null) this.#boardItems.removed(item);
     this.#autoReviews.forget(id);
     this.#reviews.take(id);
     this.#miseTrust.forget({ task: id });

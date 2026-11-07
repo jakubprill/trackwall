@@ -6,6 +6,8 @@ import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import { useDesktop } from "@/lib/desktop";
+import { daemonExamplePaths } from "@/lib/platform";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 import { GitProgramSurface } from "./GitProgramSurface.tsx";
@@ -16,6 +18,7 @@ import { WorktreesDirSurface } from "./WorktreesDirSurface.tsx";
 export function WorkspaceFolders({ conn, onRetry, onSaved }: { conn: Connection; onRetry: () => void; onSaved: () => void }) {
   const load = useCallback(() => post(conn, workspaceApi.settings, {}), [conn]);
   const settings = useRemote(load);
+  const projectsDir = { ...PROJECTS_DIR, placeholder: daemonExamplePaths(useDesktop()).projectsDir };
 
   async function saveProjectsDir(path: string) {
     await post(conn, workspaceApi.setProjectsDir, { path });
@@ -54,14 +57,14 @@ export function WorkspaceFolders({ conn, onRetry, onSaved }: { conn: Connection;
           {settings.data && (
             <PathForm
               key={settings.data.projectsDir ?? ""}
-              {...PROJECTS_DIR}
+              {...projectsDir}
               initialPath={settings.data.projectsDir ?? ""}
               configFile={settings.data.configFile}
               save={(path) => saveProjectsDir(path)}
             />
           )}
           {/* A bad `projectsDir` typed by hand into `workspace.yaml` is fixed with this very form. */}
-          {settings.errorCode === "invalid_config" && <PathForm {...PROJECTS_DIR} initialPath="" save={(path) => saveProjectsDir(path)} />}
+          {settings.errorCode === "invalid_config" && <PathForm {...projectsDir} initialPath="" save={(path) => saveProjectsDir(path)} />}
         </div>
       </Surface>
       {settings.data && <WorktreesDirSurface settings={settings.data} save={saveWorktreesDir} />}
@@ -100,6 +103,5 @@ function SuggestedProjectsDir({ conn, use }: { conn: Connection; use: (path: str
 
 const PROJECTS_DIR = {
   label: "Full path to the projects folder",
-  placeholder: "C:\\Users\\me\\Projects or /Users/me/Projects",
   configKey: "projectsDir",
 };
