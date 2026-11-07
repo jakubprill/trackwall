@@ -9,8 +9,11 @@ const TOKEN = "s".repeat(43);
 const SERVICE = "src/main/java/com/example/shop/order/OrderService.java";
 const CONTROLLER = "src/main/java/com/example/shop/order/OrderController.java";
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
+/** A secret of the user's environment, by its name: the daemon masks its value in a trace as in a log. */
+const SECRET = "jdbc-pass-7f3a9c";
 
 beforeAll(async () => {
+  process.env.SHOP_DB_PASSWORD = SECRET;
   daemon = await startSessionApi(TOKEN, {
     repos: { shop: { "README.md": "# shop\n", [SERVICE]: "class OrderService {}\n" } },
     miseCommand: ["mise"],
@@ -21,6 +24,7 @@ beforeAll(async () => {
 }, SLOW_TEST_TIMEOUT_MS);
 
 afterAll(async () => {
+  delete process.env.SHOP_DB_PASSWORD;
   await daemon.stop();
 }, 30_000);
 
@@ -49,6 +53,17 @@ describe.skipIf(process.versions.bun === undefined)("a task from a stack trace (
     // The task's first session gets the same prompt.
     expect(daemon.facade.agents.task(task.id).prompt).toBe(task.prompt);
 
+    for (const session of daemon.facade.agents.sessions().sessions.filter((s) => s.task === task.id)) {
+      await daemon.facade.agents.stop(session.id);
+    }
+    await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
+  }, 60_000);
+
+  test("a secret of the environment in the trace's message reaches the prompt masked", async () => {
+    const trace = `java.sql.SQLException: login failed for jdbc:postgresql://db/shop?password=${SECRET}\n\tat com.example.shop.order.OrderService.total(OrderService.java:55)`;
+    const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "Fix the login", approvals: "ask", stackTrace: trace });
+    expect(task.prompt).not.toContain(SECRET);
+    expect(task.prompt).toContain("password=***");
     for (const session of daemon.facade.agents.sessions().sessions.filter((s) => s.task === task.id)) {
       await daemon.facade.agents.stop(session.id);
     }

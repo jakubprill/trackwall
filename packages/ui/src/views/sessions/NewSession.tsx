@@ -105,7 +105,7 @@ export function NewSession({
         javaNavigation,
         item,
         view: choice.view,
-        stackTrace: stackTraceToSend(stackTrace),
+        stackTrace: stackTraceToSend(stackTrace, stackTraceOpen),
       }),
     (task) => onStarted({ kind: "task", id: task.id }),
   );

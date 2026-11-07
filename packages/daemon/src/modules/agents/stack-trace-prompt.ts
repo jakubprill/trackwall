@@ -1,5 +1,6 @@
 import { mcpTools } from "@trackwall/protocol";
-import { type JavaException, parseJavaStackTrace } from "./java-stack-trace.ts";
+import { DomainError } from "../../infra/errors.ts";
+import { type JavaException, parseJavaStackTrace, rootCause, shortenedTrace } from "./java-stack-trace.ts";
 import { type RepoFrame, repoFrames } from "./stack-trace-frames.ts";
 
 /**
@@ -8,8 +9,17 @@ import { type RepoFrame, repoFrames } from "./stack-trace-frames.ts";
  * The trace is quoted as text from a log, never as instructions, and the frame list says where its paths come from.
  */
 
-/** The frame list stops here, so that the whole prompt stays well within one argument of Copilot CLI (`TASK_PROMPT_MAX`). */
+/**
+ * The trace is quoted up to this length, and the frame list up to the next: with the user's prompt (`TASK_PROMPT_MAX`)
+ * and the fixed text, about 21,000 characters, so that the prompt stays one argument within the Windows command line.
+ */
+const QUOTED_TRACE_MAX_CHARS = 8000;
 const FRAME_LIST_MAX_CHARS = 4000;
+/**
+ * The longest prompt with a trace as Windows quotes it for the command line, where a `"` and the `\` before it are
+ * escaped: well under the 32,767 characters of the whole command, which also has the session's other arguments.
+ */
+const STACK_TRACE_PROMPT_MAX = 26_000;
 
 interface StackTraceContext {
   trace: string;
@@ -22,7 +32,24 @@ interface StackTraceContext {
 /** The task prompt from the user's prompt, the pasted trace and the repo's tracked sources (`STACK_TRACE_SOURCE_GLOBS`). */
 export function promptWithStackTrace(prompt: string, trace: string, tracked: { paths: readonly string[]; truncated: boolean }): string {
   const exceptions = parseJavaStackTrace(trace);
-  return stackTracePrompt(prompt, { trace, exceptions, frames: repoFrames(exceptions, tracked.paths), listCut: tracked.truncated });
+  const quoted = shortenedTrace(trace, QUOTED_TRACE_MAX_CHARS);
+  const built = stackTracePrompt(prompt, {
+    trace: quoted,
+    exceptions,
+    frames: repoFrames(exceptions, tracked.paths),
+    listCut: tracked.truncated,
+  });
+  if (windowsArgumentLength(built) > STACK_TRACE_PROMPT_MAX)
+    throw new DomainError(
+      "bad_request",
+      "the prompt with the stack trace is too long for one argument of Copilot CLI: shorten the prompt or the trace",
+    );
+  return built;
+}
+
+/** The length of the text as one quoted Windows command line argument, counting an escape for every `"` and `\`. */
+function windowsArgumentLength(text: string): number {
+  return text.length + (text.match(/["\\]/g)?.length ?? 0) + 2;
 }
 
 function stackTracePrompt(prompt: string, context: StackTraceContext): string {
@@ -66,7 +93,7 @@ function framesSection({ exceptions, frames, listCut }: StackTraceContext): stri
 
 /** Each exception that has frames here, under its name, with the deepest cause marked: it is usually where it started. */
 function frameLines(exceptions: readonly JavaException[], frames: readonly RepoFrame[]): string[] {
-  const deepestCause = exceptions.findLastIndex((e) => e.kind === "caused_by");
+  const deepestCause = rootCause(exceptions);
   const lines: string[] = [];
   let shown = -1;
   for (const { exception, frame, paths } of frames) {
@@ -82,9 +109,15 @@ function frameLines(exceptions: readonly JavaException[], frames: readonly RepoF
 
 function exceptionLine(exception: JavaException | undefined, deepest: boolean): string {
   const name = exception?.type ?? "frames";
-  const kind = exception?.kind === "caused_by" ? "Caused by " : exception?.kind === "suppressed" ? "Suppressed " : "";
-  return `- ${kind}${name}${deepest ? " (the deepest cause)" : ""}`;
+  return `- ${KIND_LABEL[exception?.kind ?? "thrown"]}${name}${deepest ? " (the root cause)" : ""}`;
 }
+
+const KIND_LABEL: Record<JavaException["kind"], string> = {
+  thrown: "",
+  caused_by: "Caused by ",
+  suppressed: "Suppressed ",
+  wrapped_by: "Wrapped by ",
+};
 
 function reproduceSection(): string {
   return [

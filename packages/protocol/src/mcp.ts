@@ -19,9 +19,7 @@ import {
   PromptDelivery,
   REPRO_TEST_FAILURE_MAX,
   REPRO_TEST_NAME_MAX,
-  ReproTestFailure,
-  ReproTestFile,
-  ReproTestName,
+  ReproTest,
   Session,
   SessionId,
   TASK_CHECK_STEP_MAX,
@@ -1025,19 +1023,17 @@ export const mcpTools = {
               'short steps in order, each with what to do and what they should see, such as "Open /orders and press Save: a toast says Saved". ' +
               "Only a hint shown next to the summary; leave it out when there is nothing to try by hand.",
           ),
-        reproTest: z
-          .object({
-            file: visibleText(ReproTestFile).describe(
-              "the test's file, relative to the repo root, e.g. src/test/java/com/example/shop/OrderServiceTest.java",
-            ),
-            name: visibleText(ReproTestName).describe(
-              `the test as its build tool names it, up to ${REPRO_TEST_NAME_MAX} characters, e.g. OrderServiceTest#totalOfEmptyOrder`,
-            ),
-            failure: visibleText(ReproTestFailure).describe(
-              `how it failed before your fix, on one line of up to ${REPRO_TEST_FAILURE_MAX} characters, e.g. NullPointerException at OrderService.java:42`,
-            ),
-          })
-          .strict()
+        reproTest: ReproTest.extend({
+          file: ReproTest.shape.file.describe(
+            "the test's file, relative to the repo root, e.g. src/test/java/com/example/shop/OrderServiceTest.java",
+          ),
+          name: ReproTest.shape.name.describe(
+            `the test as its build tool names it, up to ${REPRO_TEST_NAME_MAX} characters, e.g. OrderServiceTest#totalOfEmptyOrder`,
+          ),
+          failure: ReproTest.shape.failure.describe(
+            `how it failed before your fix, on one line of up to ${REPRO_TEST_FAILURE_MAX} characters, e.g. NullPointerException at OrderService.java:42`,
+          ),
+        })
           .optional()
           .describe(
             "the test you wrote first that reproduces the error your task was given (a stack trace), which failed before your " +

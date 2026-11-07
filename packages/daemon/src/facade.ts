@@ -154,9 +154,9 @@ export interface Facade {
    */
   runRoutine: (name: RoutineName, digest: RoutineDigest, view: SessionView) => Promise<Task>;
   /**
-   * A task the user typed (`agents.createTask`), and with a pasted stack trace (ADR-222) its prompt gets the trace, the
-   * frames found among the repo's tracked files from `vcs` in the repo root from `workspace`, and the rule to reproduce
-   * the error in a test first.
+   * A task the user typed (`agents.createTask`), and with a pasted stack trace (ADR-222) its prompt gets the trace with
+   * the secrets of the repo's environment masked (`mise` and `logs`, as a log is), the frames found among the repo's
+   * tracked files from `vcs` in the repo root from `workspace`, and the rule to reproduce the error in a test first.
    */
   createTask: (request: CreateTaskRequest) => Promise<Task>;
   /**
@@ -576,8 +576,14 @@ export function createFacade(o: FacadeOptions): Facade {
     },
     createTask: async ({ repo, prompt, stackTrace, handoffFrom, ...options }) => {
       if (stackTrace === null) return agents.createTask(repo, prompt, options, handoffFrom);
-      const tracked = await vcs.trackedFiles(await workspace.repoPath(repo), STACK_TRACE_SOURCE_GLOBS, STACK_TRACE_LIST_MAX_BYTES);
-      return agents.createTask(repo, promptWithStackTrace(prompt, stackTrace, tracked), options, handoffFrom);
+      const dir = await workspace.repoPath(repo);
+      const [tracked, run] = await Promise.all([
+        vcs.trackedFiles(dir, STACK_TRACE_SOURCE_GLOBS, STACK_TRACE_LIST_MAX_BYTES),
+        mise.runEnv({ repo, task: null }),
+      ]);
+      // A message in a trace may carry a secret (a password in a JDBC URL), which must not reach the task session.
+      const masked = logs.masker(run.env, run.secretValues)(stackTrace);
+      return agents.createTask(repo, promptWithStackTrace(prompt, masked, tracked), options, handoffFrom);
     },
     appConfig: async ({ repo, task, profile, key }) => {
       const dir = task === null ? await workspace.repoPath(repo) : agents.taskOfRepo(task, repo).worktree;

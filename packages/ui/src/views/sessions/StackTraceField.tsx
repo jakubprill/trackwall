@@ -15,7 +15,7 @@ export function StackTraceField({
   onChange,
   onOpen,
 }: {
-  /** Only a task in its own worktree has one (`offersStackTrace`); what was pasted stays while the form shows something else. */
+  /** Only a task in its own worktree has one (`offersStackTrace`); the text stays while hidden, but goes only while open. */
   shown: boolean;
   value: string;
   open: boolean;
@@ -36,11 +36,15 @@ export function StackTraceField({
             placeholder={"Paste a Java stack trace, e.g.\njava.lang.NullPointerException\n\tat com.example.shop.Order.total(Order.java:42)"}
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            maxLength={STACK_TRACE_MAX}
             rows={8}
             className="font-mono text-xs"
             disabled={disabled}
           />
+          {value.length > STACK_TRACE_MAX && (
+            <p className="text-destructive text-xs">
+              The trace has {value.length} characters, more than {STACK_TRACE_MAX}: keep the part with the exception and its causes.
+            </p>
+          )}
           <p className="text-muted-foreground max-w-prose text-xs">
             The agent gets the trace with its frames found among the repo's files, and writes a test that fails the same way before it fixes
             the code.

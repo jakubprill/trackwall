@@ -67,10 +67,23 @@ export function noIncludedFiles(): IncludedFiles {
 
 /**
  * The task prompt. It goes to Copilot CLI as one argument (`--interactive=<prompt>`), and the Windows command line holds
- * 32,767 characters together with the rest of the command.
+ * 32,767 characters together with the rest of the command. A task from a stack trace (ADR-222) adds the shortened trace
+ * and its frames to it, up to about 21,000 characters in all.
  */
 export const TASK_PROMPT_MAX = 8000;
 export const TaskPrompt = z.string().trim().min(1).max(TASK_PROMPT_MAX);
+/**
+ * A stack trace the user pasted into a new task (ADR-222): the daemon reads its frames, finds their files among the
+ * repo's tracked files and puts both into the task's prompt, with the rule to reproduce the error in a test first. It
+ * is text from a log, copied rather than typed, so it may carry characters nobody sees (`visibleText`) or a terminal's
+ * escape sequences, which it must not. It may be longer than a prompt, as a Spring trace often is: the daemon quotes a
+ * shortened copy that keeps every `Caused by:`, so the prompt stays one argument of Copilot CLI (`TASK_PROMPT_MAX`), and
+ * reads the frames from the whole of it. Bounded so the request fits `API_BODY_MAX_BYTES` with its JSON escapes.
+ */
+export const STACK_TRACE_MAX = 32_000;
+export const StackTrace = visibleText(z.string().trim().min(1).max(STACK_TRACE_MAX)).refine((text) => !/[^\P{Cc}\n\r\t]/u.test(text), {
+  message: "the stack trace must not contain control characters other than line breaks and tabs",
+});
 /** The longest reason for rejecting a task proposal (ADR-55): a few sentences for the session that proposed it. */
 export const REJECTION_REASON_MAX = 1000;
 
@@ -190,17 +203,19 @@ export const TaskCheckStep = singleLine(z.string().trim().min(1).max(TASK_CHECK_
 /**
  * The test a task's agent says reproduces the error it was given (ADR-222): the test's file, relative to the repo root,
  * its name and how it failed before the fix. Only the agent's word: the daemon neither opens the file nor runs the test
- * yet, so the panel shows it as the agent's claim.
+ * yet, so the panel shows it as the agent's claim. Text from an agent the user reads, so without invisible characters.
  */
 export const REPRO_TEST_FILE_MAX = 500;
 export const REPRO_TEST_NAME_MAX = 200;
 export const REPRO_TEST_FAILURE_MAX = 300;
-export const ReproTestFile = singleLine(z.string().trim().min(1).max(REPRO_TEST_FILE_MAX), "a test file").refine(
-  (path) => !/^(?:[A-Za-z]:|[\\/~])/.test(path) && !path.split(/[\\/]/).includes(".."),
-  { message: "the test file must be a path relative to the repo root, without .." },
+export const ReproTestFile = visibleText(
+  singleLine(z.string().trim().min(1).max(REPRO_TEST_FILE_MAX), "a test file").refine(
+    (path) => !/^(?:[A-Za-z]:|[\\/~])/.test(path) && !path.split(/[\\/]/).includes(".."),
+    { message: "the test file must be a path relative to the repo root, without .." },
+  ),
 );
-export const ReproTestName = singleLine(z.string().trim().min(1).max(REPRO_TEST_NAME_MAX), "a test name");
-export const ReproTestFailure = singleLine(z.string().trim().min(1).max(REPRO_TEST_FAILURE_MAX), "a test failure");
+export const ReproTestName = visibleText(singleLine(z.string().trim().min(1).max(REPRO_TEST_NAME_MAX), "a test name"));
+export const ReproTestFailure = visibleText(singleLine(z.string().trim().min(1).max(REPRO_TEST_FAILURE_MAX), "a test failure"));
 export const ReproTest = z.object({ file: ReproTestFile, name: ReproTestName, failure: ReproTestFailure }).strict();
 export type ReproTest = z.infer<typeof ReproTest>;
 
@@ -220,17 +235,6 @@ export const TaskSummary = z.object({
   reportedAt: z.string(),
 });
 
-/**
- * A stack trace the user pasted into a new task (ADR-222): the daemon reads its frames, finds their files among the
- * repo's tracked files and puts both into the task's prompt, with the rule to reproduce the error in a test first. It
- * is text from a log, copied rather than typed, so it may carry characters nobody sees (`visibleText`) or a terminal's
- * escape sequences, which it must not; and it is bounded, because the prompt goes to Copilot CLI as one argument
- * (`TASK_PROMPT_MAX`).
- */
-export const STACK_TRACE_MAX = 8000;
-export const StackTrace = visibleText(z.string().trim().min(1).max(STACK_TRACE_MAX)).refine((text) => !/[^\P{Cc}\n\r\t]/u.test(text), {
-  message: "the stack trace must not contain control characters other than line breaks and tabs",
-});
 export type TaskSummary = z.infer<typeof TaskSummary>;
 /** What a task session reports with `report_result`; the daemon adds the time. */
 export type ReportedSummary = Omit<TaskSummary, "reportedAt">;

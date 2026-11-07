@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseJavaStackTrace } from "../src/modules/agents/java-stack-trace.ts";
+import { parseJavaStackTrace, rootCause, shortenedTrace } from "../src/modules/agents/java-stack-trace.ts";
 import { repoFrames } from "../src/modules/agents/stack-trace-frames.ts";
 import { promptWithStackTrace } from "../src/modules/agents/stack-trace-prompt.ts";
 
@@ -27,6 +27,7 @@ describe("a Java stack trace read for a task (ADR-222)", () => {
       {
         kind: "thrown",
         type: "jakarta.servlet.ServletException",
+        depth: 0,
         frames: [
           {
             className: "org.springframework.web.servlet.FrameworkServlet",
@@ -41,6 +42,7 @@ describe("a Java stack trace read for a task (ADR-222)", () => {
       {
         kind: "caused_by",
         type: "java.lang.IllegalStateException",
+        depth: 0,
         frames: [
           { className: "com.example.shop.order.OrderService", method: "lambda$total$0", file: "OrderService.java", line: 57 },
           { className: "java.util.Optional", method: "orElseThrow", file: "Optional.java", line: 403 },
@@ -54,6 +56,7 @@ describe("a Java stack trace read for a task (ADR-222)", () => {
       {
         kind: "suppressed",
         type: "java.io.IOException",
+        depth: 1,
         frames: [{ className: "com.example.shop.io.Exports", method: "close", file: "Exports.java", line: 12 }],
         omitted: 3,
       },
@@ -70,6 +73,7 @@ describe("a Java stack trace read for a task (ADR-222)", () => {
       {
         kind: "thrown",
         type: "java.lang.IllegalArgumentException",
+        depth: 0,
         frames: [
           { className: "com.example.shop.Cli", method: "parse", file: null, line: null },
           { className: "com.example.shop.Cli", method: "main", file: "Cli.java", line: null },
@@ -92,6 +96,7 @@ describe("a Java stack trace read for a task (ADR-222)", () => {
       {
         kind: "thrown",
         type: null,
+        depth: 0,
         frames: [{ className: "com.example.shop.order.OrderService", method: "total", file: "OrderService.java", line: 55 }],
         omitted: 0,
       },
@@ -101,6 +106,99 @@ describe("a Java stack trace read for a task (ADR-222)", () => {
   test("a frame whose place is a path is no file, so the trace never names one", () => {
     const [exception] = parseJavaStackTrace("java.lang.Error\n\tat com.example.shop.Evil.run(../../etc/passwd.java:1)");
     expect(exception?.frames).toEqual([{ className: "com.example.shop.Evil", method: "run", file: null, line: null }]);
+  });
+});
+
+describe("real log formats of a Java stack trace (ADR-222)", () => {
+  test("the root cause is the main chain's last Caused by, not the cause of a suppressed exception", () => {
+    const trace = [
+      "java.lang.IllegalStateException: export failed",
+      "\tat com.example.shop.Export.run(Export.java:10)",
+      "Caused by: java.sql.SQLException: connection refused",
+      "\tat com.example.shop.Db.open(Db.java:20)",
+      "\tSuppressed: java.io.IOException: close failed",
+      "\t\tat com.example.shop.Db.close(Db.java:30)",
+      "\tCaused by: java.net.SocketException: reset",
+      "\t\tat com.example.shop.Net.read(Net.java:40)",
+    ].join("\n");
+    const exceptions = parseJavaStackTrace(trace);
+    expect(exceptions.map((e) => [e.kind, e.type, e.depth])).toEqual([
+      ["thrown", "java.lang.IllegalStateException", 0],
+      ["caused_by", "java.sql.SQLException", 0],
+      ["suppressed", "java.io.IOException", 1],
+      ["caused_by", "java.net.SocketException", 1],
+    ]);
+    expect(rootCause(exceptions)).toBe(1);
+  });
+
+  test("logback's root cause first with Wrapped by, and a trace from docker compose logs with its prefix", () => {
+    const wrapped = parseJavaStackTrace(
+      [
+        "java.sql.SQLException: connection refused",
+        "\tat com.example.shop.Db.open(Db.java:20)",
+        "Wrapped by: java.lang.IllegalStateException: export failed",
+        "\tat com.example.shop.Export.run(Export.java:10)",
+      ].join("\n"),
+    );
+    expect(wrapped.map((e) => [e.kind, e.type, e.frames.length])).toEqual([
+      ["thrown", "java.sql.SQLException", 1],
+      ["wrapped_by", "java.lang.IllegalStateException", 1],
+    ]);
+    expect(rootCause(wrapped)).toBe(0);
+
+    const compose = parseJavaStackTrace(
+      [
+        "shop-1  | java.lang.IllegalStateException: export failed",
+        "shop-1  | \tat com.example.shop.Export.run(Export.java:10)",
+        "shop-1  | Caused by: java.sql.SQLException: connection refused",
+        "shop-1  | \tat com.example.shop.Db.open(Db.java:20)",
+      ].join("\n"),
+    );
+    expect(compose.map((e) => [e.kind, e.type, e.frames.length])).toEqual([
+      ["thrown", "java.lang.IllegalStateException", 1],
+      ["caused_by", "java.sql.SQLException", 1],
+    ]);
+  });
+
+  test("a trace copied as one line with its line breaks written out, and a message line after frames that reads like a header", () => {
+    const oneLine = parseJavaStackTrace(
+      "java.lang.IllegalStateException: export failed\\n\\tat com.example.shop.Export.run(Export.java:10)\\nCaused by: java.sql.SQLException: refused\\n\\tat com.example.shop.Db.open(Db.java:20)",
+    );
+    expect(oneLine.map((e) => [e.type, e.frames.length])).toEqual([
+      ["java.lang.IllegalStateException", 1],
+      ["java.sql.SQLException", 1],
+    ]);
+
+    const continued = parseJavaStackTrace(
+      [
+        "java.lang.IllegalStateException: export failed",
+        "\tat com.example.shop.Export.run(Export.java:10)",
+        "com.example.shop.Report: line 2 of the message",
+        "\tat com.example.shop.Export.main(Export.java:3)",
+      ].join("\n"),
+    );
+    expect(continued.map((e) => [e.type, e.frames.length])).toEqual([["java.lang.IllegalStateException", 2]]);
+  });
+
+  test("a trace longer than the quote keeps every header and cause, and fewer frames of each run", () => {
+    const frames = (cls: string, n: number) =>
+      Array.from({ length: n }, (_, i) => `\tat com.example.shop.${cls}.step${i}(${cls}.java:${i + 1})`);
+    const trace = [
+      "java.lang.IllegalStateException: export failed",
+      ...frames("Export", 200),
+      "Caused by: java.sql.SQLException: connection refused",
+      ...frames("Db", 200),
+      "\t... 12 more",
+    ].join("\n");
+    const short = shortenedTrace(trace, 4000);
+    expect(short.length).toBeLessThanOrEqual(4000);
+    expect(short).toContain("java.lang.IllegalStateException: export failed\n");
+    expect(short).toContain("\nCaused by: java.sql.SQLException: connection refused\n");
+    expect(short).toContain("frames left out by Trackwall");
+    expect(short.endsWith("\t... 12 more")).toBe(true);
+    expect(shortenedTrace("java.lang.Error\n\tat com.example.shop.A.b(A.java:1)", 4000)).toBe(
+      "java.lang.Error\n\tat com.example.shop.A.b(A.java:1)",
+    );
   });
 });
 
@@ -179,7 +277,7 @@ describe("the prompt of a task from a stack trace (ADR-222)", () => {
       truncated: false,
     });
     expect(withCause).toContain(
-      "- Caused by java.lang.IllegalStateException (the deepest cause)\n  - com.example.shop.order.OrderService.lambda$total$0: src/main/java/com/example/shop/order/OrderService.java:57\n",
+      "- Caused by java.lang.IllegalStateException (the root cause)\n  - com.example.shop.order.OrderService.lambda$total$0: src/main/java/com/example/shop/order/OrderService.java:57\n",
     );
 
     const none = promptWithStackTrace("Fix it", "java.lang.Error: ```\n\tat com.example.Gone.run(Gone.java:1)", {
@@ -190,6 +288,13 @@ describe("the prompt of a task from a stack trace (ADR-222)", () => {
     expect(none).toContain(
       "## Frames in this repo\nNo frame of the stack trace names a file this repo tracks. The repo has more files than Trackwall lists, so a frame may be missing here.\n",
     );
+  });
+
+  test("a prompt that Windows would quote past one argument's room is refused", () => {
+    const quotes = '"'.repeat(7900);
+    expect(() =>
+      promptWithStackTrace(quotes, `java.lang.Error: ${quotes}\n\tat com.example.shop.A.b(A.java:1)`, { paths: [], truncated: false }),
+    ).toThrow("too long");
   });
 
   test("lists at most 30 frames, whatever the length of the trace", () => {

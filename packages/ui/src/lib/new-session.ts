@@ -130,7 +130,10 @@ export function offersStackTrace(start: NewSessionStart): boolean {
   return start.kind === "task" || start.kind === "needs-prompt";
 }
 
-/** The pasted stack trace to send with the task, `null` when the field is empty or only blank. */
-export function stackTraceToSend(text: string): string | null {
-  return text.trim() === "" ? null : text;
+/**
+ * The pasted stack trace to send with the task: only while its field is open, so a trace the user folded away and no
+ * longer sees does not go into the prompt; `null` also when the field is empty or only blank.
+ */
+export function stackTraceToSend(text: string, open: boolean): string | null {
+  return !open || text.trim() === "" ? null : text;
 }

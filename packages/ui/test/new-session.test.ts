@@ -198,10 +198,11 @@ describe("the stack trace of a new task (ADR-222)", () => {
     expect(offersStackTrace({ kind: "needs-title" })).toBe(false);
   });
 
-  test("goes with the task as pasted, and an empty or blank field sends none", () => {
+  test("goes with the task as pasted while its field is open, and a folded, empty or blank field sends none", () => {
     const trace = "java.lang.NullPointerException\n\tat com.example.shop.Order.total(Order.java:42)\n";
-    expect(stackTraceToSend(trace)).toBe(trace);
-    expect(stackTraceToSend("")).toBeNull();
-    expect(stackTraceToSend(" \n\t ")).toBeNull();
+    expect(stackTraceToSend(trace, true)).toBe(trace);
+    expect(stackTraceToSend(trace, false)).toBeNull();
+    expect(stackTraceToSend("", true)).toBeNull();
+    expect(stackTraceToSend(" \n\t ", true)).toBeNull();
   });
 });
