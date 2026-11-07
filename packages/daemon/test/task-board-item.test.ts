@@ -40,6 +40,29 @@ describe("how the work of tasks moves their board item (ADR-213)", () => {
     ]);
   });
 
+  test("removing the last task on an item sends it back to ready; with tasks left, it goes to review once they all are", async () => {
+    const moves: [string, TaskWorkColumn][] = [];
+    let tasks: Task[] = [onItem(true)];
+    const items = new TaskBoardItem({
+      move: async (item, column) => {
+        moves.push([item, column]);
+        return null;
+      },
+      tasks: () => tasks,
+      log: () => {},
+    });
+
+    items.removed(ITEM);
+    tasks = [];
+    items.removed(ITEM);
+    await settled();
+
+    expect(moves).toEqual([
+      [ITEM, "review"],
+      [ITEM, "ready"],
+    ]);
+  });
+
   test("a board that cannot be written is logged, not thrown at the task's start", async () => {
     const logged: string[] = [];
     const items = new TaskBoardItem({
