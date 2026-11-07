@@ -129,6 +129,10 @@ describe("real log formats of a Java stack trace (ADR-222)", () => {
       ["caused_by", "java.net.SocketException", 1],
     ]);
     expect(rootCause(exceptions)).toBe(1);
+    // The same trace pasted with every line indented, from a quote or a code block.
+    const indented = parseJavaStackTrace(trace.replaceAll(/^/gm, "    "));
+    expect(indented.map((e) => e.depth)).toEqual([0, 0, 1, 1]);
+    expect(rootCause(indented)).toBe(1);
   });
 
   test("logback's root cause first with Wrapped by, and a trace from docker compose logs with its prefix", () => {
@@ -271,7 +275,7 @@ describe("the prompt of a task from a stack trace (ADR-222)", () => {
     );
   });
 
-  test("marks the deepest cause, says when no frame is in the repo or the file list was cut, and fences a trace with backticks", () => {
+  test("marks the root cause, says when no frame is in the repo or the file list was cut, and fences a trace with backticks", () => {
     const withCause = promptWithStackTrace("Fix it", SPRING_TRACE, {
       paths: ["src/main/java/com/example/shop/order/OrderService.java"],
       truncated: false,

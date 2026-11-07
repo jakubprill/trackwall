@@ -1,5 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { breadcrumbs, changesLabel, formatBytes, formatUptime, relativeTime, twoDigits, workingTreeLabel } from "../src/lib/format.ts";
+import {
+  breadcrumbs,
+  changesLabel,
+  elapsedLabel,
+  formatBytes,
+  formatUptime,
+  relativeTime,
+  twoDigits,
+  workingTreeLabel,
+} from "../src/lib/format.ts";
 
 describe("format", () => {
   const now = new Date("2026-10-23T12:00:00Z");
@@ -11,6 +20,16 @@ describe("format", () => {
     expect(relativeTime("2026-10-22T10:00:00Z", now)).toBe("yesterday");
     expect(relativeTime("2026-10-18T12:00:00Z", now)).toBe("5 days ago");
     expect(relativeTime("2026-03-10T12:00:00", now)).toBe("Mar 10, 2026");
+  });
+
+  test("time in a state reads as minutes, hours with minutes, then days", () => {
+    expect(elapsedLabel("2026-10-23T11:59:30Z", now)).toBe("just now");
+    expect(elapsedLabel("2026-10-23T11:48:00Z", now)).toBe("12 min");
+    expect(elapsedLabel("2026-10-23T10:00:00Z", now)).toBe("2 h");
+    expect(elapsedLabel("2026-10-23T09:55:00Z", now)).toBe("2 h 5 min");
+    expect(elapsedLabel("2026-10-22T11:00:00Z", now)).toBe("1 day");
+    expect(elapsedLabel("2026-10-20T12:00:00Z", now)).toBe("3 days");
+    expect(elapsedLabel("not a time", now)).toBe("");
   });
 
   test("number of changes with an English plural, a clean repo without a label", () => {

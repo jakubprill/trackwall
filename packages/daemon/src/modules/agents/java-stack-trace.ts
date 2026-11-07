@@ -53,11 +53,14 @@ const CONTAINER_PREFIX = /^[\w.-]+\s+\|\s?/;
 export function parseJavaStackTrace(text: string): JavaException[] {
   const exceptions: JavaException[] = [];
   let current: JavaException | null = null;
+  // Depth counts from the first header's indentation, so a trace pasted with every line indented reads the same.
+  let base: number | null = null;
   for (const line of traceLines(text)) {
     // A header first: its message may itself read like a frame (`failed at com.example.Order.total(Order.java:42)`).
-    const header = headerOf(line, current);
+    const header = headerOf(line, current, base ?? 0);
     if (header !== null) {
-      current = header;
+      base ??= header.indent;
+      current = header.exception;
       exceptions.push(current);
       continue;
     }
@@ -91,25 +94,30 @@ function traceLines(text: string): string[] {
  * An exception that starts at `line`. A top-level header whose name does not say it is a throwable opens one only before
  * any frame: after frames it is a line of the message or the log (`com.example.Bar: oops`), not a new trace.
  */
-function headerOf(line: string, current: JavaException | null): JavaException | null {
+function headerOf(line: string, current: JavaException | null, base: number): { exception: JavaException; indent: number } | null {
   const match = HEADER.exec(line);
   const [, indent = "", prefix, type] = match ?? [];
   if (type === undefined) return null;
   const kind = headerKind(prefix);
   if (kind === "thrown" && current !== null && current.frames.length > 0 && !THROWABLE_NAME.test(type)) return null;
-  const depth = kind === "thrown" ? 0 : indentDepth(indent, kind, current);
-  return { kind, type, depth, frames: [], omitted: 0 };
+  const tabs = tabsOf(indent);
+  const depth = kind === "thrown" ? 0 : indentDepth(Math.max(0, tabs - base), kind, current);
+  return { exception: { kind, type, depth, frames: [], omitted: 0 }, indent: tabs };
 }
 
 /**
  * The JVM indents a suppressed exception one tab deeper than its owner's frames, and its causes as deep as itself; the main
  * chain's `Caused by:` starts the line.
  */
-function indentDepth(indent: string, kind: JavaExceptionKind, current: JavaException | null): number {
-  const tabs = indent.replaceAll("    ", "\t").replaceAll(" ", "").length;
+function indentDepth(tabs: number, kind: JavaExceptionKind, current: JavaException | null): number {
   if (kind === "suppressed") return Math.max(1, tabs);
   if (tabs === 0) return 0;
   return current?.depth ?? tabs;
+}
+
+/** Indentation in tab stops: a tab, or four spaces. */
+function tabsOf(indent: string): number {
+  return indent.replaceAll("    ", "\t").replaceAll(" ", "").length;
 }
 
 function javaFrame(line: string): JavaFrame | null {

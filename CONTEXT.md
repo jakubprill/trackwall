@@ -422,7 +422,7 @@ Whether a task's agent asks the user before tools: `ask` (the default) as every 
 _Avoid_: YOLO, autopilot (Copilot CLI's own modes, not what Trackwall passes), auto-approve
 
 **Sandbox** (`sandbox` in `workspace.yaml`, `SandboxSettings`, `Task.sandbox`, `SandboxState`, `copilot-sandbox.ts`; "Sandbox" on the task):
-Copilot CLI's sandbox (`--sandbox`): a task's shell commands run under the system's isolation, writing only in the worktree, the repo's git directory and the temporary folder. `sandbox.tasks` says which tasks: `auto` (the default on Linux; `off` on macOS, Windows and in a container) those without approvals, `all` every task, `off` none; a task keeps the answer from its start (ADR-181).
+Copilot CLI's sandbox (`--sandbox`): a task's shell commands run under the system's isolation, writing only in the worktree, the repo's git directory and the temporary folder. `sandbox.tasks` says which tasks: `auto` (the default on Linux, in a container only where bubblewrap can make its namespaces, ADR-219; `off` on macOS, Windows and other containers) those without approvals, `all` every task, `off` none; a task keeps the answer from its start (ADR-181).
 _Avoid_: container, jail, isolation mode (the container is the dev container; Trackwall has no isolation of its own)
 
 **Java navigation** (`Task.javaNavigation`, `javaNavigation` in `workspace.yaml`, `JavaNavigationSettings`; "Java navigation" on the start pill):
@@ -536,6 +536,10 @@ _Avoid_: orchestrator, planner (ADR-9: a human splits goals); and a session in a
 **Session group** (`listGroups`, `EntryGroup`, `groupTiles`; "⊞ group" and the "Group:" chip in the Sessions view):
 A top-level entry of the Sessions list with every task and proposal under it, at any depth. A group of two or more has its own colour on its rows and tiles, and the grid can show it alone (ADR-48).
 _Avoid_: workspace, cluster, family
+
+**Flow** (`views/flow/`, `flowGroups`, `FlowGroup`, `FlowCard`, `FlowColumn`; the "Flow" view, Ctrl+6):
+The view for a second monitor that shows every task, session and task proposal in a row per group of work (a project of Plan, a change, the supervisor, a session with the tasks it proposed, "No group") and a column per state: "Working", "Waits for you", "In review", "Stuck", "Idle" (ADR-224). It changes nothing; a card opens its task or session. Its rows are made from groups that already exist, not a kind of group of its own.
+_Avoid_: dashboard (that is Home), board (that is a project of Plan as columns), batch, epic
 
 **Repo session** (`start {repo}` without its own worktree, `kind: "repo"` of the session instructions, `SessionStartOptions`; in the UI a session of a repo without "Own worktree"):
 A Trackwall session in the root of one repo, the user's own working copy, without a task (ADR-100, ADR-175): it has the model, the conversation view and Java navigation a task has, always asks before a tool, and has no review, Changes tab or Verify. Its instructions keep the checkout as it is unless the user asks, because the graph, the impact of every task's change and the repo's service read the branch checked out in the root. Like any session it can be a main session, when it proposes tasks.

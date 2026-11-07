@@ -77,10 +77,12 @@ export const TaskPrompt = z.string().trim().min(1).max(TASK_PROMPT_MAX);
  * repo's tracked files and puts both into the task's prompt, with the rule to reproduce the error in a test first. It
  * is text from a log, copied rather than typed, so it may carry characters nobody sees (`visibleText`) or a terminal's
  * escape sequences, which it must not. It may be longer than a prompt, as a Spring trace often is: the daemon quotes a
- * shortened copy that keeps every `Caused by:`, so the prompt stays one argument of Copilot CLI (`TASK_PROMPT_MAX`), and
- * reads the frames from the whole of it. Bounded so the request fits `API_BODY_MAX_BYTES` with its JSON escapes.
+ * shortened copy that keeps every `Caused by:` (unless the lines other than frames are too long alone, then it is cut at the end), so the prompt stays one argument of Copilot CLI (`TASK_PROMPT_MAX`), and
+ * reads the frames from the whole of it. `create-task` reads a body of up to `CREATE_TASK_BODY_MAX_BYTES` for it.
  */
 export const STACK_TRACE_MAX = 32_000;
+/** A trace and a prompt at their limits, every character three bytes in UTF-8 or escaped in JSON, with room to spare. */
+export const CREATE_TASK_BODY_MAX_BYTES = 256 * 1024;
 export const StackTrace = visibleText(z.string().trim().min(1).max(STACK_TRACE_MAX)).refine((text) => !/[^\P{Cc}\n\r\t]/u.test(text), {
   message: "the stack trace must not contain control characters other than line breaks and tabs",
 });
@@ -822,9 +824,11 @@ export type JavaNavigationStatus = z.infer<typeof JavaNavigationStatus>;
 
 /**
  * Copilot CLI's sandbox as a new task would get it (ADR-181): `tasks`, which tasks `sandbox` in `workspace.yaml` puts in
- * it, and `problem`, why it cannot run on this computer (no `bwrap` on Linux), which refuses to start those tasks; `null` when it can.
+ * it; `problem`, why it cannot run on this computer (no `bwrap` on Linux, or bubblewrap unable to make its namespaces,
+ * ADR-219), which refuses to start those tasks, `null` when it can; and `chosen`, whether `tasks` comes from
+ * `workspace.yaml` rather than the default.
  */
-export const SandboxState = z.object({ tasks: SandboxSettings.shape.tasks, problem: z.string().nullable() });
+export const SandboxState = z.object({ tasks: SandboxSettings.shape.tasks, problem: z.string().nullable(), chosen: z.boolean() });
 export type SandboxState = z.infer<typeof SandboxState>;
 
 /** Whether a task with approvals mode `approvals` runs in the sandbox under `tasks` (ADR-181); the daemon's and the form's one rule. */
@@ -997,6 +1001,7 @@ export const agentsApi = {
       })
       .strict(),
     Task,
+    { maxBodyBytes: CREATE_TASK_BODY_MAX_BYTES },
   ),
   /**
    * Starts a change (ADR-171): one task per repo, in the order of `parts`, which is the order their merge requests are to

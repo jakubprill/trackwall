@@ -32,8 +32,8 @@ const fakeCopilot = join(import.meta.dir, "..", "fixtures", "fake-copilot-sessio
  * `miseEnv` is what mise sets for a session (ADR-93); nothing by default. `javaNavigation` is `javaNavigation` from the
  * workspace (ADR-99), read at every task start; not set by default. `autoReview` is `autoReview` from the workspace
  * (ADR-182), read at every report; off by default.
- * `sandbox` is `sandbox` from the workspace with its
- * default (ADR-181); off by default, since runners have no bubblewrap. `supervisorModel` is `supervisorModel` from the
+ * `sandbox` is `sandbox` from the workspace, `null` without
+ * the key (ADR-181); off by default, since runners have no bubblewrap. `supervisorModel` is `supervisorModel` from the
  * workspace (ADR-193), read at every supervisor start; Copilot CLI's default by default.
  */
 export function makeAgents(
@@ -47,7 +47,7 @@ export function makeAgents(
   miseEnv: AgentsDeps["miseEnv"] = async () => ({ vars: {}, secretNames: [], secretValues: [], profile: null, problem: null }),
   javaNavigation: () => JavaNavigationSettings | null = () => null,
   autoReview: () => AutoReviewSettings = () => ({ afterReport: false }),
-  sandbox: () => SandboxSettings = () => ({ tasks: "off" }),
+  sandbox: () => SandboxSettings | null = () => ({ tasks: "off" }),
   supervisorModel: () => string | null = () => null,
 ) {
   const procs = new ProcessGroups({
@@ -59,6 +59,7 @@ export function makeAgents(
   });
   const opened: string[] = [];
   const agents: Agents = new Agents({
+    inContainer: false,
     closeFolderTerminal: async () => {},
     procs,
     repos: {

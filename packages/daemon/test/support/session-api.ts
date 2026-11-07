@@ -53,6 +53,8 @@ export interface SessionApiOptions {
   sandboxTasks?: SandboxSettings["tasks"] | null;
   /** The port of the service proxy (ADR-189), `0` for a free one; none by default. */
   proxyPort?: number;
+  /** `true` for a daemon in a container (`FacadeOptions.inContainer`); `false` by default. */
+  inContainer?: boolean;
 }
 
 interface CopilotUnderTest {
@@ -76,7 +78,7 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
   const desktop = options.desktop ?? true;
   const openers = desktopOpeners(desktop, { openUrl: options.openUrl ?? (() => {}), openFolder: () => {} });
   const facade = createFacade({
-    inContainer: false,
+    inContainer: options.inContainer ?? false,
     home,
     homeFrom: "flag",
     openUrl: openers.openUrl,

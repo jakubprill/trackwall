@@ -91,15 +91,15 @@ function framesSection({ exceptions, frames, listCut }: StackTraceContext): stri
   return [heading, `${source}${cut}`, ...lines].join("\n");
 }
 
-/** Each exception that has frames here, under its name, with the deepest cause marked: it is usually where it started. */
+/** Each exception that has frames here, under its name, with the root cause marked: it is usually where it started. */
 function frameLines(exceptions: readonly JavaException[], frames: readonly RepoFrame[]): string[] {
-  const deepestCause = rootCause(exceptions);
+  const root = rootCause(exceptions);
   const lines: string[] = [];
   let shown = -1;
   for (const { exception, frame, paths } of frames) {
     if (exception !== shown) {
       shown = exception;
-      lines.push(exceptionLine(exceptions[exception], exception === deepestCause));
+      lines.push(exceptionLine(exceptions[exception], exception === root));
     }
     const line = frame.line === null ? "" : `:${frame.line}`;
     lines.push(`  - ${frame.className}.${frame.method}: ${paths.map((path) => `${path}${line}`).join(" or ")}`);
@@ -107,9 +107,9 @@ function frameLines(exceptions: readonly JavaException[], frames: readonly RepoF
   return lines;
 }
 
-function exceptionLine(exception: JavaException | undefined, deepest: boolean): string {
+function exceptionLine(exception: JavaException | undefined, isRoot: boolean): string {
   const name = exception?.type ?? "frames";
-  return `- ${KIND_LABEL[exception?.kind ?? "thrown"]}${name}${deepest ? " (the root cause)" : ""}`;
+  return `- ${KIND_LABEL[exception?.kind ?? "thrown"]}${name}${isRoot ? " (the root cause)" : ""}`;
 }
 
 const KIND_LABEL: Record<JavaException["kind"], string> = {
