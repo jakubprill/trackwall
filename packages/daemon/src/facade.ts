@@ -75,6 +75,7 @@ import type { KnownPlaces } from "./modules/usage-report/work-place.ts";
 import { Hosting, type HostingClis } from "./modules/vcs/hosting.ts";
 import { systemTempFolder, Vcs } from "./modules/vcs/vcs.ts";
 import { VERIFICATIONS_FILE, Verifications } from "./modules/verification/verifications.ts";
+import { ViewerAccess } from "./modules/viewer-access/viewer-access.ts";
 import { RepoWatch } from "./modules/workspace/repo-watch.ts";
 import { Workspace } from "./modules/workspace/workspace.ts";
 import { WorkspaceFile } from "./modules/workspace/workspace-file.ts";
@@ -134,6 +135,8 @@ export interface Facade {
   javaNavigation: JavaNavigation;
   /** Every file and folder Trackwall reads or writes, with its state, and the keys of `workspace.yaml` (ADR-108). */
   configFiles: ConfigFiles;
+  /** The viewer token of a read-only client such as the VS Code extension, on while the user turns it on (ADR-221); `main.ts` opens it. */
+  viewerAccess: ViewerAccess;
   /**
    * Opens a link from a README in the system (ADR-35): an `http` or `https` address checked by the `ExternalLink` schema.
    * It belongs to no module, because it concerns neither a repo nor the daemon's state.
@@ -557,6 +560,7 @@ export function createFacade(o: FacadeOptions): Facade {
     providerModels,
     javaNavigation,
     configFiles,
+    viewerAccess: new ViewerAccess({ home: o.home, log: o.log }),
     openLink: o.openUrl,
     taskChangedEndpoints: async (task) => ({ task, ...(await taskImpact(agents.task(task))) }),
     runRoutine: async (name, digest, view) => {
