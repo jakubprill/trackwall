@@ -27,9 +27,6 @@ export interface ProjectBoard {
   dropped: number;
 }
 
-/** The type a dragged card carries, so a drop of anything else (a file, text) is ignored. */
-export const CARD_DRAG_TYPE = "application/x-trackwall-board-item";
-
 /**
  * The project's items with nothing below them but dropped items, in outline order, each in the column it counts in: an
  * item whose every part was dropped is work of its own again.

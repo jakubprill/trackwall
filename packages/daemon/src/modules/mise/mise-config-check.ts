@@ -18,6 +18,11 @@ const UNFORMATTED_HEADER = /Following config files are not properly formatted:/;
  * a problem of the repo's config.
  */
 const UNSUPPORTED = /unrecognized subcommand|unexpected argument/i;
+/**
+ * What `mise fmt --check` says in a repo without a config of its own, whose mise tasks come only from the projects folder's
+ * config (the convention tasks): nothing of the repo to format, which is not a problem of its config.
+ */
+const NO_CONFIG = /No config file found in current directory/;
 /** mise's warning for a field it does not know: `mise WARN  unknown field in /r/mise.toml:4:2: taskz (did you mean tasks?)`. */
 const UNKNOWN_FIELD = /^mise WARN\s+unknown field in (.+):(\d+):(\d+): (.+)$/;
 
@@ -43,7 +48,7 @@ export interface FormatCheck {
 /** The repo's files `mise fmt --check` would rewrite, relative to its root, or the problem that stopped it. */
 export function parseFormatCheck(result: MiseCliResult, roots: RepoRoots): FormatCheck | null {
   if (result.kind !== "exited") return null;
-  if (result.code === 0 || UNSUPPORTED.test(result.stderr)) return { unformatted: [], problems: [] };
+  if (result.code === 0 || UNSUPPORTED.test(result.stderr) || NO_CONFIG.test(result.stderr)) return { unformatted: [], problems: [] };
   const lines = result.stderr.split(/\r?\n/).map((l) => l.trim());
   const header = lines.findIndex((l) => UNFORMATTED_HEADER.test(l));
   if (header === -1)

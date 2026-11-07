@@ -10,11 +10,9 @@ import {
 import { Bot, Box, GitBranch, Layers, Plug, ShieldOff, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { CopilotUsageMark } from "@/components/CopilotUsageMark";
-import { CopyRequestNotice } from "@/components/CopyRequestNotice";
-import { EnvironmentChangeNotice } from "@/components/EnvironmentChangeNotice";
 import { FolderShell } from "@/components/FolderShell";
 import { ModelChangeButton } from "@/components/ModelChange";
-import { ReadRequestNotice } from "@/components/ReadRequestNotice";
+import { SessionNotices } from "@/components/SessionNotices";
 import { SessionScreen } from "@/components/SessionScreen";
 import { StatusLabel } from "@/components/StatusLabel";
 import { TabBar } from "@/components/TabBar";
@@ -175,9 +173,7 @@ export function TaskPanel({
           onCancel={() => setChangingModel(false)}
         />
       )}
-      <EnvironmentChangeNotice key={session?.id} conn={conn} session={session} onRestarted={onChanged} />
-      <ReadRequestNotice key={`read-request-${session?.id}`} conn={conn} session={session} onDelivered={onChanged} />
-      {session && <CopyRequestNotice key={session.id} conn={conn} session={session} onCleared={onChanged} />}
+      <SessionNotices conn={conn} session={session} onChanged={onChanged} />
       {confirmingRemoval && <TaskRemoval conn={conn} task={task} onRemoved={onRemoved} onCancel={() => setRemoving(false)} />}
       <TaskNoticeStrip
         notices={details.notices}

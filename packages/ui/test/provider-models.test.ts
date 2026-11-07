@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { COPILOT_AUTO_MODEL, modelHint, providerModelsNote, unofferedModel } from "../src/lib/provider-models.ts";
+import { modelHint, modelSuggestions, providerModelsNote, unofferedModel } from "../src/lib/provider-models.ts";
 
 describe("the models of the session profile's provider in the UI (ADR-194)", () => {
   test("a suggested model's hint is its context window in thousands or millions of tokens, and its format once known", () => {
@@ -48,10 +48,21 @@ describe("a model id the provider does not offer (ADR-206)", () => {
     expect(unofferedModel("o4", models)).toEqual({ closest: null });
   });
 
-  test("an offered id, auto, an empty field and a provider without a list give no warning", () => {
+  test("auto the provider does not list is warned about like any other id, since Copilot CLI refuses it with a custom provider", () => {
+    expect(unofferedModel("auto", models)).toEqual({ closest: null });
+  });
+
+  test("an offered id, an empty field and a provider without a list give no warning", () => {
     expect(unofferedModel("gpt-6-luna", models)).toBeNull();
-    expect(unofferedModel(COPILOT_AUTO_MODEL, models)).toBeNull();
     expect(unofferedModel("  ", models)).toBeNull();
     expect(unofferedModel("claude-sonnet-4.5", [])).toBeNull();
+  });
+});
+
+describe("the suggestions of a Model field", () => {
+  test("the provider's models are the suggestions, without Copilot CLI's auto in front of them", () => {
+    expect(modelSuggestions([{ id: "gpt-6-luna", contextWindow: 400_000, wireApi: "responses" }])).toEqual([
+      { id: "gpt-6-luna", hint: "400k context · responses API" },
+    ]);
   });
 });

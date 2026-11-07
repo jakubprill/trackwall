@@ -18,6 +18,7 @@
 // clears them and appends `fmt` to `calls.log`. `tasks validate --json` prints `validation` (mise's issues) and fails when
 // one is an error; `unknownFields` (`mise.toml:4:2: taskz (did you mean tasks?)`) go to stderr of `tasks ls` and `tasks
 // validate` as mise's warnings, with the full path. `fmtUnsupported` makes both answer like a mise without these commands.
+// `noConfig` makes `fmt --check` fail like mise in a repo without a config of its own, whose tasks come from the projects folder.
 import { spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { delimiter, dirname, join, sep } from "node:path";
@@ -41,6 +42,7 @@ const config = (existsSync(configPath) ? JSON.parse(readFileSync(configPath, "ut
   validation?: { task: string; severity: string; category: string; message: string; details: string }[];
   unknownFields?: string[];
   fmtUnsupported?: boolean;
+  noConfig?: boolean;
 };
 const args = process.argv.slice(2);
 const calls = join(process.cwd(), "calls.log");
@@ -94,6 +96,11 @@ if (args[0] === "tasks" && args[1] === "ls" && args[2] === "--json") {
   }
 } else if (args[0] === "fmt" && args[1] === "--check") {
   unsupported("fmt");
+  if (config.noConfig) {
+    console.error("mise ERROR No config file found in current directory");
+    console.error("mise ERROR Version: 2026.11.1 linux-x64 (2026-11-04)");
+    process.exit(1);
+  }
   const files = config.unformatted ?? [];
   if (files.length > 0) {
     console.error("mise ERROR Following config files are not properly formatted:");

@@ -36,6 +36,12 @@ describe("parseFormatCheck: the files mise fmt --check would rewrite", () => {
     expect(parseFormatCheck({ kind: "exited", code: 2, stdout: "", stderr }, ROOTS)).toEqual({ unformatted: [], problems: [] });
   });
 
+  test("a repo without a config of its own has nothing to format, which is not a problem of its config", () => {
+    const stderr = `mise ERROR No config file found in current directory\n${VERSION_LINES}`;
+
+    expect(parseFormatCheck({ kind: "exited", code: 1, stdout: "", stderr }, ROOTS)).toEqual({ unformatted: [], problems: [] });
+  });
+
   test("any other failure is one problem with mise's first line", () => {
     const stderr = `mise ERROR TOML parse error at line 2, column 11\n  |\n2 | java = "21\n${VERSION_LINES}`;
 

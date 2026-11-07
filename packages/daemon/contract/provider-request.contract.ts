@@ -84,4 +84,14 @@ describe("what Copilot CLI sends a custom provider, which the provider's model l
     expect(new Set(problems)).toEqual(new Set(["POST /v1/responses"]));
     expect(model.requests()).toHaveLength(before);
   });
+
+  test("with a custom provider, Copilot CLI refuses the model auto before any request, so the Model fields do not suggest it", async () => {
+    // On Copilot CLI 1.0.103 it went to the provider as the model id; 1.0.107 resolves it itself and gives up.
+    const before = model.requests().length;
+
+    expect(await promptOnce({ COPILOT_MODEL: "auto" })).toBe(1);
+
+    expect(model.requests()).toHaveLength(before);
+    expect(model.takeLeftovers()).toEqual({ problems: [], unusedReplies: 0 });
+  });
 });
