@@ -226,7 +226,7 @@ jobs:
           mkdir -p "$unpacked"
           tar -xzf out/trackwall-*-linux-x64.tar.gz -C "$unpacked"
           bun packages/daemon/scripts/smoke.ts "$unpacked/trackwall/trackwall-daemon" --page
-      # The Dev Container Feature (ADR-164) installs that archive, checked against its SHA-256, and its postStartCommand
+      # The Dev Container Feature (ADR-164), with its sandbox option, installs that archive, checked against its SHA-256, and its postStartCommand
       # starts a supervised daemon; the job runs as root, the way a Feature's install.sh runs in an image build and the
       # desktop app's docker exec runs, so the command switches to the image's remote user, vscode.
       - name: Dev Container Feature
@@ -236,7 +236,9 @@ jobs:
           mkdir -p "$feature"
           tar -xzf out/devcontainer-feature-trackwall.tgz -C "$feature"
           archive="$(ls "$PWD"/out/trackwall-*-linux-x64.tar.gz)"
-          (cd "$feature" && PORT=7790 _REMOTE_USER=vscode TRACKWALL_FEATURE_ARCHIVE="$archive" sh install.sh)
+          (cd "$feature" && PORT=7790 SANDBOX=true _REMOTE_USER=vscode TRACKWALL_FEATURE_ARCHIVE="$archive" sh install.sh)
+          # The sandbox option (ADR-219) installed the programs Copilot CLI's sandbox runs on.
+          for program in bwrap slirp4netns ip iptables; do command -v "$program"; done
           # The entrypoint (ADR-184), run with no arguments as the Dev Containers CLI runs a Feature's, ends at once and
           # starts Trackwall in the background: its daemon writes daemon.json without any start of the step's own.
           /usr/local/share/trackwall/entrypoint.sh

@@ -774,9 +774,11 @@ export type JavaNavigationStatus = z.infer<typeof JavaNavigationStatus>;
 
 /**
  * Copilot CLI's sandbox as a new task would get it (ADR-181): `tasks`, which tasks `sandbox` in `workspace.yaml` puts in
- * it, and `problem`, why it cannot run on this computer (no `bwrap` on Linux), which refuses to start those tasks; `null` when it can.
+ * it; `problem`, why it cannot run on this computer (no `bwrap` on Linux, or bubblewrap unable to make its namespaces,
+ * ADR-219), which refuses to start those tasks, `null` when it can; and `chosen`, whether `tasks` comes from
+ * `workspace.yaml` rather than the default.
  */
-export const SandboxState = z.object({ tasks: SandboxSettings.shape.tasks, problem: z.string().nullable() });
+export const SandboxState = z.object({ tasks: SandboxSettings.shape.tasks, problem: z.string().nullable(), chosen: z.boolean() });
 export type SandboxState = z.infer<typeof SandboxState>;
 
 /** Whether a task with approvals mode `approvals` runs in the sandbox under `tasks` (ADR-181); the daemon's and the form's one rule. */
