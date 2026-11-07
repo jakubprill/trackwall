@@ -25,25 +25,13 @@ esac
 
 # The "sandbox" option (ADR-219): the programs Copilot CLI's sandbox runs on in Linux, so that tasks without approvals can
 # run their commands in it. They make namespaces only once the container gets the seccomp profile of the dev container
-# guide; the daemon checks that at every start and keeps the sandbox off by default until then.
+# guide; the daemon checks that and keeps the sandbox off by default until then. Installed after every check below, so a
+# bad value fails before any download.
 SANDBOX="${SANDBOX:-false}"
 case "$SANDBOX" in
 true | false) ;;
 *) fail "sandbox must be true or false, got '$SANDBOX'" ;;
 esac
-if [ "$SANDBOX" = true ]; then
-  if command -v apt-get > /dev/null 2>&1; then
-    apt-get update -qq
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends bubblewrap slirp4netns iproute2 iptables util-linux > /dev/null
-    rm -rf /var/lib/apt/lists/*
-  elif command -v apk > /dev/null 2>&1; then
-    apk add --no-cache -q bubblewrap slirp4netns iproute2 iptables util-linux
-  elif command -v dnf > /dev/null 2>&1; then
-    dnf install -y -q bubblewrap slirp4netns iproute iptables-nft util-linux
-  else
-    fail "the sandbox option needs apt-get, apk or dnf; install bubblewrap, slirp4netns, iproute2 and iptables in the image instead"
-  fi
-fi
 
 # The user VS Code works as; Trackwall runs as that user, with its state in that user's home.
 USER_NAME="${_REMOTE_USER:-root}"
@@ -95,6 +83,29 @@ else
   fail "curl or wget is needed to download $ARCHIVE"
 fi
 echo "$SHA256  $TMP/$ARCHIVE" | sha256sum -c - > /dev/null || fail "$ARCHIVE does not match the SHA-256 of this Feature"
+
+# The sandbox option, checked above: its programs, and the folders the guide keeps in volumes, made for the remote
+# user, so that a new volume there belongs to that user (Docker copies the folder's owner into an empty volume) and the
+# container needs no sudo, which no-new-privileges takes away.
+if [ "$SANDBOX" = true ]; then
+  if command -v apt-get > /dev/null 2>&1; then
+    apt-get update -qq
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends bubblewrap slirp4netns iproute2 iptables util-linux > /dev/null
+    rm -rf /var/lib/apt/lists/*
+  elif command -v apk > /dev/null 2>&1; then
+    apk add --no-cache -q bubblewrap slirp4netns iproute2 iptables util-linux
+  elif command -v dnf > /dev/null 2>&1; then
+    dnf install -y -q bubblewrap slirp4netns iproute iptables-nft util-linux
+  else
+    fail "the sandbox option needs apt-get, apk or dnf; install bubblewrap, slirp4netns, iproute2 and iptables in the image instead"
+  fi
+  for dir in "$USER_HOME/.trackwall" "$USER_HOME/.copilot" "$USER_HOME/.config" "$USER_HOME/.config/mise" /workspaces; do
+    if [ ! -e "$dir" ]; then
+      mkdir "$dir"
+      chown "$USER_UID:$USER_GID" "$dir"
+    fi
+  done
+fi
 
 DEST="/usr/local/lib/trackwall/$VERSION"
 rm -rf "$DEST"

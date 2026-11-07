@@ -134,17 +134,23 @@ describe.if(process.platform === "linux")(
     }
 
     test(
-      "where bubblewrap can make its namespaces, tasks without approvals run in the sandbox without the key",
+      "where bubblewrap can make its namespaces but a process could become root, the sandbox stays off and the doctor says why",
       async () => {
+        // The test runs as root or without no-new-privileges, like a dev container without the guide's flag (ADR-219).
         daemon = await startSessionApi(TOKEN, {
           ...ONE_REPO,
           inContainer: true,
           sandboxTasks: null,
           copilot: fakeCopilotWithPath(programsWithBwrap(0)),
         });
-        expect((await daemon.post(agentsApi.startOptions, {})).sandbox).toEqual({ tasks: "auto", problem: null, chosen: false });
-        const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "map the endpoints", approvals: "auto" });
-        expect(task.sandbox).toBe(true);
+        const { sandbox } = await daemon.post(agentsApi.startOptions, {});
+        expect(sandbox).toMatchObject({
+          tasks: "off",
+          chosen: false,
+          problem: expect.stringContaining("could leave it through the /proc/sys"),
+        });
+        const report = await daemon.post(doctorApi.run, {});
+        expect(report.checks.find((c) => c.id === "copilot-sandbox")?.status).toBe("warn");
       },
       SLOW_TEST_TIMEOUT_MS,
     );

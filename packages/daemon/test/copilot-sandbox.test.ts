@@ -3,9 +3,13 @@ import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
+  containerPrivilegesProblem,
   defaultSandboxTasks,
+  keptNamespaceProbes,
   NAMESPACE_PROBE_ARGS,
   namespacesProblem,
+  ownPrivileges,
+  type ProcessPrivileges,
   type SandboxHost,
   sandboxProblem,
   sandboxState,
@@ -89,7 +93,8 @@ describe("which tasks run in the sandbox, with and without the key (ADR-181, ADR
     expect(defaultSandboxTasks(false, "win32", true)).toBe("off");
   });
 
-  const host = (inContainer: boolean, namespaces: string | null): SandboxHost & { probed: string[] } => {
+  const safe: ProcessPrivileges = { uid: 1000, noNewPrivileges: true };
+  const host = (inContainer: boolean, namespaces: string | null, privileges = safe): SandboxHost & { probed: string[] } => {
     const probed: string[] = [];
     return {
       inContainer,
@@ -100,6 +105,7 @@ describe("which tasks run in the sandbox, with and without the key (ADR-181, ADR
         probed.push(bwrap);
         return namespaces;
       },
+      privileges: () => privileges,
     };
   };
   const refused = "bubblewrap cannot make the sandbox's namespaces here (bwrap: No permissions to create new namespace)";
@@ -125,6 +131,25 @@ describe("which tasks run in the sandbox, with and without the key (ADR-181, ADR
       expect(() => taskSandbox(state, "auto")).toThrow(expect.objectContaining({ code: "bad_request" }));
     },
   );
+
+  test.if(onLinux)(
+    "in a container whose processes can become root, the sandbox's setup would let them out, so it does not count as able to run",
+    async () => {
+      const env = { PATH: sandboxProgramsFolder() };
+      const withSudo = await sandboxState(null, env, host(true, null, { uid: 1000, noNewPrivileges: false }));
+      expect(withSudo).toMatchObject({ tasks: "off", chosen: false, problem: expect.stringContaining("--security-opt no-new-privileges") });
+      const asRoot = await sandboxState({ tasks: "auto" }, env, host(true, null, { uid: 0, noNewPrivileges: true }));
+      expect(() => taskSandbox(asRoot, "auto")).toThrow(
+        expect.objectContaining({ message: expect.stringContaining("Trackwall runs as root in this container") }),
+      );
+    },
+  );
+
+  test("with the user's own off nothing is checked, since no task runs in it", async () => {
+    const here = host(true, "never asked");
+    expect(await sandboxState({ tasks: "off" }, EMPTY_PATH, here)).toEqual({ tasks: "off", problem: null, chosen: true });
+    expect(here.probed).toEqual([]);
+  });
 
   test.if(onLinux)("the key wins, and without bubblewrap's programs nothing is probed", async () => {
     const here = host(true, null);
@@ -159,5 +184,39 @@ describe("whether a new task runs in Copilot CLI's sandbox (ADR-181)", () => {
 
   test("a task outside it starts also where the sandbox cannot run", () => {
     expect(taskSandbox({ tasks: "auto", problem: missing, chosen: true }, "ask")).toBe(false);
+  });
+});
+
+describe("what keeps processes in a container from leaving it through the sandbox's setup (ADR-219)", () => {
+  test("only a user other than root with no new privileges is safe", () => {
+    expect(containerPrivilegesProblem({ uid: 1000, noNewPrivileges: true })).toBeNull();
+    expect(containerPrivilegesProblem({ uid: 0, noNewPrivileges: true })).toBe(
+      "Trackwall runs as root in this container, which could leave it through the /proc/sys the sandbox's setup opens",
+    );
+    expect(containerPrivilegesProblem({ uid: 1000, noNewPrivileges: false })).toBe(
+      "this container lets its processes become root (sudo), which could leave it through the /proc/sys the sandbox's setup opens; start it with --security-opt no-new-privileges",
+    );
+  });
+
+  test("the user and the flag come from the kernel's status of the process", () => {
+    const status = "Name:\tbun\nUid:\t1000\t1000\t1000\t1000\nGid:\t1000\t1000\t1000\t1000\nNoNewPrivs:\t1\nSeccomp:\t2\n";
+    expect(ownPrivileges(status)).toEqual({ uid: 1000, noNewPrivileges: true });
+    expect(ownPrivileges(status.replace("NoNewPrivs:\t1", "NoNewPrivs:\t0"))).toEqual({ uid: 1000, noNewPrivileges: false });
+    expect(() => ownPrivileges("Name:\tbun\n")).toThrow("no Uid line in /proc/self/status");
+  });
+});
+
+describe("the namespace probe the daemon keeps (ADR-219)", () => {
+  test("a bubblewrap that worked is not run again, and one that failed is tried again", async () => {
+    const answers = ["timed out", null, "never asked"];
+    const runs: string[] = [];
+    const probe = keptNamespaceProbes(async (bwrap) => {
+      runs.push(bwrap);
+      return answers.shift() ?? null;
+    });
+    expect(await probe("/usr/bin/bwrap", {})).toBe("timed out");
+    expect(await probe("/usr/bin/bwrap", {})).toBeNull();
+    expect(await probe("/usr/bin/bwrap", {})).toBeNull();
+    expect(runs).toEqual(["/usr/bin/bwrap", "/usr/bin/bwrap"]);
   });
 });

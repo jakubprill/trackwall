@@ -150,8 +150,8 @@ A task without approvals runs every command without asking, and its prompt may c
 
 Docker does not let the sandbox start by default, so Trackwall leaves it off in a container, and the [doctor](/features/doctor) says so. To turn it on:
 
-1. Download [sandbox-seccomp.json](/dev-container/sandbox-seccomp.json) into the `.devcontainer` folder, next to `devcontainer.json`. It is Docker's own default seccomp profile, with one rule added that lets the sandbox make its namespaces.
-2. Add the Feature's `sandbox` option, and the profile, in `devcontainer.json`:
+1. Download [sandbox-seccomp.json](/dev-container/sandbox-seccomp.json) into the `.devcontainer` folder, next to `devcontainer.json`. It is Docker's own default seccomp profile, with one rule added that lets the sandbox make its namespaces. Download it again when you update Trackwall, so it keeps up with Docker's profile.
+2. In `devcontainer.json`, add the Feature's `sandbox` option and the `runArgs` below, and remove `postCreateCommand`:
 
    ```jsonc
    "features": {
@@ -159,19 +159,24 @@ Docker does not let the sandbox start by default, so Trackwall leaves it off in 
    },
    "runArgs": [
      "--security-opt", "seccomp=${localWorkspaceFolder}/.devcontainer/sandbox-seccomp.json",
-     "--security-opt", "systempaths=unconfined"
+     "--security-opt", "systempaths=unconfined",
+     "--security-opt", "no-new-privileges"
    ]
    ```
 
 3. Rebuild the container.
 
-From then on Trackwall sees at its start that the sandbox can run and puts tasks without approvals in it, as on a Linux computer: the New session form says so under the options. `sandbox.tasks` in `workspace.yaml` still chooses otherwise, as described in [Approvals](/features/approvals).
+From then on Trackwall sees that the sandbox can run and puts tasks without approvals in it, as on a Linux computer: the New session form says so under the options. `sandbox.tasks` in `workspace.yaml` still chooses otherwise, as described in [Approvals](/features/approvals).
 
-- The `sandbox` option installs bubblewrap, slirp4netns, iproute2 and iptables with the image's package manager (`apt-get`, `apk` or `dnf`). With another one, install them in your image yourself.
-- `systempaths=unconfined` lets the sandbox mount its own `/proc`, which Docker otherwise hides parts of. Together with the profile, it lets programs in the container make namespaces of their own. Those reach only what the program's own user can, but they give the system kernel more surface. Leave both out if you prefer to rely on the container alone.
+What each part does, and what it costs:
+
+- The `sandbox` option installs bubblewrap, slirp4netns, iproute2 and iptables with the image's package manager (`apt-get`, `apk` or `dnf`). With another one, install them in your image yourself. It also makes `~/.trackwall`, `~/.copilot`, `~/.config/mise` and `/workspaces` yours in the image, so new volumes there are yours too and need no `sudo chown`. A volume of your own elsewhere, such as one for your skills, needs its folder made yours in your image (`RUN mkdir -p ... && chown vscode:vscode ...`).
+- `systempaths=unconfined` lets the sandbox mount its own `/proc`, which Docker otherwise partly hides. It also leaves `/proc/sys` writable, and a process that is root in the container could use that to run a program as root on Docker's virtual machine, outside the container. That machine sees your Windows drives under Rancher Desktop, or your Mac's home folder under Colima.
+- `no-new-privileges` closes that: nothing in the container can become root, so `sudo` no longer works there. Install the tools you need in the image instead. Trackwall checks this. If Trackwall runs as root or `no-new-privileges` is missing, it keeps the sandbox off and the doctor says why.
+- Together, the profile and `systempaths=unconfined` let programs in the container make namespaces of their own. These reach only what the program's user can, but they expose more of the kernel to a bug. Leave all three out if you prefer to rely on the container alone.
 - Keep `TRACKWALL_HOME` in your home folder, as above. The sandbox lets commands read the system's temporary folder, so Trackwall's state there would be readable.
 - The sandbox covers the agent's own commands. A build, the tests or a service that Trackwall runs for the task, such as Verify, still runs outside it, on files the agent may have changed.
-- On a computer whose Docker uses AppArmor, the doctor may still say that bubblewrap cannot make its namespaces. Then the container needs `--security-opt apparmor=unconfined` too, which weakens it further. Check that the doctor shows the sandbox as on after the rebuild.
+- On a computer whose Docker uses AppArmor, the doctor may still say that bubblewrap cannot make its namespaces. Check that the doctor shows the sandbox as on after the rebuild.
 
 ## Back up the repos
 

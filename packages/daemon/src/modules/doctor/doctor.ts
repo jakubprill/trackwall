@@ -46,7 +46,7 @@ const CONTAINER_DISK_FIX =
   " The container's disk is the disk of Docker's virtual machine: on your computer, `docker system prune` (without `--volumes`, which would delete the repos) removes old images and containers, and the settings of Docker Desktop or Rancher Desktop can make that disk bigger.";
 /** How a dev container gets Copilot CLI's sandbox (ADR-219): the programs from the Feature and the guide's seccomp profile. */
 const CONTAINER_SANDBOX_FIX =
-  'Give the container the sandbox: the Trackwall Feature\'s "sandbox" option installs its programs, and the seccomp profile with systempaths=unconfined in runArgs lets it make its namespaces ("Copilot CLI\'s sandbox" in the dev container guide); then rebuild the container';
+  'Give the container the sandbox: the Trackwall Feature\'s "sandbox" option installs its programs, and the seccomp profile, systempaths=unconfined and no-new-privileges in runArgs let it make its namespaces safely ("Copilot CLI\'s sandbox" in the dev container guide); then rebuild the container';
 /** What to do about a repo git could not read in that check. */
 const READ_FIX = "Run git status in that repo in a terminal of the container to see why.";
 
@@ -294,7 +294,7 @@ export class Doctor {
     return ok(`mise ${versionIn(version.value) ?? firstLine(version.value)}`);
   }
 
-  /** Only where some task runs in the sandbox (`sandbox.tasks` not `off`, the default in a container). */
+  /** Where some task runs in the sandbox, or in a container where it is off by default because it cannot run there safely (ADR-219). */
   private async copilotSandbox(): Promise<Outcome> {
     const { tasks, problem, chosen } = await this.deps.sandbox();
     if (tasks === "off") {

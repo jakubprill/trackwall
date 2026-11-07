@@ -67,7 +67,7 @@ import { AutoReviews } from "./auto-reviews.ts";
 import type { CopilotHookOutput } from "./copilot-hook-output.ts";
 import { CopilotHookEvent } from "./copilot-hook-record.ts";
 import type { LspServer } from "./copilot-plugin.ts";
-import { namespacesProblem, type SandboxHost, sandboxState, taskSandbox } from "./copilot-sandbox.ts";
+import { daemonSandboxHost, type SandboxHost, sandboxState, taskSandbox } from "./copilot-sandbox.ts";
 import type { EndedTaskFacts } from "./ended-task.ts";
 import { HandoffWatch } from "./handoff-watch.ts";
 import { appendHookRecord } from "./hook-tail.ts";
@@ -281,20 +281,12 @@ export class Agents {
   readonly #javaNavigation: JavaNavigationServers;
   readonly #autoReviews: AutoReviews;
   readonly #boardItems: TaskBoardItem;
-  /** Where the daemon runs, for Copilot CLI's sandbox; the answer of each bubblewrap's namespace probe holds for the daemon's run (ADR-219). */
+  /** Where the daemon runs, for Copilot CLI's sandbox (ADR-219). */
   readonly #sandboxHost: SandboxHost;
 
   constructor(deps: AgentsDeps) {
     this.#deps = deps;
-    const probes = new Map<string, Promise<string | null>>();
-    this.#sandboxHost = {
-      inContainer: deps.inContainer,
-      namespaces: (bwrap, env) => {
-        const known = probes.get(bwrap) ?? namespacesProblem(bwrap, env);
-        probes.set(bwrap, known);
-        return known;
-      },
-    };
+    this.#sandboxHost = daemonSandboxHost(deps.inContainer);
     this.#javaNavigation = new JavaNavigationServers({
       projectsDir: () => deps.repos.projectsDir(),
       settings: () => deps.repos.javaNavigation(),
