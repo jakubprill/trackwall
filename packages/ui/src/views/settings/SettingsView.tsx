@@ -20,6 +20,7 @@ import { KeepScreenOnSurface } from "./KeepScreenOnSurface.tsx";
 import { LocalConfigReposSurface } from "./LocalConfigReposSurface.tsx";
 import { LocalConfigStoreSurface } from "./LocalConfigStoreSurface.tsx";
 import { McpCallsSurface } from "./McpCallsSurface.tsx";
+import { ModelStatsSurface } from "./ModelStatsSurface.tsx";
 import { RepoHostsSurface } from "./RepoHostsSurface.tsx";
 import { SessionProfileSurface } from "./SessionProfileSurface.tsx";
 import { StartAtSignInSurface } from "./StartAtSignInSurface.tsx";
@@ -114,6 +115,8 @@ function Section({
       return <McpCallsSurface conn={conn} live={mcpCallsLive} />;
     case "copilot-usage":
       return <CopilotUsageSurface conn={conn} />;
+    case "model-stats":
+      return <ModelStatsSurface conn={conn} />;
     case "start-at-sign-in":
       return <StartAtSignInSurface />;
     case "keep-screen-on":
