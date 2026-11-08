@@ -31,6 +31,7 @@ import { hyperlinkHandler, trackwallLinkProvider, webLinkHandler } from "@/lib/t
 import { sessionTerminalOptions } from "@/lib/terminal-options";
 import { opensSearch } from "@/lib/terminal-search";
 import { cssTokens, terminalTheme, watchWindowEffect } from "@/lib/terminal-theme";
+import { DARK_ISLAND } from "@/lib/theme";
 import { browserTimers } from "@/lib/timers";
 import { useOpenTrackwallLink } from "@/lib/trackwall-link";
 import { useTerminalDrop } from "@/lib/use-terminal-drop";
@@ -132,7 +133,8 @@ export function PtyTerminal({
     const element = host.current;
     const container = frame.current;
     if (!element || !container) return;
-    const theme = () => terminalTheme(cssTokens(document.documentElement));
+    // The frame is a dark island (ADR-235): its tokens are the dark theme's in either theme.
+    const theme = () => terminalTheme(cssTokens(container));
     const terminal = new Terminal(sessionTerminalOptions(theme(), getComputedStyle(element).fontFamily));
     const stopWatchingEffect = watchWindowEffect(document.documentElement, () => {
       terminal.options.theme = theme();
@@ -324,7 +326,12 @@ export function PtyTerminal({
     <div className="flex min-h-0 flex-1 flex-col">
       {notice && <p className="text-warning border-b px-3 py-1 text-xs">{notice}</p>}
       {!live && <p className="text-muted-foreground border-b px-3 py-1 text-xs">{kind.ended}</p>}
-      <div ref={frame} {...{ [FILE_DROP_TARGET]: "" }} className={cn("relative min-h-0 flex-1 overflow-hidden", DROP_HOVER_RING)}>
+      <div
+        ref={frame}
+        {...{ [FILE_DROP_TARGET]: "" }}
+        {...DARK_ISLAND}
+        className={cn("relative min-h-0 flex-1 overflow-hidden", DROP_HOVER_RING)}
+      >
         <div ref={host} className="absolute inset-2 font-mono" />
         {search && (
           <TerminalSearch

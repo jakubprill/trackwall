@@ -36,6 +36,10 @@ _Avoid_: watchdog, daemon manager
 Replacing Trackwall in a dev container with another release without rebuilding the container: the signed Linux archive goes into `bin/<version>/` of the state directory, `bin/current` names it, and the previous version comes back when the new one does not answer (ADR-165).
 _Avoid_: upgrade, self-update (the app's own update is *App update*)
 
+**Theme** (`ThemeChoice`, `lib/theme.ts`, `theme.rs`, `theme.json`; in the UI *theme*):
+How Trackwall looks on this computer: dark, light, or the same as the system (ADR-235). The UI keeps the choice; the shell follows it with its windows. A **dark island** (`DARK_ISLAND`) is a part that stays dark in the light theme: the session terminal and Home's 3D scene.
+_Avoid_: skin, mode (a session has modes), appearance
+
 **App update** (`updates.rs`, `UpdateCheck`; in the UI *update*):
 A newer version of Trackwall from GitHub Releases, installed by the shell after the user's click and followed by a restart (ADR-53). Its **update package** is the archive the updater downloads and checks against the signature: the release zip on Windows (`portable_update.rs`), `.app.tar.gz` on macOS; the **update manifest** is `latest.json` in the release.
 _Avoid_: upgrade, sync (that is the repo synchronization)
