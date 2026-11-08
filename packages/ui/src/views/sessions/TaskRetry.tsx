@@ -10,7 +10,7 @@ import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 
 /**
- * The retry of a task whose verification failed on a stronger model (ADR-232): a new task with the same prompt from the
+ * The retry of a task whose verification failed on a stronger model (ADR-233): a new task with the same prompt from the
  * same commit on another model, linked to this one, which the panel then opens. With a retry model in Settings it is one
  * click; "Other model" or no retry model opens the model field.
  */

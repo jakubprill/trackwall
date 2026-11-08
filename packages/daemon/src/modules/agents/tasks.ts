@@ -194,7 +194,7 @@ export interface TaskOrigin {
   view: SessionView;
   /** The change the task is a part of (ADR-171), whose earlier parts are already on the list; `null` for a task on its own. */
   change: TaskChange | null;
-  /** The task this one retries on another model (ADR-232); `null` for a first attempt. */
+  /** The task this one retries on another model (ADR-233); `null` for a first attempt. */
   retryOf: string | null;
 }
 
@@ -208,7 +208,7 @@ export type ChangeOrigin = Omit<TaskOrigin, "id" | "change" | "planFirst" | "ret
 export type TaskOptions = Omit<TaskOrigin, "id" | "title" | "proposedBy" | "change" | "retryOf">;
 
 /**
- * Where a retry on another model starts (ADR-232): the base of the task it retries, and that task's handoff, so its
+ * Where a retry on another model starts (ADR-233): the base of the task it retries, and that task's handoff, so its
  * agent reads the same handed work.
  */
 interface RetryStart {
@@ -428,7 +428,7 @@ export class AgentTasks {
   }
 
   /**
-   * A new attempt at task `id` on `model` (ADR-232): a new task with its prompt, title, approvals, plan first, Java
+   * A new attempt at task `id` on `model` (ADR-233): a new task with its prompt, title, approvals, plan first, Java
    * navigation, view, handoff and `item` (the caller checks it is still on the board), from the same base commit and
    * base branch, so the two attempts start from the same code; `retryOf` names the task it retries. It reports to the
    * user, not to a proposer, whose coordination stays with the first attempt, which goes on as it is. The same model as
@@ -647,7 +647,7 @@ export class AgentTasks {
   }
 
   /**
-   * The handoff of a retry (ADR-232): the handing task's branch as it is now, as a new subtask gets it, so the retry's
+   * The handoff of a retry (ADR-233): the handing task's branch as it is now, as a new subtask gets it, so the retry's
    * agent is not told it read a commit only the first attempt read; the first attempt's own once the handing task ended.
    */
   async #retriedHandoff(first: TaskHandoff | null): Promise<TaskHandoff | null> {

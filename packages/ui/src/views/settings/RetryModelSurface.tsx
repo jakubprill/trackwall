@@ -4,7 +4,7 @@ import type { Connection } from "@/lib/connection";
 import { ModelSettingSurface } from "./ModelSettingSurface.tsx";
 
 /**
- * The retry model (ADR-232): the stronger Copilot CLI model a task whose verification failed is offered to be retried
+ * The retry model (ADR-233): the stronger Copilot CLI model a task whose verification failed is offered to be retried
  * on, so the retry is one click in the task's Verification section.
  */
 export function RetryModelSurface({ conn }: { conn: Connection }) {

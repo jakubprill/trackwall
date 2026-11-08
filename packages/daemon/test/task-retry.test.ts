@@ -9,7 +9,7 @@ import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
 import { startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
-// A failed task retried on a stronger model (ADR-232): a new task with the same prompt from the same base commit, on the
+// A failed task retried on a stronger model (ADR-233): a new task with the same prompt from the same base commit, on the
 // model the user picks, linked to the task it retries in the task list and in the task journal.
 
 const TOKEN = "r".repeat(43);

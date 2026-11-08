@@ -23,7 +23,7 @@ const SECTION_ATTRIBUTE = "data-task-section";
  * The sections above a task's terminal (ADR-91), the same in the task panel and in a grid tile's overlay: the files
  * copied into the worktree (ADR-61), the warnings about shared files (ADR-44) and a changed mise config (ADR-59), the
  * messages from the proposer (ADR-68), the summary (ADR-39), the verification (ADR-64) with the retry of a failed task on
- * a stronger model (ADR-232), the way to a merge request
+ * a stronger model (ADR-233), the way to a merge request
  * (ADR-77) with the change it is part of (ADR-172), the service on the repo's port (ADR-132) and the mise tasks the agent runs in the worktree. Each section hides itself when it has nothing to show.
  */
 export function TaskDetails({

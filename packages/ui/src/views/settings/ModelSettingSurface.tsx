@@ -16,7 +16,7 @@ interface ModelSetting {
 }
 
 /**
- * One model setting of Settings › Agents, such as the supervisor's model (ADR-193) or the retry model (ADR-232): a
+ * One model setting of Settings › Agents, such as the supervisor's model (ADR-193) or the retry model (ADR-233): a
  * field that suggests the provider's models, saves the id to its key in `workspace.yaml` and removes the key on reset.
  */
 export function ModelSettingSurface({

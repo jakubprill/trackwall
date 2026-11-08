@@ -949,7 +949,7 @@ export class Agents {
   }
 
   /**
-   * The user's retry of a task on another model (ADR-232), see `AgentTasks.retry`; the task's board item goes with it
+   * The user's retry of a task on another model (ADR-233), see `AgentTasks.retry`; the task's board item goes with it
    * while it is still on the board.
    */
   async retryTask(id: string, model: string | null): Promise<Task> {

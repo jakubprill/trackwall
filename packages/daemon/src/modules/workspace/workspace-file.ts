@@ -81,7 +81,7 @@ const Keys: { [K in WorkspaceKey]: z.ZodType<WorkspaceKeyValues[K], unknown> } =
   autoReview: AutoReviewSettings.nullish().transform((settings) => settings ?? { afterReport: false }),
   // The Copilot CLI model the supervisor runs on (ADR-193); set in Settings › Agents or by hand.
   supervisorModel: TaskModel.nullish().transform((model) => model ?? null),
-  // The stronger model a failed task is offered to be retried on (ADR-232); set in Settings › Agents or by hand.
+  // The stronger model a failed task is offered to be retried on (ADR-233); set in Settings › Agents or by hand.
   retryModel: TaskModel.nullish().transform((model) => model ?? null),
   // The Java language server for tasks (ADR-99); by hand or by installing it in Settings › Agents (ADR-123).
   javaNavigation: JavaNavigationSettings.refine(
@@ -190,7 +190,7 @@ export class WorkspaceFile {
     return this.get("supervisorModel", Keys.supervisorModel);
   }
 
-  /** The model a failed task is offered to be retried on (`retryModel`, ADR-232); `null` when the user chose none. */
+  /** The model a failed task is offered to be retried on (`retryModel`, ADR-233); `null` when the user chose none. */
   retryModel(): string | null {
     return this.get("retryModel", Keys.retryModel);
   }

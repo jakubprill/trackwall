@@ -586,7 +586,7 @@ export const Task = z.object({
   /** The change the task is a part of (ADR-171); `null` for a task on its own. */
   change: TaskChange.nullable(),
   /**
-   * The task this one retries on another model (ADR-232): the same prompt from the same base commit, so the two
+   * The task this one retries on another model (ADR-233): the same prompt from the same base commit, so the two
    * attempts can be compared; `null` for a first attempt.
    */
   retryOf: TaskId.nullable(),
@@ -1073,7 +1073,7 @@ export const agentsApi = {
    */
   resumeTask: endpoint("resume-task", TaskRequest.extend({ model: TaskModel.nullable().optional() }), Task),
   /**
-   * A new attempt at a task on another model (ADR-232), typically a stronger one after its verification failed: a new
+   * A new attempt at a task on another model (ADR-233), typically a stronger one after its verification failed: a new
    * task with the same repo, prompt, title, approvals, plan first, Java navigation, view, handoff and board item, from
    * the same base commit, on `model`
    * (`null` for Copilot CLI's default), with `retryOf` naming the task it retries. The task it retries stays as it is,

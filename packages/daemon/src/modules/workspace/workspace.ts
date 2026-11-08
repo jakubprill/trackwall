@@ -551,7 +551,7 @@ export class Workspace {
     return this.settings();
   }
 
-  /** The model a failed task is offered to be retried on (ADR-232); `null` removes the key. */
+  /** The model a failed task is offered to be retried on (ADR-233); `null` removes the key. */
   setRetryModel(model: string | null): WorkspaceSettings {
     this.deps.file.setRetryModel(model);
     return this.settings();

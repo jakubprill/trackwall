@@ -1,7 +1,7 @@
 import type { Task, Verification } from "@trackwall/protocol";
 
 /**
- * A failed task retried on a stronger model (ADR-232): when the Verification section offers it, and on which model in
+ * A failed task retried on a stronger model (ADR-233): when the Verification section offers it, and on which model in
  * one click.
  */
 
