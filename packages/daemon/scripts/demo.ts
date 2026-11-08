@@ -24,7 +24,7 @@ import { mcpStdioCommand } from "../src/mcp/stdio-command.ts";
 import { runtimeInfo } from "../src/platform/runtime.ts";
 import { writeDemoJournal } from "./demo/journal.ts";
 import { TURNS } from "./demo/turns.ts";
-import { demoWeek, writeDemoUsage } from "./demo/usage.ts";
+import { demoEarlierWeeks, demoWeek, writeDemoUsage } from "./demo/usage.ts";
 import { commitPricingTaskContract, createDemoWorkspace, DEMO_REPOS, writePricingTaskChanges } from "./demo/workspace.ts";
 
 const VERSION = "demo";
@@ -155,7 +155,7 @@ async function setTheScene(): Promise<void> {
   await facade.mise.start({ repo: "orders-api", task: null }, "build");
   const outside = join(home, "notes");
   mkdirSync(outside, { recursive: true });
-  writeDemoUsage(copilotHome, demoWeek({ projectsDir, outside, tasks: facade.agents.tasks() }));
+  writeDemoUsage(copilotHome, [...demoWeek({ projectsDir, outside, tasks: facade.agents.tasks() }), ...demoEarlierWeeks(projectsDir)]);
 }
 
 for (const signal of SHUTDOWN_SIGNALS) process.on(signal, () => void stop(signal));

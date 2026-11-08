@@ -140,6 +140,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   }),
   route(mcpAuditApi.calls, (f, b) => f.mcpAudit.list(b.task)),
   route(usageReportApi.week, (f, b) => f.usageReport.week(b.weeksAgo)),
+  route(usageReportApi.trend, (f) => f.usageReport.trend()),
   route(taskJournalApi.modelStats, (f, b) => f.taskJournal.modelStats(b.period)),
   route(localConfigApi.store, (f) => f.localConfig.store()),
   route(localConfigApi.repo, (f, b) => f.localConfig.repo(b.repo)),

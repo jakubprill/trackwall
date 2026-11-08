@@ -76,9 +76,27 @@ export const UsageReport = z.object({
 });
 export type UsageReport = z.infer<typeof UsageReport>;
 
+/** One week's model calls over all work, for the trend of the weeks side by side: its report without the rows. */
+export const UsageWeekTotal = UsageReport.pick({ from: true, to: true, total: true, toolDefinitionTokens: true }).extend({
+  /** How many weeks before the current one; 0 is the current week. */
+  weeksAgo: z.number().int().min(0).max(USAGE_REPORT_MAX_WEEKS_AGO),
+});
+export type UsageWeekTotal = z.infer<typeof UsageWeekTotal>;
+
+/** Every week the report reaches, so the user sees whether a change (fewer MCP tools, another model) lowered the use. */
+export const UsageTrend = z.object({
+  /** The oldest week first, the current week last. */
+  weeks: z.array(UsageWeekTotal).length(USAGE_REPORT_MAX_WEEKS_AGO + 1),
+  /** Event logs that could not be read; their use is missing from every week. */
+  unreadLogs: z.number().int().nonnegative(),
+});
+export type UsageTrend = z.infer<typeof UsageTrend>;
+
 const endpoint = apiEndpoints("usage-report");
 
 export const usageReportApi = {
   /** The week that ended `weeksAgo` weeks ago: 0 is the last `USAGE_REPORT_DAYS` days up to now. */
   week: endpoint("week", z.object({ weeksAgo: z.number().int().min(0).max(USAGE_REPORT_MAX_WEEKS_AGO) }).strict(), UsageReport),
+  /** The totals of every week the report reaches, the oldest first. */
+  trend: endpoint("trend", z.object({}).strict(), UsageTrend),
 };

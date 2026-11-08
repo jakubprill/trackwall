@@ -47,6 +47,13 @@
   --group-3: oklch(0.7 0.12 262);
   --group-4: oklch(0.72 0.12 45);
   /*
+   * Series of a chart, in this order (ADR-236): the first is the measure itself, the second the part of it the chart
+   * sets apart. Checked as a pair for colour-blind readers on this dark background (deutan ΔE 11); another theme
+   * redefines `--chart-2` and checks the pair again. Charts also name each series in a legend.
+   */
+  --chart-1: var(--primary);
+  --chart-2: oklch(0.72 0.14 300);
+  /*
    * The 16 ANSI colours of the session terminals (`lib/terminal-theme.ts`): Copilot CLI draws its TUI with them, so
    * they follow the HUD. Red, green, yellow and cyan are the state and accent colours, white is muted text; blue and
    * magenta, Copilot CLI's own accents, lean towards the cyan accent, so the terminal reads as part of the panel.
@@ -96,6 +103,9 @@
   --group-2: oklch(0.55 0.18 350);
   --group-3: oklch(0.5 0.16 262);
   --group-4: oklch(0.56 0.14 45);
+  /* Chart series (ADR-236): the accent, and an orange that stands apart from it in hue and lightness, also for colour-blind readers. */
+  --chart-1: var(--primary);
+  --chart-2: oklch(0.64 0.16 50);
 }
 
 /* A dark island paints its own dark background, since the light surface under it would show through its transparent terminal. */
@@ -183,6 +193,8 @@
   --color-group-2: var(--group-2);
   --color-group-3: var(--group-3);
   --color-group-4: var(--group-4);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
   --color-input: var(--input);
   --color-ring: var(--ring);
 }

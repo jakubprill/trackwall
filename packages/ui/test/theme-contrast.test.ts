@@ -77,6 +77,8 @@ const PAIRS: ReadonlyArray<readonly [string, string, number, number?]> = [
   ["group-2", "card", 3],
   ["group-3", "card", 3],
   ["group-4", "card", 3],
+  ["chart-1", "card", 3],
+  ["chart-2", "card", 3],
 ];
 
 /** Tokens that are not colours of the theme: the terminal palette stays dark (a dark island, ADR-235) and the radius is shared. */
@@ -96,7 +98,13 @@ describe("themes", () => {
   ] as const) {
     test(`every text and mark of the ${name} theme reads on its surface (WCAG AA)`, () => {
       const theme = tokens(selector);
-      const colour = (token: string) => linearRgb(theme.get(token) ?? `missing --${token}`);
+      // A token that names another (`--chart-1: var(--primary)`) takes that one's value.
+      const value = (token: string): string => {
+        const declared = theme.get(token) ?? `missing --${token}`;
+        const other = declared.match(/^var\(--([a-z0-9-]+)\)$/)?.[1];
+        return other ? value(other) : declared;
+      };
+      const colour = (token: string) => linearRgb(value(token));
       const failing = PAIRS.flatMap(([mark, surface, needed, tint]) => {
         const back = tint ? over(colour(mark), colour(surface), tint) : colour(surface);
         const ratio = contrast(colour(mark), back);

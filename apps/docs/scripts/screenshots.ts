@@ -136,6 +136,8 @@ const SHOTS: Record<string, (page: Page) => Promise<void>> = {
     await page.keyboard.press("Control+,");
     await page.getByRole("button", { name: "Usage", exact: true }).click();
     await page.getByText("Tasks and sessions").waitFor();
+    // The chart comes in its own request, which reads every week's logs.
+    await page.getByRole("figure", { name: "Tokens in by week" }).waitFor();
     await settle(page);
   },
   "model-stats": async (page) => {
