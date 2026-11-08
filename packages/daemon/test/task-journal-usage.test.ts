@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { agentsApi, EndedTask } from "@trackwall/protocol";
+import { agentsApi, EndedTask, taskJournalApi } from "@trackwall/protocol";
 import { waitUntil } from "../src/platform/process-group.ts";
 import { waitFor } from "./support/agents.ts";
 import { FAKE_COPILOT, ONE_REPO, startSessionApi } from "./support/session-api.ts";
@@ -53,5 +53,12 @@ describe.skipIf(process.versions.bun === undefined)("the model and usage of an e
       models: [{ model: "gpt-6-luna", modelCalls: 1 }],
       usage: { modelCalls: 1 },
     });
+
+    // The model statistics (ADR-231) credit the task to the model Copilot CLI ran it on, not the one it asked for.
+    const stats = await daemon.post(taskJournalApi.modelStats, { period: "30d" });
+    expect(stats.models).toMatchObject([
+      { model: "gpt-6-luna", tasks: 1, askedForAnother: 1, tasksWithUsage: 1, tasksWithCredits: 0, usage: { modelCalls: 1 } },
+    ]);
+    expect(stats.withoutModel).toBe(0);
   }, 60_000);
 });

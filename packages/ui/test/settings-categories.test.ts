@@ -31,8 +31,8 @@ describe("Settings categories", () => {
     ]);
   });
 
-  test("what Copilot CLI used and the MCP calls agents made have a category of their own, Usage, the only one as wide as the view", () => {
-    expect(settingsCategory("usage").sections).toEqual(["copilot-usage", "mcp-calls"]);
+  test("what Copilot CLI used, how each model did on tasks and the MCP calls agents made have a category of their own, Usage, the only one as wide as the view", () => {
+    expect(settingsCategory("usage").sections).toEqual(["copilot-usage", "model-stats", "mcp-calls"]);
     expect(SETTINGS_CATEGORIES.filter((c) => c.wide).map((c) => c.id)).toEqual(["usage"]);
   });
 

@@ -1,4 +1,4 @@
-import { type CopilotUsage, countLabel, type Session } from "@trackwall/protocol";
+import { type CopilotUsage, countLabel, type Session, sumUsage } from "@trackwall/protocol";
 
 /**
  * How the UI shows what a session's Copilot CLI conversation used (ADR-190): AI credits when Copilot CLI reported them,
@@ -60,18 +60,5 @@ export function listedUsage(sessions: readonly Session[]): CopilotUsage | null {
     }
     if (session.usage !== null) counted.push(session.usage);
   }
-  if (counted.length === 0) return null;
-  const withCredits = counted.filter((u) => u.aiCredits !== null);
-  return {
-    modelCalls: sum(counted, (u) => u.modelCalls),
-    inputTokens: sum(counted, (u) => u.inputTokens),
-    outputTokens: sum(counted, (u) => u.outputTokens),
-    aiCredits: withCredits.length === 0 ? null : sum(withCredits, (u) => u.aiCredits ?? 0),
-    aiCreditsPartial: counted.some((u) => u.aiCreditsPartial) || (withCredits.length > 0 && withCredits.length < counted.length),
-    premiumRequests: sum(counted, (u) => u.premiumRequests),
-  };
-}
-
-function sum(usages: readonly CopilotUsage[], of: (usage: CopilotUsage) => number): number {
-  return usages.reduce((total, usage) => total + of(usage), 0);
+  return sumUsage(counted);
 }
