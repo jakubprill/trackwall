@@ -267,7 +267,7 @@ describe("the prompt of a task from a stack trace (ADR-222)", () => {
         "  - com.example.shop.order.OrderService.total: src/main/java/com/example/shop/order/OrderService.java:55",
         "",
         "## Reproduce it in a test first",
-        "1. Before you change the code, write a test that fails the way this stack trace shows: the same exception from the same place. Run it and see it fail for that reason.",
+        "1. Before you change the code, write a test that fails the way this stack trace shows: the same exception from the same place. Put it under src/test/ and use only code that exists before the fix, so that it compiles without the fix: Trackwall runs it on the code before your change. Run it and see it fail for that reason.",
         "2. Then fix the code so that the test passes, and run it again.",
         "3. When you call report_result, give reproTest: the test's file, its name and how it failed before the fix.",
         "If you cannot reproduce the error in a test, say why in report_result and leave reproTest out.",

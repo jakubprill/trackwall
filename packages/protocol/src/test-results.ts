@@ -67,6 +67,20 @@ export const TestFailure = z.object({
 });
 export type TestFailure = z.infer<typeof TestFailure>;
 
+/**
+ * Any test case of a report with its outcome, passed ones included, for a reproduction check that looks for one test
+ * (ADR-227); the failure's type and message as the report has them, `null` for a case that did not fail.
+ */
+export const TestCase = z.object({
+  suite: z.string(),
+  className: z.string().nullable(),
+  name: z.string(),
+  kind: z.enum(["passed", "skipped", "failure", "error"]),
+  type: z.string().nullable(),
+  message: z.string().nullable(),
+});
+export type TestCase = z.infer<typeof TestCase>;
+
 /** A report that could not be read or is not a JUnit report. */
 export const TestReportProblem = z.object({ path: z.string(), message: z.string() });
 export type TestReportProblem = z.infer<typeof TestReportProblem>;
