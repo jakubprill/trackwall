@@ -205,7 +205,7 @@ export interface AgentsDeps {
   /** Stops a task's reproduction check and removes its copy before the task ends (`reproduction`, ADR-227). */
   stopReproductionCheck: (task: string) => Promise<void>;
   repos: AgentsRepos;
-  /** Task worktrees and branches (ADR-31), the round commits in them (ADR-168), and the repo's rules at a task's base (ADR-230). */
+  /** Task worktrees and branches (ADR-31), the round commits in them (ADR-168), and the repo's rules at a task's base (ADR-234). */
   vcs: TasksVcs & RoundsVcs & RulesVcs;
   /**
    * The daemon's state directory; sessions keep their files in `sessions/<session>/` and tasks their list in `tasks.json`
@@ -1005,17 +1005,17 @@ export class Agents {
     return this.#rounds.pushWithRoundsSquashed(id, push);
   }
 
-  /** The user's automatic review of a task's changes (ADR-182) or check against the repo's rules (ADR-230), or the one running. */
+  /** The user's automatic review of a task's changes (ADR-182) or check against the repo's rules (ADR-234), or the one running. */
   startAutoReview(id: string, kind: AutoReviewKind): Promise<AutoReview> {
     return this.#autoReviews.start(id, kind);
   }
 
-  /** The task's last automatic review of the kind (ADR-182, ADR-230); `null` without one. */
+  /** The task's last automatic review of the kind (ADR-182, ADR-234); `null` without one. */
   autoReview(id: string, kind: AutoReviewKind): AutoReview | null {
     return this.#autoReviews.get(id, kind);
   }
 
-  /** Stops the task's running automatic review of the kind (ADR-182, ADR-230). */
+  /** Stops the task's running automatic review of the kind (ADR-182, ADR-234). */
   cancelAutoReview(id: string, kind: AutoReviewKind): Promise<AutoReview | null> {
     return this.#autoReviews.cancel(id, kind);
   }

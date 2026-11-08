@@ -8,7 +8,7 @@ import type { Connection } from "@/lib/connection";
 import { useRemote } from "@/lib/use-remote";
 
 /**
- * The automatic review (ADR-182) and the check against the repo's rules (ADR-230): whether a task's changes get them as
+ * The automatic review (ADR-182) and the check against the repo's rules (ADR-234): whether a task's changes get them as
  * soon as its agent reports its result. Off by default, because every run costs model credits; "Review" and "Check
  * rules" in a task's "Changes" tab work either way.
  */

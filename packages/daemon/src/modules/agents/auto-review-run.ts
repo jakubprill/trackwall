@@ -13,7 +13,7 @@ import {
 } from "./acp-messages.ts";
 
 /**
- * One automatic review (ADR-182, ADR-230): Copilot CLI over ACP in the task's worktree, with only the tools that read
+ * One automatic review (ADR-182, ADR-234): Copilot CLI over ACP in the task's worktree, with only the tools that read
  * (`REVIEWER_TOOLS`), no MCP server and every approval refused, sent one prompt; its answer is the text of that one
  * turn. The run is not a session: nobody sees or steers it, so it is not on the session list and gets no session token,
  * plugin or instructions. It ends when the turn does, when the process ends, or at `REVIEW_LIMIT_MS`; the caller stops
@@ -29,7 +29,7 @@ export const REVIEWER_TOOLS = ["view", "grep", "glob", "task", "read_agent", "li
 
 /**
  * Copilot CLI's arguments of a review, besides the session's mise arguments: only `tools` (`REVIEWER_TOOLS` for `/review`,
- * a subset for a check that runs no review agent, ADR-230), the denials as a
+ * a subset for a check that runs no review agent, ADR-234), the denials as a
  * second fence should a later Copilot CLI give a tool under another name, no built-in MCP servers, no questions to
  * the user nobody would see, and no access to the system's temporary folder; `reviewDir` (the diff) is the only folder
  * besides the worktree it may read.

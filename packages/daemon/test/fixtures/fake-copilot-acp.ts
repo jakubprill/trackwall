@@ -19,7 +19,7 @@
  * names, followed by whether the command was allowed, the arguments it got and the variables `FAKE_COPILOT_SHOW_ENV` names. With `FAKE_COPILOT_REVIEW_WAIT` set the
  * review never ends on its own.
  *
- * A prompt that asks to check a change against the repo's rules (ADR-230) is answered like a model that reads them: in
+ * A prompt that asks to check a change against the repo's rules (ADR-234) is answered like a model that reads them: in
  * every rule file the prompt lists, read from the folder it names, a line `Never add \`<text>\`` is a rule, and each
  * added line of the diff file that holds `<text>` is a violation in the format the prompt asks for, quoting the rule;
  * without one it answers that it found none. The answer ends with the rule files it read and its arguments.

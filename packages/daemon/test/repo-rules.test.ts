@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { RULE_FILES_MAX, ruleCandidates, ruleFiles } from "../src/modules/agents/repo-rules.ts";
 
-describe("where a change's rules may be (ADR-230)", () => {
+describe("where a change's rules may be (ADR-234)", () => {
   test("the root's instructions, Copilot's instruction folder, the ADR folders and AGENTS.md above every changed file", () => {
     expect(ruleCandidates(["services/orders/src/Order.java", "README.md"])).toEqual([
       "AGENTS.md",
@@ -26,7 +26,7 @@ describe("where a change's rules may be (ADR-230)", () => {
   });
 });
 
-describe("which listed files are rules (ADR-230)", () => {
+describe("which listed files are rules (ADR-234)", () => {
   test("instructions come first, root before nested before Copilot's path files, then the newest decision records", () => {
     const listed = [
       "docs/adr/0001-use-postgres.md",

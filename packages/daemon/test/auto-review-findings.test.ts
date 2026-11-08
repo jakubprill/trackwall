@@ -95,7 +95,7 @@ describe("findings read from the reviewer's answer (ADR-182)", () => {
   });
 });
 
-describe("findings read from a check against the repo's rules (ADR-230)", () => {
+describe("findings read from a check against the repo's rules (ADR-234)", () => {
   test("the rule a violation breaks goes into the finding's text between the problem and the fix", () => {
     const answer = [
       "## Issue: Shell script added to the repo",

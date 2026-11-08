@@ -11,7 +11,7 @@ import type { TaskReview } from "@/lib/use-task-review";
 
 /**
  * An automatic review of a task above its diff: "Review" asks Copilot CLI's review agent to read the task's changes
- * (ADR-182), "Check rules" asks Copilot CLI whether they keep the repo's rules (ADR-230), and each finding either
+ * (ADR-182), "Check rules" asks Copilot CLI whether they keep the repo's rules (ADR-234), and each finding either
  * reports can become a review comment on its line with one click. Nothing reaches the task's agent until the user sends
  * the review, so a wrong finding costs nothing but the reading.
  */

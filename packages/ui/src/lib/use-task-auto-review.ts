@@ -7,7 +7,7 @@ import { useAction } from "./use-action.ts";
 import { useRemote } from "./use-remote.ts";
 
 /**
- * A task's automatic review of one kind (ADR-182, ADR-230) for its "Changes" tab: the last one, polled faster while it
+ * A task's automatic review of one kind (ADR-182, ADR-234) for its "Changes" tab: the last one, polled faster while it
  * runs, and its actions.
  */
 export function useTaskAutoReview(conn: Connection, task: string, kind: AutoReviewKind, paused: boolean) {

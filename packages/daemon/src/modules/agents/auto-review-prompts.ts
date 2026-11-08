@@ -1,7 +1,7 @@
 import type { AutoReviewKind } from "@trackwall/protocol";
 
 /**
- * The one prompt of an automatic review (ADR-182, ADR-230), by its kind. Both hand the reviewer the task's diff as a file,
+ * The one prompt of an automatic review (ADR-182, ADR-234), by its kind. Both hand the reviewer the task's diff as a file,
  * since it has no shell for git, and ask for the issues in the shape of Copilot CLI's review agent, which
  * `auto-review-findings.ts` reads.
  */

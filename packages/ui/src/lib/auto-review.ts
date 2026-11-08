@@ -12,7 +12,7 @@ import type { StatusTone } from "./repo-status.ts";
 import { lineComment, type ReviewDraft } from "./review-drafts.ts";
 
 /**
- * How a task's automatic review (ADR-182) and its check against the repo's rules (ADR-230) show in its "Changes" tab, and how a finding becomes a review comment
+ * How a task's automatic review (ADR-182) and its check against the repo's rules (ADR-234) show in its "Changes" tab, and how a finding becomes a review comment
  * (ADR-62) on a line of the diff the tab shows. No React here, so the rules are tested on their own.
  */
 

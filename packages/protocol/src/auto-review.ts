@@ -27,7 +27,7 @@ export const AutoReviewState = z.enum(["running", "done", "failed", "cancelled"]
 export type AutoReviewState = z.infer<typeof AutoReviewState>;
 
 /**
- * What the reviewer checks (ADR-230): `code` is Copilot CLI's `/review` (bugs and security); `rules` checks the change
+ * What the reviewer checks (ADR-234): `code` is Copilot CLI's `/review` (bugs and security); `rules` checks the change
  * against the repo's own rules for agents (`AGENTS.md`, `CLAUDE.md`, Copilot's instruction files) and its decision records,
  * as they were at the task's base commit. Each kind has its own last review per task.
  */
@@ -61,7 +61,7 @@ export type AutoReviewFinding = z.infer<typeof AutoReviewFinding>;
 export const AutoReview = z.object({
   task: TaskId,
   repo: RepoId,
-  /** `code` for a review kept before ADR-230, which had only that kind. */
+  /** `code` for a review kept before ADR-234, which had only that kind. */
   kind: AutoReviewKind.default("code"),
   state: AutoReviewState,
   trigger: AutoReviewTrigger,
@@ -86,7 +86,7 @@ export type AutoReview = z.infer<typeof AutoReview>;
 /** The largest diff the reviewer gets: a bigger change is cut after its last whole line within it, and says so. */
 export const AUTO_REVIEW_DIFF_MAX_BYTES = 512 * 1024;
 
-/** `kind` is `code` when left out, as before ADR-230. */
+/** `kind` is `code` when left out, as before ADR-234. */
 const TaskRequest = z.object({ task: TaskId, kind: AutoReviewKind.default("code") }).strict();
 
 const endpoint = apiEndpoints("auto-review");

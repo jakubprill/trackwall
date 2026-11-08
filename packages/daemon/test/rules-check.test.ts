@@ -5,7 +5,7 @@ import { type AutoReview, agentsApi, autoReviewApi, type Task, workspaceApi } fr
 import { startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
-// A task's check against the repo's rules (ADR-230) through the real facade: real git gives the diff and the rule files
+// A task's check against the repo's rules (ADR-234) through the real facade: real git gives the diff and the rule files
 // of the task's base commit, and the fake Copilot CLI answers like a model that reads them: a rule file's line
 // "Never add `<text>`" is a rule, and an added line holding `<text>` breaks it (`test/fixtures/fake-copilot-acp.ts`).
 

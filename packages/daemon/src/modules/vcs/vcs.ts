@@ -451,7 +451,7 @@ export class Vcs {
 
   /**
    * The files of `commit` at `paths` (a file, or a directory with everything below it), with `/`, cut at `maxBytes` of
-   * output (`truncated`); for reading what a commit held where a worktree may have changed it since (ADR-230).
+   * output (`truncated`); for reading what a commit held where a worktree may have changed it since (ADR-234).
    */
   async filesAt(dir: string, commit: string, paths: readonly string[], maxBytes: number): Promise<{ paths: string[]; truncated: boolean }> {
     if (paths.length === 0) return { paths: [], truncated: false };

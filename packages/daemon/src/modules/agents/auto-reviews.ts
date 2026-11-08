@@ -20,7 +20,7 @@ import { REVIEWER_TOOLS, type ReviewOutcome, type ReviewRunProcs, reviewerArgs, 
 import type { RepoRules } from "./repo-rules.ts";
 
 /**
- * Automatic reviews of tasks (§4.4, ADR-182, ADR-230): Copilot CLI's `/review` on a task's changes (`code`), or a check
+ * Automatic reviews of tasks (§4.4, ADR-182, ADR-234): Copilot CLI's `/review` on a task's changes (`code`), or a check
  * of them against the repo's rules (`rules`), one of each kind at a time per task, run by `auto-review-run.ts` with only
  * the tools that read. The diff goes to the reviewer as a file the daemon writes (`changes.diff` in
  * `auto-reviews/<kind>/<task>/` of the state directory), since the reviewer has no shell for git, and so do the rule

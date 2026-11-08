@@ -1,7 +1,7 @@
 import { posix } from "node:path";
 
 /**
- * The repo's rules a task's change is checked against (ADR-230, §4.4): the files agents read as their instructions
+ * The repo's rules a task's change is checked against (ADR-234, §4.4): the files agents read as their instructions
  * (`AGENTS.md` and `CLAUDE.md` at the root and above every changed file, Copilot's instruction files) and the decision
  * records in the usual ADR folders, as the task's base commit holds them. Read from the base commit, not the worktree,
  * so a change that edits or deletes a rule is judged by the rule as it stood, and a rule file the agent added does not

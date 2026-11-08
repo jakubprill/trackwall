@@ -20,7 +20,7 @@ import {
  *     **Evidence:** <text>
  *     **Suggested fix:** <text>
  *
- * A check against the repo's rules (ADR-230) adds **Rule:** with the rule file and the rule it quotes, which goes into
+ * A check against the repo's rules (ADR-234) adds **Rule:** with the rule file and the rule it quotes, which goes into
  * the finding's text between the problem and the fix.
  *
  * The answer is model text, so nothing in it is trusted: a path outside the worktree or with `..` keeps no path, a
