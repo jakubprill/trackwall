@@ -21,6 +21,7 @@ function ended(n: number, endedAt: string, more: Partial<EndedTask> = {}): Ended
     proposed: false,
     item: null,
     handoffFrom: null,
+    retryOf: null,
     summary: null,
     commits: [],
     commitsTotal: null,
