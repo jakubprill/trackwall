@@ -1,5 +1,5 @@
 //! The shell's own small files in its configuration directory, next to the window state of `tauri-plugin-window-state`:
-//! the JSON files `windows.json` and `zoom.json`, and the restart marker of `autostart.rs`.
+//! the JSON files `windows.json`, `zoom.json`, `keep-screen-on.json` and `theme.json`, and the restart marker of `autostart.rs`.
 
 use serde::Serialize;
 use std::path::{Path, PathBuf};

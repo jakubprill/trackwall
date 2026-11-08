@@ -9,6 +9,8 @@ import { errorMessage } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { useOpenWebLink } from "@/lib/desktop";
 import { MARKDOWN_REMARK_PLUGINS, MARKDOWN_SANITIZE_SCHEMA, markdownLinkAddress } from "@/lib/markdown-links";
+import type { Theme } from "@/lib/theme";
+import { useTheme } from "@/lib/theme-controller";
 import { useOpenTrackwallLink } from "@/lib/trackwall-link";
 import { cn } from "@/lib/utils";
 
@@ -21,7 +23,11 @@ import { cn } from "@/lib/utils";
  * switches the view (ADR-52), and the rest is text. Images are replaced by their description.
  */
 export type MarkdownSource = "readme" | "agent";
-const README_PLUGINS = { mermaid: createMermaidPlugin({ config: { theme: "dark" } }) };
+/** A diagram in the app's theme (ADR-235): Mermaid's own dark theme, or its default, light one. */
+const README_PLUGINS: Record<Theme, ComponentProps<typeof Streamdown>["plugins"]> = {
+  dark: { mermaid: createMermaidPlugin({ config: { theme: "dark" } }) },
+  light: { mermaid: createMermaidPlugin({ config: { theme: "default" } }) },
+};
 const AGENT_PLUGINS = {};
 const README_REHYPE: ComponentProps<typeof Streamdown>["rehypePlugins"] = [rehypeRaw, [rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA]];
 const AGENT_REHYPE: ComponentProps<typeof Streamdown>["rehypePlugins"] = [[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA]];
@@ -52,6 +58,7 @@ export function Markdown({
   streaming?: boolean;
   className?: string;
 }) {
+  const { theme } = useTheme();
   const openLink = useOpenWebLink(conn);
   const openTrackwallLink = useOpenTrackwallLink();
   const [linkError, setLinkError] = useState<string>();
@@ -79,7 +86,7 @@ export function Markdown({
       <Streamdown
         mode={streaming ? "streaming" : "static"}
         isAnimating={streaming}
-        plugins={source === "readme" ? README_PLUGINS : AGENT_PLUGINS}
+        plugins={source === "readme" ? README_PLUGINS[theme] : AGENT_PLUGINS}
         remarkPlugins={MARKDOWN_REMARK_PLUGINS}
         rehypePlugins={source === "readme" ? README_REHYPE : AGENT_REHYPE}
         controls={controls}

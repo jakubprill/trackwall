@@ -39,6 +39,10 @@ describe("Settings categories", () => {
     expect(settingsCategory("app").sections).toContain("home-scene");
   });
 
+  test("the theme is under App, right before the Home scene, the other way this computer's Trackwall looks", () => {
+    expect(settingsCategory("app").sections.slice(-2)).toEqual(["theme", "home-scene"]);
+  });
+
   test("keeping the screen on is under App, after starting at sign-in, then where the daemon runs, notifications in the browser and the VS Code extension", () => {
     expect(settingsCategory("app").sections).toEqual([
       "start-at-sign-in",
@@ -47,6 +51,7 @@ describe("Settings categories", () => {
       "browser-notifications",
       "vscode-extension",
       "updates",
+      "theme",
       "home-scene",
     ]);
   });

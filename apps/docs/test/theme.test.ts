@@ -6,6 +6,8 @@ import { join } from "node:path";
 const read = (path: string) => readFileSync(join(import.meta.dir, "../../..", path), "utf8");
 const APP_CSS = read("packages/ui/src/index.css");
 const SITE_CSS = read("apps/docs/.vitepress/theme/trackwall.css");
+/** The app's dark theme, which is also a dark island in its light one (ADR-235). */
+const APP_DARK = ':root,\n[data-theme="dark"]';
 
 /** The declarations of the first `<block> {` of the stylesheet; a missing block is an error. */
 function blockBody(css: string, block: string): string {
@@ -30,7 +32,7 @@ test("the dark theme of the site has the colour values of the app", () => {
   const tokens = copiedTokens(SITE_CSS, ".dark");
   expect(tokens).toContain("background");
   for (const token of tokens) {
-    expect({ token, value: tokenValue(SITE_CSS, ".dark", token) }).toEqual({ token, value: tokenValue(APP_CSS, ":root", token) });
+    expect({ token, value: tokenValue(SITE_CSS, ".dark", token) }).toEqual({ token, value: tokenValue(APP_CSS, APP_DARK, token) });
   }
 });
 

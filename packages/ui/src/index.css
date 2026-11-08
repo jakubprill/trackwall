@@ -2,16 +2,21 @@
 /* Streamdown component classes (README, ADR-35); Tailwind does not scan node_modules by itself. */
 @source "../node_modules/streamdown/dist/*.js";
 
-@custom-variant dark (&:is(.dark *));
+/* shadcn/ui's `dark:` variants: inside the dark theme, which is also a dark island in the light one. */
+@custom-variant dark (&:is([data-theme="dark"] *));
 
 /*
- * The only theme (ADR-16), a dark HUD: black background, cool glass surfaces, thin lines and one accent
- * (cyan) for what is active. State colours (`success`, `warning`, `destructive`) speak only of state.
- * `<html>` has the `dark` class only for the `dark:` variants in shadcn/ui components.
- * `--background` has its copy as ACRYLIC_TINT in apps/desktop/src-tauri/src/window_effect.rs.
+ * Two themes (ADR-16, ADR-235), chosen with `data-theme` on `<html>` (`lib/theme.ts`). The dark one is a HUD: black
+ * background, cool glass surfaces, thin lines and one accent (cyan) for what is active. The light one is the same HUD on
+ * cool paper, with the accent and state colours darkened until they read on it (`test/theme-contrast.test.ts`). State
+ * colours (`success`, `warning`, `destructive`) speak only of state.
+ * An element with `data-theme="dark"` inside the light theme is a dark island (the session terminal and Home's scene): the
+ * selector list below declares every token again on it, so the tokens that refer to others resolve to dark values there.
+ * `--background` of each theme has its copy as an Acrylic tint in apps/desktop/src-tauri/src/window_effect.rs.
  */
-:root {
-  /* Native controls follow the dark theme: without it WebView2 on Windows 10 draws white scroll bars in the dark panels. */
+:root,
+[data-theme="dark"] {
+  /* Native controls follow the theme: without it WebView2 on Windows 10 draws white scroll bars in the dark panels. */
   color-scheme: dark;
   --radius: 0.375rem;
   --background: oklch(0.141 0.005 285.823);
@@ -71,6 +76,46 @@
   --ansi-bright-white: var(--foreground);
 }
 
+/* The light theme (ADR-235): the tokens the components use; the terminal palette stays dark, since the terminal is a dark island. */
+[data-theme="light"] {
+  color-scheme: light;
+  --background: oklch(0.972 0.004 240);
+  --foreground: oklch(0.21 0.02 250);
+  --card: oklch(0.995 0.002 240 / var(--surface-alpha, 1));
+  --card-foreground: oklch(0.21 0.02 250);
+  --overlay: oklch(0.995 0.002 240);
+  --primary: oklch(0.5 0.11 225);
+  --primary-foreground: oklch(0.985 0.005 230);
+  --secondary: oklch(0.925 0.01 240 / var(--fill-alpha, 1));
+  --secondary-foreground: oklch(0.21 0.02 250);
+  --muted: oklch(0.955 0.006 240 / var(--fill-alpha, 1));
+  --muted-foreground: oklch(0.47 0.02 250);
+  --accent: oklch(0.915 0.03 222 / var(--fill-alpha, 1));
+  --accent-foreground: oklch(0.21 0.02 250);
+  --destructive: oklch(0.53 0.2 25);
+  --success: oklch(0.5 0.12 160);
+  --warning: oklch(0.53 0.125 65);
+  --border: oklch(0.35 0.03 240 / 14%);
+  --input: oklch(0.35 0.03 240 / 24%);
+  --ring: oklch(0.5 0.11 225 / 60%);
+  --grid-line: oklch(0.35 0.03 240 / 5%);
+  --group-1: oklch(0.52 0.17 300);
+  --group-2: oklch(0.55 0.18 350);
+  --group-3: oklch(0.5 0.16 262);
+  --group-4: oklch(0.56 0.14 45);
+  /* Chart series (ADR-236): the accent, and an orange that stands apart from it in hue and lightness, also for colour-blind readers. */
+  --chart-1: var(--primary);
+  --chart-2: oklch(0.64 0.16 50);
+}
+
+/* A dark island paints its own dark background, since the light surface under it would show through its transparent terminal. */
+@layer base {
+  [data-theme="light"] [data-theme="dark"] {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+}
+
 /*
  * A Tauri window with a background effect (ADR-11, apps/desktop/src-tauri/src/window_effect.rs sets the attribute):
  * the page paints no background, and surfaces are translucent, so that Mica, Acrylic or vibrancy are visible
@@ -84,6 +129,12 @@
 [data-window-effect] {
   --surface-alpha: 55%;
   --fill-alpha: 60%;
+}
+
+/* Lines a little stronger over the dark window effect; the light theme keeps its own. A dark island of the dark theme
+   declares the tokens again, so it takes the stronger lines too. */
+[data-window-effect]:not([data-theme="light"]),
+[data-window-effect]:not([data-theme="light"]) [data-theme="dark"] {
   --border: oklch(0.85 0.04 220 / 14%);
 }
 

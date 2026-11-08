@@ -34,6 +34,7 @@ mod win_text;
 mod portable_update;
 mod remote_daemon;
 mod system_open;
+mod theme;
 mod updates;
 mod window_effect;
 mod windows;
@@ -143,6 +144,7 @@ fn main() {
         .manage(jump::PendingJump::default())
         .manage(updates::Updates::default())
         .manage(zoom::Zooms::default())
+        .manage(theme::Themes::default())
         .manage(keep_screen_on::ScreenOn::default())
         .manage(dropped_files::DroppedFiles::default())
         .invoke_handler(tauri::generate_handler![
@@ -176,7 +178,8 @@ fn main() {
             autostart::set_autostart,
             keep_screen_on::keep_screen_on,
             keep_screen_on::set_keep_screen_on,
-            zoom::zoom_window
+            zoom::zoom_window,
+            theme::set_theme
         ])
         .setup(move |app| {
             if let Some(remote) = remote_daemon::load(app.handle()) {
@@ -188,6 +191,7 @@ fn main() {
             if let Ok(dir) = portable_update::app_dir() {
                 std::thread::spawn(move || portable_update::clean_up(&dir));
             }
+            theme::Themes::load(app.handle());
             zoom::Zooms::load(app.handle());
             zoom::apply_to_main(app.handle());
             keep_screen_on::ScreenOn::load(app.handle());
@@ -227,6 +231,7 @@ fn main() {
             }
             WindowEvent::CloseRequested { .. } => windows::closed_by_user(window.app_handle(), window.label()),
             WindowEvent::Focused(true) => window.state::<Windows>().focused(window.label()),
+            WindowEvent::ThemeChanged(theme) => window_effect::retint(window, *theme),
             WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) => {
                 window.state::<dropped_files::DroppedFiles>().dropped(window.label(), paths);
             }

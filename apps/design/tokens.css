@@ -1,5 +1,5 @@
 /*
- * The app's design tokens for the mockups of the design gallery (ADR-176): copies of the values in
+ * The app's design tokens, both themes, for the mockups of the design gallery (ADR-176): copies of the values in
  * packages/ui/src/index.css (ADR-16), which apps/design/test/gallery.test.ts keeps equal. A mockup links this file
  * and takes its colours and fonts from these names, so every mockup looks like the app and like the others.
  */
@@ -35,6 +35,38 @@
   --font-sans: "Segoe UI Variable Text", system-ui, sans-serif;
   --font-mono: "Cascadia Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
   --tracking-hud: 0.12em;
+}
+
+/* The light theme (ADR-235), for a mockup or a part of one that shows it: `data-theme="light"` on its element. */
+[data-theme="light"] {
+  color-scheme: light;
+  --background: oklch(0.972 0.004 240);
+  --foreground: oklch(0.21 0.02 250);
+  --card: oklch(0.995 0.002 240);
+  --card-foreground: oklch(0.21 0.02 250);
+  --overlay: oklch(0.995 0.002 240);
+  --primary: oklch(0.5 0.11 225);
+  --primary-foreground: oklch(0.985 0.005 230);
+  --secondary: oklch(0.925 0.01 240);
+  --secondary-foreground: oklch(0.21 0.02 250);
+  --muted: oklch(0.955 0.006 240);
+  --muted-foreground: oklch(0.47 0.02 250);
+  --accent: oklch(0.915 0.03 222);
+  --accent-foreground: oklch(0.21 0.02 250);
+  --destructive: oklch(0.53 0.2 25);
+  --success: oklch(0.5 0.12 160);
+  --warning: oklch(0.53 0.125 65);
+  --border: oklch(0.35 0.03 240 / 14%);
+  --input: oklch(0.35 0.03 240 / 24%);
+  --ring: oklch(0.5 0.11 225 / 60%);
+  --grid-line: oklch(0.35 0.03 240 / 5%);
+  --group-1: oklch(0.52 0.17 300);
+  --group-2: oklch(0.55 0.18 350);
+  --group-3: oklch(0.5 0.16 262);
+  --group-4: oklch(0.56 0.14 45);
+  /* Chart series (ADR-236): the accent, and an orange that stands apart from it in hue and lightness, also for colour-blind readers. */
+  --chart-1: var(--primary);
+  --chart-2: oklch(0.64 0.16 50);
 }
 
 * {

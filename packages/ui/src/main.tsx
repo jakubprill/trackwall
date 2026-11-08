@@ -7,10 +7,13 @@ import { ErrorBoundary } from "./components/ErrorBoundary.tsx";
 import { ErrorWithRetry } from "./components/ErrorWithRetry.tsx";
 import "./index.css";
 import { LastScreens, LastScreensContext } from "./lib/last-screens.ts";
+import { startTheme, ThemeContext } from "./lib/theme-controller.ts";
 import { isTrayPanel } from "./lib/tray-panel.ts";
 import { reportUiErrors } from "./lib/ui-error-report.ts";
 import { TrayPanel } from "./views/tray-panel/TrayPanel.tsx";
 
+// Before React and before the page finishes loading, which is when the desktop shell shows the window (ADR-11, ADR-235).
+const theme = startTheme();
 const root = document.getElementById("root");
 if (!root) throw new Error("missing #root in index.html");
 const trayPanel = isTrayPanel(window.location.hash);
@@ -19,20 +22,22 @@ const lastScreens = new LastScreens();
 // The last line of defence against a blank window: an error no inner boundary caught leaves a message and a way out.
 createRoot(root, reportUiErrors(trayPanel ? "tray-panel" : "window")).render(
   <StrictMode>
-    <ErrorBoundary
-      fallback={(message) => (
-        <div className="p-6">
-          <ErrorWithRetry message={`Trackwall stopped with an error: ${message}`} onRetry={() => window.location.reload()} />
-        </div>
-      )}
-    >
-      {trayPanel ? (
-        <TrayPanel />
-      ) : (
-        <LastScreensContext.Provider value={lastScreens}>
-          <App />
-        </LastScreensContext.Provider>
-      )}
-    </ErrorBoundary>
+    <ThemeContext.Provider value={theme}>
+      <ErrorBoundary
+        fallback={(message) => (
+          <div className="p-6">
+            <ErrorWithRetry message={`Trackwall stopped with an error: ${message}`} onRetry={() => window.location.reload()} />
+          </div>
+        )}
+      >
+        {trayPanel ? (
+          <TrayPanel />
+        ) : (
+          <LastScreensContext.Provider value={lastScreens}>
+            <App />
+          </LastScreensContext.Provider>
+        )}
+      </ErrorBoundary>
+    </ThemeContext.Provider>
   </StrictMode>,
 );
