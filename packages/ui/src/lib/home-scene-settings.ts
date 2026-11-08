@@ -1,4 +1,5 @@
 import { SCENE_LABEL_MODES, SCENE_STYLES, type SceneLabelMode, type SceneStyle } from "@trackwall/scene/model";
+import { knownValue } from "./known-value.ts";
 
 /**
  * How Home draws its 3D scene on this computer (ADR-104): the style of the models and which objects have a label. A
@@ -21,8 +22,8 @@ export function readHomeSceneSettings(storage: () => Pick<Storage, "getItem">): 
   try {
     const store = storage();
     return {
-      style: known(SCENE_STYLES, store.getItem(STYLE_KEY)) ?? DEFAULT_HOME_SCENE_SETTINGS.style,
-      labels: known(SCENE_LABEL_MODES, store.getItem(LABELS_KEY)) ?? DEFAULT_HOME_SCENE_SETTINGS.labels,
+      style: knownValue(SCENE_STYLES, store.getItem(STYLE_KEY)) ?? DEFAULT_HOME_SCENE_SETTINGS.style,
+      labels: knownValue(SCENE_LABEL_MODES, store.getItem(LABELS_KEY)) ?? DEFAULT_HOME_SCENE_SETTINGS.labels,
     };
   } catch {
     return DEFAULT_HOME_SCENE_SETTINGS;
@@ -37,8 +38,4 @@ export function saveHomeSceneSettings(storage: () => Pick<Storage, "setItem">, s
   } catch {
     // Home keeps the setting until the window closes; only the next start does not remember it.
   }
-}
-
-function known<T extends string>(values: readonly T[], value: string | null): T | null {
-  return values.find((v) => v === value) ?? null;
 }

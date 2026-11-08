@@ -1,3 +1,5 @@
+import { knownValue } from "./known-value.ts";
+
 /**
  * The app's theme (ADR-235): dark, light, or the same as the system. A display preference of this computer, like the Home
  * scene's style, so it lives in `localStorage`, which every window of the desktop shell shares (one origin). Storage can be
@@ -27,13 +29,9 @@ export const DARK_ISLAND = { [THEME_ATTRIBUTE]: "dark" } as const satisfies Reco
 /** The media query that says the system asks for a light theme. */
 export const SYSTEM_LIGHT_QUERY = "(prefers-color-scheme: light)";
 
-function parseThemeChoice(value: string | null): ThemeChoice | undefined {
-  return THEME_CHOICES.find((choice) => choice === value);
-}
-
 export function readThemeChoice(storage: () => Pick<Storage, "getItem">): ThemeChoice {
   try {
-    return parseThemeChoice(storage().getItem(THEME_KEY)) ?? DEFAULT_THEME_CHOICE;
+    return knownValue(THEME_CHOICES, storage().getItem(THEME_KEY)) ?? DEFAULT_THEME_CHOICE;
   } catch {
     return DEFAULT_THEME_CHOICE;
   }

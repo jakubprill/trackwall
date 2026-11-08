@@ -99,9 +99,11 @@
 }
 
 /* A dark island paints its own dark background, since the light surface under it would show through its transparent terminal. */
-[data-theme="light"] [data-theme="dark"] {
-  background-color: var(--background);
-  color: var(--foreground);
+@layer base {
+  [data-theme="light"] [data-theme="dark"] {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
 }
 
 /*
@@ -119,8 +121,10 @@
   --fill-alpha: 60%;
 }
 
-/* Lines a little stronger over the dark window effect; the light theme keeps its own. */
-[data-window-effect]:not([data-theme="light"]) {
+/* Lines a little stronger over the dark window effect; the light theme keeps its own. A dark island of the dark theme
+   declares the tokens again, so it takes the stronger lines too. */
+[data-window-effect]:not([data-theme="light"]),
+[data-window-effect]:not([data-theme="light"]) [data-theme="dark"] {
   --border: oklch(0.85 0.04 220 / 14%);
 }
 
