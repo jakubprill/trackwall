@@ -54,7 +54,7 @@ describe.skipIf(process.versions.bun === undefined)("the model and usage of an e
       usage: { modelCalls: 1 },
     });
 
-    // The model statistics (ADR-230) credit the task to the model Copilot CLI ran it on, not the one it asked for.
+    // The model statistics (ADR-231) credit the task to the model Copilot CLI ran it on, not the one it asked for.
     const stats = await daemon.post(taskJournalApi.modelStats, { period: "30d" });
     expect(stats.models).toMatchObject([
       { model: "gpt-6-luna", tasks: 1, askedForAnother: 1, tasksWithUsage: 1, tasksWithCredits: 0, usage: { modelCalls: 1 } },

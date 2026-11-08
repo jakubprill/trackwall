@@ -55,9 +55,9 @@ export function useTaskDetails({
   const miseConfig = useRemote(off ? undefined : loadMiseConfig, { pollMs: warningPollMs });
   const running = useRunningMiseTasks(conn, runningLive, off);
 
-  const sharedFiles = (shared.error ? [] : (shared.data?.shared ?? [])).flatMap(({ task: other, files }) => {
+  const sharedFiles = (shared.error ? [] : (shared.data?.shared ?? [])).flatMap(({ task: other, files, conflicts }) => {
     const found = tasks.find((t) => t.id === other);
-    return found ? [{ files, other: found }] : [];
+    return found ? [{ files, conflicts, other: found }] : [];
   });
   // A run the verification section shows with its log and Cancel is left out of the mise tasks, so it is not listed twice.
   const miseRuns = (running.data ?? []).filter((r) => r.task === id && r.miseTask !== verification.runningMiseTask);
@@ -69,7 +69,12 @@ export function useTaskDetails({
     : taskNotices({
         task,
         messages,
-        sharedWith: sharedFiles.map(({ files, other }) => ({ task: other.id, name: taskName(other), files: files.length })),
+        sharedWith: sharedFiles.map(({ files, conflicts, other }) => ({
+          task: other.id,
+          name: taskName(other),
+          files: files.length,
+          conflicts: conflicts?.length ?? 0,
+        })),
         miseConfig: shownMiseConfig(miseConfig),
         verification: verification.verification,
         mergeRequest: mergeRequestShown,

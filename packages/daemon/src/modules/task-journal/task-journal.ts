@@ -100,7 +100,7 @@ export class TaskJournal {
     return { tasks, truncated: tasks.length < matching.length };
   }
 
-  /** The model statistics of the tasks that ended in `period` (ADR-230), read from the file anew. */
+  /** The model statistics of the tasks that ended in `period` (ADR-231), read from the file anew. */
   modelStats(period: ModelStatsPeriod, now: Date = new Date()): ModelStats {
     return modelStats(this.records(), period, now);
   }

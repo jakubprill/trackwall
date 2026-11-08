@@ -1,4 +1,4 @@
-// A month of ended tasks for the demo's "Models" in Settings › Usage (ADR-230): the task journal's records the shop's
+// A month of ended tasks for the demo's "Models" in Settings › Usage (ADR-231): the task journal's records the shop's
 // tasks would have left, on three models with outcomes and costs shaped like a real month: the large model passes
 // verification most often and costs the most per task, the small one is cheap per task but fails more, and a few tasks
 // asked for a model the account did not offer. The numbers are made up.

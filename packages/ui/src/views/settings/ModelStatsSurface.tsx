@@ -24,7 +24,7 @@ import { useRemote } from "@/lib/use-remote";
 const COLUMNS = ["Model", "Tasks", "Verified", "Failed", "With commits", "Per task", "Per verified task"];
 
 /**
- * Model statistics (ADR-230) in Settings › Usage: the ended tasks of the task journal by the model Copilot CLI ran them
+ * Model statistics (ADR-231) in Settings › Usage: the ended tasks of the task journal by the model Copilot CLI ran them
  * on, how often they passed verification and what one cost, so the user can pick the model for the next task from their
  * own work. Read on opening, on a period change and on "Refresh".
  */

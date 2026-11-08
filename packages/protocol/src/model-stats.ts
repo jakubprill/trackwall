@@ -3,7 +3,7 @@ import { apiEndpoints } from "./api.ts";
 import { CopilotUsage } from "./copilot-usage.ts";
 
 /**
- * Model statistics (ADR-230): the task journal's ended tasks (§4.19, ADR-228) grouped by the model Copilot CLI ran
+ * Model statistics (ADR-231): the task journal's ended tasks (§4.19, ADR-228) grouped by the model Copilot CLI ran
  * them on, with how they ended and what they cost, so the user can see which model finishes work they can keep and at
  * what price, from their own tasks rather than from a benchmark. Every action is `POST /api/task-journal/<action>`.
  */

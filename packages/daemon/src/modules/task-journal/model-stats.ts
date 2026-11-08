@@ -10,7 +10,7 @@ import {
 } from "@trackwall/protocol";
 
 /**
- * Model statistics (§4.19, ADR-230): the journal's records of a period grouped by the model Copilot CLI ran each task
+ * Model statistics (§4.19, ADR-231): the journal's records of a period grouped by the model Copilot CLI ran each task
  * on. A task counts for one model only, the one that made the most of its own calls (`models[0]`, ADR-228), because the
  * requested model is not always the one that did the work (ADR-225) and a task split between models has one outcome.
  */

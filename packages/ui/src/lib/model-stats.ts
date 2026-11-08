@@ -9,7 +9,7 @@ import {
 import { usageLabel } from "./copilot-usage.ts";
 
 /**
- * How Settings shows the model statistics (ADR-230): shares of a model's tasks, what one task and one verified task cost
+ * How Settings shows the model statistics (ADR-231): shares of a model's tasks, what one task and one verified task cost
  * on it, and the one sentence that answers the question the view is for: which model to start the next task on.
  */
 

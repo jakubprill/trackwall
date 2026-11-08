@@ -49,8 +49,8 @@ export interface TaskNotice {
 export interface TaskNoticeInput {
   task: Pick<Task, "included" | "summary">;
   messages: readonly Pick<TaskMessage, "readAt">[];
-  /** The other tasks that change the same files, with their names. */
-  sharedWith: readonly { task: string; name: string; files: number }[];
+  /** The other tasks that change the same files, with their names, and how many of the files a merge of the two would conflict in (ADR-230). */
+  sharedWith: readonly { task: string; name: string; files: number; conflicts: number }[];
   /** The mise config as the panel shows it: `unavailable` when mise cannot run in the worktree at all. */
   miseConfig: TaskMiseConfig | "unavailable" | undefined;
   verification: Verification | null;
@@ -65,14 +65,7 @@ export interface TaskNoticeInput {
 export function taskNotices(input: TaskNoticeInput): TaskNotice[] {
   const notices = [
     ...includedNotices(input.task.included),
-    ...input.sharedWith.map(
-      (shared): TaskNotice => ({
-        section: "shared-files",
-        key: `shared-files:${shared.task}`,
-        tone: "warning",
-        label: `${countLabel(shared.files, { one: "file", other: "files" })} also in “${shared.name}”`,
-      }),
-    ),
+    ...input.sharedWith.map(sharedFilesNotice),
     ...miseConfigNotices(input.miseConfig),
     ...messageNotices(input.messages),
     ...(input.task.summary ? [{ section: "summary", key: "summary", tone: "info", label: "Summary" } as const] : []),
@@ -83,6 +76,23 @@ export function taskNotices(input: TaskNoticeInput): TaskNotice[] {
     ),
   ];
   return [...notices.filter((n) => n.tone === "warning"), ...notices.filter((n) => n.tone !== "warning")];
+}
+
+/** A conflict is a new warning even where the shared files already were one, so a grid tile shows it as a banner again. */
+function sharedFilesNotice(shared: TaskNoticeInput["sharedWith"][number]): TaskNotice {
+  if (shared.conflicts > 0)
+    return {
+      section: "shared-files",
+      key: `shared-files:${shared.task}:conflict`,
+      tone: "warning",
+      label: `${countLabel(shared.conflicts, { one: "conflicting file", other: "conflicting files" })} with “${shared.name}”`,
+    };
+  return {
+    section: "shared-files",
+    key: `shared-files:${shared.task}`,
+    tone: "warning",
+    label: `${countLabel(shared.files, { one: "file", other: "files" })} also in “${shared.name}”`,
+  };
 }
 
 function includedNotices({ files, problems }: Task["included"]): TaskNotice[] {
