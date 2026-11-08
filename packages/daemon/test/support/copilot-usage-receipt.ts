@@ -56,15 +56,25 @@ function writeWorkspaceFile(conversationDir: string): void {
   writeFileSync(file, `cwd: ${JSON.stringify(process.cwd())}\n${branch === "" ? "" : `branch: ${branch}\n`}`);
 }
 
+/** The fake's `--model=`, if it got one. */
+function requestedModel(): string | undefined {
+  return process.argv.find((a) => a.startsWith("--model="))?.slice("--model=".length);
+}
+
 /**
- * The model a fake's call runs on: its `--model=`, or with `FAKE_COPILOT_ACCOUNT_MODELS` (comma-separated, the models an
- * account offers) the first of them when the account lacks it, as Copilot CLI falls back without stopping (ADR-225).
+ * With `FAKE_COPILOT_ACCOUNT_MODELS` (comma-separated, the models an account offers), the first of them when the account
+ * lacks the requested model, as Copilot CLI falls back without stopping (ADR-225); `undefined` when there is no fallback.
  */
-function modelInUse(): string {
-  const requested = process.argv.find((a) => a.startsWith("--model="))?.slice("--model=".length);
+function fallbackModel(): string | undefined {
+  const requested = requestedModel();
   const offered = (process.env.FAKE_COPILOT_ACCOUNT_MODELS ?? "").split(",").filter((id) => id !== "");
   if (offered.length > 0 && (requested === undefined || !offered.includes(requested))) return offered[0] ?? "fake-model";
-  return requested ?? "fake-model";
+  return undefined;
+}
+
+/** The model a fake's call runs on: the fallback's, or its `--model=`. */
+function modelInUse(): string {
+  return fallbackModel() ?? requestedModel() ?? "fake-model";
 }
 
 /**
@@ -80,14 +90,16 @@ export function recordUsage(conversation: string | undefined): void {
 
 /**
  * The model change Copilot CLI writes to the conversation's event log at every start and resume (ADR-225), with the
- * model the fake runs on, in `COPILOT_HOME` when the test set it.
+ * model the fake runs on, or `auto` when the account lacks the requested `--model`, as Copilot CLI 1.0.107 writes it
+ * before its first call names the model it picked; in `COPILOT_HOME` when the test set it.
  */
 export function recordModelChange(conversation: string | undefined): void {
   const copilotHome = process.env.COPILOT_HOME;
   if (copilotHome === undefined || copilotHome === "" || conversation === undefined) return;
   const file = conversationEventLog(copilotHome, conversation);
   mkdirSync(dirname(file), { recursive: true });
-  const model = modelInUse();
+  // Copilot CLI's own word, written out rather than taken from the daemon, so that the fake cannot drift with it.
+  const model = requestedModel() !== undefined && fallbackModel() !== undefined ? "auto" : modelInUse();
   const event = {
     type: "session.model_change",
     data: { source: "startup", newModel: model, previousModel: model },

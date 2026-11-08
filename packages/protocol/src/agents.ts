@@ -491,7 +491,8 @@ export const Session = z.object({
   model: z.string().nullable(),
   /**
    * The model Copilot CLI runs the session's conversation on (ADR-225), from its event log: the model of its latest own
-   * model call, or of its latest model change before any call; `null` before the log names one. It differs from `model`
+   * model call, or of its latest model change before any call; `null` before the log names one, and after a model
+   * change to `auto` (Copilot CLI's fallback) until its next own call. It differs from `model`
    * when Copilot CLI fell back to another one (an account without the model) or `/model` switched it.
    */
   modelInUse: z.string().nullable(),

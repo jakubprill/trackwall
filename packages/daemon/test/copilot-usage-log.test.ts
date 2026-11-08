@@ -120,6 +120,14 @@ describe("the model a conversation runs on, from Copilot CLI's event log (ADR-22
     expect(modelInUseOfLines(lines)).toBe("claude-opus-5.5");
   });
 
+  test("a change to auto names no model until a call says which one Copilot CLI picked", () => {
+    const call = receipt({ model: "gpt-6-luna", inputTokens: 1, outputTokens: 1, accounting: { sourceSessionId: "c", sequence: 1 } });
+
+    expect(modelInUseOfLines([modelChange("auto")])).toBeNull();
+    expect(modelInUseOfLines([modelChange("auto"), call])).toBe("gpt-6-luna");
+    expect(modelInUseOfLines([modelChange("gpt-5.5"), modelChange("auto")])).toBeNull();
+  });
+
   test("before a model change or a call the log names no model", () => {
     expect(modelInUseOfLines(['{"type":"session.start","data":{}}', '{"type":"session.model_change","data":{}}'])).toBeNull();
   });
