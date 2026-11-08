@@ -3,7 +3,13 @@ import { appendFileSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { conversationEventLog } from "../src/infra/copilot-home.ts";
-import { CopilotUsageLog, modelInUseOfLines, usageOfLines } from "../src/modules/agents/copilot-usage-log.ts";
+import {
+  CopilotUsageLog,
+  modelCallsOfLines,
+  modelInUseOfLines,
+  readConversationUse,
+  usageOfLines,
+} from "../src/modules/agents/copilot-usage-log.ts";
 
 /** A receipt line as Copilot CLI writes it (`session.usage_record`), with only the fields the daemon reads. */
 function receipt(usage: Record<string, unknown>): string {
@@ -122,6 +128,31 @@ describe("the model a conversation runs on, from Copilot CLI's event log (ADR-22
 
   test("before a model change or a call the log names no model", () => {
     expect(modelInUseOfLines(['{"type":"session.start","data":{}}', '{"type":"session.model_change","data":{}}'])).toBeNull();
+  });
+});
+
+describe("the models a conversation's own calls ran on, for the task journal (ADR-227)", () => {
+  test("each model counts its own calls, the most used first; sub-agent calls and receipts a resume writes again do not count", () => {
+    const call = (model: string, sequence: number, initiator?: string) =>
+      receipt({ model, inputTokens: 1, outputTokens: 1, initiator, accounting: { sourceSessionId: "c", sequence } });
+    const lines = [
+      modelChange("claude-sonnet-5.5"),
+      call("gpt-6-luna", 1),
+      call("small-model", 2, "sub-agent"),
+      modelChange("claude-opus-5.5"),
+      call("gpt-6-luna", 1),
+      call("claude-opus-5.5", 3),
+      call("claude-opus-5.5", 4),
+    ];
+
+    expect(modelCallsOfLines(lines)).toEqual([
+      { model: "claude-opus-5.5", modelCalls: 2 },
+      { model: "gpt-6-luna", modelCalls: 1 },
+    ]);
+  });
+
+  test("a conversation whose event log is missing used nothing on no model", () => {
+    expect(readConversationUse(mkdtempSync(join(tmpdir(), "trackwall-usage-")), "gone")).toEqual({ usage: null, models: [] });
   });
 });
 

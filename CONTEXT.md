@@ -210,7 +210,7 @@ The commits of the history of the latest commit of many repos at once that add o
 _Avoid_: history search, blame (another git command), log (the process logs of `logs`)
 
 **Task journal** (`TaskJournal`, `task-journal.jsonl`, MCP tool `search_task_history`, record `EndedTask`):
-A record of every task the user has ended: its prompt, the session's last summary, the commits and files on its branch and its last verdict, taken when the task ends (ADR-150). Agents search it by words to learn how a similar change was done before.
+A record of every task the user has ended: its prompt, the session's last summary, the commits and files on its branch and its last verdict, taken when the task ends (ADR-150), and the model it asked for, the models Copilot CLI ran its conversation on (`EndedTask.models`, `ModelCalls`) and what the conversation used (ADR-227). Agents search it by words to learn how a similar change was done before.
 _Avoid_: task history (only in the tool name), archive, log (the process logs of `logs`)
 
 **Task worktrees folder** (`worktreesDir` in `workspace.yaml` and `tasks.json`):

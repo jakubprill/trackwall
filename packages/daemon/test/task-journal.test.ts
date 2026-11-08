@@ -32,6 +32,9 @@ function ended(n: number, repo: string, prompt: string, endedAt: string, more: P
     files: [],
     filesTruncated: false,
     verification: null,
+    model: null,
+    usage: null,
+    models: [],
     ...more,
   };
 }
@@ -83,6 +86,15 @@ describe("task journal", async () => {
     await journal.record(ended(2, "web", "after the bad line", "2026-10-02T10:00:00Z"));
 
     expect(journal.search(ALL).tasks.map((t) => t.prompt)).toEqual(["after the bad line", "kept"]);
+  });
+
+  test("a record written before the journal kept the model and the usage reads with neither (ADR-227)", async () => {
+    const file = journalFile();
+    const journal = new TaskJournal({ file, log: () => {}, maxRecords: 100, masker: async () => (t) => t });
+    const { model, usage, models, ...older } = ended(1, "web", "written by an older version", "2026-10-01T10:00:00Z");
+    appendFileSync(file, `${JSON.stringify(older)}\n`);
+
+    expect(journal.search(ALL).tasks).toMatchObject([{ prompt: "written by an older version", model: null, usage: null, models: [] }]);
   });
 
   test("past its size and a tenth more the journal drops the oldest records", async () => {

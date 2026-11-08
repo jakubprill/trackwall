@@ -59,6 +59,7 @@ import {
   type Verification,
   type WorkingTreeChanges,
 } from "@trackwall/protocol";
+import { copilotHome } from "../../infra/copilot-home.ts";
 import { DomainError } from "../../infra/errors.ts";
 import type { ScreenViewer } from "../../infra/terminal-screen.ts";
 import { AcpSession, type ConversationViewer, type ConversationWindow } from "./acp-session.ts";
@@ -69,6 +70,7 @@ import type { CopilotHookOutput } from "./copilot-hook-output.ts";
 import { CopilotHookEvent } from "./copilot-hook-record.ts";
 import type { LspServer } from "./copilot-plugin.ts";
 import { daemonSandboxHost, type SandboxHost, sandboxState, taskSandbox } from "./copilot-sandbox.ts";
+import { readConversationUse } from "./copilot-usage-log.ts";
 import type { EndedTaskFacts } from "./ended-task.ts";
 import { HandoffWatch } from "./handoff-watch.ts";
 import { appendHookRecord } from "./hook-tail.ts";
@@ -337,6 +339,8 @@ export class Agents {
       closeFolderTerminal: (task) => deps.closeFolderTerminal(task),
       legacyWorktreesDir: join(deps.home, LEGACY_WORKTREES_DIR),
       roundCommits: (task) => this.#rounds.roundCommits(task),
+      // The home sessions start with: the user environment, as the weekly usage report reads it (ADR-199).
+      conversationUse: async (conversation) => readConversationUse(copilotHome(await deps.env()), conversation),
       openEditor: deps.openEditor,
       log: deps.log,
       // The item a task starts on is in progress from then (ADR-213); every way a task starts goes through here.
