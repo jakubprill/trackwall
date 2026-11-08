@@ -75,8 +75,8 @@ describe.skipIf(process.versions.bun === undefined)("the weekly usage report (AD
       if (session === undefined) throw new Error("the task has no session");
       const window = viewer(agents, session.id);
       await untilInputBox(window, "empty");
-      // The fake writes its receipt for a turn the user starts, as Copilot CLI does after the turn's model call.
-      window.attachment.input("and its test\r");
+      // The task's prompt is the session's only turn: the fake writes its receipt at the start, as Copilot CLI sends a
+      // prompt given at the start to the model at once. A second, typed turn would race the stop below for its receipt.
       await untilReported(task.id);
       window.attachment.detach();
       await agents.stop(session.id);
