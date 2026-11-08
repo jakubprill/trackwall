@@ -277,7 +277,7 @@ describe.skipIf(process.versions.bun === undefined)("following a task's merge re
 
       // A report hands the task over for review, and the Fix gives its agent work again (ADR-213).
       const reporter = agents.sessions().sessions.find((s) => s.task === task.id);
-      await agents.reportSummary(reporter?.id ?? null, "Rounded the prices.", []);
+      await agents.reportSummary(reporter?.id ?? null, { text: "Rounded the prices.", checkSteps: [], reproTest: null });
       expect(agents.task(task.id).inReview).toBe(true);
       // The task's session is asked to read it, and reads it once with get_review_comments.
       const { delivery } = await daemon.post(mergeRequestsApi.fixPipeline, { task: task.id });

@@ -2,6 +2,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   type AppConfig,
+  type agentsApi,
+  MAX_DROP_BYTES,
   type MiseTarget,
   type RoutineDigest,
   type RoutineName,
@@ -13,6 +15,7 @@ import {
   type TaskOutcome,
   type TerminalPlace,
 } from "@trackwall/protocol";
+import type { z } from "zod";
 import { copilotHome } from "./infra/copilot-home.ts";
 import { downloadVerified } from "./infra/download.ts";
 import { vscodeUrl } from "./infra/editor-url.ts";
@@ -34,6 +37,8 @@ import {
 } from "./modules/agents/agents.ts";
 import { resolveCopilot } from "./modules/agents/copilot-command.ts";
 import { withMiseVars } from "./modules/agents/session-env.ts";
+import { STACK_TRACE_LIST_MAX_BYTES, STACK_TRACE_SOURCE_GLOBS } from "./modules/agents/stack-trace-frames.ts";
+import { promptWithStackTrace } from "./modules/agents/stack-trace-prompt.ts";
 import { TaskBranch, taskWorktree } from "./modules/agents/task-branch.ts";
 import { Batch } from "./modules/batch/batch.ts";
 import { Board } from "./modules/board/board.ts";
@@ -67,6 +72,7 @@ import { Readiness } from "./modules/readiness/readiness.ts";
 import { Routines } from "./modules/routines/routines.ts";
 import { Services } from "./modules/services/services.ts";
 import { TASK_JOURNAL_FILE, TASK_JOURNAL_MAX_RECORDS, TaskJournal } from "./modules/task-journal/task-journal.ts";
+import { DroppedFiles } from "./modules/terminals/dropped-files.ts";
 import { FolderFiles } from "./modules/terminals/folder-files.ts";
 import { FolderTerminals } from "./modules/terminals/folder-terminals.ts";
 import { TestReports } from "./modules/test-results/test-reports.ts";
@@ -111,6 +117,8 @@ export interface Facade {
   terminals: FolderTerminals;
   /** The files of the projects folder, a repo root or a task's worktree, read only, next to its Shell tab (ADR-188). */
   folderFiles: FolderFiles;
+  /** Files dropped on a terminal from another computer, saved in `.trackwall/drops` (ADR-226). */
+  droppedFiles: DroppedFiles;
   testReports: TestReports;
   verifications: Verifications;
   /** What ended tasks were and left, searched by `search_task_history` (ADR-150). */
@@ -153,6 +161,12 @@ export interface Facade {
    */
   runRoutine: (name: RoutineName, digest: RoutineDigest, view: SessionView) => Promise<Task>;
   /**
+   * A task the user typed (`agents.createTask`), and with a pasted stack trace (ADR-222) its prompt gets the trace with
+   * the secrets of the repo's environment masked (`mise` and `logs`, as a log is), the frames found among the repo's
+   * tracked files from `vcs` in the repo root from `workspace`, and the rule to reproduce the error in a test first.
+   */
+  createTask: (request: CreateTaskRequest) => Promise<Task>;
+  /**
    * The Spring configuration of a repo root or a task's worktree in one profile's view (ADR-153), for `get_app_config`:
    * the place from `workspace` or `agents`, the environment of a run there from `mise`, its masking from `logs`, the files and the view from `cards`.
    */
@@ -168,6 +182,8 @@ export interface Facade {
    */
   keepForRestart: () => void;
 }
+
+type CreateTaskRequest = z.infer<typeof agentsApi.createTask.request>;
 
 /** Where to read the configuration (a task of `repo` when `task` is set), the profile, and an optional key prefix. */
 type AppConfigRequest = MiseTarget & AppConfigQuery;
@@ -547,6 +563,7 @@ export function createFacade(o: FacadeOptions): Facade {
     services,
     terminals,
     folderFiles: new FolderFiles({ folder: placeFolder }),
+    droppedFiles: new DroppedFiles({ projectsDir: () => workspace.projectsDir(), now: () => new Date(), maxBytes: MAX_DROP_BYTES }),
     testReports,
     verifications,
     taskJournal,
@@ -566,6 +583,17 @@ export function createFacade(o: FacadeOptions): Facade {
     runRoutine: async (name, digest, view) => {
       const { repo, prompt, title, model, approvals } = await routines.approved(name, digest);
       return agents.createTask(repo, prompt, { title, model, approvals, view });
+    },
+    createTask: async ({ repo, prompt, stackTrace, handoffFrom, ...options }) => {
+      if (stackTrace === null) return agents.createTask(repo, prompt, options, handoffFrom);
+      const dir = await workspace.repoPath(repo);
+      const [tracked, run] = await Promise.all([
+        vcs.trackedFiles(dir, STACK_TRACE_SOURCE_GLOBS, STACK_TRACE_LIST_MAX_BYTES),
+        mise.runEnv({ repo, task: null }),
+      ]);
+      // A message in a trace may carry a secret (a password in a JDBC URL), which must not reach the task session.
+      const masked = logs.masker(run.env, run.secretValues)(stackTrace);
+      return agents.createTask(repo, promptWithStackTrace(prompt, masked, tracked), options, handoffFrom);
     },
     appConfig: async ({ repo, task, profile, key }) => {
       const dir = task === null ? await workspace.repoPath(repo) : agents.taskOfRepo(task, repo).worktree;

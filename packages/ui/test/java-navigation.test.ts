@@ -126,6 +126,7 @@ describe("the Java navigation mark of a running session (ADR-175)", () => {
     copyRequest: null,
     usage: null,
     model: null,
+    modelInUse: null,
   };
 
   test("a running repo session in a terminal asks how its jdtls is doing", () => {

@@ -259,6 +259,7 @@ export class AcpSession implements AgentSession {
       // The agent replays the conversation as updates of that id before it answers; no view is attached yet.
       this.#conversation.clear();
       this.#conversationId = load;
+      this.#o.usage.readBeforeStart(load);
       const loaded = ConfigOptionsResult.safeParse(await connection.request("session/load", { sessionId: load, cwd, mcpServers: [] }));
       this.#infoChanged(this.#info.settings(loaded.data?.configOptions));
       this.#updateUsage();
@@ -430,6 +431,7 @@ export class AcpSession implements AgentSession {
       copyRequest: running ? this.copyRequest.request : null,
       usage: this.#o.usage.current(),
       model: this.model,
+      modelInUse: this.#o.usage.modelInUse(),
     };
   }
 

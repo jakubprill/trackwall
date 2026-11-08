@@ -13,12 +13,13 @@ use tauri::{AppHandle, Emitter, Manager};
 /// `packages/ui/src/App.tsx` (`apps/desktop/test/shell-events.test.ts` keeps them equal). The menu bar has to exist
 /// before any page loads, and a menu set from a page would send its clicks to that page, so the table is here and not
 /// in the UI. Settings is in the app menu.
-const VIEWS: [MenuView; 5] = [
+const VIEWS: [MenuView; 6] = [
     MenuView { id: "home", label: "Home", shortcut: "1" },
     MenuView { id: "repos", label: "Repos", shortcut: "2" },
     MenuView { id: "sessions", label: "Sessions", shortcut: "3" },
     MenuView { id: "graph", label: "Overview", shortcut: "4" },
     MenuView { id: "plan", label: "Plan", shortcut: "5" },
+    MenuView { id: "flow", label: "Flow", shortcut: "6" },
 ];
 const SETTINGS: MenuView = MenuView { id: "settings", label: "Settings", shortcut: "," };
 

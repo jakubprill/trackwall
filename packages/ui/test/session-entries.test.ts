@@ -34,6 +34,7 @@ function session(id: string, startedAt: string, task: string | null = null): Ses
     copyRequest: null,
     usage: null,
     model: null,
+    modelInUse: null,
   };
 }
 

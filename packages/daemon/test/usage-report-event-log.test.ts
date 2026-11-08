@@ -29,6 +29,7 @@ describe("what the weekly usage report takes from a conversation's event log (AD
         nanoAiu: undefined,
         creditsMissing: true,
         premiumRequests: 1,
+        ownModel: undefined,
       },
     ]);
   });

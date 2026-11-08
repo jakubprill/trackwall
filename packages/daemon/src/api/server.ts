@@ -7,6 +7,9 @@ import {
   DAEMON_INFO_PATH,
   type DaemonInfo,
   DOWNLOAD_PATH,
+  DROP_NAME_HEADER,
+  DROP_PATH,
+  type DroppedFile,
   type ErrorCode,
   HEALTH_PATH,
   type Health,
@@ -19,6 +22,7 @@ import { conversationSocketRoute } from "./conversation-socket.ts";
 import type { EventHub } from "./event-hub.ts";
 import { eventSocketRoute } from "./event-socket.ts";
 import { downloadRequest, sendDownload } from "./file-download.ts";
+import { droppedBody, droppedName, refuseOversized } from "./file-drop.ts";
 import { bearerToken, OriginPolicy, tokenMatches } from "./guard.ts";
 import { HOOKS_PATH, handleHook } from "./hooks.ts";
 import { sessionSocketRoute, terminalSocketRoute } from "./pty-socket.ts";
@@ -136,7 +140,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, o: ApiOptions, 
   if (req.method === "OPTIONS") {
     res.writeHead(204, {
       "access-control-allow-methods": "GET, POST, OPTIONS",
-      "access-control-allow-headers": "authorization, content-type",
+      "access-control-allow-headers": `authorization, content-type, ${DROP_NAME_HEADER}`,
       "access-control-max-age": "600",
     });
     return void res.end();
@@ -205,7 +209,7 @@ function authenticate(req: IncomingMessage, opensWith: RouteTokens, o: ApiOption
  */
 function journalArea(url: string | undefined): string {
   const path = (url ?? "").split("?")[0] ?? "";
-  if (postRoutes.has(path) || path === DOWNLOAD_PATH) return `api:${path}`;
+  if (postRoutes.has(path) || path === DOWNLOAD_PATH || path === DROP_PATH) return `api:${path}`;
   return path.startsWith(HOOKS_PATH) ? "api:hooks" : "api:other";
 }
 
@@ -220,10 +224,23 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
   }
   if (path === DOWNLOAD_PATH && req.method === "POST")
     return sendDownload(res, await o.facade.folderFiles.download(downloadRequest(await readJson(req, API_BODY_MAX_BYTES))));
+  if (path === DROP_PATH && req.method === "POST") return receiveDrop(req, res, o);
   const post = req.method === "POST" ? postRoutes.get(path) : undefined;
   // The token was checked before any of the body is read, so only the daemon's own clients send a large one.
   if (post) return ok(res, await post.run(o.facade, await readJson(req, post.maxBodyBytes)));
   return fail(res, "not_found", `no route ${req.method} ${path}`);
+}
+
+/** A dropped file (ADR-226); after a refusal the rest of the body is read and dropped, so the answer still reaches the client. */
+async function receiveDrop(req: IncomingMessage, res: ServerResponse, o: ApiOptions): Promise<void> {
+  try {
+    const name = droppedName(req);
+    refuseOversized(req, name);
+    return ok<DroppedFile>(res, { path: await o.facade.droppedFiles.save(name, droppedBody(req)) });
+  } catch (err) {
+    req.resume();
+    throw err;
+  }
 }
 
 function ok<T>(res: ServerResponse, data: T): void {

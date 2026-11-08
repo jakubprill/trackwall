@@ -126,12 +126,16 @@ One directory on the user's disk, set in `workspace.yaml` or in the settings. Ea
 _Avoid_: workspace directory, root, folder (without qualification)
 
 **Trackwall folder** (`TRACKWALL_DIR` = `.trackwall`, `TrackwallFolder`, `trackwallDir`):
-The one hidden folder in the projects folder where Trackwall keeps everything beside the repos, one folder per purpose: `local` (the local config store), `worktrees` (the default task worktrees folder), `lsp`, `scratch` and `removed` (ADR-125). It is not the state folder `~/.trackwall`, which holds Trackwall's own memory and lies outside the projects folder.
+The one hidden folder in the projects folder where Trackwall keeps everything beside the repos, one folder per purpose: `local` (the local config store), `worktrees` (the default task worktrees folder), `lsp`, `scratch` and `removed` (ADR-125), and `drops`, the dropped files (ADR-226). It is not the state folder `~/.trackwall`, which holds Trackwall's own memory and lies outside the projects folder.
 _Avoid_: data folder, `.trackwall-*` folders (their names before ADR-125)
 
 **Dropped folder** (`DroppedFolder`, action `dropped-folder`, UI `FolderDrop`; in Polish *upuszczony folder*):
 A folder or file dropped on the Trackwall window outside a session terminal, described by the daemon: a listed repo (or a folder inside one), the projects folder, a repo elsewhere, a hidden repo, a folder with repos, a folder without repos or a file (ADR-51). It never adds a repo by itself; it can only lead to a new projects folder.
 _Avoid_: imported repo, added repo
+
+**Dropped file** (`DroppedFile`, `POST /api/terminals/drop`, `droppedFiles` in the facade, `.trackwall/drops`):
+A file dropped on a session terminal or a shell whose daemon runs on another computer (in a container, or reached from a browser): the window sends its bytes, the daemon keeps a copy in a folder of its own under `.trackwall/drops`, and the terminal gets the copy's path pasted (ADR-226). Removed at the next drop a day later. With the daemon on this desktop a dropped file is not copied; its own path is pasted.
+_Avoid_: upload, attachment
 
 **Repo host** (`RepoHost`, `repoHosts` in `workspace.yaml`):
 GitLab or GitHub with a host name (`gitlab.example.com`), from which Trackwall searches for repos and clones them into the projects folder through a logged-in `glab` or `gh` (ADR-19).
@@ -421,6 +425,10 @@ _Avoid_: window title (that is a session's `windowTitle`)
 The Copilot CLI model a task's session runs on, as Copilot CLI names it (`claude-opus-5.5`), passed as `--model` on every start and resume of the task's session; `null` for Copilot CLI's default. Optional: a proposer names it when the user asked for a model, and the user may change it before the start (ADR-98).
 _Avoid_: LLM, engine, agent (for the model)
 
+**Model in use** (`Session.modelInUse`, `modelSwitch`; the strip "Runs on …, not …" in the UI):
+The model Copilot CLI actually runs a session's conversation on, from the conversation's event log (ADR-225): the model of its latest own call, or of its latest model change. It differs from the task model or the session's `--model` when Copilot CLI fell back to another one (an account without the model) or `/model` switched it.
+_Avoid_: actual model, real model, effective model
+
 **Task approvals** (`Task.approvals`, `TaskProposal.approvals`, `TaskApprovals`: `ask` | `auto`; "No approvals" on the start pill and on the task):
 Whether a task's agent asks the user before tools: `ask` (the default) as every session does, `auto` runs every tool without asking (`--allow-all-tools`) on every start and resume, deny rules still refusing. Only for a task in its own worktree; the user turns on the "No approvals" pill when starting the task, and a proposer may suggest it on a proposal (ADR-105).
 _Avoid_: YOLO, autopilot (Copilot CLI's own modes, not what Trackwall passes), auto-approve
@@ -540,6 +548,10 @@ _Avoid_: orchestrator, planner (ADR-9: a human splits goals); and a session in a
 **Session group** (`listGroups`, `EntryGroup`, `groupTiles`; "⊞ group" and the "Group:" chip in the Sessions view):
 A top-level entry of the Sessions list with every task and proposal under it, at any depth. A group of two or more has its own colour on its rows and tiles, and the grid can show it alone (ADR-48).
 _Avoid_: workspace, cluster, family
+
+**Flow** (`views/flow/`, `flowGroups`, `FlowGroup`, `FlowCard`, `FlowColumn`; the "Flow" view, Ctrl+6):
+The view for a second monitor that shows every task, session and task proposal in a row per group of work (a project of Plan, a change, the supervisor, a session with the tasks it proposed, "No group") and a column per state: "Working", "Waits for you", "In review", "Stuck", "Idle" (ADR-224). It changes nothing; a card opens its task or session. Its rows are made from groups that already exist, not a kind of group of its own.
+_Avoid_: dashboard (that is Home), board (that is a project of Plan as columns), batch, epic
 
 **Repo session** (`start {repo}` without its own worktree, `kind: "repo"` of the session instructions, `SessionStartOptions`; in the UI a session of a repo without "Own worktree"):
 A Trackwall session in the root of one repo, the user's own working copy, without a task (ADR-100, ADR-175): it has the model, the conversation view and Java navigation a task has, always asks before a tool, and has no review, Changes tab or Verify. Its instructions keep the checkout as it is unless the user asks, because the graph, the impact of every task's change and the repo's service read the branch checked out in the root. Like any session it can be a main session, when it proposes tasks.
@@ -767,6 +779,18 @@ The result a task session reports with the `report_result` tool: what it did, wh
 Optional steps of a summary for checking the change by hand, each with what to do and what the user should see (ADR-169). Only a hint: the user may follow them or not, and nothing waits for them.
 _Avoid_: test plan, acceptance (those decide something; check steps decide nothing)
 
+**Stack trace** (`StackTrace`, `create-task` field `stackTrace`, `parseJavaStackTrace`; "Stack trace" on the New task form):
+The text of an error with its frames that the user pastes into a new task (ADR-222). The daemon reads its Java frames, finds their files among the repo's tracked files (**frames in this repo**, `repoFrames`) and puts both into the task's prompt with the rule to reproduce the error in a test first.
+_Avoid_: log, error (an **error** is a block from a log, ADR-42), stack (a set of services)
+
+**Reproduction test** (`TaskSummary.reproTest`, `ReproTest`, `report_result` argument `reproTest`):
+The test a task's agent says it wrote first and that failed the way the task's stack trace shows: its file, name and failure before the fix (ADR-222). The agent's word, shown as such: Trackwall has not run it.
+_Avoid_: regression test, proof (Trackwall proves nothing about it yet), repro (in prose)
+
+**Evidence of a change** (ADR-222):
+What a task's result brings to show the change is right beyond the agent's summary, such as its reproduction test. The theme of ADR-222, not an identifier in code.
+_Avoid_: evidence (alone: that is the file and line of a fact on a repo card)
+
 **In review** (`Task.inReview`, "In review" on the Sessions list, column `review` of a board item):
 A task whose agent has handed its work over with `report_result` and got nothing new since: the user's review, "Fix" of a failed pipeline or its proposer's message takes it out of review until the agent reports again. The task's board item goes to "In review" once every open task on it is in review (ADR-213). One step before the user accepts the work; only the user ends a task or marks its item "Done".
 _Avoid_: ready, finished, done (those are the user's), awaiting approval (that is a tool approval)
@@ -801,7 +825,7 @@ An item not filed under a project yet, written down so it is not lost: with Alt+
 _Avoid_: draft, note
 
 **Board column** (`BoardColumn`: `ideas`, `ready`, `in_progress`, `review`, `done`, `dropped`; "Column" in the UI, `COLUMN_LABELS`):
-How far an item is: "Idea", "Ready", "In progress", "In review", "Done", "Dropped". An agent moves an item only between `ideas` and `ready`; the item's tasks move it to "In progress" and "In review" (`TaskWorkColumn`, ADR-213), and only the user sets "Done" and "Dropped".
+How far an item is: "Idea", "Ready", "In progress", "In review", "Done", "Dropped". An agent moves an item only between `ideas` and `ready`; the item's tasks move it to "In progress" and "In review", and back to "Ready" when the last task on an item still in progress is removed (`TaskWorkColumn`, ADR-213), and only the user sets "Done" and "Dropped".
 _Avoid_: status (a repo's is `RepoStatus`), state (a session's)
 
 **Task item** (`Task.item`, `TaskProposal.item`):

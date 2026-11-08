@@ -19,6 +19,8 @@ const UsageRecord = z.object({
   timestamp: z.string().optional(),
   data: z.object({
     usage: z.object({
+      /** The model the call ran on, as Copilot CLI names it (seen in 1.0.107; ADR-225). */
+      model: z.string().min(1).optional(),
       inputTokens: z.number().int().nonnegative().default(0),
       outputTokens: z.number().int().nonnegative().default(0),
       /** The model multiplier of the call (premium requests of the legacy billing). */
@@ -50,6 +52,8 @@ export interface UsageReceipt {
   creditsMissing: boolean;
   /** Premium requests: the model multiplier of a call the user started, nothing for a sub-agent's. */
   premiumRequests: number;
+  /** The model of a call the conversation made itself, not a sub-agent's, which may run on a model of its own. */
+  ownModel: string | undefined;
 }
 
 /** A receipt from an event log's line; `undefined` for any other line. */
@@ -75,6 +79,7 @@ export function usageReceipt(line: string): UsageReceipt | undefined {
     nanoAiu,
     creditsMissing: nanoAiu === undefined || usage.aiCreditsStatus === "partial",
     premiumRequests: own ? usage.cost : 0,
+    ownModel: own ? usage.model : undefined,
   };
 }
 

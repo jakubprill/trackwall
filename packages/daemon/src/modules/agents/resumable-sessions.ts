@@ -29,7 +29,8 @@ export const ResumableSession = z.preprocess(
       view: SessionView.default("terminal"),
       /**
        * Copilot CLI's id of the conversation when it is not the session id: one started in the conversation view, where
-       * Copilot CLI picks the id itself (ADR-107).
+       * Copilot CLI picks the id itself (ADR-107), or a task's, under the task's id (ADR-225), which the next daemon does
+       * not read, since a task's session resumes as its task.
        */
       conversation: ConversationId.optional(),
       /** A repo or free session's model (ADR-175); a task's is the task's. A file of a Trackwall before it has none. */

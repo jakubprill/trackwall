@@ -38,7 +38,7 @@ describe("taskNotices", () => {
     const notices = taskNotices({
       task: {
         included: { files: [".env"], problems: [] },
-        summary: { text: "Added a discount.", checkSteps: [], reportedAt: "2026-10-27T06:00:00.000Z" },
+        summary: { text: "Added a discount.", checkSteps: [], reproTest: null, reportedAt: "2026-10-27T06:00:00.000Z" },
       },
       messages: [{ readAt: "2026-10-27T06:01:00.000Z" }, { readAt: null }],
       sharedWith: [{ task: "t2", name: "Extend add()", files: 2 }],
@@ -97,7 +97,7 @@ describe("taskNotices", () => {
 describe("newWarnings", () => {
   const notices = taskNotices({
     ...quiet,
-    task: { ...quiet.task, summary: { text: "Done.", checkSteps: [], reportedAt: "2026-10-27T06:00:00.000Z" } },
+    task: { ...quiet.task, summary: { text: "Done.", checkSteps: [], reproTest: null, reportedAt: "2026-10-27T06:00:00.000Z" } },
     sharedWith: [
       { task: "t2", name: "Extend add()", files: 1 },
       { task: "t3", name: "Rename cart", files: 3 },

@@ -126,7 +126,12 @@ describe.skipIf(process.versions.bun === undefined)("main session over MCP (real
       (await call(await clientOfSession(taskSession), "report_result", { summary: "Login fixed, test in login.test.ts." }))
         .structuredContent,
     );
-    expect(reported.task.summary).toEqual({ text: "Login fixed, test in login.test.ts.", checkSteps: [], reportedAt: expect.any(String) });
+    expect(reported.task.summary).toEqual({
+      text: "Login fixed, test in login.test.ts.",
+      checkSteps: [],
+      reproTest: null,
+      reportedAt: expect.any(String),
+    });
     const detail = toolText(await call(mainClient, "get_session", { session: taskSession }));
     expect(detail).toMatch(/\n## Summary \(reported [^)]+\)\nLogin fixed, test in login\.test\.ts\.\n## Changes/);
 
@@ -143,6 +148,25 @@ describe.skipIf(process.versions.bun === undefined)("main session over MCP (real
     await call(await clientOfSession(taskSession), "report_result", { summary: "Login fixed, test in login.test.ts." });
     const cleared = toolText(await call(mainClient, "get_session", { session: taskSession }));
     expect(cleared).toContain("\nLogin fixed, test in login.test.ts.\n## Changes");
+
+    // The reproduction test is the agent's word (ADR-222): kept with the summary and shown as such, never a path outside the repo.
+    const reproTest = {
+      file: "src/test/java/com/example/shop/LoginTest.java",
+      name: "LoginTest#wrongPasswordIsRefused",
+      failure: "NullPointerException at Login.java:42",
+    };
+    const outside = await call(await clientOfSession(taskSession), "report_result", {
+      summary: "Login fixed.",
+      reproTest: { ...reproTest, file: "../other/LoginTest.java" },
+    });
+    expect(outside.isError).toBe(true);
+    const withRepro = ReportResultResult.parse(
+      (await call(await clientOfSession(taskSession), "report_result", { summary: "Login fixed.", reproTest })).structuredContent,
+    );
+    expect(withRepro.task.summary?.reproTest).toEqual(reproTest);
+    expect(toolText(await call(mainClient, "get_session", { session: taskSession }))).toContain(
+      "\nReproduction test (the agent's word): LoginTest#wrongPasswordIsRefused in src/test/java/com/example/shop/LoginTest.java, failed before the fix with: NullPointerException at Login.java:42\n",
+    );
     // The report handed the task over for review; the proposer steering it gives its agent work again (ADR-213).
     expect(daemon.facade.agents.task(task.id).inReview).toBe(true);
     await call(mainClient, "send_message", { task: task.id, text: "Also cover a locked account." });

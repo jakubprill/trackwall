@@ -57,9 +57,11 @@ const PluginManifest = z.object({
 });
 const pluginManifest = (home: string, session: string) =>
   PluginManifest.parse(JSON.parse(readFileSync(join(home, "sessions", session, "plugin", "plugin.json"), "utf8")));
+const instructions = (home: string, session: string) =>
+  readFileSync(join(home, "sessions", session, "instructions", "trackwall.instructions.md"), "utf8");
 
 describe.skipIf(process.versions.bun === undefined)("Java navigation for tasks (real git and PTY, fake Copilot CLI)", () => {
-  test("a task with Java navigation gets jdtls in its session plugin with its own data folder, and a task without it gets none", async () => {
+  test("a task with Java navigation gets jdtls in its session plugin with its own data folder and the instructions about it, and a task without it gets neither", async () => {
     const dir = makeRepo({ "pom.xml": "<project/>\n" }, "shop");
     const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
     const settings = jdtlsSettings();
@@ -75,6 +77,7 @@ describe.skipIf(process.versions.bun === undefined)("Java navigation for tasks (
     expect(java?.command).toBe(process.execPath);
     expect(java?.fileExtensions).toEqual({ ".java": "java" });
     expect(java?.args.slice(-2)).toEqual(["-data", join(projects, ".trackwall", "lsp", task.id, "workspace")]);
+    expect(instructions(home, session)).toContain("## Java navigation");
     const window = viewer(agents, session);
     await waitFor(agents, session, () => window.text().includes("LSP: java"), "the language server on the screen");
     window.attachment.detach();
@@ -82,6 +85,7 @@ describe.skipIf(process.versions.bun === undefined)("Java navigation for tasks (
     const plain = await agents.createTask("shop", "update the README");
     expect(plain.javaNavigation).toBe(false);
     expect(pluginManifest(home, sessionOf(agents, plain.id)).lspServers).toBeUndefined();
+    expect(instructions(home, sessionOf(agents, plain.id))).not.toContain("## Java navigation");
   }, 60_000);
 
   test("without the settings a task with Java navigation is refused before its worktree exists, and the form learns why", async () => {
@@ -123,7 +127,7 @@ describe.skipIf(process.versions.bun === undefined)("Java navigation for tasks (
     expect(pluginManifest(home, sessionOf(agents, task.id)).lspServers).toBeUndefined();
   }, 60_000);
 
-  test("a resume after the settings are gone starts without jdtls, and ending the task deletes its jdtls data", async () => {
+  test("a resume after the settings are gone starts without jdtls or its instructions, and ending the task deletes its jdtls data", async () => {
     const dir = makeRepo({ "pom.xml": "<project/>\n" }, "shop");
     const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
     let settings: JavaNavigationSettings | null = jdtlsSettings();
@@ -141,6 +145,8 @@ describe.skipIf(process.versions.bun === undefined)("Java navigation for tasks (
     await agents.resumeTask(task.id);
     const resumed = sessionOf(agents, task.id);
     expect(pluginManifest(home, resumed).lspServers).toBeUndefined();
+    // Without jdtls the agent hears nothing of an lsp tool it does not have.
+    expect(instructions(home, resumed)).not.toContain("## Java navigation");
     expect(agents.task(task.id).javaNavigation).toBe(true);
 
     await agents.stop(resumed);
