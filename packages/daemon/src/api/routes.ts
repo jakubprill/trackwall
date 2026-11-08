@@ -166,7 +166,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(batchApi.cancel, (f) => f.batch.cancel()),
   route(boardApi.board, (f) => f.board.board()),
   route(boardApi.create, (f, b) => f.board.create(b, { kind: "user" })),
-  route(boardApi.update, (f, { item, ...change }) => f.board.update(item, change)),
+  route(boardApi.update, (f, { item, expectedUpdatedAt, ...change }) => f.board.update(item, change, expectedUpdatedAt)),
   route(boardApi.move, (f, b) => f.board.move(b.item, b.parent, b.before)),
   route(boardApi.remove, async (f, b) => {
     await f.board.remove(b.item);
