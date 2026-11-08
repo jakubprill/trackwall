@@ -8,10 +8,9 @@ import {
   type WorkingTreeChanges,
 } from "@trackwall/protocol";
 import { z } from "zod";
-import { writeFileAtomic } from "../../infra/atomic-write.ts";
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { KeyedQueue } from "../../infra/keyed-queue.ts";
-import { readStateFile } from "../../infra/state-file.ts";
+import { readStateFile, stateFormat, writeStateFile } from "../../infra/state-file.ts";
 
 /**
  * Task rounds (§4.4, ADR-168): every turn of a task's agent that changed the worktree becomes a round with a commit of its
@@ -52,6 +51,8 @@ const StoredRounds = z.object({
 type StoredRounds = z.infer<typeof StoredRounds>;
 
 const RoundsFile = z.object({ tasks: z.array(StoredRounds) });
+/** `task-rounds.json` (ADR-168, ADR-223). */
+export const TASK_ROUNDS_FORMAT = stateFormat(RoundsFile);
 
 // The types below repeat the shape of the types from `vcs` (`RoundPlace`, `RoundWorktree`, `SquashedRounds`), because a
 // module does not import a neighbouring module (§4); the compiler checks they match where the facade passes `Vcs`.
@@ -124,7 +125,9 @@ export class TaskRoundList {
 
   constructor(deps: TaskRoundListDeps) {
     this.#deps = deps;
-    const file = readStateFile(deps.path, RoundsFile, (problem, aside) => deps.log(`${deps.path}: ${problem}; file moved to ${aside}`));
+    const file = readStateFile(deps.path, TASK_ROUNDS_FORMAT, (problem, aside) =>
+      deps.log(`${deps.path}: ${problem}; file moved to ${aside}`),
+    );
     for (const stored of file?.tasks ?? []) if (deps.task(stored.task) !== undefined) this.#state.set(stored.task, stored);
   }
 
@@ -364,7 +367,7 @@ export class TaskRoundList {
 
   #write(): void {
     try {
-      writeFileAtomic(this.#deps.path, `${JSON.stringify({ tasks: [...this.#state.values()] }, null, 2)}\n`);
+      writeStateFile(this.#deps.path, TASK_ROUNDS_FORMAT, { tasks: [...this.#state.values()] });
     } catch (err) {
       this.#deps.log(`${this.#deps.path}: ${messageOf(err)}`);
     }

@@ -12,7 +12,7 @@ import {
 } from "@trackwall/protocol";
 import { z } from "zod";
 import { DomainError, messageOf } from "../../infra/errors.ts";
-import { FollowedStateFile } from "../../infra/state-file.ts";
+import { FollowedStateFile, stateFormat } from "../../infra/state-file.ts";
 import { reviewFindings } from "./auto-review-findings.ts";
 import { type ReviewOutcome, type ReviewRunProcs, reviewerArgs, runReview } from "./auto-review-run.ts";
 
@@ -32,6 +32,8 @@ const DIFF_FILE = "changes.diff";
 
 const StoredAutoReviews = z.object({ reviews: z.array(AutoReview) });
 type StoredAutoReviews = z.infer<typeof StoredAutoReviews>;
+/** `auto-reviews.json` (ADR-182, ADR-223). */
+export const AUTO_REVIEWS_FORMAT = stateFormat(StoredAutoReviews);
 
 const STOPPED_WITH_DAEMON = "Trackwall stopped during the review; review again";
 const CANCELLED = "Stopped before the reviewer finished";
@@ -90,7 +92,7 @@ export class AutoReviews {
   constructor(deps: AutoReviewsDeps) {
     this.#deps = deps;
     const path = join(deps.home, AUTO_REVIEWS_FILE);
-    this.#file = new FollowedStateFile(path, StoredAutoReviews, {
+    this.#file = new FollowedStateFile(path, AUTO_REVIEWS_FORMAT, {
       broken: (problem, aside) => deps.log(`${path}: ${problem}; file moved to ${aside}, the tasks start without automatic reviews`),
       log: deps.log,
     });

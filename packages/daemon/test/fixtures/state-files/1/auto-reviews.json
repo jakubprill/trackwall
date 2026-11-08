@@ -1,0 +1,25 @@
+{
+  "reviews": [
+    {
+      "task": "3f2a9c1e-0000-4000-8000-000000000000",
+      "repo": "shop",
+      "state": "done",
+      "trigger": "user",
+      "startedAt": "2026-11-06T09:34:00.000Z",
+      "finishedAt": "2026-11-06T09:36:00.000Z",
+      "diffHash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "diffTruncated": false,
+      "findings": [
+        {
+          "title": "Rounding before the discount",
+          "severity": "medium",
+          "path": "src/main/java/shop/Cart.java",
+          "line": 42,
+          "text": "Round after applying the discount, or a 10% discount on 0.05 is lost."
+        }
+      ],
+      "text": "One finding.",
+      "message": null
+    }
+  ]
+}

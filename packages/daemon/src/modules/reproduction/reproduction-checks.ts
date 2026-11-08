@@ -8,7 +8,7 @@ import {
 } from "@trackwall/protocol";
 import { z } from "zod";
 import { DomainError, messageOf } from "../../infra/errors.ts";
-import { FollowedStateFile } from "../../infra/state-file.ts";
+import { FollowedStateFile, stateFormat } from "../../infra/state-file.ts";
 import { copyChanged, gitPath, testSide } from "./repro-copy.ts";
 import { type ReproTarget, reproOutcome, reproTarget } from "./repro-test-case.ts";
 import { needsChangeRun, reproductionVerdict } from "./reproduction-verdict.ts";
@@ -28,6 +28,8 @@ import { needsChangeRun, reproductionVerdict } from "./reproduction-verdict.ts";
 export const REPRODUCTION_CHECKS_FILE = "reproduction-checks.json";
 
 const StoredChecks = z.object({ checks: z.array(ReproductionCheck) });
+/** `reproduction-checks.json` (ADR-223). */
+export const REPRODUCTION_CHECKS_FORMAT = stateFormat(StoredChecks);
 type StoredChecks = z.infer<typeof StoredChecks>;
 
 /** Why a check the previous daemon left running has no verdict. */
@@ -111,7 +113,7 @@ export class ReproductionChecks {
 
   constructor(deps: ReproductionChecksDeps) {
     this.#deps = deps;
-    this.#file = new FollowedStateFile(deps.file, StoredChecks, {
+    this.#file = new FollowedStateFile(deps.file, REPRODUCTION_CHECKS_FORMAT, {
       broken: (problem, aside) => deps.log(`${deps.file}: ${problem}; file moved to ${aside}, the tasks start without reproduction checks`),
       log: deps.log,
     });

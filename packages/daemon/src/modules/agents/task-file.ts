@@ -1,8 +1,7 @@
 import { isAbsolute } from "node:path";
 import { noIncludedFiles, RepoId, Task, TaskSummary } from "@trackwall/protocol";
 import { z } from "zod";
-import { writeFileAtomic } from "../../infra/atomic-write.ts";
-import { readStateFile } from "../../infra/state-file.ts";
+import { readStateFile, stateFormat, writeStateFile } from "../../infra/state-file.ts";
 import { ConversationId } from "./acp-messages.ts";
 import { IMPACT_KEY_MAX, IMPACT_KEYS_MAX } from "./impact-proposals.ts";
 import { TaskBranch } from "./task-branch.ts";
@@ -73,6 +72,8 @@ export const StoredTask = Task.omit({ worktree: true }).extend({
 export type StoredTask = z.infer<typeof StoredTask>;
 
 const TaskFileSchema = z.object({ tasks: z.array(StoredTask) });
+/** `tasks.json` (ADR-31, ADR-223). */
+export const TASKS_FORMAT = stateFormat(TaskFileSchema);
 
 export class TaskFile {
   readonly #path: string;
@@ -84,9 +85,9 @@ export class TaskFile {
     this.#log = log;
   }
 
-  /** A missing file means no tasks. An unreadable file is moved aside (`tasks.json.broken-<time>`), and its tasks go to the log. */
+  /** A missing file means no tasks. An unreadable file is moved aside (`tasks.json.broken-<time>`, or `tasks.json.newer-<time>` when a newer Trackwall wrote it), and its tasks go to the log. */
   read(): StoredTask[] {
-    const file = readStateFile(this.#path, TaskFileSchema, (problem, aside) =>
+    const file = readStateFile(this.#path, TASKS_FORMAT, (problem, aside) =>
       this.#log(`${this.#path}: ${problem}; file moved to ${aside}, task worktrees were left on disk`),
     );
     this.#taskListRead = file !== undefined;
@@ -102,6 +103,6 @@ export class TaskFile {
   }
 
   write(tasks: readonly StoredTask[]): void {
-    writeFileAtomic(this.#path, `${JSON.stringify({ tasks }, null, 2)}\n`);
+    writeStateFile(this.#path, TASKS_FORMAT, { tasks });
   }
 }
