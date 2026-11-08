@@ -1,6 +1,6 @@
 import { RepoId, SessionView, TaskId, TaskModel } from "@trackwall/protocol";
 import { z } from "zod";
-import { FollowedStateFile } from "../../infra/state-file.ts";
+import { FollowedStateFile, stateFormat } from "../../infra/state-file.ts";
 import { ConversationId } from "./acp-messages.ts";
 
 /**
@@ -103,12 +103,14 @@ export function sessionLaunch(view: SessionView, resumed: Resumed): SessionLaunc
 }
 
 const ResumableSessionsFile = z.object({ sessions: z.array(ResumableSession) });
+/** `resumable-sessions.json` (ADR-95, ADR-223). */
+export const RESUMABLE_SESSIONS_FORMAT = stateFormat(ResumableSessionsFile);
 
 export class ResumableSessions {
   readonly #file: FollowedStateFile<z.infer<typeof ResumableSessionsFile>>;
 
   constructor(path: string, log: (msg: string) => void) {
-    this.#file = new FollowedStateFile(path, ResumableSessionsFile, {
+    this.#file = new FollowedStateFile(path, RESUMABLE_SESSIONS_FORMAT, {
       broken: (problem, aside) => log(`${path}: ${problem}; file moved to ${aside}, no session is resumed`),
       log,
     });

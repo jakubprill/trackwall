@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { startSessionApi } from "./support/session-api.ts";
 
@@ -54,6 +54,24 @@ describe.skipIf(process.versions.bun === undefined)("task logs across a daemon r
     await stopDaemon(await startDaemon(dirs));
     await startDaemon(dirs);
 
+    expect(existsSync(left)).toBe(true);
+  });
+
+  test("a task list a newer Trackwall wrote is moved aside as newer, and the daemon keeps every task's logs", async () => {
+    const before = await startDaemon();
+    await before.facade.agents.createTask("shop", "check the logs");
+    await stopDaemon(before);
+    const list = join(before.home, "tasks.json");
+    const newer = JSON.stringify({ ...JSON.parse(readFileSync(list, "utf8")), version: 99 });
+    writeFileSync(list, newer);
+    const left = taskLog(before.home, "a-task-of-the-newer-trackwall");
+
+    const after = await startDaemon({ home: before.home, projects: before.projects });
+
+    expect(after.facade.agents.sessions().tasks).toEqual([]);
+    const aside = readdirSync(before.home).filter((name) => name.startsWith("tasks.json.newer-"));
+    expect(aside).toHaveLength(1);
+    expect(readFileSync(join(before.home, aside[0] ?? ""), "utf8")).toBe(newer);
     expect(existsSync(left)).toBe(true);
   });
 });

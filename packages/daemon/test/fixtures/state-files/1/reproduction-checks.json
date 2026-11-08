@@ -1,0 +1,27 @@
+{
+  "checks": [
+    {
+      "task": "6f1c2a4e-8b3d-4c5e-9a7f-1b2c3d4e5f60",
+      "repo": "shop",
+      "test": {
+        "file": "src/test/java/shop/CartTest.java",
+        "name": "CartTest.totalIncludesDiscount",
+        "failure": "expected 90 but was 100"
+      },
+      "filter": "shop.CartTest",
+      "state": "reproduced",
+      "phase": null,
+      "startedAt": "2026-11-07T10:00:00.000Z",
+      "finishedAt": "2026-11-07T10:02:00.000Z",
+      "base": {
+        "runId": "run-1",
+        "exitCode": 1,
+        "outcome": "failed",
+        "cases": 1,
+        "failure": { "type": "org.opentest4j.AssertionFailedError", "message": "expected: <90> but was: <100>" }
+      },
+      "change": { "runId": "run-2", "exitCode": 0, "outcome": "passed", "cases": 1, "failure": null },
+      "message": null
+    }
+  ]
+}

@@ -202,8 +202,8 @@ const CARDS_DIR = "cards";
 /** The bare repo the local config store is pushed from (ADR-127). */
 const LOCAL_CONFIG_PUSH_DIR = "local-config-push";
 const DAY_START_FILE = "day-start.json";
-const ROUTINE_APPROVALS_FILE = "routine-approvals.json";
-const KNOWLEDGE_APPROVALS_FILE = "knowledge-approvals.json";
+export const ROUTINE_APPROVALS_FILE = "routine-approvals.json";
+export const KNOWLEDGE_APPROVALS_FILE = "knowledge-approvals.json";
 const LOGS_DIR = "logs";
 /** The limit of one source JSONL file; with the previous file after rotation a source takes at most twice that. */
 const LOG_FILE_MAX_BYTES = 10 * 1024 * 1024;

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { FollowedStateFile } from "../../infra/state-file.ts";
+import { FollowedStateFile, stateFormat } from "../../infra/state-file.ts";
 import { type MiseTrustNotices, StoredTrustNotices } from "./mise-trust-notices.ts";
 import { type Restored, StoredCoordination, type TaskCoordination } from "./task-coordination.ts";
 import { StoredProposals, type TaskProposals } from "./task-proposals.ts";
@@ -22,6 +22,8 @@ export const AgentQueues = z.object({
   trustNotices: StoredTrustNotices.default([]),
 });
 export type AgentQueues = z.infer<typeof AgentQueues>;
+/** `agent-queues.json` (ADR-115, ADR-223). */
+export const AGENT_QUEUES_FORMAT = stateFormat(AgentQueues);
 
 /** The queues of the `agents` module the file keeps. */
 interface Queues {
@@ -42,7 +44,7 @@ export class AgentQueuesFile {
   readonly #queues: Queues;
 
   constructor(path: string, log: (msg: string) => void, queues: Queues) {
-    this.#file = new FollowedStateFile(path, AgentQueues, {
+    this.#file = new FollowedStateFile(path, AGENT_QUEUES_FORMAT, {
       broken: (problem, aside) => log(`${path}: ${problem}; file moved to ${aside}, the queues start empty`),
       log,
     });
