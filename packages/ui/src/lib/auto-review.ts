@@ -45,7 +45,7 @@ export const AUTO_REVIEW_TEXTS: Record<
   },
   rules: {
     title: "Repo rules",
-    idle: "Copilot CLI checks the changes against the repo's AGENTS.md, instructions and ADRs. It costs model credits.",
+    idle: "Copilot CLI checks the changes against the repo's rules for agents and its ADRs. It costs model credits.",
     start: "Check rules",
     again: "Check again",
     startTitle: "check the task's changes against the repo's rules for agents and its decision records",

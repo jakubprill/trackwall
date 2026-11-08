@@ -7,6 +7,12 @@ import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { useRemote } from "@/lib/use-remote";
 
+/** The settings that start a run after the agent's report, with their labels. */
+const AFTER_REPORT = [
+  ["afterReport", "Review a task's changes when its agent reports its result"],
+  ["rulesAfterReport", "Check a task's changes against the repo's rules when its agent reports its result"],
+] as const satisfies readonly (readonly [keyof AutoReviewSettings, string])[];
+
 /**
  * The automatic review (ADR-182) and the check against the repo's rules (ADR-234): whether a task's changes get them as
  * soon as its agent reports its result. Off by default, because every run costs model credits; "Review" and "Check
@@ -38,33 +44,25 @@ export function AutoReviewSurface({ conn }: { conn: Connection }) {
         <p className="text-muted-foreground text-sm">
           Copilot CLI reviews a task's changes and you pick the findings to send to the agent as review comments. The reviewer only reads:
           it cannot run commands or change files. Each review costs model credits, so it runs when you click Review in the task's Changes
-          tab, or on its own when you turn it on here. The rules check compares the changes with the repo's AGENTS.md, CLAUDE.md, Copilot
-          instruction files and ADRs as they were before the task, and reports only a written rule the changes break.
+          tab, or on its own when you turn it on here. The rules check compares the changes with the repo's rules for agents and its ADRs as
+          they were before the task, and reports only a written rule the changes break.
         </p>
         {settings.error && <ErrorWithRetry message={settings.error} onRetry={settings.reload} />}
         {!data && !settings.error && <Loading />}
         {data && (
           <>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="accent-primary size-4 shrink-0"
-                checked={data.autoReview.afterReport}
-                disabled={busy}
-                onChange={(e) => void change({ ...data.autoReview, afterReport: e.target.checked })}
-              />
-              Review a task's changes when its agent reports its result
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="accent-primary size-4 shrink-0"
-                checked={data.autoReview.rulesAfterReport}
-                disabled={busy}
-                onChange={(e) => void change({ ...data.autoReview, rulesAfterReport: e.target.checked })}
-              />
-              Check a task's changes against the repo's rules when its agent reports its result
-            </label>
+            {AFTER_REPORT.map(([key, label]) => (
+              <label key={key} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="accent-primary size-4 shrink-0"
+                  checked={data.autoReview[key]}
+                  disabled={busy}
+                  onChange={(e) => void change({ ...data.autoReview, [key]: e.target.checked })}
+                />
+                {label}
+              </label>
+            ))}
           </>
         )}
         {data?.autoReviewProblem && <p className="text-destructive text-xs break-words">{data.autoReviewProblem}</p>}

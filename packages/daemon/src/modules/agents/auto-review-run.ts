@@ -1,4 +1,4 @@
-import type { RunState } from "@trackwall/protocol";
+import type { AutoReviewKind, RunState } from "@trackwall/protocol";
 import { AcpConnection } from "./acp-connection.ts";
 import {
   ACP_PROTOCOL_VERSION,
@@ -26,6 +26,10 @@ import {
  * and no MCP server's tools, which the list leaves out too.
  */
 export const REVIEWER_TOOLS = ["view", "grep", "glob", "task", "read_agent", "list_agents"] as const;
+type ReviewerTool = (typeof REVIEWER_TOOLS)[number];
+
+/** The tools of each kind: a rules check (ADR-234) reads the rules and the diff itself, without the review agent's `task`. */
+export const KIND_TOOLS: Record<AutoReviewKind, readonly ReviewerTool[]> = { code: REVIEWER_TOOLS, rules: ["view", "grep", "glob"] };
 
 /**
  * Copilot CLI's arguments of a review, besides the session's mise arguments: only `tools` (`REVIEWER_TOOLS` for `/review`,
@@ -34,7 +38,7 @@ export const REVIEWER_TOOLS = ["view", "grep", "glob", "task", "read_agent", "li
  * the user nobody would see, and no access to the system's temporary folder; `reviewDir` (the diff) is the only folder
  * besides the worktree it may read.
  */
-export function reviewerArgs(reviewDir: string, tools: readonly (typeof REVIEWER_TOOLS)[number][]): string[] {
+export function reviewerArgs(reviewDir: string, tools: readonly ReviewerTool[]): string[] {
   return [
     "--acp",
     `--available-tools=${tools.join(",")}`,

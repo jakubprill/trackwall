@@ -241,7 +241,10 @@ export class WorkspaceFile {
 
   /** Only the settings turned on are written, and with both off the key goes, so the file says nothing the user did not turn on. */
   setAutoReview(settings: AutoReviewSettings): void {
-    const on = Object.fromEntries(Object.entries(settings).filter(([, value]) => value));
+    const on: Partial<AutoReviewSettings> = {
+      ...(settings.afterReport && { afterReport: true }),
+      ...(settings.rulesAfterReport && { rulesAfterReport: true }),
+    };
     this.set("autoReview", Object.keys(on).length === 0 ? null : on);
   }
 

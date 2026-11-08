@@ -1,20 +1,20 @@
-import type { AutoReviewKind } from "@trackwall/protocol";
-
 /**
  * The one prompt of an automatic review (ADR-182, ADR-234), by its kind. Both hand the reviewer the task's diff as a file,
  * since it has no shell for git, and ask for the issues in the shape of Copilot CLI's review agent, which
  * `auto-review-findings.ts` reads.
  */
 
-export interface ReviewPromptInput {
-  kind: AutoReviewKind;
+interface DiffInput {
   /** The diff file the daemon wrote. */
   diffFile: string;
   /** The diff was cut at its end. */
   truncated: boolean;
-  /** For `rules`: the folder with the copies of the rule files, and their paths relative to the repo root with `/`. */
-  rules?: { dir: string; files: readonly string[] };
 }
+
+export type ReviewPromptInput =
+  | (DiffInput & { kind: "code" })
+  /** `rules`: the folder with the copies of the rule files, and their paths relative to the repo root with `/`. */
+  | (DiffInput & { kind: "rules"; rules: { dir: string; files: readonly string[] } });
 
 /** The answer of a `rules` check that found nothing, which the prompt asks for word for word. */
 const NO_RULE_VIOLATIONS = "No rule violations found.";
@@ -32,7 +32,7 @@ const TRUNCATED = "The diff is cut at its end; say which files you could not rev
  * Copilot CLI's `/review` with the daemon's instructions after it, which Copilot CLI passes on as "Additional
  * instructions". Its review agent would read the changes with git in a shell, which the reviewer does not have.
  */
-function codePrompt({ diffFile, truncated }: ReviewPromptInput): string {
+function codePrompt({ diffFile, truncated }: DiffInput): string {
   return [
     "/review",
     DIFF_IS_A_FILE(diffFile),
@@ -47,8 +47,7 @@ function codePrompt({ diffFile, truncated }: ReviewPromptInput): string {
  * daemon's own instructions. Its bar is a written rule the change breaks, quoted, so that general advice, taste and bugs
  * stay out and a change that keeps the rules gets no finding.
  */
-function rulesPrompt({ diffFile, truncated, rules }: ReviewPromptInput): string {
-  if (rules === undefined) throw new Error("a rules check needs the rule files");
+function rulesPrompt({ diffFile, truncated, rules }: Extract<ReviewPromptInput, { kind: "rules" }>): string {
   return [
     "Check whether a change keeps the written rules of this repository. Do not review it for bugs, design or style the rules do not ask for.",
     "",

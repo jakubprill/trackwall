@@ -129,7 +129,7 @@ describe.skipIf(process.versions.bun === undefined)(
       const task = await taskWith("bare", { "src/cart.ts": "console.log(1);\n" });
 
       await expect(daemon.post(autoReviewApi.start, { task: task.id, kind: "rules" })).rejects.toThrow(
-        `the repo of task ${task.id} has no rules for agents at the task's base commit: no AGENTS.md, CLAUDE.md`,
+        `the repo of task ${task.id} has no rules for agents at the task's base commit: none of AGENTS.md, CLAUDE.md, GEMINI.md`,
       );
       expect(await daemon.post(autoReviewApi.get, { task: task.id, kind: "rules" })).toBeNull();
     });

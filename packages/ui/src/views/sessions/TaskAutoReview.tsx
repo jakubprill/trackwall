@@ -1,6 +1,6 @@
 import { type AutoReview, type AutoReviewFinding, type AutoReviewKind, countLabel } from "@trackwall/protocol";
 import { ListChecks, MessageSquarePlus, ScanSearch, Square } from "lucide-react";
-import { useMemo } from "react";
+import { type ReactNode, useMemo } from "react";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { AUTO_REVIEW_TEXTS, autoReviewLabel, findingComment, inDrafts, type ShownLines, shownLines } from "@/lib/auto-review";
@@ -8,6 +8,8 @@ import type { Connection } from "@/lib/connection";
 import { relativeTime } from "@/lib/format";
 import { useTaskAutoReview } from "@/lib/use-task-auto-review";
 import type { TaskReview } from "@/lib/use-task-review";
+
+const KIND_ICONS: Record<AutoReviewKind, ReactNode> = { code: <ScanSearch />, rules: <ListChecks /> };
 
 /**
  * An automatic review of a task above its diff: "Review" asks Copilot CLI's review agent to read the task's changes
@@ -50,7 +52,7 @@ export function TaskAutoReview({
           </Button>
         ) : (
           <Button variant="outline" size="sm" onClick={state.start} disabled={state.starting} title={texts.startTitle}>
-            {kind === "rules" ? <ListChecks /> : <ScanSearch />} {autoReview ? texts.again : texts.start}
+            {KIND_ICONS[kind]} {autoReview ? texts.again : texts.start}
           </Button>
         )}
       </div>

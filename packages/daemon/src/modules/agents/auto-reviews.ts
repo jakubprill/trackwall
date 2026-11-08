@@ -5,9 +5,10 @@ import {
   AUTO_REVIEW_DIFF_MAX_BYTES,
   AUTO_REVIEW_TEXT_MAX,
   AutoReview,
-  type AutoReviewKind,
+  AutoReviewKind,
   type AutoReviewSettings,
   type AutoReviewTrigger,
+  countLabel,
   cutText,
   withoutInvisibleCharacters,
 } from "@trackwall/protocol";
@@ -16,8 +17,8 @@ import { DomainError, messageOf } from "../../infra/errors.ts";
 import { FollowedStateFile, stateFormat } from "../../infra/state-file.ts";
 import { reviewFindings } from "./auto-review-findings.ts";
 import { reviewPrompt } from "./auto-review-prompts.ts";
-import { REVIEWER_TOOLS, type ReviewOutcome, type ReviewRunProcs, reviewerArgs, runReview } from "./auto-review-run.ts";
-import type { RepoRules } from "./repo-rules.ts";
+import { KIND_TOOLS, type ReviewOutcome, type ReviewRunProcs, reviewerArgs, runReview } from "./auto-review-run.ts";
+import { type RepoRules, RULE_FILES_MAX, RULE_PLACES } from "./repo-rules.ts";
 
 /**
  * Automatic reviews of tasks (§4.4, ADR-182, ADR-234): Copilot CLI's `/review` on a task's changes (`code`), or a check
@@ -36,8 +37,6 @@ const AUTO_REVIEWS_DIR = "auto-reviews";
 const DIFF_FILE = "changes.diff";
 /** The folder of the rule files' copies beside the diff. */
 const RULES_DIR = "rules";
-/** The tools a rules check needs: it reads the rules and the diff itself, without Copilot CLI's review agent. */
-const RULES_CHECK_TOOLS = ["view", "grep", "glob"] as const;
 
 const StoredAutoReviews = z.object({ reviews: z.array(AutoReview) });
 type StoredAutoReviews = z.infer<typeof StoredAutoReviews>;
@@ -89,9 +88,11 @@ interface Entry {
   review: AutoReview;
   done: Promise<void>;
   cancelled: boolean;
+  /** Rule files a rules check had to leave out, which its message names when it ends. */
+  omittedRules: number;
 }
 
-const KINDS: readonly AutoReviewKind[] = ["code", "rules"];
+const KINDS = AutoReviewKind.options;
 
 /** The reviewer's process group in `procs`; only ever built. */
 function reviewOwner(task: string, kind: AutoReviewKind): string {
@@ -102,9 +103,6 @@ function reviewOwner(task: string, kind: AutoReviewKind): string {
 function reviewKey(task: string, kind: AutoReviewKind): string {
   return `${kind}:${task}`;
 }
-
-const NO_RULES =
-  "has no rules for agents at the task's base commit: no AGENTS.md, CLAUDE.md, .github/copilot-instructions.md, .github/instructions/*.instructions.md or folder of decision records (docs/adr, docs/decisions)";
 
 export class AutoReviews {
   readonly #deps: AutoReviewsDeps;
@@ -230,14 +228,13 @@ export class AutoReviews {
     const last = this.#reviews.get(key)?.review;
     // Only a review that finished saw the diff; one that failed or was stopped is tried again.
     if (trigger === "report" && last?.state === "done" && last.diffHash === diffHash) return null;
-    const rules = kind === "rules" ? await this.#deps.tasks.rules(task, changes.paths) : new Map<string, Buffer>();
-    if (kind === "rules" && rules.size === 0) {
-      if (trigger === "report") return null;
-      throw new DomainError("bad_request", `the repo of task ${task} ${NO_RULES}`);
-    }
+    const rules = kind === "rules" ? await this.#rules(task, changes.paths) : null;
     const launch = await this.#deps.launch({ repo, task });
     const dir = join(this.#deps.home, AUTO_REVIEWS_DIR, kind, task);
-    const ruleFiles = writeReviewDir(dir, changes.patch, rules);
+    const diffFile = join(dir, DIFF_FILE);
+    const ruleFiles = writeReviewDir(dir, changes.patch, rules?.files ?? new Map(), (msg) =>
+      this.#deps.log(`automatic rules review of task ${task}: ${msg}`),
+    );
     const entry: Entry = {
       review: {
         task,
@@ -256,25 +253,20 @@ export class AutoReviews {
       },
       done: Promise.resolve(),
       cancelled: false,
+      omittedRules: (rules?.omitted ?? 0) + (rules?.files.size ?? 0) - ruleFiles.length,
     };
     const run = runReview(
       {
         owner: reviewOwner(task, kind),
-        command: [
-          launch.program,
-          ...launch.prefix,
-          ...reviewerArgs(dir, kind === "rules" ? RULES_CHECK_TOOLS : REVIEWER_TOOLS),
-          ...launch.args,
-        ],
+        command: [launch.program, ...launch.prefix, ...reviewerArgs(dir, KIND_TOOLS[kind]), ...launch.args],
         cwd: worktree,
         env: launch.env,
         secrets: launch.secrets,
-        prompt: reviewPrompt({
-          kind,
-          diffFile: join(dir, DIFF_FILE),
-          truncated: changes.truncated,
-          rules: kind === "rules" ? { dir: join(dir, RULES_DIR), files: ruleFiles } : undefined,
-        }),
+        prompt: reviewPrompt(
+          rules === null
+            ? { kind: "code", diffFile, truncated: changes.truncated }
+            : { kind: "rules", diffFile, truncated: changes.truncated, rules: { dir: join(dir, RULES_DIR), files: ruleFiles } },
+        ),
         limitMs: this.#deps.limitMs,
       },
       this.#deps.procs,
@@ -284,6 +276,17 @@ export class AutoReviews {
     this.#follow();
     entry.done = this.#finish(entry, run, worktree, dir);
     return entry.review;
+  }
+
+  /** The repo's rules for a rules check of task `task`; `bad_request` for a repo without any, which the report only logs. */
+  async #rules(task: string, changed: readonly string[]): Promise<RepoRules> {
+    const rules = await this.#deps.tasks.rules(task, changed);
+    if (rules.files.size === 0)
+      throw new DomainError(
+        "bad_request",
+        `the repo of task ${task} has no rules for agents at the task's base commit: none of ${RULE_PLACES}`,
+      );
+    return rules;
   }
 
   /** The review's end once its reviewer has stopped and its folder is gone, so a finished review leaves nothing behind. */
@@ -297,7 +300,7 @@ export class AutoReviews {
         state: "done",
         findings: reviewFindings(answer, worktreePaths(worktree)),
         text: kept(answer),
-        message: refusedMessage(refused),
+        message: joinedMessage([refusedMessage(refused), omittedMessage(entry.omittedRules)]),
       };
     } catch (err) {
       if (!entry.cancelled) this.#deps.log(`${name}: ${messageOf(err)}`);
@@ -322,7 +325,12 @@ export class AutoReviews {
     for (const review of this.#file.read()?.reviews ?? []) {
       if (!this.#deps.tasks.hasTask(review.task)) continue;
       const restored = review.state === "running" ? stoppedWithDaemon(review, null) : review;
-      this.#reviews.set(reviewKey(review.task, review.kind), { review: restored, done: Promise.resolve(), cancelled: false });
+      this.#reviews.set(reviewKey(review.task, review.kind), {
+        review: restored,
+        done: Promise.resolve(),
+        cancelled: false,
+        omittedRules: 0,
+      });
     }
   }
 
@@ -335,7 +343,7 @@ export class AutoReviews {
  * A review's folder: the diff, and the rule files under `rules/` at their paths in the repo. Returns the rule files
  * written, in their order; a rule file whose path this system cannot hold is left out rather than failing the review.
  */
-function writeReviewDir(dir: string, patch: string, rules: RepoRules): string[] {
+function writeReviewDir(dir: string, patch: string, rules: RepoRules["files"], log: (msg: string) => void): string[] {
   const written: string[] = [];
   try {
     rmSync(dir, { recursive: true, force: true });
@@ -347,8 +355,9 @@ function writeReviewDir(dir: string, patch: string, rules: RepoRules): string[] 
         mkdirSync(dirname(file), { recursive: true });
         writeFileSync(file, content);
         written.push(path);
-      } catch {
-        // A name Windows does not allow (`:`, a reserved name) cannot be a rule the reviewer reads.
+      } catch (err) {
+        // A name Windows does not allow (`:`, a reserved name) cannot be a rule the reviewer reads; the review says so.
+        log(`rule file ${path} left out: ${messageOf(err)}`);
       }
     }
   } catch (err) {
@@ -356,6 +365,17 @@ function writeReviewDir(dir: string, patch: string, rules: RepoRules): string[] 
     throw err;
   }
   return written;
+}
+
+/** Rule files a rules check did not get, past its limits or unwritable here; `null` for none. */
+function omittedMessage(omitted: number): string | null {
+  if (omitted <= 0) return null;
+  return `${countLabel(omitted, { one: "rule file was", other: "rule files were" })} left out: a check takes at most ${RULE_FILES_MAX} files and 1 MiB of them`;
+}
+
+function joinedMessage(parts: readonly (string | null)[]): string | null {
+  const present = parts.filter((part) => part !== null);
+  return present.length === 0 ? null : present.join(". ");
 }
 
 /** What the reviewer asked for and did not get, so the user knows the review may have stopped short; `null` for nothing. */
