@@ -75,6 +75,7 @@ describe("model statistics", () => {
           sharedWithAnother: 0,
           usage: { modelCalls: 30, inputTokens: 3000, outputTokens: 300, aiCredits: 90, aiCreditsPartial: false, premiumRequests: 0 },
           tasksWithUsage: 3,
+          tasksWithCredits: 3,
         },
         {
           model: "claude-sonnet-5.5",
@@ -86,6 +87,7 @@ describe("model statistics", () => {
           sharedWithAnother: 0,
           usage: { modelCalls: 10, inputTokens: 1000, outputTokens: 100, aiCredits: 90, aiCreditsPartial: false, premiumRequests: 0 },
           tasksWithUsage: 1,
+          tasksWithCredits: 1,
         },
       ],
       withoutModel: 0,
@@ -130,7 +132,7 @@ describe("model statistics", () => {
     ];
 
     expect(modelStats(records, "all", NOW).models).toMatchObject([
-      { tasks: 3, tasksWithUsage: 2, usage: { aiCredits: 5, aiCreditsPartial: true, modelCalls: 20 } },
+      { tasks: 3, tasksWithUsage: 2, tasksWithCredits: 1, usage: { aiCredits: 5, aiCreditsPartial: true, modelCalls: 20 } },
     ]);
   });
 });

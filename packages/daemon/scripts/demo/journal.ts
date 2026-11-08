@@ -48,6 +48,9 @@ const MODELS: readonly DemoModel[] = [
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** A model the demo account does not offer, which Copilot CLI quietly replaced (ADR-225). */
+const UNOFFERED_MODEL = "gpt-6-pro";
+
 /** Writes the journal into the demo's state directory before the daemon reads it. */
 export function writeDemoJournal(home: string, repos: readonly string[], now: Date): void {
   const records: EndedTask[] = [];
@@ -80,7 +83,7 @@ export function writeDemoJournal(home: string, repos: readonly string[], now: Da
         files: [],
         filesTruncated: false,
         verification: outcome === null ? null : { state: outcome, finishedAt: endedAt },
-        model: askedForAnother ? "claude-opus-5.5" : m.model,
+        model: askedForAnother ? UNOFFERED_MODEL : m.model,
         usage: {
           modelCalls: m.callsPerTask,
           inputTokens: m.callsPerTask * 41_000,

@@ -1,4 +1,4 @@
-import { type ModelStatsPeriod, type ModelStatsRow, ModelStatsPeriod as Periods, taskJournalApi } from "@trackwall/protocol";
+import { type CopilotUsage, ModelStatsPeriod, type ModelStatsRow, taskJournalApi } from "@trackwall/protocol";
 import { useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
@@ -6,12 +6,14 @@ import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { usageDetails, usageLabel } from "@/lib/copilot-usage";
+import { usageLabel } from "@/lib/copilot-usage";
 import {
   fewTasks,
   MODEL_STATS_PERIOD_LABELS,
   perTask,
+  perTaskDetails,
   perVerifiedTask,
+  perVerifiedTaskDetails,
   rowNotes,
   share,
   verdict,
@@ -41,7 +43,7 @@ export function ModelStatsSurface({ conn }: { conn: Connection }) {
           counts for the model that made most of its calls.
         </p>
         <div className="flex items-center gap-2">
-          {Periods.options.map((p) => (
+          {ModelStatsPeriod.options.map((p) => (
             <Button
               key={p}
               variant={p === period ? "secondary" : "outline"}
@@ -106,15 +108,15 @@ function ModelRow({ row }: { row: ModelStatsRow }) {
       <td className="px-2 py-1.5 whitespace-nowrap">{share(row.verified, row.tasks)}</td>
       <td className="px-2 py-1.5 whitespace-nowrap">{share(row.failed, row.tasks)}</td>
       <td className="px-2 py-1.5 whitespace-nowrap">{share(row.withCommits, row.tasks)}</td>
-      <UsageCell usage={perTask(row)} />
-      <UsageCell usage={perVerifiedTask(row)} />
+      <UsageCell usage={perTask(row)} title={perTaskDetails(row)} />
+      <UsageCell usage={perVerifiedTask(row)} title={perVerifiedTaskDetails(row)} />
     </tr>
   );
 }
 
-function UsageCell({ usage }: { usage: ReturnType<typeof perTask> }) {
+function UsageCell({ usage, title }: { usage: CopilotUsage | null; title: string }) {
   return (
-    <td className="text-muted-foreground px-2 py-1.5 font-mono whitespace-nowrap" title={usage ? usageDetails(usage) : undefined}>
+    <td className="text-muted-foreground px-2 py-1.5 font-mono whitespace-nowrap" title={usage ? title : undefined}>
       {usage ? usageLabel(usage) : "–"}
     </td>
   );

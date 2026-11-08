@@ -28,10 +28,27 @@ export function fewTasks(row: Pick<ModelStatsRow, "tasks">): boolean {
   return row.tasks < MODEL_STATS_FEW_TASKS;
 }
 
-/** What one task cost on average, over the tasks whose usage is recorded; `null` when none is. */
+/**
+ * What one task cost on average, over the tasks whose usage is recorded; AI credits over the tasks that reported them,
+ * so a task without credits (a model of your own provider) does not pull the average down. `null` when none is.
+ */
 export function perTask(row: ModelStatsRow): CopilotUsage | null {
   if (row.usage === null || row.tasksWithUsage === 0) return null;
-  return scaled(row.usage, 1 / row.tasksWithUsage);
+  const { aiCredits } = row.usage;
+  const average = scaled(row.usage, 1 / row.tasksWithUsage);
+  return { ...average, aiCredits: aiCredits === null || row.tasksWithCredits === 0 ? null : aiCredits / row.tasksWithCredits };
+}
+
+/** The tooltip of "Per task": what the average is over. */
+export function perTaskDetails(row: ModelStatsRow): string {
+  const missing = row.tasks - row.tasksWithUsage;
+  const over = `The average of ${countLabel(row.tasksWithUsage, TASKS)} with recorded usage`;
+  return missing === 0 ? over : `${over}; ${countLabel(missing, TASKS)} without it ${missing === 1 ? "is" : "are"} left out`;
+}
+
+/** The tooltip of "Per verified task": how it is counted. */
+export function perVerifiedTaskDetails(row: ModelStatsRow): string {
+  return `What all ${countLabel(row.tasks, TASKS)} cost, over the ${row.verified} that passed verification`;
 }
 
 /**
@@ -55,7 +72,8 @@ export function rowNotes(row: ModelStatsRow): string[] {
 /**
  * The answer the statistics are for, from the models with enough tasks to compare: the one that passes verification
  * most often and the one whose passed verification costs the fewest AI credits. `null` when fewer than two models can
- * be compared, since a single model is not a choice, or when none of them passed a verification.
+ * be compared, since a single model is not a choice, or when none of them passed a verification. On a tie the model
+ * listed first, the one with more tasks, wins.
  */
 export function verdict(stats: ModelStats): string | null {
   const comparable = stats.models.filter((row) => !fewTasks(row));

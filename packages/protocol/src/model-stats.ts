@@ -39,6 +39,8 @@ export const ModelStatsRow = z.object({
   usage: CopilotUsage.nullable(),
   /** Tasks whose usage is in `usage`. */
   tasksWithUsage: z.number().int().nonnegative(),
+  /** Of those, the tasks that reported AI credits, which `usage.aiCredits` sums. */
+  tasksWithCredits: z.number().int().nonnegative(),
 });
 export type ModelStatsRow = z.infer<typeof ModelStatsRow>;
 

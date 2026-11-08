@@ -22,14 +22,14 @@ When you end a task, Trackwall keeps a short record of it (see [Agent tasks](/fe
 
 A task counts for the model that made most of its calls. If you started a task on one model and Copilot CLI ran it on another, because your account does not offer the first, the task counts for the model that did the work, and its row says how many tasks were started on another model. A task you moved to another model half way counts once, for the model that made more of its calls.
 
-"Verified" is a task whose last [Verify](/features/tasks) passed; "Failed", one whose last Verify failed. A task you never verified is in neither. "Per task" is the average of what the model's tasks used, the same way a session shows its [usage](/features/sessions): AI credits, premium requests, or only tokens with a model of your own provider. "Per verified task" divides everything the model's tasks used by the tasks that passed, so a cheap model that often fails costs more per verified task than per task.
+"Verified" is a task whose last [Verify](/features/tasks) passed; "Failed", one whose last Verify failed. A task you never verified is in neither. "Per task" is the average of what the model's tasks used (AI credits over the tasks that reported them), the same way a session shows its [usage](/features/sessions): AI credits, premium requests, or only tokens with a model of your own provider. "Per verified task" divides everything the model's tasks used by the tasks that passed, so a cheap model that often fails costs more per verified task than per task.
 
-The sentence above the table compares only models with five tasks or more. With fewer, a single failure changes the share by a fifth or more, so such a row says "too few tasks to compare" and stays out of the sentence.
+The sentence above the table compares only models with five tasks or more. With fewer, a single failure changes the share by a fifth or more, so such a row says "too few tasks to compare" and stays out of the sentence. The sentence shows only when two models or more have enough tasks, and it names the cheapest one only when at least two of them report AI credits.
 
 ## Use it
 
 1. End a few tasks on each model you want to compare, and press "Verify" before you end each one.
-2. Open "Settings" (Ctrl+, or ⌘, on macOS), choose "Usage" and find "Models" under "Copilot usage".
+2. Open "Settings" (Ctrl+, or ⌘, on macOS), choose "Usage" and find "Models" below "Copilot usage".
 3. Read the sentence above the table, then pick "90 days" or "All" when the last 30 days have too few tasks.
 4. Start your next task on the model that fits it: the one that passes most often for work that must land, the cheapest per verified task for routine changes.
 

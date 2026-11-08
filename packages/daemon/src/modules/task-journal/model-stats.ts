@@ -30,7 +30,9 @@ export function modelStats(records: readonly EndedTask[], period: ModelStatsPeri
       withoutModel++;
       continue;
     }
-    byModel.set(model, [...(byModel.get(model) ?? []), record]);
+    const tasks = byModel.get(model);
+    if (tasks === undefined) byModel.set(model, [record]);
+    else tasks.push(record);
   }
   const models = [...byModel]
     .map(([model, tasks]) => row(model, tasks))
@@ -50,5 +52,6 @@ function row(model: string, tasks: readonly EndedTask[]): ModelStatsRow {
     sharedWithAnother: tasks.filter((t) => t.models.length > 1).length,
     usage: sumUsage(usages),
     tasksWithUsage: usages.length,
+    tasksWithCredits: usages.filter((u) => u.aiCredits !== null).length,
   };
 }

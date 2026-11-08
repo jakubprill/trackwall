@@ -25,7 +25,7 @@ Only names are kept from what the agent sent: the repo, the task, the session, t
 
 ## Use it
 
-1. Open "Settings" (Ctrl+, or ⌘, on macOS), choose "Usage" and find "MCP calls" under "Models".
+1. Open "Settings" (Ctrl+, or ⌘, on macOS), choose "Usage" and find "MCP calls" below "Models".
 2. Pick a tool or an agent to see only its calls.
 3. Click "Changes" to see only what agents ran, stopped or wrote.
 4. To see what one task's agent did, open the task in "Sessions" and choose its "MCP calls" tab.
