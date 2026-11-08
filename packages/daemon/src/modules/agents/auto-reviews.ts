@@ -370,7 +370,7 @@ function writeReviewDir(dir: string, patch: string, rules: RepoRules["files"], l
 /** Rule files a rules check did not get, past its limits or unwritable here; `null` for none. */
 function omittedMessage(omitted: number): string | null {
   if (omitted <= 0) return null;
-  return `${countLabel(omitted, { one: "rule file was", other: "rule files were" })} left out: a check takes at most ${RULE_FILES_MAX} files and 1 MiB of them`;
+  return `${countLabel(omitted, { one: "rule file was", other: "rule files were" })} left out (a check takes at most ${RULE_FILES_MAX} files and 1 MiB of them, and a name this system cannot hold is skipped)`;
 }
 
 function joinedMessage(parts: readonly (string | null)[]): string | null {
