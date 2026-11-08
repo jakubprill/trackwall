@@ -537,6 +537,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     const missing = new Agents({
       inContainer: false,
       closeFolderTerminal: async () => {},
+      stopReproductionCheck: async () => {},
       procs: {
         startTerminal: () => Promise.reject(new Error("should not start")),
         startChannel: () => Promise.reject(new Error("should not start")),

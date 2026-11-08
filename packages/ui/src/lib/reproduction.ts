@@ -59,3 +59,11 @@ export function reproductionFilterNote(check: ReproductionCheck): string | null 
 export function checksTest(check: ReproductionCheck, test: ReproTest): boolean {
   return check.test.file === test.file && check.test.name === test.name;
 }
+
+/**
+ * The check to show under the agent's test: one of this test, or one of an earlier test while it runs, so it can still
+ * be stopped (a new check starts only once it has ended); `null` for a finished check of an earlier test.
+ */
+export function shownCheck(check: ReproductionCheck | null, test: ReproTest): ReproductionCheck | null {
+  return check && (check.state === "running" || checksTest(check, test)) ? check : null;
+}

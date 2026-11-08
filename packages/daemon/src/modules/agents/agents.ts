@@ -196,6 +196,8 @@ export interface AgentsDeps {
   inContainer: boolean;
   /** Closes the user's folder terminal in a task's worktree before the task ends (`terminals`, ADR-185). */
   closeFolderTerminal: (task: string) => Promise<void>;
+  /** Stops a task's reproduction check and removes its copy before the task ends (`reproduction`, ADR-227). */
+  stopReproductionCheck: (task: string) => Promise<void>;
   repos: AgentsRepos;
   /** Task worktrees and branches (ADR-31), and the round commits in them (ADR-168). */
   vcs: TasksVcs & RoundsVcs;
@@ -335,6 +337,7 @@ export class Agents {
       file: new TaskFile(join(deps.home, TASKS_FILE), deps.log),
       liveIn: (dir) => deps.procs.liveIn(dir),
       closeFolderTerminal: (task) => deps.closeFolderTerminal(task),
+      stopReproductionCheck: (task) => deps.stopReproductionCheck(task),
       legacyWorktreesDir: join(deps.home, LEGACY_WORKTREES_DIR),
       roundCommits: (task) => this.#rounds.roundCommits(task),
       openEditor: deps.openEditor,
@@ -1144,6 +1147,11 @@ export class Agents {
   /** What a reproduction check of task `id` works with (ADR-227), for the `reproduction` module. */
   reproSubject(id: string): ReturnType<AgentTasks["reproSubject"]> {
     return this.#tasks.reproSubject(id);
+  }
+
+  /** Where task `id`'s reproduction check copy is, also while the task is being ended (ADR-227). */
+  reproCopyOf(id: string): { repo: string; copy: string } {
+    return this.#tasks.reproCopyOf(id);
   }
 
   /** The copy of a reproduction check of the task, while its mise config is the trusted one, for the `mise` module (ADR-227). */

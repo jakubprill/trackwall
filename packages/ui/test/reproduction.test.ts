@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ReproductionCheck } from "@trackwall/protocol";
-import { checksTest, reproductionFilterNote, reproductionLabel, reproductionRunsLine } from "../src/lib/reproduction.ts";
+import { checksTest, reproductionFilterNote, reproductionLabel, reproductionRunsLine, shownCheck } from "../src/lib/reproduction.ts";
 
 const TEST = { file: "src/test/java/com/example/shop/CartTest.java", name: "CartTest#sums", failure: "expected 3 but was 4" };
 
@@ -52,5 +52,13 @@ describe("the reproduction check in the task panel (ADR-227)", () => {
     expect(reproductionFilterNote(CHECK)).toBeNull();
     expect(checksTest(CHECK, TEST)).toBe(true);
     expect(checksTest(CHECK, { ...TEST, name: "CartTest#empty" })).toBe(false);
+  });
+
+  test("a finished check of an earlier test is not shown, but a running one is, so it can be stopped", () => {
+    const later = { ...TEST, name: "CartTest#empty" };
+    expect(shownCheck(CHECK, later)).toBeNull();
+    expect(shownCheck({ ...CHECK, state: "running", phase: "base" }, later)?.state).toBe("running");
+    expect(shownCheck(CHECK, TEST)).toBe(CHECK);
+    expect(shownCheck(null, TEST)).toBeNull();
   });
 });

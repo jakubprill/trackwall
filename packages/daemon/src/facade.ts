@@ -337,6 +337,8 @@ export function createFacade(o: FacadeOptions): Facade {
     procs,
     // `terminals` needs `agents` for the task worktrees, so it is made below; a task ends only after both.
     closeFolderTerminal: (task): Promise<void> => terminals.closeTask(task),
+    // `reproductionChecks` is made below; a task ends only after it exists.
+    stopReproductionCheck: (task): Promise<void> => reproductionChecks.forget(task),
     repos: workspace,
     vcs,
     home: o.home,
@@ -359,8 +361,6 @@ export function createFacade(o: FacadeOptions): Facade {
     onTaskRemoved: (ended) => {
       logs.removeTaskLogs(ended.task);
       const last = verifications.take(ended.task);
-      // The check stops and its copy goes; it logs its own failures, so ending the task does not wait for it.
-      void reproductionChecks.forget(ended.task);
       // `record` logs its own failures, so ending the task does not wait for the write.
       void taskJournal.record({ ...ended, verification: last && { state: last.state, finishedAt: last.finishedAt } });
     },

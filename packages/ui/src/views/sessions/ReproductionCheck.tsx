@@ -4,7 +4,7 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
 import { relativeTime } from "@/lib/format";
-import { checksTest, reproductionFilterNote, reproductionLabel, reproductionRunsLine } from "@/lib/reproduction";
+import { checksTest, reproductionFilterNote, reproductionLabel, reproductionRunsLine, shownCheck } from "@/lib/reproduction";
 import { useReproductionCheck } from "@/lib/use-reproduction-check";
 
 /**
@@ -14,7 +14,7 @@ import { useReproductionCheck } from "@/lib/use-reproduction-check";
  */
 export function ReproductionCheck({ conn, task, test }: { conn: Connection; task: string; test: ReproTest }) {
   const state = useReproductionCheck(conn, task);
-  const check = state.check && checksTest(state.check, test) ? state.check : null;
+  const check = shownCheck(state.check, test);
   const running = check?.state === "running";
   const note = check && reproductionFilterNote(check);
   return (
@@ -25,6 +25,7 @@ export function ReproductionCheck({ conn, task, test }: { conn: Connection; task
         ) : (
           <span className="text-muted-foreground text-xs">Not checked by Trackwall</span>
         )}
+        {check && !checksTest(check, test) && <span className="text-muted-foreground text-xs">of the earlier test {check.test.name}</span>}
         {check && !running && <span className="text-muted-foreground text-xs">{relativeTime(check.startedAt, new Date())}</span>}
         {running ? (
           <Button variant="ghost" size="sm" onClick={state.cancel} disabled={state.cancelling}>

@@ -1,16 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ReproductionRun } from "@trackwall/protocol";
-import { copyChanged, testSide } from "../src/modules/reproduction/repro-copy.ts";
-import { type ReproCase, reproOutcome, reproTarget } from "../src/modules/reproduction/repro-test-case.ts";
+import type { ReproductionCheck, ReproductionRun, TestCase } from "@trackwall/protocol";
+import { copyChanged, gitPath, testSide } from "../src/modules/reproduction/repro-copy.ts";
+import { reproOutcome, reproTarget } from "../src/modules/reproduction/repro-test-case.ts";
+import { ReproductionChecks } from "../src/modules/reproduction/reproduction-checks.ts";
 import { reproductionVerdict } from "../src/modules/reproduction/reproduction-verdict.ts";
 import { parseJunitReport } from "../src/modules/test-results/junit-report.ts";
 
 const FILE = "orders/src/test/java/com/example/shop/OrderServiceTest.java";
 
-function testCase(name: string, kind: ReproCase["kind"], className = "com.example.shop.OrderServiceTest"): ReproCase {
+function testCase(name: string, kind: TestCase["kind"], className = "com.example.shop.OrderServiceTest"): TestCase {
   const failed = kind === "failure" || kind === "error";
   return {
     suite: className,
@@ -139,10 +140,34 @@ describe("what a check copies from the task's worktree (ADR-227)", () => {
       "it/OrderIT.java",
       "pom.xml",
     ];
-    expect(testSide(paths, "it/OrderIT.java")).toEqual({
+    expect(testSide(paths, "it/OrderIT.java", [])).toEqual({
       tests: ["orders/src/test/java/A.java", "src/test/resources/orders.json", "it/OrderIT.java"],
       rest: ["src/main/java/Order.java", "pom.xml"],
     });
+  });
+
+  test("the test's file is found also as ./path or with backslashes, and the trusted mise config goes onto the base too", () => {
+    const paths = ["it/OrderIT.java", "mise.toml", "src/main/java/Order.java"];
+    expect(testSide(paths, "./it\\OrderIT.java", ["mise.toml", ".tool-versions"])).toEqual({
+      tests: ["it/OrderIT.java", "mise.toml"],
+      rest: ["src/main/java/Order.java"],
+    });
+    expect(gitPath("./it\\OrderIT.java")).toBe("it/OrderIT.java");
+  });
+
+  test("a copied file is newer than the copy started, so a build that compares times recompiles it", async () => {
+    const root = mkdtempSync(join(tmpdir(), "trackwall-repro-times-"));
+    mkdirSync(join(root, "task", "src", "main"), { recursive: true });
+    mkdirSync(join(root, "task.repro"));
+    const source = join(root, "task", "src", "main", "Order.java");
+    writeFileSync(source, "class Order {}\n");
+    const anHourAgo = new Date(Date.now() - 3_600_000);
+    utimesSync(source, anHourAgo, anHourAgo);
+    const started = Date.now() - 1000;
+
+    await copyChanged(join(root, "task"), join(root, "task.repro"), ["src/main/Order.java"]);
+
+    expect(statSync(join(root, "task.repro", "src", "main", "Order.java")).mtimeMs).toBeGreaterThanOrEqual(started);
   });
 
   test("a changed file is copied, a deleted one deleted, and a link or a path under a linked folder is refused", async () => {
@@ -173,5 +198,63 @@ describe("what a check copies from the task's worktree (ADR-227)", () => {
     writeFileSync(join(worktree, "into-outside", "new.txt"), "new\n");
     await expect(copyChanged(worktree, copy, ["into-outside/new.txt"])).rejects.toThrow("lies under a linked folder");
     expect(existsSync(join(outside, "new.txt"))).toBe(false);
+  });
+});
+
+describe("reproduction checks across a daemon restart (ADR-227)", () => {
+  test("a check the previous daemon left running comes back cancelled, and the copy it left is removed", async () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-repro-restart-"));
+    const file = join(home, "reproduction-checks.json");
+    const task = "44444444-4444-4444-8444-444444444444";
+    const check: ReproductionCheck = {
+      task,
+      repo: "shop",
+      test: { file: "src/test/java/CartTest.java", name: "CartTest#sums", failure: "x" },
+      filter: null,
+      state: "running",
+      phase: "base",
+      startedAt: "2026-11-08T10:00:00.000Z",
+      finishedAt: null,
+      base: null,
+      change: null,
+      message: null,
+    };
+    writeFileSync(file, JSON.stringify({ checks: [check] }));
+    const removed: string[] = [];
+    const checks = new ReproductionChecks({
+      tasks: {
+        findTask: () => ({ repo: "shop" }),
+        reproSubject: () => {
+          throw new Error("not in this test");
+        },
+        reproCopyOf: () => ({ repo: "shop", copy: "/worktrees/shop/cart.repro" }),
+      },
+      vcs: {
+        addCheckout: async () => {},
+        removeWorktree: async (_repoDir, path) => {
+          removed.push(path);
+        },
+        changedPaths: async () => ({ paths: [], truncated: false }),
+        worktreeFingerprint: async () => "",
+        copyIncludedFiles: async () => {},
+      },
+      repos: { repoPath: async () => "/projects/shop" },
+      mise: {
+        runInReproCopy: async () => {
+          throw new Error("not in this test");
+        },
+      },
+      reports: { casesIn: async () => ({ cases: [], unread: 0, truncated: false }) },
+      file,
+      log: () => {},
+    });
+
+    expect(checks.get(task)).toMatchObject({
+      state: "cancelled",
+      phase: null,
+      message: "Trackwall stopped during the check, so it has no verdict; check again",
+    });
+    await checks.cancel(task);
+    expect(removed).toEqual(["/worktrees/shop/cart.repro"]);
   });
 });

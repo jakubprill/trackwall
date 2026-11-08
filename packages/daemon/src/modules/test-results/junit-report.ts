@@ -1,4 +1,4 @@
-import type { TestCounts } from "@trackwall/protocol";
+import type { TestCase, TestCounts } from "@trackwall/protocol";
 import { parseXml, type XmlElement } from "../../infra/xml.ts";
 
 /**
@@ -23,21 +23,11 @@ export interface ReportFailure {
   timeSeconds: number | null;
 }
 
-/** Any test case by its name and outcome, for a reproduction check that looks for one test (ADR-227). */
-export interface ReportCase {
-  suite: string;
-  className: string | null;
-  name: string;
-  kind: "passed" | "skipped" | "failure" | "error";
-  type: string | null;
-  message: string | null;
-}
-
 export interface JunitReport {
   counts: TestCounts;
   failures: ReportFailure[];
   /** Every test case in report order. */
-  cases: ReportCase[];
+  cases: TestCase[];
 }
 
 type CaseNames = { suite: string; className: string | null; name: string; timeSeconds: number | null };
@@ -87,7 +77,7 @@ function collectSuite(suite: XmlElement, outcomes: Outcome[]): void {
   }
 }
 
-function caseOf(outcome: Outcome): ReportCase {
+function caseOf(outcome: Outcome): TestCase {
   const { suite, className, name } = outcome;
   if (outcome.kind === "passed" || outcome.kind === "skipped")
     return { suite, className, name, kind: outcome.kind, type: null, message: null };

@@ -160,6 +160,19 @@ describe.skipIf(process.versions.bun === undefined)("the reproduction check (ADR
     await end(task.id);
   }, 60_000);
 
+  test("ending a task during its check stops the check first, so its run and its copy do not outlive the task", async () => {
+    const task = await taskWith("slow", { [TEST_FILE]: "class CartTest {}\n" }, REPRO);
+    await daemon.post(reproductionApi.start, { task: task.id });
+    const deadline = Date.now() + 30_000;
+    while ((await daemon.post(reproductionApi.get, { task: task.id }))?.phase !== "base" && Date.now() < deadline) await sleep(50);
+
+    await end(task.id);
+
+    expect(existsSync(`${task.worktree}.repro`)).toBe(false);
+    expect(existsSync(task.worktree)).toBe(false);
+    expect(await daemon.post(reproductionApi.get, { task: task.id })).toBeNull();
+  }, 60_000);
+
   test("a test file the task did not change, or one that is not a Java class, is inconclusive without a run", async () => {
     const untouched = await taskWith("shop", { "fake-mise.json": fakeMise(PASSED_SUM, 0) }, REPRO);
     const notChanged = await checked(untouched.id);

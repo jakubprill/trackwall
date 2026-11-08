@@ -278,13 +278,7 @@ export class Mise {
   ): Promise<{ run: RunState; filtered: boolean }> {
     const parsedArgs = MiseRunArguments.safeParse([filter]);
     if (!parsedArgs.success) throw new DomainError("bad_request", z.prettifyError(parsedArgs.error));
-    const root = await this.deps.repos.repoPath(target.repo);
-    const env = await this.deps.env();
-    const listed = await this.list(root, env);
-    if (listed.kind !== "ok") throw new DomainError("mise_unavailable", `${target.repo}: ${listed.message}`);
-    const { dir, port } = await this.deps.tasks.trustedReproCopy(target.task, target.repo);
-    const copyEnv = withTaskPort(trustingPath(env, dir), port);
-    const place: RunPlace = { dir, env: copyEnv, secrets: await this.secretsIn(dir, copyEnv) };
+    const place = await this.taskFolderPlace(target.repo, () => this.deps.tasks.trustedReproCopy(target.task, target.repo));
     const task = await this.listedTask(place, miseTask);
     if (!task) throw new DomainError("not_found", `the reproduction check's copy of ${target.repo} has no mise task "${miseTask}"`);
     const filtered = task.usage !== null;
@@ -445,17 +439,31 @@ export class Mise {
    * `port` given instead. The worktree is checked last, as close to the run as the listing of its tasks allows (§8).
    */
   private async place(target: MiseTarget, port?: number): Promise<RunPlace> {
+    const { task } = target;
+    if (task !== null)
+      return this.taskFolderPlace(target.repo, async () => {
+        const { worktree, port: taskPort } = await this.deps.tasks.trustedTaskWorktree(task, target.repo);
+        return { dir: worktree, port: port ?? taskPort };
+      });
+    if (port !== undefined) throw new Error(`a port is given only to a run in a task worktree, not in the root of ${target.repo}`);
     const root = await this.deps.repos.repoPath(target.repo);
     const env = await this.deps.env();
-    if (target.task === null) {
-      if (port !== undefined) throw new Error(`a port is given only to a run in a task worktree, not in the root of ${target.repo}`);
-      return { dir: root, env, secrets: await this.secretsIn(root, env) };
-    }
+    return { dir: root, env, secrets: await this.secretsIn(root, env) };
+  }
+
+  /**
+   * A run's place in a folder of a task (its worktree, ADR-59, or a reproduction check's copy, ADR-227): only while the
+   * repo root's mise config is trusted and `folder` gives the folder with the mise config the user trusted; the folder is
+   * a trusted path for this run alone, and the run gets the task port.
+   */
+  private async taskFolderPlace(repo: string, folder: () => Promise<{ dir: string; port: number }>): Promise<RunPlace> {
+    const root = await this.deps.repos.repoPath(repo);
+    const env = await this.deps.env();
     const listed = await this.list(root, env);
-    if (listed.kind !== "ok") throw new DomainError("mise_unavailable", `${target.repo}: ${listed.message}`);
-    const { worktree, port: taskPort } = await this.deps.tasks.trustedTaskWorktree(target.task, target.repo);
-    const worktreeEnv = withTaskPort(trustingPath(env, worktree), port ?? taskPort);
-    return { dir: worktree, env: worktreeEnv, secrets: await this.secretsIn(worktree, worktreeEnv) };
+    if (listed.kind !== "ok") throw new DomainError("mise_unavailable", `${repo}: ${listed.message}`);
+    const { dir, port } = await folder();
+    const folderEnv = withTaskPort(trustingPath(env, dir), port);
+    return { dir, env: folderEnv, secrets: await this.secretsIn(dir, folderEnv) };
   }
 
   /** The values of the secrets mise adds to a run in `dir`; none when mise does not give its environment (the run then fails itself). */

@@ -7,6 +7,7 @@ import {
   TEST_RESULTS_MAX_FAILURES,
   TEST_RESULTS_MAX_PROBLEMS,
   TEST_RESULTS_MAX_REPORTS,
+  type TestCase,
   type TestFailure,
   type TestReport,
   type TestReportProblem,
@@ -14,7 +15,7 @@ import {
 } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
-import { addCounts, emptyCounts, type JunitReport, parseJunitReport, type ReportCase, type ReportFailure } from "./junit-report.ts";
+import { addCounts, emptyCounts, type JunitReport, parseJunitReport, type ReportFailure } from "./junit-report.ts";
 import { findReportFiles, type ReportFile } from "./report-files.ts";
 
 /**
@@ -91,7 +92,7 @@ export class TestReports {
    * looks for one test in them; `dir` is the daemon's own copy of a repo, never a path from outside. Each failure's type and
    * message are masked and cut as for an agent; `unread` counts the reports that could not be read.
    */
-  async casesIn(dir: string, since: string): Promise<{ cases: ReportCase[]; unread: number; truncated: boolean }> {
+  async casesIn(dir: string, since: string): Promise<{ cases: TestCase[]; unread: number; truncated: boolean }> {
     const found = await findReportFiles(dir, Date.parse(since));
     const read = await mapLimit(found.files, READ_CONCURRENCY, readReport);
     const env = await this.#deps.env();
