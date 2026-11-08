@@ -76,9 +76,14 @@ describe("Plan first on the New session form (ADR-227)", () => {
     expect(planFirstToSend(offer, true)).toBe(false);
   });
 
+  test("is offered while the task still needs its prompt, so the pill does not wait for the first word", () => {
+    expect(planFirstOffer({ kind: "needs-prompt" }, "conversation")).toEqual({ unavailable: null });
+  });
+
   test("is not offered for a session or a change", () => {
     expect(planFirstOffer({ kind: "session" }, "conversation")).toBeNull();
     expect(planFirstOffer({ kind: "change" }, "conversation")).toBeNull();
+    expect(planFirstOffer({ kind: "needs-title" }, "conversation")).toBeNull();
     expect(planFirstToSend(null, true)).toBe(false);
   });
 });

@@ -1,4 +1,5 @@
 import type { Session, SessionView, Task } from "@trackwall/protocol";
+import type { NewSessionStart } from "@/lib/new-session";
 import { inTurn, isLive } from "@/lib/session-state";
 
 /**
@@ -22,15 +23,15 @@ export type PlanFirstOffer = { unavailable: string | null };
  * one after another. In a terminal it stays visible with why it cannot be on, since Trackwall switches Copilot CLI's
  * Plan mode only in the conversation view.
  */
-export function planFirstOffer(start: { kind: string }, view: SessionView): PlanFirstOffer | null {
-  if (start.kind !== "task") return null;
+export function planFirstOffer(start: Pick<NewSessionStart, "kind">, view: SessionView): PlanFirstOffer | null {
+  if (start.kind === "session" || start.kind === "change" || start.kind === "needs-title") return null;
   return {
     unavailable:
       view === "conversation" ? null : "Plan first needs Chat (preview): Trackwall switches Copilot CLI's Plan mode in the conversation.",
   };
 }
 
-/** Whether the task starts with Plan first: chosen, and possible where it starts. */
+/** Whether the task starts with Plan first: chosen, and possible where it starts (only a task's start sends it). */
 export function planFirstToSend(offer: PlanFirstOffer | null, chosen: boolean): boolean {
   return chosen && offer !== null && offer.unavailable === null;
 }

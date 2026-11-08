@@ -116,7 +116,7 @@ describe.skipIf(process.versions.bun === undefined)("a task that plans first (fa
     await agents.stop(session);
   }, 60_000);
 
-  test("a resume while the plan waits goes on in Plan mode, also in the next daemon; after the approval it goes on in Agent mode", async () => {
+  test("a resume while the plan waits goes on in Plan mode, also by a new daemon; after the approval it goes on in Agent mode", async () => {
     const first = startAgents();
     const task = await first.agents.createTask("shop", "Fix the login", { view: "conversation", approvals: "auto", planFirst: true });
     const firstSession = sessionOf(first.agents, task.id);
@@ -157,6 +157,21 @@ describe.skipIf(process.versions.bun === undefined)("a task that plans first (fa
 
     await expect(agents.approvePlan(planned.id)).rejects.toThrow("resume it first");
     expect(agents.task(planned.id).plan).toBe("planning");
+  }, 60_000);
+
+  test("the user cannot switch the agent out of Plan mode while the plan waits, only approve it", async () => {
+    const { agents } = startAgents();
+    const task = await agents.createTask("shop", "Fix the login", { view: "conversation", approvals: "auto", planFirst: true });
+    const session = sessionOf(agents, task.id);
+    await turnEnded(agents, session);
+
+    await expect(agents.setMode(session, AGENT_MODE)).rejects.toThrow("press Approve plan");
+    expect(agents.task(task.id).plan).toBe("planning");
+
+    await agents.approvePlan(task.id);
+    await turnEnded(agents, session);
+    await agents.setMode(session, PLAN_MODE);
+    await agents.stop(session);
   }, 60_000);
 
   test("Plan first in a terminal is refused before a worktree exists", async () => {

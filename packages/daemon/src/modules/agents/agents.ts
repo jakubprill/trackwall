@@ -62,6 +62,7 @@ import {
 import { DomainError } from "../../infra/errors.ts";
 import type { ScreenViewer } from "../../infra/terminal-screen.ts";
 import { AcpSession, type ConversationViewer, type ConversationWindow } from "./acp-session.ts";
+import { PLAN_MODE } from "./acp-session-info.ts";
 import { AgentQueuesFile } from "./agent-queues.ts";
 import type { AgentSession } from "./agent-session.ts";
 import { AutoReviews } from "./auto-reviews.ts";
@@ -1192,7 +1193,7 @@ export class Agents {
       args,
       load: start.load,
       firstMessage: start.firstMessage,
-      mode: start.mode,
+      mode: start.planMode ? PLAN_MODE : undefined,
     });
     this.#listed(started);
     return started.session.conversation;
@@ -1330,8 +1331,7 @@ export class Agents {
    * to implement the plan, and the task's plan counts as approved from then on, so a resume starts in Agent mode.
    */
   async approvePlan(id: string): Promise<Task> {
-    const task = this.#tasks.task(id);
-    if (task.plan !== "planning") throw new DomainError("bad_request", `task ${task.branch} has no plan waiting for approval`);
+    this.#tasks.assertPlanWaits(id);
     const running = this.#sessions.runningOfTask(id);
     if (!(running instanceof AcpSession)) throw new DomainError("bad_request", "the task has no running conversation; resume it first");
     await running.approvePlan(PLAN_APPROVED_MESSAGE);
@@ -1349,6 +1349,9 @@ export class Agents {
   async setMode(id: string, mode: string): Promise<Session> {
     const session = this.#conversationOf(id);
     if (!this.#sessions.isRunning(session)) throw new DomainError("bad_request", "the session is no longer running");
+    // Leaving Plan mode by hand would let the agent change files the user has not approved a plan for (ADR-227).
+    if (mode !== PLAN_MODE && session.task !== null && this.#tasks.task(session.task).plan === "planning")
+      throw new DomainError("bad_request", "the task's plan waits for your approval: press Approve plan to let the agent implement it");
     await session.setMode(mode);
     return this.#sessions.view(session);
   }

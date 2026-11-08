@@ -30,7 +30,6 @@ import {
 } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
-import { PLAN_MODE } from "./acp-session-info.ts";
 import { approvalArgs } from "./copilot-command.ts";
 import type { LspServer } from "./copilot-plugin.ts";
 import { SANDBOX_ARG } from "./copilot-sandbox.ts";
@@ -122,8 +121,8 @@ export type TaskLaunch = { repo: string; cwd: string; task: string; args: readon
       view: "conversation";
       load: string | undefined;
       firstMessage: string | undefined;
-      /** The agent's mode before the first message: Plan for a task whose plan waits for approval (ADR-227). */
-      mode: string | undefined;
+      /** Whether the agent starts in Plan mode, before the first message: its plan waits for approval (ADR-227). */
+      planMode: boolean;
     }
 );
 
@@ -635,11 +634,21 @@ export class AgentTasks {
    * plan does not wait for approval.
    */
   planApproved(id: string): Task {
-    const task = this.#get(id);
-    if (task.plan !== "planning") throw new DomainError("bad_request", `task ${task.branch} has no plan waiting for approval`);
+    const task = this.#planWaiting(id);
     const approved: KnownTask = { ...task, plan: "approved" };
     this.#save(this.#tasks.map((t) => (t.id === id ? approved : t)));
     return view(approved);
+  }
+
+  /** The task, whose plan waits for the user's approval (ADR-227); `bad_request` otherwise. */
+  assertPlanWaits(id: string): void {
+    this.#planWaiting(id);
+  }
+
+  #planWaiting(id: string): KnownTask {
+    const task = this.#get(id);
+    if (task.plan !== "planning") throw new DomainError("bad_request", `task ${task.branch} has no plan waiting for approval`);
+    return task;
   }
 
   /**
@@ -954,10 +963,10 @@ export class AgentTasks {
     // A task whose first start never learned its conversation's id starts the conversation again from the prompt.
     const load = start === "resume" ? (task.conversation ?? undefined) : undefined;
     // A plan that waits for approval is written in Plan mode at every start, a resume and a restart included (ADR-227).
-    const planning = task.plan === "planning";
-    const firstMessage = load !== undefined ? undefined : planning ? planFirstMessage(task.prompt) : task.prompt;
-    const mode = planning ? PLAN_MODE : undefined;
-    const conversation = await this.#deps.sessions.launch({ ...place, view: "conversation", load, firstMessage, mode });
+    const planMode = task.plan === "planning";
+    const opening = planMode ? planFirstMessage(task.prompt) : task.prompt;
+    const firstMessage = load === undefined ? opening : undefined;
+    const conversation = await this.#deps.sessions.launch({ ...place, view: "conversation", load, firstMessage, planMode });
     if (conversation === undefined || conversation === task.conversation) return;
     // Saved at once: the next resume, even after a daemon crash, must load this conversation, not start another one.
     this.#save(this.#tasks.map((t) => (t.id === task.id ? { ...t, conversation } : t)));
