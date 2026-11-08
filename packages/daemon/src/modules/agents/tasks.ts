@@ -34,6 +34,7 @@ import { mapLimit } from "../../infra/map-limit.ts";
 import { approvalArgs } from "./copilot-command.ts";
 import type { LspServer } from "./copilot-plugin.ts";
 import { SANDBOX_ARG } from "./copilot-sandbox.ts";
+import { type ConversationUse, NO_CONVERSATION_USE } from "./copilot-usage-log.ts";
 import { type EndedTaskFacts, type EndedTaskGit, endedTaskFacts } from "./ended-task.ts";
 import { offeredAfter } from "./impact-proposals.ts";
 import type { JavaNavigationServers } from "./java-navigation-servers.ts";
@@ -156,6 +157,8 @@ export interface AgentTasksDeps {
   legacyWorktreesDir: string;
   /** Task `task`'s round commits that the push has not squashed yet (ADR-168), which a handoff looks past (ADR-144). */
   roundCommits: (task: string) => ReadonlySet<string>;
+  /** What a conversation used over its life and on which models, from Copilot CLI's event log (ADR-228). */
+  conversationUse: (conversation: string) => Promise<ConversationUse>;
   openEditor: (dir: string) => void;
   /** A task was created and its first session started: from the form, a proposal, a routine, a handoff or a part of a change. */
   onCreated: (task: Task) => void;
@@ -884,7 +887,13 @@ export class AgentTasks {
           );
         // Last before the deletion: after the shell, which could still write, is closed.
         if (discardFingerprint !== undefined) await this.#refuseChangedSince(task, discardFingerprint);
-        const ended = await endedTaskFacts(task, this.#deps.roundCommits(id), keepBranch, new Date(), this.#deps.vcs, this.#deps.log);
+        const ending = {
+          roundCommits: this.#deps.roundCommits(id),
+          branchKept: keepBranch,
+          endedAt: new Date(),
+          conversation: await this.#conversationUse(task),
+        };
+        const ended = await endedTaskFacts(task, ending, this.#deps.vcs, this.#deps.log);
         await this.#discard(task, keepBranch);
         return ended;
       });
@@ -893,6 +902,22 @@ export class AgentTasks {
       if (task.javaNavigation) await this.#deps.javaNavigation.remove(task.id, `task ${task.id}`);
       return facts;
     });
+  }
+
+  /**
+   * What the task's conversation used (ADR-228): in a terminal under the task's id, in the conversation view under
+   * Copilot CLI's id, unknown when its first start never learned it (ADR-137). A failed read is no usage, since ending
+   * the task must not fail on its record.
+   */
+  async #conversationUse(task: StoredTask): Promise<ConversationUse> {
+    const conversation = task.view === "terminal" ? task.id : task.conversation;
+    if (conversation === null) return NO_CONVERSATION_USE;
+    try {
+      return await this.#deps.conversationUse(conversation);
+    } catch (err) {
+      this.#deps.log(`reading the conversation of ended task ${task.id} for the task journal: ${messageOf(err)}`);
+      return NO_CONVERSATION_USE;
+    }
   }
 
   /** A `job` that deletes the worktree only once git has stopped reading it; a new change computation meanwhile refuses. */
