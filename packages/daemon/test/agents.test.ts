@@ -555,7 +555,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
         setSupervisorModel: () => {},
         agentSecrets: () => [],
         sessionProfile: () => null,
-        autoReviewSettings: () => ({ afterReport: false }),
+        autoReviewSettings: () => ({ afterReport: false, rulesAfterReport: false }),
         javaNavigation: () => null,
         sandboxSettings: () => ({ tasks: "off" }),
         removeRepo: () => Promise.reject(new Error("unused")),

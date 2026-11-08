@@ -80,11 +80,11 @@ describe.skipIf(process.versions.bun === undefined)("an automatic review of a ta
       "--disallow-temp-dir",
     ])
       expect(review.text).toContain(`Argument: ${argument}`);
-    expect(review.text).toContain(`Argument: --add-dir=${join(daemon.home, "auto-reviews", task.id)}`);
+    expect(review.text).toContain(`Argument: --add-dir=${join(daemon.home, "auto-reviews", "code", task.id)}`);
     expect(review.text).not.toContain("--allow-all-tools");
     // Not a session: nobody sees or steers it, and the diff's folder goes with it.
     expect(daemon.facade.agents.sessions().sessions).toHaveLength(sessionsBefore);
-    expect(existsSync(join(daemon.home, "auto-reviews", task.id))).toBe(false);
+    expect(existsSync(join(daemon.home, "auto-reviews", "code", task.id))).toBe(false);
   });
 
   test("a task without changes has nothing to review", async () => {
@@ -102,8 +102,8 @@ describe.skipIf(process.versions.bun === undefined)("an automatic review of a ta
     await new Promise((r) => setTimeout(r, 300));
     expect(await daemon.post(autoReviewApi.get, { task: task.id })).toBeNull();
 
-    expect(await daemon.post(workspaceApi.setAutoReview, { afterReport: true })).toMatchObject({
-      autoReview: { afterReport: true },
+    expect(await daemon.post(workspaceApi.setAutoReview, { afterReport: true, rulesAfterReport: false })).toMatchObject({
+      autoReview: { afterReport: true, rulesAfterReport: false },
       autoReviewProblem: null,
     });
     await daemon.facade.agents.reportSummary(session, { text: "Added a tax.", checkSteps: [], reproTest: null });
@@ -122,10 +122,10 @@ describe.skipIf(process.versions.bun === undefined)("an automatic review of a ta
 
     // A click while the report's start gives way for the same diff still reviews it.
     await daemon.facade.agents.reportSummary(session, { text: "Nothing new.", checkSteps: [], reproTest: null });
-    expect(await daemon.facade.agents.startAutoReview(task.id)).toMatchObject({ state: "running", trigger: "user" });
+    expect(await daemon.facade.agents.startAutoReview(task.id, "code")).toMatchObject({ state: "running", trigger: "user" });
     await settled(task.id);
 
-    await daemon.post(workspaceApi.setAutoReview, { afterReport: false });
+    await daemon.post(workspaceApi.setAutoReview, { afterReport: false, rulesAfterReport: false });
     expect(readdirSync(daemon.home)).toContain("workspace.yaml");
   });
 
@@ -145,11 +145,11 @@ describe.skipIf(process.versions.bun === undefined)("an automatic review of a ta
       // Ending a task while its review is still starting waits for the start and stops the reviewer it began.
       const other = await taskWithChange("add a coupon");
       await daemon.facade.agents.stop(runningSessionOf(other.id));
-      const starting = daemon.facade.agents.startAutoReview(other.id);
+      const starting = daemon.facade.agents.startAutoReview(other.id, "code");
       await daemon.facade.agents.removeTask(other.id, false, true);
       expect(await starting).toMatchObject({ state: "running" });
-      expect(daemon.facade.agents.autoReview(other.id)).toBeNull();
-      expect(existsSync(join(daemon.home, "auto-reviews", other.id))).toBe(false);
+      expect(daemon.facade.agents.autoReview(other.id, "code")).toBeNull();
+      expect(existsSync(join(daemon.home, "auto-reviews", "code", other.id))).toBe(false);
     } finally {
       delete process.env.FAKE_COPILOT_REVIEW_WAIT;
     }

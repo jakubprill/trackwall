@@ -1,9 +1,10 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AutoReview, Task } from "@trackwall/protocol";
+import type { AutoReview, AutoReviewKind, Task } from "@trackwall/protocol";
 import { REVIEWER_TOOLS } from "../src/modules/agents/auto-review-run.ts";
 import { waitFor } from "../test/support/agents.ts";
+import { commitFiles } from "../test/support/git-repo.ts";
 import { startRealCopilotDaemon } from "./support/real-copilot.ts";
 import { type ModelRequest, type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
 
@@ -49,10 +50,10 @@ async function taskWithChange(prompt: string): Promise<Task> {
   return task;
 }
 
-async function settled(task: string): Promise<AutoReview> {
+async function settled(task: string, kind: AutoReviewKind = "code"): Promise<AutoReview> {
   const until = Date.now() + 2 * SESSION_MS;
   for (;;) {
-    const review = daemon.facade.agents.autoReview(task);
+    const review = daemon.facade.agents.autoReview(task, kind);
     if (review !== null && review.state !== "running") return review;
     if (Date.now() > until) throw new Error(`gave up waiting for the review: ${JSON.stringify(review)}`);
     await new Promise((r) => setTimeout(r, 100));
@@ -89,13 +90,13 @@ describe("an automatic review with the real Copilot CLI", () => {
       { text: issue },
     );
 
-    await daemon.facade.agents.startAutoReview(task.id);
+    await daemon.facade.agents.startAutoReview(task.id, "code");
     const review = await settled(task.id);
 
     const [main, agent, afterView, afterAgent] = model.requests().slice(-4);
     expect(main?.lastUserText).toContain('Use the task tool with agent_type: "code-review"');
     expect(main?.lastUserText).toContain(`Additional instructions: The changes to review are this branch's work`);
-    expect(diffFile).toBe(join(daemon.home, "auto-reviews", task.id, "changes.diff"));
+    expect(diffFile).toBe(join(daemon.home, "auto-reviews", "code", task.id, "changes.diff"));
     expect([...(main?.tools ?? [])].sort()).toEqual([...REVIEWER_TOOLS].sort());
     expect([...(agent?.tools ?? [])].sort()).toEqual([...REVIEWER_TOOLS].sort());
     // The diff's folder is readable without an approval (`--add-dir`), and the diff is the task's change.
@@ -128,7 +129,7 @@ describe("an automatic review with the real Copilot CLI", () => {
       { tool: "view", arguments: { path: secret } },
     );
 
-    await daemon.facade.agents.startAutoReview(task.id);
+    await daemon.facade.agents.startAutoReview(task.id, "code");
     const review = await settled(task.id);
 
     const [, afterShell, afterCreate] = model.requests().slice(-3);
@@ -141,5 +142,48 @@ describe("an automatic review with the real Copilot CLI", () => {
       findings: [],
       message: "The reviewer asked for more than reading the task and was refused: Access paths outside trusted directories",
     });
+  });
+
+  // Last, since it commits rules to the repo that every later task would start from.
+  test("a check against the repo's rules gets only view, grep and glob, reads the rules' copies freely and reports in the asked format", async () => {
+    commitFiles(join(daemon.projects, "shop"), { "AGENTS.md": "# Rules\n\n- Never export a constant named `total`.\n" }, "Add rules");
+    const task = await taskWithChange("add a cart total");
+    let rulesDir = "";
+    const violation = [
+      "## Issue: A constant named total",
+      "**File:** src/cart.ts:1",
+      "**Severity:** Medium",
+      '**Rule:** AGENTS.md: "Never export a constant named `total`."',
+      "**Problem:** The change exports `total`.",
+      "**Suggested fix:** Rename it.",
+    ].join("\n");
+    model.reply(
+      (request) => {
+        rulesDir = /copied into the folder `([^`]+)`/.exec(request.lastUserText)?.[1] ?? "";
+        return { tool: "view", arguments: { path: join(rulesDir, "AGENTS.md") } };
+      },
+      { text: violation },
+    );
+
+    await daemon.facade.agents.startAutoReview(task.id, "rules");
+    const check = await settled(task.id, "rules");
+
+    const [main, afterView] = model.requests().slice(-2);
+    expect(main?.lastUserText).toContain("\n\nCheck whether a change keeps the written rules of this repository.");
+    expect(main?.lastUserText).toContain("\n- AGENTS.md\n");
+    expect(rulesDir).toBe(join(daemon.home, "auto-reviews", "rules", task.id, "rules"));
+    expect([...(main?.tools ?? [])].sort()).toEqual(["glob", "grep", "view"]);
+    // The rules' copies are in the review's folder, which the reviewer reads without an approval (`--add-dir`).
+    expect(afterView?.toolResults.join("")).toContain("Never export a constant named `total`.");
+    expect(check).toMatchObject({ kind: "rules", state: "done", message: null, ruleFiles: ["AGENTS.md"] });
+    expect(check.findings).toEqual([
+      {
+        title: "A constant named total",
+        severity: "medium",
+        path: "src/cart.ts",
+        line: 1,
+        text: 'The change exports `total`.\n\nRule: AGENTS.md: "Never export a constant named `total`."\n\nSuggested fix: Rename it.',
+      },
+    ]);
   });
 });

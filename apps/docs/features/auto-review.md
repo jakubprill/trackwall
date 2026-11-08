@@ -1,15 +1,16 @@
 ---
 title: Automatic review
-description: Let Copilot CLI review an agent task's changes before you verify and open a merge request, and turn its findings into review comments.
+description: Let Copilot CLI review an agent task's changes and check them against the repo's rules before the merge request, and turn its findings into review comments.
 ---
 
 # Automatic review
 
-Let Copilot CLI review an agent task's changes before you verify and open a merge request, and turn its findings into review comments.
+Let Copilot CLI review an agent task's changes and check them against the repo's rules before the merge request, and turn its findings into review comments.
 
 ## What you get
 
 - A second pair of eyes on every task: Copilot CLI's own review agent reads the task's changes and reports only bugs, security holes and other issues that matter.
+- A check against the repo's own rules: the changes compared with the repo's `AGENTS.md`, `CLAUDE.md`, Copilot instruction files and decision records (ADRs), with every broken rule quoted.
 - Findings next to the diff, each with its file, line and suggested fix, that become a review comment on that line with one click.
 - A reviewer that only reads: it cannot run commands, change files or use your MCP servers, and every request for more is refused.
 - A choice of when it runs: on a click, or on its own as soon as the task's agent reports that it is done.
@@ -22,6 +23,18 @@ When it ends, the section lists the findings, each with how serious it is, its t
 
 To have every task reviewed without a click, turn on "Review a task's changes when its agent reports its result" in "Settings > Agents". The review then starts when the task's agent reports its result, which it does once it has finished and verified its work, so the findings are there when you come to verify and open the merge request. A report with the same changes as the last finished review does not start another one.
 
+### Check the repo's rules
+
+Below it, the "Repo rules" section has a "Check rules" button. It asks Copilot CLI whether the task's changes keep the rules the repo writes down for agents and developers:
+
+- `AGENTS.md` and `CLAUDE.md` at the root of the repo, and in the folder of every changed file and the folders above it;
+- `.github/copilot-instructions.md` and the `*.instructions.md` files in `.github/instructions`;
+- the decision records in `docs/adr`, `docs/adrs`, `docs/decisions`, `docs/architecture/decisions`, `doc/adr`, `adr` or `adrs`, newest first, up to 60 rule files in all.
+
+Trackwall takes these files as they were when the task started, not as the task left them. A change that deletes a rule, loosens it or adds a rule file of its own is still checked against the rules it started with. The reviewer reads them, reads the change, and reports only a place where the change breaks a rule that is written there, with the rule quoted, the file and line, and how to keep it. General advice, taste and bugs are left out; "Review" covers bugs. The section says "no violations" when the change keeps every rule, lists the rule files it used, and each violation becomes a review comment with "Add to review" like any finding. A repo without any of these files has nothing to check against, and the button says so.
+
+To check every task without a click, turn on "Check a task's changes against the repo's rules when its agent reports its result" in "Settings > Agents".
+
 The reviewer is not a session: it does not show in "Sessions" and you cannot write to it. It gets only the tools that read and search files, and no MCP servers. When it asks for anything more, such as a file outside the task, Trackwall says no for you, and the section names what was refused, since the review may have stopped short.
 
 ## Use it
@@ -30,13 +43,14 @@ The reviewer is not a session: it does not show in "Sessions" and you cannot wri
 2. When it ends, press "Add to review" on the findings you agree with.
 3. Press "Send N comments to the agent".
 
-To review every task when its agent reports, turn on the setting in "Settings > Agents".
+To check the rules, press "Check rules" in the "Repo rules" section and add the violations you agree with the same way. To review or check every task when its agent reports, turn on the settings in "Settings > Agents".
 
 ## Good to know
 
 - Every review costs model credits from your Copilot plan or your own model provider, the same as a turn of a session. That is why it is off until you press "Review" or turn the setting on.
 - The reviewer runs with the same Copilot CLI, account and [session profile](/features/mise-environment) as the task's sessions, and sends the change to the same model provider.
 - A change larger than 512 KB is cut: the reviewer gets only its first part, and the section says so.
-- "Review again" replaces the last review. Trackwall keeps the last review of each task, also when it restarts or updates; one that was still running then shows as cancelled.
+- A rules check is only as good as the rules: it finds what the files say in words, and skips a rule it cannot judge from the files, such as "run the tests" or "ask for a review".
+- "Review again" and "Check again" replace the last result of their kind. Trackwall keeps the last review and the last rules check of each task, also when it restarts or updates; one that was still running then shows as cancelled.
 - Ending a task stops its review.
 - The reviewer can read the task's worktree and your system's temporary folder, which Copilot CLI lets every session read. Copilot CLI also reads the repo's own instructions for agents, such as `AGENTS.md`, as in any session.

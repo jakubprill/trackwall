@@ -1,7 +1,7 @@
 import { dirname, join, relative } from "node:path";
 import {
   type AgentSecrets,
-  type AutoReviewSettings,
+  AutoReviewSettings,
   type CloneJob,
   type Commit,
   type DayStartSettings,
@@ -209,7 +209,7 @@ export class Workspace {
     const worktreesDir = configOrProblem(() => this.deps.file.worktreesDir(), null);
     const gitProgram = configOrProblem(() => this.deps.file.gitProgram(), null);
     const sessionProfile = configOrProblem(() => this.deps.file.sessionProfile(), null);
-    const autoReview = configOrProblem(() => this.deps.file.autoReviewSettings(), { afterReport: false });
+    const autoReview = configOrProblem(() => this.deps.file.autoReviewSettings(), AutoReviewSettings.parse({}));
     const supervisorModel = configOrProblem(() => this.deps.file.supervisorModel(), null);
     // What Settings shows is what runs: a hand edit of `gitProgram` applies when Settings reads it (ADR-112).
     this.deps.vcs.useGitProgram(gitProgram.value);
