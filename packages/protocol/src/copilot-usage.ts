@@ -23,6 +23,16 @@ export const CopilotUsage = z.object({
 export type CopilotUsage = z.infer<typeof CopilotUsage>;
 
 /**
+ * A conversation's own model calls on one model (ADR-228), as their receipts name it; a sub-agent's calls, which may
+ * run on a model of their own, are not counted.
+ */
+export const ModelCalls = z.object({
+  model: z.string(),
+  modelCalls: z.number().int().positive(),
+});
+export type ModelCalls = z.infer<typeof ModelCalls>;
+
+/**
  * The smallest `maxAiCredits` Copilot CLI takes for `--max-ai-credits` (1.0.103: "Minimum session limit is 30 AI
  * credits"); a smaller one would stop every task at its start.
  */
