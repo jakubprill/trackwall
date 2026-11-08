@@ -54,7 +54,7 @@ export const workspaceKeyValue: { [K in WorkspaceKey]: (value: WorkspaceKeyValue
   toolPermissions: (rules) => (rules.length === 0 ? "none" : countLabel(rules.length, { one: "rule", other: "rules" })),
   agentSecrets: (names) => (names.length === 0 ? "none" : names.join(", ")),
   sessionProfile: (profile) => profile ?? "none",
-  autoReview: (settings) => `afterReport: ${settings.afterReport}`,
+  autoReview: (settings) => `afterReport: ${settings.afterReport}, rulesAfterReport: ${settings.rulesAfterReport}`,
   supervisorModel: (model) => model ?? "Copilot CLI's default",
   supervisor: (settings) => `changesCode: ${settings.changesCode}`,
   sandbox: (settings) =>

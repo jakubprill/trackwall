@@ -94,3 +94,30 @@ describe("findings read from the reviewer's answer (ADR-182)", () => {
     expect(reviewFindings(answer, [WORKTREE])).toHaveLength(20);
   });
 });
+
+describe("findings read from a check against the repo's rules (ADR-234)", () => {
+  test("the rule a violation breaks goes into the finding's text between the problem and the fix", () => {
+    const answer = [
+      "## Issue: Shell script added to the repo",
+      "**File:** scripts/release.sh:1",
+      "**Severity:** Medium",
+      '**Rule:** AGENTS.md: "Scripts in the repo are in TypeScript, not bash or PowerShell"',
+      "**Problem:** The change adds a bash script.",
+      "**Suggested fix:** Write it as `scripts/release.ts`.",
+    ].join("\n");
+
+    expect(reviewFindings(answer, [WORKTREE])).toEqual([
+      {
+        title: "Shell script added to the repo",
+        severity: "medium",
+        path: "scripts/release.sh",
+        line: 1,
+        text: 'The change adds a bash script.\n\nRule: AGENTS.md: "Scripts in the repo are in TypeScript, not bash or PowerShell"\n\nSuggested fix: Write it as `scripts/release.ts`.',
+      },
+    ]);
+  });
+
+  test("the answer of a check that found nothing gives no findings", () => {
+    expect(reviewFindings("No rule violations found.", [WORKTREE])).toEqual([]);
+  });
+});

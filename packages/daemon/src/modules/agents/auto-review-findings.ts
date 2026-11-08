@@ -20,13 +20,16 @@ import {
  *     **Evidence:** <text>
  *     **Suggested fix:** <text>
  *
+ * A check against the repo's rules (ADR-234) adds **Rule:** with the rule file and the rule it quotes, which goes into
+ * the finding's text between the problem and the fix.
+ *
  * The answer is model text, so nothing in it is trusted: a path outside the worktree or with `..` keeps no path, a
  * title or text is cut to its limit, and invisible characters are dropped. An answer in another shape gives no findings,
  * and the UI shows the answer itself.
  */
 
 const ISSUE_HEADING = /^\s*#{1,4}\s*Issue\b[^:\n]*:\s*(.*)$/i;
-const FIELD = /^\s*(?:[-*]\s+)?\*\*(File|Severity|Problem|Evidence|Suggested fix)\s*:?\s*\*\*\s*:?\s*(.*)$/i;
+const FIELD = /^\s*(?:[-*]\s+)?\*\*(File|Severity|Rule|Problem|Evidence|Suggested fix)\s*:?\s*\*\*\s*:?\s*(.*)$/i;
 /** A Markdown rule (`---`), which ends a field. */
 const RULE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
 /** A line that opens or closes a Markdown code block. */
@@ -34,7 +37,7 @@ const FENCE = /^\s*(?:```|~~~)/;
 /** `path:12`, `path:12-14` or `path:12:5`; the first number is the line. */
 const PATH_LINE = /^(.*?):(\d+)(?:[-–:]\d+)?$/;
 
-const FIELDS = ["file", "severity", "problem", "evidence", "suggested fix"] as const;
+const FIELDS = ["file", "severity", "rule", "problem", "evidence", "suggested fix"] as const;
 type Field = (typeof FIELDS)[number];
 
 interface Block {
@@ -99,8 +102,11 @@ function readLine(line: string, blocks: Block[], state: ReadState): void {
 function finding(block: Block, worktrees: readonly string[]): AutoReviewFinding | null {
   const value = (field: Field) => (block.fields[field] ?? []).join("\n").trim();
   const problem = value("problem");
+  const rule = value("rule");
   const fix = value("suggested fix");
-  const text = [problem, fix === "" ? "" : `Suggested fix: ${fix}`].filter((part) => part !== "").join("\n\n");
+  const text = [problem, rule === "" ? "" : `Rule: ${rule}`, fix === "" ? "" : `Suggested fix: ${fix}`]
+    .filter((part) => part !== "")
+    .join("\n\n");
   const title = block.title === "" ? firstLine(problem) : block.title;
   if (title === "" || text === "") return null;
   const place = filePlace(plain(value("file")), worktrees);

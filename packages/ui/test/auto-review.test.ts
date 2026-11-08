@@ -74,6 +74,7 @@ describe("the state of an automatic review", () => {
   const review = (over: Partial<AutoReview>): AutoReview => ({
     task: "6f1d0a52-2c41-4a8e-9a3f-0c5a1b2d3e4f",
     repo: "shop",
+    kind: "code",
     state: "done",
     trigger: "user",
     startedAt: "2026-11-02T10:00:00Z",
@@ -83,6 +84,7 @@ describe("the state of an automatic review", () => {
     findings: [],
     text: "",
     message: null,
+    ruleFiles: [],
     ...over,
   });
 
@@ -91,5 +93,11 @@ describe("the state of an automatic review", () => {
     expect(autoReviewLabel(review({ findings: [finding({}), finding({})] }))).toEqual({ tone: "warning", label: "2 findings" });
     expect(autoReviewLabel(review({ state: "running" }))).toEqual({ tone: "warning", label: "reviewing" });
     expect(autoReviewLabel(review({ state: "failed" }))).toEqual({ tone: "error", label: "failed" });
+  });
+
+  test("a check against the repo's rules counts violations, and says it checks while it runs", () => {
+    expect(autoReviewLabel(review({ kind: "rules" }))).toEqual({ tone: "ok", label: "no violations" });
+    expect(autoReviewLabel(review({ kind: "rules", findings: [finding({})] }))).toEqual({ tone: "warning", label: "1 violation" });
+    expect(autoReviewLabel(review({ kind: "rules", state: "running" }))).toEqual({ tone: "warning", label: "checking" });
   });
 });

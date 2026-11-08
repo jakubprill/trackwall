@@ -78,7 +78,7 @@ const Keys: { [K in WorkspaceKey]: z.ZodType<WorkspaceKeyValues[K], unknown> } =
   // The mise environment only sessions start with (ADR-136); set in Settings › Agents or by hand.
   sessionProfile: SessionProfile.nullish().transform((profile) => profile ?? null),
   // Whether a task gets Copilot CLI's review once its agent reports (ADR-182); set in Settings › Agents or by hand.
-  autoReview: AutoReviewSettings.nullish().transform((settings) => settings ?? { afterReport: false }),
+  autoReview: AutoReviewSettings.nullish().transform((settings) => settings ?? AutoReviewSettings.parse({})),
   // The Copilot CLI model the supervisor runs on (ADR-193); set in Settings › Agents or by hand.
   supervisorModel: TaskModel.nullish().transform((model) => model ?? null),
   // The Java language server for tasks (ADR-99); by hand or by installing it in Settings › Agents (ADR-123).
@@ -239,9 +239,13 @@ export class WorkspaceFile {
     this.set("supervisorModel", model);
   }
 
-  /** Off removes the key, so that the file says nothing about a setting the user did not turn on. */
+  /** Only the settings turned on are written, and with both off the key goes, so the file says nothing the user did not turn on. */
   setAutoReview(settings: AutoReviewSettings): void {
-    this.set("autoReview", settings.afterReport ? settings : null);
+    const on: Partial<AutoReviewSettings> = {
+      ...(settings.afterReport && { afterReport: true }),
+      ...(settings.rulesAfterReport && { rulesAfterReport: true }),
+    };
+    this.set("autoReview", Object.keys(on).length === 0 ? null : on);
   }
 
   /** Without a Lombok jar or runtimes the key has no `lombok` or `runtimes` line, rather than `lombok: null` or `runtimes: []`. */
