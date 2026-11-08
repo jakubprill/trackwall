@@ -1,8 +1,7 @@
-import { type RepoStatus, type RepoStatusOk, trackedChanges } from "@trackwall/protocol";
+import { type RepoStatus, type RepoStatusOk, type StatusTone, trackedChanges } from "@trackwall/protocol";
 import { workingTreeLabel } from "./format.ts";
 
-/** A state's tone in the UI; `lib/status-tone.ts` picks the colour for a tone, and the tokens are in `index.css` (ADR-16). */
-export type StatusTone = "ok" | "warning" | "error";
+export type { StatusTone };
 
 /**
  * A repo's state in one line (§4.5): the dot tone and the text next to it. One place for the rule

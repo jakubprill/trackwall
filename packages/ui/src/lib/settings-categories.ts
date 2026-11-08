@@ -36,8 +36,8 @@ export const SETTINGS_CATEGORIES = [
   {
     id: "app",
     label: "App",
-    description: "The desktop app on this computer, and Trackwall in a browser tab.",
-    sections: ["start-at-sign-in", "keep-screen-on", "remote-daemon", "browser-notifications", "updates", "home-scene"],
+    description: "The desktop app on this computer, Trackwall in a browser tab, and the VS Code extension.",
+    sections: ["start-at-sign-in", "keep-screen-on", "remote-daemon", "browser-notifications", "vscode-extension", "updates", "home-scene"],
     wide: false,
   },
   {

@@ -5,6 +5,7 @@ import {
   ContainerStartResult,
   ContainerUpdateResult,
   DAEMON_INFO_PATH,
+  STATE_LABELS,
   TaskState,
   TRACKWALL_LINK_KINDS,
   TRACKWALL_LINK_SCHEME,
@@ -197,11 +198,8 @@ test("the shell knows every session state of protocol by the same name", () => {
 
 test("a notification says what a session waits for with the words of the UI's state labels", () => {
   const notification = read("apps/desktop/src-tauri/src/notification.rs");
-  const labels = read("packages/ui/src/lib/session-state.ts");
-  for (const state of ["Approval", "Plan", "Input"]) {
-    const label = new RegExp(`${state}: "([^"]+)"`).exec(labels)?.[1];
-    expect(label).toBeDefined();
-    expect(notification).toContain(`"Copilot CLI is ${label}"`);
+  for (const state of ["Approval", "Plan", "Input"] as const) {
+    expect(notification).toContain(`"Copilot CLI is ${STATE_LABELS[state]}"`);
   }
 });
 
