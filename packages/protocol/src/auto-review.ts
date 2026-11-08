@@ -26,6 +26,14 @@ export const AUTO_REVIEW_TITLE_MAX = 200;
 export const AutoReviewState = z.enum(["running", "done", "failed", "cancelled"]);
 export type AutoReviewState = z.infer<typeof AutoReviewState>;
 
+/**
+ * What the reviewer checks (ADR-230): `code` is Copilot CLI's `/review` (bugs and security); `rules` checks the change
+ * against the repo's own rules for agents (`AGENTS.md`, `CLAUDE.md`, Copilot's instruction files) and its decision records,
+ * as they were at the task's base commit. Each kind has its own last review per task.
+ */
+export const AutoReviewKind = z.enum(["code", "rules"]);
+export type AutoReviewKind = z.infer<typeof AutoReviewKind>;
+
 /** Who started it: the user's click, or the task's `report_result` with `autoReview.afterReport` on. */
 export const AutoReviewTrigger = z.enum(["user", "report"]);
 export type AutoReviewTrigger = z.infer<typeof AutoReviewTrigger>;
@@ -53,6 +61,8 @@ export type AutoReviewFinding = z.infer<typeof AutoReviewFinding>;
 export const AutoReview = z.object({
   task: TaskId,
   repo: RepoId,
+  /** `code` for a review kept before ADR-230, which had only that kind. */
+  kind: AutoReviewKind.default("code"),
   state: AutoReviewState,
   trigger: AutoReviewTrigger,
   /** ISO 8601. */
@@ -68,23 +78,27 @@ export const AutoReview = z.object({
   text: visibleText(z.string().max(AUTO_REVIEW_TEXT_MAX)),
   /** Why it failed or was cancelled, or on a finished one what the reviewer asked for and was refused; `null` otherwise. */
   message: z.string().nullable(),
+  /** The rule files a `rules` review got, relative to the repo root with `/`; empty for `code`. */
+  ruleFiles: z.array(z.string()).default([]),
 });
 export type AutoReview = z.infer<typeof AutoReview>;
 
 /** The largest diff the reviewer gets: a bigger change is cut after its last whole line within it, and says so. */
 export const AUTO_REVIEW_DIFF_MAX_BYTES = 512 * 1024;
 
-const TaskRequest = z.object({ task: TaskId }).strict();
+/** `kind` is `code` when left out, as before ADR-230. */
+const TaskRequest = z.object({ task: TaskId, kind: AutoReviewKind.default("code") }).strict();
 
 const endpoint = apiEndpoints("auto-review");
 
 export const autoReviewApi = {
   /**
-   * Starts a review of the task's changes in the background and returns it (`running`); while one runs, that one.
-   * `bad_request` when the task has no changes, `agent_unavailable` without Copilot CLI.
+   * Starts a review of the task's changes in the background and returns it (`running`); while one of the kind runs, that one.
+   * `bad_request` when the task has no changes, or for `rules` when the repo has no rule files; `agent_unavailable`
+   * without Copilot CLI.
    */
   start: endpoint("start", TaskRequest, AutoReview),
-  /** The task's last review, also from before a daemon restart; `null` when there was none. */
+  /** The task's last review of the kind, also from before a daemon restart; `null` when there was none. */
   get: endpoint("get", TaskRequest, AutoReview.nullable()),
   /** Stops the running review; it ends `cancelled`. A finished one is returned as it is. */
   cancel: endpoint("cancel", TaskRequest, AutoReview.nullable()),

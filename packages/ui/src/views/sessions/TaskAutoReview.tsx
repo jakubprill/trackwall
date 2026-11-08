@@ -1,43 +1,47 @@
-import type { AutoReview, AutoReviewFinding } from "@trackwall/protocol";
-import { MessageSquarePlus, ScanSearch, Square } from "lucide-react";
+import { type AutoReview, type AutoReviewFinding, type AutoReviewKind, countLabel } from "@trackwall/protocol";
+import { ListChecks, MessageSquarePlus, ScanSearch, Square } from "lucide-react";
 import { useMemo } from "react";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
-import { autoReviewLabel, findingComment, inDrafts, type ShownLines, shownLines } from "@/lib/auto-review";
+import { AUTO_REVIEW_TEXTS, autoReviewLabel, findingComment, inDrafts, type ShownLines, shownLines } from "@/lib/auto-review";
 import type { Connection } from "@/lib/connection";
 import { relativeTime } from "@/lib/format";
 import { useTaskAutoReview } from "@/lib/use-task-auto-review";
 import type { TaskReview } from "@/lib/use-task-review";
 
 /**
- * The automatic review of a task (ADR-182) above its diff: "Review" asks Copilot CLI's review agent to read the task's
- * changes, and each finding it reports can become a review comment on its line with one click. Nothing reaches the
- * task's agent until the user sends the review, so a wrong finding costs nothing but the reading.
+ * An automatic review of a task above its diff: "Review" asks Copilot CLI's review agent to read the task's changes
+ * (ADR-182), "Check rules" asks Copilot CLI whether they keep the repo's rules (ADR-230), and each finding either
+ * reports can become a review comment on its line with one click. Nothing reaches the task's agent until the user sends
+ * the review, so a wrong finding costs nothing but the reading.
  */
 export function TaskAutoReview({
   conn,
   task,
+  kind,
   patch,
   paused,
   review,
 }: {
   conn: Connection;
   task: string;
+  kind: AutoReviewKind;
   patch: string;
   paused: boolean;
   review: TaskReview;
 }) {
-  const state = useTaskAutoReview(conn, task, paused);
+  const state = useTaskAutoReview(conn, task, kind, paused);
   const { review: autoReview } = state;
+  const texts = AUTO_REVIEW_TEXTS[kind];
   return (
-    <section aria-label="Automatic review" className="flex flex-col gap-2 rounded-md border p-3">
+    <section aria-label={texts.title} className="flex flex-col gap-2 rounded-md border p-3">
       <div className="flex items-center gap-3">
-        <span className="hud-label">Automatic review</span>
+        <span className="hud-label">{texts.title}</span>
         {autoReview && <StatusLabel {...autoReviewLabel(autoReview)} />}
         <span className="text-muted-foreground flex-1 truncate text-xs">
           {autoReview
             ? `started ${relativeTime(autoReview.startedAt, new Date())}${autoReview.trigger === "report" ? " after the agent's report" : ""}`
-            : "Copilot CLI reads the changes and reports what looks wrong. It costs model credits."}
+            : texts.idle}
         </span>
         {state.error && <span className="text-destructive max-w-xs truncate text-xs">{state.error}</span>}
         {state.running ? (
@@ -45,14 +49,8 @@ export function TaskAutoReview({
             <Square /> Cancel
           </Button>
         ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={state.start}
-            disabled={state.starting}
-            title="review the task's changes with Copilot CLI"
-          >
-            <ScanSearch /> {autoReview ? "Review again" : "Review"}
+          <Button variant="outline" size="sm" onClick={state.start} disabled={state.starting} title={texts.startTitle}>
+            {kind === "rules" ? <ListChecks /> : <ScanSearch />} {autoReview ? texts.again : texts.start}
           </Button>
         )}
       </div>
@@ -62,7 +60,7 @@ export function TaskAutoReview({
 }
 
 function ReviewResult({ autoReview, patch, review }: { autoReview: AutoReview; patch: string; review: TaskReview }) {
-  const { findings, message, text, diffTruncated, state } = autoReview;
+  const { findings, message, text, diffTruncated, state, ruleFiles } = autoReview;
   // Read once per diff, not per finding on every poll.
   const shown = useMemo(() => shownLines(patch), [patch]);
   return (
@@ -76,6 +74,18 @@ function ReviewResult({ autoReview, patch, review }: { autoReview: AutoReview; p
             <Finding key={`${i}:${finding.title}`} finding={finding} shown={shown} review={review} />
           ))}
         </ul>
+      )}
+      {ruleFiles.length > 0 && (
+        <details className="text-xs">
+          <summary className="text-muted-foreground cursor-pointer">
+            {countLabel(ruleFiles.length, { one: "rule file", other: "rule files" })} from the task's base commit
+          </summary>
+          <ul className="mt-1 font-mono">
+            {ruleFiles.map((file) => (
+              <li key={file}>{file}</li>
+            ))}
+          </ul>
+        </details>
       )}
       {state === "done" && text !== "" && (
         <details className="text-xs">

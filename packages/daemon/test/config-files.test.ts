@@ -119,7 +119,7 @@ describe("config files", () => {
       ["sandbox", "default", "tasks: auto on Linux, off on macOS, Windows and in a container", null],
       ["agentSecrets", "file", "GITLAB_TOKEN", 2],
       ["sessionProfile", "default", "none", null],
-      ["autoReview", "default", "afterReport: false", null],
+      ["autoReview", "default", "afterReport: false, rulesAfterReport: false", null],
       ["supervisorModel", "default", "Copilot CLI's default", null],
       ["javaNavigation", "default", "not set", null],
       // The value without the user and token an HTTPS address may carry.

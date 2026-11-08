@@ -450,6 +450,21 @@ export class Vcs {
   }
 
   /**
+   * The files of `commit` at `paths` (a file, or a directory with everything below it), with `/`, cut at `maxBytes` of
+   * output (`truncated`); for reading what a commit held where a worktree may have changed it since (ADR-230).
+   */
+  async filesAt(dir: string, commit: string, paths: readonly string[], maxBytes: number): Promise<{ paths: string[]; truncated: boolean }> {
+    if (paths.length === 0) return { paths: [], truncated: false };
+    const { stdout, truncated } = await git(dir, ["ls-tree", "-r", "-z", "--name-only", commit, "--", ...paths], { maxBytes });
+    const listed = stdout
+      .toString("utf8")
+      .split("\0")
+      .filter((path) => path !== "");
+    // The last record of cut output may be an incomplete path.
+    return { paths: truncated ? listed.slice(0, -1) : listed, truncated };
+  }
+
+  /**
    * All files of a commit with their sizes and blob ids, without directories and submodules; `truncated` when the list exceeded
    * `maxBytes` of output (a repo with hundreds of thousands of files) and is incomplete.
    */

@@ -202,9 +202,12 @@ export type SupervisorSettings = z.infer<typeof SupervisorSettings>;
 
 /**
  * `autoReview` in `workspace.yaml` (ADR-182), set in Settings: with `afterReport: true` a task's changes get Copilot CLI's
- * `/review` once its agent reports its result, which costs model credits; off by default, when it runs only on a click.
+ * `/review` once its agent reports its result, and with `rulesAfterReport: true` the check against the repo's rules
+ * (ADR-230); each costs model credits, so both are off by default, when they run only on a click.
  */
-export const AutoReviewSettings = z.object({ afterReport: z.boolean().default(false) }).strict();
+export const AutoReviewSettings = z
+  .object({ afterReport: z.boolean().default(false), rulesAfterReport: z.boolean().default(false) })
+  .strict();
 export type AutoReviewSettings = z.infer<typeof AutoReviewSettings>;
 
 /**
