@@ -13,6 +13,9 @@ const USAGE_RECORD = "session.usage_record";
 
 const NANO_AIU_PER_AI_CREDIT = 1e9;
 
+/** The initiator of the conversation's own further calls in a turn, after a tool result: not a new premium request. */
+const CONVERSATION_FOLLOW_UP = "agent";
+
 const UsageRecord = z.object({
   type: z.literal(USAGE_RECORD),
   /** When Copilot CLI wrote it, ISO 8601. */
@@ -25,7 +28,10 @@ const UsageRecord = z.object({
       outputTokens: z.number().int().nonnegative().default(0),
       /** The model multiplier of the call (premium requests of the legacy billing). */
       cost: z.number().nonnegative().default(0),
-      /** What started the call; absent or `user` for the user's own turn, `sub-agent` and others for the rest. */
+      /**
+       * What started the call: absent or `user` for the call that opens the user's turn, `agent` for the conversation's
+       * further calls in the turn (after a tool result; seen in 1.0.107), `sub-agent` and others for the rest.
+       */
       initiator: z.string().optional(),
       aiCreditsStatus: z.enum(["complete", "partial", "unavailable"]).optional(),
       copilotUsage: z.object({ totalNanoAiu: z.number().nonnegative().optional() }).optional(),
@@ -50,9 +56,12 @@ export interface UsageReceipt {
   nanoAiu: number | undefined;
   /** The call reported no AI credits or only some of them. */
   creditsMissing: boolean;
-  /** Premium requests: the model multiplier of a call the user started, nothing for a sub-agent's. */
+  /** Premium requests: the model multiplier of a call the user started, nothing for the turn's further calls or a sub-agent's. */
   premiumRequests: number;
-  /** The model of a call the conversation made itself, not a sub-agent's, which may run on a model of its own. */
+  /**
+   * The model of a call the conversation made itself, the user's turn or its further calls, not a sub-agent's, which may
+   * run on a model of its own.
+   */
   ownModel: string | undefined;
 }
 
@@ -69,7 +78,8 @@ export function usageReceipt(line: string): UsageReceipt | undefined {
   if (!parsed.success) return undefined;
   const usage = parsed.data.data.usage;
   const nanoAiu = usage.aiCreditsStatus === "unavailable" ? undefined : usage.copilotUsage?.totalNanoAiu;
-  const own = usage.initiator === undefined || usage.initiator === "user";
+  const userTurn = usage.initiator === undefined || usage.initiator === "user";
+  const own = userTurn || usage.initiator === CONVERSATION_FOLLOW_UP;
   return {
     key: usage.accounting && `${usage.accounting.sourceSessionId}:${usage.accounting.sequence}`,
     at: parsed.data.timestamp,
@@ -78,7 +88,7 @@ export function usageReceipt(line: string): UsageReceipt | undefined {
     toolDefinitionTokens: usage.toolTokenCount,
     nanoAiu,
     creditsMissing: nanoAiu === undefined || usage.aiCreditsStatus === "partial",
-    premiumRequests: own ? usage.cost : 0,
+    premiumRequests: userTurn ? usage.cost : 0,
     ownModel: own ? usage.model : undefined,
   };
 }
