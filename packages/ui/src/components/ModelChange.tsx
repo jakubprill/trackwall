@@ -23,6 +23,7 @@ export function ModelChangeStrip<T>({
   conn,
   current,
   initial = current,
+  requiresModel = false,
   verb,
   note,
   apply,
@@ -33,6 +34,8 @@ export function ModelChangeStrip<T>({
   current: string | null;
   /** What the field starts with; the current model by default. */
   initial?: string | null;
+  /** Whether Copilot CLI's default (an empty field) is refused, as for a retry on a stronger model. */
+  requiresModel?: boolean;
   /** What the button does: a running session restarts, a stopped task resumes, a failed task is retried (ADR-232). */
   verb: "Restart" | "Resume" | "Retry";
   /** What the change does to this session or task, under the field. */
@@ -72,7 +75,7 @@ export function ModelChangeStrip<T>({
         <Button
           type="submit"
           size="sm"
-          disabled={change.pending || model === undefined || model === current || (verb === "Retry" && model === null)}
+          disabled={change.pending || model === undefined || model === current || (requiresModel && model === null)}
         >
           {verb} on this model
         </Button>

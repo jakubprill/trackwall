@@ -341,7 +341,11 @@ export class AgentTasks {
     const worktreesDir = await this.#deps.repos.newTaskWorktreesDir();
     // A part of a change takes its handoff when its session starts (`#launchHeld`), once the parts before it started.
     const handoff =
-      retry?.handoff ?? (change === null ? await this.#handoffFrom(this.#tasks.find((t) => t.id === proposedBy?.task)) : null);
+      retry !== null
+        ? await this.#retriedHandoff(retry.handoff)
+        : change === null
+          ? await this.#handoffFrom(this.#tasks.find((t) => t.id === proposedBy?.task))
+          : null;
     const task = this.#known({
       id,
       repo,
@@ -640,6 +644,15 @@ export class AgentTasks {
       return null;
     });
     return commit === null ? null : { task: from.id, repo: from.repo, branch: from.branch, commit };
+  }
+
+  /**
+   * The handoff of a retry (ADR-232): the handing task's branch as it is now, as a new subtask gets it, so the retry's
+   * agent is not told it read a commit only the first attempt read; the first attempt's own once the handing task ended.
+   */
+  async #retriedHandoff(first: TaskHandoff | null): Promise<TaskHandoff | null> {
+    if (first === null) return null;
+    return (await this.#handoffFrom(this.#tasks.find((t) => t.id === first.task))) ?? first;
   }
 
   /** The endpoints and types each repo was offered a task for from task `id`'s impact (ADR-198, ADR-205); `{}` once the task is gone. */

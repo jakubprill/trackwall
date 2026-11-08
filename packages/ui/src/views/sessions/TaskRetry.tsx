@@ -29,6 +29,7 @@ export function TaskRetry({ conn, task, onRetried }: { conn: Connection; task: T
         conn={conn}
         current={task.model}
         initial={model}
+        requiresModel
         verb="Retry"
         note="A new task with the same prompt from the same commit on this model. This task stays as it is, so you can compare the two."
         apply={retry}

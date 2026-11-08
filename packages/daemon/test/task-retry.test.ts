@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { agentsApi, boardApi, EndedTask, workspaceApi } from "@trackwall/protocol";
+import { TaskFile } from "../src/modules/agents/task-file.ts";
 import { waitUntil } from "../src/platform/process-group.ts";
 import { makeAgents, viewer, waitFor } from "./support/agents.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
@@ -133,12 +134,8 @@ describe.skipIf(process.versions.bun === undefined)("retrying a task on another 
 
     const retry = await daemon.post(agentsApi.retryTask, { task: subtask.id, model: "claude-opus-5.5" });
 
-    const stored = (id: string) =>
-      (
-        JSON.parse(readFileSync(join(daemon.home, "tasks.json"), "utf8")).tasks as { id: string; handoff: unknown; proposedBy: unknown }[]
-      ).find((t) => t.id === id);
-    expect(stored(retry.id)?.handoff).toEqual(stored(subtask.id)?.handoff);
-    expect(stored(retry.id)?.handoff).toMatchObject({ task: handing.id });
+    const stored = (id: string) => new TaskFile(join(daemon.home, "tasks.json"), () => {}).read().find((t) => t.id === id);
+    expect(stored(retry.id)?.handoff).toMatchObject({ task: handing.id, repo: "shop", branch: handing.branch });
     // The retry reports to the user: the coordination with the handing task stays with the first attempt.
     expect(retry.proposedBy).toBeNull();
     for (const task of [retry, subtask, handing]) await end(task.id);
