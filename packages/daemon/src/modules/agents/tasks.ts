@@ -781,14 +781,17 @@ export class AgentTasks {
    */
   async trustedWorktree(id: string, repo: string): Promise<{ worktree: string; port: number }> {
     const task = this.#existingWorktree(id);
-    return { worktree: task.worktree, port: await this.#trustedPlace(id, repo, task.worktree, "the worktree of") };
+    const advice =
+      "only the user can trust it, in the task's panel in Trackwall, and a session in Trackwall refused for it is told when they do";
+    return { worktree: task.worktree, port: await this.#trustedPlace(id, repo, task.worktree, "the worktree of", advice) };
   }
 
   /**
    * The task port for a mise run in `dir`, a folder of task `id` of `repo`, while the task is not being ended and the
-   * folder has the mise config the user trusted for the task's worktree; `place` names the folder in the refusal.
+   * folder has the mise config the user trusted for the task's worktree; `place` names the folder in the refusal, and
+   * `advice` says what to do about it.
    */
-  async #trustedPlace(id: string, repo: string, dir: string, place: string): Promise<number> {
+  async #trustedPlace(id: string, repo: string, dir: string, place: string, advice: string): Promise<number> {
     if (this.#removing.has(id)) throw new DomainError("bad_request", "this task is being ended");
     const task = this.#existingWorktree(id);
     if (task.repo !== repo) throw new DomainError("bad_request", `task ${task.branch} is in ${task.repo}, not in ${repo}`);
@@ -796,8 +799,7 @@ export class AgentTasks {
     if (changes.length > 0)
       throw new DomainError(
         "mise_unavailable",
-        `the mise config in ${place} task ${task.branch} changed since the user trusted it (${changes.map((c) => c.path).join(", ")}); ` +
-          "only the user can trust it, in the task's panel in Trackwall, and a session in Trackwall refused for it is told when they do",
+        `the mise config in ${place} task ${task.branch} changed since the user trusted it (${changes.map((c) => c.path).join(", ")}); ${advice}`,
       );
     return task.port;
   }
@@ -845,7 +847,10 @@ export class AgentTasks {
     const task = this.#existingWorktree(id);
     const dir = reproCopy(task.worktree);
     if (!existsSync(dir)) throw new DomainError("not_found", `task ${task.branch} has no reproduction check copy`);
-    return { dir, port: await this.#trustedPlace(id, repo, dir, "the reproduction check's copy of") };
+    const advice =
+      "a reproduction check copies only the mise files the user trusted for the worktree, so a mise file the task deleted or one git ignores differs; " +
+      "end the check here and run the test in the worktree instead";
+    return { dir, port: await this.#trustedPlace(id, repo, dir, "the reproduction check's copy of", advice) };
   }
 
   openEditor(id: string): void {

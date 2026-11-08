@@ -202,7 +202,14 @@ describe("what a check copies from the task's worktree (ADR-227)", () => {
 });
 
 describe("reproduction checks across a daemon restart (ADR-227)", () => {
-  test("a check the previous daemon left running comes back cancelled, and the copy it left is removed", async () => {
+  test.each([
+    { left: "running, as a crash leaves it", state: "running" as const, message: null },
+    {
+      left: "cancelled by the daemon's stop",
+      state: "cancelled" as const,
+      message: "Trackwall stopped during the check, so it has no verdict; check again",
+    },
+  ])("a check the previous daemon left $left comes back cancelled, and the copy it left is removed", async ({ state, message }) => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-repro-restart-"));
     const file = join(home, "reproduction-checks.json");
     const task = "44444444-4444-4444-8444-444444444444";
@@ -211,13 +218,13 @@ describe("reproduction checks across a daemon restart (ADR-227)", () => {
       repo: "shop",
       test: { file: "src/test/java/CartTest.java", name: "CartTest#sums", failure: "x" },
       filter: null,
-      state: "running",
-      phase: "base",
+      state,
+      phase: state === "running" ? "base" : null,
       startedAt: "2026-11-08T10:00:00.000Z",
       finishedAt: null,
       base: null,
       change: null,
-      message: null,
+      message,
     };
     writeFileSync(file, JSON.stringify({ checks: [check] }));
     const removed: string[] = [];

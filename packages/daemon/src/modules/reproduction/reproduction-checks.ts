@@ -126,7 +126,9 @@ export class ReproductionChecks {
     for (const check of this.#file.read()?.checks ?? []) {
       if (!this.#deps.tasks.findTask(check.task)) continue;
       const left = check.state === "running";
-      const done = left ? this.#removeCopy(check.task).catch(() => {}) : Promise.resolve();
+      // A check a crash left running, or one a stop cancelled before its copy was removed.
+      const copyLeft = left || check.message === STOPPED_WITH_DAEMON;
+      const done = copyLeft ? this.#removeCopy(check.task).catch(() => {}) : Promise.resolve();
       this.#byTask.set(check.task, { check: left ? stopped(check, null) : check, abort: new AbortController(), done });
     }
   }
@@ -185,17 +187,21 @@ export class ReproductionChecks {
   }
 
   /**
-   * The task ends: its check stops, its copy goes (also one a crashed daemon left), and nothing of it is kept. Awaited
-   * before the task's worktree is removed, so no read of the worktree and no run on the task port outlives the task. A
-   * copy that cannot be removed is logged and left, so the task still ends.
+   * The task is being ended: its check stops and its copy goes (also one a crashed daemon left), awaited before the task's
+   * worktree is removed, so no read of the worktree and no run on the task port outlives the task. A copy that cannot be
+   * removed is logged and left, so the task still ends. The check is kept, since the end may still be refused.
    */
-  async forget(task: string): Promise<void> {
+  async stop(task: string): Promise<void> {
     const entry = this.#byTask.get(task);
     if (entry) {
       entry.abort.abort();
       await entry.done;
     }
     await this.#removeCopy(task).catch(() => {});
+  }
+
+  /** The task has ended: nothing of its check is kept. */
+  forget(task: string): void {
     this.#byTask.delete(task);
     this.#follow();
   }
@@ -203,6 +209,7 @@ export class ReproductionChecks {
   async #run(entry: Entry, start: Omit<Running, "repoDir">): Promise<void> {
     let outcome: Outcome;
     try {
+      start.signal.throwIfAborted();
       const repoDir = await this.#deps.repos.repoPath(start.subject.repo);
       await this.#deps.vcs.removeWorktree(repoDir, start.subject.copy);
       outcome = await this.#check(entry, { ...start, repoDir });
