@@ -120,7 +120,7 @@ describe("shared files", () => {
       ],
     });
     expect(notices.map((n) => [n.key, n.tone, n.label])).toEqual([
-      ["shared-files:t2:conflict", "warning", "1 conflict with “Discount apples”"],
+      ["shared-files:t2:conflict", "warning", "1 conflicting file with “Discount apples”"],
       ["shared-files:t3", "warning", "1 file also in “Change the lime price”"],
     ]);
   });

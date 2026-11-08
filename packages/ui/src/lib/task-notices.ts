@@ -85,7 +85,7 @@ function sharedFilesNotice(shared: TaskNoticeInput["sharedWith"][number]): TaskN
       section: "shared-files",
       key: `shared-files:${shared.task}:conflict`,
       tone: "warning",
-      label: `${countLabel(shared.conflicts, { one: "conflict", other: "conflicts" })} with “${shared.name}”`,
+      label: `${countLabel(shared.conflicts, { one: "conflicting file", other: "conflicting files" })} with “${shared.name}”`,
     };
   return {
     section: "shared-files",

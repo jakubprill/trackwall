@@ -1,6 +1,7 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 import { removeFolder, removeIfPresent } from "../../infra/remove-folder.ts";
+import { borrowingGitDir } from "./borrowed-objects.ts";
 import { git } from "./git.ts";
 
 /**
@@ -13,33 +14,51 @@ import { git } from "./git.ts";
  * Only the user's global and system config does, as in their terminal.
  */
 
-/** `merge-tree` on a large repo with many renames can take seconds on Windows with a scanning antivirus. */
-const TRIAL_MERGE_TIMEOUT_MS = 15_000;
+const COMMIT = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+const OBJECT_FORMATS = new Set(["sha1", "sha256"]);
+
+/** The two branches' commits and where their repo keeps its objects, read in the repo. */
+export interface TrialMergeInput {
+  objects: string;
+  objectFormat: string;
+  ours: string;
+  theirs: string;
+}
 
 /**
- * The paths that conflict when `ours` and `theirs` (branch names in `repoDir`) are merged, from their merge base;
- * empty when they merge cleanly. `null` when git cannot tell: a git older than 2.38, a branch that is gone, a
- * repo git cannot read. The scratch git directory lies in `scratchDir` and is removed afterwards.
+ * The commits of the branches `ours` and `theirs` of `repoDir`, with the repo's objects folder; `null` when git cannot
+ * read them (a branch that is gone, a repo git cannot read).
  */
-export async function trialMergeConflicts(repoDir: string, ours: string, theirs: string, scratchDir: string): Promise<string[] | null> {
+export async function trialMergeInput(repoDir: string, ours: string, theirs: string): Promise<TrialMergeInput | null> {
+  const read = await git(repoDir, [
+    "rev-parse",
+    "--path-format=absolute",
+    "--git-common-dir",
+    "--show-object-format",
+    `refs/heads/${ours}^{commit}`,
+    `refs/heads/${theirs}^{commit}`,
+  ]).catch(() => null);
+  if (read === null) return null;
+  const [commonDir, objectFormat, ourCommit, theirCommit] = read.stdout.toString("utf8").trim().split(/\r?\n/);
+  if (!commonDir || !objectFormat || !OBJECT_FORMATS.has(objectFormat)) return null;
+  if (!ourCommit || !COMMIT.test(ourCommit) || !theirCommit || !COMMIT.test(theirCommit)) return null;
+  return { objects: join(commonDir, "objects"), objectFormat, ours: ourCommit, theirs: theirCommit };
+}
+
+/**
+ * The paths that conflict when the two commits are merged, from their merge base; empty when they merge cleanly. `null`
+ * when git cannot tell (older than 2.38, a timeout). The scratch git directory lies in `scratchDir` and is removed afterwards.
+ */
+export async function trialMergeConflicts(input: TrialMergeInput, scratchDir: string): Promise<string[] | null> {
   const scratch = await mkdtemp(join(scratchDir, "trial-merge-"));
   try {
-    const read = await git(repoDir, [
-      "rev-parse",
-      "--path-format=absolute",
-      "--git-common-dir",
-      "--show-object-format",
-      `refs/heads/${ours}^{commit}`,
-      `refs/heads/${theirs}^{commit}`,
-    ]);
-    const [commonDir, objectFormat, ourCommit, theirCommit] = read.stdout.toString("utf8").trim().split(/\r?\n/);
-    if (!commonDir || !objectFormat || !ourCommit || !theirCommit) return null;
-    await borrowingGitDir(scratch, join(commonDir, "objects"), objectFormat);
+    await borrowingGitDir(scratch, input.objects, input.objectFormat);
     const merged = await git(
       scratch,
-      [`--git-dir=${scratch}`, "merge-tree", "--write-tree", "--name-only", "--no-messages", "-z", ourCommit, theirCommit],
+      // Bare and named explicitly, which `safe.bareRepository=explicit` allows.
+      [`--git-dir=${scratch}`, "merge-tree", "--write-tree", "--name-only", "--no-messages", "-z", input.ours, input.theirs],
       // 1 is "the merge has conflicts", a result.
-      { okExitCodes: [1], timeoutMs: TRIAL_MERGE_TIMEOUT_MS },
+      { okExitCodes: [1] },
     );
     return conflictedPaths(merged.stdout.toString("utf8"));
   } catch {
@@ -59,15 +78,4 @@ export function conflictedPaths(output: string): string[] {
   const [, ...rest] = output.split("\0");
   const end = rest.indexOf("");
   return [...new Set(end === -1 ? rest : rest.slice(0, end))];
-}
-
-/** An empty git directory in `dir` that reads its objects from `objects` and writes new ones into its own. */
-async function borrowingGitDir(dir: string, objects: string, objectFormat: string): Promise<void> {
-  await mkdir(join(dir, "objects", "info"), { recursive: true });
-  await mkdir(join(dir, "refs"));
-  await writeFile(join(dir, "HEAD"), "ref: refs/heads/main\n");
-  const format = objectFormat === "sha1" ? "" : `[extensions]\n\tobjectformat = ${objectFormat}\n`;
-  await writeFile(join(dir, "config"), `[core]\n\trepositoryformatversion = ${format ? 1 : 0}\n\tbare = true\n${format}`);
-  // Forward slashes, which git reads on every system.
-  await writeFile(join(dir, "objects", "info", "alternates"), `${objects.replaceAll("\\", "/")}\n`);
 }

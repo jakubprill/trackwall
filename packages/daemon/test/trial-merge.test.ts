@@ -2,8 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { conflictedPaths, trialMergeConflicts } from "../src/modules/vcs/trial-merge.ts";
+import { gitProcessesStarted } from "../src/modules/vcs/git.ts";
+import { conflictedPaths } from "../src/modules/vcs/trial-merge.ts";
+import { Vcs } from "../src/modules/vcs/vcs.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
+
+/** A `Vcs` whose scratch folder is `scratch`. */
+function vcsIn(scratch = mkdtempSync(join(tmpdir(), "trackwall-scratch-"))): Vcs {
+  return new Vcs(async () => scratch);
+}
 
 const LINES = "one\ntwo\nthree\nfour\nfive\nsix\n";
 
@@ -26,15 +33,15 @@ describe("trial merge of two branches", () => {
       { "list.txt": LINES.replace("two", "TWO"), "a.txt": "a\n" },
       { "list.txt": LINES.replace("two", "2").replace("six", "6"), "b.txt": "b\n" },
     );
-    expect(await trialMergeConflicts(dir, "a", "b", mkdtempSync(join(tmpdir(), "trackwall-scratch-")))).toEqual(["list.txt"]);
+    expect(await vcsIn().trialMergeConflicts(dir, "a", "b")).toEqual(["list.txt"]);
 
     const apart = twoBranches({ "list.txt": LINES.replace("one", "ONE") }, { "list.txt": LINES.replace("six", "SIX") });
-    expect(await trialMergeConflicts(apart, "a", "b", mkdtempSync(join(tmpdir(), "trackwall-scratch-")))).toEqual([]);
+    expect(await vcsIn().trialMergeConflicts(apart, "a", "b")).toEqual([]);
   });
 
   test("a new file both branches add with different content conflicts, in a sha256 repo too", async () => {
     const dir = twoBranches({ "new.txt": "from a\n" }, { "new.txt": "from b\n" }, "sha256");
-    expect(await trialMergeConflicts(dir, "a", "b", mkdtempSync(join(tmpdir(), "trackwall-scratch-")))).toEqual(["new.txt"]);
+    expect(await vcsIn().trialMergeConflicts(dir, "a", "b")).toEqual(["new.txt"]);
   });
 
   test("the repo gets no objects and the scratch folder is left empty", async () => {
@@ -42,7 +49,7 @@ describe("trial merge of two branches", () => {
     const scratch = mkdtempSync(join(tmpdir(), "trackwall-scratch-"));
     const before = gitIn(dir, "count-objects", "-v");
 
-    expect(await trialMergeConflicts(dir, "a", "b", scratch)).toEqual(["list.txt"]);
+    expect(await vcsIn(scratch).trialMergeConflicts(dir, "a", "b")).toEqual(["list.txt"]);
     expect(gitIn(dir, "count-objects", "-v")).toBe(before);
     expect(readdirSync(scratch)).toEqual([]);
   });
@@ -54,12 +61,26 @@ describe("trial merge of two branches", () => {
     );
     // A driver that would resolve every conflict (and could be any program an agent wrote into the repo's config).
     gitIn(dir, "config", "merge.take.driver", "true");
-    expect(await trialMergeConflicts(dir, "a", "b", mkdtempSync(join(tmpdir(), "trackwall-scratch-")))).toEqual(["list.txt"]);
+    expect(await vcsIn().trialMergeConflicts(dir, "a", "b")).toEqual(["list.txt"]);
   });
 
   test("a branch that is gone gives no answer instead of a failure", async () => {
     const dir = twoBranches({ "a.txt": "a\n" }, { "b.txt": "b\n" });
-    expect(await trialMergeConflicts(dir, "a", "gone", mkdtempSync(join(tmpdir(), "trackwall-scratch-")))).toBeNull();
+    expect(await vcsIn().trialMergeConflicts(dir, "a", "gone")).toBeNull();
+  });
+
+  test("the same two commits are merged once: asking again costs only the read of the branches", async () => {
+    const dir = twoBranches({ "list.txt": LINES.replace("two", "TWO") }, { "list.txt": LINES.replace("two", "2") });
+    const vcs = vcsIn();
+    expect(await vcs.trialMergeConflicts(dir, "a", "b")).toEqual(["list.txt"]);
+
+    const before = gitProcessesStarted();
+    expect(await vcs.trialMergeConflicts(dir, "a", "b")).toEqual(["list.txt"]);
+    expect(gitProcessesStarted() - before).toBe(1);
+
+    gitIn(dir, "switch", "-q", "b");
+    commitFiles(dir, { "list.txt": LINES.replace("two", "TWO") }, "b gives in");
+    expect(await vcs.trialMergeConflicts(dir, "a", "b")).toEqual([]);
   });
 
   test("git's output names each conflicted path once and stops at the empty entry", () => {

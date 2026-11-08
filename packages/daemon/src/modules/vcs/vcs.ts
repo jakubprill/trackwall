@@ -68,7 +68,7 @@ import {
 } from "./round-commits.ts";
 import { StatusMemo, type TimedStatus } from "./status-memo.ts";
 import { syncRepo } from "./sync.ts";
-import { trialMergeConflicts } from "./trial-merge.ts";
+import { trialMergeConflicts, trialMergeInput } from "./trial-merge.ts";
 import { type RepoUnpushed, readUnpushed } from "./unpushed.ts";
 import { addCheckout, addWorktree, defaultBase, deleteBranch, pendingWork, removeWorktree } from "./worktree.ts";
 import { changedPaths, workingTreeChanges, worktreeChanges } from "./worktree-changes.ts";
@@ -77,6 +77,9 @@ import { copyIncludedFiles } from "./worktree-include.ts";
 
 /** A git that does not answer `--version` within this is not one to save as the "Git program" (ADR-112). */
 const GIT_PROGRAM_CHECK_TIMEOUT_MS = 15_000;
+
+/** Trial merges remembered: a pair for every two tasks of a repo with shared files, and the pairs their earlier commits made. */
+const TRIAL_MERGES_KEPT = 200;
 
 /** The system temp folder for git's scratch files, while there is no projects folder to keep them in. */
 export const systemTempFolder = async (): Promise<string> => tmpdir();
@@ -122,6 +125,8 @@ export class Vcs {
   private readonly worktreeOps = new KeyedQueue();
   private readonly states = new GitStateReader();
   private readonly headCommits = new CommitMemo();
+  /** Trial merges by their two commits (ADR-230), oldest first. */
+  private readonly trialMerges = new Map<string, string[]>();
   private readonly configs = new ConfigMemo();
   private readonly statuses: StatusMemo;
 
@@ -269,9 +274,23 @@ export class Vcs {
     return changedPaths(dir, base, await this.scratch());
   }
 
-  /** The files in which merging the branches `ours` and `theirs` of `repoDir` would conflict; `null` when git cannot tell (ADR-230). */
+  /**
+   * The files in which merging the branches `ours` and `theirs` of `repoDir` would conflict; `null` when git cannot tell
+   * (ADR-230). The answer depends only on the two commits, so a pair already merged costs one `rev-parse`: a task panel
+   * asks every few seconds while the branches move only at the end of a turn.
+   */
   async trialMergeConflicts(repoDir: string, ours: string, theirs: string): Promise<string[] | null> {
-    return trialMergeConflicts(repoDir, ours, theirs, await this.scratch());
+    const input = await trialMergeInput(repoDir, ours, theirs);
+    if (input === null) return null;
+    const key = [input.objects, input.ours, input.theirs].join("\0");
+    const known = this.trialMerges.get(key);
+    if (known !== undefined) return known;
+    const conflicts = await trialMergeConflicts(input, await this.scratch());
+    // A merge git could not try (a timeout) is tried again next time.
+    if (conflicts === null) return null;
+    if (this.trialMerges.size >= TRIAL_MERGES_KEPT) this.trialMerges.delete(this.trialMerges.keys().next().value ?? "");
+    this.trialMerges.set(key, conflicts);
+    return conflicts;
   }
 
   async worktreeFingerprint(dir: string, base: string): Promise<string> {

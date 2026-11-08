@@ -798,7 +798,8 @@ export const TaskSharedFiles = z.object({
   files: z.array(z.string()),
   /**
    * Those of `files` in which a trial merge of the two task branches conflicts (ADR-230): what the tasks committed, so
-   * work of a turn still going is not in it yet. `null` when git could not try the merge (older than 2.38).
+   * work of a turn still going is not in it yet. `null` when git could not try the merge (older than 2.38, a branch gone,
+   * a timeout).
    */
   conflicts: z.array(z.string()).nullable(),
 });
