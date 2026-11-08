@@ -28,7 +28,7 @@ afterAll(async () => {
 const TYPED_REVIEW = "Thinking about: The user sent a review of your changes in Trackwall: call get_review_comments";
 
 describe.skipIf(process.versions.bun === undefined)("Copilot CLI's framed input box (real PTY and git, fake Copilot CLI)", () => {
-  test("a new session waits for you in the framed input box before its first prompt, between rules on Windows", async () => {
+  test("a new session waits for you in its input box before its first prompt (framed; ruled on Windows)", async () => {
     const started = await daemon.facade.agents.start("shop");
     const window = viewer(daemon.facade.agents, started.id);
     const ready = await waitFor(daemon.facade.agents, started.id, (s) => s.state !== null, "the first state");
@@ -39,7 +39,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI's framed input 
     await daemon.facade.agents.stop(started.id);
   }, 30_000);
 
-  test("a review sent once the task's turn has ended is typed into the framed input box (ruled on Windows) and reaches the agent", async () => {
+  test("a review sent once the task's turn has ended is typed into the input box (framed; ruled on Windows) and reaches the agent", async () => {
     const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "describe how to run shop", approvals: "ask" });
     const session = daemon.facade.agents.sessions().sessions.find((s) => s.task === task.id);
     if (session === undefined) throw new Error("the task has no session");

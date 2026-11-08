@@ -16,7 +16,8 @@
  * helper starts only after input from the user, because on Windows the leader joins the job a moment after the start.
  * Like Copilot CLI it keeps a conversation per session id once the session has had a prompt (a marker file in the
  * temporary directory), and refuses `--resume=<id>` of an id without one (ADR-95). With `COPILOT_PROMPT_FRAME=1` it
- * frames its input box as Copilot CLI does with that feature on (ADR-220). `--version` alone prints the version,
+ * frames its input box as Copilot CLI does with that feature on (ADR-220; on Windows it keeps the
+ * ruled box, as the real one behind ConPTY). `--version` alone prints the version,
  * and `--acp` runs the ACP mode of `fake-copilot-acp.ts` (ADR-107).
  */
 import { spawn } from "node:child_process";

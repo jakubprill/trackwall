@@ -10,7 +10,7 @@
  * - framed (seen on 1.0.107, ADR-220): a rail on the left, `╻` over lines starting with `┃` over `╹`, its top a row of `▄` and
  *   its bottom a row of `▀`, with no `❯`. Copilot CLI draws it when its `PROMPT_FRAME` feature is on for the account
  *   (or `COPILOT_PROMPT_FRAME=1`) and the terminal answered its query for the background colour, as the session
- *   terminal's xterm.js does.
+ *   terminal's xterm.js does (not on Windows, where ConPTY swallows the query, so Copilot CLI keeps the ruled box).
  * The daemon's tests read screens of the real binary; the contract tests check this reading on the pinned version.
  */
 

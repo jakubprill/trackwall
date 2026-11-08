@@ -67,7 +67,7 @@ function openTerminal(id: string): ReturnType<typeof viewer> {
 }
 
 describe("Copilot CLI's framed input box with the real Copilot CLI (ADR-220)", () => {
-  test("a new supervisor waits for you in the framed input box before its first prompt, between rules on Windows", async () => {
+  test("a new supervisor waits for you in its input box before its first prompt (framed; ruled on Windows)", async () => {
     const { agents } = daemon.facade;
     const supervisor = await agents.startSupervisor("new", "terminal");
     const window = openTerminal(supervisor.id);
@@ -77,7 +77,7 @@ describe("Copilot CLI's framed input box with the real Copilot CLI (ADR-220)", (
     expect(ready.state).toMatchObject({ state: "Input", source: "screen", reason: "screen input box before the first prompt" });
   });
 
-  test("a review sent once a task's turn has ended is typed into the framed input box (ruled on Windows) and reaches the agent", async () => {
+  test("a review sent once a task's turn has ended is typed into the input box (framed; ruled on Windows) and reaches the agent", async () => {
     const { agents } = daemon.facade;
     model.reply({ text: "Added the test." });
     const task = await agents.createTask("shop", "add a login test");
