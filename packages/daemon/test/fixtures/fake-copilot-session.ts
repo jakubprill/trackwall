@@ -27,7 +27,13 @@ import { TESTED_COPILOT_CLI_VERSION } from "@trackwall/protocol";
 import { z } from "zod";
 import { ESCAPE } from "../../src/modules/agents/copilot-keys.ts";
 import { stripAnsi } from "../../src/modules/logs/stream-lines.ts";
-import { PARALLEL_TOOLS_PROMPT, PROMPT_PLACEHOLDER, type ReferenceHook, reference } from "../support/copilot-reference.ts";
+import {
+  PARALLEL_TOOLS_PROMPT,
+  PROMPT_FRAME_LAYOUT,
+  PROMPT_PLACEHOLDER,
+  type ReferenceHook,
+  reference,
+} from "../support/copilot-reference.ts";
 import { recordModelChange, recordUsage } from "../support/copilot-usage-receipt.ts";
 import { pluginHooks } from "../support/plugin-hooks.ts";
 import { serveAcp } from "./fake-copilot-acp.ts";
@@ -114,8 +120,8 @@ const real = reference();
 /**
  * The input box as Copilot CLI draws it with its `PROMPT_FRAME` feature on (ADR-220, `copilot-prompt-frame.contract.ts`):
  * framed in half blocks with a rail on the left instead of between two rules with `❯`, as wide as the rules, over the
- * same footer. The real binary also needs the terminal to answer its colour queries; the fake takes
- * `COPILOT_PROMPT_FRAME=1` alone.
+ * same footer. The real binary also needs the terminal to answer its colour queries, which ConPTY does not pass on;
+ * the fake takes `COPILOT_PROMPT_FRAME=1` alone, and on Windows keeps the ruled box as the real one does there.
  */
 function framedBox(ruled: readonly string[]): string[] {
   const footer = ruled.at(-1);
@@ -123,7 +129,7 @@ function framedBox(ruled: readonly string[]): string[] {
   if (footer === undefined || width === 0) throw new Error("the reference's input box has no rule or no footer");
   return [`╻${"▄".repeat(width - 1)}`, "┃", `╹${"▀".repeat(width - 1)}`, footer];
 }
-const promptBox = process.env.COPILOT_PROMPT_FRAME === "1" ? framedBox(real.promptBox) : real.promptBox;
+const promptBox = process.env.COPILOT_PROMPT_FRAME === "1" && PROMPT_FRAME_LAYOUT === "framed" ? framedBox(real.promptBox) : real.promptBox;
 const title = (text: string) => process.stdout.write(`\x1b]0;${text}\x07`);
 const draw = (lines: readonly string[]) => process.stdout.write(`${lines.join("\r\n")}\r\n`);
 

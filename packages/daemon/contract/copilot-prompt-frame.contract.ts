@@ -1,14 +1,16 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { promptBoxLayout } from "@trackwall/protocol";
 import { viewer, waitFor } from "../test/support/agents.ts";
-import { REFERENCE_COLS, REFERENCE_ROWS } from "../test/support/copilot-reference.ts";
+import { PROMPT_FRAME_LAYOUT, REFERENCE_COLS, REFERENCE_ROWS } from "../test/support/copilot-reference.ts";
 import { screenLines, untilInputBox } from "../test/support/screen-lines.ts";
 import { hookRecords, startRealCopilotDaemon } from "./support/real-copilot.ts";
 import { type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
 
 // Copilot CLI's framed input box (ADR-220): with its PROMPT_FRAME feature on, which an account may get and
 // `COPILOT_PROMPT_FRAME=1` forces, and with a terminal that answered its colour queries, Copilot CLI frames the input
-// box in half blocks instead of drawing it between rules with `❯`. The daemon must still see where it may type.
+// box in half blocks instead of drawing it between rules with `❯`. The daemon must still see where it may type. On
+// Windows ConPTY swallows the colour queries, so there Copilot CLI keeps the ruled box (PROMPT_FRAME_LAYOUT), and the
+// test shows that it does, so a ConPTY or Copilot CLI that starts framing it there fails here.
 
 const SESSION_MS = 60_000;
 setDefaultTimeout(4 * SESSION_MS);
@@ -65,17 +67,17 @@ function openTerminal(id: string): ReturnType<typeof viewer> {
 }
 
 describe("Copilot CLI's framed input box with the real Copilot CLI (ADR-220)", () => {
-  test("a new supervisor waits for you in the framed input box before its first prompt", async () => {
+  test("a new supervisor waits for you in the framed input box before its first prompt, between rules on Windows", async () => {
     const { agents } = daemon.facade;
     const supervisor = await agents.startSupervisor("new", "terminal");
     const window = openTerminal(supervisor.id);
 
     const ready = await waitFor(agents, supervisor.id, (s) => s.state !== null, "the framed input box of a new supervisor", SESSION_MS);
-    expect(promptBoxLayout(await screenLines(window))).toBe("framed");
+    expect(promptBoxLayout(await screenLines(window))).toBe(PROMPT_FRAME_LAYOUT);
     expect(ready.state).toMatchObject({ state: "Input", source: "screen", reason: "screen input box before the first prompt" });
   });
 
-  test("a review sent once a task's turn has ended is typed into the framed input box and reaches the agent", async () => {
+  test("a review sent once a task's turn has ended is typed into the framed input box (ruled on Windows) and reaches the agent", async () => {
     const { agents } = daemon.facade;
     model.reply({ text: "Added the test." });
     const task = await agents.createTask("shop", "add a login test");
@@ -84,7 +86,7 @@ describe("Copilot CLI's framed input box with the real Copilot CLI (ADR-220)", (
     const window = openTerminal(session.id);
     await waitFor(agents, session.id, (s) => s.state?.reason === "hook agentStop", "end of turn", SESSION_MS);
     await untilInputBox(window, "empty");
-    expect(promptBoxLayout(await screenLines(window))).toBe("framed");
+    expect(promptBoxLayout(await screenLines(window))).toBe(PROMPT_FRAME_LAYOUT);
 
     model.reply({ text: "Renamed it." });
     const review = { path: "README.md", side: "new" as const, line: 1, code: "# shop", text: "Call it login-test" };
