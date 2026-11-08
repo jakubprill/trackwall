@@ -4,7 +4,7 @@ import { useTrackwall } from "./support/trackwall-ui.ts";
 const trackwall = useTrackwall();
 
 describe("the supervisor in the conversation view (ADR-107)", () => {
-  test("a supervisor started in the conversation view switches to Plan, suggests slash commands, takes a message with a file attached, asks for its approval in the panel, shows its answer, its folded thought and its context use, drops the message box once stopped, and offers to continue it", async () => {
+  test("a supervisor started in the conversation view switches to Plan and back, suggests slash commands, takes a message with a file attached, asks for its approval in the panel, shows its answer, its folded thought and its context use, drops the message box once stopped, and offers to continue it", async () => {
     const page = await trackwall().open();
     await page.getByRole("button", { name: /Pin the supervisor panel open/ }).click();
     const panel = page.getByRole("complementary", { name: "Supervisor" });
@@ -15,6 +15,9 @@ describe("the supervisor in the conversation view (ADR-107)", () => {
     await modes.getByRole("button", { name: "Agent", pressed: true }).waitFor();
     await modes.getByRole("button", { name: "Plan" }).click();
     await modes.getByRole("button", { name: "Plan", pressed: true }).waitFor();
+    // Back to Agent: in Plan mode the fake agent writes a plan and asks for no approval (ADR-227).
+    await modes.getByRole("button", { name: "Agent" }).click();
+    await modes.getByRole("button", { name: "Agent", pressed: true }).waitFor();
 
     const message = panel.getByRole("textbox", { name: "Message to the agent" });
     await message.fill("/c");
