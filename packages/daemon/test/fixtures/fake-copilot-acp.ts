@@ -21,7 +21,7 @@
  *
  * Like Copilot CLI it answers `session/new` and `session/load` with the agent's modes (Agent, Plan, Autopilot), offers two slash commands
  * at once, switches the mode on `session/set_config_option`, in Plan mode runs no tool and answers with
- * `FAKE_ACP_PLAN` and the prompt's first line, as an agent that writes a plan and changes nothing (ADR-227), and says after each turn how much context it uses
+ * `FAKE_ACP_PLAN` and the prompt's first line, as an agent that writes a plan and changes nothing (ADR-229), and says after each turn how much context it uses
  * (1000 tokens a turn of 128000). It takes images in a prompt, and its answer names each block after the first: an
  * image by its type, a text block by its first line.
  */

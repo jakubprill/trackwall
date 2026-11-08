@@ -100,7 +100,7 @@ export interface AcpSessionOptions {
    */
   firstMessage: string | undefined;
   /**
-   * The mode the agent switches to once the session is ready, before the first message (a task's Plan mode, ADR-227);
+   * The mode the agent switches to once the session is ready, before the first message (a task's Plan mode, ADR-229);
    * `undefined` leaves the agent's own. A mode the agent does not offer fails the start.
    */
   mode: string | undefined;
@@ -170,7 +170,7 @@ export class AcpSession implements AgentSession {
   #lastStepAt = Date.now();
   #windowTitle: string | null = null;
   #ready = false;
-  /** The approval of a plan is switching the mode (ADR-227): nothing is sent until the approval goes first. */
+  /** The approval of a plan is switching the mode (ADR-229): nothing is sent until the approval goes first. */
   #switchingMode = false;
   #turn: Prompt | undefined;
   /** Approvals waiting, oldest first: the session's dialog is the first; parallel tool calls ask one after another. */
@@ -390,7 +390,7 @@ export class AcpSession implements AgentSession {
   }
 
   /**
-   * The user approved the plan the agent wrote in Plan mode (ADR-227): the agent switches to Agent mode and gets
+   * The user approved the plan the agent wrote in Plan mode (ADR-229): the agent switches to Agent mode and gets
    * `prompt` as the user's message. Refused while a turn runs, since a plan still being written is not the one the user read.
    */
   async approvePlan(prompt: string): Promise<void> {

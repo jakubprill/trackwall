@@ -11,7 +11,7 @@ import type { ConfigOption, SessionUpdate } from "./acp-messages.ts";
 
 /** Copilot CLI's Agent mode, in which the agent changes files and runs tools. */
 export const AGENT_MODE = "https://agentclientprotocol.com/protocol/session-modes#agent";
-/** Copilot CLI's Plan mode, in which it refuses to change files and writes a plan instead (ADR-227). */
+/** Copilot CLI's Plan mode, in which it refuses to change files and writes a plan instead (ADR-229). */
 export const PLAN_MODE = "https://agentclientprotocol.com/protocol/session-modes#plan";
 
 /** The id of the setting that holds the agent's mode. */

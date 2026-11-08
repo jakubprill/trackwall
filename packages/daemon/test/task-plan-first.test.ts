@@ -9,7 +9,7 @@ import { FAKE_ACP_PLAN } from "./fixtures/fake-copilot-acp.ts";
 import { makeAgents, waitFor } from "./support/agents.ts";
 import { makeRepo } from "./support/git-repo.ts";
 
-// "Plan first" for a task (ADR-227): its agent starts in Copilot CLI's Plan mode and the user approves the plan before
+// "Plan first" for a task (ADR-229): its agent starts in Copilot CLI's Plan mode and the user approves the plan before
 // it changes anything; the fake's ACP mode answers with a plan and runs no tool in Plan mode (`contract/acp-session.contract.ts`
 // checks the real Copilot CLI's refusal).
 

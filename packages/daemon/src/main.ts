@@ -173,6 +173,8 @@ async function start(
     facade.localConfig.start();
     facade.mergeRequests.start();
     facade.verifications.startOutdatedCheck();
+    // After the API: the viewer token goes into `viewer.json` with the port it answers on (ADR-221).
+    facade.viewerAccess.open({ port: api.port, instance: api.instance });
     // After the API too: a resumed session's hooks and MCP server need its port (ADR-95).
     void facade.agents.resumeLeftSessions();
     const self = { pid: process.pid, port: api.port, token, startedAt, version: VERSION };

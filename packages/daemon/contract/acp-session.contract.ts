@@ -444,7 +444,7 @@ describe("a task in the conversation view with the real Copilot CLI (ADR-137)", 
   });
 });
 
-describe("a task that plans first with the real Copilot CLI (ADR-227)", () => {
+describe("a task that plans first with the real Copilot CLI (ADR-229)", () => {
   test("the task starts in Plan mode, where Copilot CLI refuses the model's file edit even with auto approvals, a resume goes on in Plan mode, and once the plan is approved the agent works in Agent mode, where the edit goes through", async () => {
     const { agents } = daemon.facade;
     const edit = (file: string) => ({ tool: "edit", arguments: { path: file, old_str: "# shop", new_str: "# the shop" } });

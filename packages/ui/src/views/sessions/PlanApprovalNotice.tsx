@@ -13,7 +13,7 @@ const STEP_TEXT = {
 } as const;
 
 /**
- * The strip of a task started with "Plan first" while its plan waits (ADR-227): what the agent does now, and "Approve
+ * The strip of a task started with "Plan first" while its plan waits (ADR-229): what the agent does now, and "Approve
  * plan" once its turn ends, which switches it to Agent mode with the prompt to implement the plan.
  */
 export function PlanApprovalNotice({

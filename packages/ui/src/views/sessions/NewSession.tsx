@@ -54,7 +54,7 @@ const PROJECTS_FOLDER = "";
  * copy (ADR-26), and in the projects folder a free session, both with the prompt as their first message when there is one.
  * Every one can run on a chosen model (ADR-98), in the conversation view (ADR-137), and, in a repo tagged java and a
  * terminal, with a Java language server (ADR-99, ADR-175); only a task, whose changes wait for review in its own worktree,
- * can run without asking for approvals (ADR-105), and a task in the conversation view can plan first (ADR-227). The options are a row of pills under the prompt (`StartOptions`); the worktree, the model, Java navigation and the view come back as the user last started from that
+ * can run without asking for approvals (ADR-105), and a task in the conversation view can plan first (ADR-229). The options are a row of pills under the prompt (`StartOptions`); the worktree, the model, Java navigation and the view come back as the user last started from that
  * place, the approvals mode always starts at asking. Started from a board item (ADR-133), the form comes with the item's
  * repo and prompt, and the task works on the item. A task with more repos added is a change (ADR-171): a task per repo
  * on one branch name. A task can come with a stack trace (ADR-222), whose error its agent reproduces in a test first.
@@ -201,7 +201,7 @@ export function NewSession({
   );
 }
 
-/** The Plan first pill where the form offers it (ADR-227). */
+/** The Plan first pill where the form offers it (ADR-229). */
 function planFirstPill(offer: PlanFirstOffer | null, value: boolean, onChange: (value: boolean) => void) {
   return offer === null ? undefined : { value, onChange, unavailable: offer.unavailable };
 }

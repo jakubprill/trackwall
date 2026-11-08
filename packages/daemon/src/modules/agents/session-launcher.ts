@@ -454,7 +454,7 @@ export interface SessionPlace {
 }
 
 /** A start in the conversation view in a place, with arguments after the session's own. */
-/** `mode` is the agent's mode before the first message (a task's Plan mode, ADR-227); without it the agent's own. */
+/** `mode` is the agent's mode before the first message (a task's Plan mode, ADR-229); without it the agent's own. */
 export type ConversationStart = ConversationLaunch & SessionPlace & { args?: readonly string[]; mode?: string };
 
 /**

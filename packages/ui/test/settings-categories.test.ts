@@ -39,12 +39,13 @@ describe("Settings categories", () => {
     expect(settingsCategory("app").sections).toContain("home-scene");
   });
 
-  test("keeping the screen on is under App, after starting at sign-in, then where the daemon runs and notifications in the browser", () => {
+  test("keeping the screen on is under App, after starting at sign-in, then where the daemon runs, notifications in the browser and the VS Code extension", () => {
     expect(settingsCategory("app").sections).toEqual([
       "start-at-sign-in",
       "keep-screen-on",
       "remote-daemon",
       "browser-notifications",
+      "vscode-extension",
       "updates",
       "home-scene",
     ]);

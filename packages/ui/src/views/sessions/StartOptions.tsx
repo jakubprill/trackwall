@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
  * The options of a new task or session as one row of pills under its prompt, on the New session form and on a task
  * proposal: each pill shows its state and a click changes it, its explanation is the pill's tooltip, and a pill is there
  * only where the option means something (an approvals mode only for a task in its own worktree, Java navigation only in
- * a repo tagged java, Plan first only for a task in the conversation view (ADR-227); the model and the conversation view for every task and session, ADR-175). A pill the user cannot turn on yet stays visible with the reason
+ * a repo tagged java, Plan first only for a task in the conversation view (ADR-229); the model and the conversation view for every task and session, ADR-175). A pill the user cannot turn on yet stays visible with the reason
  * in its tooltip. An option
  * that gives up a safeguard (no worktree, no approvals) has a warning dot, and no approvals also its consequences under
  * the row, before the start.
@@ -37,7 +37,7 @@ export function StartOptions({
   javaNavigation?: { value: boolean; onChange: (value: boolean) => void; unavailable: string | null };
   /** Whether the task or session shows as a terminal or in the conversation view (ADR-137), still a preview. */
   view?: { value: SessionView; onChange: (value: SessionView) => void };
-  /** Whether the task's agent plans first in Copilot CLI's Plan mode (ADR-227); `unavailable` is why not now, `null` when it can. */
+  /** Whether the task's agent plans first in Copilot CLI's Plan mode (ADR-229); `unavailable` is why not now, `null` when it can. */
   planFirst?: { value: boolean; onChange: (value: boolean) => void; unavailable: string | null };
   /**
    * Whether the task's commands run in Copilot CLI's sandbox (ADR-181), which `workspace.yaml` decides, not a pill; shown

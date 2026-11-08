@@ -181,7 +181,7 @@ export const TaskApprovals = z.enum(["ask", "auto"]);
 export type TaskApprovals = z.infer<typeof TaskApprovals>;
 
 /**
- * Where a task started with "Plan first" is (ADR-227): `planning`, its agent works in Copilot CLI's Plan mode, which
+ * Where a task started with "Plan first" is (ADR-229): `planning`, its agent works in Copilot CLI's Plan mode, which
  * changes no files, and its plan waits for the user's approval; `approved`, the user approved the plan and the agent
  * works in Agent mode. A task started without it has no plan (`null` in `Task.plan`).
  */
@@ -562,7 +562,7 @@ export const Task = z.object({
   model: TaskModel.nullable(),
   /** How its sessions answer tool approvals (ADR-105). */
   approvals: TaskApprovals,
-  /** Where its plan is when it started with "Plan first" (ADR-227); `null` for a task that started without one. */
+  /** Where its plan is when it started with "Plan first" (ADR-229); `null` for a task that started without one. */
   plan: TaskPlan.nullable(),
   /** Whether its sessions get the Java language server for code navigation (ADR-99). */
   javaNavigation: z.boolean(),
@@ -1014,7 +1014,7 @@ export const agentsApi = {
    * With `handoffFrom`, another task hands it its work (ADR-147). With `stackTrace` the prompt gets the trace, its frames
    * found among the repo's tracked files and the rule to reproduce the error in a test first (ADR-222). With `planFirst`
    * its agent starts in Copilot CLI's Plan mode and writes a plan, which the user approves with `approvePlan` before it
-   * changes anything (ADR-227); it needs the conversation view (`bad_request` in a terminal).
+   * changes anything (ADR-229); it needs the conversation view (`bad_request` in a terminal).
    */
   createTask: endpoint(
     "create-task",
@@ -1107,7 +1107,7 @@ export const agentsApi = {
    */
   handToSupervisor: endpoint("hand-to-supervisor", TaskRequest, Task),
   /**
-   * The user approves the plan of a task started with "Plan first" (ADR-227): its running session switches to Agent mode
+   * The user approves the plan of a task started with "Plan first" (ADR-229): its running session switches to Agent mode
    * and gets the prompt to implement the plan. `bad_request` for a task whose plan does not wait for approval, without a
    * running session in the conversation view, or while its agent is still writing the plan. Only from the UI, never from
    * MCP: an agent does not approve its own plan.

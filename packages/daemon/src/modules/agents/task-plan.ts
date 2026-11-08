@@ -1,7 +1,7 @@
 import { mcpTools } from "@trackwall/protocol";
 
 /**
- * "Plan first" for a task (ADR-227): its agent starts in Copilot CLI's Plan mode, which refuses to change files, and the
+ * "Plan first" for a task (ADR-229): its agent starts in Copilot CLI's Plan mode, which refuses to change files, and the
  * user approves the plan in Trackwall before the agent implements it. Over ACP Copilot CLI's agent does not leave Plan
  * mode itself (it never calls its `exit_plan_mode` there, it ends its turn), so the daemon tells it what the plan is for
  * with the first message and switches it to Agent mode with the approval, whose prompt it gets as the user's message.

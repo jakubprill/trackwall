@@ -15,7 +15,7 @@ describe("the supervisor in the conversation view (ADR-107)", () => {
     await modes.getByRole("button", { name: "Agent", pressed: true }).waitFor();
     await modes.getByRole("button", { name: "Plan" }).click();
     await modes.getByRole("button", { name: "Plan", pressed: true }).waitFor();
-    // Back to Agent: in Plan mode the fake agent writes a plan and asks for no approval (ADR-227).
+    // Back to Agent: in Plan mode the fake agent writes a plan and asks for no approval (ADR-229).
     await modes.getByRole("button", { name: "Agent" }).click();
     await modes.getByRole("button", { name: "Agent", pressed: true }).waitFor();
 

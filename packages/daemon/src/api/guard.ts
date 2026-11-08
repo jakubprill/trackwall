@@ -42,9 +42,10 @@ export class OriginPolicy {
   }
 }
 
-export function hasValidToken(req: IncomingMessage, token: string): boolean {
+/** The token in `Authorization: Bearer`, for the daemon token and the viewer token (ADR-221); `undefined` without one. */
+export function bearerToken(req: IncomingMessage): string | undefined {
   const header = req.headers.authorization;
-  return header?.startsWith("Bearer ") === true && tokenMatches(header.slice("Bearer ".length), token);
+  return header?.startsWith("Bearer ") === true ? header.slice("Bearer ".length) : undefined;
 }
 
 /** Token comparison in constant time; shared by the `Authorization` header and the WebSocket subprotocol. */

@@ -37,7 +37,7 @@ function session(state: TaskState | null, run: Session["run"] = running): Sessio
   };
 }
 
-describe("the plan of a task that plans first (ADR-227)", () => {
+describe("the plan of a task that plans first (ADR-229)", () => {
   test("is being written while the session starts or the agent's turn runs, also while it asks for an approval", () => {
     expect(planStep({ plan: "planning" }, session(null))).toBe("writing");
     expect(planStep({ plan: "planning" }, session("Working"))).toBe("writing");
@@ -60,7 +60,7 @@ describe("the plan of a task that plans first (ADR-227)", () => {
   });
 });
 
-describe("Plan first on the New session form (ADR-227)", () => {
+describe("Plan first on the New session form (ADR-229)", () => {
   test("is offered for a task in the conversation view and goes with it when chosen", () => {
     const offer = planFirstOffer({ kind: "task" }, "conversation");
 

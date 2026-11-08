@@ -198,6 +198,8 @@ export interface AgentsDeps {
   inContainer: boolean;
   /** Closes the user's folder terminal in a task's worktree before the task ends (`terminals`, ADR-185). */
   closeFolderTerminal: (task: string) => Promise<void>;
+  /** Stops a task's reproduction check and removes its copy before the task ends (`reproduction`, ADR-227). */
+  stopReproductionCheck: (task: string) => Promise<void>;
   repos: AgentsRepos;
   /** Task worktrees and branches (ADR-31), and the round commits in them (ADR-168). */
   vcs: TasksVcs & RoundsVcs;
@@ -337,6 +339,7 @@ export class Agents {
       file: new TaskFile(join(deps.home, TASKS_FILE), deps.log),
       liveIn: (dir) => deps.procs.liveIn(dir),
       closeFolderTerminal: (task) => deps.closeFolderTerminal(task),
+      stopReproductionCheck: (task) => deps.stopReproductionCheck(task),
       legacyWorktreesDir: join(deps.home, LEGACY_WORKTREES_DIR),
       roundCommits: (task) => this.#rounds.roundCommits(task),
       openEditor: deps.openEditor,
@@ -609,7 +612,7 @@ export class Agents {
         title,
         proposedBy,
         model,
-        // Plan first is a choice of the New session form only (ADR-227).
+        // Plan first is a choice of the New session form only (ADR-229).
         planFirst: false,
         approvals,
         javaNavigation: false,
@@ -703,7 +706,7 @@ export class Agents {
    */
   async reportSummary(caller: string | null, report: ReportedSummary): Promise<Task> {
     const own = this.#ownTask(caller, "can report a result");
-    // A result would hand the task over for review (ADR-213) before the user approved what it is to do (ADR-227).
+    // A result would hand the task over for review (ADR-213) before the user approved what it is to do (ADR-229).
     if (this.#tasks.task(own.task).plan === "planning")
       throw new DomainError(
         "bad_request",
@@ -1152,6 +1155,21 @@ export class Agents {
     return this.#tasks.trustedWorktree(id, repo);
   }
 
+  /** What a reproduction check of task `id` works with (ADR-227), for the `reproduction` module. */
+  reproSubject(id: string): ReturnType<AgentTasks["reproSubject"]> {
+    return this.#tasks.reproSubject(id);
+  }
+
+  /** Where task `id`'s reproduction check copy is, also while the task is being ended (ADR-227). */
+  reproCopyOf(id: string): { repo: string; copy: string } {
+    return this.#tasks.reproCopyOf(id);
+  }
+
+  /** The copy of a reproduction check of the task, while its mise config is the trusted one, for the `mise` module (ADR-227). */
+  trustedReproCopy(id: string, repo: string): Promise<{ dir: string; port: number }> {
+    return this.#tasks.trustedReproCopy(id, repo);
+  }
+
   async removeTask(id: string, keepBranch: boolean, discardChanges: boolean, discardFingerprint?: string): Promise<void> {
     // Its reviewer runs in the worktree, which the removal refuses while a process of Trackwall is in it. Without one,
     // the removal starts at once, so a change computation that comes after it refuses.
@@ -1327,7 +1345,7 @@ export class Agents {
   }
 
   /**
-   * The user approves the plan of task `id` (ADR-227): its running session switches to Agent mode and gets the prompt
+   * The user approves the plan of task `id` (ADR-229): its running session switches to Agent mode and gets the prompt
    * to implement the plan, and the task's plan counts as approved from then on, so a resume starts in Agent mode.
    */
   async approvePlan(id: string): Promise<Task> {
@@ -1349,7 +1367,7 @@ export class Agents {
   async setMode(id: string, mode: string): Promise<Session> {
     const session = this.#conversationOf(id);
     if (!this.#sessions.isRunning(session)) throw new DomainError("bad_request", "the session is no longer running");
-    // Leaving Plan mode by hand would let the agent change files the user has not approved a plan for (ADR-227).
+    // Leaving Plan mode by hand would let the agent change files the user has not approved a plan for (ADR-229).
     if (mode !== PLAN_MODE && session.task !== null && this.#tasks.task(session.task).plan === "planning")
       throw new DomainError("bad_request", "the task's plan waits for your approval: press Approve plan to let the agent implement it");
     await session.setMode(mode);

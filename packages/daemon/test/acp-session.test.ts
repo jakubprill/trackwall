@@ -633,7 +633,7 @@ describe("the agent's mode, context use and commands in the conversation view", 
     expect(s.written).toHaveLength(asked);
   });
 
-  test("a start in a mode switches the agent to it before the first message goes (ADR-227)", async () => {
+  test("a start in a mode switches the agent to it before the first message goes (ADR-229)", async () => {
     const s = session({ firstMessage: "Fix the login", mode: PLAN });
     const started = s.acp.start();
     s.answer("initialize", { protocolVersion: 1 });
@@ -657,7 +657,7 @@ describe("the agent's mode, context use and commands in the conversation view", 
     await expect(started).rejects.toThrow("the agent does not offer this mode");
   });
 
-  test("approving a plan switches to Agent mode and sends the approval as the user's message, but not while a turn runs (ADR-227)", async () => {
+  test("approving a plan switches to Agent mode and sends the approval as the user's message, but not while a turn runs (ADR-229)", async () => {
     const s = session({ firstMessage: "Fix the login", mode: PLAN });
     const started = s.acp.start();
     s.answer("initialize", { protocolVersion: 1 });
@@ -679,7 +679,7 @@ describe("the agent's mode, context use and commands in the conversation view", 
     expect(s.written.at(-1)).toMatchObject({ method: "session/prompt", params: { prompt: [{ type: "text", text: "Go ahead." }] } });
   });
 
-  test("a second approval while the first switches the mode is refused, and a message written meanwhile goes after the approval (ADR-227)", async () => {
+  test("a second approval while the first switches the mode is refused, and a message written meanwhile goes after the approval (ADR-229)", async () => {
     const s = session({ mode: PLAN });
     const started = s.acp.start();
     s.answer("initialize", { protocolVersion: 1 });
