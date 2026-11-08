@@ -159,6 +159,39 @@ describe("the models a conversation's own calls ran on, for the task journal (AD
     ]);
   });
 
+  test("the turn's further calls the agent starts after a tool result count for its model, but only the user's calls are premium requests", () => {
+    // As Copilot CLI 1.0.107 writes a task's turns: one call opens each turn, the rest follow tool results.
+    const lines = [
+      receipt({
+        model: "gpt-6-luna",
+        inputTokens: 1,
+        outputTokens: 1,
+        cost: 1,
+        initiator: "user",
+        accounting: { sourceSessionId: "c", sequence: 1 },
+      }),
+      receipt({
+        model: "gpt-6-luna",
+        inputTokens: 1,
+        outputTokens: 1,
+        cost: 1,
+        initiator: "agent",
+        accounting: { sourceSessionId: "c", sequence: 2 },
+      }),
+      receipt({
+        model: "gpt-6-luna",
+        inputTokens: 1,
+        outputTokens: 1,
+        cost: 1,
+        initiator: "agent",
+        accounting: { sourceSessionId: "c", sequence: 3 },
+      }),
+    ];
+
+    expect(modelCallsOfLines(lines)).toEqual([{ model: "gpt-6-luna", modelCalls: 3 }]);
+    expect(usageOfLines(lines)).toMatchObject({ modelCalls: 3, premiumRequests: 1 });
+  });
+
   test("a conversation whose event log is missing used nothing on no model", () => {
     expect(readConversationUse(mkdtempSync(join(tmpdir(), "trackwall-usage-")), "gone")).toEqual({ usage: null, models: [] });
   });
