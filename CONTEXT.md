@@ -217,6 +217,10 @@ _Avoid_: history search, blame (another git command), log (the process logs of `
 A record of every task the user has ended: its prompt, the session's last summary, the commits and files on its branch and its last verdict, taken when the task ends (ADR-150), and the model it asked for, the models Copilot CLI ran its conversation on (`EndedTask.models`, `ModelCalls`) and what the conversation used (ADR-228). Agents search it by words to learn how a similar change was done before.
 _Avoid_: task history (only in the tool name), archive, log (the process logs of `logs`)
 
+**Model statistics** (`ModelStats`, `ModelStatsRow`, `taskJournalApi.modelStats`; in the UI *Models* in Settings › Usage):
+The task journal's records of a period grouped by the model that made most of each task's calls: how many tasks, how many passed or failed their last verification, and what one task and one verified task cost (ADR-231). A task is credited to the model Copilot CLI ran it on, not the one it asked for.
+_Avoid_: benchmark, leaderboard, model score
+
 **Task worktrees folder** (`worktreesDir` in `workspace.yaml` and `tasks.json`):
 The folder new task worktrees go into (ADR-84): the user's setting, or by default `.trackwall/worktrees` in the projects folder, which the repo list skips. Never the projects folder itself, a folder inside one of its repos, or a folder of `.trackwall` other than `.trackwall/worktrees`. Each task keeps the folder it was created in, so changing the setting moves no existing worktree.
 
@@ -461,8 +465,12 @@ What the user writes when rejecting a task proposal, for the session that propos
 _Avoid_: comment, feedback
 
 **Shared files** (`TaskSharedFiles`, action `task-shared-files`):
-Files that both this task and another task of the same repo change, each compared with its own base commit. The one merged second will likely get a conflict, so the task panel warns about them and leads to the other task. It is only a warning: nothing is stopped (ADR-44).
-_Avoid_: overlap, collision, conflict (a conflict is only the result of a merge)
+Files that both this task and another task of the same repo change, each compared with its own base commit. The one merged second may get a conflict, so the task panel warns about them and leads to the other task. It is only a warning: nothing is stopped (ADR-44).
+_Avoid_: overlap, collision, conflict (a conflict is only the result of a merge, real or trial)
+
+**Trial merge** (`trialMergeConflicts`, `TaskSharedFiles.conflicts`):
+A merge of two task branches that git computes in memory (`git merge-tree`) in a scratch git directory, without a worktree and without writing to the repo. The shared files it leaves in conflict are named as conflicts in the shared-files warning; `null` when git could not try it (ADR-230).
+_Avoid_: dry run, test merge, simulated merge
 
 **Review** (`send-review`, `SendReviewResult`; "Send N comments to the agent" in the UI):
 The review comments the user sends to a task's agent together, from the task's "Changes" tab (ADR-62). The daemon asks the task's session to read them as soon as it waits for input (`PromptDelivery`: `typed`, `queued`, `on_resume`).

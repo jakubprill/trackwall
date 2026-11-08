@@ -343,7 +343,8 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     writeFileSync(join(third.worktree, "README.md"), "# shop, changed\n");
     writeFileSync(join(elsewhere.worktree, "src", "login.ts"), "export const login = 4;\n");
 
-    expect(await agents.taskSharedFiles(first.id)).toEqual([{ task: second.id, files: ["src/login.ts"] }]);
+    // Only the second task committed, so the branches merge cleanly: the first task's edit is not committed yet.
+    expect(await agents.taskSharedFiles(first.id)).toEqual([{ task: second.id, files: ["src/login.ts"], conflicts: [] }]);
     expect(await agents.taskSharedFiles(third.id)).toEqual([]);
 
     // On Windows the running session keeps its worktree's files open, so it stops first.
@@ -352,6 +353,33 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     expect(await agents.taskSharedFiles(first.id)).toEqual([]);
     // The task's own changes are not a warning: without its worktree the call fails as `task-changes` does.
     await expect(agents.taskSharedFiles(second.id)).rejects.toMatchObject({ code: "not_found" });
+  }, 60_000);
+
+  test("a shared file whose committed edits of two tasks would conflict on merge is named as a conflict, one edited apart merges cleanly", async () => {
+    const prices = ["export const prices = {", "  apple: 1,", "  pear: 2,", "  plum: 3,", "  kiwi: 4,", "  lime: 5,", "};", ""];
+    const dir = makeRepo({ "src/prices.ts": prices.join("\n"), "README.md": "# shop\n" }, "shop");
+    const { agents, procs } = makeAgents({ shop: dir });
+    cleanups.push(() => procs.stopAll());
+    const raise = await agents.createTask("shop", "raise the apple price");
+    const discount = await agents.createTask("shop", "discount apples");
+    const lime = await agents.createTask("shop", "change the lime price");
+    const edit = (from: string, to: string) => prices.map((line) => (line === from ? to : line)).join("\n");
+
+    commitFiles(raise.worktree, { "src/prices.ts": edit("  apple: 1,", "  apple: 2,") }, "raise apples");
+    commitFiles(discount.worktree, { "src/prices.ts": edit("  apple: 1,", "  apple: 0.5,") }, "discount apples");
+    commitFiles(lime.worktree, { "src/prices.ts": edit("  lime: 5,", "  lime: 6,"), "README.md": "# shop, limes\n" }, "limes");
+    const objectsBefore = gitIn(dir, "count-objects", "-v");
+
+    expect(await agents.taskSharedFiles(raise.id)).toEqual([
+      { task: lime.id, files: ["src/prices.ts"], conflicts: [] },
+      { task: discount.id, files: ["src/prices.ts"], conflicts: ["src/prices.ts"] },
+    ]);
+    expect(await agents.taskSharedFiles(lime.id)).toEqual([
+      { task: discount.id, files: ["src/prices.ts"], conflicts: [] },
+      { task: raise.id, files: ["src/prices.ts"], conflicts: [] },
+    ]);
+    // The trial merge writes its objects into a scratch git directory, never into the repo.
+    expect(gitIn(dir, "count-objects", "-v")).toBe(objectsBefore);
   }, 60_000);
 
   test("a prompt with shell characters and a leading hyphen reaches Copilot CLI literally, as one argument", async () => {

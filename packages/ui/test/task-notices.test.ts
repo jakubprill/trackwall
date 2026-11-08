@@ -41,7 +41,7 @@ describe("taskNotices", () => {
         summary: { text: "Added a discount.", checkSteps: [], reproTest: null, reportedAt: "2026-10-27T06:00:00.000Z" },
       },
       messages: [{ readAt: "2026-10-27T06:01:00.000Z" }, { readAt: null }],
-      sharedWith: [{ task: "t2", name: "Extend add()", files: 2 }],
+      sharedWith: [{ task: "t2", name: "Extend add()", files: 2, conflicts: 0 }],
       miseConfig: { neverTrusted: false, changes: [{ path: "mise.toml", change: "modified", content: "" }], digest: "d1" },
       verification: verification("failed"),
       mergeRequest: true,
@@ -99,14 +99,35 @@ describe("newWarnings", () => {
     ...quiet,
     task: { ...quiet.task, summary: { text: "Done.", checkSteps: [], reproTest: null, reportedAt: "2026-10-27T06:00:00.000Z" } },
     sharedWith: [
-      { task: "t2", name: "Extend add()", files: 1 },
-      { task: "t3", name: "Rename cart", files: 3 },
+      { task: "t2", name: "Extend add()", files: 1, conflicts: 0 },
+      { task: "t3", name: "Rename cart", files: 3, conflicts: 0 },
     ],
   });
 
   test("are the warnings not seen yet, never the other notices", () => {
     expect(newWarnings(notices, new Set(["shared-files:t2"])).map((n) => n.key)).toEqual(["shared-files:t3"]);
     expect(newWarnings(notices, new Set(["shared-files:t2", "shared-files:t3"]))).toEqual([]);
+  });
+});
+
+describe("shared files", () => {
+  test("files a merge of the two tasks would conflict in are named as conflicts, the other shared files as files also changed there", () => {
+    const notices = taskNotices({
+      ...quiet,
+      sharedWith: [
+        { task: "t2", name: "Discount apples", files: 3, conflicts: 1 },
+        { task: "t3", name: "Change the lime price", files: 1, conflicts: 0 },
+      ],
+    });
+    expect(notices.map((n) => [n.key, n.tone, n.label])).toEqual([
+      ["shared-files:t2:conflict", "warning", "1 conflicting file with “Discount apples”"],
+      ["shared-files:t3", "warning", "1 file also in “Change the lime price”"],
+    ]);
+  });
+
+  test("shared files that turn into a conflict are a new warning", () => {
+    const conflicting = taskNotices({ ...quiet, sharedWith: [{ task: "t2", name: "Discount apples", files: 1, conflicts: 1 }] });
+    expect(newWarnings(conflicting, new Set(["shared-files:t2"])).map((n) => n.key)).toEqual(["shared-files:t2:conflict"]);
   });
 });
 
@@ -119,7 +140,7 @@ describe("tileNotices", () => {
         ...quiet,
         miseConfig: changedConfig,
         verification: verification("failed"),
-        sharedWith: [{ task: "t2", name: "Extend add()", files: 1 }],
+        sharedWith: [{ task: "t2", name: "Extend add()", files: 1, conflicts: 0 }],
         mergeRequest: true,
       }),
     );

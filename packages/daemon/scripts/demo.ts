@@ -22,6 +22,7 @@ import { userEnv } from "../src/infra/user-env.ts";
 import { createMcpEndpoint, sessionMcpRequest } from "../src/mcp/endpoint.ts";
 import { mcpStdioCommand } from "../src/mcp/stdio-command.ts";
 import { runtimeInfo } from "../src/platform/runtime.ts";
+import { writeDemoJournal } from "./demo/journal.ts";
 import { TURNS } from "./demo/turns.ts";
 import { demoWeek, writeDemoUsage } from "./demo/usage.ts";
 import { commitPricingTaskContract, createDemoWorkspace, DEMO_REPOS, writePricingTaskChanges } from "./demo/workspace.ts";
@@ -40,6 +41,7 @@ const projectsDir = join(home, "projects");
 mkdirSync(projectsDir, { recursive: true });
 createDemoWorkspace(projectsDir);
 writeFileSync(join(home, "workspace.yaml"), `projectsDir: ${JSON.stringify(projectsDir)}\n`);
+writeDemoJournal(home, DEMO_REPOS, new Date());
 
 // Copilot CLI's home of the demo, so its usage report shows the demo's week, never the developer's own conversations.
 const copilotHome = join(home, "copilot-home");

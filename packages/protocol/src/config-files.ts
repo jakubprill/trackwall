@@ -160,7 +160,7 @@ export const CONFIG_ENTRIES: Record<ConfigEntryId, ConfigEntryInfo> = {
     writer: "trackwall",
     internal: true,
     purpose:
-      "What each ended task was and left: its prompt, summary, commits, files and last verdict, which agents search for how a similar change was done.",
+      "What each ended task was and left: its prompt, summary, commits, files, last verdict, models and usage, which agents search for how a similar change was done and Settings › Usage compares models by.",
     docs: "tasks",
   },
   "day-start-file": {

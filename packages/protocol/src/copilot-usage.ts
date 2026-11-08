@@ -23,6 +23,24 @@ export const CopilotUsage = z.object({
 export type CopilotUsage = z.infer<typeof CopilotUsage>;
 
 /**
+ * The sum of several conversations' usage; `null` when there are none. AI credits sum over the conversations that
+ * reported them, and the sum is partial when one did not.
+ */
+export function sumUsage(usages: readonly CopilotUsage[]): CopilotUsage | null {
+  if (usages.length === 0) return null;
+  const withCredits = usages.filter((u) => u.aiCredits !== null);
+  const total = (of: (usage: CopilotUsage) => number) => usages.reduce((sum, usage) => sum + of(usage), 0);
+  return {
+    modelCalls: total((u) => u.modelCalls),
+    inputTokens: total((u) => u.inputTokens),
+    outputTokens: total((u) => u.outputTokens),
+    aiCredits: withCredits.length === 0 ? null : withCredits.reduce((sum, u) => sum + (u.aiCredits ?? 0), 0),
+    aiCreditsPartial: usages.some((u) => u.aiCreditsPartial) || (withCredits.length > 0 && withCredits.length < usages.length),
+    premiumRequests: total((u) => u.premiumRequests),
+  };
+}
+
+/**
  * A conversation's own model calls on one model (ADR-228), as their receipts name it; a sub-agent's calls, which may
  * run on a model of their own, are not counted.
  */

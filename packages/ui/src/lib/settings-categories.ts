@@ -29,8 +29,9 @@ export const SETTINGS_CATEGORIES = [
   {
     id: "usage",
     label: "Usage",
-    description: "What Copilot CLI used on this computer, and every call agents made to Trackwall's tools.",
-    sections: ["copilot-usage", "mcp-calls"],
+    description:
+      "What Copilot CLI used on this computer, how each model did on your tasks, and every call agents made to Trackwall's tools.",
+    sections: ["copilot-usage", "model-stats", "mcp-calls"],
     wide: true,
   },
   {
