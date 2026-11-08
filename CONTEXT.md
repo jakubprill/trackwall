@@ -784,8 +784,12 @@ The text of an error with its frames that the user pastes into a new task (ADR-2
 _Avoid_: log, error (an **error** is a block from a log, ADR-42), stack (a set of services)
 
 **Reproduction test** (`TaskSummary.reproTest`, `ReproTest`, `report_result` argument `reproTest`):
-The test a task's agent says it wrote first and that failed the way the task's stack trace shows: its file, name and failure before the fix (ADR-222). The agent's word, shown as such: Trackwall has not run it.
-_Avoid_: regression test, proof (Trackwall proves nothing about it yet), repro (in prose)
+The test a task's agent says it wrote first and that failed the way the task's stack trace shows: its file, name and failure before the fix (ADR-222). The agent's word, shown as such; the reproduction check is Trackwall's own answer about it.
+_Avoid_: regression test, proof, repro (in prose)
+
+**Reproduction check** (`ReproductionCheck`, module `reproduction`, `reproductionApi`; "Check it" under the reproduction test in a task's summary):
+Trackwall's own run of a task's reproduction test (ADR-227) in a **copy** of the repo beside the task's worktree (`<worktree>.repro`): first on the task's base with only its test files, where it must fail, then with all of the task's changes, where it must pass. `reproduced`, `not_reproduced`, `inconclusive` (it could not tell, such as a test that did not run) or `cancelled`.
+_Avoid_: verification (the whole `test` task in the worktree, ADR-64), red-green check (in the UI), proof
 
 **Evidence of a change** (ADR-222):
 What a task's result brings to show the change is right beyond the agent's summary, such as its reproduction test. The theme of ADR-222, not an identifier in code.

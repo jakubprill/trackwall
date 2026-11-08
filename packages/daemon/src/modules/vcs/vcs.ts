@@ -69,8 +69,8 @@ import {
 import { StatusMemo, type TimedStatus } from "./status-memo.ts";
 import { syncRepo } from "./sync.ts";
 import { type RepoUnpushed, readUnpushed } from "./unpushed.ts";
-import { addWorktree, defaultBase, deleteBranch, pendingWork, removeWorktree } from "./worktree.ts";
-import { workingTreeChanges, worktreeChanges } from "./worktree-changes.ts";
+import { addCheckout, addWorktree, defaultBase, deleteBranch, pendingWork, removeWorktree } from "./worktree.ts";
+import { changedPaths, workingTreeChanges, worktreeChanges } from "./worktree-changes.ts";
 import { discardFingerprint, worktreeFingerprint } from "./worktree-fingerprint.ts";
 import { copyIncludedFiles } from "./worktree-include.ts";
 
@@ -263,6 +263,11 @@ export class Vcs {
     return worktreeChanges(dir, base, maxPatchBytes, paths, await this.scratch());
   }
 
+  /** The paths of the worktree that differ from `base`, as the task's Changes count them (ADR-209, ADR-227). */
+  async changedPaths(dir: string, base: string): Promise<{ paths: string[]; truncated: boolean }> {
+    return changedPaths(dir, base, await this.scratch());
+  }
+
   async worktreeFingerprint(dir: string, base: string): Promise<string> {
     return worktreeFingerprint(dir, base, await this.scratch());
   }
@@ -292,6 +297,10 @@ export class Vcs {
 
   addWorktree(repoDir: string, path: string, branch: string, commit: string): Promise<void> {
     return this.serialWorktreeOp(repoDir, () => addWorktree(repoDir, path, branch, commit));
+  }
+
+  addCheckout(repoDir: string, path: string, commit: string): Promise<void> {
+    return this.serialWorktreeOp(repoDir, () => addCheckout(repoDir, path, commit));
   }
 
   removeWorktree(repoDir: string, path: string): Promise<void> {

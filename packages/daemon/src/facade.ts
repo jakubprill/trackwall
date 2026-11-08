@@ -69,6 +69,7 @@ import { ProcessGroups } from "./modules/procs/process-groups.ts";
 import { RuntimeFile } from "./modules/procs/runtime-file.ts";
 import { ProviderModels } from "./modules/provider-models/provider-models.ts";
 import { Readiness } from "./modules/readiness/readiness.ts";
+import { REPRODUCTION_CHECKS_FILE, ReproductionChecks } from "./modules/reproduction/reproduction-checks.ts";
 import { Routines } from "./modules/routines/routines.ts";
 import { Services } from "./modules/services/services.ts";
 import { TASK_JOURNAL_FILE, TASK_JOURNAL_MAX_RECORDS, TaskJournal } from "./modules/task-journal/task-journal.ts";
@@ -121,6 +122,8 @@ export interface Facade {
   droppedFiles: DroppedFiles;
   testReports: TestReports;
   verifications: Verifications;
+  /** Whether a task's reproduction test fails without its fix and passes with it, in a copy of the repo (ADR-227). */
+  reproductionChecks: ReproductionChecks;
   /** What ended tasks were and left, searched by `search_task_history` (ADR-150). */
   taskJournal: TaskJournal;
   /** A finished task's push, its repo host's merge request form, and the merge request with its pipeline (ADR-77). */
@@ -337,6 +340,8 @@ export function createFacade(o: FacadeOptions): Facade {
     procs,
     // `terminals` needs `agents` for the task worktrees, so it is made below; a task ends only after both.
     closeFolderTerminal: (task): Promise<void> => terminals.closeTask(task),
+    // `reproductionChecks` is made below; a task ends only after it exists.
+    stopReproductionCheck: (task): Promise<void> => reproductionChecks.stop(task),
     repos: workspace,
     vcs,
     home: o.home,
@@ -359,6 +364,7 @@ export function createFacade(o: FacadeOptions): Facade {
     onTaskRemoved: (ended) => {
       logs.removeTaskLogs(ended.task);
       const last = verifications.take(ended.task);
+      reproductionChecks.forget(ended.task);
       // `record` logs its own failures, so ending the task does not wait for the write.
       void taskJournal.record({ ...ended, verification: last && { state: last.state, finishedAt: last.finishedAt } });
     },
@@ -397,6 +403,15 @@ export function createFacade(o: FacadeOptions): Facade {
     logs,
     onVerdict: (verification) => agents.verificationFinished(verification),
     file: join(o.home, VERIFICATIONS_FILE),
+    log: o.log,
+  });
+  const reproductionChecks = new ReproductionChecks({
+    tasks: agents,
+    vcs,
+    repos: workspace,
+    mise,
+    reports: testReports,
+    file: join(o.home, REPRODUCTION_CHECKS_FILE),
     log: o.log,
   });
   const mergeRequests = new MergeRequests({
@@ -493,6 +508,7 @@ export function createFacade(o: FacadeOptions): Facade {
       "last-supervisor-file": join(o.home, LAST_SUPERVISOR_FILE),
       "agent-queues-file": join(o.home, AGENT_QUEUES_FILE),
       "verifications-file": join(o.home, VERIFICATIONS_FILE),
+      "reproduction-checks-file": join(o.home, REPRODUCTION_CHECKS_FILE),
       "auto-reviews-file": join(o.home, AUTO_REVIEWS_FILE),
       "task-journal-file": join(o.home, TASK_JOURNAL_FILE),
       "day-start-file": join(o.home, DAY_START_FILE),
@@ -566,6 +582,7 @@ export function createFacade(o: FacadeOptions): Facade {
     droppedFiles: new DroppedFiles({ projectsDir: () => workspace.projectsDir(), now: () => new Date(), maxBytes: MAX_DROP_BYTES }),
     testReports,
     verifications,
+    reproductionChecks,
     taskJournal,
     mergeRequests,
     dayStart,
@@ -606,6 +623,7 @@ export function createFacade(o: FacadeOptions): Facade {
     keepForRestart: () => {
       agents.keepRunningSessionsForResume();
       verifications.keepForRestart();
+      reproductionChecks.keepForRestart();
     },
   };
 }

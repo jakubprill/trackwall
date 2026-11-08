@@ -13,6 +13,7 @@ import {
   PATCH_MAX_BYTES,
   type ProposedBy,
   type ReportedSummary,
+  type ReproTest,
   type Session,
   type SessionView,
   TASK_SUMMARY_MAX_FILES,
@@ -149,6 +150,8 @@ export interface AgentTasksDeps {
   liveIn: (dir: string) => boolean;
   /** Closes the user's folder terminal in the task's worktree (ADR-185), once nothing else refuses the task's end. */
   closeFolderTerminal: (task: string) => Promise<void>;
+  /** Stops the task's reproduction check and removes its copy before the task ends (`reproduction`, ADR-227). */
+  stopReproductionCheck: (task: string) => Promise<void>;
   /** `worktrees/` in the state directory, where tasks saved before ADR-84 (without `worktreesDir`) have their worktrees. */
   legacyWorktreesDir: string;
   /** Task `task`'s round commits that the push has not squashed yet (ADR-168), which a handoff looks past (ADR-144). */
@@ -777,17 +780,77 @@ export class AgentTasks {
    * them, in the task's panel.
    */
   async trustedWorktree(id: string, repo: string): Promise<{ worktree: string; port: number }> {
+    const task = this.#existingWorktree(id);
+    const advice =
+      "only the user can trust it, in the task's panel in Trackwall, and a session in Trackwall refused for it is told when they do";
+    return { worktree: task.worktree, port: await this.#trustedPlace(id, repo, task.worktree, "the worktree of", advice) };
+  }
+
+  /**
+   * The task port for a mise run in `dir`, a folder of task `id` of `repo`, while the task is not being ended and the
+   * folder has the mise config the user trusted for the task's worktree; `place` names the folder in the refusal, and
+   * `advice` says what to do about it.
+   */
+  async #trustedPlace(id: string, repo: string, dir: string, place: string, advice: string): Promise<number> {
     if (this.#removing.has(id)) throw new DomainError("bad_request", "this task is being ended");
     const task = this.#existingWorktree(id);
     if (task.repo !== repo) throw new DomainError("bad_request", `task ${task.branch} is in ${task.repo}, not in ${repo}`);
-    const changes = miseConfigChanges(task.trustedMiseConfig ?? {}, await readMiseConfig(task.worktree));
+    const changes = miseConfigChanges(task.trustedMiseConfig ?? {}, await readMiseConfig(dir));
     if (changes.length > 0)
       throw new DomainError(
         "mise_unavailable",
-        `the mise config in the worktree of task ${task.branch} changed since the user trusted it (${changes.map((c) => c.path).join(", ")}); ` +
-          "only the user can trust it, in the task's panel in Trackwall, and a session in Trackwall refused for it is told when they do",
+        `the mise config in ${place} task ${task.branch} changed since the user trusted it (${changes.map((c) => c.path).join(", ")}); ${advice}`,
       );
-    return { worktree: task.worktree, port: task.port };
+    return task.port;
+  }
+
+  /**
+   * What a reproduction check of task `id` works with (ADR-227): its repo, worktree and base commit, the reproduction test
+   * its agent last reported (`null` without one), the paths of the mise config the user trusted for its worktree, and the
+   * folder of the check's copy of the repo (`reproCopyOf`). Refused while the task is being ended.
+   */
+  reproSubject(id: string): {
+    repo: string;
+    worktree: string;
+    base: string;
+    reproTest: ReproTest | null;
+    miseConfigPaths: string[];
+    copy: string;
+  } {
+    if (this.#removing.has(id)) throw new DomainError("bad_request", "this task is being ended");
+    const task = this.#existingWorktree(id);
+    return {
+      repo: task.repo,
+      worktree: task.worktree,
+      base: task.base,
+      reproTest: task.summary?.reproTest ?? null,
+      miseConfigPaths: Object.keys(task.trustedMiseConfig ?? {}),
+      copy: reproCopy(task.worktree),
+    };
+  }
+
+  /**
+   * The folder of task `id`'s reproduction check copy (ADR-227), next to its worktree in the task worktrees folder
+   * (`<worktree>.repro`), so the copy gets the same mise config from the projects folder; also while the task is being
+   * ended, so its check can remove the copy.
+   */
+  reproCopyOf(id: string): { repo: string; copy: string } {
+    const task = this.#get(id);
+    return { repo: task.repo, copy: reproCopy(task.worktree) };
+  }
+
+  /**
+   * The copy of a reproduction check of a task of `repo` for a mise task run in it (ADR-227), only while it has the mise
+   * config the user trusted for the task's worktree, as `trustedWorktree` requires of the worktree, and with the task port.
+   */
+  async trustedReproCopy(id: string, repo: string): Promise<{ dir: string; port: number }> {
+    const task = this.#existingWorktree(id);
+    const dir = reproCopy(task.worktree);
+    if (!existsSync(dir)) throw new DomainError("not_found", `task ${task.branch} has no reproduction check copy`);
+    const advice =
+      "a reproduction check copies only the mise files the user trusted for the worktree, so a mise file the task deleted or one git ignores differs; " +
+      "end the check here and run the test in the worktree instead";
+    return { dir, port: await this.#trustedPlace(id, repo, dir, "the reproduction check's copy of", advice) };
   }
 
   openEditor(id: string): void {
@@ -812,6 +875,8 @@ export class AgentTasks {
         // changes): before the check for other processes, which would count it. So an end refused for a mise task or
         // service still running there has closed the shell. `#removing` refuses a new one meanwhile.
         await this.#deps.closeFolderTerminal(id);
+        // Its reproduction check reads the worktree and runs on the task port in a copy beside it (ADR-227).
+        await this.#deps.stopReproductionCheck(id);
         if (this.#deps.liveIn(task.worktree))
           throw new DomainError(
             "bad_request",
@@ -1017,4 +1082,9 @@ function asRepoUnavailable<T>(label: string, work: Promise<T>): Promise<T> {
   return work.catch((err: unknown) => {
     throw new DomainError("repo_unavailable", `${label}: ${messageOf(err)}`);
   });
+}
+
+/** The folder of a task's reproduction check copy (ADR-227): beside its worktree, so it is in the same folders. */
+function reproCopy(worktree: string): string {
+  return `${worktree}.repro`;
 }

@@ -34,6 +34,7 @@ type StateEntryId =
   | "last-supervisor-file"
   | "agent-queues-file"
   | "verifications-file"
+  | "reproduction-checks-file"
   | "auto-reviews-file"
   | "task-journal-file"
   | "day-start-file"
@@ -147,6 +148,7 @@ export class ConfigFiles {
       case "last-supervisor-file":
       case "agent-queues-file":
       case "verifications-file":
+      case "reproduction-checks-file":
       case "auto-reviews-file":
       case "task-journal-file":
       case "day-start-file":

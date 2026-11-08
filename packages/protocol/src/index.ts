@@ -45,6 +45,7 @@ export * from "./provider-models.ts";
 export * from "./readiness.ts";
 export * from "./release-files.ts";
 export * from "./repo-hosts.ts";
+export * from "./reproduction.ts";
 export * from "./review.ts";
 export * from "./routines.ts";
 export * from "./service-proxy.ts";
