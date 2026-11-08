@@ -61,6 +61,7 @@ export function makeAgents(
   const agents: Agents = new Agents({
     inContainer: false,
     closeFolderTerminal: async () => {},
+    stopReproductionCheck: async () => {},
     procs,
     repos: {
       repoPath: async (id) => {

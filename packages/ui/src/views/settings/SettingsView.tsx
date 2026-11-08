@@ -25,6 +25,7 @@ import { SessionProfileSurface } from "./SessionProfileSurface.tsx";
 import { StartAtSignInSurface } from "./StartAtSignInSurface.tsx";
 import { SupervisorModelSurface } from "./SupervisorModelSurface.tsx";
 import { UpdatesSurface } from "./UpdatesSurface.tsx";
+import { VsCodeExtensionSurface } from "./VsCodeExtensionSurface.tsx";
 import { WorkspaceFolders } from "./WorkspaceFolders.tsx";
 
 type SettingsProps = {
@@ -121,6 +122,8 @@ function Section({
       return <RemoteDaemonSurface />;
     case "browser-notifications":
       return <BrowserNotificationsSurface />;
+    case "vscode-extension":
+      return <VsCodeExtensionSurface conn={conn} />;
     case "updates":
       return <UpdatesSurface handle={update} />;
     case "home-scene":

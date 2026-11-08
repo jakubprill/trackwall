@@ -122,7 +122,7 @@ const KIND_LABEL: Record<JavaException["kind"], string> = {
 function reproduceSection(): string {
   return [
     "## Reproduce it in a test first",
-    "1. Before you change the code, write a test that fails the way this stack trace shows: the same exception from the same place. Run it and see it fail for that reason.",
+    "1. Before you change the code, write a test that fails the way this stack trace shows: the same exception from the same place. Put it under src/test/ and use only code that exists before the fix, so that it compiles without the fix: Trackwall runs it on the code before your change. Run it and see it fail for that reason.",
     "2. Then fix the code so that the test passes, and run it again.",
     `3. When you call ${mcpTools.reportResult.name}, give reproTest: the test's file, its name and how it failed before the fix.`,
     `If you cannot reproduce the error in a test, say why in ${mcpTools.reportResult.name} and leave reproTest out.`,

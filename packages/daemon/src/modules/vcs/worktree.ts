@@ -62,6 +62,19 @@ export async function addWorktree(repoDir: string, path: string, branch: string,
 }
 
 /**
+ * A worktree at `commit` without a branch (`--detach`), for a reproduction check's copy of the repo (ADR-227): it never
+ * moves a branch, and `removeWorktree` takes it away like a task's. A failed checkout leaves nothing behind it.
+ */
+export async function addCheckout(repoDir: string, path: string, commit: string): Promise<void> {
+  try {
+    await git(repoDir, ["worktree", "add", "--quiet", "--detach", path, commit], { timeoutMs: CHECKOUT_TIMEOUT_MS });
+  } catch (err) {
+    await removeWorktree(repoDir, path).catch(() => {});
+    throw err;
+  }
+}
+
+/**
  * Removes a worktree together with uncommitted and ignored files (`--force`): the caller checked `pendingWork`
  * or the user confirmed the loss. Git drops the worktree registration before deleting files, so a removal
  * interrupted by a file held by another process (Windows) leaves a directory that is no longer a worktree; such a

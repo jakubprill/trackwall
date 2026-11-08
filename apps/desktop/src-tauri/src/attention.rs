@@ -46,9 +46,9 @@ pub struct Waiting {
     pub state: Option<TaskState>,
 }
 
-/// What the UI calls the session above all repos (`SUPERVISOR` in the UI's `session-state.ts`, ADR-58).
+/// What the UI calls the session above all repos (`SUPERVISOR` in `protocol`'s `session-label.ts`, ADR-58).
 pub const SUPERVISOR: &str = "Supervisor";
-/// What the UI calls a session in the projects folder that is not the supervisor (`FREE_SESSION` in `session-state.ts`, ADR-100).
+/// What the UI calls a session in the projects folder that is not the supervisor (`FREE_SESSION` in `session-label.ts`, ADR-100).
 pub const FREE_SESSION: &str = "Free session";
 
 impl Waiting {
