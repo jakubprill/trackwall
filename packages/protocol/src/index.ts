@@ -39,6 +39,7 @@ export * from "./mcp-knowledge.ts";
 export * from "./mcp-routines.ts";
 export * from "./merge-requests.ts";
 export * from "./mise.ts";
+export * from "./model-stats.ts";
 export * from "./plural.ts";
 export * from "./procs.ts";
 export * from "./provider-models.ts";

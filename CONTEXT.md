@@ -217,6 +217,10 @@ _Avoid_: history search, blame (another git command), log (the process logs of `
 A record of every task the user has ended: its prompt, the session's last summary, the commits and files on its branch and its last verdict, taken when the task ends (ADR-150), and the model it asked for, the models Copilot CLI ran its conversation on (`EndedTask.models`, `ModelCalls`) and what the conversation used (ADR-228). Agents search it by words to learn how a similar change was done before.
 _Avoid_: task history (only in the tool name), archive, log (the process logs of `logs`)
 
+**Model statistics** (`ModelStats`, `ModelStatsRow`, `taskJournalApi.modelStats`; in the UI *Models* in Settings › Usage):
+The task journal's records of a period grouped by the model that made most of each task's calls: how many tasks, how many passed or failed their last verification, and what one task and one verified task cost (ADR-231). A task is credited to the model Copilot CLI ran it on, not the one it asked for.
+_Avoid_: benchmark, leaderboard, model score
+
 **Task worktrees folder** (`worktreesDir` in `workspace.yaml` and `tasks.json`):
 The folder new task worktrees go into (ADR-84): the user's setting, or by default `.trackwall/worktrees` in the projects folder, which the repo list skips. Never the projects folder itself, a folder inside one of its repos, or a folder of `.trackwall` other than `.trackwall/worktrees`. Each task keeps the folder it was created in, so changing the setting moves no existing worktree.
 

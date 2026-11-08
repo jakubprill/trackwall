@@ -138,6 +138,14 @@ const SHOTS: Record<string, (page: Page) => Promise<void>> = {
     await page.getByText("Tasks and sessions").waitFor();
     await settle(page);
   },
+  "model-stats": async (page) => {
+    await page.keyboard.press("Control+,");
+    await page.getByRole("button", { name: "Usage", exact: true }).click();
+    const models = page.getByRole("region", { name: "Models" });
+    await models.getByText("gpt-6-mini").waitFor();
+    await models.scrollIntoViewIfNeeded();
+    await settle(page);
+  },
   overview: async (page) => {
     // The graph of twenty repos is wider than the other views.
     await page.setViewportSize({ width: 2400, height: 420 });
