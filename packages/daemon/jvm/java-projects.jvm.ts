@@ -11,6 +11,7 @@ import {
   LogErrors,
   MiseTaskRunResult,
   RepoCardResult,
+  type ReproductionCheck,
   type RunState,
   StartServiceResult,
   StopServiceResult,
@@ -164,6 +165,58 @@ async function verify(repo: string, task: string) {
  * no service of the slice is still starting: the first answer and each member's service as it settled (`null` for a
  * member the slice skipped).
  */
+/**
+ * A task of `repo` (the `orders` project) whose agent wrote a test that a negative quantity is refused and the fix in
+ * `Pricing`, and reported the test (ADR-222); then the reproduction check of it (ADR-227), awaited to its verdict.
+ */
+async function reproductionCheck(repo: string): Promise<ReproductionCheck> {
+  const task = await daemon.facade.agents.createTask(repo, "refuse a negative quantity");
+  const test = join(task.worktree, "src", "test", "java", "com", "example", "orders", "PricingNegativeTest.java");
+  writeFileSync(
+    test,
+    [
+      "package com.example.orders;",
+      "",
+      "import static org.junit.jupiter.api.Assertions.assertThrows;",
+      "",
+      "import org.junit.jupiter.api.Test;",
+      "",
+      "class PricingNegativeTest {",
+      "    @Test",
+      "    void refusesANegativeQuantity() {",
+      "        assertThrows(IllegalArgumentException.class, () -> Pricing.total(-1, 4));",
+      "    }",
+      "}",
+      "",
+    ].join("\n"),
+  );
+  changeLine(
+    join(task.worktree, "src", "main", "java", "com", "example", "orders", "Pricing.java"),
+    "return quantity * unitPrice;",
+    'if (quantity < 0) throw new IllegalArgumentException("negative quantity"); return quantity * unitPrice;',
+  );
+  const session = daemon.facade.agents.sessions().sessions.find((s) => s.task === task.id);
+  if (!session) throw new Error("the task has no session");
+  await daemon.facade.agents.reportSummary(session.id, {
+    text: "A negative quantity is refused.",
+    checkSteps: [],
+    reproTest: {
+      file: "src/test/java/com/example/orders/PricingNegativeTest.java",
+      name: "PricingNegativeTest#refusesANegativeQuantity",
+      failure: "no IllegalArgumentException was thrown",
+    },
+  });
+  daemon.facade.reproductionChecks.start(task.id);
+  return until(
+    async () => daemon.facade.reproductionChecks.get(task.id),
+    (check) => check !== null && check.state !== "running",
+    1000,
+  ).then((check) => {
+    if (check === null) throw new Error("the check is gone");
+    return check;
+  });
+}
+
 async function startService(args: { repo: string; task?: string; dependencies?: boolean }) {
   const { slice } = StartServiceResult.parse(await call("start_service", { ...args, timeoutSeconds: WAIT_MAX_SECONDS }));
   const ofSlice = async () => {
@@ -370,6 +423,19 @@ describe("a Maven project and a Gradle project", () => {
     );
   });
 
+  test("a reproduction check runs the agent's test without the Maven fix, where it fails, and with it, where it passes", async () => {
+    const check = await reproductionCheck("orders");
+
+    // The repo's own `test` takes no filter, so each run ran every test and the check found its test among them.
+    expect(check).toMatchObject({
+      state: "reproduced",
+      filter: null,
+      base: { outcome: "failed", cases: 1 },
+      change: { outcome: "passed" },
+    });
+    expect(check.base?.failure?.type).toBe("org.opentest4j.AssertionFailedError");
+  });
+
   test("the convention tasks file gives a repo without mise tasks a test task, which runs only the tests its filter names", async () => {
     // The last test, since the file and the two repos change the projects folder of the others: the same projects with
     // tools but no mise tasks in their mise config.
@@ -409,6 +475,18 @@ describe("a Maven project and a Gradle project", () => {
       all: { tests: 2, failures: 0, errors: 0 },
       "plain-orders": { tests: 1, failures: 0, errors: 0 },
       "plain-checkout": { tests: 1, failures: 0, errors: 0 },
+    });
+  });
+
+  test("a reproduction check with the convention test task runs only the agent's test class, through the task's filter", async () => {
+    // After the convention tasks test, which made the repo with the convention tasks.
+    const check = await reproductionCheck("plain-orders");
+
+    expect(check).toMatchObject({
+      state: "reproduced",
+      filter: "PricingNegativeTest",
+      base: { outcome: "failed", cases: 1 },
+      change: { outcome: "passed", cases: 1 },
     });
   });
 });

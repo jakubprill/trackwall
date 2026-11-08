@@ -7,7 +7,7 @@ import { waitFor } from "./support/agents.ts";
 import { FAKE_COPILOT, ONE_REPO, startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
-// The task journal keeps the model a task asked for, the models Copilot CLI ran it on and what it used (ADR-227).
+// The task journal keeps the model a task asked for, the models Copilot CLI ran it on and what it used (ADR-228).
 
 const TOKEN = "j".repeat(43);
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;

@@ -88,7 +88,7 @@ describe("task journal", async () => {
     expect(journal.search(ALL).tasks.map((t) => t.prompt)).toEqual(["after the bad line", "kept"]);
   });
 
-  test("a record written before the journal kept the model and the usage reads with neither (ADR-227)", async () => {
+  test("a record written before the journal kept the model and the usage reads with neither (ADR-228)", async () => {
     const file = journalFile();
     const journal = new TaskJournal({ file, log: () => {}, maxRecords: 100, masker: async () => (t) => t });
     const { model, usage, models, ...older } = ended(1, "web", "written by an older version", "2026-10-01T10:00:00Z");

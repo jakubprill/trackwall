@@ -69,16 +69,16 @@ export const EndedTask = z.object({
   verification: z.object({ state: VerificationState, finishedAt: z.string().nullable() }).nullable(),
   /**
    * The model Trackwall ran the task's sessions on when it ended (ADR-98, ADR-206); `null` for Copilot CLI's default.
-   * The default fills records written before ADR-227, as do those of `usage` and `models`.
+   * The default fills records written before ADR-228, as do those of `usage` and `models`.
    */
   model: z.string().nullable().default(null),
   /**
-   * What the task's conversation used over its whole life (ADR-227), from Copilot CLI's event log; `null` when the log
+   * What the task's conversation used over its whole life (ADR-228), from Copilot CLI's event log; `null` when the log
    * had no model call or could not be read.
    */
   usage: CopilotUsage.nullable().default(null),
   /**
-   * The models Copilot CLI actually ran the conversation on (ADR-225, ADR-227), with their own calls, the most first:
+   * The models Copilot CLI actually ran the conversation on (ADR-225, ADR-228), with their own calls, the most first:
    * a model Copilot CLI took instead of `model`, or several after `/model` or a restart on another one. Empty when the
    * log names none.
    */

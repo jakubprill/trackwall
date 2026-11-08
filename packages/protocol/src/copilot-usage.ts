@@ -23,7 +23,7 @@ export const CopilotUsage = z.object({
 export type CopilotUsage = z.infer<typeof CopilotUsage>;
 
 /**
- * A conversation's own model calls on one model (ADR-227), as their receipts name it; a sub-agent's calls, which may
+ * A conversation's own model calls on one model (ADR-228), as their receipts name it; a sub-agent's calls, which may
  * run on a model of their own, are not counted.
  */
 export const ModelCalls = z.object({

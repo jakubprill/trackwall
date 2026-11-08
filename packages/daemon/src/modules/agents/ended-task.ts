@@ -13,7 +13,7 @@ import type { StoredTask } from "./task-file.ts";
  * The record of a task the user is ending, for the task journal (ADR-150): read from the task list and from git before
  * its branch can go. Git is read in the repo root on the branch ref, not in the worktree, so a worktree removed by hand
  * or by an earlier end that then failed still gives the branch's commits. What the task's conversation used, and on
- * which models, comes from Copilot CLI's event log (ADR-227). The verdict is added by the facade, which knows the
+ * which models, comes from Copilot CLI's event log (ADR-228). The verdict is added by the facade, which knows the
  * `verification` module.
  */
 
@@ -36,7 +36,7 @@ export interface TaskEnding {
   roundCommits: ReadonlySet<string>;
   branchKept: boolean;
   endedAt: Date;
-  /** What the task's conversation used over its life, read from its event log once its sessions stopped (ADR-227). */
+  /** What the task's conversation used over its life, read from its event log once its sessions stopped (ADR-228). */
   conversation: ConversationUse;
 }
 

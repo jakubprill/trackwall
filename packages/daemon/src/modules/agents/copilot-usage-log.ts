@@ -21,7 +21,7 @@ interface LogState {
   totals: UsageTotals;
   /** The latest own receipt's model or model change's model, in the log's order; `null` before either. */
   modelInUse: string | null;
-  /** The conversation's own model calls by the model their receipt names (ADR-227). */
+  /** The conversation's own model calls by the model their receipt names (ADR-228). */
   callsByModel: Readonly<Record<string, number>>;
 }
 
@@ -68,12 +68,12 @@ export function modelInUseOfLines(lines: readonly string[]): string | null {
   return stateOfLines(lines).modelInUse;
 }
 
-/** The own model calls on each model after whole lines of a log (ADR-227). */
+/** The own model calls on each model after whole lines of a log (ADR-228). */
 export function modelCallsOfLines(lines: readonly string[]): ModelCalls[] {
   return modelCallsOf(stateOfLines(lines));
 }
 
-/** What a whole conversation used and on which models, for the record of a task as it ends (ADR-227). */
+/** What a whole conversation used and on which models, for the record of a task as it ends (ADR-228). */
 export interface ConversationUse {
   usage: CopilotUsage | null;
   models: ModelCalls[];
@@ -138,7 +138,7 @@ export class CopilotUsageLog {
     return this.#state.modelInUse;
   }
 
-  /** The conversation's own model calls on each model after the last update (ADR-227), the most first. */
+  /** The conversation's own model calls on each model after the last update (ADR-228), the most first. */
   modelCalls(): ModelCalls[] {
     return modelCallsOf(this.#state);
   }

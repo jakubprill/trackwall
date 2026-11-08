@@ -54,7 +54,7 @@ export function TaskDetails({
         <TaskMessages messages={details.messages} sessions={sessions} />
       </Section>
       <Section id="summary" only={only}>
-        {task.summary && <TaskSummary summary={task.summary} />}
+        {task.summary && <TaskSummary conn={conn} task={task.id} summary={task.summary} />}
       </Section>
       <Section id="verification" only={only}>
         <TaskVerification conn={conn} state={details.verification} />

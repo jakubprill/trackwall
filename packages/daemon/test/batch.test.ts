@@ -18,6 +18,9 @@ const NO_TASKS = {
   trustedTaskWorktree: async () => {
     throw new Error("no task worktree in this test");
   },
+  trustedReproCopy: async () => {
+    throw new Error("no reproduction check copy in this test");
+  },
 };
 
 const FAKE_MISE = [process.execPath, join(import.meta.dir, "fixtures", "fake-mise.ts")];

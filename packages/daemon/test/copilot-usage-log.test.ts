@@ -131,7 +131,7 @@ describe("the model a conversation runs on, from Copilot CLI's event log (ADR-22
   });
 });
 
-describe("the models a conversation's own calls ran on, for the task journal (ADR-227)", () => {
+describe("the models a conversation's own calls ran on, for the task journal (ADR-228)", () => {
   test("each model counts its own calls, the most used first; sub-agent calls and receipts a resume writes again do not count", () => {
     const call = (model: string, sequence: number, initiator?: string) =>
       receipt({ model, inputTokens: 1, outputTokens: 1, initiator, accounting: { sourceSessionId: "c", sequence } });
