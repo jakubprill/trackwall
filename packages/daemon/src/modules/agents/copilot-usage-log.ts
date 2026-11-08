@@ -1,6 +1,6 @@
 import { closeSync, openSync, readSync, statSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
-import type { CopilotUsage, ModelCalls } from "@trackwall/protocol";
+import { COPILOT_AUTO_MODEL, type CopilotUsage, type ModelCalls } from "@trackwall/protocol";
 import { conversationEventLog } from "../../infra/copilot-home.ts";
 import { addReceipt, firstSighting, NO_USAGE, type UsageTotals, usageOf, usageReceipt } from "../../infra/copilot-usage-receipt.ts";
 import { modelChangeOf } from "./copilot-model-change.ts";
@@ -19,7 +19,10 @@ import { modelChangeOf } from "./copilot-model-change.ts";
 /** What the log says so far: the usage sums, the model in use and the own calls on each model. */
 interface LogState {
   totals: UsageTotals;
-  /** The latest own receipt's model or model change's model, in the log's order; `null` before either. */
+  /**
+   * The latest own receipt's model or model change's model, in the log's order; `null` before either, and after a change
+   * to `auto` until the next own receipt.
+   */
   modelInUse: string | null;
   /** The conversation's own model calls by the model their receipt names (ADR-228). */
   callsByModel: Readonly<Record<string, number>>;
@@ -35,7 +38,10 @@ function add(state: LogState, line: string, seen: Set<string>): LogState {
   const receipt = usageReceipt(line);
   if (receipt === undefined) {
     const changed = modelChangeOf(line);
-    return changed === undefined ? state : { ...state, modelInUse: changed };
+    if (changed === undefined) return state;
+    // A change to `auto` (a start whose model the account lacks, or `/model auto`) names no model: Copilot CLI picks one
+    // per call, and the next own receipt says which. Until then the model in use is unknown, not `auto`.
+    return { ...state, modelInUse: changed === COPILOT_AUTO_MODEL ? null : changed };
   }
   if (!firstSighting(seen, receipt)) return state;
   // A receipt without an identity (older Copilot CLI) cannot be told from one a resume writes again, so it names no model.
