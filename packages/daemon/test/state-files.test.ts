@@ -13,6 +13,7 @@ import { LAST_SUPERVISOR_FILE, LAST_SUPERVISOR_FORMAT } from "../src/modules/age
 import { RESUMABLE_SESSIONS_FORMAT } from "../src/modules/agents/resumable-sessions.ts";
 import { TASKS_FORMAT } from "../src/modules/agents/task-file.ts";
 import { TASK_ROUNDS_FILE, TASK_ROUNDS_FORMAT } from "../src/modules/agents/task-rounds.ts";
+import { REPRODUCTION_CHECKS_FILE, REPRODUCTION_CHECKS_FORMAT } from "../src/modules/reproduction/reproduction-checks.ts";
 import { VERIFICATIONS_FILE, VERIFICATIONS_FORMAT } from "../src/modules/verification/verifications.ts";
 
 // The state files an older Trackwall wrote (ADR-223): `fixtures/state-files/<version>/` keeps a file of each format as
@@ -31,6 +32,7 @@ const FORMATS: Record<string, StateFormat<object>> = {
   [RESUMABLE_SESSIONS_FILE]: RESUMABLE_SESSIONS_FORMAT,
   [AGENT_QUEUES_FILE]: AGENT_QUEUES_FORMAT,
   [LAST_SUPERVISOR_FILE]: LAST_SUPERVISOR_FORMAT,
+  [REPRODUCTION_CHECKS_FILE]: REPRODUCTION_CHECKS_FORMAT,
   [ROUTINE_APPROVALS_FILE]: approvalsFormat(RoutineName),
   [KNOWLEDGE_APPROVALS_FILE]: approvalsFormat(KnowledgeName),
 };
