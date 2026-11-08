@@ -111,6 +111,10 @@ _Avoid_: proxy, thin client (without qualification)
 A random token of every Trackwall session, which its Copilot CLI sends to the MCP server and with its hooks (ADR-88, ADR-89) instead of the daemon token; it opens only those two (ADR-138), and by it the daemon knows which session is calling and, for example, stores a summary only in that session's task (ADR-39, §8). An agent outside Trackwall does not have it.
 _Avoid_: task token (an earlier plan; every session has a token, also in a repo root)
 
+**Viewer access**, **viewer token** (`ViewerAccess`, `viewerApi`, `viewer.json`, `ViewerFile`):
+Read-only access for a client on this computer that only shows what the sessions are doing, today the VS Code extension (ADR-221). While the user has "VS Code extension" on in Settings › App, the daemon writes its port and a viewer token into `viewer.json`; the token opens the viewer's session list (`ViewerSessionList`) and nothing else. A **viewer** is such a client.
+_Avoid_: read-only token (without saying it is the viewer's), API key, VS Code token
+
 ## Workspace and knowledge
 
 **Workspace** (`workspace`):
@@ -780,8 +784,12 @@ The text of an error with its frames that the user pastes into a new task (ADR-2
 _Avoid_: log, error (an **error** is a block from a log, ADR-42), stack (a set of services)
 
 **Reproduction test** (`TaskSummary.reproTest`, `ReproTest`, `report_result` argument `reproTest`):
-The test a task's agent says it wrote first and that failed the way the task's stack trace shows: its file, name and failure before the fix (ADR-222). The agent's word, shown as such: Trackwall has not run it.
-_Avoid_: regression test, proof (Trackwall proves nothing about it yet), repro (in prose)
+The test a task's agent says it wrote first and that failed the way the task's stack trace shows: its file, name and failure before the fix (ADR-222). The agent's word, shown as such; the reproduction check is Trackwall's own answer about it.
+_Avoid_: regression test, proof, repro (in prose)
+
+**Reproduction check** (`ReproductionCheck`, module `reproduction`, `reproductionApi`; "Check it" under the reproduction test in a task's summary):
+Trackwall's own run of a task's reproduction test (ADR-227) in a **copy** of the repo beside the task's worktree (`<worktree>.repro`): first on the task's base with only its test files, where it must fail, then with all of the task's changes, where it must pass. `reproduced`, `not_reproduced`, `inconclusive` (it could not tell, such as a test that did not run) or `cancelled`.
+_Avoid_: verification (the whole `test` task in the worktree, ADR-64), red-green check (in the UI), proof
 
 **Evidence of a change** (ADR-222):
 What a task's result brings to show the change is right beyond the agent's summary, such as its reproduction test. The theme of ADR-222, not an identifier in code.

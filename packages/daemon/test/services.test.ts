@@ -54,6 +54,9 @@ function setup(
       if (taskOf(id).repo !== repo) throw new DomainError("bad_request", `task ${id} is not in ${repo}`);
       return { worktree: join(home, "worktrees", id), port: taskOf(id).port };
     },
+    trustedReproCopy: async () => {
+      throw new Error("no reproduction check copy in this test");
+    },
   };
   const logs = new Logs({ dir: join(home, "logs"), maxFileBytes: 1024 * 1024, log: () => {} });
   const procs = new ProcessGroups({
