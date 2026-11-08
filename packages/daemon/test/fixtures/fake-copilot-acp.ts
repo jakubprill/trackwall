@@ -19,6 +19,11 @@
  * names, followed by whether the command was allowed, the arguments it got and the variables `FAKE_COPILOT_SHOW_ENV` names. With `FAKE_COPILOT_REVIEW_WAIT` set the
  * review never ends on its own.
  *
+ * A prompt that asks to check a change against the repo's rules (ADR-234) is answered like a model that reads them: in
+ * every rule file the prompt lists, read from the folder it names, a line `Never add \`<text>\`` is a rule, and each
+ * added line of the diff file that holds `<text>` is a violation in the format the prompt asks for, quoting the rule;
+ * without one it answers that it found none. The answer ends with the rule files it read and its arguments.
+ *
  * Like Copilot CLI it answers `session/new` and `session/load` with the agent's modes (Agent, Plan, Autopilot), offers two slash commands
  * at once, switches the mode on `session/set_config_option`, in Plan mode runs no tool and answers with
  * `FAKE_ACP_PLAN` and the prompt's first line, as an agent that writes a plan and changes nothing (ADR-229), and says after each turn how much context it uses
@@ -34,6 +39,9 @@ import { recordUsage } from "../support/copilot-usage-receipt.ts";
 
 /** The command of every turn; the tests look for it in the approval and the conversation. */
 export const FAKE_ACP_COMMAND = "echo made-by-agent";
+
+/** A rule the fake's check against the repo's rules understands: an added line must not hold the quoted text. */
+export const FAKE_RULE = /Never add `([^`]+)`/;
 
 /** The line a prompt that starts with `Edit ` adds to `README.md`, after its first line. */
 export const FAKE_ACP_EDIT_LINE = "Edited by the agent.";
@@ -170,6 +178,7 @@ export function serveAcp(o: FakeAcpOptions): void {
     history.push({ sessionUpdate: "user_message_chunk", content: { type: "text", text } });
     writeFileSync(conversationFile(sessionId), JSON.stringify(history));
     if (text.startsWith("/review")) void review(sessionId, text, turn);
+    else if (text.startsWith("Check whether a change keeps the written rules")) rulesCheck(sessionId, text, turn);
     else if (mode === PLAN_MODE) {
       update(sessionId, {
         sessionUpdate: "agent_message_chunk",
@@ -245,6 +254,19 @@ export function serveAcp(o: FakeAcpOptions): void {
       ...shownEnv.map((name) => `Env ${name}=${process.env[name] ?? ""}`),
     ].join("\n");
     update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: `${issue}\n\n${about}` } });
+    turn.end("end_turn");
+  }
+
+  function rulesCheck(sessionId: string, text: string, turn: { end: (stopReason: string) => void }): void {
+    if (process.env.FAKE_COPILOT_REVIEW_WAIT !== undefined) return;
+    const diffFile = /in the file `([^`]+)`/.exec(text)?.[1] ?? "";
+    const rulesDir = /copied into the folder `([^`]+)`/.exec(text)?.[1] ?? "";
+    const ruleFiles = [...text.matchAll(/^- (.+)$/gm)].map((match) => match[1] ?? "");
+    const added = addedLines(existsSync(diffFile) ? readFileSync(diffFile, "utf8") : "");
+    const issues = ruleFiles.flatMap((file) => violations(file, readFileSync(join(rulesDir, ...file.split("/")), "utf8"), added));
+    const answer = issues.length > 0 ? issues.join("\n\n") : "No rule violations found.";
+    const about = [`Rules read: ${ruleFiles.join(", ")}`, ...o.args.map((a) => `Argument: ${a}`)].join("\n");
+    update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: `${answer}\n\n${about}` } });
     turn.end("end_turn");
   }
 
@@ -355,16 +377,43 @@ export function serveAcp(o: FakeAcpOptions): void {
 
 /** The first added line of a unified diff: its file and its number in the new file. */
 function firstAddedLine(diff: string): { path: string; line: number } | undefined {
-  let path = "";
-  let line = 0;
+  return addedLines(diff)[0];
+}
+
+type AddedLine = { path: string; line: number; text: string };
+
+/** The lines a unified diff adds, with their file and line number in it. */
+function addedLines(diff: string): AddedLine[] {
+  const added: AddedLine[] = [];
+  const at = { path: "", line: 0 };
   for (const text of diff.split("\n")) {
     const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)/.exec(text);
-    if (text.startsWith("+++ b/")) path = text.slice("+++ b/".length);
-    else if (hunk) line = Number(hunk[1]);
-    else if (text.startsWith("+") && path !== "") return { path, line };
-    else if (!text.startsWith("-") && line > 0) line++;
+    if (text.startsWith("+++ ")) at.path = text.startsWith("+++ b/") ? text.slice("+++ b/".length) : "";
+    else if (hunk) at.line = Number(hunk[1]);
+    else if (text.startsWith("+") && at.path !== "") added.push({ path: at.path, line: at.line++, text: text.slice(1) });
+    else if (!text.startsWith("-") && at.line > 0) at.line++;
   }
-  return undefined;
+  return added;
+}
+
+/** The fake's check of `added` against the rules of rule file `file`, each violation in the format the prompt asks for. */
+function violations(file: string, rules: string, added: readonly AddedLine[]): string[] {
+  return rules.split("\n").flatMap((rule) => {
+    const forbidden = FAKE_RULE.exec(rule)?.[1];
+    if (forbidden === undefined) return [];
+    return added
+      .filter((line) => line.text.includes(forbidden))
+      .map((line) =>
+        [
+          `## Issue: ${forbidden} added`,
+          `**File:** ${line.path}:${line.line}`,
+          "**Severity:** Medium",
+          `**Rule:** ${file}: "${rule.trim()}"`,
+          `**Problem:** Line ${line.line} adds ${forbidden}.`,
+          "**Suggested fix:** Take it out.",
+        ].join("\n"),
+      );
+  });
 }
 
 function toolText(text: string) {

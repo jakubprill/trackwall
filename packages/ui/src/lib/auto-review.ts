@@ -1,10 +1,18 @@
-import { type AutoReview, type AutoReviewFinding, countLabel, cutText, REVIEW_COMMENT_MAX, type ReviewComment } from "@trackwall/protocol";
+import {
+  type AutoReview,
+  type AutoReviewFinding,
+  type AutoReviewKind,
+  countLabel,
+  cutText,
+  REVIEW_COMMENT_MAX,
+  type ReviewComment,
+} from "@trackwall/protocol";
 import { DIFF_SHOWN_LINES, type DiffAnchor, diffLines } from "./diff-lines.ts";
 import type { StatusTone } from "./repo-status.ts";
 import { lineComment, type ReviewDraft } from "./review-drafts.ts";
 
 /**
- * How a task's automatic review (ADR-182) shows in its "Changes" tab, and how a finding becomes a review comment
+ * How a task's automatic review (ADR-182) and its check against the repo's rules (ADR-234) show in its "Changes" tab, and how a finding becomes a review comment
  * (ADR-62) on a line of the diff the tab shows. No React here, so the rules are tested on their own.
  */
 
@@ -13,15 +21,49 @@ export function autoReviewPollMs(review: AutoReview | null | undefined): number 
   return review?.state === "running" ? 2000 : 10_000;
 }
 
+/** The words of a kind's section in the "Changes" tab. */
+export const AUTO_REVIEW_TEXTS: Record<
+  AutoReviewKind,
+  {
+    title: string;
+    idle: string;
+    start: string;
+    again: string;
+    startTitle: string;
+    running: string;
+    finding: { one: string; other: string };
+  }
+> = {
+  code: {
+    title: "Automatic review",
+    idle: "Copilot CLI reads the changes and reports what looks wrong. It costs model credits.",
+    start: "Review",
+    again: "Review again",
+    startTitle: "review the task's changes with Copilot CLI",
+    running: "reviewing",
+    finding: { one: "finding", other: "findings" },
+  },
+  rules: {
+    title: "Repo rules",
+    idle: "Copilot CLI checks the changes against the repo's rules for agents and its ADRs. It costs model credits.",
+    start: "Check rules",
+    again: "Check again",
+    startTitle: "check the task's changes against the repo's rules for agents and its decision records",
+    running: "checking",
+    finding: { one: "violation", other: "violations" },
+  },
+};
+
 /** The state next to the section's title. */
 export function autoReviewLabel(review: AutoReview): { tone?: StatusTone; label: string } {
+  const texts = AUTO_REVIEW_TEXTS[review.kind];
   switch (review.state) {
     case "running":
-      return { tone: "warning", label: "reviewing" };
+      return { tone: "warning", label: texts.running };
     case "done":
       return review.findings.length === 0
-        ? { tone: "ok", label: "no findings" }
-        : { tone: "warning", label: countLabel(review.findings.length, { one: "finding", other: "findings" }) };
+        ? { tone: "ok", label: `no ${texts.finding.other}` }
+        : { tone: "warning", label: countLabel(review.findings.length, texts.finding) };
     case "failed":
       return { tone: "error", label: "failed" };
     case "cancelled":

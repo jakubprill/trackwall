@@ -1,4 +1,4 @@
-import { workspaceApi } from "@trackwall/protocol";
+import { type AutoReviewSettings, workspaceApi } from "@trackwall/protocol";
 import { useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
@@ -7,9 +7,16 @@ import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { useRemote } from "@/lib/use-remote";
 
+/** The settings that start a run after the agent's report, with their labels. */
+const AFTER_REPORT = [
+  ["afterReport", "Review a task's changes when its agent reports its result"],
+  ["rulesAfterReport", "Check a task's changes against the repo's rules when its agent reports its result"],
+] as const satisfies readonly (readonly [keyof AutoReviewSettings, string])[];
+
 /**
- * The automatic review (ADR-182): whether a task's changes get Copilot CLI's review as soon as its agent reports its
- * result. Off by default, because every review costs model credits; "Review" in a task's "Changes" tab works either way.
+ * The automatic review (ADR-182) and the check against the repo's rules (ADR-234): whether a task's changes get them as
+ * soon as its agent reports its result. Off by default, because every run costs model credits; "Review" and "Check
+ * rules" in a task's "Changes" tab work either way.
  */
 export function AutoReviewSurface({ conn }: { conn: Connection }) {
   const load = useCallback(() => post(conn, workspaceApi.settings, {}), [conn]);
@@ -17,11 +24,11 @@ export function AutoReviewSurface({ conn }: { conn: Connection }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
-  async function change(afterReport: boolean) {
+  async function change(next: AutoReviewSettings) {
     setBusy(true);
     setError(undefined);
     try {
-      await post(conn, workspaceApi.setAutoReview, { afterReport });
+      await post(conn, workspaceApi.setAutoReview, next);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -37,21 +44,26 @@ export function AutoReviewSurface({ conn }: { conn: Connection }) {
         <p className="text-muted-foreground text-sm">
           Copilot CLI reviews a task's changes and you pick the findings to send to the agent as review comments. The reviewer only reads:
           it cannot run commands or change files. Each review costs model credits, so it runs when you click Review in the task's Changes
-          tab, or on its own when you turn it on here.
+          tab, or on its own when you turn it on here. The rules check compares the changes with the repo's rules for agents and its ADRs as
+          they were before the task, and reports only a written rule the changes break.
         </p>
         {settings.error && <ErrorWithRetry message={settings.error} onRetry={settings.reload} />}
         {!data && !settings.error && <Loading />}
         {data && (
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="accent-primary size-4 shrink-0"
-              checked={data.autoReview.afterReport}
-              disabled={busy}
-              onChange={(e) => void change(e.target.checked)}
-            />
-            Review a task's changes when its agent reports its result
-          </label>
+          <>
+            {AFTER_REPORT.map(([key, label]) => (
+              <label key={key} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="accent-primary size-4 shrink-0"
+                  checked={data.autoReview[key]}
+                  disabled={busy}
+                  onChange={(e) => void change({ ...data.autoReview, [key]: e.target.checked })}
+                />
+                {label}
+              </label>
+            ))}
+          </>
         )}
         {data?.autoReviewProblem && <p className="text-destructive text-xs break-words">{data.autoReviewProblem}</p>}
         {error && <p className="text-destructive text-xs break-words">{error}</p>}
