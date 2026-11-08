@@ -1,0 +1,114 @@
+{
+  "name": "@trackwall/vscode",
+  "displayName": "Trackwall",
+  "description": "See your Trackwall sessions and what waits for you in VS Code's status bar and side bar, and open one in Trackwall with a click.",
+  "version": "0.1.0",
+  "publisher": "trackwall",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jakubprill/trackwall"
+  },
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    },
+    "virtualWorkspaces": true
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "trackwall",
+          "title": "Trackwall",
+          "icon": "media/trackwall.svg"
+        }
+      ]
+    },
+    "views": {
+      "trackwall": [
+        {
+          "id": "trackwall.sessions",
+          "name": "Sessions"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "trackwall.sessions",
+        "contents": "Trackwall is not sharing its sessions with VS Code yet.\nTurn on \"VS Code extension\" in Trackwall's Settings > App. This side bar fills in a few seconds later."
+      }
+    ],
+    "commands": [
+      {
+        "command": "trackwall.openSession",
+        "title": "Open in Trackwall",
+        "category": "Trackwall"
+      },
+      {
+        "command": "trackwall.showSessions",
+        "title": "Show Sessions",
+        "category": "Trackwall"
+      },
+      {
+        "command": "trackwall.refresh",
+        "title": "Refresh",
+        "category": "Trackwall",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "trackwall.refresh",
+          "when": "view == trackwall.sessions",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "trackwall.openSession",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Trackwall",
+      "properties": {
+        "trackwall.stateFolder": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "markdownDescription": "Trackwall's state folder, where it writes `viewer.json`. Empty: `TRACKWALL_HOME` when set, otherwise `.trackwall` in your home folder."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "bun scripts/build.ts",
+    "package": "bun scripts/build.ts && bun scripts/package.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@trackwall/protocol": "workspace:*",
+    "@types/bun": "1.4.4",
+    "@types/vscode": "1.100.0",
+    "typescript": "5.9.3",
+    "zod": "4.6.7"
+  }
+}

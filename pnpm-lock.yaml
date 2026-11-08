@@ -97,6 +97,24 @@ importers:
         specifier: 4.6.7
         version: 4.6.7
 
+  apps/vscode:
+    devDependencies:
+      '@trackwall/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@types/bun':
+        specifier: 1.4.4
+        version: 1.4.4
+      '@types/vscode':
+        specifier: 1.100.0
+        version: 1.100.0
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+
   packages/daemon:
     dependencies:
       '@modelcontextprotocol/server':
@@ -1522,6 +1540,9 @@ packages:
 
   '@types/unist@3.0.3':
     resolution: {integrity: sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==}
+
+  '@types/vscode@1.100.0':
+    resolution: {integrity: sha512-4uNyvzHoraXEeCamR3+fzcBlh7Afs4Ifjs4epINyUX/jvdk0uzLnwiDY35UKDKnkCHP5Nu3dljl2H8lR6s+rQw==}
 
   '@types/web-bluetooth@0.0.21':
     resolution: {integrity: sha512-oIQLCGWtcFZy2JW77j9k8nHzAOpqMHLQejDA48XXMWH6tjCQHz5RCFz1bzsmROyL6PUm+LLnUiI4BCn221inxA==}
@@ -4027,6 +4048,8 @@ snapshots:
   '@types/unist@2.0.11': {}
 
   '@types/unist@3.0.3': {}
+
+  '@types/vscode@1.100.0': {}
 
   '@types/web-bluetooth@0.0.21': {}
 

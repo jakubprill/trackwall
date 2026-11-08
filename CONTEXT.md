@@ -111,6 +111,10 @@ _Avoid_: proxy, thin client (without qualification)
 A random token of every Trackwall session, which its Copilot CLI sends to the MCP server and with its hooks (ADR-88, ADR-89) instead of the daemon token; it opens only those two (ADR-138), and by it the daemon knows which session is calling and, for example, stores a summary only in that session's task (ADR-39, §8). An agent outside Trackwall does not have it.
 _Avoid_: task token (an earlier plan; every session has a token, also in a repo root)
 
+**Viewer access**, **viewer token** (`ViewerAccess`, `viewerApi`, `viewer.json`, `ViewerFile`):
+Read-only access for a client on this computer that only shows what the sessions are doing, today the VS Code extension (ADR-221). While the user has "VS Code extension" on in Settings › App, the daemon writes its port and a viewer token into `viewer.json`; the token opens the viewer's session list (`ViewerSessionList`) and nothing else. A **viewer** is such a client.
+_Avoid_: read-only token (without saying it is the viewer's), API key, VS Code token
+
 ## Workspace and knowledge
 
 **Workspace** (`workspace`):
