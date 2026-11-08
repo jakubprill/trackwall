@@ -6,15 +6,18 @@ import { LazyMarkdown } from "@/components/LazyMarkdown";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { post } from "@/lib/api";
+import { errorCode, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import { conflictNotice, planSave, shownText, type TextDraft, withoutFields } from "@/lib/item-edit";
 import { useAction } from "@/lib/use-action";
 import { TicketLink } from "./TicketLink.tsx";
 
 /**
  * An item's text in the right column of Plan (ADR-215): read first, with where it sits in its project, its title, its
  * notes as Markdown and its ticket; "Edit" turns the three into fields and "Save" or "Cancel" turns them back. The notes
- * are formatted like an agent's answer (no raw HTML, no diagrams), since an agent may have written them.
+ * are formatted like an agent's answer (no raw HTML, no diagrams), since an agent may have written them. The form keeps the
+ * item as it was when "Edit" was pressed and saves only the fields the user changed, on the version it shows (ADR-232,
+ * `lib/item-edit.ts`), so an agent's notes written meanwhile are never replaced by a stale copy of them.
  */
 export function ItemText({
   conn,
@@ -27,16 +30,33 @@ export function ItemText({
   item: BoardItem;
   onChanged: () => void;
 }) {
-  const [editing, setEditing] = useState(false);
+  /** The item as it was when the edit started; `null` while reading. */
+  const [base, setBase] = useState<BoardItem | null>(null);
   const save = useAction(
-    (change: BoardItemChange) => post(conn, boardApi.update, { item: item.id, ...change }),
+    (change: BoardItemChange, expectedUpdatedAt: string) =>
+      post(conn, boardApi.update, { item: item.id, ...change, expectedUpdatedAt }).catch((err: unknown) => {
+        // The board here is behind the daemon's: read it again, so the form shows what changed, in plain words.
+        if (errorCode(err) !== "item_changed") throw err;
+        onChanged();
+        throw new Error("The item changed meanwhile, so nothing was saved. Check the text and save again.");
+      }),
     () => {
-      setEditing(false);
+      setBase(null);
       onChanged();
     },
   );
-  if (editing) {
-    return <ItemTextForm item={item} pending={save.pending} error={save.error} onSave={save.run} onCancel={() => setEditing(false)} />;
+  if (base !== null) {
+    return (
+      <ItemTextForm
+        base={base}
+        current={item}
+        pending={save.pending}
+        error={save.error}
+        onSave={save.run}
+        onRebase={() => setBase(item)}
+        onCancel={() => setBase(null)}
+      />
+    );
   }
   const above = ancestorsOf(items, item);
   return (
@@ -44,7 +64,7 @@ export function ItemText({
       {above.length > 0 && <p className="text-muted-foreground truncate text-xs">{above.map((it) => it.title).join(" › ")} ›</p>}
       <div className="flex items-start gap-2">
         <h3 className="min-w-0 flex-1 text-lg font-medium break-words">{item.title}</h3>
-        <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
+        <Button variant="ghost" size="sm" onClick={() => setBase(item)}>
           <Pencil /> Edit
         </Button>
       </div>
@@ -70,56 +90,83 @@ function Notes({ conn, text }: { conn: Connection; text: string }) {
   );
 }
 
-/** Title, notes and link as fields, saved together. */
+/**
+ * Title, notes and link as fields. A field the user has not typed into follows the board; when the user and someone else
+ * both changed one, Save waits: "Use theirs" drops the user's text of those fields, "Keep mine" builds the edit on the
+ * item as it is now, so the save replaces the other text knowingly.
+ */
 function ItemTextForm({
-  item,
+  base,
+  current,
   pending,
   error,
   onSave,
+  onRebase,
   onCancel,
 }: {
-  item: BoardItem;
+  base: BoardItem;
+  current: BoardItem;
   pending: boolean;
   error: string | undefined;
-  onSave: (change: BoardItemChange) => void;
+  onSave: (change: BoardItemChange, expectedUpdatedAt: string) => void;
+  /** Builds the edit on `current` from now on. */
+  onRebase: () => void;
   onCancel: () => void;
 }) {
-  const [title, setTitle] = useState(item.title);
-  const [body, setBody] = useState(item.body);
-  const [link, setLink] = useState(item.link ?? "");
-  const change = { title: title.trim(), body, link: link.trim() === "" ? null : link.trim() };
-  const changed = change.title !== item.title || change.body !== item.body || change.link !== item.link;
+  const [draft, setDraft] = useState<TextDraft>({});
+  const shown = shownText(draft, current);
+  const plan = planSave(base, current, draft);
+  const type = (field: keyof TextDraft) => (e: { target: { value: string } }) => {
+    const value = e.target.value;
+    setDraft((typed) => ({ ...typed, [field]: value }));
+  };
   return (
     <form
       aria-label="Edit the item"
       className="flex flex-col gap-2"
       onSubmit={(e) => {
         e.preventDefault();
-        onSave(change);
+        if (plan.kind === "save") onSave(plan.change, plan.expectedUpdatedAt);
       }}
     >
-      <Input aria-label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+      {plan.kind === "conflict" && (
+        <div role="alert" className="border-warning/40 bg-warning/10 flex flex-col gap-2 rounded-md border p-2 text-sm">
+          <p>{conflictNotice(plan.fields)} Save waits for your choice.</p>
+          <div className="flex gap-2">
+            <Button type="button" size="sm" onClick={() => setDraft(withoutFields(draft, plan.fields))}>
+              Use theirs
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={onRebase}>
+              Keep mine
+            </Button>
+          </div>
+        </div>
+      )}
+      <Input aria-label="Title" value={shown.title} readOnly={pending} onChange={type("title")} />
       <Textarea
         aria-label="Plan and notes"
         placeholder="The plan, notes, what done means (Markdown)"
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
+        value={shown.body}
+        readOnly={pending}
+        onChange={type("body")}
         rows={10}
       />
       <Input
         aria-label="Link to the ticket"
         placeholder="Link to the ticket, e.g. https://…"
-        value={link}
-        onChange={(e) => setLink(e.target.value)}
+        value={shown.link}
+        readOnly={pending}
+        onChange={type("link")}
       />
       <div className="flex gap-2">
-        <Button type="submit" disabled={pending || !changed || change.title === ""}>
+        <Button type="submit" disabled={pending || plan.kind !== "save"}>
           Save
         </Button>
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
       </div>
+      {plan.kind === "no_title" && <p className="text-muted-foreground text-sm">An item needs a title.</p>}
       {error && <p className="text-destructive text-sm whitespace-pre-wrap">{error}</p>}
     </form>
   );

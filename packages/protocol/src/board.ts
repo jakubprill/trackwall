@@ -147,10 +147,15 @@ export const boardApi = {
       .strict(),
     BoardItem,
   ),
-  /** Changes the fields given; the rest stay. */
+  /**
+   * Changes the fields given; the rest stay. With `expectedUpdatedAt` (the item's `updatedAt` the client's edit started
+   * from) the write happens only while the item is still that version, otherwise `item_changed` (ADR-232): a form opened
+   * before an agent's edit does not write its stale copy over it.
+   */
   update: endpoint(
     "update",
     ItemRequest.extend({
+      expectedUpdatedAt: BoardItem.shape.updatedAt.optional(),
       title: BoardItemTitle.optional(),
       body: BoardItemBody.optional(),
       repos: BoardItemRepos.optional(),
@@ -169,4 +174,4 @@ export const boardApi = {
 };
 
 /** What `board/update` changes on an item: only the fields given. */
-export type BoardItemChange = Omit<z.infer<typeof boardApi.update.request>, "item">;
+export type BoardItemChange = Omit<z.infer<typeof boardApi.update.request>, "item" | "expectedUpdatedAt">;
