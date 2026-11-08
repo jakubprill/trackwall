@@ -69,6 +69,8 @@ interface MiseRepos {
  */
 interface MiseTaskWorktrees {
   trustedTaskWorktree(task: string, repo: string): Promise<{ worktree: string; port: number }>;
+  /** The copy of the task's reproduction check, refused while its mise config is not the trusted one (ADR-227). */
+  trustedReproCopy(task: string, repo: string): Promise<{ dir: string; port: number }>;
 }
 
 export interface MiseDeps {
@@ -258,6 +260,43 @@ export class Mise {
     if (!(await this.listedTask(place, miseTask))) return null;
     this.remember(root, miseTask);
     return this.runGroupToEnd(owner(root, miseTask), place, ["run", miseTask], repo, miseTaskLogSource(repo, null, miseTask), signal);
+  }
+
+  /**
+   * A reproduction check's run (ADR-227): the mise task from the current list in the check's copy of the task's repo,
+   * awaited to the confirmed end of its group like a run of the batch command, with `filter` as its one argument when the
+   * mise task declares arguments (ADR-158) and without it otherwise, so a repo's own `test` without a usage spec runs all
+   * its tests. The copy gets the worktree's treatment: trusted for this run only, with the task port. Its group is the
+   * check's own, so it never joins or is joined by a run in the task's worktree; its output goes to the task's log of
+   * that mise task, where the user reads why a run failed. `signal` stops the group.
+   */
+  async runInReproCopy(
+    target: { repo: string; task: string },
+    miseTask: string,
+    filter: string,
+    signal: AbortSignal,
+  ): Promise<{ run: RunState; filtered: boolean }> {
+    const parsedArgs = MiseRunArguments.safeParse([filter]);
+    if (!parsedArgs.success) throw new DomainError("bad_request", z.prettifyError(parsedArgs.error));
+    const root = await this.deps.repos.repoPath(target.repo);
+    const env = await this.deps.env();
+    const listed = await this.list(root, env);
+    if (listed.kind !== "ok") throw new DomainError("mise_unavailable", `${target.repo}: ${listed.message}`);
+    const { dir, port } = await this.deps.tasks.trustedReproCopy(target.task, target.repo);
+    const copyEnv = withTaskPort(trustingPath(env, dir), port);
+    const place: RunPlace = { dir, env: copyEnv, secrets: await this.secretsIn(dir, copyEnv) };
+    const task = await this.listedTask(place, miseTask);
+    if (!task) throw new DomainError("not_found", `the reproduction check's copy of ${target.repo} has no mise task "${miseTask}"`);
+    const filtered = task.usage !== null;
+    const run = await this.runGroupToEnd(
+      `task-repro:${target.task}:${target.repo}:${miseTask}`,
+      place,
+      ["run", miseTask, ...(filtered ? parsedArgs.data : [])],
+      target.repo,
+      miseTaskLogSource(target.repo, target.task, miseTask),
+      signal,
+    );
+    return { run, filtered };
   }
 
   /**

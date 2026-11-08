@@ -13,6 +13,7 @@ import {
   PATCH_MAX_BYTES,
   type ProposedBy,
   type ReportedSummary,
+  type ReproTest,
   type Session,
   type SessionView,
   TASK_SUMMARY_MAX_FILES,
@@ -790,6 +791,43 @@ export class AgentTasks {
     return { worktree: task.worktree, port: task.port };
   }
 
+  /**
+   * What a reproduction check of task `id` works with (ADR-227): its repo, worktree and base commit, the reproduction test
+   * its agent last reported (`null` without one) and the folder of the check's copy of the repo, next to the worktree in
+   * the task worktrees folder (`<worktree>.repro`), so the copy gets the same mise config from the projects folder.
+   * Refused while the task is being ended.
+   */
+  reproSubject(id: string): { repo: string; worktree: string; base: string; reproTest: ReproTest | null; copy: string } {
+    if (this.#removing.has(id)) throw new DomainError("bad_request", "this task is being ended");
+    const task = this.#existingWorktree(id);
+    return {
+      repo: task.repo,
+      worktree: task.worktree,
+      base: task.base,
+      reproTest: task.summary?.reproTest ?? null,
+      copy: reproCopy(task.worktree),
+    };
+  }
+
+  /**
+   * The copy of a reproduction check of a task of `repo` for a mise task run in it (ADR-227), only while it has the mise
+   * config the user trusted for the task's worktree, as `trustedWorktree` requires of the worktree, and with the task port.
+   */
+  async trustedReproCopy(id: string, repo: string): Promise<{ dir: string; port: number }> {
+    if (this.#removing.has(id)) throw new DomainError("bad_request", "this task is being ended");
+    const task = this.#existingWorktree(id);
+    if (task.repo !== repo) throw new DomainError("bad_request", `task ${task.branch} is in ${task.repo}, not in ${repo}`);
+    const dir = reproCopy(task.worktree);
+    if (!existsSync(dir)) throw new DomainError("not_found", `task ${task.branch} has no reproduction check copy`);
+    const changes = miseConfigChanges(task.trustedMiseConfig ?? {}, await readMiseConfig(dir));
+    if (changes.length > 0)
+      throw new DomainError(
+        "mise_unavailable",
+        `the mise config in the reproduction check's copy differs from the one the user trusted for task ${task.branch} (${changes.map((c) => c.path).join(", ")})`,
+      );
+    return { dir, port: task.port };
+  }
+
   openEditor(id: string): void {
     this.#deps.openEditor(this.#existingWorktree(id).worktree);
   }
@@ -1017,4 +1055,9 @@ function asRepoUnavailable<T>(label: string, work: Promise<T>): Promise<T> {
   return work.catch((err: unknown) => {
     throw new DomainError("repo_unavailable", `${label}: ${messageOf(err)}`);
   });
+}
+
+/** The folder of a task's reproduction check copy (ADR-227): beside its worktree, so it is in the same folders. */
+function reproCopy(worktree: string): string {
+  return `${worktree}.repro`;
 }

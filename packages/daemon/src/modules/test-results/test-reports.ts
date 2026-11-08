@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import {
+  REPRODUCTION_FAILURE_MAX_CHARS,
   TEST_FAILURE_HEAD_LINES,
   TEST_FAILURE_LINE_MAX_CHARS,
   TEST_FAILURE_MESSAGE_MAX_CHARS,
@@ -13,7 +14,7 @@ import {
 } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
-import { addCounts, emptyCounts, type JunitReport, parseJunitReport, type ReportFailure } from "./junit-report.ts";
+import { addCounts, emptyCounts, type JunitReport, parseJunitReport, type ReportCase, type ReportFailure } from "./junit-report.ts";
 import { findReportFiles, type ReportFile } from "./report-files.ts";
 
 /**
@@ -83,6 +84,23 @@ export class TestReports {
     const env = await this.#deps.env();
     const summary = summarize(read, (text) => this.#deps.logs.mask(text, env));
     return { dir, ...summary, earlierReports: found.earlier, truncated: found.truncated || summary.truncated };
+  }
+
+  /**
+   * Every test case of the reports under `dir` written at or after `since`, for a reproduction check (ADR-227), which
+   * looks for one test in them; `dir` is the daemon's own copy of a repo, never a path from outside. Each failure's type and
+   * message are masked and cut as for an agent; `unread` counts the reports that could not be read.
+   */
+  async casesIn(dir: string, since: string): Promise<{ cases: ReportCase[]; unread: number; truncated: boolean }> {
+    const found = await findReportFiles(dir, Date.parse(since));
+    const read = await mapLimit(found.files, READ_CONCURRENCY, readReport);
+    const env = await this.#deps.env();
+    const mask: Mask = (text) => this.#deps.logs.mask(text, env);
+    const cut = (text: string | null) => (text === null ? null : mask(text).slice(0, REPRODUCTION_FAILURE_MAX_CHARS));
+    const cases = read.flatMap((entry) =>
+      "problem" in entry ? [] : entry.report.cases.map((c) => ({ ...c, type: cut(c.type), message: cut(c.message) })),
+    );
+    return { cases, unread: read.filter((entry) => "problem" in entry).length, truncated: found.truncated };
   }
 
   async #dir({ repo, task }: TestReportsTarget): Promise<string> {

@@ -23,12 +23,25 @@ export interface ReportFailure {
   timeSeconds: number | null;
 }
 
+/** Any test case by its name and outcome, for a reproduction check that looks for one test (ADR-227). */
+export interface ReportCase {
+  suite: string;
+  className: string | null;
+  name: string;
+  kind: "passed" | "skipped" | "failure" | "error";
+  type: string | null;
+  message: string | null;
+}
+
 export interface JunitReport {
   counts: TestCounts;
   failures: ReportFailure[];
+  /** Every test case in report order. */
+  cases: ReportCase[];
 }
 
-type Outcome = { kind: "passed"; timeSeconds: number | null } | { kind: "skipped"; timeSeconds: number | null } | ReportFailure;
+type CaseNames = { suite: string; className: string | null; name: string; timeSeconds: number | null };
+type Outcome = ({ kind: "passed" } & CaseNames) | ({ kind: "skipped" } & CaseNames) | ReportFailure;
 
 /** Which count a failed test case adds to. */
 const FAILED_COUNT = { failure: "failures", error: "errors" } as const;
@@ -52,8 +65,9 @@ export function parseJunitReport(text: string): JunitReport {
   if (root.name !== "testsuites" && root.name !== "testsuite") throw new Error(`the root element is <${root.name}>, not <testsuite>`);
   const outcomes: Outcome[] = [];
   collectSuite(root, outcomes);
-  const report: JunitReport = { counts: emptyCounts(), failures: [] };
+  const report: JunitReport = { counts: emptyCounts(), failures: [], cases: [] };
   for (const outcome of outcomes) {
+    report.cases.push(caseOf(outcome));
     const counts: TestCounts = { ...emptyCounts(), tests: 1, timeSeconds: outcome.timeSeconds };
     if (outcome.kind === "skipped") counts.skipped = 1;
     else if (outcome.kind !== "passed") {
@@ -73,15 +87,26 @@ function collectSuite(suite: XmlElement, outcomes: Outcome[]): void {
   }
 }
 
+function caseOf(outcome: Outcome): ReportCase {
+  const { suite, className, name } = outcome;
+  if (outcome.kind === "passed" || outcome.kind === "skipped")
+    return { suite, className, name, kind: outcome.kind, type: null, message: null };
+  return { suite, className, name, kind: outcome.kind, type: outcome.type, message: outcome.message };
+}
+
 function outcomeOf(testCase: XmlElement, suite: string): Outcome {
   const timeSeconds = seconds(testCase.attributes.get("time"));
+  const className = testCase.attributes.get("classname") ?? null;
+  const name = testCase.attributes.get("name") ?? "";
   const failed = testCase.children.find((c) => c.name === "failure" || c.name === "error");
-  if (failed === undefined)
-    return testCase.children.some((c) => c.name === "skipped") ? { kind: "skipped", timeSeconds } : { kind: "passed", timeSeconds };
+  if (failed === undefined) {
+    const skipped = testCase.children.some((c) => c.name === "skipped");
+    return skipped ? { kind: "skipped", suite, className, name, timeSeconds } : { kind: "passed", suite, className, name, timeSeconds };
+  }
   return {
     suite,
-    className: testCase.attributes.get("classname") ?? null,
-    name: testCase.attributes.get("name") ?? "",
+    className,
+    name,
     kind: failed.name === "failure" ? "failure" : "error",
     type: failed.attributes.get("type") || null,
     message: failed.attributes.get("message") || null,

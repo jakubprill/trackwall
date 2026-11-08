@@ -1141,6 +1141,16 @@ export class Agents {
     return this.#tasks.trustedWorktree(id, repo);
   }
 
+  /** What a reproduction check of task `id` works with (ADR-227), for the `reproduction` module. */
+  reproSubject(id: string): ReturnType<AgentTasks["reproSubject"]> {
+    return this.#tasks.reproSubject(id);
+  }
+
+  /** The copy of a reproduction check of the task, while its mise config is the trusted one, for the `mise` module (ADR-227). */
+  trustedReproCopy(id: string, repo: string): Promise<{ dir: string; port: number }> {
+    return this.#tasks.trustedReproCopy(id, repo);
+  }
+
   async removeTask(id: string, keepBranch: boolean, discardChanges: boolean, discardFingerprint?: string): Promise<void> {
     // Its reviewer runs in the worktree, which the removal refuses while a process of Trackwall is in it. Without one,
     // the removal starts at once, so a change computation that comes after it refuses.

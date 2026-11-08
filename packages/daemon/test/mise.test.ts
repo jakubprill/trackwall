@@ -40,6 +40,11 @@ function setup(config: object, command: readonly string[] = FAKE_MISE) {
       if (refusal) throw refusal;
       return { worktree, port: TASK_PORT };
     },
+    trustedReproCopy: async (id: string, repo: string) => {
+      if (id !== TASK || repo !== "web") throw new DomainError("bad_request", `no task ${id} in ${repo}`);
+      if (refusal) throw refusal;
+      return { dir: `${worktree}.repro`, port: TASK_PORT };
+    },
   };
   /** The `agents` module refuses the worktree, as it does when its mise config changed since the user trusted it. */
   const refuseWorktree = (error: DomainError) => {
