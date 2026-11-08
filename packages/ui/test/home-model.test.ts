@@ -44,6 +44,7 @@ function session(id: string, repoId: string, over: Partial<Session> = {}): Sessi
     copyRequest: null,
     usage: null,
     model: null,
+    modelInUse: null,
     ...over,
   };
 }

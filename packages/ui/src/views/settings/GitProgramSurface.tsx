@@ -1,9 +1,12 @@
 import type { WorkspaceSettings } from "@trackwall/protocol";
 import { Surface } from "@/components/Surface";
+import { useDesktop } from "@/lib/desktop";
+import { daemonExamplePaths } from "@/lib/platform";
 import { PathForm } from "./PathForm.tsx";
 
 /** The git the daemon starts for local git calls (ADR-112); empty means git from `PATH`. */
 export function GitProgramSurface({ settings, save }: { settings: WorkspaceSettings; save: (path: string | null) => Promise<void> }) {
+  const example = daemonExamplePaths(useDesktop()).gitProgram;
   return (
     <Surface label="Git program">
       <div className="flex flex-col gap-4 p-4">
@@ -15,7 +18,7 @@ export function GitProgramSurface({ settings, save }: { settings: WorkspaceSetti
         <PathForm
           key={settings.gitProgram ?? ""}
           label="Full path to git"
-          placeholder={"C:\\Users\\me\\Dev\\tools\\MinGit\\cmd\\git.exe"}
+          placeholder={example}
           configKey="gitProgram"
           initialPath={settings.gitProgram ?? ""}
           configFile={settings.configFile}

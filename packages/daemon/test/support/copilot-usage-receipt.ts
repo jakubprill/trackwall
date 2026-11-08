@@ -11,7 +11,7 @@ import { conversationEventLog } from "../../src/infra/copilot-home.ts";
  * the real Copilot CLI reports only with a GitHub account, so without it the receipt says AI credits are unavailable,
  * as with the contract test's own model (BYOK).
  */
-function appendUsageReceipt(o: { copilotHome: string; conversation: string; nanoAiu?: number }): void {
+function appendUsageReceipt(o: { copilotHome: string; conversation: string; model: string; nanoAiu?: number }): void {
   const file = conversationEventLog(o.copilotHome, o.conversation);
   mkdirSync(dirname(file), { recursive: true });
   // Copilot CLI goes on with the conversation's sequence after a resume.
@@ -21,7 +21,7 @@ function appendUsageReceipt(o: { copilotHome: string; conversation: string; nano
         .filter((line) => line.includes('"session.usage_record"')).length + 1
     : 1;
   const usage = {
-    model: "fake-model",
+    model: o.model,
     inputTokens: 100,
     outputTokens: 20,
     cost: 1,
@@ -57,6 +57,17 @@ function writeWorkspaceFile(conversationDir: string): void {
 }
 
 /**
+ * The model a fake's call runs on: its `--model=`, or with `FAKE_COPILOT_ACCOUNT_MODELS` (comma-separated, the models an
+ * account offers) the first of them when the account lacks it, as Copilot CLI falls back without stopping (ADR-225).
+ */
+function modelInUse(): string {
+  const requested = process.argv.find((a) => a.startsWith("--model="))?.slice("--model=".length);
+  const offered = (process.env.FAKE_COPILOT_ACCOUNT_MODELS ?? "").split(",").filter((id) => id !== "");
+  if (offered.length > 0 && (requested === undefined || !offered.includes(requested))) return offered[0] ?? "fake-model";
+  return requested ?? "fake-model";
+}
+
+/**
  * A fake's receipt for one turn of `conversation`, in `COPILOT_HOME` when the test set it (so a test never writes into
  * the developer's Copilot CLI home), with the cost from `FAKE_COPILOT_NANO_AIU` when set.
  */
@@ -64,5 +75,25 @@ export function recordUsage(conversation: string | undefined): void {
   const copilotHome = process.env.COPILOT_HOME;
   if (copilotHome === undefined || copilotHome === "" || conversation === undefined) return;
   const cost = process.env.FAKE_COPILOT_NANO_AIU;
-  appendUsageReceipt({ copilotHome, conversation, ...(cost === undefined ? {} : { nanoAiu: Number(cost) }) });
+  appendUsageReceipt({ copilotHome, conversation, model: modelInUse(), ...(cost === undefined ? {} : { nanoAiu: Number(cost) }) });
+}
+
+/**
+ * The model change Copilot CLI writes to the conversation's event log at every start and resume (ADR-225), with the
+ * model the fake runs on, in `COPILOT_HOME` when the test set it.
+ */
+export function recordModelChange(conversation: string | undefined): void {
+  const copilotHome = process.env.COPILOT_HOME;
+  if (copilotHome === undefined || copilotHome === "" || conversation === undefined) return;
+  const file = conversationEventLog(copilotHome, conversation);
+  mkdirSync(dirname(file), { recursive: true });
+  const model = modelInUse();
+  const event = {
+    type: "session.model_change",
+    data: { source: "startup", newModel: model, previousModel: model },
+    id: crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
+    parentId: null,
+  };
+  appendFileSync(file, `${JSON.stringify(event)}\n`);
 }

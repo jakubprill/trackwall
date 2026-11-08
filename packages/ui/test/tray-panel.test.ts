@@ -23,6 +23,7 @@ function session(id: string, needsAttention: boolean, dialog: Session["dialog"] 
     copyRequest: null,
     usage: null,
     model: null,
+    modelInUse: null,
   };
 }
 

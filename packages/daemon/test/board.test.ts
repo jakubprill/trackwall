@@ -172,6 +172,19 @@ describe("the board (ADR-133)", () => {
     expect(await b.followTasks("5b0c6a7e-0000-4000-8000-0000000000ff", "review")).toBeNull();
   });
 
+  test("an item goes back to ready only from in progress: work in review, done or dropped stays where it is (ADR-213)", async () => {
+    const { board: b } = board();
+    const item = await b.create({ ...NEW, kind: "item", title: "Fix README typo", column: "in_progress" }, USER);
+
+    expect((await b.followTasks(item.id, "ready"))?.column).toBe("ready");
+    expect(await b.followTasks(item.id, "ready")).toBeNull();
+    for (const column of ["review", "done", "dropped", "ideas"] as const) {
+      await b.update(item.id, { column });
+      expect(await b.followTasks(item.id, "ready")).toBeNull();
+      expect((await b.item(item.id)).column).toBe(column);
+    }
+  });
+
   test("a read beside the daemon's own writes in the background still finds every item (ADR-213)", async () => {
     const { board: b } = board();
     const items = [];

@@ -1,4 +1,4 @@
-import type { Task } from "@trackwall/protocol";
+import type { ReproTest, Task } from "@trackwall/protocol";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { relativeTime } from "@/lib/format";
@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
  * width and shows two lines until opened, because a summary of a few paragraphs above the terminal would leave the
  * terminal a few lines in the one-entry layout. "Show all" appears only when the two lines cut the text. The check
  * steps (ADR-169) show only when opened: they are a hint the user asks for, not something the panel puts in their way.
+ * The test the agent says reproduces the task's error (ADR-222) is always in sight, worded as the agent's claim.
  */
 export function TaskSummary({ summary }: { summary: NonNullable<Task["summary"]> }) {
   const text = useRef<HTMLParagraphElement>(null);
@@ -35,6 +36,7 @@ export function TaskSummary({ summary }: { summary: NonNullable<Task["summary"]>
         <p ref={text} className={cn("text-sm whitespace-pre-wrap", !open && "line-clamp-2")}>
           {summary.text}
         </p>
+        {summary.reproTest && <ReproTestClaim test={summary.reproTest} />}
         {open && steps > 0 && (
           <section aria-label="How to check" className="mt-2">
             <span className="hud-label">How to check</span>
@@ -52,5 +54,16 @@ export function TaskSummary({ summary }: { summary: NonNullable<Task["summary"]>
         </Button>
       )}
     </section>
+  );
+}
+
+/** The agent's reproduction test (ADR-222): what it says, which Trackwall has not run. */
+function ReproTestClaim({ test }: { test: ReproTest }) {
+  return (
+    <p className="text-muted-foreground mt-1 text-xs">
+      <span className="text-foreground">Reproduction test</span> (the agent's word, not run by Trackwall):{" "}
+      <span className="text-foreground font-mono">{test.name}</span> in <span className="font-mono">{test.file}</span>, failed before the
+      fix with: {test.failure}
+    </p>
   );
 }

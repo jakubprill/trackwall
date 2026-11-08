@@ -23,6 +23,15 @@ case "$PORT" in
 esac
 [ "$PORT" -ge 1 ] && [ "$PORT" -le 65535 ] || fail "port out of range 1-65535: $PORT"
 
+# The "sandbox" option (ADR-219): the programs Copilot CLI's sandbox runs on in Linux, so that tasks without approvals can
+# run their commands in it. They make namespaces only once the container gets the seccomp profile of the dev container
+# guide; the daemon checks that and keeps the sandbox off by default until then.
+SANDBOX="${SANDBOX:-false}"
+case "$SANDBOX" in
+true | false) ;;
+*) fail "sandbox must be true or false, got '$SANDBOX'" ;;
+esac
+
 # The user VS Code works as; Trackwall runs as that user, with its state in that user's home.
 USER_NAME="${_REMOTE_USER:-root}"
 case "$USER_NAME" in
@@ -39,6 +48,28 @@ esac
 case "$USER_HOME" in
 *[!A-Za-z0-9._/-]*) fail "unexpected home folder '$USER_HOME'" ;;
 esac
+# The sandbox option, checked above: its programs, and the folders the guide keeps in volumes, made for the remote
+# user, so that a new volume there belongs to that user (Docker copies the folder's owner into an empty volume) and the
+# container needs no sudo, which no-new-privileges takes away; one the image made for root is handed over too. Before
+# the lookup of setpriv and runuser below, since util-linux, which has them, is one of the packages.
+if [ "$SANDBOX" = true ]; then
+  if command -v apt-get > /dev/null 2>&1; then
+    apt-get update -qq
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends bubblewrap slirp4netns iproute2 iptables util-linux > /dev/null
+    rm -rf /var/lib/apt/lists/*
+  elif command -v apk > /dev/null 2>&1; then
+    apk add --no-cache -q bubblewrap slirp4netns iproute2 iptables util-linux
+  elif command -v dnf > /dev/null 2>&1; then
+    dnf install -y -q bubblewrap slirp4netns iproute iptables-nft util-linux
+  else
+    fail "the sandbox option needs apt-get, apk or dnf; install bubblewrap, slirp4netns, iproute2 and iptables in the image instead"
+  fi
+  for dir in "$USER_HOME/.trackwall" "$USER_HOME/.copilot" "$USER_HOME/.config" "$USER_HOME/.config/mise" /workspaces; do
+    [ -e "$dir" ] || mkdir "$dir"
+    if [ "$(stat -c %u "$dir")" = 0 ]; then chown "$USER_UID:$USER_GID" "$dir"; fi
+  done
+fi
+
 # How the command switches from root to that user: setpriv, else runuser, by absolute path (both from util-linux, which
 # some releases split into several packages).
 if [ -x /usr/bin/setpriv ]; then

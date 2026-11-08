@@ -6,17 +6,20 @@ import { IS_WINDOWS } from "./platform.ts";
 
 /**
  * Listens to files dragged onto the Tauri window (ADR-51): marks the drop target under the pointer while dragging
- * and, on drop, sends it a `FileDropEvent`. A drop outside every target goes to `onUnhandled`. Returns whether files
- * are being dragged over the window; outside Tauri always `false`, because a browser does not give the page full paths,
- * and so without a daemon on this desktop (`enabled`, ADR-130), to which the paths of this computer mean nothing.
+ * and, on drop, sends it a `FileDropEvent`. A drop outside every target goes to `onUnhandled`, but only with the daemon
+ * on this desktop (`local`, ADR-130): a folder of this computer means nothing to a daemon elsewhere, while a terminal
+ * still takes files by sending copies (ADR-226). Returns whether files are being dragged over the window, for the hint
+ * that names both, so also only with `local`; outside Tauri always `false`, because a browser gives the page no paths.
  */
-export function useFileDrop(enabled: boolean, onUnhandled: (paths: DroppedPaths) => void): boolean {
+export function useFileDrop(local: boolean, onUnhandled: (paths: DroppedPaths) => void): boolean {
   const [dragging, setDragging] = useState(false);
   const handler = useRef(onUnhandled);
   handler.current = onUnhandled;
+  const isLocal = useRef(local);
+  isLocal.current = local;
 
   useEffect(() => {
-    if (!isTauri() || !enabled) return;
+    if (!isTauri()) return;
     let hovered: Element | undefined;
     const hover = (next: Element | undefined) => {
       if (next === hovered) return;
@@ -45,19 +48,19 @@ export function useFileDrop(enabled: boolean, onUnhandled: (paths: DroppedPaths)
       );
       if (action.kind === "hover") {
         hover(target);
-        setDragging(true);
+        setDragging(isLocal.current);
         return;
       }
       hover(undefined);
       setDragging(false);
       if (target) target.dispatchEvent(new FileDropEvent(action.paths));
-      else handler.current(action.paths);
+      else if (isLocal.current) handler.current(action.paths);
     });
     return () => {
       hover(undefined);
       void unlisten.then((unsubscribe) => unsubscribe());
     };
-  }, [enabled]);
+  }, []);
 
   return dragging;
 }

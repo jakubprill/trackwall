@@ -22,6 +22,7 @@ function session(fields: Partial<Session> & Pick<Session, "id">): Session {
     copyRequest: null,
     usage: null,
     model: null,
+    modelInUse: null,
     ...fields,
   };
 }
@@ -109,7 +110,7 @@ describe("the supervisor's situation (ADR-148)", () => {
             repo: "payments",
             prompt: "Retry a failed payment\nonce, then give up",
             proposedBy: { session: SUPERVISOR, supervisor: true, task: null },
-            summary: { text: "Done.", checkSteps: [], reportedAt: "2026-10-30T09:05:00.000Z" },
+            summary: { text: "Done.", checkSteps: [], reproTest: null, reportedAt: "2026-10-30T09:05:00.000Z" },
           }),
         ],
         proposals: [proposal],

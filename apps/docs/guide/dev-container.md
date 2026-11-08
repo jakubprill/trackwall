@@ -103,7 +103,7 @@ Or let the app start the container and connect by itself, see [Start the contain
 
 The app restarts, stops its own Trackwall with its sessions, and from then on connects to the one in the container. It neither starts nor stops that one: quitting the app leaves it running. Trackwall in the container gets a new token every time it starts, so within a few seconds after it restarts the app says the token was not accepted and shows the field again; paste the new address. The tray menu's "Quit" leaves it running too. "Use this app's own daemon" in the same place goes back.
 
-In the app, links and "Open in VS Code" open on your computer as they do from the browser. "Show in Explorer" comes back once the app knows where your computer sees the repos: in Settings › App › Daemon in a container, set "Projects folder on this computer" to the volume's folder, for example `\\wsl.localhost\rancher-desktop\var\lib\docker\volumes\workspace-repos\_data` with Rancher Desktop. To find it, run `wsl -l -v` for the name of the distribution and `docker volume inspect workspace-repos` for the folder of the volume (`Mountpoint`), and check that Explorer opens it. Files you save there from Windows can end up owned by `root` inside the container, so git in the container may not be able to change them; browse there, and edit inside the container. This works on Windows and macOS. The folder picker and dropping files on the window are not there, since paths on your computer mean nothing inside the container. The app and Trackwall in the container must be the same version: after the app updates itself, update the container too (see the last points below).
+In the app, links and "Open in VS Code" open on your computer as they do from the browser. "Show in Explorer" comes back once the app knows where your computer sees the repos: in Settings › App › Daemon in a container, set "Projects folder on this computer" to the volume's folder, for example `\\wsl.localhost\rancher-desktop\var\lib\docker\volumes\workspace-repos\_data` with Rancher Desktop. To find it, run `wsl -l -v` for the name of the distribution and `docker volume inspect workspace-repos` for the folder of the volume (`Mountpoint`), and check that Explorer opens it. Files you save there from Windows can end up owned by `root` inside the container, so git in the container may not be able to change them; browse there, and edit inside the container. This works on Windows and macOS. The folder picker and dropping a folder on the window are not there, since paths on your computer mean nothing inside the container; a file dropped on a terminal is copied into the container instead, and the terminal gets the copy's path. The app and Trackwall in the container must be the same version: after the app updates itself, update the container too (see the last points below).
 
 ### Start the container from the app
 
@@ -130,7 +130,7 @@ Tokens for such servers come in through [Environment from mise](/features/mise-e
 
 Trackwall in the container runs git itself: the sync, a task's "Push", cloning and the [doctor](/features/doctor). It does not get the SSH keys or git sign-in of your computer, also not while VS Code is open: what VS Code forwards reaches only its own terminals. So give the container a sign-in of its own, which you can revoke on its own, instead of copying your computer's key into it. The doctor's "Git access to repo hosts" line says whether git reaches each host and, if not, why.
 
-Agents in the container run as the same user and, in a container, outside Copilot CLI's sandbox, so they can use whatever sign-in git has there. Give it only the rights git needs and an end date.
+Agents in the container run as the same user, so they can use whatever sign-in git has there, unless a task runs in [Copilot CLI's sandbox](#copilot-cli-s-sandbox), which hides it from the task's commands. Give it only the rights git needs and an end date.
 
 **HTTPS with a token** (recommended). Keep the sign-in of your repo host's CLI in a volume, so it survives a rebuild: add `source=workspace-glab,target=/home/vscode/.config/glab-cli,type=volume` to `mounts` and `/home/vscode/.config/glab-cli` to the `chown` of `postCreateCommand` (for GitHub, `workspace-gh` at `/home/vscode/.config/gh`). The image needs `glab` or `gh`. The CLI keeps the token as plain text in that volume, readable by anything in the container.
 
@@ -143,6 +143,49 @@ After a rebuild the token is still in the volume, but git's own settings are not
 **An SSH key of the container.** Keep `~/.ssh` in a volume (`source=workspace-ssh,target=/home/vscode/.ssh,type=volume`, and `/home/vscode/.ssh` in the `chown`, followed by `chmod 700 /home/vscode/.ssh`). In the projects folder's Shell, run `ssh-keygen -t ed25519 -C "trackwall container" -f ~/.ssh/id_ed25519`, and add `~/.ssh/id_ed25519.pub` to your account on the repo host; GitLab lets you give it an end date, GitHub does not, so on GitHub prefer the token. Trackwall cannot type a passphrase, so leave it empty: the key is then as safe as the container, which is why it should be a key only the container has. Then connect once with `ssh -T git@gitlab.example.com` and accept the host key after comparing its fingerprint with the one your repo host publishes; git in Trackwall never accepts an unknown host key by itself.
 
 Do not copy your computer's private key into the container, and do not keep the token or key in a repo or in the [backups](#back-up-the-repos) of the repos: if one leaks, revoke it on the repo host and make a new one.
+
+## Copilot CLI's sandbox
+
+A task without approvals runs every command without asking, and its prompt may come from an agent that read something untrusted. On its own, such a task in the container can read all your repos in the volume, the git sign-in, Copilot CLI's sign-in and Trackwall's own token. In Copilot CLI's sandbox, its commands see only the task's worktree: no other repos and none of those files.
+
+Docker does not let the sandbox start by default, so Trackwall leaves it off in a container, and the [doctor](/features/doctor) says so. To turn it on:
+
+1. Download [sandbox-seccomp.json](/dev-container/sandbox-seccomp.json) into the `.devcontainer` folder, next to `devcontainer.json`. It is Docker's own default seccomp profile, with one rule added that lets the sandbox make its namespaces. Download it again when you update Trackwall, so it keeps up with Docker's profile.
+2. In `devcontainer.json`, add the Feature's `sandbox` option and the `runArgs` below, and remove `postCreateCommand`:
+
+   ```jsonc
+   "features": {
+     "https://github.com/jakubprill/trackwall/releases/download/v<version>/devcontainer-feature-trackwall.tgz": { "sandbox": true }
+   },
+   "runArgs": [
+     "--security-opt", "seccomp=${localWorkspaceFolder}/.devcontainer/sandbox-seccomp.json",
+     "--security-opt", "systempaths=unconfined",
+     "--security-opt", "no-new-privileges"
+   ]
+   ```
+
+3. On a Mac with Colima, or any Docker whose virtual machine uses AppArmor, Docker's own AppArmor profile also stops the sandbox. Download [trackwall-sandbox.apparmor.txt](/dev-container/trackwall-sandbox.apparmor.txt), which is that profile plus the namespaces and mounts the sandbox needs, and install it in the virtual machine once. It stays there until you delete the virtual machine (`colima delete`):
+
+   ```sh
+   colima ssh -- sudo tee /etc/apparmor.d/trackwall-sandbox < trackwall-sandbox.apparmor.txt > /dev/null
+   colima ssh -- sudo apparmor_parser -r /etc/apparmor.d/trackwall-sandbox
+   ```
+
+   Then add `"--security-opt", "apparmor=trackwall-sandbox"` to `runArgs`. Rancher Desktop on Windows needs none of this, since its virtual machine has no AppArmor.
+4. Rebuild the container.
+
+From then on Trackwall sees that the sandbox can run and puts tasks without approvals in it, as on a Linux computer: the New session form says so under the options. `sandbox.tasks` in `workspace.yaml` still chooses otherwise, as described in [Approvals](/features/approvals).
+
+What each part does, and what it costs:
+
+- The `sandbox` option installs bubblewrap, slirp4netns, iproute2 and iptables with the image's package manager (`apt-get`, `apk` or `dnf`). With another one, install them in your image yourself. It also makes `~/.trackwall`, `~/.copilot`, `~/.config/mise` and `/workspaces` yours in the image, so new volumes there are yours too and need no `sudo chown`. A volume of your own elsewhere, such as one for your skills, needs its folder made yours in your image (`RUN mkdir -p ... && chown vscode:vscode ...`).
+- `systempaths=unconfined` lets the sandbox mount its own `/proc`, which Docker otherwise partly hides. It also leaves `/proc/sys` writable, and a process that is root in the container could use that to run a program as root on Docker's virtual machine, outside the container. That machine sees your Windows drives under Rancher Desktop, or your Mac's home folder under Colima.
+- `no-new-privileges` closes that: nothing in the container can become root, so `sudo` no longer works there. Install the tools you need in the image instead. Trackwall checks this. If Trackwall runs as root or `no-new-privileges` is missing, it keeps the sandbox off and the doctor says why.
+- Together, the profile and `systempaths=unconfined` let programs in the container make namespaces of their own. These reach only what the program's user can, but they expose more of the kernel to a bug. Leave all three out if you prefer to rely on the container alone.
+- Keep `TRACKWALL_HOME` in your home folder, as above. The sandbox lets commands read the system's temporary folder, so Trackwall's state there would be readable.
+- The sandbox covers the agent's own commands. A build, the tests or a service that Trackwall runs for the task, such as Verify, still runs outside it, on files the agent may have changed.
+- The AppArmor profile keeps Docker's own limits, including no writes to `/proc/sys`, so on Colima root in the container cannot use it even without `no-new-privileges`. Do not use `apparmor=unconfined` instead: it drops those limits, and on Ubuntu's virtual machine the sandbox still cannot set up its network.
+- Check that the doctor shows the sandbox as on after the rebuild. If it says that bubblewrap cannot make its namespaces, it names what refused them.
 
 ## Back up the repos
 

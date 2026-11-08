@@ -33,6 +33,7 @@ function session(id: string, profile: string | null, run: Session["run"] = runni
     copyRequest: null,
     usage: null,
     model: null,
+    modelInUse: null,
   };
 }
 

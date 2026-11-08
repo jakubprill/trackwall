@@ -159,6 +159,28 @@ describe.skipIf(process.versions.bun === undefined)("the board over MCP (ADR-133
     }
   }, 60_000);
 
+  test("removing the last task on an item still in progress puts it back in Ready; one in review stays there (ADR-213)", async () => {
+    const item = await daemon.post(boardApi.create, { kind: "item", title: "Fix README typo", column: "ready", repos: ["shop"] });
+    const working = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "fix the typo", approvals: "ask", item: item.id });
+    await waitForColumn(item.id, "in_progress");
+    await daemon.facade.agents.stop(sessionOf(working.id));
+    await daemon.post(agentsApi.removeTask, { task: working.id, keepBranch: false, discardChanges: true });
+    await waitForColumn(item.id, "ready");
+
+    const reported = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "fix the typo", approvals: "ask", item: item.id });
+    const session = sessionOf(reported.id);
+    await waitFor(daemon.facade.agents, session, (s) => s.state !== null, "sessionStart");
+    const agent = await connectSessionClient(daemon.api.port, daemon.home, session);
+    clients.push(agent);
+    await call(agent, "report_result", { summary: "Fixed the typo." });
+    await waitForColumn(item.id, "review");
+    await daemon.facade.agents.stop(session);
+    await daemon.post(agentsApi.removeTask, { task: reported.id, keepBranch: true, discardChanges: true });
+    // The board writes one at a time, so a move the removal asked for would land before this read.
+    await daemon.post(boardApi.update, { item: item.id, title: "Fix README typo" });
+    expect((await daemon.facade.board.item(item.id)).column).toBe("review");
+  }, 60_000);
+
   test("a task proposed for an item keeps the item once the user starts it", async () => {
     const item = await daemon.post(boardApi.create, { kind: "item", title: "Health endpoint" });
     const agent = await outsideAgent();

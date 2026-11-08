@@ -72,7 +72,7 @@ describe("the merge request draft", () => {
       truncated: false,
     };
     const draft = mergeRequestDraft(
-      task({ summary: { text: "Added the discount and a test.\n", checkSteps: [], reportedAt: "2026-10-26T10:02:00Z" } }),
+      task({ summary: { text: "Added the discount and a test.\n", checkSteps: [], reproTest: null, reportedAt: "2026-10-26T10:02:00Z" } }),
       verification("passed", tests),
       null,
     );
@@ -99,12 +99,39 @@ describe("the merge request draft", () => {
     );
   });
 
+  test("the agent's reproduction test follows the summary as its own claim, before the verdict (ADR-222)", () => {
+    const draft = mergeRequestDraft(
+      task({
+        summary: {
+          text: "Fixed the total of an empty order.",
+          checkSteps: [],
+          reproTest: {
+            file: "src/test/java/com/example/shop/OrderServiceTest.java",
+            name: "OrderServiceTest#totalOfEmptyOrder",
+            failure: "NullPointerException at OrderService.java:42",
+          },
+          reportedAt: "2026-10-26T10:02:00Z",
+        },
+      }),
+      verification("passed"),
+      null,
+    );
+
+    expect(draft.description).toBe(
+      "Fixed the total of an empty order.\n\n" +
+        "Reproduction test (the agent's word): OrderServiceTest#totalOfEmptyOrder in src/test/java/com/example/shop/OrderServiceTest.java, " +
+        "failed before the fix with: NullPointerException at OrderService.java:42" +
+        "\n\nVerification in Trackwall: passed (mise task test)",
+    );
+  });
+
   test("the agent's check steps follow the summary as a numbered list, before the verdict (ADR-169)", () => {
     const draft = mergeRequestDraft(
       task({
         summary: {
           text: "Added the discount.",
           checkSteps: ["Open /cart with two items: the total shows -10%", "Remove an item: the discount stays"],
+          reproTest: null,
           reportedAt: "2026-10-26T10:02:00Z",
         },
       }),
@@ -120,7 +147,7 @@ describe("the merge request draft", () => {
 
   test("a long summary is cut to what the form's address carries", () => {
     const draft = mergeRequestDraft(
-      task({ summary: { text: "x".repeat(10_000), checkSteps: [], reportedAt: "2026-10-26T10:02:00Z" } }),
+      task({ summary: { text: "x".repeat(10_000), checkSteps: [], reproTest: null, reportedAt: "2026-10-26T10:02:00Z" } }),
       null,
       null,
     );
@@ -132,7 +159,7 @@ describe("the merge request draft", () => {
   test("a part of a change starts with its change block, and a long summary is cut to keep it whole (ADR-172)", () => {
     const block = "This merge request is part 2 of a change across several repos.";
     const draft = mergeRequestDraft(
-      task({ summary: { text: "x".repeat(10_000), checkSteps: [], reportedAt: "2026-10-26T10:02:00Z" } }),
+      task({ summary: { text: "x".repeat(10_000), checkSteps: [], reproTest: null, reportedAt: "2026-10-26T10:02:00Z" } }),
       null,
       block,
     );

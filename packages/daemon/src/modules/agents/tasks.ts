@@ -12,6 +12,7 @@ import {
   noIncludedFiles,
   PATCH_MAX_BYTES,
   type ProposedBy,
+  type ReportedSummary,
   type Session,
   type SessionView,
   TASK_SUMMARY_MAX_FILES,
@@ -108,7 +109,13 @@ export interface TasksVcs extends HandoffGit, EndedTaskGit {
  * message of a new conversation, or the conversation to go on with is loaded.
  */
 export type TaskLaunch = { repo: string; cwd: string; task: string; args: readonly string[] } & (
-  | { view: "terminal"; promptOnStart: boolean; lspServers: Record<string, LspServer> }
+  | {
+      view: "terminal";
+      promptOnStart: boolean;
+      lspServers: Record<string, LspServer>;
+      /** Copilot CLI's id of the conversation, the task's id that `--session-id` and `--resume` name, not the session's. */
+      conversation: string;
+    }
   | { view: "conversation"; load: string | undefined; firstMessage: string | undefined }
 );
 
@@ -596,13 +603,13 @@ export class AgentTasks {
   }
 
   /**
-   * A summary from the task session (`report_result`, ADR-39) with its check steps (ADR-169); a later one replaces the
-   * earlier one, steps included, and survives a daemon restart.
+   * A summary from the task session (`report_result`, ADR-39) with its check steps (ADR-169) and its reproduction test
+   * (ADR-222); a later one replaces the earlier one, steps and test included, and survives a daemon restart.
    */
-  setSummary(id: string, text: string, checkSteps: string[]): Task {
+  setSummary(id: string, report: ReportedSummary): Task {
     const reportedAt = new Date().toISOString();
     // A summary hands the work over for review (ADR-213).
-    const summarized = { ...this.#get(id), summary: { text, checkSteps, reportedAt }, inReview: true };
+    const summarized = { ...this.#get(id), summary: { ...report, reportedAt }, inReview: true };
     this.#save(this.#tasks.map((t) => (t.id === id ? summarized : t)));
     return view(summarized);
   }
@@ -910,6 +917,7 @@ export class AgentTasks {
         args: [...place.args, ...args],
         promptOnStart: start === "new",
         lspServers,
+        conversation: task.id,
       });
       return;
     }
