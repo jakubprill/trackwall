@@ -34,6 +34,11 @@ export const ErrorCode = z.enum([
   "no_desktop",
   /** A folder terminal cannot start: this runtime has no PTY (the daemon under Node), or there is no shell to run (ADR-185). */
   "terminal_unavailable",
+  /**
+   * A board item changed after the client read it, so a write based on that read would replace someone else's newer edit
+   * (an agent's notes, ADR-232); nothing was written.
+   */
+  "item_changed",
   "internal",
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Client } from "@modelcontextprotocol/client";
 import { agentsApi, BoardItemResult, boardApi, GetItemResult, ListItemsResult, ProposeTaskResult } from "@trackwall/protocol";
+import { loopbackRequest } from "../src/infra/loopback.ts";
 import { waitFor } from "./support/agents.ts";
 import { connectHttpClient, connectSessionClient } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
@@ -62,6 +63,29 @@ describe.skipIf(process.versions.bun === undefined)("the board over MCP (ADR-133
     const ready = BoardItemResult.parse(await call(agent, "update_item", { item: item.id, column: "ready" }));
     expect(ready.item.column).toBe("ready");
     await expect(call(agent, "update_item", { item: item.id, column: "done" })).rejects.toThrow("column");
+  });
+
+  test("the user's Save from a form opened before an agent's update_item is refused, so the agent's notes stay (ADR-232)", async () => {
+    const agent = await outsideAgent();
+    const item = await daemon.post(boardApi.create, { kind: "item", title: "Retry the export", body: "Plan: retry three times." });
+    // The user presses Edit: the form holds the item as it is now and renames it.
+    const form = { title: "Retry the invoice export", body: item.body, link: item.link };
+    await call(agent, "update_item", { item: item.id, body: "Plan: retry three times.\n\nFound: the job runs at 02:00." });
+
+    // A save of every field of the form, on the version the edit started from.
+    const refused = await loopbackRequest(daemon.api.port, boardApi.update.path, {
+      method: "POST",
+      token: TOKEN,
+      body: JSON.stringify({ item: item.id, ...form, expectedUpdatedAt: item.updatedAt }),
+    });
+
+    expect(refused.status).toBe(409);
+    expect(JSON.parse(refused.body)).toMatchObject({ ok: false, error: { code: "item_changed" } });
+    const kept = await daemon.facade.board.item(item.id);
+    expect(kept).toMatchObject({ title: "Retry the export", body: "Plan: retry three times.\n\nFound: the job runs at 02:00." });
+    // The user loads the new text, renames it again and saves on that version.
+    const saved = await daemon.post(boardApi.update, { item: item.id, ...form, body: kept.body, expectedUpdatedAt: kept.updatedAt });
+    expect(saved).toMatchObject({ title: "Retry the invoice export", body: "Plan: retry three times.\n\nFound: the job runs at 02:00." });
   });
 
   test("a task started on an item works on it, and what its agent writes down lands under that item", async () => {

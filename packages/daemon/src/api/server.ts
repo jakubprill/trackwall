@@ -66,6 +66,7 @@ const STATUS: Record<ErrorCode, number> = {
   agent_unavailable: 409,
   unsaved_changes: 409,
   dialog_changed: 409,
+  item_changed: 409,
   service_unavailable: 409,
   no_desktop: 409,
   terminal_unavailable: 409,

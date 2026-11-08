@@ -121,6 +121,36 @@ describe("the board (ADR-133)", () => {
     expect(await b.updateByAgent(started.id, { body: "notes" })).toMatchObject({ body: "notes", column: "in_progress" });
   });
 
+  test("a user's save that names an older version than the item's is refused and writes nothing (ADR-232)", async () => {
+    const { board: b, folder } = board();
+    const opened = await b.create({ ...NEW, kind: "item", title: "Retry the export", body: "Plan: retry three times." }, USER);
+    const byAgent = await b.updateByAgent(opened.id, { body: "Plan: retry three times.\n\nFound: the job runs at 02:00." });
+    const revision = b.revision();
+    const file = readFileSync(join(folder, `${opened.id}.md`), "utf8");
+
+    await expect(b.update(opened.id, { title: "Retry the invoice export", body: opened.body }, opened.updatedAt)).rejects.toThrow(
+      "the item changed since you read it",
+    );
+
+    expect(byAgent.updatedAt > opened.updatedAt).toBe(true);
+    expect(readFileSync(join(folder, `${opened.id}.md`), "utf8")).toBe(file);
+    expect(b.revision()).toBe(revision);
+    expect(await b.update(opened.id, { title: "Retry the invoice export" }, byAgent.updatedAt)).toMatchObject({
+      title: "Retry the invoice export",
+      body: "Plan: retry three times.\n\nFound: the job runs at 02:00.",
+    });
+  });
+
+  test("every write gives the item a later updatedAt, also several within one millisecond, so no two versions share one", async () => {
+    const { board: b } = board();
+    const item = await b.create({ ...NEW, kind: "item", title: "Cache the lookup" }, USER);
+    const times = [item.updatedAt];
+    for (let i = 0; i < 20; i++) times.push((await b.update(item.id, { body: `note ${i}` })).updatedAt);
+
+    expect(new Set(times).size).toBe(times.length);
+    expect([...times].sort()).toEqual(times);
+  });
+
   test("a file edited by hand counts at once, and a broken one is a problem while the rest of the board stays", async () => {
     const { board: b, folder } = board();
     const idea = await b.create({ ...NEW, kind: "item", title: "Retry the export" }, USER);
