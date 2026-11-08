@@ -585,6 +585,11 @@ export const Task = z.object({
   included: IncludedFiles,
   /** The change the task is a part of (ADR-171); `null` for a task on its own. */
   change: TaskChange.nullable(),
+  /**
+   * The task this one retries on another model (ADR-232): the same prompt from the same base commit, so the two
+   * attempts can be compared; `null` for a first attempt.
+   */
+  retryOf: TaskId.nullable(),
 });
 export type Task = z.infer<typeof Task>;
 
@@ -1067,6 +1072,14 @@ export const agentsApi = {
    * With `model` the task runs on that model from now on (ADR-206; `null` for Copilot CLI's default).
    */
   resumeTask: endpoint("resume-task", TaskRequest.extend({ model: TaskModel.nullable().optional() }), Task),
+  /**
+   * A new attempt at a task on another model (ADR-232), typically a stronger one after its verification failed: a new
+   * task with the same repo, prompt, title, approvals, view and board item, from the same base commit, on `model`
+   * (`null` for Copilot CLI's default), with `retryOf` naming the task it retries. The task it retries stays as it is,
+   * so the user compares the two and ends one. The same model as the task's is `bad_request`, as is a part of a change
+   * (ADR-171), whose parts start together on one branch name. Only from the UI, never from MCP.
+   */
+  retryTask: endpoint("retry-task", TaskRequest.extend({ model: TaskModel.nullable() }), Task),
   taskChanges: endpoint("task-changes", TaskRequest, TaskChanges),
   /**
    * Sends review comments on the task's changes to its session (ADR-62): the agent reads them with

@@ -32,6 +32,7 @@ Under `workspace.yaml` a table lists its keys:
 | `agentSecrets` | the secrets from mise that the tools of sessions may read | by hand |
 | `sessionProfile` | the mise environment sessions start with, such as another model provider | "Settings > Agents" |
 | `supervisorModel` | the Copilot CLI model the supervisor runs on, such as a cheaper one than your default | "Settings > Agents" |
+| `retryModel` | the stronger Copilot CLI model a task whose verification failed is offered to be retried on | "Settings > Agents" |
 | `autoReview` | whether a task's changes get Copilot CLI's review once its agent reports | "Settings > Agents" |
 | `localConfigRemote` | the only remote the local config store is pushed to | "Settings > Workspace" |
 | `supervisor` | whether the supervisor may change code itself | by hand |

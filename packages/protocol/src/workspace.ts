@@ -287,6 +287,13 @@ export const WorkspaceSettings = z.object({
   supervisorModel: z.string().nullable(),
   /** Why `supervisorModel` in `workspace.yaml` cannot be read; the supervisor does not start until it is fixed or saved again. */
   supervisorModelProblem: z.string().nullable(),
+  /**
+   * `retryModel` from `workspace.yaml` (ADR-232): the stronger Copilot CLI model a task whose verification failed is
+   * offered to be retried on; `null` when the user has not chosen one.
+   */
+  retryModel: z.string().nullable(),
+  /** Why `retryModel` in `workspace.yaml` cannot be read; saving the setting fixes it. */
+  retryModelProblem: z.string().nullable(),
   /** The full path of `workspace.yaml`, so that the user knows which file to edit by hand. */
   configFile: z.string(),
 });
@@ -406,6 +413,11 @@ export const workspaceApi = {
    * user's credits are spent on.
    */
   setSupervisorModel: endpoint("set-supervisor-model", z.object({ model: TaskModel.nullable() }).strict(), WorkspaceSettings),
+  /**
+   * The stronger model a failed task is offered to be retried on (ADR-232); `null` removes `retryModel` from
+   * `workspace.yaml`. No MCP tool sets it, like `setSupervisorModel`.
+   */
+  setRetryModel: endpoint("set-retry-model", z.object({ model: TaskModel.nullable() }).strict(), WorkspaceSettings),
   /** The starred repos (ADR-192). */
   starredRepos: endpoint("starred-repos", z.object({}).strict(), StarredRepos),
   /**

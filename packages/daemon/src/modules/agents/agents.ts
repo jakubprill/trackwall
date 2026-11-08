@@ -930,6 +930,16 @@ export class Agents {
     return javaNavigationState(this.#javaNavigation.readiness());
   }
 
+  /**
+   * The user's retry of a task on another model (ADR-232), see `AgentTasks.retry`; the task's board item goes with it
+   * while it is still on the board.
+   */
+  async retryTask(id: string, model: string | null): Promise<Task> {
+    const { item } = this.task(id);
+    const onBoard = item !== null && (await this.#deps.boardHas(item));
+    return this.#tasks.retry(id, model, onBoard ? item : null);
+  }
+
   /** The user's Resume; with `model` the task runs on it from now on (ADR-206). */
   resumeTask(id: string, model?: string | null): Promise<Task> {
     return this.#tasks.resume(id, model);

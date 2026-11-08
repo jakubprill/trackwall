@@ -57,7 +57,7 @@ export function TaskDetails({
         {task.summary && <TaskSummary conn={conn} task={task.id} summary={task.summary} />}
       </Section>
       <Section id="verification" only={only}>
-        <TaskVerification conn={conn} state={details.verification} />
+        <TaskVerification conn={conn} task={task} state={details.verification} onRetried={onOpenTask} />
       </Section>
       <Section id="merge-request" only={only}>
         <ChangeMergeRequests conn={conn} task={task} parts={details.change} onPushed={details.mergeRequest.reload} />

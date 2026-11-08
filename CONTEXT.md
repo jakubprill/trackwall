@@ -425,6 +425,10 @@ _Avoid_: window title (that is a session's `windowTitle`)
 The Copilot CLI model a task's session runs on, as Copilot CLI names it (`claude-opus-5.5`), passed as `--model` on every start and resume of the task's session; `null` for Copilot CLI's default. Optional: a proposer names it when the user asked for a model, and the user may change it before the start (ADR-98).
 _Avoid_: LLM, engine, agent (for the model)
 
+**Retry** (`Task.retryOf`, `EndedTask.retryOf`, action `retry-task`, `retryModel` in `workspace.yaml`; in the UI *Retry on <model>*, *Retry on a stronger model*, "Retry model" in Settings › Agents):
+A new attempt at a task on another model, usually a stronger one after its verification failed: a new task with the same prompt from the same base commit, which names the task it retries; the first attempt stays until the user ends it (ADR-232). Unlike a resume on another model (ADR-206), it does not go on with the first attempt's conversation or changes.
+_Avoid_: rerun (that is Verify again), restart (that is a session's), fallback (that is Copilot CLI's own choice of model, ADR-225)
+
 **Model in use** (`Session.modelInUse`, `modelSwitch`; the strip "Runs on …, not …" in the UI):
 The model Copilot CLI actually runs a session's conversation on, from the conversation's event log (ADR-225): the model of its latest own call, or of its latest model change; unknown after a change to `auto` until the next own call. It differs from the task model or the session's `--model` when Copilot CLI fell back to another one (an account without the model) or `/model` switched it.
 _Avoid_: actual model, real model, effective model

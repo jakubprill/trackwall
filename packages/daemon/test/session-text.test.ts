@@ -52,6 +52,7 @@ const task: Task = {
   port: 41001,
   included: { files: [], problems: [] },
   change: null,
+  retryOf: null,
 };
 
 const failed: Verification = {

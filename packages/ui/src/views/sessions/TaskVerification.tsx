@@ -1,4 +1,4 @@
-import { type LogError, miseTaskLogSource, type TestFailure, VERIFY_MISE_TASK, type Verification } from "@trackwall/protocol";
+import { type LogError, miseTaskLogSource, type Task, type TestFailure, VERIFY_MISE_TASK, type Verification } from "@trackwall/protocol";
 import { ScrollText, ShieldCheck, Square } from "lucide-react";
 import { useState } from "react";
 import { MiseTaskLog } from "@/components/MiseTaskLog";
@@ -6,8 +6,10 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
 import { relativeTime } from "@/lib/format";
+import { offersRetry } from "@/lib/task-retry";
 import type { TaskVerificationState } from "@/lib/use-task-verification";
 import { failedTestName, testCountsLabel, verificationDuration, verificationLabel } from "@/lib/verification";
+import { TaskRetry } from "./TaskRetry.tsx";
 
 /** Lines of one log error in the section: the exception and its first frames; the whole error is in the log. */
 const ERROR_LINES_SHOWN = 4;
@@ -15,7 +17,8 @@ const ERROR_LINES_SHOWN = 4;
 /**
  * The verification of a task (ADR-64): the Verify button in the task panel's header runs the repo's mise task `test`
  * in the worktree, and the section below the summary shows the verdict, the test counts and the first failed tests
- * and log errors, the same result the agent gets from `verify_task`.
+ * and log errors, the same result the agent gets from `verify_task`. A failed verdict offers a retry of the task on a
+ * stronger model (ADR-232).
  */
 
 export function VerifyButton({ state, disabled }: { state: TaskVerificationState; disabled: boolean }) {
@@ -32,7 +35,17 @@ export function VerifyButton({ state, disabled }: { state: TaskVerificationState
   );
 }
 
-export function TaskVerification({ conn, state }: { conn: Connection; state: TaskVerificationState }) {
+export function TaskVerification({
+  conn,
+  task,
+  state,
+  onRetried,
+}: {
+  conn: Connection;
+  task: Task;
+  state: TaskVerificationState;
+  onRetried: (task: string) => void;
+}) {
   const [showLog, setShowLog] = useState(false);
   const { verification } = state;
   if (!verification) return state.error ? <p className="text-destructive border-b px-4 py-2 text-xs">{state.error}</p> : null;
@@ -57,6 +70,7 @@ export function TaskVerification({ conn, state }: { conn: Connection; state: Tas
         )}
       </div>
       <VerificationDetails verification={verification} />
+      {offersRetry(verification) && <TaskRetry conn={conn} task={task} onRetried={onRetried} />}
       {showLog && <MiseTaskLog conn={conn} source={miseTaskLogSource(verification.repo, verification.task, verification.miseTask)} />}
     </section>
   );

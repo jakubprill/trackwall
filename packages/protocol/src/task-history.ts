@@ -56,6 +56,11 @@ export const EndedTask = z.object({
   item: BoardItemId.nullable(),
   /** The task that handed this one its work (ADR-143). */
   handoffFrom: TaskId.nullable(),
+  /**
+   * The task this one retried on another model (ADR-232), so a comparison of models can pair the two attempts; `null`
+   * for a first attempt and in records written before ADR-232.
+   */
+  retryOf: TaskId.nullable().default(null),
   /** The task session's last `report_result`, cut to `TASK_HISTORY_SUMMARY_MAX_CHARS`; `null` when it reported none. */
   summary: z.string().nullable(),
   /** The newest commits from the base to `head`, newest first. */

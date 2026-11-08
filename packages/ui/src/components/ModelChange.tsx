@@ -18,9 +18,10 @@ import { useProviderModels } from "@/lib/use-provider-models";
  * task. The strip under the panel's header names the model now, suggests the provider's models and warns about an id it
  * does not offer; an empty field is Copilot CLI's default.
  */
-export function ModelChangeStrip({
+export function ModelChangeStrip<T>({
   conn,
   current,
+  initial = current,
   verb,
   note,
   apply,
@@ -29,16 +30,19 @@ export function ModelChangeStrip({
 }: {
   conn: Connection;
   current: string | null;
-  /** What the button does: a running session restarts, a stopped task resumes. */
-  verb: "Restart" | "Resume";
+  /** What the field starts with; the current model by default. */
+  initial?: string | null;
+  /** What the button does: a running session restarts, a stopped task resumes, a failed task is retried (ADR-232). */
+  verb: "Restart" | "Resume" | "Retry";
   /** What the change does to this session or task, under the field. */
   note: string;
-  apply: (model: string | null) => Promise<unknown>;
-  onDone: () => void;
+  apply: (model: string | null) => Promise<T>;
+  /** With what `apply` answered: a retry opens the new task. */
+  onDone: (result: T) => void;
   onCancel: () => void;
 }) {
   const listId = useId();
-  const [text, setText] = useState(current ?? "");
+  const [text, setText] = useState(initial ?? "");
   const { models } = useProviderModels(conn);
   const change = useAction(apply, onDone);
   const model = typedModel(text);

@@ -29,7 +29,7 @@ import { type WorkspaceKeyValues, workspaceKeyValue } from "./workspace-key-valu
 /**
  * `workspace.yaml` (§4.5, ADR-13): the workspace configuration, which the user can edit by hand and keep
  * in a private repo. Read on every use, so a manual edit works without restarting the daemon. A write changes
- * only one key (`projectsDir`, `worktreesDir`, `gitProgram`, `repoHosts`, `starredRepos`, which the star in Repos writes, `javaNavigation`, which the Java navigation install writes, or `localConfigRemote`, which "Push to this remote" for the local config store writes, or `sessionProfile`, or `autoReview`, or `supervisorModel`; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `supervisor`, `sandbox` and `agentSecrets` only by hand) and keeps comments and the other keys,
+ * only one key (`projectsDir`, `worktreesDir`, `gitProgram`, `repoHosts`, `starredRepos`, which the star in Repos writes, `javaNavigation`, which the Java navigation install writes, or `localConfigRemote`, which "Push to this remote" for the local config store writes, or `sessionProfile`, or `autoReview`, or `supervisorModel`, or `retryModel`; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `supervisor`, `sandbox` and `agentSecrets` only by hand) and keeps comments and the other keys,
  * including the `repos` list from version 0.2.0, which is no longer read (ADR-18): it is the user's file, so removing it is up to them.
  */
 
@@ -81,6 +81,8 @@ const Keys: { [K in WorkspaceKey]: z.ZodType<WorkspaceKeyValues[K], unknown> } =
   autoReview: AutoReviewSettings.nullish().transform((settings) => settings ?? { afterReport: false }),
   // The Copilot CLI model the supervisor runs on (ADR-193); set in Settings › Agents or by hand.
   supervisorModel: TaskModel.nullish().transform((model) => model ?? null),
+  // The stronger model a failed task is offered to be retried on (ADR-232); set in Settings › Agents or by hand.
+  retryModel: TaskModel.nullish().transform((model) => model ?? null),
   // The Java language server for tasks (ADR-99); by hand or by installing it in Settings › Agents (ADR-123).
   javaNavigation: JavaNavigationSettings.refine(
     (settings) => [settings.jdtls, settings.java, settings.lombok, ...settings.runtimes].every((path) => path === null || isFullPath(path)),
@@ -188,6 +190,11 @@ export class WorkspaceFile {
     return this.get("supervisorModel", Keys.supervisorModel);
   }
 
+  /** The model a failed task is offered to be retried on (`retryModel`, ADR-232); `null` when the user chose none. */
+  retryModel(): string | null {
+    return this.get("retryModel", Keys.retryModel);
+  }
+
   /** The address the local config store may be pushed to (`localConfigRemote`, ADR-127); `null` keeps it unpushed. */
   localConfigRemote(): string | null {
     return this.get("localConfigRemote", Keys.localConfigRemote);
@@ -237,6 +244,11 @@ export class WorkspaceFile {
   /** `null` removes the key: the supervisor runs on Copilot CLI's default model. */
   setSupervisorModel(model: string | null): void {
     this.set("supervisorModel", model);
+  }
+
+  /** `null` removes the key: a failed task is offered a retry with an empty model field. */
+  setRetryModel(model: string | null): void {
+    this.set("retryModel", model);
   }
 
   /** Off removes the key, so that the file says nothing about a setting the user did not turn on. */

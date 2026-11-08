@@ -21,6 +21,7 @@ import { LocalConfigReposSurface } from "./LocalConfigReposSurface.tsx";
 import { LocalConfigStoreSurface } from "./LocalConfigStoreSurface.tsx";
 import { McpCallsSurface } from "./McpCallsSurface.tsx";
 import { RepoHostsSurface } from "./RepoHostsSurface.tsx";
+import { RetryModelSurface } from "./RetryModelSurface.tsx";
 import { SessionProfileSurface } from "./SessionProfileSurface.tsx";
 import { StartAtSignInSurface } from "./StartAtSignInSurface.tsx";
 import { SupervisorModelSurface } from "./SupervisorModelSurface.tsx";
@@ -106,6 +107,8 @@ function Section({
       return <SessionProfileSurface conn={conn} sessions={sessions} />;
     case "supervisor-model":
       return <SupervisorModelSurface conn={conn} />;
+    case "retry-model":
+      return <RetryModelSurface conn={conn} />;
     case "auto-review":
       return <AutoReviewSurface conn={conn} />;
     case "java-navigation":
