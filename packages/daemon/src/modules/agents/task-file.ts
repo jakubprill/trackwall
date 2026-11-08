@@ -1,8 +1,7 @@
 import { isAbsolute } from "node:path";
 import { noIncludedFiles, RepoId, Task, TaskSummary } from "@trackwall/protocol";
 import { z } from "zod";
-import { writeFileAtomic } from "../../infra/atomic-write.ts";
-import { readStateFile } from "../../infra/state-file.ts";
+import { readStateFile, stateFormat, writeStateFile } from "../../infra/state-file.ts";
 import { ConversationId } from "./acp-messages.ts";
 import { IMPACT_KEY_MAX, IMPACT_KEYS_MAX } from "./impact-proposals.ts";
 import { TaskBranch } from "./task-branch.ts";
@@ -15,7 +14,7 @@ import { MAX_MISE_PATH } from "./task-mise-config.ts";
  * worktrees folder, the repo and the branch (`taskWorktree`), so neither of them is stored. The file can be edited by hand, and its fields go to git
  * (`branch -D`, `diff <base commit>`), so the schema allows only a task branch and a full commit hash (`CommitHash` in `Task`).
  * Fields added later (title, origin and summary, ADR-39; the trusted mise config, ADR-59; the port and the included
- * files, ADR-61; the task worktrees folder, ADR-84; the model, ADR-98; the approvals mode, ADR-105; the sandbox, ADR-181; Java navigation, ADR-99; the board item, ADR-133; the view and its conversation, ADR-137; the handoff, ADR-143; the summary's check steps, ADR-169; its reproduction test, ADR-222; the change, ADR-171; the impact proposals, ADR-198; whether it is in review, ADR-213) have a default in the file, so tasks saved by an older version are not moved aside as an unreadable file.
+ * files, ADR-61; the task worktrees folder, ADR-84; the model, ADR-98; the approvals mode, ADR-105; the plan, ADR-229; the sandbox, ADR-181; Java navigation, ADR-99; the board item, ADR-133; the view and its conversation, ADR-137; the handoff, ADR-143; the summary's check steps, ADR-169; its reproduction test, ADR-222; the change, ADR-171; the impact proposals, ADR-198; whether it is in review, ADR-213) have a default in the file, so tasks saved by an older version are not moved aside as an unreadable file.
  */
 
 export const StoredTask = Task.omit({ worktree: true }).extend({
@@ -24,6 +23,7 @@ export const StoredTask = Task.omit({ worktree: true }).extend({
   proposedBy: Task.shape.proposedBy.default(null),
   model: Task.shape.model.default(null),
   approvals: Task.shape.approvals.default("ask"),
+  plan: Task.shape.plan.default(null),
   sandbox: Task.shape.sandbox.default(false),
   javaNavigation: Task.shape.javaNavigation.default(false),
   item: Task.shape.item.default(null),
@@ -73,6 +73,8 @@ export const StoredTask = Task.omit({ worktree: true }).extend({
 export type StoredTask = z.infer<typeof StoredTask>;
 
 const TaskFileSchema = z.object({ tasks: z.array(StoredTask) });
+/** `tasks.json` (ADR-31, ADR-223). */
+export const TASKS_FORMAT = stateFormat(TaskFileSchema);
 
 export class TaskFile {
   readonly #path: string;
@@ -84,9 +86,9 @@ export class TaskFile {
     this.#log = log;
   }
 
-  /** A missing file means no tasks. An unreadable file is moved aside (`tasks.json.broken-<time>`), and its tasks go to the log. */
+  /** A missing file means no tasks. An unreadable file is moved aside (`tasks.json.broken-<time>`, or `tasks.json.newer-<time>` when a newer Trackwall wrote it), and its tasks go to the log. */
   read(): StoredTask[] {
-    const file = readStateFile(this.#path, TaskFileSchema, (problem, aside) =>
+    const file = readStateFile(this.#path, TASKS_FORMAT, (problem, aside) =>
       this.#log(`${this.#path}: ${problem}; file moved to ${aside}, task worktrees were left on disk`),
     );
     this.#taskListRead = file !== undefined;
@@ -102,6 +104,6 @@ export class TaskFile {
   }
 
   write(tasks: readonly StoredTask[]): void {
-    writeFileAtomic(this.#path, `${JSON.stringify({ tasks }, null, 2)}\n`);
+    writeStateFile(this.#path, TASKS_FORMAT, { tasks });
   }
 }

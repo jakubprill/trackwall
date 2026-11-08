@@ -33,7 +33,7 @@ import {
   SessionUpdateParams,
 } from "./acp-messages.ts";
 import { attachmentLabel, checkAttachments, promptBlocks } from "./acp-prompt.ts";
-import { AcpSessionInfo } from "./acp-session-info.ts";
+import { AcpSessionInfo, AGENT_MODE } from "./acp-session-info.ts";
 import { toolCallFiles, toolCallLines, toolCallPatch, workingDirectoryNames } from "./acp-tool-call.ts";
 import type { AgentSession } from "./agent-session.ts";
 import { type CopilotHookOutput, situationOutput } from "./copilot-hook-output.ts";
@@ -99,6 +99,11 @@ export interface AcpSessionOptions {
    * daemon sends it, not the user, as `--interactive` in a terminal, so the end of its turn is reported (ADR-68).
    */
   firstMessage: string | undefined;
+  /**
+   * The mode the agent switches to once the session is ready, before the first message (a task's Plan mode, ADR-229);
+   * `undefined` leaves the agent's own. A mode the agent does not offer fails the start.
+   */
+  mode: string | undefined;
   environment: SessionEnvironment;
   /** The model Trackwall started it on (ADR-206); `null` when it passed none. */
   model: string | null;
@@ -165,6 +170,8 @@ export class AcpSession implements AgentSession {
   #lastStepAt = Date.now();
   #windowTitle: string | null = null;
   #ready = false;
+  /** The approval of a plan is switching the mode (ADR-229): nothing is sent until the approval goes first. */
+  #switchingMode = false;
   #turn: Prompt | undefined;
   /** Approvals waiting, oldest first: the session's dialog is the first; parallel tool calls ask one after another. */
   readonly #approvals: PendingApproval[] = [];
@@ -230,6 +237,8 @@ export class AcpSession implements AgentSession {
     } finally {
       clearInterval(watch);
     }
+    // Before the session is ready, so no message, the first or the user's, reaches the agent in another mode.
+    if (this.#o.mode !== undefined) await this.setMode(this.#o.mode);
     this.#ready = true;
     this.#report("Input", "session ready");
     // Before anything the user wrote while the session started: the day start's briefing comes first.
@@ -298,13 +307,18 @@ export class AcpSession implements AgentSession {
     checkAttachments(attachments, this.#takesImages);
     if (attachments.length > 0 && this.#queued.some((p) => p.attachments.length > 0))
       throw new DomainError("bad_request", "a message with attachments already waits for the turn to end");
-    this.#attention.typed();
-    this.#o.onUserText();
-    this.#waitingIds += 1;
-    this.#queued.push({ text, by: "user", id: `waiting-${this.#waitingIds}`, attachments });
+    this.#queued.push(this.#userPrompt(text, attachments));
     this.#next();
     // A message that waits for the turn shows as waiting at once, not only when it goes (which sends its own frame).
     if (this.#queued.length > 0) this.#scheduleFlush();
+  }
+
+  /** A prompt the user wrote, under the id its waiting bubble has until it goes. */
+  #userPrompt(text: string, attachments: readonly MessageAttachment[]): Prompt {
+    this.#attention.typed();
+    this.#o.onUserText();
+    this.#waitingIds += 1;
+    return { text, by: "user", id: `waiting-${this.#waitingIds}`, attachments };
   }
 
   /** The user's messages waiting for the turn to end, oldest first. */
@@ -373,6 +387,26 @@ export class AcpSession implements AgentSession {
       throw new DomainError("bad_request", `the agent did not switch the mode${err instanceof AcpError ? ` (ACP error ${err.code})` : ""}`);
     }
     this.#infoChanged(this.#info.settings(ConfigOptionsResult.safeParse(result).data?.configOptions));
+  }
+
+  /**
+   * The user approved the plan the agent wrote in Plan mode (ADR-229): the agent switches to Agent mode and gets
+   * `prompt` as the user's message. Refused while a turn runs, since a plan still being written is not the one the user read.
+   */
+  async approvePlan(prompt: string): Promise<void> {
+    if (this.#finished) throw new DomainError("bad_request", "the session has ended");
+    if (this.#switchingMode || this.#turn !== undefined || this.#queued.length > 0)
+      throw new DomainError("bad_request", "the agent is still working; approve the plan once its turn ends");
+    // Held like a start that is not ready: a message written during the switch waits behind the approval, so no turn
+    // runs between the modes and the approval is the first thing the agent reads in Agent mode.
+    this.#switchingMode = true;
+    try {
+      await this.setMode(AGENT_MODE);
+      this.#queued.unshift(this.#userPrompt(prompt, []));
+    } finally {
+      this.#switchingMode = false;
+      this.#next();
+    }
   }
 
   /** A conversation view: all entries first, then the changed ones; `closed` when the session disappears. */
@@ -469,7 +503,7 @@ export class AcpSession implements AgentSession {
 
   /** Sends what waits, when the agent waits: the first message and the user's messages first, then the daemon's prompt. */
   #next(): void {
-    if (!this.#ready || this.#finished || this.#turn !== undefined) return;
+    if (!this.#ready || this.#switchingMode || this.#finished || this.#turn !== undefined) return;
     const queued = this.#queued.shift();
     if (queued !== undefined) {
       this.#prompt(queued);

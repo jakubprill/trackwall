@@ -37,6 +37,7 @@ import { sandboxNote } from "@/lib/sandbox";
 import type { SessionSelection } from "@/lib/session-entries";
 import { readStartChoice, type StartChoice, saveStartChoice } from "@/lib/start-choices";
 import { typedModel } from "@/lib/task-model";
+import { type PlanFirstOffer, planFirstOffer, planFirstToSend } from "@/lib/task-plan";
 import { useAction } from "@/lib/use-action";
 import { useProviderModels } from "@/lib/use-provider-models";
 import { useRemote } from "@/lib/use-remote";
@@ -53,7 +54,7 @@ const PROJECTS_FOLDER = "";
  * copy (ADR-26), and in the projects folder a free session, both with the prompt as their first message when there is one.
  * Every one can run on a chosen model (ADR-98), in the conversation view (ADR-137), and, in a repo tagged java and a
  * terminal, with a Java language server (ADR-99, ADR-175); only a task, whose changes wait for review in its own worktree,
- * can run without asking for approvals (ADR-105). The options are a row of pills under the prompt (`StartOptions`); the worktree, the model, Java navigation and the view come back as the user last started from that
+ * can run without asking for approvals (ADR-105), and a task in the conversation view can plan first (ADR-229). The options are a row of pills under the prompt (`StartOptions`); the worktree, the model, Java navigation and the view come back as the user last started from that
  * place, the approvals mode always starts at asking. Started from a board item (ADR-133), the form comes with the item's
  * repo and prompt, and the task works on the item. A task with more repos added is a change (ADR-171): a task per repo
  * on one branch name. A task can come with a stack trace (ADR-222), whose error its agent reproduces in a test first.
@@ -80,6 +81,7 @@ export function NewSession({
   const [edited, setEdited] = useState<ReadonlyMap<string, StartChoice>>(new Map());
   const [prompt, setPrompt] = useState(form.prompt);
   const [approvals, setApprovals] = useState<TaskApprovals>("ask");
+  const [planFirst, setPlanFirst] = useState(false);
   const [stackTrace, setStackTrace] = useState("");
   const [stackTraceOpen, setStackTraceOpen] = useState(false);
   const chosen = place ?? firstListedRepo(form.repos, repos.data?.repos) ?? repos.data?.repos[0]?.id ?? PROJECTS_FOLDER;
@@ -95,6 +97,7 @@ export function NewSession({
   const java = javaNavigationInChange(javaNavigationInView(offers.java, choice.view), startsChange(start));
   const javaNavigation = java.kind === "ready" && choice.javaNavigation;
   const { item } = form;
+  const planOffer = planFirstOffer(start, choice.view);
   const createTask = useAction(
     (repo: string, prompt: string) =>
       post(conn, agentsApi.createTask, {
@@ -106,6 +109,7 @@ export function NewSession({
         item,
         view: choice.view,
         stackTrace: stackTraceToSend(stackTrace, stackTraceOpen),
+        planFirst: planFirstToSend(planOffer, planFirst),
       }),
     (task) => onStarted({ kind: "task", id: task.id }),
   );
@@ -159,6 +163,7 @@ export function NewSession({
             model={{ value: choice.model, onChange: (text: string) => choose({ model: text }), suggestions: providerModels }}
             javaNavigation={javaNavigationPill(java, choice.javaNavigation, (on) => choose({ javaNavigation: on }))}
             view={{ value: choice.view, onChange: (view: SessionView) => choose({ view }) }}
+            planFirst={planFirstPill(planOffer, planFirst, setPlanFirst)}
             sandbox={sandboxNote(offers.sandbox, approvals)}
             disabled={pending}
           />
@@ -194,6 +199,11 @@ export function NewSession({
       {error && <p className="text-destructive text-sm whitespace-pre-wrap">{error}</p>}
     </div>
   );
+}
+
+/** The Plan first pill where the form offers it (ADR-229). */
+function planFirstPill(offer: PlanFirstOffer | null, value: boolean, onChange: (value: boolean) => void) {
+  return offer === null ? undefined : { value, onChange, unavailable: offer.unavailable };
 }
 
 /** Where the agent works: a repo, or the projects folder for a session. */

@@ -44,6 +44,7 @@ import type { ChangeFacts } from "./task-change.ts";
 import type { StoredTask, TaskFile } from "./task-file.ts";
 import { type HandoffFacts, type HandoffGit, handoffState, type TaskHandoff } from "./task-handoff.ts";
 import { type MiseSnapshot, miseConfigChanges, miseConfigDigest, readMiseConfig, reviewMiseConfig } from "./task-mise-config.ts";
+import { planFirstMessage } from "./task-plan.ts";
 import { freeTaskPort, withTaskPorts } from "./task-port.ts";
 import { folderSize, lastActivity } from "./task-worktrees.ts";
 
@@ -118,7 +119,13 @@ export type TaskLaunch = { repo: string; cwd: string; task: string; args: readon
       /** Copilot CLI's id of the conversation, the task's id that `--session-id` and `--resume` name, not the session's. */
       conversation: string;
     }
-  | { view: "conversation"; load: string | undefined; firstMessage: string | undefined }
+  | {
+      view: "conversation";
+      load: string | undefined;
+      firstMessage: string | undefined;
+      /** Whether the agent starts in Plan mode, before the first message: its plan waits for approval (ADR-229). */
+      planMode: boolean;
+    }
 );
 
 /** Copilot CLI sessions from `Agents`, in which tasks run. */
@@ -177,6 +184,8 @@ export interface TaskOrigin {
   model: string | null;
   /** How the task's sessions answer tool approvals (ADR-105). */
   approvals: TaskApprovals;
+  /** Whether its agent plans first, in Copilot CLI's Plan mode, until the user approves the plan (ADR-229). */
+  planFirst: boolean;
   /** Whether the task's sessions get the Java language server (ADR-99). */
   javaNavigation: boolean;
   /** The board item the task works on (ADR-133); `null` for none. */
@@ -187,8 +196,11 @@ export interface TaskOrigin {
   change: TaskChange | null;
 }
 
-/** What every part of a change starts with (ADR-171): its identity and place come from the change. */
-export type ChangeOrigin = Omit<TaskOrigin, "id" | "change">;
+/**
+ * What every part of a change starts with (ADR-171): its identity and place come from the change. No part plans first
+ * (ADR-229): the change's parts start one after another, each on the work of the part before it.
+ */
+export type ChangeOrigin = Omit<TaskOrigin, "id" | "change" | "planFirst">;
 
 /** What the user chooses for a task they start: everything of its origin but the identity a proposal or a change gives it. */
 export type TaskOptions = Omit<TaskOrigin, "id" | "title" | "proposedBy" | "change">;
@@ -267,7 +279,7 @@ export class AgentTasks {
     const held: { position: number; task: KnownTask }[] = [];
     for (const [position, { repo, prompt }] of parts.entries()) {
       // A proposed change's id goes to the first part made, so a part that cannot be made does not leave it unused.
-      const partOrigin = { ...origin, id: held.length === 0 ? firstId : randomUUID(), change: { id: change, position } };
+      const partOrigin = { ...origin, planFirst: false, id: held.length === 0 ? firstId : randomUUID(), change: { id: change, position } };
       await this.#creating(repo, () => this.#create(repo, prompt, partOrigin, "hold")).then(
         (task) => held.push({ position, task }),
         (err: unknown) => failures.push({ position, repo, err }),
@@ -297,12 +309,14 @@ export class AgentTasks {
   async #create(
     repo: string,
     prompt: string,
-    { id, title, proposedBy, model, approvals, javaNavigation, item, view: sessionView, change }: TaskOrigin,
+    { id, title, proposedBy, model, approvals, planFirst, javaNavigation, item, view: sessionView, change }: TaskOrigin,
     launch: "launch" | "hold",
   ): Promise<KnownTask> {
     // Refused before the worktree exists: a task that asked for Java navigation would otherwise start without it, and
     // one that should run in the sandbox would run with the user's full access.
     if (javaNavigation) this.#deps.javaNavigation.assertCanStart(sessionView, "a task");
+    // Copilot CLI's Plan mode is a mode of its ACP session; a terminal has no way for the daemon to switch it (ADR-229).
+    if (planFirst && sessionView !== "conversation") throw new DomainError("bad_request", "Plan first needs the conversation view (Chat)");
     const sandbox = await this.#deps.sandbox(approvals);
     const repoDir = await this.#deps.repos.repoPath(repo);
     const base = await asRepoUnavailable(repo, this.#deps.vcs.defaultBase(repoDir));
@@ -324,6 +338,7 @@ export class AgentTasks {
       proposedBy,
       model,
       approvals,
+      plan: planFirst ? "planning" : null,
       javaNavigation,
       sandbox,
       item,
@@ -618,6 +633,28 @@ export class AgentTasks {
     const summarized = { ...this.#get(id), summary: { ...report, reportedAt }, inReview: true };
     this.#save(this.#tasks.map((t) => (t.id === id ? summarized : t)));
     return view(summarized);
+  }
+
+  /**
+   * The user approved the task's plan (ADR-229), once its session switched to Agent mode; `bad_request` for a task whose
+   * plan does not wait for approval.
+   */
+  planApproved(id: string): Task {
+    const task = this.#planWaiting(id);
+    const approved: KnownTask = { ...task, plan: "approved" };
+    this.#save(this.#tasks.map((t) => (t.id === id ? approved : t)));
+    return view(approved);
+  }
+
+  /** The task, whose plan waits for the user's approval (ADR-229); `bad_request` otherwise. */
+  assertPlanWaits(id: string): void {
+    this.#planWaiting(id);
+  }
+
+  #planWaiting(id: string): KnownTask {
+    const task = this.#get(id);
+    if (task.plan !== "planning") throw new DomainError("bad_request", `task ${task.branch} has no plan waiting for approval`);
+    return task;
   }
 
   /**
@@ -1015,8 +1052,11 @@ export class AgentTasks {
     if (task.javaNavigation) this.#deps.log(`task ${task.id} starts without Java navigation: it needs a terminal`);
     // A task whose first start never learned its conversation's id starts the conversation again from the prompt.
     const load = start === "resume" ? (task.conversation ?? undefined) : undefined;
-    const firstMessage = load === undefined ? task.prompt : undefined;
-    const conversation = await this.#deps.sessions.launch({ ...place, view: "conversation", load, firstMessage });
+    // A plan that waits for approval is written in Plan mode at every start, a resume and a restart included (ADR-229).
+    const planMode = task.plan === "planning";
+    const opening = planMode ? planFirstMessage(task.prompt) : task.prompt;
+    const firstMessage = load === undefined ? opening : undefined;
+    const conversation = await this.#deps.sessions.launch({ ...place, view: "conversation", load, firstMessage, planMode });
     if (conversation === undefined || conversation === task.conversation) return;
     // Saved at once: the next resume, even after a daemon crash, must load this conversation, not start another one.
     this.#save(this.#tasks.map((t) => (t.id === task.id ? { ...t, conversation } : t)));

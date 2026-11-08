@@ -9,6 +9,11 @@ import type { ConfigOption, SessionUpdate } from "./acp-messages.ts";
  * and cut to the protocol's limits.
  */
 
+/** Copilot CLI's Agent mode, in which the agent changes files and runs tools. */
+export const AGENT_MODE = "https://agentclientprotocol.com/protocol/session-modes#agent";
+/** Copilot CLI's Plan mode, in which it refuses to change files and writes a plan instead (ADR-229). */
+export const PLAN_MODE = "https://agentclientprotocol.com/protocol/session-modes#plan";
+
 /** The id of the setting that holds the agent's mode. */
 const MODE_SETTING = "mode";
 
@@ -18,10 +23,7 @@ const MODE_SETTING = "mode";
  * the working directory and URLs that the approvals mode `auto` keeps (ADR-105), and a mode Copilot CLI adds later may do
  * the same. The user can still turn autopilot on with `/autopilot`, and then the view shows it as the mode in use.
  */
-const SWITCHABLE_MODES: ReadonlySet<string> = new Set([
-  "https://agentclientprotocol.com/protocol/session-modes#agent",
-  "https://agentclientprotocol.com/protocol/session-modes#plan",
-]);
+const SWITCHABLE_MODES: ReadonlySet<string> = new Set([AGENT_MODE, PLAN_MODE]);
 
 const MODE_OPTIONS_MAX = 10;
 

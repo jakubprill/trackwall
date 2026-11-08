@@ -54,7 +54,7 @@ function conversation(id: string, o: { cwd: string; branch?: string; at: Date; i
   writeFileSync(join(dir, "events.jsonl"), lines.map((line) => `${JSON.stringify(line)}\n`).join(""));
 }
 
-/** Waits until the report of this week has the task: the fake writes its event log when the task's turn starts. */
+/** Waits until the report of this week has the task: the fake writes its event log when the turn starts. */
 async function untilReported(task: string): Promise<void> {
   const until = Date.now() + 20_000;
   for (;;) {
@@ -75,8 +75,8 @@ describe.skipIf(process.versions.bun === undefined)("the weekly usage report (AD
       if (session === undefined) throw new Error("the task has no session");
       const window = viewer(agents, session.id);
       await untilInputBox(window, "empty");
-      // The task's prompt is its one turn: the fake writes its receipt at the start, as Copilot CLI does after the prompt's
-      // model call. No turn is typed here, since its receipt could come before the stop or after it.
+      // The task's prompt is the session's only turn: the fake writes its receipt at the start, as Copilot CLI sends a
+      // prompt given at the start to the model at once. A second, typed turn would race the stop below for its receipt.
       await untilReported(task.id);
       window.attachment.detach();
       await agents.stop(session.id);
