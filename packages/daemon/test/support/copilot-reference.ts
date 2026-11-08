@@ -9,6 +9,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { PromptBoxLayout } from "@trackwall/protocol";
 import { z } from "zod";
 import { CopilotHookEvent } from "../../src/modules/agents/copilot-hook-record.ts";
 import { jsonOf } from "../../src/modules/agents/json.ts";
@@ -54,6 +55,14 @@ export const PROMPT_PLACEHOLDER = "{prompt}";
 
 /** The prompt after which the fake Copilot CLI's agent calls two commands at once, each asking for approval (ADR-66). */
 export const PARALLEL_TOOLS_PROMPT = "run two commands at once";
+
+/**
+ * The input box Copilot CLI draws with `COPILOT_PROMPT_FRAME=1` on this system (ADR-220). It frames the box only once
+ * the terminal told it its foreground and background colours (OSC 10 and 11), and on Windows the session runs in
+ * ConPTY, which passes Copilot CLI's palette queries (OSC 4) on to the terminal but swallows those two without an
+ * answer, so there the box stays between rules whatever xterm.js would answer.
+ */
+export const PROMPT_FRAME_LAYOUT: PromptBoxLayout = process.platform === "win32" ? "ruled" : "framed";
 
 export function referenceFile(platform: string = process.platform): string {
   return join(import.meta.dir, "..", "fixtures", "copilot", "reference", `${platform}.json`);
