@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
-import { lstat, mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 import { removeFolder, removeIfPresent } from "../../infra/remove-folder.ts";
+import { borrowObjects } from "./borrowed-objects.ts";
 import { existingCommit, git, symbolicRef } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { readBranchCommit } from "./head-commit.ts";
@@ -201,8 +202,7 @@ async function ensurePushRepo(pushDir: string, store: string): Promise<void> {
   await mkdir(pushDir, { recursive: true });
   if (!(await lstat(pushDir)).isDirectory()) throw new Error(`${pushDir} is not a folder (a link?)`);
   if (!existsSync(join(pushDir, ".git", "HEAD"))) await git(pushDir, ["init", "-q"]);
-  // Forward slashes, which git reads on every system.
-  await writeFile(join(pushDir, ".git", "objects", "info", "alternates"), `${join(store, ".git", "objects").replaceAll("\\", "/")}\n`);
+  await borrowObjects(join(pushDir, ".git"), join(store, ".git", "objects"));
 }
 
 function updateIndex(path: string, oid: string): string[] {
