@@ -1,6 +1,7 @@
 // A week of Copilot CLI conversations for the demo's "Copilot usage" (ADR-199): the event logs and `workspace.yaml`
 // Copilot CLI would have left in its home for the demo's tasks, its repo sessions, the supervisor and one folder
-// outside the projects folder, with model calls and tool calls spread over the last six days. The numbers are made
+// outside the projects folder, with model calls and tool calls spread over the last six days, and the supervisor's
+// conversations of the twelve weeks before it for the usage trend (ADR-234). The numbers are made
 // up but shaped like a real week: tool definitions are a large part of every call, and a few tools add most results.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -15,6 +16,8 @@ interface DemoConversation {
   /** Input tokens of the first call; each later call reads what came before, so it grows. */
   firstInput: number;
   tools: Record<string, number>;
+  /** Tool definitions every call sends; `TOOL_DEFINITION_TOKENS` when not given. */
+  toolDefinitionTokens?: number;
 }
 
 /** Tokens of the tool definitions every call sends, about as many as Trackwall's tools and Copilot CLI's own take. */
@@ -41,10 +44,13 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 function lines(id: string, c: DemoConversation, now: number): string[] {
   const out: string[] = [];
   const start = now - c.daysAgo * DAY_MS;
+  const definitions = c.toolDefinitionTokens ?? TOOL_DEFINITION_TOKENS;
+  // `firstInput` is shaped on today's tool definitions; more of them make every call read more.
+  const inputBase = c.firstInput + (definitions - TOOL_DEFINITION_TOKENS);
   const toolCalls = Object.entries(c.tools).flatMap(([tool, times]) => Array.from({ length: times }, () => tool));
   for (let call = 0; call < c.modelCalls; call++) {
     const at = new Date(start + call * 40_000).toISOString();
-    const inputTokens = c.firstInput + call * 1500;
+    const inputTokens = inputBase + call * 1500;
     const outputTokens = 400 + ((call * 137) % 900);
     // A model of about $3 per million tokens in and $15 out; a credit is a cent.
     const nanoAiu = Math.round(((inputTokens * 3 + outputTokens * 15) / 1e6) * 100 * 1e9);
@@ -53,7 +59,7 @@ function lines(id: string, c: DemoConversation, now: number): string[] {
       outputTokens,
       cost: 1,
       initiator: call === 0 ? "user" : "agent",
-      toolTokenCount: TOOL_DEFINITION_TOKENS,
+      toolTokenCount: definitions,
       aiCreditsStatus: "complete",
       copilotUsage: { totalNanoAiu: nanoAiu },
       accounting: { sourceSessionId: id, sequence: call + 1 },
@@ -143,4 +149,31 @@ export function demoWeek(o: {
     },
     { cwd: o.outside, branch: "main", daysAgo: 6, modelCalls: 4, firstInput: 24_000, tools: { view: 2, bash: 1 } },
   ];
+}
+
+/** Tool definitions before the demo's made-up change four weeks ago, when every session still had all MCP servers. */
+const TOOL_DEFINITION_TOKENS_BEFORE = 36_000;
+
+/**
+ * The supervisor's conversations of the twelve weeks before the demo's week, for the usage trend (ADR-234): a
+ * few a week, more in some weeks than in others, with more tool definitions per call until four weeks ago, so the
+ * trend shows the step a change that cut MCP tools would make.
+ */
+export function demoEarlierWeeks(projectsDir: string): DemoConversation[] {
+  const callsByWeek = [38, 52, 44, 61, 47, 58, 66, 41, 49, 56, 45, 53];
+  return callsByWeek.flatMap((calls, i) => {
+    const weeksAgo = 12 - i;
+    const toolDefinitionTokens = weeksAgo > 4 ? TOOL_DEFINITION_TOKENS_BEFORE : TOOL_DEFINITION_TOKENS;
+    const week = {
+      cwd: projectsDir,
+      branch: null,
+      firstInput: 28_000,
+      tools: { view: 4, "trackwall-search_code": 3 },
+      toolDefinitionTokens,
+    };
+    return [
+      { ...week, daysAgo: weeksAgo * 7 + 1, modelCalls: Math.ceil(calls / 2) },
+      { ...week, daysAgo: weeksAgo * 7 + 4, modelCalls: Math.floor(calls / 2) },
+    ];
+  });
 }

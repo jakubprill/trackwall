@@ -30,6 +30,8 @@
   --group-2: oklch(0.74 0.13 350);
   --group-3: oklch(0.7 0.12 262);
   --group-4: oklch(0.72 0.12 45);
+  --chart-1: var(--primary);
+  --chart-2: oklch(0.72 0.14 300);
   --font-sans: "Segoe UI Variable Text", system-ui, sans-serif;
   --font-mono: "Cascadia Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
   --tracking-hud: 0.12em;

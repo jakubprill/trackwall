@@ -117,12 +117,28 @@ const MAX_LOG_BYTES = 2 * 1024 ** 3;
  */
 export class EventLogDigests {
   readonly #cache = new Map<string, CachedDigest>();
+  /** Reads under way, by file. */
+  readonly #reading = new Map<string, Promise<EventLogDigest | undefined>>();
 
   /**
    * The log's digest; `undefined` when there is no log, it is not a regular file, or it was last written before
    * `writtenSince` (it has nothing newer). Throws when the file cannot be read.
    */
   async of(file: string, writtenSince: number): Promise<EventLogDigest | undefined> {
+    // The week and the trend are asked for together: the second waits for the first's read and finds it cached,
+    // instead of streaming a long log twice.
+    for (let pending = this.#reading.get(file); pending !== undefined; pending = this.#reading.get(file))
+      await pending.catch(() => undefined);
+    const read = this.#read(file, writtenSince);
+    this.#reading.set(file, read);
+    try {
+      return await read;
+    } finally {
+      if (this.#reading.get(file) === read) this.#reading.delete(file);
+    }
+  }
+
+  async #read(file: string, writtenSince: number): Promise<EventLogDigest | undefined> {
     const opened = await openRegularFile(file, MAX_LOG_BYTES).catch((err: unknown) => {
       if (err instanceof NotRegularFileError) return undefined;
       throw err;

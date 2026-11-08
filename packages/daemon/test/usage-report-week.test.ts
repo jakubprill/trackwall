@@ -100,3 +100,56 @@ describe("the weekly usage report over Copilot CLI's event logs (ADR-199)", () =
     },
   );
 });
+
+describe("the usage trend of every week the report reaches (ADR-234)", () => {
+  test("gives 13 weeks, the oldest first, each with the same total as that week's report", async () => {
+    const { report, conversation } = setUp();
+    const at = (msBefore: number) => new Date(NOW - msBefore).toISOString();
+    conversation("a", [
+      receipt(at(1), 1, "a:1"),
+      receipt(at(7 * DAY_MS), 10, "a:2"),
+      receipt(at(7 * DAY_MS + 1), 100, "a:3"),
+      receipt(at(13 * 7 * DAY_MS), 1000, "a:4"),
+      receipt(at(13 * 7 * DAY_MS + 1), 10_000, "a:5"),
+      receipt(at(0), 100_000, "a:6"),
+    ]);
+
+    const { weeks } = await report.trend();
+
+    expect(weeks.map((w) => w.weeksAgo)).toEqual([12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0]);
+    expect(weeks.map((w) => w.total?.inputTokens ?? 0)).toEqual([1000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 100, 11]);
+    for (const weeksAgo of [0, 1, 12]) {
+      const week = await report.week(weeksAgo);
+      expect(weeks.find((w) => w.weeksAgo === weeksAgo)).toMatchObject({ from: week.from, to: week.to, total: week.total });
+    }
+  });
+
+  test("the trend and a week asked for at the same time read the same logs and agree", async () => {
+    const { report, conversation } = setUp();
+    conversation("a", [receipt("2026-11-03T08:00:00Z", 7, "a:1"), receipt("2026-10-20T08:00:00Z", 70, "a:2")]);
+
+    const [trend, week] = await Promise.all([report.trend(), report.week(0)]);
+
+    expect(trend.weeks.at(-1)?.total).toEqual(week.total);
+    expect(trend.weeks.map((w) => w.total?.inputTokens ?? 0).reduce((a, b) => a + b)).toBe(77);
+  });
+
+  test("counts a receipt written again in another log once, and the tool definitions of each week apart", async () => {
+    const { report, conversation } = setUp();
+    const definitions = (at: string, inputTokens: number, toolTokenCount: number, key: string) => {
+      const [sourceSessionId, sequence] = key.split(":");
+      const usage = { inputTokens, outputTokens: 1, toolTokenCount, accounting: { sourceSessionId, sequence: Number(sequence) } };
+      return JSON.stringify({ type: "session.usage_record", timestamp: at, data: { usage } });
+    };
+    conversation("a", [definitions("2026-11-03T08:00:00Z", 500, 300, "a:1"), definitions("2026-10-26T08:00:00Z", 400, 100, "a:2")]);
+    conversation("b", [definitions("2026-11-03T08:00:00Z", 500, 300, "a:1")]);
+
+    const { weeks, unreadLogs } = await report.trend();
+
+    expect(weeks.slice(-2).map((w) => [w.total?.inputTokens, w.toolDefinitionTokens])).toEqual([
+      [400, 100],
+      [500, 300],
+    ]);
+    expect(unreadLogs).toBe(0);
+  });
+});
