@@ -181,6 +181,14 @@ export const TaskApprovals = z.enum(["ask", "auto"]);
 export type TaskApprovals = z.infer<typeof TaskApprovals>;
 
 /**
+ * Where a task started with "Plan first" is (ADR-229): `planning`, its agent works in Copilot CLI's Plan mode, which
+ * changes no files, and its plan waits for the user's approval; `approved`, the user approved the plan and the agent
+ * works in Agent mode. A task started without it has no plan (`null` in `Task.plan`).
+ */
+export const TaskPlan = z.enum(["planning", "approved"]);
+export type TaskPlan = z.infer<typeof TaskPlan>;
+
+/**
  * A task summary from its session (`report_result`, ADR-39): what it did and what is left, for the session that delegated
  * the task and as the merge request's description, which holds `MERGE_REQUEST_DESCRIPTION_MAX` characters together with
  * the check steps and the verification verdict.
@@ -554,6 +562,8 @@ export const Task = z.object({
   model: TaskModel.nullable(),
   /** How its sessions answer tool approvals (ADR-105). */
   approvals: TaskApprovals,
+  /** Where its plan is when it started with "Plan first" (ADR-229); `null` for a task that started without one. */
+  plan: TaskPlan.nullable(),
   /** Whether its sessions get the Java language server for code navigation (ADR-99). */
   javaNavigation: z.boolean(),
   /** Whether its sessions run their commands in Copilot CLI's sandbox (ADR-181), as `sandbox` in `workspace.yaml` said at its start. */
@@ -1002,7 +1012,9 @@ export const agentsApi = {
    * with `item`, the task works on that board item (ADR-133), `not_found` when there is none. `view` is a terminal or
    * the conversation view for every session of the task (ADR-137); Java navigation needs a terminal (`bad_request`).
    * With `handoffFrom`, another task hands it its work (ADR-147). With `stackTrace` the prompt gets the trace, its frames
-   * found among the repo's tracked files and the rule to reproduce the error in a test first (ADR-222).
+   * found among the repo's tracked files and the rule to reproduce the error in a test first (ADR-222). With `planFirst`
+   * its agent starts in Copilot CLI's Plan mode and writes a plan, which the user approves with `approvePlan` before it
+   * changes anything (ADR-229); it needs the conversation view (`bad_request` in a terminal).
    */
   createTask: endpoint(
     "create-task",
@@ -1021,6 +1033,7 @@ export const agentsApi = {
          */
         handoffFrom: TaskId.nullable().default(null),
         stackTrace: StackTrace.nullable().default(null),
+        planFirst: z.boolean().default(false),
       })
       .strict(),
     Task,
@@ -1093,6 +1106,13 @@ export const agentsApi = {
    * the UI, never from MCP.
    */
   handToSupervisor: endpoint("hand-to-supervisor", TaskRequest, Task),
+  /**
+   * The user approves the plan of a task started with "Plan first" (ADR-229): its running session switches to Agent mode
+   * and gets the prompt to implement the plan. `bad_request` for a task whose plan does not wait for approval, without a
+   * running session in the conversation view, or while its agent is still writing the plan. Only from the UI, never from
+   * MCP: an agent does not approve its own plan.
+   */
+  approvePlan: endpoint("approve-plan", TaskRequest, Task),
   /** The worktree's mise config against the trusted one (ADR-59). */
   taskMiseConfig: endpoint("task-mise-config", TaskRequest, TaskMiseConfig),
   /**

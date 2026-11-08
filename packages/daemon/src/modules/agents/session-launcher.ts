@@ -213,7 +213,7 @@ export class SessionLauncher {
    * for what the daemon gives the agent with a prompt (the supervisor's situation, ADR-148). `args` go after them (a
    * task's model and approvals mode, ADR-137).
    */
-  conversation({ id, load, firstMessage, args = [], ...place }: ConversationStart): Promise<StartedSession> {
+  conversation({ id, load, firstMessage, mode, args = [], ...place }: ConversationStart): Promise<StartedSession> {
     const { repo, supervisor, task, cwd } = place;
     return this.#start(id, place, args, (setup) => {
       const instructionsDir = this.#writeSessionFiles(id, setup.role, setup.knowledge, setup.dir, setup.token, {
@@ -228,6 +228,7 @@ export class SessionLauncher {
         cwd,
         load,
         firstMessage,
+        mode,
         environment: setup.mise.environment,
         model: setup.model,
         run: () => this.#deps.procs.state(sessionOwner(id)),
@@ -453,7 +454,8 @@ export interface SessionPlace {
 }
 
 /** A start in the conversation view in a place, with arguments after the session's own. */
-export type ConversationStart = ConversationLaunch & SessionPlace & { args?: readonly string[] };
+/** `mode` is the agent's mode before the first message (a task's Plan mode, ADR-229); without it the agent's own. */
+export type ConversationStart = ConversationLaunch & SessionPlace & { args?: readonly string[]; mode?: string };
 
 /**
  * A start in a terminal: Copilot CLI in a repo root, in a task's worktree, or the supervisor or a free session in the

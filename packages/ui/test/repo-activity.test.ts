@@ -42,6 +42,7 @@ function task(id: string, repo: string, title: string): Task {
     proposedBy: null,
     model: null,
     approvals: "ask",
+    plan: null,
     javaNavigation: false,
     sandbox: false,
     item: null,

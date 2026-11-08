@@ -54,6 +54,7 @@ function task(id: string, createdAt: string): Task {
     proposedBy: null,
     model: null,
     approvals: "ask",
+    plan: null,
     javaNavigation: false,
     sandbox: false,
     item: null,

@@ -144,9 +144,8 @@ describe.skipIf(process.versions.bun === undefined)("the supervisor in the conve
       daemon.post(agentsApi.setMode, { session: supervisor.id, mode: "https://agentclientprotocol.com/protocol/session-modes#autopilot" }),
     ).rejects.toThrow("the agent does not offer this mode");
 
+    // In Plan mode the agent writes a plan without a tool, so the turn ends without an approval (ADR-229).
     await daemon.post(agentsApi.say, { session: supervisor.id, text: "Check the build" });
-    const asking = await inState(daemon, supervisor.id, "Approval");
-    await daemon.post(agentsApi.answerDialog, { session: supervisor.id, dialog: asking.dialog?.id ?? "", answer: "1" });
     await until(() => view.info().context !== null, "the context use");
     expect(view.info().context).toEqual({ used: 1000, size: 128_000 });
 

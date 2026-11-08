@@ -31,6 +31,7 @@ function task(id: string, proposedBy: ProposedBy | null): Task {
     proposedBy,
     model: null,
     approvals: "ask",
+    plan: null,
     javaNavigation: false,
     sandbox: false,
     item: null,

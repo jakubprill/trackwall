@@ -19,8 +19,9 @@
  * names, followed by whether the command was allowed, the arguments it got and the variables `FAKE_COPILOT_SHOW_ENV` names. With `FAKE_COPILOT_REVIEW_WAIT` set the
  * review never ends on its own.
  *
- * Like Copilot CLI it answers `session/new` with the agent's modes (Agent, Plan, Autopilot), offers two slash commands
- * at once, switches the mode on `session/set_config_option`, and says after each turn how much context it uses
+ * Like Copilot CLI it answers `session/new` and `session/load` with the agent's modes (Agent, Plan, Autopilot), offers two slash commands
+ * at once, switches the mode on `session/set_config_option`, in Plan mode runs no tool and answers with
+ * `FAKE_ACP_PLAN` and the prompt's first line, as an agent that writes a plan and changes nothing (ADR-229), and says after each turn how much context it uses
  * (1000 tokens a turn of 128000). It takes images in a prompt, and its answer names each block after the first: an
  * image by its type, a text block by its first line.
  */
@@ -36,6 +37,9 @@ export const FAKE_ACP_COMMAND = "echo made-by-agent";
 
 /** The line a prompt that starts with `Edit ` adds to `README.md`, after its first line. */
 export const FAKE_ACP_EDIT_LINE = "Edited by the agent.";
+
+/** How the fake's answer in Plan mode starts; the tests look for it in the conversation. */
+export const FAKE_ACP_PLAN = "Plan for:";
 
 /** A tool the fake calls, as `tool_call` and `session/request_permission` name it. */
 type FakeToolCall = { title: string; kind: string; rawInput: Record<string, string>; locations?: { path: string }[] };
@@ -78,9 +82,10 @@ const PermissionAnswer = z.object({
 const Updates = z.array(z.record(z.string(), z.unknown()));
 
 const MODE_URL = "https://agentclientprotocol.com/protocol/session-modes#";
+const PLAN_MODE = `${MODE_URL}plan`;
 const MODES = [
   { value: `${MODE_URL}agent`, name: "Agent", description: "Default agent mode for conversational interactions" },
-  { value: `${MODE_URL}plan`, name: "Plan", description: "Plan mode for creating and executing multi-step plans" },
+  { value: PLAN_MODE, name: "Plan", description: "Plan mode for creating and executing multi-step plans" },
   { value: `${MODE_URL}autopilot`, name: "Autopilot", description: "Autonomous mode that enables allow-all" },
 ];
 /** The slash commands the fake offers; the tests look for them in the view. */
@@ -165,7 +170,13 @@ export function serveAcp(o: FakeAcpOptions): void {
     history.push({ sessionUpdate: "user_message_chunk", content: { type: "text", text } });
     writeFileSync(conversationFile(sessionId), JSON.stringify(history));
     if (text.startsWith("/review")) void review(sessionId, text, turn);
-    else
+    else if (mode === PLAN_MODE) {
+      update(sessionId, {
+        sessionUpdate: "agent_message_chunk",
+        content: { type: "text", text: `${FAKE_ACP_PLAN} ${text.split("\n")[0]}` },
+      });
+      turn.end("end_turn");
+    } else
       void (async () => {
         const toolCallId = `call_${++calls}_0`;
         const tool = turnTool(text);
@@ -262,7 +273,8 @@ export function serveAcp(o: FakeAcpOptions): void {
     const history = saved === "" ? [] : Updates.parse(JSON.parse(saved));
     conversations.set(sessionId, []);
     for (const u of history) update(sessionId, u);
-    send({ id, result: {} });
+    // A loaded conversation starts in Agent mode, as the process does (`contract/acp-session.contract.ts`).
+    send({ id, result: { configOptions: configOptions() } });
   }
 
   function cancel(params: unknown): void {
