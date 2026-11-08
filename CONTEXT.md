@@ -465,8 +465,12 @@ What the user writes when rejecting a task proposal, for the session that propos
 _Avoid_: comment, feedback
 
 **Shared files** (`TaskSharedFiles`, action `task-shared-files`):
-Files that both this task and another task of the same repo change, each compared with its own base commit. The one merged second will likely get a conflict, so the task panel warns about them and leads to the other task. It is only a warning: nothing is stopped (ADR-44).
-_Avoid_: overlap, collision, conflict (a conflict is only the result of a merge)
+Files that both this task and another task of the same repo change, each compared with its own base commit. The one merged second may get a conflict, so the task panel warns about them and leads to the other task. It is only a warning: nothing is stopped (ADR-44).
+_Avoid_: overlap, collision, conflict (a conflict is only the result of a merge, real or trial)
+
+**Trial merge** (`trialMergeConflicts`, `TaskSharedFiles.conflicts`):
+A merge of two task branches that git computes in memory (`git merge-tree`) in a scratch git directory, without a worktree and without writing to the repo. The shared files it leaves in conflict are named as conflicts in the shared-files warning; `null` when git could not try it (ADR-230).
+_Avoid_: dry run, test merge, simulated merge
 
 **Review** (`send-review`, `SendReviewResult`; "Send N comments to the agent" in the UI):
 The review comments the user sends to a task's agent together, from the task's "Changes" tab (ADR-62). The daemon asks the task's session to read them as soon as it waits for input (`PromptDelivery`: `typed`, `queued`, `on_resume`).

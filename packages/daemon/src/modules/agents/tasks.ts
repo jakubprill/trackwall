@@ -99,6 +99,8 @@ export interface TasksVcs extends HandoffGit, EndedTaskGit {
   deleteBranch(repoDir: string, branch: string): Promise<void>;
   pendingWork(work: TaskWork): Promise<TaskPendingWork>;
   worktreeChanges(dir: string, base: string, maxPatchBytes: number, paths: readonly string[]): Promise<TaskChanges>;
+  /** The files in which merging two branches of the repo would conflict; `null` when git cannot tell (ADR-230). */
+  trialMergeConflicts(repoDir: string, ours: string, theirs: string): Promise<string[] | null>;
   /** The newest commits of HEAD in `dir`: the cleanup reads when the task last committed (ADR-210). */
   log(dir: string, limit: number): Promise<{ date: string }[]>;
   /** One hash of what the worktree's files hold beyond `base` (ADR-209). */
@@ -764,11 +766,22 @@ export class AgentTasks {
     const own = this.#get(id);
     const changed = new Set((await this.#readChanges(id, 0, [])).files.map((f) => f.path));
     const others = this.#tasks.filter((t) => t.repo === own.repo && t.id !== id);
-    const theirs = await mapLimit(others, SHARED_FILES_CONCURRENCY, async (other) => ({
-      task: other.id,
-      files: (await this.#tryChangedPaths(other.id)).filter((path) => changed.has(path)),
-    }));
-    return theirs.filter((t) => t.files.length > 0);
+    const theirs = await mapLimit(others, SHARED_FILES_CONCURRENCY, async (other): Promise<TaskSharedFiles | null> => {
+      const files = (await this.#tryChangedPaths(other.id)).filter((path) => changed.has(path));
+      if (files.length === 0) return null;
+      return { task: other.id, files, conflicts: await this.#conflictsIn(files, own, other) };
+    });
+    return theirs.filter((t) => t !== null);
+  }
+
+  /**
+   * Which of the shared `files` a trial merge of the two task branches leaves in conflict (ADR-230): only the
+   * committed work, which a round commit (ADR-168) makes of every turn of the agent. A conflict in another file comes
+   * from the default branch moving between the two bases, not from the other task, so it is left out.
+   */
+  async #conflictsIn(files: readonly string[], own: KnownTask, other: KnownTask): Promise<string[] | null> {
+    const conflicts = await this.#deps.vcs.trialMergeConflicts(own.repoDir, own.branch, other.branch);
+    return conflicts && files.filter((path) => conflicts.includes(path));
   }
 
   /** Paths changed in a task, or none when its changes cannot be read for a known reason (`DomainError`). */
