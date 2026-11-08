@@ -16,7 +16,8 @@ import { useProviderModels } from "@/lib/use-provider-models";
  * Another model for a running session or a task (ADR-206): Copilot CLI with a custom provider knows only the model it
  * started on, so the only way to another one is a restart on it with the same conversation, or a Resume of a stopped
  * task. The strip under the panel's header names the model now, suggests the provider's models and warns about an id it
- * does not offer; an empty field is Copilot CLI's default.
+ * does not offer; an empty field is Copilot CLI's default. The retry of a failed task on a stronger model (ADR-232) uses
+ * the same strip, where the field must name a model.
  */
 export function ModelChangeStrip<T>({
   conn,
@@ -68,7 +69,11 @@ export function ModelChangeStrip<T>({
           list={models.length > 0 ? listId : undefined}
         />
         {models.length > 0 && <ProviderModelOptions id={listId} models={models} />}
-        <Button type="submit" size="sm" disabled={change.pending || model === undefined || model === current}>
+        <Button
+          type="submit"
+          size="sm"
+          disabled={change.pending || model === undefined || model === current || (verb === "Retry" && model === null)}
+        >
           {verb} on this model
         </Button>
         <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={change.pending}>

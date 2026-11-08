@@ -5,9 +5,12 @@ import type { Task, Verification } from "@trackwall/protocol";
  * one click.
  */
 
-/** The retry is offered once the task's last verification failed: a red verdict is what says the attempt did not work. */
-export function offersRetry(verification: Pick<Verification, "state"> | null): boolean {
-  return verification?.state === "failed";
+/**
+ * The retry is offered once the task's last verification failed: a red verdict is what says the attempt did not work.
+ * Never for a part of a change, whose parts start together and which the daemon refuses to retry alone.
+ */
+export function offersRetry(task: Pick<Task, "change">, verification: Pick<Verification, "state"> | null): boolean {
+  return task.change === null && verification?.state === "failed";
 }
 
 /**

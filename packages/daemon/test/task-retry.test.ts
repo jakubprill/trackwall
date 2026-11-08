@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { agentsApi, EndedTask, workspaceApi } from "@trackwall/protocol";
+import { agentsApi, boardApi, EndedTask, workspaceApi } from "@trackwall/protocol";
 import { waitUntil } from "../src/platform/process-group.ts";
-import { viewer, waitFor } from "./support/agents.ts";
-import { commitFiles, gitIn } from "./support/git-repo.ts";
+import { makeAgents, viewer, waitFor } from "./support/agents.ts";
+import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
 import { startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
@@ -15,7 +15,10 @@ const TOKEN = "r".repeat(43);
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
 
 beforeAll(async () => {
-  daemon = await startSessionApi(TOKEN);
+  daemon = await startSessionApi(TOKEN, {
+    repos: { shop: { "README.md": "# shop\n" }, web: { "README.md": "# web\n" } },
+    miseCommand: ["mise"],
+  });
 }, SLOW_TEST_TIMEOUT_MS);
 
 afterAll(async () => {
@@ -37,7 +40,8 @@ async function argumentsOf(session: string, last: string): Promise<string> {
 }
 
 async function end(task: string): Promise<void> {
-  await daemon.post(agentsApi.stop, { session: sessionOf(task) });
+  const running = daemon.facade.agents.sessions().sessions.find((s) => s.task === task && s.run.kind === "running");
+  if (running) await daemon.post(agentsApi.stop, { session: running.id });
   await daemon.post(agentsApi.removeTask, { task, keepBranch: false, discardChanges: true });
 }
 
@@ -105,6 +109,60 @@ describe.skipIf(process.versions.bun === undefined)("retrying a task on another 
     await end(task.id);
   }, 60_000);
 
+  test("the retry keeps the task's board item while it is on the board, and starts without one the user removed", async () => {
+    const item = await daemon.post(boardApi.create, { kind: "item", title: "Cart sum" });
+    const first = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "Fix the cart sum", approvals: "ask", item: item.id });
+
+    const kept = await daemon.post(agentsApi.retryTask, { task: first.id, model: "claude-opus-5.5" });
+    await daemon.post(boardApi.remove, { item: item.id });
+    const dropped = await daemon.post(agentsApi.retryTask, { task: first.id, model: "gpt-5.5" });
+
+    expect(kept.item).toBe(item.id);
+    expect(dropped.item).toBeNull();
+    for (const task of [kept, dropped, first]) await end(task.id);
+  }, 60_000);
+
+  test("the retry of a task another task handed its work keeps that handoff, so its agent reads the same work", async () => {
+    const handing = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "Add the refund endpoint", approvals: "ask" });
+    const subtask = await daemon.post(agentsApi.createTask, {
+      repo: "web",
+      prompt: "Show refunds",
+      approvals: "ask",
+      handoffFrom: handing.id,
+    });
+
+    const retry = await daemon.post(agentsApi.retryTask, { task: subtask.id, model: "claude-opus-5.5" });
+
+    const stored = (id: string) =>
+      (
+        JSON.parse(readFileSync(join(daemon.home, "tasks.json"), "utf8")).tasks as { id: string; handoff: unknown; proposedBy: unknown }[]
+      ).find((t) => t.id === id);
+    expect(stored(retry.id)?.handoff).toEqual(stored(subtask.id)?.handoff);
+    expect(stored(retry.id)?.handoff).toMatchObject({ task: handing.id });
+    // The retry reports to the user: the coordination with the handing task stays with the first attempt.
+    expect(retry.proposedBy).toBeNull();
+    for (const task of [retry, subtask, handing]) await end(task.id);
+  }, 60_000);
+
+  test("a part of a change cannot be retried on its own", async () => {
+    const { tasks } = await daemon.post(agentsApi.createChange, {
+      title: "Refunds",
+      prompt: "Add refunds",
+      parts: [
+        { repo: "shop", note: "" },
+        { repo: "web", note: "" },
+      ],
+      approvals: "ask",
+    });
+    const [part] = tasks;
+    if (part === undefined) throw new Error("no part started");
+
+    await expect(daemon.post(agentsApi.retryTask, { task: part.id, model: "claude-opus-5.5" })).rejects.toThrow(
+      "retry-task: a part of a change cannot be retried on its own",
+    );
+    for (const task of tasks) await end(task.id);
+  }, 60_000);
+
   test("the retry model is kept in workspace.yaml for the next failed task, and cleared again", async () => {
     expect((await daemon.post(workspaceApi.settings, {})).retryModel).toBeNull();
 
@@ -115,4 +173,21 @@ describe.skipIf(process.versions.bun === undefined)("retrying a task on another 
     expect((await daemon.post(workspaceApi.setRetryModel, { model: null })).retryModel).toBeNull();
     expect(readFileSync(join(daemon.home, "workspace.yaml"), "utf8")).not.toContain("retryModel");
   });
+});
+
+describe.skipIf(process.versions.bun === undefined)("retrying a task in the conversation view (fake Copilot CLI over ACP)", () => {
+  test("the retry keeps the conversation view and Plan first, so its agent plans again before it changes anything", async () => {
+    const { agents, procs } = makeAgents({ shop: makeRepo({ "README.md": "# shop\n" }, "shop") });
+    const first = await agents.createTask("shop", "Fix the login", {
+      view: "conversation",
+      approvals: "auto",
+      planFirst: true,
+      model: "gpt-5-mini",
+    });
+
+    const retry = await agents.retryTask(first.id, "claude-opus-5.5");
+
+    expect(retry).toMatchObject({ view: "conversation", plan: "planning", approvals: "auto", model: "claude-opus-5.5", retryOf: first.id });
+    await procs.stopAll();
+  }, 60_000);
 });

@@ -8,11 +8,16 @@ function verification(state: Verification["state"]): Pick<Verification, "state">
 
 describe("retrying a failed task on a stronger model", () => {
   test("only a failed verification offers the retry", () => {
-    expect(offersRetry(verification("failed"))).toBe(true);
-    expect(offersRetry(verification("passed"))).toBe(false);
-    expect(offersRetry(verification("running"))).toBe(false);
-    expect(offersRetry(verification("cancelled"))).toBe(false);
-    expect(offersRetry(null)).toBe(false);
+    const task = { change: null };
+    expect(offersRetry(task, verification("failed"))).toBe(true);
+    expect(offersRetry(task, verification("passed"))).toBe(false);
+    expect(offersRetry(task, verification("running"))).toBe(false);
+    expect(offersRetry(task, verification("cancelled"))).toBe(false);
+    expect(offersRetry(task, null)).toBe(false);
+  });
+
+  test("a part of a change is not offered the retry, even when its verification failed", () => {
+    expect(offersRetry({ change: { id: "c0ffee00-0000-4000-8000-000000000000", position: 0 } }, verification("failed"))).toBe(false);
   });
 
   test("the retry model from Settings is the one-click model of a task on another one", () => {

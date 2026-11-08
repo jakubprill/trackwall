@@ -37,16 +37,23 @@ export function TaskRetry({ conn, task, onRetried }: { conn: Connection; task: T
       />
     );
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {model !== null && (
-        <Button variant="outline" size="sm" onClick={() => oneClick.run(model)} disabled={oneClick.pending}>
-          <RotateCcw /> Retry on {model}
+    <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
+      {model === null ? (
+        <Button variant="outline" size="sm" onClick={() => setChoosing(true)}>
+          <RotateCcw /> Retry on a stronger model
         </Button>
+      ) : (
+        <>
+          <Button variant="outline" size="sm" onClick={() => oneClick.run(model)} disabled={oneClick.pending}>
+            <RotateCcw /> Retry on {model}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setChoosing(true)} disabled={oneClick.pending}>
+            Other model
+          </Button>
+        </>
       )}
-      <Button variant={model === null ? "outline" : "ghost"} size="sm" onClick={() => setChoosing(true)} disabled={oneClick.pending}>
-        {model === null && <RotateCcw />} {model === null ? "Retry on a stronger model" : "Other model"}
-      </Button>
       {oneClick.error && <span className="text-destructive text-xs break-words">{oneClick.error}</span>}
+      {settings.error && <span className="text-muted-foreground text-xs break-words">Retry model unknown: {settings.error}</span>}
     </div>
   );
 }
