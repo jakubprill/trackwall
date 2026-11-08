@@ -1,7 +1,15 @@
 import { appendFileSync, readFileSync } from "node:fs";
-import { EndedTask, TASK_HISTORY_MAX_CHARS, type TaskHistoryQuery, type TaskHistoryResult } from "@trackwall/protocol";
+import {
+  EndedTask,
+  type ModelStats,
+  type ModelStatsPeriod,
+  TASK_HISTORY_MAX_CHARS,
+  type TaskHistoryQuery,
+  type TaskHistoryResult,
+} from "@trackwall/protocol";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
 import { messageOf } from "../../infra/errors.ts";
+import { modelStats } from "./model-stats.ts";
 
 /**
  * The task journal (§4.19, ADR-150): one JSON line per ended task in `task-journal.jsonl` of the state directory,
@@ -90,6 +98,11 @@ export class TaskJournal {
       tasks.push(record);
     }
     return { tasks, truncated: tasks.length < matching.length };
+  }
+
+  /** The model statistics of the tasks that ended in `period` (ADR-230), read from the file anew. */
+  modelStats(period: ModelStatsPeriod, now: Date = new Date()): ModelStats {
+    return modelStats(this.records(), period, now);
   }
 
   /** Every record, oldest ended first; a line that does not parse is skipped. */
