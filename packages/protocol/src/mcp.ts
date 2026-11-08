@@ -760,8 +760,9 @@ export const mcpTools = {
       "longer in the projects folder) and since (YYYY-MM-DD, when the task ended). Each task has its repo, prompt, " +
       "the session's last summary, its branch with base and head commit (branchKept: the branch is still in the repo), " +
       `the newest commits without Trackwall's WIP round commits (up to ${TASK_HISTORY_MAX_COMMITS}, commitsTotal counts all), ` +
-      "the changed files and the last " +
-      "verification. Newest ended first; truncated: true when more matched than fit, narrow the query.",
+      "the changed files, the last verification, the model it asked for (model), the models Copilot CLI actually ran " +
+      "it on with their calls (models) and what its conversation used (usage: model calls, tokens, AI credits, premium " +
+      "requests). Newest ended first; truncated: true when more matched than fit, narrow the query.",
     args: z
       .object({
         text: TaskHistoryQuery.shape.text.default("").describe('words that must all appear, e.g. "retry payment"'),
