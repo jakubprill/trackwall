@@ -72,6 +72,10 @@ describe.skipIf(process.versions.bun === undefined)("the task journal and search
         files: ["src/cart.ts"],
         filesTruncated: false,
         verification: null,
+        model: null,
+        // The fake Copilot CLI writes no event log in the user's own Copilot CLI home here.
+        usage: null,
+        models: [],
       },
     ]);
     // Every word must appear, and a repo filter or a later day leaves the task out.

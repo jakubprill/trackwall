@@ -1,6 +1,6 @@
 import { closeSync, openSync, readSync, statSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
-import { COPILOT_AUTO_MODEL, type CopilotUsage } from "@trackwall/protocol";
+import { COPILOT_AUTO_MODEL, type CopilotUsage, type ModelCalls } from "@trackwall/protocol";
 import { conversationEventLog } from "../../infra/copilot-home.ts";
 import { addReceipt, firstSighting, NO_USAGE, type UsageTotals, usageOf, usageReceipt } from "../../infra/copilot-usage-receipt.ts";
 import { modelChangeOf } from "./copilot-model-change.ts";
@@ -16,7 +16,7 @@ import { modelChangeOf } from "./copilot-model-change.ts";
  * from where the last read stopped, so a long conversation is read once and every later turn costs only its new lines.
  */
 
-/** What the log says so far: the usage sums and the model in use. */
+/** What the log says so far: the usage sums, the model in use and the own calls on each model. */
 interface LogState {
   totals: UsageTotals;
   /**
@@ -24,9 +24,11 @@ interface LogState {
    * to `auto` until the next own receipt.
    */
   modelInUse: string | null;
+  /** The conversation's own model calls by the model their receipt names (ADR-228). */
+  callsByModel: Readonly<Record<string, number>>;
 }
 
-const NOTHING_READ: LogState = { totals: NO_USAGE, modelInUse: null };
+const NOTHING_READ: LogState = { totals: NO_USAGE, modelInUse: null, callsByModel: {} };
 
 /**
  * One line of the log added to what it says; `seen` keeps receipts counted once. A receipt written again (a resumed
@@ -44,7 +46,16 @@ function add(state: LogState, line: string, seen: Set<string>): LogState {
   if (!firstSighting(seen, receipt)) return state;
   // A receipt without an identity (older Copilot CLI) cannot be told from one a resume writes again, so it names no model.
   const model = receipt.key === undefined ? undefined : receipt.ownModel;
-  return { totals: addReceipt(state.totals, receipt), modelInUse: model ?? state.modelInUse };
+  const totals = addReceipt(state.totals, receipt);
+  if (model === undefined) return { ...state, totals };
+  return { totals, modelInUse: model, callsByModel: { ...state.callsByModel, [model]: (state.callsByModel[model] ?? 0) + 1 } };
+}
+
+/** The own calls on each model, the most first, then by name, so the same log always gives the same list. */
+function modelCallsOf(state: LogState): ModelCalls[] {
+  return Object.entries(state.callsByModel)
+    .map(([model, modelCalls]) => ({ model, modelCalls }))
+    .sort((a, b) => b.modelCalls - a.modelCalls || a.model.localeCompare(b.model));
 }
 
 /** What whole lines of a log say, for a reader that has the log in memory (the tests, a script). */
@@ -61,6 +72,30 @@ export function usageOfLines(lines: readonly string[]): CopilotUsage | null {
 /** The model in use after whole lines of a log (ADR-225). */
 export function modelInUseOfLines(lines: readonly string[]): string | null {
   return stateOfLines(lines).modelInUse;
+}
+
+/** The own model calls on each model after whole lines of a log (ADR-228). */
+export function modelCallsOfLines(lines: readonly string[]): ModelCalls[] {
+  return modelCallsOf(stateOfLines(lines));
+}
+
+/** What a whole conversation used and on which models, for the record of a task as it ends (ADR-228). */
+export interface ConversationUse {
+  usage: CopilotUsage | null;
+  models: ModelCalls[];
+}
+
+/** A conversation that used nothing, or whose log is unknown. */
+export const NO_CONVERSATION_USE: ConversationUse = { usage: null, models: [] };
+
+/**
+ * Reads a conversation's whole event log once: when a task ends its sessions have stopped, so the log is complete. A
+ * log that is missing or cannot be read is no usage and no model.
+ */
+export function readConversationUse(copilotHome: string, conversation: string): ConversationUse {
+  const log = new CopilotUsageLog(copilotHome);
+  log.update(conversation);
+  return { usage: log.current(), models: log.modelCalls() };
 }
 
 /** How often a running session's cycle looks at its event log: a size check, and a read only of what is new. */
@@ -107,6 +142,11 @@ export class CopilotUsageLog {
   /** The model the conversation runs on after the last update (ADR-225); `null` before the log names one. */
   modelInUse(): string | null {
     return this.#state.modelInUse;
+  }
+
+  /** The conversation's own model calls on each model after the last update (ADR-228), the most first. */
+  modelCalls(): ModelCalls[] {
+    return modelCallsOf(this.#state);
   }
 
   /**
