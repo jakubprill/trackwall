@@ -3,7 +3,7 @@ import { tokenCount } from "./copilot-usage.ts";
 import { toolDefinitionShare, weekLastDay, weekRange } from "./usage-report.ts";
 
 /**
- * The usage trend above the weekly report in Settings › Usage (ADR-234): one bar per week, its input tokens split into
+ * The usage trend above the weekly report in Settings › Usage (ADR-236): one bar per week, its input tokens split into
  * tool definitions and the rest, on a scale with round steps, so a change that should lower the use (fewer MCP tools,
  * another model) shows as a step down from the week it came in.
  */

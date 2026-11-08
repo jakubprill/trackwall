@@ -1,7 +1,7 @@
 // A week of Copilot CLI conversations for the demo's "Copilot usage" (ADR-199): the event logs and `workspace.yaml`
 // Copilot CLI would have left in its home for the demo's tasks, its repo sessions, the supervisor and one folder
 // outside the projects folder, with model calls and tool calls spread over the last six days, and the supervisor's
-// conversations of the twelve weeks before it for the usage trend (ADR-234). The numbers are made
+// conversations of the twelve weeks before it for the usage trend (ADR-236). The numbers are made
 // up but shaped like a real week: tool definitions are a large part of every call, and a few tools add most results.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -155,7 +155,7 @@ export function demoWeek(o: {
 const TOOL_DEFINITION_TOKENS_BEFORE = 36_000;
 
 /**
- * The supervisor's conversations of the twelve weeks before the demo's week, for the usage trend (ADR-234): a
+ * The supervisor's conversations of the twelve weeks before the demo's week, for the usage trend (ADR-236): a
  * few a week, more in some weeks than in others, with more tool definitions per call until four weeks ago, so the
  * trend shows the step a change that cut MCP tools would make.
  */

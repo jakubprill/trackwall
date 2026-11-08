@@ -33,7 +33,10 @@ export function TaskChangesView({ conn, task, paused, review }: { conn: Connecti
     <div className="flex min-w-0 flex-col gap-4">
       <ReviewBar review={review} />
       {changes.data.files.length > 0 && (
-        <TaskAutoReview conn={conn} task={task} patch={changes.data.patch} paused={paused} review={review} />
+        <>
+          <TaskAutoReview conn={conn} task={task} kind="code" patch={changes.data.patch} paused={paused} review={review} />
+          <TaskAutoReview conn={conn} task={task} kind="rules" patch={changes.data.patch} paused={paused} review={review} />
+        </>
       )}
       <ChangesBody changes={changes.data} review={review} />
     </div>

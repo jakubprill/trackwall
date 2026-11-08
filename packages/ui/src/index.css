@@ -42,7 +42,7 @@
   --group-3: oklch(0.7 0.12 262);
   --group-4: oklch(0.72 0.12 45);
   /*
-   * Series of a chart, in this order (ADR-234): the first is the measure itself, the second the part of it the chart
+   * Series of a chart, in this order (ADR-236): the first is the measure itself, the second the part of it the chart
    * sets apart. Checked as a pair for colour-blind readers on this dark background (deutan ΔE 11); another theme
    * redefines `--chart-2` and checks the pair again. Charts also name each series in a legend.
    */

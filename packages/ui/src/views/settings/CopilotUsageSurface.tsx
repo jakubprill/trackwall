@@ -20,7 +20,7 @@ const TOP_ROWS = 10;
  * The weekly usage report (ADR-199) in Settings › Usage (ADR-212): what Copilot CLI used on this computer in a week,
  * its total as a few numbers, then by task and session and by tool, the most first, side by side when there is room, so
  * the user sees where tokens go and can compare a week with the one before. Above them the trend of every week
- * (ADR-234), whose bars pick the week, and a bar under every ranked row, its share of the first.
+ * (ADR-236), whose bars pick the week, and a bar under every ranked row, its share of the first.
  */
 export function CopilotUsageSurface({ conn }: { conn: Connection }) {
   const [weeksAgo, setWeeksAgo] = useState(0);

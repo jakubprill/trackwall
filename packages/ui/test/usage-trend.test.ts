@@ -13,7 +13,7 @@ const week = (weeksAgo: number, inputTokens: number | null, toolDefinitionTokens
   toolDefinitionTokens,
 });
 
-describe("the usage trend in Settings › Usage (ADR-234)", () => {
+describe("the usage trend in Settings › Usage (ADR-236)", () => {
   test("the scale steps by 1, 2, 4 or 5 times a power of ten and its top reaches the highest week", () => {
     expect(trendScale(10_200_000)).toEqual({ top: 12_000_000, ticks: [0, 4_000_000, 8_000_000, 12_000_000] });
     expect(trendScale(3_000)).toEqual({ top: 3_000, ticks: [0, 1_000, 2_000, 3_000] });

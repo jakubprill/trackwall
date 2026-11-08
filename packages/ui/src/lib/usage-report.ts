@@ -61,7 +61,7 @@ export function toolCalls(tool: UsageTool): string {
   return tool.failures === 0 ? calls : `${calls} · ${tool.failures} failed`;
 }
 
-/** A ranked row's bar (ADR-234): its value as a share of the list's largest, in percent. */
+/** A ranked row's bar (ADR-236): its value as a share of the list's largest, in percent. */
 export function rankShare(value: number, largest: number): number {
   return largest <= 0 ? 0 : (value / largest) * 100;
 }

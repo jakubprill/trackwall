@@ -101,7 +101,7 @@ describe("the weekly usage report over Copilot CLI's event logs (ADR-199)", () =
   );
 });
 
-describe("the usage trend of every week the report reaches (ADR-234)", () => {
+describe("the usage trend of every week the report reaches (ADR-236)", () => {
   test("gives 13 weeks, the oldest first, each with the same total as that week's report", async () => {
     const { report, conversation } = setUp();
     const at = (msBefore: number) => new Date(NOW - msBefore).toISOString();

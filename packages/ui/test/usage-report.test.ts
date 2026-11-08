@@ -61,7 +61,7 @@ describe("the weekly usage report as Settings shows it (ADR-199)", () => {
     expect(weekRange({ from, to }, "en-US")).toBe("Oct 28 – Nov 3");
   });
 
-  test("a ranked row's bar is its share of the list's largest (ADR-234)", () => {
+  test("a ranked row's bar is its share of the list's largest (ADR-236)", () => {
     expect(rankShare(250, 1_000)).toBe(25);
     expect(rankShare(0, 0)).toBe(0);
   });

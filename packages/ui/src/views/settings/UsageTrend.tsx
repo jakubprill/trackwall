@@ -4,7 +4,7 @@ import { showsLabel, trendChart } from "@/lib/usage-trend";
 import { cn } from "@/lib/utils";
 
 /**
- * The usage trend (ADR-234) above the weekly report in Settings › Usage: the input tokens of every week the report
+ * The usage trend (ADR-236) above the weekly report in Settings › Usage: the input tokens of every week the report
  * reaches, the tool definitions set apart, so a change meant to lower the use shows as a step down from its week.
  * Picking a bar opens that week's report below. Plain elements, no chart library; the colours are the `chart` tokens.
  */

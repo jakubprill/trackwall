@@ -484,6 +484,10 @@ _Avoid_: note, remark, comment on a merge request (that lives on the repo host)
 Copilot CLI's built-in `/review` on a task's changes, run by the daemon with only the tools that read, on the user's click or after the task's agent reports its result when the user turned that on (ADR-182). Its **findings** (title, severity, file and line, problem and suggested fix) become review comments only when the user adds them and sends the review.
 _Avoid_: code review (that is the pre-PR review in `AGENTS.md`), auto-review in product texts, verification (that runs the tests)
 
+**Rules check** (`AutoReviewKind` `rules`, `repo-rules.ts`, `RepoRules`, `autoReview.rulesAfterReport` in `workspace.yaml`; "Check rules" and the "Repo rules" section of the task's "Changes" tab):
+The second kind of automatic review (the first is `code`): Copilot CLI, with only the tools that read, compares a task's changes with the repo's **rule files** (`AutoReview.ruleFiles`: `AGENTS.md` and `CLAUDE.md` at the root and above the changed files, Copilot's instruction files, the decision records in the usual ADR folders) as the task's base commit holds them, and reports each written rule the changes break, quoting it, as a **violation** (an `AutoReviewFinding` with the rule in its text) (ADR-234).
+_Avoid_: lint (that is a tool's rule), policy, compliance, guardrails
+
 **Merge request** (`MergeRequest`, module `merge-requests`, `mergeRequestsApi`; the "Merge request" section of the task panel):
 The request on the repo host to merge a task branch into the task's base branch, on GitHub called a pull request. Trackwall pushes the task branch at the user's request and opens the repo host's form for it with a title and description from the task; the user creates it there, and the task panel follows it, found by the task branch as its source branch (ADR-77).
 _Avoid_: pull request (except for GitHub's own pages), PR, MR in product texts
@@ -652,7 +656,7 @@ What a session's Copilot CLI conversation used, summed from the receipts Copilot
 _Avoid_: cost, spend, budget (Trackwall sets no limit)
 
 **Usage report** (`UsageReport`, the `usage-report` module, `usageReportApi`; in the UI *Copilot usage* in Settings › Usage):
-What Copilot CLI used on this computer in a week, from the event logs it keeps for every conversation (ADR-199): the total, one **usage work** row (`UsageWork`: a task, the supervisor, sessions in a repo, or outside the projects folder) per piece of work with its Copilot usage and its **tool definition tokens** (the input tokens that were the tools' definitions, sent with every model call), and one **usage tool** row (`UsageTool`) per tool with its calls, failures and **result tokens**. Do not confuse with the MCP audit, which lists Trackwall's own tool calls one by one without tokens. Its **usage trend** (`UsageTrend`, `UsageWeekTotal`, `usageReportApi.trend`; "Tokens in by week" in the UI) is the total of every week the report reaches side by side (ADR-234).
+What Copilot CLI used on this computer in a week, from the event logs it keeps for every conversation (ADR-199): the total, one **usage work** row (`UsageWork`: a task, the supervisor, sessions in a repo, or outside the projects folder) per piece of work with its Copilot usage and its **tool definition tokens** (the input tokens that were the tools' definitions, sent with every model call), and one **usage tool** row (`UsageTool`) per tool with its calls, failures and **result tokens**. Do not confuse with the MCP audit, which lists Trackwall's own tool calls one by one without tokens. Its **usage trend** (`UsageTrend`, `UsageWeekTotal`, `usageReportApi.trend`; "Tokens in by week" in the UI) is the total of every week the report reaches side by side (ADR-236).
 _Avoid_: bill, invoice, cost report
 
 **While you were away** (`AwaySummary`, `awaySummary`, `AwayItem`; an **absence** is `AwayPeriod`, opened by `absenceAt` after `AWAY_AFTER_MS`):

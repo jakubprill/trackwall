@@ -17,7 +17,7 @@ import { type KnownPlaces, recordedPlace, type WorkPlace, withRealPaths, workPla
 
 /**
  * The `usage-report` module (ADR-199, §4.25): what Copilot CLI used in one week on this computer, by the work it was
- * for and by tool, so the user sees where tokens go, and the totals of every week side by side (ADR-234). It reads
+ * for and by tool, so the user sees where tokens go, and the totals of every week side by side (ADR-236). It reads
  * the event logs Copilot CLI keeps for every conversation in its home (`event-log.ts`), only when a report is asked
  * for, and ties each conversation to its work by the folder and branch Copilot CLI recorded (`work-place.ts`). Every
  * conversation on the computer counts, also those Trackwall did not start; nothing is kept on disk, and nothing
