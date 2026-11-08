@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { CopilotUsage, UsageTool, UsageWork } from "@trackwall/protocol";
-import { toolCalls, toolDefinitionShare, toolName, weekRange, workName, workTokens } from "../src/lib/usage-report";
+import { rankShare, toolCalls, toolDefinitionShare, toolName, weekRange, workName, workTokens } from "../src/lib/usage-report";
 
 const usage: CopilotUsage = {
   modelCalls: 12,
@@ -59,5 +59,10 @@ describe("the weekly usage report as Settings shows it (ADR-199)", () => {
     const from = new Date(2026, 9, 28, 0, 0).toISOString();
     const to = new Date(2026, 10, 4, 0, 0).toISOString();
     expect(weekRange({ from, to }, "en-US")).toBe("Oct 28 – Nov 3");
+  });
+
+  test("a ranked row's bar is its share of the list's largest (ADR-236)", () => {
+    expect(rankShare(250, 1_000)).toBe(25);
+    expect(rankShare(0, 0)).toBe(0);
   });
 });

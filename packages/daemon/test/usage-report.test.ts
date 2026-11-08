@@ -114,6 +114,14 @@ describe.skipIf(process.versions.bun === undefined)("the weekly usage report (AD
       const before = await daemon.post(usageReportApi.week, { weeksAgo: 1 });
       expect(before.work.map((w) => [w.kind, w.usage.inputTokens])).toEqual([["supervisor", 7_000]]);
       expect(Date.parse(before.to) - Date.parse(before.from)).toBe(7 * DAY_MS);
+
+      const { weeks } = await daemon.post(usageReportApi.trend, {});
+      expect(weeks).toHaveLength(13);
+      expect(weeks.slice(-2).map((w) => [w.weeksAgo, w.total?.inputTokens, w.toolDefinitionTokens])).toEqual([
+        [1, 7_000, 1000],
+        [0, 71_100, 3060],
+      ]);
+      expect(weeks.slice(0, -2).every((w) => w.total === null)).toBe(true);
     },
     SLOW_TEST_TIMEOUT_MS,
   );

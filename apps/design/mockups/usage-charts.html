@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Usage charts</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<style>
+/*
+ * Proposals for charts in Settings › Usage: the input tokens of every week with tool definitions set apart (A), a bar
+ * under each ranked row (B), and models as points of verified share against cost per verified task (C). Series take
+ * the chart tokens, text the text tokens, so the charts follow the app's theme.
+ */
+body{line-height:1.5;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 48px}
+main{max-width:920px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+h1{font-size:1.5rem;margin:0;text-wrap:balance}
+h2{font-size:1.05rem;margin:0;text-wrap:balance}
+p{margin:0;max-width:68ch}
+.lede{color:var(--muted-foreground)}
+.hud{font-size:.6875rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted-foreground)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.card.rec{border-color:var(--primary)}
+.pill{display:inline-block;font-size:.6875rem;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--primary);color:var(--primary);border-radius:99px;padding:1px 8px;margin-left:8px;vertical-align:2px}
+.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;font-size:.85rem}
+.meta div{min-width:0}.meta b{display:block;font-weight:600;font-size:.6875rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-foreground);margin-bottom:2px}
+.sample{font-size:.75rem;color:var(--muted-foreground);font-style:italic}
+.chart{position:relative;overflow-x:auto}
+svg{display:block;width:100%;height:auto}
+svg text{fill:var(--muted-foreground);font-family:var(--font-mono);font-size:11px;font-variant-numeric:tabular-nums}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.8rem;color:var(--muted-foreground)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.tip{position:absolute;pointer-events:none;background:var(--overlay);border:1px solid var(--border);border-radius:4px;padding:6px 8px;font-size:.75rem;font-family:var(--font-mono);white-space:nowrap;color:var(--foreground)}
+.rank{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.rank li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:7px 0;border-bottom:1px solid var(--border);font-size:.85rem}
+.rank li:last-child{border-bottom:0}
+.rank .n{font-family:var(--font-mono);font-size:.75rem;color:var(--muted-foreground)}
+.rank .bar{grid-column:1/-1;height:4px;background:var(--secondary);border-radius:2px;overflow:hidden}
+.rank .bar span{display:block;height:100%;background:var(--chart-1);border-radius:0 2px 2px 0}
+.rank .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:22px}
+.other{display:flex;flex-direction:column;gap:10px}
+.other li{margin-bottom:8px}
+ul{margin:0;padding-left:20px;max-width:72ch}
+.pill.proposed{border-color:var(--muted-foreground);color:var(--muted-foreground)}
+</style>
+<main>
+  <header style="display:flex;flex-direction:column;gap:6px">
+    <span class="hud">Settings › Usage · charts</span>
+    <h1>Where a number reads better as a chart</h1>
+    <p class="lede">Three proposals for the usage reports, with sample numbers only. Charts are plain elements in the app's tokens, no chart library, like the impact rings and the Overview graph.</p>
+  </header>
+  <section class="card rec">
+    <h2>A. Copilot usage week by week<span class="pill">built · ADR-236</span></h2>
+    <div class="meta">
+      <div><b>Where</b>Settings › Usage › Copilot usage</div>
+      <div><b>Before</b>Four numbers for one week, arrows to the others</div>
+      <div><b>Decision</b>Did a change (fewer MCP tools) really lower the use</div>
+    </div>
+    <div class="legend"><span><i style="background:var(--chart-1)"></i>Other tokens in</span><span><i style="background:var(--chart-2)"></i>Tool definitions</span></div>
+    <div class="chart" id="trend"></div>
+    <p class="sample">Sample: four weeks ago some MCP tools were cut, and the share of tool definitions fell from about 46% to 30%.</p>
+  </section>
+  <section class="card">
+    <h2>B. Bars in the ranked lists<span class="pill">built · ADR-236</span></h2>
+    <div class="meta">
+      <div><b>Where</b>The same section, "Tasks and sessions" and "Tools"</div>
+      <div><b>Before</b>Numbers on the right, compared in one's head</div>
+      <div><b>Decision</b>Which task or tool took most of the week</div>
+    </div>
+    <div class="cols">
+      <div><span class="hud">Tasks and sessions</span><ol class="rank" id="rank1"></ol></div>
+      <div><span class="hud">Tools</span><ol class="rank" id="rank2"></ol></div>
+    </div>
+  </section>
+  <section class="card">
+    <h2>C. Models: verified share against cost<span class="pill proposed">proposed</span></h2>
+    <div class="meta">
+      <div><b>Where</b>Settings › Usage › Models (ADR-231)</div>
+      <div><b>Before</b>A table of seven columns</div>
+      <div><b>Decision</b>Which model to pick for the next task</div>
+    </div>
+    <div class="legend"><span><i style="background:var(--chart-1)"></i>Model, 5 tasks or more</span><span><i style="border:2px solid var(--muted-foreground);background:transparent;width:8px;height:8px"></i>Too few tasks to compare</span></div>
+    <div class="chart" id="models"></div>
+    <p class="sample">Best in the top left: many verified, cheap. The table stays under the chart.</p>
+  </section>
+</main>
+<script>
+const NS="http://www.w3.org/2000/svg";
+const el=(t,a,p)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p&&p.appendChild(e);return e};
+const fmt=n=>n>=1e6?(n/1e6).toFixed(1)+"M":Math.round(n/1e3)+"k";
+function tipFor(box){const t=document.createElement("div");t.className="tip";t.hidden=true;box.appendChild(t);return{show(x,y,h){t.innerHTML=h;t.hidden=false;const bw=box.clientWidth;t.style.left=Math.min(x+12,bw-t.offsetWidth-4)+"px";t.style.top=(y-10)+"px"},hide(){t.hidden=true}}}
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+// 1. trend
+(()=>{
+  const weeks=[[4.1,3.5],[4.6,4.0],[3.9,3.4],[5.2,4.4],[4.8,4.2],[5.5,4.7],[5.0,4.3],[2.0,4.6],[1.9,4.4],[2.1,4.9],[1.8,4.2],[2.0,4.6]].map(([d,r])=>[d*1e6,r*1e6]);
+  const box=document.getElementById("trend"),W=860,H=260,m={l:44,r:12,t:12,b:28};
+  const svg=el("svg",{viewBox:`0 0 ${W} ${H}`,role:"img","aria-label":"Tokens in over 13 weeks, tool definitions set apart"},box);
+  const max=12e6,iw=W-m.l-m.r,ih=H-m.t-m.b,y=v=>m.t+ih-v/max*ih,bw=iw/weeks.length;
+  for(const v of [0,4e6,8e6,12e6]){el("line",{x1:m.l,x2:W-m.r,y1:y(v),y2:y(v),stroke:css("--border")},svg);el("text",{x:m.l-8,y:y(v)+4,"text-anchor":"end"},svg).textContent=v?fmt(v):"0"}
+  const tip=tipFor(box);
+  weeks.forEach(([d,r],i)=>{
+    const x=m.l+i*bw+bw*.22,w=bw*.56;
+    el("rect",{x,y:y(d),width:w,height:y(0)-y(d),fill:css("--chart-2")},svg);
+    el("rect",{x,y:y(d+r),width:w,height:y(d)-y(d+r)-2,rx:3,fill:css("--chart-1")},svg);
+    const lbl=i===11?"now":`−${11-i}`;el("text",{x:x+w/2,y:H-8,"text-anchor":"middle"},svg).textContent=lbl;
+    const hit=el("rect",{x:m.l+i*bw,y:m.t,width:bw,height:ih,fill:"transparent"},svg);
+    hit.addEventListener("mousemove",e=>{const b=box.getBoundingClientRect();tip.show(e.clientX-b.left,e.clientY-b.top,`${i===11?"Last 7 days":(11-i)+" weeks before"}<br>in ${fmt(d+r)}<br>definitions ${Math.round(d/(d+r)*100)}%`)});
+    hit.addEventListener("mouseleave",tip.hide);
+  });
+  const xm=m.l+7*bw;el("line",{x1:xm,x2:xm,y1:m.t,y2:y(0),stroke:css("--muted-foreground"),"stroke-dasharray":"3 3"},svg);
+  el("text",{x:xm+6,y:m.t+10},svg).textContent="fewer MCP tools";
+  el("text",{x:m.l+6*bw+bw/2,y:y(10.2e6)-6,"text-anchor":"middle"},svg).textContent="46%";
+  el("text",{x:m.l+11*bw+bw/2,y:y(6.6e6)-6,"text-anchor":"middle"},svg).textContent="30%";
+})();
+
+// 2. ranks
+const fill=(id,rows,unit)=>{const max=rows[0][1];document.getElementById(id).innerHTML=rows.map(([n,v])=>`<li><span class="name" title="${n}">${n}</span><span class="n">${fmt(v)} ${unit}</span><span class="bar"><span style="width:${v/max*100}%"></span></span></li>`).join("")};
+fill("rank1",[["Add retry to payment client",2.9e6],["Supervisor",1.6e6],["Fix flaky order test",0.9e6],["Session in billing-api",0.55e6],["Upgrade Spring Boot",0.4e6]],"tokens");
+fill("rank2",[["trackwall · get_logs",410e3],["view",260e3],["bash",190e3],["trackwall · search_code",120e3],["gitlab · get_merge_request",60e3]],"tokens");
+
+// 3. models
+(()=>{
+  const rows=[["gpt-5.2",14,.79,2.1],["sonnet-4.6",9,.67,3.4],["mai-code-1.1-flash",22,.45,0.9],["opus-4.8",3,1,6.8]];
+  const box=document.getElementById("models"),W=860,H=280,m={l:48,r:24,t:14,b:36};
+  const svg=el("svg",{viewBox:`0 0 ${W} ${H}`,role:"img","aria-label":"Models: share of verified tasks and cost per verified task"},box);
+  const iw=W-m.l-m.r,ih=H-m.t-m.b,x=v=>m.l+v/8*iw,y=v=>m.t+ih-v*ih;
+  for(const v of [0,.25,.5,.75,1]){el("line",{x1:m.l,x2:W-m.r,y1:y(v),y2:y(v),stroke:css("--border")},svg);el("text",{x:m.l-8,y:y(v)+4,"text-anchor":"end"},svg).textContent=v*100+"%"}
+  for(const v of [0,2,4,6,8])el("text",{x:x(v),y:H-16,"text-anchor":"middle"},svg).textContent=v;
+  el("text",{x:m.l+iw/2,y:H-2,"text-anchor":"middle"},svg).textContent="AI credits per verified task →";
+  const tip=tipFor(box);
+  rows.forEach(([n,t,v,c])=>{
+    const few=t<5,cx=x(c),cy=y(v);
+    el("circle",{cx,cy,r:6,fill:few?"none":css("--chart-1"),stroke:few?css("--muted-foreground"):css("--card"),"stroke-width":2},svg);
+    const lt=el("text",{x:cx+(cx>W-180?-12:12),y:cy+4,"text-anchor":cx>W-180?"end":"start"},svg);lt.textContent=`${n} · ${t} tasks`;lt.style.fill=css("--foreground");
+    const hit=el("circle",{cx,cy,r:16,fill:"transparent"},svg);
+    hit.addEventListener("mousemove",e=>{const b=box.getBoundingClientRect();tip.show(e.clientX-b.left,e.clientY-b.top,`${n}<br>${t} tasks, ${Math.round(v*100)}% verified<br>${c} credits per verified task${few?"<br>too few tasks":""}`)});
+    hit.addEventListener("mouseleave",tip.hide);
+  });
+})();
+</script>
+</body>
+</html>

@@ -20,12 +20,19 @@ export function workName(work: UsageWork): string {
   }
 }
 
-/** "Oct 28 – Nov 4", in the viewer's time zone; `to` is the moment the week ended, so its own day is the last one. */
+/** "Nov 4", a day in the viewer's time zone. */
+function shortDay(time: number, locale: string | undefined): string {
+  return new Date(time).toLocaleDateString(locale, { month: "short", day: "numeric" });
+}
+
+/** The week's last day; `to` is the moment the week ended and not part of it, so one that ended at midnight ends the day before. */
+export function weekLastDay(report: Pick<UsageReport, "to">, locale?: string): string {
+  return shortDay(Date.parse(report.to) - 1, locale);
+}
+
+/** "Oct 28 – Nov 4", in the viewer's time zone. */
 export function weekRange(report: Pick<UsageReport, "from" | "to">, locale?: string): string {
-  const day = (iso: string) => new Date(iso).toLocaleDateString(locale, { month: "short", day: "numeric" });
-  // The end is exclusive: a week that ended at midnight ends on the day before.
-  const last = new Date(Date.parse(report.to) - 1).toISOString();
-  return `${day(report.from)} – ${day(last)}`;
+  return `${shortDay(Date.parse(report.from), locale)} – ${weekLastDay(report, locale)}`;
 }
 
 /** The share of input tokens that were tool definitions, in whole percent; `null` with no input. */
@@ -52,4 +59,9 @@ export function toolName(tool: Pick<UsageTool, "tool" | "server">): string {
 export function toolCalls(tool: UsageTool): string {
   const calls = countLabel(tool.calls, { one: "call", other: "calls" });
   return tool.failures === 0 ? calls : `${calls} · ${tool.failures} failed`;
+}
+
+/** A ranked row's bar (ADR-236): its value as a share of the list's largest, in percent. */
+export function rankShare(value: number, largest: number): number {
+  return largest <= 0 ? 0 : (value / largest) * 100;
 }
