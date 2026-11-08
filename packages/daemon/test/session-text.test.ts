@@ -37,6 +37,7 @@ const task: Task = {
   proposedBy: { session: null, supervisor: true, task: null },
   model: null,
   approvals: "ask",
+  plan: null,
   javaNavigation: false,
   sandbox: false,
   item: null,

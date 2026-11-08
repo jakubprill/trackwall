@@ -35,6 +35,7 @@ function task(id: string): Task {
     proposedBy: { session: "main", supervisor: false, task: null },
     model: null,
     approvals: "ask",
+    plan: null,
     javaNavigation: false,
     sandbox: false,
     item: null,

@@ -25,6 +25,7 @@ import { isLive, sessionStateLabel } from "@/lib/session-state";
 import { useTaskDetails } from "@/lib/use-task-details";
 import { useTaskReview } from "@/lib/use-task-review";
 import { JavaNavigationMark } from "./JavaNavigationMark.tsx";
+import { PlanApprovalNotice } from "./PlanApprovalNotice.tsx";
 import { SessionEnvironment } from "./SessionEnvironment.tsx";
 import { CopyIncludedFilesButton, HandToSupervisorButton, ResumeButton, StopButton, TaskEditorButton } from "./TaskButtons.tsx";
 import { TaskChangesView } from "./TaskChangesView.tsx";
@@ -174,6 +175,7 @@ export function TaskPanel({
         />
       )}
       <SessionNotices conn={conn} session={session} onChanged={onChanged} />
+      <PlanApprovalNotice conn={conn} task={task} session={session} onApproved={onChanged} />
       {confirmingRemoval && <TaskRemoval conn={conn} task={task} onRemoved={onRemoved} onCancel={() => setRemoving(false)} />}
       <TaskNoticeStrip
         notices={details.notices}

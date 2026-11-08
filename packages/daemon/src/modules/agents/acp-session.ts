@@ -33,7 +33,7 @@ import {
   SessionUpdateParams,
 } from "./acp-messages.ts";
 import { attachmentLabel, checkAttachments, promptBlocks } from "./acp-prompt.ts";
-import { AcpSessionInfo } from "./acp-session-info.ts";
+import { AcpSessionInfo, AGENT_MODE } from "./acp-session-info.ts";
 import { toolCallFiles, toolCallLines, toolCallPatch, workingDirectoryNames } from "./acp-tool-call.ts";
 import type { AgentSession } from "./agent-session.ts";
 import { type CopilotHookOutput, situationOutput } from "./copilot-hook-output.ts";
@@ -99,6 +99,11 @@ export interface AcpSessionOptions {
    * daemon sends it, not the user, as `--interactive` in a terminal, so the end of its turn is reported (ADR-68).
    */
   firstMessage: string | undefined;
+  /**
+   * The mode the agent switches to once the session is ready, before the first message (a task's Plan mode, ADR-227);
+   * `undefined` leaves the agent's own. A mode the agent does not offer fails the start.
+   */
+  mode: string | undefined;
   environment: SessionEnvironment;
   /** The model Trackwall started it on (ADR-206); `null` when it passed none. */
   model: string | null;
@@ -230,6 +235,8 @@ export class AcpSession implements AgentSession {
     } finally {
       clearInterval(watch);
     }
+    // Before the session is ready, so no message, the first or the user's, reaches the agent in another mode.
+    if (this.#o.mode !== undefined) await this.setMode(this.#o.mode);
     this.#ready = true;
     this.#report("Input", "session ready");
     // Before anything the user wrote while the session started: the day start's briefing comes first.
@@ -373,6 +380,17 @@ export class AcpSession implements AgentSession {
       throw new DomainError("bad_request", `the agent did not switch the mode${err instanceof AcpError ? ` (ACP error ${err.code})` : ""}`);
     }
     this.#infoChanged(this.#info.settings(ConfigOptionsResult.safeParse(result).data?.configOptions));
+  }
+
+  /**
+   * The user approved the plan the agent wrote in Plan mode (ADR-227): the agent switches to Agent mode and gets
+   * `prompt` as the user's message. Refused while a turn runs, since a plan still being written is not the one the user read.
+   */
+  async approvePlan(prompt: string): Promise<void> {
+    if (this.#turn !== undefined || this.#queued.length > 0)
+      throw new DomainError("bad_request", "the agent is still working; approve the plan once its turn ends");
+    await this.setMode(AGENT_MODE);
+    this.say(prompt);
   }
 
   /** A conversation view: all entries first, then the changed ones; `closed` when the session disappears. */

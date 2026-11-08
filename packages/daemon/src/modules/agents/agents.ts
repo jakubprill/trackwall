@@ -111,6 +111,7 @@ import { supervisorSituation } from "./supervisor-situation.ts";
 import { TaskBoardItem, type TaskBoardItemDeps } from "./task-board-item.ts";
 import { TaskCoordination } from "./task-coordination.ts";
 import { TaskFile } from "./task-file.ts";
+import { PLAN_APPROVED_MESSAGE } from "./task-plan.ts";
 import { TaskProposals } from "./task-proposals.ts";
 import { TaskReviews, type UnreadReview } from "./task-reviews.ts";
 import { type RoundsVcs, TASK_ROUNDS_FILE, TaskRoundList } from "./task-rounds.ts";
@@ -607,6 +608,8 @@ export class Agents {
         title,
         proposedBy,
         model,
+        // Plan first is a choice of the New session form only (ADR-227).
+        planFirst: false,
         approvals,
         javaNavigation: false,
         item,
@@ -699,6 +702,12 @@ export class Agents {
    */
   async reportSummary(caller: string | null, report: ReportedSummary): Promise<Task> {
     const own = this.#ownTask(caller, "can report a result");
+    // A result would hand the task over for review (ADR-213) before the user approved what it is to do (ADR-227).
+    if (this.#tasks.task(own.task).plan === "planning")
+      throw new DomainError(
+        "bad_request",
+        "your plan waits for the user's approval: end your turn with the plan, and report the result once it is implemented",
+      );
     const reported = this.#tasks.setSummary(own.task, report);
     this.#autoReviews.afterReport(own.task);
     this.#boardItems.handedOver(reported);
@@ -846,6 +855,7 @@ export class Agents {
     prompt: string,
     {
       approvals = "ask",
+      planFirst = false,
       model = null,
       javaNavigation = false,
       item = null,
@@ -857,7 +867,7 @@ export class Agents {
     await this.#assertOnBoard(item);
     // `task` throws `not_found` for a task that is not on the list, before a worktree exists.
     const proposedBy = handoffFrom === null ? null : { session: null, supervisor: false, task: this.task(handoffFrom).id };
-    const origin = { id: randomUUID(), title, proposedBy, model, approvals, javaNavigation, item, view, change: null };
+    const origin = { id: randomUUID(), title, proposedBy, model, approvals, planFirst, javaNavigation, item, view, change: null };
     const task = await this.#tasks.create(repo, prompt, origin);
     // The user handed the repo the work from the Impact tab, so the daemon's proposal for it is done (ADR-198).
     if (handoffFrom !== null) this.#impactProposals.replacedBy(handoffFrom, [repo]);
@@ -1182,6 +1192,7 @@ export class Agents {
       args,
       load: start.load,
       firstMessage: start.firstMessage,
+      mode: start.mode,
     });
     this.#listed(started);
     return started.session.conversation;
@@ -1312,6 +1323,19 @@ export class Agents {
     if (!this.#sessions.isRunning(session)) throw new DomainError("bad_request", "the session is no longer running");
     session.say(text, attachments);
     return this.#sessions.view(session);
+  }
+
+  /**
+   * The user approves the plan of task `id` (ADR-227): its running session switches to Agent mode and gets the prompt
+   * to implement the plan, and the task's plan counts as approved from then on, so a resume starts in Agent mode.
+   */
+  async approvePlan(id: string): Promise<Task> {
+    const task = this.#tasks.task(id);
+    if (task.plan !== "planning") throw new DomainError("bad_request", `task ${task.branch} has no plan waiting for approval`);
+    const running = this.#sessions.runningOfTask(id);
+    if (!(running instanceof AcpSession)) throw new DomainError("bad_request", "the task has no running conversation; resume it first");
+    await running.approvePlan(PLAN_APPROVED_MESSAGE);
+    return this.#tasks.planApproved(id);
   }
 
   /** Stops the turn of a session in the conversation view (ADR-107). */

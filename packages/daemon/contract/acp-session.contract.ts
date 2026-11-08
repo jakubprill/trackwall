@@ -10,6 +10,8 @@ import {
   type Session,
   type SlashCommand,
 } from "@trackwall/protocol";
+import { AGENT_MODE, PLAN_MODE } from "../src/modules/agents/acp-session-info.ts";
+import { PLAN_APPROVED_MESSAGE } from "../src/modules/agents/task-plan.ts";
 import { viewer, waitFor } from "../test/support/agents.ts";
 import { startRealCopilotDaemon } from "./support/real-copilot.ts";
 import { commitEscapeScript, ESCAPE_COMMAND, sandboxRefusedEverything } from "./support/sandbox-escape.ts";
@@ -438,6 +440,50 @@ describe("a task in the conversation view with the real Copilot CLI (ADR-137)", 
     expect(last).toMatchObject({ model: TASK_MODEL });
     // The conversation goes on: the model gets the first prompt again with the review.
     expect(JSON.stringify(last)).toContain("add a login test");
+    await agents.stop(resumed);
+  });
+});
+
+describe("a task that plans first with the real Copilot CLI (ADR-227)", () => {
+  test("the task starts in Plan mode, where Copilot CLI refuses the model's file edit even with auto approvals, a resume goes on in Plan mode, and once the plan is approved the agent works in Agent mode, where the edit goes through", async () => {
+    const { agents } = daemon.facade;
+    const edit = (file: string) => ({ tool: "edit", arguments: { path: file, old_str: "# shop", new_str: "# the shop" } });
+    model.reply(edit(join(daemon.projects, "shop", "README.md")), { text: "Plan: give README.md a friendlier title." });
+
+    const task = await agents.createTask("shop", "make the title friendlier", { view: "conversation", approvals: "auto", planFirst: true });
+    const session = taskSessionOf(task.id);
+    const view = conversationOf(session);
+    await endOfTurn(session);
+
+    expect(view.info().mode?.current).toBe(PLAN_MODE);
+    const [planning, planned] = model.requests().slice(-2);
+    // Copilot CLI marks a prompt in Plan mode for the model.
+    expect(planning?.lastUserText).toContain("[[PLAN]] make the title friendlier");
+    expect(planning?.lastUserText).toContain("Plan first");
+    // Copilot CLI's own refusal, which over ACP it ends with the advice to call exit_plan_mode, the step Trackwall's approval takes.
+    expect(planned?.toolResults.join("\n")).toContain("Plan mode does not permit changes");
+    expect(readFileSync(join(task.worktree, "README.md"), "utf8")).toStartWith("# shop");
+    view.detach();
+    await agents.stop(session);
+
+    // A loaded conversation starts in Agent mode, so the daemon switches it to Plan again while the plan waits.
+    await agents.resumeTask(task.id);
+    const resumed = taskSessionOf(task.id);
+    await inState(resumed, "Input");
+    const resumedView = conversationOf(resumed);
+    await resumedView.infoUntil((i) => i.mode?.current === PLAN_MODE, "the plan mode after the resume");
+
+    model.reply(edit(join(task.worktree, "README.md")), { text: "Implemented the plan." });
+    expect(await agents.approvePlan(task.id)).toMatchObject({ plan: "approved" });
+    await resumedView.infoUntil((i) => i.mode?.current === AGENT_MODE, "the agent mode");
+    await resumedView.until((entries) => entries.some((e) => e.kind === "agent" && e.text === "Implemented the plan."), "the answer");
+    await endOfTurn(resumed);
+
+    const implementing = model.requests().at(-2)?.lastUserText;
+    expect(implementing).toEndWith(PLAN_APPROVED_MESSAGE);
+    expect(implementing).not.toContain("[[PLAN]]");
+    expect(readFileSync(join(task.worktree, "README.md"), "utf8")).toStartWith("# the shop");
+    resumedView.detach();
     await agents.stop(resumed);
   });
 });

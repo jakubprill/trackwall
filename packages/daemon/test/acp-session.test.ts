@@ -11,7 +11,7 @@ const RUNNING: RunState = { runId: "r1", startedAt: "2026-10-28T08:00:00.000Z", 
 
 /** A session on an agent this test plays by hand: what the session wrote, and lines the agent sends back. */
 function session(
-  o: { prompt?: () => string | undefined; situation?: () => string | undefined; firstMessage?: string; load?: string } = {},
+  o: { prompt?: () => string | undefined; situation?: () => string | undefined; firstMessage?: string; load?: string; mode?: string } = {},
 ) {
   const written: { jsonrpc?: string; id?: number; method?: string; params?: unknown; result?: unknown }[] = [];
   const events: SessionEvent[] = [];
@@ -25,6 +25,7 @@ function session(
     cwd: "/projects",
     load: o.load,
     firstMessage: o.firstMessage,
+    mode: o.mode,
     environment: { variables: [], secrets: [], agentSecrets: [], profile: null, problem: null },
     model: null,
     run: () => run,
@@ -630,5 +631,51 @@ describe("the agent's mode, context use and commands in the conversation view", 
       "the agent does not offer this mode",
     );
     expect(s.written).toHaveLength(asked);
+  });
+
+  test("a start in a mode switches the agent to it before the first message goes (ADR-227)", async () => {
+    const s = session({ firstMessage: "Fix the login", mode: PLAN });
+    const started = s.acp.start();
+    s.answer("initialize", { protocolVersion: 1 });
+    await s.settle();
+    s.answer("session/new", { sessionId: "c1", configOptions: modes(AGENT) });
+    await s.settle();
+
+    expect(s.written.map((m) => m.method)).toEqual(["initialize", "session/new", "session/set_config_option"]);
+    s.answer("session/set_config_option", { configOptions: modes(PLAN) });
+    await started;
+    expect(s.written.at(-1)).toMatchObject({ method: "session/prompt", params: { prompt: [{ type: "text", text: "Fix the login" }] } });
+  });
+
+  test("a start in a mode the agent does not offer fails", async () => {
+    const s = session({ mode: PLAN });
+    const started = s.acp.start();
+    s.answer("initialize", { protocolVersion: 1 });
+    await s.settle();
+    s.answer("session/new", { sessionId: "c1", configOptions: modes(AGENT).map((o) => ({ ...o, options: [] })) });
+
+    await expect(started).rejects.toThrow("the agent does not offer this mode");
+  });
+
+  test("approving a plan switches to Agent mode and sends the approval as the user's message, but not while a turn runs (ADR-227)", async () => {
+    const s = session({ firstMessage: "Fix the login", mode: PLAN });
+    const started = s.acp.start();
+    s.answer("initialize", { protocolVersion: 1 });
+    await s.settle();
+    s.answer("session/new", { sessionId: "c1", configOptions: modes(AGENT) });
+    await s.settle();
+    s.answer("session/set_config_option", { configOptions: modes(PLAN) });
+    await started;
+
+    await expect(s.acp.approvePlan("Go ahead.")).rejects.toThrow("the agent is still working");
+    s.answer("session/prompt", { stopReason: "end_turn" });
+    await s.settle();
+    const approved = s.acp.approvePlan("Go ahead.");
+    await s.settle();
+    expect(s.written.at(-1)).toMatchObject({ method: "session/set_config_option", params: { value: AGENT } });
+    s.answer("session/set_config_option", { configOptions: modes(AGENT) });
+    await approved;
+
+    expect(s.written.at(-1)).toMatchObject({ method: "session/prompt", params: { prompt: [{ type: "text", text: "Go ahead." }] } });
   });
 });
