@@ -68,6 +68,7 @@ import {
 } from "./round-commits.ts";
 import { StatusMemo, type TimedStatus } from "./status-memo.ts";
 import { syncRepo } from "./sync.ts";
+import { trialMergeConflicts } from "./trial-merge.ts";
 import { type RepoUnpushed, readUnpushed } from "./unpushed.ts";
 import { addCheckout, addWorktree, defaultBase, deleteBranch, pendingWork, removeWorktree } from "./worktree.ts";
 import { changedPaths, workingTreeChanges, worktreeChanges } from "./worktree-changes.ts";
@@ -266,6 +267,11 @@ export class Vcs {
   /** The paths of the worktree that differ from `base`, as the task's Changes count them (ADR-209, ADR-227). */
   async changedPaths(dir: string, base: string): Promise<{ paths: string[]; truncated: boolean }> {
     return changedPaths(dir, base, await this.scratch());
+  }
+
+  /** The files in which merging the branches `ours` and `theirs` of `repoDir` would conflict; `null` when git cannot tell (ADR-230). */
+  async trialMergeConflicts(repoDir: string, ours: string, theirs: string): Promise<string[] | null> {
+    return trialMergeConflicts(repoDir, ours, theirs, await this.scratch());
   }
 
   async worktreeFingerprint(dir: string, base: string): Promise<string> {
