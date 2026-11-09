@@ -5,6 +5,7 @@ import {
   type AgentTaskChanges,
   type ApproveChangeRequest,
   type AutoReview,
+  type AutoReviewKind,
   type AutoReviewSettings,
   CHANGE_PROMPTS_TOO_LONG,
   type ChangedEndpoints,
@@ -85,6 +86,7 @@ import { MiseTrustNotices, type TrustRecipient, trustRecipientOf } from "./mise-
 import { modelArgs, modelOfArgs } from "./model-args.ts";
 import { proposedByOf, proposerExists, proposerKeyOf, proposerKind, proposerOf } from "./proposer.ts";
 import { readRequestPrompt } from "./read-request-prompt.ts";
+import { type RulesVcs, readRepoRules } from "./repo-rules.ts";
 import {
   PLAIN_START,
   type ResumableSession,
@@ -203,8 +205,8 @@ export interface AgentsDeps {
   /** Stops a task's reproduction check and removes its copy before the task ends (`reproduction`, ADR-227). */
   stopReproductionCheck: (task: string) => Promise<void>;
   repos: AgentsRepos;
-  /** Task worktrees and branches (ADR-31), and the round commits in them (ADR-168). */
-  vcs: TasksVcs & RoundsVcs;
+  /** Task worktrees and branches (ADR-31), the round commits in them (ADR-168), and the repo's rules at a task's base (ADR-234). */
+  vcs: TasksVcs & RoundsVcs & RulesVcs;
   /**
    * The daemon's state directory; sessions keep their files in `sessions/<session>/` and tasks their list in `tasks.json`
    * (worktrees saved before ADR-84 are in `worktrees/<repo>/`, newer ones in the task worktrees folder of `workspace`).
@@ -387,7 +389,11 @@ export class Agents {
         hasTask: (id) => this.#tasks.find(id) !== undefined,
         changes: async (id, maxPatchBytes) => {
           const { files, patch, truncated } = await this.#tasks.agentChanges(id, maxPatchBytes, []);
-          return { fileCount: files.length, patch, truncated };
+          return { paths: files.map((file) => file.path), patch, truncated };
+        },
+        rules: (id, changed) => {
+          const { worktree, base } = this.#tasks.task(id);
+          return readRepoRules(deps.vcs, worktree, base, changed);
         },
       },
       launch: async ({ repo, task }) => {
@@ -1025,19 +1031,19 @@ export class Agents {
     return this.#rounds.pushWithRoundsSquashed(id, push);
   }
 
-  /** The user's automatic review of a task's changes (ADR-182), or the one running. */
-  startAutoReview(id: string): Promise<AutoReview> {
-    return this.#autoReviews.start(id);
+  /** The user's automatic review of a task's changes (ADR-182) or check against the repo's rules (ADR-234), or the one running. */
+  startAutoReview(id: string, kind: AutoReviewKind): Promise<AutoReview> {
+    return this.#autoReviews.start(id, kind);
   }
 
-  /** The task's last automatic review (ADR-182); `null` without one. */
-  autoReview(id: string): AutoReview | null {
-    return this.#autoReviews.get(id);
+  /** The task's last automatic review of the kind (ADR-182, ADR-234); `null` without one. */
+  autoReview(id: string, kind: AutoReviewKind): AutoReview | null {
+    return this.#autoReviews.get(id, kind);
   }
 
-  /** Stops the task's running automatic review (ADR-182). */
-  cancelAutoReview(id: string): Promise<AutoReview | null> {
-    return this.#autoReviews.cancel(id);
+  /** Stops the task's running automatic review of the kind (ADR-182, ADR-234). */
+  cancelAutoReview(id: string, kind: AutoReviewKind): Promise<AutoReview | null> {
+    return this.#autoReviews.cancel(id, kind);
   }
 
   /** Other tasks of the same repo that change the same files (ADR-44). */

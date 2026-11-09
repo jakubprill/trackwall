@@ -1025,7 +1025,7 @@ describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
       SESSION_MS,
     );
 
-  // Six steps of SESSION_MS, more than the file's limit: the start and five ended turns.
+  // Seven steps of SESSION_MS, more than the file's limit: the start, five ended turns and the task's input box.
   test(
     "the prompt the daemon types is the agent's next message, and the message and updates reach it through the tools",
     async () => {
@@ -1052,8 +1052,13 @@ describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
       const task = await agents.approveProposal(proposal.id, "add a login test", null, "ask", "terminal");
       const session = agents.sessions().sessions.find((s) => s.task === task.id);
       if (session === undefined) throw new Error("the task has no session");
+      // Opened now, so that Copilot CLI has redrawn the task in the reference's size before the message is sent.
+      const taskWindow = openWindow(session.id);
       await turnsEnded(session.id, 1);
       await turnsEnded(main.id, 2);
+      // The daemon types only once Copilot CLI has drawn the task's input box again after agentStop (ADR-68); on a slow
+      // runner that can come after the proposer's turn has ended, and the message would be queued instead.
+      await untilInputBox(taskWindow, "empty");
 
       // A message with what the input box would mangle: an @, a leading slash and a line break.
       const text = "/keep the old endpoint\n@Deprecated callers still use it";
@@ -1093,7 +1098,7 @@ describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
       expect(requests[readMessages]?.system).toContain(TASK_MESSAGE_RULE);
       expect(requests.at(-1)?.lastUserText).toEndWith(updatesPrompt ?? "-");
     },
-    7 * SESSION_MS,
+    8 * SESSION_MS,
   );
 });
 

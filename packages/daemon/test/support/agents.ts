@@ -46,7 +46,7 @@ export function makeAgents(
   worktreesDir: () => string = () => join(home, "task-worktrees"),
   miseEnv: AgentsDeps["miseEnv"] = async () => ({ vars: {}, secretNames: [], secretValues: [], profile: null, problem: null }),
   javaNavigation: () => JavaNavigationSettings | null = () => null,
-  autoReview: () => AutoReviewSettings = () => ({ afterReport: false }),
+  autoReview: () => AutoReviewSettings = () => ({ afterReport: false, rulesAfterReport: false }),
   sandbox: () => SandboxSettings | null = () => ({ tasks: "off" }),
   supervisorModel: () => string | null = () => null,
 ) {

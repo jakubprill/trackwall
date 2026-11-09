@@ -15,16 +15,19 @@ Move between views with the keyboard, and spread Trackwall over several windows 
 - Any view in its own window, for example the session grid on one monitor and "Repos" on another.
 - Windows that come back where you left them when Trackwall starts again.
 - Each window at its own zoom: larger text on a laptop, more on screen on an ultrawide.
+- A dark or light theme, or the one your system uses.
 
 ## How it works
 
 The bar at the left edge of the window switches views, as in VS Code: "Home", "Repos", "Sessions", "Overview", "Plan" and "[Flow](/features/flow)" at the top, "Settings" at the bottom. Hover over an icon to see the view's name and key.
 
-"Settings" lists its categories on the left: "Workspace" (the projects folder, the task worktrees folder and the local config backup), "Repo hosts", "Agents" (connecting Copilot CLI and installing [Java navigation](/features/java-navigation)), "Usage" ([Copilot usage](/features/copilot-usage), [Model statistics](/features/model-stats) and the [MCP calls](/features/mcp-calls) agents made), "App" (start at sign-in, updates and how the Home scene looks), "Files" (every file Trackwall reads or writes, see [Config files](/features/config-files)) and "Diagnostics" (the doctor, the state of the daemon and Trackwall's own errors). Click a category to see its settings. In a narrow window the categories sit in a row above them.
+"Settings" lists its categories on the left: "Workspace" (the projects folder, the task worktrees folder and the local config backup), "Repo hosts", "Agents" (connecting Copilot CLI and installing [Java navigation](/features/java-navigation)), "Usage" ([Copilot usage](/features/copilot-usage), [Model statistics](/features/model-stats) and the [MCP calls](/features/mcp-calls) agents made), "App" (start at sign-in, updates, the theme and how the Home scene looks), "Files" (every file Trackwall reads or writes, see [Config files](/features/config-files)) and "Diagnostics" (the doctor, the state of the daemon and Trackwall's own errors). Click a category to see its settings. In a narrow window the categories sit in a row above them.
 
 Any view can open in a new window: right-click its icon and choose "Open in new window", press Ctrl+Shift with the view's digit, or choose "New window" in the tray. Every window has its own view bar, switches views on its own and shows the same sessions and repos live. Each window's title names its view ("Sessions – Trackwall"), so you can tell them apart in the taskbar.
 
 Ctrl+= and Ctrl+- make everything in a window larger or smaller, from half to double size, and Ctrl+0 brings it back to normal. Each window keeps its own zoom, also after Trackwall starts again.
+
+Trackwall is dark unless you choose otherwise. In Settings › App › Theme, "Light" turns every window light at once, and "Same as the system" follows Windows or macOS, also when the system switches between light and dark during the day. The title bar and the see-through window background follow the theme too. Session terminals and the 3D scene on Home stay dark in the light theme: agents draw their screens for a dark background, and the scene's glow would fade on a light one.
 
 A window opens on the monitor, at the size and position its predecessor had. When you start Trackwall again, the extra windows that were open when you quit come back on their monitors with the same view and session layout. A window you closed yourself stays closed.
 
@@ -56,4 +59,6 @@ A window opens on the monitor, at the size and position its predecessor had. Whe
 - The tray panel keeps its size; zoom changes only Trackwall's windows.
 - The zoom keys belong to the window, so they do not reach a session's terminal.
 - A new window that takes the place of a closed one starts at the closed window's zoom, as it does at its position.
+- Trackwall in a browser tab has the same theme setting, kept by that browser.
+- Diagrams in a repo's README are drawn in the theme's colours.
 - On macOS the menu bar has the views and the zoom under View, Settings… under Trackwall, and New Window and the list of open windows under Window.

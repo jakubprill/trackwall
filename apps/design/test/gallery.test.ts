@@ -26,8 +26,12 @@ function declarations(css: string, block: string): Map<string, string> {
 /** An app colour without the window-effect alpha (`/ var(--surface-alpha, 1)`), which the gallery has no use for. */
 const opaque = (value: string) => value.replace(/ \/ var\(--[a-z-]+, 1\)/, "");
 
+const LIGHT = '[data-theme="light"]';
 const GALLERY_TOKENS = declarations(TOKENS_CSS, ":root");
-const APP_COLOURS = declarations(APP_CSS, ":root");
+const GALLERY_LIGHT = declarations(TOKENS_CSS, LIGHT);
+// The app's dark theme is also a dark island in the light one (ADR-235), hence the selector list.
+const APP_COLOURS = declarations(APP_CSS, ':root,\n[data-theme="dark"]');
+const APP_LIGHT = declarations(APP_CSS, LIGHT);
 const APP_THEME = declarations(APP_CSS, "@theme inline");
 
 test("every token of the gallery has the value the app gives it", () => {
@@ -36,6 +40,10 @@ test("every token of the gallery has the value the app gives it", () => {
     const app = APP_COLOURS.get(token) ?? APP_THEME.get(token);
     expect({ token, value }).toEqual({ token, value: opaque(app ?? "missing in packages/ui/src/index.css") });
   }
+});
+
+test("the gallery's light theme has the app's light values, every one of them", () => {
+  expect(GALLERY_LIGHT).toEqual(new Map([...APP_LIGHT].map(([token, value]) => [token, opaque(value)])));
 });
 
 test("the gallery has every token of the app's :root outside the terminal palette", () => {

@@ -106,9 +106,16 @@ export class Board {
     });
   }
 
-  update(id: string, change: BoardItemChange): Promise<BoardItem> {
+  /**
+   * The user's change. With `expectedUpdatedAt` it is written only onto that version of the item (ADR-232): a form the
+   * user opened before an agent's or the daemon's write would otherwise put its stale fields back over the newer ones.
+   */
+  update(id: string, change: BoardItemChange, expectedUpdatedAt?: string): Promise<BoardItem> {
     return this.#write(async (items, dir) => {
-      const item: BoardItem = { ...found(items, id), ...change, updatedAt: new Date().toISOString() };
+      const current = found(items, id);
+      if (expectedUpdatedAt !== undefined && current.updatedAt !== expectedUpdatedAt)
+        throw new DomainError("item_changed", `the item changed since you read it (at ${current.updatedAt}); nothing was saved`);
+      const item: BoardItem = { ...current, ...change, updatedAt: nextUpdatedAt(current) };
       save(dir, item);
       return item;
     });
@@ -121,7 +128,7 @@ export class Board {
       if (current.kind === "project") throw new DomainError("bad_request", "an agent changes items, not projects; ask the user");
       if (change.column !== undefined && current.column !== "ideas" && current.column !== "ready")
         throw new DomainError("bad_request", `item ${id} is ${current.column}; only the user moves it from there`);
-      const item: BoardItem = { ...current, ...change, updatedAt: new Date().toISOString() };
+      const item: BoardItem = { ...current, ...change, updatedAt: nextUpdatedAt(current) };
       save(dir, item);
       return item;
     });
@@ -135,7 +142,7 @@ export class Board {
     return this.#write(async (items, dir) => {
       const current = items.find((it) => it.id === id);
       if (current === undefined || current.kind === "project" || !taskWorkMoves(current.column, column)) return null;
-      const item: BoardItem = { ...current, column, updatedAt: new Date().toISOString() };
+      const item: BoardItem = { ...current, column, updatedAt: nextUpdatedAt(current) };
       save(dir, item);
       return item;
     });
@@ -150,7 +157,7 @@ export class Board {
         throw new DomainError("bad_request", "an item cannot go under itself or under an item below it");
       const siblings = childrenOf(items, parent).filter((it) => it.id !== id);
       const order = placeBefore(dir, siblings, before);
-      const item: BoardItem = { ...current, parent, order, updatedAt: new Date().toISOString() };
+      const item: BoardItem = { ...current, parent, order, updatedAt: nextUpdatedAt(current) };
       save(dir, item);
       return item;
     });
@@ -217,6 +224,16 @@ async function readItem(path: string, id: string): Promise<{ item: BoardItem } |
 
 function save(dir: string, item: BoardItem): void {
   writeFileAtomic(join(dir, itemFileName(item.id)), writeItemFile(item));
+}
+
+/**
+ * The time of a change, later than the item's last one even within the same millisecond or after the clock stepped back:
+ * `updatedAt` is the version a user's save names (ADR-232), so two writes must never share it.
+ */
+function nextUpdatedAt(current: BoardItem): string {
+  const previous = Date.parse(current.updatedAt);
+  const now = Date.now();
+  return new Date(Number.isNaN(previous) || now > previous ? now : previous + 1).toISOString();
 }
 
 function found(items: readonly BoardItem[], id: string): BoardItem {

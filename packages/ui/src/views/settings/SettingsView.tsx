@@ -26,6 +26,7 @@ import { RetryModelSurface } from "./RetryModelSurface.tsx";
 import { SessionProfileSurface } from "./SessionProfileSurface.tsx";
 import { StartAtSignInSurface } from "./StartAtSignInSurface.tsx";
 import { SupervisorModelSurface } from "./SupervisorModelSurface.tsx";
+import { ThemeSurface } from "./ThemeSurface.tsx";
 import { UpdatesSurface } from "./UpdatesSurface.tsx";
 import { VsCodeExtensionSurface } from "./VsCodeExtensionSurface.tsx";
 import { WorkspaceFolders } from "./WorkspaceFolders.tsx";
@@ -132,6 +133,8 @@ function Section({
       return <VsCodeExtensionSurface conn={conn} />;
     case "updates":
       return <UpdatesSurface handle={update} />;
+    case "theme":
+      return <ThemeSurface />;
     case "home-scene":
       return <HomeSceneSurface />;
     case "daemon":

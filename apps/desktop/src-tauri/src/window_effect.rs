@@ -15,7 +15,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 use tauri::webview::{PageLoadEvent, PageLoadPayload};
-use tauri::{AppHandle, Manager, Webview, WebviewWindow};
+use tauri::{AppHandle, Manager, Theme, Webview, WebviewWindow, Window};
 
 /// An effect the system accepted; `index.css` checks only that the attribute is present, the name is for diagnostics.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -48,10 +48,21 @@ type ApplyError = window_vibrancy::Error;
 #[cfg(not(any(windows, target_os = "macos")))]
 type ApplyError = String;
 
-/// The `--background` colour from `packages/ui/src/index.css` at about 70% opacity: Acrylic itself is light,
-/// and without darkening, text on it is hard to read.
+/// The `--background` colour of each theme in `packages/ui/src/index.css` (ADR-235) at about 70% opacity: Acrylic itself
+/// is light, and without darkening, text of the dark theme on it is hard to read; the light theme gets its paper white.
 #[cfg(windows)]
-const ACRYLIC_TINT: (u8, u8, u8, u8) = (9, 9, 11, 180);
+fn acrylic_tint(theme: Theme) -> (u8, u8, u8, u8) {
+    match theme {
+        Theme::Light => (244, 246, 248, 180),
+        _ => (9, 9, 11, 180),
+    }
+}
+
+/// The theme the window has now: its own, or the system's while it follows the system.
+#[cfg(windows)]
+fn theme_of(window: &WebviewWindow) -> Theme {
+    window.theme().unwrap_or(Theme::Dark)
+}
 
 /// Effects in the order they are tried. Mica has no performance problems but needs Windows 11. Acrylic works
 /// from Windows 10 1809, but it can stutter while dragging the window on Windows 10 1903+
@@ -59,8 +70,9 @@ const ACRYLIC_TINT: (u8, u8, u8, u8) = (9, 9, 11, 180);
 fn candidates() -> &'static [(WindowEffect, Apply<WebviewWindow, ApplyError>)] {
     #[cfg(windows)]
     return &[
-        (WindowEffect::Mica, |w| window_vibrancy::apply_mica(w, Some(true))),
-        (WindowEffect::Acrylic, |w| window_vibrancy::apply_acrylic(w, Some(ACRYLIC_TINT))),
+        // `None`: Mica takes the window's theme, which the shell sets (`theme.rs`).
+        (WindowEffect::Mica, |w| window_vibrancy::apply_mica(w, None)),
+        (WindowEffect::Acrylic, |w| window_vibrancy::apply_acrylic(w, Some(acrylic_tint(theme_of(w))))),
     ];
     #[cfg(target_os = "macos")]
     return &[(WindowEffect::Vibrancy, |w| {
@@ -160,6 +172,21 @@ impl WindowEffects {
     pub fn reveal_pending(&self, label: &str) -> bool {
         lock(&self.0).get(label).is_some_and(|applied| !applied.is_revealed())
     }
+}
+
+/// A window whose theme changed (a choice in Settings, or the system's while it follows the system) gets Acrylic in its
+/// colour again; Mica and vibrancy follow the window's theme by themselves. Runs on the main thread (window events do).
+pub fn retint(window: &Window, theme: Theme) {
+    let effect = lock(&window.state::<WindowEffects>().0).get(window.label()).and_then(|applied| applied.effect.get().copied().flatten());
+    if effect != Some(WindowEffect::Acrylic) {
+        return;
+    }
+    #[cfg(windows)]
+    if let Err(err) = window_vibrancy::apply_acrylic(window, Some(acrylic_tint(theme))) {
+        crate::report_error!("tinting Acrylic for the {theme:?} theme: {err}");
+    }
+    #[cfg(not(windows))]
+    let _ = theme;
 }
 
 /// The script that passes the accepted effect to the UI.

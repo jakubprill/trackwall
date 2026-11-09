@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Light and system theme</title>
+<link rel="stylesheet" href="../tokens.css">
+<style>
+/*
+ * A proposal for a light theme and a theme that follows the system. The gallery tokens are the app's dark theme; the
+ * proposed light values are the mockup's own properties (`--t-*` under `.theme-light`), so nothing here redefines a
+ * token. Every frame below paints only with `--t-*`: `.theme-dark` maps them to today's tokens, `.theme-light` to the
+ * proposal, and `.island` brings the dark mapping back inside a light frame (the terminal and the 3D scene, variant A).
+ */
+.theme-dark, .island {
+  color-scheme: dark;
+  --t-bg: var(--background);
+  --t-fg: var(--foreground);
+  --t-card: var(--card);
+  --t-secondary: var(--secondary);
+  --t-muted: var(--muted);
+  --t-muted-fg: var(--muted-foreground);
+  --t-primary: var(--primary);
+  --t-primary-fg: var(--primary-foreground);
+  --t-accent: var(--accent);
+  --t-destructive: var(--destructive);
+  --t-success: var(--success);
+  --t-warning: var(--warning);
+  --t-border: var(--border);
+  --t-input: var(--input);
+  --t-ring: var(--ring);
+  --t-grid: var(--grid-line);
+  --t-group-1: var(--group-1);
+  --t-group-2: var(--group-2);
+  --t-group-3: var(--group-3);
+  --t-group-4: var(--group-4);
+  --t-glow: 0 0 8px var(--primary);
+  /* ANSI colours of the dark terminal, as in index.css. */
+  --t-ansi-blue: oklch(0.76 0.08 225);
+  --t-ansi-magenta: oklch(0.78 0.07 255);
+  --t-ansi-bright-black: oklch(0.58 0.02 240);
+}
+
+/* The proposed light theme: a cool paper white, ink instead of white text, and the accent and state colours darkened until
+   they read on it (WCAG AA, checked in the table below). */
+.theme-light {
+  color-scheme: light;
+  --t-bg: oklch(0.972 0.004 240);
+  --t-fg: oklch(0.21 0.02 250);
+  --t-card: oklch(0.995 0.002 240);
+  --t-secondary: oklch(0.925 0.01 240);
+  --t-muted: oklch(0.955 0.006 240);
+  --t-muted-fg: oklch(0.47 0.02 250);
+  --t-primary: oklch(0.5 0.11 225);
+  --t-primary-fg: oklch(0.985 0.005 230);
+  --t-accent: oklch(0.915 0.03 222);
+  --t-destructive: oklch(0.53 0.2 25);
+  --t-success: oklch(0.5 0.12 160);
+  --t-warning: oklch(0.53 0.125 65);
+  --t-border: oklch(0.35 0.03 240 / 14%);
+  --t-input: oklch(0.35 0.03 240 / 24%);
+  --t-ring: oklch(0.5 0.11 225 / 60%);
+  --t-grid: oklch(0.35 0.03 240 / 5%);
+  --t-group-1: oklch(0.52 0.17 300);
+  --t-group-2: oklch(0.55 0.18 350);
+  --t-group-3: oklch(0.5 0.16 262);
+  --t-group-4: oklch(0.56 0.14 45);
+  /* A glow is light on a dark screen; on paper it is a soft halo of the accent. */
+  --t-glow: 0 0 0 3px oklch(0.5 0.11 225 / 18%);
+  /* ANSI colours of a light terminal (variant B). */
+  --t-ansi-blue: oklch(0.48 0.12 250);
+  --t-ansi-magenta: oklch(0.5 0.14 300);
+  --t-ansi-bright-black: oklch(0.55 0.02 250);
+}
+
+body { line-height: 1.5; padding: 40px max(16px, env(safe-area-inset-right, 0px)) 80px max(16px, env(safe-area-inset-left, 0px)); background-image: linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px); background-size: 32px 32px; }
+.page { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 48px; }
+h1, h2, h3 { margin: 0; font-weight: 600; text-wrap: balance; }
+h1 { font-size: 28px; line-height: 1.2; }
+h2 { font-size: 19px; }
+h3 { font-size: 14px; }
+p { margin: 0; color: var(--muted-foreground); max-width: 78ch; }
+p b, li b { color: var(--foreground); font-weight: 600; }
+ul { margin: 0; padding-left: 18px; color: var(--muted-foreground); max-width: 78ch; }
+code { font-family: var(--font-mono); font-size: 12px; }
+a { color: var(--primary); }
+section { display: flex; flex-direction: column; gap: 14px; }
+.hud { font-family: var(--font-mono); font-size: 11px; letter-spacing: var(--tracking-hud); text-transform: uppercase; color: var(--muted-foreground); }
+.tablewrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; }
+th { font-family: var(--font-mono); font-size: 11px; letter-spacing: var(--tracking-hud); text-transform: uppercase; color: var(--muted-foreground); font-weight: 500; }
+tr:last-child td { border-bottom: 0; }
+td.num { font-family: var(--font-mono); text-align: right; }
+.pass { color: var(--success); font-family: var(--font-mono); }
+.fail { color: var(--destructive); font-family: var(--font-mono); }
+.chip-swatch { display: inline-block; width: 44px; height: 18px; border-radius: 3px; border: 1px solid var(--border); vertical-align: middle; }
+.toolbar { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+
+/* ---- The app frames: everything below paints with --t-* only. ---- */
+.frames { display: grid; grid-template-columns: repeat(auto-fit, minmax(560px, 1fr)); gap: 16px; }
+@media (max-width: 640px) { .frames { grid-template-columns: minmax(0, 1fr); } }
+.frame { border-radius: 10px; overflow: hidden; border: 1px solid var(--border); background: var(--t-bg); color: var(--t-fg); font-size: 13px; box-shadow: 0 10px 30px oklch(0 0 0 / 35%); min-width: 0; }
+.frame .titlebar { height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-bottom: 1px solid var(--t-border); background: var(--t-card); }
+.frame .titlebar i { width: 10px; height: 10px; border-radius: 99px; background: var(--t-secondary); display: inline-block; }
+.frame .titlebar span { margin-left: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--t-muted-fg); letter-spacing: var(--tracking-hud); text-transform: uppercase; }
+.app { display: grid; grid-template-columns: 44px 190px minmax(0, 1fr); min-height: 520px; background-image: linear-gradient(var(--t-grid) 1px, transparent 1px), linear-gradient(90deg, var(--t-grid) 1px, transparent 1px); background-size: 32px 32px; }
+@media (max-width: 640px) { .app { grid-template-columns: 40px minmax(0, 1fr); } .sidebar { display: none; } }
+.activity { border-right: 1px solid var(--t-border); display: flex; flex-direction: column; align-items: center; gap: 10px; padding-top: 10px; }
+.activity b { width: 22px; height: 22px; border-radius: 5px; border: 1.5px solid var(--t-muted-fg); opacity: 0.8; position: relative; }
+.activity b.on { border-color: var(--t-primary); opacity: 1; }
+.activity b.on::before { content: ""; position: absolute; left: -12px; top: 2px; bottom: 2px; width: 2px; border-radius: 9px; background: var(--t-primary); box-shadow: var(--t-glow); }
+.sidebar { border-right: 1px solid var(--t-border); padding: 10px 8px; display: flex; flex-direction: column; gap: 4px; }
+.t-hud { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: var(--tracking-hud); text-transform: uppercase; color: var(--t-muted-fg); }
+.row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 5px; position: relative; min-width: 0; }
+.row.selected { background: var(--t-accent); }
+.row .stripe { width: 3px; align-self: stretch; border-radius: 2px; }
+.row .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row small { color: var(--t-muted-fg); font-size: 11px; }
+.dot { width: 7px; height: 7px; border-radius: 99px; flex: none; }
+.dot.working { background: var(--t-primary); box-shadow: var(--t-glow); }
+.dot.attention { background: var(--t-warning); }
+.dot.error { background: var(--t-destructive); }
+.dot.idle { background: var(--t-secondary); border: 1px solid var(--t-input); }
+.dot.done { background: var(--t-muted-fg); }
+.main { padding: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.surface { background: var(--t-card); border: 1px solid var(--t-border); border-radius: var(--radius); }
+.tile-head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--t-border); flex-wrap: wrap; }
+.tile-head .title { font-weight: 600; flex: 1; min-width: 120px; }
+.chip { font-family: var(--font-mono); font-size: 11px; padding: 0 7px; border-radius: 99px; border: 1px solid var(--t-border); color: var(--t-muted-fg); white-space: nowrap; }
+.chip.ok { color: var(--t-success); border-color: color-mix(in oklch, var(--t-success) 35%, transparent); }
+.chip.warn { color: var(--t-warning); border-color: color-mix(in oklch, var(--t-warning) 45%, transparent); background: color-mix(in oklch, var(--t-warning) 10%, transparent); }
+.chip.work { color: var(--t-primary); border-color: color-mix(in oklch, var(--t-primary) 40%, transparent); }
+.notice { display: flex; gap: 8px; align-items: center; padding: 7px 10px; border-radius: var(--radius); border: 1px solid color-mix(in oklch, var(--t-warning) 40%, transparent); background: color-mix(in oklch, var(--t-warning) 10%, var(--t-card)); color: var(--t-warning); font-size: 12.5px; }
+.notice span { color: var(--t-fg); }
+
+/* The terminal of a task: transparent over its surface, so it takes the frame's mapping, or the dark one inside `.island`. */
+.term { font-family: var(--font-mono); font-size: 12px; line-height: 1.55; padding: 10px 12px; color: var(--t-fg); background: var(--t-bg); border-radius: 0 0 var(--radius) var(--radius); overflow: hidden; }
+.term .m { color: var(--t-muted-fg); }
+.term .p { color: var(--t-primary); }
+.term .ok { color: var(--t-success); }
+.term .w { color: var(--t-warning); }
+.term .b { color: var(--t-ansi-blue); }
+.term .g { color: var(--t-ansi-bright-black); }
+.term .box { border: 1px solid var(--t-ansi-magenta); border-radius: 4px; padding: 4px 8px; margin-top: 6px; background: var(--t-secondary); }
+.term .cursor { display: inline-block; width: 7px; height: 13px; background: var(--t-primary); vertical-align: -2px; }
+
+.buttons { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.btn { font: inherit; font-size: 12.5px; padding: 5px 12px; border-radius: 5px; border: 1px solid transparent; cursor: default; }
+.btn.primary { background: var(--t-primary); color: var(--t-primary-fg); }
+.btn.outline { background: var(--t-card); color: var(--t-fg); border-color: var(--t-input); }
+.btn.ghost { background: transparent; color: var(--t-fg); }
+.btn.ghost:hover, .btn.outline:hover { background: var(--t-accent); }
+.btn.danger { background: color-mix(in oklch, var(--t-destructive) 12%, transparent); color: var(--t-destructive); border-color: color-mix(in oklch, var(--t-destructive) 35%, transparent); }
+.field { font: inherit; font-size: 12.5px; padding: 5px 10px; border-radius: 5px; border: 1px solid var(--t-input); background: var(--t-muted); color: var(--t-fg); flex: 1; min-width: 140px; outline: 3px solid var(--t-ring); outline-offset: -1px; outline-color: color-mix(in oklch, var(--t-ring) 40%, transparent); }
+.field::placeholder { color: var(--t-muted-fg); }
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 640px) { .split { grid-template-columns: minmax(0, 1fr); } }
+.panel { padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.graph svg { width: 100%; height: 120px; display: block; }
+.graph .edge { stroke: var(--t-muted-fg); stroke-opacity: 0.45; }
+.graph .edge.hot { stroke: var(--t-primary); stroke-opacity: 1; }
+.graph .node { fill: var(--t-card); stroke: var(--t-muted-fg); }
+.graph .node.changed { stroke: var(--t-warning); }
+.graph .node.sel { stroke: var(--t-primary); stroke-width: 2; }
+.graph text { fill: var(--t-fg); font-family: var(--font-mono); font-size: 9.5px; }
+.flowcard { border-left: 3px solid var(--t-group-1); padding: 5px 8px; background: var(--t-muted); border-radius: 4px; }
+.flowcard + .flowcard { border-left-color: var(--t-group-3); }
+.flowcard small { color: var(--t-muted-fg); font-size: 11px; display: block; }
+.bars { display: flex; align-items: flex-end; gap: 5px; height: 54px; }
+.bars i { flex: 1; border-radius: 2px 2px 0 0; background: var(--t-primary); opacity: 0.85; }
+.bars i:nth-child(3n) { background: var(--t-group-3); }
+.bars i:nth-child(4n) { background: var(--t-group-4); }
+
+/* Home 3D, drawn flat: a ring of repos around the daemon core with glowing state colours. */
+.scene { position: relative; height: 130px; background: radial-gradient(circle at 50% 60%, color-mix(in oklch, var(--t-primary) 14%, var(--t-bg)) 0, var(--t-bg) 65%); border-radius: var(--radius); overflow: hidden; }
+.scene .ring { position: absolute; left: 50%; top: 62%; width: 230px; height: 70px; margin: -35px 0 0 -115px; border: 1px solid color-mix(in oklch, var(--t-primary) 45%, transparent); border-radius: 50%; }
+.scene .core { position: absolute; left: 50%; top: 40%; width: 16px; height: 46px; margin-left: -8px; border-radius: 4px; background: linear-gradient(var(--t-primary), transparent); box-shadow: 0 0 22px var(--t-primary); mix-blend-mode: screen; }
+.scene .orb { position: absolute; width: 12px; height: 12px; border-radius: 99px; mix-blend-mode: screen; }
+.scene .orb.a { left: 22%; top: 58%; background: var(--t-primary); box-shadow: 0 0 14px var(--t-primary); }
+.scene .orb.b { left: 70%; top: 70%; background: var(--t-warning); box-shadow: 0 0 14px var(--t-warning); }
+.scene .orb.c { left: 60%; top: 44%; background: var(--t-muted-fg); box-shadow: 0 0 10px var(--t-muted-fg); }
+.scene .label { position: absolute; left: 8px; top: 6px; }
+
+/* The theme switch, as it would sit in Settings › App. */
+.seg { display: inline-flex; border: 1px solid var(--t-input); border-radius: 6px; overflow: hidden; background: var(--t-muted); }
+.seg button { font: inherit; font-size: 12.5px; padding: 5px 14px; border: 0; background: transparent; color: var(--t-fg); cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--t-input); }
+.seg button[aria-pressed="true"] { background: var(--t-primary); color: var(--t-primary-fg); }
+.setting { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 12px 14px; }
+.setting .text { flex: 1; min-width: 220px; }
+.setting .text small { display: block; color: var(--t-muted-fg); }
+.mode { display: inline-flex; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--muted-foreground); }
+.mode label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+</style>
+</head>
+<body>
+<main class="page">
+  <header style="display:flex;flex-direction:column;gap:10px">
+    <div class="hud">Trackwall // proposal // theme</div>
+    <h1>Light and system theme</h1>
+    <p>Trackwall has one dark theme (ADR-16). This proposal adds a light one and a third choice, <b>System</b>, which follows Windows or macOS and switches live when the system does. Every colour of the app already comes from the tokens of <code>index.css</code>, so a theme is a second set of values for the same tokens. The accent and the state colours cannot be copied: on a light surface today's cyan has a contrast of 1.7:1, so they are darkened until every pair passes WCAG AA (the table at the end).</p>
+  </header>
+
+  <section aria-labelledby="switch">
+    <h2 id="switch">The switch in Settings › App</h2>
+    <p>Three choices; <b>Dark</b> stays the default, so an update does not turn the app light on a light work desktop. The desktop shell keeps the choice, so a window opens in its theme without a flash, and gives every window (main, extra windows, the tray panel) the same theme: the title bar, Mica and vibrancy follow it.</p>
+    <div class="frame" id="switch-frame">
+      <div class="setting">
+        <div class="text"><b>Theme</b><small>Dark, light, or the same as Windows or macOS.</small></div>
+        <div class="seg" role="group" aria-label="Theme">
+          <button type="button" data-choice="dark" aria-pressed="true">Dark</button>
+          <button type="button" data-choice="light" aria-pressed="false">Light</button>
+          <button type="button" data-choice="system" aria-pressed="false">System</button>
+        </div>
+      </div>
+    </div>
+    <p id="switch-note" style="font-size:13px">Try it: the switch repaints this setting. System follows the colour scheme of the device you read this on.</p>
+  </section>
+
+  <section aria-labelledby="side">
+    <h2 id="side">Dark and light side by side</h2>
+    <p>The same Sessions view with a task tile, its notice and terminal, controls, a graph, Flow cards, a small chart and Home's scene. In the light frame the <b>terminal and the 3D scene</b> are drawn by the variant chosen below.</p>
+    <div class="toolbar">
+      <span class="hud">Terminal and 3D scene in light</span>
+      <div class="mode">
+        <label><input type="radio" name="island" value="island" checked> A · stay dark (recommended)</label>
+        <label><input type="radio" name="island" value="light"> B · light too</label>
+      </div>
+    </div>
+    <div class="frames">
+      <template id="app">
+        <div class="titlebar"><i></i><i></i><i></i><span data-theme-name></span></div>
+        <div class="app">
+          <nav class="activity" aria-hidden="true"><b></b><b class="on"></b><b></b><b></b><b></b></nav>
+          <aside class="sidebar">
+            <div class="t-hud" style="padding:2px 6px 6px">Sessions // 05</div>
+            <div class="row selected"><span class="stripe" style="background:var(--t-group-1)"></span><span class="dot working"></span><span class="name">Fix order totals</span><small>2m</small></div>
+            <div class="row"><span class="stripe" style="background:var(--t-group-1)"></span><span class="dot attention"></span><span class="name">Review: totals</span><small>wait</small></div>
+            <div class="row"><span class="stripe" style="background:var(--t-group-3)"></span><span class="dot error"></span><span class="name">Upgrade parser</span><small>err</small></div>
+            <div class="row"><span class="stripe"></span><span class="dot idle"></span><span class="name">Supervisor</span><small>idle</small></div>
+            <div class="row"><span class="stripe"></span><span class="dot done"></span><span class="name">Docs: export</span><small>done</small></div>
+          </aside>
+          <div class="main">
+            <div class="surface">
+              <div class="tile-head"><span class="dot working"></span><span class="title">Fix order totals</span><span class="chip work">working</span><span class="chip warn">Trust mise</span><span class="chip ok">Verify ✓</span></div>
+              <div data-term-host>
+                <div class="term">
+                  <div><span class="m">●</span> Read <span class="b">src/orders/totals.ts</span> <span class="g">(84 lines)</span></div>
+                  <div><span class="ok">✓</span> mise run test <span class="g">· 42 passed</span></div>
+                  <div><span class="w">!</span> Allow <span class="p">git push</span> to origin? <span class="g">(y/n)</span></div>
+                  <div class="box"><span class="p">❯</span> Round half-even, then add the tests <span class="cursor"></span></div>
+                </div>
+              </div>
+            </div>
+            <div class="notice"><b>⚠</b> <span>Two tasks change <code>totals.ts</code>. Merge the first before the second.</span></div>
+            <div class="buttons">
+              <button class="btn primary" type="button">Start task</button>
+              <button class="btn outline" type="button">Open diff</button>
+              <button class="btn ghost" type="button">Hide</button>
+              <button class="btn danger" type="button">Stop</button>
+              <input class="field" placeholder="Ask the supervisor…" aria-label="Message">
+            </div>
+            <div class="split">
+              <div class="surface panel graph">
+                <div class="t-hud">Graph</div>
+                <svg viewBox="0 0 260 120" aria-hidden="true">
+                  <line class="edge hot" x1="60" y1="60" x2="130" y2="30"/><line class="edge" x1="130" y1="30" x2="205" y2="60"/><line class="edge" x1="60" y1="60" x2="130" y2="95"/><line class="edge" x1="130" y1="95" x2="205" y2="60"/>
+                  <rect class="node sel" x="22" y="48" width="76" height="24" rx="4"/><text x="30" y="64">orders-api</text>
+                  <rect class="node changed" x="92" y="18" width="76" height="24" rx="4"/><text x="100" y="34">pricing-lib</text>
+                  <rect class="node" x="92" y="83" width="76" height="24" rx="4"/><text x="100" y="99">orders-web</text>
+                  <rect class="node" x="167" y="48" width="76" height="24" rx="4"/><text x="175" y="64">gateway</text>
+                </svg>
+              </div>
+              <div class="surface panel">
+                <div class="t-hud">Flow</div>
+                <div class="flowcard">Totals rounding<small>In review · 2 tasks</small></div>
+                <div class="flowcard">Parser upgrade<small>Building · 1 task</small></div>
+                <div class="t-hud" style="margin-top:4px">Usage // 12 weeks</div>
+                <div class="bars" aria-hidden="true"><i style="height:30%"></i><i style="height:45%"></i><i style="height:38%"></i><i style="height:60%"></i><i style="height:52%"></i><i style="height:70%"></i><i style="height:64%"></i><i style="height:80%"></i><i style="height:58%"></i><i style="height:90%"></i><i style="height:76%"></i><i style="height:100%"></i></div>
+              </div>
+            </div>
+            <div data-scene-host>
+              <div class="scene">
+                <span class="t-hud label">Home // 3D</span>
+                <div class="ring"></div><div class="core"></div><div class="orb a"></div><div class="orb b"></div><div class="orb c"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+      <div class="frame theme-dark" data-frame="Dark"></div>
+      <div class="frame theme-light" data-frame="Light"></div>
+    </div>
+    <ul>
+      <li><b>Variant A, recommended:</b> the terminal and Home's scene stay dark inside the light window, like the terminal in many editors. The scene's holograms glow by adding light, and added light vanishes on a light background (see the 3D strip in variant B); Copilot CLI may also paint parts of its screen in its own colours meant for a dark background. A keeps both readable on day one.</li>
+      <li><b>Variant B, later:</b> a light terminal with its own 16 ANSI colours, once a test against the real Copilot CLI shows its whole screen reads on light; and, only if wanted, a light scene with solid colours instead of glow.</li>
+      <li>Graph, Flow, the Plan board, Settings and the new charts use tokens only, so they need no work of their own beyond checking them on screenshots in both themes.</li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="palette">
+    <h2 id="palette">The palette</h2>
+    <p>Each token with today's value and the proposed light one. The surfaces carry a faint cool tint, like the dark theme; the four group colours stay four distinct hues, darker.</p>
+    <div class="tablewrap"><table id="palette-table"><thead><tr><th>Token</th><th>Dark (today)</th><th>Light (proposed)</th><th>Light value</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section aria-labelledby="contrast">
+    <h2 id="contrast">Contrast check</h2>
+    <p>Computed in this page from the colours the browser paints: text needs 4.5:1, group stripes and other marks 3:1 (WCAG AA). The last rows copy today's accent and state colours onto the light surface unchanged, to show why the light theme needs its own.</p>
+    <div class="tablewrap"><table id="contrast-table"><thead><tr><th>Text or mark</th><th>On</th><th>Needed</th><th>Dark</th><th>Light</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section aria-labelledby="build">
+    <h2 id="build">How it would be built</h2>
+    <ul>
+      <li>The light values go into <code>index.css</code> under a theme attribute on <code>&lt;html&gt;</code>, next to today's; a test makes every colour token have both, and computes this contrast table in the unit tests.</li>
+      <li>The shell sets the theme of every window (light, dark, or none to follow the system), so WebView2 and WebKit report the matching <code>prefers-color-scheme</code>, and Mica, Acrylic's tint and vibrancy follow it.</li>
+      <li>The terminal and the scene read the tokens once today; they read them again when the theme changes. Mermaid diagrams take the matching theme.</li>
+      <li>Proof in the PR: the contrast test, an end-to-end test that Light repaints and System follows an emulated system scheme live, and screenshots of every view in both themes.</li>
+    </ul>
+  </section>
+</main>
+<script>
+// Fill both frames from one template, so the dark and the light frame cannot differ in content.
+const template = document.getElementById("app");
+for (const frame of document.querySelectorAll("[data-frame]")) {
+  frame.append(template.content.cloneNode(true));
+  frame.querySelector("[data-theme-name]").textContent = `Trackwall // ${frame.dataset.frame}`;
+}
+
+// Variant A wraps the light frame's terminal and scene in the dark mapping; B leaves them light.
+function applyIsland(mode) {
+  const light = document.querySelector('[data-frame="Light"]');
+  for (const host of light.querySelectorAll("[data-term-host], [data-scene-host]")) host.classList.toggle("island", mode === "island");
+}
+for (const input of document.querySelectorAll('input[name="island"]')) input.addEventListener("change", () => applyIsland(input.value));
+applyIsland("island");
+
+// The switch: System follows `prefers-color-scheme`, live.
+const switchFrame = document.getElementById("switch-frame");
+const scheme = window.matchMedia("(prefers-color-scheme: light)");
+let choice = "dark";
+function paintSwitch() {
+  const theme = choice === "system" ? (scheme.matches ? "light" : "dark") : choice;
+  switchFrame.classList.toggle("theme-light", theme === "light");
+  switchFrame.classList.toggle("theme-dark", theme === "dark");
+  for (const button of switchFrame.querySelectorAll("button")) button.setAttribute("aria-pressed", String(button.dataset.choice === choice));
+  document.getElementById("switch-note").textContent =
+    choice === "system" ? `System: this device asks for ${theme}, so the setting is ${theme}. Change the system scheme and it repaints.` : `The setting is ${theme}.`;
+}
+for (const button of switchFrame.querySelectorAll("button")) button.addEventListener("click", () => { choice = button.dataset.choice; paintSwitch(); });
+scheme.addEventListener("change", paintSwitch);
+paintSwitch();
+
+// Colours as the browser paints them: a probe in each theme, read back through a canvas as sRGB.
+const context = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+function probe(themeClass) {
+  const element = document.createElement("div");
+  element.className = themeClass;
+  element.style.display = "none";
+  document.body.append(element);
+  return element;
+}
+const probes = { dark: probe("theme-dark"), light: probe("theme-light") };
+function rgb(themeName, property, over) {
+  const element = probes[themeName];
+  element.style.color = `var(${property})`;
+  const colour = getComputedStyle(element).color;
+  context.clearRect(0, 0, 1, 1);
+  if (over) { context.fillStyle = over; context.fillRect(0, 0, 1, 1); }
+  context.fillStyle = colour;
+  context.fillRect(0, 0, 1, 1);
+  const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
+  return { r, g, b, css: colour };
+}
+const channel = (c) => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+const luminance = ({ r, g, b }) => 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+const ratio = (a, b) => { const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+const hex = ({ r, g, b }) => `rgb(${r}, ${g}, ${b})`;
+
+// The token a `--t-*` name stands for.
+const name = (token) => token.replace(/^bg$/, "background").replace(/^fg$/, "foreground").replace("muted-fg", "muted-foreground").replace("primary-fg", "primary-foreground");
+
+const TOKENS = ["bg", "card", "secondary", "muted", "accent", "fg", "muted-fg", "primary", "primary-fg", "success", "warning", "destructive", "border", "input", "group-1", "group-2", "group-3", "group-4"];
+const paletteBody = document.querySelector("#palette-table tbody");
+for (const token of TOKENS) {
+  const property = `--t-${token}`;
+  const row = document.createElement("tr");
+  const lightValue = getComputedStyle(probes.light).getPropertyValue(property).trim();
+  row.innerHTML = `<td><code>${name(token)}</code></td><td><span class="chip-swatch" style="background:${hex(rgb("dark", property, hex(rgb("dark", "--t-bg"))))}"></span></td><td><span class="chip-swatch" style="background:${hex(rgb("light", property, hex(rgb("light", "--t-bg"))))}"></span></td><td><code>${lightValue}</code></td>`;
+  paletteBody.append(row);
+}
+
+// [text or mark, surface, needed, how much of the mark tints the surface (for the 10% notice fills)]
+const PAIRS = [
+  ["fg", "bg", 4.5], ["fg", "card", 4.5], ["fg", "secondary", 4.5], ["fg", "accent", 4.5],
+  ["muted-fg", "bg", 4.5], ["muted-fg", "card", 4.5], ["muted-fg", "secondary", 4.5],
+  ["primary", "bg", 4.5], ["primary", "card", 4.5], ["primary-fg", "primary", 4.5],
+  ["success", "card", 4.5], ["warning", "card", 4.5], ["destructive", "card", 4.5],
+  ["warning", "card", 4.5, 0.1], ["destructive", "card", 4.5, 0.1], ["primary", "card", 4.5, 0.1],
+  ["group-1", "card", 3], ["group-2", "card", 3], ["group-3", "card", 3], ["group-4", "card", 3],
+];
+function measure(themeName, mark, surface, tint, markTheme = themeName) {
+  const base = hex(rgb(themeName, "--t-bg"));
+  let back = rgb(themeName, `--t-${surface}`, base);
+  if (tint) {
+    const fore = rgb(markTheme, `--t-${mark}`, hex(back));
+    back = { r: Math.round(fore.r * tint + back.r * (1 - tint)), g: Math.round(fore.g * tint + back.g * (1 - tint)), b: Math.round(fore.b * tint + back.b * (1 - tint)) };
+  }
+  return ratio(rgb(markTheme, `--t-${mark}`, hex(back)), back);
+}
+const cell = (value, needed) => `<td class="num ${value >= needed ? "pass" : "fail"}">${value.toFixed(2)} ${value >= needed ? "✓" : "✗"}</td>`;
+const contrastBody = document.querySelector("#contrast-table tbody");
+for (const [mark, surface, needed, tint] of PAIRS) {
+  const row = document.createElement("tr");
+  row.innerHTML = `<td><code>${name(mark)}</code></td><td><code>${tint ? `${name(mark)} 10% on ${name(surface)}` : name(surface)}</code></td><td class="num">${needed}:1</td>${cell(measure("dark", mark, surface, tint), needed)}${cell(measure("light", mark, surface, tint), needed)}`;
+  contrastBody.append(row);
+}
+for (const mark of ["primary", "success", "warning", "destructive", "muted-fg"]) {
+  const row = document.createElement("tr");
+  const copied = measure("light", mark, "card", 0, "dark");
+  row.innerHTML = `<td><code>${name(mark)}</code> copied from dark</td><td><code>light card</code></td><td class="num">4.5:1</td><td class="num">–</td>${cell(copied, 4.5)}`;
+  contrastBody.append(row);
+}
+</script>
+</body>
+</html>

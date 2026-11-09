@@ -226,7 +226,7 @@ fn build_saved(app: &AppHandle, saved: Vec<SavedWindow>) {
     });
 }
 
-/// Builds an extra window from the main window's configuration (size, minimum size, transparency, theme), hidden
+/// Builds an extra window from the main window's configuration (size, minimum size, transparency) in the chosen theme (ADR-235), hidden
 /// until its page has loaded, with the same background effect and reveal as the main window (ADR-11): its effect
 /// entry exists before the window, the effect is applied on the main thread and a fallback timer shows it if the page
 /// never loads.
@@ -253,6 +253,7 @@ fn build_while_opening(app: &AppHandle, label: Option<String>, url: String) -> R
         let mut window_config = config.clone();
         window_config.label = label.clone();
         window_config.url = WebviewUrl::App(url.into());
+        window_config.theme = crate::theme::Themes::native(app);
         let built = WebviewWindowBuilder::from_config(app, &window_config).and_then(|builder| builder.build());
         built.inspect_err(|_| app.state::<WindowEffects>().forget(&label)).map_err(|e| e.to_string())?
     };

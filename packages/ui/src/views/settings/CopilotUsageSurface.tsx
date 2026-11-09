@@ -9,8 +9,9 @@ import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { tokenCount, usageDetails, usageLabel } from "@/lib/copilot-usage";
-import { toolCalls, toolDefinitionShare, toolName, weekRange, workName, workTokens } from "@/lib/usage-report";
+import { rankShare, toolCalls, toolDefinitionShare, toolName, weekRange, workName, workTokens } from "@/lib/usage-report";
 import { useRemote } from "@/lib/use-remote";
+import { UsageTrend } from "./UsageTrend";
 
 /** Rows each list shows before "Show all". */
 const TOP_ROWS = 10;
@@ -18,12 +19,19 @@ const TOP_ROWS = 10;
 /**
  * The weekly usage report (ADR-199) in Settings › Usage (ADR-212): what Copilot CLI used on this computer in a week,
  * its total as a few numbers, then by task and session and by tool, the most first, side by side when there is room, so
- * the user sees where tokens go and can compare a week with the one before.
+ * the user sees where tokens go and can compare a week with the one before. Above them the trend of every week
+ * (ADR-236), whose bars pick the week, and a bar under every ranked row, its share of the first.
  */
 export function CopilotUsageSurface({ conn }: { conn: Connection }) {
   const [weeksAgo, setWeeksAgo] = useState(0);
   const load = useCallback(() => post(conn, usageReportApi.week, { weeksAgo }), [conn, weeksAgo]);
   const report = useRemote(load);
+  const loadTrend = useCallback(() => post(conn, usageReportApi.trend, {}), [conn]);
+  const trend = useRemote(loadTrend);
+  const refresh = () => {
+    report.reload();
+    trend.reload();
+  };
   const week = report.data;
   const share = week?.total ? toolDefinitionShare(week.total.inputTokens, week.toolDefinitionTokens) : null;
   return (
@@ -47,10 +55,17 @@ export function CopilotUsageSurface({ conn }: { conn: Connection }) {
             <ChevronRight aria-hidden />
           </Button>
           <span className="text-sm">{weeksAgo === 0 ? "Last 7 days" : `${weeksAgo} ${weeksAgo === 1 ? "week" : "weeks"} before`}</span>
-          <Button variant="ghost" size="sm" className="ml-auto" onClick={report.reload}>
+          <Button variant="ghost" size="sm" className="ml-auto" onClick={refresh}>
             Refresh
           </Button>
         </div>
+        {trend.error && <ErrorWithRetry message={trend.error} onRetry={trend.reload} />}
+        {trend.data ? (
+          <UsageTrend trend={trend.data} weeksAgo={weeksAgo} onPick={setWeeksAgo} />
+        ) : (
+          // The chart's height while it loads, so the week's report below does not jump when it comes.
+          !trend.error && <div aria-hidden className="h-46" />
+        )}
         {report.error && <ErrorWithRetry message={report.error} onRetry={report.reload} />}
         {!week && !report.error && <Loading />}
         {week && week.total === null && <p className="text-sm">No model calls this week.</p>}
@@ -76,12 +91,14 @@ export function CopilotUsageSurface({ conn }: { conn: Connection }) {
               <RankedList
                 title="Tasks and sessions"
                 rows={week.work}
+                size={(w) => w.usage.inputTokens}
                 rowKey={(w) => JSON.stringify([w.kind, w.task, w.repo, w.label])}
                 render={(work) => <WorkRow work={work} />}
               />
               <RankedList
                 title="Tools"
                 rows={week.tools}
+                size={(t) => t.resultTokens}
                 rowKey={(t) => JSON.stringify([t.server, t.tool])}
                 render={(tool) => <ToolRow tool={tool} />}
               />
@@ -106,21 +123,27 @@ function Big({ children }: { children: ReactNode }) {
 interface RankedListProps<T> {
   title: string;
   rows: readonly T[];
+  /** What the list ranks by; each row's bar is its share of the first row's. */
+  size: (row: T) => number;
   rowKey: (row: T) => string;
   render: (row: T) => ReactNode;
 }
 
-function RankedList<T>({ title, rows, rowKey, render }: RankedListProps<T>) {
+function RankedList<T>({ title, rows, size, rowKey, render }: RankedListProps<T>) {
   const [all, setAll] = useState(false);
   if (rows.length === 0) return null;
   const shown = all ? rows : rows.slice(0, TOP_ROWS);
+  const largest = Math.max(0, ...rows.map(size));
   return (
     <div className="flex flex-col gap-2">
       <h3 className="hud-label">{title}</h3>
       <ol className="flex flex-col">
         {shown.map((row) => (
-          <li key={rowKey(row)} className="flex min-w-0 items-baseline justify-between gap-3 border-b py-2 last:border-b-0">
-            {render(row)}
+          <li key={rowKey(row)} className="flex min-w-0 flex-col gap-1.5 border-b py-2 last:border-b-0">
+            <span className="flex min-w-0 items-baseline justify-between gap-3">{render(row)}</span>
+            <span aria-hidden className="bg-secondary flex h-1 overflow-hidden rounded-full">
+              <span className="bg-chart-1 rounded-full" style={{ width: `${rankShare(size(row), largest)}%` }} />
+            </span>
           </li>
         ))}
       </ol>

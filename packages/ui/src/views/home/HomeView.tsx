@@ -12,6 +12,7 @@ import { listNeedsSettings } from "@/lib/repo-status";
 import { GRAPH_PACE, REPO_LIST_PACE } from "@/lib/repo-watch";
 import type { SessionSelection } from "@/lib/session-entries";
 import type { SettingsCategory } from "@/lib/settings-categories";
+import { DARK_ISLAND } from "@/lib/theme";
 import { unpushedRows } from "@/lib/unpushed-work";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { useRepoList } from "@/lib/use-repo-list";
@@ -151,7 +152,8 @@ export function HomeView({
         onOpen={open}
         onOpenProposal={(id) => onOpenInSessions({ kind: "proposal", id })}
       />
-      <div className="relative min-h-0 min-w-0">
+      {/* A dark island in the light theme (ADR-235): the scene's glow adds light, which vanishes on a light background. */}
+      <div {...DARK_ISLAND} className="relative min-h-0 min-w-0">
         {unavailable ? (
           <div className="flex flex-col items-start gap-3 p-6">
             <p className="text-muted-foreground text-sm">{`The 3D view is unavailable here (${unavailable}). The lists on both sides still work.`}</p>
