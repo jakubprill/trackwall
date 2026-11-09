@@ -118,6 +118,18 @@ async function startSession() {
   return { id: started.id, window };
 }
 
+/**
+ * Waits until the terminal the test opened on session `id` shows Copilot CLI's empty input box. After `agentStop` and
+ * after a resize, Copilot CLI draws the box again only a moment later, which on a slow runner can be seconds: keys typed
+ * before that are lost, and a prompt the daemon types is queued instead (ADR-68). A viewer gets output only after the
+ * daemon's own screen has processed it, so once the terminal shows the box, the daemon's screen does too. Wait here
+ * before typing into a session after its turn or a resize, and before a step whose prompt the daemon types; open the
+ * terminal early (`openWindow`), so that its resize is redrawn before the wait.
+ */
+function untilEmptyInputBox(id: string): Promise<void> {
+  return untilInputBox(windowOf(id), "empty");
+}
+
 function windowOf(id: string): ReturnType<typeof viewer> {
   const window = windows.get(id);
   if (window === undefined) throw new Error(`no terminal of session ${id}`);
@@ -193,7 +205,7 @@ describe("a session of the real Copilot CLI", () => {
     const again = openWindow(resumed.id);
     await untilLoaded(resumed.id);
     expect(agents.sessions().sessions.find((s) => s.id === resumed.id)?.usage).toMatchObject({ modelCalls: 1 });
-    await untilInputBox(again, "empty");
+    await untilEmptyInputBox(resumed.id);
     model.reply({ text: "Counted again." });
     again.attachment.input("count again\r");
     await endOfTurn(resumed.id);
@@ -485,7 +497,7 @@ describe("a session of the real Copilot CLI", () => {
     model.reply({ text: "Run: mvn -pl orders verify" });
     window.attachment.input("which command checks orders?\r");
     await endOfTurn(id);
-    await untilInputBox(window, "empty");
+    await untilEmptyInputBox(id);
 
     window.attachment.input("/copy");
     const box = async () => promptBoxText(await screenLines(window));
@@ -572,9 +584,8 @@ describe("a session of the real Copilot CLI", () => {
     window.attachment.input("hello\r");
     await endOfTurn(id);
 
-    // agentStop comes before Copilot CLI shows its input box again, and a line typed in between can be lost (it once was
-    // on macOS), so the command is typed into the box once it is there, and sent once it shows.
-    await untilInputBox(window, "empty");
+    // A line typed too early can be lost (it once was on macOS), so the command is sent only once it shows in the box.
+    await untilEmptyInputBox(id);
     window.attachment.input("/exit");
     await untilInputBox(window, "text");
     window.attachment.input("\r");
@@ -870,12 +881,9 @@ describe("a review of a task's changes with the real Copilot CLI (ADR-62)", () =
     const task = await agents.createTask("shop", "add a login test");
     const session = agents.sessions().sessions.find((s) => s.task === task.id);
     if (session === undefined) throw new Error("the task has no session");
+    openWindow(session.id);
     await endOfTurn(session.id);
-    // The daemon types only once Copilot CLI has drawn its input box again after agentStop (ADR-68).
-    const window = viewer(agents, session.id);
-    windows.set(session.id, window);
-    window.attachment.resize(REFERENCE_COLS, REFERENCE_ROWS);
-    await untilInputBox(window, "empty");
+    await untilEmptyInputBox(session.id);
 
     model.reply({ tool: copilotToolName(mcpTools.getReviewComments.name), arguments: {} }, { text: "Renamed it." });
     const review = { path: "README.md", side: "new" as const, line: 1, code: "# shop", text: "Call it @login-test" };
@@ -1053,12 +1061,11 @@ describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
       const session = agents.sessions().sessions.find((s) => s.task === task.id);
       if (session === undefined) throw new Error("the task has no session");
       // Opened now, so that Copilot CLI has redrawn the task in the reference's size before the message is sent.
-      const taskWindow = openWindow(session.id);
+      openWindow(session.id);
       await turnsEnded(session.id, 1);
       await turnsEnded(main.id, 2);
-      // The daemon types only once Copilot CLI has drawn the task's input box again after agentStop (ADR-68); on a slow
-      // runner that can come after the proposer's turn has ended, and the message would be queued instead.
-      await untilInputBox(taskWindow, "empty");
+      // The task's box can come after the proposer's turn has ended, and the message would then be queued instead.
+      await untilEmptyInputBox(session.id);
 
       // A message with what the input box would mangle: an @, a leading slash and a line break.
       const text = "/keep the old endpoint\n@Deprecated callers still use it";
@@ -1211,9 +1218,8 @@ describe("session plugin hooks over HTTP with the real Copilot CLI (ADR-88)", ()
     try {
       const { agents } = broken.facade;
       const started = await agents.start("shop");
-      const window = viewer(agents, started.id);
-      window.attachment.resize(REFERENCE_COLS, REFERENCE_ROWS);
-      await untilInputBox(window, "empty");
+      const window = openWindow(started.id, broken);
+      await untilEmptyInputBox(started.id);
       model.reply({ text: "The shop repo has only a README." });
 
       window.attachment.input("what is in this repo?\r");
@@ -1224,6 +1230,7 @@ describe("session plugin hooks over HTTP with the real Copilot CLI (ADR-88)", ()
       expect(model.requests().at(-1)?.lastUserText).toEndWith("what is in this repo?");
       expect(hookRecords(broken.home, started.id)).toEqual([]);
       window.attachment.detach();
+      windows.delete(started.id);
       await agents.stop(started.id);
     } finally {
       await broken.stop();
@@ -1342,9 +1349,11 @@ describe("sessions across a daemon restart with the real Copilot CLI (ADR-95)", 
     const before = await startRealCopilotDaemon(model);
     const main = await before.facade.agents.start("shop");
     const supervisor = await before.facade.agents.startSupervisor("new", "terminal");
+    const mainWindow = openWindow(main.id, before);
     for (const id of [main.id, supervisor.id]) await untilLoaded(id, before);
+    await untilEmptyInputBox(main.id);
     model.reply({ text: "Noted: the code word is TEAL." });
-    openWindow(main.id, before).attachment.input("remember the code word TEAL\r");
+    mainWindow.attachment.input("remember the code word TEAL\r");
     await waitFor(before.facade.agents, main.id, (s) => s.state?.reason === "hook agentStop", "end of turn", SESSION_MS);
     windowOf(main.id).attachment.detach();
     windows.delete(main.id);
@@ -1355,8 +1364,11 @@ describe("sessions across a daemon restart with the real Copilot CLI (ADR-95)", 
       // The same ids: the supervisor never had a prompt, and still starts again in its place.
       for (const id of [main.id, supervisor.id]) await untilLoaded(id, after);
       expect(after.facade.agents.session(supervisor.id)).toMatchObject({ repo: null, run: { kind: "running" } });
+      // Opened only now, since the next daemon lists the session only once it has started it again.
+      const resumedWindow = openWindow(main.id, after);
+      await untilEmptyInputBox(main.id);
       model.reply({ text: "The code word is TEAL." });
-      openWindow(main.id, after).attachment.input("what is the code word?\r");
+      resumedWindow.attachment.input("what is the code word?\r");
       await waitFor(after.facade.agents, main.id, (s) => s.state?.reason === "hook agentStop", "end of turn", SESSION_MS);
 
       const userTexts = model.requests().at(-1)?.userTexts ?? [];
@@ -1376,9 +1388,11 @@ describe("the supervisor's last conversation with the real Copilot CLI (ADR-96)"
     try {
       const { agents } = daemon.facade;
       const first = await agents.startSupervisor("new", "terminal");
+      const firstWindow = openWindow(first.id, daemon);
       await untilLoaded(first.id, daemon);
+      await untilEmptyInputBox(first.id);
       model.reply({ text: "Noted: the code word is AMBER." });
-      openWindow(first.id, daemon).attachment.input("remember the code word AMBER\r");
+      firstWindow.attachment.input("remember the code word AMBER\r");
       await waitFor(agents, first.id, (s) => s.state?.reason === "hook agentStop", "end of turn", SESSION_MS);
       windowOf(first.id).attachment.detach();
       windows.delete(first.id);
@@ -1386,9 +1400,11 @@ describe("the supervisor's last conversation with the real Copilot CLI (ADR-96)"
 
       const resumed = await agents.startSupervisor("last", "terminal");
       expect(resumed.id).toBe(first.id);
+      const resumedWindow = openWindow(resumed.id, daemon);
       await untilLoaded(resumed.id, daemon);
+      await untilEmptyInputBox(resumed.id);
       model.reply({ text: "The code word is AMBER." });
-      openWindow(resumed.id, daemon).attachment.input("what is the code word?\r");
+      resumedWindow.attachment.input("what is the code word?\r");
       await waitFor(agents, resumed.id, (s) => s.state?.reason === "hook agentStop", "end of turn", SESSION_MS);
 
       // Each message to the supervisor ends with its situation (ADR-148).
