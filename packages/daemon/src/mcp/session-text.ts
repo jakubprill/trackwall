@@ -63,6 +63,7 @@ function sessionLines(session: AgentSession): string[] {
   if (session.windowTitle !== null) lines.push(`Window title: ${session.windowTitle}`);
   lines.push(...environmentLines(session.environment));
   if (session.usage !== null) lines.push(`Usage: ${usageLabel(session.usage)}`);
+  if (session.tokenBudget !== null) lines.push(tokenBudgetLine(session.tokenBudget));
   return lines;
 }
 
@@ -81,6 +82,12 @@ function environmentLines(environment: AgentSession["environment"]): string[] {
     environment.problem === null ? undefined : `problem: ${environment.problem}`,
   ].filter((fact) => fact !== undefined);
   return facts.length === 0 ? [] : [`Environment: ${facts.join("; ")}`];
+}
+
+/** A task's token budget (ADR-237): what this start used of it, and whether the daemon stopped the session for it. */
+function tokenBudgetLine({ budget, used, reached }: NonNullable<AgentSession["tokenBudget"]>): string {
+  const stop = reached ? "; Trackwall stopped the session at it, and only the user's Resume gives the task the budget again" : "";
+  return `Token budget: ${used} of ${budget} tokens used since this start${stop}.`;
 }
 
 function usageLabel(usage: NonNullable<AgentSession["usage"]>): string {

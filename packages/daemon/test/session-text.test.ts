@@ -12,6 +12,7 @@ const session: AgentSession = {
   startedAt: "2026-11-05T09:00:00.000Z",
   model: "gpt-5.1",
   modelInUse: "gpt-5.1",
+  tokenBudget: null,
   run: { kind: "running", runId: "run-1", startedAt: "2026-11-05T09:00:00.000Z", pid: 4242 },
   state: { state: "Input", source: "hook", confidence: "exact", at: "2026-11-05T09:20:00.000Z", reason: "agentStop" },
   windowTitle: null,
@@ -222,6 +223,21 @@ describe("get_session text", () => {
 
     expect(sessionText(result, false).split("\n")[0]).toBe(
       `Session ${SESSION_ID} (shop) on gpt-6-luna instead of claude-sonnet-5.5: running since 2026-11-05T09:00:00.000Z`,
+    );
+  });
+
+  test("says when Trackwall stopped a task's session at its token budget, so the supervisor does not resume it (ADR-237)", () => {
+    const result: GetSessionResult = {
+      session: { ...session, usage: null, needsAttention: false, tokenBudget: { budget: 2_000_000, used: 2_010_000, reached: true } },
+      task: null,
+      changes: null,
+      changesError: null,
+      verification: null,
+      javaNavigation: null,
+    };
+
+    expect(sessionText(result, false).split("\n")).toContain(
+      "Token budget: 2010000 of 2000000 tokens used since this start; Trackwall stopped the session at it, and only the user's Resume gives the task the budget again.",
     );
   });
 });

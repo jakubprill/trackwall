@@ -26,6 +26,7 @@ function session(id: string, fields: Partial<Session> = {}): Session {
     usage: null,
     model: null,
     modelInUse: null,
+    tokenBudget: null,
     ...fields,
   };
 }

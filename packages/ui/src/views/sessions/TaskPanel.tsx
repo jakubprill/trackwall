@@ -37,6 +37,7 @@ import { TaskNoticeStrip } from "./TaskNotices.tsx";
 import { TaskRemoval } from "./TaskRemoval.tsx";
 import { TaskRounds } from "./TaskRounds.tsx";
 import { VerifyButton } from "./TaskVerification.tsx";
+import { TokenBudgetMark } from "./TokenBudgetMark.tsx";
 
 /**
  * The selected task (ADR-31): title or prompt, branch, task port, its model when it has one (ADR-98), a mark when it runs without approvals (ADR-105), how its Java language server is doing (ADR-124) and session state in the header, the session terminal (or its conversation, for a task in the conversation view, ADR-137)
@@ -120,6 +121,7 @@ export function TaskPanel({
             </span>
             <span className="text-muted-foreground shrink-0 text-xs">{relativeTime(session?.startedAt ?? task.createdAt, new Date())}</span>
             <CopilotUsageMark usage={session?.usage ?? null} />
+            {session?.tokenBudget && <TokenBudgetMark budget={session.tokenBudget} />}
           </span>
           <span className="text-muted-foreground truncate text-xs" title={task.prompt}>
             {taskSubtitle(task, sessions)}

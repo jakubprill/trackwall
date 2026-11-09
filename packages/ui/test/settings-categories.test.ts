@@ -26,6 +26,7 @@ describe("Settings categories", () => {
       "session-profile",
       "supervisor-model",
       "retry-model",
+      "task-token-budget",
       "auto-review",
       "java-navigation",
     ]);

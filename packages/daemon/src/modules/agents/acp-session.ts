@@ -44,6 +44,7 @@ import type { SessionEvent } from "./live-session.ts";
 import { ReadRequestClock } from "./read-request.ts";
 import { SessionAttention } from "./session-attention.ts";
 import { sessionStuck } from "./session-stuck.ts";
+import type { TokenBudget } from "./token-budget.ts";
 
 /**
  * A Copilot CLI session in the conversation view (§4.4, ADR-107): `copilot --acp` on pipes of a `procs` group, with
@@ -123,6 +124,8 @@ export interface AcpSessionOptions {
   onTurnStart: () => void;
   /** What the conversation used (ADR-190), read when a conversation is loaded, in the session's cycle and at its end. */
   usage: CopilotUsageLog;
+  /** A task session's token budget (ADR-237), checked after every read of the usage while it runs; `null` for none. */
+  tokenBudget: TokenBudget | null;
   log: (msg: string) => void;
 }
 
@@ -431,6 +434,7 @@ export class AcpSession implements AgentSession {
     const run = this.#o.run();
     if (run?.kind !== "exited") {
       if (this.#conversationId !== undefined) this.#o.usage.poll(this.#conversationId, Date.now());
+      this.#o.tokenBudget?.check(this.#o.usage.tokensSinceStart());
       return true;
     }
     this.#finished = true;
@@ -466,6 +470,7 @@ export class AcpSession implements AgentSession {
       usage: this.#o.usage.current(),
       model: this.model,
       modelInUse: this.#o.usage.modelInUse(),
+      tokenBudget: this.#o.tokenBudget?.view(this.#o.usage.tokensSinceStart()) ?? null,
     };
   }
 

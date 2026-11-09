@@ -24,6 +24,7 @@ function session(over: Partial<Session>): Session {
     usage: null,
     model: null,
     modelInUse: null,
+    tokenBudget: null,
     ...over,
   };
 }

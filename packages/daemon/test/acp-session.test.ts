@@ -37,6 +37,7 @@ function session(
     onTurnOver: () => turnsOver.count++,
     onTurnStart: () => {},
     usage: new CopilotUsageLog(NO_COPILOT_HOME),
+    tokenBudget: null,
     log: () => {},
   });
   acp.connect({ write: (line) => written.push(JSON.parse(line)) });

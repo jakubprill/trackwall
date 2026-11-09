@@ -178,6 +178,8 @@ interface AgentsRepos {
   supervisorModel(): string | null;
   /** Writes `supervisorModel` (ADR-193), `null` removing it: a restart of the supervisor on another model (ADR-206). */
   setSupervisorModel(model: string | null): unknown;
+  /** `taskTokenBudget` from `workspace.yaml` (ADR-237): a task session's token budget, `null` for none; `invalid_config` for a bad key. */
+  taskTokenBudget(): number | null;
   /** `sandbox` from `workspace.yaml` (ADR-181), `null` without the key: which tasks run in Copilot CLI's sandbox; `invalid_config` for a bad key. */
   sandboxSettings(): SandboxSettings | null;
   /** `agentSecrets` from `workspace.yaml` (ADR-93): the secrets from mise a session's tools get; `invalid_config` for a bad key. */
@@ -969,8 +971,9 @@ export class Agents {
 
   /**
    * `resume_task` from session `caller` (`null`: an agent outside Trackwall, the user's program, which resumes any task,
-   * ADR-90): the supervisor resumes any task, a main session only the tasks it proposed, a task session none.
-   * Returns the task and its new session.
+   * ADR-90): the supervisor resumes any task, a main session only the tasks it proposed, a task session none. No agent
+   * resumes a task the daemon stopped at its token budget (ADR-237): the Resume that gives it the budget again is the
+   * user's. Returns the task and its new session.
    */
   async resumeTaskFor(caller: string | null, id: string): Promise<{ task: Task; session: Session }> {
     const task = this.#tasks.task(id);
@@ -978,6 +981,8 @@ export class Agents {
     if (session?.task != null) throw new DomainError("bad_request", `a task session resumes no task; ask the user to resume task ${id}`);
     if (session && !isSupervisor(session) && proposerOf(task.proposedBy) !== proposerKeyOf(session))
       throw new DomainError("bad_request", `task ${id} was not proposed by this session; ask the user to resume it`);
+    if (this.#sessions.views().find((s) => s.task === id)?.tokenBudget?.reached)
+      throw new DomainError("bad_request", `task ${id} was stopped at its token budget; ask the user to resume it`);
     const resumed = await this.#tasks.resume(id);
     return { task: resumed, session: this.#sessionOfTask(id) };
   }
@@ -1588,6 +1593,10 @@ export class Agents {
             // A failed handoff check does not hold back the impact proposals.
             .catch((err: unknown) => this.#deps.log(`task ${task}: after its turn: ${String(err)}`))
             .then(() => this.#impactProposals.turnOver(task, id));
+      },
+      onTokenBudgetReached: () => {
+        this.#deps.log(`session ${id}: stopped at its token budget`);
+        this.stop(id).catch((err: unknown) => this.#deps.log(`session ${id}: stopping at its token budget: ${String(err)}`));
       },
       onEvent: (event: SessionEvent) => {
         if (event.kind === "turn_ended") this.#miseTrust.turnEnded(trustRecipientOf({ id, task }));

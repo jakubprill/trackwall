@@ -24,6 +24,7 @@ function session(id: string, needsAttention: boolean, dialog: Session["dialog"] 
     usage: null,
     model: null,
     modelInUse: null,
+    tokenBudget: null,
   };
 }
 

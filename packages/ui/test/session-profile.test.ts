@@ -34,6 +34,7 @@ function session(id: string, profile: string | null, run: Session["run"] = runni
     usage: null,
     model: null,
     modelInUse: null,
+    tokenBudget: null,
   };
 }
 

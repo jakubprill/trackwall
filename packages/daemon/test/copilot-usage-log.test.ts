@@ -247,6 +247,22 @@ describe("the usage log of a session", () => {
     expect(log.modelInUse()).toBe("claude-opus-5.5");
   });
 
+  test("the tokens since the session's start leave out what the conversation used before it (ADR-237)", () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-copilot-home-"));
+    const file = conversationEventLog(home, "conv-1");
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, `${receipt({ inputTokens: 300, outputTokens: 20, accounting: { sourceSessionId: "conv-1", sequence: 1 } })}\n`);
+    const log = new CopilotUsageLog(home);
+
+    log.readBeforeStart("conv-1");
+    expect(log.tokensSinceStart()).toBe(0);
+
+    appendFileSync(file, `${receipt({ inputTokens: 100, outputTokens: 5, accounting: { sourceSessionId: "conv-1", sequence: 2 } })}\n`);
+    log.update("conv-1");
+    expect(log.current()).toMatchObject({ inputTokens: 400, outputTokens: 25 });
+    expect(log.tokensSinceStart()).toBe(105);
+  });
+
   test("a missing log leaves the usage as it was", () => {
     const log = new CopilotUsageLog(join(tmpdir(), "trackwall-no-such-copilot-home"));
 

@@ -34,6 +34,7 @@ function session(state: TaskState | null, run: Session["run"] = running): Sessio
     usage: null,
     model: null,
     modelInUse: null,
+    tokenBudget: null,
   };
 }
 

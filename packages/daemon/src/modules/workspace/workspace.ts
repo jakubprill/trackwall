@@ -212,6 +212,7 @@ export class Workspace {
     const autoReview = configOrProblem(() => this.deps.file.autoReviewSettings(), AutoReviewSettings.parse({}));
     const supervisorModel = configOrProblem(() => this.deps.file.supervisorModel(), null);
     const retryModel = configOrProblem(() => this.deps.file.retryModel(), null);
+    const taskTokenBudget = configOrProblem(() => this.deps.file.taskTokenBudget(), null);
     // What Settings shows is what runs: a hand edit of `gitProgram` applies when Settings reads it (ADR-112).
     this.deps.vcs.useGitProgram(gitProgram.value);
     return {
@@ -229,6 +230,8 @@ export class Workspace {
       supervisorModelProblem: supervisorModel.problem,
       retryModel: retryModel.value,
       retryModelProblem: retryModel.problem,
+      taskTokenBudget: taskTokenBudget.value,
+      taskTokenBudgetProblem: taskTokenBudget.problem,
       configFile: this.configFile(),
     };
   }
@@ -555,6 +558,20 @@ export class Workspace {
   setRetryModel(model: string | null): WorkspaceSettings {
     this.deps.file.setRetryModel(model);
     return this.settings();
+  }
+
+  /** The token budget of a task's session from its next start or resume (ADR-237); `null` removes the key. */
+  setTaskTokenBudget(budget: number | null): WorkspaceSettings {
+    this.deps.file.setTaskTokenBudget(budget);
+    return this.settings();
+  }
+
+  /**
+   * `taskTokenBudget` from `workspace.yaml` (ADR-237); `invalid_config` for a bad key, so that a typo never lets a task
+   * run without the budget the user meant.
+   */
+  taskTokenBudget(): number | null {
+    return this.deps.file.taskTokenBudget();
   }
 
   /**

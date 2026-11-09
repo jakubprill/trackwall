@@ -26,6 +26,7 @@ import { RetryModelSurface } from "./RetryModelSurface.tsx";
 import { SessionProfileSurface } from "./SessionProfileSurface.tsx";
 import { StartAtSignInSurface } from "./StartAtSignInSurface.tsx";
 import { SupervisorModelSurface } from "./SupervisorModelSurface.tsx";
+import { TaskTokenBudgetSurface } from "./TaskTokenBudgetSurface.tsx";
 import { ThemeSurface } from "./ThemeSurface.tsx";
 import { UpdatesSurface } from "./UpdatesSurface.tsx";
 import { VsCodeExtensionSurface } from "./VsCodeExtensionSurface.tsx";
@@ -111,6 +112,8 @@ function Section({
       return <SupervisorModelSurface conn={conn} />;
     case "retry-model":
       return <RetryModelSurface conn={conn} />;
+    case "task-token-budget":
+      return <TaskTokenBudgetSurface conn={conn} />;
     case "auto-review":
       return <AutoReviewSurface conn={conn} />;
     case "java-navigation":

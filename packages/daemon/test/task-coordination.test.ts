@@ -65,6 +65,7 @@ function view(id: string, taskId: string | null, state: TaskState | null, run: S
     usage: null,
     model: null,
     modelInUse: null,
+    tokenBudget: null,
   };
 }
 

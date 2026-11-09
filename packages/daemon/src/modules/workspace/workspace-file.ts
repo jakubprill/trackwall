@@ -14,6 +14,7 @@ import {
   StarredRepos,
   SupervisorSettings,
   TaskModel,
+  TaskTokenBudget,
   ToolPermissionRules,
   WorkspaceKey,
   type WorkspaceKeyState,
@@ -29,7 +30,7 @@ import { type WorkspaceKeyValues, workspaceKeyValue } from "./workspace-key-valu
 /**
  * `workspace.yaml` (§4.5, ADR-13): the workspace configuration, which the user can edit by hand and keep
  * in a private repo. Read on every use, so a manual edit works without restarting the daemon. A write changes
- * only one key (`projectsDir`, `worktreesDir`, `gitProgram`, `repoHosts`, `starredRepos`, which the star in Repos writes, `javaNavigation`, which the Java navigation install writes, or `localConfigRemote`, which "Push to this remote" for the local config store writes, or `sessionProfile`, or `autoReview`, or `supervisorModel`, or `retryModel`; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `supervisor`, `sandbox` and `agentSecrets` only by hand) and keeps comments and the other keys,
+ * only one key (`projectsDir`, `worktreesDir`, `gitProgram`, `repoHosts`, `starredRepos`, which the star in Repos writes, `javaNavigation`, which the Java navigation install writes, or `localConfigRemote`, which "Push to this remote" for the local config store writes, or `sessionProfile`, or `autoReview`, or `supervisorModel`, or `retryModel`, or `taskTokenBudget`; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `supervisor`, `sandbox` and `agentSecrets` only by hand) and keeps comments and the other keys,
  * including the `repos` list from version 0.2.0, which is no longer read (ADR-18): it is the user's file, so removing it is up to them.
  */
 
@@ -83,6 +84,8 @@ const Keys: { [K in WorkspaceKey]: z.ZodType<WorkspaceKeyValues[K], unknown> } =
   supervisorModel: TaskModel.nullish().transform((model) => model ?? null),
   // The stronger model a failed task is offered to be retried on (ADR-233); set in Settings › Agents or by hand.
   retryModel: TaskModel.nullish().transform((model) => model ?? null),
+  // The tokens a task's session may use from its start or resume (ADR-237); set in Settings › Agents or by hand.
+  taskTokenBudget: TaskTokenBudget.nullish().transform((budget) => budget ?? null),
   // The Java language server for tasks (ADR-99); by hand or by installing it in Settings › Agents (ADR-123).
   javaNavigation: JavaNavigationSettings.refine(
     (settings) => [settings.jdtls, settings.java, settings.lombok, ...settings.runtimes].every((path) => path === null || isFullPath(path)),
@@ -249,6 +252,16 @@ export class WorkspaceFile {
   /** `null` removes the key: a failed task is offered a retry with an empty model field. */
   setRetryModel(model: string | null): void {
     this.set("retryModel", model);
+  }
+
+  /** The token budget of a task's session (`taskTokenBudget`, ADR-237); `null` when tasks have none. */
+  taskTokenBudget(): number | null {
+    return this.get("taskTokenBudget", Keys.taskTokenBudget);
+  }
+
+  /** `null` removes the key: tasks run without a budget. */
+  setTaskTokenBudget(budget: number | null): void {
+    this.set("taskTokenBudget", budget);
   }
 
   /** Only the settings turned on are written, and with both off the key goes, so the file says nothing the user did not turn on. */

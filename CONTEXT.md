@@ -437,6 +437,10 @@ _Avoid_: LLM, engine, agent (for the model)
 A new attempt at a task on another model, usually a stronger one after its verification failed: a new task with the same prompt from the same base commit, which names the task it retries; the first attempt stays until the user ends it (ADR-233). Unlike a resume on another model (ADR-206), it does not go on with the first attempt's conversation or changes.
 _Avoid_: rerun (that is Verify again), restart (that is a session's), fallback (that is Copilot CLI's own choice of model, ADR-225)
 
+**Token budget** (`taskTokenBudget` in `workspace.yaml`, `Session.tokenBudget`, `TokenBudget`; in the UI "Token budget per task" in Settings › Agents, *Stopped at its token budget*):
+How many tokens (input and output) a task's session may use from its start or resume; at it Trackwall stops the session as Stop does, and the user's Resume gives the task the budget again (ADR-237).
+_Avoid_: limit, cap (Copilot CLI's own `--max-ai-credits` is in AI credits), quota
+
 **Model in use** (`Session.modelInUse`, `modelSwitch`; the strip "Runs on …, not …" in the UI):
 The model Copilot CLI actually runs a session's conversation on, from the conversation's event log (ADR-225): the model of its latest own call, or of its latest model change; unknown after a change to `auto` until the next own call. It differs from the task model or the session's `--model` when Copilot CLI fell back to another one (an account without the model) or `/model` switched it.
 _Avoid_: actual model, real model, effective model

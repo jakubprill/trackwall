@@ -23,6 +23,7 @@ function session(fields: Partial<Session> & Pick<Session, "id">): Session {
     usage: null,
     model: null,
     modelInUse: null,
+    tokenBudget: null,
     ...fields,
   };
 }

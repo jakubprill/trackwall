@@ -332,6 +332,7 @@ export const WorkspaceKey = z.enum([
   "autoReview",
   "supervisorModel",
   "retryModel",
+  "taskTokenBudget",
   "javaNavigation",
   "localConfigRemote",
   "supervisor",
@@ -374,6 +375,11 @@ export const WORKSPACE_KEYS: Record<WorkspaceKey, WorkspaceKeyInfo> = {
   },
   retryModel: {
     purpose: "The stronger Copilot CLI model a task whose verification failed is offered to be retried on.",
+    docs: "tasks",
+    settings: "agents",
+  },
+  taskTokenBudget: {
+    purpose: "How many tokens a task's session may use from its start or resume before Trackwall stops it.",
     docs: "tasks",
     settings: "agents",
   },
