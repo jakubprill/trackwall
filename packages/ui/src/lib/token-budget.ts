@@ -14,7 +14,8 @@ const UNITS: Readonly<Record<string, number>> = { "": 1, k: 1000, m: 1_000_000 }
  */
 export function parseTokenBudget(text: string): { budget: number } | { problem: string } {
   const compact = text.replace(/[\s_]/g, "");
-  const ungrouped = /^\d{1,3}(,\d{3})+$/.test(compact) ? compact.replaceAll(",", "") : compact;
+  const grouped = /^(\d{1,3}(?:,\d{3})+)([km]?)$/i.exec(compact);
+  const ungrouped = grouped === null ? compact : `${grouped[1]?.replaceAll(",", "")}${grouped[2]}`;
   const match = /^(\d+(?:\.\d+)?)([km]?)$/i.exec(ungrouped);
   const unit = UNITS[match?.[2]?.toLowerCase() ?? ""];
   if (match === null || unit === undefined) return { problem: "Type a number of tokens, such as 2000000, 2M or 500k." };

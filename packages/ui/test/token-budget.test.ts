@@ -9,6 +9,7 @@ describe("a task's token budget in the UI (ADR-237)", () => {
     expect(parseTokenBudget("2M")).toEqual({ budget: 2_000_000 });
     expect(parseTokenBudget("1.5m")).toEqual({ budget: 1_500_000 });
     expect(parseTokenBudget("500k")).toEqual({ budget: 500_000 });
+    expect(parseTokenBudget("1,500k")).toEqual({ budget: 1_500_000 });
   });
 
   test("anything else is refused with what to type", () => {

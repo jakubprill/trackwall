@@ -1446,13 +1446,18 @@ export class Agents {
    * Daemon start, once the API listens (the sessions' hooks and MCP server need its port): the sessions that ran when
    * the previous daemon stopped go on with their conversations (ADR-95). A task's session resumes as Resume does; the
    * supervisor, a free session and a repo session start again under their id with `--resume`. One that cannot (its task
-   * was ended, its repo is gone, a supervisor already runs) goes to the log.
+   * was ended, its repo is gone, a supervisor already runs) goes to the log, and so does a task the previous daemon
+   * marked stopped at its token budget (ADR-237) before its stop ended: only the user's Resume gives it the budget again.
    */
   async resumeLeftSessions(): Promise<void> {
     // The supervisor first: the user may start a new one meanwhile, which would leave the old conversation behind.
     const left = [...this.#left].sort((a, b) => Number(b.supervisor) - Number(a.supervisor));
     this.#left = [];
     for (const session of left) {
+      if (session.task !== null && this.#tasks.find(session.task) !== undefined && this.#tasks.stoppedAtTokenBudget(session.task)) {
+        this.#deps.log(`not resuming session ${session.session}: task ${session.task} was stopped at its token budget`);
+        continue;
+      }
       try {
         await this.#resumeLeft(session);
         this.#deps.log(`resumed session ${session.session} (${resumablePlace(session)})`);
@@ -1596,7 +1601,12 @@ export class Agents {
       },
       onTokenBudgetReached: async () => {
         this.#deps.log(`session ${id}: stopped at its token budget`);
-        if (task !== null) this.#tasks.markStoppedAtTokenBudget(task);
+        // The stop comes whatever happens to the mark: a task removed meanwhile, or `tasks.json` that cannot be written.
+        try {
+          if (task !== null) this.#tasks.markStoppedAtTokenBudget(task);
+        } catch (err) {
+          this.#deps.log(`task ${task}: marking it stopped at its token budget: ${String(err)}`);
+        }
         await this.stop(id).catch((err: unknown) => {
           this.#deps.log(`session ${id}: stopping at its token budget, tried again at its next check: ${String(err)}`);
           throw err;
