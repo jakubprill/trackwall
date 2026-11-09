@@ -981,7 +981,7 @@ export class Agents {
     if (session?.task != null) throw new DomainError("bad_request", `a task session resumes no task; ask the user to resume task ${id}`);
     if (session && !isSupervisor(session) && proposerOf(task.proposedBy) !== proposerKeyOf(session))
       throw new DomainError("bad_request", `task ${id} was not proposed by this session; ask the user to resume it`);
-    if (this.#sessions.views().find((s) => s.task === id)?.tokenBudget?.reached)
+    if (this.#tasks.stoppedAtTokenBudget(id))
       throw new DomainError("bad_request", `task ${id} was stopped at its token budget; ask the user to resume it`);
     const resumed = await this.#tasks.resume(id);
     return { task: resumed, session: this.#sessionOfTask(id) };
@@ -1594,9 +1594,13 @@ export class Agents {
             .catch((err: unknown) => this.#deps.log(`task ${task}: after its turn: ${String(err)}`))
             .then(() => this.#impactProposals.turnOver(task, id));
       },
-      onTokenBudgetReached: () => {
+      onTokenBudgetReached: async () => {
         this.#deps.log(`session ${id}: stopped at its token budget`);
-        this.stop(id).catch((err: unknown) => this.#deps.log(`session ${id}: stopping at its token budget: ${String(err)}`));
+        if (task !== null) this.#tasks.markStoppedAtTokenBudget(task);
+        await this.stop(id).catch((err: unknown) => {
+          this.#deps.log(`session ${id}: stopping at its token budget, tried again at its next check: ${String(err)}`);
+          throw err;
+        });
       },
       onEvent: (event: SessionEvent) => {
         if (event.kind === "turn_ended") this.#miseTrust.turnEnded(trustRecipientOf({ id, task }));

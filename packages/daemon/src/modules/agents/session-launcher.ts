@@ -132,8 +132,8 @@ type SessionHooks = Pick<
 
 /** How a session of either view tells `Agents` what it did. */
 export type SessionCallbacks = Omit<SessionHooks, "tokenBudget"> & {
-  /** The task session reached its token budget (ADR-237): `Agents` stops it. */
-  onTokenBudgetReached: () => void;
+  /** The task session reached its token budget (ADR-237): `Agents` stops it; a rejection makes the next check try again. */
+  onTokenBudgetReached: () => Promise<void>;
 };
 
 export interface SessionLauncherDeps {
@@ -230,6 +230,7 @@ export class SessionLauncher {
         events: CONVERSATION_HOOK_EVENTS,
         lspServers: {},
       });
+      const usage = new CopilotUsageLog(copilotHome(setup.env));
       const session = new AcpSession({
         id,
         repo,
@@ -242,8 +243,8 @@ export class SessionLauncher {
         environment: setup.mise.environment,
         model: setup.model,
         run: () => this.#deps.procs.state(sessionOwner(id)),
-        ...this.#callbacks({ id, supervisor, task }, setup.tokenBudget),
-        usage: new CopilotUsageLog(copilotHome(setup.env)),
+        ...this.#callbacks({ id, supervisor, task }, setup.tokenBudget, usage),
+        usage,
         log: this.#deps.log,
       });
       const start = async () => {
@@ -339,9 +340,14 @@ export class SessionLauncher {
   }
 
   /** The callbacks of `Agents` for a session, with its token budget (ADR-237) when it starts with one. */
-  #callbacks(session: { id: string; supervisor: boolean; task: string | null }, budget: number | null): SessionHooks {
+  #callbacks(
+    session: { id: string; supervisor: boolean; task: string | null },
+    budget: number | null,
+    usage: CopilotUsageLog,
+  ): SessionHooks {
     const { onTokenBudgetReached, ...callbacks } = this.#deps.callbacks(session);
-    return { ...callbacks, tokenBudget: budget === null ? null : new TokenBudget(budget, onTokenBudgetReached) };
+    const tokenBudget = budget === null ? null : new TokenBudget(budget, () => usage.tokensSinceStart(), onTokenBudgetReached);
+    return { ...callbacks, tokenBudget };
   }
 
   /**
@@ -430,7 +436,7 @@ export class SessionLauncher {
       environment,
       model,
       run: () => this.#deps.procs.state(sessionOwner(id)),
-      ...this.#callbacks({ id, supervisor, task }, tokenBudget),
+      ...this.#callbacks({ id, supervisor, task }, tokenBudget, usage),
       usage,
     });
     return { session, instructionsDir };

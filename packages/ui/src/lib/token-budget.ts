@@ -8,9 +8,14 @@ import { tokenCount } from "@/lib/copilot-usage";
 
 const UNITS: Readonly<Record<string, number>> = { "": 1, k: 1000, m: 1_000_000 };
 
-/** The amount typed in Settings, e.g. `2M`, `500k`, `1.5m` or `2 000 000`; a message for anything else. */
+/**
+ * The amount typed in Settings, e.g. `2M`, `500k`, `1.5m`, `2 000 000` or `2,000,000`; a message for anything else. A
+ * comma counts only between groups of three digits, so a decimal comma (`1,5M`) is refused rather than read as 15M.
+ */
 export function parseTokenBudget(text: string): { budget: number } | { problem: string } {
-  const match = /^(\d+(?:\.\d+)?)\s*([km]?)$/i.exec(text.replace(/[\s,_]/g, ""));
+  const compact = text.replace(/[\s_]/g, "");
+  const ungrouped = /^\d{1,3}(,\d{3})+$/.test(compact) ? compact.replaceAll(",", "") : compact;
+  const match = /^(\d+(?:\.\d+)?)([km]?)$/i.exec(ungrouped);
   const unit = UNITS[match?.[2]?.toLowerCase() ?? ""];
   if (match === null || unit === undefined) return { problem: "Type a number of tokens, such as 2000000, 2M or 500k." };
   const parsed = TaskTokenBudget.safeParse(Math.round(Number(match[1]) * unit));

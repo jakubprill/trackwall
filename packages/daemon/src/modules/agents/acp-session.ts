@@ -434,7 +434,7 @@ export class AcpSession implements AgentSession {
     const run = this.#o.run();
     if (run?.kind !== "exited") {
       if (this.#conversationId !== undefined) this.#o.usage.poll(this.#conversationId, Date.now());
-      this.#o.tokenBudget?.check(this.#o.usage.tokensSinceStart());
+      this.#o.tokenBudget?.check();
       return true;
     }
     this.#finished = true;
@@ -470,7 +470,7 @@ export class AcpSession implements AgentSession {
       usage: this.#o.usage.current(),
       model: this.model,
       modelInUse: this.#o.usage.modelInUse(),
-      tokenBudget: this.#o.tokenBudget?.view(this.#o.usage.tokensSinceStart()) ?? null,
+      tokenBudget: this.#o.tokenBudget?.view() ?? null,
     };
   }
 

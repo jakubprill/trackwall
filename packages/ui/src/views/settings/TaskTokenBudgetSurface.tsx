@@ -37,7 +37,7 @@ export function TaskTokenBudgetSurface({ conn }: { conn: Connection }) {
         <p className="text-muted-foreground text-sm">
           How many tokens (in and out) a task may use from its start or resume. When it reaches them, Trackwall stops the task as Stop does,
           and Resume gives it the budget again. It counts tokens, not AI credits, so it works with a model of your own provider too. A
-          change applies from the next start or resume. Without it, tasks have no limit.
+          change applies from the next start or resume. Without it, tasks have no budget.
         </p>
         {settings.error && <ErrorWithRetry message={settings.error} onRetry={settings.reload} />}
         {!data && !settings.error && <Loading />}

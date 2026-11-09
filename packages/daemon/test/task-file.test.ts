@@ -26,6 +26,7 @@ const stored = {
   conversation: "c0ffee-1",
   summary: { text: "Fixed, test added.", checkSteps: [], reproTest: null, reportedAt: "2026-10-24T10:00:00.000Z" },
   inReview: true,
+  stoppedAtTokenBudget: false,
   handoff: null,
   change: null,
   retryOf: null,
@@ -231,5 +232,13 @@ describe("tasks.json", () => {
     expect(existsSync(join(home, "tasks.json"))).toBe(false);
     expect(readdirSync(home).filter((name) => name.startsWith("tasks.json.broken-"))).toHaveLength(1);
     expect(logged[0]).toContain("file moved");
+  });
+
+  test("a task saved before token budgets comes back not stopped at one, so agents may resume it as before (ADR-237)", () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
+    const { stoppedAtTokenBudget: _, ...old } = stored;
+    writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
+
+    expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, stoppedAtTokenBudget: false }]);
   });
 });

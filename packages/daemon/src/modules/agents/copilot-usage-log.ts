@@ -197,6 +197,9 @@ export class CopilotUsageLog {
   }
 
   #restart(file: string): void {
+    // A log read again from its start counts all of its tokens toward this start's budget: one that got shorter must not
+    // hide what was used since the start behind what was used before it (ADR-237).
+    this.#tokensAtStart = 0;
     this.#file = file;
     this.#offset = 0;
     this.#rest = "";

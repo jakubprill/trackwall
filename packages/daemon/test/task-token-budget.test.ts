@@ -79,7 +79,7 @@ describe.skipIf(process.versions.bun === undefined)("a task's token budget (real
     expect(stopped.tokenBudget).toEqual({ budget: 200, used: 240, reached: true });
     expect(stopped.usage).toMatchObject({ modelCalls: 2, inputTokens: 200, outputTokens: 40 });
 
-    // An agent cannot lift the limit by resuming the task: only the user's Resume gives it the budget again.
+    // An agent cannot lift the budget by resuming the task: only the user's Resume gives it the budget again.
     const byAgent = await outside.callTool({ name: "resume_task", arguments: { task: task.id } });
     expect(byAgent.content).toEqual([
       { type: "text", text: `bad_request: task ${task.id} was stopped at its token budget; ask the user to resume it` },
@@ -105,7 +105,7 @@ describe.skipIf(process.versions.bun === undefined)("a task's token budget (real
     await daemon.post(agentsApi.stop, { session: session.id });
   }, 60_000);
 
-  test("a task in the conversation view is stopped at its budget too", async () => {
+  test("a task in the conversation view is stopped at its budget too, and its Resume counts from the loaded conversation", async () => {
     await daemon.post(workspaceApi.setTaskTokenBudget, { budget: 100 });
     const task = await daemon.post(agentsApi.createTask, {
       repo: "shop",
@@ -116,9 +116,45 @@ describe.skipIf(process.versions.bun === undefined)("a task's token budget (real
     const session = newestSessionOf(task.id);
 
     const stopped = await waitFor(daemon.facade.agents, session, (s) => s.run.kind === "exited", "the stop at the budget", 30_000);
-
     expect(stopped.tokenBudget).toEqual({ budget: 100, used: 120, reached: true });
+
+    await daemon.post(agentsApi.resumeTask, { task: task.id });
+    const resumed = newestSessionOf(task.id);
+    const afterResume = await waitFor(daemon.facade.agents, resumed, (s) => s.usage !== null, "the loaded conversation's usage");
+    expect(afterResume.tokenBudget).toEqual({ budget: 100, used: 0, reached: false });
+    expect(afterResume.run.kind).toBe("running");
     await removeTask(task.id);
+  }, 60_000);
+
+  test("an agent cannot resume a task stopped at its budget after a daemon restart either", async () => {
+    const before = await startSessionApi("u".repeat(43), {
+      ...ONE_REPO,
+      copilot: { command: FAKE_COPILOT.command, env: ({ home }) => ({ ...process.env, COPILOT_HOME: join(home, "copilot-home") }) },
+    });
+    let after: Awaited<ReturnType<typeof startSessionApi>> | undefined;
+    try {
+      await before.post(workspaceApi.setTaskTokenBudget, { budget: 100 });
+      const task = await before.post(agentsApi.createTask, { repo: "shop", prompt: "describe the repo", approvals: "auto" });
+      const first = before.facade.agents.sessions().sessions.find((s) => s.task === task.id);
+      if (first === undefined) throw new Error("the task started no session");
+      await waitFor(before.facade.agents, first.id, (s) => s.run.kind === "exited", "the stop at the budget");
+      await before.stop();
+
+      after = await startSessionApi("u".repeat(43), {
+        ...ONE_REPO,
+        restartOf: { home: before.home, projects: before.projects },
+        copilot: { command: FAKE_COPILOT.command, env: ({ home }) => ({ ...process.env, COPILOT_HOME: join(home, "copilot-home") }) },
+      });
+      const agent = await connectHttpClient(after.api.port, "u".repeat(43));
+      const byAgent = await agent.callTool({ name: "resume_task", arguments: { task: task.id } });
+      await agent.close();
+
+      expect(byAgent.content).toEqual([
+        { type: "text", text: `bad_request: task ${task.id} was stopped at its token budget; ask the user to resume it` },
+      ]);
+    } finally {
+      await after?.stop();
+    }
   }, 60_000);
 
   test("Settings saves the budget to workspace.yaml and shows it, and clearing it removes the key", async () => {

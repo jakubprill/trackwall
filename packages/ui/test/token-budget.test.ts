@@ -14,6 +14,8 @@ describe("a task's token budget in the UI (ADR-237)", () => {
   test("anything else is refused with what to type", () => {
     expect(parseTokenBudget("lots")).toEqual({ problem: "Type a number of tokens, such as 2000000, 2M or 500k." });
     expect(parseTokenBudget("2G")).toEqual({ problem: "Type a number of tokens, such as 2000000, 2M or 500k." });
+    // A decimal comma, as many keyboards type it, would otherwise save ten times the budget.
+    expect(parseTokenBudget("1,5M")).toEqual({ problem: "Type a number of tokens, such as 2000000, 2M or 500k." });
     expect(parseTokenBudget("0")).toEqual({ problem: "The budget must be a whole number of tokens above zero." });
   });
 

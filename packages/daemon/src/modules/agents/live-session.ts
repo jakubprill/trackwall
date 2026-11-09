@@ -458,7 +458,7 @@ export class LiveSession implements AgentSession {
     const run = this.#run();
     if (run?.kind !== "exited") {
       this.#usage.poll(this.conversation, Date.now());
-      this.#tokenBudget?.check(this.#usage.tokensSinceStart());
+      this.#tokenBudget?.check();
       return true;
     }
     // A stop by the user is an intended end, not a session error, even though the process ends with a signal.
@@ -495,7 +495,7 @@ export class LiveSession implements AgentSession {
       usage: this.#usage.current(),
       model: this.model,
       modelInUse: this.#usage.modelInUse(),
-      tokenBudget: this.#tokenBudget?.view(this.#usage.tokensSinceStart()) ?? null,
+      tokenBudget: this.#tokenBudget?.view() ?? null,
     };
   }
 
