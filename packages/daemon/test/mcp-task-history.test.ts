@@ -66,6 +66,7 @@ describe.skipIf(process.versions.bun === undefined)("the task journal and search
         proposed: false,
         item: null,
         handoffFrom: null,
+        retryOf: null,
         summary: "Retries the payment call; the BFF needs no change.",
         commits: [{ hash: head, subject: "Retry the payment call three times" }],
         commitsTotal: 1,

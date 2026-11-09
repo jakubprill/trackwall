@@ -28,6 +28,7 @@ const stored = {
   inReview: true,
   handoff: null,
   change: null,
+  retryOf: null,
   impactProposed: { "orders-bff": ["GET /api/orders/{id}"] },
   trustedMiseConfig: { "mise.toml": "b".repeat(64) },
   port: 41003,

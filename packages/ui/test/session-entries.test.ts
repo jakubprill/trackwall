@@ -64,6 +64,7 @@ function task(id: string, createdAt: string): Task {
     port: 41000,
     included: { files: [], problems: [] },
     change: null,
+    retryOf: null,
   };
 }
 

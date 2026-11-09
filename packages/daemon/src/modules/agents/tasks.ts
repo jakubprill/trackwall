@@ -196,16 +196,27 @@ export interface TaskOrigin {
   view: SessionView;
   /** The change the task is a part of (ADR-171), whose earlier parts are already on the list; `null` for a task on its own. */
   change: TaskChange | null;
+  /** The task this one retries on another model (ADR-233); `null` for a first attempt. */
+  retryOf: string | null;
 }
 
 /**
  * What every part of a change starts with (ADR-171): its identity and place come from the change. No part plans first
  * (ADR-229): the change's parts start one after another, each on the work of the part before it.
  */
-export type ChangeOrigin = Omit<TaskOrigin, "id" | "change" | "planFirst">;
+export type ChangeOrigin = Omit<TaskOrigin, "id" | "change" | "planFirst" | "retryOf">;
 
 /** What the user chooses for a task they start: everything of its origin but the identity a proposal or a change gives it. */
-export type TaskOptions = Omit<TaskOrigin, "id" | "title" | "proposedBy" | "change">;
+export type TaskOptions = Omit<TaskOrigin, "id" | "title" | "proposedBy" | "change" | "retryOf">;
+
+/**
+ * Where a retry on another model starts (ADR-233): the base of the task it retries, and that task's handoff, so its
+ * agent reads the same handed work.
+ */
+interface RetryStart {
+  base: TaskBase;
+  handoff: TaskHandoff | null;
+}
 
 /** A task from the file with the worktree that follows from it, and its port (one given when it was read, if it had none). */
 type KnownTask = StoredTask & TaskWork & { port: number };
@@ -281,7 +292,13 @@ export class AgentTasks {
     const held: { position: number; task: KnownTask }[] = [];
     for (const [position, { repo, prompt }] of parts.entries()) {
       // A proposed change's id goes to the first part made, so a part that cannot be made does not leave it unused.
-      const partOrigin = { ...origin, planFirst: false, id: held.length === 0 ? firstId : randomUUID(), change: { id: change, position } };
+      const partOrigin = {
+        ...origin,
+        planFirst: false,
+        id: held.length === 0 ? firstId : randomUUID(),
+        change: { id: change, position },
+        retryOf: null,
+      };
       await this.#creating(repo, () => this.#create(repo, prompt, partOrigin, "hold")).then(
         (task) => held.push({ position, task }),
         (err: unknown) => failures.push({ position, repo, err }),
@@ -311,8 +328,9 @@ export class AgentTasks {
   async #create(
     repo: string,
     prompt: string,
-    { id, title, proposedBy, model, approvals, planFirst, javaNavigation, item, view: sessionView, change }: TaskOrigin,
+    { id, title, proposedBy, model, approvals, planFirst, javaNavigation, item, view: sessionView, change, retryOf }: TaskOrigin,
     launch: "launch" | "hold",
+    retry: RetryStart | null = null,
   ): Promise<KnownTask> {
     // Refused before the worktree exists: a task that asked for Java navigation would otherwise start without it, and
     // one that should run in the sandbox would run with the user's full access.
@@ -321,10 +339,15 @@ export class AgentTasks {
     if (planFirst && sessionView !== "conversation") throw new DomainError("bad_request", "Plan first needs the conversation view (Chat)");
     const sandbox = await this.#deps.sandbox(approvals);
     const repoDir = await this.#deps.repos.repoPath(repo);
-    const base = await asRepoUnavailable(repo, this.#deps.vcs.defaultBase(repoDir));
+    const base = retry?.base ?? (await asRepoUnavailable(repo, this.#deps.vcs.defaultBase(repoDir)));
     const worktreesDir = await this.#deps.repos.newTaskWorktreesDir();
     // A part of a change takes its handoff when its session starts (`#launchHeld`), once the parts before it started.
-    const handoff = change === null ? await this.#handoffFrom(this.#tasks.find((t) => t.id === proposedBy?.task)) : null;
+    const handoff =
+      retry !== null
+        ? await this.#retriedHandoff(retry.handoff)
+        : change === null
+          ? await this.#handoffFrom(this.#tasks.find((t) => t.id === proposedBy?.task))
+          : null;
     const task = this.#known({
       id,
       repo,
@@ -350,6 +373,7 @@ export class AgentTasks {
       inReview: false,
       handoff,
       change,
+      retryOf,
       impactProposed: {},
       trustedMiseConfig: null,
       port: freeTaskPort([...this.#tasks.map((t) => t.port), ...this.#creatingPorts]),
@@ -403,6 +427,37 @@ export class AgentTasks {
       );
       throw err;
     }
+  }
+
+  /**
+   * A new attempt at task `id` on `model` (ADR-233): a new task with its prompt, title, approvals, plan first, Java
+   * navigation, view, handoff and `item` (the caller checks it is still on the board), from the same base commit and
+   * base branch, so the two attempts start from the same code; `retryOf` names the task it retries. It reports to the
+   * user, not to a proposer, whose coordination stays with the first attempt, which goes on as it is. The same model as
+   * the task's would only repeat the attempt, and a part of a change starts with the other parts on one branch name, so
+   * both are `bad_request`.
+   */
+  retry(id: string, model: string | null, item: string | null): Promise<Task> {
+    const task = this.#get(id);
+    if (this.#removing.has(id)) throw new DomainError("bad_request", "this task is being ended");
+    if (model === task.model)
+      throw new DomainError("bad_request", `the task already runs on ${model ?? "Copilot CLI's default"}; pick another model`);
+    if (task.change !== null) throw new DomainError("bad_request", "a part of a change cannot be retried on its own");
+    const origin: TaskOrigin = {
+      id: randomUUID(),
+      title: task.title,
+      proposedBy: null,
+      model,
+      approvals: task.approvals,
+      planFirst: task.plan !== null,
+      javaNavigation: task.javaNavigation,
+      item,
+      view: task.view,
+      change: null,
+      retryOf: task.id,
+    };
+    const start = { base: { branch: task.baseBranch, commit: task.base }, handoff: task.handoff };
+    return this.#creating(task.repo, () => this.#create(task.repo, task.prompt, origin, "launch", start)).then(view);
   }
 
   /**
@@ -591,6 +646,15 @@ export class AgentTasks {
       return null;
     });
     return commit === null ? null : { task: from.id, repo: from.repo, branch: from.branch, commit };
+  }
+
+  /**
+   * The handoff of a retry (ADR-233): the handing task's branch as it is now, as a new subtask gets it, so the retry's
+   * agent is not told it read a commit only the first attempt read; the first attempt's own once the handing task ended.
+   */
+  async #retriedHandoff(first: TaskHandoff | null): Promise<TaskHandoff | null> {
+    if (first === null) return null;
+    return (await this.#handoffFrom(this.#tasks.find((t) => t.id === first.task))) ?? first;
   }
 
   /** The endpoints and types each repo was offered a task for from task `id`'s impact (ADR-198, ADR-205); `{}` once the task is gone. */

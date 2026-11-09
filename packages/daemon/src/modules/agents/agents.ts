@@ -629,6 +629,7 @@ export class Agents {
         item,
         view,
         change: null,
+        retryOf: null,
       });
     } finally {
       this.#proposals.release(id, this.#tasks.find(id) === undefined);
@@ -881,7 +882,19 @@ export class Agents {
     await this.#assertOnBoard(item);
     // `task` throws `not_found` for a task that is not on the list, before a worktree exists.
     const proposedBy = handoffFrom === null ? null : { session: null, supervisor: false, task: this.task(handoffFrom).id };
-    const origin = { id: randomUUID(), title, proposedBy, model, approvals, planFirst, javaNavigation, item, view, change: null };
+    const origin = {
+      id: randomUUID(),
+      title,
+      proposedBy,
+      model,
+      approvals,
+      planFirst,
+      javaNavigation,
+      item,
+      view,
+      change: null,
+      retryOf: null,
+    };
     const task = await this.#tasks.create(repo, prompt, origin);
     // The user handed the repo the work from the Impact tab, so the daemon's proposal for it is done (ADR-198).
     if (handoffFrom !== null) this.#impactProposals.replacedBy(handoffFrom, [repo]);
@@ -911,7 +924,12 @@ export class Agents {
   async findingsPlace(caller: string | null): Promise<{ task: string | null; item: string | null }> {
     const task = caller === null ? null : this.session(caller).task;
     const item = task === null ? null : this.task(task).item;
-    return { task, item: item !== null && (await this.#deps.boardHas(item)) ? item : null };
+    return { task, item: await this.#itemOnBoard(item) };
+  }
+
+  /** `item` while it is still on the board, `null` once the user removed it (or for none). */
+  async #itemOnBoard(item: string | null): Promise<string | null> {
+    return item !== null && (await this.#deps.boardHas(item)) ? item : null;
   }
 
   async #assertOnBoard(item: string | null): Promise<void> {
@@ -934,6 +952,14 @@ export class Agents {
   /** Whether Java navigation can start now, or why not (ADR-99); `null` without `javaNavigation` in `workspace.yaml`. */
   javaNavigationState(): JavaNavigationState {
     return javaNavigationState(this.#javaNavigation.readiness());
+  }
+
+  /**
+   * The user's retry of a task on another model (ADR-233), see `AgentTasks.retry`; the task's board item goes with it
+   * while it is still on the board.
+   */
+  async retryTask(id: string, model: string | null): Promise<Task> {
+    return this.#tasks.retry(id, model, await this.#itemOnBoard(this.task(id).item));
   }
 
   /** The user's Resume; with `model` the task runs on it from now on (ADR-206). */

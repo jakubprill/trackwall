@@ -20,11 +20,12 @@ describe("Settings categories", () => {
     expect(settingsCategory("agents").sections).toContain("copilot-cli");
   });
 
-  test("Agents holds only settings: connecting Copilot CLI, the session profile, the supervisor's model, the automatic review and Java navigation", () => {
+  test("Agents holds only settings: connecting Copilot CLI, the session profile, the supervisor's model, the retry model, the automatic review and Java navigation", () => {
     expect(settingsCategory("agents").sections).toEqual([
       "copilot-cli",
       "session-profile",
       "supervisor-model",
+      "retry-model",
       "auto-review",
       "java-navigation",
     ]);

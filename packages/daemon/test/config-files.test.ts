@@ -57,7 +57,7 @@ describe("config files", () => {
       name: "workspace.yaml",
       path: workspaceFile,
       state: "present",
-      detail: "3 of 17 keys set in the file",
+      detail: "3 of 18 keys set in the file",
     });
     expect(entry("tasks-file")).toEqual({
       id: "tasks-file",
@@ -121,6 +121,7 @@ describe("config files", () => {
       ["sessionProfile", "default", "none", null],
       ["autoReview", "default", "afterReport: false, rulesAfterReport: false", null],
       ["supervisorModel", "default", "Copilot CLI's default", null],
+      ["retryModel", "default", "not set", null],
       ["javaNavigation", "default", "not set", null],
       // The value without the user and token an HTTPS address may carry.
       ["localConfigRemote", "file", "https://backups.example.com/me/backups.git", 3],

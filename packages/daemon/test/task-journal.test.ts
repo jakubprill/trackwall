@@ -26,6 +26,7 @@ function ended(n: number, repo: string, prompt: string, endedAt: string, more: P
     proposed: false,
     item: null,
     handoffFrom: null,
+    retryOf: null,
     summary: null,
     commits: [],
     commitsTotal: null,

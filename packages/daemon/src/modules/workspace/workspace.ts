@@ -211,6 +211,7 @@ export class Workspace {
     const sessionProfile = configOrProblem(() => this.deps.file.sessionProfile(), null);
     const autoReview = configOrProblem(() => this.deps.file.autoReviewSettings(), AutoReviewSettings.parse({}));
     const supervisorModel = configOrProblem(() => this.deps.file.supervisorModel(), null);
+    const retryModel = configOrProblem(() => this.deps.file.retryModel(), null);
     // What Settings shows is what runs: a hand edit of `gitProgram` applies when Settings reads it (ADR-112).
     this.deps.vcs.useGitProgram(gitProgram.value);
     return {
@@ -226,6 +227,8 @@ export class Workspace {
       autoReviewProblem: autoReview.problem,
       supervisorModel: supervisorModel.value,
       supervisorModelProblem: supervisorModel.problem,
+      retryModel: retryModel.value,
+      retryModelProblem: retryModel.problem,
       configFile: this.configFile(),
     };
   }
@@ -545,6 +548,12 @@ export class Workspace {
   /** The model the supervisor runs on (ADR-193); `null` for Copilot CLI's default. Takes effect at its next start or resume. */
   setSupervisorModel(model: string | null): WorkspaceSettings {
     this.deps.file.setSupervisorModel(model);
+    return this.settings();
+  }
+
+  /** The model a failed task is offered to be retried on (ADR-233); `null` removes the key. */
+  setRetryModel(model: string | null): WorkspaceSettings {
+    this.deps.file.setRetryModel(model);
     return this.settings();
   }
 

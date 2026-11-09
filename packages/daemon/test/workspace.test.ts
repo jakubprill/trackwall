@@ -127,6 +127,8 @@ describe("workspace", () => {
         autoReviewProblem: null,
         supervisorModel: null,
         supervisorModelProblem: null,
+        retryModel: null,
+        retryModelProblem: null,
         configFile: file,
       });
       await expect(workspace.overview("api")).rejects.toMatchObject({ code: "not_found" });
@@ -232,6 +234,8 @@ describe("workspace", () => {
         autoReviewProblem: null,
         supervisorModel: null,
         supervisorModelProblem: null,
+        retryModel: null,
+        retryModelProblem: null,
         configFile: file,
       });
       expect(readFileSync(file, "utf8")).toContain(`projectsDir: ${projects}`);

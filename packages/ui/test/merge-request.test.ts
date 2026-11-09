@@ -33,6 +33,7 @@ const task = (fields: Partial<Task> = {}): Task => ({
   port: 41000,
   included: { files: [], problems: [] },
   change: null,
+  retryOf: null,
   ...fields,
 });
 

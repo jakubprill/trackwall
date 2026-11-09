@@ -65,6 +65,7 @@ export async function endedTaskFacts(
     proposed: task.proposedBy !== null,
     item: task.item,
     handoffFrom: task.handoff?.task ?? null,
+    retryOf: task.retryOf,
     summary: task.summary === null ? null : task.summary.text.slice(0, TASK_HISTORY_SUMMARY_MAX_CHARS),
     commits: [],
     commitsTotal: null,

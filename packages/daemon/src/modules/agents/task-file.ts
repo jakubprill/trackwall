@@ -14,7 +14,7 @@ import { MAX_MISE_PATH } from "./task-mise-config.ts";
  * worktrees folder, the repo and the branch (`taskWorktree`), so neither of them is stored. The file can be edited by hand, and its fields go to git
  * (`branch -D`, `diff <base commit>`), so the schema allows only a task branch and a full commit hash (`CommitHash` in `Task`).
  * Fields added later (title, origin and summary, ADR-39; the trusted mise config, ADR-59; the port and the included
- * files, ADR-61; the task worktrees folder, ADR-84; the model, ADR-98; the approvals mode, ADR-105; the plan, ADR-229; the sandbox, ADR-181; Java navigation, ADR-99; the board item, ADR-133; the view and its conversation, ADR-137; the handoff, ADR-143; the summary's check steps, ADR-169; its reproduction test, ADR-222; the change, ADR-171; the impact proposals, ADR-198; whether it is in review, ADR-213) have a default in the file, so tasks saved by an older version are not moved aside as an unreadable file.
+ * files, ADR-61; the task worktrees folder, ADR-84; the model, ADR-98; the approvals mode, ADR-105; the plan, ADR-229; the sandbox, ADR-181; Java navigation, ADR-99; the board item, ADR-133; the view and its conversation, ADR-137; the handoff, ADR-143; the summary's check steps, ADR-169; its reproduction test, ADR-222; the change, ADR-171; the impact proposals, ADR-198; whether it is in review, ADR-213; the task it retries, ADR-233) have a default in the file, so tasks saved by an older version are not moved aside as an unreadable file.
  */
 
 export const StoredTask = Task.omit({ worktree: true }).extend({
@@ -44,6 +44,7 @@ export const StoredTask = Task.omit({ worktree: true }).extend({
   /** The task whose session proposed this one (ADR-143); `null` for a task the user typed or the supervisor or a main session proposed. */
   handoff: TaskHandoff.nullable().default(null),
   change: Task.shape.change.default(null),
+  retryOf: Task.shape.retryOf.default(null),
   /**
    * The endpoints and library types each repo was offered a task for from this task's impact (ADR-198, ADR-205), by
    * repo, as `METHOD path` and `type name`: an impact proposal, or the work its agent proposed or the user started there

@@ -331,6 +331,7 @@ export const WorkspaceKey = z.enum([
   "sessionProfile",
   "autoReview",
   "supervisorModel",
+  "retryModel",
   "javaNavigation",
   "localConfigRemote",
   "supervisor",
@@ -369,6 +370,11 @@ export const WORKSPACE_KEYS: Record<WorkspaceKey, WorkspaceKeyInfo> = {
   supervisorModel: {
     purpose: "The Copilot CLI model the supervisor runs on, such as a cheaper one than your default.",
     docs: "supervisor",
+    settings: "agents",
+  },
+  retryModel: {
+    purpose: "The stronger Copilot CLI model a task whose verification failed is offered to be retried on.",
+    docs: "tasks",
     settings: "agents",
   },
   javaNavigation: { purpose: "The Java language server tasks can get for code navigation.", docs: "java-navigation", settings: "agents" },
