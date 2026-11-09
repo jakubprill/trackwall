@@ -371,6 +371,7 @@ export class AgentTasks {
       conversation: null,
       summary: null,
       inReview: false,
+      stoppedAtTokenBudget: false,
       handoff,
       change,
       retryOf,
@@ -471,10 +472,28 @@ export class AgentTasks {
     return this.#exclusive(id, async () => {
       this.#refuseRunning(task, "resuming");
       this.#closeSessions(task);
-      const resumed = model === undefined || model === task.model ? task : this.#withModel(task, model);
+      const unstopped = this.#withStoppedAtTokenBudget(task, false);
+      const resumed = model === undefined || model === unstopped.model ? unstopped : this.#withModel(unstopped, model);
       await this.#launch(resumed, "resume");
       return view(resumed);
     });
+  }
+
+  /** Whether the daemon stopped the task at its token budget since its last resume (ADR-237). */
+  stoppedAtTokenBudget(id: string): boolean {
+    return this.#get(id).stoppedAtTokenBudget;
+  }
+
+  /** The daemon stops the task's session at its token budget (ADR-237); a resume clears it. */
+  markStoppedAtTokenBudget(id: string): void {
+    this.#withStoppedAtTokenBudget(this.#get(id), true);
+  }
+
+  #withStoppedAtTokenBudget(task: KnownTask, stopped: boolean): KnownTask {
+    if (task.stoppedAtTokenBudget === stopped) return task;
+    const changed = { ...task, stoppedAtTokenBudget: stopped };
+    this.#save(this.#tasks.map((t) => (t.id === task.id ? changed : t)));
+    return changed;
   }
 
   #withModel(task: KnownTask, model: string | null): KnownTask {
@@ -1214,6 +1233,7 @@ function view({
   conversation: ____,
   handoff: _____,
   impactProposed: ______,
+  stoppedAtTokenBudget: _______,
   ...task
 }: KnownTask): Task {
   return task;

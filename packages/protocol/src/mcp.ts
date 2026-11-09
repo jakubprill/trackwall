@@ -1133,7 +1133,8 @@ export const mcpTools = {
       `task's panel. Find the task in ${LIST_SESSIONS} (tasks, and sessions with that task whose run ended). Only when the ` +
       "user asks to continue the task. What waits for it (your messages, the user's review) is read as soon as the session " +
       "waits for input. The supervisor resumes any task, another session only tasks it proposed, and a task session none. " +
-      "bad_request while the task has a running session or another action on it runs; not_found for an unknown or ended task.",
+      "bad_request while the task has a running session or another action on it runs, or when Trackwall stopped it at its " +
+      "token budget, which only the user's Resume gives it again; not_found for an unknown or ended task.",
     args: z.object({ task: TaskId.describe(`task id from ${LIST_SESSIONS} (the tasks field)`) }).strict(),
     result: ResumeTaskResult,
   },

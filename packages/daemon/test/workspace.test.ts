@@ -129,6 +129,8 @@ describe("workspace", () => {
         supervisorModelProblem: null,
         retryModel: null,
         retryModelProblem: null,
+        taskTokenBudget: null,
+        taskTokenBudgetProblem: null,
         configFile: file,
       });
       await expect(workspace.overview("api")).rejects.toMatchObject({ code: "not_found" });
@@ -236,6 +238,8 @@ describe("workspace", () => {
         supervisorModelProblem: null,
         retryModel: null,
         retryModelProblem: null,
+        taskTokenBudget: null,
+        taskTokenBudgetProblem: null,
         configFile: file,
       });
       expect(readFileSync(file, "utf8")).toContain(`projectsDir: ${projects}`);

@@ -24,6 +24,7 @@ function session(state: "Working" | "Input" | null, run: Session["run"] = runnin
     usage: null,
     model: null,
     modelInUse: null,
+    tokenBudget: null,
   };
 }
 

@@ -454,6 +454,17 @@ export const SessionStuck = z.object({
 });
 export type SessionStuck = z.infer<typeof SessionStuck>;
 
+/**
+ * The token budget of a task's session (ADR-237): the budget it started with (`taskTokenBudget`), the tokens (input and
+ * output) its conversation used since that start, and whether the daemon stopped it for reaching the budget.
+ */
+export const SessionTokenBudget = z.object({
+  budget: z.number().int().positive(),
+  used: z.number().int().nonnegative(),
+  reached: z.boolean(),
+});
+export type SessionTokenBudget = z.infer<typeof SessionTokenBudget>;
+
 export const Session = z.object({
   id: SessionId,
   /**
@@ -504,6 +515,8 @@ export const Session = z.object({
    * when Copilot CLI fell back to another one (an account without the model) or `/model` switched it.
    */
   modelInUse: z.string().nullable(),
+  /** A task session's token budget (ADR-237); `null` for a session without a task, or a task started without a budget. */
+  tokenBudget: SessionTokenBudget.nullable(),
 });
 export type Session = z.infer<typeof Session>;
 

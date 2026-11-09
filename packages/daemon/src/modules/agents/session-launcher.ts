@@ -31,6 +31,7 @@ import { type SessionRole, withInstructionsDir, writeSessionInstructions } from 
 import type { SessionTokens } from "./session-tokens.ts";
 import type { ChangeFacts } from "./task-change.ts";
 import type { HandoffFacts } from "./task-handoff.ts";
+import { TokenBudget } from "./token-budget.ts";
 
 /**
  * How a session of either view starts (§4.4, ADR-26, ADR-107): Copilot CLI found on the user's `PATH`, the session
@@ -118,14 +119,22 @@ interface LauncherRepos {
   toolPermissions(session: Pick<Session, "repo" | "supervisor">): ToolPermissions;
   supervisorSettings(): SupervisorSettings;
   supervisorModel(): string | null;
+  /** `taskTokenBudget` from `workspace.yaml` (ADR-237), `null` without the key; `invalid_config` for a bad key. */
+  taskTokenBudget(): number | null;
   agentSecrets(): readonly string[];
 }
 
-/** How a session of either view tells `Agents` what it did. */
-export type SessionCallbacks = Pick<
+/** What the callbacks of `Agents` give a session of either view (`#callbacks`). */
+type SessionHooks = Pick<
   LiveSessionOptions,
-  "prompt" | "situation" | "onUserText" | "onPromptSent" | "onEvent" | "onTurnOver" | "onTurnStart"
+  "prompt" | "situation" | "onUserText" | "onPromptSent" | "onEvent" | "onTurnOver" | "onTurnStart" | "tokenBudget"
 >;
+
+/** How a session of either view tells `Agents` what it did. */
+export type SessionCallbacks = Omit<SessionHooks, "tokenBudget"> & {
+  /** The task session reached its token budget (ADR-237): `Agents` stops it; a rejection makes the next check try again. */
+  onTokenBudgetReached: () => Promise<void>;
+};
 
 export interface SessionLauncherDeps {
   procs: LauncherProcs;
@@ -189,6 +198,7 @@ export class SessionLauncher {
         model: setup.model,
         lspServers,
         usage: new CopilotUsageLog(copilotHome(setup.env)),
+        tokenBudget: setup.tokenBudget,
       });
       const start = async () => {
         const { terminal } = await this.#deps.procs.startTerminal({
@@ -220,6 +230,7 @@ export class SessionLauncher {
         events: CONVERSATION_HOOK_EVENTS,
         lspServers: {},
       });
+      const usage = new CopilotUsageLog(copilotHome(setup.env));
       const session = new AcpSession({
         id,
         repo,
@@ -232,8 +243,8 @@ export class SessionLauncher {
         environment: setup.mise.environment,
         model: setup.model,
         run: () => this.#deps.procs.state(sessionOwner(id)),
-        ...this.#deps.callbacks({ id, supervisor, task }),
-        usage: new CopilotUsageLog(copilotHome(setup.env)),
+        ...this.#callbacks({ id, supervisor, task }, setup.tokenBudget, usage),
+        usage,
         log: this.#deps.log,
       });
       const start = async () => {
@@ -254,8 +265,8 @@ export class SessionLauncher {
 
   /**
    * What a start reads of the configuration, each of which can refuse it: Copilot CLI, the tool permissions, the
-   * supervisor's model (ADR-193) and what mise gives the place with the agent secrets (ADR-93). A restart reads it before
-   * it stops the session (ADR-119).
+   * supervisor's model (ADR-193), a task's token budget (ADR-237) and what mise gives the place with the agent secrets
+   * (ADR-93). A restart reads it before it stops the session (ADR-119).
    */
   async inputs({ repo, supervisor, task }: Pick<SessionPlace, "repo" | "supervisor" | "task">) {
     const userEnv = await this.#deps.env();
@@ -266,7 +277,8 @@ export class SessionLauncher {
     // Read at each start, a resume and a restart included, so a change in Settings applies to the next one; a task's or
     // a repo session's model comes with the start instead (ADR-98, ADR-175).
     const model = modelArgs(supervisor ? this.#deps.repos.supervisorModel() : null);
-    return { copilot, permissions, model, ...(await this.#miseLaunch({ repo, task }, userEnv)) };
+    const tokenBudget = task === null ? null : this.#deps.repos.taskTokenBudget();
+    return { copilot, permissions, model, tokenBudget, ...(await this.#miseLaunch({ repo, task }, userEnv)) };
   }
 
   /** What mise would give a session in its place now (ADR-93, ADR-119). */
@@ -304,7 +316,7 @@ export class SessionLauncher {
   /** What every start needs: Copilot CLI, the session directory and token, and the arguments and environment it gets. */
   async #setUp(id: string, place: SessionPlace, launchArgs: readonly string[]): Promise<SessionSetup> {
     const { repo, supervisor, task } = place;
-    const { copilot, permissions, model, miseEnv, mise } = await this.inputs(place);
+    const { copilot, permissions, model, tokenBudget, miseEnv, mise } = await this.inputs(place);
     // The MCP server and the hooks are the daemon on `127.0.0.1`, which a proxy of the user must not get (ADR-89).
     const env = withLoopbackNoProxy({ ...mise.env, TERM: "xterm-256color", COLORTERM: "truecolor", ...LOOPBACK_HOOKS_ENV });
     const startModel = modelOfArgs([...copilot.args, ...mise.args, ...model, ...launchArgs]);
@@ -323,7 +335,19 @@ export class SessionLauncher {
       knowledge: await this.#knowledge(id, repo),
       dir,
       token: this.#deps.tokens.issue(id),
+      tokenBudget,
     };
+  }
+
+  /** The callbacks of `Agents` for a session, with its token budget (ADR-237) when it starts with one. */
+  #callbacks(
+    session: { id: string; supervisor: boolean; task: string | null },
+    budget: number | null,
+    usage: CopilotUsageLog,
+  ): SessionHooks {
+    const { onTokenBudgetReached, ...callbacks } = this.#deps.callbacks(session);
+    const tokenBudget = budget === null ? null : new TokenBudget(budget, () => usage.tokensSinceStart(), onTokenBudgetReached);
+    return { ...callbacks, tokenBudget };
   }
 
   /**
@@ -392,6 +416,7 @@ export class SessionLauncher {
     model,
     lspServers,
     usage,
+    tokenBudget,
   }: SessionFiles): PreparedSession {
     const supervisor = role.kind === "supervisor";
     const hooksFile = join(dir, HOOKS_FILENAME);
@@ -411,7 +436,7 @@ export class SessionLauncher {
       environment,
       model,
       run: () => this.#deps.procs.state(sessionOwner(id)),
-      ...this.#deps.callbacks({ id, supervisor, task }),
+      ...this.#callbacks({ id, supervisor, task }, tokenBudget, usage),
       usage,
     });
     return { session, instructionsDir };
@@ -490,6 +515,8 @@ interface SessionSetup {
   knowledge: SessionKnowledge;
   dir: string;
   token: string;
+  /** A task's token budget (ADR-237), read at each start; `null` for another session or a task without one. */
+  tokenBudget: number | null;
 }
 
 /** The directory of a new session and what follows from it for `LiveSession`. */
@@ -504,6 +531,7 @@ interface SessionFiles
   token: string;
   conversation: string | undefined;
   lspServers: Record<string, LspServer>;
+  tokenBudget: number | null;
 }
 
 /** A session of either view whose files are written, and the start of its process. */

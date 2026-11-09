@@ -220,6 +220,14 @@ export type AutoReviewSettings = z.infer<typeof AutoReviewSettings>;
 export const SandboxSettings = z.object({ tasks: z.enum(["auto", "all", "off"]) }).strict();
 export type SandboxSettings = z.infer<typeof SandboxSettings>;
 
+/**
+ * `taskTokenBudget` in `workspace.yaml` (ADR-237), set in Settings › Agents: how many tokens (input and output) a task's
+ * session may use from its start or resume before the daemon stops it, as the Stop button does. A Resume gives the task
+ * the budget again. Tokens and not AI credits, so it holds with a model of your own provider (BYOK) too.
+ */
+export const TaskTokenBudget = z.number().int().positive().max(1_000_000_000_000);
+export type TaskTokenBudget = z.infer<typeof TaskTokenBudget>;
+
 /** An environment variable name Copilot CLI's comma-separated `--secret-env-vars` can carry (ADR-93). */
 export const ENV_VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -297,6 +305,10 @@ export const WorkspaceSettings = z.object({
   retryModel: z.string().nullable(),
   /** Why `retryModel` in `workspace.yaml` cannot be read; saving the setting fixes it. */
   retryModelProblem: z.string().nullable(),
+  /** `taskTokenBudget` from `workspace.yaml` (ADR-237); `null` when tasks have no budget. */
+  taskTokenBudget: TaskTokenBudget.nullable(),
+  /** Why `taskTokenBudget` in `workspace.yaml` cannot be read; tasks do not start until it is fixed or saved again. */
+  taskTokenBudgetProblem: z.string().nullable(),
   /** The full path of `workspace.yaml`, so that the user knows which file to edit by hand. */
   configFile: z.string(),
 });
@@ -421,6 +433,11 @@ export const workspaceApi = {
    * `workspace.yaml`. No MCP tool sets it, like `setSupervisorModel`.
    */
   setRetryModel: endpoint("set-retry-model", z.object({ model: TaskModel.nullable() }).strict(), WorkspaceSettings),
+  /**
+   * The token budget of a task's session from its next start or resume (ADR-237); `null` removes `taskTokenBudget` from
+   * `workspace.yaml`. No MCP tool sets it: an agent must not lift its own limit.
+   */
+  setTaskTokenBudget: endpoint("set-task-token-budget", z.object({ budget: TaskTokenBudget.nullable() }).strict(), WorkspaceSettings),
   /** The starred repos (ADR-192). */
   starredRepos: endpoint("starred-repos", z.object({}).strict(), StarredRepos),
   /**

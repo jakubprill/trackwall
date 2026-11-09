@@ -152,6 +152,7 @@ async function sessionShowing(
     onTurnOver: () => {},
     onTurnStart: () => {},
     usage: new CopilotUsageLog(NO_COPILOT_HOME),
+    tokenBudget: null,
   });
   sessions.push(session);
   const written: string[] = [];

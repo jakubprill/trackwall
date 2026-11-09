@@ -26,6 +26,7 @@ import { ReadRequestClock } from "./read-request.ts";
 import { SessionAttention } from "./session-attention.ts";
 import { SessionDialogs, selectsOption } from "./session-dialogs.ts";
 import { sessionStuck } from "./session-stuck.ts";
+import type { TokenBudget } from "./token-budget.ts";
 
 /**
  * One running (or ended) Copilot CLI session in the daemon (§4.4): the screen for session terminals, the state from hooks,
@@ -155,6 +156,8 @@ export interface LiveSessionOptions {
   onTurnStart: () => void;
   /** What the conversation used (ADR-190), read at the start, in the session's cycle and at its end. */
   usage: CopilotUsageLog;
+  /** A task session's token budget (ADR-237), checked after every read of the usage while it runs; `null` for none. */
+  tokenBudget: TokenBudget | null;
 }
 
 export class LiveSession implements AgentSession {
@@ -180,6 +183,7 @@ export class LiveSession implements AgentSession {
   readonly #state: CopilotSessionState;
   readonly #hooks: HookTail;
   readonly #usage: CopilotUsageLog;
+  readonly #tokenBudget: TokenBudget | null;
   readonly #decoder = new TextDecoder();
   #terminal: SessionPty | undefined;
   #last: TaskStateChange | null = null;
@@ -260,6 +264,7 @@ export class LiveSession implements AgentSession {
     this.#dialogs = new SessionDialogs(this.#screen);
     this.#hooks = new HookTail(o.hooksFile);
     this.#usage = o.usage;
+    this.#tokenBudget = o.tokenBudget;
     // A resumed conversation shows what it used before this start, and the model of this start only.
     if (o.hasConversation) this.#usage.readBeforeStart(this.conversation);
   }
@@ -453,6 +458,7 @@ export class LiveSession implements AgentSession {
     const run = this.#run();
     if (run?.kind !== "exited") {
       this.#usage.poll(this.conversation, Date.now());
+      this.#tokenBudget?.check();
       return true;
     }
     // A stop by the user is an intended end, not a session error, even though the process ends with a signal.
@@ -489,6 +495,7 @@ export class LiveSession implements AgentSession {
       usage: this.#usage.current(),
       model: this.model,
       modelInUse: this.#usage.modelInUse(),
+      tokenBudget: this.#tokenBudget?.view() ?? null,
     };
   }
 

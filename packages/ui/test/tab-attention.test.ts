@@ -24,6 +24,7 @@ function session(id: string, state: TaskState | null, needsAttention: boolean, e
     usage: null,
     model: null,
     modelInUse: null,
+    tokenBudget: null,
     ...extra,
   };
 }

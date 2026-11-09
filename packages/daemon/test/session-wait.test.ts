@@ -47,6 +47,7 @@ const working: Session = {
   usage: null,
   model: null,
   modelInUse: null,
+  tokenBudget: null,
 };
 
 describe("what wait_for_session sees of a session", () => {

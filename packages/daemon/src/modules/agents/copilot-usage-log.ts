@@ -51,6 +51,10 @@ function add(state: LogState, line: string, seen: Set<string>): LogState {
   return { totals, modelInUse: model, callsByModel: { ...state.callsByModel, [model]: (state.callsByModel[model] ?? 0) + 1 } };
 }
 
+function tokensOf(totals: UsageTotals): number {
+  return totals.inputTokens + totals.outputTokens;
+}
+
 /** The own calls on each model, the most first, then by name, so the same log always gives the same list. */
 function modelCallsOf(state: LogState): ModelCalls[] {
   return Object.entries(state.callsByModel)
@@ -119,6 +123,8 @@ export class CopilotUsageLog {
   #state: LogState = NOTHING_READ;
   #seen = new Set<string>();
   #readAt = 0;
+  /** The tokens the conversation had used before this session's start (`readBeforeStart`), for its token budget (ADR-237). */
+  #tokensAtStart = 0;
 
   constructor(copilotHome: string) {
     this.#copilotHome = copilotHome;
@@ -139,6 +145,11 @@ export class CopilotUsageLog {
     return usageOf(this.#state.totals);
   }
 
+  /** The tokens (input and output) the conversation used since this session started, after the last update (ADR-237). */
+  tokensSinceStart(): number {
+    return Math.max(0, tokensOf(this.#state.totals) - this.#tokensAtStart);
+  }
+
   /** The model the conversation runs on after the last update (ADR-225); `null` before the log names one. */
   modelInUse(): string | null {
     return this.#state.modelInUse;
@@ -152,11 +163,13 @@ export class CopilotUsageLog {
   /**
    * Reads what a conversation this session goes on with used before its start, and forgets the model in use the log
    * named then: a restart on another model would otherwise show the old one until Copilot CLI writes the start's model
-   * change, and warn about a switch that is not there (ADR-225).
+   * change, and warn about a switch that is not there (ADR-225). What it used then does not count to the token budget
+   * of this start (ADR-237).
    */
   readBeforeStart(conversation: string): void {
     this.update(conversation);
     this.#state = { ...this.#state, modelInUse: null };
+    this.#tokensAtStart = tokensOf(this.#state.totals);
   }
 
   /**
@@ -184,6 +197,9 @@ export class CopilotUsageLog {
   }
 
   #restart(file: string): void {
+    // A log read again from its start counts all of its tokens toward this start's budget: one that got shorter must not
+    // hide what was used since the start behind what was used before it (ADR-237).
+    this.#tokensAtStart = 0;
     this.#file = file;
     this.#offset = 0;
     this.#rest = "";

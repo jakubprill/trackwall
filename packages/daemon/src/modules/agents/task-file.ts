@@ -41,6 +41,11 @@ export const StoredTask = Task.omit({ worktree: true }).extend({
     .nullable()
     .default(null),
   inReview: Task.shape.inReview.default(false),
+  /**
+   * The daemon stopped the task's session at its token budget (ADR-237), and the user has not resumed it since: no agent
+   * resumes it with `resume_task`, also after a daemon restart, when the stopped session is no longer listed.
+   */
+  stoppedAtTokenBudget: z.boolean().default(false),
   /** The task whose session proposed this one (ADR-143); `null` for a task the user typed or the supervisor or a main session proposed. */
   handoff: TaskHandoff.nullable().default(null),
   change: Task.shape.change.default(null),
