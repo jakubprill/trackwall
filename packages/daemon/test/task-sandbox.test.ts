@@ -14,9 +14,9 @@ import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
 const TOKEN = "s".repeat(43);
 
-/** The fake Copilot CLI with `PATH` as given, which is the `PATH` the daemon checks for bubblewrap. */
-function fakeCopilotWithPath(path: string) {
-  return { command: FAKE_COPILOT.command, env: () => ({ ...process.env, PATH: path }) };
+/** The fake Copilot CLI with `PATH` as given, which is the `PATH` the daemon checks for bubblewrap, and `env` added. */
+function fakeCopilotWithPath(path: string, env: Record<string, string> = {}) {
+  return { command: FAKE_COPILOT.command, env: () => ({ ...process.env, PATH: path, ...env }) };
 }
 
 let daemon: Awaited<ReturnType<typeof startSessionApi>> | undefined;
@@ -93,6 +93,42 @@ describe.skipIf(process.versions.bun === undefined)("a task in Copilot CLI's san
       const asking = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "describe the repo", approvals: "ask" });
       expect(asking.sandbox).toBe(false);
       expect(await argumentsOf(sessionOf(asking.id), "--session-id=")).not.toContain("--sandbox");
+    },
+    SLOW_TEST_TIMEOUT_MS,
+  );
+
+  test(
+    "a task whose sandbox offers to install its certificate authority waits for you, and outside the terminal it can only go on without installing",
+    async () => {
+      const path = `${sandboxProgramsFolder()}${delimiter}${process.env.PATH ?? ""}`;
+      // The fake writes this file if it ever gets the key that installs the certificate authority.
+      const installed = join(mkdtempSync(join(tmpdir(), "trackwall-ca-")), "installed");
+      daemon = await startSessionApi(TOKEN, {
+        ...ONE_REPO,
+        sandboxTasks: "auto",
+        copilot: fakeCopilotWithPath(path, { FAKE_COPILOT_SANDBOX_CA: installed }),
+      });
+      const { agents } = daemon.facade;
+      const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "map the endpoints", approvals: "auto" });
+      const session = sessionOf(task.id);
+
+      const asking = await waitFor(agents, session, (s) => s.dialog !== null, "the certificate authority dialog");
+      expect(asking.state).toMatchObject({ state: "Approval", source: "screen", reason: "screen sandbox certificate authority dialog" });
+      expect(asking.needsAttention).toBe(true);
+      expect(asking.dialog).toMatchObject({
+        kind: "approval",
+        title: "Install the proxy certificate authority?",
+        options: [{ key: "2", label: "Continue without installing (Esc)" }],
+      });
+      const dialog = asking.dialog?.id ?? "";
+      expect(() => agents.answerDialog(session, dialog, "1")).toThrow(
+        "the dialog has no option 1 that can be answered outside the terminal",
+      );
+
+      await daemon.post(agentsApi.answerDialog, { session, dialog, answer: "2" });
+      const working = await waitFor(agents, session, (s) => s.state?.source === "hook", "the task's prompt after the answer");
+      expect(working.state).toMatchObject({ state: "Working", reason: "hook sessionStart with a prompt" });
+      expect(existsSync(installed)).toBe(false);
     },
     SLOW_TEST_TIMEOUT_MS,
   );

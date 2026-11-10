@@ -1,0 +1,30 @@
+ [Current]  Sessions   Issues   Pull requests   Gists
+
+   providers  for configuration details.                                                                               ┃
+                                                                                                                       ┃
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Install the proxy certificate authority?                                                                             │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│ Git, GitHub CLI, and other tools in the sandbox sign in through a local proxy. The proxy adds your real credentials  │
+│ to requests, so the sandbox never sees them. To do that, it re-signs HTTPS traffic with its own certificate, which   │
+│ each tool has to trust.                                                                                              │
+│                                                                                                                      │
+│ Copilot already tells most tools to trust that certificate. However, Copilot cannot configure tools that only check  │
+│ the certificates your system trusts. Installing the certificate in your macOS user Keychain lets those tools sign    │
+│ in. Tools that pin their own certificates may still fail. You can continue without installing it, and most tools     │
+│ will still work.                                                                                                     │
+│                                                                                                                      │
+│ The certificate is limited to the credential hosts configured when it is installed (such as github.com) and their    │
+│ subdomains, so it cannot vouch for other sites. It is valid for ten years, and its private key stays in your Copilot │
+│ home directory.                                                                                                      │
+│                                                                                                                      │
+│ macOS asks for your login password whenever it changes Keychain trust settings.                                      │
+│                                                                                                                      │
+│ You can install it later with /sandbox ca create and /sandbox ca trust, or under Network, Proxy and blocking,        │
+│ Certificate authority in /sandbox.                                                                                   │
+│                                                                                                                      │
+│ ❯ 1. Install certificate authority                                                                                   │
+│   2. Continue without installing (Esc)                                                                               │
+│                                                                                                                      │
+│ ↑/↓ to navigate · enter to select · esc to cancel                                                                    │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

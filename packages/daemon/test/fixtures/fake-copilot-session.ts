@@ -244,6 +244,19 @@ const startTitle: string = firstTitle;
 let trustPending = process.env.FAKE_COPILOT_UNTRUSTED_FOLDER !== undefined;
 const TRUST_KEYS = new Set(["1", "2", "\r", "\n"]);
 
+/**
+ * `FAKE_COPILOT_SANDBOX_CA` stands for a computer where Copilot CLI's sandbox offers to install its certificate
+ * authority (macOS, the contract test of ADR-181): with `--sandbox` it asks after the folder trust dialog and before
+ * anything else, with no hook, and goes on after "Continue without installing" (`2` or Esc). "Install certificate
+ * authority" (`1`, or Enter on it) would change what the system trusts, so the fake says so on the screen and in the
+ * file `FAKE_COPILOT_SANDBOX_CA` names, for the test to see that it never happened. The dialog is the real binary's
+ * screen (`dialog-sandbox-ca-120.txt`), its box only.
+ */
+const caInstalledFile = process.env.FAKE_COPILOT_SANDBOX_CA;
+let caPending = caInstalledFile !== undefined && process.argv.includes("--sandbox");
+const CA_CONTINUE_KEYS = new Set(["2", ESCAPE]);
+const CA_INSTALL_KEYS = new Set(["1", "\r", "\n"]);
+
 /** Shorter than the session screen (`INITIAL_COLS` in `agents.ts`, 120 columns), with room for the input box's margin. */
 const SHORT_LINE_CHARS = 100;
 /**
@@ -289,13 +302,34 @@ function answerTrust(chunk: Buffer): void {
   if (!TRUST_KEYS.has(typedText(chunk))) return;
   trustPending = false;
   process.stdout.write("\x1b[2J\x1b[H");
+  afterTrust();
+}
+
+/** Keys while the certificate authority dialog waits: either answer draws the screen anew without it, as Copilot CLI does. */
+function answerCa(chunk: Buffer): void {
+  const key = chunk.toString("utf8");
+  if (CA_INSTALL_KEYS.has(key) && caInstalledFile !== undefined) {
+    writeFileSync(caInstalledFile, "installed");
+    process.stdout.write("Installed the proxy certificate authority\r\n");
+  } else if (!CA_CONTINUE_KEYS.has(key)) return;
+  caPending = false;
+  process.stdout.write("\x1b[2J\x1b[H");
   begin();
 }
 
-if (trustPending) {
-  const trustScreen = readFileSync(join(import.meta.dir, "copilot", "dialog-folder-trust-120.txt"), "utf8").split("\n");
-  draw(trustScreen.slice(trustScreen.findIndex((line) => line.startsWith("╭"))));
-} else begin();
+/** The dialog's box from the real binary's screen. */
+function drawStartDialog(fixture: string): void {
+  const screen = readFileSync(join(import.meta.dir, "copilot", fixture), "utf8").split("\n");
+  draw(screen.slice(screen.findIndex((line) => line.startsWith("╭"))));
+}
+
+function afterTrust(): void {
+  if (caPending) drawStartDialog("dialog-sandbox-ca-120.txt");
+  else begin();
+}
+
+if (trustPending) drawStartDialog("dialog-folder-trust-120.txt");
+else afterTrust();
 
 /** Approval requests of the turn not answered yet. */
 let awaitingApprovals = 0;
@@ -400,6 +434,10 @@ process.stdin.setRawMode?.(true);
 process.stdin.on("data", (chunk: Buffer) => {
   if (trustPending) {
     answerTrust(chunk);
+    return;
+  }
+  if (caPending) {
+    answerCa(chunk);
     return;
   }
   for (const key of typedText(chunk)) {

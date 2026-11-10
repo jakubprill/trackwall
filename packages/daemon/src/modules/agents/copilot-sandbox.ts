@@ -169,8 +169,8 @@ export function daemonSandboxHost(inContainer: boolean): SandboxHost {
  * Which tasks run in the sandbox without `sandbox` in `workspace.yaml`: on a Linux computer those without approvals;
  * in a Linux container the same once the sandbox can run there safely (`canRun`, the dev container guide, ADR-219),
  * otherwise none, since the container is the isolation there; on macOS and Windows none until someone checks it on a
- * real machine: on macOS git in Seatbelt cannot read `~/.gitconfig` and the terminal stops at Copilot CLI's question
- * about its certificate authority; on Windows the sandbox needs a Windows with BaseContainer.
+ * real machine: on macOS git in Seatbelt cannot read `~/.gitconfig` and the task first waits for an answer to Copilot
+ * CLI's question about its certificate authority (ADR-241); on Windows the sandbox needs a Windows with BaseContainer.
  */
 export function defaultSandboxTasks(inContainer: boolean, platform: NodeJS.Platform, canRun: boolean): SandboxSettings["tasks"] {
   if (platform !== "linux") return "off";

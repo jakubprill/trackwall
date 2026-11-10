@@ -29,6 +29,12 @@ const QUESTION_FOOTER = "enter accept";
 const OPTION = /^(❯\s*)?([1-9])\.\s+(.*)$/;
 /** An option that needs text typed in the terminal, so it cannot be answered with its digit alone. */
 const NEEDS_TEXT = /^No\b/;
+/**
+ * An option that adds a root certificate to what the user's system trusts (the sandbox's certificate authority,
+ * `copilot-start-dialog.ts`): only the user picks it, in the terminal, where Copilot CLI explains it and the system asks
+ * for a password, never through a button or a key sent from outside it.
+ */
+const CHANGES_SYSTEM_TRUST = /^Install (updated )?certificate authority$/;
 /** Lines made only of box drawing and spaces (the inner box's top and bottom, the rule under the heading). */
 const BOX_ONLY = /^[\s╭╮╰╯─│]*$/;
 const MAX_DETAIL_LINES = 20;
@@ -63,9 +69,10 @@ function readApproval(lines: readonly string[], notice: string | undefined): Scr
   const title = cut((box.heading ?? notice ?? CUT_BOX_TITLE).trim());
   const question = cut(joinWrapped(paragraphs.pop() ?? []));
   if (!title || !question || !options?.length) return undefined;
-  const answerable = options.filter((o) => !NEEDS_TEXT.test(o.label));
   // The selection moved to an option that takes text (it may already be taking it), so a digit would not answer.
-  if (options.some((o) => o.selected && !answerable.includes(o))) return undefined;
+  if (options.some((o) => o.selected && NEEDS_TEXT.test(o.label))) return undefined;
+  // A dialog with no option answerable outside the terminal still waits; only Stop (Esc) is offered then.
+  const answerable = options.filter((o) => !NEEDS_TEXT.test(o.label) && !CHANGES_SYSTEM_TRUST.test(o.label));
   // A cut box's detail starts with "…", which takes the place of its last line rather than of the one nearest the question.
   const detail = detailLines(paragraphs, cutAbove ? MAX_DETAIL_LINES - 1 : MAX_DETAIL_LINES);
   return {
