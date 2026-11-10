@@ -39,7 +39,7 @@ import { type EndedTaskFacts, type EndedTaskGit, endedTaskFacts } from "./ended-
 import { offeredAfter } from "./impact-proposals.ts";
 import type { JavaNavigationServers } from "./java-navigation-servers.ts";
 import { modelArgs } from "./model-args.ts";
-import { TASK_BRANCH_PREFIX, taskSlug, taskWorktree } from "./task-branch.ts";
+import { taskSlug, taskWorktree } from "./task-branch.ts";
 import type { ChangeFacts } from "./task-change.ts";
 import type { StoredTask, TaskFile } from "./task-file.ts";
 import { type HandoffFacts, type HandoffGit, handoffState, type TaskHandoff } from "./task-handoff.ts";
@@ -146,6 +146,8 @@ export interface AgentTasksDeps {
     repoPath(id: string): Promise<string>;
     /** The task worktrees folder for a new task (ADR-84), made when it is the default one in `.trackwall` (ADR-125). */
     newTaskWorktreesDir(): Promise<string>;
+    /** What a new task's branch starts with (ADR-239); `invalid_config` for a bad `taskBranchPrefix`. */
+    taskBranchPrefix(): string;
   };
   /** The tasks' jdtls (ADR-99), shared with repo sessions (ADR-175). */
   javaNavigation: JavaNavigationServers;
@@ -340,6 +342,7 @@ export class AgentTasks {
     const sandbox = await this.#deps.sandbox(approvals);
     const repoDir = await this.#deps.repos.repoPath(repo);
     const base = retry?.base ?? (await asRepoUnavailable(repo, this.#deps.vcs.defaultBase(repoDir)));
+    const branchPrefix = this.#deps.repos.taskBranchPrefix();
     const worktreesDir = await this.#deps.repos.newTaskWorktreesDir();
     // A part of a change takes its handoff when its session starts (`#launchHeld`), once the parts before it started.
     const handoff =
@@ -355,7 +358,7 @@ export class AgentTasks {
       worktreesDir,
       prompt,
       // The parts of a change share one branch name (ADR-171); each is in its own repo, so the worktrees do not collide.
-      branch: `${TASK_BRANCH_PREFIX}${taskSlug(title ?? prompt, change?.id ?? id)}`,
+      branch: `${branchPrefix}${taskSlug(title ?? prompt, change?.id ?? id)}`,
       baseBranch: base.branch,
       base: base.commit,
       createdAt: new Date().toISOString(),

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   type AppConfig,
   type agentsApi,
+  DEFAULT_TASK_BRANCH_PREFIX,
   MAX_DROP_BYTES,
   type MiseTarget,
   type RoutineDigest,
@@ -19,7 +20,7 @@ import type { z } from "zod";
 import { copilotHome } from "./infra/copilot-home.ts";
 import { downloadVerified } from "./infra/download.ts";
 import { vscodeUrl } from "./infra/editor-url.ts";
-import { DomainError, messageOf } from "./infra/errors.ts";
+import { configOrProblem, DomainError, messageOf } from "./infra/errors.ts";
 import { runProgram } from "./infra/run-program.ts";
 import { extractTarGz } from "./infra/tar.ts";
 import { ensureTrackwallDir } from "./infra/trackwall-dir.ts";
@@ -39,7 +40,7 @@ import { resolveCopilot } from "./modules/agents/copilot-command.ts";
 import { withMiseVars } from "./modules/agents/session-env.ts";
 import { STACK_TRACE_LIST_MAX_BYTES, STACK_TRACE_SOURCE_GLOBS } from "./modules/agents/stack-trace-frames.ts";
 import { promptWithStackTrace } from "./modules/agents/stack-trace-prompt.ts";
-import { TaskBranch, taskWorktree } from "./modules/agents/task-branch.ts";
+import { isTaskBranchUnder, taskWorktree } from "./modules/agents/task-branch.ts";
 import { Batch } from "./modules/batch/batch.ts";
 import { Board } from "./modules/board/board.ts";
 import type { AppConfigQuery } from "./modules/cards/app-config.ts";
@@ -639,6 +640,11 @@ async function knownPlaces(agents: Agents, taskJournal: TaskJournal, workspace: 
   const list = await workspace.entryList();
   // Without a projects folder or with a worktrees folder Settings refuses, ended tasks are matched without their worktree.
   const worktreesDir = await workspace.worktreesDir().catch(() => null);
+  // A branch the user named themselves, such as `feature/login`, is no task's: only the prefixes Trackwall gives count (ADR-239).
+  const branchPrefixes = [
+    DEFAULT_TASK_BRANCH_PREFIX,
+    configOrProblem(() => workspace.taskBranchPrefix(), DEFAULT_TASK_BRANCH_PREFIX).value,
+  ];
   return {
     tasks: [
       ...agents.tasks().map((t) => ({ id: t.id, repo: t.repo, branch: t.branch, worktree: t.worktree, title: t.title, prompt: t.prompt })),
@@ -653,6 +659,6 @@ async function knownPlaces(agents: Agents, taskJournal: TaskJournal, workspace: 
     ],
     repos: list.repos.map((r) => ({ id: r.id, path: r.path })),
     projectsDir: list.projectsDir,
-    isTaskBranch: (branch) => TaskBranch.safeParse(branch).success,
+    isTaskBranch: (branch) => isTaskBranchUnder(branch, branchPrefixes),
   };
 }

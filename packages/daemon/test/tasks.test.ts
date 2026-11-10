@@ -14,10 +14,10 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DEFAULT_TASK_BRANCH_PREFIX } from "@trackwall/protocol";
 import { z } from "zod";
 import { removeFolder } from "../src/infra/remove-folder.ts";
 import type { Agents } from "../src/modules/agents/agents.ts";
-import { TASK_BRANCH_PREFIX } from "../src/modules/agents/task-branch.ts";
 import { makeAgents, viewer, waitFor } from "./support/agents.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
 
@@ -259,6 +259,40 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     expect(() => restarted.agents.handToSupervisor(task.id)).toThrow("only a task you started yourself");
   }, 60_000);
 
+  test("a task's branch starts with the workspace's task branch prefix, and its worktree is named after the last part only", async () => {
+    const { dir } = cloneOnFeatureBranch();
+    const { agents, procs, home } = makeAgents(
+      { shop: dir },
+      undefined,
+      null,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      () => "users/agents/",
+    );
+    cleanups.push(() => procs.stopAll());
+
+    const task = await agents.createTask("shop", "Fix the login in the shop");
+    await agents.stop(sessionOf(agents, task.id));
+
+    expect(task.branch).toMatch(/^users\/agents\/fix-the-login-in-the-shop-[0-9a-f]{6}$/);
+    expect(task.worktree).toBe(join(home, "task-worktrees", "shop", task.branch.slice("users/agents/".length)));
+    expect(gitIn(task.worktree, "branch", "--show-current").trim()).toBe(task.branch);
+    // The saved task reads back after a restart, although its branch does not start with `trackwall/`.
+    const restarted = makeAgents({ shop: dir }, home);
+    cleanups.push(() => restarted.procs.stopAll());
+    expect(restarted.agents.sessions().tasks.map((t) => [t.branch, t.worktree])).toEqual([[task.branch, task.worktree]]);
+    await restarted.agents.removeTask(task.id, false, true);
+    expect(gitIn(dir, "branch", "--list", task.branch).trim()).toBe("");
+  }, 60_000);
+
   test("a new task's worktree goes into the task worktrees folder of the moment, and a changed folder does not move existing tasks", async () => {
     const { dir } = cloneOnFeatureBranch();
     const folders = mkdtempSync(join(tmpdir(), "trackwall-folders-"));
@@ -270,8 +304,8 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     const after = await first.agents.createTask("shop", "add a test");
     await first.agents.stop(sessionOf(first.agents, after.id));
 
-    expect(before.worktree).toBe(join(folders, "first", "shop", before.branch.slice(TASK_BRANCH_PREFIX.length)));
-    expect(after.worktree).toBe(join(folders, "second", "shop", after.branch.slice(TASK_BRANCH_PREFIX.length)));
+    expect(before.worktree).toBe(join(folders, "first", "shop", before.branch.slice(DEFAULT_TASK_BRANCH_PREFIX.length)));
+    expect(after.worktree).toBe(join(folders, "second", "shop", after.branch.slice(DEFAULT_TASK_BRANCH_PREFIX.length)));
     const restarted = makeAgents({ shop: dir }, first.home, null, undefined, undefined, undefined, () => join(folders, "third"));
     cleanups.push(() => restarted.procs.stopAll());
     expect(restarted.agents.sessions().tasks.map((t) => t.worktree)).toEqual([after.worktree, before.worktree]);
@@ -287,7 +321,7 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     const task = await first.agents.createTask("shop", "fix the build");
     await first.agents.stop(sessionOf(first.agents, task.id));
     // What an older version left behind: the worktree in the state directory and no `worktreesDir` in `tasks.json`.
-    const legacy = join(first.home, "worktrees", "shop", task.branch.slice(TASK_BRANCH_PREFIX.length));
+    const legacy = join(first.home, "worktrees", "shop", task.branch.slice(DEFAULT_TASK_BRANCH_PREFIX.length));
     mkdirSync(join(first.home, "worktrees", "shop"), { recursive: true });
     gitIn(dir, "worktree", "move", task.worktree, legacy);
     const file = join(first.home, "tasks.json");
@@ -420,7 +454,7 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     const task = await agents.createTask("shop", "interrupted removal");
     await agents.stop(sessionOf(agents, task.id));
     // This is how `git worktree remove` leaves a worktree when Windows did not let it delete a held file.
-    await removeFolder(join(dir, ".git", "worktrees", task.branch.slice(TASK_BRANCH_PREFIX.length)));
+    await removeFolder(join(dir, ".git", "worktrees", task.branch.slice(DEFAULT_TASK_BRANCH_PREFIX.length)));
 
     await expect(agents.removeTask(task.id, false, false)).rejects.toMatchObject({
       code: "unsaved_changes",

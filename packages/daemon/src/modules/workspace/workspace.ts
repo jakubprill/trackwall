@@ -5,6 +5,7 @@ import {
   type CloneJob,
   type Commit,
   type DayStartSettings,
+  DEFAULT_TASK_BRANCH_PREFIX,
   type DroppedFolder,
   type FileContent,
   type GraphConfig,
@@ -572,6 +573,14 @@ export class Workspace {
    */
   taskTokenBudget(): number | null {
     return this.deps.file.taskTokenBudget();
+  }
+
+  /**
+   * What a new task's branch starts with: `taskBranchPrefix` from `workspace.yaml` (ADR-239), `trackwall/` without it;
+   * `invalid_config` for a bad key, so that a typo never pushes a task's branch under a name the repo host refuses.
+   */
+  taskBranchPrefix(): string {
+    return this.deps.file.taskBranchPrefix() ?? DEFAULT_TASK_BRANCH_PREFIX;
   }
 
   /**
