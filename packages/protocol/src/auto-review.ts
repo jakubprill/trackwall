@@ -83,6 +83,13 @@ export const AutoReview = z.object({
 });
 export type AutoReview = z.infer<typeof AutoReview>;
 
+/**
+ * A task's last finished review of a kind, and whether the task's diff has moved on from the one it saw (ADR-238), as
+ * the draft of a merge request names it.
+ */
+export const FreshAutoReview = z.object({ review: AutoReview, outdated: z.boolean() });
+export type FreshAutoReview = z.infer<typeof FreshAutoReview>;
+
 /** The largest diff the reviewer gets: a bigger change is cut after its last whole line within it, and says so. */
 export const AUTO_REVIEW_DIFF_MAX_BYTES = 512 * 1024;
 

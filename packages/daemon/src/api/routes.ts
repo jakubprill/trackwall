@@ -209,6 +209,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(autoReviewApi.cancel, (f, b) => f.agents.cancelAutoReview(b.task, b.kind)),
   route(mergeRequestsApi.get, (f, b) => f.mergeRequests.get(b.task)),
   route(mergeRequestsApi.push, (f, b) => f.mergeRequests.push(b.task)),
+  route(mergeRequestsApi.evidence, (f, b) => f.mergeRequests.evidence(b.task)),
   route(mergeRequestsApi.formUrl, async (f, b) => ({ url: await f.mergeRequests.formUrl(b) })),
   route(mergeRequestsApi.jobLog, (f, b) => f.mergeRequests.jobLog(b.task, b.job)),
   route(mergeRequestsApi.fixPipeline, (f, b) => f.mergeRequests.fixPipeline(b.task)),

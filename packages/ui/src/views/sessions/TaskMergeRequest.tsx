@@ -5,6 +5,7 @@ import {
   MERGE_REQUEST_TITLE_MAX,
   type MergeRequest,
   mergeRequestNumber,
+  mergeRequestsApi,
   type TaskMergeRequest as State,
   type Task,
   type Verification,
@@ -15,7 +16,7 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { errorMessage } from "@/lib/api";
+import { errorMessage, post } from "@/lib/api";
 import { type ChangePart, changeBlock } from "@/lib/change-merge-requests";
 import type { Connection } from "@/lib/connection";
 import { useOpenWebLink } from "@/lib/desktop";
@@ -34,8 +35,8 @@ import { FailedJobs } from "./FailedJobs";
 
 /**
  * A finished task on its way to a merge request (ADR-77), below the verification: the task branch against the remote
- * with "Push", then the draft the user approves for the repo host's form (title and description from the task and its
- * verification), and once the merge request exists, its state and pipeline with links to them, and the jobs that failed
+ * with "Push", then the draft the user approves for the repo host's form (title and description from the task, its
+ * verification and Trackwall's evidence, in the repo's own template when it has one, ADR-238), and once the merge request exists, its state and pipeline with links to them, and the jobs that failed
  * it with their logs and "Fix" (ADR-197). The section shows only
  * once the task has a commit, since there is nothing to push before.
  */
@@ -54,6 +55,19 @@ export function TaskMergeRequest({
   change: readonly ChangePart[] | null;
 }) {
   const [draft, setDraft] = useState<MergeRequestDraftText>();
+  const [drafting, setDrafting] = useState(false);
+  const [evidenceError, setEvidenceError] = useState<string>();
+  // The evidence is read once per draft: a failed read still gives the draft of what the panel knows, and says so.
+  const startDraft = async () => {
+    setDrafting(true);
+    setEvidenceError(undefined);
+    const evidence = await post(conn, mergeRequestsApi.evidence, { task: task.id }).catch((err: unknown) => {
+      setEvidenceError(`Trackwall's evidence is left out: ${errorMessage(err)}`);
+      return null;
+    });
+    setDraft(mergeRequestDraft({ task, verification, evidence, changeBlock: changeBlock(task, change) }));
+    setDrafting(false);
+  };
   if (!state?.push || state.push.commits === 0)
     return error ? <p className="text-destructive border-b px-4 py-2 text-xs">{error}</p> : null;
   const branch = state.push;
@@ -69,8 +83,8 @@ export function TaskMergeRequest({
           <Upload /> {pushing ? "Pushing…" : "Push"}
         </Button>
         {formReady && state.project && !draft && (
-          <Button variant="outline" size="sm" onClick={() => setDraft(mergeRequestDraft(task, verification, changeBlock(task, change)))}>
-            <GitPullRequestArrow /> Open merge request
+          <Button variant="outline" size="sm" onClick={() => void startDraft()} disabled={drafting}>
+            <GitPullRequestArrow /> {drafting ? "Reading evidence…" : "Open merge request"}
           </Button>
         )}
       </div>
@@ -84,6 +98,7 @@ export function TaskMergeRequest({
         />
       )}
       <HostNote state={state} />
+      {draft && evidenceError && <p className="text-muted-foreground text-xs">{evidenceError}</p>}
       {draft && formReady && state.project && (
         <DraftForm
           project={state.project}
