@@ -422,6 +422,7 @@ export function createFacade(o: FacadeOptions): Facade {
     repoHosts: () => workspace.repoHosts(),
     openUrl: o.openUrl,
     jobLogExcerpt: async (raw, cut) => logs.jobLogExcerpt(raw, await o.userEnv(), cut),
+    reproductionCheck: (task) => reproductionChecks.get(task),
     onPipelineFailed: (task, mergeRequest) => agents.pipelineFailed(task.id, mergeRequest),
     log: o.log,
   });

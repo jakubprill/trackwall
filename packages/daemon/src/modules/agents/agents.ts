@@ -16,6 +16,7 @@ import {
   changePromptsFit,
   type DialogAnswer,
   type EnvironmentCheck,
+  type FreshAutoReview,
   type HttpEndpoint,
   inTurn,
   isSupervisor,
@@ -72,7 +73,7 @@ import type { CopilotHookOutput } from "./copilot-hook-output.ts";
 import { CopilotHookEvent } from "./copilot-hook-record.ts";
 import type { LspServer } from "./copilot-plugin.ts";
 import { daemonSandboxHost, type SandboxHost, sandboxState, taskSandbox } from "./copilot-sandbox.ts";
-import { readConversationUse } from "./copilot-usage-log.ts";
+import { type ConversationUse, readConversationUse } from "./copilot-usage-log.ts";
 import type { EndedTaskFacts } from "./ended-task.ts";
 import { HandoffWatch } from "./handoff-watch.ts";
 import { appendHookRecord } from "./hook-tail.ts";
@@ -1046,6 +1047,16 @@ export class Agents {
   /** The task's last automatic review of the kind (ADR-182, ADR-234); `null` without one. */
   autoReview(id: string, kind: AutoReviewKind): AutoReview | null {
     return this.#autoReviews.get(id, kind);
+  }
+
+  /** The task's last rules check (ADR-234), and whether its changes moved on after it, for its merge request (ADR-238). */
+  rulesCheck(id: string): Promise<FreshAutoReview | null> {
+    return this.#autoReviews.withFreshness(id, "rules");
+  }
+
+  /** What the task's conversation has used so far, and on which models (ADR-228), for its merge request (ADR-238). */
+  taskConversationUse(id: string): Promise<ConversationUse> {
+    return this.#tasks.conversationUse(id);
   }
 
   /** Stops the task's running automatic review of the kind (ADR-182, ADR-234). */

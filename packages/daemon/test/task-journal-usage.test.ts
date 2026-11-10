@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { agentsApi, EndedTask, taskJournalApi } from "@trackwall/protocol";
+import { agentsApi, EndedTask, mergeRequestsApi, taskJournalApi } from "@trackwall/protocol";
 import { waitUntil } from "../src/platform/process-group.ts";
 import { waitFor } from "./support/agents.ts";
 import { FAKE_COPILOT, ONE_REPO, startSessionApi } from "./support/session-api.ts";
@@ -41,6 +41,12 @@ describe.skipIf(process.versions.bun === undefined)("the model and usage of an e
     if (session === undefined) throw new Error("the task started no session");
     await waitFor(agents, session.id, (s) => s.usage !== null, "the first model call's receipt", 30_000);
     await daemon.post(agentsApi.stop, { session: session.id });
+
+    // While the task lives, the draft of its merge request names the same (ADR-238).
+    expect(await daemon.post(mergeRequestsApi.evidence, { task: task.id })).toMatchObject({
+      models: [{ model: "gpt-6-luna", modelCalls: 1 }],
+      usage: { modelCalls: 1 },
+    });
 
     await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
 

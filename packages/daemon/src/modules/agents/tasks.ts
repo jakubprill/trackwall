@@ -1040,10 +1040,15 @@ export class AgentTasks {
     });
   }
 
+  /** What the task's conversation has used so far, for the draft of its merge request (ADR-238). */
+  conversationUse(id: string): Promise<ConversationUse> {
+    return this.#conversationUse(this.#get(id));
+  }
+
   /**
    * What the task's conversation used (ADR-228): in a terminal under the task's id, in the conversation view under
    * Copilot CLI's id, unknown when its first start never learned it (ADR-137). A failed read is no usage, since ending
-   * the task must not fail on its record.
+   * the task must not fail on its record, nor a merge request's draft on one line of it.
    */
   async #conversationUse(task: StoredTask): Promise<ConversationUse> {
     const conversation = task.view === "terminal" ? task.id : task.conversation;
@@ -1051,7 +1056,7 @@ export class AgentTasks {
     try {
       return await this.#deps.conversationUse(conversation);
     } catch (err) {
-      this.#deps.log(`reading the conversation of ended task ${task.id} for the task journal: ${messageOf(err)}`);
+      this.#deps.log(`reading the conversation of task ${task.id}: ${messageOf(err)}`);
       return NO_CONVERSATION_USE;
     }
   }
