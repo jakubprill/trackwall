@@ -27,9 +27,9 @@ export function sandboxChoice(settings: SandboxSettings | null): SandboxChoice {
   return settings === null ? "default" : settings.tasks;
 }
 
-/** `sandbox.tasks` to save for `choice`; `null` removes the key. */
-export function sandboxTasksOf(choice: SandboxChoice): SandboxSettings["tasks"] | null {
-  return choice === "default" ? null : choice;
+/** `sandbox` to save for `choice`; `null` removes the key. */
+export function sandboxSettingsOf(choice: SandboxChoice): SandboxSettings | null {
+  return choice === "default" ? null : { tasks: choice };
 }
 
 const WHICH_TASKS: Record<SandboxSettings["tasks"], string> = {
@@ -40,10 +40,20 @@ const WHICH_TASKS: Record<SandboxSettings["tasks"], string> = {
 
 /**
  * What the sandbox means for the next task, under the choice in Settings: which tasks run in it (saying when that is the
- * default here), and, when the sandbox cannot run on this computer, why, with `refused` when tasks that should run in it
- * will be refused rather than only left outside it.
+ * default here), and, when the sandbox cannot run on this computer, why; `refused` when tasks that should run in it will
+ * be refused rather than only left outside it.
  */
-export function sandboxNow(state: SandboxState): { text: string; problem: string | null; refused: boolean } {
+export function sandboxNow(state: SandboxState): { text: string; problem: { text: string; refused: boolean } | null } {
   const text = `${WHICH_TASKS[state.tasks]}${state.chosen ? "." : ", Trackwall's default here."}`;
-  return { text, problem: state.problem, refused: state.problem !== null && state.tasks !== "off" };
+  if (state.problem === null) return { text, problem: null };
+  const cannotRun = `The sandbox cannot run on this computer: ${state.problem}.`;
+  return state.tasks === "off"
+    ? { text, problem: { text: cannotRun, refused: false } }
+    : {
+        text,
+        problem: {
+          text: `${cannotRun} Trackwall refuses to start these tasks until you install what it needs or choose "No task".`,
+          refused: true,
+        },
+      };
 }

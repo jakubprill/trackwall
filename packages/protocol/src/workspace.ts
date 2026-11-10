@@ -460,7 +460,7 @@ export const workspaceApi = {
    * `workspace.yaml`, so the daemon chooses for this computer. No MCP tool sets it: an agent must not take its tasks out
    * of the sandbox.
    */
-  setSandbox: endpoint("set-sandbox", z.object({ tasks: SandboxSettings.shape.tasks.nullable() }).strict(), WorkspaceSettings),
+  setSandbox: endpoint("set-sandbox", z.object({ sandbox: SandboxSettings.nullable() }).strict(), WorkspaceSettings),
   /** The starred repos (ADR-192). */
   starredRepos: endpoint("starred-repos", z.object({}).strict(), StarredRepos),
   /**

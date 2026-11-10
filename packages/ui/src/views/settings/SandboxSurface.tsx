@@ -1,11 +1,12 @@
-import { agentsApi, workspaceApi } from "@trackwall/protocol";
-import { useCallback, useState } from "react";
+import { agentsApi, type SandboxState, workspaceApi } from "@trackwall/protocol";
+import { useCallback } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
-import { errorMessage, post } from "@/lib/api";
+import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { SANDBOX_CHOICES, type SandboxChoice, sandboxChoice, sandboxNow, sandboxTasksOf } from "@/lib/sandbox";
+import { SANDBOX_CHOICES, type SandboxChoice, sandboxChoice, sandboxNow, sandboxSettingsOf } from "@/lib/sandbox";
+import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 import { SavedAs } from "./SavedAs.tsx";
 
@@ -19,22 +20,13 @@ export function SandboxSurface({ conn }: { conn: Connection }) {
   const settings = useRemote(loadSettings);
   const loadOptions = useCallback(() => post(conn, agentsApi.startOptions, {}), [conn]);
   const options = useRemote(loadOptions);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-
-  async function choose(choice: SandboxChoice) {
-    setBusy(true);
-    setError(undefined);
-    try {
-      await post(conn, workspaceApi.setSandbox, { tasks: sandboxTasksOf(choice) });
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
+  const save = useAction(
+    (choice: SandboxChoice) => post(conn, workspaceApi.setSandbox, { sandbox: sandboxSettingsOf(choice) }),
+    () => {
       settings.reload();
       options.reload();
-      setBusy(false);
-    }
-  }
+    },
+  );
 
   const data = settings.data;
   // With a key written wrong no choice is ticked: the problem says why, and any choice fixes it.
@@ -58,8 +50,8 @@ export function SandboxSurface({ conn }: { conn: Connection }) {
                   name="sandbox-tasks"
                   className="accent-primary size-4 shrink-0"
                   checked={chosen === choice}
-                  disabled={busy}
-                  onChange={() => void choose(choice)}
+                  disabled={save.pending}
+                  onChange={() => save.run(choice)}
                 />
                 {label}
               </label>
@@ -68,24 +60,20 @@ export function SandboxSurface({ conn }: { conn: Connection }) {
         )}
         {data?.sandboxProblem && <p className="text-destructive text-xs break-words">{data.sandboxProblem}</p>}
         {options.data && <SandboxNow state={options.data.sandbox} />}
-        {error && <p className="text-destructive text-xs break-words">{error}</p>}
+        {save.error && <p className="text-destructive text-xs break-words">{save.error}</p>}
         {data && <SavedAs configKey="sandbox" configFile={data.configFile} />}
       </div>
     </Surface>
   );
 }
 
-function SandboxNow({ state }: { state: Parameters<typeof sandboxNow>[0] }) {
+function SandboxNow({ state }: { state: SandboxState }) {
   const now = sandboxNow(state);
   return (
     <div className="flex flex-col gap-1 text-xs">
       <p className="text-muted-foreground">{now.text}</p>
-      {now.problem !== null && (
-        <p className={now.refused ? "text-destructive break-words" : "text-muted-foreground break-words"}>
-          {now.refused
-            ? `The sandbox cannot run on this computer: ${now.problem}. Trackwall refuses to start these tasks until you install what it needs or choose "No task".`
-            : `The sandbox cannot run on this computer: ${now.problem}.`}
-        </p>
+      {now.problem && (
+        <p className={`break-words ${now.problem.refused ? "text-destructive" : "text-muted-foreground"}`}>{now.problem.text}</p>
       )}
     </div>
   );

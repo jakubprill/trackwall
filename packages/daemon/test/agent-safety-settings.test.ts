@@ -56,7 +56,7 @@ describe.skipIf(process.versions.bun === undefined)("the sandbox set in Settings
       const before = await daemon.post(agentsApi.startOptions, {});
       expect(before.sandbox).toMatchObject({ tasks: process.platform === "linux" ? "auto" : "off", chosen: false });
 
-      const saved = await daemon.post(workspaceApi.setSandbox, { tasks: "all" });
+      const saved = await daemon.post(workspaceApi.setSandbox, { sandbox: { tasks: "all" } });
 
       expect(saved).toMatchObject({ sandbox: { tasks: "all" }, sandboxProblem: null });
       expect(workspaceYaml()).toContain("sandbox:\n  tasks: all\n");
@@ -72,7 +72,7 @@ describe.skipIf(process.versions.bun === undefined)("the sandbox set in Settings
   test(
     "choosing none writes sandbox.tasks: off, and the next task without approvals starts outside the sandbox",
     async () => {
-      await daemon.post(workspaceApi.setSandbox, { tasks: "off" });
+      await daemon.post(workspaceApi.setSandbox, { sandbox: { tasks: "off" } });
 
       expect(workspaceYaml()).toContain("sandbox:\n  tasks: off\n");
       const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "map the endpoints", approvals: "auto" });
@@ -84,7 +84,7 @@ describe.skipIf(process.versions.bun === undefined)("the sandbox set in Settings
   );
 
   test("the default removes the key, so the daemon chooses for this computer again", async () => {
-    const saved = await daemon.post(workspaceApi.setSandbox, { tasks: null });
+    const saved = await daemon.post(workspaceApi.setSandbox, { sandbox: null });
 
     expect(saved).toMatchObject({ sandbox: null, sandboxProblem: null });
     expect(workspaceYaml()).not.toContain("sandbox:");
@@ -99,7 +99,7 @@ describe.skipIf(process.versions.bun === undefined)("the sandbox set in Settings
     expect(broken.sandboxProblem).toContain("sandbox");
     await expect(daemon.post(agentsApi.startOptions, {})).rejects.toThrow(/sandbox/);
 
-    const fixed = await daemon.post(workspaceApi.setSandbox, { tasks: "auto" });
+    const fixed = await daemon.post(workspaceApi.setSandbox, { sandbox: { tasks: "auto" } });
     expect(fixed).toMatchObject({ sandbox: { tasks: "auto" }, sandboxProblem: null });
     expect(workspaceYaml()).not.toContain("none");
   });

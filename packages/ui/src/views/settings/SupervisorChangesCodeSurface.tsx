@@ -1,10 +1,11 @@
 import { workspaceApi } from "@trackwall/protocol";
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
-import { errorMessage, post } from "@/lib/api";
+import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 import { SavedAs } from "./SavedAs.tsx";
 
@@ -16,21 +17,7 @@ import { SavedAs } from "./SavedAs.tsx";
 export function SupervisorChangesCodeSurface({ conn }: { conn: Connection }) {
   const load = useCallback(() => post(conn, workspaceApi.settings, {}), [conn]);
   const settings = useRemote(load);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-
-  async function change(changesCode: boolean) {
-    setBusy(true);
-    setError(undefined);
-    try {
-      await post(conn, workspaceApi.setSupervisor, { changesCode });
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      settings.reload();
-      setBusy(false);
-    }
-  }
+  const save = useAction((changesCode: boolean) => post(conn, workspaceApi.setSupervisor, { changesCode }), settings.reload);
 
   const data = settings.data;
   return (
@@ -49,14 +36,14 @@ export function SupervisorChangesCodeSurface({ conn }: { conn: Connection }) {
               type="checkbox"
               className="accent-primary size-4 shrink-0"
               checked={data.supervisor.changesCode}
-              disabled={busy}
-              onChange={(e) => void change(e.target.checked)}
+              disabled={save.pending}
+              onChange={(e) => save.run(e.target.checked)}
             />
             Let the supervisor run commands and change files
           </label>
         )}
         {data?.supervisorProblem && <p className="text-destructive text-xs break-words">{data.supervisorProblem}</p>}
-        {error && <p className="text-destructive text-xs break-words">{error}</p>}
+        {save.error && <p className="text-destructive text-xs break-words">{save.error}</p>}
         {data && <SavedAs configKey="supervisor" configFile={data.configFile} />}
       </div>
     </Surface>
