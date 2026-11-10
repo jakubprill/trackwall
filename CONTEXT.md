@@ -504,6 +504,10 @@ _Avoid_: lint (that is a tool's rule), policy, compliance, guardrails
 The request on the repo host to merge a task branch into the task's base branch, on GitHub called a pull request. Trackwall pushes the task branch at the user's request and opens the repo host's form for it with a title and description from the task; the user creates it there, and the task panel follows it, found by the task branch as its source branch (ADR-77).
 _Avoid_: pull request (except for GitHub's own pages), PR, MR in product texts
 
+**Merge request template** (`MergeRequestTemplate`, `merge-request-template.ts`):
+The repo's own default description for a new merge request, GitLab's `.gitlab/merge_request_templates/Default.md` or GitHub's `pull_request_template.md`, read at the task's base commit; the draft fills it in with the summary and the evidence (ADR-238).
+_Avoid_: PR template, description template
+
 **Pipeline** (`Pipeline`, `PipelineState`):
 What ran on a merge request's last commit, as one state: GitLab's pipeline, or GitHub's check runs and commit statuses summed up worst first (ADR-77). A failed one names its **failed jobs** (`FailedJob`): GitLab's jobs that failed it, GitHub's failed checks and statuses, each with its page and, for a GitLab job or a GitHub Actions job, its id, by which the daemon reads the end of its log on request (`JobLog`, ADR-197).
 _Avoid_: CI, build (a build is a mise task), checks
@@ -818,8 +822,8 @@ _Avoid_: regression test, proof, repro (in prose)
 Trackwall's own run of a task's reproduction test (ADR-227) in a **copy** of the repo beside the task's worktree (`<worktree>.repro`): first on the task's base with only its test files, where it must fail, then with all of the task's changes, where it must pass. `reproduced`, `not_reproduced`, `inconclusive` (it could not tell, such as a test that did not run) or `cancelled`.
 _Avoid_: verification (the whole `test` task in the worktree, ADR-64), red-green check (in the UI), proof
 
-**Evidence of a change** (ADR-222):
-What a task's result brings to show the change is right beyond the agent's summary, such as its reproduction test. The theme of ADR-222, not an identifier in code.
+**Evidence of a change** (ADR-222; `MergeRequestEvidence`, `evidenceLines`, "Evidence from Trackwall:" in a merge request's draft, ADR-238):
+What a task's result brings to show the change is right beyond the agent's summary, such as its reproduction test, Trackwall's reproduction check, the verification, the rules check and the plan the user approved. The merge request's draft lists what Trackwall itself saw of it under "Evidence from Trackwall:", each fact worded as whose word it is.
 _Avoid_: evidence (alone: that is the file and line of a fact on a repo card)
 
 **In review** (`Task.inReview`, "In review" on the Sessions list, column `review` of a board item):
