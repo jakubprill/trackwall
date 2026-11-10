@@ -11,7 +11,7 @@ import { useRemote } from "@/lib/use-remote";
 import { SavedAs } from "./SavedAs.tsx";
 
 /**
- * Copilot CLI's sandbox for tasks (ADR-181), chosen here instead of by hand in `workspace.yaml` (ADR-239): which tasks
+ * Copilot CLI's sandbox for tasks (ADR-181), chosen here instead of by hand in `workspace.yaml` (ADR-240): which tasks
  * run their commands in it, and below the choice what the next task gets on this computer, from the daemon, which alone
  * knows the default here and whether the sandbox can run.
  */

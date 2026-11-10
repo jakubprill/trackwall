@@ -69,9 +69,9 @@ const Keys: { [K in WorkspaceKey]: z.ZodType<WorkspaceKeyValues[K], unknown> } =
   toolPermissions: ToolPermissionRules.nullish().transform((rules) => rules ?? []),
   // The user's addition to the day start's first message (ADR-70); only by hand, like `repoTags`.
   dayStart: DayStartSettings.nullish().transform((settings) => settings ?? null),
-  // Whether the supervisor may change code itself (ADR-78); set in Settings › Agents or by hand (ADR-239).
+  // Whether the supervisor may change code itself (ADR-78); set in Settings › Agents or by hand (ADR-240).
   supervisor: SupervisorSettings.nullish().transform((settings) => settings ?? { changesCode: false }),
-  // Which tasks run in Copilot CLI's sandbox (ADR-181); set in Settings › Agents or by hand (ADR-239). `null` leaves
+  // Which tasks run in Copilot CLI's sandbox (ADR-181); set in Settings › Agents or by hand (ADR-240). `null` leaves
   // the default to `agents`, which knows whether the sandbox can run on this computer.
   sandbox: SandboxSettings.nullish().transform((settings) => settings ?? null),
   // The secrets from mise that the tools of sessions get (ADR-93); only by hand, like `repoTags`.

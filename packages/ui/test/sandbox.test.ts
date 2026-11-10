@@ -24,7 +24,7 @@ describe("what the New session form says about Copilot CLI's sandbox (ADR-181)",
   });
 });
 
-describe("the sandbox choice in Settings › Agents (ADR-239)", () => {
+describe("the sandbox choice in Settings › Agents (ADR-240)", () => {
   test("no key in workspace.yaml is Trackwall's default, and saving the default removes the key", () => {
     expect(sandboxChoice(null)).toBe("default");
     expect(sandboxSettingsOf("default")).toBeNull();

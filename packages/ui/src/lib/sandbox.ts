@@ -12,7 +12,7 @@ export function sandboxNote(state: SandboxState | undefined, approvals: TaskAppr
   return state.problem === null ? { kind: "on" } : { kind: "unavailable", problem: state.problem };
 }
 
-/** A choice in Settings › Agents › Sandbox (ADR-239): one of `sandbox.tasks`, or `default` for no key in `workspace.yaml`. */
+/** A choice in Settings › Agents › Sandbox (ADR-240): one of `sandbox.tasks`, or `default` for no key in `workspace.yaml`. */
 export type SandboxChoice = SandboxSettings["tasks"] | "default";
 
 export const SANDBOX_CHOICES = [

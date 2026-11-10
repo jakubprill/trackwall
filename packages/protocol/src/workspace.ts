@@ -193,7 +193,7 @@ export interface ToolPermissions {
 }
 
 /**
- * `supervisor` in `workspace.yaml` (ADR-78), set in Settings › Agents or by hand (ADR-239). Without `changesCode: true`
+ * `supervisor` in `workspace.yaml` (ADR-78), set in Settings › Agents or by hand (ADR-240). Without `changesCode: true`
  * the supervisor starts with Copilot CLI's `shell` and `write` tools denied, so it coordinates through Trackwall's tools
  * and reads files, but changes nothing itself; `true` gives it the tools and the `toolPermissions` rules without `repos`,
  * like before ADR-78.
@@ -212,7 +212,7 @@ export const AutoReviewSettings = z
 export type AutoReviewSettings = z.infer<typeof AutoReviewSettings>;
 
 /**
- * `sandbox` in `workspace.yaml` (ADR-181), set in Settings › Agents or by hand (ADR-239): which tasks run their commands in Copilot CLI's sandbox
+ * `sandbox` in `workspace.yaml` (ADR-181), set in Settings › Agents or by hand (ADR-240): which tasks run their commands in Copilot CLI's sandbox
  * (`--sandbox`), where a shell command may write only in the task's worktree and cannot see the other repos or the
  * credential folders. `auto` covers the tasks that run without approvals (ADR-105), `all` every task, `off` none. Without
  * the key it is `auto` on Linux, in a container only where the sandbox can make its namespaces (ADR-219), and `off` in
@@ -451,12 +451,12 @@ export const workspaceApi = {
    */
   setTaskTokenBudget: endpoint("set-task-token-budget", z.object({ budget: TaskTokenBudget.nullable() }).strict(), WorkspaceSettings),
   /**
-   * Whether the supervisor may run commands and change files itself from its next start (ADR-78, ADR-239); `false`
+   * Whether the supervisor may run commands and change files itself from its next start (ADR-78, ADR-240); `false`
    * removes `supervisor` from `workspace.yaml`. No MCP tool sets it: an agent must not lift its own denial.
    */
   setSupervisor: endpoint("set-supervisor", SupervisorSettings.required(), WorkspaceSettings),
   /**
-   * Which tasks started from now on run in Copilot CLI's sandbox (ADR-181, ADR-239); `null` removes `sandbox` from
+   * Which tasks started from now on run in Copilot CLI's sandbox (ADR-181, ADR-240); `null` removes `sandbox` from
    * `workspace.yaml`, so the daemon chooses for this computer. No MCP tool sets it: an agent must not take its tasks out
    * of the sandbox.
    */

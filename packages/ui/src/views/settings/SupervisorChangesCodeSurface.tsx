@@ -11,7 +11,7 @@ import { SavedAs } from "./SavedAs.tsx";
 
 /**
  * Whether the supervisor may run commands and change files itself (`supervisor.changesCode`, ADR-78), set here instead
- * of by hand in `workspace.yaml` (ADR-239). Off by default: the supervisor coordinates and every change goes through a
+ * of by hand in `workspace.yaml` (ADR-240). Off by default: the supervisor coordinates and every change goes through a
  * task the user approves.
  */
 export function SupervisorChangesCodeSurface({ conn }: { conn: Connection }) {

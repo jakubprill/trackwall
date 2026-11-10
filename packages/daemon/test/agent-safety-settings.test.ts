@@ -7,7 +7,7 @@ import { sandboxProgramsFolder } from "./support/sandbox-programs.ts";
 import { FAKE_COPILOT, ONE_REPO, startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
-// `sandbox` (ADR-181) and `supervisor` (ADR-78) set in Settings › Agents (ADR-239) through the API the UI calls: what
+// `sandbox` (ADR-181) and `supervisor` (ADR-78) set in Settings › Agents (ADR-240) through the API the UI calls: what
 // Settings saves is what `workspace.yaml` holds, and what the next task or supervisor starts with.
 
 const TOKEN = "g".repeat(43);

@@ -566,14 +566,14 @@ export class Workspace {
     return this.settings();
   }
 
-  /** Whether the supervisor may change code itself (ADR-78, ADR-239). Takes effect at its next start or resume. */
+  /** Whether the supervisor may change code itself (ADR-78, ADR-240). Takes effect at its next start or resume. */
   setSupervisor(settings: SupervisorSettings): WorkspaceSettings {
     this.deps.file.setSupervisor(settings);
     return this.settings();
   }
 
   /**
-   * Which tasks run in Copilot CLI's sandbox (ADR-181, ADR-239); `null` removes the key. Takes effect for tasks started
+   * Which tasks run in Copilot CLI's sandbox (ADR-181, ADR-240); `null` removes the key. Takes effect for tasks started
    * after it: a task keeps the sandbox it started with for every resume.
    */
   setSandbox(settings: SandboxSettings | null): WorkspaceSettings {
