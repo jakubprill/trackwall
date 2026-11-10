@@ -402,8 +402,12 @@ A process group from `runtime.json` that the daemon no longer supervises (for ex
 ## Agents
 
 **Task** (`Task`, `TaskId`):
-The work of one agent on one repo: a prompt, a worktree, a `trackwall/<slug>` branch from the default branch, sessions and a summary. Today (ADR-31) the Sessions view creates it from the form or from an approved task proposal (ADR-39), it is stored in `tasks.json`, and the task session can be stopped and resumed. A task does not point to a session; the session has `Session.task`. In code and the API `task` always means a task.
+The work of one agent on one repo: a prompt, a worktree, a `trackwall/<slug>` branch (or one under the task branch prefix) from the default branch, sessions and a summary. Today (ADR-31) the Sessions view creates it from the form or from an approved task proposal (ADR-39), it is stored in `tasks.json`, and the task session can be stopped and resumed. A task does not point to a session; the session has `Session.task`. In code and the API `task` always means a task.
 _Avoid_: job; a bare *task* always means a task, a mise task is always a *mise task*
+
+**Task branch prefix** (`taskBranchPrefix` in `workspace.yaml`, `TaskBranchPrefix`, `DEFAULT_TASK_BRANCH_PREFIX`):
+What the branch of a new task starts with: `trackwall/` by default, or the user's own one to three folders, such as `feature/`, when the repo host accepts only such branches (ADR-239). The rest of the branch and the worktree's name stay Trackwall's.
+_Avoid_: branch pattern, branch template
 
 **Round** (`TaskRound`, `TaskRounds`, `taskRoundsApi`; "Rounds" tab and "Undo round" in the UI):
 One turn of a task's agent that changed the worktree, also a turn the user drove (ADR-168). When it ends, what the agent left uncommitted becomes the **round commit** (`TaskRound.roundCommit`, subject `WIP round <n>`) on the task branch; the round runs from the commit it started on (`from`) to HEAD after it (`to`). "Undo round" takes the newest round that stands back to its `from`, only when nothing else would be lost, and the push squashes the round commits into the agent's own commits first. Kept in `task-rounds.json`.

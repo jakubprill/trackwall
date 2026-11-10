@@ -558,7 +558,7 @@ export const Task = z.object({
   id: TaskId,
   repo: RepoId,
   prompt: z.string(),
-  /** The task branch, `trackwall/<prompt slug>-<6 characters of the id>`. */
+  /** The task branch, `<task branch prefix><prompt slug>-<6 characters of the id>`, the prefix `trackwall/` by default (ADR-239). */
   branch: z.string(),
   /** The branch the task started from (the repo's default); `null` when the repo had neither a default nor a chosen branch. */
   baseBranch: z.string().nullable(),

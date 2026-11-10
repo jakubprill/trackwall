@@ -228,6 +228,30 @@ export type SandboxSettings = z.infer<typeof SandboxSettings>;
 export const TaskTokenBudget = z.number().int().positive().max(1_000_000_000_000);
 export type TaskTokenBudget = z.infer<typeof TaskTokenBudget>;
 
+/** What a task's branch starts with without `taskBranchPrefix` in `workspace.yaml` (ADR-31). */
+export const DEFAULT_TASK_BRANCH_PREFIX = "trackwall/";
+
+/**
+ * One to three folders, each of letters, digits, `_` and `-` and ending with `/`: a valid git branch on every system, no
+ * path separator besides `/`, and never a branch without a folder, such as `main`. A source of a regular expression, so
+ * that the task branch schema of the daemon checks the same prefix.
+ */
+export const TASK_BRANCH_PREFIX_PATTERN = "(?:[A-Za-z0-9_][A-Za-z0-9_-]*/){1,3}";
+
+/**
+ * `taskBranchPrefix` in `workspace.yaml` (ADR-239), by hand only: what the branch of a new task starts with instead of
+ * `trackwall/`, e.g. `feature/` for a repo host whose push rules accept only such branches. The rest of the name stays
+ * Trackwall's (`<title words>-<6 characters>`), and so does the worktree's name, which is that rest.
+ */
+export const TaskBranchPrefix = z
+  .string()
+  .max(60)
+  .regex(
+    new RegExp(`^${TASK_BRANCH_PREFIX_PATTERN}$`),
+    "one to three folders of letters, digits, _ and -, each ending with /, e.g. feature/",
+  );
+export type TaskBranchPrefix = z.infer<typeof TaskBranchPrefix>;
+
 /** An environment variable name Copilot CLI's comma-separated `--secret-env-vars` can carry (ADR-93). */
 export const ENV_VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 

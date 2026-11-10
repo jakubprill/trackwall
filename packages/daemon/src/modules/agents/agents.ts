@@ -180,6 +180,8 @@ interface AgentsRepos {
   setSupervisorModel(model: string | null): unknown;
   /** `taskTokenBudget` from `workspace.yaml` (ADR-237): a task session's token budget, `null` for none; `invalid_config` for a bad key. */
   taskTokenBudget(): number | null;
+  /** What a new task's branch starts with: `taskBranchPrefix` from `workspace.yaml` (ADR-239); `invalid_config` for a bad key. */
+  taskBranchPrefix(): string;
   /** `sandbox` from `workspace.yaml` (ADR-181), `null` without the key: which tasks run in Copilot CLI's sandbox; `invalid_config` for a bad key. */
   sandboxSettings(): SandboxSettings | null;
   /** `agentSecrets` from `workspace.yaml` (ADR-93): the secrets from mise a session's tools get; `invalid_config` for a bad key. */
