@@ -13,6 +13,7 @@ import {
   SessionProfile,
   StarredRepos,
   SupervisorSettings,
+  TaskBranchPrefix,
   TaskModel,
   TaskTokenBudget,
   ToolPermissionRules,
@@ -30,7 +31,7 @@ import { type WorkspaceKeyValues, workspaceKeyValue } from "./workspace-key-valu
 /**
  * `workspace.yaml` (§4.5, ADR-13): the workspace configuration, which the user can edit by hand and keep
  * in a private repo. Read on every use, so a manual edit works without restarting the daemon. A write changes
- * only one key (`projectsDir`, `worktreesDir`, `gitProgram`, `repoHosts`, `starredRepos`, which the star in Repos writes, `javaNavigation`, which the Java navigation install writes, or `localConfigRemote`, which "Push to this remote" for the local config store writes, or `sessionProfile`, or `autoReview`, or `supervisorModel`, or `retryModel`, or `taskTokenBudget`, or `supervisor`, or `sandbox`; `repoTags`, `graph`, `toolPermissions`, `dayStart` and `agentSecrets` only by hand) and keeps comments and the other keys,
+ * only one key (`projectsDir`, `worktreesDir`, `gitProgram`, `repoHosts`, `starredRepos`, which the star in Repos writes, `javaNavigation`, which the Java navigation install writes, or `localConfigRemote`, which "Push to this remote" for the local config store writes, or `sessionProfile`, or `autoReview`, or `supervisorModel`, or `retryModel`, or `taskTokenBudget`, or `supervisor`, or `sandbox`; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `agentSecrets` and `taskBranchPrefix` only by hand) and keeps comments and the other keys,
  * including the `repos` list from version 0.2.0, which is no longer read (ADR-18): it is the user's file, so removing it is up to them.
  */
 
@@ -86,6 +87,8 @@ const Keys: { [K in WorkspaceKey]: z.ZodType<WorkspaceKeyValues[K], unknown> } =
   retryModel: TaskModel.nullish().transform((model) => model ?? null),
   // The tokens a task's session may use from its start or resume (ADR-237); set in Settings › Agents or by hand.
   taskTokenBudget: TaskTokenBudget.nullish().transform((budget) => budget ?? null),
+  // What a new task's branch starts with (ADR-239); only by hand, like `repoTags`. `null` leaves the default to `Workspace`.
+  taskBranchPrefix: TaskBranchPrefix.nullish().transform((prefix) => prefix ?? null),
   // The Java language server for tasks (ADR-99); by hand or by installing it in Settings › Agents (ADR-123).
   javaNavigation: JavaNavigationSettings.refine(
     (settings) => [settings.jdtls, settings.java, settings.lombok, ...settings.runtimes].every((path) => path === null || isFullPath(path)),
@@ -257,6 +260,11 @@ export class WorkspaceFile {
   /** The token budget of a task's session (`taskTokenBudget`, ADR-237); `null` when tasks have none. */
   taskTokenBudget(): number | null {
     return this.get("taskTokenBudget", Keys.taskTokenBudget);
+  }
+
+  /** What a new task's branch starts with (`taskBranchPrefix`, ADR-239); `null` without the key. */
+  taskBranchPrefix(): string | null {
+    return this.get("taskBranchPrefix", Keys.taskBranchPrefix);
   }
 
   /** `null` removes the key: tasks run without a budget. */

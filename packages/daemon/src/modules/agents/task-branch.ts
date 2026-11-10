@@ -2,21 +2,37 @@
  * The name of a task's branch and worktree directory (ADR-31) from the prompt: the first few words without diacritics,
  * in lower case, with hyphens, and the start of the task identifier, so that two tasks with the same prompt do not
  * collide. Only `[a-z0-9-]`, so the name is a valid git branch and a directory on Windows and macOS without quoting.
+ * The branch puts the workspace's task branch prefix in front of it (ADR-239), `trackwall/` by default.
  */
 
 import { join } from "node:path";
+import { TASK_BRANCH_PREFIX_PATTERN } from "@trackwall/protocol";
 import { z } from "zod";
-
-/** Without regular expression special characters, because it goes into `TaskBranch` literally. */
-export const TASK_BRANCH_PREFIX = "trackwall/";
 
 /**
  * A task branch; only such a branch goes into `tasks.json`, because the daemon deletes it with `branch -D` and turns it
- * into a worktree directory, and the file can be edited by hand. The characters are the ones `taskSlug` gives.
+ * into a worktree directory, and the file can be edited by hand. A task branch prefix (any, since the user may have
+ * changed it since the task started; ADR-239) and the characters `taskSlug` gives, so never a branch without a folder,
+ * such as `main`.
  */
 export const TaskBranch = z
   .string()
-  .regex(new RegExp(`^${TASK_BRANCH_PREFIX}[a-z0-9][a-z0-9-]*$`), `task branch: ${TASK_BRANCH_PREFIX} and [a-z0-9-]`);
+  .regex(new RegExp(`^${TASK_BRANCH_PREFIX_PATTERN}[a-z0-9][a-z0-9-]*$`), "task branch: a prefix such as trackwall/ and [a-z0-9-]");
+
+/** Whether `branch` is a task branch with one of `prefixes`: a branch of a task Trackwall no longer knows. */
+export function isTaskBranchUnder(branch: string, prefixes: readonly string[]): boolean {
+  return TaskBranch.safeParse(branch).success && prefixes.includes(branch.slice(0, slugStart(branch)));
+}
+
+/** The part of a task branch after its prefix, which ends with the name's last `/`. */
+function taskSlugOf(branch: string): string {
+  return branch.slice(slugStart(branch));
+}
+
+function slugStart(branch: string): number {
+  return branch.lastIndexOf("/") + 1;
+}
+
 /** Short: the worktree lies in the task worktrees folder, deeper than the repo root, and Windows has a 260-character limit on a file's whole path in a repo. */
 const SLUG_MAX = 32;
 const ID_CHARS = 6;
@@ -47,8 +63,9 @@ export function taskSlug(prompt: string, taskId: string): string {
 
 /**
  * A task's worktree: `<task worktrees folder>/<repo>/<branch without prefix>` (ADR-84). Computed, not stored, so `tasks.json`
- * cannot point to a directory outside the task's folder (the repo identifier and the branch have no path separators).
+ * cannot point to a directory outside the task's folder (the repo identifier and the part of the branch after its last
+ * `/` have no path separators).
  */
 export function taskWorktree(worktreesDir: string, repo: string, branch: string): string {
-  return join(worktreesDir, repo, branch.slice(TASK_BRANCH_PREFIX.length));
+  return join(worktreesDir, repo, taskSlugOf(branch));
 }

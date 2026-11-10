@@ -2,7 +2,7 @@
  * How much Copilot CLI sessions look around in the code before their first edit: tool calls that only read, model turns,
  * input tokens and time, per session and as median, 75th percentile and maximum. It reads the event logs Copilot CLI
  * keeps in `<COPILOT_HOME>/session-state` (by default `~/.copilot`), by default only of Trackwall's agent tasks (a
- * `trackwall/` branch), and prints only counts, never a prompt, a command, a repo or a path, so the output can be shared.
+ * `trackwall/` branch, the default task branch prefix), and prints only counts, never a prompt, a command, a repo or a path, so the output can be shared.
  * The numbers decide whether a repo map tool for agents is worth building (`docs/development.md`).
  *
  *   bun packages/daemon/scripts/exploration-cost.ts [--all] [--since 2026-10-01] [--copilot-home <dir>]
@@ -10,10 +10,10 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
+import { DEFAULT_TASK_BRANCH_PREFIX } from "@trackwall/protocol";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 import { copilotHome } from "../src/infra/copilot-home.ts";
-import { TASK_BRANCH_PREFIX } from "../src/modules/agents/task-branch.ts";
 import { type Exploration, measureExploration, spread } from "./exploration/measure.ts";
 
 const { values } = parseArgs({
@@ -35,7 +35,7 @@ function isTask(dir: string): boolean {
   const file = join(dir, "workspace.yaml");
   if (!existsSync(file)) return false;
   try {
-    return SessionWorkspace.safeParse(parseYaml(readFileSync(file, "utf8"))).data?.branch?.startsWith(TASK_BRANCH_PREFIX) ?? false;
+    return SessionWorkspace.safeParse(parseYaml(readFileSync(file, "utf8"))).data?.branch?.startsWith(DEFAULT_TASK_BRANCH_PREFIX) ?? false;
   } catch {
     // Copilot CLI's file, in a format nobody documents: a broken one is not a task, and the run goes on.
     return false;

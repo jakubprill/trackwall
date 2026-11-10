@@ -1,13 +1,14 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type {
-  AutoReviewSettings,
-  JavaNavigationSettings,
-  SandboxSettings,
-  Session,
-  SupervisorSettings,
-  ToolPermissions,
+import {
+  type AutoReviewSettings,
+  DEFAULT_TASK_BRANCH_PREFIX,
+  type JavaNavigationSettings,
+  type SandboxSettings,
+  type Session,
+  type SupervisorSettings,
+  type ToolPermissions,
 } from "@trackwall/protocol";
 import { DomainError } from "../../src/infra/errors.ts";
 import { Agents, type AgentsDeps } from "../../src/modules/agents/agents.ts";
@@ -35,7 +36,8 @@ const fakeCopilot = join(import.meta.dir, "..", "fixtures", "fake-copilot-sessio
  * `sandbox` is `sandbox` from the workspace, `null` without
  * the key (ADR-181); off by default, since runners have no bubblewrap. `supervisorModel` is `supervisorModel` from the
  * workspace (ADR-193), read at every supervisor start; Copilot CLI's default by default. `taskTokenBudget` is
- * `taskTokenBudget` from the workspace (ADR-237), read at every task start; none by default.
+ * `taskTokenBudget` from the workspace (ADR-237), read at every task start; none by default. `taskBranchPrefix` is what
+ * the workspace gives a new task's branch (ADR-239); `trackwall/` by default.
  */
 export function makeAgents(
   repos: Record<string, string>,
@@ -51,6 +53,7 @@ export function makeAgents(
   sandbox: () => SandboxSettings | null = () => ({ tasks: "off" }),
   supervisorModel: () => string | null = () => null,
   taskTokenBudget: () => number | null = () => null,
+  taskBranchPrefix: () => string = () => DEFAULT_TASK_BRANCH_PREFIX,
 ) {
   const procs = new ProcessGroups({
     logs: new Logs({ dir: join(home, "logs"), maxFileBytes: 1024 * 1024, log: () => {} }),
@@ -80,6 +83,7 @@ export function makeAgents(
       supervisorSettings: () => supervisor,
       supervisorModel,
       taskTokenBudget,
+      taskBranchPrefix,
       setSupervisorModel: () => {},
       agentSecrets: () => [],
       sessionProfile: () => null,

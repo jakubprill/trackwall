@@ -602,6 +602,20 @@ describe("the task worktrees folder (ADR-84)", () => {
     expect(workspace.settings()).toMatchObject({ worktreesDir: null, worktreesDirProblem: expect.stringContaining("worktreesDir") });
     expect(await workspace.setWorktreesDir(null)).toMatchObject({ worktreesDir: null, worktreesDirProblem: null });
   });
+
+  test("a new task's branch starts with taskBranchPrefix from the file, trackwall/ without it, and a bad prefix is invalid_config naming the key", async () => {
+    const { workspace, file } = await workspaceWithProjectsDir();
+    const before = readFileSync(file, "utf8");
+    expect(workspace.taskBranchPrefix()).toBe("trackwall/");
+
+    writeFileSync(file, `${before}taskBranchPrefix: feature/\n`);
+    expect(workspace.taskBranchPrefix()).toBe("feature/");
+
+    writeFileSync(file, `${before}taskBranchPrefix: feature\n`);
+    expect(() => workspace.taskBranchPrefix()).toThrow(
+      expect.objectContaining({ code: "invalid_config", message: expect.stringContaining("taskBranchPrefix") }),
+    );
+  });
 });
 
 describe("isFullPath", () => {

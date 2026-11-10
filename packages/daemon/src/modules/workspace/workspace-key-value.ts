@@ -3,6 +3,7 @@ import {
   type AutoReviewSettings,
   countLabel,
   type DayStartSettings,
+  DEFAULT_TASK_BRANCH_PREFIX,
   type GraphConfig,
   type JavaNavigationSettings,
   type RepoHost,
@@ -35,6 +36,7 @@ export interface WorkspaceKeyValues {
   supervisorModel: string | null;
   retryModel: string | null;
   taskTokenBudget: number | null;
+  taskBranchPrefix: string | null;
   supervisor: SupervisorSettings;
   sandbox: SandboxSettings | null;
   repoTags: RepoTagRules;
@@ -60,6 +62,7 @@ export const workspaceKeyValue: { [K in WorkspaceKey]: (value: WorkspaceKeyValue
   supervisorModel: (model) => model ?? "Copilot CLI's default",
   retryModel: (model) => model ?? "not set",
   taskTokenBudget: (budget) => (budget === null ? "none" : `${budget} tokens`),
+  taskBranchPrefix: (prefix) => prefix ?? DEFAULT_TASK_BRANCH_PREFIX,
   supervisor: (settings) => `changesCode: ${settings.changesCode}`,
   sandbox: (settings) =>
     settings === null ? "tasks: auto on Linux, off on macOS, Windows and in a container" : `tasks: ${settings.tasks}`,
