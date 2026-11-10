@@ -14,6 +14,7 @@ import {
   sandboxProblem,
   sandboxState,
   taskSandbox,
+  tunDeviceProblem,
 } from "../src/modules/agents/copilot-sandbox.ts";
 import { sandboxProgramsFolder } from "./support/sandbox-programs.ts";
 
@@ -94,7 +95,12 @@ describe("which tasks run in the sandbox, with and without the key (ADR-181, ADR
   });
 
   const safe: ProcessPrivileges = { uid: 1000, noNewPrivileges: true };
-  const host = (inContainer: boolean, namespaces: string | null, privileges = safe): SandboxHost & { probed: string[] } => {
+  const host = (
+    inContainer: boolean,
+    namespaces: string | null,
+    privileges = safe,
+    tunDevice: string | null = null,
+  ): SandboxHost & { probed: string[] } => {
     const probed: string[] = [];
     return {
       inContainer,
@@ -106,6 +112,7 @@ describe("which tasks run in the sandbox, with and without the key (ADR-181, ADR
         return namespaces;
       },
       privileges: () => privileges,
+      tunDevice: () => tunDevice,
     };
   };
   const refused = "bubblewrap cannot make the sandbox's namespaces here (bwrap: No permissions to create new namespace)";
@@ -142,6 +149,18 @@ describe("which tasks run in the sandbox, with and without the key (ADR-181, ADR
       expect(() => taskSandbox(asRoot, "auto")).toThrow(
         expect.objectContaining({ message: expect.stringContaining("Trackwall runs as root in this container") }),
       );
+    },
+  );
+
+  test.if(onLinux)(
+    "where the namespaces work but /dev/net/tun is missing, as in a container started without --device /dev/net/tun, the sandbox cannot run",
+    async () => {
+      const env = { PATH: sandboxProgramsFolder() };
+      const noTun = "/dev/net/tun, which slirp4netns needs for the sandbox's network, is not there";
+      expect(await sandboxState(null, env, host(true, null, safe, noTun))).toEqual({ tasks: "off", problem: noTun, chosen: false });
+      const state = await sandboxState(null, env, host(false, null, safe, noTun));
+      expect(state).toEqual({ tasks: "auto", problem: noTun, chosen: false });
+      expect(() => taskSandbox(state, "auto")).toThrow(expect.objectContaining({ message: expect.stringContaining(noTun) }));
     },
   );
 
@@ -183,6 +202,19 @@ describe("whether a new task runs in Copilot CLI's sandbox (ADR-181)", () => {
 
   test("a task outside it starts also where the sandbox cannot run", () => {
     expect(taskSandbox({ tasks: "auto", problem: missing, chosen: true }, "ask")).toBe(false);
+  });
+});
+
+describe("whether the sandbox's network can open its device (a real file)", () => {
+  test("a device that opens is no problem", () => {
+    const device = join(mkdtempSync(join(tmpdir(), "trackwall-tun-")), "tun");
+    writeFileSync(device, "");
+    expect(tunDeviceProblem(device)).toBeNull();
+  });
+
+  test("a missing one, as in a container without --device /dev/net/tun, is named with what needs it", () => {
+    const device = join(mkdtempSync(join(tmpdir(), "trackwall-tun-")), "tun");
+    expect(tunDeviceProblem(device)).toBe(`${device}, which slirp4netns needs for the sandbox's network, is not there`);
   });
 });
 

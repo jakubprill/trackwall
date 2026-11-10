@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { closeSync, openSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type SandboxSettings, type SandboxState, sandboxesTask, type TaskApprovals } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
@@ -113,6 +113,25 @@ export function keptNamespaceProbes(probe: typeof namespacesProblem = namespaces
   };
 }
 
+/**
+ * The device slirp4netns opens to give the sandbox its own network. Docker leaves it out of a container unless it is
+ * started with `--device /dev/net/tun`; without it bubblewrap makes its namespaces and the probe above passes, but every
+ * command of a task then fails with `open("/dev/net/tun"): No such file or directory`.
+ */
+const TUN_DEVICE = join("/dev", "net", "tun");
+
+/** Why the sandbox's network cannot start, from opening `device` the way slirp4netns does; `null` when it opens. */
+export function tunDeviceProblem(device: string = TUN_DEVICE): string | null {
+  try {
+    closeSync(openSync(device, "r+"));
+    return null;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    const why = code === "ENOENT" ? "is not there" : `cannot be opened (${code ?? messageOf(err)})`;
+    return `${device}, which slirp4netns needs for the sandbox's network, ${why}`;
+  }
+}
+
 /** What the kernel says of the daemon's own process: its user, and whether it and its children can gain privileges. */
 export interface ProcessPrivileges {
   uid: number;
@@ -152,6 +171,8 @@ export interface SandboxHost {
   namespaces: (bwrap: string, env: NodeJS.ProcessEnv) => Promise<string | null>;
   /** `ownPrivileges` in the daemon, read only in a container. */
   privileges: () => ProcessPrivileges;
+  /** `tunDeviceProblem` in the daemon, read only on Linux once the namespaces work. */
+  tunDevice: () => string | null;
 }
 
 /** The sandbox's host as the daemon is: this system, its folders, the kept probes and this process. */
@@ -162,6 +183,7 @@ export function daemonSandboxHost(inContainer: boolean): SandboxHost {
     systemFolders: SYSTEM_PROGRAM_FOLDERS,
     namespaces: keptNamespaceProbes(),
     privileges: () => ownPrivileges(),
+    tunDevice: () => tunDeviceProblem(),
   };
 }
 
@@ -177,15 +199,19 @@ export function defaultSandboxTasks(inContainer: boolean, platform: NodeJS.Platf
   return !inContainer || canRun ? "auto" : "off";
 }
 
-/** Why the sandbox cannot run here: its programs, then on Linux its namespaces, then in a container its privileges. */
+/**
+ * Why the sandbox cannot run here: its programs, then on Linux its namespaces, in a container its privileges, and the
+ * device of its network.
+ */
 async function hostProblem(env: NodeJS.ProcessEnv, host: SandboxHost): Promise<string | null> {
   const programs = sandboxProblem(env, host.platform, host.systemFolders);
   if (programs !== null || host.platform !== "linux") return programs;
   const bwrap = sandboxProgram("bwrap", env, host.systemFolders);
   if (bwrap === undefined) throw new Error("bwrap passed the check of the sandbox's programs but is not there");
   const namespaces = await host.namespaces(bwrap, env);
-  if (namespaces !== null || !host.inContainer) return namespaces;
-  return containerPrivilegesProblem(host.privileges());
+  if (namespaces !== null) return namespaces;
+  const privileges = host.inContainer ? containerPrivilegesProblem(host.privileges()) : null;
+  return privileges ?? host.tunDevice();
 }
 
 /**

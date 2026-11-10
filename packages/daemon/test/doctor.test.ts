@@ -340,7 +340,7 @@ describe("the check of Copilot CLI's sandbox (ADR-181)", () => {
       status: "fail",
       summary:
         "Copilot CLI's sandbox cannot run here: bubblewrap (bwrap), which Copilot CLI's sandbox runs on, is not in PATH, so Trackwall refuses to start tasks without approvals.",
-      fix: 'Install it (on Linux the bubblewrap package, with slirp4netns, iproute2 and iptables), or choose "No task" in Settings › Agents › Sandbox.',
+      fix: 'Install it (on Linux the bubblewrap package, with slirp4netns, iproute2 and iptables, and the tun kernel module), or choose "No task" in Settings › Agents › Sandbox.',
     });
   });
 
