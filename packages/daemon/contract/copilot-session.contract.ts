@@ -872,6 +872,45 @@ describe("a task in Copilot CLI's sandbox with the real Copilot CLI (ADR-181)", 
       probe.remove();
     }
   });
+
+  test("on macOS a task in the sandbox waits for you while Copilot CLI offers to install its certificate authority, and outside the terminal it only goes on without installing; on Linux it does not ask", async () => {
+    const { agents } = daemon.facade;
+    const workspaceFile = join(daemon.home, "workspace.yaml");
+    const workspace = readFileSync(workspaceFile, "utf8");
+    // Copilot CLI's settings.json as the test before left it, without `sandbox`: git and gh sign in through its proxy,
+    // which needs the authority.
+    try {
+      writeFileSync(workspaceFile, workspace.replace("tasks: off", "tasks: auto"));
+      model.reply({ text: "Mapped the endpoints." });
+      const task = await agents.createTask("shop", "map the endpoints", { approvals: "auto" });
+      expect(task.sandbox).toBe(true);
+      const session = taskSessionOf(task.id);
+      openWindow(session);
+      const first = await waitFor(
+        agents,
+        session,
+        (s) => s.dialog !== null || s.state?.source === "hook",
+        "the dialog or the first hook",
+        SESSION_MS,
+      );
+      // Copilot CLI offers it on macOS and on a Windows account that can elevate, never on Linux.
+      if (process.platform !== "win32") expect(first.dialog !== null).toBe(process.platform === "darwin");
+      if (first.dialog !== null) {
+        expect(first.state).toMatchObject({ state: "Approval", source: "screen", reason: "screen sandbox certificate authority dialog" });
+        expect(first.needsAttention).toBe(true);
+        expect(first.dialog).toMatchObject({ kind: "approval", title: "Install the proxy certificate authority?" });
+        if (first.dialog.kind !== "approval") throw new Error("not an approval");
+        expect(first.dialog.options.map((o) => o.label)).not.toContain("Install certificate authority");
+        expect(hookRecords(daemon.home, session)).toEqual([]);
+        // "Continue without installing" is remembered in Copilot CLI's home, so the next sandboxed task does not ask.
+        agents.answerDialog(session, first.dialog.id, first.dialog.options.at(-1)?.key ?? "stop");
+      }
+      await endOfTurn(session);
+      await agents.stop(session);
+    } finally {
+      writeFileSync(workspaceFile, workspace);
+    }
+  });
 });
 
 describe("a review of a task's changes with the real Copilot CLI (ADR-62)", () => {
