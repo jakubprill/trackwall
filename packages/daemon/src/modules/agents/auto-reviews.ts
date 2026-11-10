@@ -10,6 +10,7 @@ import {
   type AutoReviewTrigger,
   countLabel,
   cutText,
+  type FreshAutoReview,
   withoutInvisibleCharacters,
 } from "@trackwall/protocol";
 import { z } from "zod";
@@ -42,6 +43,11 @@ const StoredAutoReviews = z.object({ reviews: z.array(AutoReview) });
 type StoredAutoReviews = z.infer<typeof StoredAutoReviews>;
 /** `auto-reviews.json` (ADR-182, ADR-223). */
 export const AUTO_REVIEWS_FORMAT = stateFormat(StoredAutoReviews);
+
+/** The review's `diffHash`: what tells the diff it saw from the task's diff now. */
+function diffHashOf(patch: string): string {
+  return createHash("sha256").update(patch).digest("hex");
+}
 
 const STOPPED_WITH_DAEMON = "Trackwall stopped during the review; review again";
 const CANCELLED = "Stopped before the reviewer finished";
@@ -159,6 +165,17 @@ export class AutoReviews {
     return this.#reviews.get(reviewKey(task, kind))?.review ?? null;
   }
 
+  /**
+   * The task's last finished review of the kind, and whether the task's diff differs from the one it saw (ADR-238);
+   * `null` without one. A running, failed or cancelled review says nothing about the changes.
+   */
+  async withFreshness(task: string, kind: AutoReviewKind): Promise<FreshAutoReview | null> {
+    const review = this.get(task, kind);
+    if (review?.state !== "done") return null;
+    const changes = await this.#deps.tasks.changes(task, AUTO_REVIEW_DIFF_MAX_BYTES);
+    return { review, outdated: diffHashOf(changes.patch) !== review.diffHash };
+  }
+
   /** Stops the running review of the kind; it ends `cancelled`. A finished one is returned as it is. */
   async cancel(task: string, kind: AutoReviewKind): Promise<AutoReview | null> {
     await this.#stopKind(task, kind);
@@ -223,7 +240,7 @@ export class AutoReviews {
       if (trigger === "report") return null;
       throw new DomainError("bad_request", `task ${task} has no changes to review`);
     }
-    const diffHash = createHash("sha256").update(changes.patch).digest("hex");
+    const diffHash = diffHashOf(changes.patch);
     const key = reviewKey(task, kind);
     const last = this.#reviews.get(key)?.review;
     // Only a review that finished saw the diff; one that failed or was stopped is tried again.

@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { PromptDelivery, TaskId } from "./agents.ts";
 import { apiEndpoints, Done } from "./api.ts";
+import { FreshAutoReview } from "./auto-review.ts";
+import { CopilotUsage, ModelCalls } from "./copilot-usage.ts";
 import { RepoHostKind } from "./repo-hosts.ts";
+import { ReproductionCheck } from "./reproduction.ts";
 import { WebAddress } from "./workspace.ts";
 
 /**
@@ -212,6 +215,26 @@ export interface MergeRequestForm {
   description: string;
 }
 
+/** The repo's own merge request template (ADR-238): its path relative to the repo root with `/`, and its text. */
+export const MergeRequestTemplate = z.object({ path: z.string(), text: z.string().max(MERGE_REQUEST_DESCRIPTION_MAX) });
+export type MergeRequestTemplate = z.infer<typeof MergeRequestTemplate>;
+
+/**
+ * What Trackwall knows of a task beyond the task itself and its verification, for the draft of its merge request
+ * (ADR-238): the repo's template for the repo host at the task's base commit, the last reproduction check (ADR-227), the
+ * last rules check (ADR-234) and whether the changes moved on after it, and what the task's conversation used on which
+ * models (ADR-228). Each is `null` when there is none.
+ */
+export const MergeRequestEvidence = z.object({
+  template: MergeRequestTemplate.nullable(),
+  reproduction: ReproductionCheck.nullable(),
+  rules: FreshAutoReview.nullable(),
+  usage: CopilotUsage.nullable(),
+  /** The conversation's own model calls per model, the most first; empty when it made none or its log is unknown. */
+  models: z.array(ModelCalls),
+});
+export type MergeRequestEvidence = z.infer<typeof MergeRequestEvidence>;
+
 const endpoint = apiEndpoints("merge-requests");
 
 export const mergeRequestsApi = {
@@ -222,6 +245,8 @@ export const mergeRequestsApi = {
    * branch has no commits; a refused push (the remote moved on) is `repo_unavailable` with git's message.
    */
   push: endpoint("push", TaskRequest, TaskMergeRequest),
+  /** What the draft of the task's merge request is made of besides the task and its verification (ADR-238), read now. */
+  evidence: endpoint("evidence", TaskRequest, MergeRequestEvidence),
   /**
    * Opens the repo host's new merge request form in the browser, from the task branch into the target branch, with the
    * title and description filled in. `bad_request` while the branch has unpushed commits or the remote is on no known repo host.

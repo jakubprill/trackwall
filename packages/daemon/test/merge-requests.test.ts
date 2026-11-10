@@ -13,6 +13,8 @@ const TOKEN = "m".repeat(43);
 const GITLAB_MRS = "projects/shop%2Fshop/merge_requests";
 const FAKE_SSH = join(import.meta.dir, "fixtures", "fake-ssh.ts");
 const ORDERS_REMOTE = "ssh://git@gitlab.example.com/shop/orders.git";
+/** The template `shop` keeps for GitLab, with Windows line ends as an editor on Windows saves it. */
+const SHOP_TEMPLATE = "## What does this merge request do?\r\n\r\n## How to test\r\n";
 
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
 /** The bare repo `orders` pushes to, through the fake ssh. */
@@ -28,7 +30,11 @@ const hosting = fakeHostingClis({ apiResponses: { [GITLAB_MRS]: [] } });
 beforeAll(async () => {
   daemon = await startSessionApi(TOKEN, {
     repos: {
-      shop: { "README.md": "# shop\n", "src/cart.ts": "export const cart = [];\n" },
+      shop: {
+        "README.md": "# shop\n",
+        "src/cart.ts": "export const cart = [];\n",
+        ".gitlab/merge_request_templates/Default.md": SHOP_TEMPLATE,
+      },
       orders: { "README.md": "# orders\n" },
     },
     miseCommand: ["mise"],
@@ -130,6 +136,23 @@ describe.skipIf(process.versions.bun === undefined)("a merge request from a task
     );
     expect(opened).toHaveLength(1);
   }, 60_000);
+
+  test("the draft's evidence has the repo's GitLab template as the task's base commit holds it, not as the agent edited it (ADR-238)", async () => {
+    const task = await taskWithCommit("shop", "Rewrite the template", ".gitlab/merge_request_templates/Default.md");
+
+    const evidence = await daemon.post(mergeRequestsApi.evidence, { task: task.id });
+
+    expect(evidence).toEqual({
+      template: {
+        path: ".gitlab/merge_request_templates/Default.md",
+        text: "## What does this merge request do?\n\n## How to test\n",
+      },
+      reproduction: null,
+      rules: null,
+      usage: null,
+      models: [],
+    });
+  });
 
   test("a description too long for an address is cut in the form, never inside a character", async () => {
     hosting.reconfigure({ apiResponses: { [GITLAB_MRS]: [] } });

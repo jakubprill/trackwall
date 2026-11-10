@@ -64,6 +64,9 @@ const push = (fields: Partial<TaskBranchPush>): TaskBranchPush => ({
   ...fields,
 });
 
+/** The draft of a task that is no part of a change, without the daemon's evidence. */
+const draftOf = (t: Task, v: Verification | null) => mergeRequestDraft({ task: t, verification: v, evidence: null, changeBlock: null });
+
 describe("the merge request draft", () => {
   test("takes the agent's summary and the verdict with its test counts, and the first line of the prompt as the title", () => {
     const tests = {
@@ -73,36 +76,40 @@ describe("the merge request draft", () => {
       earlierReports: 0,
       truncated: false,
     };
-    const draft = mergeRequestDraft(
-      task({ summary: { text: "Added the discount and a test.\n", checkSteps: [], reproTest: null, reportedAt: "2026-10-26T10:02:00Z" } }),
-      verification("passed", tests),
-      null,
-    );
+    const draft = mergeRequestDraft({
+      task: task({
+        summary: { text: "Added the discount and a test.\n", checkSteps: [], reproTest: null, reportedAt: "2026-10-26T10:02:00Z" },
+      }),
+      verification: verification("passed", tests),
+      evidence: null,
+      changeBlock: null,
+    });
 
     expect(draft).toEqual({
       title: "Add a 10% discount to the cart",
-      description: "Added the discount and a test.\n\nVerification in Trackwall: passed (mise task test, 128 tests · 3 skipped)",
+      description:
+        "Added the discount and a test.\n\nEvidence from Trackwall:\n- Verification: passed (mise task test, 128 tests · 3 skipped)",
     });
   });
 
   test("a task's own title wins, the prompt stands in for a missing summary, and a running verification is left out", () => {
-    expect(mergeRequestDraft(task({ title: "Discount in the cart" }), verification("running"), null)).toEqual({
+    expect(draftOf(task({ title: "Discount in the cart" }), verification("running"))).toEqual({
       title: "Discount in the cart",
       description: "Add a 10% discount to the cart\nand show it on the receipt",
     });
-    expect(mergeRequestDraft(task(), verification("failed"), null).description).toEndWith(
-      "\n\nVerification in Trackwall: failed (mise task test)",
+    expect(draftOf(task(), verification("failed")).description).toEndWith(
+      "\n\nEvidence from Trackwall:\n- Verification: failed (mise task test)",
     );
   });
 
   test("an outdated verdict says it is about an earlier version of the changes (ADR-209)", () => {
-    expect(mergeRequestDraft(task(), { ...verification("passed"), outdated: true }, null).description).toEndWith(
-      "\n\nVerification in Trackwall: passed on an earlier version of the changes (mise task test)",
+    expect(draftOf(task(), { ...verification("passed"), outdated: true }).description).toEndWith(
+      "\n- Verification: passed on an earlier version of the changes (mise task test)",
     );
   });
 
   test("the agent's reproduction test follows the summary as its own claim, before the verdict (ADR-222)", () => {
-    const draft = mergeRequestDraft(
+    const draft = draftOf(
       task({
         summary: {
           text: "Fixed the total of an empty order.",
@@ -116,19 +123,18 @@ describe("the merge request draft", () => {
         },
       }),
       verification("passed"),
-      null,
     );
 
     expect(draft.description).toBe(
-      "Fixed the total of an empty order.\n\n" +
-        "Reproduction test (the agent's word): OrderServiceTest#totalOfEmptyOrder in src/test/java/com/example/shop/OrderServiceTest.java, " +
+      "Fixed the total of an empty order.\n\nEvidence from Trackwall:\n" +
+        "- Reproduction test (the agent's word): OrderServiceTest#totalOfEmptyOrder in src/test/java/com/example/shop/OrderServiceTest.java, " +
         "failed before the fix with: NullPointerException at OrderService.java:42" +
-        "\n\nVerification in Trackwall: passed (mise task test)",
+        "\n- Verification: passed (mise task test)",
     );
   });
 
   test("the agent's check steps follow the summary as a numbered list, before the verdict (ADR-169)", () => {
-    const draft = mergeRequestDraft(
+    const draft = draftOf(
       task({
         summary: {
           text: "Added the discount.",
@@ -138,19 +144,17 @@ describe("the merge request draft", () => {
         },
       }),
       verification("passed"),
-      null,
     );
 
     expect(draft.description).toBe(
       "Added the discount.\n\nHow to check:\n1. Open /cart with two items: the total shows -10%\n2. Remove an item: the discount stays" +
-        "\n\nVerification in Trackwall: passed (mise task test)",
+        "\n\nEvidence from Trackwall:\n- Verification: passed (mise task test)",
     );
   });
 
   test("a long summary is cut to what the form's address carries", () => {
-    const draft = mergeRequestDraft(
+    const draft = draftOf(
       task({ summary: { text: "x".repeat(10_000), checkSteps: [], reproTest: null, reportedAt: "2026-10-26T10:02:00Z" } }),
-      null,
       null,
     );
 
@@ -160,11 +164,12 @@ describe("the merge request draft", () => {
 
   test("a part of a change starts with its change block, and a long summary is cut to keep it whole (ADR-172)", () => {
     const block = "This merge request is part 2 of a change across several repos.";
-    const draft = mergeRequestDraft(
-      task({ summary: { text: "x".repeat(10_000), checkSteps: [], reproTest: null, reportedAt: "2026-10-26T10:02:00Z" } }),
-      null,
-      block,
-    );
+    const draft = mergeRequestDraft({
+      task: task({ summary: { text: "x".repeat(10_000), checkSteps: [], reproTest: null, reportedAt: "2026-10-26T10:02:00Z" } }),
+      verification: null,
+      evidence: null,
+      changeBlock: block,
+    });
 
     expect(draft.description.startsWith(`${block}\n\nxxx`)).toBe(true);
     expect(draft.description).toHaveLength(MERGE_REQUEST_DESCRIPTION_MAX);
@@ -172,7 +177,7 @@ describe("the merge request draft", () => {
   });
 
   test("a change block longer than the description allows is cut like any text, without the summary", () => {
-    const draft = mergeRequestDraft(task({ summary: null }), null, "y".repeat(10_000));
+    const draft = mergeRequestDraft({ task: task({ summary: null }), verification: null, evidence: null, changeBlock: "y".repeat(10_000) });
 
     expect(draft.description).toBe(`${"y".repeat(MERGE_REQUEST_DESCRIPTION_MAX - 1)}…`);
   });

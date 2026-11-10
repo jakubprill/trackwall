@@ -2,21 +2,26 @@ import {
   type BranchOnRemote,
   type FailedJob,
   type FollowedMergeRequest,
+  type FreshAutoReview,
   type HostedProject,
   type JobLog,
   type MergeRequest,
   type MergeRequestDraft,
+  type MergeRequestEvidence,
   type MergeRequestForm,
   type MergeRequestLookup,
+  type MergeRequestTemplate,
   PIPELINE_FIX_LOGS_MAX,
   type Pipeline,
   type PipelineFix,
   type PromptDelivery,
   type RepoHost,
+  type ReproductionCheck,
   type Task,
   type TaskMergeRequest,
 } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
+import { readMergeRequestTemplate, type TemplateVcs } from "./merge-request-template.ts";
 import { ACTIVE_CHECK_MS, nextCheckMs, pipelineFailedNow, type WatchRead } from "./watch-schedule.ts";
 
 /**
@@ -53,10 +58,14 @@ interface MergeRequestTasks {
   pushWithRoundsSquashed(id: string, push: (source: string | undefined) => Promise<void>): Promise<void>;
   /** Queues the user's pipeline fix for the task's agent and asks its session to read it. */
   askToFixPipeline(id: string, fix: PipelineFix): PromptDelivery;
+  /** The task's last rules check (ADR-234), and whether the task's changes moved on after it; `null` without one. */
+  rulesCheck(id: string): Promise<FreshAutoReview | null>;
+  /** What the task's conversation has used so far, and on which models (ADR-228). */
+  taskConversationUse(id: string): Promise<Pick<MergeRequestEvidence, "usage" | "models">>;
 }
 
 /** What the module needs from `vcs`: the main remote as a project on a repo host, the task branch against it, and its push. */
-interface MergeRequestVcs {
+interface MergeRequestVcs extends TemplateVcs {
   hostedProject(dir: string, hosts: readonly RepoHost[]): Promise<HostedProject | null>;
   branchOnRemote(dir: string, branch: string, base: string): Promise<BranchOnRemote | null>;
   pushBranch(dir: string, branch: string, source?: string): Promise<void>;
@@ -78,6 +87,8 @@ export interface MergeRequestsDeps {
   openUrl: (url: string) => void;
   /** The end of a job's log, cleaned and masked like a log line (`logs`, ADR-197); `cut` when the daemon did not read all of it. */
   jobLogExcerpt: (raw: string, cut: boolean) => Promise<Omit<JobLog, "job">>;
+  /** The task's last reproduction check (`reproduction`, ADR-227); `null` without one. */
+  reproductionCheck: (task: string) => ReproductionCheck | null;
   /** The pipeline of a task's merge request failed since the read before (`pipelineFailedNow`). */
   onPipelineFailed: (task: Task, mergeRequest: MergeRequest) => void;
   log: (msg: string) => void;
@@ -120,6 +131,26 @@ export class MergeRequests {
     const lookup = project && push?.published ? await this.#lookup(task, project, now) : null;
     if (project && lookup) this.#recordLookup(id, project, lookup, now);
     return { task: id, push, project, lookup, targetBranch: task.baseBranch };
+  }
+
+  /**
+   * What the draft of the task's merge request is made of besides the task and its verification (ADR-238): the repo's
+   * template for its repo host, and Trackwall's evidence of the change. Read when the user opens the draft, not polled.
+   */
+  async evidence(id: string): Promise<MergeRequestEvidence> {
+    const task = this.#deps.tasks.task(id);
+    const [template, rules, use] = await Promise.all([
+      asRepoUnavailable(task, this.#template(task)),
+      this.#deps.tasks.rulesCheck(id),
+      this.#deps.tasks.taskConversationUse(id),
+    ]);
+    return { template, reproduction: this.#deps.reproductionCheck(id), rules, ...use };
+  }
+
+  /** The repo's template for the repo host of its main remote; none without a known repo host. */
+  async #template(task: Task): Promise<MergeRequestTemplate | null> {
+    const project = await this.#deps.vcs.hostedProject(task.worktree, this.#deps.repoHosts());
+    return project && readMergeRequestTemplate(this.#deps.vcs, task.worktree, task.base, project.kind);
   }
 
   /** Reads every task's merge request at its own pace (`nextCheckMs`), the first read of each at once. */

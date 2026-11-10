@@ -7,17 +7,18 @@ import {
   MERGE_REQUEST_DESCRIPTION_MAX,
   MERGE_REQUEST_TITLE_MAX,
   type MergeRequest,
+  type MergeRequestEvidence,
   type MergeRequestForm,
   type MergeRequestState,
   type PipelineState,
   pipelineStateText,
-  reproTestLine,
   type Task,
   type TaskBranchPush,
   type Verification,
 } from "@trackwall/protocol";
+import { evidenceLines } from "./merge-request-evidence.ts";
+import { fillTemplate } from "./merge-request-template.ts";
 import type { StatusTone } from "./repo-status.ts";
-import { testCountsLabel } from "./verification.ts";
 
 /**
  * How the task panel shows a task's way to a merge request (ADR-77): the draft the user approves for the repo host's
@@ -31,21 +32,34 @@ export const MERGE_REQUEST_POLL_MS = 30_000;
 export type MergeRequestDraftText = Pick<MergeRequestForm, "title" | "description">;
 
 /**
- * The draft of the form: the task's title (or the first line of its prompt) and the agent's summary (or the prompt)
- * with its check steps (ADR-169) and the verdict of the last verification, so the reviewer sees what the user saw and
- * can try the change the same way. A part of a change starts with its change block (ADR-172), which a long summary is
- * cut to make room for, so the reviewer always sees the other repos.
+ * The draft of the form (ADR-238): the task's title (or the first line of its prompt), and the agent's summary (or the
+ * prompt) with its check steps (ADR-169) and Trackwall's evidence of the change (`evidenceLines`), so the reviewer sees
+ * what the user saw and can try the change the same way. With the repo's own template, they fill it in
+ * (`fillTemplate`), since the repo host leaves its template out once the form carries a description. A part of a change
+ * starts with its change block (ADR-172), which a long description is cut to make room for, so the reviewer always sees
+ * the other repos.
  */
-export function mergeRequestDraft(task: Task, verification: Verification | null, changeBlock: string | null): MergeRequestDraftText {
+export function mergeRequestDraft({
+  task,
+  verification,
+  evidence,
+  changeBlock,
+}: {
+  task: Task;
+  verification: Verification | null;
+  /** `null` when the daemon could not read it: the draft then has what the task panel knows. */
+  evidence: MergeRequestEvidence | null;
+  changeBlock: string | null;
+}): MergeRequestDraftText {
   const title = (task.title ?? task.prompt.split("\n", 1)[0] ?? "").trim();
-  const body = (task.summary?.text ?? task.prompt).trim();
-  const checks = task.summary && task.summary.checkSteps.length > 0 ? `\n\n${checkStepsSection(task.summary.checkSteps)}` : "";
-  const repro = task.summary?.reproTest ? `\n\n${reproTestLine(task.summary.reproTest)}` : "";
-  const verdict = verification && verification.state !== "running" ? `\n\n${verificationLine(verification)}` : "";
-  return {
-    title: cutText(title, MERGE_REQUEST_TITLE_MAX),
-    description: withBlock(changeBlock, `${body}${checks}${repro}${verdict}`),
-  };
+  const summary = (task.summary?.text ?? task.prompt).trim();
+  const lines = evidenceLines(task, verification, evidence);
+  const checks = task.summary && task.summary.checkSteps.length > 0 ? checkStepsSection(task.summary.checkSteps) : null;
+  const proof = lines.length > 0 ? ["Evidence from Trackwall:", ...lines].join("\n") : null;
+  const testing = [checks, proof].filter((part) => part !== null).join("\n\n");
+  const template = evidence?.template ?? null;
+  const description = template ? fillTemplate(template.text, summary, testing) : [summary, testing].filter((p) => p !== "").join("\n\n");
+  return { title: cutText(title, MERGE_REQUEST_TITLE_MAX), description: withBlock(changeBlock, description) };
 }
 
 function withBlock(block: string | null, rest: string): string {
@@ -60,16 +74,6 @@ function withBlock(block: string | null, rest: string): string {
 /** `How to check:` and the steps as a numbered Markdown list, which GitLab and GitHub both render. */
 function checkStepsSection(steps: readonly string[]): string {
   return ["How to check:", ...steps.map((step, index) => `${index + 1}. ${step}`)].join("\n");
-}
-
-/**
- * `Verification in Trackwall: passed (mise task test, 128 tests · 3 skipped)`; an outdated one (ADR-209) says the changes
- * moved on after it, so the reviewer does not take it for a verdict on what they read.
- */
-function verificationLine(verification: Verification): string {
-  const tests = verification.tests && verification.tests.reports > 0 ? `, ${testCountsLabel(verification.tests.totals)}` : "";
-  const outdated = verification.outdated ? " on an earlier version of the changes" : "";
-  return `Verification in Trackwall: ${verification.state}${outdated} (mise task ${verification.miseTask}${tests})`;
 }
 
 /** `2 commits · 1 not pushed · 3 files not committed`, or the warning that the remote moved on. */

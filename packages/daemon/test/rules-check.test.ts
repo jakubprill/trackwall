@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { type AutoReview, agentsApi, autoReviewApi, type Task, workspaceApi } from "@trackwall/protocol";
+import { type AutoReview, agentsApi, autoReviewApi, mergeRequestsApi, type Task, workspaceApi } from "@trackwall/protocol";
 import { startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
@@ -87,6 +87,18 @@ describe.skipIf(process.versions.bun === undefined)(
       expect(existsSync(join(daemon.home, "auto-reviews", "rules", task.id))).toBe(false);
       // The code review is a kind of its own, which this check did not start.
       expect(await daemon.post(autoReviewApi.get, { task: task.id, kind: "code" })).toBeNull();
+    });
+
+    test("the draft of the merge request carries the check, marked outdated once the changes move on after it (ADR-238)", async () => {
+      const task = await taskWith("ruled", { "src/cart.ts": "export const total = 1;\nconsole.log(total);\n" });
+      expect((await daemon.post(mergeRequestsApi.evidence, { task: task.id })).rules).toBeNull();
+
+      await daemon.post(autoReviewApi.start, { task: task.id, kind: "rules" });
+      const check = await settled(task.id, "rules");
+
+      expect((await daemon.post(mergeRequestsApi.evidence, { task: task.id })).rules).toEqual({ review: check, outdated: false });
+      writeFileSync(join(task.worktree, "src", "cart.ts"), "export const total = 2;\n");
+      expect((await daemon.post(mergeRequestsApi.evidence, { task: task.id })).rules).toEqual({ review: check, outdated: true });
     });
 
     test("a change that keeps the rules gets no finding", async () => {
