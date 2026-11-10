@@ -68,7 +68,7 @@ Rebuild the container ("Dev Containers: Rebuild Container" in VS Code). From the
 1. Install [mise](https://mise.jdx.dev/getting-started.html) as its guide describes, then Copilot CLI with it: `mise use -g node@22 npm:@github/copilot`. Trackwall finds tools installed with mise without further setup.
 2. Point Trackwall at the repos: in Settings › Workspace choose `/workspaces`, or run `echo "projectsDir: /workspaces" > ~/.trackwall/workspace.yaml` before the first start.
 3. Print the address with its token: `trackwall-container address`, and open it in the browser on your computer.
-4. Sign in to Copilot CLI once: run `copilot`, type `/login` and follow the steps in your browser. The sign-in stays in the `workspace-copilot` volume.
+4. Sign in to Copilot CLI once: run `copilot login --device-code`, open the address it prints in the browser on your computer and enter the code it shows. Without `--device-code` the browser tries to send you back to an address inside the container, which it cannot reach. The sign-in stays in the `workspace-copilot` volume.
 
 The browser keeps the token for that address, so a bookmark of `http://127.0.0.1:7700` and a new tab open Trackwall without it. The token changes every time Trackwall starts: after a restart, open or reload the page, and it asks for the address; print it again as in step 3 and paste it there. Trackwall's output goes to `~/.trackwall/logs/daemon.log` in the container; look there when it does not answer. It stops when the container stops, or when you stop it from the app; with `shutdownAction` set as above, closing VS Code does not stop the container.
 
@@ -160,7 +160,8 @@ Docker does not let the sandbox start by default, so Trackwall leaves it off in 
    "runArgs": [
      "--security-opt", "seccomp=${localWorkspaceFolder}/.devcontainer/sandbox-seccomp.json",
      "--security-opt", "systempaths=unconfined",
-     "--security-opt", "no-new-privileges"
+     "--security-opt", "no-new-privileges",
+     "--device", "/dev/net/tun"
    ]
    ```
 
@@ -180,9 +181,11 @@ What each part does, and what it costs:
 
 - The `sandbox` option installs bubblewrap, slirp4netns, iproute2 and iptables with the image's package manager (`apt-get`, `apk` or `dnf`). With another one, install them in your image yourself. It also makes `~/.trackwall`, `~/.copilot`, `~/.config/mise` and `/workspaces` yours in the image, so new volumes there are yours too and need no `sudo chown`. A volume of your own elsewhere, such as one for your skills, needs its folder made yours in your image (`RUN mkdir -p ... && chown vscode:vscode ...`).
 - `systempaths=unconfined` lets the sandbox mount its own `/proc`, which Docker otherwise partly hides. It also leaves `/proc/sys` writable, and a process that is root in the container could use that to run a program as root on Docker's virtual machine, outside the container. That machine sees your Windows drives under Rancher Desktop, or your Mac's home folder under Colima.
+- `--device /dev/net/tun` gives the sandbox its own network: slirp4netns needs that device, and Docker leaves it out of a container. Without it every command of a sandboxed task fails, and the doctor says the device is not there.
 - `no-new-privileges` closes that: nothing in the container can become root, so `sudo` no longer works there. Install the tools you need in the image instead. Trackwall checks this. If Trackwall runs as root or `no-new-privileges` is missing, it keeps the sandbox off and the doctor says why.
 - Together, the profile and `systempaths=unconfined` let programs in the container make namespaces of their own. These reach only what the program's user can, but they expose more of the kernel to a bug. Leave all three out if you prefer to rely on the container alone.
 - Keep `TRACKWALL_HOME` in your home folder, as above. The sandbox lets commands read the system's temporary folder, so Trackwall's state there would be readable.
+- Git in the container has no name and email of its own until you set them, and a task's commit then fails. Set them once in a terminal of the container, `git config --global user.name "Your Name"` and `git config --global user.email you@example.com`; after a rebuild, set them again.
 - The sandbox covers the agent's own commands. A build, the tests or a service that Trackwall runs for the task, such as Verify, still runs outside it, on files the agent may have changed.
 - The AppArmor profile keeps Docker's own limits, including no writes to `/proc/sys`, so on Colima root in the container cannot use it even without `no-new-privileges`. Do not use `apparmor=unconfined` instead: it drops those limits, and on Ubuntu's virtual machine the sandbox still cannot set up its network.
 - Check that the doctor shows the sandbox as on after the rebuild. If it says that bubblewrap cannot make its namespaces, it names what refused them.
