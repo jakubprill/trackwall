@@ -29,6 +29,7 @@ Under `workspace.yaml` a table lists its keys:
 | `repoHosts` | where the Repos view searches and clones from | "Settings > Repo hosts" |
 | `starredRepos` | the repos you starred, listed first in the Repos view | the star in "Repos" |
 | `toolPermissions` | which tools sessions may use without asking you | by hand |
+| `sandbox` | which tasks run their commands in Copilot CLI's sandbox | "Settings > Agents" |
 | `agentSecrets` | the secrets from mise that the tools of sessions may read | by hand |
 | `sessionProfile` | the mise environment sessions start with, such as another model provider | "Settings > Agents" |
 | `supervisorModel` | the Copilot CLI model the supervisor runs on, such as a cheaper one than your default | "Settings > Agents" |
@@ -36,7 +37,7 @@ Under `workspace.yaml` a table lists its keys:
 | `taskTokenBudget` | how many tokens a task may use from its start or resume before Trackwall stops it | "Settings > Agents" |
 | `autoReview` | whether a task's changes get Copilot CLI's review once its agent reports | "Settings > Agents" |
 | `localConfigRemote` | the only remote the local config store is pushed to | "Settings > Workspace" |
-| `supervisor` | whether the supervisor may change code itself | by hand |
+| `supervisor` | whether the supervisor may change code itself | "Settings > Agents" |
 | `repoTags` | your own tags on repo cards | by hand |
 | `dayStart` | your addition to the first message of Start my day | by hand |
 | `graph` | package aliases and links the graph cannot find by itself | by hand |

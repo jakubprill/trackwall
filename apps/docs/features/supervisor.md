@@ -43,12 +43,7 @@ The panel can be folded to a narrow strip at the right edge, which keeps a bell 
 ## Good to know
 
 - The supervisor coordinates and does not change code itself: it cannot run shell commands or write files, so every change goes through a task you approve and review. It still reads your repos. Every task it proposes needs your approval.
-- If you want the supervisor to run commands and edit files itself, add this to `~/.trackwall/workspace.yaml` (you edit this file by hand) and start a new supervisor; it then asks for approval like any other session:
-
-  ```yaml
-  supervisor:
-    changesCode: true
-  ```
+- If you want the supervisor to run commands and edit files itself, tick "Settings > Agents > Supervisor changes code" and start a new supervisor; it then asks for approval like any other session. It applies from the supervisor's next start: "New conversation", "Continue", "Start my day" or Restart. The setting is saved as `supervisor: { changesCode: true }` in `workspace.yaml`.
 - Ask the supervisor to remove a repo you no longer need and it proposes the removal instead of a task. It waits for you with the other proposals; "Remove repo" moves the repo's folder into `.trackwall/removed` in your projects folder, so you can move it back or delete it for good. Trackwall refuses while a session, a task or a running service still uses the repo, and tells you what to stop first.
 - It sees every session and task, also the ones you started yourself, and hears of them with each of your messages, but it wakes up on its own only for the tasks it proposed, it sends messages only to those tasks, never to sessions you started, and it cannot change Trackwall's settings.
 - With each of your messages the supervisor also hears what each task's work came to: whether its last "Verify" passed or failed, and its merge request with the pipeline and the jobs that failed it.

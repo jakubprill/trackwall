@@ -209,7 +209,7 @@ export function taskSandbox(state: SandboxState, approvals: TaskApprovals): bool
   if (state.problem !== null)
     throw new DomainError(
       "bad_request",
-      `this task should run in Copilot CLI's sandbox (sandbox.tasks: ${state.tasks} in workspace.yaml), but ${state.problem}; install it, or set sandbox.tasks to off`,
+      `this task should run in Copilot CLI's sandbox (sandbox.tasks: ${state.tasks} in workspace.yaml), but ${state.problem}; install it, or choose "No task" in Settings › Agents › Sandbox`,
     );
   return true;
 }

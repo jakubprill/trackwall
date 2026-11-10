@@ -340,7 +340,7 @@ describe("the check of Copilot CLI's sandbox (ADR-181)", () => {
       status: "fail",
       summary:
         "Copilot CLI's sandbox cannot run here: bubblewrap (bwrap), which Copilot CLI's sandbox runs on, is not in PATH, so Trackwall refuses to start tasks without approvals.",
-      fix: "Install it (on Linux the bubblewrap package, with slirp4netns, iproute2 and iptables), or set sandbox.tasks to off in workspace.yaml.",
+      fix: 'Install it (on Linux the bubblewrap package, with slirp4netns, iproute2 and iptables), or choose "No task" in Settings › Agents › Sandbox.',
     });
   });
 
@@ -354,7 +354,7 @@ describe("the check of Copilot CLI's sandbox (ADR-181)", () => {
       status: "warn",
       summary: `Tasks without approvals run their commands with the container's full access: Copilot CLI's sandbox cannot run in this container (${refused}).`,
       fix: expect.stringMatching(
-        /^Give the container the sandbox: .*"Copilot CLI's sandbox" in the dev container guide.*, or set sandbox\.tasks to off in workspace\.yaml to keep it so\.$/,
+        /^Give the container the sandbox: .*"Copilot CLI's sandbox" in the dev container guide.*, or choose "No task" in Settings › Agents › Sandbox to keep it so\.$/,
       ),
     });
   });
@@ -366,7 +366,7 @@ describe("the check of Copilot CLI's sandbox (ADR-181)", () => {
 
   test("a sandbox the user turned on in a container that refuses it fails, pointing at the guide rather than at a package", async () => {
     expect((await inContainerCheck(async () => ({ tasks: "auto", problem: refused, chosen: true })))?.fix).toMatch(
-      /^Give the container the sandbox: .*, or set sandbox\.tasks to off in workspace\.yaml\.$/,
+      /^Give the container the sandbox: .*, or choose "No task" in Settings › Agents › Sandbox\.$/,
     );
   });
 });
