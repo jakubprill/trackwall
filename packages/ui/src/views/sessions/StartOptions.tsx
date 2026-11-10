@@ -135,8 +135,8 @@ export function StartOptions({
       )}
       {approvals && sandbox?.kind === "unavailable" && (
         <p className="text-destructive max-w-prose text-xs">
-          This task should run in Copilot CLI's sandbox, which cannot run on this computer: {sandbox.problem}. Install it, or set
-          sandbox.tasks to off in workspace.yaml.
+          This task should run in Copilot CLI's sandbox, which cannot run on this computer: {sandbox.problem}. Install it, or choose "No
+          task" in Settings › Agents › Sandbox.
         </p>
       )}
     </div>

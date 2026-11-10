@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { errorMessage } from "@/lib/api";
 import { useDesktop } from "@/lib/desktop";
 import { pickFolder } from "@/lib/folder-picker";
+import { SavedAs } from "./SavedAs.tsx";
 
 /**
  * A path setting saved as one key of `workspace.yaml`: the projects folder (ADR-18), the task worktrees folder (ADR-84) or
@@ -108,15 +109,13 @@ export function PathForm({
       </div>
       <UnofferedModelNote typed={path} models={suggestions} onPick={setPath} />
       {error && <p className="text-destructive text-xs break-words">{error}</p>}
-      <p className="text-muted-foreground text-xs break-all">
-        {configFile ? (
-          <>
-            Saved as <span className="font-mono">{configKey}</span> in <span className="font-mono">{configFile}</span>
-          </>
-        ) : (
-          `Fix the YAML syntax error in the file named above; saving here only fixes a bad ${configKey}.`
-        )}
-      </p>
+      {configFile ? (
+        <SavedAs configKey={configKey} configFile={configFile} />
+      ) : (
+        <p className="text-muted-foreground text-xs break-all">
+          {`Fix the YAML syntax error in the file named above; saving here only fixes a bad ${configKey}.`}
+        </p>
+      )}
     </form>
   );
 }

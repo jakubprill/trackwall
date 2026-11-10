@@ -299,11 +299,11 @@ export class Doctor {
     const { tasks, problem, chosen } = await this.deps.sandbox();
     if (tasks === "off") {
       // Off by default in a container where the sandbox cannot run (ADR-219): the user may not know the container is
-      // then the only isolation of a task without approvals; turning it off in workspace.yaml says they do.
+      // then the only isolation of a task without approvals; turning it off in Settings or workspace.yaml says they do.
       if (chosen || !this.deps.inContainer || problem === null) return null;
       return warn(
         `Tasks without approvals run their commands with the container's full access: Copilot CLI's sandbox cannot run in this container (${problem}).`,
-        `${CONTAINER_SANDBOX_FIX}, or set sandbox.tasks to off in workspace.yaml to keep it so.`,
+        `${CONTAINER_SANDBOX_FIX}, or choose "No task" in Settings › Agents › Sandbox to keep it so.`,
       );
     }
     if (problem === null)
@@ -315,8 +315,8 @@ export class Doctor {
     return fail(
       `Copilot CLI's sandbox cannot run here: ${problem}, so Trackwall refuses to start ${tasks === "all" ? "any task" : "tasks without approvals"}.`,
       this.deps.inContainer
-        ? `${CONTAINER_SANDBOX_FIX}, or set sandbox.tasks to off in workspace.yaml.`
-        : "Install it (on Linux the bubblewrap package, with slirp4netns, iproute2 and iptables), or set sandbox.tasks to off in workspace.yaml.",
+        ? `${CONTAINER_SANDBOX_FIX}, or choose "No task" in Settings › Agents › Sandbox.`
+        : `Install it (on Linux the bubblewrap package, with slirp4netns, iproute2 and iptables), or choose "No task" in Settings › Agents › Sandbox.`,
     );
   }
 

@@ -30,7 +30,7 @@ import {
   type SessionProfile,
   type StarredRepos,
   type StatusRead,
-  type SupervisorSettings,
+  SupervisorSettings,
   type SyncResult,
   type SyncRun,
   sameHost,
@@ -214,6 +214,8 @@ export class Workspace {
     const supervisorModel = configOrProblem(() => this.deps.file.supervisorModel(), null);
     const retryModel = configOrProblem(() => this.deps.file.retryModel(), null);
     const taskTokenBudget = configOrProblem(() => this.deps.file.taskTokenBudget(), null);
+    const supervisor = configOrProblem(() => this.deps.file.supervisorSettings(), SupervisorSettings.parse({}));
+    const sandbox = configOrProblem(() => this.deps.file.sandboxSettings(), null);
     // What Settings shows is what runs: a hand edit of `gitProgram` applies when Settings reads it (ADR-112).
     this.deps.vcs.useGitProgram(gitProgram.value);
     return {
@@ -233,6 +235,10 @@ export class Workspace {
       retryModelProblem: retryModel.problem,
       taskTokenBudget: taskTokenBudget.value,
       taskTokenBudgetProblem: taskTokenBudget.problem,
+      supervisor: supervisor.value,
+      supervisorProblem: supervisor.problem,
+      sandbox: sandbox.value,
+      sandboxProblem: sandbox.problem,
       configFile: this.configFile(),
     };
   }
@@ -558,6 +564,21 @@ export class Workspace {
   /** The model a failed task is offered to be retried on (ADR-233); `null` removes the key. */
   setRetryModel(model: string | null): WorkspaceSettings {
     this.deps.file.setRetryModel(model);
+    return this.settings();
+  }
+
+  /** Whether the supervisor may change code itself (ADR-78, ADR-240). Takes effect at its next start or resume. */
+  setSupervisor(settings: SupervisorSettings): WorkspaceSettings {
+    this.deps.file.setSupervisor(settings);
+    return this.settings();
+  }
+
+  /**
+   * Which tasks run in Copilot CLI's sandbox (ADR-181, ADR-240); `null` removes the key. Takes effect for tasks started
+   * after it: a task keeps the sandbox it started with for every resume.
+   */
+  setSandbox(settings: SandboxSettings | null): WorkspaceSettings {
+    this.deps.file.setSandbox(settings);
     return this.settings();
   }
 

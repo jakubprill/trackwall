@@ -357,7 +357,7 @@ export const WORKSPACE_KEYS: Record<WorkspaceKey, WorkspaceKeyInfo> = {
   repoHosts: { purpose: "Where the Repos view searches and clones from.", docs: "repos", settings: "repo-hosts" },
   starredRepos: { purpose: "The repos you starred, listed first in the Repos view.", docs: "repos", settings: "repos" },
   toolPermissions: { purpose: "Which tools sessions may use without asking you.", docs: "approvals", settings: null },
-  sandbox: { purpose: "Which tasks run their commands in Copilot CLI's sandbox.", docs: "approvals", settings: null },
+  sandbox: { purpose: "Which tasks run their commands in Copilot CLI's sandbox.", docs: "approvals", settings: "agents" },
   agentSecrets: { purpose: "The secrets from mise that the tools of sessions may read.", docs: "mise-environment", settings: null },
   sessionProfile: {
     purpose: "The mise environment sessions start with, such as another model provider.",
@@ -387,7 +387,7 @@ export const WORKSPACE_KEYS: Record<WorkspaceKey, WorkspaceKeyInfo> = {
   taskBranchPrefix: { purpose: "What the branch of a new task starts with, such as feature/.", docs: "tasks", settings: null },
   javaNavigation: { purpose: "The Java language server tasks can get for code navigation.", docs: "java-navigation", settings: "agents" },
   localConfigRemote: { purpose: "The only remote the local config store is pushed to.", docs: "local-config", settings: "workspace" },
-  supervisor: { purpose: "Whether the supervisor may change code itself.", docs: "supervisor", settings: null },
+  supervisor: { purpose: "Whether the supervisor may change code itself.", docs: "supervisor", settings: "agents" },
   repoTags: { purpose: "Your own tags on repo cards, by repo name or address.", docs: "repo-card", settings: null },
   dayStart: { purpose: "Your addition to the first message of Start my day.", docs: "start-my-day", settings: null },
   graph: { purpose: "Package aliases and links the graph cannot find by itself.", docs: "graph", settings: null },

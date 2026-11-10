@@ -176,8 +176,7 @@ describe("whether a new task runs in Copilot CLI's sandbox (ADR-181)", () => {
     expect(() => taskSandbox({ tasks: "auto", problem: missing, chosen: true }, "auto")).toThrow(
       expect.objectContaining({
         code: "bad_request",
-        message:
-          "this task should run in Copilot CLI's sandbox (sandbox.tasks: auto in workspace.yaml), but bubblewrap (bwrap), which Copilot CLI's sandbox runs on, is not in PATH; install it, or set sandbox.tasks to off",
+        message: `this task should run in Copilot CLI's sandbox (sandbox.tasks: auto in workspace.yaml), but bubblewrap (bwrap), which Copilot CLI's sandbox runs on, is not in PATH; install it, or choose "No task" in Settings › Agents › Sandbox`,
       }),
     );
   });

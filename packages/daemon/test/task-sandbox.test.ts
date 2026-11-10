@@ -106,7 +106,7 @@ describe.skipIf(process.versions.bun === undefined)("a task in Copilot CLI's san
 
       await expect(daemon.post(agentsApi.createTask, { repo: "shop", prompt: "map the endpoints", approvals: "auto" })).rejects.toThrow(
         // `ip` and `iptables` may also be found in /usr/sbin of the runner, so only the start of the list is fixed.
-        /this task should run in Copilot CLI's sandbox \(sandbox\.tasks: auto in workspace\.yaml\), but bubblewrap \(bwrap\), slirp4netns.*, which Copilot CLI's sandbox runs on, are not in PATH; install it, or set sandbox\.tasks to off$/,
+        /this task should run in Copilot CLI's sandbox \(sandbox\.tasks: auto in workspace\.yaml\), but bubblewrap \(bwrap\), slirp4netns.*, which Copilot CLI's sandbox runs on, are not in PATH; install it, or choose "No task" in Settings › Agents › Sandbox$/,
       );
       expect(daemon.facade.agents.sessions().tasks).toEqual([]);
       expect(existsSync(join(daemon.projects, ".trackwall", "worktrees", "shop"))).toBe(worktreesBefore);

@@ -31,7 +31,7 @@ import { type WorkspaceKeyValues, workspaceKeyValue } from "./workspace-key-valu
 /**
  * `workspace.yaml` (§4.5, ADR-13): the workspace configuration, which the user can edit by hand and keep
  * in a private repo. Read on every use, so a manual edit works without restarting the daemon. A write changes
- * only one key (`projectsDir`, `worktreesDir`, `gitProgram`, `repoHosts`, `starredRepos`, which the star in Repos writes, `javaNavigation`, which the Java navigation install writes, or `localConfigRemote`, which "Push to this remote" for the local config store writes, or `sessionProfile`, or `autoReview`, or `supervisorModel`, or `retryModel`, or `taskTokenBudget`; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `supervisor`, `sandbox`, `agentSecrets` and `taskBranchPrefix` only by hand) and keeps comments and the other keys,
+ * only one key (`projectsDir`, `worktreesDir`, `gitProgram`, `repoHosts`, `starredRepos`, which the star in Repos writes, `javaNavigation`, which the Java navigation install writes, or `localConfigRemote`, which "Push to this remote" for the local config store writes, or `sessionProfile`, or `autoReview`, or `supervisorModel`, or `retryModel`, or `taskTokenBudget`, or `supervisor`, or `sandbox`; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `agentSecrets` and `taskBranchPrefix` only by hand) and keeps comments and the other keys,
  * including the `repos` list from version 0.2.0, which is no longer read (ADR-18): it is the user's file, so removing it is up to them.
  */
 
@@ -70,10 +70,10 @@ const Keys: { [K in WorkspaceKey]: z.ZodType<WorkspaceKeyValues[K], unknown> } =
   toolPermissions: ToolPermissionRules.nullish().transform((rules) => rules ?? []),
   // The user's addition to the day start's first message (ADR-70); only by hand, like `repoTags`.
   dayStart: DayStartSettings.nullish().transform((settings) => settings ?? null),
-  // Whether the supervisor may change code itself (ADR-78); only by hand, like `repoTags`.
+  // Whether the supervisor may change code itself (ADR-78); set in Settings › Agents or by hand (ADR-240).
   supervisor: SupervisorSettings.nullish().transform((settings) => settings ?? { changesCode: false }),
-  // Which tasks run in Copilot CLI's sandbox (ADR-181); only by hand, like `repoTags`. `null` leaves the default to
-  // `Workspace`, which knows whether the daemon runs in a container.
+  // Which tasks run in Copilot CLI's sandbox (ADR-181); set in Settings › Agents or by hand (ADR-240). `null` leaves
+  // the default to `agents`, which knows whether the sandbox can run on this computer.
   sandbox: SandboxSettings.nullish().transform((settings) => settings ?? null),
   // The secrets from mise that the tools of sessions get (ADR-93); only by hand, like `repoTags`.
   agentSecrets: AgentSecrets.nullish().transform((names) => names ?? []),
@@ -270,6 +270,16 @@ export class WorkspaceFile {
   /** `null` removes the key: tasks run without a budget. */
   setTaskTokenBudget(budget: number | null): void {
     this.set("taskTokenBudget", budget);
+  }
+
+  /** With `changesCode` off the key goes, as for `setAutoReview`: the file says nothing the user did not turn on. */
+  setSupervisor(settings: SupervisorSettings): void {
+    this.set("supervisor", settings.changesCode ? { changesCode: true } : null);
+  }
+
+  /** `null` removes the key: the daemon chooses which tasks run in the sandbox on this computer. */
+  setSandbox(settings: SandboxSettings | null): void {
+    this.set("sandbox", settings);
   }
 
   /** Only the settings turned on are written, and with both off the key goes, so the file says nothing the user did not turn on. */

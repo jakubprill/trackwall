@@ -23,8 +23,10 @@ import { McpCallsSurface } from "./McpCallsSurface.tsx";
 import { ModelStatsSurface } from "./ModelStatsSurface.tsx";
 import { RepoHostsSurface } from "./RepoHostsSurface.tsx";
 import { RetryModelSurface } from "./RetryModelSurface.tsx";
+import { SandboxSurface } from "./SandboxSurface.tsx";
 import { SessionProfileSurface } from "./SessionProfileSurface.tsx";
 import { StartAtSignInSurface } from "./StartAtSignInSurface.tsx";
+import { SupervisorChangesCodeSurface } from "./SupervisorChangesCodeSurface.tsx";
 import { SupervisorModelSurface } from "./SupervisorModelSurface.tsx";
 import { TaskTokenBudgetSurface } from "./TaskTokenBudgetSurface.tsx";
 import { ThemeSurface } from "./ThemeSurface.tsx";
@@ -110,10 +112,14 @@ function Section({
       return <SessionProfileSurface conn={conn} sessions={sessions} />;
     case "supervisor-model":
       return <SupervisorModelSurface conn={conn} />;
+    case "supervisor-changes-code":
+      return <SupervisorChangesCodeSurface conn={conn} />;
     case "retry-model":
       return <RetryModelSurface conn={conn} />;
     case "task-token-budget":
       return <TaskTokenBudgetSurface conn={conn} />;
+    case "sandbox":
+      return <SandboxSurface conn={conn} />;
     case "auto-review":
       return <AutoReviewSurface conn={conn} />;
     case "java-navigation":
