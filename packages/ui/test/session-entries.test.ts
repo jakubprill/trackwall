@@ -35,6 +35,7 @@ function session(id: string, startedAt: string, task: string | null = null): Ses
     usage: null,
     model: null,
     modelInUse: null,
+    modelError: null,
     tokenBudget: null,
   };
 }

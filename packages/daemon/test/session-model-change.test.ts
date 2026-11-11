@@ -109,9 +109,9 @@ describe.skipIf(process.versions.bun === undefined)("another model for a session
     await daemon.post(agentsApi.stop, { session: restarted.id });
   }, 60_000);
 
-  test("a task asked for a model the account does not offer shows the one Copilot CLI took instead, and a restart on an offered model clears the switch (ADR-225)", async () => {
-    // The fake falls back to the account's first model as Copilot CLI does (no error, the turn runs) and writes its receipts
-    // to the event log in its own home, like Copilot CLI.
+  test("a task asked for a model the account does not offer shows the one Copilot CLI before 1.0.109 took instead, and a restart on an offered model clears the switch (ADR-225)", async () => {
+    // The fake falls back to the account's first model as Copilot CLI did before 1.0.109 (no error, the turn runs) and
+    // writes its receipts to the event log in its own home, like Copilot CLI.
     const account = await startSessionApi("d".repeat(43), {
       ...ONE_REPO,
       copilot: {
@@ -120,6 +120,7 @@ describe.skipIf(process.versions.bun === undefined)("another model for a session
           ...process.env,
           COPILOT_HOME: join(home, "copilot-home"),
           FAKE_COPILOT_ACCOUNT_MODELS: "gpt-6-luna,claude-opus-5.5",
+          FAKE_COPILOT_FALLBACK: "1",
         }),
       },
     });
@@ -148,6 +149,48 @@ describe.skipIf(process.versions.bun === undefined)("another model for a session
       expect(modelSwitch(restarted)).toBeNull();
       const resumed = await waitFor(agents, restarted.id, (s) => s.modelInUse !== null, "the model set at the resume", 30_000);
       expect(resumed.modelInUse).toBe("claude-opus-5.5");
+      await account.post(agentsApi.stop, { session: restarted.id });
+    } finally {
+      await account.stop();
+    }
+  }, 60_000);
+
+  test("a task on a model the account does not offer shows why its model call failed, and a restart on an offered model clears it (ADR-242)", async () => {
+    // As Copilot CLI 1.0.109 does: the session starts on the requested model, and every prompt fails with an error in the
+    // event log and no receipt, instead of a fallback.
+    const account = await startSessionApi("e".repeat(43), {
+      ...ONE_REPO,
+      copilot: {
+        command: FAKE_COPILOT.command,
+        env: ({ home }) => ({
+          ...process.env,
+          COPILOT_HOME: join(home, "copilot-home"),
+          FAKE_COPILOT_ACCOUNT_MODELS: "gpt-6-luna,claude-opus-5.5",
+        }),
+      },
+    });
+    try {
+      const { agents } = account.facade;
+      const task = await account.post(agentsApi.createTask, {
+        repo: "shop",
+        prompt: "describe the repo",
+        approvals: "auto",
+        model: "claude-sonnet-5.5",
+      });
+      const session = agents.sessions().sessions.find((s) => s.task === task.id);
+      if (session === undefined) throw new Error("the task started no session");
+
+      const failed = await waitFor(agents, session.id, (s) => s.modelError !== null, "the failed model call", 30_000);
+
+      expect(failed.modelError).toBe('Execution failed: Model "claude-sonnet-5.5" is not available.');
+      expect(failed.modelInUse).toBe("claude-sonnet-5.5");
+      expect(modelSwitch(failed)).toBeNull();
+      expect(failed.usage).toBeNull();
+
+      const restarted = await account.post(agentsApi.restart, { session: session.id, model: "claude-opus-5.5" });
+      expect(restarted.modelError).toBeNull();
+      const resumed = await waitFor(agents, restarted.id, (s) => s.modelInUse === "claude-opus-5.5", "the model set at the resume", 30_000);
+      expect(resumed.modelError).toBeNull();
       await account.post(agentsApi.stop, { session: restarted.id });
     } finally {
       await account.stop();

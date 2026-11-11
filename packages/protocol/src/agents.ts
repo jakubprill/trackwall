@@ -515,6 +515,13 @@ export const Session = z.object({
    * when Copilot CLI fell back to another one (an account without the model) or `/model` switched it.
    */
   modelInUse: z.string().nullable(),
+  /**
+   * Why Copilot CLI's latest model call of the session's conversation failed (ADR-242), from its event log: the error's
+   * message, such as `Execution failed: Model "…" is not available.` when the account does not offer the model (Copilot
+   * CLI 1.0.109 and later fail every prompt then) or a provider's refusal; `null` once a later call goes through or the
+   * model changes, and when none failed.
+   */
+  modelError: z.string().nullable(),
   /** A task session's token budget (ADR-237); `null` for a session without a task, or a task started without a budget. */
   tokenBudget: SessionTokenBudget.nullable(),
 });

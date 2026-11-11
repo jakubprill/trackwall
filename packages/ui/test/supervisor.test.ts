@@ -35,6 +35,7 @@ function session(id: string, repo: string | null, run: Session["run"]["kind"] = 
     usage: null,
     model: null,
     modelInUse: null,
+    modelError: null,
     tokenBudget: null,
   };
 }

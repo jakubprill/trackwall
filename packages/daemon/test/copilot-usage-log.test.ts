@@ -6,6 +6,7 @@ import { conversationEventLog } from "../src/infra/copilot-home.ts";
 import {
   CopilotUsageLog,
   modelCallsOfLines,
+  modelErrorOfLines,
   modelInUseOfLines,
   readConversationUse,
   usageOfLines,
@@ -194,6 +195,67 @@ describe("the models a conversation's own calls ran on, for the task journal (AD
 
   test("a conversation whose event log is missing used nothing on no model", () => {
     expect(readConversationUse(mkdtempSync(join(tmpdir(), "trackwall-usage-")), "gone")).toEqual({ usage: null, models: [] });
+  });
+});
+
+/** A failed model call as Copilot CLI 1.0.109 writes it (`session.error`), with the fields the daemon reads and a few more. */
+function sessionError(errorType: string, message: string): string {
+  return JSON.stringify({
+    type: "session.error",
+    data: { errorType, message },
+    id: "e",
+    timestamp: "2026-11-10T21:00:00Z",
+    parentId: null,
+  });
+}
+
+describe("a failed model call, from Copilot CLI's event log (ADR-242)", () => {
+  const unavailable = 'Execution failed: Model "gpt-9" is not available.';
+  const call = receipt({
+    model: "gpt-6-luna",
+    inputTokens: 1,
+    outputTokens: 1,
+    initiator: "user",
+    accounting: { sourceSessionId: "c", sequence: 1 },
+  });
+
+  test("a start on a model the account does not offer names that model and the error of every prompt", () => {
+    const lines = [modelChange("gpt-9"), sessionError("query", unavailable)];
+
+    expect(modelInUseOfLines(lines)).toBe("gpt-9");
+    expect(modelErrorOfLines(lines)).toBe(unavailable);
+  });
+
+  test("an own call that goes through, or a restart on another model, ends the error", () => {
+    expect(modelErrorOfLines([sessionError("query", "429 rate limited"), call])).toBeNull();
+    expect(modelErrorOfLines([modelChange("gpt-9"), sessionError("query", unavailable), modelChange("gpt-6-luna")])).toBeNull();
+  });
+
+  test("an error that is not a model call's, or without a message, is no model error", () => {
+    expect(modelErrorOfLines([sessionError("mcp", "server fs failed to start")])).toBeNull();
+    expect(modelErrorOfLines([sessionError("query", "")])).toBeNull();
+    expect(modelErrorOfLines(['{"type":"session.error","data":{}}'])).toBeNull();
+  });
+
+  test("a provider's long message is cut to 500 characters", () => {
+    expect(modelErrorOfLines([sessionError("query", "x".repeat(2000))])).toBe(`${"x".repeat(500)}…`);
+  });
+
+  test("a restart forgets the error of a call before it, and a new failure after it shows again", () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-usage-"));
+    const file = conversationEventLog(home, "conv-e");
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, `${modelChange("gpt-9")}\n${sessionError("query", unavailable)}\n`);
+    const log = new CopilotUsageLog(home);
+
+    log.update("conv-e");
+    expect(log.modelError()).toBe(unavailable);
+    log.readBeforeStart("conv-e");
+    expect(log.modelError()).toBeNull();
+
+    appendFileSync(file, `${sessionError("query", "500 provider down")}\n`);
+    log.update("conv-e");
+    expect(log.modelError()).toBe("500 provider down");
   });
 });
 

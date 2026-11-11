@@ -449,6 +449,10 @@ _Avoid_: limit, cap (Copilot CLI's own `--max-ai-credits` is in AI credits), quo
 The model Copilot CLI actually runs a session's conversation on, from the conversation's event log (ADR-225): the model of its latest own call, or of its latest model change; unknown after a change to `auto` until the next own call. It differs from the task model or the session's `--model` when Copilot CLI fell back to another one (an account without the model) or `/model` switched it.
 _Avoid_: actual model, real model, effective model
 
+**Model error** (`Session.modelError`; the strip "The model call failed" in the UI):
+Why Copilot CLI's latest model call of a session's conversation failed, as Copilot CLI wrote it to the conversation's event log (ADR-242), such as a model the account does not offer (Copilot CLI 1.0.109 and later) or a provider's refusal; it ends once a later call goes through or the model changes.
+_Avoid_: session error (Copilot CLI's event covers more than the model), failure (that is a task's verdict)
+
 **Plan first** (`Task.plan`, `TaskPlan`: `planning` | `approved`, `planFirst` of `create-task`, `approve-plan`; "Plan first" on the start pill and the task's strip, "Approve plan" on the strip):
 A task whose agent starts in Copilot CLI's Plan mode, where it writes a plan and changes no files, until the user approves the plan in Trackwall; then it works in Agent mode (ADR-229). Only for a task on its own in the conversation view. Not to be confused with the "Plan" view of the **Board**.
 

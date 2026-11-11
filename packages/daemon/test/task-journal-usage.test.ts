@@ -13,13 +13,18 @@ const TOKEN = "j".repeat(43);
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
 
 beforeAll(async () => {
-  // The fake falls back to the account's first model as Copilot CLI does, and writes its receipts to the event log in
+  // The fake falls back to the account's first model as Copilot CLI did before 1.0.109, and writes its receipts to the event log in
   // its own home, like Copilot CLI.
   daemon = await startSessionApi(TOKEN, {
     ...ONE_REPO,
     copilot: {
       command: FAKE_COPILOT.command,
-      env: ({ home }) => ({ ...process.env, COPILOT_HOME: join(home, "copilot-home"), FAKE_COPILOT_ACCOUNT_MODELS: "gpt-6-luna" }),
+      env: ({ home }) => ({
+        ...process.env,
+        COPILOT_HOME: join(home, "copilot-home"),
+        FAKE_COPILOT_ACCOUNT_MODELS: "gpt-6-luna",
+        FAKE_COPILOT_FALLBACK: "1",
+      }),
     },
   });
 }, SLOW_TEST_TIMEOUT_MS);

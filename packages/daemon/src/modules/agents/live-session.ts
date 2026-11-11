@@ -495,6 +495,7 @@ export class LiveSession implements AgentSession {
       usage: this.#usage.current(),
       model: this.model,
       modelInUse: this.#usage.modelInUse(),
+      modelError: this.#usage.modelError(),
       tokenBudget: this.#tokenBudget?.view() ?? null,
     };
   }

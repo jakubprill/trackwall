@@ -12,6 +12,7 @@ const session: AgentSession = {
   startedAt: "2026-11-05T09:00:00.000Z",
   model: "gpt-5.1",
   modelInUse: "gpt-5.1",
+  modelError: null,
   tokenBudget: null,
   run: { kind: "running", runId: "run-1", startedAt: "2026-11-05T09:00:00.000Z", pid: 4242 },
   state: { state: "Input", source: "hook", confidence: "exact", at: "2026-11-05T09:20:00.000Z", reason: "agentStop" },
@@ -224,6 +225,20 @@ describe("get_session text", () => {
     expect(sessionText(result, false).split("\n")[0]).toBe(
       `Session ${SESSION_ID} (shop) on gpt-6-luna instead of claude-sonnet-5.5: running since 2026-11-05T09:00:00.000Z`,
     );
+  });
+
+  test("says why the session's last model call failed, so the supervisor does not resume it on the same model (ADR-242)", () => {
+    const failed = 'Execution failed: Model "gpt-9" is not available.';
+    const result: GetSessionResult = {
+      session: { ...session, model: "gpt-9", modelInUse: "gpt-9", modelError: failed, task: null, usage: null, needsAttention: false },
+      task: null,
+      changes: null,
+      changesError: null,
+      verification: null,
+      javaNavigation: null,
+    };
+
+    expect(sessionText(result, false).split("\n")).toContain(`Its last model call failed: ${failed}`);
   });
 
   test("says when Trackwall stopped a task's session at its token budget, so the supervisor does not resume it (ADR-237)", () => {
