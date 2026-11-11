@@ -58,6 +58,8 @@ function sessionLines(session: AgentSession): string[] {
   }
   if (session.needsAttention) lines.push("Needs attention: it waits for the user or for input.");
   if (session.stuck !== null) lines.push(`May be stuck: no step since ${session.stuck.lastStepAt}.`);
+  // A turn whose model call failed ends without an answer (ADR-242); on a model the account lacks, every later one too.
+  if (session.modelError !== null) lines.push(`Its last model call failed: ${session.modelError}`);
   if (session.readRequest !== null)
     lines.push(`Asked to read what waits for it since ${session.readRequest.since} (${session.readRequest.waitsFor}).`);
   if (session.windowTitle !== null) lines.push(`Window title: ${session.windowTitle}`);

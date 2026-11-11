@@ -127,6 +127,7 @@ describe("the Java navigation mark of a running session (ADR-175)", () => {
     usage: null,
     model: null,
     modelInUse: null,
+    modelError: null,
     tokenBudget: null,
   };
 

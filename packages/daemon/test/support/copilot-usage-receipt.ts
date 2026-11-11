@@ -63,13 +63,30 @@ function requestedModel(): string | undefined {
 
 /**
  * With `FAKE_COPILOT_ACCOUNT_MODELS` (comma-separated, the models an account offers), the first of them when the account
- * lacks the requested model, as Copilot CLI falls back without stopping (ADR-225); `undefined` when there is no fallback.
+ * lacks the requested model; `undefined` when the account has it or the test names no account.
  */
-function fallbackModel(): string | undefined {
+function offeredInstead(): string | undefined {
   const requested = requestedModel();
   const offered = (process.env.FAKE_COPILOT_ACCOUNT_MODELS ?? "").split(",").filter((id) => id !== "");
   if (offered.length > 0 && (requested === undefined || !offered.includes(requested))) return offered[0] ?? "fake-model";
   return undefined;
+}
+
+/**
+ * The model the fake falls back to without stopping when the account lacks the requested one, as Copilot CLI did before
+ * 1.0.109 (ADR-225), which `FAKE_COPILOT_FALLBACK=1` asks for; `undefined` otherwise.
+ */
+function fallbackModel(): string | undefined {
+  return process.env.FAKE_COPILOT_FALLBACK === "1" ? offeredInstead() : undefined;
+}
+
+/**
+ * The error of every model call when the account lacks the requested model, as Copilot CLI 1.0.109 and later write it
+ * instead of falling back (ADR-242, seen on a Mac with a GitHub account); `undefined` when the call goes through.
+ */
+function modelRefusal(): string | undefined {
+  if (fallbackModel() !== undefined || offeredInstead() === undefined) return undefined;
+  return `Execution failed: Model "${requestedModel() ?? "fake-model"}" is not available.`;
 }
 
 /** The model a fake's call runs on: the fallback's, or its `--model=`. */
@@ -77,13 +94,34 @@ function modelInUse(): string {
   return fallbackModel() ?? requestedModel() ?? "fake-model";
 }
 
+/** Copilot CLI's `session.error` of a failed model call, appended to the conversation's event log (ADR-242). */
+function appendModelError(o: { copilotHome: string; conversation: string; message: string }): void {
+  const file = conversationEventLog(o.copilotHome, o.conversation);
+  mkdirSync(dirname(file), { recursive: true });
+  const event = {
+    type: "session.error",
+    data: { errorType: "query", message: o.message },
+    id: crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
+    parentId: null,
+  };
+  appendFileSync(file, `${JSON.stringify(event)}\n`);
+}
+
 /**
- * A fake's receipt for one turn of `conversation`, in `COPILOT_HOME` when the test set it (so a test never writes into
- * the developer's Copilot CLI home), with the cost from `FAKE_COPILOT_NANO_AIU` when set.
+ * A fake's receipt for one turn of `conversation`, or the turn's failed call on a model the account lacks, in
+ * `COPILOT_HOME` when the test set it (so a test never writes into the developer's Copilot CLI home), with the cost from
+ * `FAKE_COPILOT_NANO_AIU` when set.
  */
 export function recordUsage(conversation: string | undefined): void {
   const copilotHome = process.env.COPILOT_HOME;
   if (copilotHome === undefined || copilotHome === "" || conversation === undefined) return;
+  // A call on a model the account lacks fails and writes no receipt (ADR-242).
+  const refusal = modelRefusal();
+  if (refusal !== undefined) {
+    appendModelError({ copilotHome, conversation, message: refusal });
+    return;
+  }
   const cost = process.env.FAKE_COPILOT_NANO_AIU;
   appendUsageReceipt({ copilotHome, conversation, model: modelInUse(), ...(cost === undefined ? {} : { nanoAiu: Number(cost) }) });
 }

@@ -4,6 +4,7 @@ import { COPILOT_AUTO_MODEL, type CopilotUsage, type ModelCalls } from "@trackwa
 import { conversationEventLog } from "../../infra/copilot-home.ts";
 import { addReceipt, firstSighting, NO_USAGE, type UsageTotals, usageOf, usageReceipt } from "../../infra/copilot-usage-receipt.ts";
 import { modelChangeOf } from "./copilot-model-change.ts";
+import { modelErrorOf } from "./copilot-model-error.ts";
 
 /**
  * What a session's conversation used (ADR-190, §4.4), from the conversation's event log that Copilot CLI keeps in its
@@ -12,7 +13,8 @@ import { modelChangeOf } from "./copilot-model-change.ts";
  * billing, its cost in nano AI units (10⁹ of them make one AI credit, as Copilot CLI's `/usage` converts them). A
  * contract test pins where and when the receipt is written. The same log names the model the conversation runs on
  * (ADR-225): each receipt the model of its call, and `session.model_change` the model set at a start, a resume or by
- * `/model`, so a model Copilot CLI took instead of the requested one shows. The log is read on demand only (`update`),
+ * `/model`, so a model Copilot CLI took instead of the requested one shows, and `session.error` a model call that failed
+ * (ADR-242), such as one on a model the account does not offer. The log is read on demand only (`update`),
  * from where the last read stopped, so a long conversation is read once and every later turn costs only its new lines.
  */
 
@@ -26,9 +28,11 @@ interface LogState {
   modelInUse: string | null;
   /** The conversation's own model calls by the model their receipt names (ADR-228). */
   callsByModel: Readonly<Record<string, number>>;
+  /** The message of the latest failed model call, until a later own receipt or model change (ADR-242); `null` otherwise. */
+  modelError: string | null;
 }
 
-const NOTHING_READ: LogState = { totals: NO_USAGE, modelInUse: null, callsByModel: {} };
+const NOTHING_READ: LogState = { totals: NO_USAGE, modelInUse: null, callsByModel: {}, modelError: null };
 
 /**
  * One line of the log added to what it says; `seen` keeps receipts counted once. A receipt written again (a resumed
@@ -37,18 +41,27 @@ const NOTHING_READ: LogState = { totals: NO_USAGE, modelInUse: null, callsByMode
 function add(state: LogState, line: string, seen: Set<string>): LogState {
   const receipt = usageReceipt(line);
   if (receipt === undefined) {
+    const error = modelErrorOf(line);
+    if (error !== undefined) return { ...state, modelError: error };
     const changed = modelChangeOf(line);
     if (changed === undefined) return state;
     // A change to `auto` (a start whose model the account lacks, or `/model auto`) names no model: Copilot CLI picks one
-    // per call, and the next own receipt says which. Until then the model in use is unknown, not `auto`.
-    return { ...state, modelInUse: changed === COPILOT_AUTO_MODEL ? null : changed };
+    // per call, and the next own receipt says which. Until then the model in use is unknown, not `auto`. A new model
+    // has not failed yet.
+    return { ...state, modelInUse: changed === COPILOT_AUTO_MODEL ? null : changed, modelError: null };
   }
   if (!firstSighting(seen, receipt)) return state;
   // A receipt without an identity (older Copilot CLI) cannot be told from one a resume writes again, so it names no model.
   const model = receipt.key === undefined ? undefined : receipt.ownModel;
   const totals = addReceipt(state.totals, receipt);
   if (model === undefined) return { ...state, totals };
-  return { totals, modelInUse: model, callsByModel: { ...state.callsByModel, [model]: (state.callsByModel[model] ?? 0) + 1 } };
+  // An own call that went through ends the error of an earlier one.
+  return {
+    totals,
+    modelInUse: model,
+    callsByModel: { ...state.callsByModel, [model]: (state.callsByModel[model] ?? 0) + 1 },
+    modelError: null,
+  };
 }
 
 function tokensOf(totals: UsageTotals): number {
@@ -76,6 +89,11 @@ export function usageOfLines(lines: readonly string[]): CopilotUsage | null {
 /** The model in use after whole lines of a log (ADR-225). */
 export function modelInUseOfLines(lines: readonly string[]): string | null {
   return stateOfLines(lines).modelInUse;
+}
+
+/** The message of the latest failed model call after whole lines of a log (ADR-242). */
+export function modelErrorOfLines(lines: readonly string[]): string | null {
+  return stateOfLines(lines).modelError;
 }
 
 /** The own model calls on each model after whole lines of a log (ADR-228). */
@@ -155,6 +173,11 @@ export class CopilotUsageLog {
     return this.#state.modelInUse;
   }
 
+  /** The message of the conversation's latest failed model call after the last update (ADR-242); `null` when none failed since. */
+  modelError(): string | null {
+    return this.#state.modelError;
+  }
+
   /** The conversation's own model calls on each model after the last update (ADR-228), the most first. */
   modelCalls(): ModelCalls[] {
     return modelCallsOf(this.#state);
@@ -162,13 +185,13 @@ export class CopilotUsageLog {
 
   /**
    * Reads what a conversation this session goes on with used before its start, and forgets the model in use the log
-   * named then: a restart on another model would otherwise show the old one until Copilot CLI writes the start's model
-   * change, and warn about a switch that is not there (ADR-225). What it used then does not count to the token budget
-   * of this start (ADR-237).
+   * named then, and the error of a model call then: a restart on another model would otherwise show the old one until
+   * Copilot CLI writes the start's model change, and warn about a switch that is not there (ADR-225) or a call that
+   * failed before the restart (ADR-242). What it used then does not count to the token budget of this start (ADR-237).
    */
   readBeforeStart(conversation: string): void {
     this.update(conversation);
-    this.#state = { ...this.#state, modelInUse: null };
+    this.#state = { ...this.#state, modelInUse: null, modelError: null };
     this.#tokensAtStart = tokensOf(this.#state.totals);
   }
 

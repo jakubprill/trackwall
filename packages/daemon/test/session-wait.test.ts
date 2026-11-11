@@ -47,6 +47,7 @@ const working: Session = {
   usage: null,
   model: null,
   modelInUse: null,
+  modelError: null,
   tokenBudget: null,
 };
 

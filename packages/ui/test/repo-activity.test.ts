@@ -24,6 +24,7 @@ function session(id: string, repo: string, state: TaskState, more: Partial<Sessi
     usage: null,
     model: null,
     modelInUse: null,
+    modelError: null,
     tokenBudget: null,
     ...more,
   };

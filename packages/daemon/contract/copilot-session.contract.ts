@@ -713,6 +713,24 @@ describe("another model for a running task with the real Copilot CLI (ADR-206)",
   });
 });
 
+describe("a failed model call with the real Copilot CLI (ADR-242)", () => {
+  test("a model call the provider refuses ends the turn with the error hook and Copilot CLI's error in the event log, which the session shows", async () => {
+    const { agents } = daemon.facade;
+    // Copilot CLI 1.0.109 fails a prompt on a model the account does not offer the same way: the same `session.error`.
+    model.reply({ refuse: { status: 400, message: "The requested model is not supported." } });
+    const task = await agents.createTask("shop", "list the endpoints");
+    const session = agents.sessions().sessions.find((s) => s.task === task.id);
+    if (session === undefined) throw new Error("the task has no session");
+
+    const failed = await waitFor(agents, session.id, (s) => s.modelError !== null, "the failed model call", SESSION_MS);
+    expect(failed.modelError).toBe("400 The requested model is not supported.");
+    expect(failed.usage).toBeNull();
+    // The turn ends with the `errorOccurred` hook and no `agentStop`.
+    await waitFor(agents, session.id, (s) => s.state?.reason === "hook errorOccurred", "the error's hook", SESSION_MS);
+    await agents.stop(session.id);
+  });
+});
+
 describe("Java navigation of a task with the real Copilot CLI (ADR-99)", () => {
   test("a task with Java navigation offers the model the lsp tool from the session plugin's lspServers, and a task without it does not", async () => {
     const { agents } = daemon.facade;

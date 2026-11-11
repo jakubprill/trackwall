@@ -45,6 +45,7 @@ function session(id: string, repoId: string, over: Partial<Session> = {}): Sessi
     usage: null,
     model: null,
     modelInUse: null,
+    modelError: null,
     tokenBudget: null,
     ...over,
   };

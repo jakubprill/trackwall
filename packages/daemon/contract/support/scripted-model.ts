@@ -12,11 +12,14 @@ import { jsonOf } from "../../src/modules/agents/json.ts";
 /** A call of one tool. */
 type ToolCall = { tool: string; arguments: Record<string, unknown> };
 
+/** A provider's refusal of a request: an HTTP error with the provider's message, as a model the provider does not serve gets. */
+type Refusal = { refuse: { status: number; message: string } };
+
 /**
  * The model's answer to one request: text that ends the turn (with the model's reasoning before it, which Copilot CLI
- * reads from `reasoning_content`), a call of one tool, or calls of several at once.
+ * reads from `reasoning_content`), a call of one tool, calls of several at once, or a refusal (ADR-242).
  */
-type ModelReply = { text: string; reasoning?: string } | ToolCall | { parallel: ToolCall[] };
+type ModelReply = { text: string; reasoning?: string } | ToolCall | { parallel: ToolCall[] } | Refusal;
 
 const Content = z.union([z.string(), z.array(z.object({ type: z.string(), text: z.string().optional() })), z.null()]);
 const Message = z.object({
@@ -94,8 +97,13 @@ function toolCalls(reply: ToolCall | { parallel: ToolCall[] }, callId: string) {
   }));
 }
 
-/** The chat-completions answer as a stream of chunks, which is what Copilot CLI asks for. */
+/** The chat-completions answer as a stream of chunks, which is what Copilot CLI asks for, or the refusal planned instead. */
 function answer(res: ServerResponse, reply: ModelReply, callId: string): void {
+  if ("refuse" in reply) {
+    res.writeHead(reply.refuse.status, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: { message: reply.refuse.message } }));
+    return;
+  }
   const { delta, finish } =
     "text" in reply
       ? { delta: { role: "assistant", content: reply.text, reasoning_content: reply.reasoning }, finish: "stop" }

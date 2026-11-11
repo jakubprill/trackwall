@@ -25,3 +25,19 @@ export function modelSwitchNote(session: Pick<Session, "model" | "modelInUse">):
       "switched it. Model restarts the session on the one you choose.",
   };
 }
+
+/**
+ * The strip of a session whose latest model call failed (ADR-242): Copilot CLI 1.0.109 and later fail every prompt on a
+ * model the account does not offer instead of taking another one, and a provider can refuse a call; the turn just
+ * ends, so only the event log tells. `null` when no call failed since the last one that went through.
+ */
+export function modelErrorNote(session: Pick<Session, "model" | "modelError">): { title: string; detail: string } | null {
+  if (session.modelError === null) return null;
+  const model = session.model === null ? "another model" : `a model other than ${session.model}`;
+  // A provider's message may end without a full stop; the sentence after it needs one.
+  const said = /[.!?]$/.test(session.modelError) ? session.modelError : `${session.modelError}.`;
+  return {
+    title: "The model call failed",
+    detail: `Copilot CLI: ${said} If your account does not offer the model, Model restarts the session on ${model}.`,
+  };
+}
