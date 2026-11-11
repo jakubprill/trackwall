@@ -109,8 +109,9 @@ function appendModelError(o: { copilotHome: string; conversation: string; messag
 }
 
 /**
- * A fake's receipt for one turn of `conversation`, or the turn's failed call on a model the account lacks, in `COPILOT_HOME` when the test set it (so a test never writes into
- * the developer's Copilot CLI home), with the cost from `FAKE_COPILOT_NANO_AIU` when set.
+ * A fake's receipt for one turn of `conversation`, or the turn's failed call on a model the account lacks, in
+ * `COPILOT_HOME` when the test set it (so a test never writes into the developer's Copilot CLI home), with the cost from
+ * `FAKE_COPILOT_NANO_AIU` when set.
  */
 export function recordUsage(conversation: string | undefined): void {
   const copilotHome = process.env.COPILOT_HOME;

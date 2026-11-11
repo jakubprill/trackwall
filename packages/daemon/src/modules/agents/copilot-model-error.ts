@@ -17,7 +17,7 @@ const QUERY_ERROR = "query";
 const ModelErrorLine = jsonOf(
   z.object({
     type: z.literal(SESSION_ERROR),
-    data: z.object({ errorType: z.literal(QUERY_ERROR), message: z.string().min(1) }),
+    data: z.object({ errorType: z.literal(QUERY_ERROR), message: z.string().trim().min(1) }),
   }),
 );
 
@@ -29,6 +29,6 @@ export function modelErrorOf(line: string): string | undefined {
   if (!line.includes(SESSION_ERROR)) return undefined;
   const parsed = ModelErrorLine.safeParse(line);
   if (!parsed.success) return undefined;
-  const message = parsed.data.data.message.trim();
+  const { message } = parsed.data.data;
   return message.length > MESSAGE_MAX ? `${message.slice(0, MESSAGE_MAX)}…` : message;
 }

@@ -234,6 +234,7 @@ describe("a failed model call, from Copilot CLI's event log (ADR-242)", () => {
   test("an error that is not a model call's, or without a message, is no model error", () => {
     expect(modelErrorOfLines([sessionError("mcp", "server fs failed to start")])).toBeNull();
     expect(modelErrorOfLines([sessionError("query", "")])).toBeNull();
+    expect(modelErrorOfLines([sessionError("query", "  ")])).toBeNull();
     expect(modelErrorOfLines(['{"type":"session.error","data":{}}'])).toBeNull();
   });
 
