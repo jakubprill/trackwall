@@ -4,7 +4,6 @@ import { defineConfig } from "vitepress";
 import llmstxt, { copyOrDownloadAsMarkdownButtons } from "vitepress-plugin-llms";
 import { mermaidFence } from "./mermaid-fence.ts";
 import { FEATURE_LIST_PAGE, SIDEBAR } from "./sidebar.ts";
-import { TALK_FRONTMATTER, TALK_PAGES } from "./talk-pages.ts";
 
 const REPO_URL = "https://github.com/jakubprill/trackwall";
 // GitHub Pages serves a project site under /<repo>/; `pnpm dev` uses the same path. It comes from the address agents
@@ -20,13 +19,6 @@ export default defineConfig({
   outDir: "dist",
   srcExclude: [TEMPLATE],
   cleanUrls: true,
-  transformPageData(pageData) {
-    if (!TALK_PAGES.includes(pageData.relativePath)) return;
-    Object.assign(pageData.frontmatter, TALK_FRONTMATTER);
-    // VitePress reads the date from git before this hook, so `lastUpdated: false` would come too late; a slide has no
-    // place for it.
-    pageData.lastUpdated = undefined;
-  },
   // The app has one dark theme (ADR-16); the site opens dark and still offers the light one.
   appearance: "dark",
   // Dates come from git; pages.yml checks out the full history.
@@ -35,8 +27,8 @@ export default defineConfig({
   head: [["link", { rel: "icon", type: "image/svg+xml", href: `${BASE}logo.svg` }]],
   // llms.txt (an index of the pages) and llms-full.txt (every page in one file) for AI tools, plus a Markdown copy
   // of each page and a "Copy page" button under its title, so an agent reads the same text as a person
-  // (except FEATURE_LIST_PAGE and the talk, which repeats the guide for listeners).
-  vite: { plugins: [llmstxt({ ignoreFiles: [TEMPLATE, FEATURE_LIST_PAGE, ...TALK_PAGES] })] },
+  // (except FEATURE_LIST_PAGE).
+  vite: { plugins: [llmstxt({ ignoreFiles: [TEMPLATE, FEATURE_LIST_PAGE] })] },
   themeConfig: {
     logo: "/logo.svg",
     search: { provider: "local" },
