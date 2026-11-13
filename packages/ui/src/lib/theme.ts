@@ -6,8 +6,11 @@ import { knownValue } from "./known-value.ts";
  * missing, refuse access or hold a value from a newer version, so anything but a known choice reads as the default, and a
  * write that fails is forgotten. The default is dark, so an update does not turn the app light on a light desktop.
  */
-const THEME_CHOICES = ["dark", "light", "system"] as const;
+export const THEME_CHOICES = ["dark", "light", "system"] as const;
 export type ThemeChoice = (typeof THEME_CHOICES)[number];
+
+/** What each choice is called in Settings and in the command palette. */
+export const THEME_CHOICE_LABELS: Record<ThemeChoice, string> = { dark: "Dark", light: "Light", system: "Same as the system" };
 
 /** The theme a page paints: a choice with "system" resolved. */
 export type Theme = Exclude<ThemeChoice, "system">;

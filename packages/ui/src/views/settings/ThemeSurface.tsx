@@ -1,11 +1,11 @@
 import { Surface } from "@/components/Surface";
-import type { ThemeChoice } from "@/lib/theme";
+import { THEME_CHOICE_LABELS, type ThemeChoice } from "@/lib/theme";
 import { useTheme } from "@/lib/theme-controller";
 
-const CHOICES: ReadonlyArray<{ value: ThemeChoice; label: string; hint: string }> = [
-  { value: "dark", label: "Dark", hint: "The HUD on a black background." },
-  { value: "light", label: "Light", hint: "The same on a light background. Terminals and the Home scene stay dark." },
-  { value: "system", label: "Same as the system", hint: "Dark or light as Windows or macOS is, changing when it changes." },
+const CHOICES: ReadonlyArray<{ value: ThemeChoice; hint: string }> = [
+  { value: "dark", hint: "The HUD on a black background." },
+  { value: "light", hint: "The same on a light background. Terminals and the Home scene stay dark." },
+  { value: "system", hint: "Dark or light as Windows or macOS is, changing when it changes." },
 ];
 
 /** The app's theme on this computer (ADR-235); every open window takes a change at once. */
@@ -26,7 +26,7 @@ export function ThemeSurface() {
               className="accent-primary mt-0.5 size-4 shrink-0"
             />
             <span className="flex flex-col">
-              <span>{option.label}</span>
+              <span>{THEME_CHOICE_LABELS[option.value]}</span>
               <span className="text-muted-foreground">{option.hint}</span>
             </span>
           </label>
