@@ -21,10 +21,11 @@ export function inTurn(state: TaskState | undefined): boolean {
 /**
  * `hook`: an agent CLI hook; `osc`: a terminal sequence; `screen`: a screen pattern; `keyboard`: a key the person
  * answered with in the session terminal; `timeout`: no signal for longer than the threshold; `exit`: the end of the
- * session process, observed by the daemon; `acp`: the Agent Client Protocol of a session in the conversation view
+ * session process, observed by the daemon; `log`: the agent CLI's own event log of the conversation, where a failed
+ * model call is recorded (ADR-243); `acp`: the Agent Client Protocol of a session in the conversation view
  * (ADR-107), where the daemon itself sends the prompt and answers the approvals.
  */
-export const TaskStateSource = z.enum(["hook", "osc", "screen", "keyboard", "timeout", "exit", "acp"]);
+export const TaskStateSource = z.enum(["hook", "osc", "screen", "keyboard", "timeout", "exit", "log", "acp"]);
 export type TaskStateSource = z.infer<typeof TaskStateSource>;
 
 /** Confidence (glossary in `CONTEXT.md`); the same scale as for graph edges. */

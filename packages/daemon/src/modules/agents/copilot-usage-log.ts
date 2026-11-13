@@ -30,9 +30,11 @@ interface LogState {
   callsByModel: Readonly<Record<string, number>>;
   /** The message of the latest failed model call, until a later own receipt or model change (ADR-242); `null` otherwise. */
   modelError: string | null;
+  /** How many failed model calls the log holds, so a reader can tell a new failure from the one it already saw. */
+  failedCalls: number;
 }
 
-const NOTHING_READ: LogState = { totals: NO_USAGE, modelInUse: null, callsByModel: {}, modelError: null };
+const NOTHING_READ: LogState = { totals: NO_USAGE, modelInUse: null, callsByModel: {}, modelError: null, failedCalls: 0 };
 
 /**
  * One line of the log added to what it says; `seen` keeps receipts counted once. A receipt written again (a resumed
@@ -42,7 +44,7 @@ function add(state: LogState, line: string, seen: Set<string>): LogState {
   const receipt = usageReceipt(line);
   if (receipt === undefined) {
     const error = modelErrorOf(line);
-    if (error !== undefined) return { ...state, modelError: error };
+    if (error !== undefined) return { ...state, modelError: error, failedCalls: state.failedCalls + 1 };
     const changed = modelChangeOf(line);
     if (changed === undefined) return state;
     // A change to `auto` (a start whose model the account lacks, or `/model auto`) names no model: Copilot CLI picks one
@@ -57,6 +59,7 @@ function add(state: LogState, line: string, seen: Set<string>): LogState {
   if (model === undefined) return { ...state, totals };
   // An own call that went through ends the error of an earlier one.
   return {
+    ...state,
     totals,
     modelInUse: model,
     callsByModel: { ...state.callsByModel, [model]: (state.callsByModel[model] ?? 0) + 1 },
@@ -176,6 +179,14 @@ export class CopilotUsageLog {
   /** The message of the conversation's latest failed model call after the last update (ADR-242); `null` when none failed since. */
   modelError(): string | null {
     return this.#state.modelError;
+  }
+
+  /**
+   * How many failed model calls the conversation's log held at the last update, those before this session's start
+   * included: a session compares it with the count it last saw to learn of a new failure (ADR-243).
+   */
+  failedCalls(): number {
+    return this.#state.failedCalls;
   }
 
   /** The conversation's own model calls on each model after the last update (ADR-228), the most first. */
