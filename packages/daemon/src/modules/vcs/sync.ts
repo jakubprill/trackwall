@@ -38,11 +38,16 @@ async function syncDefaultBranch(dir: string): Promise<SyncBranchOutcome> {
   const remote = mainRemote(config);
   if (!remote) return skipped("no-remote", "the repo has neither an origin remote nor a single other remote");
   const network = { sshCommand: config.sshCommand };
-  await git(dir, ["fetch", "--quiet", "--", remote.name], { timeoutMs: FETCH_TIMEOUT_MS, network });
+  await fetchRemote(dir, remote.name, network);
   const branch = await defaultBranch(dir, remote.name, network);
   if (branch === undefined)
     return skipped("no-default-branch", `${remote.name} does not point to a default branch (git remote set-head ${remote.name} --auto)`);
   return fastForward(dir, branch, remote.name, network);
+}
+
+/** `git fetch` of one remote; also a task's refresh from its base branch (ADR-245). */
+export async function fetchRemote(dir: string, remote: string, network: GitNetwork): Promise<void> {
+  await git(dir, ["fetch", "--quiet", "--", remote], { timeoutMs: FETCH_TIMEOUT_MS, network });
 }
 
 /**

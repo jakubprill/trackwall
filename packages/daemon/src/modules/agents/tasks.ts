@@ -24,6 +24,7 @@ import {
   type TaskChangesSummary,
   type TaskHandoffState,
   type TaskMiseConfig,
+  type TaskRefresh,
   type TaskSharedFiles,
   type TaskWorktree,
   type TaskWorktreeLoss,
@@ -878,10 +879,30 @@ export class AgentTasks {
     return this.#tracked(task, read(task));
   }
 
+  /**
+   * The user's refresh of task `id` from its base branch (ADR-245): `refresh` works in the worktree as one of the task's
+   * reads, which ending the task waits for, and the commit it merged becomes the task's base, so the task's changes stay
+   * its own work. A git failure is `repo_unavailable`; a refusal keeps its own code.
+   */
+  async refresh(id: string, refresh: (task: Task & { repoDir: string }) => Promise<TaskRefresh>): Promise<TaskRefresh> {
+    if (this.#removing.has(id)) throw new DomainError("bad_request", "this task is already being ended");
+    const task = this.#existingWorktree(id);
+    const work = refresh({ ...view(task), repoDir: task.repoDir }).catch((err: unknown) => {
+      throw err instanceof DomainError ? err : new DomainError("repo_unavailable", `${task.branch}: ${messageOf(err)}`);
+    });
+    const result = await this.#track(task, work);
+    if (result.state === "refreshed" && this.#tasks.some((t) => t.id === id))
+      this.#save(this.#tasks.map((t) => (t.id === id ? { ...t, base: result.base } : t)));
+    return result;
+  }
+
   /** `work` among the task's reads, which ending the task waits for before it deletes the worktree. */
   #tracked<T>(task: KnownTask, work: Promise<T>): Promise<T> {
+    return this.#track(task, asRepoUnavailable(task.branch, work));
+  }
+
+  #track<T>(task: KnownTask, reading: Promise<T>): Promise<T> {
     const { id } = task;
-    const reading = asRepoUnavailable(task.branch, work);
     const reads = this.#reading.get(id) ?? new Set();
     this.#reading.set(id, reads.add(reading));
     void reading

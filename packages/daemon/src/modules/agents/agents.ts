@@ -53,6 +53,7 @@ import {
   type TaskMiseConfig,
   type TaskOutcome,
   type TaskProposal,
+  type TaskRefresh,
   type TaskRounds,
   type TaskSharedFiles,
   type TaskUpdate,
@@ -122,6 +123,7 @@ import { TaskCoordination } from "./task-coordination.ts";
 import { TaskFile } from "./task-file.ts";
 import { PLAN_APPROVED_MESSAGE } from "./task-plan.ts";
 import { TaskProposals } from "./task-proposals.ts";
+import { type RefreshVcs, refreshTask } from "./task-refresh.ts";
 import { TaskReviews, type UnreadReview } from "./task-reviews.ts";
 import { type RoundsVcs, TASK_ROUNDS_FILE, TaskRoundList } from "./task-rounds.ts";
 import { AgentTasks, type TaskLaunch, type TaskOptions, type TasksVcs } from "./tasks.ts";
@@ -219,8 +221,11 @@ export interface AgentsDeps {
   /** Stops a task's reproduction check and removes its copy before the task ends (`reproduction`, ADR-227). */
   stopReproductionCheck: (task: string) => Promise<void>;
   repos: AgentsRepos;
-  /** Task worktrees and branches (ADR-31), the round commits in them (ADR-168), and the repo's rules at a task's base (ADR-234). */
-  vcs: TasksVcs & RoundsVcs & RulesVcs;
+  /**
+   * Task worktrees and branches (ADR-31), the round commits in them (ADR-168), the repo's rules at a task's base (ADR-234),
+   * and the merge of a task's refresh from its base branch (ADR-245).
+   */
+  vcs: TasksVcs & RoundsVcs & RulesVcs & RefreshVcs;
   /**
    * The daemon's state directory; sessions keep their files in `sessions/<session>/` and tasks their list in `tasks.json`
    * (worktrees saved before ADR-84 are in `worktrees/<repo>/`, newer ones in the task worktrees folder of `workspace`).
@@ -785,6 +790,7 @@ export class Agents {
       pipelineFix: session.task !== null && this.#reviews.pipelineFixUnread(session.task),
       handoffMoved: session.task !== null && this.#handoffs.waiting(session.task),
       roundUndone: session.task !== null && this.#rounds.undoneUntold(session.task),
+      refreshed: session.task !== null && this.#rounds.refreshedUntold(session.task),
       ...this.#coordination.unread(session),
       trustNotice: this.#miseTrust.waiting(trustRecipientOf(session)),
     });
@@ -1046,6 +1052,17 @@ export class Agents {
   /** The user undoes the task's newest standing round (ADR-168); its agent hears of it. Only from the UI. */
   undoTaskRound(id: string, round: number): Promise<TaskRounds> {
     return this.#rounds.undo(id, round);
+  }
+
+  /**
+   * The user's refresh of a task from its base branch (ADR-245): the newest commits merged into the task branch, its
+   * round commits squashed first, or the files the merge would conflict in, with nothing changed. Only from the UI.
+   */
+  refreshTask(id: string): Promise<TaskRefresh> {
+    return this.#tasks.refresh(id, async (task) => {
+      const done = await this.#rounds.refreshWithRoundsSquashed(id, (squash) => refreshTask(task, this.#deps.vcs, squash));
+      return done.result;
+    });
   }
 
   /** The user's push of the task branch, with the round commits the remote does not have yet squashed (ADR-168). */

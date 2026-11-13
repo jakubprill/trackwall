@@ -10,6 +10,7 @@ import type { Connection } from "@/lib/connection";
 import { useRemote } from "@/lib/use-remote";
 import type { TaskReview } from "@/lib/use-task-review";
 import { TaskAutoReview } from "./TaskAutoReview.tsx";
+import { TaskRefreshBar } from "./TaskRefreshBar.tsx";
 
 /**
  * Live diff: the agent changes files within seconds, and one request is a few quick git commands on the worktree
@@ -24,7 +25,20 @@ const POLL_MS = 2000;
  * for the task's agent (ADR-62), and the automatic review above the diff offers findings as such comments (ADR-182), under the explanation of the
  * changes (ADR-250).
  */
-export function TaskChangesView({ conn, task, paused, review }: { conn: Connection; task: string; paused: boolean; review: TaskReview }) {
+export function TaskChangesView({
+  conn,
+  task,
+  baseBranch,
+  paused,
+  review,
+}: {
+  conn: Connection;
+  task: string;
+  /** The branch the task started from, which "Refresh" merges from (ADR-245); `null` from a detached HEAD. */
+  baseBranch: string | null;
+  paused: boolean;
+  review: TaskReview;
+}) {
   const load = useCallback(() => post(conn, agentsApi.taskChanges, { task }), [conn, task]);
   // An open comment form stops polling: a refresh while the agent works would move the lines under it.
   const changes = useRemote(paused || review.editing !== null ? undefined : load, { pollMs: POLL_MS });
@@ -33,6 +47,7 @@ export function TaskChangesView({ conn, task, paused, review }: { conn: Connecti
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <ReviewBar review={review} />
+      {baseBranch !== null && <TaskRefreshBar conn={conn} task={task} baseBranch={baseBranch} onRefreshed={changes.reload} />}
       {changes.data.files.length > 0 && (
         <>
           <TaskAutoReview conn={conn} task={task} kind="explain" patch={changes.data.patch} paused={paused} review={review} />

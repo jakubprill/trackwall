@@ -3,7 +3,7 @@ import { mkdtempSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gitProcessesStarted } from "../src/modules/vcs/git.ts";
-import { conflictedPaths } from "../src/modules/vcs/trial-merge.ts";
+import { mergeTreeResult } from "../src/modules/vcs/trial-merge.ts";
 import { Vcs } from "../src/modules/vcs/vcs.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
 
@@ -83,8 +83,10 @@ describe("trial merge of two branches", () => {
     expect(await vcs.trialMergeConflicts(dir, "a", "b")).toEqual([]);
   });
 
-  test("git's output names each conflicted path once and stops at the empty entry", () => {
-    expect(conflictedPaths("4b825dc\0src/a.ts\0src/a.ts\0b.ts\0\0")).toEqual(["src/a.ts", "b.ts"]);
-    expect(conflictedPaths("4b825dc\0")).toEqual([]);
+  test("git's output names the merged tree, then each conflicted path once, and stops at the empty entry", () => {
+    const tree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+    expect(mergeTreeResult(`${tree}\0src/a.ts\0src/a.ts\0b.ts\0\0`)).toEqual({ tree, conflicts: ["src/a.ts", "b.ts"] });
+    expect(mergeTreeResult(`${tree}\0`)).toEqual({ tree, conflicts: [] });
+    expect(() => mergeTreeResult("fatal: unknown option\0")).toThrow("unexpected git merge-tree output");
   });
 });

@@ -46,6 +46,8 @@ const StoredRounds = z.object({
   squashedThrough: z.number().int().nonnegative(),
   /** A round was undone and the agent has not been told yet. */
   undoneUntold: z.boolean(),
+  /** The user refreshed the task from its base branch (ADR-245) and the agent has not been told yet. */
+  refreshedUntold: z.boolean().default(false),
   problem: z.string().nullable(),
 });
 type StoredRounds = z.infer<typeof StoredRounds>;
@@ -252,11 +254,7 @@ export class TaskRoundList {
     return this.#chain.run(task, async () => {
       const state = this.#stateOf(task);
       if (state.roundCommits.length === 0) return push(undefined);
-      if (this.#deps.midTurn(task))
-        throw new DomainError(
-          "bad_request",
-          "the agent is in the middle of a turn: push once it waits for you, so its round is in the push",
-        );
+      this.#refuseMidTurn(task, "push");
       const squashed = await this.#deps.vcs
         .squashRounds(work, work.base, new Set(state.roundCommits), squashedSubject(work))
         .catch((err: unknown) => {
@@ -284,15 +282,65 @@ export class TaskRoundList {
     });
   }
 
+  /**
+   * Runs the user's refresh of the task from its base branch (ADR-245) after the task's earlier round steps, refused in the
+   * middle of a turn, when the agent may commit. `refresh` gets `squash`, which it calls once it knows it will merge: the
+   * round commits are squashed as before a push and the branch moves there, since the push's squash does not reach behind
+   * a merge commit, and it returns the new HEAD. After a merge (`head`) the next round starts from the merge commit, which
+   * no round can undo, and the agent is asked to read about it.
+   */
+  refreshWithRoundsSquashed<T extends { head: string | null }>(
+    task: string,
+    refresh: (squash: (head: string) => Promise<string>) => Promise<T>,
+  ): Promise<T> {
+    const work = this.#task(task);
+    return this.#chain.run(task, async () => {
+      this.#refuseMidTurn(task, "refresh");
+      const done = await refresh((head) => this.#squashForMerge(work, head));
+      if (done.head === null) return done;
+      this.#save(task, { ...this.#stateOf(task), head: done.head, refreshedUntold: true });
+      this.#deps.askToRead(task);
+      return done;
+    });
+  }
+
+  /**
+   * The round commits on `head` squashed and the branch moved there; `head` itself without any to squash. Refused when a
+   * turn started during the refresh's fetch, which can take minutes.
+   */
+  async #squashForMerge(work: RoundTask, head: string): Promise<string> {
+    this.#refuseMidTurn(work.id, "refresh");
+    const state = this.#stateOf(work.id);
+    if (state.roundCommits.length === 0) return head;
+    const squashed = await this.#deps.vcs.squashRounds(work, work.base, new Set(state.roundCommits), squashedSubject(work));
+    if (squashed === null) return head;
+    await this.#deps.vcs.moveBranch(work, squashed);
+    this.#save(work.id, { ...state, head: squashed.to, roundCommits: [], squashedThrough: state.next - 1 });
+    return squashed.to;
+  }
+
+  #refuseMidTurn(task: string, action: "push" | "refresh"): void {
+    if (this.#deps.midTurn(task))
+      throw new DomainError(
+        "bad_request",
+        `the agent is in the middle of a turn: ${action} once it waits for you, so its round is in the ${action}`,
+      );
+  }
+
   /** Whether the agent has yet to hear that a round of its task was undone. */
   undoneUntold(task: string): boolean {
     return this.#state.get(task)?.undoneUntold === true;
   }
 
+  /** Whether the agent has yet to hear that the user refreshed its task from the base branch (ADR-245). */
+  refreshedUntold(task: string): boolean {
+    return this.#state.get(task)?.refreshedUntold === true;
+  }
+
   /** The daemon's prompt, which says what waits, went to the task's agent. */
   promptSent(task: string): void {
     const state = this.#state.get(task);
-    if (state?.undoneUntold) this.#save(task, { ...state, undoneUntold: false });
+    if (state?.undoneUntold || state?.refreshedUntold) this.#save(task, { ...state, undoneUntold: false, refreshedUntold: false });
   }
 
   /** The task ended: its rounds go with it. */
@@ -353,6 +401,7 @@ export class TaskRoundList {
         roundCommits: [],
         squashedThrough: 0,
         undoneUntold: false,
+        refreshedUntold: false,
         problem: null,
       }
     );

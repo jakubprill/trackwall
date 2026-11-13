@@ -238,7 +238,7 @@ function TaskTabContent({
       {shown === "shell" && <FolderShell key={task.id} conn={conn} place={{ repo: task.repo, task: task.id }} folder={task.worktree} />}
       {shown === "changes" && (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <TaskChangesView conn={conn} task={task.id} paused={paused} review={review} />
+          <TaskChangesView conn={conn} task={task.id} baseBranch={task.baseBranch} paused={paused} review={review} />
         </div>
       )}
       {shown === "rounds" && (

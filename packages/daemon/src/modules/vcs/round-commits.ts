@@ -1,15 +1,12 @@
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import type { WorkingTreeChanges } from "@trackwall/protocol";
-import { isInside } from "../../infra/path-inside.ts";
-import type { RunOutput } from "../../infra/run-program.ts";
 import { isAncestor } from "./commit-range.ts";
-import { existingCommit, type GitOptions, git, symbolicRef } from "./git.ts";
+import { existingCommit, git, symbolicRef } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { withoutHooks } from "./no-hooks.ts";
+import { assertOwnGitDir, type OwnGit, ownGitDir } from "./own-git-dir.ts";
 import { parseChangedFiles, parseNulTerminated, parseStatus } from "./parse.ts";
-import { pathKey } from "./path-key.ts";
 import { wholeLines } from "./worktree-changes.ts";
 
 /**
@@ -72,47 +69,6 @@ export async function roundWorktree(place: RoundPlace): Promise<RoundWorktree> {
     uncommitted: parseStatus(status.stdout.toString("utf8")).changes,
     blocker: operation === null ? null : `${operation} is in progress in the worktree`,
   };
-}
-
-/** Runs git in the worktree with the git directory checked by `ownGitDir`. */
-type OwnGit = (args: readonly string[], opts?: GitOptions) => Promise<RunOutput>;
-
-/**
- * Git in the worktree pinned to its checked git directory, or why its git directory is not this worktree's own in its
- * repo: the common directory must be the repo's, and the git directory one of its `worktrees/` whose `gitdir` file
- * names this worktree, so neither a git directory of the agent's nor another task's worktree passes.
- */
-async function ownGitDir(place: RoundPlace): Promise<OwnGit | { foreign: string }> {
-  const gitDir = await checkedGitDir(place);
-  if (gitDir.foreign !== undefined) return { foreign: gitDir.foreign };
-  const pin = [`--git-dir=${gitDir.path}`, `--work-tree=${place.worktree}`];
-  return (args, opts) => git(place.worktree, [...pin, ...args], opts);
-}
-
-const FOREIGN_GIT_DIR = "the worktree's .git does not point to a worktree of its repo, so Trackwall does not run git there";
-
-async function checkedGitDir({ worktree, repoDir }: RoundPlace): Promise<{ path: string; foreign?: undefined } | { foreign: string }> {
-  const absolute = ["rev-parse", "--path-format=absolute"];
-  const [own, repo] = await Promise.all([
-    git(worktree, [...absolute, "--git-dir", "--git-common-dir"]),
-    git(repoDir, [...absolute, "--git-common-dir"]),
-  ]);
-  const [gitDir, commonDir] = own.stdout.toString("utf8").trim().split(/\r?\n/);
-  const repoCommon = repo.stdout.toString("utf8").trim();
-  if (gitDir === undefined || commonDir === undefined) return { foreign: "git did not name the worktree's git directory" };
-  const [gitKey, commonKey, repoKey] = await Promise.all([pathKey(gitDir), pathKey(commonDir), pathKey(repoCommon)]);
-  if (commonKey !== repoKey || !isInside(join(repoKey, "worktrees"), gitKey) || gitKey === join(repoKey, "worktrees"))
-    return { foreign: FOREIGN_GIT_DIR };
-  const backLink = await readFile(join(gitDir, "gitdir"), "utf8").catch(() => "");
-  const [linkKey, ownKey] = await Promise.all([pathKey(resolve(gitDir, backLink.trim())), pathKey(join(worktree, ".git"))]);
-  if (backLink.trim() === "" || linkKey !== ownKey) return { foreign: FOREIGN_GIT_DIR };
-  return { path: gitDir };
-}
-
-async function assertOwnGitDir(place: RoundPlace): Promise<OwnGit> {
-  const own = await ownGitDir(place);
-  if (typeof own !== "function") throw new Error(own.foreign);
-  return own;
 }
 
 async function operationInProgress(dir: string): Promise<string | null> {

@@ -4,7 +4,7 @@ import { MCP_SERVER_NAME, mcpTools } from "@trackwall/protocol";
  * The prompt the daemon types into a session when something waits for it (ADR-62, ADR-68, ADR-197): fixed sentences on one line,
  * without anything the Copilot CLI input box treats specially, each naming the tool that returns what waits. The text
  * itself (the user's review, another agent's message, an update) comes from the tool, never as keys; a trust notice
- * (ADR-92) and an undone round (ADR-168) have no text beyond their fixed sentence.
+ * (ADR-92), an undone round (ADR-168) and a refresh from the base branch (ADR-245) have no text beyond their fixed sentence.
  */
 
 const SERVER = `(the ${MCP_SERVER_NAME} MCP server)`;
@@ -16,6 +16,9 @@ const UPDATES = `There is news about the work you delegated in Trackwall: call $
 /** Nothing to read either: the worktree itself shows what is left (ADR-168). */
 const ROUND_UNDONE =
   "The user undid your last round of changes in Trackwall: the worktree and the task branch are back where they were before that round, so check them with git status and git log before you go on, and do not redo the undone changes unless the user asks.";
+/** Nothing to read either: the merge commit on the task branch says what came in (ADR-245). */
+const REFRESHED =
+  "The user merged the newest commits of your task's base branch into your task branch in Trackwall: files in the worktree may have changed, so check git log and read again the files you work on before you go on.";
 /** The one part with nothing to read: that the user trusted a mise config is the whole news (ADR-92). */
 const TRUST_NOTICE = `The user trusted the mise config that refused your last ${mcpTools.runMiseTask.name}, ${mcpTools.verifyTask.name} or ${mcpTools.startService.name} in Trackwall: run it again if you still need it.`;
 
@@ -29,6 +32,8 @@ export interface Unread {
   handoffMoved: boolean;
   /** The user undid a round of the session's task, and the agent has not been told (ADR-168). */
   roundUndone: boolean;
+  /** The user refreshed the session's task from its base branch, and the agent has not been told (ADR-245). */
+  refreshed: boolean;
   updates: number;
   /** The user trusted the mise config a run of the session was refused for (ADR-92). */
   trustNotice: boolean;
@@ -41,12 +46,14 @@ export function readRequestPrompt({
   messages,
   handoffMoved,
   roundUndone,
+  refreshed,
   updates,
   trustNotice,
 }: Unread): string | undefined {
   const parts = [
     // First: what the agent reads next may refer to the changes that are gone.
     roundUndone && ROUND_UNDONE,
+    refreshed && REFRESHED,
     reviewComments > 0 && REVIEW,
     pipelineFix && PIPELINE_FIX,
     messages > 0 && MESSAGES,

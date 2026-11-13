@@ -16,6 +16,7 @@ import type {
 } from "@trackwall/protocol";
 import { KeyedQueue } from "../../infra/keyed-queue.ts";
 import { type BackupFile, backupRemote, commitBackups, ensureBackupRepo, pushBackups, storeHead } from "./backup-repo.ts";
+import { commitMerge, freshBaseTip } from "./base-refresh.ts";
 import { branchOnRemote, pushBranch } from "./branch-push.ts";
 import { CommitMemo } from "./commit-memo.ts";
 import {
@@ -68,7 +69,7 @@ import {
 } from "./round-commits.ts";
 import { StatusMemo, type TimedStatus } from "./status-memo.ts";
 import { syncRepo } from "./sync.ts";
-import { trialMergeConflicts, trialMergeInput } from "./trial-merge.ts";
+import { mergeIntoRepo, trialMergeConflicts, trialMergeInput } from "./trial-merge.ts";
 import { type RepoUnpushed, readUnpushed } from "./unpushed.ts";
 import { addCheckout, addWorktree, defaultBase, deleteBranch, pendingWork, removeWorktree } from "./worktree.ts";
 import { changedPaths, workingTreeChanges, worktreeChanges } from "./worktree-changes.ts";
@@ -280,7 +281,7 @@ export class Vcs {
    * asks every few seconds while the branches move only at the end of a turn.
    */
   async trialMergeConflicts(repoDir: string, ours: string, theirs: string): Promise<string[] | null> {
-    const input = await trialMergeInput(repoDir, ours, theirs);
+    const input = await trialMergeInput(repoDir, `refs/heads/${ours}`, `refs/heads/${theirs}`);
     if (input === null) return null;
     const key = [input.objects, input.ours, input.theirs].join("\0");
     const known = this.trialMerges.get(key);
@@ -318,6 +319,25 @@ export class Vcs {
 
   moveBranch(place: RoundPlace, squashed: SquashedRounds): Promise<void> {
     return this.serialWorktreeOp(place.repoDir, () => moveBranch(place, squashed));
+  }
+
+  // A task's refresh from its base branch (ADR-245, `base-refresh.ts`): the fetch in the sync queue, the merge commit in
+  // the repo's queue of worktree changes.
+
+  /** The base branch's newest commit after a fetch of the main remote; `null` when the repo has no such branch. */
+  async freshBaseTip(repoDir: string, branch: string): Promise<BranchTip | null> {
+    return this.syncing.run(await this.commonDir(repoDir), () => freshBaseTip(repoDir, branch));
+  }
+
+  /** The merge of commits `ours` and `theirs` as a tree in the repo's objects, with the paths that conflict. */
+  async mergeTree(repoDir: string, ours: string, theirs: string): Promise<{ tree: string; conflicts: string[] }> {
+    const input = await trialMergeInput(repoDir, ours, theirs);
+    if (input === null) throw new Error(`git cannot read commits ${ours} and ${theirs}`);
+    return mergeIntoRepo(input, await this.scratch());
+  }
+
+  commitMerge(place: RoundPlace, head: string, tree: string, theirs: string, message: string): Promise<string> {
+    return this.serialWorktreeOp(place.repoDir, () => commitMerge(place, head, tree, theirs, message));
   }
 
   addWorktree(repoDir: string, path: string, branch: string, commit: string): Promise<void> {
