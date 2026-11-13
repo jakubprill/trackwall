@@ -51,18 +51,34 @@ The click does exactly what the key in the terminal does, and only while the que
 
 ```mermaid
 flowchart TB
-  start(["You: a prompt, 'Own worktree' on"]) --> wt["Daemon: new branch trackwall/task-name<br/>from the default branch, in its own worktree;<br/>copies the files .worktreeinclude lists;<br/>gives the task its own port"]
-  wt --> work["Copilot CLI works in the worktree:<br/>edits, builds and tests with the repo's mise tasks"]
-  work --> verify["Verification: the mise task 'test'<br/>passed or failed, with the failed tests"]
-  verify --> summary["The agent reports a summary"]
-  summary --> review{"You review 'Changes'"}
-  review -- "comments on lines" --> work
-  review -- "good" --> push["Push: the task's branch to the remote"]
-  push --> mr["Open merge request:<br/>your repo host's form, filled in"]
-  mr --> done(["End task: the worktree goes,<br/>the branch stays if you want"])
+  start(["You: a repo and a prompt,<br/>with a model, 'Plan first' or a stack trace if you want"]) --> wt["Daemon: new branch trackwall/task-name<br/>from the default branch, in its own worktree;<br/>copies the files .worktreeinclude lists;<br/>gives the task its own port"]
+  wt --> plan{"'Plan first'?"}
+  plan -- "yes" --> approve["The agent writes a plan;<br/>you read it and press 'Approve plan'"]
+  plan -- "no" --> work
+  approve --> work["Copilot CLI works in the worktree:<br/>edits, builds and tests with the repo's mise tasks;<br/>asks you to approve commands, or not, with 'Always allow'"]
+  work --> round["End of a turn: Trackwall commits it as a round<br/>you can undo"]
+  round --> work
+  round --> report["The agent verifies and reports a summary"]
+  report --> look["You look: 'Explain this diff', the automatic review<br/>and rules check, 'Verify', 'Check it' for a stack trace"]
+  look -- "comments on lines, or 'Refresh from main'" --> work
+  look -- "verification failed" --> retry["'Retry on a stronger model':<br/>a new task from the same commit"]
+  look -- "good" --> push["Push: the round commits squashed,<br/>the task's branch to the remote"]
+  push --> mr["Open merge request: your repo host's form,<br/>with the summary and Trackwall's evidence"]
+  mr -- "pipeline failed: 'Fix'" --> work
+  mr --> done(["End task: the worktree goes, the branch stays if you want,<br/>a record of the task stays for later tasks"])
 ```
 
 Your own working copy is never touched: the agent has its own folder on its own branch, and it runs services on its own port, so you can keep working next to it. The agent is told not to push: you push its branch with "Push". See [Agent tasks](/features/tasks) and [Where agents work](/guide/where-agents-work).
+
+Each step has its own page with the details:
+
+- **Starting.** The task's options sit under the prompt: a model, "No approvals", "Plan first" (with "Chat (preview)" on), a stack trace for an error, and Java navigation in a Java repo. A warning under them says when the start would run more tasks at once than your computer is set for. See [Agent tasks](/features/tasks).
+- **While it works.** Its approval requests show in the tray panel and on Home as well as in its terminal, and "Always allow" lets one command through in every task of that repo ([Approvals outside the terminal](/features/approvals)). The Sessions list says how long it has been waiting for you ([Copilot CLI sessions](/features/sessions)). A token budget, if you set one, stops it before it runs up the bill. "Refresh from main" brings in what others merged since it started, and a warning names another task that changes the same files.
+- **Looking at the result.** "Explain this diff" tells you what changed and where to look closely, and the review and the rules check look for problems, on a click or as soon as the agent reports ([Automatic review](/features/auto-review)). "Verify" runs the repo's tests; its verdict says "outdated" once the files change after it. Your comments on lines go to the agent as one review.
+- **Landing it.** "Push" and "Open merge request" fill in your repo host's form, in the repo's own template, with the summary, steps to check it and the evidence Trackwall saw. The Sessions list follows the merge request and its pipeline, and "Fix" sends a failed pipeline's log to the agent.
+- **Afterwards.** "End task" keeps a short record that later tasks find with `search_task_history`, and that [Model statistics](/features/model-stats) compares. Tasks you forget to end show under "Old task worktrees" after a few idle days, with the disk each one takes.
+
+The [supervisor](/features/supervisor) and other sessions can propose a task, and a [plan](/features/plan) item or a [change across several repos](/features/changes) can start one; from then on it runs the same way.
 
 ## The supervisor hands work to other agents
 
