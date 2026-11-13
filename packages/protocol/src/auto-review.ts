@@ -29,9 +29,10 @@ export type AutoReviewState = z.infer<typeof AutoReviewState>;
 /**
  * What the reviewer checks (ADR-234): `code` is Copilot CLI's `/review` (bugs and security); `rules` checks the change
  * against the repo's own rules for agents (`AGENTS.md`, `CLAUDE.md`, Copilot's instruction files) and its decision records,
- * as they were at the task's base commit. Each kind has its own last review per task.
+ * as they were at the task's base commit; `explain` checks nothing and explains the change to the user who reads it
+ * (ADR-250): what it does, why and what to look at, in `text`, with no findings. Each kind has its own last review per task.
  */
-export const AutoReviewKind = z.enum(["code", "rules"]);
+export const AutoReviewKind = z.enum(["code", "rules", "explain"]);
 export type AutoReviewKind = z.infer<typeof AutoReviewKind>;
 
 /** Who started it: the user's click, or the task's `report_result` with `autoReview.afterReport` on. */
@@ -73,8 +74,9 @@ export const AutoReview = z.object({
   diffHash: z.string().regex(/^[0-9a-f]{64}$/),
   /** The diff was cut at `AUTO_REVIEW_DIFF_MAX_BYTES`, so the files after the cut were not reviewed. */
   diffTruncated: z.boolean(),
+  /** Always empty for `explain`, whose answer is its `text`. */
   findings: z.array(AutoReviewFinding).max(AUTO_REVIEW_FINDINGS_MAX),
-  /** The reviewer's answer as it wrote it, cut at `AUTO_REVIEW_TEXT_MAX`; empty while running. */
+  /** The reviewer's answer as it wrote it, cut at `AUTO_REVIEW_TEXT_MAX`; empty while running. For `explain`, Markdown. */
   text: visibleText(z.string().max(AUTO_REVIEW_TEXT_MAX)),
   /** Why it failed or was cancelled, or on a finished one what the reviewer asked for and was refused; `null` otherwise. */
   message: z.string().nullable(),

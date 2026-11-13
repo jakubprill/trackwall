@@ -28,8 +28,14 @@ import { reviewPermission } from "./auto-review-permission.ts";
 export const REVIEWER_TOOLS = ["view", "grep", "glob", "task", "read_agent", "list_agents"] as const;
 type ReviewerTool = (typeof REVIEWER_TOOLS)[number];
 
-/** The tools of each kind: a rules check (ADR-234) reads the rules and the diff itself, without the review agent's `task`. */
-export const KIND_TOOLS: Record<AutoReviewKind, readonly ReviewerTool[]> = { code: REVIEWER_TOOLS, rules: ["view", "grep", "glob"] };
+/** The tools that read and search without starting the review agent. */
+const READ_TOOLS = ["view", "grep", "glob"] as const satisfies readonly ReviewerTool[];
+
+/**
+ * The tools of each kind: a rules check (ADR-234) and an explanation (ADR-250) read the diff themselves, without the
+ * review agent's `task`.
+ */
+export const KIND_TOOLS: Record<AutoReviewKind, readonly ReviewerTool[]> = { code: REVIEWER_TOOLS, rules: READ_TOOLS, explain: READ_TOOLS };
 
 /**
  * Copilot CLI's arguments of a review, besides the session's mise arguments: only `tools` (`REVIEWER_TOOLS` for `/review`,
@@ -195,6 +201,17 @@ export class ReviewAnswer {
     const outside = this.#outside.text();
     return outside.trim() === "" ? this.#all.text() : outside;
   }
+}
+
+/**
+ * The answer without Copilot CLI's own notices, which `ReviewAnswer` gives a paragraph each: what the model wrote, as an
+ * explanation (ADR-250) shows it.
+ */
+export function withoutNotices(answer: string): string {
+  return answer
+    .split("\n\n")
+    .filter((paragraph) => !NOTICE.test(paragraph))
+    .join("\n\n");
 }
 
 /**

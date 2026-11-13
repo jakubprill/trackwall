@@ -24,7 +24,11 @@
  * added line of the diff file that holds `<text>` is a violation in the format the prompt asks for, quoting the rule;
  * without one it answers that it found none. The answer ends with the rule files it read and its arguments.
  *
- * Like Copilot CLI over ACP, a review or a check asks before it reads a file outside its working directory, whatever
+ * A prompt that asks to explain a change (ADR-250) is answered in the three sections the prompt asks for: the first line
+ * of the task's prompt it quotes, and each file the diff file (or `FAKE_COPILOT_REVIEW_FILE`) changes with its count of
+ * added lines, then its arguments.
+ *
+ * Like Copilot CLI over ACP, a review, a check or an explanation asks before it reads a file outside its working directory, whatever
  * `--add-dir` says (`contract/auto-review.contract.ts`): a `read` approval named "Access paths outside trusted
  * directories" with the file's path; refused, it ends the turn without an answer.
  *
@@ -184,6 +188,7 @@ export function serveAcp(o: FakeAcpOptions): void {
     writeFileSync(conversationFile(sessionId), JSON.stringify(history));
     if (text.startsWith("/review")) void review(sessionId, text, turn);
     else if (text.startsWith("Check whether a change keeps the written rules")) void rulesCheck(sessionId, text, turn);
+    else if (text.startsWith("Explain a change")) void explanation(sessionId, text, turn);
     else if (mode === PLAN_MODE) {
       update(sessionId, {
         sessionUpdate: "agent_message_chunk",
@@ -278,6 +283,28 @@ export function serveAcp(o: FakeAcpOptions): void {
       const answer = issues.length > 0 ? issues.join("\n\n") : "No rule violations found.";
       const about = [`Rules read: ${ruleFiles.join(", ")}`, ...o.args.map((a) => `Argument: ${a}`)].join("\n");
       update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: `${answer}\n\n${about}` } });
+    }
+    turn.end("end_turn");
+  }
+
+  async function explanation(sessionId: string, text: string, turn: { end: (stopReason: string) => void }): Promise<void> {
+    if (process.env.FAKE_COPILOT_REVIEW_WAIT !== undefined) return;
+    const diff = await readOutside(sessionId, process.env.FAKE_COPILOT_REVIEW_FILE ?? /in the file `([^`]+)`/.exec(text)?.[1] ?? "");
+    if (diff !== undefined) {
+      const task = /^`{3,}text\n(.*)$/m.exec(text)?.[1] ?? "";
+      const counts = new Map<string, number>();
+      for (const { path } of addedLines(diff)) counts.set(path, (counts.get(path) ?? 0) + 1);
+      const answer = [
+        "## Summary",
+        `The change does what the task asks: ${task}`,
+        "## Changes",
+        ...[...counts].map(([path, count]) => `- \`${path}\`: ${count} added ${count === 1 ? "line" : "lines"}.`),
+        "## Worth a closer look",
+        "Nothing stands out.",
+        "",
+        ...o.args.map((a) => `Argument: ${a}`),
+      ].join("\n");
+      update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: answer } });
     }
     turn.end("end_turn");
   }
