@@ -12,7 +12,7 @@ import {
 import { projectOf } from "./board-tree.ts";
 import { type Progress, progressBelow, progressLabel } from "./plan-progress.ts";
 import { latestSession, proposerName, taskName } from "./session-entries.ts";
-import { inTurn, PROPOSAL_STATUS, sessionPlace, sessionStateLabel, sessionTitle } from "./session-state.ts";
+import { inTurn, PAUSED_LABEL, PROPOSAL_STATUS, sessionPlace, sessionStateLabel, sessionTitle } from "./session-state.ts";
 import { outcomeMarks } from "./task-outcomes.ts";
 
 /**
@@ -221,7 +221,10 @@ function taskCard(task: Task, sessions: readonly Session[], outcome: TaskOutcome
     name: taskName(task),
     repo: task.repo,
     target: { kind: "task", id: task.id },
-    ...columnOf(latestSession(sessions, task.id), facts),
+    // A paused task rests by the user's choice (ADR-253), whatever its last turn or check left behind.
+    ...(task.paused === null
+      ? columnOf(latestSession(sessions, task.id), facts)
+      : { column: "idle" as const, since: task.paused.at, detail: PAUSED_LABEL }),
   };
 }
 

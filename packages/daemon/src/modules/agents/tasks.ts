@@ -12,6 +12,7 @@ import {
   mayHandToSupervisor,
   noIncludedFiles,
   PATCH_MAX_BYTES,
+  type PausedTask,
   type ProposedBy,
   type ReportedSummary,
   type ReproTest,
@@ -25,6 +26,7 @@ import {
   type TaskChangesSummary,
   type TaskHandoffState,
   type TaskMiseConfig,
+  type TaskPause,
   type TaskRefresh,
   type TaskSharedFiles,
   type TaskWorktree,
@@ -377,6 +379,7 @@ export class AgentTasks {
       summary: null,
       inReview: false,
       stoppedAtTokenBudget: false,
+      paused: null,
       handoff,
       change,
       retryOf,
@@ -478,13 +481,47 @@ export class AgentTasks {
       const unstopped = this.#withStoppedAtTokenBudget(task, false);
       const resumed = model === undefined || model === unstopped.model ? unstopped : this.#withModel(unstopped, model);
       await this.#launch(resumed, "resume");
-      return view(resumed);
+      // After the start: a start that failed leaves the task paused, so no agent resumes it in the user's place.
+      return view(this.#withUnpaused(this.#get(id)));
     });
   }
 
-  /** Whether the daemon stopped the task at its token budget since its last resume (ADR-237). */
-  stoppedAtTokenBudget(id: string): boolean {
-    return this.#get(id).stoppedAtTokenBudget;
+  /**
+   * Why only the user's Resume may go on with the task, or `null` when an agent's `resume_task` and a daemon restart
+   * may too: the daemon stopped it at its token budget (ADR-237), or the user paused it (ADR-253).
+   */
+  onlyUserResumes(id: string): string | null {
+    const task = this.#get(id);
+    if (task.stoppedAtTokenBudget) return "was stopped at its token budget";
+    if (task.paused !== null) return "was paused by the user";
+    return null;
+  }
+
+  /**
+   * The user's pause (ADR-253): `stop` stops the task's sessions and the rest of its work and says what it stopped and
+   * which service to start again on Resume. The task is saved as paused only after every stop succeeded, so a pause
+   * that failed halfway is tried again with the same button; a session it stopped is not resumed by a daemon restart
+   * meanwhile anyway (ADR-95). Exclusive with Resume and the end of the task, so neither runs in the middle of it. A
+   * second pause keeps the first one's time, and its service unless this one stopped the service again.
+   */
+  pause(id: string, stop: (task: Task) => Promise<{ service: TaskPause["service"]; stopped: string[] }>): Promise<PausedTask> {
+    const task = this.#get(id);
+    return this.#exclusive(id, async () => {
+      const { service, stopped } = await stop(view(task));
+      const current = this.#get(id);
+      const paused: TaskPause = { at: current.paused?.at ?? new Date().toISOString(), service: service ?? current.paused?.service ?? null };
+      const changed = { ...current, paused };
+      this.#save(this.#tasks.map((t) => (t.id === id ? changed : t)));
+      this.#deps.log(`task ${id} paused${stopped.length === 0 ? "" : `: stopped ${stopped.join(", ")}`}`);
+      return { task: view(changed), stopped };
+    });
+  }
+
+  #withUnpaused(task: KnownTask): KnownTask {
+    if (task.paused === null) return task;
+    const changed = { ...task, paused: null };
+    this.#save(this.#tasks.map((t) => (t.id === task.id ? changed : t)));
+    return changed;
   }
 
   /** The daemon stops the task's session at its token budget (ADR-237); a resume clears it. */

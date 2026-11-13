@@ -56,6 +56,7 @@ function task(id: string, repo: string, title: string): Task {
     included: { files: [], problems: [] },
     change: null,
     retryOf: null,
+    paused: null,
   };
 }
 

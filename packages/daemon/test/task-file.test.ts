@@ -27,6 +27,7 @@ const stored = {
   summary: { text: "Fixed, test added.", checkSteps: [], reproTest: null, reportedAt: "2026-10-24T10:00:00.000Z" },
   inReview: true,
   stoppedAtTokenBudget: false,
+  paused: { at: "2026-11-13T18:00:00.000Z", service: { lease: false } },
   handoff: null,
   change: null,
   retryOf: null,
@@ -240,5 +241,13 @@ describe("tasks.json", () => {
     writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
 
     expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, stoppedAtTokenBudget: false }]);
+  });
+
+  test("a task saved before pauses comes back not paused, so it runs and resumes as before (ADR-253)", () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
+    const { paused: _, ...old } = stored;
+    writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
+
+    expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, paused: null }]);
   });
 });

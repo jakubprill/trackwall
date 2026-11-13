@@ -67,6 +67,8 @@ export function makeAgents(
     inContainer: false,
     closeFolderTerminal: async () => {},
     stopReproductionCheck: async () => {},
+    stopTaskWork: async () => ({ service: null, stopped: [] }),
+    startTaskService: async () => {},
     procs,
     repos: {
       repoPath: async (id) => {

@@ -68,6 +68,7 @@ function task(id: string, createdAt: string): Task {
     included: { files: [], problems: [] },
     change: null,
     retryOf: null,
+    paused: null,
   };
 }
 

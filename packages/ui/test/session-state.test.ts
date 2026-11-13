@@ -9,7 +9,15 @@ import {
   SUPERVISOR_TARGET,
   type WaitingTarget,
 } from "../src/lib/session-entries.ts";
-import { agentsInTurn, closeCutsOffTurn, inTurn, sessionPlace, sessionStateLabel, waitingInTab } from "../src/lib/session-state.ts";
+import {
+  agentsInTurn,
+  closeCutsOffTurn,
+  inTurn,
+  sessionPlace,
+  sessionStateLabel,
+  taskStateLabel,
+  waitingInTab,
+} from "../src/lib/session-state.ts";
 
 const running = { kind: "running", runId: "r", startedAt: "2026-10-23T10:00:00Z", pid: 10 } as const;
 
@@ -233,4 +241,22 @@ test("a browser tab's title counts sessions waiting for you, the supervisor amon
   } as unknown as SessionList;
   expect(waitingInTab(list)).toBe(4);
   expect(waitingInTab(undefined)).toBe(0);
+});
+
+describe("a task's state (ADR-253)", () => {
+  const pause = { at: "2026-11-13T18:00:00Z", service: null };
+
+  test("a paused task reads paused, not stopped, although its session was stopped by the pause", () => {
+    expect(taskStateLabel({ paused: pause }, session("a", change("Working"), exited(null, true)))).toEqual({ label: "paused" });
+  });
+
+  test("a paused task reads paused also without a session, as after a daemon restart", () => {
+    expect(taskStateLabel({ paused: pause }, undefined)).toEqual({ label: "paused" });
+  });
+
+  test("a task that is not paused reads its session's state, or no session", () => {
+    expect(taskStateLabel({ paused: null }, session("a", change("Working")))).toEqual({ tone: "ok", label: "working" });
+    expect(taskStateLabel({ paused: null }, session("a", null, exited(null, true)))).toEqual({ label: "stopped" });
+    expect(taskStateLabel({ paused: null }, undefined)).toEqual({ label: "no session" });
+  });
 });

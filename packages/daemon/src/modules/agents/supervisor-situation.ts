@@ -72,7 +72,7 @@ function taskLine({ task, session, outcome }: { task: Task; session: Session | u
   const outdated = outcome?.verificationOutdated ? " but outdated, the worktree changed since" : "";
   const verified = outcome?.verification ? `; last verification ${outcome.verification}${outdated}` : "";
   const merge = outcome?.mergeRequest ? `; ${mergeRequestText(outcome.mergeRequest)}` : "";
-  return `- task ${task.id} ${quoted(task.title ?? task.prompt)} in ${task.repo}, ${origin(task.proposedBy)}: ${taskStatus(session)}${reported}${verified}${merge}`;
+  return `- task ${task.id} ${quoted(task.title ?? task.prompt)} in ${task.repo}, ${origin(task.proposedBy)}: ${taskStatus(task, session)}${reported}${verified}${merge}`;
 }
 
 /** A task's merge request by number and state, with its pipeline and, when it failed, the jobs that failed it. */
@@ -93,7 +93,9 @@ function sessionLine(session: Session): string {
   return `- ${where} (session ${session.id}), started by the user: ${sessionStatus(session)}`;
 }
 
-function taskStatus(session: Session | undefined): string {
+function taskStatus(task: Task, session: Session | undefined): string {
+  // Before the session: a paused task's session has ended too, but `resume_task` refuses it (ADR-253).
+  if (task.paused !== null) return `paused by the user since ${task.paused.at}; only the user resumes it`;
   if (session === undefined) return `no session (${mcpTools.resumeTask.name} goes on with it)`;
   if (session.run.kind === "exited") return `its session ended (${mcpTools.resumeTask.name} goes on with it)`;
   return sessionStatus(session);

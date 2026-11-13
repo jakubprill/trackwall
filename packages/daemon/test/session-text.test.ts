@@ -56,6 +56,7 @@ const task: Task = {
   included: { files: [], problems: [] },
   change: null,
   retryOf: null,
+  paused: null,
 };
 
 const failed: Verification = {

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isSupervisor, type Session } from "./agents.ts";
+import { isSupervisor, type Session, type Task } from "./agents.ts";
 import type { TaskStateChange } from "./task-state.ts";
 
 /**
@@ -57,6 +57,21 @@ export function sessionStateLabel(session: Pick<Session, "run" | "state" | "need
   // Only in place of "working": a `Stale` session prints nothing at all, which "not responding" says more strongly.
   if (session.stuck !== null && state.state === "Working") return { tone: "warning", label: STUCK_LABEL };
   return runningStateLabel(state, session.needsAttention, isIdle(session));
+}
+
+/** A task the user paused (ADR-253): its state wherever a task's shows, in place of its ended session's "stopped". */
+export const PAUSED_LABEL = "paused";
+
+/** A task without a session: none started yet in this daemon run, or its sessions were closed. */
+export const NO_SESSION_LABEL = "no session";
+
+/** A task's state in one line: "paused" for a task the user paused, otherwise its newest session's, if it has one. */
+export function taskStateLabel(
+  task: Pick<Task, "paused">,
+  session: Pick<Session, "run" | "state" | "needsAttention" | "stuck"> | undefined,
+): StatusLabel {
+  if (task.paused !== null) return { label: PAUSED_LABEL };
+  return session ? sessionStateLabel(session) : { label: NO_SESSION_LABEL };
 }
 
 function runningStateLabel(state: TaskStateChange, needsAttention: boolean, idle: boolean): StatusLabel {

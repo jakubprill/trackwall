@@ -27,6 +27,7 @@ function task(id: string, fields: Partial<Task> = {}): Task {
     proposedBy: null,
     inReview: false,
     summary: null,
+    paused: null,
     createdAt: "2026-11-07T09:00:00.000Z",
     ...fields,
   } as Task;
@@ -170,6 +171,18 @@ describe("the column of a task on the wall (ADR-224)", () => {
       column: "idle",
       since: "2026-11-07T09:00:00.000Z",
       detail: "no session",
+    });
+  });
+
+  test("a paused task rests since its pause, even when its last check failed or it was in review (ADR-253)", () => {
+    const stopped = session("s", { task: "t", run: { kind: "exited", exitCode: null, stoppedByUser: true } } as Partial<Session>);
+    const failed = new Map([["t", { task: "t", verification: "failed", verificationOutdated: false, mergeRequest: null } as TaskOutcome]]);
+    const paused = task("t", { inReview: true, paused: { at: "2026-11-07T11:00:00.000Z", service: null } });
+
+    expect(onlyCard(input({ tasks: [paused], sessions: [stopped] }, [], failed))).toMatchObject({
+      column: "idle",
+      since: "2026-11-07T11:00:00.000Z",
+      detail: "paused",
     });
   });
 
