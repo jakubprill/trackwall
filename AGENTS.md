@@ -138,4 +138,4 @@ Tool versions are in `mise.toml` (`mise install`), which also has the `setup`, `
 - Work goes through a PR to `main`, never a push straight to `main`.
 - One topic per PR. Do not mix refactoring with a behaviour change unless the refactoring is needed for it.
 - Commit messages and PR titles in the imperative mood ("Add…", "Resolve…"). History before ADR-43 is in Polish ("Dodaj…").
-- The version is bumped only at release, in three places at once, together with a release note in `docs/release-notes/` (`docs/release.md`).
+- The version is bumped only at release, in four places at once, together with a release note in `docs/release-notes/` (`docs/release.md`).
