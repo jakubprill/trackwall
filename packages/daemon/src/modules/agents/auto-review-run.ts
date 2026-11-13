@@ -204,6 +204,17 @@ export class ReviewAnswer {
 }
 
 /**
+ * The answer without Copilot CLI's own notices, which `ReviewAnswer` gives a paragraph each: what the model wrote, as an
+ * explanation (ADR-249) shows it.
+ */
+export function withoutNotices(answer: string): string {
+  return answer
+    .split("\n\n")
+    .filter((paragraph) => !NOTICE.test(paragraph))
+    .join("\n\n");
+}
+
+/**
  * Chunks carry no message boundaries, so a tool call or a notice of Copilot CLI starts a new paragraph, and a heading
  * is never glued to the text before it.
  */

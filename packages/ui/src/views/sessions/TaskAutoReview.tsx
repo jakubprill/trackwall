@@ -75,8 +75,7 @@ function ReviewResult({ autoReview, patch, review }: { autoReview: AutoReview; p
   const shown = useMemo(() => shownLines(patch), [patch]);
   return (
     <>
-      {diffTruncated && <p className="text-warning text-xs">The change was too large: the reviewer got only its first part.</p>}
-      {message && <p className="text-muted-foreground text-xs">{message}</p>}
+      <ReviewNotes diffTruncated={diffTruncated} message={message} />
       {findings.length > 0 && (
         <ul aria-label="Findings" className="flex flex-col gap-2">
           {findings.map((finding, i) => (
@@ -107,6 +106,16 @@ function ReviewResult({ autoReview, patch, review }: { autoReview: AutoReview; p
   );
 }
 
+/** What a review of any kind says about how it ran: a cut diff, and why it failed or what it was refused. */
+function ReviewNotes({ diffTruncated, message }: Pick<AutoReview, "diffTruncated" | "message">) {
+  return (
+    <>
+      {diffTruncated && <p className="text-warning text-xs">The change was too large: Copilot CLI got only its first part.</p>}
+      {message && <p className="text-muted-foreground text-xs">{message}</p>}
+    </>
+  );
+}
+
 /**
  * The explanation as Copilot CLI wrote it, in Markdown like an agent's answer (untrusted: no raw HTML, no diagrams), or
  * as plain text until the formatter has loaded or if it fails.
@@ -116,8 +125,7 @@ function Explanation({ conn, autoReview }: { conn: Connection; autoReview: AutoR
   const plain = <p className="text-sm whitespace-pre-wrap">{text}</p>;
   return (
     <>
-      {diffTruncated && <p className="text-warning text-xs">The change was too large: Copilot CLI got only its first part.</p>}
-      {message && <p className="text-muted-foreground text-xs">{message}</p>}
+      <ReviewNotes diffTruncated={diffTruncated} message={message} />
       {state === "done" && (
         <ErrorBoundary fallback={() => plain}>
           <Suspense fallback={plain}>

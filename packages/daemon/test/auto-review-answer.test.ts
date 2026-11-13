@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ReviewAnswer } from "../src/modules/agents/auto-review-run.ts";
+import { ReviewAnswer, withoutNotices } from "../src/modules/agents/auto-review-run.ts";
 
 const chunk = (text: string) => ({ sessionUpdate: "agent_message_chunk", content: { type: "text", text } }) as const;
 
@@ -33,5 +33,17 @@ describe("the reviewer's answer from the turn's updates (ADR-182)", () => {
     answer.add(chunk("## Issue: Only inside the call"));
 
     expect(answer.text()).toBe("## Issue: Only inside the call");
+  });
+});
+
+describe("an explanation's text without Copilot CLI's notices (ADR-249)", () => {
+  test("drops the paragraphs that are Copilot CLI's own notices and keeps what the model wrote", () => {
+    expect(withoutNotices("Info: Disabled tools: bash\n\n## Summary\nAdds a total.\n\nWarning: slow model")).toBe(
+      "## Summary\nAdds a total.",
+    );
+  });
+
+  test("an answer of notices alone is empty, so the explanation fails instead of showing them", () => {
+    expect(withoutNotices("Info: Disabled tools: bash")).toBe("");
   });
 });

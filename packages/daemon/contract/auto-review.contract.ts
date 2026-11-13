@@ -177,7 +177,8 @@ describe("an automatic review with the real Copilot CLI", () => {
     expect([...(main?.tools ?? [])].sort()).toEqual(["glob", "grep", "view"]);
     expect(afterView?.toolResults.join("")).toContain("+export const total = 1;");
     expect(explained).toMatchObject({ kind: "explain", state: "done", findings: [], message: null });
-    expect(explained.text).toEndWith(explanation);
+    // Copilot CLI's own notice (`Info: Disabled tools: …`) is not part of the explanation.
+    expect(explained.text).toBe(explanation);
   });
 
   // Last, since it commits rules to the repo that every later task would start from.

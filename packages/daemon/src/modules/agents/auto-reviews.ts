@@ -18,7 +18,7 @@ import { DomainError, messageOf } from "../../infra/errors.ts";
 import { FollowedStateFile, stateFormat } from "../../infra/state-file.ts";
 import { reviewFindings } from "./auto-review-findings.ts";
 import { type ReviewPromptInput, reviewPrompt } from "./auto-review-prompts.ts";
-import { KIND_TOOLS, type ReviewOutcome, type ReviewRunProcs, reviewerArgs, runReview } from "./auto-review-run.ts";
+import { KIND_TOOLS, type ReviewOutcome, type ReviewRunProcs, reviewerArgs, runReview, withoutNotices } from "./auto-review-run.ts";
 import { type RepoRules, RULE_FILES_MAX, RULE_PLACES } from "./repo-rules.ts";
 
 /**
@@ -322,7 +322,7 @@ export class AutoReviews {
       const { answer, refused } = await run;
       end =
         kind === "explain"
-          ? explainedEnd(kept(answer), refused)
+          ? explainedEnd(kept(withoutNotices(answer)), refused)
           : answeredEnd(reviewFindings(answer, worktreePaths(worktree)), kept(answer), refused, entry.omittedRules);
       if (end.state === "failed") this.#deps.log(`${name}: ${end.message}`);
     } catch (err) {
