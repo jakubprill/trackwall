@@ -206,9 +206,17 @@ export function entryTime(entry: StartedEntry): string {
 export function findEntry(entries: readonly SessionEntry[], selection: SessionSelection): SessionEntry | undefined {
   if (selection?.kind === "new") return undefined;
   if (!selection) return entries[0];
-  const found = entries.find((entry) => selects(selection, entry));
+  const found = selectedEntry(entries, selection);
   if (found) return found;
   return (selection.kind === "proposals" ? startedFrom(entries, selection.proposer) : undefined) ?? entries[0];
+}
+
+/** The entry a selection points at, matched as in `findEntry`, and `undefined` rather than a fallback when none does. */
+export function selectedEntry(
+  entries: readonly SessionEntry[],
+  selection: Exclude<SessionSelection, undefined | { kind: "new" }>,
+): SessionEntry | undefined {
+  return entries.find((entry) => selects(selection, entry));
 }
 
 /**

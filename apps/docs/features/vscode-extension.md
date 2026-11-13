@@ -32,7 +32,7 @@ The extension gets its own read-only token from Trackwall, separate from the one
 ## Good to know
 
 - The extension is not in the VS Code Marketplace yet, so VS Code does not update it: after you update Trackwall, download the `.vsix` of the new version and install it the same way. In a terminal, `gh release download v<version> -R jakubprill/trackwall -p "*.vsix"` downloads it and `code --install-extension trackwall-<version>.vsix` installs it; its SHA-256 sum is in the release's `SHA256SUMS.txt`.
-- In a dev container, install the extension in the container's VS Code window: it then runs in the container, next to the Trackwall that runs there. A click on a session still opens Trackwall's window on your computer.
+- In a dev container, install the extension in the container's VS Code window: it then runs in the container, next to the Trackwall that runs there. A click on a session still opens Trackwall's window on your computer; if that window is connected to another Trackwall than the one in the container, it says it does not have the session instead of opening another one.
 - When Trackwall keeps its state somewhere else than `.trackwall` in your home folder, set "Trackwall: State Folder" in VS Code's settings (or `TRACKWALL_HOME`), so the extension finds `viewer.json`.
 - The extension talks only to Trackwall on `127.0.0.1` of the machine it runs on, never through a proxy, and sends its token only to the Trackwall start that wrote it.
 - Other VS Code extensions run in the same process and can read `viewer.json` like any program of yours; the token in it still only shows the sessions.
