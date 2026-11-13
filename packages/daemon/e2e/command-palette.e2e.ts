@@ -23,7 +23,7 @@ async function goTo(page: Page, query: string, first: RegExp): Promise<void> {
   await palette(page).waitFor({ state: "detached" });
 }
 
-describe("the command palette (ADR-244)", () => {
+describe("the command palette (ADR-246)", () => {
   test("Ctrl+K goes to a view, a repo and a session by name; in a terminal Ctrl+K stays the terminal's and Ctrl+Shift+K opens it", async () => {
     const page = await trackwall().open();
 

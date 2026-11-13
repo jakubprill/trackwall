@@ -53,7 +53,7 @@ A group of Settings listed on the left of the Settings view: Workspace, Repo hos
 _Avoid_: tab (that is `TabBar`), page
 
 **Command palette** (`CommandPalette`, `lib/command-palette.ts`; a **command** is `PaletteCommand`):
-The field Ctrl+K (⌘K) opens over any view, Ctrl+Shift+K from a terminal: a few letters find a session, task, repo, view or Settings category, or an action such as "New session", and Enter goes there (ADR-244).
+The field Ctrl+K (⌘K) opens over any view, Ctrl+Shift+K from a terminal: a few letters find a session, task, repo, view or Settings category, or an action such as "New session", and Enter goes there (ADR-246).
 _Avoid_: quick open, search (that is the Repos view's repo search), launcher
 
 **Tab** (`TabBar`):

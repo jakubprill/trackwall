@@ -20,7 +20,7 @@ import { useRemote } from "@/lib/use-remote";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import type { ViewShortcut } from "@/lib/view-shortcut";
 
-/** The class xterm.js gives a terminal's root element; a key pressed inside it is the terminal's (ADR-244). */
+/** The class xterm.js gives a terminal's root element; a key pressed inside it is the terminal's (ADR-246). */
 const TERMINAL_CLASS = "xterm";
 
 function inTerminal(target: EventTarget | null): boolean {
@@ -28,7 +28,7 @@ function inTerminal(target: EventTarget | null): boolean {
 }
 
 /**
- * The command palette (ADR-244, `lib/command-palette.ts`): Ctrl+K (⌘K) over any view, Ctrl+Shift+K from a terminal. It
+ * The command palette (ADR-246, `lib/command-palette.ts`): Ctrl+K (⌘K) over any view, Ctrl+Shift+K from a terminal. It
  * changes the theme itself and hands every other command to `onRun`, which knows the views. Esc or a click outside closes
  * it and gives the keyboard back where it was; a command leaves the keyboard where the command puts it.
  */

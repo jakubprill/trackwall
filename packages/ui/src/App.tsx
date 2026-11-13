@@ -202,7 +202,7 @@ export function App() {
       return true;
     },
   );
-  // A command from the palette (ADR-244); the palette changes the theme itself.
+  // A command from the palette (ADR-246); the palette changes the theme itself.
   const runCommand = (action: Exclude<PaletteAction<View>, { kind: "theme" }>) => {
     switch (action.kind) {
       case "view":
@@ -264,7 +264,7 @@ export function App() {
                 )}
                 {/* Alt+N writes an idea down from every view (ADR-133). */}
                 <IdeaCapture conn={conn} />
-                {/* Ctrl+K (⌘K) goes anywhere by name (ADR-244). */}
+                {/* Ctrl+K (⌘K) goes anywhere by name (ADR-246). */}
                 <CommandPalette conn={conn} views={VIEWS} entries={entries} newWindow={newWindow !== undefined} onRun={runCommand} />
                 {dragging && conn && (
                   // Over the page, not in its flow: a bar that pushes the page down would move the terminals under the pointer.

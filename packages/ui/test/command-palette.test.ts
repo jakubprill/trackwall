@@ -14,7 +14,7 @@ const outside = { isMac: false, inTerminal: false };
 const inTerminal = { isMac: false, inTerminal: true };
 const mac = { isMac: true, inTerminal: false };
 
-describe("the command palette's shortcut (ADR-244)", () => {
+describe("the command palette's shortcut (ADR-246)", () => {
   test("Ctrl+K opens it on Windows and Linux, ⌘K on macOS, also in a terminal there", () => {
     expect(isPaletteShortcut({ ...none, key: "k", ctrlKey: true }, outside)).toBe(true);
     expect(isPaletteShortcut({ ...none, key: "k", metaKey: true }, mac)).toBe(true);
@@ -105,7 +105,7 @@ const sources: PaletteSources<"home" | "repos"> = {
 
 const labels = (commands: readonly PaletteCommand<string>[]) => commands.map((c) => `${c.group}: ${c.label}`);
 
-describe("the command palette's commands (ADR-244)", () => {
+describe("the command palette's commands (ADR-246)", () => {
   test("lists sessions and tasks first, then actions, views with their keys, repos and Settings categories", () => {
     const commands = paletteCommands(sources);
     expect(labels(commands)).toEqual([
@@ -147,7 +147,7 @@ describe("the command palette's commands (ADR-244)", () => {
   });
 });
 
-describe("matching what was typed (ADR-244)", () => {
+describe("matching what was typed (ADR-246)", () => {
   const commands = paletteCommands(sources);
 
   test("an empty field lists every command in order", () => {

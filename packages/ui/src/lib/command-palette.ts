@@ -6,7 +6,7 @@ import { THEME_CHOICE_LABELS, THEME_CHOICES, type ThemeChoice } from "./theme.ts
 import { newWindowShortcutLabel, shortcutLabel, type ViewShortcut } from "./view-shortcut.ts";
 
 /**
- * The command palette (ADR-244): one key opens a field over any view, a few letters find a session, a task, a repo, a
+ * The command palette (ADR-246): one key opens a field over any view, a few letters find a session, a task, a repo, a
  * view or a Settings category, or an action, and Enter goes there. The view bar and the Alt shortcuts need you to know
  * where a thing is; the palette needs only its name. This file holds what the palette lists and how it matches; the
  * window (`components/CommandPalette.tsx`) only shows it.
