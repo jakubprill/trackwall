@@ -137,6 +137,8 @@ describe("workspace", () => {
         supervisorProblem: null,
         sandbox: null,
         sandboxProblem: null,
+        alwaysAllow: [],
+        alwaysAllowProblem: null,
         configFile: file,
       });
       await expect(workspace.overview("api")).rejects.toMatchObject({ code: "not_found" });
@@ -252,6 +254,8 @@ describe("workspace", () => {
         supervisorProblem: null,
         sandbox: null,
         sandboxProblem: null,
+        alwaysAllow: [],
+        alwaysAllowProblem: null,
         configFile: file,
       });
       expect(readFileSync(file, "utf8")).toContain(`projectsDir: ${projects}`);
@@ -641,17 +645,62 @@ describe("vscodeUrl", () => {
   });
 });
 
+describe("tools always allowed in a repo's tasks (alwaysAllow, ADR-249)", () => {
+  test("a task in the repo starts with the tool allowed, a session in the repo root and a task elsewhere do not, and a denial stays", async () => {
+    const { workspace, file } = await workspaceWithProjectsDir();
+    const projectsDir = readFileSync(file, "utf8");
+    writeFileSync(file, `${projectsDir}toolPermissions:\n  - deny: ["shell(git push)"]\n`);
+
+    workspace.alwaysAllow({ repo: "shop", tool: "shell(npm test)" });
+
+    expect(readFileSync(file, "utf8")).toContain("alwaysAllow:\n  - repo: shop\n    tool: shell(npm test)\n");
+    expect(workspace.toolPermissions({ repo: "Shop", supervisor: false, task: "t1" })).toEqual({
+      allow: ["shell(npm test)"],
+      deny: ["shell(git push)"],
+    });
+    expect(workspace.toolPermissions({ repo: "shop", supervisor: false, task: null })).toEqual({ allow: [], deny: ["shell(git push)"] });
+    expect(workspace.toolPermissions({ repo: "billing", supervisor: false, task: "t2" })).toEqual({ allow: [], deny: ["shell(git push)"] });
+  });
+
+  test("the same tool is remembered once, and removing it in Settings takes it out of the file", async () => {
+    const { workspace, file } = await workspaceWithProjectsDir();
+
+    workspace.alwaysAllow({ repo: "shop", tool: "trackwall(verify_task)" });
+    workspace.alwaysAllow({ repo: "shop", tool: "trackwall(verify_task)" });
+    expect(workspace.settings().alwaysAllow).toEqual([{ repo: "shop", tool: "trackwall(verify_task)" }]);
+
+    const after = workspace.removeAlwaysAllowed({ repo: "shop", tool: "trackwall(verify_task)" });
+
+    expect(after.alwaysAllow).toEqual([]);
+    expect(readFileSync(file, "utf8")).not.toContain("alwaysAllow");
+  });
+
+  test("a tool too broad to always allow is refused, also when written by hand, which then stops tasks from starting", async () => {
+    const { workspace, file } = await workspaceWithProjectsDir();
+    const projectsDir = readFileSync(file, "utf8");
+
+    expect(() => workspace.alwaysAllow({ repo: "shop", tool: "shell(rm)" })).toThrow(/always allowed/);
+    writeFileSync(file, `${projectsDir}alwaysAllow:\n  - repo: shop\n    tool: shell\n`);
+
+    expect(workspace.settings().alwaysAllowProblem).toContain("alwaysAllow");
+    expect(() => workspace.toolPermissions({ repo: "shop", supervisor: false, task: "t1" })).toThrow(/alwaysAllow/);
+  });
+});
+
 describe("the tool permissions of a session from workspace.yaml (ADR-66, ADR-78)", () => {
   test("the supervisor is denied the shell and file writes, a session in a repo is not, and supervisor.changesCode lifts it", async () => {
     const { workspace, file } = await workspaceWithProjectsDir();
     const projectsDir = readFileSync(file, "utf8");
     writeFileSync(file, `${projectsDir}toolPermissions:\n  - deny: ["shell(git push)"]\n`);
 
-    expect(workspace.toolPermissions({ repo: null, supervisor: true })).toEqual({ allow: [], deny: ["shell(git push)", "shell", "write"] });
-    expect(workspace.toolPermissions({ repo: "shop", supervisor: false })).toEqual({ allow: [], deny: ["shell(git push)"] });
+    expect(workspace.toolPermissions({ repo: null, supervisor: true, task: null })).toEqual({
+      allow: [],
+      deny: ["shell(git push)", "shell", "write"],
+    });
+    expect(workspace.toolPermissions({ repo: "shop", supervisor: false, task: null })).toEqual({ allow: [], deny: ["shell(git push)"] });
 
     writeFileSync(file, `${projectsDir}toolPermissions:\n  - deny: ["shell(git push)"]\nsupervisor:\n  changesCode: true\n`);
-    expect(workspace.toolPermissions({ repo: null, supervisor: true })).toEqual({ allow: [], deny: ["shell(git push)"] });
+    expect(workspace.toolPermissions({ repo: null, supervisor: true, task: null })).toEqual({ allow: [], deny: ["shell(git push)"] });
   });
 
   test("a free session in the projects folder gets the rules without repos and keeps the shell and file writes (ADR-100)", async () => {
@@ -659,6 +708,6 @@ describe("the tool permissions of a session from workspace.yaml (ADR-66, ADR-78)
     const projectsDir = readFileSync(file, "utf8");
     writeFileSync(file, `${projectsDir}toolPermissions:\n  - deny: ["shell(git push)"]\n  - repos: ["shop"]\n    deny: ["shell(rm)"]\n`);
 
-    expect(workspace.toolPermissions({ repo: null, supervisor: false })).toEqual({ allow: [], deny: ["shell(git push)"] });
+    expect(workspace.toolPermissions({ repo: null, supervisor: false, task: null })).toEqual({ allow: [], deny: ["shell(git push)"] });
   });
 });

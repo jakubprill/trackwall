@@ -6,6 +6,7 @@ import type { LiveFeed } from "@/lib/daemon-events";
 import { SETTINGS_CATEGORIES, type SettingsCategory, type SettingsSection, settingsCategory } from "@/lib/settings-categories";
 import type { AppUpdateHandle } from "@/lib/use-app-update";
 import { cn } from "@/lib/utils";
+import { AlwaysAllowSurface } from "./AlwaysAllowSurface.tsx";
 import { AutoReviewSurface } from "./AutoReviewSurface.tsx";
 import { BrowserNotificationsSurface } from "./BrowserNotificationsSurface.tsx";
 import { ConfigFilesSurface } from "./ConfigFilesSurface.tsx";
@@ -121,6 +122,8 @@ function Section({
       return <TaskTokenBudgetSurface conn={conn} />;
     case "running-tasks-warning":
       return <RunningTasksWarningSurface conn={conn} />;
+    case "always-allow":
+      return <AlwaysAllowSurface conn={conn} />;
     case "sandbox":
       return <SandboxSurface conn={conn} />;
     case "auto-review":

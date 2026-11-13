@@ -80,6 +80,8 @@ export function makeAgents(
       },
       newTaskWorktreesDir: async () => worktreesDir(),
       toolPermissions: () => toolPermissions,
+      alwaysAllowed: () => [],
+      alwaysAllow: () => {},
       supervisorSettings: () => supervisor,
       supervisorModel,
       taskTokenBudget,

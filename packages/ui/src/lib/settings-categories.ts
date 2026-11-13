@@ -31,6 +31,7 @@ export const SETTINGS_CATEGORIES = [
       "retry-model",
       "task-token-budget",
       "running-tasks-warning",
+      "always-allow",
       "sandbox",
       "auto-review",
       "java-navigation",

@@ -304,6 +304,11 @@ export const AgentApproval = z.object({
   question: z.string(),
   /** The choices that answer the dialog at once with their digit; without "No, and tell Copilot…", which needs text typed in the terminal. */
   options: z.array(AgentDialogOption),
+  /**
+   * The tool "Always allow" would remember for the task's repo (ADR-249), as Copilot CLI names it in its "don't ask
+   * again" option (`shell(npm test)`, `trackwall(verify_task)`); absent outside a task and for anything not narrow enough.
+   */
+  alwaysAllow: z.string().optional(),
 });
 export type AgentApproval = z.infer<typeof AgentApproval>;
 
@@ -1059,6 +1064,12 @@ export const agentsApi = {
    * nothing is typed. Only from the UI, never from MCP: an agent does not approve its own tools.
    */
   answerDialog: endpoint("answer-dialog", SessionRequest.extend({ dialog: z.string().min(1).max(64), answer: DialogAnswer }), Session),
+  /**
+   * "Always allow" in a task's approval (ADR-249): remembers the dialog's `alwaysAllow` for the task's repo in
+   * `workspace.yaml` and answers "Yes", only while the same dialog is on the screen (`dialog_changed` otherwise). No MCP
+   * tool does this: an agent must not widen its own permissions.
+   */
+  alwaysAllowDialog: endpoint("always-allow-dialog", SessionRequest.extend({ dialog: z.string().min(1).max(64) }), Session),
   /** Removes an ended session from the list; a running one cannot be closed without stopping it. */
   dismiss: endpoint("dismiss", SessionRequest, SessionList),
   /** What the New session form can offer before a start: whether Java navigation (ADR-99) is set up. */

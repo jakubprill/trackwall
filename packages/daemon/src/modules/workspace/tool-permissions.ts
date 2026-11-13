@@ -1,4 +1,4 @@
-import type { SupervisorSettings, ToolPermissionRules, ToolPermissions } from "@trackwall/protocol";
+import type { AlwaysAllowedTools, SupervisorSettings, ToolPermissionRules, ToolPermissions } from "@trackwall/protocol";
 import { globMatcher } from "../../infra/glob.ts";
 
 /**
@@ -28,4 +28,23 @@ const CODE_CHANGING_TOOLS = ["shell", "write"];
 export function supervisorToolPermissions(rules: ToolPermissionRules, { changesCode }: SupervisorSettings): ToolPermissions {
   const own = sessionToolPermissions(rules, null);
   return changesCode ? own : { allow: own.allow, deny: [...new Set([...own.deny, ...CODE_CHANGING_TOOLS])] };
+}
+
+/** The tools always allowed in repo `repo`'s tasks (`alwaysAllow`, ADR-249), its identifier matched ignoring case. */
+export function alwaysAllowedIn(tools: AlwaysAllowedTools, repo: string): string[] {
+  return [...new Set(tools.filter((t) => sameRepo(t.repo, repo)).map((t) => t.tool))];
+}
+
+/** Whether two repo identifiers name the same repo for `alwaysAllow`: ignoring case, like a rule's `repos`. */
+export function sameRepo(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase();
+}
+
+/**
+ * A task session's tool permissions: its repo's rules and the tools always allowed in its repo (ADR-249). A denial
+ * from the rules still wins, since Copilot CLI refuses a denied tool whatever allows it.
+ */
+export function taskToolPermissions(rules: ToolPermissionRules, tools: AlwaysAllowedTools, repo: string): ToolPermissions {
+  const own = sessionToolPermissions(rules, repo);
+  return { allow: [...new Set([...own.allow, ...alwaysAllowedIn(tools, repo)])], deny: own.deny };
 }

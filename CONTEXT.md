@@ -753,6 +753,10 @@ _Avoid_: popup, prompt (that is the text sent to an agent), permission request (
 Patterns of Copilot CLI tools (`shell(git push)`, `write`) a session may use without asking (`allow`) or never (`deny`), for every session or for repos matching `repos`, given to each new session as `--allow-tool` and `--deny-tool` (ADR-66). By hand only.
 _Avoid_: permission (without qualification), allowlist
 
+**Always-allowed tool** (`alwaysAllow` in `workspace.yaml`, `AlwaysAllowedTool`, `alwaysAllowable`; in the UI *Always allow*):
+One shell command or one MCP tool (`shell(npm test)`, `trackwall(verify_task)`) that every task of one repo runs without asking, remembered by "Always allow" in a task's approval from the pattern Copilot CLI names in its "don't ask again" option, and removed in Settings › Agents (ADR-249). Never a whole kind, a wildcard or a command that writes by path, reaches the network or pushes.
+_Avoid_: always-allow rule, trusted command
+
 **Session environment** (`SessionEnvironment`, `Session.environment`, `Mise.sessionEnv`; in the UI *Environment from mise*):
 The variables mise sets where a session works (repo root, a task's worktree, or the projects folder), given to Copilot CLI over the user's environment; the session keeps only their names, and `problem` when mise refused its place (ADR-93).
 _Avoid_: env file, profile (a session profile is the mise environment below)
