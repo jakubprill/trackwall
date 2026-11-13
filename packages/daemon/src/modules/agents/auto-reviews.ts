@@ -22,7 +22,7 @@ import { KIND_TOOLS, type ReviewOutcome, type ReviewRunProcs, reviewerArgs, runR
 import { type RepoRules, RULE_FILES_MAX, RULE_PLACES } from "./repo-rules.ts";
 
 /**
- * Automatic reviews of tasks (§4.4, ADR-182, ADR-234, ADR-249): Copilot CLI's `/review` on a task's changes (`code`), a
+ * Automatic reviews of tasks (§4.4, ADR-182, ADR-234, ADR-250): Copilot CLI's `/review` on a task's changes (`code`), a
  * check of them against the repo's rules (`rules`), or an explanation of them for the user (`explain`), one of each kind
  * at a time per task, run by `auto-review-run.ts` with only
  * the tools that read. The diff goes to the reviewer as a file the daemon writes (`changes.diff` in
@@ -153,7 +153,7 @@ export class AutoReviews {
       this.#deps.log(`automatic review of task ${task} skipped: ${messageOf(err)}`);
       return;
     }
-    // An explanation is for the user reading the change, so only their click starts one (ADR-249).
+    // An explanation is for the user reading the change, so only their click starts one (ADR-250).
     const on: Record<AutoReviewKind, boolean> = { code: settings.afterReport, rules: settings.rulesAfterReport, explain: false };
     for (const kind of KINDS)
       if (on[kind])

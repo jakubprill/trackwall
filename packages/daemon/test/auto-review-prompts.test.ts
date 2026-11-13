@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { reviewPrompt } from "../src/modules/agents/auto-review-prompts.ts";
 
-describe("the prompt of an explanation of a task's changes (ADR-249)", () => {
+describe("the prompt of an explanation of a task's changes (ADR-250)", () => {
   test("quotes the task's prompt in a text fence, names the diff file and asks for the three sections", () => {
     const prompt = reviewPrompt({
       kind: "explain",

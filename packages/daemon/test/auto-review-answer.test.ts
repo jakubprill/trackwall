@@ -36,7 +36,7 @@ describe("the reviewer's answer from the turn's updates (ADR-182)", () => {
   });
 });
 
-describe("an explanation's text without Copilot CLI's notices (ADR-249)", () => {
+describe("an explanation's text without Copilot CLI's notices (ADR-250)", () => {
   test("drops the paragraphs that are Copilot CLI's own notices and keeps what the model wrote", () => {
     expect(withoutNotices("Info: Disabled tools: bash\n\n## Summary\nAdds a total.\n\nWarning: slow model")).toBe(
       "## Summary\nAdds a total.",

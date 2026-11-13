@@ -42,6 +42,7 @@ describe("a Copilot CLI session in the daemon", () => {
       onTurnStart: () => {},
       usage: new CopilotUsageLog(NO_COPILOT_HOME),
       tokenBudget: null,
+      alwaysAllowed: () => [],
     });
     sessions.push(session);
     session.connect({ write: (data) => written.push(data), resize: () => {} });
@@ -201,6 +202,7 @@ function runningSession(
     onTurnStart: () => {},
     usage: new CopilotUsageLog(NO_COPILOT_HOME),
     tokenBudget: null,
+    alwaysAllowed: () => [],
   });
   sessions.push(session);
   return { session, hooksFile, typedText, promptsSent, events };

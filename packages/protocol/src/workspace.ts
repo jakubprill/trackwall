@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { alwaysAllowable } from "./always-allow.ts";
 import { apiEndpoints, Done } from "./api.ts";
 import { WorkingTreeChanges } from "./changes.ts";
 import { CloneJob, CloneRequest, HostRepos, RemoteRepoSearch, RepoHosts } from "./repo-hosts.ts";
@@ -184,6 +185,26 @@ export const ToolPermissionRules = z.array(ToolPermissionRule);
 export type ToolPermissionRules = z.infer<typeof ToolPermissionRules>;
 
 /**
+ * A tool the user always allows in one repo's tasks (`alwaysAllow` in `workspace.yaml`, ADR-249): written by "Always
+ * allow" in an approval dialog, removed in Settings › Agents, or by hand. Every task session in the repo whose identifier
+ * is `repo` (ignoring case) starts with `--allow-tool=<tool>`, and a running one answers that tool's approval itself. Only
+ * a narrow pattern counts (`alwaysAllowable`), and a denial in `toolPermissions` still wins.
+ */
+export const AlwaysAllowedTool = z
+  .object({
+    repo: z.string().min(1).max(300),
+    tool: ToolPermissionPattern.refine(alwaysAllowable, {
+      message: "only one shell command or one MCP tool can be always allowed, never a whole kind or a command that reaches past the repo",
+    }),
+  })
+  .strict();
+export type AlwaysAllowedTool = z.infer<typeof AlwaysAllowedTool>;
+/** At most this many always-allowed tools, so the list stays one a person reads. */
+export const MAX_ALWAYS_ALLOWED_TOOLS = 200;
+export const AlwaysAllowedTools = z.array(AlwaysAllowedTool).max(MAX_ALWAYS_ALLOWED_TOOLS);
+export type AlwaysAllowedTools = z.infer<typeof AlwaysAllowedTools>;
+
+/**
  * The patterns one session starts with, from the rules that apply to it (`--allow-tool` and `--deny-tool`). Here because
  * `workspace` computes it and `agents` uses it, and daemon modules share types only through `protocol`.
  */
@@ -357,6 +378,10 @@ export const WorkspaceSettings = z.object({
   runningTasksWarning: RunningTasksWarning.nullable(),
   /** Why `runningTasksWarning` in `workspace.yaml` cannot be read; the warning uses the computer's default until it is fixed. */
   runningTasksWarningProblem: z.string().nullable(),
+  /** `alwaysAllow` from `workspace.yaml` (ADR-249): the tools always allowed in each repo's tasks. */
+  alwaysAllow: AlwaysAllowedTools,
+  /** Why `alwaysAllow` in `workspace.yaml` cannot be read; task sessions do not start until it is fixed or removed. */
+  alwaysAllowProblem: z.string().nullable(),
   /** The full path of `workspace.yaml`, so that the user knows which file to edit by hand. */
   configFile: z.string(),
 });
@@ -495,6 +520,12 @@ export const workspaceApi = {
     z.object({ above: RunningTasksWarning.nullable() }).strict(),
     WorkspaceSettings,
   ),
+  /**
+   * Stops always allowing a tool in a repo's tasks (ADR-249): removes the entry from `alwaysAllow` in `workspace.yaml`.
+   * Running sessions stop answering its approvals at once; one started with it keeps Copilot CLI's permission until it
+   * restarts. Only "Always allow" in an approval dialog adds one; no MCP tool does either.
+   */
+  removeAlwaysAllowed: endpoint("remove-always-allowed", AlwaysAllowedTool, WorkspaceSettings),
   /**
    * Whether the supervisor may run commands and change files itself from its next start (ADR-78, ADR-240); `false`
    * removes `supervisor` from `workspace.yaml`. No MCP tool sets it: an agent must not lift its own denial.

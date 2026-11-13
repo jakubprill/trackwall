@@ -30,7 +30,7 @@ export type AutoReviewState = z.infer<typeof AutoReviewState>;
  * What the reviewer checks (ADR-234): `code` is Copilot CLI's `/review` (bugs and security); `rules` checks the change
  * against the repo's own rules for agents (`AGENTS.md`, `CLAUDE.md`, Copilot's instruction files) and its decision records,
  * as they were at the task's base commit; `explain` checks nothing and explains the change to the user who reads it
- * (ADR-249): what it does, why and what to look at, in `text`, with no findings. Each kind has its own last review per task.
+ * (ADR-250): what it does, why and what to look at, in `text`, with no findings. Each kind has its own last review per task.
  */
 export const AutoReviewKind = z.enum(["code", "rules", "explain"]);
 export type AutoReviewKind = z.infer<typeof AutoReviewKind>;

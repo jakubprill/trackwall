@@ -5,7 +5,7 @@ import { type AutoReview, agentsApi, autoReviewApi, type Task, workspaceApi } fr
 import { startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
-// "Explain this diff" (ADR-249) through the real facade: real git gives the task's diff, and the fake Copilot CLI answers
+// "Explain this diff" (ADR-250) through the real facade: real git gives the task's diff, and the fake Copilot CLI answers
 // like a model that reads it, in the three sections the prompt asks for (`test/fixtures/fake-copilot-acp.ts`).
 
 const TOKEN = "x".repeat(43);

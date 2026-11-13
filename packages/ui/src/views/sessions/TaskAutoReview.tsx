@@ -15,7 +15,7 @@ const KIND_ICONS: Record<AutoReviewKind, ReactNode> = { code: <ScanSearch />, ru
 
 /**
  * An automatic review of a task above its diff: "Explain this diff" asks Copilot CLI to explain the task's changes
- * (ADR-249), "Review" asks Copilot CLI's review agent to read them (ADR-182), "Check rules" asks Copilot CLI whether
+ * (ADR-250), "Review" asks Copilot CLI's review agent to read them (ADR-182), "Check rules" asks Copilot CLI whether
  * they keep the repo's rules (ADR-234), and each finding a review or a check reports can become a review comment on its
  * line with one click. Nothing reaches the task's agent until the user sends the review, so a wrong finding costs
  * nothing but the reading.

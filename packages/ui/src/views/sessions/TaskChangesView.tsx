@@ -22,7 +22,7 @@ const POLL_MS = 2000;
  * the tab is open, so you can see what the agent is doing before it commits anything. `paused` stops polling
  * (the worktree disappears while the task is being ended) and keeps the last data. Lines of the diff take review comments
  * for the task's agent (ADR-62), and the automatic review above the diff offers findings as such comments (ADR-182), under the explanation of the
- * changes (ADR-249).
+ * changes (ADR-250).
  */
 export function TaskChangesView({ conn, task, paused, review }: { conn: Connection; task: string; paused: boolean; review: TaskReview }) {
   const load = useCallback(() => post(conn, agentsApi.taskChanges, { task }), [conn, task]);

@@ -13,7 +13,7 @@ import { lineComment, type ReviewDraft } from "./review-drafts.ts";
 
 /**
  * How a task's automatic review (ADR-182), its check against the repo's rules (ADR-234) and the explanation of its
- * changes (ADR-249) show in its "Changes" tab, and how a finding becomes a review comment (ADR-62) on a line of the diff
+ * changes (ADR-250) show in its "Changes" tab, and how a finding becomes a review comment (ADR-62) on a line of the diff
  * the tab shows. No React here, so the rules are tested on their own.
  */
 

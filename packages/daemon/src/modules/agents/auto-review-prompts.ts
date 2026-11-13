@@ -1,5 +1,5 @@
 /**
- * The one prompt of an automatic review (ADR-182, ADR-234, ADR-249), by its kind. Each hands the reviewer the task's diff
+ * The one prompt of an automatic review (ADR-182, ADR-234, ADR-250), by its kind. Each hands the reviewer the task's diff
  * as a file, since it has no shell for git. A review and a rules check ask for the issues in the shape of Copilot CLI's
  * review agent, which `auto-review-findings.ts` reads; an explanation asks for Markdown the user reads as it is.
  */
@@ -92,7 +92,7 @@ function fenceFor(text: string): string {
 }
 
 /**
- * The explanation of a change for the user who reviews it (ADR-249): not `/review` and no judgement, which the other
+ * The explanation of a change for the user who reviews it (ADR-250): not `/review` and no judgement, which the other
  * kinds give, but what the change does, why, and where to read closely, in Markdown the "Changes" tab shows as it is.
  * The task's prompt says what the change was for; it is the user's own text, quoted in a fence as data.
  */

@@ -337,6 +337,7 @@ export const WorkspaceKey = z.enum([
   "repoHosts",
   "starredRepos",
   "toolPermissions",
+  "alwaysAllow",
   "sandbox",
   "agentSecrets",
   "sessionProfile",
@@ -369,6 +370,7 @@ export const WORKSPACE_KEYS: Record<WorkspaceKey, WorkspaceKeyInfo> = {
   repoHosts: { purpose: "Where the Repos view searches and clones from.", docs: "repos", settings: "repo-hosts" },
   starredRepos: { purpose: "The repos you starred, listed first in the Repos view.", docs: "repos", settings: "repos" },
   toolPermissions: { purpose: "Which tools sessions may use without asking you.", docs: "approvals", settings: null },
+  alwaysAllow: { purpose: "Tools you always allow in a repo's tasks, from Always allow.", docs: "approvals", settings: "agents" },
   sandbox: { purpose: "Which tasks run their commands in Copilot CLI's sandbox.", docs: "approvals", settings: "agents" },
   agentSecrets: { purpose: "The secrets from mise that the tools of sessions may read.", docs: "mise-environment", settings: null },
   sessionProfile: {

@@ -517,7 +517,7 @@ The second kind of automatic review (the first is `code`): Copilot CLI, with onl
 _Avoid_: lint (that is a tool's rule), policy, compliance, guardrails
 
 **Explanation** (`AutoReviewKind` `explain`; "Explain this diff" and the "Explanation" section of the task's "Changes" tab):
-The third kind of automatic review: Copilot CLI, with only the tools that read, explains a task's changes to the user who reviews them, from the task's prompt and its diff, in three sections (what and why, the parts of the change, what is worth a closer look), without findings or a verdict (ADR-249).
+The third kind of automatic review: Copilot CLI, with only the tools that read, explains a task's changes to the user who reviews them, from the task's prompt and its diff, in three sections (what and why, the parts of the change, what is worth a closer look), without findings or a verdict (ADR-250).
 _Avoid_: summary (that is the agent's report, `report_result`), description (that is the merge request's), walkthrough
 
 **Merge request** (`MergeRequest`, module `merge-requests`, `mergeRequestsApi`; the "Merge request" section of the task panel):
@@ -756,6 +756,10 @@ _Avoid_: popup, prompt (that is the text sent to an agent), permission request (
 **Tool permission rule** (`toolPermissions` in `workspace.yaml`, `ToolPermissionRules`, `sessionToolPermissions`):
 Patterns of Copilot CLI tools (`shell(git push)`, `write`) a session may use without asking (`allow`) or never (`deny`), for every session or for repos matching `repos`, given to each new session as `--allow-tool` and `--deny-tool` (ADR-66). By hand only.
 _Avoid_: permission (without qualification), allowlist
+
+**Always-allowed tool** (`alwaysAllow` in `workspace.yaml`, `AlwaysAllowedTool`, `alwaysAllowable`; in the UI *Always allow*):
+One shell command or one MCP tool (`shell(npm test)`, `trackwall(verify_task)`) that every task of one repo runs without asking, remembered by "Always allow" in a task's approval from the pattern Copilot CLI names in its "don't ask again" option, and removed in Settings › Agents (ADR-249). Never a whole kind, a wildcard or a command that writes by path, reaches the network or pushes.
+_Avoid_: always-allow rule, trusted command
 
 **Session environment** (`SessionEnvironment`, `Session.environment`, `Mise.sessionEnv`; in the UI *Environment from mise*):
 The variables mise sets where a session works (repo root, a task's worktree, or the projects folder), given to Copilot CLI over the user's environment; the session keeps only their names, and `problem` when mise refused its place (ADR-93).

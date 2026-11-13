@@ -2,6 +2,7 @@ import { type AgentDialog, agentsApi, type DialogAnswer } from "@trackwall/proto
 import { type KeyboardEvent, type MouseEvent, useEffect, useRef, useState } from "react";
 import { PatchLines } from "@/components/PatchLines";
 import { Button } from "@/components/ui/button";
+import { alwaysAllowLabel } from "@/lib/always-allow";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { PATCH_SHOWN_LINES } from "@/lib/conversation";
@@ -20,7 +21,8 @@ import { useAction } from "@/lib/use-action";
  * (ADR-107). A question is answered in the session terminal (`onOpen`). An approval that shows where the user works
  * (`takesKeyboard`, in the supervisor panel while the keyboard is in it) takes the keyboard to its first option, unless the
  * user is writing a message; the arrows move between its options and Enter picks one, though not in the first moment, so
- * that an Enter meant for the message just sent does not answer it.
+ * that an Enter meant for the message just sent does not answer it. In a task, "Always allow" remembers the tool Copilot
+ * CLI names for the task's repo and answers "Yes" (ADR-249).
  */
 /** Marks the buttons of Copilot CLI's options, which the arrows move between. */
 const OPTION = "data-dialog-option";
@@ -47,7 +49,11 @@ export function AgentDialogCard({
     (key: DialogAnswer) => post(conn, agentsApi.answerDialog, { session, dialog: dialog.id, answer: key }),
     () => setAnswered(true),
   );
-  const disabled = answer.pending || answered;
+  const alwaysAllow = useAction(
+    () => post(conn, agentsApi.alwaysAllowDialog, { session, dialog: dialog.id }),
+    () => setAnswered(true),
+  );
+  const disabled = answer.pending || alwaysAllow.pending || answered;
   const options = useRef<HTMLFieldSetElement>(null);
   // The answers the arrows move between: Copilot CLI's options, without "Stop the agent".
   const optionButtons = () => [...(options.current?.querySelectorAll<HTMLButtonElement>(`button[${OPTION}]`) ?? [])];
@@ -69,10 +75,10 @@ export function AgentDialogCard({
     buttons[next]?.focus();
   };
   // A click from Enter or Space has no pointer (`detail` 0).
-  const pick = (key: DialogAnswer, event: MouseEvent<HTMLButtonElement>) => {
+  const pick = (run: () => void, event: MouseEvent<HTMLButtonElement>) => {
     if (keyAnswerTooSoon(event.detail === 0, performance.now() - shownAt.current)) return;
     if (options.current?.contains(document.activeElement)) onKeyboardLeaves?.();
-    answer.run(key);
+    run();
   };
   const change = dialog.kind === "approval" ? changeLines(dialog.patch ?? "", PATCH_SHOWN_LINES, dialog.patchCut ?? false) : undefined;
   return (
@@ -105,12 +111,31 @@ export function AgentDialogCard({
                 className="h-auto justify-start py-1.5 text-left whitespace-normal"
                 disabled={disabled}
                 {...{ [OPTION]: "" }}
-                onClick={(event) => pick(option.key, event)}
+                onClick={(event) => pick(() => answer.run(option.key), event)}
               >
                 {option.label}
               </Button>
             ))}
-            <Button size="sm" variant="ghost" className="justify-start" disabled={disabled} onClick={(event) => pick("stop", event)}>
+            {dialog.alwaysAllow !== undefined && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-auto justify-start py-1.5 text-left whitespace-normal"
+                disabled={disabled}
+                title="Runs it now, and from now on in every task of this repo without asking; an MCP tool with any arguments. You can remove it in Settings > Agents."
+                {...{ [OPTION]: "" }}
+                onClick={(event) => pick(() => alwaysAllow.run(), event)}
+              >
+                {alwaysAllowLabel(dialog.alwaysAllow)}
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="justify-start"
+              disabled={disabled}
+              onClick={(event) => pick(() => answer.run("stop"), event)}
+            >
               Stop the agent
             </Button>
           </fieldset>
@@ -124,7 +149,7 @@ export function AgentDialogCard({
           </Button>
         </>
       )}
-      {answer.error && <p className="text-destructive text-xs">{answer.error}</p>}
+      {(answer.error ?? alwaysAllow.error) && <p className="text-destructive text-xs">{answer.error ?? alwaysAllow.error}</p>}
     </div>
   );
 }

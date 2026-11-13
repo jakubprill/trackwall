@@ -119,6 +119,14 @@ const fire = pluginHooks(process.argv, "s1");
 const real = reference();
 
 /**
+ * Like Copilot CLI, a command an `--allow-tool=shell(<command>)` names runs without an approval request (the contract
+ * test of ADR-249): the reference's command, as its dialog names it in "don't ask again" (none on Windows, where a
+ * PowerShell command has no such option).
+ */
+const referenceCommand = real.approval.dialog.map((line) => /don't ask again for `([^`]+)`/.exec(line)?.[1]).find((c) => c !== undefined);
+const commandAllowed = referenceCommand !== undefined && taskArgs.includes(`--allow-tool=shell(${referenceCommand})`);
+
+/**
  * The input box as Copilot CLI draws it with its `PROMPT_FRAME` feature on (ADR-220, `copilot-prompt-frame.contract.ts`):
  * framed in half blocks with a rail on the left instead of between two rules with `❯`, as wide as the rules, over the
  * same footer. The real binary also needs the terminal to answer its colour queries, which ConPTY does not pass on;
@@ -370,7 +378,7 @@ function submit(line: string): void {
   lastAnswer = `Thinking about: ${line}`;
   process.stdout.write(`${shortLines(lastAnswer)}\r\n`);
   const parallel = line === PARALLEL_TOOLS_PROMPT;
-  if (allowAllTools) {
+  if (allowAllTools || commandAllowed) {
     endTurn(replay([...(parallel ? [firstToolDone] : []), ...real.approval.hooks.slice(asked)]));
     return;
   }

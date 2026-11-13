@@ -24,7 +24,7 @@
  * added line of the diff file that holds `<text>` is a violation in the format the prompt asks for, quoting the rule;
  * without one it answers that it found none. The answer ends with the rule files it read and its arguments.
  *
- * A prompt that asks to explain a change (ADR-249) is answered in the three sections the prompt asks for: the first line
+ * A prompt that asks to explain a change (ADR-250) is answered in the three sections the prompt asks for: the first line
  * of the task's prompt it quotes, and each file the diff file (or `FAKE_COPILOT_REVIEW_FILE`) changes with its count of
  * added lines, then its arguments.
  *

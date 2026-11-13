@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import {
   AgentSecrets,
+  AlwaysAllowedTools,
   AutoReviewSettings,
   DayStartSettings,
   GraphConfig,
@@ -32,7 +33,7 @@ import { type WorkspaceKeyValues, workspaceKeyValue } from "./workspace-key-valu
 /**
  * `workspace.yaml` (§4.5, ADR-13): the workspace configuration, which the user can edit by hand and keep
  * in a private repo. Read on every use, so a manual edit works without restarting the daemon. A write changes
- * only one key (`projectsDir`, `worktreesDir`, `gitProgram`, `repoHosts`, `starredRepos`, which the star in Repos writes, `javaNavigation`, which the Java navigation install writes, or `localConfigRemote`, which "Push to this remote" for the local config store writes, or `sessionProfile`, or `autoReview`, or `supervisorModel`, or `retryModel`, or `taskTokenBudget`, or `runningTasksWarning`, or `supervisor`, or `sandbox`; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `agentSecrets` and `taskBranchPrefix` only by hand) and keeps comments and the other keys,
+ * only one key (`projectsDir`, `worktreesDir`, `gitProgram`, `repoHosts`, `starredRepos`, which the star in Repos writes, `javaNavigation`, which the Java navigation install writes, or `localConfigRemote`, which "Push to this remote" for the local config store writes, or `sessionProfile`, or `autoReview`, or `alwaysAllow`, which "Always allow" in an approval dialog and Settings › Agents write, or `supervisorModel`, or `retryModel`, or `taskTokenBudget`, or `runningTasksWarning`, or `supervisor`, or `sandbox`; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `agentSecrets` and `taskBranchPrefix` only by hand) and keeps comments and the other keys,
  * including the `repos` list from version 0.2.0, which is no longer read (ADR-18): it is the user's file, so removing it is up to them.
  */
 
@@ -69,6 +70,8 @@ const Keys: { [K in WorkspaceKey]: z.ZodType<WorkspaceKeyValues[K], unknown> } =
   graph: GraphConfig.nullish().transform((graph) => graph ?? GraphConfig.parse({})),
   // Tool permission rules for Copilot CLI sessions (ADR-66); only by hand, like `repoTags`.
   toolPermissions: ToolPermissionRules.nullish().transform((rules) => rules ?? []),
+  // The tools always allowed in a repo's tasks (ADR-249); written by "Always allow" and Settings, or by hand.
+  alwaysAllow: AlwaysAllowedTools.nullish().transform((tools) => tools ?? []),
   // The user's addition to the day start's first message (ADR-70); only by hand, like `repoTags`.
   dayStart: DayStartSettings.nullish().transform((settings) => settings ?? null),
   // Whether the supervisor may change code itself (ADR-78); set in Settings › Agents or by hand (ADR-240).
@@ -162,6 +165,16 @@ export class WorkspaceFile {
   /** Tool permission rules (`toolPermissions`, ADR-66) in file order. */
   toolPermissionRules(): ToolPermissionRules {
     return this.get("toolPermissions", Keys.toolPermissions);
+  }
+
+  /** The tools always allowed in a repo's tasks (`alwaysAllow`, ADR-249), in the order they were added. */
+  alwaysAllowedTools(): AlwaysAllowedTools {
+    return this.get("alwaysAllow", Keys.alwaysAllow);
+  }
+
+  /** None removes the key, like `setStarredRepos`. */
+  setAlwaysAllowedTools(tools: AlwaysAllowedTools): void {
+    this.set("alwaysAllow", tools.length === 0 ? null : tools);
   }
 
   /** The day start settings (`dayStart`, ADR-70); `null` without the key. */
