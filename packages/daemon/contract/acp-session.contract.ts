@@ -473,18 +473,53 @@ describe("a task that plans first with the real Copilot CLI (ADR-229)", () => {
     const resumedView = conversationOf(resumed);
     await resumedView.infoUntil((i) => i.mode?.current === PLAN_MODE, "the plan mode after the resume");
 
+    resumedView.detach();
     model.reply(edit(join(task.worktree, "README.md")), { text: "Implemented the plan." });
     expect(await agents.approvePlan(task.id)).toMatchObject({ plan: "approved" });
-    await resumedView.infoUntil((i) => i.mode?.current === AGENT_MODE, "the agent mode");
-    await resumedView.until((entries) => entries.some((e) => e.kind === "agent" && e.text === "Implemented the plan."), "the answer");
-    await endOfTurn(resumed);
+    // Without approvals the approval starts the session again, so that Copilot CLI's --allow-all-tools applies only from now on.
+    const approved = taskSessionOf(task.id);
+    expect(approved).not.toBe(resumed);
+    const approvedView = conversationOf(approved);
+    await approvedView.infoUntil((i) => i.mode?.current === AGENT_MODE, "the agent mode");
+    await approvedView.until((entries) => entries.some((e) => e.kind === "agent" && e.text === "Implemented the plan."), "the answer");
+    await endOfTurn(approved);
 
     const implementing = model.requests().at(-2)?.lastUserText;
     expect(implementing).toEndWith(PLAN_APPROVED_MESSAGE);
     expect(implementing).not.toContain("[[PLAN]]");
     expect(readFileSync(join(task.worktree, "README.md"), "utf8")).toStartWith("# the shop");
-    resumedView.detach();
-    await agents.stop(resumed);
+    approvedView.detach();
+    await agents.stop(approved);
+  });
+});
+
+describe("a task without approvals that plans first with the real Copilot CLI (ADR-229 addendum)", () => {
+  test("Plan mode lets a script write a file, so while the plan waits the task asks before it, and once the plan is approved its session starts again without questions", async () => {
+    const { agents } = daemon.facade;
+    const written = "written-while-planning.txt";
+    const script = `python3 -c "open('${written}','w').write('1')"`;
+    model.reply((request) => shellCall(request, { bash: script, powershell: script }));
+
+    const task = await agents.createTask("shop", "plan the title", { view: "conversation", approvals: "auto", planFirst: true });
+    const planning = taskSessionOf(task.id);
+    const approval = await waitFor(agents, planning, (s) => s.dialog?.kind === "approval", "the script's approval", SESSION_MS);
+    if (approval.dialog?.kind !== "approval") throw new Error("no approval dialog");
+    // Rejecting the tool ends Copilot CLI's turn without asking the model again.
+    agents.answerDialog(planning, approval.dialog.id, String(approval.dialog.options.length));
+    await endOfTurn(planning);
+    expect(existsSync(join(task.worktree, written))).toBe(false);
+
+    model.reply((request) => shellCall(request, { bash: script, powershell: script }), { text: "Implemented the plan." });
+    await agents.approvePlan(task.id);
+    const implementing = taskSessionOf(task.id);
+    expect(implementing).not.toBe(planning);
+    const view = conversationOf(implementing);
+    await view.until((entries) => entries.some((e) => e.kind === "agent" && e.text === "Implemented the plan."), "the answer");
+    await endOfTurn(implementing);
+    expect(agents.sessions().sessions.find((s) => s.id === implementing)?.dialog).toBeNull();
+    view.detach();
+    expect(existsSync(join(task.worktree, written))).toBe(true);
+    await agents.stop(implementing);
   });
 });
 
