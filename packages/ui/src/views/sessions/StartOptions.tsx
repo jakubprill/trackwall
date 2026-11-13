@@ -24,6 +24,7 @@ export function StartOptions({
   javaNavigation,
   view,
   planFirst,
+  secondAttempt,
   sandbox = null,
   disabled,
 }: {
@@ -39,6 +40,11 @@ export function StartOptions({
   view?: { value: SessionView; onChange: (value: SessionView) => void };
   /** Whether the task's agent plans first in Copilot CLI's Plan mode (ADR-229); `unavailable` is why not now, `null` when it can. */
   planFirst?: { value: boolean; onChange: (value: boolean) => void; unavailable: string | null };
+  /**
+   * A second attempt at the task started with it, to compare side by side (ADR-251): `null` when off, else the model
+   * typed for it, empty for the task's own model.
+   */
+  secondAttempt?: { value: string | null; onChange: (value: string | null) => void; suggestions?: readonly ProviderModel[] };
   /**
    * Whether the task's commands run in Copilot CLI's sandbox (ADR-181), which `workspace.yaml` decides, not a pill; shown
    * only with `approvals`, for a task, since sessions never run in it.
@@ -119,6 +125,15 @@ export function StartOptions({
           >
             Plan first
           </Pill>
+        )}
+        {secondAttempt && (
+          <SecondAttemptPill
+            subject={subject}
+            value={secondAttempt.value}
+            onChange={secondAttempt.onChange}
+            suggestions={secondAttempt.suggestions ?? []}
+            disabled={disabled}
+          />
         )}
       </div>
       {approvals?.value === "auto" && (
@@ -257,6 +272,71 @@ function ModelPill({
       {suggestions.length > 0 && <ProviderModelOptions id={listId} models={suggestions} />}
       {invalid && <span className="text-destructive pr-2 text-xs">A model id, such as claude-opus-5.5</span>}
       <UnofferedModelNote typed={value} models={suggestions} onPick={onChange} className="max-w-xs pr-2" />
+    </span>
+  );
+}
+
+/**
+ * A second attempt at the task (ADR-251): a pill that is off until clicked, then a field for the second attempt's model,
+ * empty for the task's own one, and a button that turns it off again.
+ */
+function SecondAttemptPill({
+  subject,
+  value,
+  onChange,
+  suggestions,
+  disabled,
+}: {
+  subject: string | undefined;
+  value: string | null;
+  onChange: (value: string | null) => void;
+  suggestions: readonly ProviderModel[];
+  disabled: boolean;
+}) {
+  const listId = useId();
+  if (value === null)
+    return (
+      <Pill
+        label={named("Second attempt", subject)}
+        on={false}
+        risky={false}
+        disabled={disabled}
+        onClick={() => onChange("")}
+        tooltip="Starts the task twice from the same commit, on another model or the same one, so you can compare the two attempts side by side in its Compare tab and keep the better one. Each attempt uses its own credits."
+      >
+        Second attempt
+      </Pill>
+    );
+  const invalid = value.trim() !== "" && typedModel(value) === undefined;
+  return (
+    <span className="border-primary/45 bg-accent inline-flex h-8 items-center gap-2 rounded-full border pr-1 pl-3 text-sm">
+      <span className="text-muted-foreground" aria-hidden>
+        Second attempt on
+      </span>
+      <Input
+        aria-label={named("Model for the second attempt", subject)}
+        aria-invalid={invalid}
+        className="h-6 w-44 rounded-full font-mono text-xs"
+        placeholder="the same model"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        maxLength={TASK_MODEL_MAX}
+        spellCheck={false}
+        disabled={disabled}
+        list={suggestions.length > 0 ? listId : undefined}
+      />
+      {suggestions.length > 0 && <ProviderModelOptions id={listId} models={suggestions} />}
+      {invalid && <span className="text-destructive pr-2 text-xs">A model id, such as claude-opus-5.5</span>}
+      <button
+        type="button"
+        aria-label={named("No second attempt", subject)}
+        title="No second attempt"
+        disabled={disabled}
+        onClick={() => onChange(null)}
+        className="text-muted-foreground hover:text-foreground rounded-full px-2"
+      >
+        ×
+      </button>
     </span>
   );
 }

@@ -35,6 +35,8 @@ export interface TaskEnding {
   /** The task's round commits (ADR-168): their subject says only "WIP round", so the record lists the other commits. */
   roundCommits: ReadonlySet<string>;
   branchKept: boolean;
+  /** The other attempt at the same task the user keeps instead of this one (ADR-251); `null` for any other end. */
+  keptInstead: string | null;
   endedAt: Date;
   /** What the task's conversation used over its life, read from its event log once its sessions stopped (ADR-228). */
   conversation: ConversationUse;
@@ -46,7 +48,7 @@ export interface TaskEnding {
  */
 export async function endedTaskFacts(
   task: StoredTask,
-  { roundCommits, branchKept, endedAt, conversation }: TaskEnding,
+  { roundCommits, branchKept, keptInstead, endedAt, conversation }: TaskEnding,
   git: EndedTaskGit,
   log: (msg: string) => void,
 ): Promise<EndedTaskFacts> {
@@ -66,6 +68,7 @@ export async function endedTaskFacts(
     item: task.item,
     handoffFrom: task.handoff?.task ?? null,
     retryOf: task.retryOf,
+    keptInstead,
     summary: task.summary === null ? null : task.summary.text.slice(0, TASK_HISTORY_SUMMARY_MAX_CHARS),
     commits: [],
     commitsTotal: null,

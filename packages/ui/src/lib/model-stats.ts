@@ -61,11 +61,16 @@ export function perVerifiedTask(row: ModelStatsRow): CopilotUsage | null {
   return scaled(average, row.tasks / row.verified);
 }
 
-/** Notes on how a model got its tasks: started on another model, or split between models. */
+/**
+ * Notes on how a model got its tasks (started on another model, or split between models) and how its attempts fared
+ * when the user compared them with another attempt at the same task (ADR-251).
+ */
 export function rowNotes(row: ModelStatsRow): string[] {
   const notes: string[] = [];
   if (row.askedForAnother > 0) notes.push(`${countLabel(row.askedForAnother, TASKS)} started on another model`);
   if (row.sharedWithAnother > 0) notes.push(`${countLabel(row.sharedWithAnother, TASKS)} also ran on another model`);
+  const compared = row.keptInComparison + row.droppedInComparison;
+  if (compared > 0) notes.push(`kept in ${row.keptInComparison} of ${countLabel(compared, { one: "comparison", other: "comparisons" })}`);
   return notes;
 }
 

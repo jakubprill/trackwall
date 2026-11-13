@@ -1200,12 +1200,20 @@ export const agentsApi = {
    * Ending a task: removes the worktree, and without `keepBranch` also the branch. Changes that would be lost (uncommitted
    * files and commits outside the branch, and without `keepBranch` also the task's commits) the daemon deletes only with
    * `discardChanges`; otherwise `unsaved_changes`. With `discardFingerprint` (ADR-210) it deletes them only while the
-   * worktree still has that fingerprint, the one of what the user confirmed; otherwise `unsaved_changes` too.
+   * worktree still has that fingerprint, the one of what the user confirmed; otherwise `unsaved_changes` too. With
+   * `keptInstead` (ADR-251) the user ends this attempt at a task because they keep that other attempt at it, which the
+   * task journal records; another task is `bad_request`.
    */
   removeTask: endpoint(
     "remove-task",
     z
-      .object({ task: TaskId, keepBranch: z.boolean(), discardChanges: z.boolean(), discardFingerprint: WorktreeFingerprint.optional() })
+      .object({
+        task: TaskId,
+        keepBranch: z.boolean(),
+        discardChanges: z.boolean(),
+        discardFingerprint: WorktreeFingerprint.optional(),
+        keptInstead: TaskId.optional(),
+      })
       .strict(),
     Done,
   ),

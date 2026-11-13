@@ -35,6 +35,10 @@ export const ModelStatsRow = z.object({
   askedForAnother: z.number().int().nonnegative(),
   /** Tasks that also ran on another model (after `/model` or a restart), credited here by the most calls. */
   sharedWithAnother: z.number().int().nonnegative(),
+  /** Tasks the user kept over another attempt at the same task, compared side by side (ADR-251). */
+  keptInComparison: z.number().int().nonnegative(),
+  /** Tasks the user ended because they kept another attempt at the same task (ADR-251). */
+  droppedInComparison: z.number().int().nonnegative(),
   /** What the tasks used together; `null` when none of them has its usage recorded. */
   usage: CopilotUsage.nullable(),
   /** Tasks whose usage is in `usage`. */

@@ -61,6 +61,11 @@ export const EndedTask = z.object({
    * for a first attempt and in records written before ADR-233.
    */
   retryOf: TaskId.nullable().default(null),
+  /**
+   * The other attempt at the same task the user kept when they ended this one from a comparison (ADR-251); `null` when
+   * they ended it otherwise and in records written before ADR-251.
+   */
+  keptInstead: TaskId.nullable().default(null),
   /** The task session's last `report_result`, cut to `TASK_HISTORY_SUMMARY_MAX_CHARS`; `null` when it reported none. */
   summary: z.string().nullable(),
   /** The newest commits from the base to `head`, newest first. */

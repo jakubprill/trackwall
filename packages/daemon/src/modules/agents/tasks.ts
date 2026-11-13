@@ -5,6 +5,7 @@ import {
   type AgentTaskChanges,
   type ChangedFile,
   type CreatedChange,
+  firstAttempt,
   HANDED_TO_SUPERVISOR,
   type IncludedFiles,
   type JavaNavigationStatus,
@@ -439,14 +440,12 @@ export class AgentTasks {
    * navigation, view, handoff and `item` (the caller checks it is still on the board), from the same base commit and
    * base branch, so the two attempts start from the same code; `retryOf` names the task it retries. It reports to the
    * user, not to a proposer, whose coordination stays with the first attempt, which goes on as it is. The same model as
-   * the task's would only repeat the attempt, and a part of a change starts with the other parts on one branch name, so
-   * both are `bad_request`.
+   * the task's is a second attempt to compare with the first (ADR-251). A part of a change starts with the other parts
+   * on one branch name, so it is `bad_request`.
    */
   retry(id: string, model: string | null, item: string | null): Promise<Task> {
     const task = this.#get(id);
     if (this.#removing.has(id)) throw new DomainError("bad_request", "this task is being ended");
-    if (model === task.model)
-      throw new DomainError("bad_request", `the task already runs on ${model ?? "Copilot CLI's default"}; pick another model`);
     if (task.change !== null) throw new DomainError("bad_request", "a part of a change cannot be retried on its own");
     const origin: TaskOrigin = {
       id: randomUUID(),
@@ -1021,12 +1020,19 @@ export class AgentTasks {
    * Ending a task: removes the worktree, and without `keepBranch` also the branch. Uncommitted files and commits outside
    * the branch, and when removing the branch also the task's commits, are lost only with `discardChanges`; otherwise
    * `unsaved_changes` with what would be lost. Returns the facts of the ended task for the task journal (ADR-150),
-   * read from its worktree before it goes.
+   * read from its worktree before it goes, with `keptInstead`, the other attempt the user keeps (ADR-251).
    */
-  remove(id: string, keepBranch: boolean, discardChanges: boolean, discardFingerprint?: string): Promise<EndedTaskFacts> {
+  remove(
+    id: string,
+    keepBranch: boolean,
+    discardChanges: boolean,
+    discardFingerprint?: string,
+    keptInstead: string | null = null,
+  ): Promise<EndedTaskFacts> {
     const task = this.#get(id);
     if (discardFingerprint !== undefined && !(keepBranch && discardChanges))
       throw new DomainError("bad_request", "a confirmed fingerprint goes only with discarding changes and keeping the branch");
+    if (keptInstead !== null) this.#refuseUnlessOtherAttempt(task, keptInstead);
     return this.#exclusive(id, async () => {
       this.#refuseRunning(task, "ending it");
       const facts = await this.#whileRemoving(id, async () => {
@@ -1047,6 +1053,7 @@ export class AgentTasks {
         const ending = {
           roundCommits: this.#deps.roundCommits(id),
           branchKept: keepBranch,
+          keptInstead,
           endedAt: new Date(),
           conversation: await this.#conversationUse(task),
         };
@@ -1059,6 +1066,18 @@ export class AgentTasks {
       if (task.javaNavigation) await this.#deps.javaNavigation.remove(task.id, `task ${task.id}`);
       return facts;
     });
+  }
+
+  /**
+   * The attempt the user keeps when ending `task` from a comparison (ADR-251) must be another listed attempt at the same
+   * task, one that goes on: the journal credits it with the choice.
+   */
+  #refuseUnlessOtherAttempt(task: KnownTask, kept: string): void {
+    const other = this.#tasks.find((t) => t.id === kept);
+    if (other === undefined || other.id === task.id || this.#removing.has(kept))
+      throw new DomainError("bad_request", `the attempt to keep (${kept}) is not another task on the list`);
+    if (firstAttempt(other, this.#tasks) !== firstAttempt(task, this.#tasks))
+      throw new DomainError("bad_request", `task ${other.branch} is not another attempt at task ${task.branch}`);
   }
 
   /** What the task's conversation has used so far, for the draft of its merge request (ADR-238). */

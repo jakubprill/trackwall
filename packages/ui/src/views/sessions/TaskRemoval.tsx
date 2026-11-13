@@ -14,16 +14,20 @@ interface Refusal {
 /**
  * Ending a task (ADR-31): the worktree goes together with the files git ignores, and the branch stays or goes
  * with it. The daemon itself refuses when changes would be lost (`unsaved_changes`), and only then does the panel ask
- * whether to end it anyway, showing what will be lost.
+ * whether to end it anyway, showing what will be lost. From a comparison (ADR-251) it ends the attempt the user did
+ * not keep, and names the kept one, which the task journal records.
  */
 export function TaskRemoval({
   conn,
   task,
+  keptInstead,
   onRemoved,
   onCancel,
 }: {
   conn: Connection;
   task: Task;
+  /** The other attempt at the same task the user keeps instead of this one. */
+  keptInstead?: Task;
   onRemoved: () => void;
   onCancel: () => void;
 }) {
@@ -31,7 +35,7 @@ export function TaskRemoval({
   // A refusal is a result, not an error: it turns the buttons into the question whether to end it anyway.
   const remove = useAction(
     (keepBranch: boolean, discardChanges: boolean) =>
-      post(conn, agentsApi.removeTask, { task: task.id, keepBranch, discardChanges }).then(
+      post(conn, agentsApi.removeTask, { task: task.id, keepBranch, discardChanges, keptInstead: keptInstead?.id }).then(
         (): Refusal | undefined => undefined,
         (err: unknown) => {
           if (errorCode(err) === "unsaved_changes") return { keepBranch, message: errorMessage(err) };
@@ -42,7 +46,11 @@ export function TaskRemoval({
   );
 
   return (
-    <div role="alertdialog" aria-label="End task" className="bg-card flex flex-col gap-3 border-b px-4 py-3">
+    <div
+      role="alertdialog"
+      aria-label={keptInstead ? "End the other attempt" : "End task"}
+      className="bg-card flex flex-col gap-3 border-b px-4 py-3"
+    >
       {refusal ? (
         <>
           <p className="text-warning text-sm">
@@ -59,6 +67,12 @@ export function TaskRemoval({
         </>
       ) : (
         <>
+          {keptInstead && (
+            <p className="text-sm">
+              Keep <span className="font-mono">{keptInstead.branch}</span> and end the other attempt,{" "}
+              <span className="font-mono">{task.branch}</span>.
+            </p>
+          )}
           <p className="text-muted-foreground text-sm">
             The task's worktree will be deleted along with files git ignores (such as dependencies and build output). You can keep the
             branch <span className="text-foreground font-mono">{task.branch}</span> to push or merge it later.

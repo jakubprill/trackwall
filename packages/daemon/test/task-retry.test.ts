@@ -10,7 +10,8 @@ import { startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
 // A failed task retried on a stronger model (ADR-233): a new task with the same prompt from the same base commit, on the
-// model the user picks, linked to the task it retries in the task list and in the task journal.
+// model the user picks, linked to the task it retries in the task list and in the task journal; a second attempt on the
+// same model, and the attempt the user keeps from a comparison (ADR-251).
 
 const TOKEN = "r".repeat(43);
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
@@ -93,21 +94,58 @@ describe.skipIf(process.versions.bun === undefined)("retrying a task on another 
     expect(records.find((r) => r.task === first.id)).toMatchObject({ retryOf: null, model: "gpt-5-mini" });
   }, 60_000);
 
-  test("a retry on the model the task already runs on is refused before a worktree exists", async () => {
-    const task = await daemon.post(agentsApi.createTask, {
+  test("a second attempt on the same model starts like any retry, to compare two runs of one model", async () => {
+    const first = await daemon.post(agentsApi.createTask, {
       repo: "shop",
       prompt: "describe the repo",
       approvals: "ask",
       model: "gpt-5-mini",
     });
-    const tasksBefore = daemon.facade.agents.tasks().length;
 
-    await expect(daemon.post(agentsApi.retryTask, { task: task.id, model: "gpt-5-mini" })).rejects.toThrow(
-      "retry-task: the task already runs on gpt-5-mini; pick another model",
-    );
+    const again = await daemon.post(agentsApi.retryTask, { task: first.id, model: "gpt-5-mini" });
 
-    expect(daemon.facade.agents.tasks()).toHaveLength(tasksBefore);
-    await end(task.id);
+    expect(again).toMatchObject({ model: "gpt-5-mini", base: first.base, retryOf: first.id, prompt: "describe the repo" });
+    expect(again.worktree).not.toBe(first.worktree);
+    for (const task of [again, first]) await end(task.id);
+  }, 60_000);
+
+  test("ending one attempt to keep the other records the kept attempt in the task journal", async () => {
+    const first = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "Fix the total", approvals: "ask", model: "gpt-5-mini" });
+    const retry = await daemon.post(agentsApi.retryTask, { task: first.id, model: "claude-opus-5.5" });
+    const running = daemon.facade.agents.sessions().sessions.find((s) => s.task === first.id && s.run.kind === "running");
+    if (running) await daemon.post(agentsApi.stop, { session: running.id });
+
+    await daemon.post(agentsApi.removeTask, { task: first.id, keepBranch: false, discardChanges: true, keptInstead: retry.id });
+
+    const journal = join(daemon.home, "task-journal.jsonl");
+    expect(await waitUntil(() => existsSync(journal) && readFileSync(journal, "utf8").includes(first.id), 5000)).toBe(true);
+    const records = readFileSync(journal, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => EndedTask.parse(JSON.parse(line)));
+    expect(records.find((r) => r.task === first.id)).toMatchObject({ keptInstead: retry.id, model: "gpt-5-mini" });
+    // The kept attempt goes on.
+    expect(daemon.facade.agents.task(retry.id)).toMatchObject({ retryOf: first.id });
+    await end(retry.id);
+  }, 60_000);
+
+  test("keeping a task that is not another attempt at the same task is refused, and the task stays", async () => {
+    const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "Fix the header", approvals: "ask" });
+    const unrelated = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "Fix the footer", approvals: "ask" });
+    for (const t of [task, unrelated]) {
+      const running = daemon.facade.agents.sessions().sessions.find((s) => s.task === t.id && s.run.kind === "running");
+      if (running) await daemon.post(agentsApi.stop, { session: running.id });
+    }
+
+    await expect(
+      daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true, keptInstead: unrelated.id }),
+    ).rejects.toThrow(`remove-task: task ${unrelated.branch} is not another attempt at task ${task.branch}`);
+    await expect(
+      daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true, keptInstead: task.id }),
+    ).rejects.toThrow(`remove-task: the attempt to keep (${task.id}) is not another task on the list`);
+
+    expect(existsSync(task.worktree)).toBe(true);
+    for (const t of [task, unrelated]) await end(t.id);
   }, 60_000);
 
   test("the retry keeps the task's board item while it is on the board, and starts without one the user removed", async () => {
