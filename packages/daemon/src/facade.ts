@@ -4,10 +4,11 @@ import {
   type AppConfig,
   type agentsApi,
   DEFAULT_TASK_BRANCH_PREFIX,
+  KnowledgeName,
   MAX_DROP_BYTES,
   type MiseTarget,
   type RoutineDigest,
-  type RoutineName,
+  RoutineName,
   SERVICE_RELEASE_MS,
   type SessionView,
   type StateDirSource,
@@ -17,14 +18,17 @@ import {
   type TerminalPlace,
 } from "@trackwall/protocol";
 import type { z } from "zod";
+import { approvalsFormat } from "./infra/approved-folder.ts";
 import { copilotHome } from "./infra/copilot-home.ts";
 import { downloadVerified } from "./infra/download.ts";
 import { vscodeUrl } from "./infra/editor-url.ts";
 import { configOrProblem, DomainError, messageOf } from "./infra/errors.ts";
 import { runProgram } from "./infra/run-program.ts";
+import { STATE_BACKUPS_DIR, type StateFiles } from "./infra/state-backup.ts";
 import { extractTarGz } from "./infra/tar.ts";
 import { ensureTrackwallDir } from "./infra/trackwall-dir.ts";
 import { userShell } from "./infra/user-shell.ts";
+import { AGENT_QUEUES_FORMAT } from "./modules/agents/agent-queues.ts";
 import {
   AGENT_QUEUES_FILE,
   Agents,
@@ -36,11 +40,16 @@ import {
   TASK_ROUNDS_FILE,
   TASKS_FILE,
 } from "./modules/agents/agents.ts";
+import { AUTO_REVIEWS_FORMAT } from "./modules/agents/auto-reviews.ts";
 import { resolveCopilot } from "./modules/agents/copilot-command.ts";
+import { LAST_SUPERVISOR_FORMAT } from "./modules/agents/last-supervisor.ts";
+import { RESUMABLE_SESSIONS_FORMAT } from "./modules/agents/resumable-sessions.ts";
 import { withMiseVars } from "./modules/agents/session-env.ts";
 import { STACK_TRACE_LIST_MAX_BYTES, STACK_TRACE_SOURCE_GLOBS } from "./modules/agents/stack-trace-frames.ts";
 import { promptWithStackTrace } from "./modules/agents/stack-trace-prompt.ts";
 import { isTaskBranchUnder, taskWorktree } from "./modules/agents/task-branch.ts";
+import { TASKS_FORMAT } from "./modules/agents/task-file.ts";
+import { TASK_ROUNDS_FORMAT } from "./modules/agents/task-rounds.ts";
 import { Batch } from "./modules/batch/batch.ts";
 import { Board } from "./modules/board/board.ts";
 import type { AppConfigQuery } from "./modules/cards/app-config.ts";
@@ -70,7 +79,7 @@ import { ProcessGroups } from "./modules/procs/process-groups.ts";
 import { RuntimeFile } from "./modules/procs/runtime-file.ts";
 import { ProviderModels } from "./modules/provider-models/provider-models.ts";
 import { Readiness } from "./modules/readiness/readiness.ts";
-import { REPRODUCTION_CHECKS_FILE, ReproductionChecks } from "./modules/reproduction/reproduction-checks.ts";
+import { REPRODUCTION_CHECKS_FILE, REPRODUCTION_CHECKS_FORMAT, ReproductionChecks } from "./modules/reproduction/reproduction-checks.ts";
 import { Routines } from "./modules/routines/routines.ts";
 import { Services } from "./modules/services/services.ts";
 import { TASK_JOURNAL_FILE, TASK_JOURNAL_MAX_RECORDS, TaskJournal } from "./modules/task-journal/task-journal.ts";
@@ -82,7 +91,7 @@ import { UsageReport } from "./modules/usage-report/usage-report.ts";
 import type { KnownPlaces } from "./modules/usage-report/work-place.ts";
 import { Hosting, type HostingClis } from "./modules/vcs/hosting.ts";
 import { systemTempFolder, Vcs } from "./modules/vcs/vcs.ts";
-import { VERIFICATIONS_FILE, Verifications } from "./modules/verification/verifications.ts";
+import { VERIFICATIONS_FILE, VERIFICATIONS_FORMAT, Verifications } from "./modules/verification/verifications.ts";
 import { ViewerAccess } from "./modules/viewer-access/viewer-access.ts";
 import { RepoWatch } from "./modules/workspace/repo-watch.ts";
 import { Workspace } from "./modules/workspace/workspace.ts";
@@ -203,8 +212,25 @@ const CARDS_DIR = "cards";
 /** The bare repo the local config store is pushed from (ADR-127). */
 const LOCAL_CONFIG_PUSH_DIR = "local-config-push";
 const DAY_START_FILE = "day-start.json";
-export const ROUTINE_APPROVALS_FILE = "routine-approvals.json";
-export const KNOWLEDGE_APPROVALS_FILE = "knowledge-approvals.json";
+const ROUTINE_APPROVALS_FILE = "routine-approvals.json";
+const KNOWLEDGE_APPROVALS_FILE = "knowledge-approvals.json";
+
+/**
+ * Every state file of ADR-223 with its format: what a backup before another version copies (ADR-244), and what the
+ * test of older state files reads.
+ */
+export const STATE_FILES: StateFiles = {
+  [TASKS_FILE]: TASKS_FORMAT,
+  [VERIFICATIONS_FILE]: VERIFICATIONS_FORMAT,
+  [AUTO_REVIEWS_FILE]: AUTO_REVIEWS_FORMAT,
+  [TASK_ROUNDS_FILE]: TASK_ROUNDS_FORMAT,
+  [RESUMABLE_SESSIONS_FILE]: RESUMABLE_SESSIONS_FORMAT,
+  [AGENT_QUEUES_FILE]: AGENT_QUEUES_FORMAT,
+  [LAST_SUPERVISOR_FILE]: LAST_SUPERVISOR_FORMAT,
+  [REPRODUCTION_CHECKS_FILE]: REPRODUCTION_CHECKS_FORMAT,
+  [ROUTINE_APPROVALS_FILE]: approvalsFormat(RoutineName),
+  [KNOWLEDGE_APPROVALS_FILE]: approvalsFormat(KnowledgeName),
+};
 const LOGS_DIR = "logs";
 /** The limit of one source JSONL file; with the previous file after rotation a source takes at most twice that. */
 const LOG_FILE_MAX_BYTES = 10 * 1024 * 1024;
@@ -520,6 +546,7 @@ export function createFacade(o: FacadeOptions): Facade {
       "logs-dir": join(o.home, LOGS_DIR),
       "local-config-push-repo": join(o.home, LOCAL_CONFIG_PUSH_DIR),
       "legacy-worktrees-dir": join(o.home, LEGACY_WORKTREES_DIR),
+      "state-backups-dir": join(o.home, STATE_BACKUPS_DIR),
     },
     // A projects folder that is not set or cannot be read is a state the view shows, not an error of the whole list.
     projectsDir: () => workspace.projectsDir().catch(() => null),

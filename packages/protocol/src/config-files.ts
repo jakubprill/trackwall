@@ -31,6 +31,7 @@ export const ConfigEntryId = z.enum([
   "logs-dir",
   "local-config-push-repo",
   "legacy-worktrees-dir",
+  "state-backups-dir",
   "projects-mise-config",
   "local-config-store",
   "task-worktrees-dir",
@@ -66,7 +67,8 @@ export type DocsPage =
   | "start-my-day"
   | "supervisor"
   | "tasks"
-  | "trackwall-errors";
+  | "trackwall-errors"
+  | "updates";
 
 export interface ConfigEntryInfo {
   place: ConfigPlace;
@@ -219,6 +221,15 @@ export const CONFIG_ENTRIES: Record<ConfigEntryId, ConfigEntryInfo> = {
     internal: true,
     purpose: "Task worktrees from before version 0.5.1. New tasks no longer go here.",
     docs: "tasks",
+  },
+  "state-backups-dir": {
+    place: "state",
+    kind: "folder",
+    writer: "trackwall",
+    internal: true,
+    purpose:
+      "A copy of the files above taken each time another version of Trackwall starts, so going back to an older version brings back its tasks.",
+    docs: "updates",
   },
   "projects-mise-config": {
     place: "projects",
