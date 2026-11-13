@@ -2,6 +2,7 @@ import { realpath } from "node:fs/promises";
 import { delimiter, dirname, resolve as resolvePath } from "node:path";
 import { type RunOptions, type RunOutput, runProgram } from "../../infra/run-program.ts";
 import { chosenGitProgram, GIT_FROM_PATH, type GitProgramSource, gitProgram, gitResolution, withPathPrefix } from "./git-program.ts";
+import { assertRunSettings } from "./run-settings.ts";
 import { Slots } from "./slots.ts";
 import { WaitingCalls } from "./waiting-calls.ts";
 
@@ -10,7 +11,8 @@ import { WaitingCalls } from "./waiting-calls.ts";
  * so that a missing directory is a git error with a readable message, not an `ENOENT` mistaken for missing git.
  * `repoDir` is always the repo root, and a repo gets onto the list by itself when it lies in the projects folder (ADR-18), so
  * git must not look for a repo above it, and the keys from `NO_REPO_COMMANDS` are turned off; the rest of the repo
- * configuration applies (gaps with the `clean` filter and with programs from the repo configuration during sync in §8).
+ * configuration applies (gaps with the `clean` filter and with programs from the repo configuration during sync in §8), except in a repo
+ * with a task in the sandbox, whose run settings are checked before every call (`run-settings.ts`).
  */
 
 /**
@@ -18,6 +20,9 @@ import { WaitingCalls } from "./waiting-calls.ts";
  * `core.fsmonitor` on `status`, `log.showSignature` (with `gpg.program`) on `log`.
  */
 const NO_REPO_COMMANDS = ["-c", "core.fsmonitor=false", "-c", "log.showSignature=false"];
+
+/** Git does not look into submodules, so it runs no git with their configuration (in a repo guarded by `run-settings.ts`). */
+const SKIP_SUBMODULES = "diff.ignoreSubmodules=all";
 
 /**
  * On Windows, paths over 260 characters only with `core.longpaths`: task worktrees lie in the task worktrees folder (ADR-84), so
@@ -92,6 +97,13 @@ export function git(repoDir: string, args: readonly string[], opts: GitOptions =
   return runGit(repoDir, args, opts, false);
 }
 
+/** The repo configuration file `file` as `git config -z --list` gives it, read for the run settings guard, which it skips. */
+export function readConfigFile(repoDir: string, file: string): Promise<string> {
+  return runGit(repoDir, ["config", "--file", file, "--list", "-z", "--no-includes"], {}, false, false).then((out) =>
+    out.stdout.toString("utf8"),
+  );
+}
+
 /**
  * A short read with no options (`status`): an identical read still waiting for a slot is joined instead of queued again
  * (ADR-111). Without options, so that the key (the repo and the arguments) is the whole call.
@@ -103,10 +115,19 @@ export function gitRead(repoDir: string, args: readonly string[]): Promise<Timed
 /** The output and how long the process ran, without the wait for a slot (the reuse of a status, ADR-141). */
 export type TimedOutput = RunOutput & { ranMs: number };
 
-async function runGit(repoDir: string, args: readonly string[], opts: GitOptions, joinWaiting: boolean): Promise<TimedOutput> {
+async function runGit(
+  repoDir: string,
+  args: readonly string[],
+  opts: GitOptions,
+  joinWaiting: boolean,
+  guarded = true,
+): Promise<TimedOutput> {
+  // Before anything starts: a filter, hook or fsmonitor a sandboxed task wrote into the repo must not run (run-settings.ts).
+  const sandboxed = guarded && (await assertRunSettings(repoDir, (file) => readConfigFile(repoDir, file)));
   const ceiling = await ceilingFor(repoDir);
   const { maxBytes, stdin, okExitCodes } = opts;
-  const config = (opts.config ?? []).flatMap((entry) => ["-c", entry]);
+  // A submodule's git directory has a configuration of its own, which the guard does not read.
+  const config = [...(sandboxed ? [SKIP_SUBMODULES] : []), ...(opts.config ?? [])].flatMap((entry) => ["-c", entry]);
   // The launcher stays for network commands: credential helpers and ssh run exactly as from the user's shell.
   const program = opts.network ? GIT_FROM_PATH : await gitProgram();
   const askedAt = performance.now();

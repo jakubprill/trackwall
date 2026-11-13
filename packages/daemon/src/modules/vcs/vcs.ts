@@ -32,7 +32,7 @@ import {
   sameTree,
 } from "./commit-range.ts";
 import { ConfigMemo } from "./config-memo.ts";
-import { checkGitProgram, type GitVersion, git, gitRead, gitVersion } from "./git.ts";
+import { checkGitProgram, type GitVersion, git, gitRead, gitVersion, readConfigFile } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { useGitProgram } from "./git-program.ts";
 import { type GitState, GitStateReader, gitDirKey } from "./git-state.ts";
@@ -67,6 +67,7 @@ import {
   type SquashedRounds,
   squashRounds,
 } from "./round-commits.ts";
+import { assertRunSettings, type RunSettingsBaseline, runSettingsDigest, useRunSettingsBaselines } from "./run-settings.ts";
 import { StatusMemo, type TimedStatus } from "./status-memo.ts";
 import { syncRepo } from "./sync.ts";
 import { mergeIntoRepo, trialMergeConflicts, trialMergeInput } from "./trial-merge.ts";
@@ -296,6 +297,21 @@ export class Vcs {
 
   async worktreeFingerprint(dir: string, base: string): Promise<string> {
     return worktreeFingerprint(dir, base, await this.scratch());
+  }
+
+  /**
+   * The digest of the run settings of the repo `dir` lies in (ADR-181 addendum), refused when the repo's other sandboxed
+   * tasks have digests it does not match, so a new task cannot take another task's change for its baseline.
+   */
+  async runSettingsBaseline(dir: string): Promise<string | null> {
+    const read = (file: string) => readConfigFile(dir, file);
+    await assertRunSettings(dir, read);
+    return runSettingsDigest(dir, read);
+  }
+
+  /** Process-wide, like the git program: `git()` checks them before every call (`run-settings.ts`). */
+  useRunSettingsBaselines(baselines: readonly RunSettingsBaseline[]): void {
+    useRunSettingsBaselines(baselines);
   }
 
   async discardFingerprint(dir: string, base: string): Promise<string | null> {

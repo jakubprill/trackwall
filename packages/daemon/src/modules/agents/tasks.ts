@@ -111,6 +111,13 @@ export interface TasksVcs extends HandoffGit, EndedTaskGit {
   /** One hash of what the worktree's files hold beyond `base` (ADR-209). */
   worktreeFingerprint(dir: string, base: string): Promise<string>;
   discardFingerprint(dir: string, base: string): Promise<string | null>;
+  /**
+   * The digest of the run settings of the repo `dir` lies in (`run-settings.ts`), refused when the repo's other sandboxed
+   * tasks have digests it does not match; `null` without a git directory.
+   */
+  runSettingsBaseline(dir: string): Promise<string | null>;
+  /** From now on git in a repo with one of these worktrees runs only while its run settings match one of their digests. */
+  useRunSettingsBaselines(baselines: readonly { worktree: string; repoDir: string; digest: string }[]): void;
 }
 
 /**
@@ -260,6 +267,7 @@ export class AgentTasks {
     const ported = withTaskPorts(stored);
     this.#tasks = ported.map((task) => this.#known(task));
     if (ported.some((task, i) => task.port !== stored[i]?.port)) this.#save(this.#tasks);
+    else this.#guardRunSettings();
   }
 
   list(): Task[] {
@@ -388,6 +396,7 @@ export class AgentTasks {
       change,
       retryOf,
       impactProposed: {},
+      runSettings: null,
       trustedMiseConfig: null,
       port: freeTaskPort([...this.#tasks.map((t) => t.port), ...this.#creatingPorts]),
       included: noIncludedFiles(),
@@ -401,6 +410,8 @@ export class AgentTasks {
       // The mise config of the fresh worktree is the base commit's and the ignored files copied from the repo root, whose
       // config the user trusted (ADR-59, ADR-61).
       task.trustedMiseConfig = await this.#initialMiseConfig(task);
+      // Before the agent's session starts, so the digest is of the settings the user left (ADR-181 addendum).
+      if (task.sandbox) task.runSettings = await this.#deps.vcs.runSettingsBaseline(task.worktree);
       // Saved before the session starts: the worktree is already on disk and must not disappear from the list if the daemon crashes.
       this.#save([task, ...this.#tasks]);
       if (launch === "launch") await this.#launchNew(task);
@@ -1229,7 +1240,8 @@ export class AgentTasks {
    * The task's first session with its prompt (`new`), or one that goes on with its conversation (`resume`), in the
    * conversation view with `message` as the first message after the conversation loads.
    */
-  async #launch(task: KnownTask, start: "new" | "resume", message?: string): Promise<void> {
+  async #launch(stored: KnownTask, start: "new" | "resume", message?: string): Promise<void> {
+    const task = await this.#withRunSettings(stored);
     // The model, the approvals mode and the sandbox on every start, the first and each resume: Copilot CLI would
     // otherwise resume on its default model, ask again and leave the sandbox (ADR-98, ADR-105, ADR-181).
     const sandboxArgs = task.sandbox ? [SANDBOX_ARG] : [];
@@ -1291,6 +1303,18 @@ export class AgentTasks {
       throw new DomainError("bad_request", `task ${task.branch} has a running session; stop it before ${action}`);
   }
 
+  /**
+   * A sandboxed task saved by an older version has no digest of its repo's run settings: it takes one at its next start,
+   * before its session, so from then on its repo is guarded too (ADR-181 addendum).
+   */
+  async #withRunSettings(task: KnownTask): Promise<KnownTask> {
+    if (!task.sandbox || task.runSettings !== null) return task;
+    const runSettings = await this.#deps.vcs.runSettingsBaseline(task.worktree);
+    const guarded = { ...task, runSettings };
+    this.#save(this.#tasks.map((t) => (t.id === task.id ? guarded : t)));
+    return guarded;
+  }
+
   /** The task's ended sessions disappear from the list. */
   #closeSessions(task: KnownTask): void {
     for (const session of this.#deps.sessions.of(task.id)) this.#deps.sessions.close(session.id);
@@ -1327,6 +1351,14 @@ export class AgentTasks {
   #save(tasks: KnownTask[]): void {
     this.#deps.file.write(tasks.map(({ worktree: _, ...stored }) => stored));
     this.#tasks = tasks;
+    this.#guardRunSettings();
+  }
+
+  /** The digests of the listed sandboxed tasks guard git in their repos (ADR-181 addendum). */
+  #guardRunSettings(): void {
+    this.#deps.vcs.useRunSettingsBaselines(
+      this.#tasks.flatMap((t) => (t.runSettings === null ? [] : [{ worktree: t.worktree, repoDir: t.repoDir, digest: t.runSettings }])),
+    );
   }
 }
 
@@ -1346,6 +1378,7 @@ function view({
   handoff: _____,
   impactProposed: ______,
   stoppedAtTokenBudget: _______,
+  runSettings: ________,
   ...task
 }: KnownTask): Task {
   return task;

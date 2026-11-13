@@ -971,6 +971,9 @@ describe("a task in Copilot CLI's sandbox with the real Copilot CLI (ADR-181)", 
         const escapes = probe.escapes();
         expect(escapes).not.toContain("the user's home");
         if (process.platform === "linux") expect(escapes).toEqual(["the repo's git hooks", "the repo's git config"]);
+        // What the agent wrote there would run outside the sandbox at the daemon's next git command, so the daemon
+        // refuses git in the repo until it is undone (ADR-181 addendum).
+        if (escapes.length > 0) await expect(agents.taskChanges(task.id)).rejects.toThrow("changed since a task in the sandbox started");
       }
       expect(agents.session(session).dialog).toBeNull();
       await agents.stop(session);

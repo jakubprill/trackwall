@@ -58,8 +58,13 @@ export function commitEscapeScript(repo: string) {
         existsSync(join(repo, ".git", "hooks", "post-checkout")) && "the repo's git hooks",
         readFileSync(config, "utf8") !== configBefore && "the repo's git config",
       ].filter((place) => place !== false),
-    /** The repo as it was, so that later tests start from the same commit. */
+    /**
+     * The repo as it was, its git hooks and config included, so that later tests start from the same commit and the
+     * daemon, which refuses git in a repo whose run settings a sandboxed task changed, runs git there again.
+     */
     remove: () => {
+      writeFileSync(config, configBefore);
+      rmSync(join(repo, ".git", "hooks", "post-checkout"), { force: true });
       git("reset", "-q", "--hard", "HEAD~1");
       rmSync(PROBE_DIR, { recursive: true, force: true });
     },
