@@ -70,6 +70,7 @@ import { PLAN_MODE } from "./acp-session-info.ts";
 import { AgentQueuesFile } from "./agent-queues.ts";
 import type { AgentSession } from "./agent-session.ts";
 import { AutoReviews } from "./auto-reviews.ts";
+import { yesOption } from "./copilot-always-allow.ts";
 import type { CopilotHookOutput } from "./copilot-hook-output.ts";
 import { CopilotHookEvent } from "./copilot-hook-record.ts";
 import type { LspServer } from "./copilot-plugin.ts";
@@ -1359,15 +1360,23 @@ export class Agents {
   }
 
   /**
-   * "Always allow" in a running task session's approval (ADR-249): the tool goes into `alwaysAllow` for the task's repo,
-   * then the approval gets "Yes"; see `LiveSession.alwaysAllow`.
+   * "Always allow" in a running task session's approval (ADR-249): the tool the dialog offers goes into `alwaysAllow`
+   * for the task's repo, then the approval gets its plain "Yes". Over ACP no dialog offers one, so it is `bad_request`.
    */
   alwaysAllowDialog(id: string, dialog: string): Session {
     const session = this.#sessions.get(id);
     if (!this.#sessions.isRunning(session)) throw new DomainError("dialog_changed", "the session is no longer running");
     const repo = session.repo;
     if (repo === null || session.task === null) throw new DomainError("bad_request", "Always allow is offered only in a task");
-    session.alwaysAllow(dialog, (tool) => this.#deps.repos.alwaysAllow({ repo, tool }));
+    const shown = this.#sessions.view(session).dialog;
+    if (shown?.id !== dialog)
+      throw new DomainError("dialog_changed", "the dialog is no longer on the session's screen; it was answered or it changed");
+    const yes = shown.kind === "approval" ? yesOption(shown) : undefined;
+    if (shown.kind !== "approval" || shown.alwaysAllow === undefined || yes === undefined)
+      throw new DomainError("bad_request", "this approval cannot be always allowed");
+    this.#deps.repos.alwaysAllow({ repo, tool: shown.alwaysAllow });
+    // Checks again that the same dialog is on the screen, so a key never goes into another one.
+    session.answerDialog(dialog, yes);
     return this.#sessions.view(session);
   }
 

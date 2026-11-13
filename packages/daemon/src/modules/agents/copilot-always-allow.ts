@@ -1,4 +1,4 @@
-import { type AgentApproval, type AgentDialog, alwaysAllowable } from "@trackwall/protocol";
+import { type AgentApproval, type AgentDialog, alwaysAllowable, plainShellCommand, toolPatternParts } from "@trackwall/protocol";
 
 /**
  * "Always allow" in a task's approval dialog (ADR-249): the tool permission pattern Copilot CLI itself names in its
@@ -10,9 +10,9 @@ import { type AgentApproval, type AgentDialog, alwaysAllowable } from "@trackwal
  */
 
 /** "Yes, and don't ask again for `npm test` in this repo (/path)". */
-const SHELL_OPTION = /^Yes, and don't ask again for `([^`]+)` in this repo\b/;
+const SHELL_OPTION = /^Yes, and don't ask again for `([^`]+)` in this repo \([^()]*\)$/;
 /** "Yes, and don't ask again for tool "verify_task" from "trackwall" in this repo (/path)". */
-const MCP_OPTION = /^Yes, and don't ask again for tool "([^"]+)" from "([^"]+)" in this repo\b/;
+const MCP_OPTION = /^Yes, and don't ask again for tool "([^"]+)" from "([^"]+)" in this repo \([^()]*\)$/;
 
 /** The questions of a command's and of an MCP tool's approval; a path's or a file's approval asks another. */
 const RUN_COMMAND = "Do you want to run this command?";
@@ -42,4 +42,17 @@ export function withAlwaysAllow(dialog: AgentDialog | null, place: { repo: strin
   if (dialog?.kind !== "approval" || place.repo === null || place.task === null || yesOption(dialog) === undefined) return dialog;
   const pattern = alwaysAllowPattern(dialog);
   return pattern === null ? dialog : { ...dialog, alwaysAllow: pattern };
+}
+
+/**
+ * Whether the daemon may answer the approval "Yes" itself for an always-allowed `pattern` (ADR-249): an MCP tool is the
+ * pattern itself; a command only when the command the dialog shows is that one plain command with its arguments, so a
+ * command Copilot CLI left out of its option's label is never approved with it.
+ */
+export function approvalWithin(dialog: Pick<AgentApproval, "detail">, pattern: string): boolean {
+  const parts = toolPatternParts(pattern);
+  if (parts === null) return false;
+  if (parts.kind !== "shell") return true;
+  const command = dialog.detail.join(" ").trim();
+  return plainShellCommand(command) && (command === parts.argument || command.startsWith(`${parts.argument} `));
 }

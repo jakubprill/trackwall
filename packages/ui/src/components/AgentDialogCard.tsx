@@ -26,8 +26,6 @@ import { useAction } from "@/lib/use-action";
  */
 /** Marks the buttons of Copilot CLI's options, which the arrows move between. */
 const OPTION = "data-dialog-option";
-/** The answer of "Always allow", which is no key of Copilot CLI's. */
-const ALWAYS_ALLOW = "always";
 
 export function AgentDialogCard({
   conn,
@@ -48,13 +46,14 @@ export function AgentDialogCard({
 }) {
   const [answered, setAnswered] = useState(false);
   const answer = useAction(
-    (key: DialogAnswer | typeof ALWAYS_ALLOW) =>
-      key === ALWAYS_ALLOW
-        ? post(conn, agentsApi.alwaysAllowDialog, { session, dialog: dialog.id })
-        : post(conn, agentsApi.answerDialog, { session, dialog: dialog.id, answer: key }),
+    (key: DialogAnswer) => post(conn, agentsApi.answerDialog, { session, dialog: dialog.id, answer: key }),
     () => setAnswered(true),
   );
-  const disabled = answer.pending || answered;
+  const alwaysAllow = useAction(
+    () => post(conn, agentsApi.alwaysAllowDialog, { session, dialog: dialog.id }),
+    () => setAnswered(true),
+  );
+  const disabled = answer.pending || alwaysAllow.pending || answered;
   const options = useRef<HTMLFieldSetElement>(null);
   // The answers the arrows move between: Copilot CLI's options, without "Stop the agent".
   const optionButtons = () => [...(options.current?.querySelectorAll<HTMLButtonElement>(`button[${OPTION}]`) ?? [])];
@@ -76,10 +75,10 @@ export function AgentDialogCard({
     buttons[next]?.focus();
   };
   // A click from Enter or Space has no pointer (`detail` 0).
-  const pick = (key: DialogAnswer | typeof ALWAYS_ALLOW, event: MouseEvent<HTMLButtonElement>) => {
+  const pick = (run: () => void, event: MouseEvent<HTMLButtonElement>) => {
     if (keyAnswerTooSoon(event.detail === 0, performance.now() - shownAt.current)) return;
     if (options.current?.contains(document.activeElement)) onKeyboardLeaves?.();
-    answer.run(key);
+    run();
   };
   const change = dialog.kind === "approval" ? changeLines(dialog.patch ?? "", PATCH_SHOWN_LINES, dialog.patchCut ?? false) : undefined;
   return (
@@ -112,7 +111,7 @@ export function AgentDialogCard({
                 className="h-auto justify-start py-1.5 text-left whitespace-normal"
                 disabled={disabled}
                 {...{ [OPTION]: "" }}
-                onClick={(event) => pick(option.key, event)}
+                onClick={(event) => pick(() => answer.run(option.key), event)}
               >
                 {option.label}
               </Button>
@@ -123,14 +122,20 @@ export function AgentDialogCard({
                 variant="outline"
                 className="h-auto justify-start py-1.5 text-left whitespace-normal"
                 disabled={disabled}
-                title="Runs it now, and from now on in every task of this repo without asking. You can remove it in Settings > Agents."
+                title="Runs it now, and from now on in every task of this repo without asking; an MCP tool with any arguments. You can remove it in Settings > Agents."
                 {...{ [OPTION]: "" }}
-                onClick={(event) => pick(ALWAYS_ALLOW, event)}
+                onClick={(event) => pick(() => alwaysAllow.run(), event)}
               >
                 {alwaysAllowLabel(dialog.alwaysAllow)}
               </Button>
             )}
-            <Button size="sm" variant="ghost" className="justify-start" disabled={disabled} onClick={(event) => pick("stop", event)}>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="justify-start"
+              disabled={disabled}
+              onClick={(event) => pick(() => answer.run("stop"), event)}
+            >
               Stop the agent
             </Button>
           </fieldset>
@@ -144,7 +149,7 @@ export function AgentDialogCard({
           </Button>
         </>
       )}
-      {answer.error && <p className="text-destructive text-xs">{answer.error}</p>}
+      {(answer.error ?? alwaysAllow.error) && <p className="text-destructive text-xs">{answer.error ?? alwaysAllow.error}</p>}
     </div>
   );
 }

@@ -14,7 +14,7 @@ import {
 import { DomainError } from "../../infra/errors.ts";
 import { type ScreenViewer, TerminalScreen } from "../../infra/terminal-screen.ts";
 import type { AgentSession } from "./agent-session.ts";
-import { withAlwaysAllow, yesOption } from "./copilot-always-allow.ts";
+import { approvalWithin, withAlwaysAllow, yesOption } from "./copilot-always-allow.ts";
 import { type CopilotHookOutput, hookOutputFor, situationOutput } from "./copilot-hook-output.ts";
 import type { CopilotHookEvent, CopilotHookRecord } from "./copilot-hook-record.ts";
 import { approvalRequest } from "./copilot-hooks.ts";
@@ -416,21 +416,6 @@ export class LiveSession implements AgentSession {
   }
 
   /**
-   * "Always allow" (ADR-249): `remember` keeps the tool the dialog `id` offers for the task's repo, then the dialog gets
-   * its plain "Yes", only while the same dialog is on the screen, as with `answerDialog`.
-   */
-  alwaysAllow(id: string, remember: (tool: string) => void): void {
-    const dialog = this.#offeredDialog();
-    if (dialog?.id !== id)
-      throw new DomainError("dialog_changed", "the dialog is no longer on the session's screen; it was answered or it changed");
-    const yes = dialog.kind === "approval" ? yesOption(dialog) : undefined;
-    if (dialog.kind !== "approval" || dialog.alwaysAllow === undefined || yes === undefined)
-      throw new DomainError("bad_request", "this approval cannot be always allowed");
-    remember(dialog.alwaysAllow);
-    this.answerDialog(id, yes);
-  }
-
-  /**
    * An approval of a tool the user always allows in the task's repo gets "Yes" from the daemon, as the user would give
    * it (ADR-249): the session started before the tool was remembered, so Copilot CLI asks, while the next start gets
    * `--allow-tool` and does not.
@@ -439,7 +424,8 @@ export class LiveSession implements AgentSession {
     const dialog = this.#offeredDialog();
     if (dialog?.kind !== "approval" || dialog.alwaysAllow === undefined) return;
     const yes = yesOption(dialog);
-    if (yes !== undefined && this.#alwaysAllowed().includes(dialog.alwaysAllow)) this.answerDialog(dialog.id, yes);
+    if (yes === undefined || !approvalWithin(dialog, dialog.alwaysAllow) || !this.#alwaysAllowed().includes(dialog.alwaysAllow)) return;
+    this.answerDialog(dialog.id, yes);
   }
 
   /** The dialog as the views get it: with what "Always allow" would remember in a task (ADR-249). */

@@ -360,8 +360,9 @@ export class SessionLauncher {
     if (repo === null || task === null) return [];
     try {
       return this.#deps.repos.alwaysAllowed(repo);
-    } catch {
-      return [];
+    } catch (err) {
+      if (err instanceof DomainError && err.code === "invalid_config") return [];
+      throw err;
     }
   }
 

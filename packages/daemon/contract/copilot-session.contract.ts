@@ -361,8 +361,8 @@ describe("a session of the real Copilot CLI", () => {
       agents.answerDialog(id, approval.dialog.id, "1");
       await endOfTurn(id);
 
-      // An allowed `touch` is not asked about on a path outside the session's folder, which is why Always allow refuses
-      // commands that write by path (`alwaysAllowable`), even this one only for the repo's tasks.
+      // An allowed command is not asked about on a path outside the session's folder, which is why Always allow refuses
+      // commands that write, move or remove files by path (`alwaysAllowable`); `touch` itself only makes empty files.
       const workspaceFile = join(daemon.home, "workspace.yaml");
       const workspace = readFileSync(workspaceFile, "utf8");
       writeFileSync(workspaceFile, `${workspace}toolPermissions:\n  - repos: [shop]\n    allow: ["shell(touch)"]\n`);

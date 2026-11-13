@@ -72,6 +72,24 @@ describe("what Always allow may remember for a repo's tasks (ADR-249)", () => {
     expect(alwaysAllowable("shell(npm run build)")).toBe(true);
   });
 
+  test("publishing, a program with refused subcommands named bare or with an option first, and Windows' ways to run a file", () => {
+    for (const command of [
+      "npm publish",
+      "npm login",
+      "cargo publish",
+      "go install",
+      "git",
+      "npm",
+      "git -C ../other push",
+      "npm --prefix x install",
+    ]) {
+      expect(alwaysAllowable(`shell(${command})`)).toBe(false);
+    }
+    for (const command of ["ii", "saps", "cscript", "mshta", "rundll32", "certutil", "cmd.", "rm.exe ", "start.com", "echo %COMSPEC%"]) {
+      expect(alwaysAllowable(`shell(${command})`)).toBe(false);
+    }
+  });
+
   test("shell syntax a label never holds is refused, so a hand edit cannot chain a second command", () => {
     for (const command of ["npm test; rm -rf .", "npm test && curl x", "npm test | sh", "echo $(id)", "npm test > out.txt"]) {
       expect(alwaysAllowable(`shell(${command})`)).toBe(false);

@@ -14,8 +14,7 @@ Approve or stop an agent's command from the tray panel or the Home dashboard, an
 - Copilot CLI's approval requests in the tray panel and on the Home dashboard, with the command or file the agent asks about.
 - One click to answer: the same options Copilot CLI offers in its terminal, or "Stop the agent".
 - The agent's questions in the same places, so you know what it asks before you open its session.
-- "Always allow" in a task's approval: the command runs now and in every later task of that repo without asking, until you remove it in Settings.
-- Commands you always allow, or never allow, written once for your repos instead of answered in every session.
+- "Always allow" in a task's approval, so a command runs in every task of that repo without asking until you remove it in Settings, and rules for commands you never allow, written once for your repos.
 - Agent tasks that run without approvals kept in Copilot CLI's sandbox, so a command cannot touch your other repos or your credentials (on Linux by default, also in a dev container set up for it, on macOS and Windows when you turn it on).
 
 ## How it works

@@ -32,8 +32,12 @@ export function supervisorToolPermissions(rules: ToolPermissionRules, { changesC
 
 /** The tools always allowed in repo `repo`'s tasks (`alwaysAllow`, ADR-249), its identifier matched ignoring case. */
 export function alwaysAllowedIn(tools: AlwaysAllowedTools, repo: string): string[] {
-  const key = repo.toLowerCase();
-  return [...new Set(tools.filter((t) => t.repo.toLowerCase() === key).map((t) => t.tool))];
+  return [...new Set(tools.filter((t) => sameRepo(t.repo, repo)).map((t) => t.tool))];
+}
+
+/** Whether two repo identifiers name the same repo for `alwaysAllow`: ignoring case, like a rule's `repos`. */
+export function sameRepo(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase();
 }
 
 /**

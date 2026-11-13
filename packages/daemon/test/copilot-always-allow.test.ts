@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { alwaysAllowPattern } from "../src/modules/agents/copilot-always-allow.ts";
+import { alwaysAllowPattern, approvalWithin } from "../src/modules/agents/copilot-always-allow.ts";
 
 // The labels are Copilot CLI 1.0.109's, seen on the real binary for each command in a contract run (ADR-249).
 const RUN = "Do you want to run this command?";
@@ -34,5 +34,19 @@ describe("the pattern Always allow takes from Copilot CLI's don't ask again opti
 
   test("a command without the option, such as a redirection or a PowerShell command on Windows, offers nothing", () => {
     expect(alwaysAllowPattern(dialog(RUN))).toBeNull();
+  });
+});
+
+describe("whether a running task answers an approval of an always-allowed tool itself (ADR-249)", () => {
+  test("only when the command shown is that one plain command with its arguments", () => {
+    expect(approvalWithin({ detail: ["npm test -- --watch"] }, "shell(npm test)")).toBe(true);
+    expect(approvalWithin({ detail: ["npm test"] }, "shell(npm test)")).toBe(true);
+    expect(approvalWithin({ detail: ["npm testing"] }, "shell(npm test)")).toBe(false);
+    expect(approvalWithin({ detail: ["npm test; cat ~/.aws/credentials"] }, "shell(npm test)")).toBe(false);
+    expect(approvalWithin({ detail: ["npm test && git push"] }, "shell(npm test)")).toBe(false);
+  });
+
+  test("an MCP tool is the pattern itself, whatever its arguments", () => {
+    expect(approvalWithin({ detail: ["{", '  "task": "abc"', "}"] }, "trackwall(verify_task)")).toBe(true);
   });
 });

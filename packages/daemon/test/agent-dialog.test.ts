@@ -500,26 +500,6 @@ describe("Always allow in a task's approval (ADR-249)", () => {
     expect(session.view()?.dialog).not.toHaveProperty("alwaysAllow");
   });
 
-  test("Always allow remembers the tool, then types the plain Yes", async () => {
-    const { session, written } = await sessionShowing("shell-120", "permission_prompt", undefined, WIDE, inTask());
-    const remembered: string[] = [];
-
-    session.alwaysAllow(session.view()?.dialog?.id ?? "", (tool) => remembered.push(tool));
-
-    expect(remembered).toEqual(["shell(touch)"]);
-    expect(written).toEqual(["1"]);
-    expect(session.view()).toMatchObject({ state: { state: "Working", source: "keyboard" }, dialog: null });
-  });
-
-  test("Always allow for a dialog no longer on the screen remembers nothing and types nothing", async () => {
-    const { session, written } = await sessionShowing("shell-120", "permission_prompt", undefined, WIDE, inTask());
-    const remembered: string[] = [];
-
-    expect(dialogError(() => session.alwaysAllow("another dialog", (tool) => remembered.push(tool)))).toBe("dialog_changed");
-    expect(remembered).toEqual([]);
-    expect(written).toEqual([]);
-  });
-
   test("a running task answers Yes itself to an approval of a tool already always allowed in its repo", async () => {
     const { session, written } = await sessionShowing("shell-120", "permission_prompt", undefined, WIDE, inTask(["shell(touch)"]));
     // The session's next read cycle.

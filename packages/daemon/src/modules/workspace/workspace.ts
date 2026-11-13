@@ -57,7 +57,7 @@ import { moveRepoOut } from "./repo-removal.ts";
 import { withStar } from "./starred-repos.ts";
 import { suggestedProjectsDir } from "./suggested-projects-dir.ts";
 import { SyncRuns } from "./sync-runs.ts";
-import { alwaysAllowedIn, sessionToolPermissions, supervisorToolPermissions, taskToolPermissions } from "./tool-permissions.ts";
+import { alwaysAllowedIn, sameRepo, sessionToolPermissions, supervisorToolPermissions, taskToolPermissions } from "./tool-permissions.ts";
 import { type RepoUnpushedRead, type UnpushedRead, unpushedWork } from "./unpushed-work.ts";
 import type { WorkspaceFile } from "./workspace-file.ts";
 import { checkWorktreesDir, defaultWorktreesDir } from "./worktrees-dir.ts";
@@ -580,7 +580,7 @@ export class Workspace {
   /** Stops always allowing a tool in a repo's tasks (ADR-249); an entry that is not there changes nothing. */
   removeAlwaysAllowed(entry: AlwaysAllowedTool): WorkspaceSettings {
     const tools = this.deps.file.alwaysAllowedTools();
-    const kept = tools.filter((t) => !(t.repo.toLowerCase() === entry.repo.toLowerCase() && t.tool === entry.tool));
+    const kept = tools.filter((t) => !(sameRepo(t.repo, entry.repo) && t.tool === entry.tool));
     if (kept.length !== tools.length) this.deps.file.setAlwaysAllowedTools(kept);
     return this.settings();
   }

@@ -101,7 +101,11 @@ describe.skipIf(process.versions.bun === undefined)("Always allow in a task's ap
       expect(removed.alwaysAllow).toEqual([]);
       const last = await taskAsking("make one more file");
       expect(await argumentsOf(last)).not.toContain("--allow-tool=shell(touch)");
-      await waitFor(agents, last, (s) => s.dialog?.kind === "approval", "the approval dialog again");
+      const again = await waitFor(agents, last, (s) => s.dialog?.kind === "approval", "the approval dialog again");
+      // Always allow for a dialog the screen no longer shows remembers nothing and types nothing.
+      await expect(daemon.post(agentsApi.alwaysAllowDialog, { session: last, dialog: "0123456789abcdef" })).rejects.toThrow(/no longer/);
+      expect((await daemon.post(workspaceApi.settings, {})).alwaysAllow).toEqual([]);
+      expect(daemon.facade.agents.session(last).dialog?.id).toBe(again.dialog?.id);
       await daemon.post(agentsApi.stop, { session: last });
     },
     SLOW_TEST_TIMEOUT_MS,
