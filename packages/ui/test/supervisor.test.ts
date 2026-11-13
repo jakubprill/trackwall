@@ -66,6 +66,7 @@ function task(id: string, proposedBy: Task["proposedBy"]): Task {
     included: { files: [], problems: [] },
     change: null,
     retryOf: null,
+    paused: null,
   };
 }
 

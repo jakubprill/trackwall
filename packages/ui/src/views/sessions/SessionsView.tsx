@@ -20,6 +20,7 @@ import { SessionScreen } from "@/components/SessionScreen";
 import { SessionStateLabel } from "@/components/SessionStateLabel";
 import { StatusLabel } from "@/components/StatusLabel";
 import { TaskOutcomeMarks } from "@/components/TaskOutcomeMarks";
+import { TaskStateLabel } from "@/components/TaskStateLabel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
@@ -396,7 +397,7 @@ function StartedListItem({
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <RowName name={entryName(entry)} group={group} delegated={delegated} waits={session?.needsAttention === true} />
           {task && <TaskLine task={task} />}
-          <RowStatus session={session} />
+          <RowStatus task={task} session={session} />
           <TaskOutcomeMarks marks={outcomeMarks(outcome, task?.inReview === true)} />
           {session?.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
         </span>
@@ -778,13 +779,12 @@ function LayoutBar({
   );
 }
 
-/** A row's session state and what its conversation used (ADR-190). */
-function RowStatus({ session }: { session: Session | undefined }) {
-  if (session === undefined) return <span className="text-muted-foreground text-xs">no session</span>;
+/** A row's state (a task's, ADR-253, or its session's) and what its conversation used (ADR-190). */
+function RowStatus({ task, session }: { task: Task | undefined; session: Session | undefined }) {
   return (
     <span className="text-muted-foreground flex items-center gap-3 text-xs">
-      <SessionStateLabel session={session} />
-      <CopilotUsageMark usage={session.usage} />
+      {task ? <TaskStateLabel task={task} session={session} /> : session && <SessionStateLabel session={session} />}
+      {session && <CopilotUsageMark usage={session.usage} />}
     </span>
   );
 }

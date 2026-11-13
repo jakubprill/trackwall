@@ -37,6 +37,7 @@ const part = (id: string, repo: string, position: number | null): Task => ({
   included: { files: [], problems: [] },
   change: position === null ? null : { id: CHANGE, position },
   retryOf: null,
+  paused: null,
 });
 
 const mergeRequest = (path: string, number: number, state: MergeRequestState): FollowedMergeRequest => ({

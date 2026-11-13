@@ -1,9 +1,10 @@
-import { agentsApi, type Session, type Task, WORKTREE_INCLUDE_FILE } from "@trackwall/protocol";
-import { FileInput, Forward, Play, Square } from "lucide-react";
+import { agentsApi, type PausedTask, type Session, type Task, WORKTREE_INCLUDE_FILE } from "@trackwall/protocol";
+import { FileInput, Forward, Pause, Play, Square } from "lucide-react";
 import { EditorButton } from "@/components/EditorButton";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import { PAUSE_TITLE } from "@/lib/task-pause";
 import { useAction } from "@/lib/use-action";
 
 /** Stopping the task's running session, in its panel and its grid tile; the error shows next to the button. */
@@ -42,6 +43,44 @@ export function ResumeButton({
   );
 }
 
+/**
+ * Pausing a task (ADR-253): its session, service, mise tasks, checks and shell stop, and only the user's Resume goes on.
+ * The daemon waits until every process is gone, which takes a few seconds for one that ignores the gentle stop; the
+ * error shows next to the button.
+ */
+export function PauseButton({
+  conn,
+  task,
+  disabled = false,
+  iconOnly = false,
+  onPaused,
+}: {
+  conn: Connection;
+  task: Task;
+  disabled?: boolean;
+  /** In the task panel's header, so its buttons stay on one row on a small screen and the terminal keeps its height. */
+  iconOnly?: boolean;
+  onPaused: (paused: PausedTask) => void;
+}) {
+  const pause = useAction(() => post(conn, agentsApi.pauseTask, { task: task.id }), onPaused);
+  const label = pause.pending ? "Pausing…" : "Pause";
+  return (
+    <>
+      {pause.error && <span className="text-destructive max-w-xs truncate text-xs">{pause.error}</span>}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={pause.run}
+        disabled={disabled || pause.pending}
+        aria-label={iconOnly ? label : undefined}
+        title={PAUSE_TITLE}
+      >
+        <Pause /> {!iconOnly && label}
+      </Button>
+    </>
+  );
+}
+
 /** Opening the task's worktree in VS Code (`EditorButton`); the error shows next to the button. */
 export function TaskEditorButton({ conn, task, label }: { conn: Connection; task: Task; label: string }) {
   const openEditor = useAction(
@@ -60,7 +99,18 @@ export function TaskEditorButton({ conn, task, label }: { conn: Connection; task
  * Copying what the repo root's `.worktreeinclude` names into the task's worktree again (ADR-61), for a line added after
  * the task started; the "Included files" section then lists what the worktree got. The error shows next to the button.
  */
-export function CopyIncludedFilesButton({ conn, task, onCopied }: { conn: Connection; task: Task; onCopied: () => void }) {
+export function CopyIncludedFilesButton({
+  conn,
+  task,
+  iconOnly = false,
+  onCopied,
+}: {
+  conn: Connection;
+  task: Task;
+  /** In the task panel's header, beside Pause, so its buttons stay on one row on a small screen. */
+  iconOnly?: boolean;
+  onCopied: () => void;
+}) {
   const copy = useAction(() => post(conn, agentsApi.copyIncludedFilesAgain, { task: task.id }), onCopied);
   return (
     <>
@@ -70,9 +120,10 @@ export function CopyIncludedFilesButton({ conn, task, onCopied }: { conn: Connec
         size="sm"
         onClick={copy.run}
         disabled={copy.pending}
-        title={`Copy the files the repo's ${WORKTREE_INCLUDE_FILE} names into the worktree again; files it already has stay as they are`}
+        aria-label={iconOnly ? "Copy included files" : undefined}
+        title={`Copy included files: the files the repo's ${WORKTREE_INCLUDE_FILE} names, into the worktree again; files it already has stay as they are`}
       >
-        <FileInput /> Copy included files
+        <FileInput /> {!iconOnly && "Copy included files"}
       </Button>
     </>
   );

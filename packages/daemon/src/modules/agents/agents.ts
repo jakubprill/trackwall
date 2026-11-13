@@ -27,6 +27,7 @@ import {
   type MergeRequest,
   type MessageAttachment,
   type MiseTarget,
+  type PausedTask,
   type PipelineFix,
   type PromptDelivery,
   proposalRepos,
@@ -52,6 +53,7 @@ import {
   type TaskMessage,
   type TaskMiseConfig,
   type TaskOutcome,
+  type TaskPause,
   type TaskProposal,
   type TaskRefresh,
   type TaskRounds,
@@ -64,7 +66,7 @@ import {
   type WorkingTreeChanges,
 } from "@trackwall/protocol";
 import { copilotHome } from "../../infra/copilot-home.ts";
-import { DomainError } from "../../infra/errors.ts";
+import { DomainError, messageOf } from "../../infra/errors.ts";
 import type { ScreenViewer } from "../../infra/terminal-screen.ts";
 import { AcpSession, type ConversationViewer, type ConversationWindow } from "./acp-session.ts";
 import { PLAN_MODE } from "./acp-session-info.ts";
@@ -212,6 +214,13 @@ interface AgentsRepos {
   removeRepo(id: string, expectedDir: string, beforeMove: () => void): Promise<string>;
 }
 
+/** What the facade stopped of a task the user pauses (ADR-253), and the service to start again on Resume. */
+export interface StoppedTaskWork {
+  service: TaskPause["service"];
+  /** In words the UI shows, such as "the service on port 4103". */
+  stopped: string[];
+}
+
 export interface AgentsDeps {
   procs: AgentsProcs;
   /** The daemon runs in a container (`FacadeOptions.inContainer`), where the sandbox is off by default unless it can run (ADR-219). */
@@ -220,6 +229,14 @@ export interface AgentsDeps {
   closeFolderTerminal: (task: string) => Promise<void>;
   /** Stops a task's reproduction check and removes its copy before the task ends (`reproduction`, ADR-227). */
   stopReproductionCheck: (task: string) => Promise<void>;
+  /**
+   * The user pauses a task (ADR-253): the facade stops what other modules run for it (its verification, reproduction
+   * check, service, other mise tasks in its worktree and its shell) and says what it stopped and the service to start
+   * again on Resume. Its sessions and automatic reviews are stopped by `agents` before.
+   */
+  stopTaskWork: (task: Task) => Promise<StoppedTaskWork>;
+  /** Resume of a paused task starts its service again as it ran at the pause (`services`, ADR-253). */
+  startTaskService: (task: Task, service: NonNullable<TaskPause["service"]>) => Promise<void>;
   repos: AgentsRepos;
   /**
    * Task worktrees and branches (ADR-31), the round commits in them (ADR-168), the repo's rules at a task's base (ADR-234),
@@ -987,15 +1004,41 @@ export class Agents {
     return this.#tasks.retry(id, model, await this.#itemOnBoard(this.task(id).item));
   }
 
-  /** The user's Resume; with `model` the task runs on it from now on (ADR-206). */
-  resumeTask(id: string, model?: string | null): Promise<Task> {
-    return this.#tasks.resume(id, model);
+  /**
+   * The user's Resume; with `model` the task runs on it from now on (ADR-206). A paused task's service that ran at the
+   * pause starts again once its session runs (ADR-253); a start the service refuses (its config no longer trusted, the
+   * repo's port held by another task's lease) goes to the log, and the task runs without it, as the Services view shows.
+   */
+  async resumeTask(id: string, model?: string | null): Promise<Task> {
+    const service = this.#tasks.task(id).paused?.service ?? null;
+    const resumed = await this.#tasks.resume(id, model);
+    if (service !== null)
+      await this.#deps.startTaskService(resumed, service).catch((err: unknown) => {
+        this.#deps.log(`task ${id} resumed without its service: ${messageOf(err)}`);
+      });
+    return resumed;
+  }
+
+  /**
+   * The user's pause of a task (ADR-253): its running sessions stop as with Stop, then its automatic reviews and, through
+   * the facade, the rest of its work; the task is saved as paused once all of it stopped. Only from the UI.
+   */
+  pauseTask(id: string): Promise<PausedTask> {
+    return this.#tasks.pause(id, async (task) => {
+      const sessions = this.#sessions.views().filter((s) => s.task === id && s.run.kind !== "exited");
+      await Promise.all(sessions.map((session) => this.#deps.procs.stop(sessionOwner(session.id))));
+      const reviews = this.#autoReviews.stop(id);
+      if (reviews !== null) await reviews;
+      const work = await this.#deps.stopTaskWork(task);
+      const own = [...(sessions.length > 0 ? ["the session"] : []), ...(reviews !== null ? ["the automatic review"] : [])];
+      return { service: work.service, stopped: [...own, ...work.stopped] };
+    });
   }
 
   /**
    * `resume_task` from session `caller` (`null`: an agent outside Trackwall, the user's program, which resumes any task,
    * ADR-90): the supervisor resumes any task, a main session only the tasks it proposed, a task session none. No agent
-   * resumes a task the daemon stopped at its token budget (ADR-237): the Resume that gives it the budget again is the
+   * resumes a task the user paused (ADR-253), nor one the daemon stopped at its token budget (ADR-237): the Resume that gives it the budget again is the
    * user's. Returns the task and its new session.
    */
   async resumeTaskFor(caller: string | null, id: string): Promise<{ task: Task; session: Session }> {
@@ -1004,8 +1047,8 @@ export class Agents {
     if (session?.task != null) throw new DomainError("bad_request", `a task session resumes no task; ask the user to resume task ${id}`);
     if (session && !isSupervisor(session) && proposerOf(task.proposedBy) !== proposerKeyOf(session))
       throw new DomainError("bad_request", `task ${id} was not proposed by this session; ask the user to resume it`);
-    if (this.#tasks.stoppedAtTokenBudget(id))
-      throw new DomainError("bad_request", `task ${id} was stopped at its token budget; ask the user to resume it`);
+    const onlyUser = this.#tasks.onlyUserResumes(id);
+    if (onlyUser !== null) throw new DomainError("bad_request", `task ${id} ${onlyUser}; ask the user to resume it`);
     const resumed = await this.#tasks.resume(id);
     return { task: resumed, session: this.#sessionOfTask(id) };
   }
@@ -1519,15 +1562,18 @@ export class Agents {
    * the previous daemon stopped go on with their conversations (ADR-95). A task's session resumes as Resume does; the
    * supervisor, a free session and a repo session start again under their id with `--resume`. One that cannot (its task
    * was ended, its repo is gone, a supervisor already runs) goes to the log, and so does a task the previous daemon
-   * marked stopped at its token budget (ADR-237) before its stop ended: only the user's Resume gives it the budget again.
+   * marked stopped at its token budget (ADR-237) or the user paused (ADR-253) before its stop ended: only the user's
+   * Resume gives it the budget again or ends the pause.
    */
   async resumeLeftSessions(): Promise<void> {
     // The supervisor first: the user may start a new one meanwhile, which would leave the old conversation behind.
     const left = [...this.#left].sort((a, b) => Number(b.supervisor) - Number(a.supervisor));
     this.#left = [];
     for (const session of left) {
-      if (session.task !== null && this.#tasks.find(session.task) !== undefined && this.#tasks.stoppedAtTokenBudget(session.task)) {
-        this.#deps.log(`not resuming session ${session.session}: task ${session.task} was stopped at its token budget`);
+      const onlyUser =
+        session.task !== null && this.#tasks.find(session.task) !== undefined ? this.#tasks.onlyUserResumes(session.task) : null;
+      if (onlyUser !== null) {
+        this.#deps.log(`not resuming session ${session.session}: task ${session.task} ${onlyUser}`);
         continue;
       }
       try {

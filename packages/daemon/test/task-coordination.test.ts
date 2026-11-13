@@ -42,6 +42,7 @@ function task(id: string, proposedBy: ProposedBy | null): Task {
     included: { files: [], problems: [] },
     change: null,
     retryOf: null,
+    paused: null,
   };
 }
 

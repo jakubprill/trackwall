@@ -245,6 +245,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(agentsApi.createChange, (f, b) => f.agents.createChange(b)),
   route(agentsApi.startOptions, (f) => f.agents.startOptions()),
   route(agentsApi.resumeTask, (f, b) => f.agents.resumeTask(b.task, b.model)),
+  route(agentsApi.pauseTask, (f, b) => f.agents.pauseTask(b.task)),
   route(agentsApi.retryTask, (f, b) => f.agents.retryTask(b.task, b.model)),
   route(agentsApi.taskChanges, (f, b) => f.agents.taskChanges(b.task)),
   route(agentsApi.sendReview, (f, b) => f.agents.sendReview(b.task, b.comments)),

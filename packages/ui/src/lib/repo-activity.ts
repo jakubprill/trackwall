@@ -2,7 +2,7 @@ import { proposalRepos, type RunningMiseTask, type SessionList, type Task } from
 import type { StatusTone } from "./repo-status.ts";
 import { runStateLabel } from "./run-state.ts";
 import { entryTime, latestSession, type SessionSelection, taskName } from "./session-entries.ts";
-import { PROPOSAL_STATUS, sessionStateLabel, sessionTitle } from "./session-state.ts";
+import { PROPOSAL_STATUS, sessionStateLabel, sessionTitle, taskStateLabel } from "./session-state.ts";
 
 /**
  * What is going on in one repo, for the bar above the repo's tabs (ADR-103): task proposals waiting for a decision,
@@ -80,7 +80,7 @@ function tasks(repo: string, list: SessionList): Work[] {
         item: {
           key: `task:${task.id}`,
           name: taskName(task),
-          status: session ? sessionStateLabel(session) : { label: "no session" },
+          status: taskStateLabel(task, session),
           open: { view: "sessions", selection: { kind: "task", id: task.id } },
         },
       };

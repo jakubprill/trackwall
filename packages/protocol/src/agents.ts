@@ -571,6 +571,19 @@ export function isFreeSession(session: Pick<Session, "repo" | "supervisor">): bo
 export const SupervisorConversation = z.enum(["last", "new"]);
 export type SupervisorConversation = z.infer<typeof SupervisorConversation>;
 
+/**
+ * A task the user paused (ADR-253): its session, its service, its other mise tasks, its shell and its checks were stopped
+ * to free the computer, while its worktree, branch and conversation stay. Only the user's Resume goes on with it, also
+ * after a daemon restart, and starts its service again when one ran at the pause.
+ */
+export const TaskPause = z.object({
+  /** ISO 8601. */
+  at: z.string(),
+  /** The task's service that ran at the pause, which Resume starts again the same way; `null` when none ran. */
+  service: z.object({ lease: z.boolean() }).nullable(),
+});
+export type TaskPause = z.infer<typeof TaskPause>;
+
 export const Task = z.object({
   id: TaskId,
   repo: RepoId,
@@ -620,8 +633,14 @@ export const Task = z.object({
    * attempts can be compared; `null` for a first attempt.
    */
   retryOf: TaskId.nullable(),
+  /** The user paused the task (ADR-253); `null` while it is not paused. */
+  paused: TaskPause.nullable(),
 });
 export type Task = z.infer<typeof Task>;
+
+/** What a pause stopped (ADR-253), in words the UI shows: "the session", "the service on port 4103", "mise task test". */
+export const PausedTask = z.object({ task: Task, stopped: z.array(z.string()) });
+export type PausedTask = z.infer<typeof PausedTask>;
 
 /** Parts of a change were started one by one; the ones that could not start are named with why, the others run. */
 export const CreatedChange = z.object({
@@ -1130,9 +1149,17 @@ export const agentsApi = {
   ),
   /**
    * A new session for a task that has no running session, in the task's view: it goes on with the task's conversation.
-   * With `model` the task runs on that model from now on (ADR-206; `null` for Copilot CLI's default).
+   * With `model` the task runs on that model from now on (ADR-206; `null` for Copilot CLI's default). A paused task's
+   * pause ends, and the service that ran at the pause starts again (ADR-253).
    */
   resumeTask: endpoint("resume-task", TaskRequest.extend({ model: TaskModel.nullable().optional() }), Task),
+  /**
+   * The user pauses a task (ADR-253): its running session stops (the rest of a turn is lost, as with Stop), then its
+   * automatic reviews, verification, reproduction check, service (not the services it calls), other mise tasks in its
+   * worktree and its shell. The worktree, branch, conversation and everything the task panel shows stay; Resume goes on
+   * with them. Pausing a paused task stops whatever was started there since. Only from the UI, never from MCP.
+   */
+  pauseTask: endpoint("pause-task", TaskRequest, PausedTask),
   /**
    * A new attempt at a task on another model (ADR-233), typically a stronger one after its verification failed: a new
    * task with the same repo, prompt, title, approvals, plan first, Java navigation, view, handoff and board item, from
