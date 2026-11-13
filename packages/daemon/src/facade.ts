@@ -83,6 +83,7 @@ import { REPRODUCTION_CHECKS_FILE, REPRODUCTION_CHECKS_FORMAT, ReproductionCheck
 import { Routines } from "./modules/routines/routines.ts";
 import { Services } from "./modules/services/services.ts";
 import { TASK_JOURNAL_FILE, TASK_JOURNAL_MAX_RECORDS, TaskJournal } from "./modules/task-journal/task-journal.ts";
+import { TaskTemplates } from "./modules/task-templates/task-templates.ts";
 import { DroppedFiles } from "./modules/terminals/dropped-files.ts";
 import { FolderFiles } from "./modules/terminals/folder-files.ts";
 import { FolderTerminals } from "./modules/terminals/folder-terminals.ts";
@@ -121,6 +122,8 @@ export interface Facade {
   board: Board;
   /** Saved tasks the user runs by hand, in `.trackwall/routines` of the projects folder, with their approvals (ADR-173). */
   routines: Routines;
+  /** The prompts the New task form starts from: built-in ones and the user's own in `.trackwall/task-templates` (ADR-251). */
+  taskTemplates: TaskTemplates;
   /** Short facts about the user's repos in `.trackwall/knowledge` of the projects folder, with their approvals (ADR-170). */
   knowledge: Knowledge;
   services: Services;
@@ -603,6 +606,7 @@ export function createFacade(o: FacadeOptions): Facade {
     batch,
     board,
     routines,
+    taskTemplates: new TaskTemplates({ projectsDir: () => workspace.projectsDir() }),
     knowledge,
     agents,
     services,

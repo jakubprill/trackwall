@@ -830,7 +830,15 @@ _Avoid_: recording (that is `session.cast`), snapshot
 
 **Routine** (module `routines`, `Routine`, `RoutineEntry`, `routinesApi`, MCP tool `propose_routine`; "Routines" under the New task form):
 A task the user repeats, saved once by an agent at the user's request and run by hand with "Run", each run an ordinary task with the routine's title, repo, model and approvals mode. A file in `.trackwall/routines` of the projects folder; it runs only in the version the user approved ("Approve this version"), so any change waits for approval again (ADR-173).
-_Avoid_: recipe, template, playbook, job, automation (a routine does not start by itself)
+_Avoid_: recipe, template (that is a task template, which only fills the prompt), playbook, job, automation (a routine does not start by itself)
+
+**Task template** (module `task-templates`, `TaskTemplate`, `TaskTemplateEntry`, `BUILT_IN_TASK_TEMPLATES`, `taskTemplatesApi`; "Start from a template:" and "Save as template" in the New task form):
+A prompt the user starts a task from: one click fills the New task form's prompt, and the user fills in its placeholders and starts the task as any other. Built-in ones ship with Trackwall; the user's own lie as files in `.trackwall/task-templates` of the projects folder, and one with a built-in's name takes its place. It only fills text the user reads, so it needs no approval (ADR-251).
+_Avoid_: preset, snippet, recipe; and a routine is a whole task that runs as saved
+
+**Placeholder** (`TEMPLATE_PLACEHOLDER`, `placeholdersLeft`):
+A part of a task template's prompt for the user to replace before starting: lowercase words in angle brackets, such as `<test name>` (ADR-251).
+_Avoid_: variable, parameter, field
 
 **Routine digest** (`RoutineDigest`, an alias of `ContentDigest`):
 The SHA-256 of a routine file's bytes: what the user approved, and what an approval or a run names, so a file changed meanwhile is refused. Workspace knowledge entries are approved the same way (`ContentDigest`).

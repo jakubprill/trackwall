@@ -28,6 +28,7 @@ import {
   taskOutcomesApi,
   taskRefreshApi,
   taskRoundsApi,
+  taskTemplatesApi,
   terminalsApi,
   usageReportApi,
   verificationApi,
@@ -187,6 +188,12 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(routinesApi.run, (f, b) => f.runRoutine(b.name, b.digest, b.view)),
   route(routinesApi.remove, async (f, b) => {
     await f.routines.remove(b.name);
+    return null;
+  }),
+  route(taskTemplatesApi.list, (f) => f.taskTemplates.list()),
+  route(taskTemplatesApi.save, (f, b) => f.taskTemplates.save(b)),
+  route(taskTemplatesApi.remove, async (f, b) => {
+    await f.taskTemplates.remove(b.name);
     return null;
   }),
   route(knowledgeApi.list, (f) => f.knowledge.list()),

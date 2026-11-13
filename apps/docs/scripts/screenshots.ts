@@ -148,6 +148,14 @@ const SHOTS: Record<string, (page: Page) => Promise<void>> = {
     await models.scrollIntoViewIfNeeded();
     await settle(page);
   },
+  "task-templates": async (page) => {
+    await page.keyboard.press("Control+3");
+    await page.getByRole("button", { name: "New task or Copilot CLI session" }).click();
+    await page.getByRole("button", { name: "Fix a failing test" }).click();
+    // Picking a template selects its first placeholder, so typing fills it in.
+    await page.keyboard.type("RefundServiceTest.refundsOnlyOnce");
+    await settle(page);
+  },
   overview: async (page) => {
     // The graph of twenty repos is wider than the other views.
     await page.setViewportSize({ width: 2400, height: 420 });

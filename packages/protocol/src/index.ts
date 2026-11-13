@@ -62,6 +62,7 @@ export * from "./task-outcomes.ts";
 export * from "./task-refresh.ts";
 export * from "./task-rounds.ts";
 export * from "./task-state.ts";
+export * from "./task-templates.ts";
 export * from "./task-updates.ts";
 export * from "./terminals.ts";
 export * from "./test-results.ts";
