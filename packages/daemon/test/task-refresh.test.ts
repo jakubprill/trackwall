@@ -39,9 +39,20 @@ const head = (dir: string) => gitIn(dir, "rev-parse", "HEAD").trim();
 const refresh = (task: string) => daemon.post(taskRefreshApi.refreshTask, { task });
 const taskNow = (id: string) => daemon.facade.agents.task(id);
 
+/**
+ * A task whose session is stopped: the fake Copilot CLI stays in its first turn after the task's prompt, and a refresh is
+ * refused in a turn, so the tests that are not about turns refresh a task the user stopped.
+ */
+async function stoppedTask(repo: string, prompt: string) {
+  const task = await daemon.facade.agents.createTask(repo, prompt);
+  const session = daemon.facade.agents.sessions().sessions.find((s) => s.task === task.id && s.run.kind === "running");
+  if (session) await daemon.post(agentsApi.stop, { session: session.id });
+  return task;
+}
+
 describe.skipIf(process.versions.bun === undefined)("refreshing a task from its base branch (real git, fake Copilot CLI)", () => {
   test("a task does not see work merged to main after it started until it is refreshed; the refresh merges it and the task's changes stay its own", async () => {
-    const task = await daemon.facade.agents.createTask("shop", "Add a cart");
+    const task = await stoppedTask("shop", "Add a cart");
     commitFiles(task.worktree, { "cart.ts": "export const cart = [];\n" }, "Add a cart");
     const taskHead = head(task.worktree);
     // Someone merges other work to main after the task started.
@@ -69,7 +80,7 @@ describe.skipIf(process.versions.bun === undefined)("refreshing a task from its 
   }, 60_000);
 
   test("a merge that would conflict changes nothing and names the files", async () => {
-    const task = await daemon.facade.agents.createTask("web", "Rename the site");
+    const task = await stoppedTask("web", "Rename the site");
     commitFiles(task.worktree, { "README.md": "# web shop\n" }, "Rename the site");
     const taskHead = head(task.worktree);
     commitFiles(repoDir("web"), { "README.md": "# web store\n", LICENSE: "MIT\n" }, "Rename the site differently");
@@ -84,7 +95,7 @@ describe.skipIf(process.versions.bun === undefined)("refreshing a task from its 
   }, 60_000);
 
   test("changes outside a commit are never mixed with a merge: the refresh is refused and says why", async () => {
-    const task = await daemon.facade.agents.createTask("api", "Add an endpoint");
+    const task = await stoppedTask("api", "Add an endpoint");
     writeFileSync(join(task.worktree, "endpoint.ts"), "export const endpoint = 1;\n");
     commitFiles(repoDir("api"), { "CHANGELOG.md": "Later work\n" }, "Later work on main");
 
@@ -102,7 +113,7 @@ describe.skipIf(process.versions.bun === undefined)("refreshing a task from its 
     gitIn(repoDir("docs"), "remote", "add", "origin", origin);
     gitIn(repoDir("docs"), "fetch", "-q", "origin");
     gitIn(repoDir("docs"), "remote", "set-head", "origin", "main");
-    const task = await daemon.facade.agents.createTask("docs", "Write a guide");
+    const task = await stoppedTask("docs", "Write a guide");
     commitFiles(task.worktree, { "guide.md": "# Guide\n" }, "Write a guide");
     const colleague = join(remotes, "colleague");
     gitIn(remotes, "clone", "-q", origin, colleague);
@@ -121,7 +132,7 @@ describe.skipIf(process.versions.bun === undefined)("refreshing a task from its 
   test("the merge runs no merge driver an agent could write into the repo's config", async () => {
     const lines = "one\ntwo\nthree\nfour\nfive\n";
     commitFiles(repoDir("lib"), { "list.txt": lines, ".gitattributes": "list.txt merge=agent\n" }, "Add a list");
-    const task = await daemon.facade.agents.createTask("lib", "Change the list");
+    const task = await stoppedTask("lib", "Change the list");
     // A merge driver in the repo's config, as an agent outside the sandbox could add it, that would leave a mark when run.
     const marker = join(mkdtempSync(join(tmpdir(), "trackwall-driver-")), "driver-ran");
     gitIn(
