@@ -65,6 +65,16 @@ export const StoredTask = Task.omit({ worktree: true }).extend({
    * replaced when the user trusts a changed one. `null` in a task saved by an older version, whose config then needs
    * the user's trust once.
    */
+  /**
+   * The digest of the repo's run settings when a task in the sandbox started (`run-settings.ts`, ADR-181 addendum); the
+   * daemon refuses git in the repo once they match no such digest. `null` without the sandbox, and in a sandboxed task
+   * saved by an older version until its next start.
+   */
+  runSettings: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/)
+    .nullable()
+    .default(null),
   trustedMiseConfig: z
     .record(z.string().max(MAX_MISE_PATH), z.string().regex(/^[0-9a-f]{64}$/))
     .nullable()

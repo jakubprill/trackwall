@@ -32,6 +32,7 @@ const stored = {
   change: null,
   retryOf: null,
   impactProposed: { "orders-bff": ["GET /api/orders/{id}"] },
+  runSettings: "c".repeat(64),
   trustedMiseConfig: { "mise.toml": "b".repeat(64) },
   port: 41003,
   included: { files: [".env", "config/application-local.yml"], problems: ["data.db is not a regular file (a link or a special file)"] },
@@ -62,6 +63,7 @@ describe("tasks.json", () => {
       view: _view,
       conversation: _conversation,
       summary: ___,
+      runSettings: _runSettings,
       trustedMiseConfig: ____,
       port: _____,
       included: ______,
@@ -83,6 +85,7 @@ describe("tasks.json", () => {
         conversation: null,
         summary: null,
         handoff: null,
+        runSettings: null,
         trustedMiseConfig: null,
         port: null,
         included: { files: [], problems: [] },
@@ -96,6 +99,14 @@ describe("tasks.json", () => {
     writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
 
     expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, trustedMiseConfig: null }]);
+  });
+
+  test("a sandboxed task saved before run settings were guarded comes back without their digest, which its next start takes", () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
+    const { runSettings: _, ...old } = stored;
+    writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
+
+    expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, runSettings: null }]);
   });
 
   test("a task saved before task ports comes back without a port and without included files", () => {
@@ -223,6 +234,7 @@ describe("tasks.json", () => {
     ["a relative repo root", { repoDir: "shop" }],
     ["a relative task worktrees folder, because the worktree is deleted from it", { worktreesDir: "worktrees" }],
     ["a trusted mise config hash that is not SHA-256", { trustedMiseConfig: { "mise.toml": "not-a-hash" } }],
+    ["a run settings digest that is not SHA-256", { runSettings: "not-a-hash" }],
   ])("a task with %s moves the file aside and does not come back", (_, change) => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
     const logged: string[] = [];
