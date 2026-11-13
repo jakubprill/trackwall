@@ -9,6 +9,7 @@ import {
   type RepoHost,
   RepoHosts,
   RepoTagRules,
+  RunningTasksWarning,
   SandboxSettings,
   SessionProfile,
   StarredRepos,
@@ -31,7 +32,7 @@ import { type WorkspaceKeyValues, workspaceKeyValue } from "./workspace-key-valu
 /**
  * `workspace.yaml` (§4.5, ADR-13): the workspace configuration, which the user can edit by hand and keep
  * in a private repo. Read on every use, so a manual edit works without restarting the daemon. A write changes
- * only one key (`projectsDir`, `worktreesDir`, `gitProgram`, `repoHosts`, `starredRepos`, which the star in Repos writes, `javaNavigation`, which the Java navigation install writes, or `localConfigRemote`, which "Push to this remote" for the local config store writes, or `sessionProfile`, or `autoReview`, or `supervisorModel`, or `retryModel`, or `taskTokenBudget`, or `supervisor`, or `sandbox`; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `agentSecrets` and `taskBranchPrefix` only by hand) and keeps comments and the other keys,
+ * only one key (`projectsDir`, `worktreesDir`, `gitProgram`, `repoHosts`, `starredRepos`, which the star in Repos writes, `javaNavigation`, which the Java navigation install writes, or `localConfigRemote`, which "Push to this remote" for the local config store writes, or `sessionProfile`, or `autoReview`, or `supervisorModel`, or `retryModel`, or `taskTokenBudget`, or `runningTasksWarning`, or `supervisor`, or `sandbox`; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `agentSecrets` and `taskBranchPrefix` only by hand) and keeps comments and the other keys,
  * including the `repos` list from version 0.2.0, which is no longer read (ADR-18): it is the user's file, so removing it is up to them.
  */
 
@@ -87,6 +88,8 @@ const Keys: { [K in WorkspaceKey]: z.ZodType<WorkspaceKeyValues[K], unknown> } =
   retryModel: TaskModel.nullish().transform((model) => model ?? null),
   // The tokens a task's session may use from its start or resume (ADR-237); set in Settings › Agents or by hand.
   taskTokenBudget: TaskTokenBudget.nullish().transform((budget) => budget ?? null),
+  // How many tasks may run at once before a start warns (ADR-244); set in Settings › Agents or by hand.
+  runningTasksWarning: RunningTasksWarning.nullish().transform((above) => above ?? null),
   // What a new task's branch starts with (ADR-239); only by hand, like `repoTags`. `null` leaves the default to `Workspace`.
   taskBranchPrefix: TaskBranchPrefix.nullish().transform((prefix) => prefix ?? null),
   // The Java language server for tasks (ADR-99); by hand or by installing it in Settings › Agents (ADR-123).
@@ -270,6 +273,16 @@ export class WorkspaceFile {
   /** `null` removes the key: tasks run without a budget. */
   setTaskTokenBudget(budget: number | null): void {
     this.set("taskTokenBudget", budget);
+  }
+
+  /** How many tasks may run at once before a start warns (`runningTasksWarning`, ADR-244); `null` for the computer's default. */
+  runningTasksWarning(): number | null {
+    return this.get("runningTasksWarning", Keys.runningTasksWarning);
+  }
+
+  /** `null` removes the key: the computer's default. */
+  setRunningTasksWarning(above: number | null): void {
+    this.set("runningTasksWarning", above);
   }
 
   /** With `changesCode` off the key goes, as for `setAutoReview`: the file says nothing the user did not turn on. */

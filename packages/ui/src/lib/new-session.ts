@@ -117,6 +117,15 @@ export function formChangeStart(
   return { start: changeStart(start, firstPart === null ? [] : added, title), firstPart };
 }
 
+/**
+ * How many tasks the form would start (ADR-244), for the running tasks warning: one for a task, also before its prompt is
+ * typed, one per repo for a change (at least the first while its title is missing), none for a session.
+ */
+export function tasksStarting(start: NewSessionStart): number {
+  if (start.kind === "change") return start.parts.length;
+  return start.kind === "task" || start.kind === "needs-prompt" || start.kind === "needs-title" ? 1 : 0;
+}
+
 /** Whether the form starts a change, with or without its title yet. */
 export function startsChange(start: NewSessionStart): boolean {
   return start.kind === "change" || start.kind === "needs-title";

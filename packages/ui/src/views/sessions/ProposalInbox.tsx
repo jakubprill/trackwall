@@ -37,6 +37,7 @@ import { ChangeOrderHints } from "./ChangeOrderHints.tsx";
 import { ChangeProposalParts } from "./ChangeProposalParts.tsx";
 import { ProposalActions, ProposalError } from "./ProposalActions.tsx";
 import { RepoRemovalNote } from "./RepoRemovalNote.tsx";
+import { RunningTasksNote } from "./RunningTasksNote.tsx";
 import { StartOptions } from "./StartOptions.tsx";
 
 /**
@@ -77,7 +78,8 @@ export function ProposalInbox({
   const decisions = useProposalDecisions({ conn, group, onChanged, onSelect, currentSelection });
   // Whether a proposal started without approvals runs in Copilot CLI's sandbox, or is refused (ADR-181).
   const loadStartOptions = useCallback(() => post(conn, agentsApi.startOptions, {}), [conn]);
-  const sandbox = useRemote(loadStartOptions).data?.sandbox;
+  const startOptions = useRemote(loadStartOptions).data;
+  const sandbox = startOptions?.sandbox;
   const providerModels = useProviderModels(conn).models;
   const [prompts, setPrompts] = useState<ReadonlyMap<string, string>>(new Map());
   const [models, setModels] = useState<ReadonlyMap<string, string>>(new Map());
@@ -162,6 +164,10 @@ export function ProposalInbox({
           them
           {several ? ", and tick a proposal once you have opened it" : ""}.
         </p>
+      )}
+      {proposals.some((p) => p.kind !== "remove_repo") && (
+        // The ticked tasks when "Start selected" would start them, otherwise the one task a proposal's own button starts.
+        <RunningTasksNote sessions={sessions} warning={startOptions?.runningTasksWarning} starting={Math.max(toStart.length, 1)} />
       )}
       <ul aria-label="Task proposals" className="flex flex-col gap-2">
         {proposals.map((p) => {

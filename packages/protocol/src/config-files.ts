@@ -333,6 +333,7 @@ export const WorkspaceKey = z.enum([
   "supervisorModel",
   "retryModel",
   "taskTokenBudget",
+  "runningTasksWarning",
   "taskBranchPrefix",
   "javaNavigation",
   "localConfigRemote",
@@ -376,6 +377,11 @@ export const WORKSPACE_KEYS: Record<WorkspaceKey, WorkspaceKeyInfo> = {
   },
   retryModel: {
     purpose: "The stronger Copilot CLI model a task whose verification failed is offered to be retried on.",
+    docs: "tasks",
+    settings: "agents",
+  },
+  runningTasksWarning: {
+    purpose: "How many tasks may run at once before starting another one warns that the computer may slow down.",
     docs: "tasks",
     settings: "agents",
   },

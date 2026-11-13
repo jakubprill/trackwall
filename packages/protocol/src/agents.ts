@@ -901,7 +901,26 @@ export function sandboxesTask(tasks: SandboxSettings["tasks"], approvals: TaskAp
   return tasks === "all" || (tasks === "auto" && approvals === "auto");
 }
 
-export const StartOptions = z.object({ javaNavigation: JavaNavigationState, sandbox: SandboxState });
+/**
+ * When starting a task warns that too many run at once (ADR-244): above `above` running tasks, which is
+ * `runningTasksWarning` from `workspace.yaml` or, without it or with a key written wrong, `computerDefault`, the number
+ * the daemon picks from the processors and memory of the computer it runs on (in a container, the container's).
+ */
+export const RunningTasksWarningState = z.object({
+  above: z.number().int().positive(),
+  computerDefault: z.number().int().positive(),
+  /** The logical processors the daemon may use. */
+  processors: z.number().int().positive(),
+  /** The memory the daemon's computer or container has, in GiB, to one decimal place. */
+  memoryGiB: z.number().nonnegative(),
+});
+export type RunningTasksWarningState = z.infer<typeof RunningTasksWarningState>;
+
+export const StartOptions = z.object({
+  javaNavigation: JavaNavigationState,
+  sandbox: SandboxState,
+  runningTasksWarning: RunningTasksWarningState,
+});
 export type StartOptions = z.infer<typeof StartOptions>;
 
 const SessionRequest = z.object({ session: SessionId }).strict();

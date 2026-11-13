@@ -214,6 +214,7 @@ export class Workspace {
     const supervisorModel = configOrProblem(() => this.deps.file.supervisorModel(), null);
     const retryModel = configOrProblem(() => this.deps.file.retryModel(), null);
     const taskTokenBudget = configOrProblem(() => this.deps.file.taskTokenBudget(), null);
+    const runningTasksWarning = configOrProblem(() => this.deps.file.runningTasksWarning(), null);
     const supervisor = configOrProblem(() => this.deps.file.supervisorSettings(), SupervisorSettings.parse({}));
     const sandbox = configOrProblem(() => this.deps.file.sandboxSettings(), null);
     // What Settings shows is what runs: a hand edit of `gitProgram` applies when Settings reads it (ADR-112).
@@ -235,6 +236,8 @@ export class Workspace {
       retryModelProblem: retryModel.problem,
       taskTokenBudget: taskTokenBudget.value,
       taskTokenBudgetProblem: taskTokenBudget.problem,
+      runningTasksWarning: runningTasksWarning.value,
+      runningTasksWarningProblem: runningTasksWarning.problem,
       supervisor: supervisor.value,
       supervisorProblem: supervisor.problem,
       sandbox: sandbox.value,
@@ -586,6 +589,17 @@ export class Workspace {
   setTaskTokenBudget(budget: number | null): WorkspaceSettings {
     this.deps.file.setTaskTokenBudget(budget);
     return this.settings();
+  }
+
+  /** How many tasks may run at once before a start warns (ADR-244); `null` removes the key. */
+  setRunningTasksWarning(above: number | null): WorkspaceSettings {
+    this.deps.file.setRunningTasksWarning(above);
+    return this.settings();
+  }
+
+  /** `runningTasksWarning` from `workspace.yaml` (ADR-244), `null` without the key; `invalid_config` for a bad key. */
+  runningTasksWarning(): number | null {
+    return this.deps.file.runningTasksWarning();
   }
 
   /**
