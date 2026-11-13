@@ -8,7 +8,7 @@ import { commitFiles, gitIn } from "./support/git-repo.ts";
 import { startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
-// A task's refresh from its base branch (ADR-244): the newest commits of the branch the task started from merged into the
+// A task's refresh from its base branch (ADR-245): the newest commits of the branch the task started from merged into the
 // task branch, never rebased, with nothing changed when the merge would conflict. Each test has a repo of its own.
 
 const TOKEN = "f".repeat(43);

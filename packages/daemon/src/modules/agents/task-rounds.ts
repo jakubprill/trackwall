@@ -46,7 +46,7 @@ const StoredRounds = z.object({
   squashedThrough: z.number().int().nonnegative(),
   /** A round was undone and the agent has not been told yet. */
   undoneUntold: z.boolean(),
-  /** The user refreshed the task from its base branch (ADR-244) and the agent has not been told yet. */
+  /** The user refreshed the task from its base branch (ADR-245) and the agent has not been told yet. */
   refreshedUntold: z.boolean().default(false),
   problem: z.string().nullable(),
 });
@@ -283,7 +283,7 @@ export class TaskRoundList {
   }
 
   /**
-   * Runs the user's refresh of the task from its base branch (ADR-244) after the task's earlier round steps, refused in the
+   * Runs the user's refresh of the task from its base branch (ADR-245) after the task's earlier round steps, refused in the
    * middle of a turn, when the agent may commit. `refresh` gets `squash`, which it calls once it knows it will merge: the
    * round commits are squashed as before a push and the branch moves there, since the push's squash does not reach behind
    * a merge commit, and it returns the new HEAD. After a merge (`head`) the next round starts from the merge commit, which
@@ -332,7 +332,7 @@ export class TaskRoundList {
     return this.#state.get(task)?.undoneUntold === true;
   }
 
-  /** Whether the agent has yet to hear that the user refreshed its task from the base branch (ADR-244). */
+  /** Whether the agent has yet to hear that the user refreshed its task from the base branch (ADR-245). */
   refreshedUntold(task: string): boolean {
     return this.#state.get(task)?.refreshedUntold === true;
   }

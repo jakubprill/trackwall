@@ -33,7 +33,7 @@ export function TaskChangesView({
 }: {
   conn: Connection;
   task: string;
-  /** The branch the task started from, which "Refresh" merges from (ADR-244); `null` from a detached HEAD. */
+  /** The branch the task started from, which "Refresh" merges from (ADR-245); `null` from a detached HEAD. */
   baseBranch: string | null;
   paused: boolean;
   review: TaskReview;

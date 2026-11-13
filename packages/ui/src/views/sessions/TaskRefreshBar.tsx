@@ -9,7 +9,7 @@ import { useAction } from "@/lib/use-action";
 import { cn } from "@/lib/utils";
 
 /**
- * "Refresh from <base branch>" in the task's "Changes" tab (ADR-244): merges the newest commits of the branch the task
+ * "Refresh from <base branch>" in the task's "Changes" tab (ADR-245): merges the newest commits of the branch the task
  * started from into the task branch. The daemon refuses it in the middle of a turn and changes nothing when the merge
  * would conflict; the bar shows what it did.
  */

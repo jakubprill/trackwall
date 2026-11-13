@@ -4,7 +4,7 @@ import { apiEndpoints } from "./api.ts";
 import { CommitHash } from "./workspace.ts";
 
 /**
- * A task's refresh from its base branch (§4.4, ADR-244): the newest commits of the branch the task started from are merged
+ * A task's refresh from its base branch (§4.4, ADR-245): the newest commits of the branch the task started from are merged
  * into the task branch, so the agent works on today's code. A merge, never a rebase: the branch keeps its history, so a
  * pushed branch needs no force push. Nothing changes when the merge would conflict; the files are named instead.
  */

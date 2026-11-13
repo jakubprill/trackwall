@@ -214,7 +214,7 @@ export interface AgentsDeps {
   repos: AgentsRepos;
   /**
    * Task worktrees and branches (ADR-31), the round commits in them (ADR-168), the repo's rules at a task's base (ADR-234),
-   * and the merge of a task's refresh from its base branch (ADR-244).
+   * and the merge of a task's refresh from its base branch (ADR-245).
    */
   vcs: TasksVcs & RoundsVcs & RulesVcs & RefreshVcs;
   /**
@@ -1041,7 +1041,7 @@ export class Agents {
   }
 
   /**
-   * The user's refresh of a task from its base branch (ADR-244): the newest commits merged into the task branch, its
+   * The user's refresh of a task from its base branch (ADR-245): the newest commits merged into the task branch, its
    * round commits squashed first, or the files the merge would conflict in, with nothing changed. Only from the UI.
    */
   refreshTask(id: string): Promise<TaskRefresh> {

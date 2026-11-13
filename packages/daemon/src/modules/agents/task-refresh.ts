@@ -2,7 +2,7 @@ import type { TaskRefresh } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
 
 /**
- * A task's refresh from its base branch (§4.4, ADR-244): the newest commit of the branch the task started from, after a
+ * A task's refresh from its base branch (§4.4, ADR-245): the newest commit of the branch the task started from, after a
  * fetch, is merged into the task branch, and becomes the task's base, so the task's changes stay its own work. The merge
  * is tried in memory first: a merge that would conflict changes nothing and names the files, so the worktree is never
  * left half merged for the user or the agent to sort out. The caller runs it in the task's queue of round steps, outside a

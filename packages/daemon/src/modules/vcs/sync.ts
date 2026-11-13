@@ -45,7 +45,7 @@ async function syncDefaultBranch(dir: string): Promise<SyncBranchOutcome> {
   return fastForward(dir, branch, remote.name, network);
 }
 
-/** `git fetch` of one remote; also a task's refresh from its base branch (ADR-244). */
+/** `git fetch` of one remote; also a task's refresh from its base branch (ADR-245). */
 export async function fetchRemote(dir: string, remote: string, network: GitNetwork): Promise<void> {
   await git(dir, ["fetch", "--quiet", "--", remote], { timeoutMs: FETCH_TIMEOUT_MS, network });
 }

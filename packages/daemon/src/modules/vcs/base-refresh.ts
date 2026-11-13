@@ -7,7 +7,7 @@ import type { RoundPlace } from "./round-commits.ts";
 import { fetchRemote } from "./sync.ts";
 
 /**
- * The git side of a task's refresh from its base branch (§4.4, ADR-244): the base branch's newest commit after a fetch,
+ * The git side of a task's refresh from its base branch (§4.4, ADR-245): the base branch's newest commit after a fetch,
  * and the merge commit that brings it into the task branch. The merge itself is built in memory in a scratch git
  * directory (`mergeIntoRepo` in `trial-merge.ts`), so no merge driver or attribute an agent could write into the repo
  * runs; only the commit and the move of the branch and the worktree run in the worktree, with its own git directory

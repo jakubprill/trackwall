@@ -3,7 +3,7 @@ import { refreshMessage } from "../src/lib/task-refresh.ts";
 
 const BASE = "a".repeat(40);
 
-describe("the message after Refresh from the base branch (ADR-244)", () => {
+describe("the message after Refresh from the base branch (ADR-245)", () => {
   test("a refresh that merged commits says how many and from where, and that the agent is told", () => {
     expect(refreshMessage({ state: "refreshed", from: "origin/main", commits: 3, base: BASE })).toEqual({
       tone: "done",

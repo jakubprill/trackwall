@@ -1,7 +1,7 @@
 import { countLabel, type TaskRefresh } from "@trackwall/protocol";
 
 /**
- * What the task's "Refresh from <branch>" (ADR-244) says after it ran: what came in, that nothing was needed, or which
+ * What the task's "Refresh from <branch>" (ADR-245) says after it ran: what came in, that nothing was needed, or which
  * files would conflict, with what the user can do about them.
  */
 export function refreshMessage(result: TaskRefresh): { tone: "done" | "warning"; text: string } {

@@ -758,7 +758,7 @@ describe("the prompt the daemon types for what waits", () => {
     );
   });
 
-  test("says that the user merged the newest commits of the base branch into the task branch, so the agent reads its files again (ADR-244)", () => {
+  test("says that the user merged the newest commits of the base branch into the task branch, so the agent reads its files again (ADR-245)", () => {
     expect(
       readRequestPrompt({
         reviewComments: 0,

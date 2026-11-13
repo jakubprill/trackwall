@@ -11,7 +11,7 @@ import { git } from "./git.ts";
  * own that reads the repo's objects through `objects/info/alternates`: the repo gets no objects every few seconds,
  * several windows asking at once never write the same object (on Windows "Permission denied", #36), and nothing an
  * agent can write in the repo (its `.git/config` with a merge driver's program, `info/attributes`, hooks) plays a part.
- * Only the user's global and system config does, as in their terminal. A task's refresh from its base branch (ADR-244)
+ * Only the user's global and system config does, as in their terminal. A task's refresh from its base branch (ADR-245)
  * makes its merge the same way, with the merged objects written into the repo (`mergeIntoRepo`).
  */
 
@@ -60,7 +60,7 @@ export async function trialMergeConflicts(input: TrialMergeInput, scratchDir: st
 }
 
 /**
- * The merge of the two commits as a tree in the repo's own objects (ADR-244), with the paths that conflict: a tree that
+ * The merge of the two commits as a tree in the repo's own objects (ADR-245), with the paths that conflict: a tree that
  * holds conflict markers when there are any, which the caller then does not commit. A git that cannot merge in memory
  * (older than 2.38) or a timeout is an exception.
  */

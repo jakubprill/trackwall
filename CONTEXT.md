@@ -414,7 +414,7 @@ One turn of a task's agent that changed the worktree, also a turn the user drove
 _Avoid_: step, iteration, snapshot; a "status round" of the repo lists (`repo-status-rounds.ts`) is not a task round
 
 **Refresh** (`TaskRefresh`, `taskRefreshApi.refreshTask`, `refresh-task`; "Refresh from <base branch>" in the UI):
-The user's merge of the newest commits of a task's base branch, after a fetch (`origin/main`, or `main` without a remote that has it), into the task branch, which then takes that commit as its base, so the task's changes stay its own work (ADR-244). Always a merge commit, never a rebase; a merge that would conflict changes nothing and names the files. Refused while the agent is in a turn or the worktree has changes outside a commit.
+The user's merge of the newest commits of a task's base branch, after a fetch (`origin/main`, or `main` without a remote that has it), into the task branch, which then takes that commit as its base, so the task's changes stay its own work (ADR-245). Always a merge commit, never a rebase; a merge that would conflict changes nothing and names the files. Refused while the agent is in a turn or the worktree has changes outside a commit.
 _Avoid_: sync (that is the repo list's fast-forward of the default branch), update, rebase, pull
 
 **Task notice** (`TaskNotice`, `taskNotices`, "Task notices" in the UI):

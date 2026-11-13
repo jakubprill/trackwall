@@ -880,7 +880,7 @@ export class AgentTasks {
   }
 
   /**
-   * The user's refresh of task `id` from its base branch (ADR-244): `refresh` works in the worktree as one of the task's
+   * The user's refresh of task `id` from its base branch (ADR-245): `refresh` works in the worktree as one of the task's
    * reads, which ending the task waits for, and the commit it merged becomes the task's base, so the task's changes stay
    * its own work. A git failure is `repo_unavailable`; a refusal keeps its own code.
    */

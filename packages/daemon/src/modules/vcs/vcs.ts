@@ -321,7 +321,7 @@ export class Vcs {
     return this.serialWorktreeOp(place.repoDir, () => moveBranch(place, squashed));
   }
 
-  // A task's refresh from its base branch (ADR-244, `base-refresh.ts`): the fetch in the sync queue, the merge commit in
+  // A task's refresh from its base branch (ADR-245, `base-refresh.ts`): the fetch in the sync queue, the merge commit in
   // the repo's queue of worktree changes.
 
   /** The base branch's newest commit after a fetch of the main remote; `null` when the repo has no such branch. */

@@ -54,7 +54,7 @@ export type GitOptions = Pick<RunOptions, "maxBytes" | "stdin" | "okExitCodes"> 
   indexFile?: string;
   /**
    * Where the command writes new objects (`GIT_OBJECT_DIRECTORY`): a merge built in a scratch git directory of the daemon's
-   * writes its result into the repo's objects (ADR-244).
+   * writes its result into the repo's objects (ADR-245).
    */
   objectDirectory?: string;
   /** `-c key=value` for this command only, over the repo's own configuration (a push without the repo's hooks, ADR-77). */
