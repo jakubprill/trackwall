@@ -258,6 +258,22 @@ describe("a failed model call, from Copilot CLI's event log (ADR-242)", () => {
     log.update("conv-e");
     expect(log.modelError()).toBe("500 provider down");
   });
+
+  test("every failed call counts, also one with the same message, and a call that goes through does not reset the count (ADR-243)", () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-usage-"));
+    const file = conversationEventLog(home, "conv-f");
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, `${modelChange("gpt-9")}\n${sessionError("query", unavailable)}\n`);
+    const log = new CopilotUsageLog(home);
+
+    log.update("conv-f");
+    expect(log.failedCalls()).toBe(1);
+
+    appendFileSync(file, `${sessionError("query", unavailable)}\n${call}\n${sessionError("mcp", "server fs failed to start")}\n`);
+    log.update("conv-f");
+    expect(log.failedCalls()).toBe(2);
+    expect(log.modelError()).toBeNull();
+  });
 });
 
 describe("the usage log of a session", () => {

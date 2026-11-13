@@ -22,6 +22,18 @@ const SESSION_START_WITH_PROMPT: StateSignal = {
 };
 
 /**
+ * A model call that failed, read from the conversation's event log (ADR-242, ADR-243): Copilot CLI's own record, so
+ * `high`. Copilot CLI 1.0.110 sends no hook at all after the `sessionStart` of a starting prompt whose model the account
+ * does not offer, so without this the session would stay `Working` while it sits in its empty input box.
+ */
+const MODEL_CALL_FAILED: StateSignal = {
+  state: "Error",
+  source: "log",
+  confidence: "high",
+  reason: "log session.error (model call failed)",
+};
+
+/**
  * A prompt the daemon typed counts as on its way this long (ADR-62): its session is not waiting for you meanwhile, and
  * one not taken by then may be typed again into an empty input box.
  */
@@ -174,6 +186,11 @@ export class CopilotSessionState {
   inPromptBox(lines: () => readonly string[]): boolean {
     const hooksSay = this.#inPromptBox ?? !this.#promptOnItsWay();
     return hooksSay && promptBoxOnScreen(lines()) === "empty";
+  }
+
+  /** A new failed model call in the conversation's event log (ADR-243): the turn ended with it. */
+  modelCallFailed(): TaskStateChange[] {
+    return this.#signal(MODEL_CALL_FAILED);
   }
 
   /** The daemon typed a prompt into the session (ADR-62); before the first hook its `sessionStart` then starts work. */

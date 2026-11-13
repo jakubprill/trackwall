@@ -99,3 +99,23 @@ describe("approvals of tools the agent called at once (ADR-66)", () => {
     expect(states(session.output("● Operation cancelled by user\r\n"))).toEqual(["Input screen operation cancelled"]);
   });
 });
+
+describe("a failed model call from the conversation's event log (ADR-243)", () => {
+  const sessionStart: CopilotHookRecord = { event: "sessionStart", receivedAt: 0, payload: {}, omitted: [] };
+  const errorOccurred: CopilotHookRecord = { event: "errorOccurred", receivedAt: 0, payload: {}, omitted: [] };
+
+  test("ends the Working of a starting prompt after which Copilot CLI sends no hook", () => {
+    const session = new CopilotSessionState({ now: () => 0, staleAfterMs: 60_000, promptOnStart: true, program: null });
+    expect(states(session.hook(sessionStart))).toEqual(["Working hook sessionStart with a prompt"]);
+
+    expect(states(session.modelCallFailed())).toEqual(["Error log session.error (model call failed)"]);
+  });
+
+  test("leaves the error hook its say, and the next prompt's hook starts work again", () => {
+    const session = sessionInTurn();
+    session.hook(errorOccurred);
+
+    expect(session.modelCallFailed()).toEqual([]);
+    expect(states(session.hook(promptSubmitted))).toEqual(["Working hook userPromptSubmitted"]);
+  });
+});

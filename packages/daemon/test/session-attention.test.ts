@@ -25,6 +25,16 @@ describe("waiting for you (ADR-47)", () => {
     expect(attention.waiting("Input")).toBe(false);
   });
 
+  test("Error, a turn that failed, waits for you until the user has seen it (ADR-243)", () => {
+    const attention = new SessionAttention();
+    attention.changed("Working", "Error");
+    expect(attention.waiting("Error")).toBe(true);
+
+    attention.window().focus(true);
+
+    expect(attention.waiting("Error")).toBe(false);
+  });
+
   test("Approval and Plan wait for an answer even in a window in front of the user", () => {
     const attention = new SessionAttention();
     attention.window().focus(true);

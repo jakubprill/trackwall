@@ -289,7 +289,7 @@ export const WaitStatus = z.enum([
   "working",
   /** The session does not respond (`Stale`) or may be stuck (`Session.stuck`, ADR-151). */
   "stale",
-  /** The session is waiting for the user (`needsAttention`): it finished a turn, asks for permission or for a plan approval. */
+  /** The session is waiting for the user (`needsAttention`): it finished or failed a turn, asks for permission or for a plan approval. */
   "needs_attention",
   /** The session's process has ended. */
   "exited",
@@ -782,7 +782,7 @@ export const mcpTools = {
       "repo (null for the supervisor, the one session in the projects folder above all repos), start time, process state (run: running, stopping, exited with exit code; the screen is not shared), the " +
       "latest state change (state: Working, Input, Approval, Plan, Done, Error, Stale, with source and confidence; " +
       "null before the first signal), window title (what the agent is working on), needsAttention (running and " +
-      "waiting for the user: approval, plan approval, or an ended turn the user has not seen yet) and task: the id of the task whose worktree it runs in, null in the repo root and for the supervisor. With repo set, the supervisor is left out. A task " +
+      "waiting for the user: approval, plan approval, or an ended or failed turn the user has not seen yet) and task: the id of the task whose worktree it runs in, null in the repo root and for the supervisor. With repo set, the supervisor is left out. A task " +
       "is work in its own worktree on its own branch: prompt, branch, base branch and commit, worktree path. Sessions " +
       "end with Trackwall, tasks stay until the user ends them. Also task proposals waiting for the user's decision " +
       `(${PROPOSE_TASK}) and caller: your own session id when you run in Trackwall, null otherwise. The repo argument ` +

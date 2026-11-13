@@ -658,14 +658,14 @@ An agent CLI running in a PTY owned by the daemon, in a repo root, in a task's w
 _Avoid_: POSIX session (that is a process group term), window (that is the terminal window in the UI)
 
 **Waiting for you** (`Session.needsAttention`, `SessionAttention`):
-A running session in `Approval` or `Plan`, or in `Input` the user has not seen yet (ADR-47): the agent will not move on without a human, and the human does not know yet. The daemon computes it; the UI (the counter on the view bar, which also counts task proposals waiting for a decision, ADR-39; "Next waiting") and the tray (the "Waiting: <repo>" menu, the flashing window, the system notification and the tray panel, ADR-50) only read the field. In a browser tab the page itself shows the count in the tab's title and a browser notification (ADR-146).
+A running session in `Approval` or `Plan`, or in `Input` or `Error` the user has not seen yet (ADR-47, ADR-243): the agent will not move on without a human, and the human does not know yet. The daemon computes it; the UI (the counter on the view bar, which also counts task proposals waiting for a decision, ADR-39; "Next waiting") and the tray (the "Waiting: <repo>" menu, the flashing window, the system notification and the tray panel, ADR-50) only read the field. In a browser tab the page itself shows the count in the tab's title and a browser notification (ADR-146).
 
 **Browser notification** (`showBrowserNotification`, `BrowserNotice`; with the count in the tab's title `TabAttention`, `useTabAttention`):
 A notification the Trackwall page in a browser tab shows through the browser when a session starts waiting for you or task proposals arrive while the tab is not in front (ADR-146): the same moments and words as the system notification of the desktop app, which shows its own instead. The browser asks for permission after a click on "Turn on notifications".
 _Avoid_: system notification (that is the desktop app's, ADR-50), web push (nothing goes through a push service)
 
 **Seen** (`SessionAttention.focus`, `typed`; the `focus` frame of `PtyClientMessage`):
-The user has seen the session's current `Input`: a session terminal was focused and visible, or the user typed into the session, after the state began.
+The user has seen the session's current `Input` or `Error`: a session terminal was focused and visible, or the user typed into the session, after the state began.
 _Avoid_: read, acknowledged
 
 **Idle** (`isIdle`, `IDLE_LABEL`, dashboard state `idle`):
@@ -728,7 +728,7 @@ The screen a session terminal showed when it closed, kept by the window and show
 _Avoid_: cached screen, screenshot
 
 **Task state** (`TaskState`, change: `TaskStateChange`; *state* in product texts):
-`Working`, `Input`, `Approval`, `Plan`, `Done`, `Error` or `Stale`, always with a source (`hook`, `osc`, `screen`, `keyboard`, `timeout`, `exit`) and a confidence (§4.4).
+`Working`, `Input`, `Approval`, `Plan`, `Done`, `Error` or `Stale`, always with a source (`hook`, `osc`, `screen`, `keyboard`, `timeout`, `exit`, `log` for Copilot CLI's event log of the conversation, `acp`) and a confidence (§4.4).
 
 **State detector**:
 A rule that infers the task state from hooks, terminal sequences, the look of the screen or a human's keys in the session terminal.
