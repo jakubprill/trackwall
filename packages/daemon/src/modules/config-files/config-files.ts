@@ -43,7 +43,8 @@ type StateEntryId =
   | "cards-dir"
   | "logs-dir"
   | "local-config-push-repo"
-  | "legacy-worktrees-dir";
+  | "legacy-worktrees-dir"
+  | "state-backups-dir";
 
 /** Copilot CLI's `config.json` as the doctor reads it (`trustedFolders`); the facade's wiring checks the two agree. */
 type CopilotTrust =
@@ -158,6 +159,7 @@ export class ConfigFiles {
       case "logs-dir":
       case "local-config-push-repo":
       case "legacy-worktrees-dir":
+      case "state-backups-dir":
         return plainEntry(this.#deps.statePaths[id]);
       case "projects-mise-config":
         return this.#projectsMiseConfig(ctx.projectsDir, depth);
