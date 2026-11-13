@@ -3,6 +3,7 @@ import { Columns3, FolderGit2, ListTree, Network, Orbit, Settings, SquareTermina
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityBar, type ActivityView } from "@/components/ActivityBar";
 import { AwaySummary } from "@/components/AwaySummary";
+import { CommandPalette } from "@/components/CommandPalette";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -15,6 +16,7 @@ import { RemoteDaemonSurface } from "@/components/RemoteDaemonSurface";
 import { SupervisorPanel } from "@/components/SupervisorPanel";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { inDesktopShell, reportShown, START_PARAMS, startFromLocation } from "@/lib/app-window";
+import type { PaletteAction } from "@/lib/command-palette";
 import { DaemonPlaceContext, useDaemonPlace } from "@/lib/desktop";
 import { DROP_HINT } from "@/lib/dropped-folder";
 import type { DroppedPaths } from "@/lib/file-drop";
@@ -200,6 +202,29 @@ export function App() {
       return true;
     },
   );
+  // A command from the palette (ADR-244); the palette changes the theme itself.
+  const runCommand = (action: Exclude<PaletteAction<View>, { kind: "theme" }>) => {
+    switch (action.kind) {
+      case "view":
+        return setView(action.view);
+      case "settings":
+        return openSettings(action.category);
+      case "entry":
+        return openInSessions(action.selection);
+      case "repo":
+        return openRepos(action.repo);
+      case "new-session":
+        return openInSessions({ kind: "new" });
+      case "supervisor":
+        return showSupervisor();
+      case "next-waiting":
+        return void openNextWaiting();
+      case "new-window":
+        return newWindow?.open(view);
+      default:
+        return action satisfies never;
+    }
+  };
   // Ctrl+= / Ctrl+- / Ctrl+0 zoom the window in the desktop app (ADR-65); a browser zooms on its own.
   useWindowShortcuts(
     (event) => (inDesktopShell() ? zoomStepOf(event, IS_MAC) : undefined),
@@ -239,6 +264,8 @@ export function App() {
                 )}
                 {/* Alt+N writes an idea down from every view (ADR-133). */}
                 <IdeaCapture conn={conn} />
+                {/* Ctrl+K (⌘K) goes anywhere by name (ADR-244). */}
+                <CommandPalette conn={conn} views={VIEWS} entries={entries} newWindow={newWindow !== undefined} onRun={runCommand} />
                 {dragging && conn && (
                   // Over the page, not in its flow: a bar that pushes the page down would move the terminals under the pointer.
                   <p className="bg-card text-muted-foreground pointer-events-none fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md border px-4 py-2 text-sm shadow-lg">
