@@ -35,7 +35,7 @@ Trackwall takes these files as they were when the task started, not as the task 
 
 To check every task without a click, turn on "Check a task's changes against the repo's rules when its agent reports its result" in "Settings > Agents".
 
-The reviewer is not a session: it does not show in "Sessions" and you cannot write to it. It gets only the tools that read and search files, and no MCP servers. When it asks for anything more, such as a file outside the task, Trackwall says no for you, and the section names what was refused, since the review may have stopped short.
+The reviewer is not a session: it does not show in "Sessions" and you cannot write to it. It gets only the tools that read and search files, and no MCP servers. Trackwall lets it read the change and the copies of the rules it wrote for it. When it asks for anything more, such as a file outside the task, Trackwall says no for you, and the section names what was refused, since the review may have stopped short. A review that was refused something and found nothing shows as failed rather than as a clean result, because the reviewer may not have seen the change at all; review again, or read the change yourself.
 
 ## Use it
 
@@ -53,4 +53,4 @@ To check the rules, press "Check rules" in the "Repo rules" section and add the 
 - A rules check is only as good as the rules: it finds what the files say in words, and skips a rule it cannot judge from the files, such as "run the tests" or "ask for a review".
 - "Review again" and "Check again" replace the last result of their kind. Trackwall keeps the last review and the last rules check of each task, also when it restarts or updates; one that was still running then shows as cancelled.
 - Ending a task stops its review.
-- The reviewer can read the task's worktree and your system's temporary folder, which Copilot CLI lets every session read. Copilot CLI also reads the repo's own instructions for agents, such as `AGENTS.md`, as in any session.
+- The reviewer can read the task's worktree, the change and the rules Trackwall hands it, and your system's temporary folder, which Copilot CLI lets every session read. Copilot CLI also reads the repo's own instructions for agents, such as `AGENTS.md`, as in any session.

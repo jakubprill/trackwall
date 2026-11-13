@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AutoReview, AutoReviewKind, Task } from "@trackwall/protocol";
 import { REVIEWER_TOOLS } from "../src/modules/agents/auto-review-run.ts";
@@ -11,8 +12,8 @@ import { type ModelRequest, type ScriptedModel, startScriptedModel } from "./sup
 // The contract of the automatic review (ADR-182) with the real Copilot CLI: `/review` over ACP as the daemon starts it,
 // against the scripted model. What the daemon relies on: `/review` asks the model to run the review agent through the
 // `task` tool and passes the daemon's text on; the model and the review agent get only `REVIEWER_TOOLS`; a file outside
-// the worktree and the diff's folder needs an approval, which the daemon refuses; and the answer of the turn is what
-// the daemon reads the findings from. The fake's `/review` (`test/fixtures/fake-copilot-acp.ts`) answers in the same shape.
+// the worktree needs an approval, which the daemon gives for the review's own folder only (`--add-dir` does not spare it
+// over ACP) and refuses for anything else; and the answer of the turn is what the daemon reads the findings from. The fake's `/review` (`test/fixtures/fake-copilot-acp.ts`) answers in the same shape.
 
 let model: ScriptedModel;
 let daemon: Awaited<ReturnType<typeof startRealCopilotDaemon>>;
@@ -22,7 +23,10 @@ setDefaultTimeout(4 * SESSION_MS);
 
 beforeAll(async () => {
   model = await startScriptedModel();
-  daemon = await startRealCopilotDaemon(model);
+  // Copilot CLI lets a session read the system's temporary folder, where the tests make the state directory: Copilot
+  // CLI gets a temporary folder of its own, so the state directory is outside it and untrusted, as `~/.trackwall` is.
+  const copilotTemp = mkdtempSync(join(tmpdir(), "trackwall-copilot-temp-"));
+  daemon = await startRealCopilotDaemon(model, {}, { TMPDIR: copilotTemp, TEMP: copilotTemp, TMP: copilotTemp });
 });
 
 afterEach(async () => {
@@ -99,7 +103,7 @@ describe("an automatic review with the real Copilot CLI", () => {
     expect(diffFile).toBe(join(daemon.home, "auto-reviews", "code", task.id, "changes.diff"));
     expect([...(main?.tools ?? [])].sort()).toEqual([...REVIEWER_TOOLS].sort());
     expect([...(agent?.tools ?? [])].sort()).toEqual([...REVIEWER_TOOLS].sort());
-    // The diff's folder is readable without an approval (`--add-dir`), and the diff is the task's change.
+    // The daemon approved reading the diff in the review's folder, and the diff is the task's change.
     expect(afterView?.toolResults.join("")).toContain("+export const total = 1;");
     expect(afterAgent?.toolResults.join("")).toContain("## Issue: Total is never used");
     expect(review).toMatchObject({ state: "done", message: null });
@@ -136,16 +140,16 @@ describe("an automatic review with the real Copilot CLI", () => {
     expect(afterShell?.toolResults.join("")).toContain("Tool 'bash' does not exist");
     expect(afterCreate?.toolResults.join("")).toContain("Tool 'create' does not exist");
     expect(existsSync(marker)).toBe(false);
-    // Refusing the read ends the turn: the review is done without findings and says what was refused.
+    // Refusing the read ends the turn: a review that found nothing after a refusal fails and says what was refused.
     expect(review).toMatchObject({
-      state: "done",
+      state: "failed",
       findings: [],
-      message: "The reviewer asked for more than reading the task and was refused: Access paths outside trusted directories",
+      message: `The review did not finish: the reviewer was refused what it asked for and found nothing, so the change is not known to be fine. Refused: Access paths outside trusted directories: ${secret}`,
     });
   });
 
   // Last, since it commits rules to the repo that every later task would start from.
-  test("a check against the repo's rules gets only view, grep and glob, reads the rules' copies freely and reports in the asked format", async () => {
+  test("a check against the repo's rules gets only view, grep and glob, reads the rules' copies with the daemon's approval and reports in the asked format", async () => {
     commitFiles(join(daemon.projects, "shop"), { "AGENTS.md": "# Rules\n\n- Never export a constant named `total`.\n" }, "Add rules");
     const task = await taskWithChange("add a cart total");
     let rulesDir = "";
@@ -173,7 +177,7 @@ describe("an automatic review with the real Copilot CLI", () => {
     expect(main?.lastUserText).toContain("\n- AGENTS.md\n");
     expect(rulesDir).toBe(join(daemon.home, "auto-reviews", "rules", task.id, "rules"));
     expect([...(main?.tools ?? [])].sort()).toEqual(["glob", "grep", "view"]);
-    // The rules' copies are in the review's folder, which the reviewer reads without an approval (`--add-dir`).
+    // The rules' copies are in the review's folder, which the daemon lets the reviewer read.
     expect(afterView?.toolResults.join("")).toContain("Never export a constant named `total`.");
     expect(check).toMatchObject({ kind: "rules", state: "done", message: null, ruleFiles: ["AGENTS.md"] });
     expect(check.findings).toEqual([
