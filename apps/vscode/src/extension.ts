@@ -2,7 +2,7 @@ import { SessionId } from "@trackwall/protocol";
 import * as vscode from "vscode";
 import { statusBarState } from "./session-groups.ts";
 import { OPEN_SESSION_COMMAND, SessionsTree } from "./sessions-tree.ts";
-import { stateFolder } from "./viewer-file.ts";
+import { notSharingMessage, stateFolder } from "./viewer-file.ts";
 import { watchSessions } from "./viewer-watch.ts";
 
 /**
@@ -16,11 +16,13 @@ export function activate(context: vscode.ExtensionContext): void {
   const tree = new SessionsTree();
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
   status.command = "trackwall.showSessions";
+  const view = vscode.window.createTreeView("trackwall.sessions", { treeDataProvider: tree });
   const watch = watchSessions({
     folder: () => stateFolder(vscode.workspace.getConfiguration("trackwall").get<string>("stateFolder") ?? ""),
     focused: () => vscode.window.state.focused,
-    onRead: (read) => {
+    onRead: (read, folder) => {
       tree.show(read);
+      view.message = read.kind === "off" ? notSharingMessage(folder) : undefined;
       const state = statusBarState(read);
       if (!state) return void status.hide();
       status.text = state.text;
@@ -34,7 +36,7 @@ export function activate(context: vscode.ExtensionContext): void {
     tree,
     status,
     { dispose: watch.dispose },
-    vscode.window.registerTreeDataProvider("trackwall.sessions", tree),
+    view,
     vscode.commands.registerCommand(OPEN_SESSION_COMMAND, (id: unknown) => openSession(id)),
     vscode.commands.registerCommand("trackwall.showSessions", () => vscode.commands.executeCommand("workbench.view.extension.trackwall")),
     vscode.commands.registerCommand("trackwall.refresh", () => watch.refresh()),

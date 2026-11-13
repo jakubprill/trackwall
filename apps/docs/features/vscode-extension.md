@@ -33,6 +33,7 @@ The extension gets its own read-only token from Trackwall, separate from the one
 
 - The extension is not in the VS Code Marketplace yet: you install it from the `.vsix` file, which is built from the source with `pnpm --filter @trackwall/vscode package`.
 - In a dev container, install the extension in the container's VS Code window: it then runs in the container, next to the Trackwall that runs there. A click on a session still opens Trackwall's window on your computer.
-- When Trackwall keeps its state somewhere else than `.trackwall` in your home folder, set "Trackwall: State Folder" in VS Code's settings (or `TRACKWALL_HOME`), so the extension finds `viewer.json`.
+- When Trackwall keeps its state somewhere else than `.trackwall` in your home folder, set "Trackwall: State Folder" in VS Code's settings (or `TRACKWALL_HOME`), so the extension finds `viewer.json`. A folder set there that does not exist on the machine where the extension runs is ignored: VS Code also applies your settings from your computer in a dev container's window, and the extension in the container then looks in `TRACKWALL_HOME` or `.trackwall` in the container's home folder.
+- While Trackwall does not share its sessions, the side bar names the `viewer.json` file it looked for, so you can check that it is the folder of the Trackwall you mean.
 - The extension talks only to Trackwall on `127.0.0.1` of the machine it runs on, never through a proxy, and sends its token only to the Trackwall start that wrote it.
 - Other VS Code extensions run in the same process and can read `viewer.json` like any program of yours; the token in it still only shows the sessions.

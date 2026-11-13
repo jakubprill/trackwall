@@ -1,4 +1,5 @@
 import { readSessions, type ViewerRead } from "./viewer-client.ts";
+import type { StateFolder } from "./viewer-file.ts";
 
 /**
  * Looks at the daemon again and again: every 2 s while the VS Code window has the focus, every 10 s while it does not,
@@ -16,9 +17,10 @@ export interface SessionWatch {
 }
 
 export function watchSessions(o: {
-  folder: () => string;
+  folder: () => StateFolder;
   focused: () => boolean;
-  onRead: (read: ViewerRead) => void;
+  /** Each look's result with the folder it looked in, which the side bar names while there is no `viewer.json`. */
+  onRead: (read: ViewerRead, folder: StateFolder) => void;
   read?: typeof readSessions;
 }): SessionWatch {
   const read = o.read ?? readSessions;
@@ -36,8 +38,9 @@ export function watchSessions(o: {
     running = true;
     clearTimeout(timer);
     try {
-      const result = await read(o.folder()).catch((err: unknown): ViewerRead => ({ kind: "unavailable", reason: String(err) }));
-      if (!disposed) o.onRead(result);
+      const folder = o.folder();
+      const result = await read(folder.path).catch((err: unknown): ViewerRead => ({ kind: "unavailable", reason: String(err) }));
+      if (!disposed) o.onRead(result, folder);
     } catch (err) {
       // A failure of VS Code's API while it shows the result must not end the loop as an unhandled rejection.
       console.error(`[trackwall] cannot show the sessions: ${String(err)}`);

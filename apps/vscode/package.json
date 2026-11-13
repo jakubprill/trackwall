@@ -47,12 +47,6 @@
         }
       ]
     },
-    "viewsWelcome": [
-      {
-        "view": "trackwall.sessions",
-        "contents": "Trackwall is not sharing its sessions with VS Code yet.\nTurn on \"VS Code extension\" in Trackwall's Settings > App. This side bar fills in a few seconds later."
-      }
-    ],
     "commands": [
       {
         "command": "trackwall.openSession",
@@ -93,7 +87,7 @@
           "type": "string",
           "default": "",
           "scope": "machine",
-          "markdownDescription": "Trackwall's state folder, where it writes `viewer.json`. Empty: `TRACKWALL_HOME` when set, otherwise `.trackwall` in your home folder."
+          "markdownDescription": "Trackwall's state folder, where it writes `viewer.json`. Empty, or a folder that does not exist on the machine where the extension runs (such as a path of your computer in a dev container): `TRACKWALL_HOME` when set, otherwise `.trackwall` in your home folder."
         }
       }
     }
