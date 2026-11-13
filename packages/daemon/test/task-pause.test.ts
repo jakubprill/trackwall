@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
 import { agentsApi, miseApi, servicesApi, terminalsApi } from "@trackwall/protocol";
@@ -16,6 +16,7 @@ const FAKE_MISE = [process.execPath, join(import.meta.dir, "fixtures", "fake-mis
 const MISE_CONFIG = JSON.stringify({ tasks: [{ name: "dev" }, { name: "watch" }], servers: { dev: {} } });
 const REPOS = { repos: { shop: { "fake-mise.json": MISE_CONFIG } }, miseCommand: FAKE_MISE };
 const TIMEOUT = 90_000;
+const RESUMABLE_FILE = "resumable-sessions.json";
 
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;
 /** An agent outside Trackwall with the daemon token, which `resume_task` lets resume any task (ADR-90). */
@@ -140,14 +141,29 @@ describe.skipIf(process.versions.bun === undefined)("pausing a task (real PTY, p
         const task = await before.post(agentsApi.createTask, { repo: "shop", prompt: "describe the repo", approvals: "auto" });
         // A second task runs through the restart, so the restart is seen resuming what it should.
         const running = await before.post(agentsApi.createTask, { repo: "shop", prompt: "describe the tests", approvals: "auto" });
-        runningSessionOf(before, running.id);
+        const sessions = [runningSessionOf(before, task.id), runningSessionOf(before, running.id)];
+        // The list of sessions to resume follows the running ones at every check (ADR-95); once it holds both, it is kept
+        // as the daemon would leave it if it stopped before the check after the pause: with the paused task's session.
+        const resumable = join(before.home, RESUMABLE_FILE);
+        await waitForCondition(
+          () => existsSync(resumable) && sessions.every((id) => readFileSync(resumable, "utf8").includes(id)),
+          "both sessions in the list to resume",
+        );
+        const listed = readFileSync(resumable, "utf8");
         const paused = await before.post(agentsApi.pauseTask, { task: task.id });
         await before.stop();
+        writeFileSync(resumable, listed);
 
-        after = await startSessionApi("q".repeat(43), { ...REPOS, restartOf: { home: before.home, projects: before.projects } });
+        const log: string[] = [];
+        after = await startSessionApi("q".repeat(43), {
+          ...REPOS,
+          restartOf: { home: before.home, projects: before.projects },
+          log: (msg) => log.push(msg),
+        });
         const restarted = after;
         await waitForCondition(() => sessionsOf(restarted, running.id).some((s) => s.run.kind === "running"), "the running task resumed");
 
+        expect(log).toContain(`not resuming session ${sessions[0]}: task ${task.id} was paused by the user`);
         expect(after.facade.agents.task(task.id).paused).toEqual(paused.task.paused);
         expect(sessionsOf(after, task.id)).toEqual([]);
         const agent = await connectHttpClient(after.api.port, "q".repeat(43));
