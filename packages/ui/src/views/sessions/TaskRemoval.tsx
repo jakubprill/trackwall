@@ -14,7 +14,7 @@ interface Refusal {
 /**
  * Ending a task (ADR-31): the worktree goes together with the files git ignores, and the branch stays or goes
  * with it. The daemon itself refuses when changes would be lost (`unsaved_changes`), and only then does the panel ask
- * whether to end it anyway, showing what will be lost. From a comparison (ADR-251) it ends the attempt the user did
+ * whether to end it anyway, showing what will be lost. From a comparison (ADR-252) it ends the attempt the user did
  * not keep, and names the kept one, which the task journal records.
  */
 export function TaskRemoval({

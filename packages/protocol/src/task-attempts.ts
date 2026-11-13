@@ -1,5 +1,5 @@
 /**
- * The attempts at one task (ADR-251): a task and its retries (ADR-233), linked by `retryOf`, which all start from the
+ * The attempts at one task (ADR-252): a task and its retries (ADR-233), linked by `retryOf`, which all start from the
  * same prompt and base commit, so the user can compare them side by side and keep one. One rule for the daemon, which
  * checks the attempt a user keeps, and the UI, which offers the comparison.
  */

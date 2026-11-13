@@ -5,7 +5,7 @@ import { EndedTask } from "@trackwall/protocol";
 import { waitUntil } from "../src/platform/process-group.ts";
 import { showSessions, useTrackwall, waitForTerminal } from "./support/trackwall-ui.ts";
 
-// Two attempts at one task compared side by side (ADR-251): started together from the New session form, compared in the
+// Two attempts at one task compared side by side (ADR-252): started together from the New session form, compared in the
 // task's Compare tab, one kept and the other ended, which the task journal records.
 
 const trackwall = useTrackwall();

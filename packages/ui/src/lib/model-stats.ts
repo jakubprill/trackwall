@@ -63,7 +63,7 @@ export function perVerifiedTask(row: ModelStatsRow): CopilotUsage | null {
 
 /**
  * Notes on how a model got its tasks (started on another model, or split between models) and how its attempts fared
- * when the user compared them with another attempt at the same task (ADR-251).
+ * when the user compared them with another attempt at the same task (ADR-252).
  */
 export function rowNotes(row: ModelStatsRow): string[] {
   const notes: string[] = [];

@@ -236,7 +236,7 @@ function TaskTabContent({
   review: ReturnType<typeof useTaskReview>;
   onOpenTask: (id: string) => void;
   onShowImpact: (task: string) => void;
-  /** What the "Compare" tab needs beyond the task (ADR-251). */
+  /** What the "Compare" tab needs beyond the task (ADR-252). */
   comparison: Pick<ComponentProps<typeof TaskComparison>, "tasks" | "sessions" | "outcomes" | "onChanged" | "onRemoved">;
 }) {
   return (

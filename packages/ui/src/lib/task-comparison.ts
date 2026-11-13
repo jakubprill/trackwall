@@ -12,7 +12,7 @@ import { errorMessage } from "./api.ts";
 import { typedModel } from "./task-model.ts";
 
 /**
- * Two attempts at one task side by side (ADR-251): a task and its retry (ADR-233) start from the same prompt and base
+ * Two attempts at one task side by side (ADR-252): a task and its retry (ADR-233) start from the same prompt and base
  * commit, so what they did differently is their work. No React here, so what the "Compare" tab says is tested on its own.
  */
 
@@ -83,7 +83,7 @@ export function reviewLabel(review: AutoReview | null): string {
 }
 
 /**
- * The model of the second attempt a new task starts with (ADR-251): the one typed for it, or with an empty field the
+ * The model of the second attempt a new task starts with (ADR-252): the one typed for it, or with an empty field the
  * task's own model, so the two attempts are two runs of one model. `undefined` for text that is no model id, which
  * holds the start until the user fixes it, as for the task's own model.
  */

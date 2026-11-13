@@ -35,7 +35,7 @@ interface Keeping {
 }
 
 /**
- * The "Compare" tab of a task with another attempt at it (ADR-251): the task and that attempt in two columns (model,
+ * The "Compare" tab of a task with another attempt at it (ADR-252): the task and that attempt in two columns (model,
  * state, what it used, its verdict and review, its changes and report), the files either of them changed with what
  * each did, a file's two diffs side by side, and "Keep this one", which ends the other attempt and tells the task
  * journal which one the user kept.

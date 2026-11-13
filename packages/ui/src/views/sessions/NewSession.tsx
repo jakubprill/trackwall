@@ -213,7 +213,7 @@ export function NewSession({
 }
 
 /**
- * The second attempt a new task may start with (ADR-251): the pill's value, whether its model is no id yet, and the
+ * The second attempt a new task may start with (ADR-252): the pill's value, whether its model is no id yet, and the
  * start of the task followed by its retry from the same commit. When the second attempt does not start, the form stays
  * with why, and forgets the task, which runs.
  */

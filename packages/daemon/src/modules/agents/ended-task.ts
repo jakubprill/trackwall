@@ -35,7 +35,7 @@ export interface TaskEnding {
   /** The task's round commits (ADR-168): their subject says only "WIP round", so the record lists the other commits. */
   roundCommits: ReadonlySet<string>;
   branchKept: boolean;
-  /** The other attempt at the same task the user keeps instead of this one (ADR-251); `null` for any other end. */
+  /** The other attempt at the same task the user keeps instead of this one (ADR-252); `null` for any other end. */
   keptInstead: string | null;
   endedAt: Date;
   /** What the task's conversation used over its life, read from its event log once its sessions stopped (ADR-228). */

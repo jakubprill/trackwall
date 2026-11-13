@@ -440,7 +440,7 @@ export class AgentTasks {
    * navigation, view, handoff and `item` (the caller checks it is still on the board), from the same base commit and
    * base branch, so the two attempts start from the same code; `retryOf` names the task it retries. It reports to the
    * user, not to a proposer, whose coordination stays with the first attempt, which goes on as it is. The same model as
-   * the task's is a second attempt to compare with the first (ADR-251). A part of a change starts with the other parts
+   * the task's is a second attempt to compare with the first (ADR-252). A part of a change starts with the other parts
    * on one branch name, so it is `bad_request`.
    */
   retry(id: string, model: string | null, item: string | null): Promise<Task> {
@@ -1020,7 +1020,7 @@ export class AgentTasks {
    * Ending a task: removes the worktree, and without `keepBranch` also the branch. Uncommitted files and commits outside
    * the branch, and when removing the branch also the task's commits, are lost only with `discardChanges`; otherwise
    * `unsaved_changes` with what would be lost. Returns the facts of the ended task for the task journal (ADR-150),
-   * read from its worktree before it goes, with `keptInstead`, the other attempt the user keeps (ADR-251).
+   * read from its worktree before it goes, with `keptInstead`, the other attempt the user keeps (ADR-252).
    */
   remove(
     id: string,
@@ -1069,7 +1069,7 @@ export class AgentTasks {
   }
 
   /**
-   * The attempt the user keeps when ending `task` from a comparison (ADR-251) must be another listed attempt at the same
+   * The attempt the user keeps when ending `task` from a comparison (ADR-252) must be another listed attempt at the same
    * task, one that goes on: the journal credits it with the choice.
    */
   #refuseUnlessOtherAttempt(task: KnownTask, kept: string): void {

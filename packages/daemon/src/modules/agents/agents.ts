@@ -1255,7 +1255,7 @@ export class Agents {
     return this.#tasks.trustedReproCopy(id, repo);
   }
 
-  /** Ends task `id`; `keptInstead` names the other attempt at it the user keeps from a comparison (ADR-251). */
+  /** Ends task `id`; `keptInstead` names the other attempt at it the user keeps from a comparison (ADR-252). */
   async removeTask(
     id: string,
     keepBranch: boolean,

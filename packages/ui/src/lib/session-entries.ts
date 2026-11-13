@@ -281,7 +281,7 @@ export type TaskTab = "session" | "shell" | "changes" | "compare" | "rounds" | "
 /**
  * The tabs a task's panel shows: its session's tab only while it has a session, named "Chat" for a task in the
  * conversation view (ADR-137), which has no terminal, and "Terminal" otherwise. "Shell" is the user's own shell in
- * the worktree (ADR-185). "Compare" only while another attempt at the task is listed (ADR-251).
+ * the worktree (ADR-185). "Compare" only while another attempt at the task is listed (ADR-252).
  */
 export function taskTabs(session: Pick<Session, "view"> | undefined, hasOtherAttempt: boolean): readonly { id: TaskTab; label: string }[] {
   const sessionTab = session ? [{ id: "session", label: session.view === "conversation" ? "Chat" : "Terminal" } as const] : [];

@@ -41,7 +41,7 @@ export function StartOptions({
   /** Whether the task's agent plans first in Copilot CLI's Plan mode (ADR-229); `unavailable` is why not now, `null` when it can. */
   planFirst?: { value: boolean; onChange: (value: boolean) => void; unavailable: string | null };
   /**
-   * A second attempt at the task started with it, to compare side by side (ADR-251): `null` when off, else the model
+   * A second attempt at the task started with it, to compare side by side (ADR-252): `null` when off, else the model
    * typed for it, empty for the task's own model.
    */
   secondAttempt?: { value: string | null; onChange: (value: string | null) => void; suggestions?: readonly ProviderModel[] };
@@ -277,7 +277,7 @@ function ModelPill({
 }
 
 /**
- * A second attempt at the task (ADR-251): a pill that is off until clicked, then a field for the second attempt's model,
+ * A second attempt at the task (ADR-252): a pill that is off until clicked, then a field for the second attempt's model,
  * empty for the task's own one, and a button that turns it off again.
  */
 function SecondAttemptPill({

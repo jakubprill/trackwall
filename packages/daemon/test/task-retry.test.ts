@@ -11,7 +11,7 @@ import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
 // A failed task retried on a stronger model (ADR-233): a new task with the same prompt from the same base commit, on the
 // model the user picks, linked to the task it retries in the task list and in the task journal; a second attempt on the
-// same model, and the attempt the user keeps from a comparison (ADR-251).
+// same model, and the attempt the user keeps from a comparison (ADR-252).
 
 const TOKEN = "r".repeat(43);
 let daemon: Awaited<ReturnType<typeof startSessionApi>>;

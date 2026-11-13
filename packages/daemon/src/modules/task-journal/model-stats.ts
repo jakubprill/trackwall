@@ -42,7 +42,7 @@ export function modelStats(records: readonly EndedTask[], period: ModelStatsPeri
   return { period, models, withoutModel };
 }
 
-/** `kept`: the tasks the user kept over another attempt at the same task (ADR-251). */
+/** `kept`: the tasks the user kept over another attempt at the same task (ADR-252). */
 function row(model: string, tasks: readonly EndedTask[], kept: ReadonlySet<string>): ModelStatsRow {
   const usages = tasks.flatMap((t): CopilotUsage[] => (t.usage === null ? [] : [t.usage]));
   return {

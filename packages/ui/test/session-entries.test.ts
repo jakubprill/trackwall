@@ -464,7 +464,7 @@ describe("the tabs of a task's panel (ADR-137)", () => {
     expect(taskTabs(undefined, false).map((t) => t.label)).toEqual(["Shell", "Changes", "Rounds", "Impact", "MCP calls"]);
   });
 
-  test("a task with another attempt at it listed gets a Compare tab after its changes (ADR-251)", () => {
+  test("a task with another attempt at it listed gets a Compare tab after its changes (ADR-252)", () => {
     expect(taskTabs({ view: "terminal" }, true).map((t) => t.label)).toEqual([
       "Terminal",
       "Shell",
