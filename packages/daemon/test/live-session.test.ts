@@ -90,6 +90,37 @@ describe("a Copilot CLI session in the daemon", () => {
     expect(session.view()).toMatchObject({ state: { state: "Input" }, needsAttention: true });
   });
 
+  test("waits for you since the state began, although a stronger source confirming it moves the state's time", () => {
+    const { session, hooksFile } = runningSession();
+    const notification = (payload: Record<string, string>) =>
+      appendFileSync(hooksFile, `${JSON.stringify({ event: "notification", receivedAt: 0, payload, omitted: [] })}\n`);
+    setSystemTime(new Date("2026-11-13T12:00:00.000Z"));
+    notification({ message: "Allow this command?" });
+    session.tick();
+    expect(session.view()).toMatchObject({ state: { state: "Approval", confidence: "low" }, needsAttention: true });
+
+    setSystemTime(new Date("2026-11-13T12:07:00.000Z"));
+    notification({ notification_type: "permission_prompt" });
+    session.tick();
+    setSystemTime();
+
+    expect(session.view()).toMatchObject({
+      state: { state: "Approval", confidence: "high", at: "2026-11-13T12:07:00.000Z" },
+      waitingSince: "2026-11-13T12:00:00.000Z",
+    });
+  });
+
+  test("a session the user has seen waits for nobody, so it has no waiting time", () => {
+    const { session, hooksFile } = runningSession();
+    session.connect({ write: () => {}, resize: () => {} });
+    endTurn(session, hooksFile);
+    expect(session.view()?.waitingSince).toEqual(session.view()?.state?.at ?? "missing");
+
+    session.input("n");
+
+    expect(session.view()).toMatchObject({ needsAttention: false, waitingSince: null });
+  });
+
   test("Esc that interrupts the turn leaves the session idle, not waiting for you", () => {
     const { session, hooksFile } = runningSession();
     session.connect({ write: () => {}, resize: () => {} });

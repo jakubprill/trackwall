@@ -14,6 +14,7 @@ function session(id: string, repo: string, state: TaskState, more: Partial<Sessi
     state: { state, source: "hook", confidence: "exact", at: AT, reason: "hook agentStop" },
     windowTitle: null,
     needsAttention: state === "Approval",
+    waitingSince: null,
     stuck: null,
     task: null,
     dialog: null,

@@ -22,7 +22,7 @@ Watch every group of agent work on one wall, on a second monitor, with what wait
 
 Each row is a group you already made. A task started on an item of a Plan project is in that project's row, with how far the project is. The parts of a change share a row named after its first part. The supervisor, the tasks it proposed and its proposals waiting for you share a row too, and so does any other session with the tasks it proposed, under the session's name as in "Sessions". Everything else, such as a task you typed yourself, is under "No group".
 
-A card goes to "Waits for you" when its agent asks for an approval or a plan, when its turn ended and you have not looked yet, or when it is a task proposal waiting for your decision. It goes to "In review" when the agent handed its work over, and to "Stuck" when the agent may be stuck, its session ended with an error, or its verification or pipeline failed. A column lists its longest wait first.
+A card goes to "Waits for you" when its agent asks for an approval or a plan, when its turn ended and you have not looked yet, or when it is a task proposal waiting for your decision. It goes to "In review" when the agent handed its work over, and to "Stuck" when the agent may be stuck, its session ended with an error, or its verification or pipeline failed. A column lists its longest wait first, and a card in "Waits for you" counts from the moment its session started to wait.
 
 Click a card to open its task or session. In the desktop app it opens in the window that shows "Sessions", so the wall stays as it is.
 
