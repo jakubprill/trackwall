@@ -371,8 +371,8 @@ _Avoid_: dashboard (that is the 3D scene), repo overview (that is the README and
 
 ## Processes and services
 
-**Service** (`Service`, `ServiceId`):
-A repo with its mise task `dev` (`SERVICE_MISE_TASK`), its port and its readiness. One per repo root and per task worktree (ADR-45, ADR-61).
+**Service** (`Service`, known by its `repo` and `task`):
+A repo with its mise task `dev` (`SERVICE_MISE_TASK`), its port and its readiness. One per repo root (`task: null`) and per task worktree (ADR-45, ADR-61).
 _Avoid_: app, microservice (when the entity in Trackwall is meant)
 
 **Service state** (`ServiceState`):
@@ -592,7 +592,7 @@ _Avoid_: inbox, notification, nudge
 Text a session's agent asked to put on the user's clipboard. It waits in the session's panel, the newest one per session, until the user copies or dismisses it; only the user's click writes the clipboard (ADR-180).
 _Avoid_: clipboard write, paste request
 
-**Agent queues** (`agent-queues.json`, `AgentQueues`, `agentQueuesFile`):
+**Agent queues** (`agent-queues.json`, `AgentQueues`, `AgentQueuesFile`):
 Everything that waits in the `agents` module for the user or an agent: task proposals, unread review comments, task messages, task updates and mise trust notices. Kept in the state directory, so a daemon restart or an update does not lose them; the sessions that come back are asked to read what is unread (ADR-115).
 _Avoid_: inbox, mailbox, outbox
 
