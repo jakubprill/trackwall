@@ -35,6 +35,7 @@ function session(id: string, repoId: string, over: Partial<Session> = {}): Sessi
     state: { state: "Working", source: "hook", confidence: "high", at: "2026-10-24T10:01:00Z", reason: "hook" },
     windowTitle: null,
     needsAttention: false,
+    waitingSince: null,
     stuck: null,
     task: null,
     dialog: null,

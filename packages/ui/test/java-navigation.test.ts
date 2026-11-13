@@ -117,6 +117,7 @@ describe("the Java navigation mark of a running session (ADR-175)", () => {
     state: null,
     windowTitle: null,
     needsAttention: false,
+    waitingSince: null,
     stuck: null,
     task: null,
     dialog: null,

@@ -119,6 +119,19 @@ describe("the column of a task on the wall (ADR-224)", () => {
     expect(onlyCard(input({ sessions: [free(false)] }))).toMatchObject({ column: "idle", detail: "idle" });
   });
 
+  test("a waiting card counts from when the wait began, not from the state's last confirmation (ADR-247)", () => {
+    const asking = session("s", {
+      task: "t",
+      needsAttention: true,
+      waitingSince: "2026-11-07T10:00:00.000Z",
+      state: { state: "Approval", confidence: "high", at: "2026-11-07T10:07:00.000Z" },
+    } as Partial<Session>);
+    expect(onlyCard(input({ tasks: [task("t")], sessions: [asking] }))).toMatchObject({
+      column: "waiting",
+      since: "2026-11-07T10:00:00.000Z",
+    });
+  });
+
   test("a finished turn the user has not seen waits for the user", () => {
     const finished = session("s", {
       task: "t",

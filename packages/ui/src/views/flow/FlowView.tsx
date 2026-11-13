@@ -1,5 +1,5 @@
 import { type BoardRevision, type SessionList, type TaskOutcome, trackwallLink } from "@trackwall/protocol";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { ProgressBar } from "@/components/ProgressBar";
@@ -18,6 +18,7 @@ import {
 import { elapsedLabel } from "@/lib/format";
 import { useOpenTrackwallLink } from "@/lib/trackwall-link";
 import { useBoard } from "@/lib/use-board";
+import { useClock } from "@/lib/use-clock";
 import { cn } from "@/lib/utils";
 
 /** The cards' times are read again every half minute; the wall is looked at, not touched. */
@@ -56,7 +57,7 @@ export function FlowView({
   const board = useBoard(conn, boardLive);
   const items = board.data?.items;
   const groups = useMemo(() => (sessions ? flowGroups({ list: sessions, items: items ?? [], outcomes }) : []), [sessions, items, outcomes]);
-  const now = useClock();
+  const now = useClock(CLOCK_MS);
   if (!sessions) {
     return (
       <div className="p-6">
@@ -151,14 +152,4 @@ function Card({ card, now }: { card: FlowCard; now: Date }) {
       {time && <span className={cn("font-mono text-xs", COLUMN_TEXT[card.column])}>{time}</span>}
     </button>
   );
-}
-
-/** The time now, read again every `CLOCK_MS`, so a card's time moves on while nothing else changes. */
-function useClock(): Date {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), CLOCK_MS);
-    return () => clearInterval(timer);
-  }, []);
-  return now;
 }

@@ -14,6 +14,7 @@ function session(state: "Working" | "Input" | null, run: Session["run"] = runnin
     state: state && { state, source: "hook", confidence: "high", at: "2026-10-29T08:01:00Z", reason: "hook" },
     windowTitle: null,
     needsAttention: false,
+    waitingSince: null,
     stuck: null,
     task: null,
     dialog: null,

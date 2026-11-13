@@ -8,7 +8,9 @@ import type { TaskState } from "@trackwall/protocol";
  * visible) or a key typed into the session marks it seen. A window that is in front of the user when the state
  * changes sees the new state at once. Only a change to another state makes the session unseen again, so a stronger
  * source confirming `Input` (a hook after a key) does not bring back a state the user has already seen. The state
- * itself lives with the session; this class only remembers whether the user has seen it.
+ * itself lives with the session; this class only remembers whether the user has seen it, and since when the session
+ * waits (`Session.waitingSince`): the time of the change into the state, kept while a source only confirms it, because
+ * the state's own time (`TaskStateChange.at`) moves with every stronger source and would restart the wait.
  */
 
 const WAITS_FOR_ANSWER: ReadonlySet<TaskState> = new Set(["Approval", "Plan"]);
@@ -27,15 +29,24 @@ export interface AttentionWindow {
 export class SessionAttention {
   readonly #focused = new Set<AttentionWindow>();
   #seen = false;
+  /** ISO 8601: when the session came into its state. */
+  #since: string | undefined;
 
   waiting(state: TaskState | undefined): boolean {
     if (state === undefined) return false;
     return WAITS_FOR_ANSWER.has(state) || (WAITS_TO_BE_SEEN.has(state) && !this.#seen);
   }
 
-  /** The session's state changed from `previous` to `next`; reported after every change of the detectors. */
-  changed(previous: TaskState | undefined, next: TaskState): void {
-    if (previous !== next) this.#seen = this.#focused.size > 0;
+  /** Since when the session waits for you in `state`, ISO 8601; `null` while it does not. */
+  waitingSince(state: TaskState | undefined): string | null {
+    return this.waiting(state) ? (this.#since ?? null) : null;
+  }
+
+  /** The session's state changed from `previous` to `next` at `at` (ISO 8601); reported after every change of the detectors. */
+  changed(previous: TaskState | undefined, next: TaskState, at: string): void {
+    if (previous === next) return;
+    this.#seen = this.#focused.size > 0;
+    this.#since = at;
   }
 
   window(): AttentionWindow {

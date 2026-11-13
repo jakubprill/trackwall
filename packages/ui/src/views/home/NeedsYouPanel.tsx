@@ -4,11 +4,12 @@ import { HardDrive, Lightbulb } from "lucide-react";
 import type { ReactNode } from "react";
 import { Loading } from "@/components/Loading";
 import { QueueItem } from "@/components/QueueItem";
+import { SessionStateLabel } from "@/components/SessionStateLabel";
 import { StatusLabel } from "@/components/StatusLabel";
 import { twoDigits } from "@/lib/format";
 import { HOME_SESSION_STATUS, homeRepoStatus } from "@/lib/home-model";
 import { proposalName } from "@/lib/session-entries";
-import { PROPOSAL_STATUS, sessionStateLabel, sessionTitle } from "@/lib/session-state";
+import { PROPOSAL_STATUS, sessionTitle } from "@/lib/session-state";
 import { UNPUSHED_NOTE, type UnpushedRow } from "@/lib/unpushed-work";
 
 /**
@@ -66,11 +67,10 @@ export function NeedsYouPanel({
           // The full state from the "Sessions" view (for example "asking for approval"), and the window title tells two
           // sessions of one repo apart.
           const session = sessions.get(s.id);
-          const status = session ? sessionStateLabel(session) : HOME_SESSION_STATUS[s.state];
           const title = session ? sessionTitle(session) : s.repo;
           return (
             <Row key={s.id} id={sessionKey(s.id)} selected={selected} onSelect={onSelect} onOpen={onOpen} title={title}>
-              <StatusLabel tone={status.tone} label={status.label} />
+              {session ? <SessionStateLabel session={session} /> : <StatusLabel {...HOME_SESSION_STATUS[s.state]} />}
             </Row>
           );
         })}

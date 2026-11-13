@@ -28,6 +28,11 @@ function isNewWindowShortcut(press: KeyPress, isMac: boolean): boolean {
   return hasModifiers(press, isMac ? { meta: true, shift: true } : { ctrl: true, shift: true }) && press.key.toLowerCase() === "n";
 }
 
+/** The caption of Ctrl+Shift+N (⌘⇧N). */
+export function newWindowShortcutLabel(isMac: boolean): string {
+  return isMac ? "⌘⇧N" : "Ctrl+Shift+N";
+}
+
 /**
  * What a key press does on the activity bar: switch this window's view, open a view in a new window, or nothing for
  * a held new-window shortcut, which is still taken so that its autorepeat does not reach a session terminal (xterm.js

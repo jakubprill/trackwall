@@ -14,6 +14,7 @@ function session(id: string, needsAttention: boolean, dialog: Session["dialog"] 
     state: null,
     windowTitle: null,
     needsAttention,
+    waitingSince: null,
     stuck: null,
     task: null,
     dialog,

@@ -460,6 +460,7 @@ export class AcpSession implements AgentSession {
       state: this.#last,
       windowTitle: this.#windowTitle,
       needsAttention: running && this.#attention.waiting(this.#last?.state),
+      waitingSince: running ? this.#attention.waitingSince(this.#last?.state) : null,
       stuck: running ? sessionStuck(this.#last, this.#lastStepAt, Date.now()) : null,
       task: this.task,
       dialog: running ? (this.#approvals[0]?.dialog ?? null) : null,
@@ -642,7 +643,7 @@ export class AcpSession implements AgentSession {
     const previous = this.#last?.state;
     this.#lastStepAt = Date.now();
     this.#last = { state, source, confidence: "exact", at: new Date().toISOString(), reason };
-    this.#attention.changed(previous, state);
+    this.#attention.changed(previous, state, this.#last.at);
   }
 
   /** Gathers the change for the next frame. */

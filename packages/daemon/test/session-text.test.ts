@@ -18,6 +18,7 @@ const session: AgentSession = {
   state: { state: "Input", source: "hook", confidence: "exact", at: "2026-11-05T09:20:00.000Z", reason: "agentStop" },
   windowTitle: null,
   needsAttention: true,
+  waitingSince: "2026-11-05T09:20:00.000Z",
   stuck: null,
   task: TASK_ID,
   environment: { variables: ["SHOP_URL", "SHOP_MODE"], secrets: ["SHOP_TOKEN"], agentSecrets: [], profile: null, problem: null },
@@ -117,7 +118,7 @@ describe("get_session text", () => {
       [
         `Session ${SESSION_ID} (task ${TASK_ID} in shop) on gpt-5.1: running since 2026-11-05T09:00:00.000Z`,
         "State: Input at 2026-11-05T09:20:00.000Z (hook, exact): agentStop",
-        "Needs attention: it waits for the user or for input.",
+        "Needs attention: it waits for the user or for input since 2026-11-05T09:20:00.000Z.",
         "Environment: 2 variables; 1 secret",
         "Usage: 12 model calls, 340000 input and 5100 output tokens",
         `## Task ${TASK_ID}: Fix login`,

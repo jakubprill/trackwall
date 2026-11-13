@@ -14,13 +14,14 @@ import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import { AgentDialogCard } from "@/components/AgentDialogCard";
 import { Loading } from "@/components/Loading";
+import { SessionStateLabel } from "@/components/SessionStateLabel";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
 import { twoDigits } from "@/lib/format";
 import { homeDaemonStatus, homeRepoStatus, homeServiceStatus, pullLabel } from "@/lib/home-model";
 import { branchLabel } from "@/lib/repo-status";
-import { sessionPlace, sessionStateLabel } from "@/lib/session-state";
+import { sessionPlace } from "@/lib/session-state";
 
 /**
  * The dashboard's right panel: details of the selected object and a button that goes to it. Without a selection it shows
@@ -166,7 +167,7 @@ function RepoDetails({
           ? "none"
           : sessions.map((s) => (
               <button key={s.id} type="button" className="hover:text-primary block text-left" onClick={() => onSelect(sessionKey(s.id))}>
-                <StatusLabel {...sessionStateLabel(s)} />
+                <SessionStateLabel session={s} />
               </button>
             ))}
       </Field>
@@ -179,7 +180,7 @@ function SessionDetails({ session, onSelect }: { session: Session; onSelect: (ke
   return (
     <dl className="grid w-full grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-xs">
       <Field name="State">
-        <StatusLabel {...sessionStateLabel(session)} />
+        <SessionStateLabel session={session} />
       </Field>
       {repo !== null && (
         <Field name="Repo">
