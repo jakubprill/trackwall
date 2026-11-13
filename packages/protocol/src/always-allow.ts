@@ -3,7 +3,7 @@
  * shell command without asking wherever its paths point, outside the worktree included (its contract test), so only a
  * narrow pattern may be remembered: a named shell command or one MCP tool, never a whole kind (`shell`, `write`), a
  * wildcard, or a command that writes, moves or deletes files by path, reaches the network, runs code given on its
- * command line, raises privileges, or pushes and configures git. The daemon checks the pattern Copilot CLI offers in its
+ * command line, raises privileges, or pushes and configures git (git only with a subcommand from a list). The daemon checks the pattern Copilot CLI offers in its
  * dialog with this, and the `alwaysAllow` key of `workspace.yaml` is read through it too, so a hand edit cannot widen it.
  */
 
@@ -19,6 +19,17 @@ const NEVER_COMMANDS = new Set([
   ...["start", "start-process", "invoke-expression", "iex", "invoke-command", "icm", "call"],
   ...["saps", "start-job", "sajb", "ii", "invoke-item", "ipmo", "import-module", "cscript", "wscript", "mshta", "rundll32"],
   ...["regsvr32", "forfiles", "wmic", "assoc", "ftype"],
+  // Runtimes that run a source file or a program given as an argument, like the interpreters above.
+  ...["java", "javaw", "jbang", "jrunscript", "groovy", "kotlin", "kotlinc", "scala", "rscript", "julia", "tclsh", "swift"],
+  // Wrappers that run another command, debuggers and editors that run commands of their own.
+  ...["command", "builtin", "setsid", "stdbuf", "flock", "script", "busybox", "chroot", "unshare", "nsenter", "pkexec"],
+  ...["runuser", "strace", "ltrace", "gdb", "lldb", "vi", "vim", "nvim", "ex", "emacs"],
+  // Shell builtins that change what the session's later commands run: Copilot CLI keeps one shell for the session.
+  ...["export", "alias", "set", "unset", "declare", "typeset", "cd", "pushd", "popd"],
+  // Opening a file or an address with the program the system picks, which may run it.
+  ...["open", "xdg-open", "explorer", "code", "code-insiders", "cursor"],
+  // Stopping other processes, the daemon and other sessions among them.
+  ...["kill", "pkill", "killall", "taskkill", "stop-process", "spps"],
   // Programs that download and run a package.
   ...["npx", "pnpx", "bunx", "uvx", "pipx"],
   ...["msiexec", "brew", "winget", "choco", "scoop", "gem", "bundle", "poetry", "uv", "conda"],
@@ -39,25 +50,10 @@ const NEVER_COMMANDS = new Set([
 ]);
 
 /**
- * Subcommands refused for a command allowed otherwise: pushing, fetching and configuring git, installing, running and
- * publishing packages. Not Maven's or Gradle's phases, which may come after any option (`mvn -q deploy`), so a prefix
- * pattern cannot leave them out (§8).
+ * Subcommands refused for a command allowed otherwise: installing, running and publishing packages. Not Maven's or
+ * Gradle's phases, which may come after any option (`mvn -q deploy`), so a prefix pattern cannot leave them out (§8).
  */
 const NEVER_SUBCOMMANDS: Readonly<Record<string, ReadonlySet<string>>> = {
-  git: new Set([
-    "push",
-    "config",
-    "remote",
-    "credential",
-    "submodule",
-    "clone",
-    "fetch",
-    "pull",
-    "send-email",
-    "worktree",
-    "clean",
-    "reset",
-  ]),
   npm: new Set(["install", "i", "add", "exec", "x", "publish", "login", "adduser", "token", "config", "set"]),
   pnpm: new Set(["add", "install", "i", "dlx", "exec", "publish", "login", "config"]),
   yarn: new Set(["add", "install", "dlx", "exec", "publish", "login", "npm", "config"]),
@@ -66,7 +62,23 @@ const NEVER_SUBCOMMANDS: Readonly<Record<string, ReadonlySet<string>>> = {
   mise: new Set(["exec", "x", "install", "use"]),
   cargo: new Set(["install", "publish", "login"]),
   go: new Set(["install", "get", "run"]),
-  dotnet: new Set(["tool", "nuget"]),
+  dotnet: new Set(["tool", "nuget", "exec", "fsi"]),
+};
+
+/**
+ * The only subcommands of a program that may be remembered, where refusing some is not enough. A pattern covers every
+ * option after it, and most of git's reading commands take ones that reach past the repo: `--output=<path>` writes any
+ * file (`log`, `diff`, `show`, `blame`, `shortlog`, `rev-list`, `reflog`, `stash`), `grep -O<program>` and
+ * `difftool -x` run a program, `archive -o` and `format-patch -o` write by path, `rebase --exec` and `bisect run` run
+ * commands. So for git only these subcommands, checked to take none of those options (a contract test shows
+ * `git log --output` writing outside the worktree without a question once `git log` is allowed).
+ */
+const ONLY_SUBCOMMANDS: Readonly<Record<string, ReadonlySet<string>>> = {
+  git: new Set([
+    ...["status", "add", "commit", "rm", "mv", "restore", "switch", "checkout", "branch", "merge", "tag"],
+    ...["rev-parse", "ls-files", "ls-tree", "cat-file", "describe", "show-branch", "cherry", "merge-base", "name-rev"],
+    ...["check-ignore", "for-each-ref", "count-objects"],
+  ]),
 };
 
 /** Characters a shell would read as more than one plain command: Copilot CLI's labels never hold them. */
@@ -104,10 +116,13 @@ function shellCommandAllowable(command: string): boolean {
   const word = commandWord(first);
   if (NEVER_COMMANDS.has(word)) return false;
   const refused = NEVER_SUBCOMMANDS[word];
-  if (refused === undefined) return true;
-  // A program with refused subcommands only with one named: neither bare, which would allow them all, nor with an
+  const only = ONLY_SUBCOMMANDS[word];
+  if (refused === undefined && only === undefined) return true;
+  // A program with checked subcommands only with one named: neither bare, which would allow them all, nor with an
   // option first (`git -C x push`), which moves the subcommand out of the second word.
-  return second !== undefined && !second.startsWith("-") && !refused.has(second.toLowerCase());
+  if (second === undefined || second.startsWith("-")) return false;
+  const subcommand = second.toLowerCase();
+  return only === undefined ? refused?.has(subcommand) !== true : only.has(subcommand);
 }
 
 /**
