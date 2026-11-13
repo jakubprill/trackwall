@@ -145,7 +145,7 @@ export function TaskPanel({
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <VerifyButton state={details.verification} disabled={confirmingRemoval} />
           <TaskEditorButton conn={conn} task={task} label="VS Code" />
-          <CopyIncludedFilesButton conn={conn} task={task} onCopied={onChanged} />
+          <CopyIncludedFilesButton conn={conn} task={task} onCopied={onChanged} iconOnly />
           <ModelChangeButton
             open={changingModel}
             onToggle={() => setChangingModel(!changingModel)}
@@ -306,7 +306,7 @@ function SessionButtons({
 }) {
   return (
     <>
-      {task.paused === null && <PauseButton conn={conn} task={task} disabled={removing} onPaused={onPaused} />}
+      {task.paused === null && <PauseButton conn={conn} task={task} disabled={removing} onPaused={onPaused} iconOnly />}
       {liveSession ? (
         <StopButton conn={conn} session={liveSession} onStopped={onStopped} />
       ) : (
