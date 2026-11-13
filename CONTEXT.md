@@ -371,8 +371,8 @@ _Avoid_: dashboard (that is the 3D scene), repo overview (that is the README and
 
 ## Processes and services
 
-**Service** (`Service`, `ServiceId`):
-A repo with its mise task `dev` (`SERVICE_MISE_TASK`), its port and its readiness. One per repo root and per task worktree (ADR-45, ADR-61).
+**Service** (`Service`, known by its `repo` and `task`):
+A repo with its mise task `dev` (`SERVICE_MISE_TASK`), its port and its readiness. One per repo root (`task: null`) and per task worktree (ADR-45, ADR-61).
 _Avoid_: app, microservice (when the entity in Trackwall is meant)
 
 **Service state** (`ServiceState`):
@@ -450,8 +450,16 @@ The Copilot CLI model a task's session runs on, as Copilot CLI names it (`claude
 _Avoid_: LLM, engine, agent (for the model)
 
 **Retry** (`Task.retryOf`, `EndedTask.retryOf`, action `retry-task`, `retryModel` in `workspace.yaml`; in the UI *Retry on <model>*, *Retry on a stronger model*, "Retry model" in Settings › Agents):
-A new attempt at a task on another model, usually a stronger one after its verification failed: a new task with the same prompt from the same base commit, which names the task it retries; the first attempt stays until the user ends it (ADR-233). Unlike a resume on another model (ADR-206), it does not go on with the first attempt's conversation or changes.
+A new attempt at a task, usually on a stronger model after its verification failed, or on the same model as a second run to compare (ADR-252): a new task with the same prompt from the same base commit, which names the task it retries; the first attempt stays until the user ends it (ADR-233). Unlike a resume on another model (ADR-206), it does not go on with the first attempt's conversation or changes.
 _Avoid_: rerun (that is Verify again), restart (that is a session's), fallback (that is Copilot CLI's own choice of model, ADR-225)
+
+**Attempts** (`firstAttempt`, `otherAttempts` in `task-attempts.ts`; "Other attempt" in the UI):
+A task and its retries, which all go back through `retryOf` to one first attempt (also one that has ended) and so share its prompt and base commit (ADR-252).
+_Avoid_: run, variant, candidate, round (a round is one turn of one task's agent)
+
+**Comparison** (`TaskComparison`, `lib/task-comparison.ts`, `keptInstead` of `remove-task` and of `EndedTask`; the "Compare" tab, "Keep this one", and "Second attempt" on the New session form):
+Two attempts at one task side by side in the task's "Compare" tab: model, state, usage, verdict, automatic review, changes, report and each file's two diffs. "Keep this one" ends the other attempt, and its journal record names the kept one (`keptInstead`), which model statistics count (`keptInComparison`, `droppedInComparison`). "Second attempt" starts a task and its retry together (ADR-252).
+_Avoid_: A/B test, duel, race, winner (in product texts)
 
 **Token budget** (`taskTokenBudget` in `workspace.yaml`, `Session.tokenBudget`, `TokenBudget`; in the UI "Token budget per task" in Settings › Agents, *Stopped at its token budget*):
 How many tokens (input and output) a task's session may use from its start or resume; at it Trackwall stops the session as Stop does, and the user's Resume gives the task the budget again (ADR-237).
@@ -592,7 +600,7 @@ _Avoid_: inbox, notification, nudge
 Text a session's agent asked to put on the user's clipboard. It waits in the session's panel, the newest one per session, until the user copies or dismisses it; only the user's click writes the clipboard (ADR-180).
 _Avoid_: clipboard write, paste request
 
-**Agent queues** (`agent-queues.json`, `AgentQueues`, `agentQueuesFile`):
+**Agent queues** (`agent-queues.json`, `AgentQueues`, `AgentQueuesFile`):
 Everything that waits in the `agents` module for the user or an agent: task proposals, unread review comments, task messages, task updates and mise trust notices. Kept in the state directory, so a daemon restart or an update does not lose them; the sessions that come back are asked to read what is unread (ADR-115).
 _Avoid_: inbox, mailbox, outbox
 

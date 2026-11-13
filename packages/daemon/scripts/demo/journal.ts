@@ -78,6 +78,7 @@ export function writeDemoJournal(home: string, repos: readonly string[], now: Da
         item: null,
         handoffFrom: null,
         retryOf: null,
+        keptInstead: null,
         summary: null,
         commits: [],
         commitsTotal: outcome === null ? 0 : 1 + (n % 3),

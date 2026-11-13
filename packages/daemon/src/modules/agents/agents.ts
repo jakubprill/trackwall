@@ -1255,13 +1255,20 @@ export class Agents {
     return this.#tasks.trustedReproCopy(id, repo);
   }
 
-  async removeTask(id: string, keepBranch: boolean, discardChanges: boolean, discardFingerprint?: string): Promise<void> {
+  /** Ends task `id`; `keptInstead` names the other attempt at it the user keeps from a comparison (ADR-252). */
+  async removeTask(
+    id: string,
+    keepBranch: boolean,
+    discardChanges: boolean,
+    discardFingerprint?: string,
+    keptInstead: string | null = null,
+  ): Promise<void> {
     // Its reviewer runs in the worktree, which the removal refuses while a process of Trackwall is in it. Without one,
     // the removal starts at once, so a change computation that comes after it refuses.
     const stopping = this.#autoReviews.stop(id);
     if (stopping !== null) await stopping;
     const { item } = this.#tasks.task(id);
-    const ended = await this.#tasks.remove(id, keepBranch, discardChanges, discardFingerprint);
+    const ended = await this.#tasks.remove(id, keepBranch, discardChanges, discardFingerprint, keptInstead);
     // The task that was still at work may have been the last one on its item not in review, or the last one on it.
     if (item !== null) this.#boardItems.removed(item);
     this.#autoReviews.forget(id);

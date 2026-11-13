@@ -3,12 +3,14 @@ import {
   type ChangeRequest,
   cardsApi,
   countLabel,
+  type ProviderModel,
   pluralNoun,
   type RunningTasksWarningState,
   type SandboxState,
   type Session,
   type SessionView,
   TASK_PROMPT_MAX,
+  type Task,
   type TaskApprovals,
   workspaceApi,
 } from "@trackwall/protocol";
@@ -38,6 +40,7 @@ import { tagsByRepo } from "@/lib/repo-tags";
 import { sandboxNote } from "@/lib/sandbox";
 import type { SessionSelection } from "@/lib/session-entries";
 import { readStartChoice, type StartChoice, saveStartChoice } from "@/lib/start-choices";
+import { secondAttemptModel, startTwoAttempts } from "@/lib/task-comparison";
 import { typedModel } from "@/lib/task-model";
 import { type PlanFirstOffer, planFirstOffer, planFirstToSend } from "@/lib/task-plan";
 import { useAction } from "@/lib/use-action";
@@ -103,20 +106,23 @@ export function NewSession({
   const javaNavigation = java.kind === "ready" && choice.javaNavigation;
   const { item } = form;
   const planOffer = planFirstOffer(start, choice.view);
+  const second = useSecondAttempt(conn, model, onStarted, () => setPrompt(""));
   const createTask = useAction(
     (repo: string, prompt: string) =>
-      post(conn, agentsApi.createTask, {
-        repo,
-        prompt,
-        approvals,
-        model: model ?? null,
-        javaNavigation,
-        item,
-        view: choice.view,
-        stackTrace: stackTraceToSend(stackTrace, stackTraceOpen),
-        planFirst: planFirstToSend(planOffer, planFirst),
-      }),
-    (task) => onStarted({ kind: "task", id: task.id }),
+      second.start(() =>
+        post(conn, agentsApi.createTask, {
+          repo,
+          prompt,
+          approvals,
+          model: model ?? null,
+          javaNavigation,
+          item,
+          view: choice.view,
+          stackTrace: stackTraceToSend(stackTrace, stackTraceOpen),
+          planFirst: planFirstToSend(planOffer, planFirst),
+        }),
+      ),
+    second.started,
   );
   const startSession = useAction(
     (repo: string | null, prompt: string | undefined) =>
@@ -124,7 +130,7 @@ export function NewSession({
     (session) => onStarted({ kind: "session", id: session.id }),
   );
   const pending = createTask.pending || startSession.pending || change.create.pending;
-  const error = createTask.error ?? startSession.error ?? change.create.error;
+  const error = [createTask.error, startSession.error, change.create.error, second.problem].find((e) => e !== undefined);
   const run = () => {
     // A model that is not an id is not remembered; the start waits for it to be fixed.
     if (model !== undefined) saveStartChoice(() => window.localStorage, chosen, choice);
@@ -179,6 +185,7 @@ export function NewSession({
             javaNavigation={javaNavigationPill(java, choice.javaNavigation, (on) => choose({ javaNavigation: on }))}
             view={{ value: choice.view, onChange: (view: SessionView) => choose({ view }) }}
             planFirst={planFirstPill(planOffer, planFirst, setPlanFirst)}
+            secondAttempt={secondAttemptPill(start, second, providerModels)}
             sandbox={sandboxNote(offers.sandbox, approvals)}
             disabled={pending}
           />
@@ -198,7 +205,7 @@ export function NewSession({
           <RunningTasksNote sessions={sessions} warning={offers.runningTasksWarning} starting={tasksStarting(start)} />
           <StartNote start={start} repo={repo} sessions={sessions} />
           <div className="flex flex-wrap items-center gap-2">
-            <StartButton start={start} disabled={pending} invalidModel={model === undefined} onClick={run} />
+            <StartButton start={start} disabled={pending} invalidModel={model === undefined || second.holds(start)} onClick={run} />
             {onCancel && (
               <Button variant="ghost" onClick={onCancel}>
                 Cancel
@@ -215,6 +222,41 @@ export function NewSession({
       {error && <p className="text-destructive text-sm whitespace-pre-wrap">{error}</p>}
     </div>
   );
+}
+
+/**
+ * The second attempt a new task may start with (ADR-252): the pill's value, whether its model is no id yet, and the
+ * start of the task followed by its retry from the same commit. When the second attempt does not start, the form stays
+ * with why, and forgets the task, which runs.
+ */
+function useSecondAttempt(
+  conn: Connection,
+  taskModel: string | null | undefined,
+  onStarted: (selection: SessionSelection) => void,
+  clearPrompt: () => void,
+) {
+  const [value, setValue] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string>();
+  const model = value === null ? null : secondAttemptModel(value, taskModel ?? null);
+  const start = (create: () => Promise<Task>) => {
+    setProblem(undefined);
+    if (value === null || model === undefined) return create().then((task) => ({ task, secondProblem: null }));
+    return startTwoAttempts(create, (task) => post(conn, agentsApi.retryTask, { task: task.id, model }));
+  };
+  const started = ({ task, secondProblem }: { task: Task; secondProblem: string | null }) => {
+    if (secondProblem === null) return onStarted({ kind: "task", id: task.id });
+    clearPrompt();
+    setValue(null);
+    setProblem(secondProblem);
+  };
+  /** A second attempt's model that is no id holds the start of a task, as the task's own model does. */
+  const holds = (form: NewSessionStart) => form.kind === "task" && model === undefined;
+  return { value, setValue, holds, problem, start, started };
+}
+
+/** The second attempt's pill, only for a task on its own: a change's parts start together on one branch name (ADR-171). */
+function secondAttemptPill(start: NewSessionStart, second: ReturnType<typeof useSecondAttempt>, suggestions: readonly ProviderModel[]) {
+  return start.kind === "task" ? { value: second.value, onChange: second.setValue, suggestions } : undefined;
 }
 
 /** The Plan first pill where the form offers it (ADR-229). */

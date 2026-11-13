@@ -271,7 +271,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(agentsApi.taskWorktrees, (f) => f.agents.taskWorktrees()),
   route(agentsApi.taskWorktreeSize, (f, b) => f.agents.taskWorktreeSize(b.task)),
   route(agentsApi.removeTask, async (f, b) => {
-    await f.agents.removeTask(b.task, b.keepBranch, b.discardChanges, b.discardFingerprint);
+    await f.agents.removeTask(b.task, b.keepBranch, b.discardChanges, b.discardFingerprint, b.keptInstead ?? null);
     return null;
   }),
   route(terminalsApi.start, (f, b) => f.terminals.start(b)),

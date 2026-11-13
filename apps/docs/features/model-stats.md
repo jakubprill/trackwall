@@ -15,6 +15,7 @@ See which model passes verification most often on your own tasks, and what one t
 - What one task cost on average, and what one verified task cost once the failed and unverified ones are paid for too.
 - One sentence that names the model that passes verification most often and the one that costs the least per verified task.
 - The tasks Copilot CLI ran on another model than the one you started them on, so a quiet switch does not hide in the numbers.
+- How often you kept a model's attempt when you compared two attempts at one task side by side.
 
 ## How it works
 
@@ -23,6 +24,8 @@ When you end a task, Trackwall keeps a short record of it (see [Agent tasks](/fe
 A task counts for the model that made most of its calls. If you started a task on one model and Copilot CLI ran it on another, because your account does not offer the first, the task counts for the model that did the work, and its row says how many tasks were started on another model. A task you moved to another model half way counts once, for the model that made more of its calls.
 
 "Verified" is a task whose last [Verify](/features/tasks) passed; "Failed", one whose last Verify failed. A task you never verified is in neither. "Per task" is the average of what the model's tasks used (AI credits over the tasks that reported them), the same way a session shows its [usage](/features/sessions): AI credits, premium requests, or only tokens with a model of your own provider. "Per verified task" divides everything the model's tasks used by the tasks that passed, so a cheap model that often fails costs more per verified task than per task.
+
+When you compare two attempts at one task in its "Compare" tab and keep one (see [Agent tasks](/features/tasks)), the row of each model says how often you kept its attempt, such as "kept in 3 of 4 comparisons". Both attempts started from the same prompt and commit, so this is the fairest comparison of two models the statistics have. The attempt you ended counts at once, the one you kept once you end it too, each for the model that did its work.
 
 The sentence above the table compares only models with five tasks or more. With fewer, a single failure changes the share by a fifth or more, so such a row says "too few tasks to compare" and stays out of the sentence. The sentence shows only when two models or more have enough tasks, and it names the cheapest one only when at least two of them report AI credits.
 

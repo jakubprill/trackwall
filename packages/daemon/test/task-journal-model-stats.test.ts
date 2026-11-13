@@ -22,6 +22,7 @@ function ended(n: number, endedAt: string, more: Partial<EndedTask> = {}): Ended
     item: null,
     handoffFrom: null,
     retryOf: null,
+    keptInstead: null,
     summary: null,
     commits: [],
     commitsTotal: null,
@@ -74,6 +75,8 @@ describe("model statistics", () => {
           withCommits: 2,
           askedForAnother: 0,
           sharedWithAnother: 0,
+          keptInComparison: 0,
+          droppedInComparison: 0,
           usage: { modelCalls: 30, inputTokens: 3000, outputTokens: 300, aiCredits: 90, aiCreditsPartial: false, premiumRequests: 0 },
           tasksWithUsage: 3,
           tasksWithCredits: 3,
@@ -86,6 +89,8 @@ describe("model statistics", () => {
           withCommits: 1,
           askedForAnother: 0,
           sharedWithAnother: 0,
+          keptInComparison: 0,
+          droppedInComparison: 0,
           usage: { modelCalls: 10, inputTokens: 1000, outputTokens: 100, aiCredits: 90, aiCreditsPartial: false, premiumRequests: 0 },
           tasksWithUsage: 1,
           tasksWithCredits: 1,
@@ -111,6 +116,19 @@ describe("model statistics", () => {
     expect(modelStats(records, "all", NOW).models).toMatchObject([
       { model: "gpt-6-mini", tasks: 3, askedForAnother: 1, sharedWithAnother: 1 },
     ]);
+  });
+
+  test("an attempt kept from a comparison counts for its model, and the attempt ended for it for the other model", () => {
+    const first = ended(1, "2026-10-01T10:00:00Z", { models: [{ model: "gpt-6-mini", modelCalls: 5 }] });
+    const retry = ended(2, "2026-11-02T10:00:00Z", { retryOf: first.task, models: [{ model: "claude-opus-5.5", modelCalls: 7 }] });
+    const dropped = { ...first, keptInstead: retry.task };
+
+    expect(modelStats([dropped, retry], "all", NOW).models).toMatchObject([
+      { model: "claude-opus-5.5", keptInComparison: 1, droppedInComparison: 0 },
+      { model: "gpt-6-mini", keptInComparison: 0, droppedInComparison: 1 },
+    ]);
+    // The kept attempt counts in a period that no longer holds the attempt ended for it.
+    expect(modelStats([dropped, retry], "30d", NOW).models).toMatchObject([{ model: "claude-opus-5.5", keptInComparison: 1 }]);
   });
 
   test("tasks ended before the period, and tasks without a recorded model, are in no row", () => {

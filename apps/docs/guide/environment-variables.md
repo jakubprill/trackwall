@@ -16,6 +16,7 @@ An agent's environment is built in layers: your own, then mise's for the folder 
 | `TRACKWALL_HOME` | Trackwall's own folder instead of `~/.trackwall` (`%USERPROFILE%\.trackwall` on Windows): `workspace.yaml`, the task list, logs and the files of each session. An empty value counts as not set. |
 | `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` | the proxy Trackwall and git use to reach your repo hosts, as in your terminal |
 | `GIT_SSH_COMMAND`, `GIT_SSH` | your own ssh program for git; without one, Trackwall makes ssh fail instead of waiting for a password it cannot ask for |
+| `COPILOT_HOME` | Copilot CLI's own folder instead of `~/.copilot`, as Copilot CLI reads it: Trackwall looks there for its `config.json` and for the logs that [Copilot usage](/features/copilot-usage) and each session's usage add up |
 
 Trackwall reads these when it starts, so set them where the app sees them: on Windows in your account's environment variables, on macOS with `launchctl setenv` (an app opened from the Dock or Finder does not read your shell profile). Then choose "Quit" in Trackwall's tray menu and start it again.
 
@@ -29,6 +30,7 @@ A session's Copilot CLI starts with your environment, with these on top:
 | `NO_PROXY` | Trackwall adds `127.0.0.1` to yours | Copilot CLI reaches Trackwall on your computer directly, past a proxy you use for everything else |
 | `COPILOT_HOOK_ALLOW_LOCALHOST` | Trackwall sets it to `1` | Copilot CLI tells Trackwall what the agent is doing, such as that it waits for your approval |
 | `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` | Trackwall adds its folder after yours | the [session instructions](/features/session-instructions) |
+| `COPILOT_PROVIDER_WIRE_API` | Trackwall replaces yours when the session talks to [another model provider](/features/mise-environment#use-another-model-provider) and its model answers only in the other format | a model your provider serves only in the Responses API or only in Chat Completions works without you picking the format |
 | `TERM`, `COLORTERM` | Trackwall | colours in the terminal inside Trackwall |
 
 ## Variables mise tasks get

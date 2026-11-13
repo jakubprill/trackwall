@@ -13,8 +13,8 @@ Trackwall is at an early stage. This page lists what it does not cover, so you c
 
 - **Copilot CLI only.** Sessions, tasks and the supervisor run Copilot CLI. Another agent can use Trackwall's tools through the [MCP server](/features/mcp), but it gets no session, state or approvals in the app.
 - **Session states come partly from the screen.** Trackwall reads Copilot CLI's approval questions from its terminal, so a new Copilot CLI version that changes those screens can break them until Trackwall follows. Trackwall checks its assumptions against the newest Copilot CLI every night.
-- **The conversation view is a preview.** "Chat (preview)" covers the supervisor, tasks and sessions; [Java navigation](/features/java-navigation) works only in the terminal.
-- **No time or cost budget per task.** A task runs until it ends, you stop it, or its agent stops.
+- **The [conversation view](/features/conversation-view) is a preview.** "Chat (preview)" covers the supervisor, tasks and sessions; [Java navigation](/features/java-navigation) works only in the terminal.
+- **A budget only in tokens, and only for tasks.** A task with "Token budget per task" set stops when it reaches it ([Agent tasks](/features/tasks)); there is no limit on time, and other sessions and the supervisor run until they end or you stop them.
 
 ## Your repos
 
