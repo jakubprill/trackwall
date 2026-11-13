@@ -1,9 +1,10 @@
-import { agentsApi, type Session, type Task, WORKTREE_INCLUDE_FILE } from "@trackwall/protocol";
-import { FileInput, Forward, Play, Square } from "lucide-react";
+import { agentsApi, type PausedTask, type Session, type Task, WORKTREE_INCLUDE_FILE } from "@trackwall/protocol";
+import { FileInput, Forward, Pause, Play, Square } from "lucide-react";
 import { EditorButton } from "@/components/EditorButton";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
+import { PAUSE_TITLE } from "@/lib/task-pause";
 import { useAction } from "@/lib/use-action";
 
 /** Stopping the task's running session, in its panel and its grid tile; the error shows next to the button. */
@@ -37,6 +38,33 @@ export function ResumeButton({
       {resume.error && <span className="text-destructive max-w-xs truncate text-xs">{resume.error}</span>}
       <Button variant="outline" size="sm" onClick={resume.run} disabled={disabled || resume.pending}>
         <Play /> Resume
+      </Button>
+    </>
+  );
+}
+
+/**
+ * Pausing a task (ADR-251): its session, service, mise tasks, checks and shell stop, and only the user's Resume goes on.
+ * The daemon waits until every process is gone, which takes a few seconds for one that ignores the gentle stop; the
+ * error shows next to the button.
+ */
+export function PauseButton({
+  conn,
+  task,
+  disabled = false,
+  onPaused,
+}: {
+  conn: Connection;
+  task: Task;
+  disabled?: boolean;
+  onPaused: (paused: PausedTask) => void;
+}) {
+  const pause = useAction(() => post(conn, agentsApi.pauseTask, { task: task.id }), onPaused);
+  return (
+    <>
+      {pause.error && <span className="text-destructive max-w-xs truncate text-xs">{pause.error}</span>}
+      <Button variant="outline" size="sm" onClick={pause.run} disabled={disabled || pause.pending} title={PAUSE_TITLE}>
+        <Pause /> {pause.pending ? "Pausing…" : "Pause"}
       </Button>
     </>
   );

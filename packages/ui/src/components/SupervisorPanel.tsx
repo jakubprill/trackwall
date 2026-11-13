@@ -24,7 +24,7 @@ import {
   taskName,
 } from "@/lib/session-entries";
 import { ariaSessionShortcut, SUPERVISOR_SHORTCUT, sessionShortcutLabel } from "@/lib/session-shortcut";
-import { isLive, PROPOSAL_STATUS, SUPERVISOR, sessionPlace, sessionStateLabel } from "@/lib/session-state";
+import { isLive, PROPOSAL_STATUS, SUPERVISOR, sessionPlace, sessionStateLabel, taskStateLabel } from "@/lib/session-state";
 import { type SupervisorSummary, supervisorStateLabel } from "@/lib/supervisor";
 import { type SupervisorLayout, widenedOrNarrowed } from "@/lib/supervisor-layout";
 import { useAction } from "@/lib/use-action";
@@ -283,7 +283,12 @@ function DelegatedWork({ work, onOpen }: { work: readonly SessionRow[]; onOpen: 
 function WorkRow({ row, onOpen }: { row: SessionRow; onOpen: () => void }) {
   const { entry } = row;
   const session = entrySession(entry);
-  const status = entry.kind === "proposals" ? PROPOSAL_STATUS : session ? sessionStateLabel(session) : { label: "no session" };
+  const status =
+    entry.kind === "proposals"
+      ? PROPOSAL_STATUS
+      : entry.kind === "task"
+        ? taskStateLabel(entry.task, session)
+        : sessionStateLabel(entry.session);
   return (
     <button
       type="button"

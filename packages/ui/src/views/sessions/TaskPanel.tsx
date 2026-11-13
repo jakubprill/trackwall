@@ -1,5 +1,6 @@
 import {
   mayHandToSupervisor,
+  type PausedTask,
   type RunningMiseTask,
   type Session,
   TASK_PORT_ENV,
@@ -14,8 +15,8 @@ import { FolderShell } from "@/components/FolderShell";
 import { ModelChangeButton } from "@/components/ModelChange";
 import { SessionNotices } from "@/components/SessionNotices";
 import { SessionScreen } from "@/components/SessionScreen";
-import { SessionStateLabel } from "@/components/SessionStateLabel";
 import { TabBar } from "@/components/TabBar";
+import { TaskStateLabel } from "@/components/TaskStateLabel";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
@@ -25,9 +26,17 @@ import { isLive } from "@/lib/session-state";
 import { useTaskDetails } from "@/lib/use-task-details";
 import { useTaskReview } from "@/lib/use-task-review";
 import { JavaNavigationMark } from "./JavaNavigationMark.tsx";
+import { PausedNotice } from "./PausedNotice.tsx";
 import { PlanApprovalNotice } from "./PlanApprovalNotice.tsx";
 import { SessionEnvironment } from "./SessionEnvironment.tsx";
-import { CopyIncludedFilesButton, HandToSupervisorButton, ResumeButton, StopButton, TaskEditorButton } from "./TaskButtons.tsx";
+import {
+  CopyIncludedFilesButton,
+  HandToSupervisorButton,
+  PauseButton,
+  ResumeButton,
+  StopButton,
+  TaskEditorButton,
+} from "./TaskButtons.tsx";
 import { TaskChangesView } from "./TaskChangesView.tsx";
 import { scrollToSection, TaskDetails } from "./TaskDetails.tsx";
 import { TaskImpact } from "./TaskImpact.tsx";
@@ -87,6 +96,12 @@ export function TaskPanel({
   const [tab, setTab] = useState<TaskTab>(initialTab);
   const [removing, setRemoving] = useState(false);
   const [changingModel, setChangingModel] = useState(false);
+  /** What this panel's pause stopped, shown until the panel shows another task. */
+  const [stopped, setStopped] = useState<{ task: string; what: string[] }>();
+  const paused = ({ task: { id }, stopped: what }: PausedTask) => {
+    setStopped({ task: id, what });
+    onChanged();
+  };
   const review = useTaskReview(conn, task.id);
   const confirmingRemoval = removing && !liveSession;
   const details = useTaskDetails({ conn, task, tasks, outcomes, messages, runningLive, paused: confirmingRemoval });
@@ -117,7 +132,7 @@ export function TaskPanel({
             <TaskMarks task={task} />
             <JavaNavigationMark conn={conn} task={task} running={liveSession !== undefined} />
             <span className="text-muted-foreground shrink-0 text-xs">
-              {session ? <SessionStateLabel session={session} /> : "no session"}
+              <TaskStateLabel task={task} session={session} />
             </span>
             <span className="text-muted-foreground shrink-0 text-xs">{relativeTime(session?.startedAt ?? task.createdAt, new Date())}</span>
             <CopilotUsageMark usage={session?.usage ?? null} />
@@ -141,27 +156,23 @@ export function TaskPanel({
           {mayHandToSupervisor(task) && (
             <HandToSupervisorButton conn={conn} task={task} disabled={confirmingRemoval} onHanded={onChanged} />
           )}
-          {liveSession ? (
-            <StopButton conn={conn} session={liveSession} onStopped={onChanged} />
-          ) : (
-            <>
-              <ResumeButton
-                conn={conn}
-                task={task}
-                disabled={removing}
-                onResumed={() => {
-                  setTab("session");
-                  onChanged();
-                }}
-              />
-              <Button variant="outline" size="sm" onClick={() => setRemoving(true)} disabled={removing}>
-                <Trash2 /> End task
-              </Button>
-            </>
-          )}
+          <SessionButtons
+            conn={conn}
+            task={task}
+            liveSession={liveSession}
+            removing={removing}
+            onPaused={paused}
+            onResumed={() => {
+              setTab("session");
+              onChanged();
+            }}
+            onStopped={onChanged}
+            onEnd={() => setRemoving(true)}
+          />
         </div>
       </header>
       <SessionEnvironment environment={session?.environment} />
+      <PausedNotice task={task} stopped={stopped?.task === task.id ? stopped.what : undefined} />
       {changingModel && (
         <TaskModelChange
           key={liveSession?.id ?? "resume"}
@@ -271,6 +282,45 @@ function taskSubtitle(task: Task, sessions: readonly Session[]): string {
  * Copilot CLI's sandbox (ADR-181), and its place
  * in a change (ADR-171), whose parts the Sessions list shows in their merge order.
  */
+/**
+ * Pause while the task is not paused (ADR-251), then Stop for its running session, or Resume and End task without one.
+ */
+function SessionButtons({
+  conn,
+  task,
+  liveSession,
+  removing,
+  onPaused,
+  onResumed,
+  onStopped,
+  onEnd,
+}: {
+  conn: Connection;
+  task: Task;
+  liveSession: Session | undefined;
+  removing: boolean;
+  onPaused: (paused: PausedTask) => void;
+  onResumed: () => void;
+  onStopped: () => void;
+  onEnd: () => void;
+}) {
+  return (
+    <>
+      {task.paused === null && <PauseButton conn={conn} task={task} disabled={removing} onPaused={onPaused} />}
+      {liveSession ? (
+        <StopButton conn={conn} session={liveSession} onStopped={onStopped} />
+      ) : (
+        <>
+          <ResumeButton conn={conn} task={task} disabled={removing} onResumed={onResumed} />
+          <Button variant="outline" size="sm" onClick={onEnd} disabled={removing}>
+            <Trash2 /> End task
+          </Button>
+        </>
+      )}
+    </>
+  );
+}
+
 function TaskMarks({ task }: { task: Task }) {
   return (
     <>

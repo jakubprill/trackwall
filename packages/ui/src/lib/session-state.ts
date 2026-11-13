@@ -1,7 +1,17 @@
 import { isSupervisor, type Session, type SessionList, type TaskStateChange } from "@trackwall/protocol";
 
 /** The state labels moved to `protocol` (ADR-221), so the VS Code extension shows the same words; the UI keeps importing them from here. */
-export { IDLE_LABEL, isIdle, STATE_LABELS, SUPERVISOR, sessionPlace, sessionStateLabel, sessionTitle } from "@trackwall/protocol";
+export {
+  IDLE_LABEL,
+  isIdle,
+  PAUSED_LABEL,
+  STATE_LABELS,
+  SUPERVISOR,
+  sessionPlace,
+  sessionStateLabel,
+  sessionTitle,
+  taskStateLabel,
+} from "@trackwall/protocol";
 
 /** The status of a task proposal wherever it shows (the Sessions list, “Needs you” on the dashboard): waiting for a decision. */
 export const PROPOSAL_STATUS = { tone: "warning", label: "waiting for your decision" } as const;

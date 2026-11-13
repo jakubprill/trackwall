@@ -46,6 +46,7 @@ function task(id: string): Task {
     included: { files: [], problems: [] },
     change: null,
     retryOf: null,
+    paused: null,
   };
 }
 

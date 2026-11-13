@@ -413,6 +413,10 @@ _Avoid_: job; a bare *task* always means a task, a mise task is always a *mise t
 The number of tasks that may run at once before starting another one shows a warning under the start options (ADR-248). The user's number, or the computer's default from its processors and memory. A **running task** is one whose session runs or is still stopping. Only a warning: no start is refused.
 _Avoid_: task limit, concurrency limit (nothing is limited)
 
+**Paused task** (`Task.paused`, `TaskPause`, `pause-task`, `PausedTask`; "Pause" and "paused" in the UI):
+A task the user put aside for later (ADR-251): its session, its service, its other mise tasks, its checks, its automatic review and the user's shell in its worktree were stopped to free the computer, while its worktree, branch and conversation stay. Only the user's Resume goes on with it, also after a daemon restart, and starts its service again; no agent's `resume_task` does. A paused task is not a running task.
+_Avoid_: frozen (that is a hint of a stuck session), suspended, parked, stopped (a stopped task's session ended, but an agent may resume it)
+
 **Task branch prefix** (`taskBranchPrefix` in `workspace.yaml`, `TaskBranchPrefix`, `DEFAULT_TASK_BRANCH_PREFIX`):
 What the branch of a new task starts with: `trackwall/` by default, or the user's own one to three folders, such as `feature/`, when the repo host accepts only such branches (ADR-239). The rest of the branch and the worktree's name stay Trackwall's.
 _Avoid_: branch pattern, branch template

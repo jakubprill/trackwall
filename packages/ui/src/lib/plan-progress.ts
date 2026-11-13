@@ -2,7 +2,7 @@ import { ancestorsOf, type BoardColumn, type BoardItem, type Session, type Task,
 import { isClosed, outline } from "./board-tree.ts";
 import type { StatusTone } from "./repo-status.ts";
 import { latestSession } from "./session-entries.ts";
-import { sessionStateLabel } from "./session-state.ts";
+import { taskStateLabel } from "./session-state.ts";
 import { type OutcomeMark, outcomeMarks } from "./task-outcomes.ts";
 
 /**
@@ -84,7 +84,7 @@ export function itemTaskIndex({ tasks, sessions, outcomes }: TaskActivity): Item
     listed.push({
       task,
       session,
-      state: session ? sessionStateLabel(session) : { label: "no session" },
+      state: taskStateLabel(task, session),
       marks: outcomeMarks(outcomes.get(task.id), task.inReview),
       waitsForYou: task.inReview || session?.needsAttention === true,
     });

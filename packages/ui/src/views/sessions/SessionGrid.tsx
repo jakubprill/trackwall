@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { SessionScreen } from "@/components/SessionScreen";
 import { SessionStateLabel } from "@/components/SessionStateLabel";
 import { StatusLabel } from "@/components/StatusLabel";
+import { TaskStateLabel } from "@/components/TaskStateLabel";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
@@ -13,7 +14,7 @@ import { type GridPage, gridShape } from "@/lib/session-grid";
 import type { EntryGroup } from "@/lib/session-groups";
 import { profileChange, useCurrentSessionProfile } from "@/lib/session-profile";
 import { sessionShortcutLabel } from "@/lib/session-shortcut";
-import { PROPOSAL_STATUS, sessionStateLabel } from "@/lib/session-state";
+import { PROPOSAL_STATUS, sessionStateLabel, taskStateLabel } from "@/lib/session-state";
 import { useSessionClose } from "@/lib/use-session-close";
 import { useTaskEnding } from "@/lib/use-task-ending";
 import { useTileOverlay } from "@/lib/use-tile-overlay";
@@ -312,8 +313,15 @@ function TileTitle({ entry, under }: { entry: SessionEntry; under: string | unde
     <>
       {name}
       {/* In a narrow tile the state is its dot, with the text as the tooltip. */}
-      <span className="text-muted-foreground shrink-0 text-xs" title={session ? sessionStateLabel(session).label : undefined}>
-        {session ? <SessionStateLabel session={session} labelClassName="@max-lg:sr-only" /> : "no session"}
+      <span
+        className="text-muted-foreground shrink-0 text-xs"
+        title={task ? taskStateLabel(task, session).label : session ? sessionStateLabel(session).label : undefined}
+      >
+        {task ? (
+          <TaskStateLabel task={task} session={session} labelClassName="@max-lg:sr-only" />
+        ) : (
+          session && <SessionStateLabel session={session} labelClassName="@max-lg:sr-only" />
+        )}
       </span>
       <span className="min-w-0 flex-1 truncate" title={task?.prompt ?? session?.windowTitle ?? undefined}>
         {task ? <TaskLine task={task} /> : <span className="text-muted-foreground text-xs">{session?.windowTitle}</span>}

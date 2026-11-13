@@ -61,6 +61,7 @@ function task(id: string, fields: Partial<Task> = {}): Task {
     included: { files: [], problems: [] },
     change: null,
     retryOf: null,
+    paused: null,
     ...fields,
   };
 }

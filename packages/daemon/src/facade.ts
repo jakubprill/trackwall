@@ -9,7 +9,9 @@ import {
   type MiseTarget,
   type RoutineDigest,
   RoutineName,
+  SERVICE_MISE_TASK,
   SERVICE_RELEASE_MS,
+  type Service,
   type SessionView,
   type StateDirSource,
   type Task,
@@ -37,6 +39,7 @@ import {
   LAST_SUPERVISOR_FILE,
   LEGACY_WORKTREES_DIR,
   RESUMABLE_SESSIONS_FILE,
+  type StoppedTaskWork,
   TASK_ROUNDS_FILE,
   TASKS_FILE,
 } from "./modules/agents/agents.ts";
@@ -369,6 +372,11 @@ export function createFacade(o: FacadeOptions): Facade {
     closeFolderTerminal: (task): Promise<void> => terminals.closeTask(task),
     // `reproductionChecks` is made below; a task ends only after it exists.
     stopReproductionCheck: (task): Promise<void> => reproductionChecks.stop(task),
+    // `services`, `mise`, `verifications` and `terminals` are made below; a task is paused only after all of them exist.
+    stopTaskWork: (task): Promise<StoppedTaskWork> => stopTaskWork(task, { verifications, reproductionChecks, services, mise, terminals }),
+    startTaskService: async ({ repo, id }, { lease }) => {
+      await services.start({ repo, task: id, lease, dependencies: false, waitMs: 0 });
+    },
     repos: workspace,
     vcs,
     home: o.home,
@@ -663,6 +671,58 @@ export function createFacade(o: FacadeOptions): Facade {
  * needed of. A workspace that cannot be read fails the report, which says why, instead of showing every conversation
  * outside the projects folder.
  */
+/** The modules a pause stops a task's work in (ADR-251). */
+interface TaskWorkModules {
+  verifications: Verifications;
+  reproductionChecks: ReproductionChecks;
+  services: Services;
+  mise: Mise;
+  terminals: FolderTerminals;
+}
+
+/** One stop of a pause: what it stops in words, `null` when nothing of that kind ran, and its end. */
+interface WorkStop {
+  what: string | null;
+  done: Promise<unknown>;
+}
+
+/**
+ * What a pause stops besides the task's sessions and reviews (ADR-251), all at once, since a process that ignores the
+ * gentle stop holds each for the grace period: the verification and the reproduction check, whose runs are mise tasks
+ * in the worktree and on the task port; the task's own service, not the services it calls, which run from their repo
+ * roots and may serve other work; any other mise task in the worktree; the user's shell there. The words come in that
+ * order whatever ends first.
+ */
+async function stopTaskWork(task: Task, m: TaskWorkModules): Promise<StoppedTaskWork> {
+  const service = (await m.services.list()).find((s) => s.task === task.id && s.state !== "stopped" && s.state !== "crashed");
+  const verification = m.verifications.get(task.id);
+  const verifying = verification?.state === "running" ? verification : null;
+  // The verification's run and the service's `dev` are stopped by their own modules, which then know why they ended.
+  const owned = new Set([...(verifying ? [verifying.miseTask] : []), ...(service ? [SERVICE_MISE_TASK] : [])]);
+  const runs = m.mise.running().filter((r) => r.task === task.id && !owned.has(r.miseTask));
+  const shell = m.terminals.list().some((t) => t.task === task.id && t.run.kind !== "exited");
+  const stops: WorkStop[] = [
+    { what: verifying ? "the verification" : null, done: m.verifications.cancel(task.id) },
+    {
+      what: m.reproductionChecks.get(task.id)?.state === "running" ? "the reproduction check" : null,
+      done: m.reproductionChecks.cancel(task.id),
+    },
+    serviceStop(task, service, m.services),
+    ...runs.map((run) => ({ what: `mise task ${run.miseTask}`, done: m.mise.stop({ repo: run.repo, task: task.id }, run.miseTask) })),
+    { what: shell ? "the shell" : null, done: m.terminals.closeTask(task.id) },
+  ];
+  await Promise.all(stops.map((stop) => stop.done));
+  return { service: service ? { lease: service.lease } : null, stopped: stops.flatMap(({ what }) => (what === null ? [] : [what])) };
+}
+
+function serviceStop(task: Task, service: Service | undefined, services: Services): WorkStop {
+  if (service === undefined) return { what: null, done: Promise.resolve() };
+  return {
+    what: service.port === null ? "the service" : `the service on port ${service.port}`,
+    done: services.stop({ repo: task.repo, task: task.id, dependencies: false }),
+  };
+}
+
 async function knownPlaces(agents: Agents, taskJournal: TaskJournal, workspace: Workspace): Promise<KnownPlaces> {
   const list = await workspace.entryList();
   // Without a projects folder or with a worktrees folder Settings refuses, ended tasks are matched without their worktree.

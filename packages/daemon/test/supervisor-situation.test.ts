@@ -54,6 +54,7 @@ function task(fields: Partial<Task> & Pick<Task, "id">): Task {
     included: { files: [], problems: [] },
     change: null,
     retryOf: null,
+    paused: null,
     ...fields,
   };
 }

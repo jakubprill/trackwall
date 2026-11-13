@@ -87,6 +87,7 @@ const billingTask: Task = {
   included: { files: [], problems: [] },
   change: null,
   retryOf: null,
+  paused: null,
 };
 
 const sources: PaletteSources<"home" | "repos"> = {
