@@ -7,7 +7,7 @@ import { useClock } from "@/lib/use-clock";
 const CLOCK_MS = 30_000;
 
 /**
- * The strip of a paused task (ADR-251) under its header: since when, what Resume brings back, and right after the pause
+ * The strip of a paused task (ADR-253) under its header: since when, what Resume brings back, and right after the pause
  * what it stopped (`stopped`, which only the click that paused it knows).
  */
 export function PausedNotice({ task, stopped }: { task: Task; stopped: readonly string[] | undefined }) {

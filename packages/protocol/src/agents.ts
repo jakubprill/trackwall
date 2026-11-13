@@ -572,7 +572,7 @@ export const SupervisorConversation = z.enum(["last", "new"]);
 export type SupervisorConversation = z.infer<typeof SupervisorConversation>;
 
 /**
- * A task the user paused (ADR-251): its session, its service, its other mise tasks, its shell and its checks were stopped
+ * A task the user paused (ADR-253): its session, its service, its other mise tasks, its shell and its checks were stopped
  * to free the computer, while its worktree, branch and conversation stay. Only the user's Resume goes on with it, also
  * after a daemon restart, and starts its service again when one ran at the pause.
  */
@@ -633,12 +633,12 @@ export const Task = z.object({
    * attempts can be compared; `null` for a first attempt.
    */
   retryOf: TaskId.nullable(),
-  /** The user paused the task (ADR-251); `null` while it is not paused. */
+  /** The user paused the task (ADR-253); `null` while it is not paused. */
   paused: TaskPause.nullable(),
 });
 export type Task = z.infer<typeof Task>;
 
-/** What a pause stopped (ADR-251), in words the UI shows: "the session", "the service on port 4103", "mise task test". */
+/** What a pause stopped (ADR-253), in words the UI shows: "the session", "the service on port 4103", "mise task test". */
 export const PausedTask = z.object({ task: Task, stopped: z.array(z.string()) });
 export type PausedTask = z.infer<typeof PausedTask>;
 
@@ -1150,11 +1150,11 @@ export const agentsApi = {
   /**
    * A new session for a task that has no running session, in the task's view: it goes on with the task's conversation.
    * With `model` the task runs on that model from now on (ADR-206; `null` for Copilot CLI's default). A paused task's
-   * pause ends, and the service that ran at the pause starts again (ADR-251).
+   * pause ends, and the service that ran at the pause starts again (ADR-253).
    */
   resumeTask: endpoint("resume-task", TaskRequest.extend({ model: TaskModel.nullable().optional() }), Task),
   /**
-   * The user pauses a task (ADR-251): its running session stops (the rest of a turn is lost, as with Stop), then its
+   * The user pauses a task (ADR-253): its running session stops (the rest of a turn is lost, as with Stop), then its
    * automatic reviews, verification, reproduction check, service (not the services it calls), other mise tasks in its
    * worktree and its shell. The worktree, branch, conversation and everything the task panel shows stay; Resume goes on
    * with them. Pausing a paused task stops whatever was started there since. Only from the UI, never from MCP.
@@ -1227,12 +1227,20 @@ export const agentsApi = {
    * Ending a task: removes the worktree, and without `keepBranch` also the branch. Changes that would be lost (uncommitted
    * files and commits outside the branch, and without `keepBranch` also the task's commits) the daemon deletes only with
    * `discardChanges`; otherwise `unsaved_changes`. With `discardFingerprint` (ADR-210) it deletes them only while the
-   * worktree still has that fingerprint, the one of what the user confirmed; otherwise `unsaved_changes` too.
+   * worktree still has that fingerprint, the one of what the user confirmed; otherwise `unsaved_changes` too. With
+   * `keptInstead` (ADR-252) the user ends this attempt at a task because they keep that other attempt at it, which the
+   * task journal records; another task is `bad_request`.
    */
   removeTask: endpoint(
     "remove-task",
     z
-      .object({ task: TaskId, keepBranch: z.boolean(), discardChanges: z.boolean(), discardFingerprint: WorktreeFingerprint.optional() })
+      .object({
+        task: TaskId,
+        keepBranch: z.boolean(),
+        discardChanges: z.boolean(),
+        discardFingerprint: WorktreeFingerprint.optional(),
+        keptInstead: TaskId.optional(),
+      })
       .strict(),
     Done,
   ),

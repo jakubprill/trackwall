@@ -2,7 +2,7 @@ import type { TaskPause } from "@trackwall/protocol";
 import { relativeTime } from "./format.ts";
 
 /**
- * The words of a paused task (ADR-251) in its panel: when it was paused, what Resume brings back, and what the pause
+ * The words of a paused task (ADR-253) in its panel: when it was paused, what Resume brings back, and what the pause
  * stopped, as the daemon named it.
  */
 

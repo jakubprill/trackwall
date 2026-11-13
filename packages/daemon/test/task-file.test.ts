@@ -243,7 +243,7 @@ describe("tasks.json", () => {
     expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, stoppedAtTokenBudget: false }]);
   });
 
-  test("a task saved before pauses comes back not paused, so it runs and resumes as before (ADR-251)", () => {
+  test("a task saved before pauses comes back not paused, so it runs and resumes as before (ADR-253)", () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
     const { paused: _, ...old } = stored;
     writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));

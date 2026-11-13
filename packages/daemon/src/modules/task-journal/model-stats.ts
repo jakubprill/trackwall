@@ -34,13 +34,16 @@ export function modelStats(records: readonly EndedTask[], period: ModelStatsPeri
     if (tasks === undefined) byModel.set(model, [record]);
     else tasks.push(record);
   }
+  // Every record, not only the period's: the attempt dropped for a task of the period may have ended before it.
+  const kept = new Set(records.flatMap((r) => (r.keptInstead === null ? [] : [r.keptInstead])));
   const models = [...byModel]
-    .map(([model, tasks]) => row(model, tasks))
+    .map(([model, tasks]) => row(model, tasks, kept))
     .sort((a, b) => b.tasks - a.tasks || a.model.localeCompare(b.model));
   return { period, models, withoutModel };
 }
 
-function row(model: string, tasks: readonly EndedTask[]): ModelStatsRow {
+/** `kept`: the tasks the user kept over another attempt at the same task (ADR-252). */
+function row(model: string, tasks: readonly EndedTask[], kept: ReadonlySet<string>): ModelStatsRow {
   const usages = tasks.flatMap((t): CopilotUsage[] => (t.usage === null ? [] : [t.usage]));
   return {
     model,
@@ -50,6 +53,8 @@ function row(model: string, tasks: readonly EndedTask[]): ModelStatsRow {
     withCommits: tasks.filter((t) => (t.commitsTotal ?? t.commits.length) > 0).length,
     askedForAnother: tasks.filter((t) => t.model !== null && t.model !== COPILOT_AUTO_MODEL && t.model !== model).length,
     sharedWithAnother: tasks.filter((t) => t.models.length > 1).length,
+    keptInComparison: tasks.filter((t) => kept.has(t.task)).length,
+    droppedInComparison: tasks.filter((t) => t.keptInstead !== null).length,
     usage: sumUsage(usages),
     tasksWithUsage: usages.length,
     tasksWithCredits: usages.filter((u) => u.aiCredits !== null).length,

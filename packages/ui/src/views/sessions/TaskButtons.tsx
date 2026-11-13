@@ -44,7 +44,7 @@ export function ResumeButton({
 }
 
 /**
- * Pausing a task (ADR-251): its session, service, mise tasks, checks and shell stop, and only the user's Resume goes on.
+ * Pausing a task (ADR-253): its session, service, mise tasks, checks and shell stop, and only the user's Resume goes on.
  * The daemon waits until every process is gone, which takes a few seconds for one that ignores the gentle stop; the
  * error shows next to the button.
  */

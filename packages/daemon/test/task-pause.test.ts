@@ -8,7 +8,7 @@ import { connectHttpClient } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
-// A paused task (ADR-251) through the API the UI calls: real PTY, process groups and git, the fake Copilot CLI and the
+// A paused task (ADR-253) through the API the UI calls: real PTY, process groups and git, the fake Copilot CLI and the
 // fake mise (`fixtures/fake-mise.ts`), whose `dev` runs `fixtures/fake-service.ts` and whose `watch` runs until stopped.
 
 const TOKEN = "p".repeat(43);

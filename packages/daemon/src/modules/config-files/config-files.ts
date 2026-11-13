@@ -177,6 +177,8 @@ export class ConfigFiles {
         return trackwallEntry(ctx.projectsDir, "board");
       case "routines-dir":
         return trackwallEntry(ctx.projectsDir, "routines");
+      case "task-templates-dir":
+        return trackwallEntry(ctx.projectsDir, "task-templates");
       case "knowledge-dir":
         return trackwallEntry(ctx.projectsDir, "knowledge");
       case "copilot-config":

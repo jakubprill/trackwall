@@ -14,7 +14,7 @@ import { TileOverlay } from "./TileOverlay.tsx";
 /**
  * The task menu of a grid tile (ADR-91): behind one button in the tile's header, so that six tiles keep their header on
  * one line, what the task panel's header has: branch, task port, model, no approvals, the sandbox and start, and VS Code, Verify,
- * Copy included files, Pause (ADR-251), Stop or Resume. "Changes" opens the task alone on its changes, "Details" the task's sections over the terminal.
+ * Copy included files, Pause (ADR-253), Stop or Resume. "Changes" opens the task alone on its changes, "Details" the task's sections over the terminal.
  * It lies over the terminal like the other overlays, so that the terminal keeps its size, and is one of the tile's
  * `overlay`, so that opening it closes the task's notices and back. While the task is being ended there is no menu.
  */

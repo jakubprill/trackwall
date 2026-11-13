@@ -779,7 +779,7 @@ function LayoutBar({
   );
 }
 
-/** A row's state (a task's, ADR-251, or its session's) and what its conversation used (ADR-190). */
+/** A row's state (a task's, ADR-253, or its session's) and what its conversation used (ADR-190). */
 function RowStatus({ task, session }: { task: Task | undefined; session: Session | undefined }) {
   return (
     <span className="text-muted-foreground flex items-center gap-3 text-xs">

@@ -28,6 +28,7 @@ import {
   taskOutcomesApi,
   taskRefreshApi,
   taskRoundsApi,
+  taskTemplatesApi,
   terminalsApi,
   usageReportApi,
   verificationApi,
@@ -189,6 +190,12 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     await f.routines.remove(b.name);
     return null;
   }),
+  route(taskTemplatesApi.list, (f) => f.taskTemplates.list()),
+  route(taskTemplatesApi.save, (f, b) => f.taskTemplates.save(b)),
+  route(taskTemplatesApi.remove, async (f, b) => {
+    await f.taskTemplates.remove(b.name);
+    return null;
+  }),
   route(knowledgeApi.list, (f) => f.knowledge.list()),
   route(knowledgeApi.write, (f, b) => f.knowledge.write(b)),
   route(knowledgeApi.approve, (f, b) => f.knowledge.approve(b.name, b.digest)),
@@ -265,7 +272,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(agentsApi.taskWorktrees, (f) => f.agents.taskWorktrees()),
   route(agentsApi.taskWorktreeSize, (f, b) => f.agents.taskWorktreeSize(b.task)),
   route(agentsApi.removeTask, async (f, b) => {
-    await f.agents.removeTask(b.task, b.keepBranch, b.discardChanges, b.discardFingerprint);
+    await f.agents.removeTask(b.task, b.keepBranch, b.discardChanges, b.discardFingerprint, b.keptInstead ?? null);
     return null;
   }),
   route(terminalsApi.start, (f, b) => f.terminals.start(b)),

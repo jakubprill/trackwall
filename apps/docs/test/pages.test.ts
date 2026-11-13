@@ -151,6 +151,20 @@ test("every page Settings › Files links to for a file or a key of workspace.ya
   expect(pages.filter((page) => !featurePages.includes(page))).toEqual([]);
 });
 
+test("the table of workspace.yaml keys on the Config files page lists every key, in order, where Settings changes it", () => {
+  const changedIn = {
+    workspace: '"Settings > Workspace"',
+    "repo-hosts": '"Settings > Repo hosts"',
+    agents: '"Settings > Agents"',
+    repos: 'the star in "Repos"',
+  };
+  const rows = [...read("features/config-files.md").matchAll(/^\| `(\w+)` \| .+ \| (.+) \|$/gm)].map((m) => `${m[1]}: ${m[2]}`);
+  const keys = Object.entries(WORKSPACE_KEYS).map(
+    ([key, info]) => `${key}: ${info.settings === null ? "by hand" : changedIn[info.settings]}`,
+  );
+  expect(rows).toEqual(keys);
+});
+
 test("a talk page is left out of the site search", () => {
   for (const path of TALK_PAGES) expect({ path, search: frontmatter(path).fields.search }).toEqual({ path, search: false });
 });

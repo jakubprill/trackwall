@@ -221,7 +221,7 @@ function taskCard(task: Task, sessions: readonly Session[], outcome: TaskOutcome
     name: taskName(task),
     repo: task.repo,
     target: { kind: "task", id: task.id },
-    // A paused task rests by the user's choice (ADR-251), whatever its last turn or check left behind.
+    // A paused task rests by the user's choice (ADR-253), whatever its last turn or check left behind.
     ...(task.paused === null
       ? columnOf(latestSession(sessions, task.id), facts)
       : { column: "idle" as const, since: task.paused.at, detail: PAUSED_LABEL }),

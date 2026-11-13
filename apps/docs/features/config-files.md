@@ -26,17 +26,21 @@ Under `workspace.yaml` a table lists its keys:
 | --- | --- | --- |
 | `projectsDir` | the folder with all your repos | "Settings > Workspace" |
 | `worktreesDir` | where agent tasks get their own copy of a repo | "Settings > Workspace" |
+| `gitProgram` | which git Trackwall runs to read your repos, when starting the one on your `PATH` is slow | "Settings > Workspace" |
 | `repoHosts` | where the Repos view searches and clones from | "Settings > Repo hosts" |
 | `starredRepos` | the repos you starred, listed first in the Repos view | the star in "Repos" |
 | `toolPermissions` | which tools sessions may use without asking you | by hand |
+| `alwaysAllow` | the tools you always allow in a repo's tasks, from "Always allow" in an approval | "Settings > Agents" |
 | `sandbox` | which tasks run their commands in Copilot CLI's sandbox | "Settings > Agents" |
 | `agentSecrets` | the secrets from mise that the tools of sessions may read | by hand |
 | `sessionProfile` | the mise environment sessions start with, such as another model provider | "Settings > Agents" |
+| `autoReview` | whether a task's changes get Copilot CLI's review once its agent reports | "Settings > Agents" |
 | `supervisorModel` | the Copilot CLI model the supervisor runs on, such as a cheaper one than your default | "Settings > Agents" |
 | `retryModel` | the stronger Copilot CLI model a task whose verification failed is offered to be retried on | "Settings > Agents" |
 | `taskTokenBudget` | how many tokens a task may use from its start or resume before Trackwall stops it | "Settings > Agents" |
+| `runningTasksWarning` | how many tasks may run at once before starting another one warns you | "Settings > Agents" |
 | `taskBranchPrefix` | what the branch of a new task starts with, such as `feature/` | by hand |
-| `autoReview` | whether a task's changes get Copilot CLI's review once its agent reports | "Settings > Agents" |
+| `javaNavigation` | the Java language server and Java that tasks get for code navigation | "Settings > Agents" |
 | `localConfigRemote` | the only remote the local config store is pushed to | "Settings > Workspace" |
 | `supervisor` | whether the supervisor may change code itself | "Settings > Agents" |
 | `repoTags` | your own tags on repo cards | by hand |

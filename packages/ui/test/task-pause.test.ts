@@ -3,7 +3,7 @@ import { pausedNote, stoppedNote } from "../src/lib/task-pause.ts";
 
 const now = new Date("2026-11-13T18:12:00Z");
 
-describe("a paused task's words (ADR-251)", () => {
+describe("a paused task's words (ADR-253)", () => {
   test("the note says when the task was paused and that Resume starts the service it stopped again", () => {
     expect(pausedNote({ at: "2026-11-13T18:00:00Z", service: { lease: false } }, now)).toBe(
       "Paused 12 min ago. Resume goes on with its conversation and starts its service again.",

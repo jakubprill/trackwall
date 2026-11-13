@@ -214,7 +214,7 @@ interface AgentsRepos {
   removeRepo(id: string, expectedDir: string, beforeMove: () => void): Promise<string>;
 }
 
-/** What the facade stopped of a task the user pauses (ADR-251), and the service to start again on Resume. */
+/** What the facade stopped of a task the user pauses (ADR-253), and the service to start again on Resume. */
 export interface StoppedTaskWork {
   service: TaskPause["service"];
   /** In words the UI shows, such as "the service on port 4103". */
@@ -230,12 +230,12 @@ export interface AgentsDeps {
   /** Stops a task's reproduction check and removes its copy before the task ends (`reproduction`, ADR-227). */
   stopReproductionCheck: (task: string) => Promise<void>;
   /**
-   * The user pauses a task (ADR-251): the facade stops what other modules run for it (its verification, reproduction
+   * The user pauses a task (ADR-253): the facade stops what other modules run for it (its verification, reproduction
    * check, service, other mise tasks in its worktree and its shell) and says what it stopped and the service to start
    * again on Resume. Its sessions and automatic reviews are stopped by `agents` before.
    */
   stopTaskWork: (task: Task) => Promise<StoppedTaskWork>;
-  /** Resume of a paused task starts its service again as it ran at the pause (`services`, ADR-251). */
+  /** Resume of a paused task starts its service again as it ran at the pause (`services`, ADR-253). */
   startTaskService: (task: Task, service: NonNullable<TaskPause["service"]>) => Promise<void>;
   repos: AgentsRepos;
   /**
@@ -1006,7 +1006,7 @@ export class Agents {
 
   /**
    * The user's Resume; with `model` the task runs on it from now on (ADR-206). A paused task's service that ran at the
-   * pause starts again once its session runs (ADR-251); a start the service refuses (its config no longer trusted, the
+   * pause starts again once its session runs (ADR-253); a start the service refuses (its config no longer trusted, the
    * repo's port held by another task's lease) goes to the log, and the task runs without it, as the Services view shows.
    */
   async resumeTask(id: string, model?: string | null): Promise<Task> {
@@ -1020,7 +1020,7 @@ export class Agents {
   }
 
   /**
-   * The user's pause of a task (ADR-251): its running sessions stop as with Stop, then its automatic reviews and, through
+   * The user's pause of a task (ADR-253): its running sessions stop as with Stop, then its automatic reviews and, through
    * the facade, the rest of its work; the task is saved as paused once all of it stopped. Only from the UI.
    */
   pauseTask(id: string): Promise<PausedTask> {
@@ -1038,7 +1038,7 @@ export class Agents {
   /**
    * `resume_task` from session `caller` (`null`: an agent outside Trackwall, the user's program, which resumes any task,
    * ADR-90): the supervisor resumes any task, a main session only the tasks it proposed, a task session none. No agent
-   * resumes a task the user paused (ADR-251), nor one the daemon stopped at its token budget (ADR-237): the Resume that gives it the budget again is the
+   * resumes a task the user paused (ADR-253), nor one the daemon stopped at its token budget (ADR-237): the Resume that gives it the budget again is the
    * user's. Returns the task and its new session.
    */
   async resumeTaskFor(caller: string | null, id: string): Promise<{ task: Task; session: Session }> {
@@ -1298,13 +1298,20 @@ export class Agents {
     return this.#tasks.trustedReproCopy(id, repo);
   }
 
-  async removeTask(id: string, keepBranch: boolean, discardChanges: boolean, discardFingerprint?: string): Promise<void> {
+  /** Ends task `id`; `keptInstead` names the other attempt at it the user keeps from a comparison (ADR-252). */
+  async removeTask(
+    id: string,
+    keepBranch: boolean,
+    discardChanges: boolean,
+    discardFingerprint?: string,
+    keptInstead: string | null = null,
+  ): Promise<void> {
     // Its reviewer runs in the worktree, which the removal refuses while a process of Trackwall is in it. Without one,
     // the removal starts at once, so a change computation that comes after it refuses.
     const stopping = this.#autoReviews.stop(id);
     if (stopping !== null) await stopping;
     const { item } = this.#tasks.task(id);
-    const ended = await this.#tasks.remove(id, keepBranch, discardChanges, discardFingerprint);
+    const ended = await this.#tasks.remove(id, keepBranch, discardChanges, discardFingerprint, keptInstead);
     // The task that was still at work may have been the last one on its item not in review, or the last one on it.
     if (item !== null) this.#boardItems.removed(item);
     this.#autoReviews.forget(id);
@@ -1555,7 +1562,7 @@ export class Agents {
    * the previous daemon stopped go on with their conversations (ADR-95). A task's session resumes as Resume does; the
    * supervisor, a free session and a repo session start again under their id with `--resume`. One that cannot (its task
    * was ended, its repo is gone, a supervisor already runs) goes to the log, and so does a task the previous daemon
-   * marked stopped at its token budget (ADR-237) or the user paused (ADR-251) before its stop ended: only the user's
+   * marked stopped at its token budget (ADR-237) or the user paused (ADR-253) before its stop ended: only the user's
    * Resume gives it the budget again or ends the pause.
    */
   async resumeLeftSessions(): Promise<void> {

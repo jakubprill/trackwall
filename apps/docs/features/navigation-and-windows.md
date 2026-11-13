@@ -51,6 +51,11 @@ A window opens on the monitor, at the size and position its predecessor had. Whe
 | Ctrl+= or Ctrl++, Ctrl+- | ⌘=, ⌘- | Zoom this window in or out. |
 | Ctrl+0 | ⌘0 | Back to actual size. |
 | Ctrl+PageDown, Ctrl+PageUp | ⌘⇧], ⌘⇧[ (or ⌃PageDown, ⌃PageUp) | The next or previous tab of a task or a repo, such as "Terminal" and "Shell". |
+| Alt+1 … Alt+9 | ⌥1 … ⌥9 | The session at that position in "Sessions" ([Copilot CLI sessions](/features/sessions)). |
+| Alt+J | ⌥J | The next session or task proposal waiting for you. |
+| Win+Alt+J | ⌃⌥J | Bring Trackwall forward on the next session waiting for you, from any app. |
+| Alt+0 | ⌥0 | The [supervisor](/features/supervisor) panel. |
+| Alt+N | ⌥N | Write an idea into the inbox of your [plan](/features/plan). |
 
 ## Good to know
 

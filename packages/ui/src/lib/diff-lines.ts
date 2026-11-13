@@ -172,3 +172,34 @@ export function changeLines(patch: string, maxLines: number, cut: boolean): Chan
     more: cut || all.length > maxLines,
   };
 }
+
+/**
+ * Each file's part of a unified diff, from its `diff --git` line to the next one, by the file's path as its header
+ * names it (the new name, or the old one for a deleted file; from the `diff --git` line itself when the part has no
+ * `---`/`+++` names, as for a binary file or a mode change). Text before the first file header belongs to no file.
+ */
+export function fileDiffs(patch: string): Map<string, string> {
+  const parts = new Map<string, string>();
+  const starts = [...patch.matchAll(/^diff --git /gm)].map((m) => m.index);
+  starts.forEach((start, i) => {
+    const part = patch.slice(start, starts[i + 1] ?? patch.length);
+    const path = filePath(part);
+    if (path !== null) parts.set(path, part);
+  });
+  return parts;
+}
+
+/** The path of one file's part of a diff (`fileDiffs`); `null` when its header names none. */
+function filePath(part: string): string | null {
+  const hunk = part.search(/^@@/m);
+  const header = (hunk < 0 ? part : part.slice(0, hunk)).split("\n");
+  let oldPath: string | null = null;
+  let newPath: string | null = null;
+  for (const line of header) {
+    if (line.startsWith("--- ")) oldPath = headerPath(line.slice(4));
+    if (line.startsWith("+++ ")) newPath = headerPath(line.slice(4));
+  }
+  if (newPath !== null || oldPath !== null) return newPath ?? oldPath;
+  // Without names, `diff --git a/<path> b/<path>`, where both are the same path for a binary file or a mode change.
+  return /^diff --git a\/.* b\/(.*)$/.exec(header[0] ?? "")?.[1] ?? null;
+}

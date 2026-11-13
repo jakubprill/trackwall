@@ -94,7 +94,7 @@ function sessionLine(session: Session): string {
 }
 
 function taskStatus(task: Task, session: Session | undefined): string {
-  // Before the session: a paused task's session has ended too, but `resume_task` refuses it (ADR-251).
+  // Before the session: a paused task's session has ended too, but `resume_task` refuses it (ADR-253).
   if (task.paused !== null) return `paused by the user since ${task.paused.at}; only the user resumes it`;
   if (session === undefined) return `no session (${mcpTools.resumeTask.name} goes on with it)`;
   if (session.run.kind === "exited") return `its session ended (${mcpTools.resumeTask.name} goes on with it)`;

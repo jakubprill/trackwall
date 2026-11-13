@@ -1,5 +1,6 @@
 import {
   mayHandToSupervisor,
+  otherAttempts,
   type PausedTask,
   type RunningMiseTask,
   type Session,
@@ -9,7 +10,7 @@ import {
   type TaskOutcome,
 } from "@trackwall/protocol";
 import { Bot, Box, GitBranch, Layers, Plug, ShieldOff, Trash2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { type ComponentProps, useRef, useState } from "react";
 import { CopilotUsageMark } from "@/components/CopilotUsageMark";
 import { FolderShell } from "@/components/FolderShell";
 import { ModelChangeButton } from "@/components/ModelChange";
@@ -38,6 +39,7 @@ import {
   TaskEditorButton,
 } from "./TaskButtons.tsx";
 import { TaskChangesView } from "./TaskChangesView.tsx";
+import { TaskComparison } from "./TaskComparison.tsx";
 import { scrollToSection, TaskDetails } from "./TaskDetails.tsx";
 import { TaskImpact } from "./TaskImpact.tsx";
 import { TaskMcpCalls } from "./TaskMcpCalls.tsx";
@@ -107,8 +109,9 @@ export function TaskPanel({
   const details = useTaskDetails({ conn, task, tasks, outcomes, messages, runningLive, paused: confirmingRemoval });
   const [detailsOpen, setDetailsOpen] = useState(false);
   const detailsArea = useRef<HTMLElement>(null);
-  const shown: TaskTab = session || tab !== "session" ? tab : "changes";
-  const tabs = taskTabs(session);
+  const tabs = taskTabs(session, otherAttempts(task, tasks).length > 0);
+  // A tab the task no longer has (no session, or the other attempt ended) falls back to its changes.
+  const shown: TaskTab = tabs.some((t) => t.id === tab) ? tab : "changes";
 
   return (
     <>
@@ -218,6 +221,7 @@ export function TaskPanel({
         review={review}
         onOpenTask={onOpenTask}
         onShowImpact={onShowImpact}
+        comparison={{ tasks, sessions, outcomes, onChanged, onRemoved }}
       />
     </>
   );
@@ -233,6 +237,7 @@ function TaskTabContent({
   review,
   onOpenTask,
   onShowImpact,
+  comparison,
 }: {
   shown: TaskTab;
   conn: Connection;
@@ -242,6 +247,8 @@ function TaskTabContent({
   review: ReturnType<typeof useTaskReview>;
   onOpenTask: (id: string) => void;
   onShowImpact: (task: string) => void;
+  /** What the "Compare" tab needs beyond the task (ADR-252). */
+  comparison: Pick<ComponentProps<typeof TaskComparison>, "tasks" | "sessions" | "outcomes" | "onChanged" | "onRemoved">;
 }) {
   return (
     <>
@@ -250,6 +257,11 @@ function TaskTabContent({
       {shown === "changes" && (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <TaskChangesView conn={conn} task={task.id} baseBranch={task.baseBranch} paused={paused} review={review} />
+        </div>
+      )}
+      {shown === "compare" && (
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <TaskComparison conn={conn} task={task} paused={paused} onOpenTask={onOpenTask} {...comparison} />
         </div>
       )}
       {shown === "rounds" && (
@@ -283,7 +295,7 @@ function taskSubtitle(task: Task, sessions: readonly Session[]): string {
  * in a change (ADR-171), whose parts the Sessions list shows in their merge order.
  */
 /**
- * Pause while the task is not paused (ADR-251), then Stop for its running session, or Resume and End task without one.
+ * Pause while the task is not paused (ADR-253), then Stop for its running session, or Resume and End task without one.
  */
 function SessionButtons({
   conn,

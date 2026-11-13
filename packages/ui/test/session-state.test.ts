@@ -243,7 +243,7 @@ test("a browser tab's title counts sessions waiting for you, the supervisor amon
   expect(waitingInTab(undefined)).toBe(0);
 });
 
-describe("a task's state (ADR-251)", () => {
+describe("a task's state (ADR-253)", () => {
   const pause = { at: "2026-11-13T18:00:00Z", service: null };
 
   test("a paused task reads paused, not stopped, although its session was stopped by the pause", () => {

@@ -59,7 +59,7 @@ export function sessionStateLabel(session: Pick<Session, "run" | "state" | "need
   return runningStateLabel(state, session.needsAttention, isIdle(session));
 }
 
-/** A task the user paused (ADR-251): its state wherever a task's shows, in place of its ended session's "stopped". */
+/** A task the user paused (ADR-253): its state wherever a task's shows, in place of its ended session's "stopped". */
 export const PAUSED_LABEL = "paused";
 
 /** A task without a session: none started yet in this daemon run, or its sessions were closed. */
