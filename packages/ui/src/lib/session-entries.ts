@@ -276,19 +276,21 @@ function selects(selection: Exclude<SessionSelection, undefined | { kind: "new" 
  * The tabs of a task's panel: its session (the session terminal, or the conversation view, ADR-137), its worktree
  * changes, its rounds (ADR-168), its impact on other repos (ADR-147) and its MCP calls.
  */
-export type TaskTab = "session" | "shell" | "changes" | "rounds" | "impact" | "mcp-calls";
+export type TaskTab = "session" | "shell" | "changes" | "compare" | "rounds" | "impact" | "mcp-calls";
 
 /**
  * The tabs a task's panel shows: its session's tab only while it has a session, named "Chat" for a task in the
  * conversation view (ADR-137), which has no terminal, and "Terminal" otherwise. "Shell" is the user's own shell in
- * the worktree (ADR-185).
+ * the worktree (ADR-185). "Compare" only while another attempt at the task is listed (ADR-252).
  */
-export function taskTabs(session: Pick<Session, "view"> | undefined): readonly { id: TaskTab; label: string }[] {
+export function taskTabs(session: Pick<Session, "view"> | undefined, hasOtherAttempt: boolean): readonly { id: TaskTab; label: string }[] {
   const sessionTab = session ? [{ id: "session", label: session.view === "conversation" ? "Chat" : "Terminal" } as const] : [];
+  const compareTab = hasOtherAttempt ? [{ id: "compare", label: "Compare" } as const] : [];
   return [
     ...sessionTab,
     { id: "shell", label: "Shell" },
     { id: "changes", label: "Changes" },
+    ...compareTab,
     { id: "rounds", label: "Rounds" },
     { id: "impact", label: "Impact" },
     { id: "mcp-calls", label: "MCP calls" },

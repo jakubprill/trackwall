@@ -35,6 +35,7 @@ When the routine changes, whether an agent saved a new version or someone edited
 - Your approval covers the routine's prompt, not the mise tasks it runs. Those run like any mise task in that repo, so check a mise task the agent added for the routine as you would any other.
 - A routine runs only when you press "Run". There is no schedule yet.
 - A run never pushes or opens a merge request by itself; you do that from the task, as with any task.
+- A prompt you start from and change each time is better as a [task template](/features/task-templates): it only fills the "New task" form and needs no approval.
 - A routine works in one repo. Work across several repos is still a task per repo, or the supervisor.
 - A routine marked "runs without approvals" starts its task in that mode; you see the mark before you approve it.
 - Keep secrets out of a routine: it names environment variables, never their values.

@@ -13,8 +13,8 @@ import { ensureTrackwallDir, trackwallDir } from "./trackwall-dir.ts";
  * remembers, and the old folder goes once it is empty. This file goes when no installation has the old folders left.
  */
 
-/** The folders of `.trackwall` that had a name of their own before ADR-125; later ones (the board, ADR-133; routines, ADR-173; knowledge, ADR-170; drops, ADR-226) never did. */
-type OldFolder = Exclude<TrackwallFolder, "board" | "routines" | "knowledge" | "drops">;
+/** The folders of `.trackwall` that had a name of their own before ADR-125; later ones (the board, ADR-133; routines, ADR-173; knowledge, ADR-170; drops, ADR-226; task templates, ADR-251) never did. */
+type OldFolder = Exclude<TrackwallFolder, "board" | "routines" | "knowledge" | "drops" | "task-templates">;
 
 /** Each folder of `.trackwall` under its name before ADR-125. */
 const OLD_NAMES: Record<OldFolder, string> = {

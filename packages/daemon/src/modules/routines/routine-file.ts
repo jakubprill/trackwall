@@ -1,7 +1,7 @@
 import { Routine, RoutineName } from "@trackwall/protocol";
 import { z } from "zod";
-import type { ApprovedFolderFormat } from "../../infra/approved-folder.ts";
 import { readFrontmatter, writeFrontmatter } from "../../infra/frontmatter.ts";
+import type { FolderFormat } from "../../infra/named-file-folder.ts";
 
 /**
  * One routine as a file (ADR-173): `<name>.md`, YAML frontmatter with the title, repo, model and approvals mode, and the
@@ -37,7 +37,7 @@ export function readRoutineFile(name: RoutineName, text: string): { routine: Rou
 }
 
 /** How the routines folder is read: a prompt of `TASK_PROMPT_MAX` characters in any script fits in 64 KB with its frontmatter. */
-export const ROUTINE_FILE_FORMAT: ApprovedFolderFormat<Routine> = {
+export const ROUTINE_FILE_FORMAT: FolderFormat<Routine> = {
   what: "routine",
   name: RoutineName,
   extension: EXTENSION,

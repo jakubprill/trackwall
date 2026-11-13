@@ -172,6 +172,7 @@
                       "!../../infra/regular-file.ts",
                       "!../../infra/frontmatter.ts",
                       "!../../infra/approved-folder.ts",
+                      "!../../infra/named-file-folder.ts",
                       "!../../infra/remove-folder.ts",
                       "!../../infra/run-program.ts",
                       "!../../infra/trackwall-dir.ts",

@@ -25,6 +25,8 @@ function row(model: string, more: Partial<ModelStatsRow> = {}): ModelStatsRow {
     withCommits: 0,
     askedForAnother: 0,
     sharedWithAnother: 0,
+    keptInComparison: 0,
+    droppedInComparison: 0,
     usage: null,
     tasksWithUsage: 0,
     tasksWithCredits: 0,
@@ -83,6 +85,11 @@ describe("model statistics in Settings", () => {
       "1 task also ran on another model",
     ]);
     expect(rowNotes(row("gpt-6"))).toEqual([]);
+  });
+
+  test("a model whose attempts were compared side by side says how often the user kept them", () => {
+    expect(rowNotes(row("claude-opus-5.5", { keptInComparison: 2, droppedInComparison: 1 }))).toEqual(["kept in 2 of 3 comparisons"]);
+    expect(rowNotes(row("gpt-6-mini", { droppedInComparison: 1 }))).toEqual(["kept in 0 of 1 comparison"]);
   });
 
   test("the verdict names the model that passes most often and the one cheapest per pass", () => {

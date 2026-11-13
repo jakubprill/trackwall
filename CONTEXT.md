@@ -450,8 +450,16 @@ The Copilot CLI model a task's session runs on, as Copilot CLI names it (`claude
 _Avoid_: LLM, engine, agent (for the model)
 
 **Retry** (`Task.retryOf`, `EndedTask.retryOf`, action `retry-task`, `retryModel` in `workspace.yaml`; in the UI *Retry on <model>*, *Retry on a stronger model*, "Retry model" in Settings › Agents):
-A new attempt at a task on another model, usually a stronger one after its verification failed: a new task with the same prompt from the same base commit, which names the task it retries; the first attempt stays until the user ends it (ADR-233). Unlike a resume on another model (ADR-206), it does not go on with the first attempt's conversation or changes.
+A new attempt at a task, usually on a stronger model after its verification failed, or on the same model as a second run to compare (ADR-252): a new task with the same prompt from the same base commit, which names the task it retries; the first attempt stays until the user ends it (ADR-233). Unlike a resume on another model (ADR-206), it does not go on with the first attempt's conversation or changes.
 _Avoid_: rerun (that is Verify again), restart (that is a session's), fallback (that is Copilot CLI's own choice of model, ADR-225)
+
+**Attempts** (`firstAttempt`, `otherAttempts` in `task-attempts.ts`; "Other attempt" in the UI):
+A task and its retries, which all go back through `retryOf` to one first attempt (also one that has ended) and so share its prompt and base commit (ADR-252).
+_Avoid_: run, variant, candidate, round (a round is one turn of one task's agent)
+
+**Comparison** (`TaskComparison`, `lib/task-comparison.ts`, `keptInstead` of `remove-task` and of `EndedTask`; the "Compare" tab, "Keep this one", and "Second attempt" on the New session form):
+Two attempts at one task side by side in the task's "Compare" tab: model, state, usage, verdict, automatic review, changes, report and each file's two diffs. "Keep this one" ends the other attempt, and its journal record names the kept one (`keptInstead`), which model statistics count (`keptInComparison`, `droppedInComparison`). "Second attempt" starts a task and its retry together (ADR-252).
+_Avoid_: A/B test, duel, race, winner (in product texts)
 
 **Token budget** (`taskTokenBudget` in `workspace.yaml`, `Session.tokenBudget`, `TokenBudget`; in the UI "Token budget per task" in Settings › Agents, *Stopped at its token budget*):
 How many tokens (input and output) a task's session may use from its start or resume; at it Trackwall stops the session as Stop does, and the user's Resume gives the task the budget again (ADR-237).
@@ -822,7 +830,15 @@ _Avoid_: recording (that is `session.cast`), snapshot
 
 **Routine** (module `routines`, `Routine`, `RoutineEntry`, `routinesApi`, MCP tool `propose_routine`; "Routines" under the New task form):
 A task the user repeats, saved once by an agent at the user's request and run by hand with "Run", each run an ordinary task with the routine's title, repo, model and approvals mode. A file in `.trackwall/routines` of the projects folder; it runs only in the version the user approved ("Approve this version"), so any change waits for approval again (ADR-173).
-_Avoid_: recipe, template, playbook, job, automation (a routine does not start by itself)
+_Avoid_: recipe, template (that is a task template, which only fills the prompt), playbook, job, automation (a routine does not start by itself)
+
+**Task template** (module `task-templates`, `TaskTemplate`, `TaskTemplateEntry`, `BUILT_IN_TASK_TEMPLATES`, `taskTemplatesApi`; "Start from a template:" and "Save as template" in the New task form):
+A prompt the user starts a task from: one click fills the New task form's prompt, and the user fills in its placeholders and starts the task as any other. Built-in ones ship with Trackwall; the user's own lie as files in `.trackwall/task-templates` of the projects folder, and one with a built-in's name takes its place. It only fills text the user reads, so it needs no approval (ADR-251).
+_Avoid_: preset, snippet, recipe; and a routine is a whole task that runs as saved
+
+**Placeholder** (`TEMPLATE_PLACEHOLDER`, `placeholdersLeft`):
+A part of a task template's prompt for the user to replace before starting: lowercase words in angle brackets, such as `<test name>` (ADR-251).
+_Avoid_: variable, parameter, field
 
 **Routine digest** (`RoutineDigest`, an alias of `ContentDigest`):
 The SHA-256 of a routine file's bytes: what the user approved, and what an approval or a run names, so a file changed meanwhile is refused. Workspace knowledge entries are approved the same way (`ContentDigest`).
