@@ -1,7 +1,7 @@
 import { KnowledgeEntry, KnowledgeName } from "@trackwall/protocol";
 import { z } from "zod";
-import type { ApprovedFolderFormat } from "../../infra/approved-folder.ts";
 import { readFrontmatter, writeFrontmatter } from "../../infra/frontmatter.ts";
+import type { FolderFormat } from "../../infra/named-file-folder.ts";
 
 /**
  * One entry of workspace knowledge as a file (ADR-170): `<name>.md`, YAML frontmatter with the kind, repos, evidence,
@@ -37,7 +37,7 @@ export function readKnowledgeFile(name: KnowledgeName, text: string): { entry: K
 }
 
 /** How the knowledge folder is read: an entry is two short texts, so 16 KB is plenty in any script. */
-export const KNOWLEDGE_FILE_FORMAT: ApprovedFolderFormat<KnowledgeEntry> = {
+export const KNOWLEDGE_FILE_FORMAT: FolderFormat<KnowledgeEntry> = {
   what: "knowledge entry",
   name: KnowledgeName,
   extension: EXTENSION,
