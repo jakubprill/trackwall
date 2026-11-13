@@ -5,16 +5,16 @@ import {
   contentText,
   InitializeResult,
   NewSessionResult,
-  type PermissionOutcome,
   PromptResult,
-  RequestPermissionParams,
   SessionUpdate,
   SessionUpdateParams,
 } from "./acp-messages.ts";
+import { reviewPermission } from "./auto-review-permission.ts";
 
 /**
  * One automatic review (ADR-182, ADR-234): Copilot CLI over ACP in the task's worktree, with only the tools that read
- * (`REVIEWER_TOOLS`), no MCP server and every approval refused, sent one prompt; its answer is the text of that one
+ * (`REVIEWER_TOOLS`), no MCP server and every approval refused but reading the review's own folder
+ * (`auto-review-permission.ts`), sent one prompt; its answer is the text of that one
  * turn. The run is not a session: nobody sees or steers it, so it is not on the session list and gets no session token,
  * plugin or instructions. It ends when the turn does, when the process ends, or at `REVIEW_LIMIT_MS`; the caller stops
  * the process group either way.
@@ -35,10 +35,10 @@ export const KIND_TOOLS: Record<AutoReviewKind, readonly ReviewerTool[]> = { cod
  * Copilot CLI's arguments of a review, besides the session's mise arguments: only `tools` (`REVIEWER_TOOLS` for `/review`,
  * a subset for a check that runs no review agent, ADR-234), the denials as a
  * second fence should a later Copilot CLI give a tool under another name, no built-in MCP servers, no questions to
- * the user nobody would see, and no access to the system's temporary folder; `reviewDir` (the diff) is the only folder
- * besides the worktree it may read.
+ * the user nobody would see, and no access to the system's temporary folder. No `--add-dir` for the review's folder:
+ * over ACP Copilot CLI asks before reading it all the same, and the run approves those reads itself.
  */
-export function reviewerArgs(reviewDir: string, tools: readonly ReviewerTool[]): string[] {
+export function reviewerArgs(tools: readonly ReviewerTool[]): string[] {
   return [
     "--acp",
     `--available-tools=${tools.join(",")}`,
@@ -48,7 +48,6 @@ export function reviewerArgs(reviewDir: string, tools: readonly ReviewerTool[]):
     "--disable-builtin-mcps",
     "--no-ask-user",
     "--disallow-temp-dir",
-    `--add-dir=${reviewDir}`,
   ];
 }
 
@@ -77,6 +76,8 @@ export interface ReviewRun {
   owner: string;
   command: readonly string[];
   cwd: string;
+  /** The review's folder with the diff and the rule files' copies, the one place outside `cwd` the reviewer may read. */
+  reviewDir: string;
   env: NodeJS.ProcessEnv;
   secrets: readonly string[];
   /** The text of the one prompt (`auto-review-prompts.ts`). */
@@ -85,7 +86,7 @@ export interface ReviewRun {
   limitMs?: number;
 }
 
-/** What a review's turn gave: the answer, and the titles of the approvals the daemon refused, in order. */
+/** What a review's turn gave: the answer, and the approvals the daemon refused, in order, by title and the paths named. */
 export interface ReviewOutcome {
   answer: string;
   refused: string[];
@@ -105,9 +106,11 @@ export async function runReview(run: ReviewRun, procs: ReviewRunProcs, log: (msg
       if (update !== undefined) answer.add(update);
     },
     onRequest: async (method, params) => {
-      const { title, outcome } = refusal(method, params);
-      refused.push(title);
-      log(`automatic review: refused the reviewer's request "${title}"`);
+      const { title, outcome, approved } = reviewPermission(method, params, run.reviewDir);
+      if (!approved) {
+        refused.push(title);
+        log(`automatic review: refused the reviewer's request "${title}"`);
+      }
       return { outcome };
     },
     log,
@@ -216,18 +219,4 @@ class Paragraphs {
   text(): string {
     return this.#paragraphs.join("\n\n");
   }
-}
-
-/**
- * Every approval the reviewer asks for is refused (a file outside the worktree and the diff's folder, a tool a later
- * Copilot CLI asks about): nobody watches the run to decide. Any other request is not offered.
- */
-function refusal(method: string, params: unknown): { title: string; outcome: PermissionOutcome } {
-  if (method !== "session/request_permission") throw new Error(`${method} is not offered`);
-  const parsed = RequestPermissionParams.safeParse(params);
-  const reject = parsed.success ? parsed.data.options.find((option) => option.kind.startsWith("reject")) : undefined;
-  return {
-    title: parsed.success ? (parsed.data.toolCall.title ?? "a tool") : "an approval it could not read",
-    outcome: reject ? { outcome: "selected", optionId: reject.optionId } : { outcome: "cancelled" },
-  };
 }

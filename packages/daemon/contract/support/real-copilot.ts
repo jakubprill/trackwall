@@ -25,8 +25,10 @@ function isCopilotSetting(name: string): boolean {
 }
 
 /**
- * The environment of the sessions: offline BYOK mode, and a Copilot home that trusts the projects folder and the
- * state directory (task worktrees), so the folder trust dialog does not stop the session at its start.
+ * The environment of the sessions: offline BYOK mode, and a Copilot home that trusts the projects folder (with the
+ * task worktrees in it), so the folder trust dialog does not stop the session at its start. Not the state directory:
+ * the user's Copilot CLI does not trust it either, so a test that reads a file the daemon writes there (the automatic
+ * review's diff) sees the approval a user's session would ask for.
  */
 function byokEnv(model: ScriptedModel, dirs: { home: string; projects: string }): NodeJS.ProcessEnv {
   const copilotHome = join(dirs.home, "copilot-home");
@@ -34,7 +36,7 @@ function byokEnv(model: ScriptedModel, dirs: { home: string; projects: string })
   // Written once: Copilot CLI then rewrites the file in its own format, which the doctor must read as it is.
   if (!existsSync(config)) {
     mkdirSync(copilotHome, { recursive: true });
-    writeFileSync(config, JSON.stringify({ trustedFolders: [dirs.projects, dirs.home] }));
+    writeFileSync(config, JSON.stringify({ trustedFolders: [dirs.projects] }));
   }
   const inherited = Object.fromEntries(Object.entries(process.env).filter(([name]) => !isCopilotSetting(name)));
   return {

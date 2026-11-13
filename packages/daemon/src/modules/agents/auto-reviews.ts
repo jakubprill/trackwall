@@ -275,8 +275,9 @@ export class AutoReviews {
     const run = runReview(
       {
         owner: reviewOwner(task, kind),
-        command: [launch.program, ...launch.prefix, ...reviewerArgs(dir, KIND_TOOLS[kind]), ...launch.args],
+        command: [launch.program, ...launch.prefix, ...reviewerArgs(KIND_TOOLS[kind]), ...launch.args],
         cwd: worktree,
+        reviewDir: dir,
         env: launch.env,
         secrets: launch.secrets,
         prompt: reviewPrompt(
@@ -313,12 +314,8 @@ export class AutoReviews {
     let end: Partial<AutoReview>;
     try {
       const { answer, refused } = await run;
-      end = {
-        state: "done",
-        findings: reviewFindings(answer, worktreePaths(worktree)),
-        text: kept(answer),
-        message: joinedMessage([refusedMessage(refused), omittedMessage(entry.omittedRules)]),
-      };
+      end = answeredEnd(reviewFindings(answer, worktreePaths(worktree)), kept(answer), refused, entry.omittedRules);
+      if (end.state === "failed") this.#deps.log(`${name}: ${end.message}`);
     } catch (err) {
       if (!entry.cancelled) this.#deps.log(`${name}: ${messageOf(err)}`);
       end = entry.cancelled ? { state: "cancelled", message: CANCELLED } : { state: "failed", message: messageOf(err) };
@@ -395,10 +392,30 @@ function joinedMessage(parts: readonly (string | null)[]): string | null {
   return present.length === 0 ? null : present.join(". ");
 }
 
-/** What the reviewer asked for and did not get, so the user knows the review may have stopped short; `null` for nothing. */
-function refusedMessage(refused: readonly string[]): string | null {
-  if (refused.length === 0) return null;
-  return cutText(`The reviewer asked for more than reading the task and was refused: ${[...new Set(refused)].join("; ")}`, 500);
+/**
+ * How a review whose turn ended settles: `done` with its findings, or `failed` when the reviewer was refused something
+ * and found nothing, since it may never have read the change and "no findings" would read as a clean change.
+ */
+function answeredEnd(
+  findings: AutoReview["findings"],
+  text: string,
+  refused: readonly string[],
+  omittedRules: number,
+): Partial<AutoReview> {
+  const refusals = [...new Set(refused)].join("; ");
+  if (refused.length > 0 && findings.length === 0)
+    return {
+      state: "failed",
+      text,
+      message: cutText(
+        `The review did not finish: the reviewer was refused what it asked for and found nothing, so the change is not known to be fine. Refused: ${refusals}`,
+        500,
+      ),
+    };
+  // What the reviewer asked for and did not get, so the user knows the review may have stopped short.
+  const refusedMessage =
+    refused.length === 0 ? null : cutText(`The reviewer asked for more than reading the task and was refused: ${refusals}`, 500);
+  return { state: "done", findings, text, message: joinedMessage([refusedMessage, omittedMessage(omittedRules)]) };
 }
 
 function stoppedWithDaemon(review: AutoReview, finishedAt: string | null): AutoReview {
