@@ -47,6 +47,7 @@ import { ChangeParts } from "./ChangeParts.tsx";
 import { RunningTasksNote } from "./RunningTasksNote.tsx";
 import { StackTraceField } from "./StackTraceField.tsx";
 import { StartOptions } from "./StartOptions.tsx";
+import { TaskTemplatePicker, TemplatePlaceholders, useTemplatePrompt } from "./TaskTemplatePicker.tsx";
 
 /** The place choice's value for the projects folder; a repo id is never empty. */
 const PROJECTS_FOLDER = "";
@@ -83,6 +84,7 @@ export function NewSession({
   const [place, setPlace] = useState<string>();
   const [edited, setEdited] = useState<ReadonlyMap<string, StartChoice>>(new Map());
   const [prompt, setPrompt] = useState(form.prompt);
+  const template = useTemplatePrompt(prompt, setPrompt);
   const [approvals, setApprovals] = useState<TaskApprovals>("ask");
   const [planFirst, setPlanFirst] = useState(false);
   const [stackTrace, setStackTrace] = useState("");
@@ -138,7 +140,16 @@ export function NewSession({
       {repos.data && (
         <>
           <PlaceSelect repos={repos.data.repos} value={chosen} projectsFolder={form.sessions} onChange={setPlace} />
+          <TaskTemplatePicker
+            conn={conn}
+            prompt={prompt}
+            picked={template.picked}
+            disabled={pending}
+            onPick={template.pick}
+            onPickedChange={template.setPicked}
+          />
           <Textarea
+            ref={template.promptBox}
             aria-label="Prompt for the agent"
             placeholder={
               start.kind === "session"
@@ -150,6 +161,7 @@ export function NewSession({
             maxLength={TASK_PROMPT_MAX}
             rows={5}
           />
+          <TemplatePlaceholders prompt={prompt} picked={template.picked} />
           <StackTraceField
             shown={offersStackTrace(start)}
             value={stackTrace}

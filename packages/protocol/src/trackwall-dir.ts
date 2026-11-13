@@ -11,11 +11,22 @@ export const TRACKWALL_DIR = ".trackwall";
  * task worktrees folder (ADR-84); `lsp`, each task's Java language server data (ADR-99); `scratch`, git's temporary
  * indexes, removed after each git command (clarification to ADR-31); `removed`, where a removed repo goes (ADR-83);
  * `board`, the board items, one Markdown file each (ADR-133); `routines`, the routines, one Markdown file each
- * (ADR-173); `knowledge`, the workspace knowledge, one Markdown file per entry (ADR-170); `drops`, files dropped on a terminal from
+ * (ADR-173); `task-templates`, the user's own task templates, one Markdown file each (ADR-251); `knowledge`, the
+ * workspace knowledge, one Markdown file per entry (ADR-170); `drops`, files dropped on a terminal from
  * a computer that is not the daemon's, each in a folder of its own, kept for a week (ADR-226).
  * A name alone means nothing in the projects folder, so a path is made only from `TrackwallFolder`.
  */
-export type TrackwallFolder = "local" | "worktrees" | "lsp" | "scratch" | "removed" | "board" | "routines" | "knowledge" | "drops";
+export type TrackwallFolder =
+  | "local"
+  | "worktrees"
+  | "lsp"
+  | "scratch"
+  | "removed"
+  | "board"
+  | "routines"
+  | "task-templates"
+  | "knowledge"
+  | "drops";
 
 /** A folder of `.trackwall` as the user reads it, the same on every system: `.trackwall/local`. */
 export function trackwallDirLabel(folder: TrackwallFolder): string {

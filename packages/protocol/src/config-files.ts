@@ -40,6 +40,7 @@ export const ConfigEntryId = z.enum([
   "language-server-dir",
   "board-dir",
   "routines-dir",
+  "task-templates-dir",
   "knowledge-dir",
   "copilot-config",
 ]);
@@ -63,6 +64,7 @@ export type DocsPage =
   | "repo-card"
   | "repos"
   | "routines"
+  | "task-templates"
   | "sessions"
   | "start-my-day"
   | "supervisor"
@@ -294,6 +296,14 @@ export const CONFIG_ENTRIES: Record<ConfigEntryId, ConfigEntryInfo> = {
     internal: false,
     purpose: "Your routines, tasks you run again and again, one Markdown file each, written by an agent at your request.",
     docs: "routines",
+  },
+  "task-templates-dir": {
+    place: "projects",
+    kind: "folder",
+    writer: "you",
+    internal: false,
+    purpose: "Your own task templates, prompts you start a new task from, one Markdown file each, saved from the New task form.",
+    docs: "task-templates",
   },
   "knowledge-dir": {
     place: "projects",
