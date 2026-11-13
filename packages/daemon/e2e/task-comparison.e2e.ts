@@ -22,6 +22,9 @@ describe("two attempts at one task compared side by side", () => {
     await page.getByRole("textbox", { name: "Model for the second attempt" }).fill("claude-opus-5.5");
     await page.getByRole("button", { name: "Create task" }).click();
     await waitForTerminal(page, "Argument: --model=gpt-5-mini");
+    // The form asks for the second attempt only once the first task exists, so its worktree may still be in the making
+    // when the first terminal shows (on a slow Windows runner it was).
+    await waitUntil(() => daemon.facade.agents.sessions().tasks.length === 2, 15_000);
 
     const tasks = daemon.facade.agents.sessions().tasks;
     const first = tasks.find((t) => t.retryOf === null);
