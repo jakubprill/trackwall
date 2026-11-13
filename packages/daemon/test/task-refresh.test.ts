@@ -24,6 +24,9 @@ beforeAll(async () => {
   for (const name of REPOS) {
     gitIn(repoDir(name), "config", "user.name", "Repo User");
     gitIn(repoDir(name), "config", "user.email", "user@example.com");
+    // Git on Windows checks files out with CRLF by default, and the merge writes the merged files into the worktree, so
+    // the files the tests read back hold the line ends they committed only when the repo turns that off.
+    gitIn(repoDir(name), "config", "core.autocrlf", "false");
   }
 }, SLOW_TEST_TIMEOUT_MS);
 
