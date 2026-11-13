@@ -38,6 +38,7 @@ import { useFileDrop } from "@/lib/use-file-drop";
 import { useJumpRequest } from "@/lib/use-jump-request";
 import { useNewWindow } from "@/lib/use-new-window";
 import { useRepoWatch } from "@/lib/use-repo-watch";
+import { useSessionLink } from "@/lib/use-session-link";
 import { useSessionTree } from "@/lib/use-session-tree";
 import { useSessions } from "@/lib/use-sessions";
 import { useTabAttention } from "@/lib/use-tab-attention";
@@ -146,6 +147,7 @@ export function App() {
   const tree = useSessionTree(sessions);
   const { rows } = tree;
   const supervisor = useMemo(() => supervisorSummary(sessions.data, rows), [sessions.data, rows]);
+  const entries = useMemo(() => rows.map((r) => r.entry), [rows]);
   // Whether the keyboard is in the supervisor panel: then its terminal is the one in front of the user, not the one
   // selected in a view (ADR-47). The panel reports focus coming and going; Alt+0 gives the keyboard to its terminal.
   const [supervisorFocused, setSupervisorFocused] = useState(false);
@@ -164,17 +166,18 @@ export function App() {
   // Alt+J (ADR-48) and the global shortcut (ADR-50): what comes after the selected entry, like the "Next waiting" button.
   const openNextWaiting = () => {
     const inSessions = view === "sessions";
-    const entries = rows.map((r) => r.entry);
     const selected = inSessions ? findEntry(entries, session) : undefined;
     const { open, taken } = nextWaitingShortcut(entries, selected, inSessions, supervisor.sessionWaits);
     if (open?.kind === "supervisor") showSupervisor();
     else if (open) openInSessions(entrySelection(open));
     return taken;
   };
-  // A `trackwall://` link (ADR-52): from the shell's jump, or clicked in this page in a browser tab.
+  // A `trackwall://` link (ADR-52): from the shell's jump, or clicked in this page in a browser tab. A session or task
+  // the list does not hold gives a notice rather than another session (`useSessionLink`).
+  const sessionLink = useSessionLink(sessions, entries, openInSessions);
   const showLinkTarget = (target: TrackwallLinkTarget) => {
     if (target.kind === "repo") openRepos(target.id);
-    else openInSessions(target);
+    else sessionLink.show(target);
   };
   // Jump from the tray, a notification or the tray panel (ADR-26, ADR-39, ADR-50), from the global shortcut (ADR-50)
   // or from a `trackwall://` link (ADR-52): the shell shows the window first.
@@ -224,6 +227,7 @@ export function App() {
                 <AwaySummary list={sessions.data} onOpen={openInSessions} />
                 <ErrorBanner message={error} action={{ label: "Try again", onClick: retry }} />
                 <ErrorBanner message={windowError} action={{ label: "Dismiss", onClick: dismissWindowError }} />
+                <ErrorBanner message={sessionLink.notice} action={{ label: "Dismiss", onClick: sessionLink.dismiss }} />
                 {conn && dropped && (
                   <FolderDrop
                     key={dropped.seq}
