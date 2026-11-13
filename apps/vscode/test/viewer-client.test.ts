@@ -3,10 +3,10 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { ViewerSessionList } from "@trackwall/protocol";
 import { readSessions } from "../src/viewer-client.ts";
-import { stateFolder } from "../src/viewer-file.ts";
+import { notSharingMessage, stateFolder } from "../src/viewer-file.ts";
 
 const TOKEN = "k".repeat(43);
 const LIST: ViewerSessionList = {
@@ -104,8 +104,30 @@ describe("one look at the daemon", () => {
 describe("Trackwall's state folder", () => {
   test("is the setting first, then TRACKWALL_HOME, then .trackwall in the home folder, as the daemon picks it", () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
-    expect(stateFolder(` ${home} `, { TRACKWALL_HOME: "/elsewhere" })).toBe(home);
-    expect(stateFolder("", { TRACKWALL_HOME: home })).toBe(home);
-    expect(stateFolder("", {})).toEndWith(".trackwall");
+    expect(stateFolder(` ${home} `, { TRACKWALL_HOME: "/elsewhere" })).toEqual({ path: home, ignoredSetting: null });
+    expect(stateFolder("", { TRACKWALL_HOME: home })).toEqual({ path: home, ignoredSetting: null });
+    expect(stateFolder("", {}).path).toEndWith(".trackwall");
+  });
+});
+
+describe("Trackwall's state folder set on another computer", () => {
+  test("is ignored when it does not exist here, and the folder comes from TRACKWALL_HOME as without the setting", () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
+    const fromHost = join(tmpdir(), "no-such-folder", "Users", "someone", ".trackwall");
+    expect(stateFolder(fromHost, { TRACKWALL_HOME: home })).toEqual({ path: home, ignoredSetting: resolve(fromHost) });
+  });
+
+  test("is named in the side bar's text with the viewer.json the extension looked for", () => {
+    const fromHost = join(tmpdir(), "no-such-folder", "Users", "someone", ".trackwall");
+    const inContainer = join(tmpdir(), "container-home", ".trackwall");
+    expect(notSharingMessage({ path: inContainer, ignoredSetting: fromHost })).toBe(
+      `Trackwall is not sharing its sessions with VS Code yet: there is no ${join(inContainer, "viewer.json")}.` +
+        ` "Trackwall: State Folder" is ${fromHost}, which does not exist on this machine, so it is ignored here.` +
+        ` Turn on "VS Code extension" in Trackwall's Settings > App. This side bar fills in a few seconds later.`,
+    );
+    expect(notSharingMessage({ path: inContainer, ignoredSetting: null })).toBe(
+      `Trackwall is not sharing its sessions with VS Code yet: there is no ${join(inContainer, "viewer.json")}.` +
+        ` Turn on "VS Code extension" in Trackwall's Settings > App. This side bar fills in a few seconds later.`,
+    );
   });
 });

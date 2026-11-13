@@ -14,9 +14,12 @@ describe("looking at the daemon again and again", () => {
     let most = 0;
     const reads: ViewerRead[] = [];
     const watch = watchSessions({
-      folder: () => "/state",
+      folder: () => ({ path: "/state", ignoredSetting: null }),
       focused: () => true,
-      onRead: (read) => reads.push(read),
+      onRead: (read, folder) => {
+        expect(folder).toEqual({ path: "/state", ignoredSetting: null });
+        reads.push(read);
+      },
       read: async (folder) => {
         expect(folder).toBe("/state");
         looks++;

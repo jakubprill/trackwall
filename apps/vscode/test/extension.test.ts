@@ -34,6 +34,8 @@ const LIST: ViewerSessionList = {
 
 let server: Server;
 let folder: string;
+/** "Trackwall: State Folder" as the VS Code window has it. */
+let setting = "";
 
 const statusItem = {
   text: "",
@@ -52,6 +54,7 @@ const statusItem = {
 const commands = new Map<string, (...args: unknown[]) => unknown>();
 const opened: string[] = [];
 let tree: { getChildren: (node?: unknown) => unknown[]; getTreeItem: (node: unknown) => Record<string, unknown> } | undefined;
+const view = { message: undefined as string | undefined, dispose() {} };
 
 class TreeItem {
   constructor(
@@ -82,15 +85,15 @@ mock.module("vscode", () => ({
   window: {
     state: { focused: true },
     createStatusBarItem: () => statusItem,
-    registerTreeDataProvider: (_id: string, provider: typeof tree) => {
-      tree = provider;
-      return { dispose() {} };
+    createTreeView: (_id: string, options: { treeDataProvider: typeof tree }) => {
+      tree = options.treeDataProvider;
+      return view;
     },
     onDidChangeWindowState: () => ({ dispose() {} }),
     showWarningMessage: () => undefined,
   },
   workspace: {
-    getConfiguration: () => ({ get: () => folder }),
+    getConfiguration: () => ({ get: () => setting }),
     onDidChangeConfiguration: () => ({ dispose() {} }),
   },
   commands: {
@@ -142,18 +145,25 @@ async function until(check: () => boolean): Promise<void> {
   }
 }
 
+type Extension = { activate: (context: { subscriptions: { dispose: () => void }[] }) => void };
+
+async function buildExtension(): Promise<Extension> {
+  const out = mkdtempSync(join(tmpdir(), "trackwall-vscode-dist-"));
+  const built = await Bun.build({
+    entrypoints: [join(import.meta.dir, "..", "src", "extension.ts")],
+    outdir: out,
+    target: "node",
+    format: "cjs",
+    external: ["vscode"],
+  });
+  expect(built.success).toBe(true);
+  return require(join(out, "extension.js")) as Extension;
+}
+
 describe("the built extension in VS Code", () => {
   test("loads as CommonJS, shows what waits in the status bar and side bar, and opens a session in Trackwall", async () => {
-    const out = mkdtempSync(join(tmpdir(), "trackwall-vscode-dist-"));
-    const built = await Bun.build({
-      entrypoints: [join(import.meta.dir, "..", "src", "extension.ts")],
-      outdir: out,
-      target: "node",
-      format: "cjs",
-      external: ["vscode"],
-    });
-    expect(built.success).toBe(true);
-    const extension = require(join(out, "extension.js")) as { activate: (context: { subscriptions: { dispose: () => void }[] }) => void };
+    setting = folder;
+    const extension = await buildExtension();
     const context = { subscriptions: [] as { dispose: () => void }[] };
     extension.activate(context);
 
@@ -172,6 +182,35 @@ describe("the built extension in VS Code", () => {
     await commands.get("trackwall.openSession")?.(SESSION);
     await commands.get("trackwall.openSession")?.("../../not-a-session");
     expect(opened).toEqual([`trackwall://session/${SESSION}`]);
+    for (const d of context.subscriptions) d.dispose();
+  });
+
+  test("in a dev container, ignores a state folder set on the host that does not exist there and finds the container's Trackwall", async () => {
+    // The user setting written on a Mac reaches the container's window; the container's Trackwall writes to TRACKWALL_HOME.
+    setting = join(tmpdir(), "no-such-folder", "Users", "someone", ".trackwall");
+    const before = process.env.TRACKWALL_HOME;
+    process.env.TRACKWALL_HOME = folder;
+    statusItem.visible = false;
+    try {
+      const extension = await buildExtension();
+      const context = { subscriptions: [] as { dispose: () => void }[] };
+      extension.activate(context);
+      await until(() => statusItem.visible);
+      expect(statusItem.text).toBe("$(bell) 1 waiting");
+      for (const d of context.subscriptions) d.dispose();
+    } finally {
+      if (before === undefined) delete process.env.TRACKWALL_HOME;
+      else process.env.TRACKWALL_HOME = before;
+    }
+  });
+
+  test("while Trackwall does not share its sessions, the side bar names the viewer.json it looked for", async () => {
+    setting = mkdtempSync(join(tmpdir(), "trackwall-empty-"));
+    const extension = await buildExtension();
+    const context = { subscriptions: [] as { dispose: () => void }[] };
+    extension.activate(context);
+    await until(() => view.message !== undefined);
+    expect(view.message).toContain(join(setting, "viewer.json"));
     for (const d of context.subscriptions) d.dispose();
   });
 });
