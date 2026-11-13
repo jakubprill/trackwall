@@ -652,6 +652,7 @@ describe("the prompt the daemon types for what waits", () => {
         messages: 0,
         handoffMoved: false,
         roundUndone: false,
+        refreshed: false,
         updates: 0,
         trustNotice: false,
       }),
@@ -663,6 +664,7 @@ describe("the prompt the daemon types for what waits", () => {
         messages: 0,
         handoffMoved: false,
         roundUndone: false,
+        refreshed: false,
         updates: 0,
         trustNotice: false,
       }),
@@ -676,6 +678,7 @@ describe("the prompt the daemon types for what waits", () => {
         messages: 1,
         handoffMoved: false,
         roundUndone: false,
+        refreshed: false,
         updates: 3,
         trustNotice: false,
       }),
@@ -693,6 +696,7 @@ describe("the prompt the daemon types for what waits", () => {
         messages: 0,
         handoffMoved: false,
         roundUndone: false,
+        refreshed: false,
         updates: 0,
         trustNotice: false,
       }),
@@ -710,6 +714,7 @@ describe("the prompt the daemon types for what waits", () => {
         messages: 0,
         handoffMoved: true,
         roundUndone: false,
+        refreshed: false,
         updates: 0,
         trustNotice: false,
       }),
@@ -726,6 +731,7 @@ describe("the prompt the daemon types for what waits", () => {
         messages: 0,
         handoffMoved: false,
         roundUndone: false,
+        refreshed: false,
         updates: 0,
         trustNotice: true,
       }),
@@ -742,12 +748,30 @@ describe("the prompt the daemon types for what waits", () => {
         messages: 0,
         handoffMoved: false,
         roundUndone: true,
+        refreshed: false,
         updates: 0,
         trustNotice: false,
       }),
     ).toBe(
       "The user undid your last round of changes in Trackwall: the worktree and the task branch are back where they were before that round, so check them with git status and git log before you go on, and do not redo the undone changes unless the user asks. " +
         "The user sent a review of your changes in Trackwall: call get_review_comments (the trackwall MCP server) and address every comment.",
+    );
+  });
+
+  test("says that the user merged the newest commits of the base branch into the task branch, so the agent reads its files again (ADR-244)", () => {
+    expect(
+      readRequestPrompt({
+        reviewComments: 0,
+        pipelineFix: false,
+        messages: 0,
+        handoffMoved: false,
+        roundUndone: false,
+        refreshed: true,
+        updates: 0,
+        trustNotice: false,
+      }),
+    ).toBe(
+      "The user merged the newest commits of your task's base branch into your task branch in Trackwall: files in the worktree may have changed, so check git log and read again the files you work on before you go on.",
     );
   });
 });

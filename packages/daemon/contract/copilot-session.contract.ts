@@ -1142,6 +1142,7 @@ describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
         messages: 0,
         handoffMoved: false,
         roundUndone: false,
+        refreshed: false,
         updates: 1,
         trustNotice: false,
       });
@@ -1151,6 +1152,7 @@ describe("a proposer and its task with the real Copilot CLI (ADR-68)", () => {
         messages: 1,
         handoffMoved: false,
         roundUndone: false,
+        refreshed: false,
         updates: 0,
         trustNotice: false,
       });

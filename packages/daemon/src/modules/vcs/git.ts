@@ -52,6 +52,11 @@ export type GitOptions = Pick<RunOptions, "maxBytes" | "stdin" | "okExitCodes"> 
   network?: GitNetwork;
   /** An index instead of the repo index (`GIT_INDEX_FILE`): task changes counted without touching the index the agent uses. */
   indexFile?: string;
+  /**
+   * Where the command writes new objects (`GIT_OBJECT_DIRECTORY`): a merge built in a scratch git directory of the daemon's
+   * writes its result into the repo's objects (ADR-244).
+   */
+  objectDirectory?: string;
   /** `-c key=value` for this command only, over the repo's own configuration (a push without the repo's hooks, ADR-77). */
   config?: readonly string[];
 };
@@ -118,6 +123,7 @@ async function runGit(repoDir: string, args: readonly string[], opts: GitOptions
         ...withPathPrefix(gitEnv(), program.pathPrefix),
         ...(opts.network && networkEnv(opts.network.sshCommand)),
         ...(opts.indexFile && { GIT_INDEX_FILE: opts.indexFile }),
+        ...(opts.objectDirectory && { GIT_OBJECT_DIRECTORY: opts.objectDirectory }),
         GIT_CEILING_DIRECTORIES: ceiling,
         GIT_OPTIONAL_LOCKS: "0",
       },
