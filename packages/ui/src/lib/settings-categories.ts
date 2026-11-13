@@ -30,6 +30,7 @@ export const SETTINGS_CATEGORIES = [
       "supervisor-changes-code",
       "retry-model",
       "task-token-budget",
+      "running-tasks-warning",
       "sandbox",
       "auto-review",
       "java-navigation",

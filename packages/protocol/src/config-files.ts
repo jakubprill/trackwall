@@ -31,6 +31,7 @@ export const ConfigEntryId = z.enum([
   "logs-dir",
   "local-config-push-repo",
   "legacy-worktrees-dir",
+  "state-backups-dir",
   "projects-mise-config",
   "local-config-store",
   "task-worktrees-dir",
@@ -66,7 +67,8 @@ export type DocsPage =
   | "start-my-day"
   | "supervisor"
   | "tasks"
-  | "trackwall-errors";
+  | "trackwall-errors"
+  | "updates";
 
 export interface ConfigEntryInfo {
   place: ConfigPlace;
@@ -220,6 +222,15 @@ export const CONFIG_ENTRIES: Record<ConfigEntryId, ConfigEntryInfo> = {
     purpose: "Task worktrees from before version 0.5.1. New tasks no longer go here.",
     docs: "tasks",
   },
+  "state-backups-dir": {
+    place: "state",
+    kind: "folder",
+    writer: "trackwall",
+    internal: true,
+    purpose:
+      "A copy of the files above taken each time another version of Trackwall starts, so going back to an older version brings back its tasks.",
+    docs: "updates",
+  },
   "projects-mise-config": {
     place: "projects",
     kind: "file",
@@ -333,6 +344,7 @@ export const WorkspaceKey = z.enum([
   "supervisorModel",
   "retryModel",
   "taskTokenBudget",
+  "runningTasksWarning",
   "taskBranchPrefix",
   "javaNavigation",
   "localConfigRemote",
@@ -381,6 +393,11 @@ export const WORKSPACE_KEYS: Record<WorkspaceKey, WorkspaceKeyInfo> = {
   },
   taskTokenBudget: {
     purpose: "How many tokens a task's session may use from its start or resume before Trackwall stops it.",
+    docs: "tasks",
+    settings: "agents",
+  },
+  runningTasksWarning: {
+    purpose: "How many tasks may run at once before starting another one warns that the computer may slow down.",
     docs: "tasks",
     settings: "agents",
   },

@@ -37,6 +37,7 @@ import { ChangeOrderHints } from "./ChangeOrderHints.tsx";
 import { ChangeProposalParts } from "./ChangeProposalParts.tsx";
 import { ProposalActions, ProposalError } from "./ProposalActions.tsx";
 import { RepoRemovalNote } from "./RepoRemovalNote.tsx";
+import { RunningTasksNote } from "./RunningTasksNote.tsx";
 import { StartOptions } from "./StartOptions.tsx";
 
 /**
@@ -77,7 +78,8 @@ export function ProposalInbox({
   const decisions = useProposalDecisions({ conn, group, onChanged, onSelect, currentSelection });
   // Whether a proposal started without approvals runs in Copilot CLI's sandbox, or is refused (ADR-181).
   const loadStartOptions = useCallback(() => post(conn, agentsApi.startOptions, {}), [conn]);
-  const sandbox = useRemote(loadStartOptions).data?.sandbox;
+  const startOptions = useRemote(loadStartOptions).data;
+  const sandbox = startOptions?.sandbox;
   const providerModels = useProviderModels(conn).models;
   const [prompts, setPrompts] = useState<ReadonlyMap<string, string>>(new Map());
   const [models, setModels] = useState<ReadonlyMap<string, string>>(new Map());
@@ -131,6 +133,15 @@ export function ProposalInbox({
     if (parts !== undefined) decisions.startChange(start, parts);
   };
   const toStart = proposals.filter((p) => ticked.has(p.id));
+  /**
+   * The tasks a start would add (ADR-248): the ticked ones for "Start selected", otherwise those of the open proposal's
+   * own button, a task per repo kept for a change.
+   */
+  const tasksStarting = () => {
+    if (toStart.length > 0) return toStart.length;
+    const open = proposals.find((p) => p.id === shown);
+    return open?.parts ? open.parts.length - editOf(open).dropped.size : 1;
+  };
   // Ticking and "Start selected" are for tasks; a folder action has its own button (ADR-83).
   const several = proposals.filter((p) => p.kind === "task").length > 1;
 
@@ -162,6 +173,9 @@ export function ProposalInbox({
           them
           {several ? ", and tick a proposal once you have opened it" : ""}.
         </p>
+      )}
+      {proposals.some((p) => p.kind !== "remove_repo") && (
+        <RunningTasksNote sessions={sessions} warning={startOptions?.runningTasksWarning} starting={tasksStarting()} />
       )}
       <ul aria-label="Task proposals" className="flex flex-col gap-2">
         {proposals.map((p) => {
