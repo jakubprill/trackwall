@@ -6,6 +6,7 @@ import { EXTENSION_NAME, extensionManifest, vsixManifest } from "../scripts/vsix
 import { zip } from "../scripts/zip.ts";
 
 const source: unknown = JSON.parse(readFileSync(join(import.meta.dir, "..", "package.json"), "utf8"));
+const release = readFileSync(join(import.meta.dir, "..", "..", "..", ".github", "workflows", "release.yml"), "utf8");
 
 describe("the .vsix", () => {
   test("carries the extension's manifest under the name VS Code takes, without what only the repo needs", () => {
@@ -18,8 +19,8 @@ describe("the .vsix", () => {
   });
 
   test("names the extension, its version, engine and kind in the package manifest", () => {
-    const xml = vsixManifest(extensionManifest(source));
-    expect(xml).toContain(`<Identity Language="en-US" Id="trackwall" Version="0.1.0" Publisher="trackwall" />`);
+    const xml = vsixManifest({ ...extensionManifest(source), version: "1.2.3" });
+    expect(xml).toContain(`<Identity Language="en-US" Id="trackwall" Version="1.2.3" Publisher="trackwall" />`);
     expect(xml).toContain(`<Property Id="Microsoft.VisualStudio.Code.Engine" Value="^1.100.0" />`);
     expect(xml).toContain(`<Property Id="Microsoft.VisualStudio.Code.ExtensionKind" Value="workspace" />`);
     expect(xml).toContain("<Categories>Other</Categories>");
@@ -39,5 +40,12 @@ describe("the .vsix", () => {
     expect(end.readUInt32LE(0)).toBe(0x06054b50);
     expect(end.readUInt16LE(10)).toBe(2);
     expect(archive.includes(Buffer.from("extension/zażółć.md", "utf8"))).toBe(true);
+  });
+
+  test("release.yml packs it with the tag's version, checks its name and publishes it with its checksum", () => {
+    expect(release).toContain("pnpm --filter @trackwall/vscode package");
+    expect(release).toContain('vsix="trackwall-$version.vsix"');
+    expect(release).toContain('expected=("$win" "$mac" "$mac_update" "$linux_x64" "$linux_arm64" "$vsix"');
+    expect(release).toMatch(/sha256sum [^\n]*"\$vsix"/);
   });
 });

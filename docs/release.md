@@ -26,8 +26,8 @@ The last line prints the public key, which goes into `tauri.conf.json` through a
 
 ## How to release a version
 
-1. Bump the version in three places (the test `apps/desktop/test/versions.test.ts` checks that they match):
-   `packages/daemon/package.json`, `apps/desktop/src-tauri/tauri.conf.json`, `apps/desktop/src-tauri/Cargo.toml`.
+1. Bump the version in four places (the test `apps/desktop/test/versions.test.ts` checks that they match):
+   `packages/daemon/package.json`, `apps/desktop/src-tauri/tauri.conf.json`, `apps/desktop/src-tauri/Cargo.toml` and `apps/vscode/package.json` (the VS Code extension's `.vsix` is released with the app's version).
    The install commands on `apps/docs/guide/install.md` name the version too; `apps/docs/test/pages.test.ts` checks that they follow it.
    Then `cargo update --workspace --manifest-path apps/desktop/src-tauri/Cargo.toml` carries the new version into `Cargo.lock` (without bumping dependencies); commit it with the rest.
 2. Write the release note `docs/release-notes/v<version>.md` in English (ADR-32) for the user: what is new, how to move from an older version, known limitations (the same test checks that the file exists and is not empty).
@@ -43,7 +43,7 @@ The last line prints the public key, which goes into `tauri.conf.json` through a
    A tag with a hyphen (for example `v0.3.0-rc.1`) creates a pre-release.
 6. When the release is out, start the previous version on Windows and macOS (from the first version with the updater, ADR-53) and click "Update and restart" (or "Settings > Updates > Check for updates"): the app restarts in the new version, and on Windows `%LOCALAPPDATA%\Programs\Trackwall\.update` is gone a minute later. This is the only check of the update from a real release.
 
-The workflow checks that the tag points to a commit on `main` and matches the version in `tauri.conf.json`, runs `pnpm test` on `windows-latest` and `macos-latest` (a tag does not require green CI on its commit) and builds in parallel with the same scripts as CI (`pnpm build:desktop`, the sidecar smoke test, `pnpm portable`), waits for the owner's approval of the `release` environment, signs the update package of each system with the key from that environment's secrets (the step fails without `TAURI_SIGNING_PRIVATE_KEY`), builds the Linux archives on an x64 and an arm64 runner, each smoke-tested as it unpacks and signed with the same key (`apps/desktop/scripts/package-linux.ts`), and publishes the release only after every build succeeds and every signature, the Linux archives' included, turns out to be made with the key in `tauri.conf.json`. The release contains:
+The workflow checks that the tag points to a commit on `main` and matches the version in `tauri.conf.json`, runs `pnpm test` on `windows-latest` and `macos-latest` (a tag does not require green CI on its commit) and builds in parallel with the same scripts as CI (`pnpm build:desktop`, the sidecar smoke test, `pnpm portable`), waits for the owner's approval of the `release` environment, signs the update package of each system with the key from that environment's secrets (the step fails without `TAURI_SIGNING_PRIVATE_KEY`), builds the Linux archives on an x64 and an arm64 runner, each smoke-tested as it unpacks and signed with the same key (`apps/desktop/scripts/package-linux.ts`), packs the VS Code extension and checks that its `.vsix` carries the tag's version, and publishes the release only after every build succeeds and every signature, the Linux archives' included, turns out to be made with the key in `tauri.conf.json`. The release contains:
 
 | File | Contents |
 |---|---|
@@ -54,9 +54,10 @@ The workflow checks that the tag points to a commit on `main` and matches the ve
 | `trackwall-<version>-macos-arm64.app.tar.gz.sig` | its update signature |
 | `trackwall-<version>-linux-x64.tar.gz`, `trackwall-<version>-linux-arm64.tar.gz` | a `trackwall` folder with `trackwall-daemon`, `ui/` and `README.txt`, for a Linux container (no desktop app) |
 | `trackwall-<version>-linux-<arch>.tar.gz.sig` | its signature, made with the update key; `trackwall-container update` downloads both from this address and checks the signature with the key of the version already installed (ADR-165), so the names and the key are a contract with every installed version |
+| `trackwall-<version>.vsix` | the VS Code extension (ADR-221), packed on Linux with `pnpm --filter @trackwall/vscode package`; the same file for every system |
 | `latest.json` | the update manifest: version, date, address and signature of the update package for each system |
 | `devcontainer-feature-trackwall.tgz` | the Dev Container Feature that installs the Linux archive of this release, with both archives' SHA-256 written in (ADR-164); a `devcontainer.json` names it by its address in the release |
-| `SHA256SUMS.txt` | SHA-256 sums of the five archives and the Feature |
+| `SHA256SUMS.txt` | SHA-256 sums of the five archives, the `.vsix` and the Feature |
 
 The release description is the note from `docs/release-notes/v<version>.md`, followed by the list of PRs since the previous release generated by GitHub (without a previous release: since the beginning of the repo). If the workflow fails in the publish step, just run it again: the existing release gets its files replaced, and no second one is created.
 

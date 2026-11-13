@@ -2,7 +2,7 @@
   "name": "@trackwall/vscode",
   "displayName": "Trackwall",
   "description": "See your Trackwall sessions and what waits for you in VS Code's status bar and side bar, and open one in Trackwall with a click.",
-  "version": "0.1.0",
+  "version": "0.5.26",
   "publisher": "trackwall",
   "license": "MIT",
   "private": true,
