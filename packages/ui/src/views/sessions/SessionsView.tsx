@@ -17,6 +17,7 @@ import { Loading } from "@/components/Loading";
 import { ModelChangeButton, SessionModelChange } from "@/components/ModelChange";
 import { SessionNotices } from "@/components/SessionNotices";
 import { SessionScreen } from "@/components/SessionScreen";
+import { SessionStateLabel } from "@/components/SessionStateLabel";
 import { StatusLabel } from "@/components/StatusLabel";
 import { TaskOutcomeMarks } from "@/components/TaskOutcomeMarks";
 import { Badge } from "@/components/ui/badge";
@@ -56,7 +57,7 @@ import {
   sessionShortcut,
   sessionShortcutLabel,
 } from "@/lib/session-shortcut";
-import { attentionCount, isLive, PROPOSAL_STATUS, SUPERVISOR, sessionPlace, sessionStateLabel } from "@/lib/session-state";
+import { attentionCount, isLive, PROPOSAL_STATUS, SUPERVISOR, sessionPlace } from "@/lib/session-state";
 import type { SupervisorSummary } from "@/lib/supervisor";
 import { outcomeMarks } from "@/lib/task-outcomes";
 import { useAction } from "@/lib/use-action";
@@ -424,7 +425,7 @@ function SupervisorListItem({ supervisor, onOpen }: { supervisor: SupervisorSumm
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <RowName name={SUPERVISOR} group={null} delegated={supervisor.delegated} waits={supervisor.sessionWaits} />
-        <span className="text-muted-foreground text-xs">{session ? <StatusLabel {...sessionStateLabel(session)} /> : "not running"}</span>
+        <span className="text-muted-foreground text-xs">{session ? <SessionStateLabel session={session} /> : "not running"}</span>
       </span>
     </button>
   );
@@ -782,7 +783,7 @@ function RowStatus({ session }: { session: Session | undefined }) {
   if (session === undefined) return <span className="text-muted-foreground text-xs">no session</span>;
   return (
     <span className="text-muted-foreground flex items-center gap-3 text-xs">
-      <StatusLabel {...sessionStateLabel(session)} />
+      <SessionStateLabel session={session} />
       <CopilotUsageMark usage={session.usage} />
     </span>
   );
@@ -824,7 +825,7 @@ function SessionPanel({
             <span className="truncate text-sm font-medium">{sessionPlace(session)}</span>
             <SessionJavaNavigationMark conn={conn} session={session} running={live} />
             <span className="text-muted-foreground text-xs">
-              <StatusLabel {...sessionStateLabel(session)} />
+              <SessionStateLabel session={session} />
             </span>
             <span className="text-muted-foreground text-xs">{relativeTime(session.startedAt, new Date())}</span>
             <CopilotUsageMark usage={session.usage} />

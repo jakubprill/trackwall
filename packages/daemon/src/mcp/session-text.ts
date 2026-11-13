@@ -56,7 +56,7 @@ function sessionLines(session: AgentSession): string[] {
     const { state, source, confidence, at, reason } = session.state;
     lines.push(`State: ${state} at ${at} (${source}, ${confidence}): ${reason}`);
   }
-  if (session.needsAttention) lines.push("Needs attention: it waits for the user or for input.");
+  if (session.needsAttention) lines.push(attentionLine(session.waitingSince));
   if (session.stuck !== null) lines.push(`May be stuck: no step since ${session.stuck.lastStepAt}.`);
   // A turn whose model call failed ends without an answer (ADR-242); on a model the account lacks, every later one too.
   if (session.modelError !== null) lines.push(`Its last model call failed: ${session.modelError}`);
@@ -67,6 +67,11 @@ function sessionLines(session: AgentSession): string[] {
   if (session.usage !== null) lines.push(`Usage: ${usageLabel(session.usage)}`);
   if (session.tokenBudget !== null) lines.push(tokenBudgetLine(session.tokenBudget));
   return lines;
+}
+
+/** Since when, so that the supervisor can tell a wait of a minute from one of an hour (ADR-247). */
+function attentionLine(waitingSince: string | null): string {
+  return `Needs attention: it waits for the user or for input${waitingSince === null ? "" : ` since ${waitingSince}`}.`;
 }
 
 function runLabel(run: AgentSession["run"]): string {

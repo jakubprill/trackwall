@@ -25,6 +25,7 @@ function session(id: string, startedAt: string, task: string | null = null): Ses
     state: null,
     windowTitle: null,
     needsAttention: false,
+    waitingSince: null,
     stuck: null,
     task,
     dialog: null,

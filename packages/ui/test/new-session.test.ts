@@ -23,6 +23,7 @@ function session(id: string, over: Partial<Session>): Session {
     state: null,
     windowTitle: null,
     needsAttention: false,
+    waitingSince: null,
     stuck: null,
     task: null,
     dialog: null,

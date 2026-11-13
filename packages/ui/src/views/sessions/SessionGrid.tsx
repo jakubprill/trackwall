@@ -2,6 +2,7 @@ import type { RunningMiseTask, Session, Task, TaskMessage, TaskOutcome } from "@
 import { Maximize2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { SessionScreen } from "@/components/SessionScreen";
+import { SessionStateLabel } from "@/components/SessionStateLabel";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
@@ -312,7 +313,7 @@ function TileTitle({ entry, under }: { entry: SessionEntry; under: string | unde
       {name}
       {/* In a narrow tile the state is its dot, with the text as the tooltip. */}
       <span className="text-muted-foreground shrink-0 text-xs" title={session ? sessionStateLabel(session).label : undefined}>
-        {session ? <StatusLabel {...sessionStateLabel(session)} labelClassName="@max-lg:sr-only" /> : "no session"}
+        {session ? <SessionStateLabel session={session} labelClassName="@max-lg:sr-only" /> : "no session"}
       </span>
       <span className="min-w-0 flex-1 truncate" title={task?.prompt ?? session?.windowTitle ?? undefined}>
         {task ? <TaskLine task={task} /> : <span className="text-muted-foreground text-xs">{session?.windowTitle}</span>}

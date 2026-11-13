@@ -13,6 +13,7 @@ function session(fields: Partial<Session> & Pick<Session, "id">): Session {
     state: null,
     windowTitle: null,
     needsAttention: false,
+    waitingSince: null,
     stuck: null,
     task: null,
     dialog: null,

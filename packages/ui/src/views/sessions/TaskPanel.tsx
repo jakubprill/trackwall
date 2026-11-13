@@ -14,14 +14,14 @@ import { FolderShell } from "@/components/FolderShell";
 import { ModelChangeButton } from "@/components/ModelChange";
 import { SessionNotices } from "@/components/SessionNotices";
 import { SessionScreen } from "@/components/SessionScreen";
-import { StatusLabel } from "@/components/StatusLabel";
+import { SessionStateLabel } from "@/components/SessionStateLabel";
 import { TabBar } from "@/components/TabBar";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { relativeTime } from "@/lib/format";
 import { proposerLabel, type TaskTab, taskName, taskTabs } from "@/lib/session-entries";
-import { isLive, sessionStateLabel } from "@/lib/session-state";
+import { isLive } from "@/lib/session-state";
 import { useTaskDetails } from "@/lib/use-task-details";
 import { useTaskReview } from "@/lib/use-task-review";
 import { JavaNavigationMark } from "./JavaNavigationMark.tsx";
@@ -117,7 +117,7 @@ export function TaskPanel({
             <TaskMarks task={task} />
             <JavaNavigationMark conn={conn} task={task} running={liveSession !== undefined} />
             <span className="text-muted-foreground shrink-0 text-xs">
-              {session ? <StatusLabel {...sessionStateLabel(session)} /> : "no session"}
+              {session ? <SessionStateLabel session={session} /> : "no session"}
             </span>
             <span className="text-muted-foreground shrink-0 text-xs">{relativeTime(session?.startedAt ?? task.createdAt, new Date())}</span>
             <CopilotUsageMark usage={session?.usage ?? null} />

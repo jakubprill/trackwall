@@ -37,6 +37,7 @@ const working: Session = {
   state: { state: "Working", source: "hook", confidence: "high", reason: "hook postToolUse", at: "2026-10-31T09:00:00.000Z" },
   windowTitle: null,
   needsAttention: false,
+  waitingSince: null,
   stuck: null,
   task: null,
   dialog: null,

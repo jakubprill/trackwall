@@ -490,6 +490,7 @@ export class LiveSession implements AgentSession {
       state: this.#last,
       windowTitle: this.#state.windowTitle ?? null,
       needsAttention: run.kind === "running" && this.#attention.waiting(this.#last?.state),
+      waitingSince: run.kind === "running" ? this.#attention.waitingSince(this.#last?.state) : null,
       stuck: run.kind === "running" ? sessionStuck(this.#last, this.#lastStepAt, Date.now()) : null,
       task: this.task,
       dialog: run.kind === "running" ? this.#dialog() : null,
@@ -637,7 +638,7 @@ export class LiveSession implements AgentSession {
   #report(changes: readonly (TaskStateChange | undefined)[]): void {
     for (const change of changes) {
       if (!change) continue;
-      this.#attention.changed(this.#last?.state, change.state);
+      this.#attention.changed(this.#last?.state, change.state, change.at);
       if (change.state !== this.#last?.state && DIALOG_IN_STATE.has(change.state)) this.#dialogs.waitStarted(this.#requestsGoOn);
       const wasError = this.#last?.state === "Error";
       this.#last = change;

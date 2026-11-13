@@ -24,6 +24,7 @@ function session(state: TaskState | null, run: Session["run"] = running): Sessio
     state: state && { state, source: "acp", confidence: "exact", at: "2026-11-08T08:01:00Z", reason: "acp" },
     windowTitle: null,
     needsAttention: false,
+    waitingSince: null,
     stuck: null,
     task: "t1",
     dialog: null,

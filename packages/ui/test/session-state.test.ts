@@ -24,6 +24,7 @@ function session(id: string, state: Session["state"], run: Session["run"] = runn
     state,
     windowTitle: null,
     needsAttention,
+    waitingSince: null,
     stuck: null,
     task: null,
     dialog: null,
