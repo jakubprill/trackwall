@@ -124,6 +124,7 @@ async function sessionShowing(
   notificationType: string,
   prompt: () => string | undefined = () => undefined,
   terminal: { cols: number; rows: number; message?: string } = { cols: 120, rows: 30 },
+  place: { task: string | null; alwaysAllowed: () => readonly string[] } = { task: null, alwaysAllowed: () => [] },
 ) {
   const typedText = { count: 0 };
   const hooksFile = join(mkdtempSync(join(tmpdir(), "trackwall-dialog-")), "hooks.jsonl");
@@ -132,7 +133,7 @@ async function sessionShowing(
     id: "s1",
     repo: "shop",
     supervisor: false,
-    task: null,
+    task: place.task,
     cols: terminal.cols,
     rows: terminal.rows,
     hooksFile,
@@ -153,6 +154,7 @@ async function sessionShowing(
     onTurnStart: () => {},
     usage: new CopilotUsageLog(NO_COPILOT_HOME),
     tokenBudget: null,
+    alwaysAllowed: place.alwaysAllowed,
   });
   sessions.push(session);
   const written: string[] = [];
@@ -466,5 +468,58 @@ describe("the daemon's prompt and a dialog on the screen (ADR-62, ADR-68)", () =
 
     expect(typedText.count).toBe(0);
     expect(written).toEqual(["PostgreSQL"]);
+  });
+});
+
+describe("Always allow in a task's approval (ADR-249)", () => {
+  const WIDE = { cols: 120, rows: 30 };
+  const inTask = (alwaysAllowed: readonly string[] = []) => ({ task: "t1", alwaysAllowed: () => alwaysAllowed });
+
+  test("a task's command approval offers the command Copilot CLI would not ask about again as a shell pattern", async () => {
+    const { session } = await sessionShowing("shell-120", "permission_prompt", undefined, WIDE, inTask());
+
+    expect(session.view()?.dialog).toMatchObject({ kind: "approval", alwaysAllow: "shell(touch)" });
+  });
+
+  test("a task's MCP tool approval offers the server's tool, and a file change offers nothing", async () => {
+    const mcp = await sessionShowing("mcp-45", "permission_prompt", undefined, { cols: 100, rows: 45 }, inTask());
+    const create = await sessionShowing("create-120", "permission_prompt", undefined, WIDE, inTask());
+
+    expect(mcp.session.view()?.dialog).toMatchObject({ kind: "approval", alwaysAllow: "trackwall(verify_task)" });
+    expect(create.session.view()?.dialog).toMatchObject({
+      kind: "approval",
+      question: "Do you want to create /src/app-outside/notes-with-a-rather-long-name-for-wrapping.txt?",
+    });
+    expect(create.session.view()?.dialog).not.toHaveProperty("alwaysAllow");
+  });
+
+  test("a session in the repo root offers nothing: its folder is the repo itself, not a worktree you review", async () => {
+    const { session } = await sessionShowing("shell-120", "permission_prompt");
+
+    expect(session.view()?.dialog).toMatchObject({ kind: "approval", question: "Do you want to run this command?" });
+    expect(session.view()?.dialog).not.toHaveProperty("alwaysAllow");
+  });
+
+  test("a running task answers Yes itself to an approval of a tool already always allowed in its repo", async () => {
+    const { session, written } = await sessionShowing("shell-120", "permission_prompt", undefined, WIDE, inTask(["shell(touch)"]));
+    // The session's next read cycle.
+    session.tick();
+
+    expect(written).toEqual(["1"]);
+    expect(session.view()).toMatchObject({ state: { state: "Working", source: "keyboard" }, dialog: null });
+  });
+
+  test("a tool always allowed in the repo is not answered in a session outside a task, nor another tool in a task", async () => {
+    const root = await sessionShowing("shell-120", "permission_prompt", undefined, WIDE, {
+      task: null,
+      alwaysAllowed: () => ["shell(touch)"],
+    });
+    const other = await sessionShowing("shell-120", "permission_prompt", undefined, WIDE, inTask(["shell(npm test)"]));
+    root.session.tick();
+    other.session.tick();
+
+    expect(root.written).toEqual([]);
+    expect(other.written).toEqual([]);
+    expect(other.session.view()?.state).toMatchObject({ state: "Approval" });
   });
 });

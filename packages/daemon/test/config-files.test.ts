@@ -57,7 +57,7 @@ describe("config files", () => {
       name: "workspace.yaml",
       path: workspaceFile,
       state: "present",
-      detail: "3 of 21 keys set in the file",
+      detail: "3 of 22 keys set in the file",
     });
     expect(entry("tasks-file")).toEqual({
       id: "tasks-file",
@@ -116,6 +116,7 @@ describe("config files", () => {
       ["repoHosts", "default", "none", null],
       ["starredRepos", "default", "none", null],
       ["toolPermissions", "default", "none", null],
+      ["alwaysAllow", "default", "none", null],
       ["sandbox", "default", "tasks: auto on Linux, off on macOS, Windows and in a container", null],
       ["agentSecrets", "file", "GITLAB_TOKEN", 2],
       ["sessionProfile", "default", "none", null],
