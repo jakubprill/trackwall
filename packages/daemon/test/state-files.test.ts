@@ -2,19 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { copyFileSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { KnowledgeName, RoutineName } from "@trackwall/protocol";
-import { KNOWLEDGE_APPROVALS_FILE, ROUTINE_APPROVALS_FILE } from "../src/facade.ts";
-import { approvalsFormat } from "../src/infra/approved-folder.ts";
-import { readStateFile, type StateFormat, stateVersion } from "../src/infra/state-file.ts";
-import { AGENT_QUEUES_FORMAT } from "../src/modules/agents/agent-queues.ts";
-import { AGENT_QUEUES_FILE, RESUMABLE_SESSIONS_FILE, TASKS_FILE } from "../src/modules/agents/agents.ts";
-import { AUTO_REVIEWS_FILE, AUTO_REVIEWS_FORMAT } from "../src/modules/agents/auto-reviews.ts";
-import { LAST_SUPERVISOR_FILE, LAST_SUPERVISOR_FORMAT } from "../src/modules/agents/last-supervisor.ts";
-import { RESUMABLE_SESSIONS_FORMAT } from "../src/modules/agents/resumable-sessions.ts";
-import { TASKS_FORMAT } from "../src/modules/agents/task-file.ts";
-import { TASK_ROUNDS_FILE, TASK_ROUNDS_FORMAT } from "../src/modules/agents/task-rounds.ts";
-import { REPRODUCTION_CHECKS_FILE, REPRODUCTION_CHECKS_FORMAT } from "../src/modules/reproduction/reproduction-checks.ts";
-import { VERIFICATIONS_FILE, VERIFICATIONS_FORMAT } from "../src/modules/verification/verifications.ts";
+import { STATE_FILES } from "../src/facade.ts";
+import { readStateFile, stateVersion } from "../src/infra/state-file.ts";
 
 // The state files an older Trackwall wrote (ADR-223): `fixtures/state-files/<version>/` keeps a file of each format as
 // that format version wrote it, and every one of them must still read in the current Trackwall. A schema change that
@@ -23,19 +12,6 @@ import { VERIFICATIONS_FILE, VERIFICATIONS_FORMAT } from "../src/modules/verific
 const FIXTURES = join(import.meta.dir, "fixtures", "state-files");
 
 const SRC = join(import.meta.dir, "..", "src");
-
-const FORMATS: Record<string, StateFormat<object>> = {
-  [TASKS_FILE]: TASKS_FORMAT,
-  [VERIFICATIONS_FILE]: VERIFICATIONS_FORMAT,
-  [AUTO_REVIEWS_FILE]: AUTO_REVIEWS_FORMAT,
-  [TASK_ROUNDS_FILE]: TASK_ROUNDS_FORMAT,
-  [RESUMABLE_SESSIONS_FILE]: RESUMABLE_SESSIONS_FORMAT,
-  [AGENT_QUEUES_FILE]: AGENT_QUEUES_FORMAT,
-  [LAST_SUPERVISOR_FILE]: LAST_SUPERVISOR_FORMAT,
-  [REPRODUCTION_CHECKS_FILE]: REPRODUCTION_CHECKS_FORMAT,
-  [ROUTINE_APPROVALS_FILE]: approvalsFormat(RoutineName),
-  [KNOWLEDGE_APPROVALS_FILE]: approvalsFormat(KnowledgeName),
-};
 
 /** The daemon's source files with their text, relative to `src`. */
 function sources(): { file: string; text: string }[] {
@@ -50,8 +26,8 @@ describe("state files of older Trackwall versions (ADR-223)", () => {
   for (const version of versions) {
     for (const name of readdirSync(join(FIXTURES, version))) {
       test(`${name} of state format ${version} still reads`, () => {
-        const format = FORMATS[name];
-        if (format === undefined) throw new Error(`${name} has no format in this test`);
+        const format = STATE_FILES[name];
+        if (format === undefined) throw new Error(`${name} has no format in STATE_FILES`);
         // A copy, since a file that does not read is moved aside.
         const file = join(mkdtempSync(join(tmpdir(), "trackwall-state-files-")), name);
         copyFileSync(join(FIXTURES, version, name), file);
@@ -66,13 +42,13 @@ describe("state files of older Trackwall versions (ADR-223)", () => {
   }
 
   test("every state format has a file of its current version", () => {
-    for (const [name, format] of Object.entries(FORMATS)) {
+    for (const [name, format] of Object.entries(STATE_FILES)) {
       expect(readdirSync(join(FIXTURES, String(stateVersion(format))))).toContain(name);
     }
   });
 
-  test("every state format the daemon defines is in this test", async () => {
-    const listed = Object.values(FORMATS);
+  test("every state format the daemon defines is in STATE_FILES, which backups copy", async () => {
+    const listed = Object.values(STATE_FILES);
     for (const { file, text } of sources()) {
       for (const [, name] of text.matchAll(/export const (\w+) = stateFormat\(/g)) {
         const module: Record<string, unknown> = await import(join(SRC, file));
