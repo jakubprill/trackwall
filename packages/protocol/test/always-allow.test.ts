@@ -9,7 +9,8 @@ describe("what Always allow may remember for a repo's tasks (ADR-249)", () => {
       "shell(mvn -q)",
       "shell(touch)",
       "shell(git status)",
-      "shell(git log)",
+      "shell(git commit)",
+      "shell(git rev-parse)",
       "trackwall(verify_task)",
     ]) {
       expect(alwaysAllowable(pattern)).toBe(true);
@@ -86,6 +87,54 @@ describe("what Always allow may remember for a repo's tasks (ADR-249)", () => {
       expect(alwaysAllowable(`shell(${command})`)).toBe(false);
     }
     for (const command of ["ii", "saps", "cscript", "mshta", "rundll32", "certutil", "cmd.", "rm.exe ", "start.com", "echo %COMSPEC%"]) {
+      expect(alwaysAllowable(`shell(${command})`)).toBe(false);
+    }
+  });
+
+  test("git subcommands that write a file by path or run a program through an option, since a pattern covers every option after it", () => {
+    // `git log --output=<path>` writes any file, `git grep -O<program>` and `git difftool -x` run a program.
+    for (const command of [
+      "git log",
+      "git diff",
+      "git show",
+      "git blame",
+      "git shortlog",
+      "git rev-list",
+      "git reflog",
+      "git stash",
+      "git grep",
+      "git difftool",
+      "git archive",
+      "git format-patch",
+      "git rebase",
+      "git bisect",
+      "git hook",
+      "git init",
+      "git Log",
+    ]) {
+      expect(alwaysAllowable(`shell(${command})`)).toBe(false);
+    }
+  });
+
+  test("runtimes that run a source file, wrappers and editors that run commands, shell builtins that change later commands, opening with the system and stopping processes", () => {
+    for (const command of [
+      "java",
+      "groovy",
+      "command",
+      "setsid",
+      "vim",
+      "export",
+      "alias",
+      "cd",
+      "open",
+      "xdg-open",
+      "explorer.exe",
+      "code",
+      "kill",
+      "taskkill",
+      "dotnet exec",
+      "dotnet fsi",
+    ]) {
       expect(alwaysAllowable(`shell(${command})`)).toBe(false);
     }
   });

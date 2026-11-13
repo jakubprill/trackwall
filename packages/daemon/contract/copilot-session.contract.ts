@@ -7,6 +7,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import {
   agentsApi,
+  alwaysAllowable,
   MCP_SERVER_NAME,
   mcpTools,
   promptBoxText,
@@ -373,6 +374,31 @@ describe("a session of the real Copilot CLI", () => {
         await endOfTurn(allowed.id);
         expect(hookRecords(daemon.home, allowed.id).map((r) => r.event)).not.toContain("notification");
         expect(existsSync(outside)).toBe(true);
+      } finally {
+        writeFileSync(workspaceFile, workspace);
+        rmSync(outside, { force: true });
+      }
+    },
+  );
+
+  test.skipIf(process.platform === "win32")(
+    "an allowed git log writes a file outside the folder through --output without asking, which is why Always allow takes only some git subcommands (ADR-249)",
+    async () => {
+      const outside = join(dirname(daemon.projects), `git-log-output-${Date.now()}.txt`);
+      // A pattern covers every option after it: `--output=<path>` writes any file, and Copilot CLI checks no path of an
+      // allowed command. Always allow therefore never remembers `git log` (`alwaysAllowable`); a hand-written rule can.
+      expect(alwaysAllowable("shell(git log)")).toBe(false);
+      const workspaceFile = join(daemon.home, "workspace.yaml");
+      const workspace = readFileSync(workspaceFile, "utf8");
+      writeFileSync(workspaceFile, `${workspace}toolPermissions:\n  - repos: [shop]\n    allow: ["shell(git log)"]\n`);
+      try {
+        const allowed = await startSession();
+        const command = `git log -1 --format=tformat:written-by-git-log --output=${outside}`;
+        model.reply((request) => shellCall(request, { bash: command, powershell: "" }), { text: "Done." });
+        allowed.window.attachment.input("log it\r");
+        await endOfTurn(allowed.id);
+        expect(hookRecords(daemon.home, allowed.id).map((r) => r.event)).not.toContain("notification");
+        expect(readFileSync(outside, "utf8")).toBe("written-by-git-log\n");
       } finally {
         writeFileSync(workspaceFile, workspace);
         rmSync(outside, { force: true });
