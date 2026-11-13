@@ -100,15 +100,20 @@ pub fn read_daemon_file(home: &Path) -> Option<DaemonFile> {
 
 /// The version from `GET /api/health`, or `None` when nobody answers.
 pub fn health(port: u16, location: DaemonLocation) -> Option<String> {
-    let (status, body) = http(port, location, "GET", "/api/health", None).ok()?;
+    health_answer(port, location).ok().flatten()
+}
+
+/// What `GET /api/health` came to: the version, `None` when whatever answered is not a Trackwall daemon, or why no answer came.
+fn health_answer(port: u16, location: DaemonLocation) -> Result<Option<String>, HttpError> {
+    let (status, body) = http(port, location, "GET", "/api/health", None)?;
     if status != 200 {
-        return None;
+        return Ok(None);
     }
-    let v: serde_json::Value = serde_json::from_str(&body).ok()?;
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(&body) else { return Ok(None) };
     if v["ok"] != serde_json::Value::Bool(true) {
-        return None;
+        return Ok(None);
     }
-    v["data"]["version"].as_str().map(str::to_owned)
+    Ok(v["data"]["version"].as_str().map(str::to_owned))
 }
 
 /// Finds a running daemon or starts the sidecar and waits until it answers.
@@ -195,17 +200,31 @@ impl From<RemoteRefusal> for String {
 /// Checks a remote daemon (ADR-130): it answers, has this app's version and accepts the token.
 pub fn connect_remote(remote: &RemoteDaemon) -> Result<Connection, RemoteRefusal> {
     let port = remote.port;
-    match health(port, DaemonLocation::Remote) {
-        None => {
+    match health_answer(port, DaemonLocation::Remote) {
+        Err(HttpError::Unreachable(_)) => {
             return Err(RemoteRefusal::Refused(format!(
                 "No Trackwall daemon answers at 127.0.0.1:{port}. Start it (for example in its container), check that the \
                  port is forwarded to this computer, and click “Try again”."
             )))
         }
-        Some(version) if version != VERSION => return Err(RemoteRefusal::OtherVersion { port, version }),
-        Some(_) => {}
+        Err(HttpError::NoAnswer(why)) => {
+            // Something holds the port, most often a port forward, so "nobody answers" would send the user the wrong way.
+            return Err(RemoteRefusal::Refused(format!(
+                "Something accepted the connection at 127.0.0.1:{port}, but no answer came back ({why}). Check the port \
+                 forward to the daemon (for example forward the port again in VS Code's Ports view) and that the daemon runs \
+                 behind it, and click “Try again”."
+            )));
+        }
+        Ok(None) => {
+            return Err(RemoteRefusal::Refused(format!(
+                "Something answers at 127.0.0.1:{port}, but not as a Trackwall daemon. Check that this port is forwarded to \
+                 Trackwall's daemon, not to another program, and click “Try again”."
+            )))
+        }
+        Ok(Some(version)) if version != VERSION => return Err(RemoteRefusal::OtherVersion { port, version }),
+        Ok(Some(_)) => {}
     }
-    match http(port, DaemonLocation::Remote, "GET", DAEMON_INFO_PATH, Some(&remote.token)).map_err(RemoteRefusal::Refused)? {
+    match http(port, DaemonLocation::Remote, "GET", DAEMON_INFO_PATH, Some(&remote.token)).map_err(|e| RemoteRefusal::Refused(e.into()))? {
         (200, _) => Ok(Connection::new(port, &remote.token, DaemonLocation::Remote)),
         (401, _) => Err(RemoteRefusal::Refused(format!(
             "The daemon at 127.0.0.1:{port} did not accept the token: it gets a new one every time it starts. \
@@ -242,7 +261,7 @@ pub enum SessionsError {
 /// The body of the `POST /api/agents/sessions` reply (the list of Copilot CLI sessions, ADR-26).
 pub fn sessions(conn: &Connection) -> Result<String, SessionsError> {
     let (status, body) =
-        http(conn.port, conn.location, "POST", "/api/agents/sessions", Some(&conn.token)).map_err(SessionsError::Failed)?;
+        http(conn.port, conn.location, "POST", "/api/agents/sessions", Some(&conn.token)).map_err(|e| SessionsError::Failed(e.into()))?;
     match status {
         200 => Ok(body),
         401 => Err(SessionsError::TokenRefused),
@@ -319,57 +338,107 @@ fn log_tail(path: &Path) -> String {
     }
 }
 
-/// A minimal HTTP/1.1 client for the daemon on 127.0.0.1: `Connection: close`, the response read to the end, the whole
-/// request within the limit of `location`, however slowly the answer trickles in.
-fn http(port: u16, location: DaemonLocation, method: &str, path: &str, token: Option<&str>) -> Result<(u16, String), String> {
+/// Why a request to the daemon got no answer: nothing took the connection (nobody listens, or the port is refused), or
+/// something took it and no complete answer came back in time (a stalled port forward, a daemon that hangs).
+#[derive(Debug, PartialEq)]
+enum HttpError {
+    Unreachable(String),
+    NoAnswer(String),
+}
+
+impl From<HttpError> for String {
+    fn from(error: HttpError) -> String {
+        match error {
+            HttpError::Unreachable(why) | HttpError::NoAnswer(why) => why,
+        }
+    }
+}
+
+const NO_ANSWER_IN_TIME: &str = "the daemon did not answer in time";
+
+/// A read or write that ran out of time is told in words: the system says "Resource temporarily unavailable" on Unix and
+/// something else on Windows, which tells the user nothing.
+fn io_no_answer(error: std::io::Error) -> HttpError {
+    match error.kind() {
+        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut => HttpError::NoAnswer(NO_ANSWER_IN_TIME.to_owned()),
+        _ => HttpError::NoAnswer(error.to_string()),
+    }
+}
+
+/// A minimal HTTP/1.1 client for the daemon on 127.0.0.1: `Connection: close`, the response read until its declared end
+/// or until the connection closes, the whole request within the limit of `location`, however slowly the answer trickles in.
+/// Reading stops at the declared end because a port forward may keep the connection open after the daemon closed its side.
+fn http(port: u16, location: DaemonLocation, method: &str, path: &str, token: Option<&str>) -> Result<(u16, String), HttpError> {
     let deadline = Instant::now() + location.timeout();
     let left = || {
         deadline
             .checked_duration_since(Instant::now())
             .filter(|d| !d.is_zero())
-            .ok_or_else(|| "the daemon did not answer in time".to_owned())
+            .ok_or_else(|| HttpError::NoAnswer(NO_ANSWER_IN_TIME.to_owned()))
     };
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    let mut stream = TcpStream::connect_timeout(&addr, left()?).map_err(|e| e.to_string())?;
-    stream.set_write_timeout(Some(left()?)).map_err(|e| e.to_string())?;
+    let mut stream = TcpStream::connect_timeout(&addr, location.timeout()).map_err(|e| HttpError::Unreachable(e.to_string()))?;
+    stream.set_write_timeout(Some(left()?)).map_err(io_no_answer)?;
     let auth = token.map(|t| format!("Authorization: Bearer {t}\r\n")).unwrap_or_default();
     let req = format!("{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{auth}Content-Length: 0\r\nConnection: close\r\n\r\n");
-    stream.write_all(req.as_bytes()).map_err(|e| e.to_string())?;
+    stream.write_all(req.as_bytes()).map_err(io_no_answer)?;
     let mut raw = Vec::new();
     let mut chunk = [0u8; 8192];
-    while raw.len() < MAX_RESPONSE_BYTES {
-        stream.set_read_timeout(Some(left()?)).map_err(|e| e.to_string())?;
-        match stream.read(&mut chunk).map_err(|e| e.to_string())? {
+    while raw.len() < MAX_RESPONSE_BYTES && !is_complete(&raw) {
+        stream.set_read_timeout(Some(left()?)).map_err(io_no_answer)?;
+        match stream.read(&mut chunk).map_err(io_no_answer)? {
             0 => break,
             n => raw.extend_from_slice(&chunk[..n.min(MAX_RESPONSE_BYTES - raw.len())]),
         }
     }
-    parse_response(&raw)
+    parse_response(&raw).map_err(|why| HttpError::NoAnswer(why.to_owned()))
 }
 
 /// The daemon's answers to the shell are small; more is not read.
 const MAX_RESPONSE_BYTES: usize = 1 << 20;
 
-fn parse_response(raw: &[u8]) -> Result<(u16, String), String> {
-    let split = raw.windows(4).position(|w| w == b"\r\n\r\n").ok_or("incomplete HTTP response")?;
-    let head = String::from_utf8_lossy(&raw[..split]);
-    let body = &raw[split + 4..];
+/// The head and body of a response, split at the blank line; `None` while the head has not come in full.
+fn split_response(raw: &[u8]) -> Option<(String, &[u8])> {
+    let split = raw.windows(4).position(|w| w == b"\r\n\r\n")?;
+    Some((String::from_utf8_lossy(&raw[..split]).into_owned(), &raw[split + 4..]))
+}
+
+/// The value of a header of the head, its name compared without regard to case.
+fn header<'a>(head: &'a str, name: &str) -> Option<&'a str> {
+    head.lines().skip(1).find_map(|line| {
+        let (key, value) = line.split_once(':')?;
+        key.trim().eq_ignore_ascii_case(name).then(|| value.trim())
+    })
+}
+
+fn is_chunked(head: &str) -> bool {
+    header(head, "transfer-encoding").is_some_and(|v| v.to_ascii_lowercase().contains("chunked"))
+}
+
+/// Whether the bytes read so far hold the whole response as its head declares it: the `Content-Length` bytes, or the last
+/// chunk. A response that declares neither ends only when the connection closes.
+fn is_complete(raw: &[u8]) -> bool {
+    let Some((head, body)) = split_response(raw) else { return false };
+    if is_chunked(&head) {
+        return dechunk(body).is_ok();
+    }
+    header(&head, "content-length").and_then(|v| v.parse::<usize>().ok()).is_some_and(|length| body.len() >= length)
+}
+
+fn parse_response(raw: &[u8]) -> Result<(u16, String), &'static str> {
+    let (head, body) = split_response(raw).ok_or("incomplete HTTP response")?;
     let status = head.split_whitespace().nth(1).and_then(|s| s.parse::<u16>().ok()).ok_or("missing status code")?;
-    let chunked = head.lines().any(|l| {
-        let l = l.to_ascii_lowercase();
-        l.starts_with("transfer-encoding:") && l.contains("chunked")
-    });
-    let body = if chunked { dechunk(body)? } else { body.to_vec() };
+    let body = if is_chunked(&head) { dechunk(body)? } else { body.to_vec() };
     Ok((status, String::from_utf8_lossy(&body).into_owned()))
 }
 
 /// Decodes `Transfer-Encoding: chunked` on bytes (chunk sizes are in bytes, not characters).
-fn dechunk(mut body: &[u8]) -> Result<Vec<u8>, String> {
+fn dechunk(mut body: &[u8]) -> Result<Vec<u8>, &'static str> {
     let mut out = Vec::new();
     loop {
         let eol = body.windows(2).position(|w| w == b"\r\n").ok_or("malformed chunk")?;
         let size_line = String::from_utf8_lossy(&body[..eol]);
-        let size = usize::from_str_radix(size_line.split(';').next().unwrap_or("").trim(), 16).map_err(|e| e.to_string())?;
+        let size = usize::from_str_radix(size_line.split(';').next().unwrap_or("").trim(), 16).map_err(|_| "malformed chunk size")?;
         let rest = &body[eol + 2..];
         if size == 0 {
             return Ok(out);
@@ -437,6 +506,110 @@ mod tests {
         let asked = Instant::now();
         assert!(http(port, DaemonLocation::Local, "GET", "/api/health", None).is_err());
         assert!(asked.elapsed() < Duration::from_secs(3));
+    }
+
+    #[test]
+    fn a_complete_answer_counts_even_when_the_connection_stays_open() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind 127.0.0.1:0");
+        let port = listener.local_addr().expect("listening address").port();
+        std::thread::spawn(move || {
+            let mut held = Vec::new();
+            for mut stream in listener.incoming().flatten() {
+                let mut request = [0u8; 1024];
+                let _ = stream.read(&mut request);
+                let body = format!(r#"{{"ok":true,"data":{{"version":"{VERSION}"}}}}"#);
+                let reply = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}", body.len());
+                let _ = stream.write_all(reply.as_bytes());
+                // Kept open after a full answer, as a port forward that does not pass on the daemon's close does.
+                held.push(stream);
+            }
+        });
+
+        let asked = Instant::now();
+        assert_eq!(health(port, DaemonLocation::Remote).as_deref(), Some(VERSION));
+        assert!(asked.elapsed() < Duration::from_secs(1), "took {:?}", asked.elapsed());
+    }
+
+    #[test]
+    fn a_chunked_answer_ends_at_its_last_chunk_even_when_the_connection_stays_open() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind 127.0.0.1:0");
+        let port = listener.local_addr().expect("listening address").port();
+        std::thread::spawn(move || {
+            if let Some(mut stream) = listener.incoming().flatten().next() {
+                let mut request = [0u8; 1024];
+                let _ = stream.read(&mut request);
+                let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nok\r\n0\r\n\r\n");
+                std::thread::sleep(Duration::from_secs(30));
+            }
+        });
+
+        let asked = Instant::now();
+        assert_eq!(http(port, DaemonLocation::Remote, "GET", "/api/health", None), Ok((200, "ok".to_owned())));
+        assert!(asked.elapsed() < Duration::from_secs(1), "took {:?}", asked.elapsed());
+    }
+
+    #[test]
+    fn a_port_nobody_listens_on_is_told_as_no_daemon_answering() {
+        let port = {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind 127.0.0.1:0");
+            listener.local_addr().expect("listening address").port()
+        };
+
+        let Err(RemoteRefusal::Refused(reason)) = connect_remote(&RemoteDaemon { port, token: "t".into() }) else {
+            panic!("a closed port was taken");
+        };
+        assert!(reason.starts_with(&format!("No Trackwall daemon answers at 127.0.0.1:{port}.")), "{reason}");
+    }
+
+    #[test]
+    fn a_port_that_accepts_but_never_answers_is_told_as_a_connection_without_an_answer() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind 127.0.0.1:0");
+        let port = listener.local_addr().expect("listening address").port();
+        // Accepts and closes at once without a byte, as a forward whose other end is not there.
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                drop(stream);
+            }
+        });
+
+        let Err(RemoteRefusal::Refused(reason)) = connect_remote(&RemoteDaemon { port, token: "t".into() }) else {
+            panic!("a port without an answer was taken");
+        };
+        assert!(reason.starts_with(&format!("Something accepted the connection at 127.0.0.1:{port}, but no answer came")), "{reason}");
+        assert!(reason.contains("port forward"), "{reason}");
+    }
+
+    #[test]
+    fn a_port_that_answers_but_not_as_trackwall_is_told_so() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind 127.0.0.1:0");
+        let port = listener.local_addr().expect("listening address").port();
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().flatten() {
+                let mut request = [0u8; 1024];
+                let _ = stream.read(&mut request);
+                let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nnot found");
+            }
+        });
+
+        let Err(RemoteRefusal::Refused(reason)) = connect_remote(&RemoteDaemon { port, token: "t".into() }) else {
+            panic!("another program was taken for the daemon");
+        };
+        assert!(reason.starts_with(&format!("Something answers at 127.0.0.1:{port}, but not as a Trackwall daemon.")), "{reason}");
+    }
+
+    #[test]
+    fn a_connection_that_stays_silent_ends_with_words_not_an_os_error() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind 127.0.0.1:0");
+        let port = listener.local_addr().expect("listening address").port();
+        std::thread::spawn(move || {
+            let held: Vec<_> = listener.incoming().flatten().collect();
+            drop(held);
+        });
+
+        assert_eq!(
+            http(port, DaemonLocation::Local, "GET", "/api/health", None),
+            Err(HttpError::NoAnswer("the daemon did not answer in time".to_owned()))
+        );
     }
 
     #[test]
