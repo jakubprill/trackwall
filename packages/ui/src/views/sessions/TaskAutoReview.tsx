@@ -1,6 +1,8 @@
 import { type AutoReview, type AutoReviewFinding, type AutoReviewKind, countLabel } from "@trackwall/protocol";
-import { ListChecks, MessageSquarePlus, ScanSearch, Square } from "lucide-react";
-import { type ReactNode, useMemo } from "react";
+import { BookOpenText, ListChecks, MessageSquarePlus, ScanSearch, Square } from "lucide-react";
+import { type ReactNode, Suspense, useMemo } from "react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { LazyMarkdown } from "@/components/LazyMarkdown";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { AUTO_REVIEW_TEXTS, autoReviewLabel, findingComment, inDrafts, type ShownLines, shownLines } from "@/lib/auto-review";
@@ -9,13 +11,14 @@ import { relativeTime } from "@/lib/format";
 import { useTaskAutoReview } from "@/lib/use-task-auto-review";
 import type { TaskReview } from "@/lib/use-task-review";
 
-const KIND_ICONS: Record<AutoReviewKind, ReactNode> = { code: <ScanSearch />, rules: <ListChecks /> };
+const KIND_ICONS: Record<AutoReviewKind, ReactNode> = { code: <ScanSearch />, rules: <ListChecks />, explain: <BookOpenText /> };
 
 /**
- * An automatic review of a task above its diff: "Review" asks Copilot CLI's review agent to read the task's changes
- * (ADR-182), "Check rules" asks Copilot CLI whether they keep the repo's rules (ADR-234), and each finding either
- * reports can become a review comment on its line with one click. Nothing reaches the task's agent until the user sends
- * the review, so a wrong finding costs nothing but the reading.
+ * An automatic review of a task above its diff: "Explain this diff" asks Copilot CLI to explain the task's changes
+ * (ADR-249), "Review" asks Copilot CLI's review agent to read them (ADR-182), "Check rules" asks Copilot CLI whether
+ * they keep the repo's rules (ADR-234), and each finding a review or a check reports can become a review comment on its
+ * line with one click. Nothing reaches the task's agent until the user sends the review, so a wrong finding costs
+ * nothing but the reading.
  */
 export function TaskAutoReview({
   conn,
@@ -56,7 +59,12 @@ export function TaskAutoReview({
           </Button>
         )}
       </div>
-      {autoReview && <ReviewResult autoReview={autoReview} patch={patch} review={review} />}
+      {autoReview &&
+        (autoReview.kind === "explain" ? (
+          <Explanation conn={conn} autoReview={autoReview} />
+        ) : (
+          <ReviewResult autoReview={autoReview} patch={patch} review={review} />
+        ))}
     </section>
   );
 }
@@ -94,6 +102,28 @@ function ReviewResult({ autoReview, patch, review }: { autoReview: AutoReview; p
           <summary className="text-muted-foreground cursor-pointer">The reviewer's answer</summary>
           <pre className="mt-1 max-h-64 overflow-auto font-mono whitespace-pre-wrap">{text}</pre>
         </details>
+      )}
+    </>
+  );
+}
+
+/**
+ * The explanation as Copilot CLI wrote it, in Markdown like an agent's answer (untrusted: no raw HTML, no diagrams), or
+ * as plain text until the formatter has loaded or if it fails.
+ */
+function Explanation({ conn, autoReview }: { conn: Connection; autoReview: AutoReview }) {
+  const { message, text, diffTruncated, state } = autoReview;
+  const plain = <p className="text-sm whitespace-pre-wrap">{text}</p>;
+  return (
+    <>
+      {diffTruncated && <p className="text-warning text-xs">The change was too large: Copilot CLI got only its first part.</p>}
+      {message && <p className="text-muted-foreground text-xs">{message}</p>}
+      {state === "done" && (
+        <ErrorBoundary fallback={() => plain}>
+          <Suspense fallback={plain}>
+            <LazyMarkdown conn={conn} text={text} source="agent" />
+          </Suspense>
+        </ErrorBoundary>
       )}
     </>
   );

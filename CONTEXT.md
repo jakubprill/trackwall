@@ -512,6 +512,10 @@ _Avoid_: code review (that is the pre-PR review in `AGENTS.md`), auto-review in 
 The second kind of automatic review (the first is `code`): Copilot CLI, with only the tools that read, compares a task's changes with the repo's **rule files** (`AutoReview.ruleFiles`: `AGENTS.md` and `CLAUDE.md` at the root and above the changed files, Copilot's instruction files, the decision records in the usual ADR folders) as the task's base commit holds them, and reports each written rule the changes break, quoting it, as a **violation** (an `AutoReviewFinding` with the rule in its text) (ADR-234).
 _Avoid_: lint (that is a tool's rule), policy, compliance, guardrails
 
+**Explanation** (`AutoReviewKind` `explain`; "Explain this diff" and the "Explanation" section of the task's "Changes" tab):
+The third kind of automatic review: Copilot CLI, with only the tools that read, explains a task's changes to the user who reviews them, from the task's prompt and its diff, in three sections (what and why, the parts of the change, what is worth a closer look), without findings or a verdict (ADR-249).
+_Avoid_: summary (that is the agent's report, `report_result`), description (that is the merge request's), walkthrough
+
 **Merge request** (`MergeRequest`, module `merge-requests`, `mergeRequestsApi`; the "Merge request" section of the task panel):
 The request on the repo host to merge a task branch into the task's base branch, on GitHub called a pull request. Trackwall pushes the task branch at the user's request and opens the repo host's form for it with a title and description from the task; the user creates it there, and the task panel follows it, found by the task branch as its source branch (ADR-77).
 _Avoid_: pull request (except for GitHub's own pages), PR, MR in product texts

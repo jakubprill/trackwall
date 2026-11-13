@@ -12,8 +12,9 @@ import type { StatusTone } from "./repo-status.ts";
 import { lineComment, type ReviewDraft } from "./review-drafts.ts";
 
 /**
- * How a task's automatic review (ADR-182) and its check against the repo's rules (ADR-234) show in its "Changes" tab, and how a finding becomes a review comment
- * (ADR-62) on a line of the diff the tab shows. No React here, so the rules are tested on their own.
+ * How a task's automatic review (ADR-182), its check against the repo's rules (ADR-234) and the explanation of its
+ * changes (ADR-249) show in its "Changes" tab, and how a finding becomes a review comment (ADR-62) on a line of the diff
+ * the tab shows. No React here, so the rules are tested on their own.
  */
 
 /** A running review is polled more often, so the findings show soon after the reviewer ends. */
@@ -31,7 +32,8 @@ export const AUTO_REVIEW_TEXTS: Record<
     again: string;
     startTitle: string;
     running: string;
-    finding: { one: string; other: string };
+    /** What a finished one says: how many findings, by the words for one and more, or for an explanation a word of its own. */
+    done: { one: string; other: string } | { label: string };
   }
 > = {
   code: {
@@ -41,7 +43,7 @@ export const AUTO_REVIEW_TEXTS: Record<
     again: "Review again",
     startTitle: "review the task's changes with Copilot CLI",
     running: "reviewing",
-    finding: { one: "finding", other: "findings" },
+    done: { one: "finding", other: "findings" },
   },
   rules: {
     title: "Repo rules",
@@ -50,7 +52,16 @@ export const AUTO_REVIEW_TEXTS: Record<
     again: "Check again",
     startTitle: "check the task's changes against the repo's rules for agents and its decision records",
     running: "checking",
-    finding: { one: "violation", other: "violations" },
+    done: { one: "violation", other: "violations" },
+  },
+  explain: {
+    title: "Explanation",
+    idle: "Copilot CLI explains what the agent changed and why, and what to read closely. It costs model credits.",
+    start: "Explain this diff",
+    again: "Explain again",
+    startTitle: "have Copilot CLI explain the task's changes, without judging them",
+    running: "explaining",
+    done: { label: "explained" },
   },
 };
 
@@ -61,9 +72,10 @@ export function autoReviewLabel(review: AutoReview): { tone?: StatusTone; label:
     case "running":
       return { tone: "warning", label: texts.running };
     case "done":
+      if ("label" in texts.done) return { tone: "ok", label: texts.done.label };
       return review.findings.length === 0
-        ? { tone: "ok", label: `no ${texts.finding.other}` }
-        : { tone: "warning", label: countLabel(review.findings.length, texts.finding) };
+        ? { tone: "ok", label: `no ${texts.done.other}` }
+        : { tone: "warning", label: countLabel(review.findings.length, texts.done) };
     case "failed":
       return { tone: "error", label: "failed" };
     case "cancelled":

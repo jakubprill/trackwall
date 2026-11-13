@@ -100,4 +100,10 @@ describe("the state of an automatic review", () => {
     expect(autoReviewLabel(review({ kind: "rules", findings: [finding({})] }))).toEqual({ tone: "warning", label: "1 violation" });
     expect(autoReviewLabel(review({ kind: "rules", state: "running" }))).toEqual({ tone: "warning", label: "checking" });
   });
+
+  test("an explanation counts no findings: it says it explains while it runs and that it explained when done (ADR-249)", () => {
+    expect(autoReviewLabel(review({ kind: "explain", text: "## Summary\nAdds a total." }))).toEqual({ tone: "ok", label: "explained" });
+    expect(autoReviewLabel(review({ kind: "explain", state: "running" }))).toEqual({ tone: "warning", label: "explaining" });
+    expect(autoReviewLabel(review({ kind: "explain", state: "failed" }))).toEqual({ tone: "error", label: "failed" });
+  });
 });

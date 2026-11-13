@@ -148,6 +148,38 @@ describe("an automatic review with the real Copilot CLI", () => {
     });
   });
 
+  test("an explanation gets only view, grep and glob, reads the diff with the daemon's approval and its answer is the explanation", async () => {
+    const task = await taskWithChange("add a cart total");
+    const explanation = [
+      "## Summary",
+      "Adds the cart total the task asks for.",
+      "## Changes",
+      "- `src/cart.ts`: exports `total`.",
+      "## Worth a closer look",
+      "Nothing stands out.",
+    ].join("\n");
+    let diffFile = "";
+    model.reply(
+      (request) => {
+        diffFile = diffFileIn(request);
+        return { tool: "view", arguments: { path: diffFile } };
+      },
+      { text: explanation },
+    );
+
+    await daemon.facade.agents.startAutoReview(task.id, "explain");
+    const explained = await settled(task.id, "explain");
+
+    const [main, afterView] = model.requests().slice(-2);
+    expect(main?.lastUserText).toContain("Explain a change to the developer who has to review and merge it.");
+    expect(main?.lastUserText).toContain("\n```text\nadd a cart total\n```\n");
+    expect(diffFile).toBe(join(daemon.home, "auto-reviews", "explain", task.id, "changes.diff"));
+    expect([...(main?.tools ?? [])].sort()).toEqual(["glob", "grep", "view"]);
+    expect(afterView?.toolResults.join("")).toContain("+export const total = 1;");
+    expect(explained).toMatchObject({ kind: "explain", state: "done", findings: [], message: null });
+    expect(explained.text).toEndWith(explanation);
+  });
+
   // Last, since it commits rules to the repo that every later task would start from.
   test("a check against the repo's rules gets only view, grep and glob, reads the rules' copies with the daemon's approval and reports in the asked format", async () => {
     commitFiles(join(daemon.projects, "shop"), { "AGENTS.md": "# Rules\n\n- Never export a constant named `total`.\n" }, "Add rules");
