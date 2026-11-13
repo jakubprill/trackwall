@@ -344,6 +344,7 @@ export const WorkspaceKey = z.enum([
   "supervisorModel",
   "retryModel",
   "taskTokenBudget",
+  "runningTasksWarning",
   "taskBranchPrefix",
   "javaNavigation",
   "localConfigRemote",
@@ -392,6 +393,11 @@ export const WORKSPACE_KEYS: Record<WorkspaceKey, WorkspaceKeyInfo> = {
   },
   taskTokenBudget: {
     purpose: "How many tokens a task's session may use from its start or resume before Trackwall stops it.",
+    docs: "tasks",
+    settings: "agents",
+  },
+  runningTasksWarning: {
+    purpose: "How many tasks may run at once before starting another one warns that the computer may slow down.",
     docs: "tasks",
     settings: "agents",
   },

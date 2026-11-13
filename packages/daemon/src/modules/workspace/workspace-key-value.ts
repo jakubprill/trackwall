@@ -36,6 +36,7 @@ export interface WorkspaceKeyValues {
   supervisorModel: string | null;
   retryModel: string | null;
   taskTokenBudget: number | null;
+  runningTasksWarning: number | null;
   taskBranchPrefix: string | null;
   supervisor: SupervisorSettings;
   sandbox: SandboxSettings | null;
@@ -62,6 +63,7 @@ export const workspaceKeyValue: { [K in WorkspaceKey]: (value: WorkspaceKeyValue
   supervisorModel: (model) => model ?? "Copilot CLI's default",
   retryModel: (model) => model ?? "not set",
   taskTokenBudget: (budget) => (budget === null ? "none" : `${budget} tokens`),
+  runningTasksWarning: (above) => (above === null ? "the computer's default" : `above ${above} running tasks`),
   taskBranchPrefix: (prefix) => prefix ?? DEFAULT_TASK_BRANCH_PREFIX,
   supervisor: (settings) => `changesCode: ${settings.changesCode}`,
   sandbox: (settings) =>
