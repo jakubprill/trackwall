@@ -1,7 +1,7 @@
 /**
- * The one prompt of an automatic review (ADR-182, ADR-234), by its kind. Both hand the reviewer the task's diff as a file,
- * since it has no shell for git, and ask for the issues in the shape of Copilot CLI's review agent, which
- * `auto-review-findings.ts` reads.
+ * The one prompt of an automatic review (ADR-182, ADR-234, ADR-250), by its kind. Each hands the reviewer the task's diff
+ * as a file, since it has no shell for git. A review and a rules check ask for the issues in the shape of Copilot CLI's
+ * review agent, which `auto-review-findings.ts` reads; an explanation asks for Markdown the user reads as it is.
  */
 
 interface DiffInput {
@@ -14,13 +14,22 @@ interface DiffInput {
 export type ReviewPromptInput =
   | (DiffInput & { kind: "code" })
   /** `rules`: the folder with the copies of the rule files, and their paths relative to the repo root with `/`. */
-  | (DiffInput & { kind: "rules"; rules: { dir: string; files: readonly string[] } });
+  | (DiffInput & { kind: "rules"; rules: { dir: string; files: readonly string[] } })
+  /** `explain`: the task's prompt, which says what the change was for. */
+  | (DiffInput & { kind: "explain"; taskPrompt: string });
 
 /** The answer of a `rules` check that found nothing, which the prompt asks for word for word. */
 const NO_RULE_VIOLATIONS = "No rule violations found.";
 
 export function reviewPrompt(input: ReviewPromptInput): string {
-  return input.kind === "rules" ? rulesPrompt(input) : codePrompt(input);
+  switch (input.kind) {
+    case "code":
+      return codePrompt(input);
+    case "rules":
+      return rulesPrompt(input);
+    case "explain":
+      return explainPrompt(input);
+  }
 }
 
 const DIFF_IS_A_FILE = (diffFile: string) =>
@@ -73,5 +82,40 @@ function rulesPrompt({ diffFile, truncated, rules }: Extract<ReviewPromptInput, 
     "**Suggested fix:** <what would keep the rule>",
     "",
     `When the change breaks no rule, answer only: ${NO_RULE_VIOLATIONS}`,
+  ].join("\n");
+}
+
+/** The fence around the task's prompt in an explanation's prompt, longer than any run of backticks the prompt holds. */
+function fenceFor(text: string): string {
+  const longest = Math.max(0, ...[...text.matchAll(/`+/g)].map((run) => run[0].length));
+  return "`".repeat(Math.max(3, longest + 1));
+}
+
+/**
+ * The explanation of a change for the user who reviews it (ADR-250): not `/review` and no judgement, which the other
+ * kinds give, but what the change does, why, and where to read closely, in Markdown the "Changes" tab shows as it is.
+ * The task's prompt says what the change was for; it is the user's own text, quoted in a fence as data.
+ */
+function explainPrompt({ diffFile, truncated, taskPrompt }: Extract<ReviewPromptInput, { kind: "explain" }>): string {
+  const fence = fenceFor(taskPrompt);
+  return [
+    "Explain a change to the developer who has to review and merge it. Do not review it: do not look for bugs and do not judge it, other reviews do that.",
+    "",
+    "An agent made the change for this task, as the developer wrote it:",
+    `${fence}text`,
+    taskPrompt,
+    fence,
+    "",
+    DIFF_IS_A_FILE(diffFile),
+    ...(truncated ? ["The diff is cut at its end; say which files you could not read."] : []),
+    "There is no shell and no git: read the diff with the view tool, and files of the working directory with view, grep and glob where you need their surroundings.",
+    "",
+    "Answer in Markdown with exactly these three sections, in plain words, and nothing before or after them:",
+    "## Summary",
+    "Two or three sentences: what the change does and why, in terms of the task.",
+    "## Changes",
+    "One bullet per part of the change (a file, or files that do one thing together): what changed and why it was needed. Name files by their path relative to the repository root, in backticks.",
+    "## Worth a closer look",
+    "Bullets for the places a reviewer should read carefully, each with its file and the reason: behaviour that changes for users or callers, a public API, configuration, data or a database migration, security, deleted code, and anything the task did not ask for. When nothing stands out, write only: Nothing stands out.",
   ].join("\n");
 }

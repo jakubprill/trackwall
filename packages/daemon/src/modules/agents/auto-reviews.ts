@@ -17,17 +17,19 @@ import { z } from "zod";
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { FollowedStateFile, stateFormat } from "../../infra/state-file.ts";
 import { reviewFindings } from "./auto-review-findings.ts";
-import { reviewPrompt } from "./auto-review-prompts.ts";
-import { KIND_TOOLS, type ReviewOutcome, type ReviewRunProcs, reviewerArgs, runReview } from "./auto-review-run.ts";
+import { type ReviewPromptInput, reviewPrompt } from "./auto-review-prompts.ts";
+import { KIND_TOOLS, type ReviewOutcome, type ReviewRunProcs, reviewerArgs, runReview, withoutNotices } from "./auto-review-run.ts";
 import { type RepoRules, RULE_FILES_MAX, RULE_PLACES } from "./repo-rules.ts";
 
 /**
- * Automatic reviews of tasks (§4.4, ADR-182, ADR-234): Copilot CLI's `/review` on a task's changes (`code`), or a check
- * of them against the repo's rules (`rules`), one of each kind at a time per task, run by `auto-review-run.ts` with only
+ * Automatic reviews of tasks (§4.4, ADR-182, ADR-234, ADR-250): Copilot CLI's `/review` on a task's changes (`code`), a
+ * check of them against the repo's rules (`rules`), or an explanation of them for the user (`explain`), one of each kind
+ * at a time per task, run by `auto-review-run.ts` with only
  * the tools that read. The diff goes to the reviewer as a file the daemon writes (`changes.diff` in
  * `auto-reviews/<kind>/<task>/` of the state directory), since the reviewer has no shell for git, and so do the rule
- * files of the task's base commit (`rules/` beside it); the findings come from its answer (`auto-review-findings.ts`).
- * The result is for the user, who turns findings into review comments in the "Changes" tab: nothing reaches the task's
+ * files of the task's base commit (`rules/` beside it); the findings come from its answer (`auto-review-findings.ts`),
+ * and an explanation is the answer itself. The result is for the user, who turns findings into review comments in the
+ * "Changes" tab: nothing reaches the task's
  * agent from here. The last review of each kind of every task is kept across a daemon restart in `auto-reviews.json`,
  * like the verifications (ADR-115).
  */
@@ -57,7 +59,7 @@ const CANCELLED = "Stopped before the reviewer finished";
  * the repo's rules for them.
  */
 interface AutoReviewTasks {
-  task(id: string): { repo: string; worktree: string };
+  task(id: string): { repo: string; worktree: string; prompt: string };
   hasTask(id: string): boolean;
   /** The task's changes against its base commit: the changed files' paths, and the diff cut within `maxPatchBytes`. */
   changes(id: string, maxPatchBytes: number): Promise<{ paths: string[]; patch: string; truncated: boolean }>;
@@ -151,7 +153,8 @@ export class AutoReviews {
       this.#deps.log(`automatic review of task ${task} skipped: ${messageOf(err)}`);
       return;
     }
-    const on: Record<AutoReviewKind, boolean> = { code: settings.afterReport, rules: settings.rulesAfterReport };
+    // An explanation is for the user reading the change, so only their click starts one (ADR-250).
+    const on: Record<AutoReviewKind, boolean> = { code: settings.afterReport, rules: settings.rulesAfterReport, explain: false };
     for (const kind of KINDS)
       if (on[kind])
         this.#startOnce(task, kind, "report").catch((err: unknown) =>
@@ -233,7 +236,7 @@ export class AutoReviews {
   }
 
   async #start(task: string, kind: AutoReviewKind, trigger: AutoReviewTrigger): Promise<AutoReview | null> {
-    const { repo, worktree } = this.#deps.tasks.task(task);
+    const { repo, worktree, prompt: taskPrompt } = this.#deps.tasks.task(task);
     const changes = await this.#deps.tasks.changes(task, AUTO_REVIEW_DIFF_MAX_BYTES);
     if (changes.paths.length === 0) {
       // The agent reports on tasks without changes too; only the user's click is told.
@@ -281,9 +284,12 @@ export class AutoReviews {
         env: launch.env,
         secrets: launch.secrets,
         prompt: reviewPrompt(
-          rules === null
-            ? { kind: "code", diffFile, truncated: changes.truncated }
-            : { kind: "rules", diffFile, truncated: changes.truncated, rules: { dir: join(dir, RULES_DIR), files: ruleFiles } },
+          promptInput(
+            kind,
+            { diffFile, truncated: changes.truncated },
+            taskPrompt,
+            rules && { dir: join(dir, RULES_DIR), files: ruleFiles },
+          ),
         ),
         limitMs: this.#deps.limitMs,
       },
@@ -314,7 +320,10 @@ export class AutoReviews {
     let end: Partial<AutoReview>;
     try {
       const { answer, refused } = await run;
-      end = answeredEnd(reviewFindings(answer, worktreePaths(worktree)), kept(answer), refused, entry.omittedRules);
+      end =
+        kind === "explain"
+          ? explainedEnd(kept(withoutNotices(answer)), refused)
+          : answeredEnd(reviewFindings(answer, worktreePaths(worktree)), kept(answer), refused, entry.omittedRules);
       if (end.state === "failed") this.#deps.log(`${name}: ${end.message}`);
     } catch (err) {
       if (!entry.cancelled) this.#deps.log(`${name}: ${messageOf(err)}`);
@@ -416,6 +425,43 @@ function answeredEnd(
   const refusedMessage =
     refused.length === 0 ? null : cutText(`The reviewer asked for more than reading the task and was refused: ${refusals}`, 500);
   return { state: "done", findings, text, message: joinedMessage([refusedMessage, omittedMessage(omittedRules)]) };
+}
+
+/**
+ * How an explanation whose turn ended settles: `done` with its text, or `failed` without one. A refused request does not
+ * fail it, since the text says what the explainer read; the message names it, as on a review.
+ */
+function explainedEnd(text: string, refused: readonly string[]): Partial<AutoReview> {
+  const refusals = [...new Set(refused)].join("; ");
+  if (text === "")
+    return {
+      state: "failed",
+      text,
+      message: cutText(`Copilot CLI gave no explanation${refusals === "" ? "" : `; it was refused: ${refusals}`}`, 500),
+    };
+  return {
+    state: "done",
+    text,
+    message: refused.length === 0 ? null : cutText(`The explainer asked for more than reading the task and was refused: ${refusals}`, 500),
+  };
+}
+
+/** The prompt's input of a review of `kind`; `rules` comes with the rule files' copies. */
+function promptInput(
+  kind: AutoReviewKind,
+  diff: { diffFile: string; truncated: boolean },
+  taskPrompt: string,
+  rules: { dir: string; files: readonly string[] } | null,
+): ReviewPromptInput {
+  switch (kind) {
+    case "code":
+      return { kind, ...diff };
+    case "explain":
+      return { kind, ...diff, taskPrompt };
+    case "rules":
+      if (rules === null) throw new Error("a rules check starts with the repo's rules");
+      return { kind, ...diff, rules };
+  }
 }
 
 function stoppedWithDaemon(review: AutoReview, finishedAt: string | null): AutoReview {
