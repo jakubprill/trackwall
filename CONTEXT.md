@@ -405,6 +405,10 @@ A process group from `runtime.json` that the daemon no longer supervises (for ex
 The work of one agent on one repo: a prompt, a worktree, a `trackwall/<slug>` branch (or one under the task branch prefix) from the default branch, sessions and a summary. Today (ADR-31) the Sessions view creates it from the form or from an approved task proposal (ADR-39), it is stored in `tasks.json`, and the task session can be stopped and resumed. A task does not point to a session; the session has `Session.task`. In code and the API `task` always means a task.
 _Avoid_: job; a bare *task* always means a task, a mise task is always a *mise task*
 
+**Running tasks warning** (`runningTasksWarning` in `workspace.yaml`, `RunningTasksWarning`, `RunningTasksWarningState`, "Warn above running tasks" in the UI):
+The number of tasks that may run at once before starting another one shows a warning under the start options (ADR-248). The user's number, or the computer's default from its processors and memory. A **running task** is one whose session runs or is still stopping. Only a warning: no start is refused.
+_Avoid_: task limit, concurrency limit (nothing is limited)
+
 **Task branch prefix** (`taskBranchPrefix` in `workspace.yaml`, `TaskBranchPrefix`, `DEFAULT_TASK_BRANCH_PREFIX`):
 What the branch of a new task starts with: `trackwall/` by default, or the user's own one to three folders, such as `feature/`, when the repo host accepts only such branches (ADR-239). The rest of the branch and the worktree's name stay Trackwall's.
 _Avoid_: branch pattern, branch template

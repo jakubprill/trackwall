@@ -4,6 +4,7 @@ import {
   cardsApi,
   countLabel,
   pluralNoun,
+  type RunningTasksWarningState,
   type SandboxState,
   type Session,
   type SessionView,
@@ -31,6 +32,7 @@ import {
   sessionsInSameFolder,
   stackTraceToSend,
   startsChange,
+  tasksStarting,
 } from "@/lib/new-session";
 import { tagsByRepo } from "@/lib/repo-tags";
 import { sandboxNote } from "@/lib/sandbox";
@@ -42,6 +44,7 @@ import { useAction } from "@/lib/use-action";
 import { useProviderModels } from "@/lib/use-provider-models";
 import { useRemote } from "@/lib/use-remote";
 import { ChangeParts } from "./ChangeParts.tsx";
+import { RunningTasksNote } from "./RunningTasksNote.tsx";
 import { StackTraceField } from "./StackTraceField.tsx";
 import { StartOptions } from "./StartOptions.tsx";
 
@@ -180,6 +183,7 @@ export function NewSession({
               partly={change.partly}
             />
           )}
+          <RunningTasksNote sessions={sessions} warning={offers.runningTasksWarning} starting={tasksStarting(start)} />
           <StartNote start={start} repo={repo} sessions={sessions} />
           <div className="flex flex-wrap items-center gap-2">
             <StartButton start={start} disabled={pending} invalidModel={model === undefined} onClick={run} />
@@ -236,17 +240,20 @@ function PlaceSelect({
 }
 
 /**
- * Java navigation for a task or session in `repo` (ADR-99, ADR-175), from the repo's tags and the daemon's settings, and
- * Copilot CLI's sandbox as a new task would get it (ADR-181).
+ * Java navigation for a task or session in `repo` (ADR-99, ADR-175), from the repo's tags and the daemon's settings,
+ * Copilot CLI's sandbox as a new task would get it (ADR-181), and above how many running tasks a start warns (ADR-248).
  */
-function useStartOffers(conn: Connection, repo: string | null): { java: JavaNavigationOffer; sandbox: SandboxState | undefined } {
+function useStartOffers(
+  conn: Connection,
+  repo: string | null,
+): { java: JavaNavigationOffer; sandbox: SandboxState | undefined; runningTasksWarning: RunningTasksWarningState | undefined } {
   const loadTags = useCallback(() => post(conn, cardsApi.tags, {}), [conn]);
   const tags = useRemote(loadTags);
   // Asked again for each repo chosen, so that a fix in workspace.yaml shows without reopening the form.
   const loadOptions = useCallback(() => post(conn, agentsApi.startOptions, {}), [conn, repo]);
   const options = useRemote(loadOptions);
   const java = javaNavigationOffer(repo === null ? undefined : tagsByRepo(tags.data).get(repo), options.data?.javaNavigation);
-  return { java, sandbox: options.data?.sandbox };
+  return { java, sandbox: options.data?.sandbox, runningTasksWarning: options.data?.runningTasksWarning };
 }
 
 /** The Java navigation pill, or none where the offer is hidden (also in the projects folder, which has no tags). */

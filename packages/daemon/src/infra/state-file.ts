@@ -115,6 +115,21 @@ export class FollowedStateFile<T extends object> {
   }
 }
 
+/**
+ * Whether the file at `path` was written by a newer version of the format than this Trackwall reads, which
+ * `readStateFile` would set aside; `false` for a file that is missing or does not read at all.
+ */
+export function writtenByNewer(path: string, format: StateFormat<object>): boolean {
+  let json: unknown;
+  try {
+    json = JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return false;
+  }
+  const object = StateObject.safeParse(json);
+  return object.success && (object.data.version ?? 1) > stateVersion(format);
+}
+
 /** A state file: an object whose `version`, when it has one, is a whole number from 1. */
 const StateObject = z.looseObject({ version: z.int().min(1).optional() });
 

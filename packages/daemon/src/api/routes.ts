@@ -83,6 +83,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(workspaceApi.setSupervisorModel, (f, b) => f.workspace.setSupervisorModel(b.model)),
   route(workspaceApi.setRetryModel, (f, b) => f.workspace.setRetryModel(b.model)),
   route(workspaceApi.setTaskTokenBudget, (f, b) => f.workspace.setTaskTokenBudget(b.budget)),
+  route(workspaceApi.setRunningTasksWarning, (f, b) => f.workspace.setRunningTasksWarning(b.above)),
   route(workspaceApi.setAutoReview, (f, b) => f.workspace.setAutoReview(b)),
   route(workspaceApi.setSupervisor, (f, b) => f.workspace.setSupervisor(b)),
   route(workspaceApi.setSandbox, (f, b) => f.workspace.setSandbox(b.sandbox)),

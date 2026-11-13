@@ -83,6 +83,7 @@ export function makeAgents(
       supervisorSettings: () => supervisor,
       supervisorModel,
       taskTokenBudget,
+      runningTasksWarning: () => null,
       taskBranchPrefix,
       setSupervisorModel: () => {},
       agentSecrets: () => [],

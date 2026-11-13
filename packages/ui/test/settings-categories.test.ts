@@ -20,7 +20,7 @@ describe("Settings categories", () => {
     expect(settingsCategory("agents").sections).toContain("copilot-cli");
   });
 
-  test("Agents holds only settings: connecting Copilot CLI, the session profile, the supervisor's model and whether it changes code, the retry model, the token budget, the sandbox, the automatic review and Java navigation", () => {
+  test("Agents holds only settings: connecting Copilot CLI, the session profile, the supervisor's model and whether it changes code, the retry model, the token budget, the running tasks warning, the sandbox, the automatic review and Java navigation", () => {
     expect(settingsCategory("agents").sections).toEqual([
       "copilot-cli",
       "session-profile",
@@ -28,6 +28,7 @@ describe("Settings categories", () => {
       "supervisor-changes-code",
       "retry-model",
       "task-token-budget",
+      "running-tasks-warning",
       "sandbox",
       "auto-review",
       "java-navigation",

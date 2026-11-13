@@ -9,7 +9,7 @@ import { sessionHookRequest } from "./api/hooks.ts";
 import { type ApiServer, startApi } from "./api/server.ts";
 import { openServiceProxy, type ServiceProxy } from "./api/service-proxy.ts";
 import { isUiDir } from "./api/static.ts";
-import { createErrorJournal, createFacade, type Facade, HOSTING_CLIS } from "./facade.ts";
+import { createErrorJournal, createFacade, type Facade, HOSTING_CLIS, STATE_FILES } from "./facade.ts";
 import {
   ADDRESS_COMMAND,
   APPLY_UPDATE_COMMAND,
@@ -35,6 +35,7 @@ import { watchEventLoopStalls } from "./infra/event-loop-stalls.ts";
 import { resolveTrackwallHome, trackwallHome } from "./infra/home.ts";
 import { selfCommand } from "./infra/self-command.ts";
 import { SHUTDOWN_SIGNALS, shutdownOnce, stopDaemon } from "./infra/shutdown.ts";
+import { keepStateAcrossVersions } from "./infra/state-backup.ts";
 import { openBrowser, openFolder } from "./infra/system-open.ts";
 import { UPDATE_PUBLIC_KEY } from "./infra/update-key.ts";
 import { userEnv } from "./infra/user-env.ts";
@@ -111,6 +112,8 @@ async function start(
   const started = await withStartLock(home, async () => {
     const running = await probeRunningDaemon(home);
     if (running) return { kind: "existing" as const, ...running };
+    // Before the facade, whose modules read the state files: a backup of what the previous version left, or the way back.
+    keepStateAcrossVersions({ home, version: VERSION, files: STATE_FILES, now: () => new Date(), log });
     const token = newToken();
     const openers = desktopOpeners(desktop, { openUrl: openBrowser, openFolder });
     facade = createFacade({
