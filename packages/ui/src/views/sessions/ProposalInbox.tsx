@@ -133,6 +133,15 @@ export function ProposalInbox({
     if (parts !== undefined) decisions.startChange(start, parts);
   };
   const toStart = proposals.filter((p) => ticked.has(p.id));
+  /**
+   * The tasks a start would add (ADR-248): the ticked ones for "Start selected", otherwise those of the open proposal's
+   * own button, a task per repo kept for a change.
+   */
+  const tasksStarting = () => {
+    if (toStart.length > 0) return toStart.length;
+    const open = proposals.find((p) => p.id === shown);
+    return open?.parts ? open.parts.length - editOf(open).dropped.size : 1;
+  };
   // Ticking and "Start selected" are for tasks; a folder action has its own button (ADR-83).
   const several = proposals.filter((p) => p.kind === "task").length > 1;
 
@@ -166,8 +175,7 @@ export function ProposalInbox({
         </p>
       )}
       {proposals.some((p) => p.kind !== "remove_repo") && (
-        // The ticked tasks when "Start selected" would start them, otherwise the one task a proposal's own button starts.
-        <RunningTasksNote sessions={sessions} warning={startOptions?.runningTasksWarning} starting={Math.max(toStart.length, 1)} />
+        <RunningTasksNote sessions={sessions} warning={startOptions?.runningTasksWarning} starting={tasksStarting()} />
       )}
       <ul aria-label="Task proposals" className="flex flex-col gap-2">
         {proposals.map((p) => {

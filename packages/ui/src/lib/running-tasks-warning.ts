@@ -1,4 +1,4 @@
-import { countLabel, RunningTasksWarning, type RunningTasksWarningState, type Session } from "@trackwall/protocol";
+import { countLabel, pluralNoun, RunningTasksWarning, type RunningTasksWarningState, type Session } from "@trackwall/protocol";
 
 /**
  * The warning before a start when too many tasks would run at once (ADR-248): the tasks counted from the listed
@@ -28,7 +28,7 @@ export function runningTasksWarningNote(
   const running = runningTaskCount(sessions);
   const total = running + starting;
   if (total <= warning.above) return null;
-  const already = running === 0 ? "No task is running yet" : `${countLabel(running, TASKS)} already ${running === 1 ? "runs" : "run"}`;
+  const already = running === 0 ? "No task is running yet" : `${countLabel(running, TASKS)} already ${pluralNoun(running, RUN)}`;
   const these = starting === 1 ? "this one makes" : `these ${starting} make`;
   return (
     `${already}; ${these} ${total}, more than the ${warning.above} this computer is set to warn above. ` +
@@ -38,6 +38,7 @@ export function runningTasksWarningNote(
 }
 
 const TASKS = { one: "task", other: "tasks" };
+const RUN = { one: "runs", other: "run" };
 
 /** The number typed in Settings › Agents, a whole number from 1 to 100; a message for anything else. */
 export function parseRunningTasksWarning(text: string): { above: number } | { problem: string } {
