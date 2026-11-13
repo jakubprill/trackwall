@@ -48,6 +48,7 @@ const ordersSession: Session = {
   state: null,
   windowTitle: "Fix the rounding",
   needsAttention: false,
+  waitingSince: null,
   stuck: null,
   task: null,
   dialog: null,
