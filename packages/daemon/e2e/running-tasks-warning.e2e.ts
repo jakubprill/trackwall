@@ -7,7 +7,7 @@ const trackwall = useTrackwall();
 
 const WARNING = /1 task already runs; this one makes 2, more than the 1 this computer is set to warn above/;
 
-describe("the running tasks warning (ADR-244)", () => {
+describe("the running tasks warning (ADR-248)", () => {
   test("with the computer set to warn above 1 task and one running, the New session form warns before a second task and still starts it", async () => {
     const { daemon } = trackwall();
     await daemon.post(workspaceApi.setRunningTasksWarning, { above: 1 });
@@ -25,6 +25,11 @@ describe("the running tasks warning (ADR-244)", () => {
     // Only a warning: the start is the user's call.
     await page.getByRole("button", { name: "Create task" }).click();
     await waitForTerminal(page, "--interactive=Add a licence");
-    expect(daemon.facade.agents.sessions().tasks.map((t) => t.prompt).sort()).toEqual(["Add a README section", "Add a licence"]);
+    expect(
+      daemon.facade.agents
+        .sessions()
+        .tasks.map((t) => t.prompt)
+        .sort(),
+    ).toEqual(["Add a README section", "Add a licence"]);
   }, 60_000);
 });

@@ -182,7 +182,7 @@ interface AgentsRepos {
   setSupervisorModel(model: string | null): unknown;
   /** `taskTokenBudget` from `workspace.yaml` (ADR-237): a task session's token budget, `null` for none; `invalid_config` for a bad key. */
   taskTokenBudget(): number | null;
-  /** `runningTasksWarning` from `workspace.yaml` (ADR-244): tasks at once before a start warns, `null` for the computer's default; `invalid_config` for a bad key. */
+  /** `runningTasksWarning` from `workspace.yaml` (ADR-248): tasks at once before a start warns, `null` for the computer's default; `invalid_config` for a bad key. */
   runningTasksWarning(): number | null;
   /** What a new task's branch starts with: `taskBranchPrefix` from `workspace.yaml` (ADR-239); `invalid_config` for a bad key. */
   taskBranchPrefix(): string;
@@ -947,7 +947,7 @@ export class Agents {
   /**
    * What the New session form offers on this computer: whether Java navigation can start now, or why not (ADR-99), and
    * which tasks run in Copilot CLI's sandbox and whether it can run here (ADR-181), and above how many running tasks a
-   * start warns (ADR-244).
+   * start warns (ADR-248).
    */
   async startOptions(): Promise<StartOptions> {
     return {

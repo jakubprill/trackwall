@@ -4,7 +4,7 @@ import { runningTasksWarningNote } from "@/lib/running-tasks-warning";
 
 /**
  * The warning under the start options of the New session form and the task proposals when the start would make more
- * tasks run at once than this computer is set to warn above (ADR-244). Only a warning: the start button stays.
+ * tasks run at once than this computer is set to warn above (ADR-248). Only a warning: the start button stays.
  */
 export function RunningTasksNote({
   sessions,

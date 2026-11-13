@@ -88,7 +88,7 @@ const Keys: { [K in WorkspaceKey]: z.ZodType<WorkspaceKeyValues[K], unknown> } =
   retryModel: TaskModel.nullish().transform((model) => model ?? null),
   // The tokens a task's session may use from its start or resume (ADR-237); set in Settings › Agents or by hand.
   taskTokenBudget: TaskTokenBudget.nullish().transform((budget) => budget ?? null),
-  // How many tasks may run at once before a start warns (ADR-244); set in Settings › Agents or by hand.
+  // How many tasks may run at once before a start warns (ADR-248); set in Settings › Agents or by hand.
   runningTasksWarning: RunningTasksWarning.nullish().transform((above) => above ?? null),
   // What a new task's branch starts with (ADR-239); only by hand, like `repoTags`. `null` leaves the default to `Workspace`.
   taskBranchPrefix: TaskBranchPrefix.nullish().transform((prefix) => prefix ?? null),
@@ -275,7 +275,7 @@ export class WorkspaceFile {
     this.set("taskTokenBudget", budget);
   }
 
-  /** How many tasks may run at once before a start warns (`runningTasksWarning`, ADR-244); `null` for the computer's default. */
+  /** How many tasks may run at once before a start warns (`runningTasksWarning`, ADR-248); `null` for the computer's default. */
   runningTasksWarning(): number | null {
     return this.get("runningTasksWarning", Keys.runningTasksWarning);
   }

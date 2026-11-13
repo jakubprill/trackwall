@@ -3,7 +3,7 @@ import type { RunningTasksWarningState } from "@trackwall/protocol";
 import { configOrProblem } from "../../infra/errors.ts";
 
 /**
- * When starting a task warns that too many run at once (ADR-244, §4.4). Each running task holds a Copilot CLI process
+ * When starting a task warns that too many run at once (ADR-248, §4.4). Each running task holds a Copilot CLI process
  * and, while it works, the builds, tests and services it runs (a Maven or Gradle build, a Java language server, a Spring
  * Boot service) on the same computer, and on a Windows machine with an antivirus every file those write is scanned
  * too, so a few tasks at once can slow all of them and the user's own editor. The warning never refuses a start: the

@@ -406,7 +406,7 @@ The work of one agent on one repo: a prompt, a worktree, a `trackwall/<slug>` br
 _Avoid_: job; a bare *task* always means a task, a mise task is always a *mise task*
 
 **Running tasks warning** (`runningTasksWarning` in `workspace.yaml`, `RunningTasksWarning`, `RunningTasksWarningState`, "Warn above running tasks" in the UI):
-The number of tasks that may run at once before starting another one shows a warning under the start options (ADR-244). The user's number, or the computer's default from its processors and memory. A **running task** is one whose session runs or is still stopping. Only a warning: no start is refused.
+The number of tasks that may run at once before starting another one shows a warning under the start options (ADR-248). The user's number, or the computer's default from its processors and memory. A **running task** is one whose session runs or is still stopping. Only a warning: no start is refused.
 _Avoid_: task limit, concurrency limit (nothing is limited)
 
 **Task branch prefix** (`taskBranchPrefix` in `workspace.yaml`, `TaskBranchPrefix`, `DEFAULT_TASK_BRANCH_PREFIX`):

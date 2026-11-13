@@ -12,7 +12,7 @@ import { PathForm } from "./PathForm.tsx";
 const LABEL = "Warn above running tasks";
 
 /**
- * The running tasks warning (ADR-244): above how many running tasks starting another one warns that the computer may
+ * The running tasks warning (ADR-248): above how many running tasks starting another one warns that the computer may
  * slow down, saved as `runningTasksWarning` in `workspace.yaml`; without it, the default the daemon picks from the
  * processors and memory of the computer or container it runs on.
  */

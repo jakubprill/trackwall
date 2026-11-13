@@ -1,7 +1,7 @@
 import { countLabel, RunningTasksWarning, type RunningTasksWarningState, type Session } from "@trackwall/protocol";
 
 /**
- * The warning before a start when too many tasks would run at once (ADR-244): the tasks counted from the listed
+ * The warning before a start when too many tasks would run at once (ADR-248): the tasks counted from the listed
  * sessions, which the view keeps live, against the number the daemon gives in `start-options`. Only a warning: the
  * start button stays as it is.
  */

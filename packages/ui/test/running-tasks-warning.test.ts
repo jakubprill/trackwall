@@ -8,7 +8,7 @@ import {
   runningTasksWarningNote,
 } from "../src/lib/running-tasks-warning.ts";
 
-// The warning before a start when too many tasks would run at once (ADR-244).
+// The warning before a start when too many tasks would run at once (ADR-248).
 
 type Listed = Pick<Session, "task" | "run">;
 const RUN_BASE = { runId: "r1", startedAt: "2026-11-13T10:00:00.000Z" };

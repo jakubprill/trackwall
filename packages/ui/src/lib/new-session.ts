@@ -118,7 +118,7 @@ export function formChangeStart(
 }
 
 /**
- * How many tasks the form would start (ADR-244), for the running tasks warning: one for a task, also before its prompt is
+ * How many tasks the form would start (ADR-248), for the running tasks warning: one for a task, also before its prompt is
  * typed, one per repo for a change (at least the first while its title is missing), none for a session.
  */
 export function tasksStarting(start: NewSessionStart): number {

@@ -591,13 +591,13 @@ export class Workspace {
     return this.settings();
   }
 
-  /** How many tasks may run at once before a start warns (ADR-244); `null` removes the key. */
+  /** How many tasks may run at once before a start warns (ADR-248); `null` removes the key. */
   setRunningTasksWarning(above: number | null): WorkspaceSettings {
     this.deps.file.setRunningTasksWarning(above);
     return this.settings();
   }
 
-  /** `runningTasksWarning` from `workspace.yaml` (ADR-244), `null` without the key; `invalid_config` for a bad key. */
+  /** `runningTasksWarning` from `workspace.yaml` (ADR-248), `null` without the key; `invalid_config` for a bad key. */
   runningTasksWarning(): number | null {
     return this.deps.file.runningTasksWarning();
   }

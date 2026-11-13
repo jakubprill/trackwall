@@ -230,7 +230,7 @@ export const TaskTokenBudget = z.number().int().positive().max(1_000_000_000_000
 export type TaskTokenBudget = z.infer<typeof TaskTokenBudget>;
 
 /**
- * `runningTasksWarning` in `workspace.yaml` (ADR-244), set in Settings › Agents: how many tasks may run at once before
+ * `runningTasksWarning` in `workspace.yaml` (ADR-248), set in Settings › Agents: how many tasks may run at once before
  * starting another one shows a warning. Only a warning: the start is never refused. Without the key the daemon picks a
  * number from the computer's processors and memory (`RunningTasksWarningState.computerDefault`).
  */
@@ -353,7 +353,7 @@ export const WorkspaceSettings = z.object({
   taskTokenBudget: TaskTokenBudget.nullable(),
   /** Why `taskTokenBudget` in `workspace.yaml` cannot be read; tasks do not start until it is fixed or saved again. */
   taskTokenBudgetProblem: z.string().nullable(),
-  /** `runningTasksWarning` from `workspace.yaml` (ADR-244); `null` for the computer's default. */
+  /** `runningTasksWarning` from `workspace.yaml` (ADR-248); `null` for the computer's default. */
   runningTasksWarning: RunningTasksWarning.nullable(),
   /** Why `runningTasksWarning` in `workspace.yaml` cannot be read; the warning uses the computer's default until it is fixed. */
   runningTasksWarningProblem: z.string().nullable(),
@@ -487,7 +487,7 @@ export const workspaceApi = {
    */
   setTaskTokenBudget: endpoint("set-task-token-budget", z.object({ budget: TaskTokenBudget.nullable() }).strict(), WorkspaceSettings),
   /**
-   * How many tasks may run at once before a start warns (ADR-244); `null` removes `runningTasksWarning` from
+   * How many tasks may run at once before a start warns (ADR-248); `null` removes `runningTasksWarning` from
    * `workspace.yaml`, back to the computer's default.
    */
   setRunningTasksWarning: endpoint(

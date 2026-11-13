@@ -7,7 +7,7 @@ import { computerDefault, daemonComputer, runningTasksWarningState } from "../sr
 import { ONE_REPO, startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
-// Above how many running tasks a start warns (ADR-244): the computer's default and `runningTasksWarning` set in
+// Above how many running tasks a start warns (ADR-248): the computer's default and `runningTasksWarning` set in
 // Settings › Agents, through the API the New session form and Settings call.
 
 const GIB = 1024 ** 3;

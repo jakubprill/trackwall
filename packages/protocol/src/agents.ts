@@ -902,7 +902,7 @@ export function sandboxesTask(tasks: SandboxSettings["tasks"], approvals: TaskAp
 }
 
 /**
- * When starting a task warns that too many run at once (ADR-244): above `above` running tasks, which is
+ * When starting a task warns that too many run at once (ADR-248): above `above` running tasks, which is
  * `runningTasksWarning` from `workspace.yaml` or, without it or with a key written wrong, `computerDefault`, the number
  * the daemon picks from the processors and memory of the computer it runs on (in a container, the container's).
  */

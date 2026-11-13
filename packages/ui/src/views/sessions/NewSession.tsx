@@ -241,7 +241,7 @@ function PlaceSelect({
 
 /**
  * Java navigation for a task or session in `repo` (ADR-99, ADR-175), from the repo's tags and the daemon's settings,
- * Copilot CLI's sandbox as a new task would get it (ADR-181), and above how many running tasks a start warns (ADR-244).
+ * Copilot CLI's sandbox as a new task would get it (ADR-181), and above how many running tasks a start warns (ADR-248).
  */
 function useStartOffers(
   conn: Connection,
