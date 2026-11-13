@@ -360,6 +360,14 @@ export class AcpSession implements AgentSession {
     return record?.event === "userPromptSubmitted" ? situationOutput(this.#o.situation()) : {};
   }
 
+  /**
+   * Copilot CLI over ACP names no pattern with its "Always allow" (ADR-249), so Trackwall cannot show or remove what it
+   * would remember; its own option stays in the dialog.
+   */
+  alwaysAllow(): void {
+    throw new DomainError("bad_request", "Always allow is offered only in a task's terminal");
+  }
+
   /** Answers the approval `id` names with an option's digit, or `stop`, which refuses it and ends the turn. */
   answerDialog(id: string, answer: DialogAnswer): void {
     const approval = this.#approvals[0];

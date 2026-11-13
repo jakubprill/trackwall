@@ -29,6 +29,7 @@ describe("Settings categories", () => {
       "retry-model",
       "task-token-budget",
       "running-tasks-warning",
+      "always-allow",
       "sandbox",
       "auto-review",
       "java-navigation",

@@ -3,6 +3,7 @@ import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   type AgentTaskChanges,
+  type AlwaysAllowedTool,
   type ApproveChangeRequest,
   type AutoReview,
   type AutoReviewKind,
@@ -173,7 +174,11 @@ interface AgentsRepos {
   /** The task worktrees folder for a new task (ADR-84), made when it is the default one in `.trackwall` (ADR-125). */
   newTaskWorktreesDir(): Promise<string>;
   /** The `toolPermissions` patterns for a session in repo `repo` (`null` in the projects folder) or the supervisor, ADR-66. */
-  toolPermissions(session: Pick<Session, "repo" | "supervisor">): ToolPermissions;
+  toolPermissions(session: Pick<Session, "repo" | "supervisor" | "task">): ToolPermissions;
+  /** The tools always allowed in repo `repo`'s tasks (ADR-249); `invalid_config` for a bad `alwaysAllow`. */
+  alwaysAllowed(repo: string): string[];
+  /** Remembers a tool as always allowed in a repo's tasks (ADR-249); `bad_request` for one that may not be. */
+  alwaysAllow(entry: AlwaysAllowedTool): void;
   /** `supervisor` from `workspace.yaml` (ADR-78); `invalid_config` for a bad key. */
   supervisorSettings(): SupervisorSettings;
   /** `supervisorModel` from `workspace.yaml` (ADR-193): the supervisor's model, `null` for the default; `invalid_config` for a bad key. */
@@ -1350,6 +1355,19 @@ export class Agents {
     // The state after the hooks already written, so that an approval just answered in the terminal is not answered again.
     if (!this.#sessions.isRunning(session)) throw new DomainError("dialog_changed", "the session is no longer running");
     session.answerDialog(dialog, answer);
+    return this.#sessions.view(session);
+  }
+
+  /**
+   * "Always allow" in a running task session's approval (ADR-249): the tool goes into `alwaysAllow` for the task's repo,
+   * then the approval gets "Yes"; see `LiveSession.alwaysAllow`.
+   */
+  alwaysAllowDialog(id: string, dialog: string): Session {
+    const session = this.#sessions.get(id);
+    if (!this.#sessions.isRunning(session)) throw new DomainError("dialog_changed", "the session is no longer running");
+    const repo = session.repo;
+    if (repo === null || session.task === null) throw new DomainError("bad_request", "Always allow is offered only in a task");
+    session.alwaysAllow(dialog, (tool) => this.#deps.repos.alwaysAllow({ repo, tool }));
     return this.#sessions.view(session);
   }
 

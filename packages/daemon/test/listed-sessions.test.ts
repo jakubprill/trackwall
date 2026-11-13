@@ -41,6 +41,7 @@ function fakeSession(
     deliverNow: () => {},
     hookOutput: () => ({}),
     answerDialog: () => {},
+    alwaysAllow: () => {},
     dispose() {
       fake.disposed = true;
     },

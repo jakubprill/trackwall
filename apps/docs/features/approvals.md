@@ -14,6 +14,7 @@ Approve or stop an agent's command from the tray panel or the Home dashboard, an
 - Copilot CLI's approval requests in the tray panel and on the Home dashboard, with the command or file the agent asks about.
 - One click to answer: the same options Copilot CLI offers in its terminal, or "Stop the agent".
 - The agent's questions in the same places, so you know what it asks before you open its session.
+- "Always allow" in a task's approval: the command runs now and in every later task of that repo without asking, until you remove it in Settings.
 - Commands you always allow, or never allow, written once for your repos instead of answered in every session.
 - Agent tasks that run without approvals kept in Copilot CLI's sandbox, so a command cannot touch your other repos or your credentials (on Linux by default, also in a dev container set up for it, on macOS and Windows when you turn it on).
 
@@ -24,6 +25,8 @@ When an agent asks for approval, for example to run `mvn test` or to write a fil
 A click answers in the session's terminal, exactly as if you pressed the key there, and the agent goes on. "Stop the agent" is Esc: the agent ends its turn and waits for you. The terminal keeps working at the same time, so you can still answer there. If you did, or the agent has asked something else meanwhile, or asked the same thing again, the button says the request is no longer there and types nothing.
 
 When the agent asks a question of its own (Copilot CLI's form with "Copilot needs information."), the panel and Home show the question, and "Answer in the session" opens its terminal, since the answer is yours to type.
+
+In an [agent task](/features/tasks), the request may also offer "Always allow `npm test` in this repo's tasks" (or an MCP tool, such as "verify_task from trackwall"). It answers "Yes", and from then on every task of that repo runs that command without asking: the tasks you start next, and the ones already running, which Trackwall answers for you. Trackwall remembers exactly the command Copilot CLI names in its "don't ask again", such as `npm test` or `mvn -q`, so `git status` is not `git push`. It offers this only for one command or one MCP tool at a time, and never for a command that writes, moves or deletes files by path (`cp`, `rm`, `sed`), runs code you give it (`bash`, `node`, `npx`), reaches the network (`curl`, `ssh`) or pushes or configures git, because Copilot CLI checks no paths of a command it is allowed to run. You see and remove what you allowed in "Settings > Agents > Always allowed in tasks"; it is saved as `alwaysAllow` in `workspace.yaml`.
 
 For commands you never want to be asked about, or never want to run, add rules under `toolPermissions` in `~/.trackwall/workspace.yaml` (you edit this file by hand). Every new session gets them as Copilot CLI's own approval rules: an allowed command runs without a question, a denied one is refused, and a denial always wins.
 
@@ -46,7 +49,7 @@ sandbox:
 
 1. Start a [session](/features/sessions) or an [agent task](/features/tasks) and let the agent work.
 2. When it asks for approval, click the Trackwall icon in the tray.
-3. Read the command and click "Yes", "Yes, and don't ask again" or "Stop the agent".
+3. Read the command and click "Yes", "Yes, and don't ask again", "Always allow … in this repo's tasks" (in a task) or "Stop the agent".
 
 ## Good to know
 
@@ -54,7 +57,10 @@ sandbox:
 - A rule with `repos` applies to sessions whose repo name matches one of the patterns (`*` is any text, the case does not matter); a rule without `repos` applies to every session, the [supervisor](/features/supervisor) included.
 - The [supervisor](/features/supervisor) runs no shell commands and writes no files, whatever your rules allow, unless you set `supervisor.changesCode: true`.
 - Rules apply to sessions started after you save the file. A mistake in `toolPermissions` stops new sessions from starting, with a message that names the problem, so a denial you wrote is never silently dropped.
-- "Yes, and don't ask again" is remembered by Copilot CLI for the folder the session runs in. Each agent task has its own folder, so for something every task of a repo may do, add a rule instead.
+- "Yes, and don't ask again" is remembered by Copilot CLI for the folder the session runs in. Each agent task has its own folder, so for something every task of a repo may do, use "Always allow" or add a rule instead.
+- "Always allow" is not offered in a session in the repo itself, in the [supervisor](/features/supervisor), for a file change, or for a PowerShell command on Windows, where Copilot CLI has no "don't ask again" for it. A build or test command you always allow runs the repo's own scripts, which the task's agent can change in its worktree, so allow those only where you would let the agent run its own changes; a task in the sandbox keeps them inside it.
+- After you remove an always-allowed command, running tasks ask about it again at once; a task that started while it was allowed keeps Copilot CLI's permission until you resume or restart it.
+- The [conversation view](/features/sessions) shows Copilot CLI's own "Always allow", which Copilot CLI keeps for that conversation; Trackwall offers its own only in a task's terminal.
 - When the agent runs several commands at once, Copilot CLI asks about them one after another. The session keeps "asking for approval" until you have answered all of them, and the panel shows the next request as soon as the terminal does, never the one you just answered.
 - If you move the selection in the terminal to "No, and tell Copilot what to do differently", the buttons disappear until the agent asks again, so a click cannot type into the text you are writing there.
 - Answering from outside the terminal is for approvals only. The option "No, and tell Copilot what to do differently" needs text, so it stays in the terminal.

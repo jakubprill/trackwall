@@ -1,5 +1,6 @@
 import {
   type AgentSecrets,
+  type AlwaysAllowedTools,
   type AutoReviewSettings,
   countLabel,
   type DayStartSettings,
@@ -30,6 +31,7 @@ export interface WorkspaceKeyValues {
   repoHosts: RepoHost[];
   starredRepos: StarredRepos;
   toolPermissions: ToolPermissionRules;
+  alwaysAllow: AlwaysAllowedTools;
   agentSecrets: AgentSecrets;
   sessionProfile: string | null;
   autoReview: AutoReviewSettings;
@@ -57,6 +59,7 @@ export const workspaceKeyValue: { [K in WorkspaceKey]: (value: WorkspaceKeyValue
   repoHosts: (hosts) => (hosts.length === 0 ? "none" : hosts.map((h) => h.host).join(", ")),
   starredRepos: (ids) => (ids.length === 0 ? "none" : ids.join(", ")),
   toolPermissions: (rules) => (rules.length === 0 ? "none" : countLabel(rules.length, { one: "rule", other: "rules" })),
+  alwaysAllow: (tools) => (tools.length === 0 ? "none" : countLabel(tools.length, { one: "tool", other: "tools" })),
   agentSecrets: (names) => (names.length === 0 ? "none" : names.join(", ")),
   sessionProfile: (profile) => profile ?? "none",
   autoReview: (settings) => `afterReport: ${settings.afterReport}, rulesAfterReport: ${settings.rulesAfterReport}`,

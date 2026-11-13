@@ -30,5 +30,7 @@ export interface AgentSession {
   /** What a hook of the session answers (ADR-85; the supervisor's situation, ADR-148). */
   hookOutput(record: CopilotHookRecord | undefined): CopilotHookOutput;
   answerDialog(id: string, answer: DialogAnswer): void;
+  /** "Always allow" in a task's approval (ADR-249): `remember` keeps the tool, then the approval gets "Yes". */
+  alwaysAllow(id: string, remember: (tool: string) => void): void;
   dispose(): void;
 }

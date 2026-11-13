@@ -1,4 +1,5 @@
 export * from "./agents.ts";
+export * from "./always-allow.ts";
 export * from "./api.ts";
 export * from "./app-config.ts";
 export * from "./approved-file.ts";

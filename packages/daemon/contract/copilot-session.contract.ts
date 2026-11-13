@@ -15,6 +15,7 @@ import {
   type UsageReport,
 } from "@trackwall/protocol";
 import { conversationEventLog } from "../src/infra/copilot-home.ts";
+import { alwaysAllowPattern } from "../src/modules/agents/copilot-always-allow.ts";
 import { windowTitleFromOsc } from "../src/modules/agents/copilot-osc.ts";
 import { OscParser } from "../src/modules/agents/osc-parser.ts";
 import { readRequestPrompt } from "../src/modules/agents/read-request-prompt.ts";
@@ -315,6 +316,69 @@ describe("a session of the real Copilot CLI", () => {
     agents.answerDialog(id, dialog.id, "1");
     await endOfTurn(id);
   });
+
+  test("the MCP tool Copilot CLI names in its don't ask again, as Always allow remembers it, is an --allow-tool pattern that runs it without asking (ADR-249)", async () => {
+    const { agents } = daemon.facade;
+    const call = { tool: copilotToolName(mcpTools.verifyTask.name), arguments: { task: "no-such-task" } };
+    const { id } = await startSession();
+    model.reply(call);
+    windowOf(id).attachment.input("verify the task\r");
+    const approval = await waitFor(agents, id, (s) => s.dialog?.kind === "approval", "approval dialog", SESSION_MS);
+    if (approval.dialog?.kind !== "approval") throw new Error(`no approval dialog: ${JSON.stringify(approval.dialog)}`);
+    const pattern = alwaysAllowPattern(approval.dialog);
+    expect(pattern).toBe(`${MCP_SERVER_NAME}(${mcpTools.verifyTask.name})`);
+    model.reply({ text: "There is no such task." });
+    agents.answerDialog(id, approval.dialog.id, "1");
+    await endOfTurn(id);
+
+    const workspaceFile = join(daemon.home, "workspace.yaml");
+    const workspace = readFileSync(workspaceFile, "utf8");
+    writeFileSync(workspaceFile, `${workspace}toolPermissions:\n  - repos: [shop]\n    allow: ["${pattern}"]\n`);
+    try {
+      const allowed = await startSession();
+      model.reply(call, { text: "There is no such task." });
+      allowed.window.attachment.input("verify the task\r");
+      await endOfTurn(allowed.id);
+      expect(hookRecords(daemon.home, allowed.id).map((r) => r.event)).not.toContain("notification");
+    } finally {
+      writeFileSync(workspaceFile, workspace);
+    }
+  });
+
+  test.skipIf(process.platform === "win32")(
+    "a shell command's don't ask again names it with its subcommand, and allowed it runs without asking also on a path outside the folder (ADR-249)",
+    async () => {
+      const { agents } = daemon.facade;
+      const outside = join(dirname(daemon.projects), `always-allowed-${Date.now()}.txt`);
+      const { id } = await startSession();
+      // `git commit` asks, and Copilot CLI names it with its subcommand, so allowing it allows no `git push`.
+      model.reply((request) => shellCall(request, { bash: "git commit --allow-empty -m empty", powershell: "" }));
+      windowOf(id).attachment.input("commit\r");
+      const approval = await waitFor(agents, id, (s) => s.dialog?.kind === "approval", "approval dialog", SESSION_MS);
+      if (approval.dialog?.kind !== "approval") throw new Error(`no approval dialog: ${JSON.stringify(approval.dialog)}`);
+      expect(alwaysAllowPattern(approval.dialog)).toBe("shell(git commit)");
+      model.reply({ text: "Committed." });
+      agents.answerDialog(id, approval.dialog.id, "1");
+      await endOfTurn(id);
+
+      // An allowed `touch` is not asked about on a path outside the session's folder, which is why Always allow refuses
+      // commands that write by path (`alwaysAllowable`), even this one only for the repo's tasks.
+      const workspaceFile = join(daemon.home, "workspace.yaml");
+      const workspace = readFileSync(workspaceFile, "utf8");
+      writeFileSync(workspaceFile, `${workspace}toolPermissions:\n  - repos: [shop]\n    allow: ["shell(touch)"]\n`);
+      try {
+        const allowed = await startSession();
+        model.reply((request) => shellCall(request, { bash: `touch ${outside}`, powershell: "" }), { text: "Done." });
+        allowed.window.attachment.input("touch it\r");
+        await endOfTurn(allowed.id);
+        expect(hookRecords(daemon.home, allowed.id).map((r) => r.event)).not.toContain("notification");
+        expect(existsSync(outside)).toBe(true);
+      } finally {
+        writeFileSync(workspaceFile, workspace);
+        rmSync(outside, { force: true });
+      }
+    },
+  );
 
   test("two tools called at once ask for both approvals at once, and after the first is answered the session waits for the second", async () => {
     const { agents } = daemon.facade;

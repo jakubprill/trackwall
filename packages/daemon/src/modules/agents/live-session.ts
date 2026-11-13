@@ -14,6 +14,7 @@ import {
 import { DomainError } from "../../infra/errors.ts";
 import { type ScreenViewer, TerminalScreen } from "../../infra/terminal-screen.ts";
 import type { AgentSession } from "./agent-session.ts";
+import { withAlwaysAllow, yesOption } from "./copilot-always-allow.ts";
 import { type CopilotHookOutput, hookOutputFor, situationOutput } from "./copilot-hook-output.ts";
 import type { CopilotHookEvent, CopilotHookRecord } from "./copilot-hook-record.ts";
 import { approvalRequest } from "./copilot-hooks.ts";
@@ -158,6 +159,8 @@ export interface LiveSessionOptions {
   usage: CopilotUsageLog;
   /** A task session's token budget (ADR-237), checked after every read of the usage while it runs; `null` for none. */
   tokenBudget: TokenBudget | null;
+  /** The tools the user always allows in the task's repo (ADR-249), read whenever an approval of one may be on the screen. */
+  alwaysAllowed: () => readonly string[];
 }
 
 export class LiveSession implements AgentSession {
@@ -238,6 +241,7 @@ export class LiveSession implements AgentSession {
   #lastStepAt: number | undefined;
   /** The failed model calls of the conversation's event log already reported as the state (ADR-243). */
   #failedCallsSeen: number;
+  readonly #alwaysAllowed: () => readonly string[];
 
   constructor(o: LiveSessionOptions) {
     this.id = o.id;
@@ -267,6 +271,7 @@ export class LiveSession implements AgentSession {
     this.#hooks = new HookTail(o.hooksFile);
     this.#usage = o.usage;
     this.#tokenBudget = o.tokenBudget;
+    this.#alwaysAllowed = o.alwaysAllowed;
     // A resumed conversation shows what it used before this start, and the model of this start only.
     if (o.hasConversation) this.#usage.readBeforeStart(this.conversation);
     // A call that failed before this start is not this start's turn.
@@ -410,6 +415,38 @@ export class LiveSession implements AgentSession {
     this.input(answer === "stop" ? ESCAPE : answer);
   }
 
+  /**
+   * "Always allow" (ADR-249): `remember` keeps the tool the dialog `id` offers for the task's repo, then the dialog gets
+   * its plain "Yes", only while the same dialog is on the screen, as with `answerDialog`.
+   */
+  alwaysAllow(id: string, remember: (tool: string) => void): void {
+    const dialog = this.#offeredDialog();
+    if (dialog?.id !== id)
+      throw new DomainError("dialog_changed", "the dialog is no longer on the session's screen; it was answered or it changed");
+    const yes = dialog.kind === "approval" ? yesOption(dialog) : undefined;
+    if (dialog.kind !== "approval" || dialog.alwaysAllow === undefined || yes === undefined)
+      throw new DomainError("bad_request", "this approval cannot be always allowed");
+    remember(dialog.alwaysAllow);
+    this.answerDialog(id, yes);
+  }
+
+  /**
+   * An approval of a tool the user always allows in the task's repo gets "Yes" from the daemon, as the user would give
+   * it (ADR-249): the session started before the tool was remembered, so Copilot CLI asks, while the next start gets
+   * `--allow-tool` and does not.
+   */
+  #answerAlwaysAllowed(): void {
+    const dialog = this.#offeredDialog();
+    if (dialog?.kind !== "approval" || dialog.alwaysAllow === undefined) return;
+    const yes = yesOption(dialog);
+    if (yes !== undefined && this.#alwaysAllowed().includes(dialog.alwaysAllow)) this.answerDialog(dialog.id, yes);
+  }
+
+  /** The dialog as the views get it: with what "Always allow" would remember in a task (ADR-249). */
+  #offeredDialog(): AgentDialog | null {
+    return withAlwaysAllow(this.#dialog(), this);
+  }
+
   /** The size is set by the last terminal that reported it; the TUI gets it together with the PTY. */
   resize(cols: number, rows: number): void {
     if (this.#finished || (cols === this.#screen.cols && rows === this.#screen.rows)) return;
@@ -451,6 +488,7 @@ export class LiveSession implements AgentSession {
     if (this.#finished) return false;
     this.#readHooks();
     if (this.#last?.state === "Approval" && this.#dialogOnScreen("approval") !== null) this.#state.approvalOnScreen();
+    this.#answerAlwaysAllowed();
     this.#report([this.#state.tick()]);
     this.#settleUserDraft();
     this.#followTypedPrompt();
@@ -493,7 +531,7 @@ export class LiveSession implements AgentSession {
       waitingSince: run.kind === "running" ? this.#attention.waitingSince(this.#last?.state) : null,
       stuck: run.kind === "running" ? sessionStuck(this.#last, this.#lastStepAt, Date.now()) : null,
       task: this.task,
-      dialog: run.kind === "running" ? this.#dialog() : null,
+      dialog: run.kind === "running" ? this.#offeredDialog() : null,
       environment: this.environment,
       view: "terminal",
       readRequest: run.kind === "running" ? this.#readRequestView() : null,

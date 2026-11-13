@@ -1,6 +1,7 @@
 import { dirname, join, relative } from "node:path";
 import {
   type AgentSecrets,
+  AlwaysAllowedTool,
   AutoReviewSettings,
   type CloneJob,
   type Commit,
@@ -12,6 +13,7 @@ import {
   type HostedRepo,
   type HostRepos,
   type JavaNavigationSettings,
+  MAX_ALWAYS_ALLOWED_TOOLS,
   PATCH_MAX_BYTES,
   type RemoteRepoList,
   type RemoteRepoMore,
@@ -55,7 +57,7 @@ import { moveRepoOut } from "./repo-removal.ts";
 import { withStar } from "./starred-repos.ts";
 import { suggestedProjectsDir } from "./suggested-projects-dir.ts";
 import { SyncRuns } from "./sync-runs.ts";
-import { sessionToolPermissions, supervisorToolPermissions } from "./tool-permissions.ts";
+import { alwaysAllowedIn, sessionToolPermissions, supervisorToolPermissions, taskToolPermissions } from "./tool-permissions.ts";
 import { type RepoUnpushedRead, type UnpushedRead, unpushedWork } from "./unpushed-work.ts";
 import type { WorkspaceFile } from "./workspace-file.ts";
 import { checkWorktreesDir, defaultWorktreesDir } from "./worktrees-dir.ts";
@@ -217,6 +219,7 @@ export class Workspace {
     const runningTasksWarning = configOrProblem(() => this.deps.file.runningTasksWarning(), null);
     const supervisor = configOrProblem(() => this.deps.file.supervisorSettings(), SupervisorSettings.parse({}));
     const sandbox = configOrProblem(() => this.deps.file.sandboxSettings(), null);
+    const alwaysAllow = configOrProblem(() => this.deps.file.alwaysAllowedTools(), []);
     // What Settings shows is what runs: a hand edit of `gitProgram` applies when Settings reads it (ADR-112).
     this.deps.vcs.useGitProgram(gitProgram.value);
     return {
@@ -242,6 +245,8 @@ export class Workspace {
       supervisorProblem: supervisor.problem,
       sandbox: sandbox.value,
       sandboxProblem: sandbox.problem,
+      alwaysAllow: alwaysAllow.value,
+      alwaysAllowProblem: alwaysAllow.problem,
       configFile: this.configFile(),
     };
   }
@@ -541,9 +546,43 @@ export class Workspace {
    * from `workspace.yaml` (ADR-66); `invalid_config` for a bad `toolPermissions`, so that no session starts without a
    * denial the user wrote. A free session (ADR-100) gets the rules without `repos`, without the supervisor's denial.
    */
-  toolPermissions(session: Pick<Session, "repo" | "supervisor">): ToolPermissions {
+  toolPermissions(session: Pick<Session, "repo" | "supervisor" | "task">): ToolPermissions {
     const rules = this.deps.file.toolPermissionRules();
-    return session.supervisor ? supervisorToolPermissions(rules, this.supervisorSettings()) : sessionToolPermissions(rules, session.repo);
+    if (session.supervisor) return supervisorToolPermissions(rules, this.supervisorSettings());
+    // Only a task's: its worktree is the place the user reviews before anything reaches the repo (ADR-249).
+    if (session.task !== null && session.repo !== null)
+      return taskToolPermissions(rules, this.deps.file.alwaysAllowedTools(), session.repo);
+    return sessionToolPermissions(rules, session.repo);
+  }
+
+  /**
+   * The tools always allowed in repo `repo`'s tasks (ADR-249), read at every call so a removal in Settings or by hand
+   * applies at once; `invalid_config` for a bad `alwaysAllow`.
+   */
+  alwaysAllowed(repo: string): string[] {
+    return alwaysAllowedIn(this.deps.file.alwaysAllowedTools(), repo);
+  }
+
+  /** Remembers `tool` as always allowed in repo `repo`'s tasks (ADR-249); `bad_request` for a pattern that may not be. */
+  alwaysAllow(entry: AlwaysAllowedTool): void {
+    const parsed = AlwaysAllowedTool.safeParse(entry);
+    if (!parsed.success) throw new DomainError("bad_request", parsed.error.issues[0]?.message ?? "this tool cannot be always allowed");
+    const tools = this.deps.file.alwaysAllowedTools();
+    if (alwaysAllowedIn(tools, entry.repo).includes(entry.tool)) return;
+    if (tools.length >= MAX_ALWAYS_ALLOWED_TOOLS)
+      throw new DomainError(
+        "bad_request",
+        `at most ${MAX_ALWAYS_ALLOWED_TOOLS} tools can be always allowed; remove some in Settings › Agents`,
+      );
+    this.deps.file.setAlwaysAllowedTools([...tools, parsed.data]);
+  }
+
+  /** Stops always allowing a tool in a repo's tasks (ADR-249); an entry that is not there changes nothing. */
+  removeAlwaysAllowed(entry: AlwaysAllowedTool): WorkspaceSettings {
+    const tools = this.deps.file.alwaysAllowedTools();
+    const kept = tools.filter((t) => !(t.repo.toLowerCase() === entry.repo.toLowerCase() && t.tool === entry.tool));
+    if (kept.length !== tools.length) this.deps.file.setAlwaysAllowedTools(kept);
+    return this.settings();
   }
 
   /** The mise environment new sessions start with (ADR-136); `null` removes it. Takes effect at the next session start. */

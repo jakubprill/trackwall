@@ -116,12 +116,14 @@ export interface LauncherProcs {
 
 /** What a start reads of the workspace configuration, each of which can refuse it. */
 interface LauncherRepos {
-  toolPermissions(session: Pick<Session, "repo" | "supervisor">): ToolPermissions;
+  toolPermissions(session: Pick<Session, "repo" | "supervisor" | "task">): ToolPermissions;
   supervisorSettings(): SupervisorSettings;
   supervisorModel(): string | null;
   /** `taskTokenBudget` from `workspace.yaml` (ADR-237), `null` without the key; `invalid_config` for a bad key. */
   taskTokenBudget(): number | null;
   agentSecrets(): readonly string[];
+  /** The tools always allowed in repo `repo`'s tasks (ADR-249); `invalid_config` for a bad `alwaysAllow`. */
+  alwaysAllowed(repo: string): string[];
 }
 
 /** What the callbacks of `Agents` give a session of either view (`#callbacks`). */
@@ -273,7 +275,7 @@ export class SessionLauncher {
     // The user's `PATH`, not mise's: a mise config an agent can change must not choose the program that gets every secret.
     const copilot = resolveCopilot(this.#deps.copilot, userEnv);
     if ("missing" in copilot) throw new DomainError("agent_unavailable", copilot.message);
-    const permissions = this.#deps.repos.toolPermissions({ repo, supervisor });
+    const permissions = this.#deps.repos.toolPermissions({ repo, supervisor, task });
     // Read at each start, a resume and a restart included, so a change in Settings applies to the next one; a task's or
     // a repo session's model comes with the start instead (ADR-98, ADR-175).
     const model = modelArgs(supervisor ? this.#deps.repos.supervisorModel() : null);
@@ -348,6 +350,19 @@ export class SessionLauncher {
     const { onTokenBudgetReached, ...callbacks } = this.#deps.callbacks(session);
     const tokenBudget = budget === null ? null : new TokenBudget(budget, () => usage.tokensSinceStart(), onTokenBudgetReached);
     return { ...callbacks, tokenBudget };
+  }
+
+  /**
+   * The tools a running task session answers "Yes" for itself (ADR-249); none outside a task, and none while
+   * `alwaysAllow` cannot be read, so a mistake in the file asks rather than allows.
+   */
+  #alwaysAllowed(repo: string | null, task: string | null): readonly string[] {
+    if (repo === null || task === null) return [];
+    try {
+      return this.#deps.repos.alwaysAllowed(repo);
+    } catch {
+      return [];
+    }
   }
 
   /**
@@ -438,6 +453,7 @@ export class SessionLauncher {
       run: () => this.#deps.procs.state(sessionOwner(id)),
       ...this.#callbacks({ id, supervisor, task }, tokenBudget, usage),
       usage,
+      alwaysAllowed: () => this.#alwaysAllowed(repo, task),
     });
     return { session, instructionsDir };
   }
