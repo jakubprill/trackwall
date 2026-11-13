@@ -236,6 +236,8 @@ export class LiveSession implements AgentSession {
    * until the first hook, since without hooks the daemon cannot see the agent's steps.
    */
   #lastStepAt: number | undefined;
+  /** The failed model calls of the conversation's event log already reported as the state (ADR-243). */
+  #failedCallsSeen: number;
 
   constructor(o: LiveSessionOptions) {
     this.id = o.id;
@@ -267,6 +269,8 @@ export class LiveSession implements AgentSession {
     this.#tokenBudget = o.tokenBudget;
     // A resumed conversation shows what it used before this start, and the model of this start only.
     if (o.hasConversation) this.#usage.readBeforeStart(this.conversation);
+    // A call that failed before this start is not this start's turn.
+    this.#failedCallsSeen = this.#usage.failedCalls();
   }
 
   /** The process terminal; it arrives after the group starts, and output can arrive earlier. */
@@ -458,6 +462,7 @@ export class LiveSession implements AgentSession {
     const run = this.#run();
     if (run?.kind !== "exited") {
       this.#usage.poll(this.conversation, Date.now());
+      this.#reportFailedCall();
       this.#tokenBudget?.check();
       return true;
     }
@@ -616,6 +621,17 @@ export class LiveSession implements AgentSession {
    */
   #readPromptBox(): void {
     if (this.#state.screenSpeaks) this.#report(this.#state.screen(() => this.#screen.lines()));
+  }
+
+  /**
+   * A model call that failed since the last look ends the turn (ADR-243): the hooks may say nothing after it. Read after
+   * the hooks, which Copilot CLI sends before the call, so the failure is not followed by a hook of the same turn.
+   */
+  #reportFailedCall(): void {
+    const failed = this.#usage.failedCalls();
+    if (failed <= this.#failedCallsSeen) return;
+    this.#failedCallsSeen = failed;
+    this.#report(this.#state.modelCallFailed());
   }
 
   #report(changes: readonly (TaskStateChange | undefined)[]): void {

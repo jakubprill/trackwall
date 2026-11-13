@@ -17,7 +17,11 @@ import type { TaskStateChange, TaskStateSource } from "@trackwall/protocol";
  *   unless a detector has already reported the end of the session (`endsSession`), because that says more than the code.
  */
 
-const DETECTOR_RANK = { screen: 1, osc: 2, hook: 3 } as const satisfies Partial<Record<TaskStateSource, number>>;
+/**
+ * `log` (a failed model call in the conversation's event log, ADR-243) ranks below the hooks: it can end `Working` like
+ * any weaker source, and a hook that already said the same (`errorOccurred`) or says what came next keeps its say.
+ */
+const DETECTOR_RANK = { screen: 1, osc: 2, log: 2, hook: 3 } as const satisfies Partial<Record<TaskStateSource, number>>;
 
 /** Signal sources of the detectors observing a session; `keyboard`, `timeout` and `exit` have their own methods. */
 type DetectorSource = keyof typeof DETECTOR_RANK;
