@@ -23,6 +23,7 @@ import { McpCallsSurface } from "./McpCallsSurface.tsx";
 import { ModelStatsSurface } from "./ModelStatsSurface.tsx";
 import { RepoHostsSurface } from "./RepoHostsSurface.tsx";
 import { RetryModelSurface } from "./RetryModelSurface.tsx";
+import { RunningTasksWarningSurface } from "./RunningTasksWarningSurface.tsx";
 import { SandboxSurface } from "./SandboxSurface.tsx";
 import { SessionProfileSurface } from "./SessionProfileSurface.tsx";
 import { StartAtSignInSurface } from "./StartAtSignInSurface.tsx";
@@ -118,6 +119,8 @@ function Section({
       return <RetryModelSurface conn={conn} />;
     case "task-token-budget":
       return <TaskTokenBudgetSurface conn={conn} />;
+    case "running-tasks-warning":
+      return <RunningTasksWarningSurface conn={conn} />;
     case "sandbox":
       return <SandboxSurface conn={conn} />;
     case "auto-review":
