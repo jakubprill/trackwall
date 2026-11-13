@@ -26,5 +26,6 @@ Agents connected to the [MCP server](/features/mcp) know the format, so a sessio
 
 ## Good to know
 
+- A link to a session or task that Trackwall does not have, because it ended or the link comes from Trackwall running somewhere else (such as in a dev container), shows a message saying so and leaves the selection as it was.
 - On macOS the system learns the links the first time you start the app.
 - On Windows the portable `trackwall.exe` registers the links for your user every time it starts. After moving the folder, start Trackwall once from the new place; with two copies, the one started last gets the links.
