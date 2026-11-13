@@ -181,8 +181,8 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # Checks the files and writes SHA256SUMS.txt and latest.json without write access: it runs `pnpm install` for the
-  # script, and only the publish job below may change the repo.
+  # Packs the VS Code extension, checks the files and writes SHA256SUMS.txt and latest.json without write access: it
+  # runs `pnpm install` for the scripts, and only the publish job below may change the repo.
   manifest:
     needs: [build, linux]
     runs-on: ubuntu-latest
@@ -204,6 +204,14 @@ jobs:
           path: dist
           merge-multiple: true
 
+      # The VS Code extension (ADR-221), for a download next to the app. Its version is the app's (versions.test.ts);
+      # the next step refuses a .vsix not named after the tag.
+      - name: VS Code extension
+        run: |
+          pnpm --filter @trackwall/vscode package
+          unzip -l apps/vscode/out/*.vsix
+          cp apps/vscode/out/*.vsix dist/
+
       - name: Checksums
         working-directory: dist
         env:
@@ -215,7 +223,8 @@ jobs:
           mac_update="trackwall-$version-macos-arm64.app.tar.gz"
           linux_x64="trackwall-$version-linux-x64.tar.gz"
           linux_arm64="trackwall-$version-linux-arm64.tar.gz"
-          expected=("$win" "$mac" "$mac_update" "$linux_x64" "$linux_arm64" "$win.sig" "$mac_update.sig" "$linux_x64.sig" "$linux_arm64.sig")
+          vsix="trackwall-$version.vsix"
+          expected=("$win" "$mac" "$mac_update" "$linux_x64" "$linux_arm64" "$vsix" "$win.sig" "$mac_update.sig" "$linux_x64.sig" "$linux_arm64.sig")
           for f in "${expected[@]}"; do
             [ -f "$f" ] || { echo "::error::Missing $f, found: $(ls)"; exit 1; }
           done
@@ -226,7 +235,7 @@ jobs:
           # The Dev Container Feature (ADR-164) carries the SHA-256 of both Linux archives it installs.
           bun ../apps/desktop/scripts/package-feature.ts .
           feature="devcontainer-feature-trackwall.tgz"
-          sha256sum "$win" "$mac" "$mac_update" "$linux_x64" "$linux_arm64" "$feature" > SHA256SUMS.txt
+          sha256sum "$win" "$mac" "$mac_update" "$linux_x64" "$linux_arm64" "$vsix" "$feature" > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       # The manifest the app's updater reads from releases/latest/download/latest.json (ADR-53); the script refuses a
@@ -245,6 +254,7 @@ jobs:
             dist/SHA256SUMS.txt
             dist/latest.json
             dist/devcontainer-feature-trackwall.tgz
+            dist/*.vsix
           if-no-files-found: error
           retention-days: 7
 
@@ -261,7 +271,7 @@ jobs:
           sparse-checkout: docs/release-notes
           persist-credentials: false
 
-      # The packages and signatures of every build and the manifest job's two files.
+      # The packages and signatures of every build and the manifest job's files.
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           pattern: trackwall-*

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { assertVersionsMatch, REPO } from "../scripts/lib.ts";
 
-test("the versions of the daemon, tauri.conf and Cargo.toml are equal", () => {
+test("the versions of the daemon, tauri.conf, Cargo.toml and the VS Code extension are equal", () => {
   expect(() => assertVersionsMatch()).not.toThrow();
 });
 
