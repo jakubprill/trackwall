@@ -11,7 +11,7 @@ Move between views with the keyboard, and spread Trackwall over several windows 
 
 ## What you get
 
-- Every view one key away.
+- Every view one key away, and any session, task, repo or setting a few letters away with Ctrl+K.
 - Any view in its own window, for example the session grid on one monitor and "Repos" on another.
 - Windows that come back where you left them when Trackwall starts again.
 - Each window at its own zoom: larger text on a laptop, more on screen on an ultrawide.
@@ -22,6 +22,8 @@ Move between views with the keyboard, and spread Trackwall over several windows 
 The bar at the left edge of the window switches views, as in VS Code: "Home", "Repos", "Sessions", "Overview", "Plan" and "[Flow](/features/flow)" at the top, "Settings" at the bottom. Hover over an icon to see the view's name and key.
 
 "Settings" lists its categories on the left: "Workspace" (the projects folder, the task worktrees folder and the local config backup), "Repo hosts", "Agents" (connecting Copilot CLI and installing [Java navigation](/features/java-navigation)), "Usage" ([Copilot usage](/features/copilot-usage), [Model statistics](/features/model-stats) and the [MCP calls](/features/mcp-calls) agents made), "App" (start at sign-in, updates, the theme and how the Home scene looks), "Files" (every file Trackwall reads or writes, see [Config files](/features/config-files)) and "Diagnostics" (the doctor, the state of the daemon and Trackwall's own errors). Click a category to see its settings. In a narrow window the categories sit in a row above them.
+
+Ctrl+K (⌘K on macOS) opens the command palette over any view. Type a few letters of what you want, a session, a task, a repo, a view or a Settings category, and press Enter, or click it. The palette also does a few things: start a new session, open the next session waiting for you, show the supervisor, open the current view in a new window and switch the theme. Every word you type must appear in the name, so "billing task" finds a task in the `billing` repo; names that start with what you typed come first. Where an action has its own key, the palette shows it next to the name.
 
 Any view can open in a new window: right-click its icon and choose "Open in new window", press Ctrl+Shift with the view's digit, or choose "New window" in the tray. Every window has its own view bar, switches views on its own and shows the same sessions and repos live. Each window's title names its view ("Sessions – Trackwall"), so you can tell them apart in the taskbar.
 
@@ -34,7 +36,8 @@ A window opens on the monitor, at the size and position its predecessor had. Whe
 ## Use it
 
 1. Press Ctrl+1 … Ctrl+6 to switch views (⌘ on macOS).
-2. Press Ctrl+Shift+3 to open "Sessions" in a new window, and drag it to your other monitor.
+2. Press Ctrl+K, type the name of a repo, and press Enter to open it in "Repos".
+3. Press Ctrl+Shift+3 to open "Sessions" in a new window, and drag it to your other monitor.
 
 ## Shortcuts
 
@@ -42,6 +45,7 @@ A window opens on the monitor, at the size and position its predecessor had. Whe
 |---|---|---|
 | Ctrl+1, Ctrl+2, Ctrl+3, Ctrl+4, Ctrl+5, Ctrl+6 | ⌘1, ⌘2, ⌘3, ⌘4, ⌘5, ⌘6 | Home, Repos, Sessions, Overview, Plan, Flow. |
 | Ctrl+, | ⌘, | Settings. |
+| Ctrl+K (Ctrl+Shift+K in a terminal) | ⌘K | The command palette. |
 | Ctrl+Shift+digit | ⌥⌘digit | Open that view in a new window. |
 | Ctrl+Shift+N | ⌘⇧N | Open the current view in a new window. |
 | Ctrl+= or Ctrl++, Ctrl+- | ⌘=, ⌘- | Zoom this window in or out. |
@@ -57,6 +61,8 @@ A window opens on the monitor, at the size and position its predecessor had. Whe
 - With the same session open in two windows, the window you type in sets the terminal size.
 - If a window's monitor is unplugged, the window opens at the default position.
 - The tray panel keeps its size; zoom changes only Trackwall's windows.
+- In a session's or a folder's terminal Ctrl+K deletes to the end of the line, as it does in every shell, so there Ctrl+Shift+K opens the palette. It works everywhere else too. On macOS ⌘K works everywhere.
+- Esc or a click outside closes the palette and puts the keyboard back where it was.
 - The zoom keys belong to the window, so they do not reach a session's terminal.
 - A new window that takes the place of a closed one starts at the closed window's zoom, as it does at its position.
 - Trackwall in a browser tab has the same theme setting, kept by that browser.

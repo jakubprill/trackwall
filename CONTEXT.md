@@ -52,6 +52,10 @@ _Avoid_: tab (for a whole screen)
 A group of Settings listed on the left of the Settings view: Workspace, Repo hosts, Agents, Usage, App, Files and Diagnostics (ADR-102, ADR-212). Each holds a few sections, such as the projects folder or the daemon's state.
 _Avoid_: tab (that is `TabBar`), page
 
+**Command palette** (`CommandPalette`, `lib/command-palette.ts`; a **command** is `PaletteCommand`):
+The field Ctrl+K (⌘K) opens over any view, Ctrl+Shift+K from a terminal: a few letters find a session, task, repo, view or Settings category, or an action such as "New session", and Enter goes there (ADR-246).
+_Avoid_: quick open, search (that is the Repos view's repo search), launcher
+
 **Tab** (`TabBar`):
 A switch for part of the content inside a view, for example README, Files, Commits and mise tasks in the Repos view.
 
