@@ -3,13 +3,14 @@ import { useEffect } from "react";
 import { AgentDialogCard } from "@/components/AgentDialogCard";
 import { Loading } from "@/components/Loading";
 import { QueueItem } from "@/components/QueueItem";
+import { SessionStateLabel } from "@/components/SessionStateLabel";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { errorMessage } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { twoDigits } from "@/lib/format";
 import { proposalName } from "@/lib/session-entries";
-import { PROPOSAL_STATUS, sessionStateLabel, sessionTitle } from "@/lib/session-state";
+import { PROPOSAL_STATUS, sessionTitle } from "@/lib/session-state";
 import { openFromTrayPanel, type TrayPanelTarget, trayPanelEntries } from "@/lib/tray-panel";
 import { useConnection } from "@/lib/use-connection";
 import { useDaemonEvents } from "@/lib/use-daemon-events";
@@ -87,7 +88,7 @@ function WaitingSession({ conn, session, onOpen }: { conn: Connection | undefine
   return (
     <>
       <QueueItem title={sessionTitle(session)} active={false} onClick={onOpen}>
-        <StatusLabel {...sessionStateLabel(session)} />
+        <SessionStateLabel session={session} />
       </QueueItem>
       {conn && session.dialog && (
         <li className="px-2 pb-2">

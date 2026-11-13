@@ -17,6 +17,7 @@ function session(id: string, supervisor = false): Session {
     state: null,
     windowTitle: null,
     needsAttention: false,
+    waitingSince: null,
     stuck: null,
     task: null,
     dialog: null,

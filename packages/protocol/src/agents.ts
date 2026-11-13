@@ -487,6 +487,11 @@ export const Session = z.object({
    * The daemon computes it so that the UI and the tray in the shell (Rust) read one rule instead of copies of it.
    */
   needsAttention: z.boolean(),
+  /**
+   * Since when the session waits for you (ADR-247), ISO 8601: the change into the state it waits in, which a source only
+   * confirming that state does not move; `null` while `needsAttention` is false.
+   */
+  waitingSince: z.iso.datetime().nullable(),
   /** The session may be stuck (ADR-151); `null` while its agent takes steps, waits or has ended. */
   stuck: SessionStuck.nullable(),
   /** The task in whose worktree the session runs; `null` for a session in the repo root. */

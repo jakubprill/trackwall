@@ -200,10 +200,12 @@ function columnOf(session: Session | undefined, work: WorkFacts): Pick<FlowCard,
   const at = session?.state?.at ?? work.since;
   if (session?.stuck) return { column: "stuck", since: session.stuck.lastStepAt, detail };
   if (state?.tone === "error") return { column: "stuck", since: at, detail };
-  if (session?.needsAttention && session.state?.state !== "Input") return { column: "waiting", since: at, detail };
+  // A wait counts from when it began (ADR-247); the state's own time moves when a stronger source confirms it.
+  const waitingSince = session?.waitingSince ?? at;
+  if (session?.needsAttention && session.state?.state !== "Input") return { column: "waiting", since: waitingSince, detail };
   if (session && inTurn(session)) return { column: "working", since: at, detail };
   if (work.review) return { column: "review", since: work.review.reportedAt ?? at, detail: "handed over" };
-  if (session?.needsAttention) return { column: "waiting", since: at, detail };
+  if (session?.needsAttention) return { column: "waiting", since: waitingSince, detail };
   if (work.failed) return { column: "stuck", since: at, detail: work.failed };
   return { column: "idle", since: at, detail };
 }
