@@ -21,6 +21,9 @@ import { WaitingCalls } from "./waiting-calls.ts";
  */
 const NO_REPO_COMMANDS = ["-c", "core.fsmonitor=false", "-c", "log.showSignature=false"];
 
+/** Git does not look into submodules, so it runs no git with their configuration (in a repo guarded by `run-settings.ts`). */
+const SKIP_SUBMODULES = "diff.ignoreSubmodules=all";
+
 /**
  * On Windows, paths over 260 characters only with `core.longpaths`: task worktrees lie in the task worktrees folder (ADR-84), so
  * repo file paths are longer in them than in the projects folder. The key changes nothing outside Windows.
@@ -96,7 +99,7 @@ export function git(repoDir: string, args: readonly string[], opts: GitOptions =
 
 /** The repo configuration file `file` as `git config -z --list` gives it, read for the run settings guard, which it skips. */
 export function readConfigFile(repoDir: string, file: string): Promise<string> {
-  return runGit(repoDir, ["config", "--file", file, "--list", "-z", "--includes"], {}, false, false).then((out) =>
+  return runGit(repoDir, ["config", "--file", file, "--list", "-z", "--no-includes"], {}, false, false).then((out) =>
     out.stdout.toString("utf8"),
   );
 }
@@ -120,10 +123,11 @@ async function runGit(
   guarded = true,
 ): Promise<TimedOutput> {
   // Before anything starts: a filter, hook or fsmonitor a sandboxed task wrote into the repo must not run (run-settings.ts).
-  if (guarded) await assertRunSettings(repoDir, (file) => readConfigFile(repoDir, file));
+  const sandboxed = guarded && (await assertRunSettings(repoDir, (file) => readConfigFile(repoDir, file)));
   const ceiling = await ceilingFor(repoDir);
   const { maxBytes, stdin, okExitCodes } = opts;
-  const config = (opts.config ?? []).flatMap((entry) => ["-c", entry]);
+  // A submodule's git directory has a configuration of its own, which the guard does not read.
+  const config = [...(sandboxed ? [SKIP_SUBMODULES] : []), ...(opts.config ?? [])].flatMap((entry) => ["-c", entry]);
   // The launcher stays for network commands: credential helpers and ssh run exactly as from the user's shell.
   const program = opts.network ? GIT_FROM_PATH : await gitProgram();
   const askedAt = performance.now();

@@ -111,10 +111,13 @@ export interface TasksVcs extends HandoffGit, EndedTaskGit {
   /** One hash of what the worktree's files hold beyond `base` (ADR-209). */
   worktreeFingerprint(dir: string, base: string): Promise<string>;
   discardFingerprint(dir: string, base: string): Promise<string | null>;
-  /** The digest of the run settings of the repo `dir` lies in (`run-settings.ts`); `null` without a git directory. */
-  runSettingsDigest(dir: string): Promise<string | null>;
+  /**
+   * The digest of the run settings of the repo `dir` lies in (`run-settings.ts`), refused when the repo's other sandboxed
+   * tasks have digests it does not match; `null` without a git directory.
+   */
+  runSettingsBaseline(dir: string): Promise<string | null>;
   /** From now on git in a repo with one of these worktrees runs only while its run settings match one of their digests. */
-  useRunSettingsBaselines(baselines: readonly { worktree: string; digest: string }[]): void;
+  useRunSettingsBaselines(baselines: readonly { worktree: string; repoDir: string; digest: string }[]): void;
 }
 
 /**
@@ -408,7 +411,7 @@ export class AgentTasks {
       // config the user trusted (ADR-59, ADR-61).
       task.trustedMiseConfig = await this.#initialMiseConfig(task);
       // Before the agent's session starts, so the digest is of the settings the user left (ADR-181 addendum).
-      if (task.sandbox) task.runSettings = await this.#deps.vcs.runSettingsDigest(task.worktree);
+      if (task.sandbox) task.runSettings = await this.#deps.vcs.runSettingsBaseline(task.worktree);
       // Saved before the session starts: the worktree is already on disk and must not disappear from the list if the daemon crashes.
       this.#save([task, ...this.#tasks]);
       if (launch === "launch") await this.#launchNew(task);
@@ -1306,7 +1309,7 @@ export class AgentTasks {
    */
   async #withRunSettings(task: KnownTask): Promise<KnownTask> {
     if (!task.sandbox || task.runSettings !== null) return task;
-    const runSettings = await this.#deps.vcs.runSettingsDigest(task.worktree);
+    const runSettings = await this.#deps.vcs.runSettingsBaseline(task.worktree);
     const guarded = { ...task, runSettings };
     this.#save(this.#tasks.map((t) => (t.id === task.id ? guarded : t)));
     return guarded;
@@ -1354,7 +1357,7 @@ export class AgentTasks {
   /** The digests of the listed sandboxed tasks guard git in their repos (ADR-181 addendum). */
   #guardRunSettings(): void {
     this.#deps.vcs.useRunSettingsBaselines(
-      this.#tasks.flatMap((t) => (t.runSettings === null ? [] : [{ worktree: t.worktree, digest: t.runSettings }])),
+      this.#tasks.flatMap((t) => (t.runSettings === null ? [] : [{ worktree: t.worktree, repoDir: t.repoDir, digest: t.runSettings }])),
     );
   }
 }

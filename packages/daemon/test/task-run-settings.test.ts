@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { agentsApi } from "@trackwall/protocol";
 import { countedEntries } from "../src/modules/vcs/run-settings.ts";
@@ -85,7 +85,35 @@ describe.skipIf(process.versions.bun === undefined)(
     );
 
     test(
-      "settings git writes in ordinary work and a second task's worktree do not refuse git, while a new hook does",
+      "a task's worktree whose .git the agent points at a git directory of its own is refused, and so is a config rewritten in place with its old times",
+      async () => {
+        daemon = await sandboxed("all");
+        const repoDir = join(daemon.projects, "shop");
+        execFileSync("git", ["-C", repoDir, "config", "filter.trace.clean", "cat -u"]);
+        const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "map the endpoints", approvals: "auto" });
+        await daemon.facade.agents.taskChanges(task.id);
+
+        // The same size and modification time, as an agent's write followed by `touch -d` leaves it.
+        const config = join(repoDir, ".git", "config");
+        const before = statSync(config);
+        writeFileSync(config, readFileSync(config, "utf8").replace("cat -u", `tee ${TRACE.slice(0, 2)}`));
+        utimesSync(config, before.atime, before.mtime);
+        expect(statSync(config).size).toBe(before.size);
+        await expect(daemon.facade.agents.taskChanges(task.id)).rejects.toThrow("changed since a task in the sandbox started");
+        execFileSync("git", ["-C", repoDir, "config", "filter.trace.clean", "cat -u"]);
+        await daemon.facade.agents.taskChanges(task.id);
+
+        // A git directory of the agent's own, inside the worktree it can write.
+        const own = join(task.worktree, "own-git");
+        execFileSync("git", ["init", "--quiet", "--bare", own]);
+        writeFileSync(join(task.worktree, ".git"), `gitdir: ${own}\n`);
+        await expect(daemon.facade.agents.taskChanges(task.id)).rejects.toThrow("no longer leads to its repo's git directory");
+      },
+      SLOW_TEST_TIMEOUT_MS,
+    );
+
+    test(
+      "settings git writes in ordinary work, husky's hooks path and a second task's worktree do not refuse git, while a new hook does",
       async () => {
         daemon = await sandboxed("all");
         const repoDir = join(daemon.projects, "shop");
@@ -93,6 +121,8 @@ describe.skipIf(process.versions.bun === undefined)(
         execFileSync("git", ["-C", repoDir, "remote", "add", "origin", "https://example.com/shop.git"]);
         execFileSync("git", ["-C", repoDir, "config", "branch.main.remote", "origin"]);
         execFileSync("git", ["-C", repoDir, "config", "branch.main.merge", "refs/heads/main"]);
+        execFileSync("git", ["-C", repoDir, "config", "core.hooksPath", ".husky"]);
+        execFileSync("git", ["-C", repoDir, "config", "lfs.repositoryformatversion", "0"]);
         await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "list the tests", approvals: "auto" });
 
         await daemon.facade.agents.taskChanges(task.id);
@@ -106,16 +136,21 @@ describe.skipIf(process.versions.bun === undefined)(
 );
 
 describe("the entries of a repo configuration that count as run settings", () => {
-  test("keys git writes in ordinary work are left out, and everything else counts, in its order", () => {
+  test("keys with which git runs a program or reads another file count, in their order, and the rest is left out", () => {
     const list = [
       "core.bare\nfalse",
+      "core.filemode\ntrue",
       "remote.origin.url\nhttps://example.com/shop.git",
-      "remote.origin.fetch\n+refs/heads/*:refs/remotes/origin/*",
       "remote.origin.uploadpack\nsh -c id",
       "branch.main.remote\norigin",
-      "user.email\nme@example.com",
+      "branch.main.vscode-merge-base\norigin/main",
+      "lfs.https://example.com/shop.git/info/lfs.access\nbasic",
       "filter.lfs.clean\ngit-lfs clean -- %f",
       "core.fsmonitor\n./watch",
+      "include.path\n../shared.gitconfig",
+      "core.hookspath\n.husky",
+      "core.hookspath\n../elsewhere",
+      "core.hookspath\n/tmp/hooks",
       "",
     ].join("\0");
 
@@ -124,6 +159,9 @@ describe("the entries of a repo configuration that count as run settings", () =>
       "remote.origin.uploadpack\nsh -c id",
       "filter.lfs.clean\ngit-lfs clean -- %f",
       "core.fsmonitor\n./watch",
+      "include.path\n../shared.gitconfig",
+      "core.hookspath\n../elsewhere",
+      "core.hookspath\n/tmp/hooks",
     ]);
   });
 });
