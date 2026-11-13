@@ -83,7 +83,9 @@ describe.skipIf(process.versions.bun === undefined)(
       ]);
       // Only the tools that read, and not the review agent's `task`: the check reads the rules itself.
       expect(check.text).toContain("Argument: --available-tools=view,grep,glob\n");
-      expect(check.text).toContain(`Argument: --add-dir=${join(daemon.home, "auto-reviews", "rules", task.id)}`);
+      // The rules' copies and the diff are outside the worktree: the daemon approved reading them, and only them.
+      expect(check.message).toBeNull();
+      expect(check.text).not.toContain("--add-dir");
       expect(existsSync(join(daemon.home, "auto-reviews", "rules", task.id))).toBe(false);
       // The code review is a kind of its own, which this check did not start.
       expect(await daemon.post(autoReviewApi.get, { task: task.id, kind: "code" })).toBeNull();

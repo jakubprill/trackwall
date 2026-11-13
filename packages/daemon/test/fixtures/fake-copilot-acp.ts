@@ -15,14 +15,18 @@
  * (`test/acp-tool-call.test.ts` has the same shapes); the file stays as it is.
  *
  * A prompt that starts with `/review` is an automatic review (ADR-182): the agent asks to run its shell command, then
- * answers with one issue in the format of Copilot CLI's review agent on the first added line of the diff file the prompt
- * names, followed by whether the command was allowed, the arguments it got and the variables `FAKE_COPILOT_SHOW_ENV` names. With `FAKE_COPILOT_REVIEW_WAIT` set the
- * review never ends on its own.
+ * reads the diff file the prompt names and answers with one issue in the format of Copilot CLI's review agent on the first added line of the diff file the prompt
+ * names (`FAKE_COPILOT_REVIEW_FILE` names another one), followed by whether the command was allowed, the arguments it
+ * got and the variables `FAKE_COPILOT_SHOW_ENV` names. With `FAKE_COPILOT_REVIEW_WAIT` set the review never ends on its own.
  *
  * A prompt that asks to check a change against the repo's rules (ADR-234) is answered like a model that reads them: in
  * every rule file the prompt lists, read from the folder it names, a line `Never add \`<text>\`` is a rule, and each
  * added line of the diff file that holds `<text>` is a violation in the format the prompt asks for, quoting the rule;
  * without one it answers that it found none. The answer ends with the rule files it read and its arguments.
+ *
+ * Like Copilot CLI over ACP, a review or a check asks before it reads a file outside its working directory, whatever
+ * `--add-dir` says (`contract/auto-review.contract.ts`): a `read` approval named "Access paths outside trusted
+ * directories" with the file's path; refused, it ends the turn without an answer.
  *
  * Like Copilot CLI it answers `session/new` and `session/load` with the agent's modes (Agent, Plan, Autopilot), offers two slash commands
  * at once, switches the mode on `session/set_config_option`, in Plan mode runs no tool and answers with
@@ -35,6 +39,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
+import { isInside } from "../../src/infra/path-inside.ts";
 import { recordUsage } from "../support/copilot-usage-receipt.ts";
 
 /** The command of every turn; the tests look for it in the approval and the conversation. */
@@ -178,7 +183,7 @@ export function serveAcp(o: FakeAcpOptions): void {
     history.push({ sessionUpdate: "user_message_chunk", content: { type: "text", text } });
     writeFileSync(conversationFile(sessionId), JSON.stringify(history));
     if (text.startsWith("/review")) void review(sessionId, text, turn);
-    else if (text.startsWith("Check whether a change keeps the written rules")) rulesCheck(sessionId, text, turn);
+    else if (text.startsWith("Check whether a change keeps the written rules")) void rulesCheck(sessionId, text, turn);
     else if (mode === PLAN_MODE) {
       update(sessionId, {
         sessionUpdate: "agent_message_chunk",
@@ -235,8 +240,14 @@ export function serveAcp(o: FakeAcpOptions): void {
     if (process.env.FAKE_COPILOT_REVIEW_WAIT !== undefined) return;
     const allowed = o.allowAllTools || (await permission(sessionId, `call_${++calls}_0`, SHELL_TOOL.call));
     if (turn.cancelled) return;
-    const diffFile = /in the file `([^`]+)`/.exec(text)?.[1] ?? "";
-    const added = firstAddedLine(existsSync(diffFile) ? readFileSync(diffFile, "utf8") : "");
+    const diffFile = process.env.FAKE_COPILOT_REVIEW_FILE ?? /in the file `([^`]+)`/.exec(text)?.[1] ?? "";
+    const diff = await readOutside(sessionId, diffFile);
+    if (turn.cancelled) return;
+    if (diff === undefined) {
+      turn.end("end_turn");
+      return;
+    }
+    const added = firstAddedLine(diff);
     const issue = added
       ? [
           `## Issue: Fake finding in ${added.path}`,
@@ -257,17 +268,48 @@ export function serveAcp(o: FakeAcpOptions): void {
     turn.end("end_turn");
   }
 
-  function rulesCheck(sessionId: string, text: string, turn: { end: (stopReason: string) => void }): void {
+  async function rulesCheck(sessionId: string, text: string, turn: { end: (stopReason: string) => void }): Promise<void> {
     if (process.env.FAKE_COPILOT_REVIEW_WAIT !== undefined) return;
-    const diffFile = /in the file `([^`]+)`/.exec(text)?.[1] ?? "";
-    const rulesDir = /copied into the folder `([^`]+)`/.exec(text)?.[1] ?? "";
     const ruleFiles = [...text.matchAll(/^- (.+)$/gm)].map((match) => match[1] ?? "");
-    const added = addedLines(existsSync(diffFile) ? readFileSync(diffFile, "utf8") : "");
-    const issues = ruleFiles.flatMap((file) => violations(file, readFileSync(join(rulesDir, ...file.split("/")), "utf8"), added));
-    const answer = issues.length > 0 ? issues.join("\n\n") : "No rule violations found.";
-    const about = [`Rules read: ${ruleFiles.join(", ")}`, ...o.args.map((a) => `Argument: ${a}`)].join("\n");
-    update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: `${answer}\n\n${about}` } });
+    const read = await readCheckInputs(sessionId, text, ruleFiles);
+    if (read !== undefined) {
+      const added = addedLines(read.diff);
+      const issues = read.rules.flatMap(([file, content]) => violations(file, content, added));
+      const answer = issues.length > 0 ? issues.join("\n\n") : "No rule violations found.";
+      const about = [`Rules read: ${ruleFiles.join(", ")}`, ...o.args.map((a) => `Argument: ${a}`)].join("\n");
+      update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: `${answer}\n\n${about}` } });
+    }
     turn.end("end_turn");
+  }
+
+  /** The diff and the rule files a check reads, by the paths its prompt names; `undefined` once a read is refused. */
+  async function readCheckInputs(
+    sessionId: string,
+    text: string,
+    ruleFiles: readonly string[],
+  ): Promise<{ diff: string; rules: [string, string][] } | undefined> {
+    const rulesDir = /copied into the folder `([^`]+)`/.exec(text)?.[1] ?? "";
+    const diff = await readOutside(sessionId, /in the file `([^`]+)`/.exec(text)?.[1] ?? "");
+    if (diff === undefined) return undefined;
+    const rules: [string, string][] = [];
+    for (const file of ruleFiles) {
+      const content = await readOutside(sessionId, join(rulesDir, ...file.split("/")));
+      if (content === undefined) return undefined;
+      rules.push([file, content]);
+    }
+    return { diff, rules };
+  }
+
+  /**
+   * A file the review reads, `""` for one that is not there; outside the working directory only after an approval, as
+   * Copilot CLI asks for it, and `undefined` when that is refused.
+   */
+  async function readOutside(sessionId: string, path: string): Promise<string | undefined> {
+    if (!isInside(process.cwd(), path)) {
+      const read = { title: "Access paths outside trusted directories", kind: "read", rawInput: { path }, locations: [{ path }] };
+      if (!(await permission(sessionId, `call_${++calls}_0`, read))) return undefined;
+    }
+    return existsSync(path) ? readFileSync(path, "utf8") : "";
   }
 
   async function permission(sessionId: string, toolCallId: string, tool: FakeToolCall): Promise<boolean> {

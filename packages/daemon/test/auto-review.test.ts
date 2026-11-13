@@ -80,11 +80,32 @@ describe.skipIf(process.versions.bun === undefined)("an automatic review of a ta
       "--disallow-temp-dir",
     ])
       expect(review.text).toContain(`Argument: ${argument}`);
-    expect(review.text).toContain(`Argument: --add-dir=${join(daemon.home, "auto-reviews", "code", task.id)}`);
+    // The diff is outside the worktree: the daemon approved reading it, which the message does not count as refused.
+    expect(review.text).not.toContain("--add-dir");
     expect(review.text).not.toContain("--allow-all-tools");
     // Not a session: nobody sees or steers it, and the diff's folder goes with it.
     expect(daemon.facade.agents.sessions().sessions).toHaveLength(sessionsBefore);
     expect(existsSync(join(daemon.home, "auto-reviews", "code", task.id))).toBe(false);
+  });
+
+  test("a reviewer refused reading the diff, which then finds nothing, fails instead of reporting no findings", async () => {
+    const task = await taskWithChange("add a cart fee");
+    // A file outside the worktree and the review's folder stands for a diff the reviewer could not read.
+    const elsewhere = join(daemon.projects, "..", "not-the-diff.patch");
+    writeFileSync(elsewhere, "+export const fee = 1;\n");
+    process.env.FAKE_COPILOT_REVIEW_FILE = elsewhere;
+    try {
+      await daemon.post(autoReviewApi.start, { task: task.id });
+      const review = await settled(task.id);
+
+      expect(review).toMatchObject({
+        state: "failed",
+        findings: [],
+        message: `The review did not finish: the reviewer was refused what it asked for and found nothing, so the change is not known to be fine. Refused: Make a file; Access paths outside trusted directories: ${elsewhere}`,
+      });
+    } finally {
+      delete process.env.FAKE_COPILOT_REVIEW_FILE;
+    }
   });
 
   test("a task without changes has nothing to review", async () => {
