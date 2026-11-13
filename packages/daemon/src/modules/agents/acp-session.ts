@@ -392,14 +392,19 @@ export class AcpSession implements AgentSession {
     this.#infoChanged(this.#info.settings(ConfigOptionsResult.safeParse(result).data?.configOptions));
   }
 
+  /** Refuses an approval of the plan while the session has ended or a turn runs, since a plan still being written is not the one the user read. */
+  assertPlanApprovable(): void {
+    if (this.#finished) throw new DomainError("bad_request", "the session has ended");
+    if (this.#switchingMode || this.#turn !== undefined || this.#queued.length > 0)
+      throw new DomainError("bad_request", "the agent is still working; approve the plan once its turn ends");
+  }
+
   /**
    * The user approved the plan the agent wrote in Plan mode (ADR-229): the agent switches to Agent mode and gets
    * `prompt` as the user's message. Refused while a turn runs, since a plan still being written is not the one the user read.
    */
   async approvePlan(prompt: string): Promise<void> {
-    if (this.#finished) throw new DomainError("bad_request", "the session has ended");
-    if (this.#switchingMode || this.#turn !== undefined || this.#queued.length > 0)
-      throw new DomainError("bad_request", "the agent is still working; approve the plan once its turn ends");
+    this.assertPlanApprovable();
     // Held like a start that is not ready: a message written during the switch waits behind the approval, so no turn
     // runs between the modes and the approval is the first thing the agent reads in Agent mode.
     this.#switchingMode = true;

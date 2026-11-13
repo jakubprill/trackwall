@@ -9,8 +9,8 @@ import { FAKE_ACP_PLAN } from "./fixtures/fake-copilot-acp.ts";
 import { makeAgents, waitFor } from "./support/agents.ts";
 import { makeRepo } from "./support/git-repo.ts";
 
-// "Plan first" for a task (ADR-229): its agent starts in Copilot CLI's Plan mode and the user approves the plan before
-// it changes anything; the fake's ACP mode answers with a plan and runs no tool in Plan mode (`contract/acp-session.contract.ts`
+// "Plan first" for a task (ADR-229): its agent starts in Copilot CLI's Plan mode, asking before every tool also without
+// approvals, and the user approves the plan before it changes anything; the fake's ACP mode answers with a plan and runs no tool in Plan mode (`contract/acp-session.contract.ts`
 // checks the real Copilot CLI's refusal).
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -79,23 +79,53 @@ describe.skipIf(process.versions.bun === undefined)("a task that plans first (fa
     await agents.stop(session);
   }, 60_000);
 
-  test("approving the plan switches the agent to Agent mode, sends it the approval as the user's message, and its tools run again", async () => {
+  test("approving the plan of a task without approvals starts its session again with the conversation, in Agent mode without questions, with the approval as the user's message", async () => {
     const { agents, home } = startAgents();
     const task = await agents.createTask("shop", "Fix the login", { view: "conversation", approvals: "auto", planFirst: true });
-    const session = sessionOf(agents, task.id);
-    await turnEnded(agents, session);
-    const view = conversationOf(agents, session);
+    const planning = sessionOf(agents, task.id);
+    await turnEnded(agents, planning);
 
     const approved = await agents.approvePlan(task.id);
 
     expect(approved.plan).toBe("approved");
     expect(JSON.parse(readFileSync(join(home, "tasks.json"), "utf8")).tasks[0]).toMatchObject({ plan: "approved" });
+    const implementing = sessionOf(agents, task.id);
+    expect(implementing).not.toBe(planning);
+    const view = conversationOf(agents, implementing);
     await view.until(() => view.entries().some((e) => e.kind === "tool"), "the implementation's tool");
-    await turnEnded(agents, session);
+    await turnEnded(agents, implementing);
     expect(view.mode()).toBe(AGENT_MODE);
-    const users = view.entries().filter((e) => e.kind === "user");
-    expect(users.at(-1)).toMatchObject({ kind: "user", text: PLAN_APPROVED_MESSAGE });
+    expect(
+      view
+        .entries()
+        .filter((e) => e.kind === "user")
+        .at(-1),
+    ).toMatchObject({ kind: "user", text: PLAN_APPROVED_MESSAGE });
+    // The fake asks before its tool unless it was started with --allow-all-tools.
+    expect(agents.sessions().sessions.find((s) => s.id === implementing)?.dialog).toBeNull();
     await expect(agents.approvePlan(task.id)).rejects.toThrow("no plan waiting for approval");
+    view.detach();
+    await agents.stop(implementing);
+  }, 60_000);
+
+  test("approving the plan of a task that asks switches its running session to Agent mode, where its tool asks", async () => {
+    const { agents } = startAgents();
+    const task = await agents.createTask("shop", "Fix the login", { view: "conversation", approvals: "ask", planFirst: true });
+    const session = sessionOf(agents, task.id);
+    await turnEnded(agents, session);
+    const view = conversationOf(agents, session);
+
+    await agents.approvePlan(task.id);
+
+    expect(sessionOf(agents, task.id)).toBe(session);
+    await waitFor(agents, session, (s) => s.dialog?.kind === "approval", "the tool's approval");
+    expect(view.mode()).toBe(AGENT_MODE);
+    expect(
+      view
+        .entries()
+        .filter((e) => e.kind === "user")
+        .at(-1),
+    ).toMatchObject({ kind: "user", text: PLAN_APPROVED_MESSAGE });
     view.detach();
     await agents.stop(session);
   }, 60_000);
@@ -111,9 +141,10 @@ describe.skipIf(process.versions.bun === undefined)("a task that plans first (fa
     expect(agents.task(task.id)).toMatchObject({ summary: null, inReview: false });
 
     await agents.approvePlan(task.id);
-    await turnEnded(agents, session);
-    expect(await agents.reportSummary(session, report)).toMatchObject({ inReview: true });
-    await agents.stop(session);
+    const implementing = sessionOf(agents, task.id);
+    await turnEnded(agents, implementing);
+    expect(await agents.reportSummary(implementing, report)).toMatchObject({ inReview: true });
+    await agents.stop(implementing);
   }, 60_000);
 
   test("a resume while the plan waits goes on in Plan mode, also by a new daemon; after the approval it goes on in Agent mode", async () => {
@@ -131,8 +162,9 @@ describe.skipIf(process.versions.bun === undefined)("a task that plans first (fa
     await planningView.until(() => planningView.mode() === PLAN_MODE, "the Plan mode");
     planningView.detach();
     await restarted.agents.approvePlan(task.id);
-    await turnEnded(restarted.agents, planning);
-    await restarted.agents.stop(planning);
+    const approved = sessionOf(restarted.agents, task.id);
+    await turnEnded(restarted.agents, approved);
+    await restarted.agents.stop(approved);
 
     await restarted.agents.resumeTask(task.id);
     const implementing = sessionOf(restarted.agents, task.id);
@@ -169,9 +201,10 @@ describe.skipIf(process.versions.bun === undefined)("a task that plans first (fa
     expect(agents.task(task.id).plan).toBe("planning");
 
     await agents.approvePlan(task.id);
-    await turnEnded(agents, session);
-    await agents.setMode(session, PLAN_MODE);
-    await agents.stop(session);
+    const implementing = sessionOf(agents, task.id);
+    await turnEnded(agents, implementing);
+    await agents.setMode(implementing, PLAN_MODE);
+    await agents.stop(implementing);
   }, 60_000);
 
   test("Plan first in a terminal is refused before a worktree exists", async () => {

@@ -35,6 +35,7 @@ import {
 } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
+import { AGENT_MODE, PLAN_MODE } from "./acp-session-info.ts";
 import { approvalArgs } from "./copilot-command.ts";
 import type { LspServer } from "./copilot-plugin.ts";
 import { SANDBOX_ARG } from "./copilot-sandbox.ts";
@@ -129,8 +130,11 @@ export type TaskLaunch = { repo: string; cwd: string; task: string; args: readon
       view: "conversation";
       load: string | undefined;
       firstMessage: string | undefined;
-      /** Whether the agent starts in Plan mode, before the first message: its plan waits for approval (ADR-229). */
-      planMode: boolean;
+      /**
+       * The mode the agent switches to before the first message: Plan while its plan waits for approval, Agent once the
+       * plan is approved, as Copilot CLI loads a conversation in the mode it was left in (ADR-229); `undefined` without a plan.
+       */
+      mode: string | undefined;
     }
 );
 
@@ -771,6 +775,23 @@ export class AgentTasks {
     return view(approved);
   }
 
+  /**
+   * The user approved the plan of a task without approvals (ADR-229 addendum), whose session the caller has stopped: it
+   * planned asking before every tool, so it starts again with its conversation, now in Agent mode without questions,
+   * and gets `message` first.
+   */
+  implementPlan(id: string, message: string): Promise<Task> {
+    const task = this.#planWaiting(id);
+    return this.#exclusive(id, async () => {
+      this.#refuseRunning(task, "implementing its plan");
+      this.#closeSessions(task);
+      const approved: KnownTask = { ...task, plan: "approved" };
+      this.#save(this.#tasks.map((t) => (t.id === id ? approved : t)));
+      await this.#launch(approved, "resume", message);
+      return view(approved);
+    });
+  }
+
   /** The task, whose plan waits for the user's approval (ADR-229); `bad_request` otherwise. */
   assertPlanWaits(id: string): void {
     this.#planWaiting(id);
@@ -1204,8 +1225,11 @@ export class AgentTasks {
     }
   }
 
-  /** The task's first session with its prompt (`new`), or one that goes on with its conversation (`resume`). */
-  async #launch(task: KnownTask, start: "new" | "resume"): Promise<void> {
+  /**
+   * The task's first session with its prompt (`new`), or one that goes on with its conversation (`resume`), in the
+   * conversation view with `message` as the first message after the conversation loads.
+   */
+  async #launch(task: KnownTask, start: "new" | "resume", message?: string): Promise<void> {
     // The model, the approvals mode and the sandbox on every start, the first and each resume: Copilot CLI would
     // otherwise resume on its default model, ask again and leave the sandbox (ADR-98, ADR-105, ADR-181).
     const sandboxArgs = task.sandbox ? [SANDBOX_ARG] : [];
@@ -1213,7 +1237,9 @@ export class AgentTasks {
       repo: task.repo,
       cwd: task.worktree,
       task: task.id,
-      args: [...modelArgs(task.model), ...approvalArgs(task.approvals), ...sandboxArgs],
+      // While its plan waits the agent asks before every tool, also with auto approvals: Plan mode refuses only the
+      // changes Copilot CLI recognises, not a script that writes (ADR-229 addendum).
+      args: [...modelArgs(task.model), ...approvalArgs(task.plan === "planning" ? "ask" : task.approvals), ...sandboxArgs],
     };
     if (task.view === "terminal") {
       // `=` instead of a separate argument, so that a prompt starting with `-` is not a Copilot CLI option.
@@ -1234,10 +1260,11 @@ export class AgentTasks {
     // A task whose first start never learned its conversation's id starts the conversation again from the prompt.
     const load = start === "resume" ? (task.conversation ?? undefined) : undefined;
     // A plan that waits for approval is written in Plan mode at every start, a resume and a restart included (ADR-229).
-    const planMode = task.plan === "planning";
-    const opening = planMode ? planFirstMessage(task.prompt) : task.prompt;
-    const firstMessage = load === undefined ? opening : undefined;
-    const conversation = await this.#deps.sessions.launch({ ...place, view: "conversation", load, firstMessage, planMode });
+    const planning = task.plan === "planning";
+    const opening = planning ? planFirstMessage(task.prompt) : task.prompt;
+    const firstMessage = load === undefined ? opening : message;
+    const mode = planning ? PLAN_MODE : task.plan === "approved" ? AGENT_MODE : undefined;
+    const conversation = await this.#deps.sessions.launch({ ...place, view: "conversation", load, firstMessage, mode });
     if (conversation === undefined || conversation === task.conversation) return;
     // Saved at once: the next resume, even after a daemon crash, must load this conversation, not start another one.
     this.#save(this.#tasks.map((t) => (t.id === task.id ? { ...t, conversation } : t)));

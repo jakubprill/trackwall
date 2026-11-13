@@ -1346,7 +1346,7 @@ export class Agents {
       args,
       load: start.load,
       firstMessage: start.firstMessage,
-      mode: start.planMode ? PLAN_MODE : undefined,
+      mode: start.mode,
     });
     this.#listed(started);
     return started.session.conversation;
@@ -1502,14 +1502,21 @@ export class Agents {
 
   /**
    * The user approves the plan of task `id` (ADR-229): its running session switches to Agent mode and gets the prompt
-   * to implement the plan, and the task's plan counts as approved from then on, so a resume starts in Agent mode.
+   * to implement the plan, and the task's plan counts as approved from then on, so a resume starts in Agent mode. A task
+   * without approvals planned asking before every tool, so its session starts again with its conversation instead.
    */
   async approvePlan(id: string): Promise<Task> {
     this.#tasks.assertPlanWaits(id);
     const running = this.#sessions.runningOfTask(id);
     if (!(running instanceof AcpSession)) throw new DomainError("bad_request", "the task has no running conversation; resume it first");
-    await running.approvePlan(PLAN_APPROVED_MESSAGE);
-    return this.#tasks.planApproved(id);
+    if (this.#tasks.task(id).approvals === "ask") {
+      await running.approvePlan(PLAN_APPROVED_MESSAGE);
+      return this.#tasks.planApproved(id);
+    }
+    // A task without approvals planned with questions, and Copilot CLI takes `--allow-all-tools` only at its start.
+    running.assertPlanApprovable();
+    await this.#deps.procs.stop(sessionOwner(running.id));
+    return this.#tasks.implementPlan(id, PLAN_APPROVED_MESSAGE);
   }
 
   /** Stops the turn of a session in the conversation view (ADR-107). */
