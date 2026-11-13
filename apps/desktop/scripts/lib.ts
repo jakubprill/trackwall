@@ -58,12 +58,16 @@ export function cargoVersion(path: string): string {
   return parseFile(path, CargoManifest, Bun.TOML.parse).package.version;
 }
 
-/** The version must be the same in the daemon, Tauri and Cargo: the shell compares it with `/api/health`. */
+/**
+ * The version must be the same in the daemon, Tauri and Cargo: the shell compares it with `/api/health`. The VS Code
+ * extension carries it too, so that the `.vsix` of a release is named and versioned with the app it belongs to.
+ */
 function versions(): Record<string, string> {
   const manifests = {
     "packages/daemon/package.json": jsonVersion,
     "apps/desktop/src-tauri/tauri.conf.json": jsonVersion,
     "apps/desktop/src-tauri/Cargo.toml": cargoVersion,
+    "apps/vscode/package.json": jsonVersion,
   };
   return Object.fromEntries(Object.entries(manifests).map(([path, read]) => [path, read(join(REPO, ...path.split("/")))]));
 }

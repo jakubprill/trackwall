@@ -120,7 +120,7 @@ The extension in `apps/vscode` is one CommonJS bundle with `@trackwall/protocol`
 
 ```sh
 pnpm --filter @trackwall/vscode package   # apps/vscode/out/trackwall-<version>.vsix
-code --install-extension apps/vscode/out/trackwall-0.1.0.vsix
+code --install-extension apps/vscode/out/trackwall-<version>.vsix   # the app's version; each release also publishes it
 ```
 
 Then turn on "VS Code extension" in Settings › App of the Trackwall you run (with `pnpm dev`, its state folder is `.trackwall-dev` in the repo: set "Trackwall: State Folder" in VS Code to it). The extension has its own version in `apps/vscode/package.json`, not the release's; it is not published to the Marketplace.

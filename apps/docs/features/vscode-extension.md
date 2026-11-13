@@ -25,13 +25,13 @@ The extension gets its own read-only token from Trackwall, separate from the one
 ## Use it
 
 1. In Trackwall, open "Settings" (Ctrl+, or ⌘, on macOS), choose "App" and tick "Let the VS Code extension see the sessions" under "VS Code extension".
-2. In VS Code, run "Extensions: Install from VSIX…" from the Command Palette and pick the `trackwall-<version>.vsix` file.
+2. Download `trackwall-<version>.vsix` of your Trackwall version from [Releases](https://github.com/jakubprill/trackwall/releases), next to the app's archives. In VS Code, run "Extensions: Install from VSIX…" from the Command Palette and pick that file.
 3. Look at the status bar: within two seconds it shows what waits for you. Click it to open the "Trackwall" side bar.
 4. Click a session in the side bar to open it in Trackwall.
 
 ## Good to know
 
-- The extension is not in the VS Code Marketplace yet: you install it from the `.vsix` file, which is built from the source with `pnpm --filter @trackwall/vscode package`.
+- The extension is not in the VS Code Marketplace yet, so VS Code does not update it: after you update Trackwall, download the `.vsix` of the new version and install it the same way. In a terminal, `gh release download v<version> -R jakubprill/trackwall -p "*.vsix"` downloads it and `code --install-extension trackwall-<version>.vsix` installs it; its SHA-256 sum is in the release's `SHA256SUMS.txt`.
 - In a dev container, install the extension in the container's VS Code window: it then runs in the container, next to the Trackwall that runs there. A click on a session still opens Trackwall's window on your computer; if that window is connected to another Trackwall than the one in the container, it says it does not have the session instead of opening another one.
 - When Trackwall keeps its state somewhere else than `.trackwall` in your home folder, set "Trackwall: State Folder" in VS Code's settings (or `TRACKWALL_HOME`), so the extension finds `viewer.json`.
 - The extension talks only to Trackwall on `127.0.0.1` of the machine it runs on, never through a proxy, and sends its token only to the Trackwall start that wrote it.

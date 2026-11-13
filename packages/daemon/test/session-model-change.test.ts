@@ -186,6 +186,11 @@ describe.skipIf(process.versions.bun === undefined)("another model for a session
       expect(failed.modelInUse).toBe("claude-sonnet-5.5");
       expect(modelSwitch(failed)).toBeNull();
       expect(failed.usage).toBeNull();
+      // Copilot CLI 1.0.110 sends only the `sessionStart` of the starting prompt, no end of the turn: the failed call
+      // in the event log ends `Working` and the session waits for you.
+      const waiting = await waitFor(agents, session.id, (s) => s.state?.state !== "Working", "the end of the failed turn", 30_000);
+      expect(waiting.state).toMatchObject({ state: "Error", source: "log" });
+      expect(waiting.needsAttention).toBe(true);
 
       const restarted = await account.post(agentsApi.restart, { session: session.id, model: "claude-opus-5.5" });
       expect(restarted.modelError).toBeNull();
