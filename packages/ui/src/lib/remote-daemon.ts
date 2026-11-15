@@ -19,7 +19,7 @@ export async function remoteDaemonPort(): Promise<number | null> {
     .parse(await invoke<unknown>(PORT_COMMAND));
 }
 
-/** Checks the daemon at the address of its page (`http://127.0.0.1:<port>/#token=…`), saves it and restarts the app. */
+/** Checks the daemon at the address of its page (`http://127.0.0.1:<port>/#code=…`), saves it and restarts the app. */
 export function switchToRemoteDaemon(address: string): Promise<void> {
   return invoke(USE_REMOTE_COMMAND, { address });
 }

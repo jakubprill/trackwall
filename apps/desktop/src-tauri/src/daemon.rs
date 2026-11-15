@@ -4,7 +4,7 @@
 //! HTTP is written by hand on `TcpStream` here, because we only talk to our own daemon on loopback,
 //! and all the traffic is a few short requests. An HTTP client with TLS and async would be bigger than the rest of the shell.
 
-use crate::remote_daemon::RemoteDaemon;
+use crate::remote_daemon::{self, RemoteDaemon};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::{Read, Write};
@@ -231,6 +231,24 @@ pub fn connect_remote(remote: &RemoteDaemon) -> Result<Connection, RemoteRefusal
              Paste the address with its current token."
         ))),
         (status, _) => Err(RemoteRefusal::Refused(format!("The daemon at 127.0.0.1:{port} answered {status} to the token check."))),
+    }
+}
+
+/// Trades a one-time page code (ADR-161) for the token. `PAGE_CODE_EXCHANGE_PATH` in protocol.
+const PAGE_CODE_EXCHANGE_PATH: &str = "/api/page-code/exchange";
+
+/// The remote daemon with its token for the one-time code of a pasted address: the code is the bearer of this one request,
+/// and the daemon closes it whatever the answer.
+pub fn exchange_page_code(port: u16, code: &str) -> Result<RemoteDaemon, String> {
+    let (status, body) = http(port, DaemonLocation::Remote, "POST", PAGE_CODE_EXCHANGE_PATH, Some(code)).map_err(String::from)?;
+    let answer = serde_json::from_str::<serde_json::Value>(&body).unwrap_or_default();
+    if status != 200 {
+        let refused = answer["error"]["message"].as_str().map(str::to_owned);
+        return Err(refused.unwrap_or_else(|| format!("The daemon at 127.0.0.1:{port} answered {status} to the address's code.")));
+    }
+    match answer["data"]["token"].as_str() {
+        Some(token) if remote_daemon::is_token(token) => Ok(RemoteDaemon { port, token: token.to_owned() }),
+        _ => Err(format!("The daemon at 127.0.0.1:{port} gave no token for the address's code.")),
     }
 }
 
@@ -577,6 +595,46 @@ mod tests {
         };
         assert!(reason.starts_with(&format!("Something accepted the connection at 127.0.0.1:{port}, but no answer came")), "{reason}");
         assert!(reason.contains("port forward"), "{reason}");
+    }
+
+    /// A daemon on a free port that answers every request with `reply` and hands over each request it read.
+    fn answering(reply: String) -> (u16, std::sync::mpsc::Receiver<String>) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind 127.0.0.1:0");
+        let port = listener.local_addr().expect("listening address").port();
+        let (sent, requests) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().flatten() {
+                let mut request = [0u8; 2048];
+                let read = stream.read(&mut request).unwrap_or(0);
+                let _ = sent.send(String::from_utf8_lossy(&request[..read]).into_owned());
+                let _ = stream.write_all(reply.as_bytes());
+            }
+        });
+        (port, requests)
+    }
+
+    #[test]
+    fn a_one_time_code_is_traded_for_the_token_with_the_code_as_the_bearer_of_that_request() {
+        let token = "Zm9vYmFyLWJhei1xdXV4LTAxMjM0NTY3ODktYWJjZGVm";
+        let body = format!(r#"{{"ok":true,"data":{{"token":"{token}"}}}}"#);
+        let (port, requests) = answering(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}", body.len()));
+
+        assert_eq!(exchange_page_code(port, "the-code"), Ok(RemoteDaemon { port, token: token.into() }));
+        let request = requests.recv().expect("the request");
+        assert!(request.starts_with("POST /api/page-code/exchange HTTP/1.1\r\n"), "{request}");
+        assert!(request.contains("\r\nAuthorization: Bearer the-code\r\n"), "{request}");
+    }
+
+    #[test]
+    fn a_spent_code_is_told_with_the_daemons_reason_and_a_token_that_could_add_a_header_is_refused() {
+        let (port, _) = answering(
+            "HTTP/1.1 401 Unauthorized\r\nContent-Length: 74\r\n\r\n{\"ok\":false,\"error\":{\"code\":\"unauthorized\",\"message\":\"code used already\"}}".into(),
+        );
+        assert_eq!(exchange_page_code(port, "spent"), Err("code used already".to_owned()));
+
+        let (port, _) = answering("HTTP/1.1 200 OK\r\nContent-Length: 37\r\n\r\n{\"ok\":true,\"data\":{\"token\":\"a\\r\\nb\"}}".into());
+        let refused = exchange_page_code(port, "code").expect_err("a token with a line break was taken");
+        assert!(refused.contains("gave no token"), "{refused}");
     }
 
     #[test]

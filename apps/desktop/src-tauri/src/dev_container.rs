@@ -618,7 +618,7 @@ async fn exclusive(
     match outcome {
         Outcome::OtherVersion(container) => Ok(Some(OtherVersion { container, app: daemon::VERSION })),
         Outcome::Connect(remote) => {
-            remote_daemon::refuse_own_daemon(state, &remote)?;
+            remote_daemon::refuse_own_daemon(state, remote.port)?;
             unless_cancelled(&starting.cancelled, cancelled_message)?;
             remote_daemon::switch_to(app, &remote).map(|()| None)
         }

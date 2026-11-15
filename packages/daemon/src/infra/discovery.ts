@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { closeSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeSync } from "node:fs";
 import { join } from "node:path";
-import { DAEMON_FILE, DaemonFile, HEALTH_PATH, HealthResult } from "@trackwall/protocol";
+import { DAEMON_FILE, DaemonFile, HEALTH_PATH, HealthResult, PAGE_CODE_PATH, PageCodeResult } from "@trackwall/protocol";
 import { writeFileAtomic } from "./atomic-write.ts";
 import { loopbackRequest } from "./loopback.ts";
 
@@ -25,11 +25,25 @@ export function newToken(): string {
 }
 
 /**
- * The address of the daemon's page with its token, which the page moves out of the address bar into storage (§5.2).
- * The token goes in the fragment: it does not reach the server, logs or the Referer header.
+ * The address of the daemon's page with a one-time code from the running daemon `file` describes (ADR-161, §5.2), which
+ * the page trades for the token: a browser keeps every address it opened in its history, and the code there is dead
+ * after its first use or a minute. The code goes in the fragment: it does not reach the server, logs or the Referer header.
  */
-export function daemonPageAddress(file: Pick<DaemonFile, "port" | "token">): string {
-  return `http://127.0.0.1:${file.port}/#token=${file.token}`;
+export async function daemonPageAddress(file: Pick<DaemonFile, "port" | "token">): Promise<string> {
+  const res = await loopbackRequest(file.port, PAGE_CODE_PATH, { method: "POST", token: file.token });
+  let parsed: ReturnType<typeof PageCodeResult.safeParse>;
+  try {
+    parsed = PageCodeResult.safeParse(JSON.parse(res.body));
+  } catch {
+    parsed = PageCodeResult.safeParse(undefined);
+  }
+  if (!parsed.success || !parsed.data.ok) throw new Error(`the daemon on port ${file.port} gave no page code (HTTP ${res.status})`);
+  return pageAddress(file.port, parsed.data.data.code);
+}
+
+/** The page address on `port` with a page code; one place for its form, which the page and the desktop app read. */
+export function pageAddress(port: number, code: string): string {
+  return `http://127.0.0.1:${port}/#code=${code}`;
 }
 
 export function readDaemonFile(home: string): DaemonFile | undefined {

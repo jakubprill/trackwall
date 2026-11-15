@@ -15,6 +15,8 @@ import {
   LogTail,
   logsApi,
   MAX_REPOS_PER_REQUEST,
+  PageCodeExchangeResult,
+  PageCodeResult,
   Repo,
   RepoGraph,
   RepoList,
@@ -184,6 +186,27 @@ describe("api", () => {
     const res = await authed("/api/nope");
     expect(res.status).toBe(404);
     expect(JSON.parse(res.body)).toMatchObject({ ok: false, error: { code: "not_found" } });
+  });
+
+  test("a page code from the token opens its exchange for the token once, is no token itself, and opens no other route", async () => {
+    expect((await req("/api/page-code", { method: "POST" })).status).toBe(401);
+    const issued = PageCodeResult.parse(JSON.parse((await authed("/api/page-code", { method: "POST" })).body));
+    if (!issued.ok) throw new Error("no page code");
+    expect(issued.data.expiresInMs).toBe(60_000);
+    const code = issued.data.code;
+
+    expect((await req("/api/daemon/info", { token: code })).status).toBe(401);
+    const exchange = (opts: LoopbackOptions = {}) => req("/api/page-code/exchange", { method: "POST", token: code, ...opts });
+    expect((await exchange({ headers: { origin: "https://evil.example" } })).status).toBe(403);
+    expect(PageCodeExchangeResult.parse(JSON.parse((await exchange()).body))).toEqual({ ok: true, data: { token: TOKEN } });
+
+    const again = await exchange();
+    expect(again.status).toBe(401);
+    expect(JSON.parse(again.body)).toMatchObject({
+      ok: false,
+      error: { code: "unauthorized", message: expect.stringContaining("used already") },
+    });
+    expect((await req("/api/page-code/exchange", { method: "POST", token: "x".repeat(43) })).status).toBe(401);
   });
 
   test("shutdown answers, then triggers the stop", async () => {

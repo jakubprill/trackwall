@@ -57,7 +57,7 @@ describe.each(RUNTIMES)("daemon process under %s", (name, runtime) => {
     }
   }, 20_000);
 
-  test("address prints the running daemon's page address with its token, and fails when none runs", async () => {
+  test("address prints the running daemon's page address with a one-time code instead of its token, and fails when none runs", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-e2e-"));
     const env = { ...process.env, TRACKWALL_HOME: home };
     const none = Bun.spawn([...runtime, MAIN, "address"], { env, stdout: "pipe", stderr: "pipe" });
@@ -70,7 +70,16 @@ describe.each(RUNTIMES)("daemon process under %s", (name, runtime) => {
       const file = await waitFor(() => readDaemonFile(home), daemon);
       const address = Bun.spawn([...runtime, MAIN, "address"], { env, stdout: "pipe", stderr: "pipe" });
       expect(await address.exited).toBe(0);
-      expect(await new Response(address.stdout).text()).toBe(`http://127.0.0.1:${file.port}/#token=${file.token}\n`);
+      const printed = await new Response(address.stdout).text();
+      expect(printed).not.toContain(file.token);
+      expect(printed).toMatch(new RegExp(`^http://127\\.0\\.0\\.1:${file.port}/#code=[A-Za-z0-9_-]{43}\n$`));
+      expect(await new Response(address.stderr).text()).toContain("once, within 60 seconds");
+      // What the browser's history keeps: worth the token once, then nothing.
+      const code = printed.trim().split("#code=")[1] ?? "";
+      expect((await loopbackRequest(file.port, "/api/daemon/info", { token: code })).status).toBe(401);
+      const exchange = () => loopbackRequest(file.port, "/api/page-code/exchange", { method: "POST", token: code });
+      expect(JSON.parse((await exchange()).body)).toEqual({ ok: true, data: { token: file.token } });
+      expect((await exchange()).status).toBe(401);
       await loopbackRequest(file.port, "/api/daemon/shutdown", { method: "POST", token: file.token });
       expect(await daemon.exited).toBe(0);
     } finally {

@@ -102,7 +102,7 @@ _Avoid_: workspace (that is a separate term, see below)
 The secret from `~/.trackwall/daemon.json` with which the UI, the shell and the stdio bridge authenticate to the API and the MCP server; Trackwall sessions do not get it (ADR-138).
 
 **Page address** (`daemonPageAddress`, `trackwall-daemon address`):
-The address of the daemon's page with the daemon token in its fragment, `http://127.0.0.1:<port>/#token=…`, which opens Trackwall in a browser; the page moves the token out of the address bar into its storage (ADR-161). The desktop app takes the same address for a remote daemon (ADR-130).
+The address of the daemon's page with a page code in its fragment, `http://127.0.0.1:<port>/#code=…`, which opens Trackwall in a browser; the page trades the code for the daemon token and keeps the token in its storage (ADR-161). The desktop app takes the same address for a remote daemon (ADR-130). An older daemon printed the token itself (`#token=…`), which both still take.
 
 **MCP server** (`/mcp`, `createMcpEndpoint`):
 The part of the daemon through which agents read its state with MCP tools; the same port as the API, with the daemon token or a Trackwall session's own token (§5.3, ADR-24, ADR-138).
@@ -118,6 +118,10 @@ _Avoid_: proxy, thin client (without qualification)
 **Session token** (the `x-trackwall-session-token` header in the session's `mcp-config.json` and `hooks.json`, `callerSession`):
 A random token of every Trackwall session, which its Copilot CLI sends to the MCP server and with its hooks (ADR-88, ADR-89) instead of the daemon token; it opens only those two (ADR-138), and by it the daemon knows which session is calling and, for example, stores a summary only in that session's task (ADR-39, §8). An agent outside Trackwall does not have it.
 _Avoid_: task token (an earlier plan; every session has a token, also in a repo root)
+
+**Page code** (`PageCodes`, `PAGE_CODE_PATH`, `PAGE_CODE_EXCHANGE_PATH`, `#code=`; `PageCredential` for a code or an older address's token):
+A one-time code in the page address that `trackwall-daemon address` prints and `--ui` opens, which the page or the desktop app trades once, within a minute, for the daemon token (ADR-161). It stands in the address instead of the token, so the address a browser's history keeps opens nothing later.
+_Avoid_: page token, login code
 
 **Viewer access**, **viewer token** (`ViewerAccess`, `viewerApi`, `viewer.json`, `ViewerFile`):
 Read-only access for a client on this computer that only shows what the sessions are doing, today the VS Code extension (ADR-221). While the user has "VS Code extension" on in Settings › App, the daemon writes its port and a viewer token into `viewer.json`; the token opens the viewer's session list (`ViewerSessionList`) and nothing else. A **viewer** is such a client.

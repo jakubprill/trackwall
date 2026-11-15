@@ -36,6 +36,7 @@ async function startTrackwall(options: Omit<SessionApiOptions, "uiDir"> = ONE_RE
     throw err;
   });
   const origin = `http://127.0.0.1:${daemon.api.port}`;
+  const pageAddress = () => `${origin}/#code=${daemon.api.pageCode()}`;
   const clients: Client[] = [];
   const cspViolations: string[] = [];
   const watched = async (page: Promise<Page>) => {
@@ -48,8 +49,8 @@ async function startTrackwall(options: Omit<SessionApiOptions, "uiDir"> = ONE_RE
   return {
     daemon,
     origin,
-    /** The page address with the token, as `trackwall-daemon address` prints it. */
-    address: `${origin}/#token=${token}`,
+    /** A page address with a new one-time code, as `trackwall-daemon address` prints it (ADR-161). */
+    address: () => pageAddress(),
     /**
      * The page in a browser without a token, as a bookmark opens it after the daemon restarted (ADR-161); in a context of
      * its own, so that a second tab shares its storage.
@@ -61,12 +62,12 @@ async function startTrackwall(options: Omit<SessionApiOptions, "uiDir"> = ONE_RE
       return page;
     },
     /** The main window as the Tauri shell opens it, on Home. */
-    open: async (viewport = VIEWPORT) => openMainWindow(await watched(browser.newPage({ viewport, colorScheme: "dark" })), origin, token),
+    open: async (viewport = VIEWPORT) => openMainWindow(await watched(browser.newPage({ viewport, colorScheme: "dark" })), pageAddress()),
     /** The main window as the Tauri shell shows it: under the window's origin and CSP, connected through the shell. */
     openDesktopWindow: (failingFiles?: RegExp) => openDesktopWindow(browser, { baseUrl: origin, token }, VIEWPORT, failingFiles),
     /** The tray panel (ADR-50): the same UI under `#tray-panel`, at the size of its window. */
     openTrayPanel: async () =>
-      openTrayPanel(await watched(browser.newPage({ viewport: TRAY_PANEL_VIEWPORT, colorScheme: "dark" })), origin, token),
+      openTrayPanel(await watched(browser.newPage({ viewport: TRAY_PANEL_VIEWPORT, colorScheme: "dark" })), origin, pageAddress()),
     agentOf: async (session: string) => {
       const client = await connectSessionClient(daemon.api.port, daemon.home, session);
       clients.push(client);
@@ -108,10 +109,10 @@ export function useTrackwall(options?: Omit<SessionApiOptions, "uiDir">, expecte
   };
 }
 
-/** Loads the UI with the token in the address, as the daemon prints it, and waits until the UI has taken it from there. */
-async function signIn(page: Page, origin: string, token: string): Promise<void> {
-  await page.goto(`${origin}/#token=${token}`);
-  await page.waitForFunction(() => !window.location.hash.includes("token="));
+/** Loads the UI at an address with a one-time code, as the daemon prints it, and waits until the UI has traded it for the token. */
+async function signIn(page: Page, address: string): Promise<void> {
+  await page.goto(address);
+  await page.waitForFunction(() => !window.location.hash.includes("code=") && localStorage.getItem("trackwall.token") !== null);
 }
 
 /**
@@ -119,8 +120,8 @@ async function signIn(page: Page, origin: string, token: string): Promise<void> 
  * CLI draws: the fake does not redraw when the terminal shrinks, as Copilot CLI does, and its approval dialog wrapped
  * over two rows is no dialog the daemon can read.
  */
-async function openMainWindow(page: Page, origin: string, token: string): Promise<Page> {
-  await signIn(page, origin, token);
+async function openMainWindow(page: Page, address: string): Promise<Page> {
+  await signIn(page, address);
   await page.getByRole("button", { name: "Fold the supervisor panel" }).click();
   return page;
 }
@@ -129,8 +130,8 @@ async function openMainWindow(page: Page, origin: string, token: string): Promis
  * The tray panel reads the connection from the tab's storage, so after signing in the tab loads the panel's address,
  * with another query string so that the browser loads the page again instead of only changing the fragment.
  */
-async function openTrayPanel(page: Page, origin: string, token: string): Promise<Page> {
-  await signIn(page, origin, token);
+async function openTrayPanel(page: Page, origin: string, address: string): Promise<Page> {
+  await signIn(page, address);
   await page.goto(`${origin}/?panel#tray-panel`);
   return page;
 }

@@ -32,6 +32,21 @@ export const Health = z.object({
 export type Health = z.infer<typeof Health>;
 export const HealthResult = apiResult(Health);
 
+/**
+ * `POST /api/page-code`, with the daemon token: a one-time code for a page address (`#code=`), which `trackwall-daemon
+ * address` prints and `--ui` opens instead of the token, so that the browser's history holds nothing that lasts (ADR-161).
+ */
+export const PAGE_CODE_PATH = "/api/page-code";
+export const PageCode = z.object({ code: z.string(), expiresInMs: z.number().int().positive() });
+export type PageCode = z.infer<typeof PageCode>;
+export const PageCodeResult = apiResult(PageCode);
+
+/** `POST /api/page-code/exchange`, with a page code as the bearer instead of the token: answers the token, once per code. */
+export const PAGE_CODE_EXCHANGE_PATH = "/api/page-code/exchange";
+export const PageCodeExchange = z.object({ token: z.string() });
+export type PageCodeExchange = z.infer<typeof PageCodeExchange>;
+export const PageCodeExchangeResult = apiResult(PageCodeExchange);
+
 export const DAEMON_INFO_PATH = "/api/daemon/info";
 
 /** `GET /api/daemon/info`: details of the daemon process, needs the token. */

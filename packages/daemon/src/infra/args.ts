@@ -18,8 +18,8 @@ export const USAGE = `trackwall-daemon [options]
 trackwall-daemon mcp-stdio [--home <dir>]
                    stdio bridge to the MCP server of the running daemon (for Copilot CLI)
 trackwall-daemon address [--home <dir>]
-                   print the running daemon's page address with its token (to open it in a browser;
-                   whoever sees the output can use the daemon until it restarts)
+                   print the running daemon's page address with a one-time code (to open it in a browser
+                   or paste it into the desktop app once, within a minute)
 trackwall-daemon container start [--port <n>] [--home <dir>]
                    in a dev container: make sure a daemon runs on the port (default 7700), restarted
                    after a crash, and print how it stands as JSON (trackwall-container start)
@@ -89,7 +89,7 @@ function toInt(value: string | undefined, name: string): number {
 
 /** The `trackwall-daemon` subcommand that starts the Stdio bridge to `/mcp` (§5.3). */
 export const MCP_STDIO_COMMAND = "mcp-stdio";
-/** The `trackwall-daemon` subcommand that prints the running daemon's page address with its token (ADR-161). */
+/** The `trackwall-daemon` subcommand that prints the running daemon's page address with a one-time code (ADR-161). */
 export const ADDRESS_COMMAND = "address";
 const SUBCOMMANDS = [MCP_STDIO_COMMAND, ADDRESS_COMMAND] as const;
 /** The subcommand of `trackwall-daemon` behind `trackwall-container` in a dev container (ADR-164). */
