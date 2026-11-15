@@ -922,7 +922,7 @@ function copilotLogTail(): string {
 }
 
 describe("a task in Copilot CLI's sandbox with the real Copilot CLI (ADR-181)", () => {
-  test("a task without approvals writes and commits in its worktree, and a script it runs cannot write into the user's home, only into the repo's git directory", async () => {
+  test("a task without approvals writes and commits in its worktree, and a script it runs cannot write into the user's home or read a token file there, only write into the repo's git directory", async () => {
     const { agents } = daemon.facade;
     const workspaceFile = join(daemon.home, "workspace.yaml");
     const workspace = readFileSync(workspaceFile, "utf8");
@@ -961,15 +961,20 @@ describe("a task in Copilot CLI's sandbox with the real Copilot CLI (ADR-181)", 
         .slice(-3)
         .flatMap((r) => r.toolResults);
       if (sandboxRefusedEverything(answers)) {
-        expect({ inside: existsSync(join(task.worktree, "inside.txt")), escapes: probe.escapes() }).toEqual({ inside: false, escapes: [] });
+        expect({ inside: existsSync(join(task.worktree, "inside.txt")), escapes: probe.escapes(task.worktree) }).toEqual({
+          inside: false,
+          escapes: [],
+        });
       } else {
         expect({ inside: existsSync(join(task.worktree, "inside.txt")), answers }).toMatchObject({ inside: true });
         const lastCommit = spawnSync("git", ["log", "-1", "--format=%s"], { cwd: task.worktree, encoding: "utf8" }).stdout.trim();
         expect({ lastCommit, answers }).toMatchObject({ lastCommit: "sandboxed" });
         // On Linux the repo's whole git directory is granted for the worktree's commits, hooks and config with it: a
         // gap in §8, pinned here so that a change in Copilot CLI shows.
-        const escapes = probe.escapes();
+        const escapes = probe.escapes(task.worktree);
         expect(escapes).not.toContain("the user's home");
+        // The state folder with the daemon token lies in the user's home, so the task cannot take the token (§8).
+        expect(escapes).not.toContain("a token file in the user's home");
         if (process.platform === "linux") expect(escapes).toEqual(["the repo's git hooks", "the repo's git config"]);
         // What the agent wrote there would run outside the sandbox at the daemon's next git command, so the daemon
         // refuses git in the repo until it is undone (ADR-181 addendum).

@@ -547,13 +547,17 @@ describe("a task in Copilot CLI's sandbox in the conversation view with the real
         .slice(-3)
         .flatMap((r) => r.toolResults);
       if (sandboxRefusedEverything(answers)) {
-        expect({ inside: existsSync(join(task.worktree, "inside.txt")), escapes: probe.escapes() }).toEqual({ inside: false, escapes: [] });
+        expect({ inside: existsSync(join(task.worktree, "inside.txt")), escapes: probe.escapes(task.worktree) }).toEqual({
+          inside: false,
+          escapes: [],
+        });
       } else {
         expect({ inside: existsSync(join(task.worktree, "inside.txt")), answers }).toMatchObject({ inside: true });
         // On Linux the repo's whole git directory is granted for the worktree's commits, hooks and config with it: a
         // gap in §8, pinned here so that a change in Copilot CLI shows.
-        const escapes = probe.escapes();
+        const escapes = probe.escapes(task.worktree);
         expect(escapes).not.toContain("the user's home");
+        expect(escapes).not.toContain("a token file in the user's home");
         if (process.platform === "linux") expect(escapes).toEqual(["the repo's git hooks", "the repo's git config"]);
       }
       await agents.stop(session);
