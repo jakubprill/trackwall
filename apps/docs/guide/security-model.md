@@ -14,6 +14,7 @@ Trackwall runs coding agents on your computer, with your files and your tokens. 
 - The daemon listens only on `127.0.0.1`, so nothing else on the network can reach it.
 - Every request needs a token. The daemon makes a fresh one at each start and keeps it in a file only your user can read; the desktop app hands it to the window.
 - A request from a web page on another address is refused, even with the token, so a website you visit cannot talk to Trackwall through your browser.
+- An address Trackwall prints or opens in a browser carries a one-time code, not the token. The page trades it for the token once, within a minute, so the copy your browser's history keeps, or syncs to other devices, opens nothing later.
 - A website cannot show Trackwall's page inside its own, so it cannot trick you into a click on an approval there.
 - A session gets its own token, which opens only the MCP server and its own hooks, never the rest of the daemon.
 - The [VS Code extension](/features/vscode-extension) gets its own read-only token too, and only after you turn it on: it shows what the sessions are doing and opens nothing else.

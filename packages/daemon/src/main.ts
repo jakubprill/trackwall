@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { type ContainerStartResult, type ContainerUpdateResult, releaseFileUrl } from "@trackwall/protocol";
 import { EventHub } from "./api/event-hub.ts";
 import { sessionHookRequest } from "./api/hooks.ts";
+import { PAGE_CODE_LIFETIME_MS } from "./api/page-codes.ts";
 import { type ApiServer, startApi } from "./api/server.ts";
 import { openServiceProxy, type ServiceProxy } from "./api/service-proxy.ts";
 import { isUiDir } from "./api/static.ts";
@@ -29,7 +30,15 @@ import { containerStart } from "./infra/container-start.ts";
 import { DAEMON_LOG, superviseDaemon } from "./infra/container-supervisor.ts";
 import { applyUpdate, containerUpdate } from "./infra/container-update.ts";
 import { CONTAINER_MARKERS, desktopOpeners, devContainerFolder, hasDesktop, ownContainer } from "./infra/desktop.ts";
-import { daemonPageAddress, newToken, probeRunningDaemon, watchDaemonFile, withStartLock, writeDaemonFile } from "./infra/discovery.ts";
+import {
+  daemonPageAddress,
+  newToken,
+  pageAddress,
+  probeRunningDaemon,
+  watchDaemonFile,
+  withStartLock,
+  writeDaemonFile,
+} from "./infra/discovery.ts";
 import { messageOf } from "./infra/errors.ts";
 import { watchEventLoopStalls } from "./infra/event-loop-stalls.ts";
 import { resolveTrackwallHome, trackwallHome } from "./infra/home.ts";
@@ -182,7 +191,7 @@ async function start(
     void facade.agents.resumeLeftSessions();
     const self = { pid: process.pid, port: api.port, token, startedAt, version: VERSION };
     writeDaemonFile(home, self);
-    return { kind: "started" as const, self };
+    return { kind: "started" as const, self, pageCode: api.pageCode };
   });
 
   if (started.kind === "existing") {
@@ -191,11 +200,11 @@ async function start(
       process.exit(EXIT_OTHER_VERSION_RUNNING);
     }
     log(`daemon ${VERSION} is already running (pid ${started.file.pid}, port ${started.file.port})`);
-    if (args.ui) openUi(desktop, daemonPageAddress(started.file));
+    if (args.ui) await openUi(desktop, () => daemonPageAddress(started.file));
     return;
   }
 
-  const { self } = started;
+  const { self, pageCode } = started;
   watchEventLoopStalls(log);
   stopWatching = watchDaemonFile(home, self, (other) => void shutdown(`daemon.json points to pid ${other.pid}`));
   for (const signal of SHUTDOWN_SIGNALS) {
@@ -205,7 +214,7 @@ async function start(
   log(`trackwall-daemon ${VERSION} at http://127.0.0.1:${self.port} (pid ${process.pid}, ${runtimeInfo().name}, state in ${home})`);
   if (!uiDir) log("no built UI: the API works, but no page will be served (build packages/ui or pass --ui-dir)");
   if (args.ui) {
-    if (uiDir) openUi(desktop, daemonPageAddress(self));
+    if (uiDir) await openUi(desktop, async () => pageAddress(self.port, pageCode()));
     else log("--ui ignored because there is no UI to show");
   }
 }
@@ -222,10 +231,18 @@ function resolveUiDir(explicit: string | undefined): string | undefined {
   return candidates.find(isUiDir);
 }
 
-/** Without a desktop (ADR-120) there is no browser to open; the address is not logged, since it carries the token. */
-function openUi(desktop: boolean, url: string): void {
-  if (desktop) openBrowser(url);
-  else log(`--ui ignored: no desktop to open a browser on; print the address with "trackwall-daemon ${ADDRESS_COMMAND}"`);
+/**
+ * Opens the page with a one-time code (ADR-161). Without a desktop (ADR-120) there is no browser to open; the address is
+ * not logged, since its code opens the token for a minute.
+ */
+async function openUi(desktop: boolean, address: () => Promise<string>): Promise<void> {
+  if (!desktop)
+    return void log(`--ui ignored: no desktop to open a browser on; print the address with "trackwall-daemon ${ADDRESS_COMMAND}"`);
+  try {
+    openBrowser(await address());
+  } catch (err) {
+    log(`--ui: the page did not open: ${messageOf(err)}`);
+  }
 }
 
 function log(msg: string): void {
@@ -273,7 +290,8 @@ function runMcpStdio(home: string): void {
 
 /**
  * The page address of the daemon that answers for this state directory, for a browser on another computer's side of a
- * forwarded port (a dev container, ADR-161). Only a daemon that answers: an old `daemon.json` would give a dead token.
+ * forwarded port (a dev container, ADR-161), with a one-time code instead of the token. Only a daemon that answers: an
+ * old `daemon.json` would give a dead token.
  */
 async function printAddress(home: string): Promise<void> {
   const running = await probeRunningDaemon(home);
@@ -282,7 +300,15 @@ async function printAddress(home: string): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  process.stdout.write(`${daemonPageAddress(running.file)}\n`);
+  try {
+    process.stdout.write(`${await daemonPageAddress(running.file)}\n`);
+    process.stderr.write(
+      `It opens Trackwall once, within ${PAGE_CODE_LIFETIME_MS / 1000} seconds; run the command again for another browser.\n`,
+    );
+  } catch (err) {
+    process.stderr.write(`${messageOf(err)}\n`);
+    process.exitCode = 1;
+  }
 }
 
 /** One JSON object on stdout whatever happens, for the desktop app that runs it through `docker exec` (ADR-164). */

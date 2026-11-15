@@ -5,12 +5,13 @@ import { call, errorCode, errorMessage } from "./api.ts";
 import { inDesktopShell } from "./app-window.ts";
 import {
   type Connection,
+  credentialFromAddress,
   daemonInstance,
+  exchangePageCode,
   forgetToken,
   resolveConnection,
   retryConnection,
   saveToken,
-  tokenFromAddress,
   tokenStorage,
 } from "./connection.ts";
 
@@ -31,7 +32,10 @@ export interface ConnectionHandle {
    * the page asks for its address instead of showing views that all fail (ADR-161).
    */
   tokenRefused: boolean;
-  /** Takes the token from a pasted page address; rejects when there is none or the daemon does not accept it either. */
+  /**
+   * Takes the token for a pasted page address, trading its one-time code; rejects when there is none, the code is spent or
+   * the daemon does not accept the token either.
+   */
   connectWithAddress: (address: string) => Promise<void>;
 }
 
@@ -80,8 +84,9 @@ export function useConnection(): ConnectionHandle {
   }, []);
 
   const connectWithAddress = useCallback(async (address: string) => {
-    const next = { baseUrl: "", token: tokenFromAddress(address) };
+    const given = credentialFromAddress(address);
     const instance = await daemonInstance();
+    const next = { baseUrl: "", token: "code" in given ? await exchangePageCode(given.code) : given.token };
     if (await refusesToken(next)) throw new Error(NEW_TOKEN_REFUSED);
     saveToken(tokenStorage(), next.token, instance);
     setTokenRefused(false);

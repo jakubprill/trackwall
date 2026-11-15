@@ -1,8 +1,9 @@
 //! A remote daemon (ADR-130): a daemon the app connects to instead of starting its own, for example one in a dev
 //! container whose port is forwarded to 127.0.0.1 of this computer. The app neither starts nor stops it.
 //!
-//! The user pastes the address the daemon's page opens with (`http://127.0.0.1:<port>/#token=<token>`); the port and
-//! token go into `remote-daemon.json` in the shell's configuration directory, which decides the mode at every start.
+//! The user pastes the address `trackwall-daemon address` prints (`http://127.0.0.1:<port>/#code=<one-time code>`, or
+//! `#token=<token>` from an older daemon); the app trades the code for the token (ADR-161), and the port and token go
+//! into `remote-daemon.json` in the shell's configuration directory, which decides the mode at every start.
 //! Switching the mode restarts the app, so the daemon of one mode never outlives the switch unnoticed.
 
 use crate::daemon;
@@ -30,22 +31,50 @@ pub fn is_token(token: &str) -> bool {
     !token.is_empty() && token.len() <= MAX_TOKEN_LEN && token.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
+/// What a pasted address carries after `#`: a one-time code the daemon trades for its token, or the token itself.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PageCredential {
+    Code(String),
+    Token(String),
+}
+
+/// A pasted address of the daemon's page: its port on this computer's loopback and what its fragment carries.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PastedAddress {
+    pub port: u16,
+    pub credential: PageCredential,
+}
+
+impl PastedAddress {
+    /// The remote daemon with its token, trading a one-time code for it at the daemon first.
+    fn into_remote(self) -> Result<RemoteDaemon, String> {
+        match self.credential {
+            PageCredential::Token(token) => Ok(RemoteDaemon { port: self.port, token }),
+            PageCredential::Code(code) => daemon::exchange_page_code(self.port, &code),
+        }
+    }
+}
+
 /// Reads the address of the daemon's page. Only a loopback address with its port is accepted: the app talks to the
-/// daemon on 127.0.0.1 alone, and the token must never reach another host.
-pub fn parse_address(address: &str) -> Result<RemoteDaemon, String> {
+/// daemon on 127.0.0.1 alone, and neither the code nor the token may ever reach another host.
+pub fn parse_address(address: &str) -> Result<PastedAddress, String> {
     let url = Url::parse(address.trim()).map_err(|_| "Paste the whole address, starting with http://127.0.0.1:".to_owned())?;
     if url.scheme() != "http" || !matches!(url.host_str(), Some("127.0.0.1" | "localhost")) {
         return Err("The address must start with http://127.0.0.1: or http://localhost: (a forwarded port on this computer).".into());
     }
-    let port = url.port().ok_or("The address has no port, as in http://127.0.0.1:7700/#token=….")?;
-    let token = url
-        .fragment()
-        .and_then(|fragment| fragment.split('&').find_map(|pair| pair.strip_prefix("token=")))
-        .ok_or("The address has no token: copy it with the part after #token=.")?;
-    if !is_token(token) {
-        return Err("The token in the address is not one Trackwall gives out.".into());
+    let port = url.port().ok_or("The address has no port, as in http://127.0.0.1:7700/#code=….")?;
+    let fragment = url.fragment().unwrap_or_default();
+    let value = |name: &str| fragment.split('&').find_map(|pair| pair.strip_prefix(name)).filter(|v| !v.is_empty());
+    let credential = match (value("code="), value("token=")) {
+        (Some(code), _) => PageCredential::Code(code.to_owned()),
+        (None, Some(token)) => PageCredential::Token(token.to_owned()),
+        (None, None) => return Err("The address has no code: copy it with the part after #code=.".into()),
+    };
+    let (PageCredential::Code(given) | PageCredential::Token(given)) = &credential;
+    if !is_token(given) {
+        return Err("The code in the address is not one Trackwall gives out.".into());
     }
-    Ok(RemoteDaemon { port, token: token.to_owned() })
+    Ok(PastedAddress { port, credential })
 }
 
 /// The saved remote daemon; a missing file means the app runs its own daemon, and a damaged one is reported and
@@ -80,19 +109,22 @@ pub async fn use_remote_daemon(
     starting: tauri::State<'_, DevContainerStart>,
     address: String,
 ) -> Result<(), String> {
-    let remote = parse_address(&address)?;
-    refuse_own_daemon(&state, &remote)?;
-    let checked = remote.clone();
-    tauri::async_runtime::spawn_blocking(move || daemon::connect_remote(&checked).map_err(String::from))
-        .await
-        .map_err(|e| e.to_string())??;
+    let pasted = parse_address(&address)?;
+    refuse_own_daemon(&state, pasted.port)?;
+    let remote = tauri::async_runtime::spawn_blocking(move || {
+        let remote = pasted.into_remote()?;
+        daemon::connect_remote(&remote).map_err(String::from)?;
+        Ok::<_, String>(remote)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
     starting.cancel();
     switch_to(&app, &remote)
 }
 
 /// Its own daemon would pass the check, and the restart would then stop the daemon it was told to connect to.
-pub fn refuse_own_daemon(state: &DaemonState, remote: &RemoteDaemon) -> Result<(), String> {
-    if state.remote().is_none() && state.ready().is_some_and(|own| own.port == remote.port) {
+pub fn refuse_own_daemon(state: &DaemonState, port: u16) -> Result<(), String> {
+    if state.remote().is_none() && state.ready().is_some_and(|own| own.port == port) {
         return Err("That is the address of this app's own daemon. Paste the address of the daemon in the container.".into());
     }
     Ok(())
@@ -134,9 +166,15 @@ mod tests {
     const TOKEN: &str = "Zm9vYmFyLWJhei1xdXV4LTAxMjM0NTY3ODktYWJjZGVm";
 
     #[test]
-    fn reads_the_port_and_token_from_the_address_of_the_daemons_page() {
-        let remote = parse_address(&format!("http://127.0.0.1:7700/#token={TOKEN}")).unwrap();
-        assert_eq!(remote, RemoteDaemon { port: 7700, token: TOKEN.into() });
+    fn reads_the_port_and_one_time_code_from_the_address_the_daemon_prints() {
+        let pasted = parse_address(&format!("http://127.0.0.1:7700/#code={TOKEN}")).unwrap();
+        assert_eq!(pasted, PastedAddress { port: 7700, credential: PageCredential::Code(TOKEN.into()) });
+    }
+
+    #[test]
+    fn reads_the_token_from_the_address_an_older_daemon_printed() {
+        let pasted = parse_address(&format!("http://127.0.0.1:7700/#token={TOKEN}")).unwrap();
+        assert_eq!(pasted, PastedAddress { port: 7700, credential: PageCredential::Token(TOKEN.into()) });
     }
 
     #[test]
@@ -161,6 +199,7 @@ mod tests {
         assert!(parse_address(&format!("http://127.0.0.1/#token={TOKEN}")).is_err());
         assert!(parse_address("http://127.0.0.1:7700/").is_err());
         assert!(parse_address("http://127.0.0.1:7700/#token=").is_err());
+        assert!(parse_address("http://127.0.0.1:7700/#code=").is_err());
         assert!(parse_address("127.0.0.1:7700").is_err());
     }
 
@@ -168,6 +207,7 @@ mod tests {
     fn rejects_a_token_that_could_add_a_header() {
         assert!(parse_address("http://127.0.0.1:7700/#token=abc%0D%0AX-Evil:%201").is_err());
         assert!(parse_address("http://127.0.0.1:7700/#token=abc def").is_err());
+        assert!(parse_address("http://127.0.0.1:7700/#code=abc%0D%0AX-Evil:%201").is_err());
     }
 
     #[test]

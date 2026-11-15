@@ -168,4 +168,6 @@ try {
 // Written once the scene is set, so whoever waits for daemon.json finds the demo ready.
 writeDaemonFile(home, { pid: process.pid, port: api.port, token, startedAt, version: VERSION });
 log(`demo shop in ${projectsDir}`);
-log(`UI: ${daemonPageAddress({ port: api.port, token })}`);
+log(
+  `UI: ${await daemonPageAddress({ port: api.port, token })} (opens once, within a minute; print another with "bun packages/daemon/src/main.ts address --home ${home}")`,
+);

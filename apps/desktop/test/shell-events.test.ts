@@ -5,6 +5,7 @@ import {
   ContainerStartResult,
   ContainerUpdateResult,
   DAEMON_INFO_PATH,
+  PAGE_CODE_EXCHANGE_PATH,
   STATE_LABELS,
   TaskState,
   TRACKWALL_LINK_KINDS,
@@ -289,6 +290,11 @@ test("the UI opens links and VS Code outside the window with the command the she
 test("the shell checks a remote daemon's token on the daemon info path of protocol", () => {
   const shell = /const DAEMON_INFO_PATH: &str = "([^"]+)";/.exec(read("apps/desktop/src-tauri/src/daemon.rs"))?.[1];
   expect(shell).toBe(DAEMON_INFO_PATH);
+});
+
+test("the shell trades a pasted address's one-time code on the exchange path of protocol", () => {
+  const shell = /const PAGE_CODE_EXCHANGE_PATH: &str = "([^"]+)";/.exec(read("apps/desktop/src-tauri/src/daemon.rs"))?.[1];
+  expect(shell).toBe(PAGE_CODE_EXCHANGE_PATH);
 });
 
 test("the UI keeps the projects folder on this computer and shows a repo there with the commands the shell defines", () => {

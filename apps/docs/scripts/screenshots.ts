@@ -229,6 +229,7 @@ const demo = spawn(process.execPath, [join(REPO, "packages", "daemon", "scripts"
 let daemon: DaemonFile | undefined;
 try {
   daemon = await demoReady(demo);
+  // The token itself, as an older daemon's address carries it: every picture opens a page of its own, and a page code opens one.
   const url = `http://127.0.0.1:${daemon.port}/#token=${daemon.token}`;
   const browser = await chromium.launch();
   try {

@@ -13,6 +13,10 @@ import {
   type ErrorCode,
   HEALTH_PATH,
   type Health,
+  PAGE_CODE_EXCHANGE_PATH,
+  PAGE_CODE_PATH,
+  type PageCode,
+  type PageCodeExchange,
 } from "@trackwall/protocol";
 import type { Facade } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
@@ -25,6 +29,7 @@ import { downloadRequest, sendDownload } from "./file-download.ts";
 import { droppedBody, droppedName, refuseOversized } from "./file-drop.ts";
 import { bearerToken, OriginPolicy, tokenMatches } from "./guard.ts";
 import { HOOKS_PATH, handleHook } from "./hooks.ts";
+import { PAGE_CODE_LIFETIME_MS, PageCodes } from "./page-codes.ts";
 import { sessionSocketRoute, terminalSocketRoute } from "./pty-socket.ts";
 import { postRoutes } from "./routes.ts";
 import { attachSockets } from "./sockets.ts";
@@ -50,7 +55,16 @@ export interface ApiServer {
   port: number;
   /** This start's random id, which `GET /api/health` reports (ADR-161) and viewer access writes next to its token (ADR-221). */
   instance: string;
+  /** A one-time code for the page address the daemon opens in a browser instead of the token (`page-codes.ts`). */
+  pageCode: () => string;
   close: () => Promise<void>;
+}
+
+/** What one start of the API server holds besides its options. */
+interface ApiStart {
+  policy: OriginPolicy;
+  instance: string;
+  pageCodes: PageCodes;
 }
 
 const STATUS: Record<ErrorCode, number> = {
@@ -78,11 +92,12 @@ const STATUS: Record<ErrorCode, number> = {
  * free port.
  */
 export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer> {
-  let policy: OriginPolicy | undefined;
+  let start: ApiStart | undefined;
   const instance = randomUUID();
+  const pageCodes = new PageCodes();
   const server = createServer((req, res) => {
-    if (!policy) return void res.destroy();
-    handle(req, res, options, policy, instance).catch((err: unknown) => {
+    if (!start) return void res.destroy();
+    handle(req, res, options, start).catch((err: unknown) => {
       if (err instanceof DomainError && !res.headersSent) return fail(res, err.code, err.message);
       process.stderr.write(`[api] ${req.method} ${req.url}: ${String(err)}\n`);
       options.facade.errorJournal.recordDaemonError(journalArea(req.url), err);
@@ -98,7 +113,8 @@ export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer
     });
   });
   const boundPort = (server.address() as AddressInfo).port;
-  policy = new OriginPolicy(boundPort, options.allowOrigins);
+  const policy = new OriginPolicy(boundPort, options.allowOrigins);
+  start = { policy, instance, pageCodes };
   const closeSockets = attachSockets(server, {
     token: options.token,
     policy: () => policy,
@@ -113,6 +129,7 @@ export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer
     server,
     port: boundPort,
     instance,
+    pageCode: () => pageCodes.issue(),
     close: async () => {
       closeSockets();
       options.events.close();
@@ -125,7 +142,8 @@ export async function startApi(options: ApiOptions, port = 0): Promise<ApiServer
   };
 }
 
-async function handle(req: IncomingMessage, res: ServerResponse, o: ApiOptions, policy: OriginPolicy, instance: string): Promise<void> {
+async function handle(req: IncomingMessage, res: ServerResponse, o: ApiOptions, start: ApiStart): Promise<void> {
+  const { policy, instance } = start;
   const origin = req.headers.origin;
   if (!policy.isAllowedHost(req.headers.host) || !policy.isAllowedOrigin(origin)) {
     return fail(res, "forbidden_origin", "host or origin is not allowed");
@@ -149,9 +167,9 @@ async function handle(req: IncomingMessage, res: ServerResponse, o: ApiOptions, 
 
   // Only `GET /api/health` and the static UI files are public; the rest of the API, MCP and the hooks pass one token check.
   if (path === HEALTH_PATH && req.method === "GET") return ok<Health>(res, { status: "ok", version: o.version, instance });
-  const route = protectedRoute(req, res, path, o);
+  const route = protectedRoute(req, res, path, o, start.pageCodes);
   if (route) {
-    const caller = authenticate(req, route.opensWith, o);
+    const caller = authenticate(req, route.opensWith, o, start.pageCodes);
     return "refused" in caller ? fail(res, "unauthorized", caller.refused) : route.run(caller.session);
   }
   if (o.uiDir && (req.method === "GET" || req.method === "HEAD")) return serveStatic(o.uiDir, path, res);
@@ -160,9 +178,9 @@ async function handle(req: IncomingMessage, res: ServerResponse, o: ApiOptions, 
 
 /**
  * Which token besides the daemon token opens a route: a session token on a route a session uses (ADR-138), the viewer
- * token on the viewer's session list (ADR-221), or none.
+ * token on the viewer's session list (ADR-221), a one-time page code on its exchange for the token (ADR-161), or none.
  */
-type RouteTokens = "daemon" | "session" | "viewer";
+type RouteTokens = "daemon" | "session" | "viewer" | "page-code";
 
 /** A route behind the token and how `authenticate` treats it. */
 interface ProtectedRoute {
@@ -172,8 +190,19 @@ interface ProtectedRoute {
 }
 
 /** The routes behind the token: the API, MCP and the session plugin's hooks (ADR-88); `undefined` for any other path. */
-function protectedRoute(req: IncomingMessage, res: ServerResponse, path: string, o: ApiOptions): ProtectedRoute | undefined {
-  if (path.startsWith("/api/")) return { opensWith: postRoutes.get(path)?.opensWith ?? "daemon", run: () => handleApi(req, res, path, o) };
+function protectedRoute(
+  req: IncomingMessage,
+  res: ServerResponse,
+  path: string,
+  o: ApiOptions,
+  pageCodes: PageCodes,
+): ProtectedRoute | undefined {
+  if (path === PAGE_CODE_EXCHANGE_PATH && req.method === "POST") {
+    return { opensWith: "page-code", run: () => drain(req).then(() => ok<PageCodeExchange>(res, { token: o.token })) };
+  }
+  if (path.startsWith("/api/")) {
+    return { opensWith: postRoutes.get(path)?.opensWith ?? "daemon", run: () => handleApi(req, res, path, o, pageCodes) };
+  }
   if (path === MCP_PATH) return { opensWith: "session", run: (session) => o.mcp.handle(req, res, session) };
   if (path.startsWith(HOOKS_PATH)) {
     return {
@@ -189,15 +218,22 @@ function protectedRoute(req: IncomingMessage, res: ServerResponse, path: string,
  * session-scoped route a session token the daemon issued is enough and says which session calls (ADR-39), so the files
  * of a session, which its agent can read, hold no token for the API (ADR-138). An unknown session token there is
  * refused even with the daemon token, so an ended session does not look like an agent outside Trackwall. The viewer
- * token opens the viewer's session list alone and only while viewer access is on (ADR-221).
+ * token opens the viewer's session list alone and only while viewer access is on (ADR-221). A page code opens its
+ * exchange once: checking it closes it (ADR-161).
  */
-function authenticate(req: IncomingMessage, opensWith: RouteTokens, o: ApiOptions): { session: string | null } | { refused: string } {
+function authenticate(
+  req: IncomingMessage,
+  opensWith: RouteTokens,
+  o: ApiOptions,
+  pageCodes: PageCodes,
+): { session: string | null } | { refused: string } {
   const sessionToken = opensWith === "session" ? req.headers[SESSION_TOKEN_HEADER] : undefined;
   if (sessionToken === undefined) {
     const given = bearerToken(req);
-    const opened =
-      given !== undefined && (tokenMatches(given, o.token) || (opensWith === "viewer" && o.facade.viewerAccess.accepts(given)));
-    return opened ? { session: null } : { refused: "missing or invalid token" };
+    if (given === undefined) return { refused: "missing or invalid token" };
+    if (tokenMatches(given, o.token) || (opensWith === "viewer" && o.facade.viewerAccess.accepts(given))) return { session: null };
+    if (opensWith !== "page-code") return { refused: "missing or invalid token" };
+    return pageCodes.take(given) ? { session: null } : { refused: PAGE_CODE_REFUSED };
   }
   const session = typeof sessionToken === "string" ? o.facade.agents.callerSession(sessionToken) : undefined;
   return session === undefined ? { refused: "unknown session token: this Trackwall session has ended" } : { session };
@@ -214,9 +250,16 @@ function journalArea(url: string | undefined): string {
   return path.startsWith(HOOKS_PATH) ? "api:hooks" : "api:other";
 }
 
+/** Shown as it is by the desktop app and the page's address field; a page that loads with a spent code shows the field. */
+const PAGE_CODE_REFUSED = `The address's one-time code was used already or is older than ${PAGE_CODE_LIFETIME_MS / 1000} seconds: print the address again.`;
+
 /** `/api/*` routes with the token, already checked. */
-async function handleApi(req: IncomingMessage, res: ServerResponse, path: string, o: ApiOptions): Promise<void> {
+async function handleApi(req: IncomingMessage, res: ServerResponse, path: string, o: ApiOptions, pageCodes: PageCodes): Promise<void> {
   if (path === DAEMON_INFO_PATH && req.method === "GET") return ok<DaemonInfo>(res, o.info());
+  if (path === PAGE_CODE_PATH && req.method === "POST") {
+    await drain(req);
+    return ok<PageCode>(res, { code: pageCodes.issue(), expiresInMs: PAGE_CODE_LIFETIME_MS });
+  }
   if (path === "/api/daemon/shutdown" && req.method === "POST") {
     await drain(req);
     ok(res, { stopping: true as const });

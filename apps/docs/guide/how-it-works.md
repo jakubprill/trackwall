@@ -68,7 +68,7 @@ sequenceDiagram
 
 ### In a browser, or in a container
 
-The window is a web page, so the same page also works in a browser tab. The daemon serves it itself, at an address with the token after a `#`, which the browser never sends anywhere. When Trackwall runs in a [dev container](/guide/dev-container), the container's port is forwarded to your computer, and you open that address in the browser, or point the desktop app at it under "Daemon in a container" in "Settings > App".
+The window is a web page, so the same page also works in a browser tab. The daemon serves it itself, at an address with a one-time code after a `#`, which the browser never sends anywhere. The page trades the code for the token once and keeps the token, so the code your browser's history keeps opens nothing later. When Trackwall runs in a [dev container](/guide/dev-container), the container's port is forwarded to your computer, and you open that address in the browser, or point the desktop app at it under "Daemon in a container" in "Settings > App".
 
 ```mermaid
 flowchart LR
