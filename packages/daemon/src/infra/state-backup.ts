@@ -59,6 +59,8 @@ export function keepStateAcrossVersions(o: KeepStateOptions): void {
       o.log(`state files of Trackwall ${last ?? "(before backups)"} copied to ${backup.path} before ${o.version} reads them`);
     const newer = Object.entries(o.files).filter(([name, format]) => writtenByNewer(join(o.home, name), format));
     if (newer.length > 0) goBack(o, newer.map(([name]) => name).join(", "));
+    // A first start on an empty state directory took no backup, but still notes its version (in a new folder).
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
     pruneBackups(o.home, o.log);
     writeFileAtomic(join(dir, LAST_VERSION_FILE), `${JSON.stringify({ version: o.version })}\n`);
   } catch (err) {
