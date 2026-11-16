@@ -7,7 +7,7 @@ import { sessionHooksFile } from "../src/modules/agents/session-launcher.ts";
 import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { isAlive } from "../src/platform/process-group.ts";
 import { makeAgents, viewer, waitFor } from "./support/agents.ts";
-import { PARALLEL_TOOLS_PROMPT } from "./support/copilot-reference.ts";
+import { BACKGROUND_AGENT_PROMPT, PARALLEL_TOOLS_PROMPT } from "./support/copilot-reference.ts";
 import { untilInputBox } from "./support/screen-lines.ts";
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -243,6 +243,33 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     expect(window.text()).toContain("Argument: --allow-tool=shell(mvn:*)");
     expect(window.text()).toContain("Argument: --allow-tool=write");
     expect(window.text()).toContain("Argument: --deny-tool=shell(git push)");
+    window.attachment.detach();
+    await agents.stop(started.id);
+  }, 60_000);
+
+  test("a session whose agent waits for its background agent keeps working without calling you, and waits for you once the agent's next turn ends (ADR-254)", async () => {
+    const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
+    const copilotHome = mkdtempSync(join(tmpdir(), "trackwall-copilot-home-"));
+    const gate = join(mkdtempSync(join(tmpdir(), "trackwall-gate-")), "finish");
+    const env = { ...process.env, COPILOT_HOME: copilotHome, FAKE_COPILOT_BACKGROUND_GATE: gate };
+    const { agents, procs, home } = makeAgents({ shop: repoDir }, undefined, null, undefined, env);
+    cleanups.push(() => procs.stopAll());
+    const started = await agents.start("shop");
+    const window = viewer(agents, started.id);
+    await untilInputBox(window, "empty");
+
+    window.attachment.input(`${BACKGROUND_AGENT_PROMPT}\r`);
+    const hooks = () => readFileSync(sessionHooksFile(home, started.id), "utf8");
+    // The hook's answer comes after the daemon has read its record, so the state already tells the turn's end.
+    const waiting = await waitFor(agents, started.id, () => hooks().includes('"agentStop"'), "the main agent's turn end");
+
+    expect(waiting.state).toMatchObject({ state: "Working", source: "hook" });
+    expect(waiting.needsAttention).toBe(false);
+
+    writeFileSync(gate, "");
+    const done = await waitFor(agents, started.id, (s) => s.state?.state === "Input", "the end of the agent's next turn");
+    expect(done.state).toMatchObject({ state: "Input", reason: "hook agentStop" });
+    expect(hooks()).toContain("fake-background-agent");
     window.attachment.detach();
     await agents.stop(started.id);
   }, 60_000);

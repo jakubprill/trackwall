@@ -17,6 +17,7 @@ import {
 } from "@trackwall/protocol";
 import { conversationEventLog } from "../src/infra/copilot-home.ts";
 import { alwaysAllowPattern } from "../src/modules/agents/copilot-always-allow.ts";
+import { backgroundAgentEventOf } from "../src/modules/agents/copilot-background-agent.ts";
 import { windowTitleFromOsc } from "../src/modules/agents/copilot-osc.ts";
 import { OscParser } from "../src/modules/agents/osc-parser.ts";
 import { readRequestPrompt } from "../src/modules/agents/read-request-prompt.ts";
@@ -800,6 +801,173 @@ describe("another model for a running task with the real Copilot CLI (ADR-206)",
     await waitFor(agents, restarted.id, (s) => s.usage?.modelCalls === 2, "the receipt of the call on the new model", SESSION_MS);
     expect(agents.session(restarted.id).modelInUse).toBe(REVIEW_MODEL);
     await agents.stop(restarted.id);
+  });
+});
+
+describe("subagents and background agents with the real Copilot CLI (ADR-254)", () => {
+  /** What the main agent asks its subagent; the subagent's requests are told apart by it. */
+  const SUBAGENT_PROMPT = "Count the files in the folder.";
+
+  /** What the main agent says at each step of its turn: after the task tool's answer, and at the end of its work. */
+  const MAIN_SAYS = { background: "I am waiting for the counter.", sync: "The counter found three files." };
+
+  /**
+   * The model of a turn in which the main agent starts a subagent with the task tool (`mode` "background" or Copilot
+   * CLI's default) and says what it does, and, after a background agent's notification, what it found. The subagent
+   * answers once `answer` resolves, so a test sees the main agent wait for it.
+   */
+  function subagentTurn(mode: "background" | "sync", answer: Promise<void>) {
+    const task = { description: "Count files", prompt: SUBAGENT_PROMPT, agent_type: "explore", name: "counter" };
+    const subagent = async () => {
+      await answer;
+      return { text: "Three files." };
+    };
+    const main = (request: ModelRequest) => {
+      if (!request.lastUserText.endsWith("count them")) return { text: MAIN_SAYS.sync };
+      if (request.toolResults.length > 0) return { text: MAIN_SAYS[mode] };
+      return { tool: "task", arguments: mode === "sync" ? task : { ...task, mode } };
+    };
+    const reply = (request: ModelRequest) =>
+      request.userTexts.some((text) => text.includes(SUBAGENT_PROMPT)) ? subagent() : main(request);
+    // The main agent's two requests, the subagent's, and the main agent's after a background agent's notification.
+    model.reply(reply, reply, reply, ...(mode === "sync" ? [] : [reply]));
+  }
+
+  /**
+   * The hook records of session `id` as event and whose they are: the main agent's conversation, which its
+   * `sessionStart` names, or a subagent's.
+   */
+  const hooksOf = (id: string) => {
+    const records = hookRecords(daemon.home, id);
+    const main = records.find((r) => r.event === "sessionStart")?.payload.sessionId;
+    return records.map((r) => `${r.event} ${r.payload.sessionId === main ? "main" : "subagent"}`);
+  };
+
+  /** What the event log of session `id`'s conversation says about background agents so far; nothing before Copilot CLI writes it. */
+  function backgroundEventsOf(id: string) {
+    const eventLog = conversationEventLog(join(daemon.home, "copilot-home"), id);
+    if (!existsSync(eventLog)) return [];
+    return readFileSync(eventLog, "utf8")
+      .split("\n")
+      .flatMap((line) => backgroundAgentEventOf(line) ?? []);
+  }
+
+  test("a background agent's hooks come under its own sessionId without a sessionStart after the main agent's agentStop, the session works on meanwhile, and once the agent ends Copilot CLI starts the main agent's next turn itself", async () => {
+    const { agents } = daemon.facade;
+    const { id, window } = await startSession();
+    let answer = () => {};
+    subagentTurn(
+      "background",
+      new Promise<void>((resolve) => {
+        answer = resolve;
+      }),
+    );
+
+    window.attachment.input("count them\r");
+    await waitFor(agents, id, () => hooksOf(id).includes("userPromptSubmitted subagent"), "the background agent's turn", SESSION_MS);
+
+    expect(hooksOf(id)).toEqual([
+      "sessionStart main",
+      "userPromptSubmitted main",
+      "postToolUse main",
+      "agentStop main",
+      "userPromptSubmitted subagent",
+    ]);
+    const waiting = agents.sessions().sessions.find((s) => s.id === id);
+    expect(waiting?.state).toMatchObject({ state: "Working", source: "hook" });
+    expect(waiting?.needsAttention).toBe(false);
+    // Copilot CLI's footer says what the session waits for a moment after the hook.
+    const until = Date.now() + SESSION_MS;
+    while (!(await screenLines(window)).some((line) => line.includes("Waiting for background agents"))) {
+      if (Date.now() > until) throw new Error(`no "Waiting for background agents":\n${(await screenLines(window)).join("\n")}`);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    answer();
+    await waitFor(
+      agents,
+      id,
+      () => hooksOf(id).filter((h) => h === "agentStop main").length === 2,
+      "the main agent's next turn",
+      SESSION_MS,
+    );
+    expect(hooksOf(id).slice(5)).toEqual(["agentStop subagent", "userPromptSubmitted main", "notification main", "agentStop main"]);
+    expect(hookRecords(daemon.home, id).find((r) => r.event === "notification")?.payload.notification_type).toBe("agent_idle");
+    const done = await waitFor(agents, id, (s) => s.state?.state === "Input", "the end of the main agent's work", SESSION_MS);
+    expect(done.state).toMatchObject({ source: "hook", reason: "hook agentStop" });
+    // The event log names the agent's start and end, which Copilot CLI writes a moment after the hooks, the log's first
+    // lines included.
+    await waitFor(agents, id, () => backgroundEventsOf(id).length === 2, "the background agent's end in the event log", SESSION_MS);
+    const [start, end] = backgroundEventsOf(id);
+    if (start === undefined || !("started" in start)) throw new Error("the event log names no background agent's start");
+    expect(end).toEqual({ ended: start.started });
+  });
+
+  test("a subagent in the foreground sends its hooks under its own sessionId in the middle of the main agent's turn, which ends once", async () => {
+    const { agents } = daemon.facade;
+    const { id, window } = await startSession();
+    subagentTurn("sync", Promise.resolve());
+
+    window.attachment.input("count them\r");
+    await waitFor(
+      agents,
+      id,
+      () => hooksOf(id).filter((h) => h === "agentStop main").length === 1,
+      "the main agent's turn end",
+      SESSION_MS,
+    );
+
+    expect(hooksOf(id)).toEqual([
+      "sessionStart main",
+      "userPromptSubmitted main",
+      "userPromptSubmitted subagent",
+      "agentStop subagent",
+      "postToolUse main",
+      "agentStop main",
+    ]);
+    // A subagent in the foreground is no background agent: the event log names its end, never a start in the background.
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    expect(backgroundEventsOf(id).filter((event) => "started" in event)).toEqual([]);
+  });
+
+  test("a review sent while a subagent works reaches the main agent, with the task tool's result and at the end of its turn, and never the subagent", async () => {
+    const { agents } = daemon.facade;
+    let taskId: string | undefined;
+    const subagentAsked: string[] = [];
+    const review = { path: "README.md", side: "new" as const, line: 1, code: "# shop", text: "Mention the signup page" };
+    const subagent = (request: ModelRequest) => {
+      subagentAsked.push(request.lastUserText);
+      // The review goes out while the subagent waits for the model's answer, so its turn is still running.
+      if (taskId === undefined) throw new Error("the subagent's request came before the task was created");
+      if (subagentAsked.length === 1) agents.sendReview(taskId, [review]);
+      return { text: "Three files." };
+    };
+    const main = (request: ModelRequest) => {
+      if (request.lastUserText.includes("sent a review of your changes")) return { text: "I will read the review." };
+      if (request.toolResults.length > 0) return { text: MAIN_SAYS.sync };
+      return { tool: "task", arguments: { description: "Count files", prompt: SUBAGENT_PROMPT, agent_type: "explore", name: "counter" } };
+    };
+    const reply = (request: ModelRequest) =>
+      request.userTexts.some((text) => text.includes(SUBAGENT_PROMPT)) ? subagent(request) : main(request);
+    // The main agent's request, the subagent's, the main agent's after the tool, and the turn the block starts.
+    model.reply(reply, reply, reply, reply);
+    const task = await agents.createTask("shop", "count them");
+    taskId = task.id;
+    const id = taskSessionOf(task.id);
+
+    await waitFor(
+      agents,
+      id,
+      () => hooksOf(id).filter((h) => h === "agentStop main").length >= 2,
+      "the turn the review starts",
+      SESSION_MS,
+    );
+
+    expect(subagentAsked).toEqual([expect.stringContaining(SUBAGENT_PROMPT)]);
+    const requests = model.requests();
+    expect(requests.at(-2)?.toolResults.join("\n")).toContain("sent a review of your changes in Trackwall");
+    expect(requests.at(-1)?.lastUserText).toContain("sent a review of your changes in Trackwall");
+    await agents.stop(id);
   });
 });
 

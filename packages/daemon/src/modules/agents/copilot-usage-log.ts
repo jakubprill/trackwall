@@ -3,6 +3,7 @@ import { StringDecoder } from "node:string_decoder";
 import { COPILOT_AUTO_MODEL, type CopilotUsage, type ModelCalls } from "@trackwall/protocol";
 import { conversationEventLog } from "../../infra/copilot-home.ts";
 import { addReceipt, firstSighting, NO_USAGE, type UsageTotals, usageOf, usageReceipt } from "../../infra/copilot-usage-receipt.ts";
+import { backgroundAgentEventOf, runningAfter } from "./copilot-background-agent.ts";
 import { modelChangeOf } from "./copilot-model-change.ts";
 import { modelErrorOf } from "./copilot-model-error.ts";
 
@@ -16,6 +17,7 @@ import { modelErrorOf } from "./copilot-model-error.ts";
  * `/model`, so a model Copilot CLI took instead of the requested one shows, and `session.error` a model call that failed
  * (ADR-242), such as one on a model the account does not offer. The log is read on demand only (`update`),
  * from where the last read stopped, so a long conversation is read once and every later turn costs only its new lines.
+ * The same log tells which background agents of the conversation still run (ADR-254, `copilot-background-agent.ts`).
  */
 
 /** What the log says so far: the usage sums, the model in use and the own calls on each model. */
@@ -32,9 +34,18 @@ interface LogState {
   modelError: string | null;
   /** How many failed model calls the log holds, so a reader can tell a new failure from the one it already saw. */
   failedCalls: number;
+  /** The tool calls of the background agents that have started and not ended (ADR-254). */
+  backgroundAgents: readonly string[];
 }
 
-const NOTHING_READ: LogState = { totals: NO_USAGE, modelInUse: null, callsByModel: {}, modelError: null, failedCalls: 0 };
+const NOTHING_READ: LogState = {
+  totals: NO_USAGE,
+  modelInUse: null,
+  callsByModel: {},
+  modelError: null,
+  failedCalls: 0,
+  backgroundAgents: [],
+};
 
 /**
  * One line of the log added to what it says; `seen` keeps receipts counted once. A receipt written again (a resumed
@@ -43,6 +54,8 @@ const NOTHING_READ: LogState = { totals: NO_USAGE, modelInUse: null, callsByMode
 function add(state: LogState, line: string, seen: Set<string>): LogState {
   const receipt = usageReceipt(line);
   if (receipt === undefined) {
+    const agent = backgroundAgentEventOf(line);
+    if (agent !== undefined) return { ...state, backgroundAgents: runningAfter(state.backgroundAgents, agent) };
     const error = modelErrorOf(line);
     if (error !== undefined) return { ...state, modelError: error, failedCalls: state.failedCalls + 1 };
     const changed = modelChangeOf(line);
@@ -189,6 +202,11 @@ export class CopilotUsageLog {
     return this.#state.failedCalls;
   }
 
+  /** How many background agents of the conversation run after the last update (ADR-254). */
+  backgroundAgents(): number {
+    return this.#state.backgroundAgents.length;
+  }
+
   /** The conversation's own model calls on each model after the last update (ADR-228), the most first. */
   modelCalls(): ModelCalls[] {
     return modelCallsOf(this.#state);
@@ -199,10 +217,11 @@ export class CopilotUsageLog {
    * named then, and the error of a model call then: a restart on another model would otherwise show the old one until
    * Copilot CLI writes the start's model change, and warn about a switch that is not there (ADR-225) or a call that
    * failed before the restart (ADR-242). What it used then does not count to the token budget of this start (ADR-237).
+   * Background agents of an earlier start ended with its process (ADR-254).
    */
   readBeforeStart(conversation: string): void {
     this.update(conversation);
-    this.#state = { ...this.#state, modelInUse: null, modelError: null };
+    this.#state = { ...this.#state, modelInUse: null, modelError: null, backgroundAgents: [] };
     this.#tokensAtStart = tokensOf(this.#state.totals);
   }
 

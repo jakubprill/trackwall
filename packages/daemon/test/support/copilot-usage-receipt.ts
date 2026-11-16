@@ -147,3 +147,21 @@ export function recordModelChange(conversation: string | undefined): void {
   };
   appendFileSync(file, `${JSON.stringify(event)}\n`);
 }
+
+/**
+ * The start or the end of the fake's background agent in the conversation's event log (ADR-254), as Copilot CLI 1.0.109
+ * writes them for the `task` tool in background mode; in `COPILOT_HOME` when the test set it.
+ */
+export function recordBackgroundAgent(conversation: string | undefined, type: "subagent.started" | "subagent.completed"): void {
+  const copilotHome = process.env.COPILOT_HOME;
+  if (copilotHome === undefined || copilotHome === "" || conversation === undefined) return;
+  const file = conversationEventLog(copilotHome, conversation);
+  mkdirSync(dirname(file), { recursive: true });
+  const data = {
+    toolCallId: "call_background_0",
+    agentName: "explore",
+    ...(type === "subagent.started" ? { executionMode: "background" } : {}),
+  };
+  const event = { type, data, id: crypto.randomUUID(), timestamp: new Date().toISOString(), parentId: null };
+  appendFileSync(file, `${JSON.stringify(event)}\n`);
+}

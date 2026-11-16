@@ -29,13 +29,14 @@ import { z } from "zod";
 import { ESCAPE } from "../../src/modules/agents/copilot-keys.ts";
 import { stripAnsi } from "../../src/modules/logs/stream-lines.ts";
 import {
+  BACKGROUND_AGENT_PROMPT,
   PARALLEL_TOOLS_PROMPT,
   PROMPT_FRAME_LAYOUT,
   PROMPT_PLACEHOLDER,
   type ReferenceHook,
   reference,
 } from "../support/copilot-reference.ts";
-import { recordModelChange, recordUsage } from "../support/copilot-usage-receipt.ts";
+import { recordBackgroundAgent, recordModelChange, recordUsage } from "../support/copilot-usage-receipt.ts";
 import { pluginHooks } from "../support/plugin-hooks.ts";
 import { serveAcp } from "./fake-copilot-acp.ts";
 
@@ -115,7 +116,11 @@ if (process.argv.includes("--acp")) {
   await new Promise<never>(() => {});
 }
 
-const fire = pluginHooks(process.argv, "s1");
+/** The session id from `--session-id=` or `--resume=`, under which the fake keeps the session's conversation. */
+const sessionId = taskArgs.find((a) => /^--(session-id|resume)=/.test(a))?.replace(/^--[a-z-]+=/, "");
+
+// The hooks carry the conversation's id as `sessionId`, as Copilot CLI's do; a subagent's carry its own (ADR-254).
+const fire = pluginHooks(process.argv, sessionId ?? "s1");
 const real = reference();
 
 /**
@@ -159,8 +164,6 @@ function drawDialog(dialog: readonly string[]): void {
 
 const initialPrompt = taskArgs.find((a) => a.startsWith("--interactive="))?.slice("--interactive=".length);
 
-/** The session id from `--session-id=` or `--resume=`, under which the fake keeps the session's conversation. */
-const sessionId = taskArgs.find((a) => /^--(session-id|resume)=/.test(a))?.replace(/^--[a-z-]+=/, "");
 const conversationsDir = join(tmpdir(), "trackwall-fake-copilot-conversations");
 const conversationMarker = sessionId === undefined ? undefined : join(conversationsDir, sessionId);
 
@@ -377,6 +380,10 @@ function submit(line: string): void {
   for (const turnTitle of turnTitles) title(turnTitle.replaceAll(PROMPT_PLACEHOLDER, line));
   lastAnswer = `Thinking about: ${line}`;
   process.stdout.write(`${shortLines(lastAnswer)}\r\n`);
+  if (line === BACKGROUND_AGENT_PROMPT) {
+    startBackgroundAgent();
+    return;
+  }
   const parallel = line === PARALLEL_TOOLS_PROMPT;
   if (allowAllTools || commandAllowed) {
     endTurn(replay([...(parallel ? [firstToolDone] : []), ...real.approval.hooks.slice(asked)]));
@@ -404,6 +411,35 @@ function endTurn(outputs: HookOutputs): void {
     redrawing = false;
     draw(promptBox);
   }, REDRAW_MS);
+}
+
+/** The conversation of the fake's background agent, under which its hooks come. */
+const BACKGROUND_AGENT = "fake-background-agent";
+
+/**
+ * The turn of `BACKGROUND_AGENT_PROMPT`, as Copilot CLI 1.0.109 runs it (the contract test of ADR-254): the `task` tool
+ * starts a background agent, whose start the event log gets before the main agent ends its turn, and Copilot CLI waits
+ * for it under the input box. The agent's own turn (when the file `FAKE_COPILOT_BACKGROUND_GATE` names exists, at once
+ * without it) sends hooks under its own `sessionId`; once it ends, the event log gets its completion and Copilot CLI
+ * starts the main agent's next turn itself, with the notification `agent_idle`.
+ */
+function startBackgroundAgent(): void {
+  recordBackgroundAgent(sessionId, "subagent.started");
+  fire("postToolUse", { toolName: "task" });
+  endTurn(replay(real.turn.filter((h) => h.event === "agentStop")));
+  process.stdout.write("● Waiting for background agents\r\n");
+  const gate = process.env.FAKE_COPILOT_BACKGROUND_GATE;
+  const finish = setInterval(() => {
+    if (gate !== undefined && !existsSync(gate)) return;
+    clearInterval(finish);
+    fire("userPromptSubmitted", { sessionId: BACKGROUND_AGENT, prompt: "" });
+    fire("agentStop", { sessionId: BACKGROUND_AGENT, stopReason: "end_turn" });
+    recordBackgroundAgent(sessionId, "subagent.completed");
+    recordUsage(sessionId);
+    replay([promptHook]);
+    fire("notification", { notification_type: "agent_idle", title: "Agent idle", message: "The background agent is idle." });
+    endTurn(replay(real.turn.filter((h) => h.event === "agentStop")));
+  }, 50);
 }
 
 /**

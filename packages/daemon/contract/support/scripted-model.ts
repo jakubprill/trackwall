@@ -84,7 +84,7 @@ function summarize(request: z.infer<typeof Request>, headers: IncomingMessage["h
   };
 }
 
-type QueuedReply = ModelReply | ((request: ModelRequest) => ModelReply);
+type QueuedReply = ModelReply | ((request: ModelRequest) => ModelReply | Promise<ModelReply>);
 
 /** The tool calls of a reply that calls tools, each with its own id, in the chat-completions shape. */
 function toolCalls(reply: ToolCall | { parallel: ToolCall[] }, callId: string) {
@@ -174,7 +174,8 @@ export async function startScriptedModel() {
     requests.push(request);
     const next = queue.shift();
     if (next === undefined) return refuse(res, `no reply queued for the request after "${request.lastUserText.slice(-80)}"`);
-    answer(res, typeof next === "function" ? next(request) : next, `call_${requests.length}`);
+    const callId = `call_${requests.length}`;
+    answer(res, typeof next === "function" ? await next(request) : next, callId);
   }
 
   const server = createServer((req, res) => {
