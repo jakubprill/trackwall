@@ -779,10 +779,13 @@ function LayoutBar({
   );
 }
 
-/** A row's state (a task's, ADR-253, or its session's) and what its conversation used (ADR-190). */
+/**
+ * A row's state (a task's, ADR-253, or its session's) and what its conversation used (ADR-190). The list is narrow, so
+ * the usage goes under the state when the state with its waiting time takes the row.
+ */
 function RowStatus({ task, session }: { task: Task | undefined; session: Session | undefined }) {
   return (
-    <span className="text-muted-foreground flex items-center gap-3 text-xs">
+    <span className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
       {task ? <TaskStateLabel task={task} session={session} /> : session && <SessionStateLabel session={session} />}
       {session && <CopilotUsageMark usage={session.usage} />}
     </span>
