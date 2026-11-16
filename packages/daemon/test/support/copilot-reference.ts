@@ -56,6 +56,9 @@ export const PROMPT_PLACEHOLDER = "{prompt}";
 /** The prompt after which the fake Copilot CLI's agent calls two commands at once, each asking for approval (ADR-66). */
 export const PARALLEL_TOOLS_PROMPT = "run two commands at once";
 
+/** The prompt after which the fake Copilot CLI's agent starts a background agent and waits for it (ADR-254). */
+export const BACKGROUND_AGENT_PROMPT = "ask a background agent";
+
 /**
  * The input box Copilot CLI draws with `COPILOT_PROMPT_FRAME=1` on this system (ADR-220). It frames the box only once
  * the terminal told it its foreground and background colours (OSC 10 and 11), and on Windows the session runs in

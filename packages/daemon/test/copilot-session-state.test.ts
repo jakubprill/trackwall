@@ -119,3 +119,29 @@ describe("a failed model call from the conversation's event log (ADR-243)", () =
     expect(states(session.hook(promptSubmitted))).toEqual(["Working hook userPromptSubmitted"]);
   });
 });
+
+describe("the main agent waiting for its background agents (ADR-254)", () => {
+  const agentStop: CopilotHookRecord = { event: "agentStop", receivedAt: 0, payload: { stopReason: "end_turn" }, omitted: [] };
+  /** OSC 9;4;0: Copilot CLI removes the progress bar at the end of its main agent's turn. */
+  const progressRemoved = "\u001b]9;4;0;0\u0007";
+
+  test("an agentStop while background agents run keeps the session working, also when the progress bar goes", () => {
+    const session = sessionInTurn();
+
+    expect(session.hook(agentStop, true)).toEqual([]);
+    expect(session.output(progressRemoved)).toEqual([]);
+  });
+
+  test("the agentStop of a turn after which no background agent runs is the end of the turn", () => {
+    const session = sessionInTurn();
+
+    expect(states(session.hook(agentStop, false))).toEqual(["Input hook agentStop"]);
+  });
+
+  test("Ctrl+C stops the background agents, and the session waits for you", () => {
+    const session = sessionInTurn();
+    session.hook(agentStop, true);
+
+    expect(states(session.key("interrupt"))).toEqual(["Input key interrupt"]);
+  });
+});

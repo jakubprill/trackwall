@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
-import { appendFileSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { RunState } from "@trackwall/protocol";
+import { conversationEventLog } from "../src/infra/copilot-home.ts";
 import type { CopilotHookEvent, CopilotHookRecord } from "../src/modules/agents/copilot-hook-record.ts";
 import { CopilotUsageLog } from "../src/modules/agents/copilot-usage-log.ts";
 import { LiveSession, type SessionEvent } from "../src/modules/agents/live-session.ts";
@@ -163,6 +164,7 @@ function runningSession(
   prompt: () => string | undefined = () => "read the review",
   run: () => RunState = () => ({ kind: "running", runId: "r2", startedAt: "2026-10-24T12:00:00.000Z", pid: 1 }),
   situation: () => string | undefined = () => undefined,
+  copilotHome = NO_COPILOT_HOME,
 ): {
   session: LiveSession;
   hooksFile: string;
@@ -200,7 +202,7 @@ function runningSession(
     onEvent: (event) => events.push(event),
     onTurnOver: () => {},
     onTurnStart: () => {},
-    usage: new CopilotUsageLog(NO_COPILOT_HOME),
+    usage: new CopilotUsageLog(copilotHome),
     tokenBudget: null,
     alwaysAllowed: () => [],
   });
@@ -1111,5 +1113,120 @@ describe("a session that may be stuck (ADR-151)", () => {
 
     session.input("x");
     expect(session.view()?.stuck).toBeNull();
+  });
+});
+
+describe("subagents and background agents of the main agent (ADR-254)", () => {
+  /** The main agent's conversation: the session's id, which Copilot CLI's hooks carry as `sessionId`. */
+  const MAIN = "s2";
+  /** A subagent's conversation, under which Copilot CLI sends its hooks. */
+  const SUBAGENT = "3d56e567-4448-44d6-b760-cea6e827d922";
+
+  /** A session in the middle of the main agent's turn, whose conversation's event log the test writes. */
+  function sessionInTurn(prompt: () => string | undefined = () => undefined) {
+    const copilotHome = mkdtempSync(join(tmpdir(), "trackwall-copilot-home-"));
+    const running = runningSession(prompt, undefined, undefined, copilotHome);
+    running.session.connect({ write: () => {}, resize: () => {} });
+    hook(running.session, running.hooksFile, "sessionStart", { sessionId: MAIN, source: "new" });
+    hook(running.session, running.hooksFile, "userPromptSubmitted", { sessionId: MAIN });
+    const eventLog = conversationEventLog(copilotHome, MAIN);
+    mkdirSync(dirname(eventLog), { recursive: true });
+    const logEvent = (type: string, data: Record<string, unknown>) => appendFileSync(eventLog, `${JSON.stringify({ type, data })}\n`);
+    return { ...running, logEvent };
+  }
+
+  test("the main agent's turn end while its background agent runs keeps the session working and ends no turn; the turn Copilot CLI starts once the agent finishes does", () => {
+    const { session, hooksFile, events, logEvent } = sessionInTurn();
+    logEvent("subagent.started", { toolCallId: "call_1_0", agentName: "explore", executionMode: "background" });
+    hook(session, hooksFile, "postToolUse", { sessionId: MAIN, toolName: "task" });
+
+    hook(session, hooksFile, "agentStop", { sessionId: MAIN, stopReason: "end_turn" });
+    session.tick();
+
+    expect(session.view()).toMatchObject({ state: { state: "Working", source: "hook" }, needsAttention: false });
+    expect(events).toEqual([]);
+
+    hook(session, hooksFile, "userPromptSubmitted", { sessionId: SUBAGENT });
+    hook(session, hooksFile, "agentStop", { sessionId: SUBAGENT, stopReason: "end_turn" });
+    logEvent("subagent.completed", { toolCallId: "call_1_0", agentName: "explore" });
+    session.tick();
+
+    expect(session.view()).toMatchObject({ state: { state: "Working" }, needsAttention: false });
+    expect(events).toEqual([]);
+
+    hook(session, hooksFile, "userPromptSubmitted", { sessionId: MAIN });
+    hook(session, hooksFile, "notification", { sessionId: MAIN, notification_type: "agent_idle" });
+    hook(session, hooksFile, "agentStop", { sessionId: MAIN, stopReason: "end_turn" });
+    session.tick();
+
+    expect(session.view()).toMatchObject({ state: { state: "Input", reason: "hook agentStop" }, needsAttention: true });
+    expect(events).toEqual([{ kind: "turn_ended" }]);
+  });
+
+  test("a wait for a background agent that sends no hook for 10 s and that the event log does not name as running ends the main agent's work", () => {
+    const { session, hooksFile, events } = sessionInTurn();
+    // A task call whose agent never started: its result comes back, and no subagent's hook follows.
+    hook(session, hooksFile, "postToolUse", { sessionId: MAIN, toolName: "task" });
+    hook(session, hooksFile, "agentStop", { sessionId: MAIN, stopReason: "end_turn" });
+    later(9000, () => session.tick());
+    expect(session.view()?.state).toMatchObject({ state: "Working" });
+
+    later(11_000, () => session.tick());
+
+    expect(session.view()?.state).toMatchObject({ state: "Input", source: "log", reason: "log no background agent runs" });
+    expect(events).toEqual([{ kind: "turn_ended" }]);
+  });
+
+  test("a background agent that runs a long tool without hooks keeps the wait while the event log names it as running", () => {
+    const { session, hooksFile, events, logEvent } = sessionInTurn();
+    logEvent("subagent.started", { toolCallId: "call_1_0", agentName: "task", executionMode: "background" });
+    hook(session, hooksFile, "postToolUse", { sessionId: MAIN, toolName: "task" });
+    hook(session, hooksFile, "agentStop", { sessionId: MAIN, stopReason: "end_turn" });
+    hook(session, hooksFile, "userPromptSubmitted", { sessionId: SUBAGENT });
+
+    later(30_000, () => session.tick());
+
+    expect(session.view()?.state).toMatchObject({ state: "Working" });
+    expect(events).toEqual([]);
+  });
+
+  test("Ctrl+C while the main agent waits for its background agents stops them, and the session waits for you", () => {
+    const { session, hooksFile } = sessionInTurn();
+    hook(session, hooksFile, "postToolUse", { sessionId: MAIN, toolName: "task" });
+    hook(session, hooksFile, "agentStop", { sessionId: MAIN, stopReason: "end_turn" });
+    session.tick();
+
+    session.input("\u0003");
+
+    expect(session.view()?.state).toMatchObject({ state: "Input", source: "keyboard", reason: "key interrupt" });
+  });
+
+  test("a subagent's turn in the middle of the main agent's ends no turn and gets none of what waits, which the main agent's turn end gets", () => {
+    const { session, hooksFile, events } = sessionInTurn(() => "read the review");
+    expect(session.askToRead()).toBe("queued");
+
+    expect(hook(session, hooksFile, "userPromptSubmitted", { sessionId: SUBAGENT })).toEqual({});
+    expect(hook(session, hooksFile, "postToolUse", { sessionId: SUBAGENT, toolName: "bash" })).toEqual({});
+    expect(hook(session, hooksFile, "agentStop", { sessionId: SUBAGENT, stopReason: "end_turn" })).toEqual({});
+    session.tick();
+
+    expect(session.view()?.state).toMatchObject({ state: "Working" });
+    expect(events).toEqual([]);
+    expect(hook(session, hooksFile, "agentStop", { sessionId: MAIN, stopReason: "end_turn" })).toEqual({
+      decision: "block",
+      reason: "read the review",
+    });
+  });
+
+  test("after /clear the main agent's hooks come under the new conversation its sessionStart names", () => {
+    const { session, hooksFile, events } = sessionInTurn();
+    hook(session, hooksFile, "agentStop", { sessionId: MAIN, stopReason: "end_turn" });
+    hook(session, hooksFile, "sessionEnd", { sessionId: MAIN, reason: "user_exit" });
+    hook(session, hooksFile, "sessionStart", { sessionId: "after-clear", source: "new" });
+    hook(session, hooksFile, "userPromptSubmitted", { sessionId: "after-clear" });
+    hook(session, hooksFile, "agentStop", { sessionId: "after-clear", stopReason: "end_turn" });
+    session.tick();
+
+    expect(events).toEqual([{ kind: "turn_ended" }, { kind: "turn_ended" }]);
   });
 });

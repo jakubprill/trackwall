@@ -828,6 +828,10 @@ _Avoid_: record (without qualification; that is a log line)
 What the daemon answers a session plugin hook with and Copilot CLI acts on (ADR-85): empty, a block of `agentStop` whose reason becomes the next turn's message, or `additionalContext` of `postToolUse` added to the tool's result. It carries the daemon's prompt about what waits for the session.
 _Avoid_: hook response, hook result
 
+**Subagent**, **background agent** (`CopilotSubagents`):
+An agent Copilot CLI's `task` tool starts for the session's **main agent**, in its own context and conversation; its hooks come to the session plugin under its own `sessionId` and are not the session's turns (ADR-254). A background agent is a subagent started in background mode: the main agent ends its turn and waits for it ("Waiting for background agents"), and Copilot CLI starts the main agent's next turn once it finishes, so the session is still working meanwhile.
+_Avoid_: child session, worker
+
 **Window title** (`windowTitle`):
 The title an agent CLI sets with the OSC 0 / 2 sequence; in Copilot CLI it is a description of the current work. Shown next to the state, it is never the state.
 _Avoid_: intention, intent

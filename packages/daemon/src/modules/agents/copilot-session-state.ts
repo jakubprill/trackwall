@@ -34,6 +34,29 @@ const MODEL_CALL_FAILED: StateSignal = {
 };
 
 /**
+ * The main agent's `agentStop` while background agents it started still run (ADR-254): Copilot CLI shows "Waiting for
+ * background agents" and starts the agent's next turn itself once they finish, so the work goes on. The hooks tell it
+ * (`copilot-subagents.ts`), so `high`.
+ */
+const WAITING_FOR_BACKGROUND_AGENTS: StateSignal = {
+  state: "Working",
+  source: "hook",
+  confidence: "high",
+  reason: "hook agentStop while background agents run",
+};
+
+/**
+ * The main agent waited for background agents that sent no hook for a while and that the event log no longer names as
+ * running (ADR-254): one whose `task` call failed, or one stopped another way; no turn of the main agent follows.
+ */
+const BACKGROUND_AGENTS_ENDED: StateSignal = {
+  state: "Input",
+  source: "log",
+  confidence: "medium",
+  reason: "log no background agent runs",
+};
+
+/**
  * A prompt the daemon typed counts as on its way this long (ADR-62): its session is not waiting for you meanwhile, and
  * one not taken by then may be typed again into an empty input box.
  */
@@ -112,6 +135,11 @@ export class CopilotSessionState {
   #screenPhase: "start" | "keyed" | "dialog" | "answered" | "done" = "start";
   /** The heading of the dialog shown before the first hook that waits (`dialog`) or was answered last (`answered`). */
   #startDialog: string | undefined;
+  /**
+   * The main agent ended its turn while background agents run (ADR-254): until its next hook the removed progress bar
+   * (OSC 9;4;0) does not end `Working`.
+   */
+  #waitingForBackgroundAgents = false;
 
   constructor(o: CopilotSessionStateOptions) {
     this.#tracker = new TaskStateTracker(o);
@@ -133,7 +161,7 @@ export class CopilotSessionState {
     const changes = [this.#tick(), this.#tracker.activity()];
     for (const osc of this.#osc.feed(data)) {
       this.#windowTitle = windowTitleFromOsc(osc, this.#program) ?? this.#windowTitle;
-      const signal = stateFromOsc(osc);
+      const signal = this.#waitingForBackgroundAgents ? undefined : stateFromOsc(osc);
       if (signal) changes.push(this.#tracker.signal(signal));
     }
     const cancelled = this.#screen.feed(data);
@@ -150,13 +178,36 @@ export class CopilotSessionState {
    * A `postToolUse` while an approval request is not answered is held back for `HOLD_TOOL_USE_MS`: it may be of a tool
    * called together with the one asking (one that needed no approval, or one of several already approved, ADR-66).
    * Only an `Approval` guessed from a notification's text, no request of a known kind, ends with it at once as before.
+   * `backgroundAgentsRun`: background agents of the main agent may run as the hook comes (ADR-254); then its `agentStop`
+   * does not end its work. Not by default, as in a replayed recording, which keeps no subagents.
    */
-  hook(record: CopilotHookRecord): TaskStateChange[] {
+  hook(record: CopilotHookRecord, backgroundAgentsRun = false): TaskStateChange[] {
+    this.#waitingForBackgroundAgents = record.event === "agentStop" && backgroundAgentsRun;
+    return this.#applyHook(record);
+  }
+
+  /** Whether the main agent waits for its background agents (ADR-254): since its `agentStop`, until its next hook or a key. */
+  get waitingForBackgroundAgents(): boolean {
+    return this.#waitingForBackgroundAgents;
+  }
+
+  /**
+   * A hook of a subagent the main agent started (ADR-254): another conversation's turn inside this session, so it
+   * changes no state and keeps the main agent's wait for its background agents, but it is the session's activity,
+   * which keeps `Working` from turning `Stale`. Only its tool's `postToolUse` says, as the main agent's would, that the
+   * work goes on, such as after an approval the subagent asked for.
+   */
+  subagentHook(record: CopilotHookRecord): TaskStateChange[] {
+    if (record.event === "postToolUse") return this.#applyHook(record);
+    return [this.#tick(), this.#tracker.activity()].filter((c) => c !== undefined);
+  }
+
+  #applyHook(record: CopilotHookRecord): TaskStateChange[] {
     const waiting = this.#tracker.current?.state === "Approval";
     const keepsWaiting = record.event === "postToolUse" && waiting && this.#approvalsAsked > 0;
     // The first `sessionStart`: no hook has changed the state yet.
     const withPrompt = record.event === "sessionStart" && this.#inPromptBox === undefined && this.#promptOnItsWay();
-    const hookSignal = withPrompt ? SESSION_START_WITH_PROMPT : stateFromHook(record);
+    const hookSignal = this.#hookSignal(record, withPrompt);
     if (keepsWaiting && hookSignal) this.#heldToolUse = { signal: hookSignal, at: this.#now() };
     else if (hookSignal) this.#heldToolUse = undefined;
     const signal = keepsWaiting ? undefined : hookSignal;
@@ -166,6 +217,18 @@ export class CopilotSessionState {
     const asked = signal?.confidence === "high" ? 1 : 0;
     if (signal?.state === "Approval") this.#approvalsAsked = (waiting ? this.#approvalsAsked : 0) + asked;
     return this.#signal(signal);
+  }
+
+  /** The state a hook record of the main agent says, `hook` having decided the two cases the record alone cannot tell. */
+  #hookSignal(record: CopilotHookRecord, withPrompt: boolean): StateSignal | undefined {
+    if (withPrompt) return SESSION_START_WITH_PROMPT;
+    return this.#waitingForBackgroundAgents ? WAITING_FOR_BACKGROUND_AGENTS : stateFromHook(record);
+  }
+
+  /** The main agent's wait for its background agents ended without a turn of its own (ADR-254). */
+  backgroundAgentsEnded(): TaskStateChange[] {
+    this.#waitingForBackgroundAgents = false;
+    return this.#signal(BACKGROUND_AGENTS_ENDED);
   }
 
   /**
@@ -254,6 +317,8 @@ export class CopilotSessionState {
     // A key before the screen was read may have answered a dialog: one not redrawn yet must not ask again.
     if (this.#screenPhase === "start") this.#screenPhase = "keyed";
     if (!signal) return [stale].filter((c) => c !== undefined);
+    // Ctrl+C stops the background agents too ("ctrl+c stop agents"), and no turn of the main agent follows.
+    this.#waitingForBackgroundAgents = false;
     this.#lastAnswerAt = this.#now();
     if (this.#screenPhase === "dialog") this.#screenPhase = "answered";
     // An answer to one of several approval requests: the next one's dialog follows, so the session still waits (ADR-66).

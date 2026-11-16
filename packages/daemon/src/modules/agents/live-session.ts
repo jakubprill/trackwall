@@ -20,6 +20,7 @@ import type { CopilotHookEvent, CopilotHookRecord } from "./copilot-hook-record.
 import { approvalRequest } from "./copilot-hooks.ts";
 import { answersDialog, ESCAPE, type SessionKey, sessionKey } from "./copilot-keys.ts";
 import { CopilotSessionState, RETYPE_AFTER_MS } from "./copilot-session-state.ts";
+import { CopilotSubagents } from "./copilot-subagents.ts";
 import type { CopilotUsageLog } from "./copilot-usage-log.ts";
 import { CopyRequestSlot } from "./copy-request.ts";
 import { HookTail } from "./hook-tail.ts";
@@ -43,6 +44,13 @@ export const STALE_AFTER_MS = 60_000;
  * one pasted string, in which a carriage return is text and does not submit.
  */
 const SUBMIT_DELAY_MS = 100;
+
+/**
+ * How long the main agent may wait for background agents with no hook and none running in the event log before its
+ * work counts as ended (ADR-254): well above the time Copilot CLI takes to write the log, some 100 ms, and to read it
+ * here, every 2 s.
+ */
+const BACKGROUND_QUIET_MS = 10_000;
 
 /**
  * How many times the daemon tries again with a prompt it typed and the session did not take within `RETYPE_AFTER_MS`
@@ -241,6 +249,10 @@ export class LiveSession implements AgentSession {
   #lastStepAt: number | undefined;
   /** The failed model calls of the conversation's event log already reported as the state (ADR-243). */
   #failedCallsSeen: number;
+  /** The subagents of the main agent, which tell its hook records from theirs (ADR-254). */
+  readonly #subagents = new CopilotSubagents();
+  /** The last hook record read was a subagent's (ADR-254): its hook gets no output. */
+  #subagentHookRead = false;
   readonly #alwaysAllowed: () => readonly string[];
 
   constructor(o: LiveSessionOptions) {
@@ -315,6 +327,8 @@ export class LiveSession implements AgentSession {
       this.#userDrove = true;
       this.#daemonTurn = false;
     }
+    // Ctrl+C stops the background agents too ("ctrl+c stop agents"), ADR-254.
+    if (key === "interrupt") this.#subagents.stopped();
     if (key && this.#keyChangesState(key, data)) this.#report(this.#state.key(key));
     // After the key's own state change, so that the `Input` an Esc causes counts as seen.
     if (typedByUser(data)) {
@@ -374,19 +388,25 @@ export class LiveSession implements AgentSession {
     // The hooks file is closed once the exit was seen; a late hook changes nothing.
     if (this.#finished) return {};
     const turnEnded = this.#readHooks(record?.event === "agentStop");
-    const blockedTurn = record?.payload.stop_hook_active === true;
+    // What waits is for the main agent: a block or context in a subagent's hook would go to the subagent.
+    if (record === undefined || this.#subagentHookRead) return {};
+    return this.#mainAgentHookOutput(record, turnEnded);
+  }
+
+  /** `hookOutput` for a hook of the main agent, its records read; `turnEnded`: the hook ended a turn the user did not drive. */
+  #mainAgentHookOutput(record: CopilotHookRecord, turnEnded: boolean): CopilotHookOutput {
+    const blockedTurn = record.payload.stop_hook_active === true;
     const asked = this.#promptAsked || this.#promptTyped !== undefined || (blockedTurn && this.#blockGiven);
-    if (record?.event === "agentStop") this.#blockGiven = false;
-    const output =
-      record === undefined || !asked
-        ? {}
-        : hookOutputFor({
-            event: record.event,
-            blockedTurn,
-            prompt: this.#promptText(),
-            contextGiven: this.#contextGiven,
-            userDraft: this.#userDraft,
-          });
+    if (record.event === "agentStop") this.#blockGiven = false;
+    const output = !asked
+      ? {}
+      : hookOutputFor({
+          event: record.event,
+          blockedTurn,
+          prompt: this.#promptText(),
+          contextGiven: this.#contextGiven,
+          userDraft: this.#userDraft,
+        });
     if ("additionalContext" in output) this.#contextGiven = output.additionalContext;
     if ("reason" in output) {
       this.#promptSent(output.reason, 0);
@@ -396,7 +416,7 @@ export class LiveSession implements AgentSession {
       if (turnEnded) this.#onEvent({ kind: "turn_ended" });
     }
     // `hookOutputFor` gives a prompt's hook nothing, so the situation replaces nothing.
-    return record?.event === "userPromptSubmitted" ? situationOutput(this.#situation()) : output;
+    return record.event === "userPromptSubmitted" ? situationOutput(this.#situation()) : output;
   }
 
   /**
@@ -487,6 +507,7 @@ export class LiveSession implements AgentSession {
     if (run?.kind !== "exited") {
       this.#usage.poll(this.conversation, Date.now());
       this.#reportFailedCall();
+      this.#endQuietWaitForBackgroundAgents();
       this.#tokenBudget?.check();
       return true;
     }
@@ -606,6 +627,12 @@ export class LiveSession implements AgentSession {
   /** Applies one hook record; true when it ended a turn the user did not drive. */
   #readHook(record: CopilotHookRecord): boolean {
     this.#lastStepAt = Date.now();
+    this.#subagentHookRead = this.#subagents.read(record);
+    // A subagent's turn is not the session's (ADR-254).
+    if (this.#subagentHookRead) {
+      this.#report(this.#state.subagentHook(record));
+      return false;
+    }
     if (record.event === "userPromptSubmitted") {
       this.#userDraft = false;
       this.#hasConversation = true;
@@ -613,17 +640,49 @@ export class LiveSession implements AgentSession {
     }
     if (record.event === "userPromptSubmitted" || record.event === "agentStop") this.#contextGiven = undefined;
     if (record.event !== "notification") this.#requestsGoOn = false;
-    this.#report(this.#state.hook(record));
+    // With background agents the agent's work goes on in a turn Copilot CLI starts once they finish (ADR-254).
+    this.#report(this.#state.hook(record, this.#subagents.backgroundAgentsRun));
     // After the state change, which starts a new wait on the first request.
     if (approvalRequest(record)) this.#dialogs.requested(record.payload.message);
     this.#applyEarlyAnswer(record.event);
     // The end of a turn from its hook, not from the state: a question dialog and an Esc give `Input` mid-turn too.
-    if (record.event !== "agentStop") return false;
+    if (record.event !== "agentStop" || this.#state.waitingForBackgroundAgents) return false;
+    return this.#turnOver();
+  }
+
+  /** The main agent's work ended; true when it was a turn the user did not drive. */
+  #turnOver(): boolean {
     this.#onTurnOver();
     this.#daemonTurn = false;
     const ended = !this.#userDrove;
     this.#userDrove = false;
     return ended;
+  }
+
+  /**
+   * The background agents the main agent's conversation's event log names as running, read again first. Not what
+   * decides at the main agent's `agentStop`: Copilot CLI writes the log some 100 ms after the hooks, so it may lack a
+   * start or an end then. After `/clear` the main agent's conversation is a new one, whose log this session does not
+   * follow, so none count.
+   */
+  #backgroundAgentsInLog(): number {
+    const main = this.#subagents.conversation;
+    if (main !== undefined && main !== this.conversation) return 0;
+    this.#usage.update(this.conversation);
+    return this.#usage.backgroundAgents();
+  }
+
+  /**
+   * The main agent waits for background agents of which no hook has come for `BACKGROUND_QUIET_MS` and the event log
+   * names none as running (ADR-254): one that never started (a `task` call that failed) or that was stopped another way
+   * than with Ctrl+C. Copilot CLI starts no turn of the main agent then, so its work ends here.
+   */
+  #endQuietWaitForBackgroundAgents(): void {
+    if (!this.#state.waitingForBackgroundAgents || this.#lastStepAt === undefined) return;
+    if (Date.now() - this.#lastStepAt < BACKGROUND_QUIET_MS || this.#backgroundAgentsInLog() > 0) return;
+    this.#subagents.stopped();
+    this.#report(this.#state.backgroundAgentsEnded());
+    if (this.#turnOver()) this.#onEvent({ kind: "turn_ended" });
   }
 
   /**
