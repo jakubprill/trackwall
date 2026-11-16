@@ -201,12 +201,16 @@ export function SessionsView({
             <Button
               variant="outline"
               size="sm"
-              className="w-full"
+              // The label wraps instead of running past the frame: with a wider system font (Segoe UI on Windows) the
+              // longest one and the shortcut do not fit the list's width on one line.
+              className="h-auto min-h-8 w-full py-1.5 text-left whitespace-normal"
               onClick={() => (next.kind === "supervisor" ? onShowSupervisor() : select(entrySelection(next)))}
               aria-keyshortcuts={ariaSessionShortcut(NEXT_WAITING)}
             >
-              <BellRing /> {nextWaitingLabel(next, waiting)}
-              <span className="text-muted-foreground ml-auto font-mono text-2xs">{sessionShortcutLabel(NEXT_WAITING, IS_MAC)}</span>
+              <BellRing /> <span className="min-w-0">{nextWaitingLabel(next, waiting)}</span>
+              <span className="text-muted-foreground ml-auto shrink-0 font-mono text-2xs">
+                {sessionShortcutLabel(NEXT_WAITING, IS_MAC)}
+              </span>
             </Button>
           </div>
         )}

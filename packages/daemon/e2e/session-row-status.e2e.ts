@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { sessionRow, showSessions, typeInTerminal, useTrackwall, waitForTerminal } from "./support/trackwall-ui.ts";
+import { changeSessionLists, sessionRow, showSessions, typeInTerminal, useTrackwall, waitForTerminal } from "./support/trackwall-ui.ts";
 
 const trackwall = useTrackwall();
 
@@ -20,21 +20,7 @@ describe("a session's row in the Sessions list", () => {
     const page = await trackwall().open();
     // The session has waited for five minutes and used AI credits: the list reads both from the daemon, live from the
     // event socket and from its answer to the session list.
-    await page.routeWebSocket(/\/ws$/, (socket) => {
-      const server = socket.connectToServer();
-      server.onMessage((message) => {
-        const event = JSON.parse(String(message));
-        if (event.type === "sessions.changed") withWaitAndUsage(event.payload);
-        socket.send(JSON.stringify(event));
-      });
-    });
-    await page.route("**/api/agents/sessions", async (route) => {
-      const response = await route.fetch();
-      const body = await response.json();
-      withWaitAndUsage(body.data);
-      await route.fulfill({ response, json: body });
-    });
-    await page.reload();
+    await changeSessionLists(page, withWaitAndUsage);
     await showSessions(page);
     await page.getByRole("button", { name: "Own worktree", pressed: true }).click();
     await page.getByRole("button", { name: "Start session" }).click();

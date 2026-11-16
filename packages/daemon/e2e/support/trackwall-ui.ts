@@ -180,3 +180,28 @@ export async function typeInTerminal(page: Page, keys: string): Promise<void> {
   await page.locator(".xterm").click();
   await page.keyboard.type(keys);
 }
+
+/** A session list as the daemon sends it, with the fields a test changes before the UI reads it. */
+type SessionListBody = { sessions: { supervisor: boolean; needsAttention: boolean; waitingSince: string | null; usage: unknown }[] };
+
+/**
+ * Changes every session list the page reads, from the event socket and from the daemon's answer to the session list,
+ * for a state the fake Copilot CLI does not reach. A route takes only a page loaded after it, hence the reload.
+ */
+export async function changeSessionLists(page: Page, change: (list: SessionListBody) => void): Promise<void> {
+  await page.routeWebSocket(/\/ws$/, (socket) => {
+    const server = socket.connectToServer();
+    server.onMessage((message) => {
+      const event = JSON.parse(String(message));
+      if (event.type === "sessions.changed") change(event.payload);
+      socket.send(JSON.stringify(event));
+    });
+  });
+  await page.route("**/api/agents/sessions", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    change(body.data);
+    await route.fulfill({ response, json: body });
+  });
+  await page.reload();
+}
