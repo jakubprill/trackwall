@@ -39,7 +39,13 @@ const text = (path: string) => readFileSync(path, "utf8");
 describe("state backups across Trackwall versions (ADR-244)", () => {
   test("a first start on an empty state directory takes no backup", () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-state-backup-"));
-    startIn(home, "0.5.25");
+    const log = startIn(home, "0.5.25");
+    expect(stateBackups(home)).toEqual([]);
+    // It still notes the version, without an error, so the files this version writes next are not taken later for
+    // ones a Trackwall before backups left.
+    expect(log).toEqual([]);
+    copyFileSync(join(FIXTURES, TASKS_FILE), join(home, TASKS_FILE));
+    startIn(home, "0.5.25", 1);
     expect(stateBackups(home)).toEqual([]);
   });
 
