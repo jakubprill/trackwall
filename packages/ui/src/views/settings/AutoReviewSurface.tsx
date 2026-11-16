@@ -49,22 +49,19 @@ export function AutoReviewSurface({ conn }: { conn: Connection }) {
         </p>
         {settings.error && <ErrorWithRetry message={settings.error} onRetry={settings.reload} />}
         {!data && !settings.error && <Loading />}
-        {data && (
-          <>
-            {AFTER_REPORT.map(([key, label]) => (
-              <label key={key} className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="accent-primary size-4 shrink-0"
-                  checked={data.autoReview[key]}
-                  disabled={busy}
-                  onChange={(e) => void change({ ...data.autoReview, [key]: e.target.checked })}
-                />
-                {label}
-              </label>
-            ))}
-          </>
-        )}
+        {data &&
+          AFTER_REPORT.map(([key, label]) => (
+            <label key={key} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="accent-primary size-4 shrink-0"
+                checked={data.autoReview[key]}
+                disabled={busy}
+                onChange={(e) => void change({ ...data.autoReview, [key]: e.target.checked })}
+              />
+              {label}
+            </label>
+          ))}
         {data?.autoReviewProblem && <p className="text-destructive text-xs break-words">{data.autoReviewProblem}</p>}
         {error && <p className="text-destructive text-xs break-words">{error}</p>}
       </div>
