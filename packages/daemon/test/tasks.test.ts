@@ -18,6 +18,7 @@ import { DEFAULT_TASK_BRANCH_PREFIX } from "@trackwall/protocol";
 import { z } from "zod";
 import { removeFolder } from "../src/infra/remove-folder.ts";
 import type { Agents } from "../src/modules/agents/agents.ts";
+import { gitProcessesStarted } from "../src/modules/vcs/git.ts";
 import { makeAgents, viewer, waitFor } from "./support/agents.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
 
@@ -410,6 +411,11 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     // Only the second task committed, so the branches merge cleanly: the first task's edit is not committed yet.
     expect(await agents.taskSharedFiles(first.id)).toEqual([{ task: second.id, files: ["src/login.ts"], conflicts: [] }]);
     expect(await agents.taskSharedFiles(third.id)).toEqual([]);
+    // The views ask every few seconds, so each task costs only its changed paths: the new files and one diff, and the
+    // entries of the first task's new file in the temporary index (the Changes with their counts are six to seven each).
+    const before = gitProcessesStarted();
+    await agents.taskSharedFiles(third.id);
+    expect(gitProcessesStarted() - before).toBe(2 + 3 + 2);
 
     // On Windows the running session keeps its worktree's files open, so it stops first.
     await agents.stop(sessionOf(agents, second.id));

@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { removeFolder, removeIfPresent } from "../../infra/remove-folder.ts";
-import { git, knownDefaultBranch, revParse, symbolicRef } from "./git.ts";
+import { existingCommit, git, knownDefaultBranch, revParse, symbolicRef } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { parseStatus } from "./parse.ts";
 import { pathKey } from "./path-key.ts";
@@ -33,7 +33,8 @@ export async function defaultBase(dir: string): Promise<WorktreeBase> {
     const commit = (await revParse(dir, `refs/heads/${branch}`)) ?? (await revParse(dir, `refs/remotes/${remote.name}/${branch}`));
     if (commit) return { branch, commit };
   }
-  const head = await revParse(dir, "HEAD");
+  // Not `revParse`: a repo git cannot read (a damaged `HEAD`) is not a repo without commits, and git's error says what is wrong.
+  const head = await existingCommit(dir, "HEAD");
   if (!head) throw new Error("the repo has no commits yet");
   const current = await symbolicRef(dir, "HEAD");
   return { branch: current?.startsWith("refs/heads/") ? current.slice("refs/heads/".length) : null, commit: head };

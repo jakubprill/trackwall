@@ -4,7 +4,7 @@ import { lstat, readlink } from "node:fs/promises";
 import { resolve } from "node:path";
 import { mapLimit } from "../../infra/map-limit.ts";
 import { existingCommit } from "./git.ts";
-import { changedPaths } from "./worktree-changes.ts";
+import { type ChangesScratch, changedPaths } from "./worktree-changes.ts";
 
 /**
  * A task worktree's fingerprint (ADR-209): one hash of what its files hold, so a verification can tell that they changed
@@ -20,8 +20,8 @@ const HASH_CONCURRENCY = 8;
 /** A larger file (a jar, a database dump) counts by its size and modification time instead of its content. */
 const CONTENT_HASH_MAX_BYTES = 16 * 1024 * 1024;
 
-export async function worktreeFingerprint(dir: string, base: string, scratchDir: string): Promise<string> {
-  return (await contentFingerprint(dir, base, scratchDir)).hash;
+export async function worktreeFingerprint(dir: string, base: string, scratch: ChangesScratch): Promise<string> {
+  return (await contentFingerprint(dir, base, scratch)).hash;
 }
 
 /**
@@ -29,16 +29,16 @@ export async function worktreeFingerprint(dir: string, base: string, scratchDir:
  * new commit outside the branch changes it too, though a commit leaves the fingerprint as it was. `null` when the file
  * list was cut, since an edit past the cut would not change it.
  */
-export async function discardFingerprint(dir: string, base: string, scratchDir: string): Promise<string | null> {
-  const [content, head] = await Promise.all([contentFingerprint(dir, base, scratchDir), existingCommit(dir, "HEAD")]);
+export async function discardFingerprint(dir: string, base: string, scratch: ChangesScratch): Promise<string | null> {
+  const [content, head] = await Promise.all([contentFingerprint(dir, base, scratch), existingCommit(dir, "HEAD")]);
   if (content.truncated) return null;
   return createHash("sha256")
     .update(`content ${content.hash}\nhead ${head ?? "none"}\n`)
     .digest("hex");
 }
 
-async function contentFingerprint(dir: string, base: string, scratchDir: string): Promise<{ hash: string; truncated: boolean }> {
-  const listed = await changedPaths(dir, base, scratchDir);
+async function contentFingerprint(dir: string, base: string, scratch: ChangesScratch): Promise<{ hash: string; truncated: boolean }> {
+  const listed = await changedPaths(dir, base, scratch);
   const paths = listed.paths.sort();
   const digests = await mapLimit(paths, HASH_CONCURRENCY, (path) => fileDigest(resolve(dir, path)));
   const hash = createHash("sha256").update(`base ${base}\n`);

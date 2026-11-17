@@ -195,3 +195,58 @@ describe("statuses the lists reuse while git has no reason to see a change (ADR-
     REAL_GIT_TIMEOUT,
   );
 });
+
+describe("the git budget of a task worktree's changes, read every few seconds while its task is open", () => {
+  /** A repo with a task worktree beside it, as `git worktree add` makes one: its `.git` is a file. */
+  function repoWithTaskWorktree() {
+    const repo = makeRepo({ "src/cart.ts": "export const sum = 1;\n" }, "shop");
+    const base = gitIn(repo, "rev-parse", "HEAD").trim();
+    const worktree = join(mkdtempSync(join(tmpdir(), "trackwall-worktree-")), "task");
+    gitIn(repo, "worktree", "add", "--quiet", "-b", "trackwall/task", worktree, base);
+    return { repo, base, worktree, vcs: new Vcs(systemTempFolder) };
+  }
+
+  test(
+    "the first read asks git where the worktree's index lies, the next ones do not",
+    async () => {
+      const { base, worktree, vcs } = repoWithTaskWorktree();
+      writeFileSync(join(worktree, "src", "cart.ts"), "export const sum = 2;\n");
+
+      // Where the index lies, the uncommitted count, the commit count, the new files and three diffs.
+      expect(await gitProcessesOf(() => vcs.worktreeChanges(worktree, base, 1000, []))).toBe(7);
+      expect(await gitProcessesOf(() => vcs.worktreeChanges(worktree, base, 1000, []))).toBe(6);
+      // Only the paths, as the shared files warning reads them: the new files and one diff.
+      expect(await gitProcessesOf(() => vcs.changedPaths(worktree, base))).toBe(2);
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
+    "a worktree made again in the same folder is asked again, and its changes are read from its own index",
+    async () => {
+      const { repo, base, worktree, vcs } = repoWithTaskWorktree();
+      expect((await vcs.changedPaths(worktree, base)).paths).toEqual([]);
+
+      gitIn(repo, "worktree", "remove", "--force", worktree);
+      // Another worktree takes the name `task` in the repo's `worktrees`, so the one made again gets another name there
+      // and its index lies elsewhere than the first one's did.
+      gitIn(
+        repo,
+        "worktree",
+        "add",
+        "--quiet",
+        "-b",
+        "trackwall/other",
+        join(mkdtempSync(join(tmpdir(), "trackwall-worktree-")), "task"),
+        base,
+      );
+      gitIn(repo, "worktree", "add", "--quiet", "-b", "trackwall/task-2", worktree, base);
+      writeFileSync(join(worktree, "notes.md"), "plan\n");
+      expect(gitIn(worktree, "rev-parse", "--git-path", "index").trim()).toEndWith(join("worktrees", "task1", "index"));
+
+      // Where the index lies, the new files, their entries in the temporary index and one diff.
+      expect(await gitProcessesOf(async () => expect((await vcs.changedPaths(worktree, base)).paths).toEqual(["notes.md"]))).toBe(4);
+    },
+    REAL_GIT_TIMEOUT,
+  );
+});

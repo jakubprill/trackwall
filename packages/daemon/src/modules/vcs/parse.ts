@@ -143,6 +143,19 @@ export function parseBlobs(out: Buffer, count: number): (Buffer | undefined)[] {
   return blobs;
 }
 
+/**
+ * Text cut at a byte limit, up to its last whole UTF-8 character: a limit that falls inside a character of several
+ * bytes would otherwise leave a replacement character at the end, which the file does not have.
+ */
+export function wholeCharacters(text: Buffer): Buffer {
+  // The last character starts at most three bytes before the end: bytes `10xxxxxx` only continue one.
+  let start = text.length - 1;
+  while (start > text.length - 4 && start > 0 && ((text[start] ?? 0) & 0xc0) === 0x80) start--;
+  const lead = text[start] ?? 0;
+  const length = lead >= 0xf0 ? 4 : lead >= 0xe0 ? 3 : lead >= 0xc0 ? 2 : 1;
+  return start + length > text.length ? text.subarray(0, start) : text;
+}
+
 /** The same heuristic as git's: a NUL in the first 8000 bytes means a binary file. */
 export function isBinary(content: Buffer): boolean {
   return content.subarray(0, 8000).includes(0);

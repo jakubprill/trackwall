@@ -104,6 +104,8 @@ export interface TasksVcs extends HandoffGit, EndedTaskGit {
   deleteBranch(repoDir: string, branch: string): Promise<void>;
   pendingWork(work: TaskWork): Promise<TaskPendingWork>;
   worktreeChanges(dir: string, base: string, maxPatchBytes: number, paths: readonly string[]): Promise<TaskChanges>;
+  /** Only the paths the worktree's Changes hold, without their line counts, the diff or the commit counts. */
+  changedPaths(dir: string, base: string): Promise<{ paths: string[]; truncated: boolean }>;
   /** The files in which merging two branches of the repo would conflict; `null` when git cannot tell (ADR-230). */
   trialMergeConflicts(repoDir: string, ours: string, theirs: string): Promise<string[] | null>;
   /** The newest commits of HEAD in `dir`: the cleanup reads when the task last committed (ADR-210). */
@@ -970,11 +972,12 @@ export class AgentTasks {
    * Shared files (ADR-44): files changed both in this task and in another task of the same repo. Changes of another task
    * that cannot be read (being ended, worktree deleted by hand, broken index) are left out, because this is only a
    * warning; a failure to read this task's own changes is reported as in `changes`. A cut-off file list (`truncated`)
-   * can miss a shared file, which is acceptable for a warning.
+   * can miss a shared file, which is acceptable for a warning. The views ask for it every few seconds, so it reads only
+   * the paths (`changedPaths`): three git processes less per task than the Changes with their counts.
    */
   async sharedFiles(id: string): Promise<TaskSharedFiles[]> {
     const own = this.#get(id);
-    const changed = new Set((await this.#readChanges(id, 0, [])).files.map((f) => f.path));
+    const changed = new Set(await this.#changedPaths(id));
     const others = this.#tasks.filter((t) => t.repo === own.repo && t.id !== id);
     const theirs = await mapLimit(others, SHARED_FILES_CONCURRENCY, async (other): Promise<TaskSharedFiles | null> => {
       const files = (await this.#tryChangedPaths(other.id)).filter((path) => changed.has(path));
@@ -997,11 +1000,15 @@ export class AgentTasks {
   /** Paths changed in a task, or none when its changes cannot be read for a known reason (`DomainError`). */
   async #tryChangedPaths(id: string): Promise<string[]> {
     try {
-      return (await this.#readChanges(id, 0, [])).files.map((f) => f.path);
+      return await this.#changedPaths(id);
     } catch (err) {
       if (err instanceof DomainError) return [];
       throw err;
     }
+  }
+
+  async #changedPaths(id: string): Promise<string[]> {
+    return (await this.#readWorktree(id, (task) => this.#deps.vcs.changedPaths(task.worktree, task.base))).paths;
   }
 
   #readChanges(id: string, maxPatchBytes: number, paths: readonly string[]): Promise<TaskChanges> {

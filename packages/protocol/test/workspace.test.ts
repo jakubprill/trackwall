@@ -2,9 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { HostName, RemoteRepoName, RemoteRepoSearch, RepoHosts, RepoPath, workspaceApi } from "../src/index.ts";
 
 describe("workspace contract", () => {
-  test("a path in a repo does not leave the commit's tree and has no control characters", () => {
-    for (const ok of ["", "src", "src/a b.ts", "win\\file.txt"]) expect(RepoPath.safeParse(ok).success).toBe(true);
-    for (const bad of ["..", "src/../x", "./src", "/src", "src/", "a\nb", "a\0b"]) expect(RepoPath.safeParse(bad).success).toBe(false);
+  test("a path in a repo does not leave the commit's tree and has no line break, while a tab is a name character", () => {
+    for (const ok of ["", "src", "src/a b.ts", "win\\file.txt", "tab\there.txt"]) expect(RepoPath.safeParse(ok).success).toBe(true);
+    for (const bad of ["..", "src/../x", "./src", "/src", "src/", "a\nb", "a\rb", "a\0b"])
+      expect(RepoPath.safeParse(bad).success).toBe(false);
   });
 
   test("an action body accepts no unknown fields", () => {
