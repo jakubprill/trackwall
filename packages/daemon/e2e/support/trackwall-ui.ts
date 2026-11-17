@@ -182,7 +182,15 @@ export async function typeInTerminal(page: Page, keys: string): Promise<void> {
 }
 
 /** A session list as the daemon sends it, with the fields a test changes before the UI reads it. */
-type SessionListBody = { sessions: { supervisor: boolean; needsAttention: boolean; waitingSince: string | null; usage: unknown }[] };
+export type SessionListBody = {
+  sessions: {
+    supervisor: boolean;
+    needsAttention: boolean;
+    waitingSince: string | null;
+    usage: unknown;
+    state: { state: string; confidence: string } | null;
+  }[];
+};
 
 /**
  * Changes every session list the page reads, from the event socket and from the daemon's answer to the session list,

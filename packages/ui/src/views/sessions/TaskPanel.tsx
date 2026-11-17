@@ -117,34 +117,7 @@ export function TaskPanel({
     <>
       {/* In a narrow column (the supervisor panel pinned on a small screen) the buttons wrap under the task. */}
       <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-2">
-        <div className="flex min-w-60 flex-1 flex-col gap-0.5">
-          <span className="flex min-w-0 items-center gap-3">
-            {/* The branch, longer and repeating the task, gives way first. */}
-            <span className="max-w-1/2 shrink-0 truncate text-sm font-medium">{task.repo}</span>
-            <span className="text-muted-foreground flex min-w-0 items-center gap-1 font-mono text-xs">
-              <GitBranch className="size-3 shrink-0" aria-label="branch" />
-              <span className="truncate">{task.branch}</span>
-            </span>
-            <span
-              className="text-muted-foreground flex shrink-0 items-center gap-1 font-mono text-xs"
-              title={`task port: ${TASK_PORT_ENV.join(" and ")} of its mise tasks`}
-            >
-              <Plug className="size-3" aria-label="task port" />
-              {task.port}
-            </span>
-            <TaskMarks task={task} />
-            <JavaNavigationMark conn={conn} task={task} running={liveSession !== undefined} />
-            <span className="text-muted-foreground shrink-0 text-xs">
-              <TaskStateLabel task={task} session={session} />
-            </span>
-            <span className="text-muted-foreground shrink-0 text-xs">{relativeTime(session?.startedAt ?? task.createdAt, new Date())}</span>
-            <CopilotUsageMark usage={session?.usage ?? null} />
-            {session?.tokenBudget && <TokenBudgetMark budget={session.tokenBudget} />}
-          </span>
-          <span className="text-muted-foreground truncate text-xs" title={task.prompt}>
-            {taskSubtitle(task, sessions)}
-          </span>
-        </div>
+        <TaskHeading conn={conn} task={task} session={session} sessions={sessions} running={liveSession !== undefined} />
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <VerifyButton state={details.verification} disabled={confirmingRemoval} />
           <TaskEditorButton conn={conn} task={task} label="VS Code" />
@@ -370,5 +343,56 @@ function TaskMarks({ task }: { task: Task }) {
         </span>
       )}
     </>
+  );
+}
+
+/**
+ * The left side of a task's header in two lines that never wrap, so the terminal keeps its height on a small screen:
+ * where the task works and its state, then what it works on with its start time and usage. The branch and the prompt,
+ * the longest parts, give way first, and the rest never runs under the buttons (a small screen, a wide system font).
+ */
+function TaskHeading({
+  conn,
+  task,
+  session,
+  sessions,
+  running,
+}: {
+  conn: Connection;
+  task: Task;
+  session: Session | undefined;
+  sessions: readonly Session[];
+  running: boolean;
+}) {
+  return (
+    <div className="flex min-w-60 flex-1 flex-col gap-0.5">
+      <span className="flex min-w-0 items-center gap-3">
+        <span className="max-w-1/2 shrink-0 truncate text-sm font-medium">{task.repo}</span>
+        <span className="text-muted-foreground flex min-w-0 items-center gap-1 font-mono text-xs">
+          <GitBranch className="size-3 shrink-0" aria-label="branch" />
+          <span className="truncate">{task.branch}</span>
+        </span>
+        <span
+          className="text-muted-foreground flex shrink-0 items-center gap-1 font-mono text-xs"
+          title={`task port: ${TASK_PORT_ENV.join(" and ")} of its mise tasks`}
+        >
+          <Plug className="size-3" aria-label="task port" />
+          {task.port}
+        </span>
+        <TaskMarks task={task} />
+        <JavaNavigationMark conn={conn} task={task} running={running} />
+        <span className="text-muted-foreground shrink-0 text-xs">
+          <TaskStateLabel task={task} session={session} />
+        </span>
+      </span>
+      <span className="text-muted-foreground flex min-w-0 items-center gap-3 text-xs">
+        <span className="min-w-0 truncate" title={task.prompt}>
+          {taskSubtitle(task, sessions)}
+        </span>
+        <span className="shrink-0">{relativeTime(session?.startedAt ?? task.createdAt, new Date())}</span>
+        <CopilotUsageMark usage={session?.usage ?? null} />
+        {session?.tokenBudget && <TokenBudgetMark budget={session.tokenBudget} />}
+      </span>
+    </div>
   );
 }
