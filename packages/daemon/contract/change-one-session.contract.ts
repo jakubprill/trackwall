@@ -81,8 +81,10 @@ describe("a change in one session with the real Copilot CLI (ADR-265)", () => {
     // The prompt came as the first message, in the change's folder, with the role of the one session.
     const first = model.requests().find((r) => r.lastUserText.includes("create a file in each repo"));
     const folder = dirname(payments.worktree);
-    // Copilot CLI names its working directory by the real path (macOS: /private/var/… for the temporary /var/…).
-    expect(first?.system).toContain(realpathSync.native(folder));
+    // Copilot CLI names its working directory by the real path on macOS (/private/var/… for the temporary /var/…), but
+    // on Windows as it was given, where the temporary folder keeps its 8.3 short name (C:\Users\RUNNER~1\…).
+    const named = [folder, realpathSync.native(folder)].filter((path) => first?.system.includes(path));
+    expect(named).not.toEqual([]);
     expect(first?.system).toContain("You run one change across 2 repos in this one session.");
     // The command wrote into both worktrees, and Copilot CLI asked for nothing: no approval, no access to another path.
     expect(existsSync(join(payments.worktree, "refunds.txt"))).toBe(true);
