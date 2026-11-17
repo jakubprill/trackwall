@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Settings: get started</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<style>
+/* A "Get started" checklist that knows where Trackwall runs, and Settings as folded rows from the left edge. */
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--background); color: var(--foreground);
+  font: 15px/1.6 var(--font-sans);
+  padding: 40px max(16px, env(safe-area-inset-left, 0px)) 80px max(16px, env(safe-area-inset-right, 0px));
+}
+.page { max-width: 1480px; margin: 0 auto; display: flex; flex-direction: column; gap: 56px; }
+.prose { max-width: 76ch; display: flex; flex-direction: column; gap: 8px; }
+h1, h2, h3 { margin: 0; font-weight: 600; text-wrap: balance; }
+h1 { font-size: 2rem; } h2 { font-size: 1.35rem; } p { margin: 0; }
+.hud { font: 500 11px/16px var(--font-mono); letter-spacing: var(--tracking-hud); text-transform: uppercase; color: var(--muted-foreground); }
+.lede { color: var(--muted-foreground); }
+.scroll { overflow-x: auto; }
+
+/* The app window */
+.window { width: 1440px; height: 900px; display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--background); font: 13px/1.5 var(--font-sans); }
+.rail { width: 48px; flex: none; border-right: 1px solid var(--border); }
+.cats { width: 200px; flex: none; padding: 24px 8px; display: flex; flex-direction: column; gap: 2px; }
+.cats .hud { padding: 14px 12px 4px; font-size: 10px; }
+.cat { padding: 6px 12px; border-radius: 6px; color: var(--muted-foreground); font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
+.cat.on { background: var(--secondary); color: var(--foreground); }
+.count { font: 11px/18px var(--font-mono); padding: 0 6px; border-radius: 9px; background: color-mix(in oklch, var(--warning) 22%, transparent); color: var(--warning); }
+.content { width: 760px; flex: none; padding: 24px 32px 24px 24px; display: flex; flex-direction: column; gap: 14px; overflow: hidden; }
+.head h3 { font-size: 18px; } .head p { color: var(--muted-foreground); font-size: 14px; }
+.where { display: inline-flex; align-items: center; gap: 6px; font: 11px/20px var(--font-mono); padding: 0 8px; border-radius: 4px; border: 1px solid var(--border); color: var(--muted-foreground); }
+
+.surface { border: 1px solid var(--border); border-radius: 8px; background: var(--card); min-width: 0; display: flex; flex-direction: column; }
+.surface > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--border); }
+.mono { font-family: var(--font-mono); }
+.muted { color: var(--muted-foreground); }
+.small { font-size: 12px; }
+.btn { height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--border); color: var(--foreground); font-size: 12.5px; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; background: transparent; }
+.btn.primary { background: var(--primary); color: var(--primary-foreground); border-color: transparent; font-weight: 600; }
+.btn.link { border: 0; padding: 0; color: var(--primary); height: auto; }
+.input { height: 28px; border: 1px solid var(--input); border-radius: 6px; padding: 0 8px; font-size: 12px; display: inline-flex; align-items: center; min-width: 200px; }
+.code { font: 12px/1.5 var(--font-mono); border: 1px solid var(--input); border-radius: 6px; padding: 5px 8px; background: var(--muted); overflow-wrap: anywhere; }
+
+/* A step of the checklist: its state, what it is, what was found, and the one action that settles it. */
+.step { display: grid; grid-template-columns: 22px 1fr auto; gap: 4px 10px; align-items: start; padding: 11px 14px; border-bottom: 1px solid var(--border); }
+.step:last-child { border-bottom: 0; }
+.mark { width: 18px; height: 18px; border-radius: 50%; margin-top: 1px; display: grid; place-items: center; font: 600 11px/1 var(--font-mono); border: 1px solid var(--border); color: var(--muted-foreground); }
+.mark.ok { background: color-mix(in oklch, var(--success) 22%, transparent); color: var(--success); border-color: transparent; }
+.mark.todo { background: color-mix(in oklch, var(--warning) 22%, transparent); color: var(--warning); border-color: transparent; }
+.step .k { font-size: 13.5px; font-weight: 600; }
+.step .v { color: var(--muted-foreground); grid-column: 2; }
+.step .act { grid-column: 2; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+.step .side { grid-row: 1; grid-column: 3; color: var(--muted-foreground); font-size: 12px; }
+.ready { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border: 1px solid color-mix(in oklch, var(--success) 40%, transparent); border-radius: 8px; background: color-mix(in oklch, var(--success) 8%, transparent); }
+
+/* A setting as a folded row: its name, what it does in one line, and its value now; the form opens under it. */
+.fold { display: grid; grid-template-columns: 14px 190px 1fr auto; gap: 10px; align-items: baseline; padding: 9px 14px; border-bottom: 1px solid var(--border); }
+.fold:last-child { border-bottom: 0; }
+.fold .chev { color: var(--muted-foreground); font-size: 10px; }
+.fold .k { font-size: 13.5px; }
+.fold .what { color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fold .val { font: 12px var(--font-mono); color: var(--muted-foreground); white-space: nowrap; }
+.fold .val.set { color: var(--foreground); }
+.fold .val.set::before { content: "● "; color: var(--primary); }
+.open { padding: 0 14px 12px 38px; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid var(--border); }
+.open .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.opt { display: flex; gap: 8px; align-items: baseline; }
+.radio { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--input); flex: none; position: relative; top: 2px; }
+.radio.on { border: 4px solid var(--primary); }
+
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.pick { border: 1px solid var(--border); border-radius: 8px; padding: 14px; background: var(--card); display: flex; flex-direction: column; gap: 6px; }
+.pick.on { border-color: var(--primary); }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; max-width: 1440px; }
+.notes div { border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; font-size: 14px; }
+.notes b { display: block; margin-bottom: 4px; }
+table.cmp { border-collapse: collapse; font-size: 14px; max-width: 900px; }
+.cmp th, .cmp td { text-align: left; padding: 6px 14px 6px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+.cmp th { font: 500 11px/16px var(--font-mono); letter-spacing: var(--tracking-hud); text-transform: uppercase; color: var(--muted-foreground); }
+.cmp td:nth-child(3) { color: var(--success); }
+</style>
+
+<main class="page">
+  <section class="prose">
+    <span class="hud">Settings · first start</span>
+    <h1>Settings: get started</h1>
+    <p class="lede">Today Trackwall needs one setting to work, the projects folder, and has thirty-two sections of settings that all look equally important. What stops a new user is mostly outside Settings: Copilot CLI is not installed or does not trust the folder, a company proxy, git without a sign-in in the container. Those are found only by the doctor, at the bottom of the last category. Nothing ever says "you are ready".</p>
+  </section>
+
+  <table class="cmp">
+    <tr><th>To get to a first session</th><th>Today</th><th>Proposed</th></tr>
+    <tr><td>Places to visit</td><td>Home, Settings › Workspace, Settings › Diagnostics, a text editor for Copilot CLI's config.json</td><td>one page</td></tr>
+    <tr><td>Sections on screen before the first one that matters next</td><td>32, each open with its full text</td><td>4 or 5 steps</td></tr>
+    <tr><td>Typing</td><td>the folder path, a JSON entry by hand</td><td>none on a usual computer: two clicks</td></tr>
+    <tr><td>A sign that it is ready</td><td>none</td><td>"Ready" with the button that starts a session</td></tr>
+    <tr><td>Height of Settings › Agents</td><td>3,237 px, three screens</td><td>about 560 px, one screen</td></tr>
+  </table>
+
+  <section class="prose"><span class="hud">Variant A · proposed</span><h2>"Get started" finds where Trackwall runs and lists only what is left</h2>
+    <p class="lede">A new first category, and the same list on Home until it is done. Each step shows what Trackwall found and one action. The steps come from the doctor's checks, so there is one source of truth. Nobody picks a profile: Trackwall already knows whether it runs on this computer or in a container.</p></section>
+  <div class="scroll"><div class="window"><div class="rail"></div><div class="cats" data-on="Get started" data-count="2"></div><div class="content">
+    <div class="head"><h3>Get started <span class="where">on this computer · Windows</span></h3><p>2 steps left before your first session.</p></div>
+    <div class="surface">
+      <div class="step"><span class="mark todo">1</span><span class="k">Projects folder</span><span class="side">needed</span>
+        <span class="v">The folder that holds your git repos. Found <span class="mono">C:\Users\you\Dev</span> with 14 repos.</span>
+        <span class="act"><span class="btn primary">Use C:\Users\you\Dev</span><span class="btn">Choose another…</span></span></div>
+      <div class="step"><span class="mark ok">✓</span><span class="k">Copilot CLI</span><span class="side">1.0.110</span>
+        <span class="v">Installed and signed in.</span></div>
+      <div class="step"><span class="mark todo">3</span><span class="k">Copilot CLI trusts your projects folder</span><span class="side">recommended</span>
+        <span class="v">Without it Copilot CLI asks "Do you trust this folder?" in every repo and every task.</span>
+        <span class="act"><span class="btn">Trust C:\Users\you\Dev</span><span class="muted small">adds one line to <span class="mono">~\.copilot\config.json</span></span></span></div>
+      <div class="step"><span class="mark ok">✓</span><span class="k">Network for sessions</span><span class="side">direct</span>
+        <span class="v">github.com and api.githubcopilot.com answer.</span></div>
+      <div class="step"><span class="mark">5</span><span class="k">Start your first session</span>
+        <span class="v">Opens Sessions with a repo chosen.</span></div>
+    </div>
+    <div class="surface">
+      <div class="fold"><span class="chev">▸</span><span class="k">Good to have</span><span class="what">mise for repo tasks and services · a repo host to clone from · gh or glab signed in</span><span class="val">3 optional</span></div>
+    </div>
+  </div></div></div>
+
+  <section class="prose"><span class="hud">Variant A · in a dev container</span>
+    <p class="lede">The same page when Trackwall runs in a container. The steps change by themselves: the folder is the volume, git needs a name and a sign-in of its own, the proxy certificate is named. Each command has a button that opens the projects folder's Shell with it typed in.</p></section>
+  <div class="scroll"><div class="window"><div class="rail"></div><div class="cats" data-on="Get started" data-count="3"></div><div class="content">
+    <div class="head"><h3>Get started <span class="where">in a dev container · Debian</span></h3><p>3 steps left before your first session.</p></div>
+    <div class="surface">
+      <div class="step"><span class="mark ok">✓</span><span class="k">Projects folder</span><span class="side">/workspaces · 14 repos</span>
+        <span class="v">In a Docker volume, so git and builds are fast.</span></div>
+      <div class="step"><span class="mark todo">2</span><span class="k">Copilot CLI</span><span class="side">needed</span>
+        <span class="v">Not installed in this container. Install it with mise, then sign in with a code you enter in your browser.</span>
+        <span class="act"><span class="code">mise use -g node@22 npm:@github/copilot &amp;&amp; copilot login --device-code</span><span class="btn">Run in Shell</span></span></div>
+      <div class="step"><span class="mark todo">3</span><span class="k">Git name and sign-in</span><span class="side">needed for commits and Push</span>
+        <span class="v">Git here has no name or email, and cannot reach gitlab.example.com: no sign-in for HTTPS.</span>
+        <span class="act"><span class="input muted">Your Name</span><span class="input muted">you@example.com</span><span class="btn">Save</span><span class="btn">Sign in with glab in Shell</span></span></div>
+      <div class="step"><span class="mark todo">4</span><span class="k">Network for sessions</span><span class="side">proxy.example.com:8080</span>
+        <span class="v">Your proxy replaces certificates and Copilot CLI does not trust it yet. The container already has the certificate.</span>
+        <span class="act"><span class="code">"NODE_EXTRA_CA_CERTS": "/usr/local/share/ca-certificates/corp-root.crt"</span><span class="btn">Copy for containerEnv</span></span></div>
+      <div class="step"><span class="mark ok">✓</span><span class="k">Copilot CLI trusts your projects folder</span><span class="side">/workspaces</span><span class="v">Trusted.</span></div>
+      <div class="step"><span class="mark">6</span><span class="k">Start your first session</span><span class="v">Opens Sessions with a repo chosen.</span></div>
+    </div>
+    <div class="surface">
+      <div class="fold"><span class="chev">▸</span><span class="k">Good to have</span><span class="what">the sandbox for tasks without approvals · mise · this app on your computer</span><span class="val">3 optional</span></div>
+    </div>
+  </div></div></div>
+
+  <section class="prose"><span class="hud">Variant A · done</span>
+    <p class="lede">When every needed step is done the page says so, Home drops its list, and Settings opens on Workspace again. The category stays, so the list is there when something breaks later, with the number of open steps next to its name.</p></section>
+  <div class="scroll"><div class="window" style="height:420px"><div class="rail"></div><div class="cats" data-on="Get started"></div><div class="content">
+    <div class="head"><h3>Get started <span class="where">on this computer · Windows</span></h3></div>
+    <div class="ready"><span><b>Ready.</b> <span class="muted">Everything Trackwall needs is in place.</span></span><span class="btn primary">Start a session</span></div>
+    <div class="surface">
+      <div class="fold"><span class="chev">▸</span><span class="k">Projects folder</span><span class="what">C:\Users\you\Dev · 14 repos</span><span class="val">✓</span></div>
+      <div class="fold"><span class="chev">▸</span><span class="k">Copilot CLI</span><span class="what">1.0.110, trusts C:\Users\you\Dev</span><span class="val">✓</span></div>
+      <div class="fold"><span class="chev">▸</span><span class="k">Network for sessions</span><span class="what">direct</span><span class="val">✓</span></div>
+      <div class="fold"><span class="chev">▸</span><span class="k">Good to have</span><span class="what">mise 2026.11.2 · gitlab.example.com · glab signed in</span><span class="val">✓</span></div>
+    </div>
+  </div></div></div>
+
+  <section class="prose"><span class="hud">Variant A · the other categories</span><h2>Every setting is one folded row, from the left edge</h2>
+    <p class="lede">Settings no longer sits in the middle of a wide window: it starts next to the activity bar. A setting shows its name, one line on what it does and its value now; a dot marks a value you changed. A click opens the form with the full text and a link to its page. So there is no separate "Advanced" tab to hunt through: everything is one screen, and nothing is open until asked. The same folded row is the pattern for the long forms of the other views later.</p></section>
+  <div class="scroll"><div class="window"><div class="rail"></div><div class="cats" data-on="Agents"></div><div class="content">
+    <div class="head"><h3>Agents</h3><p>How sessions and tasks start. Every setting has a default that works.</p></div>
+    <span class="hud">Tasks</span>
+    <div class="surface">
+      <div class="fold"><span class="chev">▾</span><span class="k">Sandbox</span><span class="what">Which tasks run their commands closed inside their own worktree</span><span class="val">default: no task</span></div>
+      <div class="open">
+        <div class="opt"><span class="radio on"></span><span>Default for this computer <span class="muted">· no task on Windows</span></span></div>
+        <div class="opt"><span class="radio"></span><span>Tasks without approvals</span></div>
+        <div class="opt"><span class="radio"></span><span>Every task</span></div>
+        <div class="opt"><span class="radio"></span><span>No task</span></div>
+        <span class="muted small">Copilot CLI's sandbox is not checked on Windows yet. <span class="btn link small">How the sandbox works ↗</span></span>
+      </div>
+      <div class="fold"><span class="chev">▸</span><span class="k">Auto-review</span><span class="what">Review a task's changes when its agent reports its result</span><span class="val set">on</span></div>
+      <div class="fold"><span class="chev">▸</span><span class="k">Always allowed tools</span><span class="what">Tools you chose "Always allow" for, by repo</span><span class="val">none</span></div>
+      <div class="fold"><span class="chev">▸</span><span class="k">Token budget</span><span class="what">Stop a task after this many tokens</span><span class="val">no limit</span></div>
+      <div class="fold"><span class="chev">▸</span><span class="k">Running tasks warning</span><span class="what">Warn before starting more tasks than this at once</span><span class="val">default: 6</span></div>
+      <div class="fold"><span class="chev">▸</span><span class="k">Retry model</span><span class="what">A stronger model for "Retry" on a failed task</span><span class="val">not set</span></div>
+      <div class="fold"><span class="chev">▸</span><span class="k">Java navigation</span><span class="what">Let agents jump to Java definitions and callers</span><span class="val">not set up</span></div>
+    </div>
+    <span class="hud">Supervisor</span>
+    <div class="surface">
+      <div class="fold"><span class="chev">▸</span><span class="k">Model</span><span class="what">The model the supervisor runs on</span><span class="val set">gpt-5-mini</span></div>
+      <div class="fold"><span class="chev">▸</span><span class="k">Changes code</span><span class="what">Let the supervisor run commands and edit files itself</span><span class="val">off</span></div>
+    </div>
+    <span class="hud">Model provider and other clients</span>
+    <div class="surface">
+      <div class="fold"><span class="chev">▸</span><span class="k">Session profile</span><span class="what">A mise environment only sessions get, for a model provider of your own</span><span class="val">not set</span></div>
+      <div class="fold"><span class="chev">▸</span><span class="k">Your own Copilot CLI</span><span class="what">Give sessions you start in a terminal Trackwall's tools; sessions started here have them</span><span class="val">optional</span></div>
+    </div>
+  </div></div></div>
+
+  <section class="prose"><span class="hud">Variant B · not proposed</span><h2>Profiles you choose</h2>
+    <p class="lede">A first screen asks where Trackwall runs and fills the settings from the answer. It adds a question whose answer Trackwall already has, a wrong pick sets things up wrong, and a profile cannot fix what is outside Settings: the proxy, the sign-ins, the trusted folder. What a profile would fill in is one path, which the folder suggestion already does.</p></section>
+  <div class="scroll"><div class="window" style="height:360px"><div class="rail"></div><div class="cats" data-on="Get started"></div><div class="content">
+    <div class="head"><h3>Where does Trackwall run?</h3><p>Choose a profile; you can change every setting later.</p></div>
+    <div class="cards">
+      <div class="pick on"><b>On this computer</b><span class="muted">Repos in a folder of your computer. Fills the projects folder and the task worktrees folder.</span></div>
+      <div class="pick"><b>In a dev container</b><span class="muted">Repos in a Docker volume. Fills /workspaces and connects this app to the container.</span></div>
+      <div class="pick"><b>Company network</b><span class="muted">Adds the proxy and its certificate to either of the two.</span></div>
+    </div>
+    <span class="btn primary" style="align-self:flex-start">Continue</span>
+  </div></div></div>
+
+  <section class="prose"><span class="hud">Variant C · the smallest step</span><h2>Only the layout and the texts</h2>
+    <p class="lede">Settings from the left edge, folded rows as in variant A, shorter texts, and no "Get started". Settings gets calm, but a new user still has to know that the doctor exists.</p></section>
+
+  <div class="notes">
+    <div><b>What "minimum" really is</b>One setting: the projects folder. Everything else in Settings has a default that works. The rest of the minimum is outside Settings: Copilot CLI installed and signed in, and on a company network the proxy and its certificate. In a container also git's name and its sign-in to the repo host.</div>
+    <div><b>One click instead of a manual</b>"Use this folder" saves the folder Trackwall found. "Trust this folder" writes the folder into Copilot CLI's trusted folders, which today is a JSON edit by hand; it is the one place where Trackwall would change Copilot CLI's own file, only on your click.</div>
+    <div><b>Texts</b>One sentence per setting, written as what it does for you. The long explanation and "Saved as … in workspace.yaml" move into the opened row; the file names stay in Settings › Files.</div>
+    <div><b>What it does not fix</b>The dev container still needs its devcontainer.json and a rebuild before Trackwall runs at all. The page starts helping from the moment Trackwall answers.</div>
+  </div>
+</main>
+
+<script>
+// The list of categories, the same in every window: the checklist first, then what you set, then what you read.
+const GROUPS = [[null, ["Get started"]], ["Settings", ["Workspace", "Repo hosts", "Agents", "App"]], ["Reports", ["Usage", "Files", "Diagnostics"]]];
+for (const cats of document.querySelectorAll(".cats")) {
+  for (const [label, names] of GROUPS) {
+    if (label) cats.insertAdjacentHTML("beforeend", `<span class="hud">${label}</span>`);
+    for (const name of names) {
+      const count = name === "Get started" && cats.dataset.count ? `<span class="count">${cats.dataset.count}</span>` : "";
+      cats.insertAdjacentHTML("beforeend", `<span class="cat${name === cats.dataset.on ? " on" : ""}">${name}${count}</span>`);
+    }
+  }
+}
+</script>
+</body>
+</html>
