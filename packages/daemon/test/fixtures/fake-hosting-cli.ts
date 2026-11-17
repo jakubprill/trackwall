@@ -1,6 +1,7 @@
 /**
  * Fake `gh` and `glab` for repo hosting tests. The first argument is a JSON file with the test settings; then the
- * arguments as the daemon passes them: `api --hostname <host> <path>`, `auth status --hostname <host>` or
+ * arguments as the daemon passes them: `api --hostname <host> <path>`, `api --hostname <host> graphql -f query=… <fields>`
+ * (answered from `apiResponses.graphql`), `auth status --hostname <host>` or
  * `repo clone <repo> <directory>`.
  * Every call appends to `log` the arguments and the environment variables the daemon is meant to set.
  */
@@ -46,7 +47,8 @@ if (command === "api") {
     process.stdout.write(config.apiRaw);
     process.exit(0);
   }
-  const path = args.at(-1) ?? "";
+  // A GraphQL call ends with its variables, not a path.
+  const path = args[3] === "graphql" ? "graphql" : (args.at(-1) ?? "");
   const pathError = config.apiPathErrors[path.split("?")[0] ?? ""];
   if (pathError) fail(pathError);
   const response = config.apiResponses[path.split("?")[0] ?? ""];
