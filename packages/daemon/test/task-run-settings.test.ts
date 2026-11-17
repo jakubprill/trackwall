@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { agentsApi } from "@trackwall/protocol";
 import { countedEntries } from "../src/modules/vcs/run-settings.ts";
@@ -38,6 +38,12 @@ function writeFilter(repoDir: string, worktree: string): void {
   execFileSync("git", ["-C", repoDir, "config", "filter.trace.clean", `tee ${TRACE}`]);
   writeFileSync(join(worktree, ".gitattributes"), "*.md filter=trace\n");
   writeFileSync(join(worktree, "README.md"), "# shop, changed\n");
+}
+
+/** Git as the user runs it in a test repo: with an identity, and with clones of local folders allowed for submodules. */
+function gitAsUser(dir: string, ...args: string[]): void {
+  const config = ["protocol.file.allow=always", "user.name=Test", "user.email=test@example.com"].flatMap((entry) => ["-c", entry]);
+  execFileSync("git", ["-C", dir, ...config, ...args], { stdio: "pipe" });
 }
 
 describe.skipIf(process.versions.bun === undefined)(
@@ -132,6 +138,165 @@ describe.skipIf(process.versions.bun === undefined)(
       },
       SLOW_TEST_TIMEOUT_MS,
     );
+
+    test(
+      "a hook in the folder a relative hooks path names does not run on the daemon's git in a repo with a task in the sandbox: not on a read of the task's changes, not on a fetch",
+      async () => {
+        daemon = await sandboxed("all");
+        const repoDir = join(daemon.projects, "shop");
+        const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "map the endpoints", approvals: "auto" });
+        await daemon.facade.agents.taskChanges(task.id);
+        // What the agent can do from the sandbox: a hooks path that does not count as a run setting (husky writes one),
+        // naming a folder of its worktree and one of the repo's git directory, both of which it writes.
+        execFileSync("git", ["-C", repoDir, "config", "core.hooksPath", "tw-hooks"]);
+        const ran = join(daemon.projects, "ran-by-a-hook.txt");
+        for (const folder of [join(task.worktree, "tw-hooks"), join(repoDir, "tw-hooks")]) {
+          mkdirSync(folder);
+          for (const hook of ["post-index-change", "reference-transaction"]) {
+            writeFileSync(join(folder, hook), `#!/bin/sh\necho ${hook} >> "${ran.replaceAll("\\", "/")}"\n`);
+            chmodSync(join(folder, hook), 0o755);
+          }
+        }
+        writeFileSync(join(task.worktree, "new-file.txt"), "untracked, so the read writes an index of its own\n");
+        const upstream = join(daemon.projects, "..", `upstream-${task.id}.git`);
+        execFileSync("git", ["clone", "--quiet", "--bare", repoDir, upstream]);
+        execFileSync("git", ["-C", repoDir, "-c", "core.hooksPath=", "remote", "add", "origin", upstream]);
+
+        expect((await daemon.facade.agents.taskChanges(task.id)).files.map((f) => f.path)).toContain("new-file.txt");
+        await new Vcs(systemTempFolder).sync(repoDir);
+
+        expect(existsSync(ran)).toBe(false);
+        // The same fetch by the user's own git runs the hook: the folder and the hooks are in place.
+        execFileSync("git", ["-C", repoDir, "update-ref", "refs/heads/by-the-user", "HEAD"]);
+        expect(readFileSync(ran, "utf8")).toContain("reference-transaction");
+      },
+      SLOW_TEST_TIMEOUT_MS,
+    );
+
+    test(
+      "a remote address that names a program, a proxy for git's requests and a transfer program of git-lfs written into .git/config refuse git",
+      async () => {
+        daemon = await sandboxed("all");
+        const repoDir = join(daemon.projects, "shop");
+        execFileSync("git", ["-C", repoDir, "remote", "add", "origin", "https://example.com/shop.git"]);
+        const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "map the endpoints", approvals: "auto" });
+        await daemon.facade.agents.taskChanges(task.id);
+        const ran = join(daemon.projects, "ran-by-the-remote.txt");
+        writeFileSync(join(task.worktree, "remote.sh"), `echo ran > "${ran.replaceAll("\\", "/")}"\n`);
+        const refused = "changed since a task in the sandbox started";
+
+        // `ext::` runs its command as the transport of a fetch, once the repo allows the protocol.
+        execFileSync("git", ["-C", repoDir, "config", "protocol.ext.allow", "always"]);
+        execFileSync("git", [
+          "-C",
+          repoDir,
+          "config",
+          "remote.origin.url",
+          `ext::sh ${join(task.worktree, "remote.sh").replaceAll("\\", "/")}`,
+        ]);
+        await expect(new Vcs(systemTempFolder).sync(repoDir)).rejects.toThrow(refused);
+        expect(existsSync(ran)).toBe(false);
+        execFileSync("git", ["-C", repoDir, "config", "--unset", "protocol.ext.allow"]);
+        execFileSync("git", ["-C", repoDir, "config", "remote.origin.url", "https://example.com/shop.git"]);
+        await daemon.facade.agents.taskChanges(task.id);
+
+        // A proxy without a certificate check would get the user's credentials for the repo host.
+        execFileSync("git", ["-C", repoDir, "config", "http.proxy", "http://127.0.0.1:9"]);
+        execFileSync("git", ["-C", repoDir, "config", "http.sslVerify", "false"]);
+        await expect(daemon.facade.agents.taskChanges(task.id)).rejects.toThrow(refused);
+        execFileSync("git", ["-C", repoDir, "config", "--remove-section", "http"]);
+        await daemon.facade.agents.taskChanges(task.id);
+
+        // git-lfs runs this program at the next checkout of an LFS file.
+        execFileSync("git", ["-C", repoDir, "config", "lfs.customtransfer.own.path", join(task.worktree, "remote.sh")]);
+        execFileSync("git", ["-C", repoDir, "config", "lfs.standalonetransferagent", "own"]);
+        await expect(daemon.facade.agents.taskChanges(task.id)).rejects.toThrow(refused);
+      },
+      SLOW_TEST_TIMEOUT_MS,
+    );
+
+    test(
+      "a commondir written into the repo's .git, which moves git to another configuration, refuses git in the repo",
+      async () => {
+        daemon = await sandboxed("all");
+        const repoDir = join(daemon.projects, "shop");
+        const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "map the endpoints", approvals: "auto" });
+        await daemon.facade.agents.taskChanges(task.id);
+        // What the agent can do from the sandbox: a second common directory inside `.git`, with a filter of its own,
+        // while `.git/config`, the attributes and the hooks stay as they were.
+        const own = join(repoDir, ".git", "own");
+        for (const part of ["config", "refs", "objects", "worktrees"])
+          cpSync(join(repoDir, ".git", part), join(own, part), { recursive: true });
+        execFileSync("git", ["config", "--file", join(own, "config"), "filter.trace.clean", `tee ${TRACE}`]);
+        mkdirSync(join(own, "info"), { recursive: true });
+        writeFileSync(join(own, "info", "attributes"), "* filter=trace\n");
+        writeFileSync(join(repoDir, ".git", "commondir"), "own\n");
+        writeFileSync(join(task.worktree, "README.md"), "# shop, changed\n");
+        // Entries without the files' times, so that a status reads every file again, through the filter.
+        execFileSync("git", ["-C", repoDir, "read-tree", "HEAD"]);
+        const refused = "no longer leads to its repo's git directory";
+
+        await expect(new Vcs(systemTempFolder).status(repoDir, "fresh")).rejects.toThrow(refused);
+
+        expect(existsSync(join(repoDir, TRACE))).toBe(false);
+        // The task's worktree names the repo's `.git` itself as its common directory, so git there still reads the old one.
+        expect((await daemon.facade.agents.taskChanges(task.id)).files.map((f) => f.path)).toContain("README.md");
+        expect(existsSync(join(task.worktree, TRACE))).toBe(false);
+      },
+      SLOW_TEST_TIMEOUT_MS,
+    );
+
+    test(
+      "a fetch in a repo with a task in the sandbox does not go into a submodule, whose own git config the task can write",
+      async () => {
+        daemon = await sandboxed("all");
+        const repoDir = join(daemon.projects, "shop");
+        const outside = join(daemon.projects, "..");
+        const unique = `${Date.now()}-${process.pid}`;
+        // A repo with a submodule, cloned from a remote that moves on to a new commit of the submodule.
+        const library = join(outside, `library-${unique}`);
+        const libraryRemote = join(outside, `library-${unique}.git`);
+        execFileSync("git", ["init", "--quiet", library]);
+        writeFileSync(join(library, "a.txt"), "one\n");
+        gitAsUser(library, "add", ".");
+        gitAsUser(library, "commit", "--quiet", "-m", "one");
+        execFileSync("git", ["clone", "--quiet", "--bare", library, libraryRemote]);
+        gitAsUser(repoDir, "submodule", "add", "--quiet", libraryRemote, "library");
+        gitAsUser(repoDir, "commit", "--quiet", "-m", "add the library");
+        const remote = join(outside, `shop-${unique}.git`);
+        execFileSync("git", ["clone", "--quiet", "--bare", repoDir, remote]);
+        gitAsUser(repoDir, "remote", "add", "origin", remote);
+        gitAsUser(repoDir, "fetch", "--quiet", "origin");
+        const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "map the endpoints", approvals: "auto" });
+        await daemon.facade.agents.taskChanges(task.id);
+        writeFileSync(join(library, "a.txt"), "two\n");
+        gitAsUser(library, "commit", "--quiet", "-am", "two");
+        gitAsUser(library, "push", "--quiet", libraryRemote, "HEAD");
+        const colleague = join(outside, `colleague-${unique}`);
+        gitAsUser(outside, "clone", "--quiet", "--recurse-submodules", remote, colleague);
+        gitAsUser(join(colleague, "library"), "pull", "--quiet", "origin", "HEAD");
+        gitAsUser(colleague, "commit", "--quiet", "-am", "newer library");
+        gitAsUser(colleague, "push", "--quiet", "origin", "HEAD");
+
+        // What the agent can do from the sandbox: the submodule's git directory lies in the repo's `.git`.
+        const ran = join(daemon.projects, "ran-by-the-submodule.txt");
+        writeFileSync(join(task.worktree, "remote.sh"), `echo ran > "${ran.replaceAll("\\", "/")}"\n`);
+        const config = join(repoDir, ".git", "modules", "library", "config");
+        execFileSync("git", ["config", "--file", config, "protocol.ext.allow", "always"]);
+        execFileSync("git", [
+          "config",
+          "--file",
+          config,
+          "remote.origin.url",
+          `ext::sh ${join(task.worktree, "remote.sh").replaceAll("\\", "/")}`,
+        ]);
+
+        await new Vcs(systemTempFolder).sync(repoDir);
+
+        expect(existsSync(ran)).toBe(false);
+      },
+      SLOW_TEST_TIMEOUT_MS,
+    );
   },
 );
 
@@ -151,6 +316,15 @@ describe("the entries of a repo configuration that count as run settings", () =>
       "core.hookspath\n.husky",
       "core.hookspath\n../elsewhere",
       "core.hookspath\n/tmp/hooks",
+      "protocol.ext.allow\nalways",
+      "http.proxy\nhttp://127.0.0.1:8080",
+      "http.https://example.com/.sslverify\nfalse",
+      "lfs.repositoryformatversion\n0",
+      "lfs.standalonetransferagent\nown",
+      "lfs.customtransfer.own.path\n/tmp/transfer",
+      "lfs.extension.own.clean\n/tmp/extension %f",
+      "gc.auto\n1",
+      "gc.recentobjectshook\n/tmp/recent",
       "",
     ].join("\0");
 
@@ -162,6 +336,13 @@ describe("the entries of a repo configuration that count as run settings", () =>
       "include.path\n../shared.gitconfig",
       "core.hookspath\n../elsewhere",
       "core.hookspath\n/tmp/hooks",
+      "protocol.ext.allow\nalways",
+      "http.proxy\nhttp://127.0.0.1:8080",
+      "http.https://example.com/.sslverify\nfalse",
+      "lfs.standalonetransferagent\nown",
+      "lfs.customtransfer.own.path\n/tmp/transfer",
+      "lfs.extension.own.clean\n/tmp/extension %f",
+      "gc.recentobjectshook\n/tmp/recent",
     ]);
   });
 });

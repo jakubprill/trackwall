@@ -2,7 +2,7 @@ import type { BranchOnRemote } from "@trackwall/protocol";
 import { countBetween } from "./commit-range.ts";
 import { existingCommit, git } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
-import { withoutHooks } from "./no-hooks.ts";
+import { NO_HOOKS } from "./no-hooks.ts";
 import { networkAddress } from "./remote.ts";
 
 /**
@@ -53,11 +53,9 @@ export async function pushBranch(dir: string, branch: string, source?: string): 
       `${remote.name} pushes to ${elsewhere}, not to ${fetchesFrom} it fetches from; Trackwall pushes only where it fetches from`,
     );
   const ref = `refs/heads/${branch}`;
-  await withoutHooks((hooksPath) =>
-    git(dir, ["push", "--no-follow-tags", "--no-recurse-submodules", "--", remote.name, `${source ?? ref}:${ref}`], {
-      timeoutMs: PUSH_TIMEOUT_MS,
-      network: { sshCommand: config.sshCommand },
-      config: [hooksPath, `remote.${remote.name}.receivepack=git-receive-pack`, "push.gpgSign=false"],
-    }),
-  );
+  await git(dir, ["push", "--no-follow-tags", "--no-recurse-submodules", "--", remote.name, `${source ?? ref}:${ref}`], {
+    timeoutMs: PUSH_TIMEOUT_MS,
+    network: { sshCommand: config.sshCommand },
+    config: [NO_HOOKS, `remote.${remote.name}.receivepack=git-receive-pack`, "push.gpgSign=false"],
+  });
 }
