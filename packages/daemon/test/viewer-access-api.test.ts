@@ -88,7 +88,7 @@ describe.skipIf(process.versions.bun === undefined)("viewer access for the VS Co
         supervisor: false,
         task: null,
         taskName: null,
-        status: { tone: "warning", label: expect.stringContaining("waiting for you") },
+        status: { tone: "warning", label: "Needs you: answer" },
         needsAttention: true,
         live: true,
       });

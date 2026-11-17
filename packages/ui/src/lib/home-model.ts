@@ -121,7 +121,7 @@ export function homeServiceStatus(service: HomeService): HomeStatus {
   return { tone: "error", label: "service failing" };
 }
 
-/** The words of the "Sessions" view (`STATE_LABELS`), without "probably", because the dashboard shows only the category. */
+/** The words of the "Sessions" view (`STATE_LABELS`), without the guess, because the dashboard shows only the category. */
 export const HOME_SESSION_STATUS: Record<HomeSessionState, HomeStatus> = {
   working: { tone: "ok", label: STATE_LABELS.Working },
   attention: { tone: "warning", label: STATE_LABELS.Input },
