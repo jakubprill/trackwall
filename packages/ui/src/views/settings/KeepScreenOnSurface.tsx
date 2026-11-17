@@ -1,6 +1,5 @@
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
-import { Surface } from "@/components/Surface";
 import { inDesktopShell } from "@/lib/app-window";
 import { KEEP_SCREEN_ON_CHOICES, keepScreenOn, setKeepScreenOn } from "@/lib/keep-screen-on";
 import { useShellSetting } from "@/lib/use-shell-setting";
@@ -8,19 +7,13 @@ import { useShellSetting } from "@/lib/use-shell-setting";
 /** Keeping the screen on (ADR-218), held by the desktop shell with the system's own power request. */
 export function KeepScreenOnSurface() {
   return (
-    <Surface label="Keep the screen on">
-      <div className="flex flex-col gap-3 p-4">
-        <p className="text-muted-foreground text-sm">
-          Keeps the screen from turning off and locking while you watch agents work. Trackwall asks the system the way a video player does;
-          a lock your organisation enforces after a time without input can still lock the screen.
-        </p>
-        {inDesktopShell() ? (
-          <KeepScreenOnChoice />
-        ) : (
-          <p className="text-sm">Only the desktop app can keep the screen on, not the browser.</p>
-        )}
-      </div>
-    </Surface>
+    <div className="flex flex-col gap-3 p-4">
+      <p className="text-muted-foreground text-sm">
+        Keeps the screen from turning off and locking while you watch agents work. Trackwall asks the system the way a video player does; a
+        lock your organisation enforces after a time without input can still lock the screen.
+      </p>
+      {inDesktopShell() ? <KeepScreenOnChoice /> : <p className="text-sm">Only the desktop app can keep the screen on, not the browser.</p>}
+    </div>
   );
 }
 

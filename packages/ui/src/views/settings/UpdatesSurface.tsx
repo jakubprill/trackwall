@@ -1,5 +1,4 @@
 import { Loading } from "@/components/Loading";
-import { Surface } from "@/components/Surface";
 import { UpdateInstallStatus } from "@/components/UpdateInstallStatus";
 import { UpdateOffer } from "@/components/UpdateOffer";
 import { Button } from "@/components/ui/button";
@@ -8,15 +7,13 @@ import type { AppUpdateHandle } from "@/lib/use-app-update";
 /** Updates from GitHub Releases (ADR-53). Without the Tauri window (`trackwall-daemon --ui`) the app is updated by hand. */
 export function UpdatesSurface({ handle }: { handle: AppUpdateHandle | undefined }) {
   return (
-    <Surface label="Updates">
-      <div className="flex flex-col items-start gap-3 p-4">
-        <p className="text-muted-foreground text-sm">
-          Trackwall checks GitHub Releases for a newer version every few hours and installs it when you click. The download is checked
-          against the release signing key.
-        </p>
-        {handle ? <UpdateStatus handle={handle} /> : <p className="text-sm">Updates are installed from the desktop app.</p>}
-      </div>
-    </Surface>
+    <div className="flex flex-col items-start gap-3 p-4">
+      <p className="text-muted-foreground text-sm">
+        Trackwall checks GitHub Releases for a newer version every few hours and installs it when you click. The download is checked against
+        the release signing key.
+      </p>
+      {handle ? <UpdateStatus handle={handle} /> : <p className="text-sm">Updates are installed from the desktop app.</p>}
+    </div>
   );
 }
 

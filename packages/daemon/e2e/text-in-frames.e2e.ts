@@ -57,6 +57,12 @@ describe("text in the UI", () => {
       await categories.filter({ hasText: category }).click();
       await page.waitForLoadState("networkidle");
       found.push(...(await outside(page, `Settings, ${category}`)));
+      // A setting is a folded row (ADR-263): its form is checked too, with every row of the category open at once.
+      const folded = await page.locator('button[aria-expanded="false"][aria-controls]').all();
+      if (folded.length === 0) continue;
+      for (const row of folded) await row.click();
+      await page.waitForLoadState("networkidle");
+      found.push(...(await outside(page, `Settings, ${category}, every setting open`)));
     }
     const tray = await trackwall().openTrayPanel();
     await tray.addStyleTag({ content: WIDER_FONT });
