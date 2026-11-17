@@ -599,6 +599,10 @@ _Avoid_: API change (also endpoints), breaking change, public API diff
 A task proposal the daemon makes when a task's turn ends, for each repo of ring 1 of its impact that surely calls an endpoint the task's commits removed or changed, and each repo that imports a changed library type: the task's own proposal, so an approved one is its subtask, with the Impact tab's hand-off prompt. A repo is offered each endpoint and type once (ADR-198, ADR-205).
 _Avoid_: auto-handoff, consumer task
 
+**Task tree** (`treeOf`, `treeWork` in `task-tree.ts`):
+A task with every subtask proposed from it, at any depth; the topmost task names it. One piece of work, so one repo gets one task of the tree: a subtask cannot propose a repo where a task of another branch of its tree works or that branch's proposal waits, and no impact proposal goes there (ADR-259).
+_Avoid_: family, task group (a session group is the Sessions list's, ADR-48)
+
 **Task message** (`TaskMessage`, MCP tools `send_message` and `get_messages`; "Messages" in the task panel):
 Text a task's proposer sends to the task's session: a correction, an answer, a change elsewhere to follow. The daemon asks the task's session to read it the way it asks for a review, and the task's agent reads it with `get_messages`. At most 5 to a task until the user takes part again (ADR-68).
 _Avoid_: note, comment (that is a review comment), chat
@@ -894,7 +898,7 @@ What a task's result brings to show the change is right beyond the agent's summa
 _Avoid_: evidence (alone: that is the file and line of a fact on a repo card)
 
 **In review** (`Task.inReview`, "In review" on the Sessions list, column `review` of a board item):
-A task whose agent has handed its work over with `report_result` and got nothing new since: the user's review, "Fix" of a failed pipeline or its proposer's message takes it out of review until the agent reports again. The task's board item goes to "In review" once every open task on it is in review (ADR-213). One step before the user accepts the work; only the user ends a task or marks its item "Done".
+A task whose agent has handed its work over with `report_result` and got nothing new since: the user's review, "Fix" of a failed pipeline or its proposer's message takes it out of review until the agent reports again, or until its next turn ends without changing the worktree (ADR-258). The task's board item goes to "In review" once every open task on it is in review (ADR-213). One step before the user accepts the work; only the user ends a task or marks its item "Done".
 _Avoid_: ready, finished, done (those are the user's), awaiting approval (that is a tool approval)
 
 ## Plan

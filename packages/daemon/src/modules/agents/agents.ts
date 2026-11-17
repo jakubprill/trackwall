@@ -103,6 +103,7 @@ import {
   type SessionStartOptions,
   sessionLaunch,
 } from "./resumable-sessions.ts";
+import { ReviewReturns } from "./review-returns.ts";
 import { daemonComputer, runningTasksWarningState } from "./running-tasks-warning.ts";
 import type { SessionMiseEnv } from "./session-env.ts";
 import {
@@ -129,6 +130,7 @@ import { TaskProposals } from "./task-proposals.ts";
 import { type RefreshVcs, refreshTask } from "./task-refresh.ts";
 import { TaskReviews, type UnreadReview } from "./task-reviews.ts";
 import { type RoundsVcs, TASK_ROUNDS_FILE, TaskRoundList } from "./task-rounds.ts";
+import { secondInTreeRefusal } from "./task-tree.ts";
 import { AgentTasks, type TaskLaunch, type TaskOptions, type TasksVcs } from "./tasks.ts";
 
 /**
@@ -314,6 +316,7 @@ export class Agents {
   readonly #handoffs: HandoffWatch;
   readonly #impactProposals: ImpactProposals;
   readonly #rounds: TaskRoundList;
+  readonly #reviewReturns = new ReviewReturns();
   readonly #coordination: TaskCoordination;
   readonly #supervisor: SupervisorSessions;
   readonly #resumable: ResumableSessions;
@@ -587,9 +590,18 @@ export class Agents {
     await this.#deps.repos.repoPath(proposal.repo);
     await this.#assertOnBoard(proposal.item);
     const proposedBy = proposedByOf(caller === null ? null : this.session(caller));
-    // The agent knows better than the comparison what the repo has to do (ADR-198).
-    if (proposedBy.task !== null) this.#impactProposals.replacedBy(proposedBy.task, [proposal.repo]);
+    if (proposedBy.task !== null) {
+      this.#refuseSecondInTree(proposedBy.task, proposal.repo);
+      // The agent knows better than the comparison what the repo has to do (ADR-198).
+      this.#impactProposals.replacedBy(proposedBy.task, [proposal.repo]);
+    }
     return this.#proposals.add({ kind: "task", ...proposal, parts: null, proposedBy });
+  }
+
+  /** `bad_request` when a task or an agent's proposal of task `task`'s tree already covers `repo` (ADR-259). */
+  #refuseSecondInTree(task: string, repo: string): void {
+    const refusal = secondInTreeRefusal(task, repo, this.#tasks.list(), this.#proposals.list());
+    if (refusal !== null) throw new DomainError("bad_request", refusal);
   }
 
   /**
@@ -762,6 +774,7 @@ export class Agents {
         "your plan waits for the user's approval: end your turn with the plan, and report the result once it is implemented",
       );
     const reported = this.#tasks.setSummary(own.task, report);
+    this.#reviewReturns.forget(own.task);
     this.#autoReviews.afterReport(own.task);
     this.#boardItems.handedOver(reported);
     // Awaited, so the update is there for the proposer by the time the tool answers.
@@ -811,7 +824,15 @@ export class Agents {
 
   /** Task `id`'s agent got work again, so its work is no longer waiting for review (ADR-213). */
   #backToWork(id: string): void {
-    if (this.#tasks.takeOutOfReview(id)) this.#boardItems.backToWork(this.#tasks.task(id));
+    if (!this.#tasks.takeOutOfReview(id)) return;
+    this.#reviewReturns.gaveWork(id);
+    this.#boardItems.backToWork(this.#tasks.task(id));
+  }
+
+  /** Task `id`'s agent answered the work it got again without changing anything, so it hands its work back (ADR-258). */
+  #backInReview(id: string): void {
+    const back = this.#tasks.backInReview(id);
+    if (back !== undefined) this.#boardItems.handedOver(back);
   }
 
   /** The prompt for what waits unread for a session: its task's review comments and messages, and its updates. */
@@ -1335,6 +1356,7 @@ export class Agents {
     this.#miseTrust.forget({ task: id });
     this.#handoffs.forget(id);
     this.#rounds.forget(id);
+    this.#reviewReturns.forget(id);
     this.#coordination.taskEnded(id);
     this.#deps.onTaskRemoved(ended);
   }
@@ -1727,18 +1749,25 @@ export class Agents {
       },
       onTurnStart: () => {
         this.#coordination.turnStarted(id);
-        if (task !== null) void this.#rounds.turnStarted(task);
+        if (task === null) return;
+        this.#reviewReturns.turnStarted(task);
+        void this.#rounds.turnStarted(task);
       },
       onTurnOver: () => {
-        // The round commit first: it moves the branch, which the tasks it handed work to then hear about (ADR-144), and
-        // which the impact proposals compare (ADR-198).
-        if (task !== null)
-          void this.#rounds
-            .turnOver(task)
-            .then(() => this.#handoffs.turnOver(task))
-            // A failed handoff check does not hold back the impact proposals.
-            .catch((err: unknown) => this.#deps.log(`task ${task}: after its turn: ${String(err)}`))
-            .then(() => this.#impactProposals.turnOver(task, id));
+        if (task === null) return;
+        // Decided now: the next turn may start while the round is committed.
+        const answeredWork = this.#reviewReturns.turnOver(task);
+        // The round commit first: it tells whether the turn changed anything, it moves the branch, which the tasks it
+        // handed work to then hear about (ADR-144), and which the impact proposals compare (ADR-198).
+        void this.#rounds
+          .turnOver(task)
+          .then((changed) => {
+            if (answeredWork && !changed) this.#backInReview(task);
+          })
+          .then(() => this.#handoffs.turnOver(task))
+          // A failed handoff check does not hold back the impact proposals.
+          .catch((err: unknown) => this.#deps.log(`task ${task}: after its turn: ${String(err)}`))
+          .then(() => this.#impactProposals.turnOver(task, id));
       },
       onTokenBudgetReached: async () => {
         this.#deps.log(`session ${id}: stopped at its token budget`);
