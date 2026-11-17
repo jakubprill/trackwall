@@ -176,6 +176,35 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     expect(read(true)).not.toContain("read what it changed with get_task_changes");
   });
 
+  test("the one session of a change is told every part's folder, repo and task, not to commit, and to report once (ADR-265)", () => {
+    const parts = [
+      { task: "5e7a1c3b-0000-4000-8000-000000000000", repo: "payments", branch: "trackwall/refund-api-9d0c11" },
+      { task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427", repo: "orders-api", branch: "trackwall/refund-api-9d0c11" },
+    ];
+    const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
+    const role = { kind: "task" as const, repo: "payments", task: "5e7a1c3b-0000-4000-8000-000000000000", handoff: null };
+    writeSessionInstructions(sessionDir, "0.5.14", { ...role, change: { parts, oneSession: true } }, NO_KNOWLEDGE, false);
+    const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
+
+    expect(text).toContain(
+      "You run one change across 2 repos in this one session. The folder you are in holds a git worktree per repo, each on the branch `trackwall/refund-api-9d0c11`, and each is a task in Trackwall that the user reviews on its own, their merge requests to be merged in this order:\n" +
+        "  1. folder `payments`: the repo `payments` (its id in Trackwall tools), task `5e7a1c3b-0000-4000-8000-000000000000`\n" +
+        "  2. folder `orders-api`: the repo `orders-api` (its id in Trackwall tools), task `1b4e28ba-2fa1-11d2-883f-0016d3cca427`\n",
+    );
+    expect(text).toContain(
+      "- Do not commit, switch branches, push, merge or open merge requests: when a turn of yours ends, Trackwall commits what you changed in each repo",
+    );
+    expect(text).toContain("read `AGENTS.md` and `.github/copilot-instructions.md` in its folder when it has them");
+    expect(text).toContain("call report_result once for the whole change");
+    expect(text).toContain("- Do not propose tasks for the repos above.");
+    // One conversation has no sibling session to read or wait for, and no tool guide (ADR-257).
+    expect(text).not.toContain("get_handoff");
+    expect(text).not.toContain("Change only your part");
+    expect(text).not.toContain("## Trackwall tools");
+    // About as short as a solo task's role: the file is part of every model call.
+    expect(text.length).toBeLessThan(3600);
+  });
+
   test("a part of a change knows its sibling parts in merge order and builds on the part before it (ADR-171)", () => {
     const parts = [
       { task: "5e7a1c3b-0000-4000-8000-000000000000", repo: "payments", branch: "trackwall/refund-api-9d0c11" },

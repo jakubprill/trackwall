@@ -1,7 +1,7 @@
 import { countLabel, type Session, type SessionList, type Task } from "@trackwall/protocol";
 import type { AwayPeriod } from "./away-presence.ts";
 import type { StatusTone } from "./repo-status.ts";
-import { workingSession, proposalName, type SessionSelection, taskName } from "./session-entries.ts";
+import { proposalName, type SessionSelection, taskName, workingSession } from "./session-entries.ts";
 import { PROPOSAL_STATUS, sessionStateLabel, sessionTitle } from "./session-state.ts";
 
 /**

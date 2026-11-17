@@ -129,11 +129,6 @@ export type ChangeSessions = z.infer<typeof ChangeSessions>;
 /** One conversation costs a fraction of one per repo (ADR-265), so a change runs in one unless the request says otherwise. */
 export const DEFAULT_CHANGE_SESSIONS: ChangeSessions = "shared";
 
-/** Whether `task` is a part another part's session works on (ADR-265): it has no session of its own. */
-export function isLedPart(task: { id: string; change: TaskChange | null }): boolean {
-  return task.change !== null && task.change.session !== null && task.change.session !== task.id;
-}
-
 /**
  * The prompt of the one session of a change (ADR-265): the change's prompt, then every part's note with its repo, since
  * that session does every part.

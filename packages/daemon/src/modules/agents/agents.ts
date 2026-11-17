@@ -123,9 +123,9 @@ import { outcome, sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "
 import { SupervisorSessions } from "./supervisor-sessions.ts";
 import { supervisorSituation } from "./supervisor-situation.ts";
 import { TaskBoardItem, type TaskBoardItemDeps } from "./task-board-item.ts";
+import { sharedSession } from "./task-change.ts";
 import { TaskCoordination } from "./task-coordination.ts";
 import { TaskFile } from "./task-file.ts";
-import { sharedSession } from "./task-change.ts";
 import { PLAN_APPROVED_MESSAGE } from "./task-plan.ts";
 import { TaskProposals } from "./task-proposals.ts";
 import { type RefreshVcs, refreshTask } from "./task-refresh.ts";

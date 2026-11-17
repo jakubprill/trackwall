@@ -11,7 +11,7 @@ import {
 } from "@trackwall/protocol";
 import { projectOf } from "./board-tree.ts";
 import { type Progress, progressBelow, progressLabel } from "./plan-progress.ts";
-import { latestSession, workingSession, proposerName, taskName } from "./session-entries.ts";
+import { latestSession, proposerName, taskName, workingSession } from "./session-entries.ts";
 import { inTurn, NO_SESSION_LABEL, PAUSED_LABEL, PROPOSAL_STATUS, sessionPlace, sessionStateLabel, sessionTitle } from "./session-state.ts";
 import { outcomeMarks } from "./task-outcomes.ts";
 

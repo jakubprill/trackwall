@@ -78,7 +78,7 @@ const CHANGE_FOLDERS = "_changes";
  * holds a worktree per part under its repo's name and is where the change's session runs, so every part is inside
  * the folder Copilot CLI works in. The parts share the branch name, so they share the folder.
  */
-export function changeFolder(worktreesDir: string, branch: string): string {
+function changeFolder(worktreesDir: string, branch: string): string {
   return join(worktreesDir, CHANGE_FOLDERS, taskSlugOf(branch));
 }
 

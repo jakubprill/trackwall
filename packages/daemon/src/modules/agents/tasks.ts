@@ -44,7 +44,7 @@ import { type EndedTaskFacts, type EndedTaskGit, endedTaskFacts } from "./ended-
 import { offeredAfter } from "./impact-proposals.ts";
 import type { JavaNavigationServers } from "./java-navigation-servers.ts";
 import { modelArgs } from "./model-args.ts";
-import { changeFolder, changePartWorktree, taskSlug, taskWorktree } from "./task-branch.ts";
+import { changePartWorktree, taskSlug, taskWorktree } from "./task-branch.ts";
 import type { ChangeFacts, SharedChangeSession } from "./task-change.ts";
 import type { StoredTask, TaskFile } from "./task-file.ts";
 import { type HandoffFacts, type HandoffGit, handoffState, type TaskHandoff } from "./task-handoff.ts";
@@ -322,11 +322,12 @@ export class AgentTasks {
     const held: HeldPart[] = [];
     for (const [position, { repo, prompt }] of parts.entries()) {
       // A proposed change's id goes to the first part made, so a part that cannot be made does not leave it unused.
-      const id = held.length === 0 ? firstId : randomUUID();
+      const first = held.length === 0;
+      const id = first ? firstId : randomUUID();
       // In a change with one session the first part made is the lead part, whose session gets the whole prompt (ADR-265).
       const lead = shared === null ? null : (held[0]?.task.id ?? id);
       const partOrigin = { ...origin, planFirst: false, id, change: { id: change, position, session: lead }, retryOf: null };
-      await this.#creating(repo, () => this.#create(repo, lead === id && shared !== null ? shared.prompt : prompt, partOrigin, "hold")).then(
+      await this.#creating(repo, () => this.#create(repo, shared !== null && first ? shared.prompt : prompt, partOrigin, "hold")).then(
         (task) => held.push({ position, task }),
         (err: unknown) => failures.push({ position, repo, err }),
       );
@@ -732,20 +733,19 @@ export class AgentTasks {
 
   /**
    * The tasks the session of task `id` works on (ADR-265), in the parts' order: for the lead part of a change with one
-   * session every listed part, the lead included; for any other task with a session only itself; for a part without
-   * one, none.
+   * session every listed part, the lead included; for any other task with a session only itself (also a part whose
+   * lead part is gone); for a part without one, none.
    */
   worksOn(id: string): string[] {
     const task = this.#tasks.find((t) => t.id === id);
     if (task === undefined) return [];
-    if (task.change === null || task.change.session === null) return [id];
-    if (task.change.session !== id) return [];
-    return this.#parts(task.change.id).map((t) => t.id);
+    const candidates = task.change === null ? [task] : this.#parts(task.change.id);
+    return candidates.filter((t) => this.sessionTask(t.id) === id).map((t) => t.id);
   }
 
   /** Where the session of task `id` runs: its worktree, or for the lead part of a change with one session the change's folder (ADR-265). */
   sessionFolder(id: string): string {
-    return sessionFolderOf(this.#get(id), this.#deps.legacyWorktreesDir);
+    return sessionFolderOf(this.#get(id));
   }
 
   /**
@@ -1340,7 +1340,7 @@ export class AgentTasks {
     await asRepoUnavailable(task.branch, this.#deps.vcs.removeWorktree(task.repoDir, task.worktree));
     if (!keepBranch) await asRepoUnavailable(task.branch, this.#deps.vcs.deleteBranch(task.repoDir, task.branch));
     // The folder of a change with one session goes with its last part (ADR-265); `rmdir` refuses a folder that still has one.
-    if (task.change !== null && task.change.session !== null) {
+    if (inOneSession(task)) {
       try {
         rmdirSync(dirname(task.worktree));
       } catch {
@@ -1380,7 +1380,7 @@ export class AgentTasks {
     const sandboxArgs = task.sandbox ? [SANDBOX_ARG] : [];
     const place = {
       repo: task.repo,
-      cwd: sessionFolderOf(task, this.#deps.legacyWorktreesDir),
+      cwd: sessionFolderOf(task),
       task: task.id,
       // While its plan waits the agent asks before every tool, also with auto approvals: Plan mode refuses only the
       // changes Copilot CLI recognises, not a script that writes (ADR-229 addendum).
@@ -1480,8 +1480,7 @@ export class AgentTasks {
 
   #known(task: StoredTask & { port: number }): KnownTask {
     const worktreesDir = task.worktreesDir ?? this.#deps.legacyWorktreesDir;
-    const oneSession = task.change !== null && task.change.session !== null;
-    const place = oneSession ? changePartWorktree : taskWorktree;
+    const place = inOneSession(task) ? changePartWorktree : taskWorktree;
     return { ...task, worktree: place(worktreesDir, task.repo, task.branch) };
   }
 
@@ -1500,10 +1499,13 @@ export class AgentTasks {
 }
 
 /** Where a task's session runs: its worktree, or for the lead part of a change with one session the change's folder (ADR-265). */
-function sessionFolderOf(task: KnownTask, legacyWorktreesDir: string): string {
-  return task.change !== null && task.change.session === task.id
-    ? changeFolder(task.worktreesDir ?? legacyWorktreesDir, task.branch)
-    : task.worktree;
+function sessionFolderOf(task: KnownTask): string {
+  return task.change?.session === task.id ? dirname(task.worktree) : task.worktree;
+}
+
+/** The task is a part of a change with one session (ADR-265), so its worktree is in the change's folder. */
+function inOneSession(task: Pick<StoredTask, "change">): boolean {
+  return task.change !== null && task.change.session !== null;
 }
 
 /**

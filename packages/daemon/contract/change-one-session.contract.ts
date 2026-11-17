@@ -45,6 +45,15 @@ function shellCall(request: ModelRequest, command: { bash: string; powershell: s
   return { tool, arguments: { command: command[tool], description: "Create a file in each repo" } };
 }
 
+/** Waits until `ready` holds, asking again every 200 ms, at most `SESSION_MS`. */
+async function eventually(what: string, ready: () => Promise<boolean>): Promise<void> {
+  const until = Date.now() + SESSION_MS;
+  while (!(await ready())) {
+    if (Date.now() > until) throw new Error(`gave up waiting for ${what}`);
+    await new Promise((r) => setTimeout(r, 200));
+  }
+}
+
 describe("a change in one session with the real Copilot CLI (ADR-265)", () => {
   test("the one session works in the change's folder on every part's worktree without asking for another path, and each part gets its round commit", async () => {
     model.reply(
@@ -83,21 +92,16 @@ describe("a change in one session with the real Copilot CLI (ADR-265)", () => {
 
     // The end of the turn commits what it left in each part, on the part's own branch.
     for (const part of [payments, orders]) {
-      const until = Date.now() + SESSION_MS;
-      while ((await daemon.post(taskRoundsApi.rounds, { task: part.id })).rounds.length === 0) {
-        if (Date.now() > until) throw new Error(`gave up waiting for round 1 of ${part.repo}`);
-        await new Promise((r) => setTimeout(r, 200));
-      }
+      await eventually(
+        `round 1 of ${part.repo}`,
+        async () => (await daemon.post(taskRoundsApi.rounds, { task: part.id })).rounds.length > 0,
+      );
       expect(gitIn(part.worktree, "log", "-1", "--format=%s").trim()).toBe("WIP round 1");
     }
 
     // Copilot CLI records the folder, which is no repo and has no branch: the usage report counts it for the lead part.
-    const until = Date.now() + SESSION_MS;
     const row = async () => (await daemon.facade.usageReport.week(0)).work.find((w) => w.task === payments.id);
-    while ((await row()) === undefined) {
-      if (Date.now() > until) throw new Error("the change's conversation never showed in the report");
-      await new Promise((r) => setTimeout(r, 200));
-    }
+    await eventually("the change's conversation in the usage report", async () => (await row()) !== undefined);
     expect(await row()).toMatchObject({ kind: "task", repo: "payments", conversations: 1 });
 
     await daemon.facade.agents.stop(session.id);

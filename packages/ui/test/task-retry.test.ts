@@ -17,7 +17,9 @@ describe("retrying a failed task on a stronger model", () => {
   });
 
   test("a part of a change is not offered the retry, even when its verification failed", () => {
-    expect(offersRetry({ change: { id: "c0ffee00-0000-4000-8000-000000000000", position: 0, session: null } }, verification("failed"))).toBe(false);
+    expect(
+      offersRetry({ change: { id: "c0ffee00-0000-4000-8000-000000000000", position: 0, session: null } }, verification("failed")),
+    ).toBe(false);
   });
 
   test("the retry model from Settings is the one-click model of a task on another one", () => {

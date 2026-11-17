@@ -354,7 +354,10 @@ describe("Sessions view entries", () => {
   });
 
   test("the parts of a change sit under its first part in merge order, and under the next one once the first is ended (ADR-171)", () => {
-    const part = (id: string, createdAt: string, position: number) => ({ ...task(id, createdAt), change: { id: CHANGE, position, session: null } });
+    const part = (id: string, createdAt: string, position: number) => ({
+      ...task(id, createdAt),
+      change: { id: CHANGE, position, session: null },
+    });
     // Started one after another, so the later parts are the newer ones.
     const tasks = [
       part("web", "2026-10-23T10:02:00Z", 2),
@@ -380,7 +383,10 @@ describe("Sessions view entries", () => {
   });
 
   test("every part of a change in one session shows the session of its lead part (ADR-265)", () => {
-    const part = (id: string, position: number) => ({ ...task(id, "2026-10-23T10:00:00Z"), change: { id: CHANGE, position, session: "payments" } });
+    const part = (id: string, position: number) => ({
+      ...task(id, "2026-10-23T10:00:00Z"),
+      change: { id: CHANGE, position, session: "payments" },
+    });
     const lead = session("s1", "2026-10-23T10:00:05Z", "payments");
     const entries = rowEntries({
       sessions: [lead],
