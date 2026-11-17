@@ -64,6 +64,7 @@ import { DayStartFile } from "./modules/day-start/day-start-file.ts";
 import { trustedFolderOf, trustedFolders } from "./modules/doctor/copilot-trust.ts";
 import { type DiskSpace, diskSpace } from "./modules/doctor/disk-space.ts";
 import { Doctor } from "./modules/doctor/doctor.ts";
+import { measureFileWrites } from "./modules/doctor/file-scanning.ts";
 import { profileEnvironment } from "./modules/doctor/model-provider-check.ts";
 import { SYSTEM_CA_FILES, sessionCertificates } from "./modules/doctor/network-check.ts";
 import { probeConnection, probeTls, type TlsProbe } from "./modules/doctor/tls-probe.ts";
@@ -282,6 +283,8 @@ export interface FacadeOptions {
   connectionProbe?: TlsProbe;
   /** Only for tests, like `tlsProbe`, so that the doctor's report does not depend on the runner's disk; the daemon leaves it out for `diskSpace`. */
   diskSpace?: (folder: string) => Promise<DiskSpace>;
+  /** Only for tests, like `diskSpace`, so that the report does not depend on the runner's antivirus; the daemon leaves it out for `measureFileWrites` (ADR-255). */
+  measureFileWrites?: (folder: string, files: number) => Promise<number>;
   /** The folder the daemon serves the UI from: the error journal maps the UI's frames with its source maps (ADR-94). */
   uiDir?: string;
   log: (msg: string) => void;
@@ -511,6 +514,9 @@ export function createFacade(o: FacadeOptions): Facade {
     mountTable,
     diskSpace: o.diskSpace ?? diskSpace,
     homeDir: homedir(),
+    stateDir: o.home,
+    worktreesDir: () => workspace.worktreesDir().catch(() => null),
+    measureFileWrites: o.measureFileWrites ?? measureFileWrites,
     inContainer: o.inContainer,
     workspaceFile: workspace.configFile(),
     workspaceKeys: () => workspace.workspaceKeys(),
