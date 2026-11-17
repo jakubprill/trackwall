@@ -58,9 +58,10 @@ describe("text in the UI", () => {
       await page.waitForLoadState("networkidle");
       found.push(...(await outside(page, `Settings, ${category}`)));
       // A setting is a folded row (ADR-263): its form is checked too, with every row of the category open at once.
-      const folded = await page.locator('button[aria-expanded="false"][aria-controls]').all();
-      if (folded.length === 0) continue;
-      for (const row of folded) await row.click();
+      const folded = page.locator('button[aria-expanded="false"][aria-controls]');
+      if ((await folded.count()) === 0) continue;
+      // An opened row leaves the locator, so the first folded one is always the next.
+      while ((await folded.count()) > 0) await folded.first().click();
       await page.waitForLoadState("networkidle");
       found.push(...(await outside(page, `Settings, ${category}, every setting open`)));
     }
