@@ -111,6 +111,27 @@ describe.skipIf(process.versions.bun === undefined)("a change in one session (AD
     expect(existsSync(folder)).toBe(false);
   }, 60_000);
 
+  test("a repo that cannot get a part is named, and the one session works on the parts that were made", async () => {
+    const { tasks, failed } = await daemon.post(agentsApi.createChange, {
+      title: "Refund API",
+      prompt: "Add refunds",
+      parts: [{ repo: "billing" }, { repo: "payments" }, { repo: "orders-api" }],
+      approvals: "ask",
+      sessions: "shared",
+    });
+    expect(failed.map((f) => f.repo)).toEqual(["billing"]);
+    const [payments, orders] = tasks;
+    if (payments === undefined || orders === undefined) throw new Error("two parts expected");
+    // The first part made leads, whatever its place in the merge order.
+    expect(tasks.map((t) => [t.repo, t.change?.position, t.change?.session])).toEqual([
+      ["payments", 1, payments.id],
+      ["orders-api", 2, payments.id],
+    ]);
+    const session = sessionsOf(payments.id).find((s) => s.run.kind === "running");
+    if (!session) throw new Error("the lead part has no running session");
+    await endChange({ payments, orders, session: session.id });
+  }, 60_000);
+
   test("a turn of the session is a round with a commit in every part it changed, and its one report hands every part over", async () => {
     const change = await changeInOneSession();
     const { payments, orders, session } = change;

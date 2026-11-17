@@ -148,6 +148,7 @@ describe.skipIf(process.versions.bun === undefined)(
         parts: [{ repo: "payments" }, { repo: "billing" }, { repo: "shop-web" }],
         approvals: "ask",
         item: item.id,
+        sessions: "perPart",
       });
       expect(tasks.map((t) => [t.repo, t.change?.position])).toEqual([
         ["payments", 0],

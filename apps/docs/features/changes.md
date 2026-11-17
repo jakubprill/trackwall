@@ -1,11 +1,11 @@
 ---
 title: Changes across several repos
-description: Start one piece of work in several repos at once. One agent makes it in one conversation, and you review each repo on its own.
+description: Start one piece of work in several repos at once, made by one agent in one conversation and reviewed repo by repo.
 ---
 
 # Changes across several repos
 
-Start one piece of work in several repos at once. One agent makes it in one conversation, and you review each repo on its own.
+Start one piece of work in several repos at once, made by one agent in one conversation and reviewed repo by repo.
 
 ## What you get
 
@@ -21,7 +21,7 @@ A change is a group of [agent tasks](/features/tasks), one per repo. Press "+" i
 
 "Create change in N repos" creates a worktree and a task in each repo, all on the branch `trackwall/<title>-<6 characters>` (or under your own prefix, see [agent tasks](/features/tasks)), and starts one agent for all of them. It runs in a folder that holds the worktree of every repo, so it reads and changes them like folders of one project. It gets the prompt of the whole change with the note of each repo, and it knows which folder is which repo and the order to merge them in.
 
-In "Sessions" the parts sit under the first part of the change, in the merge order, and each part's panel says "Part of a change in one session" and shows that one session. When the agent ends a turn, Trackwall commits what it changed in each repo as a [round](/features/task-rounds) of that repo's task. When it reports its result, every part gets the summary and is ready for review. A review you send on any part reaches the one agent.
+In "Sessions" the parts sit under the first part of the change, in the merge order, and each part's panel says "Part of a change in one session" and shows that one session. When the agent ends a turn, Trackwall commits what it changed in each repo as a [round](/features/tasks) of that repo's task. When it reports its result, every part gets the summary and is ready for review. A review you send on any part reaches the one agent.
 
 An agent can propose a change too: the [supervisor](/features/supervisor) or another [main session](/features/main-session) that plans work across repos. The proposal waits in "Sessions" like a task proposal, as one card that lists every repo in the merge order with what it has to do. Read the prompt and the notes, and the same hints on the order, edit them if you like, untick the repos the change should leave out and press "Start change". Each part then reports to the session that proposed it, which follows them like the tasks it proposes. The agent of a task proposes work in other repos as separate tasks instead, which build on its own branch.
 
