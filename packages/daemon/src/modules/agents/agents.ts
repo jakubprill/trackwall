@@ -353,6 +353,7 @@ export class Agents {
       callbacks: (session) => this.#sessionCallbacks(session),
       handoff: (task) => this.#tasks.handoff(task),
       change: (task) => this.#tasks.change(task),
+      solo: (task) => this.#tasks.solo(task),
       knowledge: deps.knowledge,
       wireApi: deps.wireApi,
     });
