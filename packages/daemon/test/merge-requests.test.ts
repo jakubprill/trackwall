@@ -310,6 +310,7 @@ describe.skipIf(process.versions.bun === undefined)("following a task's merge re
       expect(session?.readRequest?.prompt).toContain("The user asks you to fix the failed pipeline of your merge request");
       expect(agents.takeReviewComments(session?.id ?? "")).toEqual({
         comments: [],
+        mergeRequestComments: null,
         pipelineFix: { pipeline: "https://gitlab.example.com/shop/shop/-/pipelines/50", commit: sha, logs: [job], otherJobs: [] },
       });
       expect(agents.takeReviewComments(session?.id ?? "").pipelineFix).toBeNull();
@@ -327,6 +328,79 @@ describe.skipIf(process.versions.bun === undefined)("following a task's merge re
       expect(agents.takeReviewComments(session?.id ?? "").pipelineFix).toMatchObject({ logs: [], otherJobs: ["unit-tests"] });
     } finally {
       delete process.env.ORDERS_DB_PASSWORD;
+      for (const session of agents.sessions().sessions) await agents.stop(session.id);
+    }
+  }, 60_000);
+
+  test("the user reads the unresolved threads of the merge request and hands the ones still open to the task's agent (ADR-256)", async () => {
+    const agents = daemon.facade.agents;
+    const task = await taskWithCommit("shop", "Speed up checkout");
+    gitIn(task.worktree, "update-ref", `refs/remotes/origin/${task.branch}`, "HEAD");
+    const sha = gitIn(task.worktree, "rev-parse", "HEAD").trim();
+    const discussions = `${MR_7}/discussions`;
+    const thread = (id: string, body: string, resolved: boolean) => ({
+      id,
+      notes: [
+        {
+          id: id === "a".repeat(40) ? 81 : 82,
+          body,
+          author: { username: "reviewer" },
+          created_at: "2026-11-16T10:00:00Z",
+          system: false,
+          resolvable: true,
+          resolved,
+          position: { new_path: "src/cart.ts", old_path: "src/cart.ts", new_line: 1, old_line: null },
+        },
+      ],
+    });
+    const open = [thread("a".repeat(40), "Name the constant.", false), thread("b".repeat(40), "Add a test for an empty cart.", false)];
+    try {
+      // Before the merge request exists, there is nothing to read.
+      hosting.reconfigure({ apiResponses: { [GITLAB_MRS]: [] } });
+      await roundAfter(1);
+      await expect(daemon.post(mergeRequestsApi.threads, { task: task.id })).rejects.toThrow(
+        `branch ${task.branch} has no open merge request`,
+      );
+
+      hosting.reconfigure({ apiResponses: { ...mr7("passed", sha), [discussions]: [...open, thread("c".repeat(40), "Done.", true)] } });
+      // Past the next read of a branch without a merge request.
+      await roundAfter(7);
+      const seen = await daemon.post(mergeRequestsApi.threads, { task: task.id });
+      expect(seen.mergeRequest).toBe("https://gitlab.example.com/shop/shop/-/merge_requests/7");
+      expect(seen.threads.map((t) => [t.file, t.line, t.notes[0]?.text])).toEqual([
+        ["src/cart.ts", { side: "new", number: 1 }, "Name the constant."],
+        ["src/cart.ts", { side: "new", number: 1 }, "Add a test for an empty cart."],
+      ]);
+
+      const reporter = agents.sessions().sessions.find((s) => s.task === task.id);
+      await agents.reportSummary(reporter?.id ?? null, { text: "Faster checkout.", checkSteps: [], reproTest: null });
+      expect(agents.task(task.id).inReview).toBe(true);
+
+      // The reviewer resolved one thread after the user saw them: only the one still open goes to the agent.
+      const [first, second] = open;
+      hosting.reconfigure({
+        apiResponses: {
+          ...mr7("passed", sha),
+          [discussions]: [first, { ...second, notes: second?.notes.map((n) => ({ ...n, resolved: true })) }],
+        },
+      });
+      const sent = await daemon.post(mergeRequestsApi.sendThreads, { task: task.id, threads: seen.threads.map((t) => t.id) });
+      expect(sent.sent).toBe(1);
+      expect(["typed", "queued"]).toContain(sent.delivery);
+      expect(agents.task(task.id).inReview).toBe(false);
+      const session = agents.sessions().sessions.find((s) => s.task === task.id);
+      expect(session?.readRequest?.prompt).toContain("The user hands you unresolved comments from the reviewers of your merge request");
+      expect(agents.takeReviewComments(session?.id ?? "")).toEqual({
+        comments: [],
+        pipelineFix: null,
+        mergeRequestComments: { mergeRequest: seen.mergeRequest, threads: seen.threads.slice(0, 1) },
+      });
+
+      await expect(daemon.post(mergeRequestsApi.sendThreads, { task: task.id, threads: ["b".repeat(40)] })).rejects.toThrow(
+        "the threads you picked are resolved or gone on the repo host now",
+      );
+      expect(agents.takeReviewComments(session?.id ?? "").mergeRequestComments).toBeNull();
+    } finally {
       for (const session of agents.sessions().sessions) await agents.stop(session.id);
     }
   }, 60_000);

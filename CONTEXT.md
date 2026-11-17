@@ -563,6 +563,10 @@ _Avoid_: CI, build (a build is a mise task), checks
 The user's request to a task's agent to fix the failed pipeline of the task's merge request, with the end of the failed jobs' logs. Queued like a review and read with `get_review_comments` (ADR-197); the fix goes on the same task branch, so the merge request gets it with the next push.
 _Avoid_: retry, rerun (that is the repo host's button), fix task (no new task is made)
 
+**Merge request thread** (`MergeRequestThread`, `merge-requests/threads`, "Read threads" under an open merge request in the task panel):
+An unresolved thread of a task's merge request on the repo host: a reviewer's comment on a line, a file or the merge request as a whole, with the replies under it (a GitLab discussion that can be resolved, a GitHub review thread). The threads the user picks go to the task's agent with "Send to agent" as **merge request comments** (`MergeRequestComments`), queued like a review and read with `get_review_comments` (ADR-256).
+_Avoid_: review comment (that is the user's own comment in Trackwall), discussion, note (a note is one comment of a thread)
+
 **Followed merge request** (`FollowedMergeRequest`, `MergeRequests.followed`, `checkWatched`):
 A task's merge request as the daemon last read it while following every task in the background (ADR-154), with its project and `pipelineFailedAt`, the moment the daemon saw its pipeline fail after seeing it otherwise. A new `pipelineFailedAt` is a failed pipeline to announce.
 _Avoid_: tracked, watched merge request (the watch is the reading, not the merge request)

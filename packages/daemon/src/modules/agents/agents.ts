@@ -25,6 +25,7 @@ import {
   type JavaNavigationState,
   type JavaNavigationStatus,
   type MergeRequest,
+  type MergeRequestComments,
   type MessageAttachment,
   type MiseTarget,
   type PausedTask,
@@ -787,9 +788,22 @@ export class Agents {
    * the task's running session is asked to read it, now or once it waits for input; without one, the session the user resumes is.
    */
   askToFixPipeline(id: string, fix: PipelineFix): PromptDelivery {
+    return this.#queueForAgent(id, () => this.#reviews.fixPipeline(id, fix));
+  }
+
+  /**
+   * The merge request threads the user handed to the task's agent (ADR-256), queued like a review: the task's running
+   * session is asked to read them, now or once it waits for input; without one, the session the user resumes is.
+   */
+  askToAddressThreads(id: string, comments: MergeRequestComments): PromptDelivery {
+    return this.#queueForAgent(id, () => this.#reviews.addThreads(id, comments));
+  }
+
+  /** Queues the user's request for task `id`'s agent with `queue`, gives it work again and asks its session to read. */
+  #queueForAgent(id: string, queue: () => void): PromptDelivery {
     // Only to refuse an unknown or ended task (`not_found`).
     this.#tasks.task(id);
-    this.#reviews.fixPipeline(id, fix);
+    queue();
     this.#backToWork(id);
     this.#coordination.reviewed(id);
     return this.#sessions.runningOfTask(id)?.askToRead() ?? "on_resume";
@@ -806,6 +820,7 @@ export class Agents {
     return readRequestPrompt({
       reviewComments,
       pipelineFix: session.task !== null && this.#reviews.pipelineFixUnread(session.task),
+      mergeRequestThreads: session.task !== null && this.#reviews.threadsUnread(session.task),
       handoffMoved: session.task !== null && this.#handoffs.waiting(session.task),
       roundUndone: session.task !== null && this.#rounds.undoneUntold(session.task),
       refreshed: session.task !== null && this.#rounds.refreshedUntold(session.task),
@@ -814,7 +829,7 @@ export class Agents {
     });
   }
 
-  /** The unread review comments and pipeline fix of session `caller`'s own task (`get_review_comments`), which now count as read. */
+  /** The unread review comments, pipeline fix and merge request comments of session `caller`'s own task (`get_review_comments`), which now count as read. */
   takeReviewComments(caller: string | null): UnreadReview {
     return this.#reviews.take(this.#ownTask(caller, "has review comments").task);
   }

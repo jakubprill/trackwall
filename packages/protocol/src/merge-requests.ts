@@ -5,6 +5,7 @@ import { FreshAutoReview } from "./auto-review.ts";
 import { CopilotUsage, ModelCalls } from "./copilot-usage.ts";
 import { RepoHostKind } from "./repo-hosts.ts";
 import { ReproductionCheck } from "./reproduction.ts";
+import { ReviewSide } from "./review.ts";
 import { WebAddress } from "./workspace.ts";
 
 /**
@@ -91,6 +92,71 @@ export const PipelineFix = z.object({
   otherJobs: z.array(z.string()).max(PIPELINE_FAILED_JOBS_MAX),
 });
 export type PipelineFix = z.infer<typeof PipelineFix>;
+
+/**
+ * The sizes of the merge request comments the agent gets (ADR-256): enough for a round of review, small enough that the
+ * whole of it (15 threads of 5 notes of 1,000 characters at most) stays a size an agent's context takes.
+ */
+export const MERGE_REQUEST_THREADS_MAX = 15;
+export const MERGE_REQUEST_THREAD_NOTES_MAX = 5;
+export const MERGE_REQUEST_NOTE_CHARS_MAX = 1000;
+
+/** A thread's id on the repo host: GitLab's discussion id, or the node id of a GitHub review thread. */
+export const MergeRequestThreadId = z.string().regex(/^[A-Za-z0-9_-]{1,100}$/);
+
+/** One comment of a thread, as its author wrote it on the repo host; a longer one is cut and ends with "…". */
+export const MergeRequestNote = z.object({
+  /** The author's user name on the repo host. */
+  author: z.string(),
+  text: z.string().max(MERGE_REQUEST_NOTE_CHARS_MAX + 1),
+  /** ISO 8601. */
+  at: z.string(),
+});
+export type MergeRequestNote = z.infer<typeof MergeRequestNote>;
+
+/**
+ * An unresolved thread of a merge request (ADR-256): a reviewer's comment on a line of the diff, or a GitLab thread on
+ * the merge request as a whole, with the replies under it, oldest first.
+ */
+export const MergeRequestThread = z.object({
+  id: MergeRequestThreadId,
+  /** The file the thread is on, relative to the repo root with `/`; `null` for a thread on the merge request as a whole. */
+  file: z.string().nullable(),
+  /**
+   * The line it is on, as the reviewer saw it (later commits may have moved it): `new` a line of the changed file, `old`
+   * a removed line numbered in the file before the change; `null` with `file` for a thread on a whole file.
+   */
+  line: z.object({ side: ReviewSide, number: z.number().int().positive() }).nullable(),
+  /** The thread's first note on the repo host. */
+  url: z.string(),
+  notes: z.array(MergeRequestNote).min(1).max(MERGE_REQUEST_THREAD_NOTES_MAX),
+  /** Replies left out after the first `MERGE_REQUEST_THREAD_NOTES_MAX` notes; the thread's page has them. */
+  moreNotes: z.number().int().nonnegative(),
+});
+export type MergeRequestThread = z.infer<typeof MergeRequestThread>;
+
+/** The unresolved threads of a task's open merge request, as the repo host gives them now, oldest first (ADR-256). */
+export const MergeRequestThreads = z.object({
+  /** The merge request's page. */
+  mergeRequest: z.string(),
+  threads: z.array(MergeRequestThread),
+  /** The repo host has more threads than the daemon reads (`MERGE_REQUEST_THREADS_READ_MAX`); its page has them all. */
+  more: z.boolean(),
+});
+export type MergeRequestThreads = z.infer<typeof MergeRequestThreads>;
+
+/** The most threads read from the repo host: GitHub's largest page, and as many as fit a long review. */
+export const MERGE_REQUEST_THREADS_READ_MAX = 100;
+
+/**
+ * Merge request comments (ADR-256): the unresolved threads of the task's merge request the user handed to its agent, at
+ * most `MERGE_REQUEST_THREADS_MAX`. The agent reads them with `get_review_comments`, like the user's own review (ADR-62).
+ */
+export const MergeRequestComments = z.object({
+  mergeRequest: z.string(),
+  threads: z.array(MergeRequestThread).min(1).max(MERGE_REQUEST_THREADS_MAX),
+});
+export type MergeRequestComments = z.infer<typeof MergeRequestComments>;
 
 export const Pipeline = z.object({
   state: PipelineState,
@@ -264,4 +330,18 @@ export const mergeRequestsApi = {
    * jobs' logs and queues them as a pipeline fix for `get_review_comments`. `bad_request` while the pipeline has not failed.
    */
   fixPipeline: endpoint("fix-pipeline", TaskRequest, z.object({ delivery: PromptDelivery })),
+  /**
+   * The unresolved threads of the task's open merge request (ADR-256), read from the repo host now. `bad_request` while
+   * the task has no open merge request.
+   */
+  threads: endpoint("threads", TaskRequest, MergeRequestThreads),
+  /**
+   * Hands the threads the user picked to the task's agent (ADR-256): the daemon reads them from the repo host again and
+   * queues those still unresolved as merge request comments for `get_review_comments`. `bad_request` when none of them is.
+   */
+  sendThreads: endpoint(
+    "send-threads",
+    TaskRequest.extend({ threads: z.array(MergeRequestThreadId).min(1).max(MERGE_REQUEST_THREADS_MAX) }),
+    z.object({ delivery: PromptDelivery, sent: z.number().int().positive() }),
+  ),
 };

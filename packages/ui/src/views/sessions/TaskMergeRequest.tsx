@@ -32,12 +32,13 @@ import {
 } from "@/lib/merge-request";
 import type { TaskMergeRequestState } from "@/lib/use-task-merge-request";
 import { FailedJobs } from "./FailedJobs";
+import { MergeRequestThreads } from "./MergeRequestThreads";
 
 /**
  * A finished task on its way to a merge request (ADR-77), below the verification: the task branch against the remote
  * with "Push", then the draft the user approves for the repo host's form (title and description from the task, its
  * verification and Trackwall's evidence, in the repo's own template when it has one, ADR-238), and once the merge request exists, its state and pipeline with links to them, and the jobs that failed
- * it with their logs and "Fix" (ADR-197). The section shows only
+ * it with their logs and "Fix" (ADR-197), and while it is open, its unresolved review threads for the agent (ADR-256). The section shows only
  * once the task has a commit, since there is nothing to push before.
  */
 export function TaskMergeRequest({
@@ -181,6 +182,10 @@ function FoundMergeRequest({
           open={open}
           fix={canFixPipeline(mergeRequest) ? fix : undefined}
         />
+      )}
+      {mergeRequest.state === "open" && (
+        // Another merge request from the branch starts without the threads read for the one before.
+        <MergeRequestThreads key={mergeRequest.url} conn={conn} task={task} open={open} />
       )}
     </div>
   );
