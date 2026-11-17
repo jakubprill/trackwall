@@ -4,7 +4,7 @@ import type { WorkingTreeChanges } from "@trackwall/protocol";
 import { isAncestor } from "./commit-range.ts";
 import { existingCommit, git, symbolicRef } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
-import { withoutHooks } from "./no-hooks.ts";
+import { NO_HOOKS } from "./no-hooks.ts";
 import { assertOwnGitDir, type OwnGit, ownGitDir } from "./own-git-dir.ts";
 import { parseChangedFiles, parseNulTerminated, parseStatus } from "./parse.ts";
 import { wholeLines } from "./worktree-changes.ts";
@@ -90,18 +90,16 @@ async function operationInProgress(dir: string): Promise<string | null> {
  */
 export async function commitRound(place: RoundPlace, message: string, keepOut: readonly string[]): Promise<string> {
   const own = await assertOwnGitDir(place);
-  return withoutHooks(async (hooksPath) => {
-    const opts = { timeoutMs: ROUND_TIMEOUT_MS, config: [hooksPath, ...ROUND_CONFIG] };
-    const excluded = keepOut.map((path) => `:(top,literal,exclude)${path}`);
-    await own(["add", "--all", "--", ".", ...excluded], opts);
-    // A kept-out file the agent staged itself (`git add -f`) leaves the index too.
-    if (keepOut.length > 0) await own(["reset", "--quiet", "--", ...keepOut.map((path) => `:(top,literal)${path}`)], opts);
-    const staged = await own(["diff", "--cached", "--name-only", "-z", "--no-ext-diff"], opts);
-    if (parseNulTerminated(staged.stdout).length > 0) await own(["commit", "--quiet", "--no-verify", "-m", message], opts);
-    const head = await existingCommit(place.worktree, "HEAD");
-    if (head === undefined) throw new Error("the task branch has no commit");
-    return head;
-  });
+  const opts = { timeoutMs: ROUND_TIMEOUT_MS, config: [NO_HOOKS, ...ROUND_CONFIG] };
+  const excluded = keepOut.map((path) => `:(top,literal,exclude)${path}`);
+  await own(["add", "--all", "--", ".", ...excluded], opts);
+  // A kept-out file the agent staged itself (`git add -f`) leaves the index too.
+  if (keepOut.length > 0) await own(["reset", "--quiet", "--", ...keepOut.map((path) => `:(top,literal)${path}`)], opts);
+  const staged = await own(["diff", "--cached", "--name-only", "-z", "--no-ext-diff"], opts);
+  if (parseNulTerminated(staged.stdout).length > 0) await own(["commit", "--quiet", "--no-verify", "-m", message], opts);
+  const head = await existingCommit(place.worktree, "HEAD");
+  if (head === undefined) throw new Error("the task branch has no commit");
+  return head;
 }
 
 /** Files and diff from commit `from` to commit `to`, the diff cut within `maxPatchBytes`, as a task's changes are read (ADR-31). */
@@ -134,7 +132,7 @@ export async function resetRound(place: RoundPlace, head: string, to: string): P
   const [ref, now] = await Promise.all([symbolicRef(dir, "HEAD"), existingCommit(dir, "HEAD")]);
   if (ref !== `refs/heads/${place.branch}` || now !== head) throw new Error("the worktree moved since the round was checked");
   if (!(await isAncestor(dir, to, head))) throw new Error(`commit ${to} is not in the history of HEAD`);
-  await withoutHooks((hooksPath) => own(["reset", "--keep", "--quiet", to, "--"], { timeoutMs: ROUND_TIMEOUT_MS, config: [hooksPath] }));
+  await own(["reset", "--keep", "--quiet", to, "--"], { timeoutMs: ROUND_TIMEOUT_MS, config: [NO_HOOKS] });
 }
 
 /** The squashed history of a task branch, not on the branch yet: `moveBranch` moves the branch from `from` to `to`. */
@@ -163,39 +161,35 @@ export async function squashRounds(
   const pushed = await pushedTip(dir, place.branch);
   const range = await straightCommits(dir, head, [base, ...(pushed === null ? [] : [pushed])]);
   if (!range.commits.some((c) => roundCommits.has(c))) return null;
-  return withoutHooks(async (hooksPath) => {
-    const config = [hooksPath];
-    let parent = range.start;
-    let rewritten = false;
-    let lastRound: Buffer | null = null;
-    for (const commit of range.commits) {
-      if (roundCommits.has(commit)) {
-        lastRound = (await own(["cat-file", "commit", commit], { config })).stdout;
-        rewritten = true;
-        continue;
-      }
-      lastRound = null;
-      if (!rewritten) {
-        parent = commit;
-        continue;
-      }
-      const raw = (await own(["cat-file", "commit", commit], { config })).stdout;
-      parent = await writeCommit(own, withParent(raw, parent, null), config);
+  const config = [NO_HOOKS];
+  let parent = range.start;
+  let rewritten = false;
+  let lastRound: Buffer | null = null;
+  for (const commit of range.commits) {
+    if (roundCommits.has(commit)) {
+      lastRound = (await own(["cat-file", "commit", commit], { config })).stdout;
+      rewritten = true;
+      continue;
     }
-    // A round commit's tree is HEAD's when it is the last commit; it keeps that commit's identity and dates.
-    if (lastRound !== null) parent = await writeCommit(own, withParent(lastRound, parent, Buffer.from(`${message}\n`, "utf8")), config);
-    return { from: head, to: parent };
-  });
+    lastRound = null;
+    if (!rewritten) {
+      parent = commit;
+      continue;
+    }
+    const raw = (await own(["cat-file", "commit", commit], { config })).stdout;
+    parent = await writeCommit(own, withParent(raw, parent, null), config);
+  }
+  // A round commit's tree is HEAD's when it is the last commit; it keeps that commit's identity and dates.
+  if (lastRound !== null) parent = await writeCommit(own, withParent(lastRound, parent, Buffer.from(`${message}\n`, "utf8")), config);
+  return { from: head, to: parent };
 }
 
 /** Moves the task branch from `from` to `to` (the squashed history, or back after a failed push), only while it is at `from`. */
 export async function moveBranch(place: RoundPlace, squashed: SquashedRounds): Promise<void> {
   const own = await assertOwnGitDir(place);
-  await withoutHooks((hooksPath) =>
-    own(["update-ref", "-m", "trackwall: squash round commits", `refs/heads/${place.branch}`, squashed.to, squashed.from], {
-      config: [hooksPath],
-    }),
-  );
+  await own(["update-ref", "-m", "trackwall: squash round commits", `refs/heads/${place.branch}`, squashed.to, squashed.from], {
+    config: [NO_HOOKS],
+  });
 }
 
 /** The main remote's branch of the same name as the last fetch or push left it; `null` without one. */

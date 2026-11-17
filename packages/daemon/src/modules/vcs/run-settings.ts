@@ -14,6 +14,9 @@ import { pathKey } from "./path-key.ts";
  * leads to the task's repo. It cannot close a race in which the agent swaps a file back and forth between the check
  * and git's own read; Copilot CLI's read-only paths do (§8).
  *
+ * Hooks are not part of it for the daemon: its git runs none in such a repo (`git.ts`), since a hooks path may name a
+ * folder of the worktree.
+ *
  * Read: the keys of the repo configuration `config` that make git run a program or read another file (`RUN_KEYS`),
  * without following includes, so the digest does not depend on the directory git runs in; `config.worktree` of the
  * repo and of each worktree; `info/attributes`; and the hook files in `hooks/`. Every daemon git call compares the
@@ -21,12 +24,15 @@ import { pathKey } from "./path-key.ts";
  */
 
 /**
- * Keys with which git runs a program, reads another configuration or works elsewhere. A relative `core.hooksPath`
- * without `..` (husky's `.husky`) is left out: it names a folder of the checkout git runs in, and the daemon's own
- * writing calls in a task's worktree run without hooks.
+ * Keys with which git runs a program, reads another configuration, works elsewhere or sends its requests elsewhere:
+ * `protocol.*` lets a remote's address name a program (`ext::`), `http.*` a proxy and whether its certificate is
+ * checked, and git-lfs runs the program of `lfs.customtransfer.*` at a checkout. A relative `core.hooksPath` without
+ * `..` (husky's `.husky`) is left out: a tool writes it in ordinary work, and it names a folder an agent writes anyway,
+ * so the daemon's git runs no hooks at all in a repo with a task in the sandbox (`NO_HOOKS` in `no-hooks.ts`).
  */
 const RUN_KEYS = [
-  /^(filter|diff|difftool|mergetool|pager|alias|credential|include|includeif|url|uploadpack|extensions|gpg|ssh|man|browser|sequence|trailer|fsmonitor)\./,
+  /^(filter|diff|difftool|mergetool|pager|alias|credential|include|includeif|url|uploadpack|extensions|gpg|ssh|man|browser|sequence|trailer|fsmonitor|protocol|http)\./,
+  /^lfs\.(standalonetransferagent|customtransfer\..+)$/s,
   /^merge\.(tool|.+\.driver)$/s,
   /^core\.(fsmonitor|sshcommand|pager|editor|askpass|attributesfile|gitproxy|worktree|bare|alternaterefscommand)$/,
   /^remote\..+\.(vcs|uploadpack|receivepack|proxy)$/s,

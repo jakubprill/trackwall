@@ -6,7 +6,7 @@ import { borrowObjects } from "./borrowed-objects.ts";
 import { existingCommit, git, symbolicRef } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { readBranchCommit } from "./head-commit.ts";
-import { withoutHooks } from "./no-hooks.ts";
+import { NO_HOOKS } from "./no-hooks.ts";
 import { networkAddress } from "./remote.ts";
 
 /**
@@ -75,38 +75,36 @@ export async function ensureBackupRepo(dir: string): Promise<void> {
  */
 export async function commitBackups(dir: string, files: readonly BackupFile[], message: string, scratchDir: string): Promise<boolean> {
   // Even `read-tree` and `update-index` run a hook (`post-index-change`), so no command here may see the store's hooks.
-  return withoutHooks(async (hooksPath) => {
-    const config = [hooksPath];
-    const parent = (await existingCommit(dir, BRANCH)) ?? null;
-    const scratch = await mkdtemp(join(scratchDir, "store-index-"));
-    const indexFile = join(scratch, "index");
-    let entries: { path: string; oid: string }[];
-    // One write per distinct content: on Windows two git processes writing the same object at once can fail with
-    // "Permission denied" (the same `mise.local.toml` in several repos).
-    const hashed = new Map<string, Promise<string>>();
-    const hashOnce = (content: Buffer) => {
-      const key = content.toString("latin1");
-      const oid = hashed.get(key) ?? hashBlob(dir, content, config);
-      hashed.set(key, oid);
-      return oid;
-    };
-    try {
-      if (parent !== null) await git(dir, ["read-tree", parent], { indexFile, config });
-      entries = await Promise.all(files.map(async (f) => ({ path: f.path, oid: await hashOnce(f.content) })));
-      for (const { path, oid } of entries) await git(dir, updateIndex(path, oid), { indexFile, config });
-      const tree = (await git(dir, ["write-tree"], { indexFile, config })).stdout.toString("utf8").trim();
-      if (parent !== null && tree === (await treeOf(dir, parent))) return false;
-      const parents = parent === null ? [] : ["-p", parent];
-      const made = (await git(dir, ["commit-tree", tree, ...parents, "-m", message], { config: [...IDENTITY, hooksPath] })).stdout;
-      // The old value guards against a commit someone else made meanwhile; an empty one means the branch must not exist yet.
-      await git(dir, ["update-ref", "-m", message, BRANCH, made.toString("utf8").trim(), parent ?? ""], { config });
-    } finally {
-      // A leftover index in the scratch folder harms nothing, so failing to remove it does not fail a backup that worked.
-      await removeFolder(scratch, removeIfPresent).catch(() => undefined);
-    }
-    for (const { path, oid } of entries) await git(dir, updateIndex(path, oid), { config });
-    return true;
-  });
+  const config = [NO_HOOKS];
+  const parent = (await existingCommit(dir, BRANCH)) ?? null;
+  const scratch = await mkdtemp(join(scratchDir, "store-index-"));
+  const indexFile = join(scratch, "index");
+  let entries: { path: string; oid: string }[];
+  // One write per distinct content: on Windows two git processes writing the same object at once can fail with
+  // "Permission denied" (the same `mise.local.toml` in several repos).
+  const hashed = new Map<string, Promise<string>>();
+  const hashOnce = (content: Buffer) => {
+    const key = content.toString("latin1");
+    const oid = hashed.get(key) ?? hashBlob(dir, content, config);
+    hashed.set(key, oid);
+    return oid;
+  };
+  try {
+    if (parent !== null) await git(dir, ["read-tree", parent], { indexFile, config });
+    entries = await Promise.all(files.map(async (f) => ({ path: f.path, oid: await hashOnce(f.content) })));
+    for (const { path, oid } of entries) await git(dir, updateIndex(path, oid), { indexFile, config });
+    const tree = (await git(dir, ["write-tree"], { indexFile, config })).stdout.toString("utf8").trim();
+    if (parent !== null && tree === (await treeOf(dir, parent))) return false;
+    const parents = parent === null ? [] : ["-p", parent];
+    const made = (await git(dir, ["commit-tree", tree, ...parents, "-m", message], { config: [...IDENTITY, NO_HOOKS] })).stdout;
+    // The old value guards against a commit someone else made meanwhile; an empty one means the branch must not exist yet.
+    await git(dir, ["update-ref", "-m", message, BRANCH, made.toString("utf8").trim(), parent ?? ""], { config });
+  } finally {
+    // A leftover index in the scratch folder harms nothing, so failing to remove it does not fail a backup that worked.
+    await removeFolder(scratch, removeIfPresent).catch(() => undefined);
+  }
+  for (const { path, oid } of entries) await git(dir, updateIndex(path, oid), { config });
+  return true;
 }
 
 /** The commit of `main`, read from the git directory's files where they tell for sure (a pass reads it every few seconds); `null` before the first backup. */
@@ -139,7 +137,7 @@ export async function backupRemote(dir: string): Promise<BackupRemote | null> {
 
 /**
  * Why the store cannot be pushed to `url`, or `null`. Only to an HTTPS or SSH address: a local path or a shared folder is
- * a repo an agent may have written, and its `pre-receive` hook would run as the user, out of reach of `core.hooksPath`
+ * a repo an agent may have written, and its `pre-receive` hook would run as the user, out of reach of `core.NO_HOOKS`
  * here. The user allows the address as they read it, so it must name the host git connects to plainly: only printable
  * ASCII without a space or backslash (a URL parser takes `\` for `/`, curl does not; a Cyrillic letter looks like a Latin
  * one), and an SSH user without `.` or `:`, so `ssh://github.com@other.example/x` cannot pass for `github.com`, and no `@`
@@ -181,16 +179,14 @@ export async function pushBackups(store: string, pushDir: string, url: string, c
   if (problem !== null) throw new Error(problem);
   await ensurePushRepo(pushDir, store);
   const config = await readConfig(pushDir);
-  await withoutHooks((hooksPath) =>
-    git(
-      pushDir,
-      ["push", "--no-follow-tags", "--no-recurse-submodules", "--receive-pack=git-receive-pack", "--", url, `${commit}:${BRANCH}`],
-      {
-        timeoutMs: PUSH_TIMEOUT_MS,
-        network: { sshCommand: config.sshCommand },
-        config: [hooksPath, "push.gpgSign=false"],
-      },
-    ),
+  await git(
+    pushDir,
+    ["push", "--no-follow-tags", "--no-recurse-submodules", "--receive-pack=git-receive-pack", "--", url, `${commit}:${BRANCH}`],
+    {
+      timeoutMs: PUSH_TIMEOUT_MS,
+      network: { sshCommand: config.sshCommand },
+      config: [NO_HOOKS, "push.gpgSign=false"],
+    },
   );
 }
 

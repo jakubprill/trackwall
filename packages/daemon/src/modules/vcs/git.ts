@@ -2,6 +2,7 @@ import { realpath } from "node:fs/promises";
 import { delimiter, dirname, resolve as resolvePath } from "node:path";
 import { type RunOptions, type RunOutput, runProgram } from "../../infra/run-program.ts";
 import { chosenGitProgram, GIT_FROM_PATH, type GitProgramSource, gitProgram, gitResolution, withPathPrefix } from "./git-program.ts";
+import { NO_HOOKS } from "./no-hooks.ts";
 import { assertRunSettings } from "./run-settings.ts";
 import { Slots } from "./slots.ts";
 import { WaitingCalls } from "./waiting-calls.ts";
@@ -21,8 +22,14 @@ import { WaitingCalls } from "./waiting-calls.ts";
  */
 const NO_REPO_COMMANDS = ["-c", "core.fsmonitor=false", "-c", "log.showSignature=false"];
 
-/** Git does not look into submodules, so it runs no git with their configuration (in a repo guarded by `run-settings.ts`). */
-const SKIP_SUBMODULES = "diff.ignoreSubmodules=all";
+/**
+ * In a repo guarded by `run-settings.ts`: git does not look into submodules, whose git directories under `.git/modules`
+ * have a configuration of their own that the guard does not read (a `status` would run their `core.fsmonitor`, a fetch
+ * that recurses the program their remote's address names), and it runs no hooks, since the repo's hooks path may name a
+ * folder of the worktree, where the task's agent writes (`post-index-change` runs on a read of the task's changes,
+ * `reference-transaction` on a fetch).
+ */
+const IN_GUARDED_REPO = ["diff.ignoreSubmodules=all", "fetch.recurseSubmodules=false", "submodule.recurse=false", NO_HOOKS];
 
 /**
  * On Windows, paths over 260 characters only with `core.longpaths`: task worktrees lie in the task worktrees folder (ADR-84), so
@@ -126,8 +133,7 @@ async function runGit(
   const sandboxed = guarded && (await assertRunSettings(repoDir, (file) => readConfigFile(repoDir, file)));
   const ceiling = await ceilingFor(repoDir);
   const { maxBytes, stdin, okExitCodes } = opts;
-  // A submodule's git directory has a configuration of its own, which the guard does not read.
-  const config = [...(sandboxed ? [SKIP_SUBMODULES] : []), ...(opts.config ?? [])].flatMap((entry) => ["-c", entry]);
+  const config = [...(sandboxed ? IN_GUARDED_REPO : []), ...(opts.config ?? [])].flatMap((entry) => ["-c", entry]);
   // The launcher stays for network commands: credential helpers and ssh run exactly as from the user's shell.
   const program = opts.network ? GIT_FROM_PATH : await gitProgram();
   const askedAt = performance.now();

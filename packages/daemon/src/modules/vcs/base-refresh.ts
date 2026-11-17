@@ -1,7 +1,7 @@
 import { type BranchTip, isAncestor } from "./commit-range.ts";
 import { existingCommit, symbolicRef } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
-import { withoutHooks } from "./no-hooks.ts";
+import { NO_HOOKS } from "./no-hooks.ts";
 import { assertOwnGitDir } from "./own-git-dir.ts";
 import type { RoundPlace } from "./round-commits.ts";
 import { fetchRemote } from "./sync.ts";
@@ -47,12 +47,10 @@ export async function commitMerge(place: RoundPlace, head: string, tree: string,
   const dir = place.worktree;
   const [ref, now, config] = await Promise.all([symbolicRef(dir, "HEAD"), existingCommit(dir, "HEAD"), readConfig(dir)]);
   if (ref !== `refs/heads/${place.branch}` || now !== head) throw new Error("the worktree moved since the refresh was checked");
-  return withoutHooks(async (hooksPath) => {
-    const opts = { timeoutMs: CHECKOUT_TIMEOUT_MS, config: [hooksPath, "gc.auto=0"] };
-    const made = await own(["commit-tree", "--no-gpg-sign", "-p", head, "-p", theirs, "-m", message, tree], opts);
-    const commit = made.stdout.toString("utf8").trim();
-    // An LFS filter may fetch objects during the checkout: an environment without prompts.
-    await own(["reset", "--keep", "--quiet", commit, "--"], { ...opts, network: { sshCommand: config.sshCommand } });
-    return commit;
-  });
+  const opts = { timeoutMs: CHECKOUT_TIMEOUT_MS, config: [NO_HOOKS, "gc.auto=0"] };
+  const made = await own(["commit-tree", "--no-gpg-sign", "-p", head, "-p", theirs, "-m", message, tree], opts);
+  const commit = made.stdout.toString("utf8").trim();
+  // An LFS filter may fetch objects during the checkout: an environment without prompts.
+  await own(["reset", "--keep", "--quiet", commit, "--"], { ...opts, network: { sshCommand: config.sshCommand } });
+  return commit;
 }
