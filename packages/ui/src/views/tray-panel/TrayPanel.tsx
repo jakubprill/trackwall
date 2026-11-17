@@ -1,4 +1,4 @@
-import type { Session } from "@trackwall/protocol";
+import type { Session, SessionList } from "@trackwall/protocol";
 import { useEffect } from "react";
 import { AgentDialogCard } from "@/components/AgentDialogCard";
 import { Loading } from "@/components/Loading";
@@ -15,6 +15,7 @@ import { openFromTrayPanel, type TrayPanelTarget, trayPanelEntries } from "@/lib
 import { useConnection } from "@/lib/use-connection";
 import { useDaemonEvents } from "@/lib/use-daemon-events";
 import { useSessions } from "@/lib/use-sessions";
+import { cn } from "@/lib/utils";
 
 /**
  * The tray panel (ADR-50): a small window next to the tray icon, with the task proposals and the sessions waiting for
@@ -38,15 +39,35 @@ export function TrayPanel() {
     window.addEventListener("focus", onShown);
     return () => window.removeEventListener("focus", onShown);
   }, [refresh, reload]);
-  const entries = sessions.data && trayPanelEntries(sessions.data);
   const open = (target?: TrayPanelTarget) => {
     openFromTrayPanel(target).catch((err: unknown) => console.error(`[tray panel] ${errorMessage(err)}`));
   };
-  const failure = error ?? sessions.error;
+  return <TrayPanelContent conn={conn} list={sessions.data} failure={error ?? sessions.error} onOpen={open} className="h-screen" />;
+}
+
+/**
+ * What the panel shows for a session list: a pure view of its props, so that the gallery of view states (`src/gallery`)
+ * shows it in every state with the same code as the panel. `className` sizes it: the whole window in the panel.
+ */
+export function TrayPanelContent({
+  conn,
+  list,
+  failure,
+  onOpen,
+  className,
+}: {
+  conn: Connection | undefined;
+  /** `undefined` until the list arrives. */
+  list: SessionList | undefined;
+  failure: string | undefined;
+  onOpen: (target?: TrayPanelTarget) => void;
+  className: string;
+}) {
+  const entries = list && trayPanelEntries(list);
   const count = entries ? entries.approvals.length + entries.proposals.length + entries.sessions.length : 0;
 
   return (
-    <div className="bg-card flex h-screen flex-col border">
+    <div className={cn("bg-card flex flex-col border", className)}>
       <h1 className="hud-label px-4 pt-3 pb-2">
         Waiting for you <span className="text-primary">{`// ${twoDigits(count)}`}</span>
       </h1>
@@ -61,21 +82,21 @@ export function TrayPanel() {
         {entries && count > 0 && (
           <ul aria-label="Waiting for you">
             {entries.approvals.map((s) => (
-              <WaitingSession key={s.id} conn={conn} session={s} onOpen={() => open({ kind: "session", id: s.id })} />
+              <WaitingSession key={s.id} conn={conn} session={s} onOpen={() => onOpen({ kind: "session", id: s.id })} />
             ))}
             {entries.proposals.map((p) => (
-              <QueueItem key={p.id} title={proposalName(p)} active={false} onClick={() => open({ kind: "proposal", id: p.id })}>
+              <QueueItem key={p.id} title={proposalName(p)} active={false} onClick={() => onOpen({ kind: "proposal", id: p.id })}>
                 <StatusLabel {...PROPOSAL_STATUS} />
               </QueueItem>
             ))}
             {entries.sessions.map((s) => (
-              <WaitingSession key={s.id} conn={conn} session={s} onOpen={() => open({ kind: "session", id: s.id })} />
+              <WaitingSession key={s.id} conn={conn} session={s} onOpen={() => onOpen({ kind: "session", id: s.id })} />
             ))}
           </ul>
         )}
       </div>
       <div className="border-t p-2">
-        <Button variant="outline" size="sm" className="w-full" onClick={() => open()}>
+        <Button variant="outline" size="sm" className="w-full" onClick={() => onOpen()}>
           Open Trackwall
         </Button>
       </div>

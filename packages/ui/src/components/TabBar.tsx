@@ -9,7 +9,8 @@ const ARIA_SHORTCUT = ariaTabShortcut(IS_MAC);
 /**
  * A tab bar in a view's content, for example in the Repo view. `ActivityBar` switches the app's views. Ctrl+PageDown
  * and Ctrl+PageUp (⌘⇧] and ⌘⇧[ on macOS) step through its tabs from anywhere in the window, a session terminal
- * included (ADR-211); a view shows one tab bar at a time, so the shortcut has one owner.
+ * included (ADR-211); a view shows one tab bar at a time, so the shortcut has one owner. Tabs that do not fit the width
+ * (a small screen with the supervisor panel pinned) go on to a second row instead of being cut off.
  */
 export function TabBar<Id extends string>({
   tabs,
@@ -31,7 +32,7 @@ export function TabBar<Id extends string>({
     },
   );
   return (
-    <div role="tablist" title={SHORTCUT_HINT} aria-keyshortcuts={ARIA_SHORTCUT} className="flex gap-1 border-b">
+    <div role="tablist" title={SHORTCUT_HINT} aria-keyshortcuts={ARIA_SHORTCUT} className="flex flex-wrap gap-x-1 border-b">
       {tabs.map((t) => (
         <button
           key={t.id}
@@ -40,7 +41,7 @@ export function TabBar<Id extends string>({
           aria-selected={active === t.id}
           onClick={() => onSelect(t.id)}
           className={cn(
-            "-mb-px border-b-2 px-3 py-2 text-sm transition-colors",
+            "-mb-px border-b-2 px-3 py-2 text-sm whitespace-nowrap transition-colors",
             active === t.id
               ? "border-primary text-foreground font-medium"
               : "text-muted-foreground border-transparent hover:text-foreground",

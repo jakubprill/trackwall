@@ -1,13 +1,21 @@
 import { describe, expect, test } from "bun:test";
 import type { Page } from "playwright";
-import { textOutsideFrames, WIDER_FONT } from "./support/text-overflow.ts";
+import { layoutFaults, WIDER_FONT } from "./support/layout-faults.ts";
 import { changeSessionLists, SMALL_SCREEN, showSessions, useTrackwall, waitForTerminal } from "./support/trackwall-ui.ts";
 
 const trackwall = useTrackwall();
 
-/** Text out of its frame in the page now, each line prefixed with where the test was. */
+/** Longer than a tooltip's fade (`transition-opacity`, 150 ms). */
+const TOOLTIP_FADE_MS = 300;
+
+/** Faults of layout in the page now (`layoutFaults`), each line prefixed with where the test was. */
 async function outside(page: Page, where: string): Promise<string[]> {
-  const found = await page.evaluate(textOutsideFrames);
+  // Away from the button just clicked, whose tooltip lies over the view on purpose while the pointer is on it.
+  const size = page.viewportSize();
+  if (size === null) throw new Error("the page has no viewport size");
+  await page.mouse.move(size.width - 1, size.height - 1);
+  await page.waitForTimeout(TOOLTIP_FADE_MS);
+  const found = await page.evaluate(layoutFaults, null);
   return found.map((line) => `${where}: ${line}`);
 }
 

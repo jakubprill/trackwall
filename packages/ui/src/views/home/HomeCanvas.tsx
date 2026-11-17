@@ -139,7 +139,9 @@ export function HomeCanvas(props: HomeCanvasProps) {
     else mounted.overview();
   }, [props.focus]);
 
-  return <div ref={hostRef} className="relative size-full overflow-hidden" />;
+  // The scene's labels follow the 3D camera, so they leave the scene's edge and cross each other as it flies; the layout
+  // checks of the E2E tests leave whatever is inside `data-scene` out.
+  return <div ref={hostRef} data-scene className="relative size-full overflow-hidden" />;
 }
 
 /**
