@@ -59,6 +59,14 @@ async function eventually(check: () => boolean, what: string): Promise<void> {
   }
 }
 
+/** What `tasks.json` keeps of the repos task `id` was offered from its impact. */
+function impactProposed(id: string): Record<string, string[]> {
+  const file = JSON.parse(readFileSync(join(daemon.home, "tasks.json"), "utf8")) as {
+    tasks: { id: string; impactProposed?: Record<string, string[]> }[];
+  };
+  return file.tasks.find((t) => t.id === id)?.impactProposed ?? {};
+}
+
 async function changeOrdersContract(): Promise<Task> {
   const task = await daemon.post(agentsApi.createTask, { repo: "orders-api", prompt: "Cancel orders by POST", approvals: "ask" });
   commitFiles(
@@ -148,6 +156,49 @@ describe.skipIf(process.versions.bun === undefined)(
 
       for (const s of [runningSession(subtask.id), session]) await daemon.facade.agents.stop(s);
       for (const t of [subtask.id, task.id]) await daemon.post(agentsApi.removeTask, { task: t, keepBranch: false, discardChanges: true });
+    }, 60_000);
+
+    test("a repo where a task of the same tree already works gets no impact proposal (ADR-259)", async () => {
+      // The root task hands the API and the reports to two subtasks; the API subtask's change reaches the reports.
+      const root = await daemon.post(agentsApi.createTask, { repo: "orders-bff", prompt: "Cancel orders by POST", approvals: "ask" });
+      const rootClient = await connectSessionClient(daemon.api.port, daemon.home, runningSession(root.id));
+      clients.push(rootClient);
+      const subtasks: Task[] = [];
+      for (const repo of ["orders-api", "legacy-reports"]) {
+        const { proposal } = ProposeTaskResult.parse(
+          (
+            await rootClient.callTool({
+              name: "propose_task",
+              arguments: { repo, title: `Cancel by POST in ${repo}`, prompt: "cancel by POST" },
+            })
+          ).structuredContent,
+        );
+        subtasks.push(
+          await daemon.post(agentsApi.approveProposal, { proposal: proposal.id, prompt: proposal.prompt, model: null, approvals: "ask" }),
+        );
+      }
+      const [api] = subtasks;
+      if (api === undefined) throw new Error("no API subtask");
+      commitFiles(
+        api.worktree,
+        {
+          [CONTROLLER]: readFileSync(join(daemon.projects, "orders-api", CONTROLLER), "utf8").replace(
+            "method = RequestMethod.PUT",
+            "method = RequestMethod.POST",
+          ),
+        },
+        "Cancel by POST",
+      );
+
+      await endTurn(runningSession(api.id));
+      // The comparison ran: the reports' endpoints count as offered, yet nothing waits for the user.
+      await eventually(() => "legacy-reports" in impactProposed(api.id), "the impact check");
+      expect(proposals()).toEqual([]);
+
+      for (const t of [...subtasks, root]) {
+        await daemon.facade.agents.stop(runningSession(t.id));
+        await daemon.post(agentsApi.removeTask, { task: t.id, keepBranch: false, discardChanges: true });
+      }
     }, 60_000);
 
     test("handing the repo the work from the Impact tab withdraws the impact proposal waiting there", async () => {

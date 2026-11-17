@@ -143,9 +143,14 @@ export class TaskRoundList {
     });
   }
 
-  /** A turn of the task's agent ended: what it left uncommitted becomes the round commit, and a turn that changed something a round. */
-  turnOver(task: string): Promise<void> {
-    return this.#run(task, "committing the round", async (work) => {
+  /**
+   * A turn of the task's agent ended: what it left uncommitted becomes the round commit, and a turn that changed something
+   * a round. Resolves to whether the turn may have changed the worktree: `false` only when the worktree is where the turn
+   * started, so a failed check counts as a change.
+   */
+  async turnOver(task: string): Promise<boolean> {
+    let changed = true;
+    await this.#run(task, "committing the round", async (work) => {
       const state = this.#stateOf(task);
       // A turn whose start was not seen (a daemon restart in the middle of it) cannot vouch for what came before it.
       const turn = this.#turns.get(task) ?? { from: state.head, outside: true };
@@ -158,6 +163,7 @@ export class TaskRoundList {
       const { head, roundCommit } = ended;
       const from = turn.from ?? work.base;
       if (from === head) {
+        changed = false;
         this.#save(task, { ...state, head, problem: null });
         return;
       }
@@ -179,6 +185,7 @@ export class TaskRoundList {
         problem: null,
       });
     });
+    return changed;
   }
 
   /** HEAD after the round commit of what the turn left uncommitted (`null` when it left nothing), or why there is none. */

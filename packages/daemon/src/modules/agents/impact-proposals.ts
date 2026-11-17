@@ -7,7 +7,6 @@ import {
   type ImpactedRepo,
   MAX_CHANGED_ENDPOINTS,
   MAX_CHANGED_TYPES,
-  proposalRepos,
   TASK_TITLE_MAX,
   type Task,
   type TaskProposal,
@@ -16,6 +15,7 @@ import {
 import { messageOf } from "../../infra/errors.ts";
 import { KeyedQueue } from "../../infra/keyed-queue.ts";
 import type { NewProposal } from "./task-proposals.ts";
+import { treeWork } from "./task-tree.ts";
 
 /**
  * Impact proposals (§4.4, ADR-198, ADR-205): when a turn of a task's session ends, the daemon compares the task's commits
@@ -132,11 +132,13 @@ export class ImpactProposals {
 
   /**
    * Work for `repos` started or was proposed otherwise from task `task` (its agent's own proposal, a hand-off from the
-   * Impact tab): the impact proposals of that task waiting there go, without a rejection, since nobody waits for them.
+   * Impact tab): the impact proposals of that task's tree (ADR-259) waiting there go, without a rejection, since nobody
+   * waits for them.
    */
   replacedBy(task: string, repos: readonly string[]): void {
-    for (const p of this.#deps.proposals.list())
-      if (p.fromImpact && p.proposedBy.task === task && repos.includes(p.repo)) this.#deps.proposals.withdraw(p.id);
+    const { tasks, proposals } = this.#deps;
+    for (const work of treeWork(task, tasks.list(), proposals.list()))
+      if (work.kind === "proposal" && work.fromImpact && work.repos.some((r) => repos.includes(r))) proposals.withdraw(work.id);
   }
 
   async #check(id: string, session: string): Promise<void> {
@@ -153,7 +155,8 @@ export class ImpactProposals {
 
   /**
    * The repos where the task's work already goes on or came from: its own, the handing task's, its change's parts, and
-   * the repos of the proposals and tasks it made. Such a repo gets no proposal, and its endpoints count as offered.
+   * the repos of every task and waiting proposal of its tree (ADR-259). Such a repo gets no proposal, and its endpoints
+   * count as offered.
    */
   #workedRepos(task: Task): Set<string> {
     const { tasks, proposals } = this.#deps;
@@ -161,8 +164,7 @@ export class ImpactProposals {
     const handoff = tasks.handoff(task.id);
     if (handoff !== null) repos.add(handoff.repo);
     for (const part of tasks.change(task.id)?.parts ?? []) repos.add(part.repo);
-    for (const p of proposals.list()) if (p.proposedBy.task === task.id) for (const repo of proposalRepos(p)) repos.add(repo);
-    for (const t of tasks.list()) if (t.proposedBy?.task === task.id) repos.add(t.repo);
+    for (const work of treeWork(task.id, tasks.list(), proposals.list())) for (const repo of work.repos) repos.add(repo);
     return repos;
   }
 }

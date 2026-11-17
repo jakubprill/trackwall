@@ -825,6 +825,18 @@ export class AgentTasks {
     return true;
   }
 
+  /**
+   * The task's agent answered the work it got again without changing anything (ADR-258), so the work it handed over is
+   * in review again; `undefined` when the task ended, is in review already or never reported.
+   */
+  backInReview(id: string): Task | undefined {
+    const task = this.#tasks.find((t) => t.id === id);
+    if (task === undefined || task.inReview || task.summary === null) return undefined;
+    const back = { ...task, inReview: true };
+    this.#save(this.#tasks.map((t) => (t.id === id ? back : t)));
+    return view(back);
+  }
+
   changes(id: string): Promise<TaskChanges> {
     return this.#readChanges(id, PATCH_MAX_BYTES, []);
   }
