@@ -651,6 +651,7 @@ describe("the prompt the daemon types for what waits", () => {
       readRequestPrompt({
         reviewComments: 0,
         pipelineFix: false,
+        mergeRequestThreads: false,
         messages: 0,
         handoffMoved: false,
         roundUndone: false,
@@ -663,6 +664,7 @@ describe("the prompt the daemon types for what waits", () => {
       readRequestPrompt({
         reviewComments: 2,
         pipelineFix: false,
+        mergeRequestThreads: false,
         messages: 0,
         handoffMoved: false,
         roundUndone: false,
@@ -677,6 +679,7 @@ describe("the prompt the daemon types for what waits", () => {
       readRequestPrompt({
         reviewComments: 0,
         pipelineFix: false,
+        mergeRequestThreads: false,
         messages: 1,
         handoffMoved: false,
         roundUndone: false,
@@ -695,6 +698,7 @@ describe("the prompt the daemon types for what waits", () => {
       readRequestPrompt({
         reviewComments: 1,
         pipelineFix: true,
+        mergeRequestThreads: false,
         messages: 0,
         handoffMoved: false,
         roundUndone: false,
@@ -708,11 +712,31 @@ describe("the prompt the daemon types for what waits", () => {
     );
   });
 
+  test("asks a task to address the merge request threads the user handed over, after the pipeline fix (ADR-256)", () => {
+    expect(
+      readRequestPrompt({
+        reviewComments: 0,
+        pipelineFix: true,
+        mergeRequestThreads: true,
+        messages: 0,
+        handoffMoved: false,
+        roundUndone: false,
+        refreshed: false,
+        updates: 0,
+        trustNotice: false,
+      }),
+    ).toBe(
+      "The user asks you to fix the failed pipeline of your merge request: call get_review_comments (the trackwall MCP server) for the end of the failed jobs' logs. " +
+        "The user hands you unresolved comments from the reviewers of your merge request: call get_review_comments (the trackwall MCP server) and address every thread.",
+    );
+  });
+
   test("asks a task to read where the work it builds on is now when the handing task's branch moved (ADR-144)", () => {
     expect(
       readRequestPrompt({
         reviewComments: 0,
         pipelineFix: false,
+        mergeRequestThreads: false,
         messages: 0,
         handoffMoved: true,
         roundUndone: false,
@@ -730,6 +754,7 @@ describe("the prompt the daemon types for what waits", () => {
       readRequestPrompt({
         reviewComments: 0,
         pipelineFix: false,
+        mergeRequestThreads: false,
         messages: 0,
         handoffMoved: false,
         roundUndone: false,
@@ -747,6 +772,7 @@ describe("the prompt the daemon types for what waits", () => {
       readRequestPrompt({
         reviewComments: 1,
         pipelineFix: false,
+        mergeRequestThreads: false,
         messages: 0,
         handoffMoved: false,
         roundUndone: true,
@@ -765,6 +791,7 @@ describe("the prompt the daemon types for what waits", () => {
       readRequestPrompt({
         reviewComments: 0,
         pipelineFix: false,
+        mergeRequestThreads: false,
         messages: 0,
         handoffMoved: false,
         roundUndone: false,
