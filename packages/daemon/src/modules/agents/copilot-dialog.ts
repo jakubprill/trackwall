@@ -21,8 +21,9 @@ import type { AgentApproval, AgentDialog, AgentDialogOption, AgentQuestion } fro
  * Copilot CLI 1.0.112 no longer lets a tall approval run off the top: it scrolls what the approval asks about inside the
  * box (the footer gains "pgup/pgdn to scroll"), and in a terminal of some 16 rows or fewer it squeezes the box, without
  * the blank lines between its parts and with only the selected option. Nothing but the question's first words then says
- * where the detail ends, so a squeezed box counts only with a question that starts as Copilot CLI's approvals do
- * (`SQUEEZED_QUESTION`); its detail is the beginning of what the box scrolls, so it ends with "…".
+ * where the detail ends, so a squeezed box counts only with one question line that starts as Copilot CLI's approvals do
+ * (`SQUEEZED_QUESTION`) and one option under it, the selected one; its detail is the beginning of what the box scrolls,
+ * so it ends with "…".
  */
 
 /** A dialog as read from the screen, before it gets the id of its wait. */
@@ -31,8 +32,10 @@ export type ScreenDialog = Omit<AgentApproval, "id"> | Omit<AgentQuestion, "id">
 const APPROVAL_FOOTER = "enter to select";
 const QUESTION_HEADING = "Copilot needs information.";
 const QUESTION_FOOTER = "enter accept";
+/** The marker in front of the selected option. */
+const SELECTED = "❯";
 /** An option line: an optional selection marker, the digit and the label. */
-const OPTION = /^(❯\s*)?([1-9])\.\s+(.*)$/;
+const OPTION = new RegExp(`^(${SELECTED}\\s*)?([1-9])\\.\\s+(.*)$`);
 /** An option that needs text typed in the terminal, so it cannot be answered with its digit alone. */
 const NEEDS_TEXT = /^No\b/;
 /**
@@ -110,15 +113,20 @@ function shownDetail(paragraphs: readonly string[][], missing: "above" | "below"
 }
 
 /**
- * The detail, the question and the options of a squeezed box, whose lines follow each other without blank ones: the
- * question runs from its last line that starts as an approval's question does to the first option under it. Without
- * such a line and an option there are no parts, so the box is no dialog.
+ * The detail, the question and the option of a squeezed box, whose lines follow each other without blank ones: the
+ * question runs from the line that starts as an approval's question does to the selected option, the only one such a
+ * box draws. The question can hold a path the agent chose, and without a blank line under it a wrapped part of that
+ * path could pass for an option ("2. Yes, only this file") or for the question, so anything but one such question
+ * line and one option line under it, with the selection marker, is no dialog.
  */
 function squeezedParts(lines: readonly string[]): string[][] {
-  const question = lines.findLastIndex((l) => SQUEEZED_QUESTION.test(l.trim()));
-  const firstOption = lines.findIndex((l, i) => i > question && OPTION.test(l.trim()));
-  if (question < 0 || firstOption < 0) return [];
-  return [lines.slice(0, question), lines.slice(question, firstOption), lines.slice(firstOption)].filter((part) => part.length > 0);
+  const text = lines.map((l) => l.trim());
+  const question = text.findIndex((l) => SQUEEZED_QUESTION.test(l));
+  const option = text.findIndex((l, i) => i > question && OPTION.test(l));
+  if (question < 0 || option < 0 || !text[option]?.startsWith(SELECTED)) return [];
+  const others = text.filter((l, i) => (i !== question && SQUEEZED_QUESTION.test(l)) || (i > question && i !== option && OPTION.test(l)));
+  if (others.length > 0) return [];
+  return [lines.slice(0, question), lines.slice(question, option), lines.slice(option)].filter((part) => part.length > 0);
 }
 
 /**

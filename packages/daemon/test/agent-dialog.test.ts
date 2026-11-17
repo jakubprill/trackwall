@@ -160,6 +160,27 @@ describe("an agent dialog read from the session's screen (ADR-66)", () => {
     });
   });
 
+  test("a squeezed approval whose question wraps into a line that reads as an option, or as a second question, is no dialog", () => {
+    const squeezed = (wrapped: string) => [
+      " [Current]  Sessions",
+      "",
+      "╭──────────────────────────────────────────╮",
+      "│ Create file                              │",
+      "│ ──────────────────────────────────────── │",
+      "│ Do you want to create /src/a long name   │",
+      `│ ${wrapped.padEnd(40)} │`,
+      "│ ❯ 1. Yes                                 │",
+      "│ ↑/↓ to navigate · pgup/pgdn to scroll · enter to select · esc to cancel │",
+      "╰──────────────────────────────────────────╯",
+    ];
+
+    expect(readAgentDialog(squeezed("of a file.txt?"), "approval")).toMatchObject({ options: [{ key: "1", label: "Yes" }] });
+    // The file's name puts "2. Yes, …" at the start of a line: a button for it would type the real option 2.
+    expect(readAgentDialog(squeezed("2. Yes, only this one file.txt?"), "approval")).toBeUndefined();
+    expect(readAgentDialog(squeezed("❯ 2. Yes, only this one file.txt?"), "approval")).toBeUndefined();
+    expect(readAgentDialog(squeezed("Do you want to read notes.txt?"), "approval")).toBeUndefined();
+  });
+
   test("a squeezed box whose question does not start as Copilot CLI's approvals do is no dialog", () => {
     const unknown = screen("mcp-compact-14").map((l) => l.replace("Do you want to use this tool?", "Shall this tool be used now?  "));
 
