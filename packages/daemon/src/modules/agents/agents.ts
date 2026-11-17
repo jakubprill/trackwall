@@ -28,7 +28,6 @@ import {
   type MergeRequestComments,
   type MessageAttachment,
   type MiseTarget,
-  mcpTools,
   type PausedTask,
   type PipelineFix,
   type PromptDelivery,
@@ -131,7 +130,7 @@ import { TaskProposals } from "./task-proposals.ts";
 import { type RefreshVcs, refreshTask } from "./task-refresh.ts";
 import { TaskReviews, type UnreadReview } from "./task-reviews.ts";
 import { type RoundsVcs, TASK_ROUNDS_FILE, TaskRoundList } from "./task-rounds.ts";
-import { treeWork } from "./task-tree.ts";
+import { secondInTreeRefusal } from "./task-tree.ts";
 import { AgentTasks, type TaskLaunch, type TaskOptions, type TasksVcs } from "./tasks.ts";
 
 /**
@@ -600,15 +599,8 @@ export class Agents {
 
   /** `bad_request` when a task or an agent's proposal of task `task`'s tree already covers `repo` (ADR-259). */
   #refuseSecondInTree(task: string, repo: string): void {
-    const covering = treeWork(task, this.#tasks.list(), this.#proposals.list()).find((w) => !w.fromImpact && w.repos.includes(repo));
-    if (covering === undefined) return;
-    if (covering.id === task) throw new DomainError("bad_request", `${repo} is your own task's repo: make the change there yourself`);
-    const named = covering.title === null ? `\`${covering.id}\`` : `\`${covering.id}\` (${covering.title})`;
-    const where = covering.kind === "task" ? `already works in ${repo}` : `is already proposed in ${repo}`;
-    throw new DomainError(
-      "bad_request",
-      `task ${named} of the same work ${where}, so do not propose a second one there: say what it needs from your change in your ${mcpTools.reportResult.name}, or ask your proposer with ${mcpTools.askProposer.name}, who passes it on`,
-    );
+    const refusal = secondInTreeRefusal(task, repo, this.#tasks.list(), this.#proposals.list());
+    if (refusal !== null) throw new DomainError("bad_request", refusal);
   }
 
   /**
@@ -836,9 +828,8 @@ export class Agents {
     this.#boardItems.backToWork(this.#tasks.task(id));
   }
 
-  /** A turn of task `id`'s agent ended: one that answered the work it got again without changing anything hands it back (ADR-258). */
-  #afterTurnInReview(id: string, changed: boolean): void {
-    if (!this.#reviewReturns.turnOver(id, changed)) return;
+  /** Task `id`'s agent answered the work it got again without changing anything, so it hands its work back (ADR-258). */
+  #backInReview(id: string): void {
     const back = this.#tasks.backInReview(id);
     if (back !== undefined) this.#boardItems.handedOver(back);
   }
@@ -1762,16 +1753,20 @@ export class Agents {
         void this.#rounds.turnStarted(task);
       },
       onTurnOver: () => {
-        // The round commit first: it moves the branch, which the tasks it handed work to then hear about (ADR-144), and
-        // which the impact proposals compare (ADR-198).
-        if (task !== null)
-          void this.#rounds
-            .turnOver(task)
-            .then((changed) => this.#afterTurnInReview(task, changed))
-            .then(() => this.#handoffs.turnOver(task))
-            // A failed handoff check does not hold back the impact proposals.
-            .catch((err: unknown) => this.#deps.log(`task ${task}: after its turn: ${String(err)}`))
-            .then(() => this.#impactProposals.turnOver(task, id));
+        if (task === null) return;
+        // Decided now: the next turn may start while the round is committed.
+        const answeredWork = this.#reviewReturns.turnOver(task);
+        // The round commit first: it tells whether the turn changed anything, it moves the branch, which the tasks it
+        // handed work to then hear about (ADR-144), and which the impact proposals compare (ADR-198).
+        void this.#rounds
+          .turnOver(task)
+          .then((changed) => {
+            if (answeredWork && !changed) this.#backInReview(task);
+          })
+          .then(() => this.#handoffs.turnOver(task))
+          // A failed handoff check does not hold back the impact proposals.
+          .catch((err: unknown) => this.#deps.log(`task ${task}: after its turn: ${String(err)}`))
+          .then(() => this.#impactProposals.turnOver(task, id));
       },
       onTokenBudgetReached: async () => {
         this.#deps.log(`session ${id}: stopped at its token budget`);
