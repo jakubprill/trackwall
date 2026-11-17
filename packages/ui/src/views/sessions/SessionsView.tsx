@@ -291,6 +291,12 @@ export function SessionsView({
 const INDENT = ["", "ml-4", "ml-8", "ml-12"] as const;
 
 /**
+ * The room left of every row for its group's stripe, so that the stripe stays beside a selected row instead of under its
+ * background and edge, also on a group's top row; the supervisor heading gets it too, to line up with the rows.
+ */
+const STRIPE_GUTTER = "pl-2";
+
+/**
  * A list row: an entry indented under the session that proposed it, with a line along the children of one main session.
  * A session or task that delegated work has a “main” badge with the number of entries under it.
  */
@@ -320,7 +326,7 @@ function SessionListItem({
 }) {
   const { entry, depth } = row;
   return (
-    <div className="group/row relative">
+    <div className={cn("group/row relative", STRIPE_GUTTER)}>
       {group && <GroupStripe colour={group.colour} className="top-1 bottom-1 left-0 w-1" />}
       <div className={cn(INDENT[Math.min(depth, INDENT.length - 1)], depth > 0 && "border-l pl-1")}>
         {entry.kind === "proposals" ? (
@@ -423,16 +429,18 @@ function StartedListItem({
 function SupervisorListItem({ supervisor, onOpen }: { supervisor: SupervisorSummary; onOpen: () => void }) {
   const { session } = supervisor;
   return (
-    <button type="button" onClick={onOpen} aria-keyshortcuts={ariaSessionShortcut(SUPERVISOR_SHORTCUT)} className={ROW_BUTTON}>
-      <span className="flex w-8 shrink-0 flex-col items-end gap-0.5 pt-0.5">
-        <Crown className="text-primary size-3.5" aria-hidden />
-        <span className="text-muted-foreground/70 font-mono text-2xs">{sessionShortcutLabel(SUPERVISOR_SHORTCUT, IS_MAC)}</span>
-      </span>
-      <span className="flex min-w-0 flex-1 flex-col gap-1">
-        <RowName name={SUPERVISOR} group={null} delegated={supervisor.delegated} waits={supervisor.sessionWaits} />
-        <span className="text-muted-foreground text-xs">{session ? <SessionStateLabel session={session} /> : "not running"}</span>
-      </span>
-    </button>
+    <div className={STRIPE_GUTTER}>
+      <button type="button" onClick={onOpen} aria-keyshortcuts={ariaSessionShortcut(SUPERVISOR_SHORTCUT)} className={ROW_BUTTON}>
+        <span className="flex w-8 shrink-0 flex-col items-end gap-0.5 pt-0.5">
+          <Crown className="text-primary size-3.5" aria-hidden />
+          <span className="text-muted-foreground/70 font-mono text-2xs">{sessionShortcutLabel(SUPERVISOR_SHORTCUT, IS_MAC)}</span>
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <RowName name={SUPERVISOR} group={null} delegated={supervisor.delegated} waits={supervisor.sessionWaits} />
+          <span className="text-muted-foreground text-xs">{session ? <SessionStateLabel session={session} /> : "not running"}</span>
+        </span>
+      </button>
+    </div>
   );
 }
 
