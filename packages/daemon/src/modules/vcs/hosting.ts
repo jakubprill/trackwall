@@ -124,7 +124,7 @@ export class Hosting {
   }
 
   /**
-   * The unresolved threads of merge request `mr` in `project` (ADR-255), read now: only on the user's request, so a
+   * The unresolved threads of merge request `mr` in `project` (ADR-256), read now: only on the user's request, so a
    * review's comments go to the agent as the repo host shows them.
    */
   mergeRequestThreads(project: HostedProject, mr: ThreadsOf): Promise<MergeRequestThreads> {

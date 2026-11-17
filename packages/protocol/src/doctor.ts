@@ -5,8 +5,8 @@ import { apiEndpoints } from "./api.ts";
  * Contract of the `doctor` module (ADR-101): checks of what Trackwall needs on this computer (the projects folder and, on
  * Linux, whether it is mounted from the host, in a container the work there on no remote (ADR-162), the keys of
  * `workspace.yaml` (ADR-108), git, Copilot CLI and its trusted folders and sandbox (ADR-181), the network sessions reach GitHub and Copilot
- * through (ADR-166), mise, the Java language server of tasks (ADR-123), `gh` and `glab` for the repo hosts), each with what to do
- * when it fails. It only reads; it changes nothing. Every action is `POST /api/doctor/<action>`.
+ * through (ADR-166), folders an antivirus scans (ADR-255), mise, the Java language server of tasks (ADR-123), `gh` and `glab` for the repo hosts), each with what to do
+ * when it fails. It only reads, apart from small files it writes and removes to time them; it changes nothing. Every action is `POST /api/doctor/<action>`.
  */
 
 /** What a check is about; one check per item, in this order. */
@@ -14,6 +14,7 @@ export const DoctorCheckId = z.enum([
   "projects-folder",
   "projects-folder-storage",
   "disk-space",
+  "file-scanning",
   "unpushed-work",
   "workspace-file",
   "git",

@@ -712,7 +712,7 @@ describe("the prompt the daemon types for what waits", () => {
     );
   });
 
-  test("asks a task to address the merge request threads the user handed over, after the pipeline fix (ADR-255)", () => {
+  test("asks a task to address the merge request threads the user handed over, after the pipeline fix (ADR-256)", () => {
     expect(
       readRequestPrompt({
         reviewComments: 0,

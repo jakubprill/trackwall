@@ -9,7 +9,7 @@ import { deliveryMessage } from "@/lib/review-drafts";
 import { useAction } from "@/lib/use-action";
 
 /**
- * The unresolved threads of a task's open merge request (ADR-255), read from the repo host when the user asks: each with
+ * The unresolved threads of a task's open merge request (ADR-256), read from the repo host when the user asks: each with
  * where it is and what its reviewers wrote, picked or not, and "Send to agent", which hands the picked ones to the
  * task's agent like a review. Replying and resolving stay on the repo host, a link away.
  */

@@ -332,7 +332,7 @@ describe.skipIf(process.versions.bun === undefined)("following a task's merge re
     }
   }, 60_000);
 
-  test("the user reads the unresolved threads of the merge request and hands the ones still open to the task's agent (ADR-255)", async () => {
+  test("the user reads the unresolved threads of the merge request and hands the ones still open to the task's agent (ADR-256)", async () => {
     const agents = daemon.facade.agents;
     const task = await taskWithCommit("shop", "Speed up checkout");
     gitIn(task.worktree, "update-ref", `refs/remotes/origin/${task.branch}`, "HEAD");

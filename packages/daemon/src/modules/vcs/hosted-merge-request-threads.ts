@@ -12,7 +12,7 @@ import {
 import { z } from "zod";
 
 /**
- * The unresolved threads of a merge request on GitHub and GitLab (ADR-255): GitLab's discussions through its REST API,
+ * The unresolved threads of a merge request on GitHub and GitLab (ADR-256): GitLab's discussions through its REST API,
  * GitHub's review threads through GraphQL, the only API that says whether a thread is resolved. Only reads; replying
  * and resolving stay with the user on the repo host. Running `gh` and `glab` is in `hosting.ts`.
  */

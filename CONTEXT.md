@@ -560,7 +560,7 @@ The user's request to a task's agent to fix the failed pipeline of the task's me
 _Avoid_: retry, rerun (that is the repo host's button), fix task (no new task is made)
 
 **Merge request thread** (`MergeRequestThread`, `merge-requests/threads`, "Read threads" under an open merge request in the task panel):
-An unresolved thread of a task's merge request on the repo host: a reviewer's comment on a line, a file or the merge request as a whole, with the replies under it (a GitLab discussion that can be resolved, a GitHub review thread). The threads the user picks go to the task's agent with "Send to agent" as **merge request comments** (`MergeRequestComments`), queued like a review and read with `get_review_comments` (ADR-255).
+An unresolved thread of a task's merge request on the repo host: a reviewer's comment on a line, a file or the merge request as a whole, with the replies under it (a GitLab discussion that can be resolved, a GitHub review thread). The threads the user picks go to the task's agent with "Send to agent" as **merge request comments** (`MergeRequestComments`), queued like a review and read with `get_review_comments` (ADR-256).
 _Avoid_: review comment (that is the user's own comment in Trackwall), discussion, note (a note is one comment of a thread)
 
 **Followed merge request** (`FollowedMergeRequest`, `MergeRequests.followed`, `checkWatched`):

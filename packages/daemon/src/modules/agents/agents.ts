@@ -791,7 +791,7 @@ export class Agents {
   }
 
   /**
-   * The merge request threads the user handed to the task's agent (ADR-255), queued like a review: the task's running
+   * The merge request threads the user handed to the task's agent (ADR-256), queued like a review: the task's running
    * session is asked to read them, now or once it waits for input; without one, the session the user resumes is.
    */
   askToAddressThreads(id: string, comments: MergeRequestComments): PromptDelivery {

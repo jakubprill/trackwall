@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { type DoctorCheckId, type DoctorStatus, TESTED_COPILOT_CLI_VERSION } from "@trackwall/protocol";
@@ -7,6 +7,7 @@ import { createFacade } from "../src/facade.ts";
 import { defaultSandboxTasks } from "../src/modules/agents/copilot-sandbox.ts";
 import { trustedFolderOf } from "../src/modules/doctor/copilot-trust.ts";
 import { copilotVersionOutcome, Doctor, type DoctorDeps } from "../src/modules/doctor/doctor.ts";
+import { FILES_PER_ROUND, folderCosts, measureFileWrites } from "../src/modules/doctor/file-scanning.ts";
 import { folderStorage } from "../src/modules/doctor/folder-storage.ts";
 import type { TlsProbe } from "../src/modules/doctor/tls-probe.ts";
 import { compareVersions, versionIn } from "../src/modules/doctor/version.ts";
@@ -32,6 +33,9 @@ function fakeDeps(overrides: Partial<DoctorDeps>): DoctorDeps {
     mountTable: async () => null,
     diskSpace: async () => ({ disk: 1, free: 100 * 1024 ** 3, total: 200 * 1024 ** 3 }),
     homeDir: tmpdir(),
+    stateDir: tmpdir(),
+    worktreesDir: async () => null,
+    measureFileWrites: async () => 0.1,
     inContainer: false,
     unpushedWork: async () => ({ inContainer: false, repos: [], unreadable: [] }),
     remoteReach: async () => [],
@@ -92,6 +96,7 @@ function doctorFacade(o: Setup) {
     tlsProbe: async () => ({ kind: "ok" }),
     connectionProbe: o.connectionProbe,
     diskSpace: async () => ({ disk: 1, free: 100 * 1024 ** 3, total: 200 * 1024 ** 3 }),
+    measureFileWrites: async () => 0.1,
     log: () => {},
   });
   return { facade, home, projects, copilotHome };
@@ -152,6 +157,7 @@ describe("doctor", () => {
     expect(report.checks.map((c) => [c.id, c.status])).toEqual([
       ["projects-folder", "ok"],
       ["disk-space", "ok"],
+      ["file-scanning", "ok"],
       ["workspace-file", "ok"],
       ["git", "ok"],
       ["copilot-cli", "ok"],
@@ -173,6 +179,7 @@ describe("doctor", () => {
     expect(report.checks.map((c) => [c.id, c.status])).toEqual([
       ["projects-folder", "fail"],
       ["disk-space", "ok"],
+      ["file-scanning", "ok"],
       ["git", "ok"],
       ["copilot-cli", "fail"],
       ...sandboxRow,
@@ -301,6 +308,7 @@ describe("doctor", () => {
     expect(report.checks.map((c) => [c.id, c.status, c.summary])).toEqual([
       ["projects-folder", "fail", "No projects folder is set."],
       ["disk-space", "ok", "100.0 GB free on the disk of your home folder."],
+      ["file-scanning", "ok", "Writing a file takes 0.10 ms in Trackwall's state folder."],
       ["git", "fail", "git: program git not found in PATH"],
       ["copilot-cli", "fail", "Copilot CLI: mise: broken install"],
       ["network", "ok", expect.stringMatching(/^github\.com and api\.githubcopilot\.com answer /)],
@@ -566,5 +574,114 @@ describe("the doctor on free disk space", () => {
     expect(space.free).toBeGreaterThan(0);
     expect(space.free).toBeLessThanOrEqual(space.total);
     expect((await diskSpace(mkdtempSync(join(tmpdir(), "trackwall-doctor-disk-")))).disk).toBe(space.disk);
+  });
+});
+
+describe("the doctor on antivirus scanning (ADR-255)", () => {
+  /** Real folders, since the check only measures folders that exist; the times come from `msPerFile` by folder. */
+  function scanCheck(o: {
+    msPerFile: Record<string, number>;
+    worktreesDir?: (projects: string) => string;
+    inContainer?: boolean;
+    unwritable?: string[];
+  }) {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-doctor-scan-home-"));
+    const projects = join(home, "Dev");
+    const state = join(home, ".trackwall");
+    for (const dir of [projects, state, join(home, ".m2")]) mkdirSync(dir);
+    const names: Record<string, string> = { [projects]: "projects", [state]: "state", [join(home, ".m2")]: "m2" };
+    const worktrees = o.worktreesDir?.(home) ?? null;
+    if (worktrees !== null) {
+      mkdirSync(worktrees, { recursive: true });
+      names[worktrees] = "worktrees";
+    }
+    const deps = fakeDeps({
+      projectsDir: async () => projects,
+      homeDir: home,
+      stateDir: state,
+      worktreesDir: async () => worktrees,
+      inContainer: o.inContainer ?? false,
+      measureFileWrites: async (folder) => {
+        const name = names[folder] ?? folder;
+        if (o.unwritable?.includes(name)) throw new Error(`EACCES: ${folder}`);
+        const ms = o.msPerFile[name];
+        if (ms === undefined) throw new Error(`no time for ${name}`);
+        return ms;
+      },
+    });
+    return { home, check: new Doctor(deps).run().then((report) => report.checks.find((c) => c.id === "file-scanning")) };
+  }
+
+  test("with only the projects folder left out of the antivirus, the state folder and Maven's cache are named, slowest first, with their paths", async () => {
+    const { home, check } = scanCheck({ msPerFile: { projects: 0.1, state: 2.8, m2: 3.1 } });
+    expect(await check).toEqual({
+      id: "file-scanning",
+      status: "warn",
+      summary:
+        "Writing a file takes 3.1 ms in Maven's cache, 2.8 ms in Trackwall's state folder, against 0.10 ms in the projects folder: an antivirus probably scans them, which slows git, builds and tasks.",
+      fix: `Have these folders left out of the antivirus's real-time scanning, like the projects folder (at work, IT does that): ${join(home, ".m2")}, ${join(home, ".trackwall")}. A folder on a network drive is slow as well; then move it to this computer's disk.`,
+    });
+  });
+
+  test("folders that write alike are ok with their times, also when every one of them is slow, and a tenfold gap among fast folders is no scanner", async () => {
+    expect(await scanCheck({ msPerFile: { projects: 2.5, state: 2.9, m2: 3.1 } }).check).toMatchObject({
+      status: "ok",
+      summary: "Writing a file takes 2.5 ms in the projects folder, 2.9 ms in Trackwall's state folder, 3.1 ms in Maven's cache.",
+    });
+    expect((await scanCheck({ msPerFile: { projects: 0.3, state: 1.1, m2: 0.4 } }).check)?.status).toBe("ok");
+    expect((await scanCheck({ msPerFile: { projects: 0.02, state: 0.3, m2: 0.4 } }).check)?.status).toBe("ok");
+  });
+
+  test("the default worktrees folder shares the projects folder's exclusion, while one chosen elsewhere is measured on its own", async () => {
+    const inside = scanCheck({
+      msPerFile: { projects: 0.1, state: 0.1, m2: 0.1 },
+      worktreesDir: (home) => join(home, "Dev", ".trackwall", "worktrees"),
+    });
+    expect((await inside.check)?.summary).not.toContain("worktrees");
+    const elsewhere = scanCheck({
+      msPerFile: { projects: 0.1, state: 0.1, m2: 0.1, worktrees: 2 },
+      worktreesDir: (home) => join(home, "tw"),
+    });
+    expect(await elsewhere.check).toMatchObject({
+      status: "warn",
+      summary: expect.stringMatching(/^Writing a file takes 2.0 ms in the task worktrees folder, against /),
+    });
+  });
+
+  test("a folder that cannot be written is left out, and in a container there is no row", async () => {
+    expect((await scanCheck({ msPerFile: { projects: 0.1, state: 0.1 }, unwritable: ["m2"] }).check)?.summary).toBe(
+      "Writing a file takes 0.10 ms in the projects folder, 0.10 ms in Trackwall's state folder.",
+    );
+    expect(await scanCheck({ msPerFile: { projects: 0.1, state: 3, m2: 3 }, inContainer: true }).check).toBeUndefined();
+  });
+
+  test("each folder counts by its fastest round after a warm-up, the folders taking turns", async () => {
+    const calls: string[] = [];
+    const rounds: Record<string, number[]> = { a: [9, 3, 1, 2], b: [9, 4, 5, 6] };
+    const costs = await folderCosts(
+      [
+        { name: "A", path: "a" },
+        { name: "B", path: "b" },
+      ],
+      async (path, files) => {
+        expect(files).toBe(FILES_PER_ROUND);
+        calls.push(path);
+        const next = rounds[path]?.shift();
+        if (next === undefined) throw new Error(`one round too many in ${path}`);
+        return next;
+      },
+    );
+    expect(calls).toEqual(["a", "b", "a", "b", "a", "b", "a", "b"]);
+    expect(costs.map((c) => [c.folder.name, c.msPerFile])).toEqual([
+      ["A", 1],
+      ["B", 4],
+    ]);
+  });
+
+  test("a measurement writes and reads real files and leaves nothing behind", async () => {
+    const folder = mkdtempSync(join(tmpdir(), "trackwall-doctor-measure-"));
+    const ms = await measureFileWrites(folder, 5);
+    expect(ms).toBeGreaterThan(0);
+    expect(readdirSync(folder)).toEqual([]);
   });
 });

@@ -1,7 +1,7 @@
 import { MERGE_REQUEST_THREADS_MAX, type MergeRequestThread, type MergeRequestThreads } from "@trackwall/protocol";
 
 /**
- * The unresolved threads of a task's merge request in its panel (ADR-255): where each one is, which the user hands to
+ * The unresolved threads of a task's merge request in its panel (ADR-256): where each one is, which the user hands to
  * the agent at first, and what the list leaves out, in words.
  */
 

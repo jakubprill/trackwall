@@ -35,7 +35,7 @@ import { ACTIVE_CHECK_MS, nextCheckMs, pipelineFailedNow, type WatchRead } from 
  * user, an agent, another MCP server) shows the same. It also follows every task's merge request in the background
  * (ADR-154): the Sessions list shows it, and a pipeline that fails is announced. On the user's request it reads the end
  * of a failed job's log, and hands the failed jobs' logs to the task's agent as a pipeline fix (ADR-197), and it reads
- * the unresolved threads of the merge request and hands those the user picks to the agent (ADR-255). Kept only in
+ * the unresolved threads of the merge request and hands those the user picks to the agent (ADR-256). Kept only in
  * memory: the repo host's last answers, and what it last read of each task.
  */
 
@@ -61,7 +61,7 @@ interface MergeRequestTasks {
   pushWithRoundsSquashed(id: string, push: (source: string | undefined) => Promise<void>): Promise<void>;
   /** Queues the user's pipeline fix for the task's agent and asks its session to read it. */
   askToFixPipeline(id: string, fix: PipelineFix): PromptDelivery;
-  /** Queues the merge request threads the user picked for the task's agent and asks its session to read them (ADR-255). */
+  /** Queues the merge request threads the user picked for the task's agent and asks its session to read them (ADR-256). */
   askToAddressThreads(id: string, comments: MergeRequestComments): PromptDelivery;
   /** The task's last rules check (ADR-234), and whether the task's changes moved on after it; `null` without one. */
   rulesCheck(id: string): Promise<FreshAutoReview | null>;
@@ -343,14 +343,14 @@ export class MergeRequests {
     return { delivery: this.#deps.tasks.askToFixPipeline(id, fix) };
   }
 
-  /** The unresolved threads of the task's open merge request, read from the repo host now (ADR-255). */
+  /** The unresolved threads of the task's open merge request, read from the repo host now (ADR-256). */
   async threads(id: string): Promise<MergeRequestThreads> {
     const { project, mergeRequest } = await this.#openMergeRequest(id, "has no open merge request");
     return this.#readThreads(project, mergeRequest);
   }
 
   /**
-   * Hands the threads the user picked to the task's agent (ADR-255): read again, so the agent gets each as the repo host
+   * Hands the threads the user picked to the task's agent (ADR-256): read again, so the agent gets each as the repo host
    * shows it now, and a thread resolved since the user saw it stays out. Refused when none of them is unresolved now.
    */
   async sendThreads(id: string, picked: readonly string[]): Promise<{ delivery: PromptDelivery; sent: number }> {

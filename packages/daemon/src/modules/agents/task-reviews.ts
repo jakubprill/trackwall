@@ -11,7 +11,7 @@ import { DomainError } from "../../infra/errors.ts";
 
 /**
  * Review comments the user sent on a task's changes and its agent has not read yet (ADR-62), per task, oldest first,
- * the user's latest pipeline fix (ADR-197) and the merge request threads the user handed over (ADR-255), which
+ * the user's latest pipeline fix (ADR-197) and the merge request threads the user handed over (ADR-256), which
  * `get_review_comments` returns with them.
  * Since ADR-115 they outlive a daemon restart in `agent-queues.json` (`stored`, `restore`), so the resumed task session
  * reads them; every change is reported to `changed`, which writes the file. A comment counts as read once `take`
@@ -28,7 +28,7 @@ export const StoredReviews = z.array(
     comments: z.array(ReviewComment).max(REVIEW_UNREAD_MAX),
     // A file from before ADR-197 has none.
     pipelineFix: PipelineFix.nullable().default(null),
-    // A file from before ADR-255 has none.
+    // A file from before ADR-256 has none.
     mergeRequestComments: MergeRequestComments.nullable().default(null),
   }),
 );
@@ -78,7 +78,7 @@ export class TaskReviews {
   }
 
   /**
-   * Merge request threads the user handed over (ADR-255), joined with the unread ones by thread: a thread sent again
+   * Merge request threads the user handed over (ADR-256), joined with the unread ones by thread: a thread sent again
    * replaces its older copy, and a merge request other than the one before (the branch got a new one) starts afresh.
    * More than `MERGE_REQUEST_THREADS_MAX` unread is refused.
    */

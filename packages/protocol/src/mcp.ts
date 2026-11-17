@@ -230,7 +230,7 @@ export const GetReviewCommentsResult = z.object({
   comments: z.array(ReviewComment),
   /** The user's request to fix the failed pipeline of the task's merge request, with the end of the failed jobs' logs (ADR-197). */
   pipelineFix: PipelineFix.nullable(),
-  /** The unresolved threads of the task's merge request the user handed over, from its reviewers on the repo host (ADR-255). */
+  /** The unresolved threads of the task's merge request the user handed over, from its reviewers on the repo host (ADR-256). */
   mergeRequestComments: MergeRequestComments.nullable(),
 });
 export type GetReviewCommentsResult = z.infer<typeof GetReviewCommentsResult>;

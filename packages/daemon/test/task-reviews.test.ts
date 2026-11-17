@@ -86,7 +86,7 @@ describe("unread review comments of a task", () => {
     expect(old.take(task)).toEqual({ comments: [comment], pipelineFix: null, mergeRequestComments: null });
   });
 
-  test("merge request threads add up by thread until the agent reads them, a thread sent again replaces its copy (ADR-255)", () => {
+  test("merge request threads add up by thread until the agent reads them, a thread sent again replaces its copy (ADR-256)", () => {
     const reviews = new TaskReviews(() => {});
     reviews.addThreads("t1", { mergeRequest: MR, threads: [thread("a1", "Use a constant."), thread("b2", "Add a test.")] });
     reviews.addThreads("t1", { mergeRequest: MR, threads: [thread("a1", "Use a constant, please.")] });

@@ -1,7 +1,7 @@
 import { MCP_SERVER_NAME, mcpTools } from "@trackwall/protocol";
 
 /**
- * The prompt the daemon types into a session when something waits for it (ADR-62, ADR-68, ADR-197, ADR-255): fixed sentences on one line,
+ * The prompt the daemon types into a session when something waits for it (ADR-62, ADR-68, ADR-197, ADR-256): fixed sentences on one line,
  * without anything the Copilot CLI input box treats specially, each naming the tool that returns what waits. The text
  * itself (the user's review, another agent's message, an update) comes from the tool, never as keys; a trust notice
  * (ADR-92), an undone round (ADR-168) and a refresh from the base branch (ADR-245) have no text beyond their fixed sentence.
@@ -28,7 +28,7 @@ export interface Unread {
   reviewComments: number;
   /** The user asked the task's agent to fix its merge request's failed pipeline (ADR-197). */
   pipelineFix: boolean;
-  /** The user handed the task's agent unresolved threads of its merge request (ADR-255). */
+  /** The user handed the task's agent unresolved threads of its merge request (ADR-256). */
   mergeRequestThreads: boolean;
   messages: number;
   /** The branch of the task that handed this session's task its work moved since it read it (ADR-144). */
