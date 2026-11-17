@@ -227,6 +227,7 @@ describe.skipIf(process.versions.bun === undefined)(
       );
       window.attachment.detach();
       expect(after.facade.agents.takeReviewComments(resumed)).toEqual({
+        otherParts: [],
         comments: [COMMENT],
         pipelineFix: null,
         mergeRequestComments: null,

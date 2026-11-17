@@ -354,7 +354,7 @@ describe("Sessions view entries", () => {
   });
 
   test("the parts of a change sit under its first part in merge order, and under the next one once the first is ended (ADR-171)", () => {
-    const part = (id: string, createdAt: string, position: number) => ({ ...task(id, createdAt), change: { id: CHANGE, position } });
+    const part = (id: string, createdAt: string, position: number) => ({ ...task(id, createdAt), change: { id: CHANGE, position, session: null } });
     // Started one after another, so the later parts are the newer ones.
     const tasks = [
       part("web", "2026-10-23T10:02:00Z", 2),
@@ -377,6 +377,24 @@ describe("Sessions view entries", () => {
       "task web @1",
     ]);
     expect(shape(list(tasks))).toEqual(["task other @0", "task orders @0", "task web @1"]);
+  });
+
+  test("every part of a change in one session shows the session of its lead part (ADR-265)", () => {
+    const part = (id: string, position: number) => ({ ...task(id, "2026-10-23T10:00:00Z"), change: { id: CHANGE, position, session: "payments" } });
+    const lead = session("s1", "2026-10-23T10:00:05Z", "payments");
+    const entries = rowEntries({
+      sessions: [lead],
+      tasks: [part("orders", 1), part("payments", 0)],
+      proposals: [],
+      messages: [],
+      lastSupervisor: null,
+      sessionProfile: { name: null },
+    });
+
+    expect(entries.map((e) => [entryId(e), e.kind === "task" ? e.session?.id : undefined])).toEqual([
+      ["payments", "s1"],
+      ["orders", "s1"],
+    ]);
   });
 
   test("tasks that delegate to each other stay on the list instead of looping it", () => {

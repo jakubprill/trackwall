@@ -11,7 +11,7 @@ import {
 } from "@trackwall/protocol";
 import { projectOf } from "./board-tree.ts";
 import { type Progress, progressBelow, progressLabel } from "./plan-progress.ts";
-import { latestSession, proposerName, taskName } from "./session-entries.ts";
+import { latestSession, workingSession, proposerName, taskName } from "./session-entries.ts";
 import { inTurn, NO_SESSION_LABEL, PAUSED_LABEL, PROPOSAL_STATUS, sessionPlace, sessionStateLabel, sessionTitle } from "./session-state.ts";
 import { outcomeMarks } from "./task-outcomes.ts";
 
@@ -223,7 +223,7 @@ function taskCard(task: Task, sessions: readonly Session[], outcome: TaskOutcome
     target: { kind: "task", id: task.id },
     // A paused task rests by the user's choice (ADR-253), whatever its last turn or check left behind.
     ...(task.paused === null
-      ? columnOf(latestSession(sessions, task.id), facts)
+      ? columnOf(workingSession(sessions, task), facts)
       : { column: "idle" as const, since: task.paused.at, detail: PAUSED_LABEL }),
   };
 }

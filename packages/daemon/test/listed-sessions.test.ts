@@ -59,6 +59,7 @@ function makeList(running: (owner: string) => boolean = () => true) {
     tokens,
     resumable: new ResumableSessions(join(home, "resumable-sessions.json"), () => {}),
     lastSupervisor: new LastSupervisorFile(join(home, "last-supervisor.json"), () => {}),
+    sessionTask: (task) => task,
     log: () => {},
   });
   return { list, tokens, home };

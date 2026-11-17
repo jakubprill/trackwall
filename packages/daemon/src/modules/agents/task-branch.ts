@@ -69,3 +69,20 @@ export function taskSlug(prompt: string, taskId: string): string {
 export function taskWorktree(worktreesDir: string, repo: string, branch: string): string {
   return join(worktreesDir, repo, taskSlugOf(branch));
 }
+
+/** No repo has this name (a repo id starts with a letter or a digit), so it never collides with a repo's worktrees. */
+const CHANGE_FOLDERS = "_changes";
+
+/**
+ * The folder of a change with one session (ADR-265): `<task worktrees folder>/_changes/<branch without prefix>`, which
+ * holds a worktree per part under its repo's name and is where the change's session runs, so every part is inside
+ * the folder Copilot CLI works in. The parts share the branch name, so they share the folder.
+ */
+export function changeFolder(worktreesDir: string, branch: string): string {
+  return join(worktreesDir, CHANGE_FOLDERS, taskSlugOf(branch));
+}
+
+/** The worktree of a part of a change with one session (ADR-265): the change's folder, then the repo. */
+export function changePartWorktree(worktreesDir: string, repo: string, branch: string): string {
+  return join(changeFolder(worktreesDir, branch), repo);
+}

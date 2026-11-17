@@ -181,7 +181,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     ];
     const read = (handoff: HandoffFacts | null) => {
       const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
-      const change = { parts };
+      const change = { parts, oneSession: false };
       writeSessionInstructions(
         sessionDir,
         "0.5.14",

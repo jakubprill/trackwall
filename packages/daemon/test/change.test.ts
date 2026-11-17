@@ -48,7 +48,7 @@ async function endAll(tasks: readonly { id: string }[]): Promise<void> {
   }
 }
 
-describe.skipIf(process.versions.bun === undefined)("a change across several repos (ADR-171; real PTY and git, fake Copilot CLI)", () => {
+describe.skipIf(process.versions.bun === undefined)("a change with a session per part (ADR-171; real PTY and git, fake Copilot CLI)", () => {
   test("starts one task per repo on one branch name, in the merge order, each with the change's prompt and its own note", async () => {
     const { tasks, failed } = await daemon.post(agentsApi.createChange, {
       title: "Refund API",
@@ -58,6 +58,7 @@ describe.skipIf(process.versions.bun === undefined)("a change across several rep
         { repo: "orders-api", note: "" },
       ],
       approvals: "ask",
+      sessions: "perPart",
     });
 
     expect(failed).toEqual([]);
@@ -92,6 +93,7 @@ describe.skipIf(process.versions.bun === undefined)("a change across several rep
       prompt: "Add refunds",
       parts: [{ repo: "payments" }, { repo: "orders-api" }, { repo: "shop-web" }],
       approvals: "ask",
+      sessions: "perPart",
     });
     const [payments, orders, web] = tasks;
     if (payments === undefined || orders === undefined || web === undefined) throw new Error("three parts expected");
@@ -207,6 +209,7 @@ describe.skipIf(process.versions.bun === undefined)("a change across several rep
         parts,
         model: null,
         approvals: "ask",
+        sessions: "perPart",
       });
     await expect(
       approve([

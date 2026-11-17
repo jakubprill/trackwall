@@ -312,10 +312,14 @@ function TaskMarks({ task }: { task: Task }) {
       {task.change !== null && (
         <span
           className="text-muted-foreground flex shrink-0 items-center gap-1 text-xs"
-          title="A part of a change across several repos: the Sessions list shows its parts in the order to merge them"
+          title={
+            task.change.session === null
+              ? "A part of a change across several repos: the Sessions list shows its parts in the order to merge them"
+              : "A part of a change across several repos that one session makes: every part shows that session, and the Sessions list shows the parts in the order to merge them"
+          }
         >
           <Layers className="size-3" aria-hidden />
-          Part of a change
+          {task.change.session === null ? "Part of a change" : "Part of a change in one session"}
         </span>
       )}
       {task.model !== null && (
