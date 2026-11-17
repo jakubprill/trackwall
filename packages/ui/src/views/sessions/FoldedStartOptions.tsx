@@ -1,7 +1,6 @@
-import { ChevronDown, ChevronRight } from "lucide-react";
 import { type ComponentProps, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { type ChosenOption, chosenOptions, moreOptionsOpen } from "@/lib/start-options";
+import { FoldButton } from "@/components/FoldButton";
+import { chosenOptions, moreOptionsOpen } from "@/lib/start-options";
 import { StartOptions } from "./StartOptions.tsx";
 
 type Options = ComponentProps<typeof StartOptions>;
@@ -26,7 +25,15 @@ export function FoldedStartOptions({ worktree, disabled, ...more }: Options) {
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
         <StartOptions worktree={worktree} disabled={disabled} />
-        <MoreOptionsButton open={open} chosen={chosen} onOpen={setToggled} />
+        <FoldButton open={open} onOpen={setToggled}>
+          More options
+          {!open &&
+            chosen.map((option) => (
+              <span key={option.text} className={option.risky ? "text-warning" : "text-muted-foreground"}>
+                · {option.text}
+              </span>
+            ))}
+        </FoldButton>
       </div>
       {open && <StartOptions {...more} disabled={disabled} />}
     </div>
@@ -36,18 +43,4 @@ export function FoldedStartOptions({ worktree, disabled, ...more }: Options) {
 /** Whether a pill that may be unavailable is on, as `StartOptions` shows it. */
 function isOn(pill: { value: boolean; unavailable: string | null } | undefined): boolean {
   return pill?.value === true && pill.unavailable === null;
-}
-
-function MoreOptionsButton({ open, chosen, onOpen }: { open: boolean; chosen: readonly ChosenOption[]; onOpen: (open: boolean) => void }) {
-  return (
-    <Button variant="ghost" size="sm" aria-expanded={open} onClick={() => onOpen(!open)}>
-      {open ? <ChevronDown /> : <ChevronRight />} More options
-      {!open &&
-        chosen.map((option) => (
-          <span key={option.text} className={option.risky ? "text-warning" : "text-muted-foreground"}>
-            · {option.text}
-          </span>
-        ))}
-    </Button>
-  );
 }

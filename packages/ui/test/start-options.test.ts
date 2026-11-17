@@ -37,8 +37,8 @@ describe("the folded options of the New session form", () => {
   test("only giving up approvals is marked as risky", () => {
     const chosen = chosenOptions({ approvals: "auto", model: "gpt-5.5", view: "terminal" });
     expect(chosen).toEqual([
-      { text: "No approvals", risky: true },
-      { text: "Model: gpt-5.5", risky: false },
+      { text: "No approvals", risky: true, invalid: false },
+      { text: "Model: gpt-5.5", risky: false, invalid: false },
     ]);
   });
 
@@ -54,5 +54,11 @@ describe("the folded options of the New session form", () => {
 
   test("options the user opened stay open with nothing chosen", () => {
     expect(moreOptionsOpen(true, [])).toBe(true);
+  });
+
+  test("a model that is no model id holds the start, so the options cannot be folded over it", () => {
+    const chosen = chosenOptions({ model: "not a model", view: "terminal" });
+    expect(chosen).toEqual([{ text: "Model: not a model", risky: false, invalid: true }]);
+    expect(moreOptionsOpen(false, chosen)).toBe(true);
   });
 });

@@ -14,9 +14,10 @@ import {
   type TaskApprovals,
   workspaceApi,
 } from "@trackwall/protocol";
-import { ChevronDown, ChevronRight, GitBranch, Play } from "lucide-react";
+import { GitBranch, Play } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
+import { FoldButton } from "@/components/FoldButton";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
@@ -267,9 +268,9 @@ function TrustedFolderNote({ projectsDir }: { projectsDir: string | null }) {
   if (projectsDir === null) return null;
   return (
     <div className="flex flex-col gap-1">
-      <Button variant="ghost" size="sm" className="text-muted-foreground w-fit" aria-expanded={open} onClick={() => setOpen(!open)}>
-        {open ? <ChevronDown /> : <ChevronRight />} Copilot CLI asks to trust the folder?
-      </Button>
+      <FoldButton open={open} onOpen={setOpen} className="text-muted-foreground">
+        Copilot CLI asks to trust the folder?
+      </FoldButton>
       {open && (
         <p className="text-muted-foreground max-w-prose text-xs">
           Copilot CLI asks you to trust a folder before it works there. To skip that prompt for every repo and task, add{" "}

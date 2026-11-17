@@ -1,7 +1,8 @@
 import { type TaskTemplateEntry, taskTemplatesApi, trackwallDirLabel } from "@trackwall/protocol";
-import { BookmarkPlus, ChevronDown, ChevronRight } from "lucide-react";
+import { BookmarkPlus } from "lucide-react";
 import { type RefObject, useCallback, useRef, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
+import { FoldButton } from "@/components/FoldButton";
 import { RemoveForGood } from "@/components/RemoveForGood";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,10 +45,10 @@ export function TaskTemplatePicker({
   const { templates, problems } = list.data;
   return (
     <section aria-label="Task templates" className="flex flex-col gap-2">
-      <Button variant="ghost" size="sm" className="w-fit" aria-expanded={open} onClick={() => setOpen(!open)}>
-        {open ? <ChevronDown /> : <ChevronRight />} Templates
+      <FoldButton open={open} onOpen={setOpen}>
+        Templates
         {!open && picked && <span className="text-muted-foreground">· {picked.title}</span>}
-      </Button>
+      </FoldButton>
       {open && (
         <div className="flex flex-wrap items-center gap-1.5">
           {templates.map((template) => (
