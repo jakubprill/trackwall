@@ -13,7 +13,7 @@ const CLOCK_MS = 30_000;
  */
 export function SessionStateLabel({ session, labelClassName }: { session: Session; labelClassName?: string }) {
   return (
-    <span className="flex min-w-0 items-center gap-1.5">
+    <span className="flex min-w-0 flex-wrap items-center gap-x-1.5">
       <StatusLabel {...sessionStateLabel(session)} labelClassName={labelClassName} />
       {session.waitingSince !== null && <WaitingTime since={session.waitingSince} />}
     </span>

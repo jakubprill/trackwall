@@ -29,7 +29,7 @@ describe("a session's row in the Sessions list", () => {
 
     const row = sessionRow(page, "shop");
     const waited = row.getByTitle(/^Waiting for you since/);
-    const used = row.getByText("0.34 AI credits");
+    const used = row.getByText("0.34 cr");
     await waited.waitFor();
     await used.waitFor();
     const a = await waited.boundingBox();

@@ -23,7 +23,7 @@ const LIST: ViewerSessionList = {
       windowTitle: "Editing Cart.java",
       task: null,
       taskName: null,
-      status: { tone: "warning", label: "asking for approval" },
+      status: { tone: "warning", label: "Needs you: approval" },
       needsAttention: true,
       live: true,
       since: "2026-11-07T10:00:00Z",
@@ -176,7 +176,7 @@ describe("the built extension in VS Code", () => {
     expect(tree.getTreeItem(group)).toMatchObject({ label: "Waiting for you", description: "1" });
     const [row] = tree.getChildren(group);
     const item = tree.getTreeItem(row);
-    expect(item).toMatchObject({ label: "Editing Cart.java", description: "shop · asking for approval" });
+    expect(item).toMatchObject({ label: "Editing Cart.java", description: "shop · Needs you: approval" });
     expect(item.command).toEqual({ command: "trackwall.openSession", title: "Open in Trackwall", arguments: [SESSION] });
 
     await commands.get("trackwall.openSession")?.(SESSION);

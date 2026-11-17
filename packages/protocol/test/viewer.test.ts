@@ -61,7 +61,7 @@ describe("the viewer's session list", () => {
           windowTitle: "Editing Cart.java",
           task: TASK_ID,
           taskName: "Fix the checkout total",
-          status: { tone: "warning", label: "asking for approval" },
+          status: { tone: "warning", label: "Needs you: approval" },
           needsAttention: true,
           live: true,
           since: "2026-11-07T10:05:00Z",
@@ -73,7 +73,7 @@ describe("the viewer's session list", () => {
           windowTitle: null,
           task: null,
           taskName: null,
-          status: { tone: null, label: "state unknown" },
+          status: { tone: null, label: "State unknown" },
           needsAttention: false,
           live: true,
           since: "2026-11-07T10:00:00Z",
@@ -118,7 +118,7 @@ describe("the viewer's session list", () => {
     expect(JSON.stringify(list)).not.toContain("rm -rf");
     expect(JSON.stringify(list)).not.toContain("secret note");
     expect(list.sessions[0]?.windowTitle).toHaveLength(VIEWER_TEXT_MAX);
-    expect(list.sessions[0]).toMatchObject({ live: false, status: { tone: null, label: "stopped" } });
+    expect(list.sessions[0]).toMatchObject({ live: false, status: { tone: null, label: "Stopped" } });
     expect(ViewerSessionList.safeParse(list).success).toBe(true);
   });
 });

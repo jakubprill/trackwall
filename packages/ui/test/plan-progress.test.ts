@@ -114,8 +114,8 @@ describe("how far a project of Plan is and what its tasks do (ADR-215)", () => {
     const index = itemTaskIndex({ tasks: [older, task("other"), newer], sessions, outcomes: noOutcomes });
     const listed = itemTasks("accept", index);
     expect(listed.map((t) => [t.task.id, t.state.label, t.waitsForYou, t.marks.map((m) => m.label)])).toEqual([
-      ["newer", "no session", true, ["In review"]],
-      ["older", "waiting for you", true, []],
+      ["newer", "Ready for review", true, []],
+      ["older", "Needs you: answer", true, []],
     ]);
   });
 

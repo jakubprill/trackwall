@@ -10,7 +10,7 @@ function session(over: Partial<ViewerSession>): ViewerSession {
     windowTitle: null,
     task: null,
     taskName: null,
-    status: { tone: "ok", label: "working" },
+    status: { tone: "ok", label: "Working" },
     needsAttention: false,
     live: true,
     since: "2026-11-07T10:00:00Z",
@@ -21,7 +21,7 @@ function session(over: Partial<ViewerSession>): ViewerSession {
 const approval = session({
   id: "22222222-2222-4222-8222-222222222222",
   taskName: "Fix the checkout total",
-  status: { tone: "warning", label: "asking for approval" },
+  status: { tone: "warning", label: "Needs you: approval" },
   needsAttention: true,
 });
 const working = session({ windowTitle: "Editing Cart.java" });
@@ -39,13 +39,13 @@ describe("the side bar", () => {
         id: "waiting",
         label: "Waiting for you",
         rows: [
-          { id: approval.id, label: "Fix the checkout total", description: "shop · asking for approval", tone: "warning", live: true },
+          { id: approval.id, label: "Fix the checkout total", description: "shop · Needs you: approval", tone: "warning", live: true },
         ],
       },
       {
         id: "running",
         label: "Running",
-        rows: [{ id: working.id, label: "Editing Cart.java", description: "shop · working", tone: "ok", live: true }],
+        rows: [{ id: working.id, label: "Editing Cart.java", description: "shop · Working", tone: "ok", live: true }],
       },
       {
         id: "ended",

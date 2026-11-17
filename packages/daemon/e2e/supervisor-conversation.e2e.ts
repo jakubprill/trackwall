@@ -79,7 +79,7 @@ describe("the supervisor in the conversation view (ADR-107)", () => {
     await panel.getByText("The session has ended; this is its conversation.").waitFor();
     await message.waitFor({ state: "detached" });
     // Without a day start today, the start card puts Start my day first and offers to continue the stopped conversation (ADR-126).
-    await panel.getByText(/^stopped at /).waitFor();
+    await panel.getByText(/^Stopped at /).waitFor();
     await panel.getByRole("button", { name: "Start my day" }).waitFor();
     await panel.getByRole("button", { name: "Continue", exact: true }).waitFor();
   }, 60_000);

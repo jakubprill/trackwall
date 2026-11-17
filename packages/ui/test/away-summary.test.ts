@@ -121,7 +121,7 @@ describe("While you were away (ADR-151)", () => {
       {
         key: "s-stuck",
         title: "web",
-        facts: [{ tone: "warning", text: "may be stuck: no step for 30 min" }],
+        facts: [{ tone: "warning", text: "May be stuck: no step for 30 min" }],
         at: "2026-10-31T10:40:00.000Z",
         open: { kind: "session", id: "s-stuck" },
       },
@@ -135,7 +135,7 @@ describe("While you were away (ADR-151)", () => {
       {
         key: "t-waiting",
         title: "orders · Add a price field",
-        facts: [{ tone: "warning", text: "asking for approval" }],
+        facts: [{ tone: "warning", text: "Needs you: approval" }],
         at: "2026-10-31T09:20:00.000Z",
         open: { kind: "task", id: "t-waiting" },
       },
@@ -200,8 +200,8 @@ describe("While you were away (ADR-151)", () => {
     );
 
     expect(items.map((i) => [i.key, i.facts])).toEqual([
-      ["s-ended", [{ tone: "error", text: "error" }]],
-      ["s-error", [{ tone: "error", text: "error" }]],
+      ["s-ended", [{ tone: "error", text: "Error" }]],
+      ["s-error", [{ tone: "error", text: "Error" }]],
     ]);
     expect(
       awayHeadline(

@@ -209,7 +209,7 @@ _Avoid_: test run (that is the mise task that wrote the reports), coverage
 One verdict on a task's changes (ADR-64): the mise task `test` (`VERIFY_MISE_TASK`) run in the task's worktree, then `passed` (exit code 0 and no failed test in the test reports the run wrote), `failed` (with the first failed tests and log errors) or `cancelled`; `running` until the run ends. The last one of each task is kept, also across a daemon restart (`verifications.json`, ADR-115); one whose run the restart ended comes back `cancelled`.
 _Avoid_: check, CI, validation (that is a schema at the point of entry)
 
-**Outdated verdict** (`Verification.outdated`, `TaskOutcome.verificationOutdated`, `checkOutdated`; UI "Outdated", "Verify outdated", "passed · outdated"):
+**Outdated verdict** (`Verification.outdated`, `TaskOutcome.verificationOutdated`, `checkOutdated`; UI "Outdated", "Verify again", "passed · outdated"):
 A verification's verdict given before the task's worktree changed (ADR-209): the **worktree fingerprint** (`worktreeFingerprint`, one hash of the files that differ from the task's base commit and their content) its run started on is no longer the worktree's. It stays outdated until the next verification replaces it.
 _Avoid_: stale (that is `Stale`, a session state), expired, invalid
 
@@ -572,7 +572,7 @@ A task's merge request as the daemon last read it while following every task in 
 _Avoid_: tracked, watched merge request (the watch is the reading, not the merge request)
 
 **Task outcome** (`TaskOutcome`, `taskOutcomesApi`, `/ws` topic `task-outcomes.changed`; the marks on a task's row in Sessions):
-What a task's work came to: the state of its last verification and its followed merge request (ADR-154). The Sessions list shows it on the task's row ("Verified", "Verify failed", "Verify outdated", `!12` in the pipeline's colour).
+What a task's work came to: the state of its last verification and its followed merge request (ADR-154). The Sessions list shows it on the task's row ("Verified", "Verify failed", "Verify again", `!12` in the pipeline's colour).
 _Avoid_: task status (that is the session's state), result (that is the summary from `report_result`)
 
 **Proposer** (`Task.proposedBy`, `proposerOf` in `proposer.ts`):
@@ -897,7 +897,7 @@ _Avoid_: verification (the whole `test` task in the worktree, ADR-64), red-green
 What a task's result brings to show the change is right beyond the agent's summary, such as its reproduction test, Trackwall's reproduction check, the verification, the rules check and the plan the user approved. The merge request's draft lists what Trackwall itself saw of it under "Evidence from Trackwall:", each fact worded as whose word it is.
 _Avoid_: evidence (alone: that is the file and line of a fact on a repo card)
 
-**In review** (`Task.inReview`, "In review" on the Sessions list, column `review` of a board item):
+**In review** (`Task.inReview`, the state "Ready for review" of a task, `READY_FOR_REVIEW`, column `review` of a board item):
 A task whose agent has handed its work over with `report_result` and got nothing new since: the user's review, "Fix" of a failed pipeline or its proposer's message takes it out of review until the agent reports again, or until its next turn ends without changing the worktree (ADR-258). The task's board item goes to "In review" once every open task on it is in review (ADR-213). One step before the user accepts the work; only the user ends a task or marks its item "Done".
 _Avoid_: ready, finished, done (those are the user's), awaiting approval (that is a tool approval)
 

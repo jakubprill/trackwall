@@ -103,8 +103,8 @@ describe("what is going on in one repo", () => {
 
     expect(items.map((i) => [i.name, i.status.label])).toEqual([
       ["Rename OrderDto fields", "waiting for your decision"],
-      ["Add paging", "asking for approval"],
-      ["orders · refactor", "working"],
+      ["Add paging", "Needs you: approval"],
+      ["orders · refactor", "Working"],
       ["test", "running"],
     ]);
   });
@@ -153,7 +153,7 @@ describe("what is going on in one repo", () => {
 
     const items = repoActivity("orders", sessions, [running("payments", "dev")]);
 
-    expect(items.map((i) => [i.name, i.status.label])).toEqual([["Old task", "no session"]]);
+    expect(items.map((i) => [i.name, i.status.label])).toEqual([["Old task", "No session"]]);
   });
 
   test("before the first session list arrives only running mise tasks show", () => {

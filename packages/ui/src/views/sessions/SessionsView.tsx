@@ -1,5 +1,6 @@
 import {
   agentsApi,
+  type CopilotUsage,
   countLabel,
   proposalRepos,
   type RunningMiseTask,
@@ -405,10 +406,16 @@ function StartedListItem({
       >
         <PositionLabel position={position} />
         <span className="flex min-w-0 flex-1 flex-col gap-1">
-          <RowName name={entryName(entry)} group={group} delegated={delegated} waits={session?.needsAttention === true} />
+          <RowName
+            name={entryName(entry)}
+            group={group}
+            delegated={delegated}
+            waits={session?.needsAttention === true}
+            usage={session?.usage ?? null}
+          />
           {task && <TaskLine task={task} />}
           <RowStatus task={task} session={session} />
-          <TaskOutcomeMarks marks={outcomeMarks(outcome, task?.inReview === true)} />
+          <TaskOutcomeMarks marks={outcomeMarks(outcome)} />
           {session?.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
         </span>
       </button>
@@ -456,12 +463,15 @@ function RowName({
   group,
   delegated,
   waits,
+  usage = null,
 }: {
   name: string;
   /** The row's group, for its level under the group's top entry; `null` for a row alone and the supervisor heading. */
   group: EntryGroup | null;
   delegated: number;
   waits: boolean;
+  /** What the row's conversation used, short at the end of the line (ADR-261); the supervisor heading has none. */
+  usage?: CopilotUsage | null;
 }) {
   return (
     <span className="flex min-w-0 items-center gap-2">
@@ -473,6 +483,11 @@ function RowName({
         </Badge>
       )}
       {waits && <BellRing className="text-warning size-3.5 shrink-0" aria-label="waiting for you" />}
+      {usage !== null && (
+        <span className="ml-auto">
+          <CopilotUsageMark usage={usage} short />
+        </span>
+      )}
     </span>
   );
 }
@@ -791,15 +806,11 @@ function LayoutBar({
   );
 }
 
-/**
- * A row's state (a task's, ADR-253, or its session's) and what its conversation used (ADR-190). The list is narrow, so
- * the usage goes under the state when the state with its waiting time takes the row.
- */
+/** A row's one state (ADR-261): a task's (ADR-253) or its session's, with how long it has waited for you. */
 function RowStatus({ task, session }: { task: Task | undefined; session: Session | undefined }) {
   return (
-    <span className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+    <span className="text-muted-foreground flex min-w-0 text-xs">
       {task ? <TaskStateLabel task={task} session={session} /> : session && <SessionStateLabel session={session} />}
-      {session && <CopilotUsageMark usage={session.usage} />}
     </span>
   );
 }

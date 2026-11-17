@@ -181,7 +181,7 @@ function mergeRequestNotices(shown: boolean, found: TaskNoticeInput["foundMergeR
 }
 
 /** The row's and the panel's tones as notice tones, so the chip and the row never disagree. */
-const STATUS_NOTICE_TONE: Record<StatusTone, TaskNoticeTone> = { ok: "passed", warning: "running", error: "failed" };
+const STATUS_NOTICE_TONE: Record<StatusTone, TaskNoticeTone> = { ok: "passed", warning: "running", error: "failed", review: "info" };
 
 /** A grid tile's header: the notices with a chip of their own, and the rest for the badge. */
 export function tileNotices(notices: readonly TaskNotice[]): { chips: TaskNotice[]; others: TaskNotice[] } {

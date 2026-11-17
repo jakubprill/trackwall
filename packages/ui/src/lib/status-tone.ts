@@ -5,6 +5,7 @@ export const STATUS_DOT_CLASS: Record<StatusTone, string> = {
   ok: "bg-success shadow-glow-success",
   warning: "bg-warning shadow-glow-warning",
   error: "bg-destructive shadow-glow-destructive",
+  review: "bg-primary shadow-glow-primary",
 };
 
 /**
@@ -14,5 +15,6 @@ export const STATUS_DOT_CLASS: Record<StatusTone, string> = {
 export function statusTextClass(tone: StatusTone | undefined): string {
   if (tone === "warning") return "text-warning";
   if (tone === "error") return "text-destructive";
+  if (tone === "review") return "text-primary";
   return tone === "ok" ? "" : "text-muted-foreground";
 }

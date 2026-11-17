@@ -34,7 +34,7 @@ export const VIEWER_TEXT_MAX = 200;
 
 export const ViewerStatus = z.object({
   tone: StatusTone.nullable(),
-  /** The state in the words of the UI (`sessionStateLabel`): "asking for approval", "working", "idle"… */
+  /** The state in the words of the UI (`sessionStateLabel`): "Needs you: approval", "Working", "Idle"… */
   label: z.string(),
 });
 

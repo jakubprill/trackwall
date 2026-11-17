@@ -67,7 +67,7 @@ function onlyCard(flow: FlowInput) {
 describe("the column of a task on the wall (ADR-224)", () => {
   test("a task whose agent is in a turn is working, since the state changed", () => {
     const card = onlyCard(input({ tasks: [task("t")], sessions: [session("s", { task: "t" })] }));
-    expect(card).toMatchObject({ column: "working", since: "2026-11-07T10:00:00.000Z", detail: "working", repo: "payments" });
+    expect(card).toMatchObject({ column: "working", since: "2026-11-07T10:00:00.000Z", detail: "Working", repo: "payments" });
     expect(card?.target).toEqual({ kind: "task", id: "t" });
   });
 
@@ -117,7 +117,7 @@ describe("the column of a task on the wall (ADR-224)", () => {
       name: "Docs",
       target: { kind: "session", id: "free" },
     });
-    expect(onlyCard(input({ sessions: [free(false)] }))).toMatchObject({ column: "idle", detail: "idle" });
+    expect(onlyCard(input({ sessions: [free(false)] }))).toMatchObject({ column: "idle", detail: "Idle" });
   });
 
   test("a waiting card counts from when the wait began, not from the state's last confirmation (ADR-247)", () => {
@@ -147,10 +147,10 @@ describe("the column of a task on the wall (ADR-224)", () => {
     expect(onlyCard(input({ tasks: [task("t")], sessions: [quiet] }))).toMatchObject({
       column: "stuck",
       since: "2026-11-07T09:40:00.000Z",
-      detail: "may be stuck",
+      detail: "May be stuck",
     });
     const crashed = session("s", { task: "t", run: { kind: "exited", exitCode: 1, stoppedByUser: false } } as Partial<Session>);
-    expect(onlyCard(input({ tasks: [task("t")], sessions: [crashed] }))).toMatchObject({ column: "stuck", detail: "error" });
+    expect(onlyCard(input({ tasks: [task("t")], sessions: [crashed] }))).toMatchObject({ column: "stuck", detail: "Error" });
   });
 
   test("an idle task with a failed verification is stuck with the check named, and without one it is idle", () => {
@@ -163,14 +163,14 @@ describe("the column of a task on the wall (ADR-224)", () => {
       column: "stuck",
       detail: "Verification failed",
     });
-    expect(onlyCard(input({ tasks: [task("t")], sessions: [idle] }))).toMatchObject({ column: "idle", detail: "idle" });
+    expect(onlyCard(input({ tasks: [task("t")], sessions: [idle] }))).toMatchObject({ column: "idle", detail: "Idle" });
   });
 
   test("a task without a session is idle since it was created", () => {
     expect(onlyCard(input({ tasks: [task("t")] }))).toMatchObject({
       column: "idle",
       since: "2026-11-07T09:00:00.000Z",
-      detail: "no session",
+      detail: "No session",
     });
   });
 
@@ -182,7 +182,7 @@ describe("the column of a task on the wall (ADR-224)", () => {
     expect(onlyCard(input({ tasks: [paused], sessions: [stopped] }, [], failed))).toMatchObject({
       column: "idle",
       since: "2026-11-07T11:00:00.000Z",
-      detail: "paused",
+      detail: "Paused",
     });
   });
 

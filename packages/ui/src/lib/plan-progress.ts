@@ -85,7 +85,7 @@ export function itemTaskIndex({ tasks, sessions, outcomes }: TaskActivity): Item
       task,
       session,
       state: taskStateLabel(task, session),
-      marks: outcomeMarks(outcomes.get(task.id), task.inReview),
+      marks: outcomeMarks(outcomes.get(task.id)),
       waitsForYou: task.inReview || session?.needsAttention === true,
     });
     index.set(task.item, listed);

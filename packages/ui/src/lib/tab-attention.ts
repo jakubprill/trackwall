@@ -1,6 +1,6 @@
 import { proposalRepos, type Session, type SessionId, type SessionList, type TaskProposal, type TaskState } from "@trackwall/protocol";
 import { proposalKindLabel, proposalsName } from "./session-entries.ts";
-import { STATE_LABELS, sessionPlace, waitingInTab } from "./session-state.ts";
+import { sessionPlace, waitingInTab } from "./session-state.ts";
 import type { Jump } from "./use-jump-request.ts";
 
 /**
@@ -31,15 +31,19 @@ export interface BrowserNotice {
 /** The start of every Trackwall notification tag: a newer notice under the same tag replaces the older one. */
 export const TAG_PREFIX = "trackwall:";
 
-/** What a session waits for, in the words of the session states, as the shell's `session_notice` says it. */
-const WAITS_FOR: Partial<Record<TaskState, string>> = { Approval: STATE_LABELS.Approval, Plan: STATE_LABELS.Plan };
+/**
+ * What a session waits for, in a sentence, word for word as the shell's `session_notice` (`notification.rs`) says it;
+ * the states' own short words (`STATE_LABELS`, ADR-261) do not read as a sentence.
+ */
+const WAITS_FOR: Partial<Record<TaskState, string>> = { Approval: "asking for approval", Plan: "waiting for plan approval" };
+const WAITS_FOR_YOU = "waiting for you";
 
 /** "Session in orders-api: Copilot CLI is asking for approval", as the shell's notification says it. */
 export function sessionNotice(session: Session): BrowserNotice {
   const state = session.state?.state;
   return {
     title: session.repo === null ? sessionPlace(session) : `Session in ${session.repo}`,
-    body: `Copilot CLI is ${(state && WAITS_FOR[state]) ?? STATE_LABELS.Input}`,
+    body: `Copilot CLI is ${(state && WAITS_FOR[state]) ?? WAITS_FOR_YOU}`,
     tag: `${TAG_PREFIX}session:${session.id}`,
     target: { kind: "session", id: session.id },
   };

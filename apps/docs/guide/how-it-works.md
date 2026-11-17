@@ -92,7 +92,7 @@ flowchart LR
 A session you start in Trackwall gets two connections to the daemon, set up before Copilot CLI starts:
 
 - **The MCP server.** Copilot CLI connects to the daemon's MCP server over HTTP and gets its tools: repos and cards, the graph, code search, logs and errors, services, sessions and tasks, the plan. Each session gets its own token, so the daemon knows which session is calling: a task can report only its own result, and a session runs mise tasks only in its own repo.
-- **Hooks.** Copilot CLI tells the daemon what it is doing: a turn started, a tool ran, the agent stopped. With that, and with what it reads on the session's screen, the daemon shows "working", "waiting for you" or "asking for approval", and finds the approval question it shows in the tray panel.
+- **Hooks.** Copilot CLI tells the daemon what it is doing: a turn started, a tool ran, the agent stopped. With that, and with what it reads on the session's screen, the daemon shows "Working", "Needs you: answer" or "Needs you: approval", and finds the approval question it shows in the tray panel.
 
 ```mermaid
 sequenceDiagram
