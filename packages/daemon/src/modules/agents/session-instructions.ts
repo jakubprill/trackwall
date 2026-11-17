@@ -160,6 +160,13 @@ function repoRole(repo: string): string[] {
   ];
 }
 
+/**
+ * Every task session's rule on running the tests (ADR-257, addendum): in the T2 measurement of 2026-11-17 the agent ran
+ * the whole suite with the build tool and then twice more with `verify_task`, each run a call whose output stays in its
+ * context.
+ */
+const TESTS_ONCE_RULE = `- ${mcpTools.verifyTask.name} runs the repo's whole test suite: do not also run the whole suite yourself, before or after it, with the build tool or ${mcpTools.runMiseTask.name}. While you work, run only the tests you need. When the repo has no mise task ${VERIFY_MISE_TASK}, run the suite yourself once instead.`;
+
 /** Every task session's rule on the round commits (ADR-168), solo or not. */
 const ROUND_COMMITS_RULE =
   "- When a turn of yours ends, Trackwall commits what you left uncommitted as a `WIP round <n>` commit on the task branch, so the user can see and undo each round, and squashes those commits into yours before the push. Leave them as they are: do not amend, squash, rebase or reset them away.";
@@ -174,6 +181,7 @@ function taskRole({ repo, task, handoff, change }: Extract<SessionRole, { kind: 
     ROUND_COMMITS_RULE,
     `- Work that belongs to another repo is not yours: propose it with ${mcpTools.proposeTask.name} and say so in your result. When your turn ends, Trackwall proposes a task to each repo that calls an endpoint or imports a public library type your commits removed or changed (${mcpTools.getChangedEndpoints.name} with task \`${task}\` lists them); your own proposal for such a repo replaces Trackwall's, so make one only when the repo needs more than following the new contract. Other work that builds on your change (a reader of a message or field you changed, a caller ${mcpTools.findEndpoint.name} or ${mcpTools.whoCalls.name} names) you propose yourself after you commit, one proposal per repo. Trackwall tells the new task that your task handed it the work and how to read your changes, so your prompt says what changed in the contract and what the other repo has to do, not how your code does it.`,
     `- Before you report that you are done, call ${mcpTools.verifyTask.name} with repo \`${repo}\` and task \`${task}\`: it runs the repo's mise task ${VERIFY_MISE_TASK} in this worktree, and the user sees its verdict in the task's panel. Fix what fails and call it again. If the repo has no mise task ${VERIFY_MISE_TASK}, do not add one (a changed mise config needs the user's trust); say so in your result.`,
+    TESTS_ONCE_RULE,
     `- When you are done, or stuck and need the user, call ${mcpTools.reportResult.name}: what you did, what is left and what to check, or the question you need answered. Call it again if the result changes. Your result becomes the description of the task's merge request, which the user opens from Trackwall, so write it for the reviewer in about ${TASK_SUMMARY_WORDS} words: more than ${TASK_SUMMARY_MAX} characters is refused. When the user can try the change by hand (a page, an endpoint, a command), add checkSteps: a few short steps, each on one line of up to ${TASK_CHECK_STEP_MAX} characters, with what to do and what they should see. They are only a hint for the user, so leave them out when there is nothing to try.`,
     `- When you need a decision from the session that proposed your task (or the supervisor the user handed it to) to go on, ask it with ${mcpTools.askProposer.name} and end your turn: its answer comes as a message. If no session answers your task (the user started it), the tool says so; then ask the user.`,
     `- When Trackwall asks you to call ${mcpTools.getMessages.name}, the session that proposed your task, or the supervisor the user handed it to, has written to you. ${TASK_MESSAGE_RULE}`,
@@ -192,8 +200,9 @@ function soloTaskRole({ repo, task }: Extract<SessionRole, { kind: "soloTask" }>
     `You run the task \`${task}\` in the repo \`${repo}\` (its id in Trackwall tools), in the task's own git worktree on its own branch. The user started it and reviews its changes in Trackwall.`,
     "- Work only in this worktree. Commit on the task branch; do not switch branches, push, merge or open merge requests unless the task asks for it.",
     ROUND_COMMITS_RULE,
-    `- To run the repo's mise tasks with your changes, pass task \`${task}\` to ${mcpTools.runMiseTask.name}; you may also run the build in this worktree yourself.`,
+    `- To run a mise task of the repo with your changes, pass task \`${task}\` to ${mcpTools.runMiseTask.name}.`,
     `- Before you report that you are done, call ${mcpTools.verifyTask.name} with repo \`${repo}\` and task \`${task}\` and fix what fails. If the repo has no mise task ${VERIFY_MISE_TASK}, do not add one; say so in your result.`,
+    TESTS_ONCE_RULE,
     `- When you are done, or stuck and need the user, call ${mcpTools.reportResult.name}: what you did, what is left and what to check, in about ${TASK_SUMMARY_WORDS} words (more than ${TASK_SUMMARY_MAX} characters is refused), with optional checkSteps of up to ${TASK_CHECK_STEP_MAX} characters each. It becomes the description of the task's merge request.`,
     `- If your change turns out to need work in another repo, propose it with ${mcpTools.proposeTask.name} and say so in your result. Trackwall's other tools reach the user's other repos; this task does not need them otherwise.`,
   ];
