@@ -58,3 +58,16 @@ test("a callout that would stick out of the canvas on its side goes to the other
 
   expect(placed.get("edge")?.side).toBe("right");
 });
+
+test("a pile of callouts over one spot all get a place, however far the last one is lifted", () => {
+  // Lifted more than 512 px, a rise no longer holds its anchor's fraction exactly, so the lifted callout ends a hair
+  // inside the gap of the one below it; the layout must take that place instead of lifting it there again for ever.
+  const pile = Array.from({ length: 18 }, (_, i) => ({ key: `repo-${i}`, anchor: { x: 600, y: 300 - i * 0.1 }, ...label }));
+
+  const placed = layoutCallouts(pile, 450, canvas);
+
+  const rises = pile.map((callout) => placed.get(callout.key)?.rise ?? Number.NaN);
+  expect(rises[0]).toBe(CALLOUT_BASE_RISE);
+  // Each one stands a callout's height and the gap above the one before it, less the 0.1 px its object is higher.
+  for (let i = 1; i < rises.length; i++) expect((rises[i] ?? 0) - (rises[i - 1] ?? 0)).toBeCloseTo(34 - 0.1, 6);
+});

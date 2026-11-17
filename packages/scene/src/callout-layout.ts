@@ -16,6 +16,8 @@ const GAP = 4;
  * front of the camera would flip sides with every small turn.
  */
 const SIDE_HYSTERESIS = 12;
+/** Far below what a screen shows and far above the rounding error of a rise, in pixels. */
+const ROUNDING = 1e-6;
 
 export type CalloutSide = "left" | "right";
 
@@ -86,7 +88,13 @@ function calloutBox(input: CalloutInput<string>, side: CalloutSide, rise: number
   return { left, right: left + input.width, top: middle - input.height / 2, bottom: middle + input.height / 2 };
 }
 
-/** Boxes closer than `GAP` count as overlapping, so callouts never touch. */
+/**
+ * Boxes closer than `GAP` count as overlapping, so callouts never touch. A callout lifted over another stands exactly
+ * `GAP` above it, give or take the rounding of its rise (lifted more than 512 px, a rise no longer holds its anchor's
+ * fraction), and must not count as still in the way: a pile of 18 callouts lifted its last one to the same place for
+ * ever and froze Home.
+ */
 function overlaps(a: Box, b: Box): boolean {
-  return a.left < b.right + GAP && b.left < a.right + GAP && a.top < b.bottom + GAP && b.top < a.bottom + GAP;
+  const gap = GAP - ROUNDING;
+  return a.left < b.right + gap && b.left < a.right + gap && a.top < b.bottom + gap && b.top < a.bottom + gap;
 }
