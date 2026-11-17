@@ -2,7 +2,7 @@ import { type CardWarmupProgress, DAEMON_INFO_PATH, DaemonInfo } from "@trackwal
 import { RefreshCw } from "lucide-react";
 import { useCallback } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
-import { Loading } from "@/components/Loading";
+import { Skeleton } from "@/components/Skeleton";
 import { Surface } from "@/components/Surface";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,7 +46,7 @@ export function DaemonSurface({
     >
       <div className="flex flex-col gap-4 p-4">
         <p className="text-muted-foreground text-sm">The process that holds all of Trackwall's state.</p>
-        {!info.data && !info.error && <Loading text="Connecting to the daemon…" />}
+        {!info.data && !info.error && <InfoRows rows={INFO_LABELS.map((label) => [label, null])} />}
         {info.error && (
           <ErrorWithRetry
             message={info.error}
@@ -68,23 +68,32 @@ function StatusBadge({ info }: { info: Remote<DaemonInfo> }) {
   return <Badge variant="secondary">connecting</Badge>;
 }
 
+/** The rows of the table, known before the daemon answers, so the table has its final size while it connects. */
+const INFO_LABELS = ["Version", "PID", "Runtime", "Platform", "Launched", "Uptime", "State directory"] as const;
+
 function InfoTable({ info, warmup }: { info: DaemonInfo; warmup: CardWarmupProgress | undefined }) {
-  const rows: [string, string][] = [
-    ["Version", info.version],
-    ["PID", String(info.pid)],
-    ["Runtime", `${info.runtime.name} ${info.runtime.version}`],
-    ["Platform", `${info.platform} / ${info.arch}`],
-    ["Launched", info.launchedBy === "desktop" ? "by the desktop app" : "manually"],
-    ["Uptime", formatUptime(info.uptimeMs)],
-    ["State directory", info.home],
-  ];
+  const values: Record<(typeof INFO_LABELS)[number], string> = {
+    Version: info.version,
+    PID: String(info.pid),
+    Runtime: `${info.runtime.name} ${info.runtime.version}`,
+    Platform: `${info.platform} / ${info.arch}`,
+    Launched: info.launchedBy === "desktop" ? "by the desktop app" : "manually",
+    Uptime: formatUptime(info.uptimeMs),
+    "State directory": info.home,
+  };
+  const rows: [string, string][] = INFO_LABELS.map((label) => [label, values[label]]);
   if (warmup) rows.push(["Repo cards", warmupLabel(warmup)]);
+  return <InfoRows rows={rows} />;
+}
+
+/** The table of the daemon's state; a row without a value yet shows a bar in its place. */
+function InfoRows({ rows }: { rows: readonly (readonly [string, string | null])[] }) {
   return (
     <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">
       {rows.map(([k, v]) => (
         <div key={k} className="contents">
           <dt className="hud-label self-center">{k}</dt>
-          <dd className="font-mono break-all">{v}</dd>
+          <dd className="font-mono break-all">{v ?? <Skeleton className="h-5 w-40 max-w-full" />}</dd>
         </div>
       ))}
     </dl>
