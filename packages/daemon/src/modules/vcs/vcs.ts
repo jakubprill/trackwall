@@ -39,6 +39,7 @@ import { type GitState, GitStateReader, gitDirKey } from "./git-state.ts";
 import { grep, grepCounts, grepFiles } from "./grep.ts";
 import { readHeadCommit } from "./head-commit.ts";
 import { hostedProject } from "./hosted-project.ts";
+import { IndexPlaces } from "./index-place.ts";
 import { excludeLocally, ignoredPaths, trackedPaths } from "./local-files.ts";
 import { searchLog } from "./log-search.ts";
 import {
@@ -73,7 +74,7 @@ import { syncRepo } from "./sync.ts";
 import { mergeIntoRepo, trialMergeConflicts, trialMergeInput } from "./trial-merge.ts";
 import { type RepoUnpushed, readUnpushed } from "./unpushed.ts";
 import { addCheckout, addWorktree, defaultBase, deleteBranch, pendingWork, removeWorktree } from "./worktree.ts";
-import { changedPaths, workingTreeChanges, worktreeChanges } from "./worktree-changes.ts";
+import { type ChangesScratch, changedPaths, workingTreeChanges, worktreeChanges } from "./worktree-changes.ts";
 import { discardFingerprint, worktreeFingerprint } from "./worktree-fingerprint.ts";
 import { copyIncludedFiles } from "./worktree-include.ts";
 
@@ -118,6 +119,10 @@ export class Vcs {
     return dir;
   }
 
+  private async changesScratch(): Promise<ChangesScratch> {
+    return { dir: await this.scratch(), indexPlaces: this.indexPlaces };
+  }
+
   /**
    * Running syncs by `.git` directory (shared by a repo and its worktrees): a repo and its worktree, or a
    * link in the projects folder, are several list entries, and two simultaneous fetches in one `.git` fight over the
@@ -130,6 +135,7 @@ export class Vcs {
   /** Trial merges by their two commits (ADR-230), oldest first. */
   private readonly trialMerges = new Map<string, string[]>();
   private readonly configs = new ConfigMemo();
+  private readonly indexPlaces = new IndexPlaces();
   private readonly statuses: StatusMemo;
 
   /** `git --version` of the git the daemon runs (the doctor, ADR-101). */
@@ -204,7 +210,7 @@ export class Vcs {
    * index. In a repo without commits, against the empty tree: then every file is new.
    */
   async changes(dir: string, maxPatchBytes: number): Promise<WorkingTreeChanges> {
-    return workingTreeChanges(dir, (await this.headCommit(dir)) ?? (await emptyTree(dir)), maxPatchBytes, [], await this.scratch());
+    return workingTreeChanges(dir, (await this.headCommit(dir)) ?? (await emptyTree(dir)), maxPatchBytes, [], await this.changesScratch());
   }
 
   /** The address of the main remote (`origin` or the only one) as `host/path` (ADR-21); `null` without such a remote. */
@@ -268,12 +274,12 @@ export class Vcs {
   readonly copyIncludedFiles = copyIncludedFiles;
 
   async worktreeChanges(dir: string, base: string, maxPatchBytes: number, paths: readonly string[]): Promise<TaskChanges> {
-    return worktreeChanges(dir, base, maxPatchBytes, paths, await this.scratch());
+    return worktreeChanges(dir, base, maxPatchBytes, paths, await this.changesScratch());
   }
 
   /** The paths of the worktree that differ from `base`, as the task's Changes count them (ADR-209, ADR-227). */
   async changedPaths(dir: string, base: string): Promise<{ paths: string[]; truncated: boolean }> {
-    return changedPaths(dir, base, await this.scratch());
+    return changedPaths(dir, base, await this.changesScratch());
   }
 
   /**
@@ -296,7 +302,7 @@ export class Vcs {
   }
 
   async worktreeFingerprint(dir: string, base: string): Promise<string> {
-    return worktreeFingerprint(dir, base, await this.scratch());
+    return worktreeFingerprint(dir, base, await this.changesScratch());
   }
 
   /**
@@ -315,7 +321,7 @@ export class Vcs {
   }
 
   async discardFingerprint(dir: string, base: string): Promise<string | null> {
-    return discardFingerprint(dir, base, await this.scratch());
+    return discardFingerprint(dir, base, await this.changesScratch());
   }
 
   // Task rounds (ADR-168, `round-commits.ts`): the agents module runs one task's steps one after another, and the writes

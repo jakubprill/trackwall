@@ -5,6 +5,7 @@ import type { TaskChanges, WorkingTreeChanges } from "@trackwall/protocol";
 import { mapLimit } from "../../infra/map-limit.ts";
 import type { RunOutput } from "../../infra/run-program.ts";
 import { git, revParse } from "./git.ts";
+import type { IndexPlaces } from "./index-place.ts";
 import { parseChangedFiles, parseNulTerminated } from "./parse.ts";
 import { commitCount, uncommittedCount } from "./worktree.ts";
 
@@ -18,12 +19,6 @@ import { commitCount, uncommittedCount } from "./worktree.ts";
  * from the repo configuration.
  */
 
-/** The empty blob hash in both git object formats (`git hash-object -t blob /dev/null`). */
-const EMPTY_BLOB = new Map([
-  ["sha1", "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"],
-  ["sha256", "473a0f4c3be8a93681a267e3b1e9a7dcda1185436fe141f7749120a303721813"],
-]);
-
 const NUL = Buffer.from([0]);
 const SLASH = "/".charCodeAt(0);
 const NEWLINE = "\n".charCodeAt(0);
@@ -33,6 +28,14 @@ const SUBMODULE_CONCURRENCY = 4;
 
 /** Large worktrees on Windows with a scanning antivirus can take a dozen seconds or more for `git status`. */
 const CHANGES_TIMEOUT_MS = 60_000;
+
+/** What a read of changes works with besides the working directory. */
+export interface ChangesScratch {
+  /** The folder of the temporary indexes. */
+  dir: string;
+  /** Where each working directory's own index lies, remembered between reads (`index-place.ts`). */
+  indexPlaces: IndexPlaces;
+}
 
 /** Without the diff: only files with line counts, and commit counts (the MCP tool `get_session`). */
 const NO_PATCH: RunOutput = { stdout: Buffer.alloc(0), truncated: false };
@@ -48,12 +51,12 @@ export async function worktreeChanges(
   base: string,
   maxPatchBytes: number,
   paths: readonly string[],
-  scratchDir: string,
+  scratch: ChangesScratch,
 ): Promise<TaskChanges> {
   // Each one to the end: ending a task waits for this read before it deletes the worktree, so rejecting one part
   // must not leave a git still reading the directory.
   const work = [
-    workingTreeChanges(dir, base, maxPatchBytes, paths, scratchDir),
+    workingTreeChanges(dir, base, maxPatchBytes, paths, scratch),
     commitCount(dir, base, "HEAD"),
     uncommittedCount(dir),
   ] as const;
@@ -80,16 +83,16 @@ async function copyIndex(index: string, copy: string): Promise<void> {
 
 /**
  * The working directory `dir` against `base` (a commit or a tree), only under `paths` (git pathspecs; none is the whole
- * tree). The temporary index lies in `scratchDir`.
+ * tree). The temporary index lies in `scratch.dir`.
  */
 export function workingTreeChanges(
   dir: string,
   base: string,
   maxPatchBytes: number,
   paths: readonly string[],
-  scratchDir: string,
+  scratch: ChangesScratch,
 ): Promise<WorkingTreeChanges> {
-  return withChangesIndex(dir, base, paths, scratchDir, async (diff, untrackedTruncated) => {
+  return withChangesIndex(dir, base, paths, scratch, async (diff, untrackedTruncated) => {
     // All at once, but each to the end: the temporary index can be removed only when no git reads it.
     const work = [
       diff(["--name-status", "-z"]),
@@ -113,8 +116,8 @@ export function workingTreeChanges(
  * Only the paths of the working directory `dir` that differ from `base`, as `workingTreeChanges` counts them, without
  * the line counts and the diff: the worktree fingerprint (ADR-209) hashes their content itself.
  */
-export function changedPaths(dir: string, base: string, scratchDir: string): Promise<{ paths: string[]; truncated: boolean }> {
-  return withChangesIndex(dir, base, [], scratchDir, async (diff, untrackedTruncated) => {
+export function changedPaths(dir: string, base: string, scratch: ChangesScratch): Promise<{ paths: string[]; truncated: boolean }> {
+  return withChangesIndex(dir, base, [], scratch, async (diff, untrackedTruncated) => {
     const names = await diff(["--name-only", "-z"]);
     // The last entry of a cut list may have an incomplete path.
     const paths = names.stdout
@@ -130,22 +133,18 @@ type IndexDiff = (args: string[], maxBytes?: number) => Promise<RunOutput>;
 
 /**
  * `read` with diffs of `dir` against `base` (a commit or a tree), only under `paths` (git pathspecs; none is the whole
- * tree), through a temporary index in `scratchDir` with the new files added, removed once `read` is done; `read` also
+ * tree), through a temporary index in `scratch.dir` with the new files added, removed once `read` is done; `read` also
  * gets whether the list of new files was cut.
  */
 async function withChangesIndex<T>(
   dir: string,
   base: string,
   paths: readonly string[],
-  scratchDir: string,
+  scratch: ChangesScratch,
   read: (diff: IndexDiff, untrackedTruncated: boolean) => Promise<T>,
 ): Promise<T> {
-  const out = (await git(dir, ["rev-parse", "--git-path", "index", "--show-object-format"])).stdout.toString("utf8").trim();
-  const [indexPath, objectFormat] = out.split(/\r?\n/);
-  const emptyBlob = objectFormat === undefined ? undefined : EMPTY_BLOB.get(objectFormat);
-  if (!indexPath || emptyBlob === undefined) throw new Error(`git rev-parse did not give the index path and a known object format: ${out}`);
-  const index = resolve(dir, indexPath);
-  const tmp = resolve(scratchDir, `index-${randomUUID()}`);
+  const { index, emptyBlob } = await scratch.indexPlaces.of(dir);
+  const tmp = resolve(scratch.dir, `index-${randomUUID()}`);
   try {
     await copyIndex(index, tmp);
     const untrackedTruncated = await addUntracked(dir, tmp, emptyBlob, paths);
