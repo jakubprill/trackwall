@@ -18,7 +18,7 @@ const CHIP = ["bg-group-1/10", "bg-group-2/10", "bg-group-3/10", "bg-group-4/10"
 
 /** A bar in the group's colour; the caller places it (along a row, across a tile's top). */
 export function GroupStripe({ colour, className }: { colour: number; className: string }) {
-  return <span aria-hidden className={cn("pointer-events-none absolute rounded-full", FILL[colour], className)} />;
+  return <span aria-hidden data-group-stripe className={cn("pointer-events-none absolute rounded-full", FILL[colour], className)} />;
 }
 
 /** How many levels a row sits under its group's top entry, as ↳1, ↳2: past the third level the indent stops growing. */
