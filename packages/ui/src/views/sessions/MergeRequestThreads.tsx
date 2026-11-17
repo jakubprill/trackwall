@@ -1,4 +1,4 @@
-import { type MergeRequestThread, mergeRequestsApi, type MergeRequestThreads as Read } from "@trackwall/protocol";
+import { type MergeRequestThread, mergeRequestsApi, type MergeRequestThreads as ThreadsRead } from "@trackwall/protocol";
 import { ExternalLink, MessagesSquare, Send } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ import { useAction } from "@/lib/use-action";
  * task's agent like a review. Replying and resolving stay on the repo host, a link away.
  */
 export function MergeRequestThreads({ conn, task, open }: { conn: Connection; task: string; open: (url: string) => void }) {
-  const [read, setRead] = useState<Read>();
+  const [read, setRead] = useState<ThreadsRead>();
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [sent, setSent] = useState<string>();
   const load = useAction(

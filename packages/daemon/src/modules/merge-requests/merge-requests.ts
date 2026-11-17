@@ -357,9 +357,9 @@ export class MergeRequests {
     const { project, mergeRequest } = await this.#openMergeRequest(id, "has no open merge request");
     const wanted = new Set(picked);
     const now = await this.#readThreads(project, mergeRequest);
-    const [first, ...rest] = now.threads.filter((t) => wanted.has(t.id));
-    if (!first) throw new DomainError("bad_request", "the threads you picked are resolved or gone on the repo host now");
-    const comments = { mergeRequest: now.mergeRequest, threads: [first, ...rest] };
+    const threads = now.threads.filter((t) => wanted.has(t.id));
+    if (threads.length === 0) throw new DomainError("bad_request", "the threads you picked are resolved or gone on the repo host now");
+    const comments = { mergeRequest: now.mergeRequest, threads };
     return { delivery: this.#deps.tasks.askToAddressThreads(id, comments), sent: comments.threads.length };
   }
 
@@ -371,14 +371,14 @@ export class MergeRequests {
 
   /** The task's open merge request whose pipeline failed, as the repo host shows it now (or within `LOOKUP_CACHE_MS`). */
   async #failedPipeline(id: string): Promise<{ project: HostedProject; pipeline: Pipeline }> {
-    const { project, mergeRequest } = await this.#openMergeRequest(id, "has no open merge request whose pipeline failed");
-    if (mergeRequest.pipeline?.state !== "failed")
-      throw new DomainError("bad_request", `branch ${this.#deps.tasks.task(id).branch} has no open merge request whose pipeline failed`);
+    const lacks = "has no open merge request whose pipeline failed";
+    const { task, project, mergeRequest } = await this.#openMergeRequest(id, lacks);
+    if (mergeRequest.pipeline?.state !== "failed") throw new DomainError("bad_request", `branch ${task.branch} ${lacks}`);
     return { project, pipeline: mergeRequest.pipeline };
   }
 
   /** The task's open merge request, as the repo host shows it now (or within `LOOKUP_CACHE_MS`); `lacks` ends the refusal. */
-  async #openMergeRequest(id: string, lacks: string): Promise<{ project: HostedProject; mergeRequest: MergeRequest }> {
+  async #openMergeRequest(id: string, lacks: string): Promise<{ task: Task; project: HostedProject; mergeRequest: MergeRequest }> {
     const task = this.#deps.tasks.task(id);
     const { onRemote, project } = await this.#branch(task);
     if (!project) throw unknownHost(task);
@@ -389,7 +389,7 @@ export class MergeRequests {
     if (lookup.kind === "unavailable") throw new DomainError("bad_request", `cannot read the merge request: ${lookup.message}`);
     const mergeRequest = lookup.kind === "found" ? lookup.mergeRequest : null;
     if (mergeRequest?.state !== "open") throw new DomainError("bad_request", `branch ${task.branch} ${lacks}`);
-    return { project, mergeRequest };
+    return { task, project, mergeRequest };
   }
 
   async #readJobLog(project: HostedProject, job: JobWithLog): Promise<JobLog> {

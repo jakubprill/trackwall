@@ -102,7 +102,10 @@ function gitlabLine({ position }: GitLabNote): MergeRequestThread["line"] {
   return null;
 }
 
-/** GitHub's review threads, with the first comments of each; `isResolved` is GraphQL's alone. */
+/**
+ * GitHub's review threads, with the first comments of each; `isResolved` is GraphQL's alone. One line, so a Windows
+ * command line carries it as one argument without line breaks.
+ */
 const GITHUB_THREADS_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
@@ -123,7 +126,7 @@ const GITHUB_THREADS_QUERY = `query($owner: String!, $name: String!, $number: In
       }
     }
   }
-}`;
+}`.replace(/\s+/g, " ");
 
 /** A deleted account's comments have no author; GitHub shows them as "ghost". */
 const GITHUB_GHOST = "ghost";
@@ -192,10 +195,9 @@ async function githubThreads(api: ThreadsApi, project: HostedProject, mr: Thread
 }
 
 /** The first notes of a thread, each cut to `MERGE_REQUEST_NOTE_CHARS_MAX` characters, and how many were left out. */
-function notes(written: MergeRequestNote[]): { notes: [MergeRequestNote, ...MergeRequestNote[]]; moreNotes: number } {
-  const [first, ...rest] = written.slice(0, MERGE_REQUEST_THREAD_NOTES_MAX).map((n) => ({ ...n, text: cut(n.text) }));
-  if (!first) throw new Error("a thread without a note");
-  return { notes: [first, ...rest], moreNotes: Math.max(0, written.length - MERGE_REQUEST_THREAD_NOTES_MAX) };
+function notes(written: MergeRequestNote[]): { notes: MergeRequestNote[]; moreNotes: number } {
+  const notes = written.slice(0, MERGE_REQUEST_THREAD_NOTES_MAX).map((n) => ({ ...n, text: cut(n.text) }));
+  return { notes, moreNotes: Math.max(0, written.length - MERGE_REQUEST_THREAD_NOTES_MAX) };
 }
 
 /** By code points, so a cut never splits an emoji. */

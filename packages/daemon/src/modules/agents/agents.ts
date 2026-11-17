@@ -787,12 +787,7 @@ export class Agents {
    * the task's running session is asked to read it, now or once it waits for input; without one, the session the user resumes is.
    */
   askToFixPipeline(id: string, fix: PipelineFix): PromptDelivery {
-    // Only to refuse an unknown or ended task (`not_found`).
-    this.#tasks.task(id);
-    this.#reviews.fixPipeline(id, fix);
-    this.#backToWork(id);
-    this.#coordination.reviewed(id);
-    return this.#sessions.runningOfTask(id)?.askToRead() ?? "on_resume";
+    return this.#queueForAgent(id, () => this.#reviews.fixPipeline(id, fix));
   }
 
   /**
@@ -800,9 +795,14 @@ export class Agents {
    * session is asked to read them, now or once it waits for input; without one, the session the user resumes is.
    */
   askToAddressThreads(id: string, comments: MergeRequestComments): PromptDelivery {
+    return this.#queueForAgent(id, () => this.#reviews.addThreads(id, comments));
+  }
+
+  /** Queues the user's request for task `id`'s agent with `queue`, gives it work again and asks its session to read. */
+  #queueForAgent(id: string, queue: () => void): PromptDelivery {
     // Only to refuse an unknown or ended task (`not_found`).
     this.#tasks.task(id);
-    this.#reviews.addThreads(id, comments);
+    queue();
     this.#backToWork(id);
     this.#coordination.reviewed(id);
     return this.#sessions.runningOfTask(id)?.askToRead() ?? "on_resume";

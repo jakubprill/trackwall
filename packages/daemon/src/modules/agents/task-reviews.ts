@@ -42,9 +42,8 @@ export interface UnreadReview {
 }
 
 export class TaskReviews {
-  readonly #unread = new Map<string, ReviewComment[]>();
-  readonly #pipelineFixes = new Map<string, PipelineFix>();
-  readonly #threads = new Map<string, MergeRequestComments>();
+  /** What waits unread per task; a task with nothing unread has no entry. */
+  readonly #unread = new Map<string, UnreadReview>();
   readonly #changed: () => void;
 
   constructor(changed: () => void) {
@@ -52,45 +51,30 @@ export class TaskReviews {
   }
 
   stored(): StoredReviews {
-    const tasks = new Set([...this.#unread.keys(), ...this.#pipelineFixes.keys(), ...this.#threads.keys()]);
-    return [...tasks].map((task) => ({
-      task,
-      comments: this.#unread.get(task) ?? [],
-      pipelineFix: this.#pipelineFixes.get(task) ?? null,
-      mergeRequestComments: this.#threads.get(task) ?? null,
-    }));
+    return [...this.#unread].map(([task, review]) => ({ task, ...review }));
   }
 
   /** The unread comments the previous daemon kept, of the tasks that are still there (`hasTask`). */
   restore(stored: StoredReviews, hasTask: (task: string) => boolean): void {
     this.#unread.clear();
-    this.#pipelineFixes.clear();
-    this.#threads.clear();
-    for (const { task, comments, pipelineFix, mergeRequestComments } of stored) {
-      if (!hasTask(task)) continue;
-      if (comments.length > 0) this.#unread.set(task, comments);
-      if (pipelineFix) this.#pipelineFixes.set(task, pipelineFix);
-      if (mergeRequestComments) this.#threads.set(task, mergeRequestComments);
-    }
+    for (const { task, ...review } of stored) if (hasTask(task) && !isEmpty(review)) this.#unread.set(task, review);
   }
 
   /** Adds a review after the unread comments; returns how many are unread now. More than `REVIEW_UNREAD_MAX` is refused. */
   add(task: string, comments: readonly ReviewComment[]): number {
-    const unread = [...(this.#unread.get(task) ?? []), ...comments];
+    const unread = [...this.#of(task).comments, ...comments];
     if (unread.length > REVIEW_UNREAD_MAX)
       throw new DomainError(
         "bad_request",
         `the agent has not read ${unread.length - comments.length} comments yet; at most ${REVIEW_UNREAD_MAX} can wait for it`,
       );
-    this.#unread.set(task, unread);
-    this.#changed();
+    this.#update(task, { comments: unread });
     return unread.length;
   }
 
   /** The user's request to fix the failed pipeline; it replaces an unread one, whose logs are older. */
   fixPipeline(task: string, fix: PipelineFix): void {
-    this.#pipelineFixes.set(task, fix);
-    this.#changed();
+    this.#update(task, { pipelineFix: fix });
   }
 
   /**
@@ -99,45 +83,47 @@ export class TaskReviews {
    * More than `MERGE_REQUEST_THREADS_MAX` unread is refused.
    */
   addThreads(task: string, comments: MergeRequestComments): void {
-    const before = this.#threads.get(task);
+    const before = this.#of(task).mergeRequestComments;
     const kept = before?.mergeRequest === comments.mergeRequest ? before.threads : [];
     const sent = new Set(comments.threads.map((t) => t.id));
-    const [first, ...rest] = [...kept.filter((t) => !sent.has(t.id)), ...comments.threads];
-    if (!first) return;
-    const threads = [first, ...rest];
+    const threads = [...kept.filter((t) => !sent.has(t.id)), ...comments.threads];
     if (threads.length > MERGE_REQUEST_THREADS_MAX)
       throw new DomainError(
         "bad_request",
         `the agent has not read ${kept.length} merge request threads yet; at most ${MERGE_REQUEST_THREADS_MAX} can wait for it`,
       );
-    this.#threads.set(task, { mergeRequest: comments.mergeRequest, threads });
-    this.#changed();
+    this.#update(task, { mergeRequestComments: { mergeRequest: comments.mergeRequest, threads } });
   }
 
   unread(task: string): number {
-    return this.#unread.get(task)?.length ?? 0;
+    return this.#of(task).comments.length;
   }
 
   pipelineFixUnread(task: string): boolean {
-    return this.#pipelineFixes.has(task);
+    return this.#of(task).pipelineFix !== null;
   }
 
   threadsUnread(task: string): boolean {
-    return this.#threads.has(task);
+    return this.#of(task).mergeRequestComments !== null;
   }
 
-  /** The unread comments, pipeline fix and merge request comments, which from now on count as read. */
+  /** Everything unread, which from now on counts as read. */
   take(task: string): UnreadReview {
-    const review = {
-      comments: this.#unread.get(task) ?? [],
-      pipelineFix: this.#pipelineFixes.get(task) ?? null,
-      mergeRequestComments: this.#threads.get(task) ?? null,
-    };
-    if (review.comments.length === 0 && review.pipelineFix === null && review.mergeRequestComments === null) return review;
-    this.#unread.delete(task);
-    this.#pipelineFixes.delete(task);
-    this.#threads.delete(task);
-    this.#changed();
+    const review = this.#of(task);
+    if (this.#unread.delete(task)) this.#changed();
     return review;
   }
+
+  #of(task: string): UnreadReview {
+    return this.#unread.get(task) ?? { comments: [], pipelineFix: null, mergeRequestComments: null };
+  }
+
+  #update(task: string, change: Partial<UnreadReview>): void {
+    this.#unread.set(task, { ...this.#of(task), ...change });
+    this.#changed();
+  }
+}
+
+function isEmpty(review: UnreadReview): boolean {
+  return review.comments.length === 0 && review.pipelineFix === null && review.mergeRequestComments === null;
 }
