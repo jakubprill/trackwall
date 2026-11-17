@@ -73,14 +73,13 @@ describe.skipIf(process.versions.bun === undefined)(
       );
       expect(daemon.facade.agents.sessions().proposals).toEqual([]);
 
-      // The root's repo is the tree's too, and the subtask's own repo is its own work.
+      // The subtask's own line is its own to split: its repo, and the repo of the task above it.
       const organizationsClient = await clientOfTask(organizations.id);
-      expect(toolText(await propose(organizationsClient, "employees", "Rename the email field"))).toStartWith(
-        `bad_request: task \`${root.id}\` of the same work already works in employees, so do not propose a second one there`,
-      );
-      expect(toolText(await propose(organizationsClient, "organizations", "Also the address"))).toBe(
-        "bad_request: organizations is your own task's repo: make the change there yourself",
-      );
+      for (const repo of ["organizations", "employees"]) {
+        const split = await propose(organizationsClient, repo, `Split the work in ${repo}`);
+        expect(split.isError).toBeFalsy();
+        daemon.facade.agents.rejectProposal(ProposeTaskResult.parse(split.structuredContent).proposal.id, undefined);
+      }
 
       // A task of another tree may still propose there: it is other work.
       const other = await daemon.post(agentsApi.createTask, { repo: "departments", prompt: "Rename departments", approvals: "ask" });

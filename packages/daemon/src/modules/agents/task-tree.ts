@@ -17,6 +17,8 @@ export interface TreeWork {
   id: string;
   title: string | null;
   repos: string[];
+  /** The task that proposed it, `null` for a task nobody's task proposed. */
+  proposer: string | null;
   /** A proposal the daemon made from a task's impact (ADR-198), which an agent's own proposal replaces. */
   fromImpact: boolean;
 }
@@ -30,13 +32,16 @@ export function treeOf(task: string, tasks: readonly Pick<Task, "id" | "proposed
 }
 
 function topOf(task: string, proposerOf: ReadonlyMap<string, string | null>): string {
-  const seen = new Set<string>();
-  let top = task;
+  return lineOf(task, proposerOf).at(-1) ?? task;
+}
+
+/** Task `task` and the tasks above it along the proposers, topmost last. */
+function lineOf(task: string, proposerOf: ReadonlyMap<string, string | null>): string[] {
+  const line = [task];
   for (;;) {
-    seen.add(top);
-    const proposer = proposerOf.get(top) ?? null;
-    if (proposer === null || seen.has(proposer)) return top;
-    top = proposer;
+    const proposer = proposerOf.get(line[line.length - 1] ?? task) ?? null;
+    if (proposer === null || line.includes(proposer)) return line;
+    line.push(proposer);
   }
 }
 
@@ -48,17 +53,32 @@ export function treeWork(task: string, tasks: readonly TreeTask[], proposals: re
   return [
     ...tasks
       .filter((t) => inTree(t.id))
-      .map((t) => ({ kind: "task" as const, id: t.id, title: t.title, repos: [t.repo], fromImpact: false })),
+      .map((t) => ({
+        kind: "task" as const,
+        id: t.id,
+        title: t.title,
+        repos: [t.repo],
+        proposer: t.proposedBy?.task ?? null,
+        fromImpact: false,
+      })),
     ...proposals
       .filter((p) => inTree(p.proposedBy.task))
-      .map((p) => ({ kind: "proposal" as const, id: p.id, title: p.title, repos: proposalRepos(p), fromImpact: p.fromImpact })),
+      .map((p) => ({
+        kind: "proposal" as const,
+        id: p.id,
+        title: p.title,
+        repos: proposalRepos(p),
+        proposer: p.proposedBy.task,
+        fromImpact: p.fromImpact,
+      })),
   ];
 }
 
 /**
- * Why task `task` may not propose a task in `repo`: a task of its tree works there, itself included, or an agent's
- * proposal of its tree waits there; `null` when it may. A waiting impact proposal does not count: the agent's own
- * proposal replaces it.
+ * Why task `task` may not propose a task in `repo`: a task of another branch of its tree works there, or an agent's
+ * proposal of another branch waits there; `null` when it may. The task's own line does not count: itself, the tasks
+ * above it and what it proposed itself, since it knows that work and may split it further. A waiting impact proposal
+ * does not count either: the agent's own proposal replaces it.
  */
 export function secondInTreeRefusal(
   task: string,
@@ -66,9 +86,11 @@ export function secondInTreeRefusal(
   tasks: readonly TreeTask[],
   proposals: readonly TreeProposal[],
 ): string | null {
-  const covering = treeWork(task, tasks, proposals).find((w) => !w.fromImpact && w.repos.includes(repo));
+  const ownLine = new Set(lineOf(task, new Map(tasks.map((t) => [t.id, t.proposedBy?.task ?? null]))));
+  const covering = treeWork(task, tasks, proposals).find(
+    (w) => !w.fromImpact && w.repos.includes(repo) && !ownLine.has(w.id) && w.proposer !== task,
+  );
   if (covering === undefined) return null;
-  if (covering.id === task) return `${repo} is your own task's repo: make the change there yourself`;
   const named = covering.title === null ? `\`${covering.id}\`` : `\`${covering.id}\` (${covering.title})`;
   const where = covering.kind === "task" ? `already works in ${repo}` : `is already proposed in ${repo}`;
   return `task ${named} of the same work ${where}, so do not propose a second one there: say what it needs from your change in your ${mcpTools.reportResult.name}, or ask your proposer with ${mcpTools.askProposer.name}, who passes it on`;

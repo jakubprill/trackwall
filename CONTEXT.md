@@ -596,7 +596,7 @@ A task proposal the daemon makes when a task's turn ends, for each repo of ring 
 _Avoid_: auto-handoff, consumer task
 
 **Task tree** (`treeOf`, `treeWork` in `task-tree.ts`):
-A task with every subtask proposed from it, at any depth; the topmost task names it. One piece of work, so one repo gets one task of the tree: a subtask cannot propose a repo where a task of its tree works or the tree's proposal waits, and no impact proposal goes there (ADR-259).
+A task with every subtask proposed from it, at any depth; the topmost task names it. One piece of work, so one repo gets one task of the tree: a subtask cannot propose a repo where a task of another branch of its tree works or that branch's proposal waits, and no impact proposal goes there (ADR-259).
 _Avoid_: family, task group (a session group is the Sessions list's, ADR-48)
 
 **Task message** (`TaskMessage`, MCP tools `send_message` and `get_messages`; "Messages" in the task panel):

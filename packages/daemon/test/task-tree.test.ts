@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ProposedBy } from "@trackwall/protocol";
-import { treeOf, treeWork } from "../src/modules/agents/task-tree.ts";
+import { secondInTreeRefusal, treeOf, treeWork } from "../src/modules/agents/task-tree.ts";
 
 const byTask = (task: string): ProposedBy => ({ session: `session of ${task}`, supervisor: false, task });
 const bySession: ProposedBy = { session: "main", supervisor: false, task: null };
@@ -42,5 +42,19 @@ describe("task trees", () => {
       { id: "b", proposedBy: byTask("a") },
     ];
     expect(treeOf("a", loop)).toBe("b");
+  });
+
+  test("a task may not propose a repo another branch of its tree covers, but may split its own line's work", () => {
+    expect(secondInTreeRefusal("department", "organization-service", tasks, [])).toStartWith(
+      "task `organization` (Expose the email) of the same work already works in organization-service",
+    );
+    expect(secondInTreeRefusal("department", "department-service", tasks, [])).toBeNull();
+    expect(secondInTreeRefusal("department", "employee-service", tasks, [])).toBeNull();
+    const own = { id: "p3", repo: "gateway", parts: null, title: "Gateway", proposedBy: byTask("department"), fromImpact: false };
+    expect(secondInTreeRefusal("department", "gateway", tasks, [own])).toBeNull();
+    expect(secondInTreeRefusal("organization", "gateway", tasks, [own])).toStartWith(
+      "task `p3` (Gateway) of the same work is already proposed in gateway",
+    );
+    expect(secondInTreeRefusal("organization", "gateway", tasks, [{ ...own, fromImpact: true }])).toBeNull();
   });
 });
