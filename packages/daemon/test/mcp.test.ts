@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -11,6 +11,7 @@ import {
   DaemonInfoResult,
   type DayReport,
   dayStartApi,
+  GET_REPO_README_MAX_CHARS,
   GetDayReportResult,
   GetRepoResult,
   ListReposResult,
@@ -206,6 +207,26 @@ describe("MCP server over Streamable HTTP", () => {
     expect(result.content).toEqual([{ type: "text", text: JSON.stringify(data) }]);
     expect(logs.some((l) => l.startsWith("list_repos: ok"))).toBe(true);
     await client.close();
+  });
+
+  test("get_repo returns only the beginning of a long README, so the rest is read from the file (ADR-257)", async () => {
+    const longReadme = `# Docs\n\n${"A line about the docs site, its build and its pages.\n".repeat(200)}`;
+    makeRepo({ "README.md": longReadme }, "docs-site", projects);
+    try {
+      const client = await connectHttpClient(api.port, TOKEN);
+      const result = await client.callTool({ name: "get_repo", arguments: { repo: "docs-site" } });
+      const data = GetRepoResult.parse(result.structuredContent);
+      expect(longReadme.length).toBeGreaterThan(10_000);
+      expect(data.readme).toEqual({
+        path: "README.md",
+        text: longReadme.slice(0, GET_REPO_README_MAX_CHARS),
+        truncated: true,
+        format: "markdown",
+      });
+      await client.close();
+    } finally {
+      rmSync(join(projects, "docs-site"), { recursive: true, force: true });
+    }
   });
 
   test("get_repo returns the README, recent commits and the state of mise tasks", async () => {

@@ -3,7 +3,6 @@ import { useCallback } from "react";
 import { CopyableCode } from "@/components/CopyableCode";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
-import { Surface } from "@/components/Surface";
 import { call } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { copilotMcpAddCommand, copilotMcpConfig, copilotMcpConfigPath } from "@/lib/copilot-mcp";
@@ -20,46 +19,44 @@ export function ConnectCopilotSurface({ conn, onRetry }: { conn: Connection; onR
   const info = useRemote(load);
   if (info.data) return <ConnectCopilot info={info.data} />;
   return (
-    <Surface label="Copilot CLI">
-      <div className="p-4">
-        {info.error ? (
-          <ErrorWithRetry
-            message={info.error}
-            onRetry={() => {
-              onRetry();
-              info.reload();
-            }}
-          />
-        ) : (
-          <Loading />
-        )}
-      </div>
-    </Surface>
+    <div className="p-4">
+      {info.error ? (
+        <ErrorWithRetry
+          message={info.error}
+          onRetry={() => {
+            onRetry();
+            info.reload();
+          }}
+        />
+      ) : (
+        <Loading />
+      )}
+    </div>
   );
 }
 
 function ConnectCopilot({ info }: { info: DaemonInfo }) {
   const command = copilotMcpAddCommand(info.mcpStdioCommand, info.platform);
   return (
-    <Surface label="Copilot CLI" note="The tools are read-only. Trackwall must be running when Copilot CLI starts.">
-      <div className="flex flex-col gap-3 p-4 text-sm">
-        <p className="text-muted-foreground">
-          Gives the agent a map of the repos in your projects folder through {TOOL_NAMES.length} tools. Run this once in a terminal, then
-          restart Copilot CLI:
-        </p>
-        <CopyableCode text={command} />
-        {/* Folded (ADR-212): the list and the JSON entry are long, and most people need neither once connected. */}
-        <details>
-          <summary className="text-muted-foreground cursor-pointer">Or add an entry to {copilotMcpConfigPath(info.platform)}</summary>
-          <div className="pt-2">
-            <CopyableCode text={copilotMcpConfig(info.mcpStdioCommand)} />
-          </div>
-        </details>
-        <details>
-          <summary className="text-muted-foreground cursor-pointer">The {TOOL_NAMES.length} tools</summary>
-          <p className="text-muted-foreground pt-2 font-mono text-xs">{TOOL_NAMES.join(", ")}</p>
-        </details>
-      </div>
-    </Surface>
+    <div className="flex flex-col gap-3 p-4 text-sm">
+      <p className="text-muted-foreground">
+        Optional: the sessions you start in Trackwall already have these tools. For Copilot CLI you start yourself in a terminal, this gives
+        the agent a map of the repos in your projects folder through {TOOL_NAMES.length} tools. Run it once in a terminal, then restart
+        Copilot CLI:
+      </p>
+      <CopyableCode text={command} />
+      {/* Folded (ADR-212): the list and the JSON entry are long, and most people need neither once connected. */}
+      <details>
+        <summary className="text-muted-foreground cursor-pointer">Or add an entry to {copilotMcpConfigPath(info.platform)}</summary>
+        <div className="pt-2">
+          <CopyableCode text={copilotMcpConfig(info.mcpStdioCommand)} />
+        </div>
+      </details>
+      <details>
+        <summary className="text-muted-foreground cursor-pointer">The {TOOL_NAMES.length} tools</summary>
+        <p className="text-muted-foreground pt-2 font-mono text-xs">{TOOL_NAMES.join(", ")}</p>
+      </details>
+      <p className="text-muted-foreground text-xs">The tools are read-only. Trackwall must be running when Copilot CLI starts.</p>
+    </div>
   );
 }

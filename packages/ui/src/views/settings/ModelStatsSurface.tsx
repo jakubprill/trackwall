@@ -1,7 +1,8 @@
 import { type CopilotUsage, ModelStatsPeriod, type ModelStatsRow, taskJournalApi } from "@trackwall/protocol";
 import { useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
-import { Loading } from "@/components/Loading";
+import { Skeleton, Skeletons } from "@/components/Skeleton";
+import { Steady } from "@/components/Steady";
 import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
@@ -33,6 +34,7 @@ export function ModelStatsSurface({ conn }: { conn: Connection }) {
   const load = useCallback(() => post(conn, taskJournalApi.modelStats, { period }), [conn, period]);
   const remote = useRemote(load);
   const stats = remote.data;
+  const loading = !stats && !remote.error;
   const answer = stats ? verdict(stats) : null;
   const note = stats ? withoutModelNote(stats) : null;
   return (
@@ -58,31 +60,38 @@ export function ModelStatsSurface({ conn }: { conn: Connection }) {
             Refresh
           </Button>
         </div>
-        {remote.error && <ErrorWithRetry message={remote.error} onRetry={remote.reload} />}
-        {!stats && !remote.error && <Loading />}
-        {stats && stats.models.length === 0 && <p className="text-sm">No ended task with a recorded model in this period.</p>}
-        {answer && <p className="text-sm">{answer}</p>}
-        {stats && stats.models.length > 0 && (
-          <section aria-label="Models" className="overflow-auto rounded-md border">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-card">
-                <tr className="border-b">
-                  {COLUMNS.map((h) => (
-                    <th key={h} scope="col" className="hud-label px-2 py-1.5 font-normal">
-                      {h}
-                    </th>
+        <Steady name="model-stats" loading={loading} className="flex flex-col gap-4">
+          {remote.error && <ErrorWithRetry message={remote.error} onRetry={remote.reload} />}
+          {loading && (
+            <Skeletons className="flex flex-col gap-4">
+              <Skeleton className="h-5 w-80 max-w-full" />
+              <Skeleton className="h-24" />
+            </Skeletons>
+          )}
+          {stats && stats.models.length === 0 && <p className="text-sm">No ended task with a recorded model in this period.</p>}
+          {answer && <p className="text-sm">{answer}</p>}
+          {stats && stats.models.length > 0 && (
+            <section aria-label="Models" className="overflow-auto rounded-md border">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-card">
+                  <tr className="border-b">
+                    {COLUMNS.map((h) => (
+                      <th key={h} scope="col" className="hud-label px-2 py-1.5 font-normal">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.models.map((row) => (
+                    <ModelRow key={row.model} row={row} />
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {stats.models.map((row) => (
-                  <ModelRow key={row.model} row={row} />
-                ))}
-              </tbody>
-            </table>
-          </section>
-        )}
-        {note && <p className="text-muted-foreground text-xs">{note}</p>}
+                </tbody>
+              </table>
+            </section>
+          )}
+          {note && <p className="text-muted-foreground text-xs">{note}</p>}
+        </Steady>
       </div>
     </Surface>
   );

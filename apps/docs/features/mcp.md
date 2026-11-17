@@ -31,7 +31,7 @@ The agent sees the same projects folder you see in Trackwall, through the tools 
 | Tool | What the agent gets |
 |---|---|
 | `list_repos` | The repos of the projects folder with branch, status, last sync and tags; filter by tags. |
-| `get_repo` | One repo's README, latest commits, mise tasks and tags. |
+| `get_repo` | One repo's latest commits, mise tasks and tags, with the beginning of its README. |
 | `get_repo_card` | The [repo card](/features/repo-card), with evidence. |
 | `search_code` | Text or a regular expression in all repos at once, narrowed by repo, tag or path, as short grep-like lines grouped by repo and file, or only the list of files with how many lines match in each. |
 | `search_commits` | Who changed what and when, in the history of all repos at once: the commits that add or remove a text such as a field or an endpoint path, or by message (an issue key), author, path or date, newest first with the files they changed. |

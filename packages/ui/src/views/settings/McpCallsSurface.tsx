@@ -1,9 +1,10 @@
 import { MCP_AUDIT_MAX_CALLS, type McpAuditRevision, type McpCall } from "@trackwall/protocol";
 import { useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
-import { Loading } from "@/components/Loading";
 import { McpCallEffectBadge } from "@/components/McpCallEffectBadge";
 import { McpCallKindFilter } from "@/components/McpCallKindFilter";
+import { Skeleton, Skeletons } from "@/components/Skeleton";
+import { Steady } from "@/components/Steady";
 import { Surface } from "@/components/Surface";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
@@ -17,6 +18,7 @@ import { useMcpCalls } from "@/lib/use-mcp-calls";
 export function McpCallsSurface({ conn, live }: { conn: Connection; live: LiveFeed<McpAuditRevision> | undefined }) {
   const audit = useMcpCalls(conn, live);
   const calls = audit.data?.calls;
+  const loading = !calls && !audit.error;
   return (
     <Surface label="MCP calls" meta={calls && calls.length > 0 ? String(calls.length) : undefined}>
       <div className="flex flex-col gap-3 p-4">
@@ -25,9 +27,16 @@ export function McpCallsSurface({ conn, live }: { conn: Connection; live: LiveFe
           ended. Prompts, messages, request bodies and search text are not kept. The last {MCP_AUDIT_MAX_CALLS} calls stay on this computer,
           also after a restart.
         </p>
-        {audit.error && <ErrorWithRetry message={audit.error} onRetry={audit.reload} />}
-        {!calls && !audit.error && <Loading />}
-        {calls && <McpCallTable calls={calls} />}
+        <Steady name="mcp-calls" loading={loading} className="flex flex-col gap-3">
+          {audit.error && <ErrorWithRetry message={audit.error} onRetry={audit.reload} />}
+          {loading && (
+            <Skeletons className="flex flex-col gap-3">
+              <Skeleton className="h-8 w-80 max-w-full" />
+              <Skeleton className="h-40" />
+            </Skeletons>
+          )}
+          {calls && <McpCallTable calls={calls} />}
+        </Steady>
       </div>
     </Surface>
   );

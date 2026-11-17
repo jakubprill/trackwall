@@ -1,15 +1,12 @@
-import { countLabel, type SessionList, workspaceApi } from "@trackwall/protocol";
-import { useCallback } from "react";
-import { ErrorWithRetry } from "@/components/ErrorWithRetry";
-import { Loading } from "@/components/Loading";
-import { Surface } from "@/components/Surface";
+import { countLabel, type SessionList, type WorkspaceSettings, workspaceApi } from "@trackwall/protocol";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { providerModelsNote } from "@/lib/provider-models";
 import { sessionsOnOtherProfile } from "@/lib/session-profile";
 import { useProviderModels } from "@/lib/use-provider-models";
-import { useRemote } from "@/lib/use-remote";
+import type { RemoteHandle } from "@/lib/use-remote";
 import { PathForm } from "./PathForm.tsx";
+import { SettingsRead } from "./SettingsRead.tsx";
 
 /**
  * The session profile (ADR-136): the mise environment only Copilot CLI sessions start with, e.g. `byok` for another model
@@ -17,9 +14,15 @@ import { PathForm } from "./PathForm.tsx";
  * and this section says how many running sessions keep another profile (ADR-178), and whether the provider's models came
  * for the Model fields to suggest (ADR-194).
  */
-export function SessionProfileSurface({ conn, sessions }: { conn: Connection; sessions: SessionList | undefined }) {
-  const load = useCallback(() => post(conn, workspaceApi.settings, {}), [conn]);
-  const settings = useRemote(load);
+export function SessionProfileSurface({
+  conn,
+  settings,
+  sessions,
+}: {
+  conn: Connection;
+  settings: RemoteHandle<WorkspaceSettings>;
+  sessions: SessionList | undefined;
+}) {
   const models = useProviderModels(conn).list;
 
   async function save(profile: string | null) {
@@ -32,43 +35,40 @@ export function SessionProfileSurface({ conn, sessions }: { conn: Connection; se
   const modelsNote = models.data ? providerModelsNote(models.data) : null;
   const outdated = sessions ? sessionsOnOtherProfile(sessions).length : 0;
   return (
-    <Surface label="Session profile">
-      <div className="flex flex-col gap-4 p-4">
-        <p className="text-muted-foreground text-sm">
-          A mise environment that only sessions start with. With byok, sessions also read mise.byok.toml, for example from your projects
-          folder, which can point Copilot CLI at another model provider and hold its key encrypted. Mise tasks and services never get it.
-          Empty means sessions start with your usual mise config.
+    <div className="flex flex-col gap-4 p-4">
+      <p className="text-muted-foreground text-sm">
+        A mise environment that only sessions start with. With byok, sessions also read mise.byok.toml, for example from your projects
+        folder, which can point Copilot CLI at another model provider and hold its key encrypted. Mise tasks and services never get it.
+        Empty means sessions start with your usual mise config.
+      </p>
+      <SettingsRead settings={settings} />
+      {data && (
+        <PathForm
+          key={data.sessionProfile ?? ""}
+          label="Session profile"
+          placeholder="byok"
+          configKey="sessionProfile"
+          initialPath={data.sessionProfile ?? ""}
+          configFile={data.configFile}
+          folder={false}
+          save={(profile) => save(profile)}
+          resetLabel="No profile"
+          reset={data.sessionProfile === null && !data.sessionProfileProblem ? undefined : () => save(null)}
+        />
+      )}
+      {data?.sessionProfileProblem && <p className="text-destructive text-xs break-words">{data.sessionProfileProblem}</p>}
+      {modelsNote && (
+        <p className={modelsNote.problem ? "text-warning text-xs break-words" : "text-muted-foreground text-xs"}>{modelsNote.text}</p>
+      )}
+      {outdated > 0 && (
+        <p className="text-warning text-xs">
+          {countLabel(outdated, {
+            one: "running session keeps the profile it started with",
+            other: "running sessions keep the profile they started with",
+          })}
+          . The session's panel offers Restart to apply, which keeps the conversation.
         </p>
-        {settings.error && <ErrorWithRetry message={settings.error} onRetry={settings.reload} />}
-        {!data && !settings.error && <Loading />}
-        {data && (
-          <PathForm
-            key={data.sessionProfile ?? ""}
-            label="Session profile"
-            placeholder="byok"
-            configKey="sessionProfile"
-            initialPath={data.sessionProfile ?? ""}
-            configFile={data.configFile}
-            folder={false}
-            save={(profile) => save(profile)}
-            resetLabel="No profile"
-            reset={data.sessionProfile === null && !data.sessionProfileProblem ? undefined : () => save(null)}
-          />
-        )}
-        {data?.sessionProfileProblem && <p className="text-destructive text-xs break-words">{data.sessionProfileProblem}</p>}
-        {modelsNote && (
-          <p className={modelsNote.problem ? "text-warning text-xs break-words" : "text-muted-foreground text-xs"}>{modelsNote.text}</p>
-        )}
-        {outdated > 0 && (
-          <p className="text-warning text-xs">
-            {countLabel(outdated, {
-              one: "running session keeps the profile it started with",
-              other: "running sessions keep the profile they started with",
-            })}
-            . The session's panel offers Restart to apply, which keeps the conversation.
-          </p>
-        )}
-      </div>
-    </Surface>
+      )}
+    </div>
   );
 }
