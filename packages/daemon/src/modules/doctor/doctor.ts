@@ -1,4 +1,5 @@
 import { realpath, stat } from "node:fs/promises";
+import { join } from "node:path";
 import {
   countLabel,
   type DoctorCheck,
@@ -16,8 +17,10 @@ import {
   type WorkspaceKeysRead,
   workspaceKeysSummary,
 } from "@trackwall/protocol";
+import { isInside } from "../../infra/path-inside.ts";
 import { trustedFolderOf, trustedFolders } from "./copilot-trust.ts";
 import { type DiskSpace, gigabytes, LOW_DISK_BYTES, VERY_LOW_DISK_BYTES } from "./disk-space.ts";
+import { fileScanningOutcome, folderCosts, type ScanFolder } from "./file-scanning.ts";
 import { firstLine } from "./first-line.ts";
 import { folderStorage } from "./folder-storage.ts";
 import { modelProviderOutcome, type ProfileEnvironment } from "./model-provider-check.ts";
@@ -29,7 +32,7 @@ import { compareVersions, versionIn } from "./version.ts";
 /**
  * The doctor (§4.15, ADR-101): checks of what Trackwall needs on this computer, each with what to do when it fails, for the
  * person setting Trackwall up or wondering why a part of it does not work. It only reads and runs `--version` and
- * `auth status` and opens a TLS connection to GitHub and Copilot without sending anything but a proxy's login (ADR-166); it changes nothing, and its report is not kept. A check that throws becomes a failed check, never a
+ * `auth status` and opens a TLS connection to GitHub and Copilot without sending anything but a proxy's login (ADR-166), and writes and removes small files to time them (ADR-255); it changes nothing, and its report is not kept. A check that throws becomes a failed check, never a
  * failed report.
  */
 
@@ -80,6 +83,12 @@ export interface DoctorDeps {
   diskSpace: (folder: string) => Promise<DiskSpace>;
   /** The home folder, where build caches such as `~/.m2` live. */
   homeDir: string;
+  /** Trackwall's state folder (`--home`), where its logs and task records are written. */
+  stateDir: string;
+  /** The task worktrees folder (ADR-84); `null` while the projects folder is not set. */
+  worktreesDir: () => Promise<string | null>;
+  /** Writes and reads `files` files in a temporary folder of `folder` and says the milliseconds per file (`measureFileWrites`, a fake in tests). */
+  measureFileWrites: (folder: string, files: number) => Promise<number>;
   /** Trackwall runs in a container, whose disk is Docker's: the same `FacadeOptions.inContainer` that `unpushedWork` reads (ADR-162). */
   inContainer: boolean;
   /** `/proc/self/mountinfo` on Linux, `null` elsewhere: where the projects folder's files live. */
@@ -127,6 +136,7 @@ export class Doctor {
       "projects-folder": (ctx) => this.projectsFolder(ctx),
       "projects-folder-storage": (ctx) => this.projectsFolderStorage(ctx),
       "disk-space": (ctx) => this.diskSpace(ctx),
+      "file-scanning": (ctx) => this.fileScanning(ctx),
       "unpushed-work": (ctx) => this.unpushedWork(ctx),
       "workspace-file": () => this.workspaceFile(),
       git: () => this.git(),
@@ -231,6 +241,47 @@ export class Doctor {
     if (lowest.free < VERY_LOW_DISK_BYTES) return fail(`Only ${gigabytes(lowest.free)} free on the disk of ${where}.`, fix);
     if (lowest.free < LOW_DISK_BYTES) return warn(`Only ${gigabytes(lowest.free)} free on the disk of ${where}.`, fix);
     return ok(`${gigabytes(lowest.free)} free on the disk of ${where}.`);
+  }
+
+  /**
+   * Whether an antivirus scans some of the folders Trackwall and builds write in (ADR-255): their file writes compared
+   * with each other. In a container the files are on Docker's disk, which the computer's antivirus does not scan file by
+   * file, and a difference there is the storage's, which the projects folder storage check names.
+   */
+  private async fileScanning({ projectsDir }: CheckContext): Promise<Outcome> {
+    if (this.deps.inContainer) return null;
+    return fileScanningOutcome(await folderCosts(await this.scanFolders(projectsDir), this.deps.measureFileWrites));
+  }
+
+  /** The folders where Trackwall, its tasks and Java builds write the most files; each path once. */
+  private async scanFolders(projectsDir: Settled<string | null>): Promise<ScanFolder[]> {
+    const projects = projectsDir.ok ? projectsDir.value : null;
+    const worktrees = await this.deps.worktreesDir();
+    const home = this.deps.homeDir;
+    const candidates: ScanFolder[] = [
+      ...(projects === null ? [] : [{ name: "the projects folder", path: projects }]),
+      // The default worktrees folder is in the projects folder and shares its exclusion; only one chosen elsewhere is its own.
+      ...(worktrees === null || (projects !== null && isInside(projects, worktrees))
+        ? []
+        : [{ name: "the task worktrees folder", path: worktrees }]),
+      { name: "Trackwall's state folder", path: this.deps.stateDir },
+      { name: "Maven's cache", path: join(home, ".m2") },
+      { name: "Gradle's cache", path: join(home, ".gradle") },
+    ];
+    const exists = await Promise.all(
+      candidates.map((c) =>
+        stat(c.path).then(
+          (s) => s.isDirectory(),
+          () => false,
+        ),
+      ),
+    );
+    const seen = new Set<string>();
+    return candidates.filter((c, i) => {
+      if (!exists[i] || seen.has(c.path)) return false;
+      seen.add(c.path);
+      return true;
+    });
   }
 
   /**

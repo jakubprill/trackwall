@@ -5,6 +5,7 @@ const CHECK_TITLES: Record<DoctorCheckId, string> = {
   "projects-folder": "Projects folder",
   "projects-folder-storage": "Projects folder storage",
   "disk-space": "Free disk space",
+  "file-scanning": "Antivirus scanning",
   "unpushed-work": "Work only in this container",
   "workspace-file": "Workspace settings file",
   git: "Git",
