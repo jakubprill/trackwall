@@ -1,9 +1,10 @@
-import { USAGE_REPORT_MAX_WEEKS_AGO, type UsageTool, type UsageWork, usageReportApi } from "@trackwall/protocol";
+import { USAGE_REPORT_MAX_WEEKS_AGO, type UsageReport, type UsageTool, type UsageWork, usageReportApi } from "@trackwall/protocol";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
-import { Loading } from "@/components/Loading";
+import { Skeleton, Skeletons } from "@/components/Skeleton";
 import { StatTile } from "@/components/StatTile";
+import { Steady } from "@/components/Steady";
 import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
@@ -33,7 +34,7 @@ export function CopilotUsageSurface({ conn }: { conn: Connection }) {
     trend.reload();
   };
   const week = report.data;
-  const share = week?.total ? toolDefinitionShare(week.total.inputTokens, week.toolDefinitionTokens) : null;
+  const loading = !week && !report.error;
   return (
     <Surface label="Copilot usage" meta={week ? weekRange(week) : undefined}>
       <div className="@container flex flex-col gap-4 p-4">
@@ -64,54 +65,94 @@ export function CopilotUsageSurface({ conn }: { conn: Connection }) {
           <UsageTrend trend={trend.data} weeksAgo={weeksAgo} onPick={setWeeksAgo} />
         ) : (
           // The chart's height while it loads, so the week's report below does not jump when it comes.
-          !trend.error && <div aria-hidden className="h-46" />
+          !trend.error && <Skeleton className="h-46" />
         )}
-        {report.error && <ErrorWithRetry message={report.error} onRetry={report.reload} />}
-        {!week && !report.error && <Loading />}
-        {week && week.total === null && <p className="text-sm">No model calls this week.</p>}
-        {week?.total && (
-          <>
-            <dl className="grid grid-cols-2 gap-2 @3xl:grid-cols-4">
-              <StatTile label="Used" title={usageDetails(week.total)}>
-                <Big>{usageLabel(week.total)}</Big>
-              </StatTile>
-              <StatTile label="Tokens in">
-                <Big>{tokenCount(week.total.inputTokens)}</Big>
-              </StatTile>
-              <StatTile label="Tokens out">
-                <Big>{tokenCount(week.total.outputTokens)}</Big>
-              </StatTile>
-              {share !== null && share > 0 && (
-                <StatTile label="Tool definitions" title="Tool definitions are sent with every model call, used or not">
-                  <Big>{share}%</Big> of tokens in
-                </StatTile>
-              )}
-            </dl>
-            <div className="grid gap-6 @3xl:grid-cols-2">
-              <RankedList
-                title="Tasks and sessions"
-                rows={week.work}
-                size={(w) => w.usage.inputTokens}
-                rowKey={(w) => JSON.stringify([w.kind, w.task, w.repo, w.label])}
-                render={(work) => <WorkRow work={work} />}
-              />
-              <RankedList
-                title="Tools"
-                rows={week.tools}
-                size={(t) => t.resultTokens}
-                rowKey={(t) => JSON.stringify([t.server, t.tool])}
-                render={(tool) => <ToolRow tool={tool} />}
-              />
-            </div>
-          </>
-        )}
-        {week && week.unreadLogs > 0 && (
-          <p className="text-muted-foreground text-xs">
-            {week.unreadLogs} {week.unreadLogs === 1 ? "log" : "logs"} could not be read, so their use is missing; the daemon log says why.
-          </p>
-        )}
+        <Steady name="usage-week" loading={loading} className="flex flex-col gap-4">
+          {report.error && <ErrorWithRetry message={report.error} onRetry={report.reload} />}
+          {loading && <WeekPlaceholder />}
+          {week && <WeekReport week={week} />}
+        </Steady>
       </div>
     </Surface>
+  );
+}
+
+/** A week's numbers: its total as tiles, then the tasks and sessions and the tools, the most first. */
+function WeekReport({ week }: { week: UsageReport }) {
+  const share = week.total ? toolDefinitionShare(week.total.inputTokens, week.toolDefinitionTokens) : null;
+  return (
+    <>
+      {week.total === null && <p className="text-sm">No model calls this week.</p>}
+      {week.total && (
+        <>
+          <dl className="grid grid-cols-2 gap-2 @3xl:grid-cols-4">
+            <StatTile label="Used" title={usageDetails(week.total)}>
+              <Big>{usageLabel(week.total)}</Big>
+            </StatTile>
+            <StatTile label="Tokens in">
+              <Big>{tokenCount(week.total.inputTokens)}</Big>
+            </StatTile>
+            <StatTile label="Tokens out">
+              <Big>{tokenCount(week.total.outputTokens)}</Big>
+            </StatTile>
+            {share !== null && share > 0 && (
+              <StatTile label="Tool definitions" title="Tool definitions are sent with every model call, used or not">
+                <Big>{share}%</Big> of tokens in
+              </StatTile>
+            )}
+          </dl>
+          <div className="grid gap-6 @3xl:grid-cols-2">
+            <RankedList
+              title="Tasks and sessions"
+              rows={week.work}
+              size={(w) => w.usage.inputTokens}
+              rowKey={(w) => JSON.stringify([w.kind, w.task, w.repo, w.label])}
+              render={(work) => <WorkRow work={work} />}
+            />
+            <RankedList
+              title="Tools"
+              rows={week.tools}
+              size={(t) => t.resultTokens}
+              rowKey={(t) => JSON.stringify([t.server, t.tool])}
+              render={(tool) => <ToolRow tool={tool} />}
+            />
+          </div>
+        </>
+      )}
+      {week.unreadLogs > 0 && (
+        <p className="text-muted-foreground text-xs">
+          {week.unreadLogs} {week.unreadLogs === 1 ? "log" : "logs"} could not be read, so their use is missing; the daemon log says why.
+        </p>
+      )}
+    </>
+  );
+}
+
+const PLACEHOLDER_TILES = ["used", "in", "out", "definitions"];
+const PLACEHOLDER_LISTS = ["work", "tools"];
+/** As many rows as a list shows before "Show all", which a week of work fills. */
+const PLACEHOLDER_ROWS = Array.from({ length: TOP_ROWS }, (_, i) => `row-${i}`);
+
+/** A week's report while it is read: the tiles and the two lists in their places, without their numbers. */
+function WeekPlaceholder() {
+  return (
+    <Skeletons className="flex flex-col gap-4">
+      <div className="grid grid-cols-2 gap-2 @3xl:grid-cols-4">
+        {PLACEHOLDER_TILES.map((tile) => (
+          <Skeleton key={tile} className="h-17" />
+        ))}
+      </div>
+      <div className="grid gap-6 @3xl:grid-cols-2">
+        {PLACEHOLDER_LISTS.map((list) => (
+          <div key={list} className="flex flex-col gap-2">
+            <Skeleton className="h-4 w-32" />
+            {PLACEHOLDER_ROWS.map((row) => (
+              <Skeleton key={row} className="h-12" />
+            ))}
+          </div>
+        ))}
+      </div>
+    </Skeletons>
   );
 }
 

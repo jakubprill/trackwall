@@ -1,7 +1,8 @@
 import { errorJournalApi, type TrackwallError } from "@trackwall/protocol";
 import { useCallback } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
-import { Loading } from "@/components/Loading";
+import { Skeleton, Skeletons } from "@/components/Skeleton";
+import { Steady } from "@/components/Steady";
 import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
@@ -19,6 +20,7 @@ export function ErrorJournalSurface({ conn }: { conn: Connection }) {
   const journal = useRemote(load);
   const clear = useAction(() => post(conn, errorJournalApi.clear, {}), journal.reload);
   const errors = journal.data?.errors;
+  const loading = !errors && !journal.error;
   return (
     <Surface label="Trackwall errors" meta={errors && errors.length > 0 ? String(errors.length) : undefined}>
       <div className="flex flex-col gap-3 p-4">
@@ -27,26 +29,32 @@ export function ErrorJournalSurface({ conn }: { conn: Connection }) {
           They stay on this computer. Paths, user and computer names, repo names and hosts are replaced before an error is saved.
         </p>
         {journal.error && <ErrorWithRetry message={journal.error} onRetry={journal.reload} />}
-        {!errors && !journal.error && <Loading />}
-        {errors?.length === 0 && <p className="text-sm">No errors.</p>}
-        {errors && errors.length > 0 && (
-          <>
-            <ul className="flex flex-col gap-3">
-              {errors.map((error) => (
-                <ErrorEntry key={error.fingerprint} error={error} />
-              ))}
-            </ul>
-            <div className="flex items-center gap-3">
-              <Button variant="outline" size="sm" disabled={clear.pending} onClick={() => clear.run()}>
-                Clear
-              </Button>
-              <Button variant="ghost" size="sm" onClick={journal.reload}>
-                Refresh
-              </Button>
-              {clear.error && <p className="text-destructive text-xs">{clear.error}</p>}
-            </div>
-          </>
-        )}
+        <Steady name="trackwall-errors" loading={loading} className="flex flex-col gap-3">
+          {loading && (
+            <Skeletons>
+              <Skeleton className="h-5 w-24" />
+            </Skeletons>
+          )}
+          {errors?.length === 0 && <p className="text-sm">No errors.</p>}
+          {errors && errors.length > 0 && (
+            <>
+              <ul className="flex flex-col gap-3">
+                {errors.map((error) => (
+                  <ErrorEntry key={error.fingerprint} error={error} />
+                ))}
+              </ul>
+              <div className="flex items-center gap-3">
+                <Button variant="outline" size="sm" disabled={clear.pending} onClick={() => clear.run()}>
+                  Clear
+                </Button>
+                <Button variant="ghost" size="sm" onClick={journal.reload}>
+                  Refresh
+                </Button>
+                {clear.error && <p className="text-destructive text-xs">{clear.error}</p>}
+              </div>
+            </>
+          )}
+        </Steady>
       </div>
     </Surface>
   );
