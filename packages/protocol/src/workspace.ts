@@ -22,13 +22,13 @@ export type RepoId = z.infer<typeof RepoId>;
 
 /**
  * A path in the commit's tree, with `/` as in git, without `.` and `..`; empty means the root. It does not touch the file
- * system (ADR-14), so `\` is an ordinary name character. Without control characters, because the daemon passes it to git line by line.
+ * system (ADR-14), so `\` is an ordinary name character, and so is a tab. Without a line break or a NUL, because the daemon passes it to git line by line.
  */
 export const RepoPath = z
   .string()
   .max(4096)
   .refine((p) => p === "" || p.split("/").every((s) => s !== "" && s !== "." && s !== ".."), "repo path: no empty, '.' or '..' segments")
-  .refine((p) => [...p].every((c) => c >= " "), "repo path: no control characters");
+  .refine((p) => !/[\n\r\0]/.test(p), "repo path: no line breaks or NUL");
 export type RepoPath = z.infer<typeof RepoPath>;
 
 /** A full commit hash, SHA-1 or SHA-256; the only kind the daemon passes to git as a revision and writes into file names. */

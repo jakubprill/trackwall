@@ -204,6 +204,33 @@ describe("vcs on real git", () => {
     SLOW_TEST_TIMEOUT_MS,
   );
 
+  test("a file cut inside a character of several bytes ends on its last whole character", async () => {
+    // "ż" takes two bytes in UTF-8 and "€" three, so every limit below falls inside a character.
+    const dir = makeRepo({ "two.txt": "żżżż", "three.txt": "a€€" });
+
+    expect(await vcs.file(dir, "two.txt", 3)).toEqual({ kind: "text", text: "ż", size: 8, truncated: true });
+    expect(await vcs.file(dir, "three.txt", 2)).toEqual({ kind: "text", text: "a", size: 7, truncated: true });
+    expect(await vcs.file(dir, "three.txt", 3)).toEqual({ kind: "text", text: "a", size: 7, truncated: true });
+    expect(await vcs.file(dir, "three.txt", 4)).toEqual({ kind: "text", text: "a€", size: 7, truncated: true });
+  });
+
+  // Windows refuses a tab in a file name, so a repo with one cannot be checked out there.
+  test.skipIf(process.platform === "win32")("tree lists a file with a tab in its name and file reads it", async () => {
+    const dir = makeRepo({ "tab\there.txt": "t\n" });
+
+    expect((await vcs.tree(dir, ""))?.map((entry) => entry.path)).toEqual(["tab\there.txt"]);
+    expect(await vcs.file(dir, "tab\there.txt", 100)).toEqual({ kind: "text", text: "t\n", size: 2, truncated: false });
+  });
+
+  test("defaultBase says a repo has no commits only when git says so, and passes git's error for a repo it cannot read", async () => {
+    const empty = makeRepo();
+    const broken = makeRepo({ "a.txt": "a\n" });
+    writeFileSync(join(broken, ".git", "HEAD"), "garbage\n");
+
+    await expect(vcs.defaultBase(empty)).rejects.toThrow("the repo has no commits yet");
+    await expect(vcs.defaultBase(broken)).rejects.toThrow("not a git repository");
+  });
+
   test(
     "log returns commits newest first",
     async () => {
