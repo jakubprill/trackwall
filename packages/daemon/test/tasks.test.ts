@@ -81,6 +81,36 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     window.attachment.detach();
   }, 60_000);
 
+  test("a task the user starts gets the short solo instructions, and a task approved from a proposal the full ones (ADR-257)", async () => {
+    const { dir } = cloneOnFeatureBranch();
+    const { agents, procs, home } = makeAgents({ shop: dir });
+    cleanups.push(() => procs.stopAll());
+    const instructionsOf = (task: string) =>
+      readFileSync(join(home, "sessions", sessionOf(agents, task), "instructions", "trackwall.instructions.md"), "utf8");
+
+    const solo = await agents.createTask("shop", "add logout");
+    const soloText = instructionsOf(solo.id);
+    expect(soloText).toContain(`You run the task \`${solo.id}\` in the repo \`shop\``);
+    expect(soloText).toContain(`call verify_task with repo \`shop\` and task \`${solo.id}\``);
+    expect(soloText).toContain("call report_result");
+    expect(soloText).not.toContain("## Trackwall tools");
+    expect(soloText).not.toContain("start_service");
+
+    const proposal = await agents.propose(null, {
+      repo: "shop",
+      title: "Add login",
+      prompt: "add login",
+      model: null,
+      approvals: "ask",
+      item: null,
+    });
+    const proposed = await agents.approveProposal(proposal.id, proposal.prompt, null, "ask", "terminal");
+    const proposedText = instructionsOf(proposed.id);
+    expect(proposedText).toContain("## Trackwall tools");
+    expect(proposedText).toContain("When Trackwall asks you to call get_messages");
+    expect(soloText.length).toBeLessThan(proposedText.length / 3);
+  }, 60_000);
+
   test("a task's changes are commits and uncommitted files, new ones too, and the worktree's index stays untouched", async () => {
     const { dir } = cloneOnFeatureBranch();
     const { agents, procs } = makeAgents({ shop: dir });

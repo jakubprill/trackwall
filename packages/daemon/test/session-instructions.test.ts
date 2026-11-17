@@ -45,6 +45,40 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     expect(text).toContain(MCP_INSTRUCTIONS);
   });
 
+  test("a solo task gets a short role that keeps the review rules and leaves out the MCP instruction and the coordination (ADR-257)", () => {
+    const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
+    writeSessionInstructions(
+      sessionDir,
+      "0.5.30",
+      { kind: "soloTask", repo: "shop", task: "1b4e28ba-2fa1-11d2-883f-0016d3cca427" },
+      {
+        entries: [
+          {
+            kind: "how-to",
+            name: "offline-build",
+            repos: ["shop"],
+            text: "Run the build with mvn -o.",
+            updatedAt: "2026-11-17T08:00:00Z",
+            writtenBy: { kind: "user" },
+          },
+        ],
+        more: 0,
+      },
+      false,
+    );
+    const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
+    expect(text).toContain("You run the task `1b4e28ba-2fa1-11d2-883f-0016d3cca427` in the repo `shop`");
+    expect(text).toContain("do not amend, squash, rebase or reset them away");
+    expect(text).toContain("call verify_task with repo `shop` and task `1b4e28ba-2fa1-11d2-883f-0016d3cca427`");
+    expect(text).toContain("more than 4000 characters is refused");
+    expect(text).toContain("propose it with propose_task");
+    expect(text).toContain("- how-to, `shop`: Run the build with mvn -o.");
+    expect(text).not.toContain(MCP_INSTRUCTIONS);
+    expect(text).not.toContain("get_messages");
+    expect(text).not.toContain("start_service");
+    expect(text.length).toBeLessThan(4000);
+  });
+
   test("a task session follows its proposer's message over the task's prompt, and only the user's own text over a message", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
     writeSessionInstructions(

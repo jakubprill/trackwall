@@ -23,6 +23,8 @@ import type { HandoffFacts } from "./task-handoff.ts";
  * Trackwall version and where the user sees the session), its role (the supervisor or a free session in the projects
  * folder, a repo session in the repo root or a task session in a worktree), how its Java navigation behaves when it has
  * one (ADR-99) and the shared MCP instruction (`MCP_INSTRUCTIONS`), which Copilot CLI does not take from the MCP server.
+ * A solo task (ADR-257) gets a short role without the MCP instruction: the file is part of every model call of the
+ * session, and the text about other repos, services and coordination has no reader in a task the user runs alone.
  */
 
 /** Copilot CLI 1.0.103 variable with instruction directories separated by commas (checked with `copilot instruction list`). */
@@ -40,7 +42,9 @@ export type SessionRole =
   | { kind: "supervisor"; changesCode: boolean }
   | { kind: "free" }
   | { kind: "repo"; repo: string }
-  | { kind: "task"; repo: string; task: string; handoff: HandoffFacts | null; change: ChangeFacts | null };
+  | { kind: "task"; repo: string; task: string; handoff: HandoffFacts | null; change: ChangeFacts | null }
+  /** A solo task (ADR-257): the user started it, no session proposed it and it is no part of a change. */
+  | { kind: "soloTask"; repo: string; task: string };
 
 /**
  * Writes the instructions of a session started by Trackwall `version` to `<sessionDir>/instructions/` and returns that
@@ -86,10 +90,7 @@ function sessionInstructions(version: string, role: SessionRole, knowledge: Sess
     "",
     ...(javaNavigation ? JAVA_NAVIGATION_SECTION : []),
     ...knowledgeSection(knowledge),
-    "## Trackwall tools",
-    "",
-    MCP_INSTRUCTIONS,
-    "",
+    ...(role.kind === "soloTask" ? [] : ["## Trackwall tools", "", MCP_INSTRUCTIONS, ""]),
   ].join("\n");
 }
 
@@ -107,7 +108,8 @@ const JAVA_NAVIGATION_SECTION = [
 function sessionRole(role: SessionRole): string[] {
   if (role.kind === "supervisor") return supervisorRole(role.changesCode);
   if (role.kind === "free") return freeRole();
-  return role.kind === "repo" ? repoRole(role.repo) : taskRole(role);
+  if (role.kind === "repo") return repoRole(role.repo);
+  return role.kind === "soloTask" ? soloTaskRole(role) : taskRole(role);
 }
 
 function supervisorRole(changesCode: boolean): string[] {
@@ -149,6 +151,10 @@ function repoRole(repo: string): string[] {
   ];
 }
 
+/** Every task session's rule on the round commits (ADR-168), solo or not. */
+const ROUND_COMMITS_RULE =
+  "- When a turn of yours ends, Trackwall commits what you left uncommitted as a `WIP round <n>` commit on the task branch, so the user can see and undo each round, and squashes those commits into yours before the push. Leave them as they are: do not amend, squash, rebase or reset them away.";
+
 function taskRole({ repo, task, handoff, change }: Extract<SessionRole, { kind: "task" }>): string[] {
   return [
     `You run the task \`${task}\` in the repo \`${repo}\` (its id in Trackwall tools), in the task's own git worktree on its own branch. The user reviews the task's changes in Trackwall.`,
@@ -156,13 +162,31 @@ function taskRole({ repo, task, handoff, change }: Extract<SessionRole, { kind: 
     `- Build and test your changes with ${mcpTools.runMiseTask.name} and task \`${task}\`: it runs the repo's mise tasks in this worktree (without task, in the repo root, which does not have your changes). ${mcpTools.waitForMiseTask.name}, ${mcpTools.tail.name} and ${mcpTools.getErrors.name} take the same task. If the mise config of this worktree changed, the user has to trust it in Trackwall first.`,
     `- Run your changes with ${mcpTools.startService.name} and task \`${task}\`: the repo's service starts from this worktree on the task's own port (mise tasks here get it as ${TASK_PORT_ENV.join(" and ")}), next to the one from the repo root; ${mcpTools.callEndpoint.name} and ${mcpTools.stopService.name} take the same task.`,
     "- Commit your changes on the task branch. Do not switch branches, push, merge or open merge requests unless the task asks for it: the user pushes the branch and opens its merge request from Trackwall.",
-    "- When a turn of yours ends, Trackwall commits what you left uncommitted as a `WIP round <n>` commit on the task branch, so the user can see and undo each round, and squashes those commits into yours before the push. Leave them as they are: do not amend, squash, rebase or reset them away.",
+    ROUND_COMMITS_RULE,
     `- Work that belongs to another repo is not yours: propose it with ${mcpTools.proposeTask.name} and say so in your result. When your turn ends, Trackwall proposes a task to each repo that calls an endpoint or imports a public library type your commits removed or changed (${mcpTools.getChangedEndpoints.name} with task \`${task}\` lists them); your own proposal for such a repo replaces Trackwall's, so make one only when the repo needs more than following the new contract. Other work that builds on your change (a reader of a message or field you changed, a caller ${mcpTools.findEndpoint.name} or ${mcpTools.whoCalls.name} names) you propose yourself after you commit, one proposal per repo. Trackwall tells the new task that your task handed it the work and how to read your changes, so your prompt says what changed in the contract and what the other repo has to do, not how your code does it.`,
     `- Before you report that you are done, call ${mcpTools.verifyTask.name} with repo \`${repo}\` and task \`${task}\`: it runs the repo's mise task ${VERIFY_MISE_TASK} in this worktree, and the user sees its verdict in the task's panel. Fix what fails and call it again. If the repo has no mise task ${VERIFY_MISE_TASK}, do not add one (a changed mise config needs the user's trust); say so in your result.`,
     `- When you are done, or stuck and need the user, call ${mcpTools.reportResult.name}: what you did, what is left and what to check, or the question you need answered. Call it again if the result changes. Your result becomes the description of the task's merge request, which the user opens from Trackwall, so write it for the reviewer in about ${TASK_SUMMARY_WORDS} words: more than ${TASK_SUMMARY_MAX} characters is refused. When the user can try the change by hand (a page, an endpoint, a command), add checkSteps: a few short steps, each on one line of up to ${TASK_CHECK_STEP_MAX} characters, with what to do and what they should see. They are only a hint for the user, so leave them out when there is nothing to try.`,
     `- When you need a decision from the session that proposed your task (or the supervisor the user handed it to) to go on, ask it with ${mcpTools.askProposer.name} and end your turn: its answer comes as a message. If no session answers your task (the user started it), the tool says so; then ask the user.`,
     `- When Trackwall asks you to call ${mcpTools.getMessages.name}, the session that proposed your task, or the supervisor the user handed it to, has written to you. ${TASK_MESSAGE_RULE}`,
     ...(change !== null ? changeLines(task, change, handoff) : handoff === null ? [] : handoffLines(handoff)),
+  ];
+}
+
+/**
+ * The role of a solo task (ADR-257): what keeps its work reviewable in Trackwall (the worktree, the branch, the rounds,
+ * the verification and the result), and one line on other repos, since a change can still reach them. Messages and a
+ * review reach it as prompts that name their tool (`read-request-prompt.ts`), so a task the user hands to the supervisor
+ * later needs no line about them here.
+ */
+function soloTaskRole({ repo, task }: Extract<SessionRole, { kind: "soloTask" }>): string[] {
+  return [
+    `You run the task \`${task}\` in the repo \`${repo}\` (its id in Trackwall tools), in the task's own git worktree on its own branch. The user started it and reviews its changes in Trackwall.`,
+    "- Work only in this worktree. Commit on the task branch; do not switch branches, push, merge or open merge requests unless the task asks for it.",
+    ROUND_COMMITS_RULE,
+    `- To run the repo's mise tasks with your changes, pass task \`${task}\` to ${mcpTools.runMiseTask.name}; you may also run the build in this worktree yourself.`,
+    `- Before you report that you are done, call ${mcpTools.verifyTask.name} with repo \`${repo}\` and task \`${task}\` and fix what fails. If the repo has no mise task ${VERIFY_MISE_TASK}, do not add one; say so in your result.`,
+    `- When you are done, or stuck and need the user, call ${mcpTools.reportResult.name}: what you did, what is left and what to check, in about ${TASK_SUMMARY_WORDS} words (more than ${TASK_SUMMARY_MAX} characters is refused), with optional checkSteps of up to ${TASK_CHECK_STEP_MAX} characters each. It becomes the description of the task's merge request.`,
+    `- If your change turns out to need work in another repo, propose it with ${mcpTools.proposeTask.name} and say so in your result. Trackwall's other tools reach the user's other repos; this task does not need them otherwise.`,
   ];
 }
 
