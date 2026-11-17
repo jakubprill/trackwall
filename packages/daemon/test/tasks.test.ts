@@ -81,7 +81,7 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     window.attachment.detach();
   }, 60_000);
 
-  test("a task the user starts gets the short solo instructions, and a task approved from a proposal the full ones (ADR-256)", async () => {
+  test("a task the user starts gets the short solo instructions, and a task approved from a proposal the full ones (ADR-257)", async () => {
     const { dir } = cloneOnFeatureBranch();
     const { agents, procs, home } = makeAgents({ shop: dir });
     cleanups.push(() => procs.stopAll());

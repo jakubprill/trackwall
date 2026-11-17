@@ -154,7 +154,7 @@ export interface SessionLauncherDeps {
   handoff: (task: string) => HandoffFacts | null;
   /** What a session of the task is told about the change it is a part of (ADR-171). */
   change: (task: string) => ChangeFacts | null;
-  /** Whether the task is a solo task (ADR-256), whose sessions get the short role. */
+  /** Whether the task is a solo task (ADR-257), whose sessions get the short role. */
   solo: (task: string) => boolean;
   /** The workspace knowledge the user approved for a session in `repo` (`null`: in the projects folder), ADR-170. */
   knowledge: (repo: string | null) => Promise<SessionKnowledge>;

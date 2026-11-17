@@ -23,7 +23,7 @@ import type { HandoffFacts } from "./task-handoff.ts";
  * Trackwall version and where the user sees the session), its role (the supervisor or a free session in the projects
  * folder, a repo session in the repo root or a task session in a worktree), how its Java navigation behaves when it has
  * one (ADR-99) and the shared MCP instruction (`MCP_INSTRUCTIONS`), which Copilot CLI does not take from the MCP server.
- * A solo task (ADR-256) gets a short role without the MCP instruction: the file is part of every model call of the
+ * A solo task (ADR-257) gets a short role without the MCP instruction: the file is part of every model call of the
  * session, and the text about other repos, services and coordination has no reader in a task the user runs alone.
  */
 
@@ -43,7 +43,7 @@ export type SessionRole =
   | { kind: "free" }
   | { kind: "repo"; repo: string }
   | { kind: "task"; repo: string; task: string; handoff: HandoffFacts | null; change: ChangeFacts | null }
-  /** A solo task (ADR-256): the user started it, no session proposed it and it is no part of a change. */
+  /** A solo task (ADR-257): the user started it, no session proposed it and it is no part of a change. */
   | { kind: "soloTask"; repo: string; task: string };
 
 /**
@@ -173,7 +173,7 @@ function taskRole({ repo, task, handoff, change }: Extract<SessionRole, { kind: 
 }
 
 /**
- * The role of a solo task (ADR-256): what keeps its work reviewable in Trackwall (the worktree, the branch, the rounds,
+ * The role of a solo task (ADR-257): what keeps its work reviewable in Trackwall (the worktree, the branch, the rounds,
  * the verification and the result), and one line on other repos, since a change can still reach them. Messages and a
  * review reach it as prompts that name their tool (`read-request-prompt.ts`), so a task the user hands to the supervisor
  * later needs no line about them here.

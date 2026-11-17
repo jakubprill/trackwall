@@ -659,7 +659,7 @@ export class AgentTasks {
   }
 
   /**
-   * Whether task `id` is a solo task (ADR-256): the user started it themselves, so no session proposed it or took it over
+   * Whether task `id` is a solo task (ADR-257): the user started it themselves, so no session proposed it or took it over
    * (`proposedBy`), and it is no part of a change. An unknown task is not one.
    */
   solo(id: string): boolean {

@@ -45,7 +45,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     expect(text).toContain(MCP_INSTRUCTIONS);
   });
 
-  test("a solo task gets a short role that keeps the review rules and leaves out the MCP instruction and the coordination (ADR-256)", () => {
+  test("a solo task gets a short role that keeps the review rules and leaves out the MCP instruction and the coordination (ADR-257)", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
     writeSessionInstructions(
       sessionDir,
