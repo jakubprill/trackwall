@@ -1,7 +1,7 @@
 import { proposalRepos, type RunningMiseTask, type SessionList, type Task } from "@trackwall/protocol";
 import type { StatusTone } from "./repo-status.ts";
 import { runStateLabel } from "./run-state.ts";
-import { entryTime, latestSession, type SessionSelection, taskName } from "./session-entries.ts";
+import { entryTime, type SessionSelection, taskName, workingSession } from "./session-entries.ts";
 import { PROPOSAL_STATUS, sessionStateLabel, sessionTitle, taskStateLabel } from "./session-state.ts";
 
 /**
@@ -73,7 +73,7 @@ function tasks(repo: string, list: SessionList): Work[] {
   return list.tasks
     .filter((t) => t.repo === repo)
     .map((task) => {
-      const session = latestSession(list.sessions, task.id);
+      const session = workingSession(list.sessions, task);
       return {
         waits: session?.needsAttention ?? false,
         startedAt: entryTime({ kind: "task", task, session }),

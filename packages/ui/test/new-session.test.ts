@@ -217,6 +217,7 @@ describe("the request that starts a change (ADR-171)", () => {
       model: null,
       item: null,
       view: "terminal",
+      sessions: "shared",
     });
     expect(agentsApi.createChange.request.safeParse(request).error?.issues).toBeUndefined();
   });

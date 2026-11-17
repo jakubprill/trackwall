@@ -1,7 +1,7 @@
 import { countLabel, type Session, type SessionList, type Task } from "@trackwall/protocol";
 import type { AwayPeriod } from "./away-presence.ts";
 import type { StatusTone } from "./repo-status.ts";
-import { latestSession, proposalName, type SessionSelection, taskName } from "./session-entries.ts";
+import { proposalName, type SessionSelection, taskName, workingSession } from "./session-entries.ts";
 import { PROPOSAL_STATUS, sessionStateLabel, sessionTitle } from "./session-state.ts";
 
 /**
@@ -41,7 +41,7 @@ export function awaySummary(list: SessionList, away: AwayPeriod, now: Date): Awa
       at: p.createdAt,
       open: { kind: "proposal", id: p.id },
     }));
-  const tasks = list.tasks.map((task) => taskItem(task, latestSession(list.sessions, task.id), since, now));
+  const tasks = list.tasks.map((task) => taskItem(task, workingSession(list.sessions, task), since, now));
   // A task's sessions are its item; the supervisor is listed, and opening it opens its panel.
   const sessions = list.sessions.filter((s) => s.task === null).map((s) => sessionItem(s, since, now));
   const items = [...proposals, ...tasks, ...sessions].filter((item) => item !== undefined);

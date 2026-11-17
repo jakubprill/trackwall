@@ -171,7 +171,29 @@ const TESTS_ONCE_RULE = `- ${mcpTools.verifyTask.name} runs the repo's whole tes
 const ROUND_COMMITS_RULE =
   "- When a turn of yours ends, Trackwall commits what you left uncommitted as a `WIP round <n>` commit on the task branch, so the user can see and undo each round, and squashes those commits into yours before the push. Leave them as they are: do not amend, squash, rebase or reset them away.";
 
+/**
+ * The role of the one session of a change (ADR-265): it does every part, each in its repo's folder under the folder it
+ * runs in, and each part stays a task the user reviews on its own. Short like a solo task's (ADR-257): the file is part
+ * of every model call. The session does not commit: Trackwall's round commits do it in every part, and under Copilot
+ * CLI's sandbox a commit from a folder that is no repo could not write the repos' git directories anyway.
+ */
+function sharedChangeRole(task: string, { parts }: ChangeFacts): string[] {
+  const branch = parts.find((p) => p.task === task)?.branch ?? parts[0]?.branch ?? "";
+  return [
+    `You run one change across ${parts.length} repos in this one session. The folder you are in holds a git worktree per repo, each on the branch \`${branch}\`, and each is a task in Trackwall that the user reviews on its own, their merge requests to be merged in this order:`,
+    ...parts.map((p, i) => `  ${i + 1}. folder \`${p.repo}\`: the repo \`${p.repo}\` (its id in Trackwall tools), task \`${p.task}\``),
+    "- Make the whole change yourself, in each of these folders, so that the parts fit together; work only inside them. This folder is no repo, so Copilot CLI loaded no repo's own instructions: before you change a repo, read `AGENTS.md` and `.github/copilot-instructions.md` in its folder when it has them.",
+    "- Do not commit, switch branches, push, merge or open merge requests: when a turn of yours ends, Trackwall commits what you changed in each repo as a `WIP round <n>` commit on its branch, so the user can see and undo each round, and squashes those commits before the push.",
+    `- To run a mise task of a repo with your changes, pass that repo's task to ${mcpTools.runMiseTask.name}.`,
+    TESTS_ONCE_RULE,
+    `- Before you report that you are done, call ${mcpTools.verifyTask.name} for every repo you changed, with the repo and its task, and fix what fails. If a repo has no mise task ${VERIFY_MISE_TASK}, do not add one; say so in your result.`,
+    `- When you are done, or stuck and need the user, call ${mcpTools.reportResult.name} once for the whole change: what you did in each repo, what is left and what to check, in about ${TASK_SUMMARY_WORDS} words (more than ${TASK_SUMMARY_MAX} characters is refused), with optional checkSteps of up to ${TASK_CHECK_STEP_MAX} characters each. It becomes the description of every part's merge request.`,
+    `- Do not propose tasks for the repos above. If the change turns out to need another repo, propose it with ${mcpTools.proposeTask.name} and say so in your result.`,
+  ];
+}
+
 function taskRole({ repo, task, handoff, change }: Extract<SessionRole, { kind: "task" }>): string[] {
+  if (change?.oneSession) return sharedChangeRole(task, change);
   return [
     `You run the task \`${task}\` in the repo \`${repo}\` (its id in Trackwall tools), in the task's own git worktree on its own branch. The user reviews the task's changes in Trackwall.`,
     "- Work only in this worktree: the repo root and other worktrees belong to the user and to other agents.",

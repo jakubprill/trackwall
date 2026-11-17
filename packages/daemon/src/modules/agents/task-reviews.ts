@@ -41,6 +41,9 @@ export interface UnreadReview {
   mergeRequestComments: MergeRequestComments | null;
 }
 
+/** What waits unread for another part the one session of a change works on (ADR-265), with the part's repo and task. */
+export type PartReview = UnreadReview & { task: string; repo: string };
+
 export class TaskReviews {
   /** What waits unread per task; a task with nothing unread has no entry. */
   readonly #unread = new Map<string, UnreadReview>();
