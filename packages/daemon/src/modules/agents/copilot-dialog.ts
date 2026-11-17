@@ -103,10 +103,10 @@ function boxParts(body: readonly string[]): { paragraphs: string[][]; squeezed: 
  * its heading is cut, so its "…" comes last; a box only cut above lost its beginning. The "…" takes the place of the
  * last detail line, not of the one nearest the question.
  */
-function shownDetail(paragraphs: readonly string[][], cut: "above" | "below" | null): string[] {
-  const detail = detailLines(paragraphs, cut === null ? MAX_DETAIL_LINES : MAX_DETAIL_LINES - 1);
-  if (cut === null) return detail;
-  return cut === "above" ? [CUT_DETAIL, ...detail] : [...detail, CUT_DETAIL];
+function shownDetail(paragraphs: readonly string[][], missing: "above" | "below" | null): string[] {
+  const detail = detailLines(paragraphs, missing === null ? MAX_DETAIL_LINES : MAX_DETAIL_LINES - 1);
+  if (missing === null) return detail;
+  return missing === "above" ? [CUT_DETAIL, ...detail] : [...detail, CUT_DETAIL];
 }
 
 /**

@@ -15,6 +15,7 @@ import {
   TASK_MESSAGE_RULE,
   type UsageReport,
 } from "@trackwall/protocol";
+import { copilotCliVersion } from "../scripts/copilot-cli.ts";
 import { conversationEventLog } from "../src/infra/copilot-home.ts";
 import { alwaysAllowPattern } from "../src/modules/agents/copilot-always-allow.ts";
 import { backgroundAgentEventOf } from "../src/modules/agents/copilot-background-agent.ts";
@@ -22,6 +23,7 @@ import { windowTitleFromOsc } from "../src/modules/agents/copilot-osc.ts";
 import { OscParser } from "../src/modules/agents/osc-parser.ts";
 import { readRequestPrompt } from "../src/modules/agents/read-request-prompt.ts";
 import { sessionHooksFile } from "../src/modules/agents/session-launcher.ts";
+import { compareVersions } from "../src/modules/doctor/version.ts";
 import { viewer, waitFor } from "../test/support/agents.ts";
 import { REFERENCE_COLS, REFERENCE_ROWS } from "../test/support/copilot-reference.ts";
 import { screenLines, untilInputBox } from "../test/support/screen-lines.ts";
@@ -92,6 +94,8 @@ function shellCall(request: ModelRequest, command: { bash: string; powershell: s
   return { tool, arguments: { command: command[tool], description: "Create a file" } };
 }
 
+/** The first Copilot CLI that scrolls an approval taller than the terminal inside its box and squeezes it in a short one (§4.4). */
+const SQUEEZES_TALL_APPROVALS_FROM = "1.0.112";
 /** A model other than the scripted model's default (`COPILOT_MODEL`), which only a task's `--model` asks for (ADR-98). */
 const REVIEW_MODEL = "trackwall-review-model";
 
@@ -313,9 +317,9 @@ describe("a session of the real Copilot CLI", () => {
     expect(dialog.question).toBe("Do you want to use this tool?");
     // Cut above, the heading comes from the notification and the detail starts with "…"; squeezed, the box keeps its
     // own heading and the detail it scrolls ends with "…".
-    const cutAbove = { title: `Use MCP tool: ${MCP_SERVER_NAME}/${mcpTools.verifyTask.name}`, cutDetail: dialog.detail[0] };
-    const squeezed = { title: mcpTools.verifyTask.name, cutDetail: dialog.detail.at(-1) };
-    expect([cutAbove, squeezed]).toContainEqual({ title: dialog.title, cutDetail: "…" });
+    const squeezed = compareVersions(copilotCliVersion(), SQUEEZES_TALL_APPROVALS_FROM) >= 0;
+    expect(dialog.title).toBe(squeezed ? mcpTools.verifyTask.name : `Use MCP tool: ${MCP_SERVER_NAME}/${mcpTools.verifyTask.name}`);
+    expect(squeezed ? dialog.detail.at(-1) : dialog.detail[0]).toBe("…");
     expect(dialog.options[0]).toEqual({ key: "1", label: "Yes" });
 
     model.reply({ text: "There is no such task." });

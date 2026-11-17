@@ -15,7 +15,7 @@ test("pnpm test gives every test the long time limit, so a test on real git need
   expect(manifest.scripts.test).toContain(`--timeout ${SLOW_TEST_TIMEOUT_MS}`);
 });
 
-/** Top-level calls of a test file, by the offset of their first character. */
+/** Where a test file first calls one of `names` at its top level; infinity when it calls none. */
 function firstCall(source: string, names: readonly string[]): number {
   const offsets = names.map((name) => source.search(new RegExp(`^${name}\\(`, "m"))).filter((offset) => offset >= 0);
   return offsets.length === 0 ? Number.POSITIVE_INFINITY : Math.min(...offsets);
