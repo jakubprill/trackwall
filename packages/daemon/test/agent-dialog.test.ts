@@ -8,7 +8,10 @@ import { CopilotUsageLog } from "../src/modules/agents/copilot-usage-log.ts";
 import { LiveSession } from "../src/modules/agents/live-session.ts";
 import { NO_COPILOT_HOME, screenProcessed } from "./support/live-session.ts";
 
-/** Screens of Copilot CLI 1.0.103 taken from the real binary in tmux (paths replaced, lengths kept). */
+/**
+ * Screens of Copilot CLI 1.0.103 taken from the real binary in tmux (paths replaced, lengths kept); the `mcp-compact`
+ * ones are of 1.0.112, as the daemon's terminal emulator held them in the contract test of a short terminal.
+ */
 function screen(name: string): string[] {
   return readFileSync(join(import.meta.dir, "fixtures", "copilot", `dialog-${name}.txt`), "utf8").split("\n");
 }
@@ -104,6 +107,63 @@ describe("an agent dialog read from the session's screen (ADR-66)", () => {
     const withOutput = lines.map((l, i) => (i === 1 ? " ● The agent's output" : l));
 
     expect(readAgentDialog(withOutput, "approval")).toBeUndefined();
+  });
+
+  test("an approval Copilot CLI 1.0.112 squeezes into a short terminal, without blank lines and with only the selected option, is read with its heading", () => {
+    expect(readAgentDialog(screen("mcp-compact-14"), "approval", "Use MCP tool: trackwall/verify_task")).toEqual({
+      kind: "approval",
+      title: "verify_task",
+      detail: [
+        "{",
+        '  "task": "no-such-task",',
+        String.raw`  "note": "step 0\nstep 1\nstep 2\nstep 3\nstep 4\nstep 5\nstep 6\nstep 7\nstep 8\nstep`,
+        "…",
+      ],
+      question: "Do you want to use this tool?",
+      options: [{ key: "1", label: "Yes" }],
+    });
+  });
+
+  test("a squeezed approval that is also cut above its heading gets the notification's text as its heading", () => {
+    expect(readAgentDialog(screen("mcp-compact-cut-8"), "approval", "Use MCP tool: trackwall/verify_task")).toEqual({
+      kind: "approval",
+      title: "Use MCP tool: trackwall/verify_task",
+      detail: ["…"],
+      question: "Do you want to use this tool?",
+      options: [{ key: "1", label: "Yes" }],
+    });
+  });
+
+  test("a squeezed approval's question wrapped over two lines is joined, and the lines of a file above it stay the detail", () => {
+    const squeezed = [
+      " [Current]  Sessions",
+      "",
+      "╭──────────────────────────────────────────╮",
+      "│ Create file                              │",
+      "│ ──────────────────────────────────────── │",
+      "│ notes.txt +2 -0                          │",
+      "│ 1 +   Do you want tea?                   │",
+      "│ Do you want to create /src/app-outside/  │",
+      "│ notes.txt?                               │",
+      "│ ❯ 2. Yes, and don't ask again for file   │",
+      "│   operations when in this repo           │",
+      "│ ↑/↓ to navigate · pgup/pgdn to scroll · enter to select · esc to cancel │",
+      "╰──────────────────────────────────────────╯",
+    ];
+
+    expect(readAgentDialog(squeezed, "approval")).toEqual({
+      kind: "approval",
+      title: "Create file",
+      detail: ["notes.txt +2 -0", "1 +   Do you want tea?", "…"],
+      question: "Do you want to create /src/app-outside/notes.txt?",
+      options: [{ key: "2", label: "Yes, and don't ask again for file operations when in this repo" }],
+    });
+  });
+
+  test("a squeezed box whose question does not start as Copilot CLI's approvals do is no dialog", () => {
+    const unknown = screen("mcp-compact-14").map((l) => l.replace("Do you want to use this tool?", "Shall this tool be used now?  "));
+
+    expect(readAgentDialog(unknown, "approval")).toBeUndefined();
   });
 
   test("a screen without a dialog, or with a numbered list that is not one, gives none", () => {
