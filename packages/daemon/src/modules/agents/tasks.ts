@@ -658,6 +658,15 @@ export class AgentTasks {
     return { parts: this.#parts(change.id).map(({ id: task, repo, branch }) => ({ task, repo, branch })) };
   }
 
+  /**
+   * Whether task `id` is a solo task (ADR-256): the user started it themselves, so no session proposed it or took it over
+   * (`proposedBy`), and it is no part of a change. An unknown task is not one.
+   */
+  solo(id: string): boolean {
+    const task = this.#tasks.find((t) => t.id === id);
+    return task !== undefined && task.proposedBy === null && task.change === null;
+  }
+
   /** The tasks task `id` handed their work to (ADR-143), while they last. */
   handedTo(id: string): string[] {
     return this.#tasks.filter((t) => t.handoff?.task === id).map((t) => t.id);

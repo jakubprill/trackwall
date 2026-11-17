@@ -154,6 +154,8 @@ export interface SessionLauncherDeps {
   handoff: (task: string) => HandoffFacts | null;
   /** What a session of the task is told about the change it is a part of (ADR-171). */
   change: (task: string) => ChangeFacts | null;
+  /** Whether the task is a solo task (ADR-256), whose sessions get the short role. */
+  solo: (task: string) => boolean;
   /** The workspace knowledge the user approved for a session in `repo` (`null`: in the projects folder), ADR-170. */
   knowledge: (repo: string | null) => Promise<SessionKnowledge>;
   /**
@@ -410,7 +412,9 @@ export class SessionLauncher {
 
   #role(repo: string | null, supervisor: boolean, task: string | null): SessionRole {
     if (repo !== null && task !== null)
-      return { kind: "task", repo, task, handoff: this.#deps.handoff(task), change: this.#deps.change(task) };
+      return this.#deps.solo(task)
+        ? { kind: "soloTask", repo, task }
+        : { kind: "task", repo, task, handoff: this.#deps.handoff(task), change: this.#deps.change(task) };
     if (repo !== null) return { kind: "repo", repo };
     return supervisor ? { kind: "supervisor", changesCode: this.#deps.repos.supervisorSettings().changesCode } : { kind: "free" };
   }
