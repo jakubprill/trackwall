@@ -23,7 +23,7 @@ describe("while you were away (ADR-151)", () => {
     const strip = page.getByRole("region", { name: "While you were away" });
     await strip.getByText(/^While you were away \(2 h 0 min\): 2 changes, 2 need you$/).waitFor();
     await strip.getByRole("button", { name: "Show", exact: true }).click();
-    await strip.getByRole("button").filter({ hasText: "waiting for you" }).filter({ hasNotText: "Add a licence" }).waitFor();
+    await strip.getByRole("button").filter({ hasText: "Needs you: answer" }).filter({ hasNotText: "Add a licence" }).waitFor();
     await strip.getByRole("button").filter({ hasText: "shop · Add a licence" }).filter({ hasText: "waiting for your decision" }).click();
     await page.getByRole("textbox", { name: "Prompt for the agent: Add a licence" }).waitFor();
 

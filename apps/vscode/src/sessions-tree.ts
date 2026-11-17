@@ -8,7 +8,7 @@ export const OPEN_SESSION_COMMAND = "trackwall.openSession";
 
 type Node = { kind: "group"; group: SessionGroup } | { kind: "session"; row: SessionRow } | { kind: "message"; text: string };
 
-const TONE_COLOURS = { ok: "charts.green", warning: "charts.yellow", error: "charts.red" } as const;
+const TONE_COLOURS = { ok: "charts.green", warning: "charts.yellow", error: "charts.red", review: "charts.blue" } as const;
 
 export class SessionsTree implements vscode.TreeDataProvider<Node> {
   readonly #changed = new vscode.EventEmitter<undefined>();

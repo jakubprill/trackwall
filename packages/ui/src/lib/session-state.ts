@@ -4,6 +4,7 @@ import { isSupervisor, type Session, type SessionList, type TaskStateChange } fr
 export {
   IDLE_LABEL,
   isIdle,
+  NO_SESSION_LABEL,
   PAUSED_LABEL,
   STATE_LABELS,
   SUPERVISOR,

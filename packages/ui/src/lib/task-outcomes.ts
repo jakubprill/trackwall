@@ -13,7 +13,7 @@ import { verificationOutdatedLabel } from "./verification.ts";
 
 /** One mark on a task's row: a word or a number with a tone, and the whole story as its tooltip. */
 export interface OutcomeMark {
-  key: "review" | "verification" | "merge-request";
+  key: "verification" | "merge-request";
   tone?: StatusTone;
   label: string;
   title: string;
@@ -26,25 +26,21 @@ const VERIFICATION_MARK: Record<VerificationState, { tone?: StatusTone; label: s
   cancelled: { label: "Verify cancelled", title: "Verification cancelled" },
 };
 
-/** An outdated verdict (ADR-209) says so, without the colour of a pass or a failure of the changes as they are now. */
+/**
+ * An outdated verdict (ADR-209) says what to do about it (ADR-261), without the colour of a pass or a failure of the
+ * changes as they are now.
+ */
 function verificationMark(state: VerificationState, outdated: boolean): Omit<OutcomeMark, "key"> {
   if (!outdated) return VERIFICATION_MARK[state];
-  return { label: "Verify outdated", title: verificationOutdatedLabel(state) };
+  return { label: "Verify again", title: verificationOutdatedLabel(state) };
 }
 
-/** A task whose agent handed its work over (ADR-213), until the user gives it work again. */
-const IN_REVIEW_MARK: OutcomeMark = {
-  key: "review",
-  label: "In review",
-  title: "The agent handed its work over for your review; a review or a Fix gives it work again",
-};
-
 /**
- * "In review" first when the agent handed its work over, then the verdict, then the merge request: `!12` with the
- * pipeline's tone while it is open, the merge request's own once merged or closed.
+ * The verdict, then the merge request: `!12` with the pipeline's tone while it is open, the merge request's own once
+ * merged or closed. A task handed over for review says so in its state ("Ready for review", ADR-261), not here.
  */
-export function outcomeMarks(outcome: TaskOutcome | undefined, inReview: boolean): OutcomeMark[] {
-  const marks: OutcomeMark[] = inReview ? [IN_REVIEW_MARK] : [];
+export function outcomeMarks(outcome: TaskOutcome | undefined): OutcomeMark[] {
+  const marks: OutcomeMark[] = [];
   if (!outcome) return marks;
   if (outcome.verification) marks.push({ key: "verification", ...verificationMark(outcome.verification, outcome.verificationOutdated) });
   const mr = outcome.mergeRequest;

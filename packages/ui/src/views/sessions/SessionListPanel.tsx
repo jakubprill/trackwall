@@ -1,4 +1,12 @@
-import { countLabel, proposalRepos, type Session, type SessionList, type Task, type TaskOutcome } from "@trackwall/protocol";
+import {
+  type CopilotUsage,
+  countLabel,
+  proposalRepos,
+  type Session,
+  type SessionList,
+  type Task,
+  type TaskOutcome,
+} from "@trackwall/protocol";
 import { BellRing, Crown, Lightbulb, Plus } from "lucide-react";
 import { CopilotUsageMark } from "@/components/CopilotUsageMark";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -251,10 +259,16 @@ function StartedListItem({
       >
         <PositionLabel position={position} />
         <span className="flex min-w-0 flex-1 flex-col gap-1">
-          <RowName name={entryName(entry)} group={group} delegated={delegated} waits={session?.needsAttention === true} />
+          <RowName
+            name={entryName(entry)}
+            group={group}
+            delegated={delegated}
+            waits={session?.needsAttention === true}
+            usage={session?.usage ?? null}
+          />
           {task && <TaskLine task={task} />}
           <RowStatus task={task} session={session} />
-          <TaskOutcomeMarks marks={outcomeMarks(outcome, task?.inReview === true)} />
+          <TaskOutcomeMarks marks={outcomeMarks(outcome)} />
           {session?.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
         </span>
       </button>
@@ -295,19 +309,23 @@ const ROW_BUTTON =
 
 /**
  * The first line of a session, task or supervisor row: its name, the "main" badge with the work delegated under it
- * (the supervisor is the main session above all repos) and a bell while it waits for you.
+ * (the supervisor is the main session above all repos), a bell while it waits for you, and what its conversation used,
+ * in short at the end (ADR-261).
  */
 function RowName({
   name,
   group,
   delegated,
   waits,
+  usage = null,
 }: {
   name: string;
   /** The row's group, for its level under the group's top entry; `null` for a row alone and the supervisor heading. */
   group: EntryGroup | null;
   delegated: number;
   waits: boolean;
+  /** The supervisor heading has none. */
+  usage?: CopilotUsage | null;
 }) {
   return (
     <span className="flex min-w-0 items-center gap-2">
@@ -319,6 +337,11 @@ function RowName({
         </Badge>
       )}
       {waits && <BellRing className="text-warning size-3.5 shrink-0" aria-label="waiting for you" />}
+      {usage !== null && (
+        <span className="ml-auto">
+          <CopilotUsageMark usage={usage} short />
+        </span>
+      )}
     </span>
   );
 }
@@ -392,15 +415,11 @@ function nextWaitingLabel(next: WaitingTarget, waiting: number): string {
   return waiting === 1 ? "One thing is waiting for you" : `Next waiting (${waiting})`;
 }
 
-/**
- * A row's state (a task's, ADR-253, or its session's) and what its conversation used (ADR-190). The list is narrow, so
- * the usage goes under the state when the state with its waiting time takes the row.
- */
+/** A row's one state (ADR-261): a task's (ADR-253) or its session's, with how long it has waited for you. */
 function RowStatus({ task, session }: { task: Task | undefined; session: Session | undefined }) {
   return (
-    <span className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+    <span className="text-muted-foreground flex min-w-0 text-xs">
       {task ? <TaskStateLabel task={task} session={session} /> : session && <SessionStateLabel session={session} />}
-      {session && <CopilotUsageMark usage={session.usage} />}
     </span>
   );
 }

@@ -61,34 +61,35 @@ function exited(exitCode: number | null, stoppedByUser = false): Session["run"] 
 }
 
 describe("session state in one line", () => {
-  test("a session waiting for you has a warning tone, a working one ok", () => {
-    expect(sessionStateLabel(waiting("a", change("Input")))).toEqual({ tone: "warning", label: "waiting for you" });
-    expect(sessionStateLabel(waiting("a", change("Approval")))).toEqual({ tone: "warning", label: "asking for approval" });
-    expect(sessionStateLabel(session("a", change("Working")))).toEqual({ tone: "ok", label: "working" });
+  test("a session waiting for you needs you, in a warning tone; a working one is ok (ADR-261)", () => {
+    expect(sessionStateLabel(waiting("a", change("Input")))).toEqual({ tone: "warning", label: "Needs you: answer" });
+    expect(sessionStateLabel(waiting("a", change("Approval")))).toEqual({ tone: "warning", label: "Needs you: approval" });
+    expect(sessionStateLabel(session("a", change("Working")))).toEqual({ tone: "ok", label: "Working" });
   });
 
   test("a working session that may be stuck has a warning instead of working (ADR-151)", () => {
     const stuck = { ...session("a", change("Working")), stuck: { lastStepAt: "2026-10-23T10:00:00.000Z" } };
 
-    expect(sessionStateLabel(stuck)).toEqual({ tone: "warning", label: "may be stuck" });
+    expect(sessionStateLabel(stuck)).toEqual({ tone: "warning", label: "May be stuck" });
   });
 
   test("Input the user has already seen is shown as idle, without a warning", () => {
-    expect(sessionStateLabel(session("a", change("Input")))).toEqual({ label: "idle" });
-    expect(sessionStateLabel(session("a", change("Input", "medium")))).toEqual({ label: "probably idle" });
+    expect(sessionStateLabel(session("a", change("Input")))).toEqual({ label: "Idle" });
+    expect(sessionStateLabel(session("a", change("Input", "medium")))).toEqual({ label: "Idle", guess: true });
   });
 
-  test("a weaker signal is given as “probably”", () => {
-    expect(sessionStateLabel(waiting("a", change("Input", "low"))).label).toBe("probably waiting for you");
-    expect(sessionStateLabel(session("a", change("Working", "medium"))).label).toBe("probably working");
+  test("a weaker signal is a guess with the same words, not a longer label (ADR-261)", () => {
+    expect(sessionStateLabel(waiting("a", change("Input", "low")))).toEqual({ tone: "warning", label: "Needs you: answer", guess: true });
+    expect(sessionStateLabel(session("a", change("Working", "medium")))).toEqual({ tone: "ok", label: "Working", guess: true });
+    expect(sessionStateLabel(session("a", change("Working", "high"))).guess).toBeUndefined();
   });
 
   test("without a signal the state is unknown; the process exit wins over the state from hooks", () => {
-    expect(sessionStateLabel(session("a", null))).toEqual({ label: "state unknown" });
-    expect(sessionStateLabel(session("a", change("Input"), exited(null, true)))).toEqual({ label: "stopped" });
-    expect(sessionStateLabel(session("a", change("Done"), exited(1)))).toEqual({ label: "finished" });
-    expect(sessionStateLabel(session("a", change("Input"), exited(1)))).toEqual({ tone: "error", label: "error" });
-    expect(sessionStateLabel(session("a", change("Error"), exited(0)))).toEqual({ tone: "error", label: "error" });
+    expect(sessionStateLabel(session("a", null))).toEqual({ label: "State unknown" });
+    expect(sessionStateLabel(session("a", change("Input"), exited(null, true)))).toEqual({ label: "Stopped" });
+    expect(sessionStateLabel(session("a", change("Done"), exited(1)))).toEqual({ label: "Finished" });
+    expect(sessionStateLabel(session("a", change("Input"), exited(1)))).toEqual({ tone: "error", label: "Error" });
+    expect(sessionStateLabel(session("a", change("Error"), exited(0)))).toEqual({ tone: "error", label: "Error" });
   });
 });
 
@@ -247,16 +248,37 @@ describe("a task's state (ADR-253)", () => {
   const pause = { at: "2026-11-13T18:00:00Z", service: null };
 
   test("a paused task reads paused, not stopped, although its session was stopped by the pause", () => {
-    expect(taskStateLabel({ paused: pause }, session("a", change("Working"), exited(null, true)))).toEqual({ label: "paused" });
+    expect(taskStateLabel({ paused: pause, inReview: false }, session("a", change("Working"), exited(null, true)))).toEqual({
+      label: "Paused",
+    });
   });
 
   test("a paused task reads paused also without a session, as after a daemon restart", () => {
-    expect(taskStateLabel({ paused: pause }, undefined)).toEqual({ label: "paused" });
+    expect(taskStateLabel({ paused: pause, inReview: false }, undefined)).toEqual({ label: "Paused" });
   });
 
   test("a task that is not paused reads its session's state, or no session", () => {
-    expect(taskStateLabel({ paused: null }, session("a", change("Working")))).toEqual({ tone: "ok", label: "working" });
-    expect(taskStateLabel({ paused: null }, session("a", null, exited(null, true)))).toEqual({ label: "stopped" });
-    expect(taskStateLabel({ paused: null }, undefined)).toEqual({ label: "no session" });
+    expect(taskStateLabel({ paused: null, inReview: false }, session("a", change("Working")))).toEqual({ tone: "ok", label: "Working" });
+    expect(taskStateLabel({ paused: null, inReview: false }, session("a", null, exited(null, true)))).toEqual({ label: "Stopped" });
+    expect(taskStateLabel({ paused: null, inReview: false }, undefined)).toEqual({ label: "No session" });
+  });
+  test("a task handed over for review reads Ready for review while its agent is idle, ended or gone (ADR-261)", () => {
+    const handedOver = { paused: null, inReview: true };
+    const ready = { tone: "review", label: "Ready for review" } as const;
+    expect(taskStateLabel(handedOver, session("a", change("Input")))).toEqual(ready);
+    expect(taskStateLabel(handedOver, session("a", change("Done"), exited(0)))).toEqual(ready);
+    expect(taskStateLabel(handedOver, session("a", change("Input"), exited(null, true)))).toEqual(ready);
+    expect(taskStateLabel(handedOver, undefined)).toEqual(ready);
+  });
+
+  test("a task handed over for review that works again, needs you or failed says that instead (ADR-261)", () => {
+    const handedOver = { paused: null, inReview: true };
+    expect(taskStateLabel(handedOver, session("a", change("Working", "low")))).toEqual({ tone: "ok", label: "Working", guess: true });
+    expect(taskStateLabel(handedOver, waiting("a", change("Approval")))).toEqual({ tone: "warning", label: "Needs you: approval" });
+    expect(taskStateLabel(handedOver, session("a", change("Error"), exited(1)))).toEqual({ tone: "error", label: "Error" });
+  });
+
+  test("a paused task reads Paused even when it was handed over for review", () => {
+    expect(taskStateLabel({ paused: pause, inReview: true }, undefined)).toEqual({ label: "Paused" });
   });
 });

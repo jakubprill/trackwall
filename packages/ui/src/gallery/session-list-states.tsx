@@ -86,7 +86,7 @@ const sessionStates: GalleryState = {
   ),
 };
 
-/** Tasks in each state, with every outcome mark: In review, the verdicts and merge requests with their pipelines. */
+/** Tasks in each state, Ready for review among them, with every outcome mark: the verdicts and merge requests with their pipelines. */
 const taskStates: GalleryState = {
   name: "Tasks and their outcome marks",
   render: () => (

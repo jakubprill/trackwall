@@ -1,8 +1,8 @@
 import { agentsApi, autoReviewApi, otherAttempts, type Session, type Task, type TaskOutcome } from "@trackwall/protocol";
 import { Crown, ExternalLink } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
-import { SessionStateLabel } from "@/components/SessionStateLabel";
 import { TaskOutcomeMarks } from "@/components/TaskOutcomeMarks";
+import { TaskStateLabel } from "@/components/TaskStateLabel";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
@@ -207,7 +207,7 @@ function AttemptColumn({
   onKeep: (() => void) | undefined;
 }) {
   const model = attemptModel(task, session);
-  const marks = outcomeMarks(outcome, task.inReview);
+  const marks = outcomeMarks(outcome);
   const usage = session?.usage ?? null;
   return (
     <section aria-label={`${heading}: ${model.asked}`} className="bg-card flex min-w-0 flex-col gap-3 rounded-md border p-3">
@@ -218,7 +218,9 @@ function AttemptColumn({
         <span className="text-muted-foreground truncate font-mono text-xs">{task.branch}</span>
       </header>
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
-        <Fact label="State">{session ? <SessionStateLabel session={session} /> : "no session"}</Fact>
+        <Fact label="State">
+          <TaskStateLabel task={task} session={session} />
+        </Fact>
         <Fact label="Used">
           {usage ? (
             <span className="font-mono" title={usageDetails(usage)}>

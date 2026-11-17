@@ -18,7 +18,7 @@ const LIST: ViewerSessionList = {
       windowTitle: null,
       task: null,
       taskName: null,
-      status: { tone: "warning", label: "asking for approval" },
+      status: { tone: "warning", label: "Needs you: approval" },
       needsAttention: true,
       live: true,
       since: "2026-11-07T10:00:00Z",

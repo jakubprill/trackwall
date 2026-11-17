@@ -23,10 +23,7 @@ const USAGE = {
   premiumRequests: 0,
 };
 
-/**
- * Makes every session of a session list probably working (a state from a weak signal, the longest words a working
- * session gets) and use `USAGE`.
- */
+/** Makes every session of a session list probably working (a guess from a weak signal) and use `USAGE`. */
 function probablyWorkingWithUsage(list: SessionListBody): void {
   for (const session of list.sessions) {
     session.usage = USAGE;
@@ -47,8 +44,11 @@ describe("a task's state and usage", () => {
     await page.getByRole("button", { name: "Create task" }).click();
     await waitForTerminal(page, "--interactive=Add a discount");
     const row = sessionRow(page, "shop");
-    await row.getByText("probably working").waitFor();
-    await row.getByText("3437 AI credits").waitFor();
+    await row
+      .getByTitle(/^A guess/)
+      .getByText("Working")
+      .waitFor();
+    await row.getByText("3.4k cr").waitFor();
     const header = page.locator("header").filter({ hasText: "3437 AI credits" });
 
     const found = [...(await row.evaluate(overlapsIn)), ...(await header.evaluate(overlapsIn))];

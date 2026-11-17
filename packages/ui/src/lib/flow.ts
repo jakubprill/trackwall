@@ -12,7 +12,7 @@ import {
 import { projectOf } from "./board-tree.ts";
 import { type Progress, progressBelow, progressLabel } from "./plan-progress.ts";
 import { latestSession, proposerName, taskName } from "./session-entries.ts";
-import { inTurn, PAUSED_LABEL, PROPOSAL_STATUS, sessionPlace, sessionStateLabel, sessionTitle } from "./session-state.ts";
+import { inTurn, NO_SESSION_LABEL, PAUSED_LABEL, PROPOSAL_STATUS, sessionPlace, sessionStateLabel, sessionTitle } from "./session-state.ts";
 import { outcomeMarks } from "./task-outcomes.ts";
 
 /**
@@ -196,7 +196,7 @@ interface WorkFacts {
  */
 function columnOf(session: Session | undefined, work: WorkFacts): Pick<FlowCard, "column" | "since" | "detail"> {
   const state = session && sessionStateLabel(session);
-  const detail = state?.label ?? "no session";
+  const detail = state?.label ?? NO_SESSION_LABEL;
   const at = session?.state?.at ?? work.since;
   if (session?.stuck) return { column: "stuck", since: session.stuck.lastStepAt, detail };
   if (state?.tone === "error") return { column: "stuck", since: at, detail };
@@ -213,7 +213,7 @@ function columnOf(session: Session | undefined, work: WorkFacts): Pick<FlowCard,
 function taskCard(task: Task, sessions: readonly Session[], outcome: TaskOutcome | undefined): FlowCard {
   const facts: WorkFacts = {
     review: task.inReview ? { reportedAt: task.summary?.reportedAt } : undefined,
-    failed: outcomeMarks(outcome, false).find((m) => m.tone === "error")?.title,
+    failed: outcomeMarks(outcome).find((m) => m.tone === "error")?.title,
     since: task.createdAt,
   };
   return {

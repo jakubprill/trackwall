@@ -22,8 +22,8 @@ struct Notice {
     target: Jump,
 }
 
-/// A session that started waiting; the words are the session state labels of the UI (`STATE_LABELS`, a test in
-/// `apps/desktop/test/shell-events.test.ts` keeps them the same).
+/// A session that started waiting, in the sentence a browser tab's notification says (`sessionNotice` in the UI's
+/// `tab-attention.ts`, a test in `apps/desktop/test/shell-events.test.ts` keeps them the same).
 fn session_notice(waiting: &Waiting) -> Notice {
     let body = match waiting.state {
         Some(TaskState::Approval) => "Copilot CLI is asking for approval",

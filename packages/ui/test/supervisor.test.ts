@@ -275,6 +275,6 @@ describe("the supervisor's state in the panel header (ADR-126)", () => {
   test("a supervisor you stopped says stopped and when", () => {
     const ended = summary(list({ sessions: [session("sup", null, "exited")] })).session;
 
-    expect(supervisorStateLabel(ended, false, clock)).toEqual({ label: "stopped at 10:00" });
+    expect(supervisorStateLabel(ended, false, clock)).toEqual({ label: "Stopped at 10:00" });
   });
 });

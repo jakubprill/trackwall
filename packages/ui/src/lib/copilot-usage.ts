@@ -34,6 +34,21 @@ export function usageLabel(usage: CopilotUsage): string {
   return `${tokenCount(usage.inputTokens + usage.outputTokens)} tokens`;
 }
 
+/**
+ * The shortest label, for the name line of a row in the Sessions list (ADR-261): "3.4k cr", "≥3.2 cr", "4 req", "1.2k tok".
+ * The full label is in the tooltip (`usageDetails`).
+ */
+export function usageShortLabel(usage: CopilotUsage): string {
+  if (usage.aiCredits !== null) return `${usage.aiCreditsPartial ? "≥" : ""}${shortAmount(usage.aiCredits)} cr`;
+  if (usage.premiumRequests > 0) return `${shortAmount(usage.premiumRequests)} req`;
+  return `${tokenCount(usage.inputTokens + usage.outputTokens)} tok`;
+}
+
+/** Like `amount` below a thousand, then 1.2k and 3.4M like `tokenCount`. */
+function shortAmount(n: number): string {
+  return n < 1000 ? amount(n) : tokenCount(Math.round(n));
+}
+
 /** The tooltip: the calls and tokens behind the label, and why there are no credits when there are none. */
 export function usageDetails(usage: CopilotUsage): string {
   const lines = [

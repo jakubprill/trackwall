@@ -6,7 +6,6 @@ import {
   ContainerUpdateResult,
   DAEMON_INFO_PATH,
   PAGE_CODE_EXCHANGE_PATH,
-  STATE_LABELS,
   TaskState,
   TRACKWALL_LINK_KINDS,
   TRACKWALL_LINK_SCHEME,
@@ -197,10 +196,12 @@ test("the shell knows every session state of protocol by the same name", () => {
   expect(shell).toEqual([...TaskState.options, "Unknown"]);
 });
 
-test("a notification says what a session waits for with the words of the UI's state labels", () => {
+test("a notification says what a session waits for in the same sentence in the shell and a browser tab", () => {
   const notification = read("apps/desktop/src-tauri/src/notification.rs");
-  for (const state of ["Approval", "Plan", "Input"] as const) {
-    expect(notification).toContain(`"Copilot CLI is ${STATE_LABELS[state]}"`);
+  const tab = read("packages/ui/src/lib/tab-attention.ts");
+  for (const waits of ["asking for approval", "waiting for plan approval", "waiting for you"]) {
+    expect(notification).toContain(`"Copilot CLI is ${waits}"`);
+    expect(tab).toContain(`"${waits}"`);
   }
 });
 

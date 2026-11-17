@@ -58,7 +58,7 @@ export function exited(exitCode: number | null, stoppedByUser = false): Session[
   };
 }
 
-/** A state change from a hook; `medium` confidence makes it "probably …". */
+/** A state change from a hook; `medium` confidence makes it a guess (a hollow dot, ADR-261). */
 export function stateOf(state: TaskState, confidence: "high" | "medium" = "high"): Session["state"] {
   return { state, source: "hook", confidence, at: minutesAgo(5), reason: "hook" };
 }
