@@ -414,7 +414,7 @@ The work of one agent on one repo: a prompt, a worktree, a `trackwall/<slug>` br
 _Avoid_: job; a bare *task* always means a task, a mise task is always a *mise task*
 
 **Solo task** (`AgentTasks.solo`, `SessionRole` kind `soloTask`):
-A task the user started themselves in one repo: no session proposed it or took it over (`Task.proposedBy` is `null`) and it is no part of a change (ADR-257). Its sessions get a short role in their session instructions, without the MCP instruction and the text about other repos, services and coordination, because each line costs tokens in every model call and nobody reads its updates. A task the user later hands to the supervisor stops being solo from its next session on.
+A task the user started themselves in one repo: no session proposed it or took it over (`Task.proposedBy` is `null`) and it is no part of a change (ADR-257). Its sessions get a short role in their session instructions, without the text about other repos, services and coordination, because each line costs tokens in every model call and nobody reads its updates (no task session gets the MCP instruction). A task the user later hands to the supervisor stops being solo from its next session on.
 _Avoid_: lean mode, lightweight task, single task (a solo task may still propose work in another repo)
 
 **Running tasks warning** (`runningTasksWarning` in `workspace.yaml`, `RunningTasksWarning`, `RunningTasksWarningState`, "Warn above running tasks" in the UI):

@@ -9,7 +9,7 @@ import type { HandoffFacts } from "../src/modules/agents/task-handoff.ts";
 const NO_KNOWLEDGE = { entries: [], more: 0 };
 
 describe("Copilot CLI session instructions (ADR-46)", () => {
-  test("a task session's file applies to the whole session and carries its role and the MCP instruction", () => {
+  test("a task session's file applies to the whole session and carries its role, without the MCP instruction (ADR-257)", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
     const dir = writeSessionInstructions(
       sessionDir,
@@ -42,7 +42,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     expect(text).toContain(
       "When Trackwall asks you to call get_messages, the session that proposed your task, or the supervisor the user handed it to, has written to you",
     );
-    expect(text).toContain(MCP_INSTRUCTIONS);
+    expect(text).not.toContain(MCP_INSTRUCTIONS);
   });
 
   test("a solo task gets a short role that keeps the review rules and leaves out the MCP instruction and the coordination (ADR-257)", () => {
@@ -230,13 +230,14 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     expect(text).toContain("The user sees this session in Trackwall's Sessions view");
   });
 
-  test("a session in the repo root is a repo session that keeps the user's checkout and does not get the task rules", () => {
+  test("a session in the repo root is a repo session that keeps the user's checkout and does not get the task rules, but the MCP instruction", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
     writeSessionInstructions(sessionDir, "0.3.0", { kind: "repo", repo: "shop" }, NO_KNOWLEDGE, false);
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain("You are a repo session in the root of the repo `shop`");
     expect(text).toContain("Do not switch this working copy's branch, commit, push or merge unless they ask");
     expect(text).not.toContain("Work only in this worktree");
+    expect(text).toContain(MCP_INSTRUCTIONS);
   });
 
   test("the supervisor in the projects folder coordinates through proposals and does not get the task rules", () => {

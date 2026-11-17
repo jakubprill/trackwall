@@ -23,8 +23,9 @@ import type { HandoffFacts } from "./task-handoff.ts";
  * Trackwall version and where the user sees the session), its role (the supervisor or a free session in the projects
  * folder, a repo session in the repo root or a task session in a worktree), how its Java navigation behaves when it has
  * one (ADR-99) and the shared MCP instruction (`MCP_INSTRUCTIONS`), which Copilot CLI does not take from the MCP server.
- * A solo task (ADR-257) gets a short role without the MCP instruction: the file is part of every model call of the
- * session, and the text about other repos, services and coordination has no reader in a task the user runs alone.
+ * A task session gets no MCP instruction, and a solo task a short role besides (ADR-257): the file is part of every
+ * model call of the session, and the text about other repos, services and coordination has no reader in a task the user
+ * runs alone.
  */
 
 /** Copilot CLI 1.0.103 variable with instruction directories separated by commas (checked with `copilot instruction list`). */
@@ -90,8 +91,16 @@ function sessionInstructions(version: string, role: SessionRole, knowledge: Sess
     "",
     ...(javaNavigation ? JAVA_NAVIGATION_SECTION : []),
     ...knowledgeSection(knowledge),
-    ...(role.kind === "soloTask" ? [] : ["## Trackwall tools", "", MCP_INSTRUCTIONS, ""]),
+    ...(isTaskSession(role) ? [] : ["## Trackwall tools", "", MCP_INSTRUCTIONS, ""]),
   ].join("\n");
+}
+
+/**
+ * A task session gets no MCP instruction (ADR-257): its role names the tools it works with, the instruction goes into
+ * every model call, and a task on several repos runs as several such sessions, each paying for it again.
+ */
+function isTaskSession(role: SessionRole): boolean {
+  return role.kind === "task" || role.kind === "soloTask";
 }
 
 /**

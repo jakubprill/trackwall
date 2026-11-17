@@ -81,7 +81,7 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     window.attachment.detach();
   }, 60_000);
 
-  test("a task the user starts gets the short solo instructions, and a task approved from a proposal the full ones (ADR-257)", async () => {
+  test("a task the user starts gets the short solo role, and a task approved from a proposal the full one, neither the MCP instruction (ADR-257)", async () => {
     const { dir } = cloneOnFeatureBranch();
     const { agents, procs, home } = makeAgents({ shop: dir });
     cleanups.push(() => procs.stopAll());
@@ -106,9 +106,9 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
     });
     const proposed = await agents.approveProposal(proposal.id, proposal.prompt, null, "ask", "terminal");
     const proposedText = instructionsOf(proposed.id);
-    expect(proposedText).toContain("## Trackwall tools");
+    expect(proposedText).not.toContain("## Trackwall tools");
     expect(proposedText).toContain("When Trackwall asks you to call get_messages");
-    expect(soloText.length).toBeLessThan(proposedText.length / 3);
+    expect(soloText.length).toBeLessThan(proposedText.length / 2);
   }, 60_000);
 
   test("a task's changes are commits and uncommitted files, new ones too, and the worktree's index stays untouched", async () => {
