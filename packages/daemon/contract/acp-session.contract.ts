@@ -14,7 +14,7 @@ import { AGENT_MODE, PLAN_MODE } from "../src/modules/agents/acp-session-info.ts
 import { PLAN_APPROVED_MESSAGE } from "../src/modules/agents/task-plan.ts";
 import { viewer, waitFor } from "../test/support/agents.ts";
 import { startRealCopilotDaemon } from "./support/real-copilot.ts";
-import { commitEscapeScript, ESCAPE_COMMAND, sandboxRefusedEverything } from "./support/sandbox-escape.ts";
+import { commitEscapeScript, ESCAPE_COMMAND, linuxGitDirectoryEscapes, sandboxRefusedEverything } from "./support/sandbox-escape.ts";
 import { type ModelRequest, type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
 
 // The contract of the conversation view with the real Copilot CLI (ADR-107, for tasks ADR-137): `copilot --acp` as the
@@ -553,12 +553,12 @@ describe("a task in Copilot CLI's sandbox in the conversation view with the real
         });
       } else {
         expect({ inside: existsSync(join(task.worktree, "inside.txt")), answers }).toMatchObject({ inside: true });
-        // On Linux the repo's whole git directory is granted for the worktree's commits, hooks and config with it: a
-        // gap in §8, pinned here so that a change in Copilot CLI shows.
+        // On Linux Copilot CLI up to 1.0.110 grants the repo's whole git directory, hooks and config with it (a gap in
+        // §8), and a newer one keeps those two read-only: pinned by version, so that a change in Copilot CLI shows.
         const escapes = probe.escapes(task.worktree);
         expect(escapes).not.toContain("the user's home");
         expect(escapes).not.toContain("a token file in the user's home");
-        if (process.platform === "linux") expect(escapes).toEqual(["the repo's git hooks", "the repo's git config"]);
+        if (process.platform === "linux") expect(escapes).toEqual(linuxGitDirectoryEscapes());
       }
       await agents.stop(session);
     } finally {
