@@ -1,10 +1,20 @@
-import type { CardWarmupProgress, McpAuditRevision, SessionList } from "@trackwall/protocol";
-import { type ReactNode, useState } from "react";
+import { type CardWarmupProgress, type DoctorReport, doctorApi, type McpAuditRevision, type SessionList } from "@trackwall/protocol";
+import { Fragment, type ReactNode, useCallback, useState } from "react";
 import { RemoteDaemonSurface } from "@/components/RemoteDaemonSurface";
+import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
-import { SETTINGS_CATEGORIES, type SettingsCategory, type SettingsSection, settingsCategory } from "@/lib/settings-categories";
+import { getStartedPlan } from "@/lib/get-started";
+import {
+  SETTINGS_CATEGORIES,
+  SETTINGS_GROUP_LABELS,
+  type SettingsCategory,
+  type SettingsGroup,
+  type SettingsSection,
+  settingsCategory,
+} from "@/lib/settings-categories";
 import type { AppUpdateHandle } from "@/lib/use-app-update";
+import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
 import { AlwaysAllowSurface } from "./AlwaysAllowSurface.tsx";
 import { AutoReviewSurface } from "./AutoReviewSurface.tsx";
@@ -15,6 +25,7 @@ import { CopilotUsageSurface } from "./CopilotUsageSurface.tsx";
 import { DaemonSurface } from "./DaemonSurface.tsx";
 import { DoctorSurface } from "./DoctorSurface.tsx";
 import { ErrorJournalSurface } from "./ErrorJournalSurface.tsx";
+import { GetStartedSurface } from "./GetStartedSurface.tsx";
 import { HomeSceneSurface } from "./HomeSceneSurface.tsx";
 import { JavaNavigationSurface } from "./JavaNavigationSurface.tsx";
 import { KeepScreenOnSurface } from "./KeepScreenOnSurface.tsx";
@@ -47,34 +58,58 @@ type SettingsProps = {
   onRetry: () => void;
   /** After the projects folder is saved, so that the app can show its repos. */
   onSaved: () => void;
+  /** Shows where sessions start, from "Get started" once it is ready. */
+  onStart: () => void;
 };
 
 /**
  * Settings (ADR-102): the list of categories on the left and the sections of the chosen one on the right; in a narrow
  * window, for example next to the supervisor panel, the list becomes a row above the sections. Each setting is also a
  * key in `workspace.yaml`, which can be edited by hand (ADR-13, ADR-18, ADR-84). The view is as wide as a wide category
- * needs (ADR-212), so the list stays in one place when the user moves between categories.
+ * needs (ADR-212), so the list stays in one place when the user moves between categories, and starts at the left edge
+ * of the window (ADR-262). The doctor runs for "Get started" only once that category is shown; its open steps then stay
+ * as a number next to its name.
  */
 export function SettingsView({ initialCategory, ...props }: SettingsProps & { initialCategory: SettingsCategory }) {
   const [current, setCurrent] = useState(initialCategory);
   const category = settingsCategory(current);
+  const [setupShown, setSetupShown] = useState(initialCategory === "get-started");
+  const { conn } = props;
+  const loadSetup = useCallback(() => post(conn, doctorApi.run, {}), [conn]);
+  const setup = useRemote(setupShown ? loadSetup : undefined);
+  const open = setup.data ? getStartedPlan(setup.data).open : 0;
+  const show = (id: SettingsCategory) => {
+    if (id === "get-started") setSetupShown(true);
+    setCurrent(id);
+  };
   return (
     <div className="@container w-full max-w-6xl">
       <div className="flex flex-col gap-4 @3xl:flex-row @3xl:items-start @3xl:gap-6">
         <nav aria-label="Settings categories" className="flex shrink-0 gap-1 overflow-x-auto @3xl:w-44 @3xl:flex-col">
-          {SETTINGS_CATEGORIES.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              aria-current={c.id === current ? "page" : undefined}
-              onClick={() => setCurrent(c.id)}
-              className={cn(
-                "shrink-0 rounded-md px-3 py-1.5 text-left text-sm whitespace-nowrap transition-colors",
-                c.id === current ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
-              )}
-            >
-              {c.label}
-            </button>
+          {SETTINGS_CATEGORIES.map((c, i) => (
+            <Fragment key={c.id}>
+              <GroupCaption group={c.group} previous={SETTINGS_CATEGORIES[i - 1]?.group} />
+              <button
+                type="button"
+                aria-current={c.id === current ? "page" : undefined}
+                onClick={() => show(c.id)}
+                className={cn(
+                  "flex shrink-0 items-center justify-between gap-2 rounded-md px-3 py-1.5 text-left text-sm whitespace-nowrap transition-colors",
+                  c.id === current ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                )}
+              >
+                {c.label}
+                {c.id === "get-started" && open > 0 && (
+                  <span
+                    role="img"
+                    aria-label={`${open} to do`}
+                    className="bg-warning/20 text-warning rounded-full px-1.5 font-mono text-xs"
+                  >
+                    {open}
+                  </span>
+                )}
+              </button>
+            </Fragment>
           ))}
         </nav>
         <div className={cn("flex w-full min-w-0 flex-col gap-4", !category.wide && "max-w-xl")}>
@@ -83,7 +118,7 @@ export function SettingsView({ initialCategory, ...props }: SettingsProps & { in
             <p className="text-muted-foreground text-sm">{category.description}</p>
           </header>
           {category.sections.map((section) => (
-            <Section key={section} section={section} {...props} />
+            <Section key={section} section={section} setup={setup} onOpenCategory={show} {...props} />
           ))}
         </div>
       </div>
@@ -91,8 +126,18 @@ export function SettingsView({ initialCategory, ...props }: SettingsProps & { in
   );
 }
 
+/** The caption of a group of categories, above its first one; only in the list on the left, a row of categories has none. */
+function GroupCaption({ group, previous }: { group: SettingsGroup; previous: SettingsGroup | undefined }) {
+  const label = SETTINGS_GROUP_LABELS[group];
+  if (label === null || group === previous) return null;
+  return <span className="hud-label hidden px-3 pt-3 pb-1 @3xl:block">{label}</span>;
+}
+
 function Section({
   section,
+  setup,
+  onOpenCategory,
+  onStart,
   conn,
   update,
   warmupLive,
@@ -100,8 +145,22 @@ function Section({
   sessions,
   onRetry,
   onSaved,
-}: SettingsProps & { section: SettingsSection }): ReactNode {
+}: SettingsProps & {
+  section: SettingsSection;
+  setup: RemoteHandle<DoctorReport>;
+  onOpenCategory: (category: SettingsCategory) => void;
+}): ReactNode {
   switch (section) {
+    case "get-started":
+      return (
+        <GetStartedSurface
+          conn={conn}
+          report={setup}
+          onRetry={onRetry}
+          onStart={onStart}
+          onOpenDiagnostics={() => onOpenCategory("diagnostics")}
+        />
+      );
     case "folders":
       return <WorkspaceFolders conn={conn} onRetry={onRetry} onSaved={onSaved} />;
     case "local-config-store":

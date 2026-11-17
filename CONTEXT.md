@@ -49,7 +49,7 @@ A screen of the app in the UI (Home, Repos, Sessions, Overview, Plan, Settings),
 _Avoid_: tab (for a whole screen)
 
 **Settings category** (`SettingsCategory`, `SETTINGS_CATEGORIES`; its sections `SettingsSection`):
-A group of Settings listed on the left of the Settings view: Workspace, Repo hosts, Agents, Usage, App, Files and Diagnostics (ADR-102, ADR-212). Each holds a few sections, such as the projects folder or the daemon's state.
+A group of Settings listed on the left of the Settings view: Get started, then Workspace, Repo hosts, Agents and App under "Settings", and Usage, Files and Diagnostics under "Reports" (ADR-102, ADR-212, ADR-262). Each holds a few sections, such as the projects folder or the daemon's state.
 _Avoid_: tab (that is `TabBar`), page
 
 **Command palette** (`CommandPalette`, `lib/command-palette.ts`; a **command** is `PaletteCommand`):
@@ -966,6 +966,10 @@ _Avoid_: access log, history (of a task, that is its handoff and summary), tool 
 **Doctor** (`Doctor`, the `doctor` module, `doctorApi`; in the UI *Doctor* in Settings):
 The checks of what Trackwall needs on this computer: the projects folder, every key of `workspace.yaml`, git, Copilot CLI and its trusted folders, the network for sessions (proxy and certificates, ADR-166), mise, `gh` and `glab` signed in to the repo hosts (ADR-101). Each is a **doctor check** (`DoctorCheck`) with a state (`ok`, `warn`, `fail`), what was found and what to do. It only reads.
 _Avoid_: health check (that is `GET /api/health`), diagnostics, setup wizard
+
+**Get started** (`getStartedPlan`, `GetStartedStep`, the `get-started` Settings category; in the UI *Get started*):
+The doctor checks that stand between a new user and a first session, shown as **steps** in the order to do them (ADR-262): the projects folder, Git, Copilot CLI and the network are *needed*, Copilot CLI's trusted folder and git access to the repo hosts *recommended*. With no needed step open it says *Ready*. It adds no checks of its own.
+_Avoid_: onboarding, setup wizard, profile
 
 **Config files** (`ConfigFiles`, the `config-files` module, `configFilesApi`; in the UI *Files* in Settings):
 Every file and folder Trackwall reads or writes on this computer, grouped by **place** (`ConfigPlace`: Trackwall's state folder, the projects folder, Copilot CLI's folder). Each is a **config entry** (`ConfigEntry`, what it is for in `CONFIG_ENTRIES`) with a state (`present`, `missing`, `invalid`), and each key of `workspace.yaml` a **workspace key** (`WorkspaceKeyState`) with its value and whether it comes from the file or the default (ADR-108). It only reads.

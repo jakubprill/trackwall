@@ -60,4 +60,4 @@ To update by hand, for example when a proxy stops the download or on 0.4.0, whic
 
 ## First start
 
-Set the projects folder in "Settings", then [connect Copilot CLI](/guide/connect-copilot-cli). The [list of all features](/features/) shows what to try next.
+Home offers [Get started](/features/get-started): a short list in "Settings" that sets your projects folder and checks Git, Copilot CLI and the network, and says when Trackwall is ready. Sessions you start in Trackwall get its tools by themselves; to give them to a Copilot CLI you start in your own terminal, [connect Copilot CLI](/guide/connect-copilot-cli). The [list of all features](/features/) shows what to try next.

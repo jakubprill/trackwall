@@ -1,9 +1,18 @@
 import { describe, expect, test } from "bun:test";
-import { FIRST_SETTINGS_CATEGORY, SETTINGS_CATEGORIES, settingsCategory } from "../src/lib/settings-categories.ts";
+import { firstSettingsCategory, SETTINGS_CATEGORIES, SETTINGS_GROUP_LABELS, settingsCategory } from "../src/lib/settings-categories.ts";
 
 describe("Settings categories", () => {
-  test("the list shows Workspace, Repo hosts, Agents, Usage, App, Files and Diagnostics in this order", () => {
-    expect(SETTINGS_CATEGORIES.map((c) => c.label)).toEqual(["Workspace", "Repo hosts", "Agents", "Usage", "App", "Files", "Diagnostics"]);
+  test("the list shows Get started, then what you set (Workspace, Repo hosts, Agents, App), then what you read (Usage, Files, Diagnostics)", () => {
+    expect(SETTINGS_CATEGORIES.map((c) => [SETTINGS_GROUP_LABELS[c.group], c.label])).toEqual([
+      [null, "Get started"],
+      ["Settings", "Workspace"],
+      ["Settings", "Repo hosts"],
+      ["Settings", "Agents"],
+      ["Settings", "App"],
+      ["Reports", "Usage"],
+      ["Reports", "Files"],
+      ["Reports", "Diagnostics"],
+    ]);
   });
 
   test("Files shows every config file, then the local config of every repo", () => {
@@ -62,8 +71,10 @@ describe("Settings categories", () => {
     ]);
   });
 
-  test("Settings opens on Workspace, with the projects folder first", () => {
-    expect(FIRST_SETTINGS_CATEGORY).toBe("workspace");
-    expect(settingsCategory(FIRST_SETTINGS_CATEGORY).sections[0]).toBe("folders");
+  test("Settings opens on Get started until a session exists, and on Workspace with the projects folder first after that", () => {
+    expect(firstSettingsCategory(undefined)).toBe("get-started");
+    expect(firstSettingsCategory(0)).toBe("get-started");
+    expect(firstSettingsCategory(3)).toBe("workspace");
+    expect(settingsCategory("workspace").sections[0]).toBe("folders");
   });
 });

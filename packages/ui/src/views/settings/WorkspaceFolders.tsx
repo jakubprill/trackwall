@@ -1,24 +1,17 @@
 import { workspaceApi } from "@trackwall/protocol";
 import { useCallback } from "react";
-import { ErrorWithRetry } from "@/components/ErrorWithRetry";
-import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
-import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { useDesktop } from "@/lib/desktop";
-import { daemonExamplePaths } from "@/lib/platform";
-import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 import { GitProgramSurface } from "./GitProgramSurface.tsx";
-import { PathForm } from "./PathForm.tsx";
+import { ProjectsFolderForm } from "./ProjectsFolderForm.tsx";
 import { WorktreesDirSurface } from "./WorktreesDirSurface.tsx";
 
 /** The projects folder, the task worktrees folder and the git program; all come from one read of the workspace settings. */
 export function WorkspaceFolders({ conn, onRetry, onSaved }: { conn: Connection; onRetry: () => void; onSaved: () => void }) {
   const load = useCallback(() => post(conn, workspaceApi.settings, {}), [conn]);
   const settings = useRemote(load);
-  const example = daemonExamplePaths(useDesktop()).projectsDir;
 
   async function saveProjectsDir(path: string) {
     await post(conn, workspaceApi.setProjectsDir, { path });
@@ -43,31 +36,7 @@ export function WorkspaceFolders({ conn, onRetry, onSaved }: { conn: Connection;
           <p className="text-muted-foreground text-sm">
             The Repos view shows every git repo directly inside this folder. A repo cloned into it appears in the list on its own.
           </p>
-          {settings.error && (
-            <ErrorWithRetry
-              message={settings.error}
-              onRetry={() => {
-                onRetry();
-                settings.reload();
-              }}
-            />
-          )}
-          {!settings.data && !settings.error && <Loading />}
-          {settings.data?.projectsDir === null && <SuggestedProjectsDir conn={conn} use={saveProjectsDir} />}
-          {settings.data && (
-            <PathForm
-              key={settings.data.projectsDir ?? ""}
-              {...PROJECTS_DIR}
-              placeholder={example}
-              initialPath={settings.data.projectsDir ?? ""}
-              configFile={settings.data.configFile}
-              save={(path) => saveProjectsDir(path)}
-            />
-          )}
-          {/* A bad `projectsDir` typed by hand into `workspace.yaml` is fixed with this very form. */}
-          {settings.errorCode === "invalid_config" && (
-            <PathForm {...PROJECTS_DIR} placeholder={example} initialPath="" save={(path) => saveProjectsDir(path)} />
-          )}
+          <ProjectsFolderForm conn={conn} settings={settings} save={saveProjectsDir} onRetry={onRetry} />
         </div>
       </Surface>
       {settings.data && <WorktreesDirSurface settings={settings.data} save={saveWorktreesDir} />}
@@ -75,36 +44,3 @@ export function WorkspaceFolders({ conn, onRetry, onSaved }: { conn: Connection;
     </>
   );
 }
-
-/**
- * A folder of the home folder that looks like a projects folder (`Dev`, `Projects`…), offered with one button while none
- * is set, so that the usual case needs no typing or browsing.
- */
-function SuggestedProjectsDir({ conn, use }: { conn: Connection; use: (path: string) => Promise<void> }) {
-  const load = useCallback(() => post(conn, workspaceApi.suggestedProjectsDir, {}), [conn]);
-  const suggestion = useRemote(load);
-  const save = useAction(
-    (path: string) => use(path),
-    () => {},
-  );
-  if (!suggestion.data) return null;
-  const path = suggestion.data;
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span>
-          Found <span className="font-mono text-xs">{path}</span> in your home folder.
-        </span>
-        <Button size="sm" onClick={() => save.run(path)} disabled={save.pending}>
-          Use this folder
-        </Button>
-      </div>
-      {save.error && <p className="text-destructive text-xs break-words">{save.error}</p>}
-    </div>
-  );
-}
-
-const PROJECTS_DIR = {
-  label: "Full path to the projects folder",
-  configKey: "projectsDir",
-};

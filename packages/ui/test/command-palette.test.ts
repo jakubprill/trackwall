@@ -122,11 +122,12 @@ describe("the command palette's commands (ADR-246)", () => {
       "Views: Repos",
       "Repos: billing",
       "Repos: orders-api",
+      "Settings: Get started",
       "Settings: Workspace",
       "Settings: Repo hosts",
       "Settings: Agents",
-      "Settings: Usage",
       "Settings: App",
+      "Settings: Usage",
       "Settings: Files",
       "Settings: Diagnostics",
     ]);
