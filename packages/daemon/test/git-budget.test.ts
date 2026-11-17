@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, normalize } from "node:path";
 import { CardCache } from "../src/modules/cards/card-cache.ts";
 import { Cards } from "../src/modules/cards/cards.ts";
 import { Graph } from "../src/modules/graph/graph.ts";
@@ -242,7 +242,9 @@ describe("the git budget of a task worktree's changes, read every few seconds wh
       );
       gitIn(repo, "worktree", "add", "--quiet", "-b", "trackwall/task-2", worktree, base);
       writeFileSync(join(worktree, "notes.md"), "plan\n");
-      expect(gitIn(worktree, "rev-parse", "--git-path", "index").trim()).toEndWith(join("worktrees", "task1", "index"));
+      // git prints the path with forward slashes on Windows too.
+      const index = normalize(gitIn(worktree, "rev-parse", "--git-path", "index").trim());
+      expect(index).toEndWith(join("worktrees", "task1", "index"));
 
       // Where the index lies, the new files, their entries in the temporary index and one diff.
       expect(await gitProcessesOf(async () => expect((await vcs.changedPaths(worktree, base)).paths).toEqual(["notes.md"]))).toBe(4);
