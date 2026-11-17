@@ -2,6 +2,8 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { copilotCliVersion } from "../../scripts/copilot-cli.ts";
+import { compareVersions } from "../../src/modules/doctor/version.ts";
 
 // What a contract test of Copilot CLI's sandbox (ADR-181) runs in a task: a script committed into the repo, so that
 // Copilot CLI's check of the paths in a command cannot see what it touches, as with a build script. It tries to write
@@ -23,6 +25,20 @@ const SCRIPT_NAME = "escape.mjs";
  * sandbox fails closed there, so the test checks that nothing ran instead of what the sandbox let through.
  */
 const WINDOWS_WITHOUT_SANDBOX = "Windows sandboxing requires BaseContainer";
+
+const GIT_HOOKS = "the repo's git hooks";
+const GIT_CONFIG = "the repo's git config";
+/** The first Copilot CLI whose sandbox on Linux keeps the repo's git hooks and config read-only (seen on the binaries of 1.0.110 and 1.0.111). */
+const GIT_HOOKS_READ_ONLY_FROM = "1.0.111";
+
+/**
+ * What the escape script still writes outside the worktree on Linux, by the Copilot CLI the tests run on. Up to 1.0.110
+ * the sandbox grants the repo's whole git directory for the worktree's commits, hooks and config with it (a gap in §8);
+ * from 1.0.111 it keeps those two read-only. Pinned both ways, so that a change in Copilot CLI shows.
+ */
+export function linuxGitDirectoryEscapes(version = copilotCliVersion()): string[] {
+  return compareVersions(version, GIT_HOOKS_READ_ONLY_FROM) < 0 ? [GIT_HOOKS, GIT_CONFIG] : [];
+}
 
 /** Whether the shell's answers to the model say the sandbox could not run, so every command was refused. */
 export function sandboxRefusedEverything(answers: readonly string[]): boolean {
@@ -63,8 +79,8 @@ export function commitEscapeScript(repo: string) {
       [
         existsSync(ESCAPED) && "the user's home",
         readIfThere(join(worktree, READ_COPY)).includes(TOKEN) && "a token file in the user's home",
-        existsSync(join(repo, ".git", "hooks", "post-checkout")) && "the repo's git hooks",
-        readFileSync(config, "utf8") !== configBefore && "the repo's git config",
+        existsSync(join(repo, ".git", "hooks", "post-checkout")) && GIT_HOOKS,
+        readFileSync(config, "utf8") !== configBefore && GIT_CONFIG,
       ].filter((place) => place !== false),
     /**
      * The repo as it was, its git hooks and config included, so that later tests start from the same commit and the

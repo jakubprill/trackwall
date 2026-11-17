@@ -17,6 +17,13 @@ import type { AgentApproval, AgentDialog, AgentDialogOption, AgentQuestion } fro
  * question, options and footer are still there, so such a box counts when only the first line (the tab bar, not
  * checked) and blank lines are above its left border, which runs unbroken up from the footer; the heading is then gone, and the approval's text from its
  * notification hook stands in.
+ *
+ * Copilot CLI 1.0.112 no longer lets a tall approval run off the top: it scrolls what the approval asks about inside the
+ * box (the footer gains "pgup/pgdn to scroll"), and in a terminal of some 16 rows or fewer it squeezes the box, without
+ * the blank lines between its parts and with only the selected option. Nothing but the question's first words then says
+ * where the detail ends, so a squeezed box counts only with one question line that starts as Copilot CLI's approvals do
+ * (`SQUEEZED_QUESTION`) and one option under it, the selected one; its detail is the beginning of what the box scrolls,
+ * so it ends with "…".
  */
 
 /** A dialog as read from the screen, before it gets the id of its wait. */
@@ -25,8 +32,10 @@ export type ScreenDialog = Omit<AgentApproval, "id"> | Omit<AgentQuestion, "id">
 const APPROVAL_FOOTER = "enter to select";
 const QUESTION_HEADING = "Copilot needs information.";
 const QUESTION_FOOTER = "enter accept";
+/** The marker in front of the selected option. */
+const SELECTED = "❯";
 /** An option line: an optional selection marker, the digit and the label. */
-const OPTION = /^(❯\s*)?([1-9])\.\s+(.*)$/;
+const OPTION = new RegExp(`^(${SELECTED}\\s*)?([1-9])\\.\\s+(.*)$`);
 /** An option that needs text typed in the terminal, so it cannot be answered with its digit alone. */
 const NEEDS_TEXT = /^No\b/;
 /**
@@ -37,10 +46,12 @@ const NEEDS_TEXT = /^No\b/;
 const CHANGES_SYSTEM_TRUST = /^Install (updated )?certificate authority$/;
 /** Lines made only of box drawing and spaces (the inner box's top and bottom, the rule under the heading). */
 const BOX_ONLY = /^[\s╭╮╰╯─│]*$/;
+/** How the question of every approval Copilot CLI draws starts ("Do you want to run this command?"), read only in a squeezed box. */
+const SQUEEZED_QUESTION = /^Do you want /;
 const MAX_DETAIL_LINES = 20;
 /** The heading of a cut box whose notification hook brought no text. */
 const CUT_BOX_TITLE = "Approval request";
-/** The first detail line of a cut box: the detail starts in the middle of what the dialog shows. */
+/** The detail line that stands for what a cut or squeezed box does not show: first in a box cut above, last in a squeezed one. */
 const CUT_DETAIL = "…";
 const MAX_TEXT = 300;
 
@@ -63,7 +74,7 @@ function readApproval(lines: readonly string[], notice: string | undefined): Scr
   const { body } = box;
   // The rule under the heading.
   if (body[0] !== undefined && body[0].trim() !== "" && BOX_ONLY.test(body[0])) body.shift();
-  const paragraphs = split(body);
+  const { paragraphs, squeezed } = boxParts(body);
   const options = readOptions(paragraphs.pop() ?? []);
   const cutAbove = box.heading === undefined;
   const title = cut((box.heading ?? notice ?? CUT_BOX_TITLE).trim());
@@ -73,15 +84,49 @@ function readApproval(lines: readonly string[], notice: string | undefined): Scr
   if (options.some((o) => o.selected && NEEDS_TEXT.test(o.label))) return undefined;
   // A dialog with no option answerable outside the terminal still waits; only Stop (Esc) is offered then.
   const answerable = options.filter((o) => !NEEDS_TEXT.test(o.label) && !CHANGES_SYSTEM_TRUST.test(o.label));
-  // A cut box's detail starts with "…", which takes the place of its last line rather than of the one nearest the question.
-  const detail = detailLines(paragraphs, cutAbove ? MAX_DETAIL_LINES - 1 : MAX_DETAIL_LINES);
   return {
     kind: "approval",
     title,
-    detail: cutAbove ? [CUT_DETAIL, ...detail] : detail,
+    detail: shownDetail(paragraphs, squeezed ? "below" : cutAbove ? "above" : null),
     question,
     options: answerable.map(({ key, label }) => ({ key, label })),
   };
+}
+
+/** The paragraphs of a box's body, the options last and the question before them, and whether the box is squeezed. */
+function boxParts(body: readonly string[]): { paragraphs: string[][]; squeezed: boolean } {
+  const spaced = split(body);
+  // A box with blank lines has at least its question and its options apart; one run of lines is a squeezed box.
+  const squeezed = spaced.length === 1;
+  return { paragraphs: squeezed ? squeezedParts(spaced[0] ?? []) : spaced, squeezed };
+}
+
+/**
+ * The detail with "…" where the box does not show it: a squeezed box shows the beginning of what it scrolls, also when
+ * its heading is cut, so its "…" comes last; a box only cut above lost its beginning. The "…" takes the place of the
+ * last detail line, not of the one nearest the question.
+ */
+function shownDetail(paragraphs: readonly string[][], missing: "above" | "below" | null): string[] {
+  const detail = detailLines(paragraphs, missing === null ? MAX_DETAIL_LINES : MAX_DETAIL_LINES - 1);
+  if (missing === null) return detail;
+  return missing === "above" ? [CUT_DETAIL, ...detail] : [...detail, CUT_DETAIL];
+}
+
+/**
+ * The detail, the question and the option of a squeezed box, whose lines follow each other without blank ones: the
+ * question runs from the line that starts as an approval's question does to the selected option, the only one such a
+ * box draws. The question can hold a path the agent chose, and without a blank line under it a wrapped part of that
+ * path could pass for an option ("2. Yes, only this file") or for the question, so anything but one such question
+ * line and one option line under it, with the selection marker, is no dialog.
+ */
+function squeezedParts(lines: readonly string[]): string[][] {
+  const text = lines.map((l) => l.trim());
+  const question = text.findIndex((l) => SQUEEZED_QUESTION.test(l));
+  const option = text.findIndex((l, i) => i > question && OPTION.test(l));
+  if (question < 0 || option < 0 || !text[option]?.startsWith(SELECTED)) return [];
+  const others = text.filter((l, i) => (i !== question && SQUEEZED_QUESTION.test(l)) || (i > question && i !== option && OPTION.test(l)));
+  if (others.length > 0) return [];
+  return [lines.slice(0, question), lines.slice(question, option), lines.slice(option)].filter((part) => part.length > 0);
 }
 
 /**
