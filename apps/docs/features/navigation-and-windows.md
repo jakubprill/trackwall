@@ -25,6 +25,8 @@ The bar at the left edge of the window switches views, as in VS Code: "Home", "R
 
 In "Workspace", "Agents" and "App" every setting is one folded row: its name, one sentence on what it does, and its value now. A dot before the value marks one you changed; without it the row says what applies by default. Click a row to open its form with the full explanation, and click it again to fold it. A setting that needs you, such as a projects folder that is not set, is already open.
 
+"Usage" and "Diagnostics" read their data when you open them. While they do, each section shows grey bars in the shape of what is coming and keeps the height it had last time, so nothing jumps when the data arrives.
+
 Ctrl+K (⌘K on macOS) opens the command palette over any view. Type a few letters of what you want, a session, a task, a repo, a view or a Settings category, and press Enter, or click it. The palette also does a few things: start a new session, open the next session waiting for you, show the supervisor, open the current view in a new window and switch the theme. Every word you type must appear in the name, so "billing task" finds a task in the `billing` repo; names that start with what you typed come first. Where an action has its own key, the palette shows it next to the name.
 
 Any view can open in a new window: right-click its icon and choose "Open in new window", press Ctrl+Shift with the view's digit, or choose "New window" in the tray. Every window has its own view bar, switches views on its own and shows the same sessions and repos live. Each window's title names its view ("Sessions – Trackwall"), so you can tell them apart in the taskbar.

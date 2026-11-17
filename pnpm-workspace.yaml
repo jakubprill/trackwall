@@ -35,3 +35,9 @@ patchedDependencies:
   # scene threw before it drew. The patch makes them closures that do the same. Remove it when koota stops generating code;
   # the E2E test of the window under its CSP shows whether it does.
   koota@0.6.6: patches/koota@0.6.6.patch
+
+auditConfig:
+  ignoreGhsas:
+    # picomatch <=4.0.7 (ReDoS in a glob pattern) has no fixed version yet. Only knip, a lint tool, brings it in, and it
+    # matches the patterns of our own knip.json, never input from outside. Remove this when picomatch ships a fix.
+    - GHSA-fc5q-39xc-vjpf
