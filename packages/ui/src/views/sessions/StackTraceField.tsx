@@ -1,6 +1,5 @@
 import { STACK_TRACE_MAX } from "@trackwall/protocol";
-import { ChevronDown, ChevronRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { FoldButton } from "@/components/FoldButton";
 import { Textarea } from "@/components/ui/textarea";
 
 /**
@@ -26,9 +25,9 @@ export function StackTraceField({
   if (!shown) return null;
   return (
     <div className="flex flex-col gap-2">
-      <Button variant="ghost" size="sm" className="w-fit" aria-expanded={open} onClick={() => onOpen(!open)}>
-        {open ? <ChevronDown /> : <ChevronRight />} Stack trace
-      </Button>
+      <FoldButton open={open} onOpen={onOpen}>
+        Stack trace
+      </FoldButton>
       {open && (
         <>
           <Textarea

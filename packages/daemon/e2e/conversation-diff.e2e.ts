@@ -9,6 +9,7 @@ describe("the diff panel of the conversation view (ADR-107)", () => {
     const page = await trackwall().open();
     await showSessions(page);
     await page.getByRole("textbox", { name: "Prompt for the agent" }).fill("Edit the README");
+    await page.getByRole("button", { name: "More options" }).click();
     await page.getByRole("button", { name: /Chat \(preview\)/ }).click();
     await page.getByRole("button", { name: "Create task" }).click();
     await page.getByRole("button", { name: "Allow once" }).click();

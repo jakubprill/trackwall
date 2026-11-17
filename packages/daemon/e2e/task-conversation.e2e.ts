@@ -10,6 +10,7 @@ describe("an agent task in Chat (ADR-137)", () => {
     const page = await trackwall().open();
     await showSessions(page);
     await page.getByRole("textbox", { name: "Prompt for the agent" }).fill(PROMPT);
+    await page.getByRole("button", { name: "More options" }).click();
     await page.getByRole("button", { name: /Chat \(preview\)/ }).click();
     await page.getByRole("button", { name: "Create task" }).click();
     // Layout "1", the default: the task with its full panel, where the bug was; the grid's tiles already showed Chat.

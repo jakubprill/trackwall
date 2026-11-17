@@ -28,6 +28,8 @@ export interface ListedSessionsDeps {
   tokens: SessionTokens;
   resumable: ResumableSessions;
   lastSupervisor: LastSupervisorFile;
+  /** The task whose session works on `task` (ADR-265): the lead part for a part of a change with one session, else the task. */
+  sessionTask: (task: string) => string;
   log: (msg: string) => void;
 }
 
@@ -129,11 +131,15 @@ export class ListedSessions {
     return this.#all().find((s) => match(s) && this.isRunning(s));
   }
 
-  /** The task's newest session while it runs. */
+  /**
+   * The newest running session that works on the task: its own, or for a part of a change with one session the lead
+   * part's (ADR-265), so what waits for a part's agent reaches the session that does the part.
+   */
   runningOfTask(task: string): AgentSession | undefined {
+    const worker = this.#deps.sessionTask(task);
     return this.#all()
       .reverse()
-      .find((s) => s.task === task && this.isRunning(s));
+      .find((s) => s.task === worker && this.isRunning(s));
   }
 
   /** How the environment mise would give the session now differs from the one it started with (ADR-119). */

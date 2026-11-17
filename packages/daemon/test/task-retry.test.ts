@@ -188,6 +188,7 @@ describe.skipIf(process.versions.bun === undefined)("retrying a task on another 
         { repo: "web", note: "" },
       ],
       approvals: "ask",
+      sessions: "perPart",
     });
     const [part] = tasks;
     if (part === undefined) throw new Error("no part started");

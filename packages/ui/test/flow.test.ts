@@ -219,8 +219,8 @@ describe("the groups on the wall (ADR-224)", () => {
   test("the parts of a change share a row named after the first part, with how many repos it spans", () => {
     const change = "c1";
     const parts = [
-      task("second", { repo: "web", title: "Rename in web", change: { id: change, position: 1 } }),
-      task("first", { repo: "api", title: "Rename customer id", change: { id: change, position: 0 } }),
+      task("second", { repo: "web", title: "Rename in web", change: { id: change, position: 1, session: null } }),
+      task("first", { repo: "api", title: "Rename customer id", change: { id: change, position: 0, session: null } }),
     ];
     const groups = flowGroups(input({ tasks: parts }));
     expect(groups.map((g) => [g.kind, g.name, g.summary, g.cards.length])).toEqual([
@@ -286,9 +286,9 @@ describe("the groups on the wall (ADR-224)", () => {
   test("a change's row is named after its earliest part in the row, when the first part is in a project's row", () => {
     const checkoutItems = [item("checkout", { kind: "project", parent: null }), item("form")];
     const parts = [
-      task("first", { title: "Part on the plan", item: "form", change: { id: "c1", position: 0 } }),
-      task("third", { title: "Third part", change: { id: "c1", position: 2 } }),
-      task("second", { title: "Second part", change: { id: "c1", position: 1 } }),
+      task("first", { title: "Part on the plan", item: "form", change: { id: "c1", position: 0, session: null } }),
+      task("third", { title: "Third part", change: { id: "c1", position: 2, session: null } }),
+      task("second", { title: "Second part", change: { id: "c1", position: 1, session: null } }),
     ];
     expect(flowGroups(input({ tasks: parts }, checkoutItems)).map((g) => [g.kind, g.name])).toEqual([
       ["project", "checkout"],
@@ -297,7 +297,7 @@ describe("the groups on the wall (ADR-224)", () => {
   });
 
   test("a task on an item of a project stays in the project's row when it is also a part of a change", () => {
-    const part = task("t", { item: "form", change: { id: "c1", position: 0 } });
+    const part = task("t", { item: "form", change: { id: "c1", position: 0, session: null } });
     expect(flowGroups(input({ tasks: [part] }, items)).map((g) => g.kind)).toEqual(["project"]);
   });
 
@@ -310,7 +310,7 @@ describe("the groups on the wall (ADR-224)", () => {
           tasks: [
             task("loose"),
             task("sup", { proposedBy: { session: null, supervisor: true, task: null } }),
-            task("part", { change: { id: "c1", position: 0 } }),
+            task("part", { change: { id: "c1", position: 0, session: null } }),
             task("pay", { item: "form" }),
             task("find", { item: "filters" }),
           ],

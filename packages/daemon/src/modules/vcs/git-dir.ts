@@ -18,17 +18,23 @@ export interface GitDirs {
 /**
  * The git directory of the repo (with `HEAD`) and the common one (with `refs/` and `packed-refs`): both `.git` in a normal
  * clone; in a worktree `.git` is a file with `gitdir: <path>`, and that directory names the common one in `commondir`.
+ * Git reads `commondir` in any git directory, a clone's own `.git` too, so it is read there as well: whoever writes
+ * that file moves git to another configuration (`run-settings.ts`).
  */
 export async function gitDirs(repo: string): Promise<GitDirs | null> {
   const dotGit = join(repo, ".git");
   const info = await statIfExists(dotGit);
   if (!info) return null;
-  if (info.isDirectory()) return { gitDir: dotGit, commonDir: dotGit };
-  const pointer = /^gitdir:\s*(.+?)\s*$/m.exec(await readFile(dotGit, "utf8"));
-  if (!pointer?.[1]) return null;
-  const gitDir = relativeTo(repo, pointer[1]);
+  const gitDir = info.isDirectory() ? dotGit : await pointedGitDir(repo, dotGit);
+  if (gitDir === null) return null;
   const common = (await readIfExists(join(gitDir, "commondir"))).trim();
   return { gitDir, commonDir: common ? relativeTo(gitDir, common) : gitDir };
+}
+
+/** The git directory a worktree's `.git` file names; `null` for a file that names none. */
+async function pointedGitDir(repo: string, dotGit: string): Promise<string | null> {
+  const pointer = /^gitdir:\s*(.+?)\s*$/m.exec(await readFile(dotGit, "utf8"));
+  return pointer?.[1] ? relativeTo(repo, pointer[1]) : null;
 }
 
 /**

@@ -27,6 +27,7 @@ describe("a failed task retried on a stronger model", () => {
     const page = await trackwall().open();
     await showSessions(page);
     await page.getByRole("textbox", { name: "Prompt for the agent" }).fill(PROMPT);
+    await page.getByRole("button", { name: "More options" }).click();
     await page.getByRole("button", { name: "Model for the agent: Copilot CLI default" }).click();
     await page.getByRole("textbox", { name: "Model for the agent" }).fill("gpt-5-mini");
     await page.getByRole("button", { name: "Create task" }).click();

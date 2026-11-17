@@ -501,7 +501,7 @@ Copilot CLI's sandbox (`--sandbox`): a task's shell commands run under the syste
 _Avoid_: container, jail, isolation mode (the container is the dev container; Trackwall has no isolation of its own)
 
 **Run settings** (`run-settings.ts`, `runSettingsDigest`, `runSettings` in `tasks.json`):
-What in a repo's git directory makes git run a program: the repo configuration (filters, `core.fsmonitor`, hooks path and the rest, without the keys git writes in ordinary work), `config.worktree`, `info/attributes` and the hooks. A task in the sandbox can write them, so the daemon refuses git in its repo once they change (ADR-181 addendum).
+What in a repo's git directory makes git run a program or send its requests elsewhere: the repo configuration (filters, `core.fsmonitor`, an absolute hooks path, `protocol.*`, `http.*`, git-lfs's transfer program and the rest, without the keys git and tools write in ordinary work), `config.worktree`, `info/attributes` and the hooks. A task in the sandbox can write them, so the daemon refuses git in its repo once they change, and runs no hooks there at all (ADR-181 addenda).
 
 **Java navigation** (`Task.javaNavigation`, `javaNavigation` in `workspace.yaml`, `JavaNavigationSettings`; "Java navigation" on the start pill):
 A Java language server (jdtls) a task's sessions get for Copilot CLI's `lsp` tool, started by Copilot CLI from the session plugin in the task's worktree with the task's own index. The user installs jdtls and its Java with "Install" in Settings › Agents, which writes their paths into `workspace.yaml` (ADR-123), or names their own there by hand (the install's progress and last error: `JavaNavigationInstall`; how a task's jdtls is doing, from its log: `JavaNavigationStatus`, ADR-124), then turns the pill on for a task in a repo tagged java (ADR-99). The install also gets the Java versions the repos build with, the **runtimes** (`JavaNavigationSettings.runtimes`, `JavaRuntime`), which jdtls may run Gradle on and Gradle takes toolchains from, and a Lombok jar (ADR-167).
@@ -588,8 +588,16 @@ What a task whose session proposed another task hands that task: the handing tas
 _Avoid_: dependency, upstream, parent task
 
 **Change** (`Task.change`, `TaskChange`, `ChangeId`; "change" in the UI):
-One piece of work across several repos that the user starts at once, or approves on one card when an agent proposes it (`propose_change`, a `TaskProposal` of `kind: change`): one task per repo, its **parts**, all on one branch name from the change's title, each with its place in the **merge order** (`TaskChange.position`), the order their merge requests are to be merged. A change is no record of its own: it is the tasks that carry its id, and it ends with its last part. Each part's session knows its siblings, and builds on the part right before it as a handoff (ADR-171). The merge order is information; nothing waits for it or merges by it (ADR-9). Not a subtask: no part proposed another, so none reports to another; the parts of a proposed change all report to its proposer.
+One piece of work across several repos that the user starts at once, or approves on one card when an agent proposes it (`propose_change`, a `TaskProposal` of `kind: change`): one task per repo, its **parts**, all on one branch name from the change's title, each with its place in the **merge order** (`TaskChange.position`), the order their merge requests are to be merged. A change is no record of its own: it is the tasks that carry its id, and it ends with its last part. One session makes the whole change (ADR-265): it belongs to the **lead part** and works on every part in the **change folder**. With a session per part (`sessions: "perPart"`, ADR-171) each part's session knows its siblings and builds on the part right before it as a handoff. The merge order is information; nothing waits for it or merges by it (ADR-9). Not a subtask: no part proposed another, so none reports to another; the parts of a proposed change all report to its proposer.
 _Avoid_: multi-repo task, epic; and do not confuse it with a task's changes (its diff, `TaskChanges`), which every part has.
+
+**Lead part** (`TaskChange.session`, `AgentTasks.sessionTask`):
+The part of a change whose session makes the whole change: the first part made. Every part names it; the other parts have no session of their own, and a review, a message or Resume on any of them reaches the lead part's session. It ends last (ADR-265).
+_Avoid_: main part, parent task, root task
+
+**Change folder** (`changeFolder`, `AgentTasks.sessionFolder`; `<worktrees>/_changes/<branch>/`):
+The folder the session of a change runs in: no repo itself, it holds the worktree of each part under its repo's name, and is removed with the last part (ADR-265).
+_Avoid_: workspace, monorepo, change worktree
 
 **Impact** (`ImpactedRepo`, `impact` in `ChangedEndpoints`, `graph/impact.ts`; in the UI the task's *Impact* tab and *Impact of* in Overview):
 The repos a task's committed API change reaches, in rings: ring 1 calls a changed endpoint, ring 2 calls an endpoint of ring 1 that makes such a call, up to three rings; a repo reached only through code Trackwall could not follow, or through a client without paths, is *maybe* (`sure: false`) (ADR-147).

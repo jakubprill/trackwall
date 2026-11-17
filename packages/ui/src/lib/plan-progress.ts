@@ -1,7 +1,7 @@
 import { ancestorsOf, type BoardColumn, type BoardItem, type Session, type Task, type TaskOutcome } from "@trackwall/protocol";
 import { isClosed, outline } from "./board-tree.ts";
 import type { StatusTone } from "./repo-status.ts";
-import { latestSession } from "./session-entries.ts";
+import { workingSession } from "./session-entries.ts";
 import { taskStateLabel } from "./session-state.ts";
 import { type OutcomeMark, outcomeMarks } from "./task-outcomes.ts";
 
@@ -79,7 +79,7 @@ export function itemTaskIndex({ tasks, sessions, outcomes }: TaskActivity): Item
   const newestFirst = [...tasks].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   for (const task of newestFirst) {
     if (task.item === null) continue;
-    const session = latestSession(sessions, task.id);
+    const session = workingSession(sessions, task);
     const listed = index.get(task.item) ?? [];
     listed.push({
       task,

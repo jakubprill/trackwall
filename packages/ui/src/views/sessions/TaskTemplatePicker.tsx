@@ -2,6 +2,7 @@ import { type TaskTemplateEntry, taskTemplatesApi, trackwallDirLabel } from "@tr
 import { BookmarkPlus } from "lucide-react";
 import { type RefObject, useCallback, useRef, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
+import { FoldButton } from "@/components/FoldButton";
 import { RemoveForGood } from "@/components/RemoveForGood";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,33 +38,40 @@ export function TaskTemplatePicker({
   const load = useCallback(() => post(conn, taskTemplatesApi.list, {}), [conn]);
   const list = useRemote(load);
   const [saving, setSaving] = useState(false);
+  // Folded until asked for (ADR-266): most prompts are typed, and the template a prompt came from stays named.
+  const [open, setOpen] = useState(false);
   if (list.error) return <ErrorWithRetry message={list.error} onRetry={list.reload} />;
   if (!list.data) return null;
   const { templates, problems } = list.data;
   return (
     <section aria-label="Task templates" className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-muted-foreground text-xs">Start from a template:</span>
-        {templates.map((template) => (
-          <Button
-            key={template.name}
-            variant={picked?.name === template.name ? "secondary" : "outline"}
-            size="sm"
-            disabled={disabled}
-            title={template.origin === "own" ? `Your template, ${trackwallDirLabel("task-templates")}/${template.name}.md` : undefined}
-            onClick={() => onPick(template)}
-          >
-            {template.title}
-            {template.origin === "own" && <span className="text-muted-foreground"> · yours</span>}
-          </Button>
-        ))}
-        {!saving && (
-          <Button variant="ghost" size="sm" disabled={disabled || prompt.trim() === ""} onClick={() => setSaving(true)}>
-            <BookmarkPlus /> Save as template
-          </Button>
-        )}
-      </div>
-      {saving && (
+      <FoldButton open={open} onOpen={setOpen}>
+        Templates
+        {!open && picked && <span className="text-muted-foreground">· {picked.title}</span>}
+      </FoldButton>
+      {open && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {templates.map((template) => (
+            <Button
+              key={template.name}
+              variant={picked?.name === template.name ? "secondary" : "outline"}
+              size="sm"
+              disabled={disabled}
+              title={template.origin === "own" ? `Your template, ${trackwallDirLabel("task-templates")}/${template.name}.md` : undefined}
+              onClick={() => onPick(template)}
+            >
+              {template.title}
+              {template.origin === "own" && <span className="text-muted-foreground"> · yours</span>}
+            </Button>
+          ))}
+          {!saving && (
+            <Button variant="ghost" size="sm" disabled={disabled || prompt.trim() === ""} onClick={() => setSaving(true)}>
+              <BookmarkPlus /> Save as template
+            </Button>
+          )}
+        </div>
+      )}
+      {open && saving && (
         <SaveTemplate
           conn={conn}
           prompt={prompt}
@@ -77,7 +85,7 @@ export function TaskTemplatePicker({
           }}
         />
       )}
-      {picked?.origin === "own" && !saving && (
+      {open && picked?.origin === "own" && !saving && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-muted-foreground text-xs">Your template “{picked.title}”</span>
           <RemoveForGood

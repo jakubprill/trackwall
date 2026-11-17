@@ -9,6 +9,7 @@ const worktrees = join(projects, ".trackwall", "worktrees");
 const task = (t: Partial<KnownTask> & Pick<KnownTask, "id" | "repo">): KnownTask => ({
   branch: "trackwall/fix-login-3f2a9c",
   worktree: join(worktrees, t.repo, "fix-login-3f2a9c"),
+  sessionFolder: null,
   title: null,
   prompt: "Fix the login\nand its test",
   ...t,
@@ -49,6 +50,16 @@ describe("the work a Copilot CLI conversation was for, from its folder and branc
     const place = workPlace({ cwd: join(worktrees, "billing", "fix-login-3f2a9c"), branch: "trackwall/fix-login-3f2a9c" }, known(tasks));
 
     expect(place).toMatchObject({ kind: "task", task: T2, repo: "billing" });
+  });
+
+  test("the conversation of a change in one session ran in the change's folder, which is no repo, and counts for its lead part (ADR-265)", () => {
+    const folder = join(worktrees, "_changes", "fix-login-3f2a9c");
+    const tasks = [
+      task({ id: T1, repo: "shop", worktree: join(folder, "shop"), sessionFolder: folder, title: "Fix the login" }),
+      task({ id: T2, repo: "billing", worktree: join(folder, "billing") }),
+    ];
+
+    expect(workPlace({ cwd: folder }, known(tasks))).toEqual({ kind: "task", task: T1, repo: "shop", label: "Fix the login" });
   });
 
   test("a worktree that moved since is found by its repo folder, then by its branch when one task has it, and is not guessed among several", () => {

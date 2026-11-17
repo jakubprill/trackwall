@@ -202,9 +202,15 @@ export class TaskCoordination {
     return this.#updates.take(this.#deps.proposerKey(caller));
   }
 
-  /** How many messages wait unread for a session's task, and updates for its own delegated work. */
-  unread(session: Pick<Session, "id" | "supervisor" | "task">): { messages: number; updates: number } {
-    const messages = session.task === null ? 0 : this.#messages.unread(session.task);
+  /**
+   * How many messages wait unread for the tasks a session works on (`tasks`: its own task, and for the one session of a
+   * change every part, ADR-265), and updates for its own delegated work.
+   */
+  unread(
+    session: Pick<Session, "id" | "supervisor" | "task">,
+    tasks: readonly string[] = session.task === null ? [] : [session.task],
+  ): { messages: number; updates: number } {
+    const messages = tasks.reduce((unread, task) => unread + this.#messages.unread(task), 0);
     return { messages, updates: this.#updates.unread(proposerKeyOf(session)) };
   }
 
