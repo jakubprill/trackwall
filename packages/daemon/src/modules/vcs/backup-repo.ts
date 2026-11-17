@@ -137,7 +137,7 @@ export async function backupRemote(dir: string): Promise<BackupRemote | null> {
 
 /**
  * Why the store cannot be pushed to `url`, or `null`. Only to an HTTPS or SSH address: a local path or a shared folder is
- * a repo an agent may have written, and its `pre-receive` hook would run as the user, out of reach of `core.NO_HOOKS`
+ * a repo an agent may have written, and its `pre-receive` hook would run as the user, out of reach of `core.hooksPath`
  * here. The user allows the address as they read it, so it must name the host git connects to plainly: only printable
  * ASCII without a space or backslash (a URL parser takes `\` for `/`, curl does not; a Cyrillic letter looks like a Latin
  * one), and an SSH user without `.` or `:`, so `ssh://github.com@other.example/x` cannot pass for `github.com`, and no `@`

@@ -25,11 +25,19 @@ const NO_REPO_COMMANDS = ["-c", "core.fsmonitor=false", "-c", "log.showSignature
 /**
  * In a repo guarded by `run-settings.ts`: git does not look into submodules, whose git directories under `.git/modules`
  * have a configuration of their own that the guard does not read (a `status` would run their `core.fsmonitor`, a fetch
- * that recurses the program their remote's address names), and it runs no hooks, since the repo's hooks path may name a
+ * that recurses the program their remote's address names); it runs no hooks, since the repo's hooks path may name a
  * folder of the worktree, where the task's agent writes (`post-index-change` runs on a read of the task's changes,
- * `reference-transaction` on a fetch).
+ * `reference-transaction` on a fetch); and it starts no maintenance after a fetch or a merge, whose `gc` runs the
+ * programs of `gc.*` keys.
  */
-const IN_GUARDED_REPO = ["diff.ignoreSubmodules=all", "fetch.recurseSubmodules=false", "submodule.recurse=false", NO_HOOKS];
+const IN_GUARDED_REPO = [
+  "diff.ignoreSubmodules=all",
+  "fetch.recurseSubmodules=false",
+  "submodule.recurse=false",
+  "gc.auto=0",
+  "maintenance.auto=false",
+  NO_HOOKS,
+];
 
 /**
  * On Windows, paths over 260 characters only with `core.longpaths`: task worktrees lie in the task worktrees folder (ADR-84), so

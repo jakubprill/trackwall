@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { agentsApi } from "@trackwall/protocol";
 import { countedEntries } from "../src/modules/vcs/run-settings.ts";
@@ -216,6 +216,37 @@ describe.skipIf(process.versions.bun === undefined)(
     );
 
     test(
+      "a commondir written into the repo's .git, which moves git to another configuration, refuses git in the repo",
+      async () => {
+        daemon = await sandboxed("all");
+        const repoDir = join(daemon.projects, "shop");
+        const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "map the endpoints", approvals: "auto" });
+        await daemon.facade.agents.taskChanges(task.id);
+        // What the agent can do from the sandbox: a second common directory inside `.git`, with a filter of its own,
+        // while `.git/config`, the attributes and the hooks stay as they were.
+        const own = join(repoDir, ".git", "own");
+        for (const part of ["config", "refs", "objects", "worktrees"])
+          cpSync(join(repoDir, ".git", part), join(own, part), { recursive: true });
+        execFileSync("git", ["config", "--file", join(own, "config"), "filter.trace.clean", `tee ${TRACE}`]);
+        mkdirSync(join(own, "info"), { recursive: true });
+        writeFileSync(join(own, "info", "attributes"), "* filter=trace\n");
+        writeFileSync(join(repoDir, ".git", "commondir"), "own\n");
+        writeFileSync(join(task.worktree, "README.md"), "# shop, changed\n");
+        // Entries without the files' times, so that a status reads every file again, through the filter.
+        execFileSync("git", ["-C", repoDir, "read-tree", "HEAD"]);
+        const refused = "no longer leads to its repo's git directory";
+
+        await expect(new Vcs(systemTempFolder).status(repoDir, "fresh")).rejects.toThrow(refused);
+
+        expect(existsSync(join(repoDir, TRACE))).toBe(false);
+        // The task's worktree names the repo's `.git` itself as its common directory, so git there still reads the old one.
+        expect((await daemon.facade.agents.taskChanges(task.id)).files.map((f) => f.path)).toContain("README.md");
+        expect(existsSync(join(task.worktree, TRACE))).toBe(false);
+      },
+      SLOW_TEST_TIMEOUT_MS,
+    );
+
+    test(
       "a fetch in a repo with a task in the sandbox does not go into a submodule, whose own git config the task can write",
       async () => {
         daemon = await sandboxed("all");
@@ -291,6 +322,9 @@ describe("the entries of a repo configuration that count as run settings", () =>
       "lfs.repositoryformatversion\n0",
       "lfs.standalonetransferagent\nown",
       "lfs.customtransfer.own.path\n/tmp/transfer",
+      "lfs.extension.own.clean\n/tmp/extension %f",
+      "gc.auto\n1",
+      "gc.recentobjectshook\n/tmp/recent",
       "",
     ].join("\0");
 
@@ -307,6 +341,8 @@ describe("the entries of a repo configuration that count as run settings", () =>
       "http.https://example.com/.sslverify\nfalse",
       "lfs.standalonetransferagent\nown",
       "lfs.customtransfer.own.path\n/tmp/transfer",
+      "lfs.extension.own.clean\n/tmp/extension %f",
+      "gc.recentobjectshook\n/tmp/recent",
     ]);
   });
 });
