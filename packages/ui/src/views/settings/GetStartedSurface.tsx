@@ -80,10 +80,5 @@ export function GetStartedSurface({
 function ProjectsFolderStep({ conn, onRetry, onSaved }: { conn: Connection; onRetry: () => void; onSaved: () => void }) {
   const load = useCallback(() => post(conn, workspaceApi.settings, {}), [conn]);
   const settings = useRemote(load);
-  async function save(path: string) {
-    await post(conn, workspaceApi.setProjectsDir, { path });
-    settings.reload();
-    onSaved();
-  }
-  return <ProjectsFolderForm conn={conn} settings={settings} save={save} onRetry={onRetry} />;
+  return <ProjectsFolderForm conn={conn} settings={settings} onSaved={onSaved} onRetry={onRetry} />;
 }

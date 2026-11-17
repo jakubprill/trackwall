@@ -1,22 +1,17 @@
-import { type DoctorCheck, type DoctorStatus, doctorApi } from "@trackwall/protocol";
-import { useCallback } from "react";
+import type { DoctorCheck, DoctorReport, DoctorStatus } from "@trackwall/protocol";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
-import { post } from "@/lib/api";
-import type { Connection } from "@/lib/connection";
 import { doctorCheckTitle, doctorHeadline, doctorProblemCount, doctorStatusLabel } from "@/lib/doctor";
-import { useRemote } from "@/lib/use-remote";
+import type { RemoteHandle } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
 
 /**
- * The doctor (ADR-101): what Trackwall needs on this computer, checked when Settings opens and on "Check again", each
- * problem with what to do about it. It only reads.
+ * The doctor (ADR-101): what Trackwall needs on this computer, checked when Settings shows it and on "Check again", each
+ * problem with what to do about it. It only reads. The report is the one "Get started" shows as steps (ADR-262).
  */
-export function DoctorSurface({ conn }: { conn: Connection }) {
-  const load = useCallback(() => post(conn, doctorApi.run, {}), [conn]);
-  const report = useRemote(load);
+export function DoctorSurface({ report }: { report: RemoteHandle<DoctorReport> }) {
   const problems = report.data && doctorProblemCount(report.data);
   return (
     <Surface label="Doctor" meta={problems ? String(problems) : undefined}>

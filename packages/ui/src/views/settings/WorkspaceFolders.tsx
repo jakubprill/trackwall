@@ -13,12 +13,6 @@ export function WorkspaceFolders({ conn, onRetry, onSaved }: { conn: Connection;
   const load = useCallback(() => post(conn, workspaceApi.settings, {}), [conn]);
   const settings = useRemote(load);
 
-  async function saveProjectsDir(path: string) {
-    await post(conn, workspaceApi.setProjectsDir, { path });
-    settings.reload();
-    onSaved();
-  }
-
   async function saveWorktreesDir(path: string | null) {
     await post(conn, workspaceApi.setWorktreesDir, { path });
     settings.reload();
@@ -36,7 +30,7 @@ export function WorkspaceFolders({ conn, onRetry, onSaved }: { conn: Connection;
           <p className="text-muted-foreground text-sm">
             The Repos view shows every git repo directly inside this folder. A repo cloned into it appears in the list on its own.
           </p>
-          <ProjectsFolderForm conn={conn} settings={settings} save={saveProjectsDir} onRetry={onRetry} />
+          <ProjectsFolderForm conn={conn} settings={settings} onSaved={onSaved} onRetry={onRetry} />
         </div>
       </Surface>
       {settings.data && <WorktreesDirSurface settings={settings.data} save={saveWorktreesDir} />}

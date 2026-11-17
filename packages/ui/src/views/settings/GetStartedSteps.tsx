@@ -41,8 +41,6 @@ export function GetStartedSteps({ plan, action }: { plan: GetStartedPlan; action
   );
 }
 
-const NEED_LABEL = { needed: "needed", recommended: "recommended" } as const;
-
 function Step({ step, number, children }: { step: GetStartedStep; number: number; children?: ReactNode }) {
   const command = fixCommand(step.fix);
   return (
@@ -51,7 +49,7 @@ function Step({ step, number, children }: { step: GetStartedStep; number: number
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex flex-wrap items-baseline justify-between gap-x-3">
           <span className="text-sm font-medium">{step.title}</span>
-          {step.state === "todo" && <span className="text-muted-foreground text-xs">{NEED_LABEL[step.need]}</span>}
+          {step.state === "todo" && <span className="text-muted-foreground text-xs">{step.need}</span>}
         </div>
         <span className="text-muted-foreground text-xs break-words">{step.summary}</span>
         {/* A step settled right here shows its form instead of the sentence that sends the user elsewhere. */}

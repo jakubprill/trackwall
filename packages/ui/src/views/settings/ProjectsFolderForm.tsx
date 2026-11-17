@@ -23,16 +23,22 @@ const PROJECTS_DIR = {
 export function ProjectsFolderForm({
   conn,
   settings,
-  save,
+  onSaved,
   onRetry,
 }: {
   conn: Connection;
   settings: RemoteHandle<WorkspaceSettings>;
-  save: (path: string) => Promise<void>;
+  /** After the folder is saved and the settings are asked for again. */
+  onSaved: () => void;
   /** Reconnects to the daemon, for a read that failed because the daemon is gone. */
   onRetry: () => void;
 }) {
   const example = daemonExamplePaths(useDesktop()).projectsDir;
+  async function save(path: string) {
+    await post(conn, workspaceApi.setProjectsDir, { path });
+    settings.reload();
+    onSaved();
+  }
   return (
     <>
       {settings.error && (

@@ -42,6 +42,8 @@ export interface GetStartedPlan {
   goodToHave: GoodToHave[];
   /** No `needed` step is open: a session can start. */
   ready: boolean;
+  /** The `needed` steps that are `todo`. */
+  neededOpen: number;
   /** The steps that are `todo`, needed and recommended: the number next to the category's name. */
   open: number;
   /** Doctor checks outside this list that are not ok, which "Settings > Diagnostics" shows. */
@@ -74,35 +76,36 @@ function stepState(check: DoctorCheck, need: GetStartedNeed): GetStartedState {
 
 export function getStartedPlan(report: DoctorReport): GetStartedPlan {
   const byId = new Map(report.checks.map((c) => [c.id, c]));
+  // A step whose check did not run shows as waiting only while the projects folder, which it waits for, is still open.
+  const folderOpen = byId.get("projects-folder")?.status === "fail";
   const steps = STEPS.flatMap(({ id, title, need, later }): GetStartedStep[] => {
     const check = byId.get(id);
-    if (check === undefined) return later === undefined ? [] : [{ id, title, need, state: "later", summary: later, fix: null }];
+    if (check === undefined)
+      return later !== undefined && folderOpen ? [{ id, title, need, state: "later", summary: later, fix: null }] : [];
     const state = stepState(check, need);
     return [{ id, title, need, state, summary: check.summary, fix: state === "todo" ? check.fix : null }];
   });
-  // A step whose check did not run shows only while the projects folder, which it waits for, is still open.
-  const folderOpen = steps.some((s) => s.id === "projects-folder" && s.state === "todo");
-  const shown = steps.filter((s) => s.state !== "later" || folderOpen);
   const goodToHave = GOOD_TO_HAVE.flatMap((id): GoodToHave[] => {
     const check = byId.get(id);
     return check ? [{ id, title: doctorCheckTitle(id), ok: check.status === "ok", summary: check.summary, fix: check.fix }] : [];
   });
   const listed = new Set<DoctorCheckId>([...STEPS.map((s) => s.id), ...GOOD_TO_HAVE]);
+  const todo = steps.filter((s) => s.state === "todo");
+  const neededOpen = todo.filter((s) => s.need === "needed").length;
   return {
-    steps: shown,
+    steps,
     goodToHave,
-    ready: !shown.some((s) => s.need === "needed" && s.state === "todo"),
-    open: shown.filter((s) => s.state === "todo").length,
+    ready: neededOpen === 0,
+    neededOpen,
+    open: todo.length,
     otherProblems: report.checks.filter((c) => !listed.has(c.id) && c.status !== "ok").length,
   };
 }
 
 /** The line under the title: how much is left before a first session, or that nothing is. */
-export function getStartedHeadline(plan: GetStartedPlan): string {
-  const needed = plan.steps.filter((s) => s.need === "needed" && s.state === "todo").length;
-  if (needed > 0) return `${countLabel(needed, { one: "step", other: "steps" })} left before your first session.`;
-  const recommended = plan.open;
-  if (recommended > 0) return `Ready. ${countLabel(recommended, { one: "recommended step is", other: "recommended steps are" })} left.`;
+export function getStartedHeadline({ neededOpen, open }: Pick<GetStartedPlan, "neededOpen" | "open">): string {
+  if (neededOpen > 0) return `${countLabel(neededOpen, { one: "step", other: "steps" })} left before your first session.`;
+  if (open > 0) return `Ready. ${countLabel(open, { one: "recommended step is", other: "recommended steps are" })} left.`;
   return "Ready. Everything Trackwall needs to start a session is in place.";
 }
 
@@ -113,12 +116,9 @@ export function getStartedPlace(place: Pick<DaemonPlace, "container">): string {
 
 /** The one line of the folded "Good to have" row: what is there and what is not. */
 export function goodToHaveSummary(items: readonly GoodToHave[]): string {
-  const missing = items.filter((i) => !i.ok).length;
-  if (missing === 0) return "All there.";
-  return `${countLabel(missing, { one: "tool", other: "tools" })} could add more: ${items
-    .filter((i) => !i.ok)
-    .map((i) => i.title)
-    .join(", ")}.`;
+  const missing = items.filter((i) => !i.ok).map((i) => i.title);
+  if (missing.length === 0) return "All there.";
+  return `${countLabel(missing.length, { one: "tool", other: "tools" })} could add more: ${missing.join(", ")}.`;
 }
 
 /**

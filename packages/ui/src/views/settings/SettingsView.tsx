@@ -1,7 +1,6 @@
-import { type CardWarmupProgress, type DoctorReport, doctorApi, type McpAuditRevision, type SessionList } from "@trackwall/protocol";
-import { Fragment, type ReactNode, useCallback, useState } from "react";
+import type { CardWarmupProgress, DoctorReport, McpAuditRevision, SessionList } from "@trackwall/protocol";
+import { Fragment, type ReactNode, useState } from "react";
 import { RemoteDaemonSurface } from "@/components/RemoteDaemonSurface";
-import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { getStartedPlan } from "@/lib/get-started";
@@ -14,7 +13,8 @@ import {
   settingsCategory,
 } from "@/lib/settings-categories";
 import type { AppUpdateHandle } from "@/lib/use-app-update";
-import { type RemoteHandle, useRemote } from "@/lib/use-remote";
+import { useDoctorReport } from "@/lib/use-doctor-report";
+import type { RemoteHandle } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
 import { AlwaysAllowSurface } from "./AlwaysAllowSurface.tsx";
 import { AutoReviewSurface } from "./AutoReviewSurface.tsx";
@@ -67,21 +67,17 @@ type SettingsProps = {
  * window, for example next to the supervisor panel, the list becomes a row above the sections. Each setting is also a
  * key in `workspace.yaml`, which can be edited by hand (ADR-13, ADR-18, ADR-84). The view is as wide as a wide category
  * needs (ADR-212), so the list stays in one place when the user moves between categories, and starts at the left edge
- * of the window (ADR-262). The doctor runs for "Get started" only once that category is shown; its open steps then stay
- * as a number next to its name.
+ * of the window (ADR-262). "Get started" and "Diagnostics" show one run of the doctor (`useDoctorReport`), whose open steps
+ * stay as a number next to "Get started".
  */
 export function SettingsView({ initialCategory, ...props }: SettingsProps & { initialCategory: SettingsCategory }) {
   const [current, setCurrent] = useState(initialCategory);
   const category = settingsCategory(current);
-  const [setupShown, setSetupShown] = useState(initialCategory === "get-started");
-  const { conn } = props;
-  const loadSetup = useCallback(() => post(conn, doctorApi.run, {}), [conn]);
-  const setup = useRemote(setupShown ? loadSetup : undefined);
-  const open = setup.data ? getStartedPlan(setup.data).open : 0;
-  const show = (id: SettingsCategory) => {
-    if (id === "get-started") setSetupShown(true);
-    setCurrent(id);
-  };
+  const doctor = useDoctorReport(
+    props.conn,
+    category.sections.some((s) => s === "get-started" || s === "doctor"),
+  );
+  const open = doctor.data ? getStartedPlan(doctor.data).open : 0;
   return (
     <div className="@container w-full max-w-6xl">
       <div className="flex flex-col gap-4 @3xl:flex-row @3xl:items-start @3xl:gap-6">
@@ -92,7 +88,7 @@ export function SettingsView({ initialCategory, ...props }: SettingsProps & { in
               <button
                 type="button"
                 aria-current={c.id === current ? "page" : undefined}
-                onClick={() => show(c.id)}
+                onClick={() => setCurrent(c.id)}
                 className={cn(
                   "flex shrink-0 items-center justify-between gap-2 rounded-md px-3 py-1.5 text-left text-sm whitespace-nowrap transition-colors",
                   c.id === current ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -118,7 +114,7 @@ export function SettingsView({ initialCategory, ...props }: SettingsProps & { in
             <p className="text-muted-foreground text-sm">{category.description}</p>
           </header>
           {category.sections.map((section) => (
-            <Section key={section} section={section} setup={setup} onOpenCategory={show} {...props} />
+            <Section key={section} section={section} doctor={doctor} onOpenCategory={setCurrent} {...props} />
           ))}
         </div>
       </div>
@@ -135,7 +131,7 @@ function GroupCaption({ group, previous }: { group: SettingsGroup; previous: Set
 
 function Section({
   section,
-  setup,
+  doctor,
   onOpenCategory,
   onStart,
   conn,
@@ -147,7 +143,7 @@ function Section({
   onSaved,
 }: SettingsProps & {
   section: SettingsSection;
-  setup: RemoteHandle<DoctorReport>;
+  doctor: RemoteHandle<DoctorReport>;
   onOpenCategory: (category: SettingsCategory) => void;
 }): ReactNode {
   switch (section) {
@@ -155,7 +151,7 @@ function Section({
       return (
         <GetStartedSurface
           conn={conn}
-          report={setup}
+          report={doctor}
           onRetry={onRetry}
           onStart={onStart}
           onOpenDiagnostics={() => onOpenCategory("diagnostics")}
@@ -218,7 +214,7 @@ function Section({
     case "local-config-repos":
       return <LocalConfigReposSurface conn={conn} />;
     case "doctor":
-      return <DoctorSurface conn={conn} />;
+      return <DoctorSurface report={doctor} />;
     case "trackwall-errors":
       return <ErrorJournalSurface conn={conn} />;
   }
