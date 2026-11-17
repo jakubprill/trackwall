@@ -1,10 +1,9 @@
 import { DAEMON_INFO_PATH, DaemonInfo, mcpTools } from "@trackwall/protocol";
-import { Check, Copy } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
+import { CopyableCode } from "@/components/CopyableCode";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Surface } from "@/components/Surface";
-import { Button } from "@/components/ui/button";
 import { call } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { copilotMcpAddCommand, copilotMcpConfig, copilotMcpConfigPath } from "@/lib/copilot-mcp";
@@ -62,30 +61,5 @@ function ConnectCopilot({ info }: { info: DaemonInfo }) {
         </details>
       </div>
     </Surface>
-  );
-}
-
-function CopyableCode({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = () => {
-    navigator.clipboard.writeText(text).then(
-      () => setCopied(true),
-      () => setCopied(false),
-    );
-  };
-  return (
-    <div className="surface flex items-start gap-2 p-2">
-      <pre className="min-w-0 flex-1 font-mono text-xs whitespace-pre-wrap break-all">{text}</pre>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="size-6"
-        onClick={copy}
-        aria-label={copied ? "Copied" : "Copy"}
-        title={copied ? "Copied" : "Copy"}
-      >
-        {copied ? <Check /> : <Copy />}
-      </Button>
-    </div>
   );
 }

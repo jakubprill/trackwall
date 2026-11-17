@@ -57,4 +57,5 @@ The doctor only looks. To time file writes it writes a few dozen small files int
 - Your own MCP servers and the certificates of Java builds are not checked.
 - The model provider check tells whether something answers at the provider's address, not whether your key or model name is right; a session started with the profile shows that in its terminal.
 - Whether Copilot CLI itself is signed in is not checked; a session that cannot sign in says so in its terminal.
+- [Get started](/features/get-started) shows the few checks that stand before a first session as steps.
 - Errors of Trackwall itself are listed under [Trackwall errors](/features/trackwall-errors).

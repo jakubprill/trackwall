@@ -28,7 +28,7 @@ import { SESSION_LAYOUTS, type SessionLayout } from "@/lib/session-grid";
 import { CurrentSessionProfile, currentSessionProfile } from "@/lib/session-profile";
 import { sessionShortcut } from "@/lib/session-shortcut";
 import { agentsInTurn, attentionCount } from "@/lib/session-state";
-import { FIRST_SETTINGS_CATEGORY, type SettingsCategory } from "@/lib/settings-categories";
+import { firstSettingsCategory, type SettingsCategory } from "@/lib/settings-categories";
 import { selectsSupervisor, showingTakesKeyboard, supervisorSummary } from "@/lib/supervisor";
 import { readSupervisorLayout, type SupervisorLayout, saveSupervisorLayout, unfolded } from "@/lib/supervisor-layout";
 import { ShowTrackwallTarget } from "@/lib/trackwall-link";
@@ -358,16 +358,17 @@ export function App() {
                         />
                       )}
                       {conn && view === "settings" && (
-                        <div className="flex justify-center p-6">
+                        <div className="p-6">
                           <SettingsView
                             conn={conn}
-                            initialCategory={settingsCategory ?? FIRST_SETTINGS_CATEGORY}
+                            initialCategory={settingsCategory ?? firstSettingsCategory(sessions.data?.sessions.length)}
                             update={appUpdate}
                             warmupLive={warmupLive}
                             mcpCallsLive={mcpCallsLive}
                             sessions={sessions.data}
                             onRetry={retry}
                             onSaved={() => setView("repos")}
+                            onStart={() => setView("sessions")}
                           />
                         </div>
                       )}

@@ -58,7 +58,7 @@ More in [How Trackwall works](https://jakubprill.github.io/trackwall/guide/how-i
 ## Quick start
 
 1. Download the build for Windows or macOS from [Releases](https://github.com/jakubprill/trackwall/releases). The builds are not signed yet, so follow the [installation steps](https://jakubprill.github.io/trackwall/guide/install) to get past SmartScreen and Gatekeeper.
-2. Start Trackwall and set your projects folder in "Settings".
+2. Start Trackwall and follow "Get started" in "Settings": it sets your projects folder and checks what else a first session needs.
 3. Install [GitHub Copilot CLI](https://github.com/github/copilot-cli) and [connect it](https://jakubprill.github.io/trackwall/guide/connect-copilot-cli) to Trackwall's MCP server.
 4. Start a session from "Sessions", or ask your own Copilot CLI which repos call one of your services.
 

@@ -128,14 +128,7 @@ export function HomeView({
 
   const needsSettings = listNeedsSettings(repos.errorCode);
   if (needsSettings || repos.data?.projectsDir === null) {
-    return (
-      <div className="flex flex-col items-start gap-3 p-6">
-        <p className="text-sm">{needsSettings ? repos.error : "Choose a projects folder to see your repos and sessions here."}</p>
-        <Button variant="outline" size="sm" onClick={() => onOpenSettings("workspace")}>
-          Open Settings
-        </Button>
-      </div>
-    );
+    return <HomeNeedsFolder error={needsSettings ? repos.error : undefined} onOpenSettings={onOpenSettings} />;
   }
 
   return (
@@ -197,6 +190,22 @@ export function HomeView({
         onSelect={setSelected}
         onOpen={open}
       />
+    </div>
+  );
+}
+
+/**
+ * Home without a projects folder. A new user goes to "Get started" for the whole list of what is left (ADR-262); a
+ * settings file that cannot be read (`error`) is fixed where the folders are.
+ */
+function HomeNeedsFolder({ error, onOpenSettings }: { error: string | undefined; onOpenSettings: (category: SettingsCategory) => void }) {
+  const broken = error !== undefined;
+  return (
+    <div className="flex flex-col items-start gap-3 p-6">
+      <p className="text-sm">{broken ? error : "Trackwall needs your projects folder before it can show your repos and sessions here."}</p>
+      <Button variant={broken ? "outline" : "default"} size="sm" onClick={() => onOpenSettings(broken ? "workspace" : "get-started")}>
+        {broken ? "Open Settings" : "Get started"}
+      </Button>
     </div>
   );
 }
