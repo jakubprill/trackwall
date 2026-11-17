@@ -1,4 +1,11 @@
-import { CHANGE_PARTS_MAX, type ChangePart, type ChangeRequest, isFreeSession, type Session } from "@trackwall/protocol";
+import {
+  CHANGE_PARTS_MAX,
+  type ChangePart,
+  type ChangeRequest,
+  DEFAULT_CHANGE_SESSIONS,
+  isFreeSession,
+  type Session,
+} from "@trackwall/protocol";
 import { isLive } from "./session-state.ts";
 
 /**
@@ -86,14 +93,15 @@ export function changeStart(start: NewSessionStart, added: readonly ChangePartDr
 }
 
 /** The form's options that every part of a change starts with. */
-export type ChangeOptions = Omit<ChangeRequest, "title" | "prompt" | "parts">;
+export type ChangeOptions = Omit<ChangeRequest, "title" | "prompt" | "parts" | "sessions">;
 
 /**
  * The request that starts a change: the change's own fields, without the form's `kind`, which the daemon's strict
- * schema refuses as an unknown key.
+ * schema refuses as an unknown key. A change the form starts runs in one session (ADR-265), the daemon's default,
+ * named here so the request says what it starts.
  */
 export function changeRequest(start: Extract<NewSessionStart, { kind: "change" }>, options: ChangeOptions): ChangeRequest {
-  return { title: start.title, prompt: start.prompt, parts: start.parts, ...options };
+  return { title: start.title, prompt: start.prompt, parts: start.parts, ...options, sessions: DEFAULT_CHANGE_SESSIONS };
 }
 
 /** The parts the form makes: the task's repo first, then each chosen repo once, in the order the user put them. */

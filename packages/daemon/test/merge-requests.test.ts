@@ -309,6 +309,7 @@ describe.skipIf(process.versions.bun === undefined)("following a task's merge re
       const session = agents.sessions().sessions.find((s) => s.task === task.id);
       expect(session?.readRequest?.prompt).toContain("The user asks you to fix the failed pipeline of your merge request");
       expect(agents.takeReviewComments(session?.id ?? "")).toEqual({
+        otherParts: [],
         comments: [],
         mergeRequestComments: null,
         pipelineFix: { pipeline: "https://gitlab.example.com/shop/shop/-/pipelines/50", commit: sha, logs: [job], otherJobs: [] },
@@ -391,6 +392,7 @@ describe.skipIf(process.versions.bun === undefined)("following a task's merge re
       const session = agents.sessions().sessions.find((s) => s.task === task.id);
       expect(session?.readRequest?.prompt).toContain("The user hands you unresolved comments from the reviewers of your merge request");
       expect(agents.takeReviewComments(session?.id ?? "")).toEqual({
+        otherParts: [],
         comments: [],
         pipelineFix: null,
         mergeRequestComments: { mergeRequest: seen.mergeRequest, threads: seen.threads.slice(0, 1) },

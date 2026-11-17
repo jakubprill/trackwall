@@ -61,7 +61,7 @@ function sessionEntries({ sessions, tasks, proposals }: SessionList): SessionEnt
   const started: StartedEntry[] = [
     // The supervisor is not an entry: it has its own panel, and its work sits under its heading (ADR-58).
     ...sessions.filter((s) => s.task === null && !isSupervisor(s)).map((session) => ({ kind: "session" as const, session })),
-    ...tasks.map((task) => ({ kind: "task" as const, task, session: latestSession(sessions, task.id) })),
+    ...tasks.map((task) => ({ kind: "task" as const, task, session: workingSession(sessions, task) })),
   ];
   return [...proposalGroups(proposals), ...started.sort((a, b) => entryTime(b).localeCompare(entryTime(a)))];
 }
@@ -189,6 +189,14 @@ function entryProposer(entry: SessionEntry): string | null {
 /** A task's current session: `SessionList.sessions` goes from the newest. */
 export function latestSession(sessions: readonly Session[], task: string): Session | undefined {
   return sessions.find((s) => s.task === task);
+}
+
+/**
+ * The current session that works on a task: its own, or for a part of a change with one session the lead part's
+ * (ADR-265), so every part shows the one session that does it.
+ */
+export function workingSession(sessions: readonly Session[], task: Pick<Task, "id" | "change">): Session | undefined {
+  return latestSession(sessions, task.change?.session ?? task.id);
 }
 
 /** When an entry started, for "most recently started first": a task by its latest session, without one by its creation. */

@@ -16,6 +16,7 @@ describe("two attempts at one task compared side by side", () => {
     const page = await trackwall().open();
     await showSessions(page);
     await page.getByRole("textbox", { name: "Prompt for the agent" }).fill("Sum the cart");
+    await page.getByRole("button", { name: "More options" }).click();
     await page.getByRole("button", { name: "Model for the agent: Copilot CLI default" }).click();
     await page.getByRole("textbox", { name: "Model for the agent" }).fill("gpt-5-mini");
     await page.getByRole("button", { name: "Second attempt" }).click();

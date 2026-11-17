@@ -952,6 +952,7 @@ describe.skipIf(process.versions.bun === undefined)("agent tasks in a worktree (
       model: null,
       item: null,
       view: "conversation" as const,
+      sessions: "perPart" as const,
     };
     await expect(agents.createChange(request)).rejects.toThrow();
 

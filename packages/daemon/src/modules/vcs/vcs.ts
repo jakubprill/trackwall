@@ -53,6 +53,7 @@ import {
   parseObjects,
   parseStatus,
   parseTree,
+  wholeCharacters,
 } from "./parse.ts";
 import { pathKey } from "./path-key.ts";
 import { remoteAddress } from "./remote.ts";
@@ -466,7 +467,7 @@ export class Vcs {
     if (object?.type !== "blob") return undefined;
     const { stdout, truncated } = await git(dir, ["cat-file", "blob", object.oid], { maxBytes });
     if (isBinary(stdout)) return { kind: "binary", size: object.size };
-    return { kind: "text", text: stdout.toString("utf8"), size: object.size, truncated };
+    return { kind: "text", text: (truncated ? wholeCharacters(stdout) : stdout).toString("utf8"), size: object.size, truncated };
   }
 
   /** The full hash of the HEAD commit; `null` in a repo without commits. From the git directory's files when they tell for sure. */
@@ -536,8 +537,8 @@ export class Vcs {
 
   /**
    * Existence, type and size of objects in one process (`cat-file --batch-check`); `undefined` for a missing one,
-   * also for a submodule whose commit is not in this repo. Specifications go by lines, hence the ban on control
-   * characters in `RepoPath`.
+   * also for a submodule whose commit is not in this repo. Specifications go by lines, hence the ban on line
+   * breaks in `RepoPath`.
    */
   private async objects(dir: string, specs: string[]): Promise<(GitObject | undefined)[]> {
     const { stdout } = await git(dir, ["cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)"], {

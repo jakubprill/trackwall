@@ -17,6 +17,7 @@ import {
 import { GitBranch, Play } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
+import { FoldButton } from "@/components/FoldButton";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
@@ -48,9 +49,9 @@ import { useAction } from "@/lib/use-action";
 import { useProviderModels } from "@/lib/use-provider-models";
 import { useRemote } from "@/lib/use-remote";
 import { ChangeParts } from "./ChangeParts.tsx";
+import { FoldedStartOptions } from "./FoldedStartOptions.tsx";
 import { RunningTasksNote } from "./RunningTasksNote.tsx";
 import { StackTraceField } from "./StackTraceField.tsx";
-import { StartOptions } from "./StartOptions.tsx";
 import { TaskTemplatePicker, TemplatePlaceholders, useTemplatePrompt } from "./TaskTemplatePicker.tsx";
 
 /** The place choice's value for the projects folder; a repo id is never empty. */
@@ -62,7 +63,7 @@ const PROJECTS_FOLDER = "";
  * copy (ADR-26), and in the projects folder a free session, both with the prompt as their first message when there is one.
  * Every one can run on a chosen model (ADR-98), in the conversation view (ADR-137), and, in a repo tagged java and a
  * terminal, with a Java language server (ADR-99, ADR-175); only a task, whose changes wait for review in its own worktree,
- * can run without asking for approvals (ADR-105), and a task in the conversation view can plan first (ADR-229). The options are a row of pills under the prompt (`StartOptions`); the worktree, the model, Java navigation and the view come back as the user last started from that
+ * can run without asking for approvals (ADR-105), and a task in the conversation view can plan first (ADR-229). The options are pills under the prompt (`StartOptions`), all but the worktree folded under "More options" (ADR-266, `FoldedStartOptions`); the worktree, the model, Java navigation and the view come back as the user last started from that
  * place, the approvals mode always starts at asking. Started from a board item (ADR-133), the form comes with the item's
  * repo and prompt, and the task works on the item. A task with more repos added is a change (ADR-171): a task per repo
  * on one branch name. A task can come with a stack trace (ADR-222), whose error its agent reproduces in a test first.
@@ -177,7 +178,7 @@ export function NewSession({
             onChange={setStackTrace}
             onOpen={setStackTraceOpen}
           />
-          <StartOptions
+          <FoldedStartOptions
             worktree={
               repo === null || !form.sessions ? undefined : { value: choice.worktree, onChange: (worktree) => choose({ worktree }) }
             }
@@ -213,11 +214,7 @@ export function NewSession({
               </Button>
             )}
           </div>
-          <p className="text-muted-foreground max-w-prose text-xs">
-            Copilot CLI asks you to trust a folder before it works there. To skip that prompt for every repo and task, add{" "}
-            <span className="text-foreground font-mono">{repos.data.projectsDir}</span> to <span className="font-mono">trustedFolders</span>{" "}
-            in <span className="font-mono">~/.copilot/config.json</span>; trust covers its repos and their task worktrees.
-          </p>
+          <TrustedFolderNote projectsDir={repos.data.projectsDir} />
         </>
       )}
       {error && <p className="text-destructive text-sm whitespace-pre-wrap">{error}</p>}
@@ -263,6 +260,26 @@ function secondAttemptPill(start: NewSessionStart, second: ReturnType<typeof use
 /** The Plan first pill where the form offers it (ADR-229). */
 function planFirstPill(offer: PlanFirstOffer | null, value: boolean, onChange: (value: boolean) => void) {
   return offer === null ? undefined : { value, onChange, unavailable: offer.unavailable };
+}
+
+/** How to stop Copilot CLI's trust prompt, folded: it matters once, before the first start (ADR-266). */
+function TrustedFolderNote({ projectsDir }: { projectsDir: string | null }) {
+  const [open, setOpen] = useState(false);
+  if (projectsDir === null) return null;
+  return (
+    <div className="flex flex-col gap-1">
+      <FoldButton open={open} onOpen={setOpen} className="text-muted-foreground">
+        Copilot CLI asks to trust the folder?
+      </FoldButton>
+      {open && (
+        <p className="text-muted-foreground max-w-prose text-xs">
+          Copilot CLI asks you to trust a folder before it works there. To skip that prompt for every repo and task, add{" "}
+          <span className="text-foreground font-mono">{projectsDir}</span> to <span className="font-mono">trustedFolders</span> in{" "}
+          <span className="font-mono">~/.copilot/config.json</span>; trust covers its repos and their task worktrees.
+        </p>
+      )}
+    </div>
+  );
 }
 
 /** Where the agent works: a repo, or the projects folder for a session. */

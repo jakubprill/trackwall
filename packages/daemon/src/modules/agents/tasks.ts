@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, rmdirSync } from "node:fs";
 import { dirname } from "node:path";
 import {
   type AgentTaskChanges,
@@ -44,8 +44,8 @@ import { type EndedTaskFacts, type EndedTaskGit, endedTaskFacts } from "./ended-
 import { offeredAfter } from "./impact-proposals.ts";
 import type { JavaNavigationServers } from "./java-navigation-servers.ts";
 import { modelArgs } from "./model-args.ts";
-import { taskSlug, taskWorktree } from "./task-branch.ts";
-import type { ChangeFacts } from "./task-change.ts";
+import { changePartWorktree, taskSlug, taskWorktree } from "./task-branch.ts";
+import type { ChangeFacts, SharedChangeSession } from "./task-change.ts";
 import type { StoredTask, TaskFile } from "./task-file.ts";
 import { type HandoffFacts, type HandoffGit, handoffState, type TaskHandoff } from "./task-handoff.ts";
 import { type MiseSnapshot, miseConfigChanges, miseConfigDigest, readMiseConfig, reviewMiseConfig } from "./task-mise-config.ts";
@@ -237,6 +237,17 @@ interface RetryStart {
   handoff: TaskHandoff | null;
 }
 
+/** A part of a change made and held until its session starts, and a part that could not be made or started. */
+interface HeldPart {
+  position: number;
+  task: KnownTask;
+}
+interface PartFailure {
+  position: number;
+  repo: string;
+  err: unknown;
+}
+
 /** A task from the file with the worktree that follows from it, and its port (one given when it was read, if it had none). */
 type KnownTask = StoredTask & TaskWork & { port: number };
 
@@ -306,33 +317,71 @@ export class AgentTasks {
     parts: readonly { repo: string; prompt: string }[],
     origin: ChangeOrigin,
     firstId: string = randomUUID(),
+    shared: SharedChangeSession | null = null,
   ): Promise<CreatedChange> {
     const change = randomUUID();
-    const failures: { position: number; repo: string; err: unknown }[] = [];
-    const held: { position: number; task: KnownTask }[] = [];
+    const failures: PartFailure[] = [];
+    const held: HeldPart[] = [];
     for (const [position, { repo, prompt }] of parts.entries()) {
       // A proposed change's id goes to the first part made, so a part that cannot be made does not leave it unused.
-      const partOrigin = {
-        ...origin,
-        planFirst: false,
-        id: held.length === 0 ? firstId : randomUUID(),
-        change: { id: change, position },
-        retryOf: null,
-      };
-      await this.#creating(repo, () => this.#create(repo, prompt, partOrigin, "hold")).then(
+      const first = held.length === 0;
+      const id = first ? firstId : randomUUID();
+      // In a change with one session the first part made is the lead part, whose session gets the whole prompt (ADR-265).
+      const lead = shared === null ? null : (held[0]?.task.id ?? id);
+      const partOrigin = { ...origin, planFirst: false, id, change: { id: change, position, session: lead }, retryOf: null };
+      await this.#creating(repo, () => this.#create(repo, shared !== null && first ? shared.prompt : prompt, partOrigin, "hold")).then(
         (task) => held.push({ position, task }),
         (err: unknown) => failures.push({ position, repo, err }),
       );
     }
+    const tasks = shared === null ? await this.#launchParts(held, failures) : await this.#launchShared(held, failures);
+    failures.sort((a, b) => a.position - b.position);
+    if (tasks.length === 0 && failures[0]) throw failures[0].err;
+    return { tasks, failed: failures.map(({ repo, err }) => ({ repo, message: messageOf(err) })) };
+  }
+
+  /** A session per held part, in the parts' order (ADR-171); a part whose session cannot start goes to `failures`. */
+  async #launchParts(held: readonly HeldPart[], failures: PartFailure[]): Promise<Task[]> {
     const tasks: Task[] = [];
     for (const { position, task: part } of held)
       await this.#launchHeld(part).then(
         (task) => tasks.push(task),
         (err: unknown) => failures.push({ position, repo: part.repo, err }),
       );
-    failures.sort((a, b) => a.position - b.position);
-    if (tasks.length === 0 && failures[0]) throw failures[0].err;
-    return { tasks, failed: failures.map(({ repo, err }) => ({ repo, message: messageOf(err) })) };
+    return tasks;
+  }
+
+  /**
+   * The one session of a change (ADR-265): the lead part's, in the change's folder. The other parts get none, so they
+   * are let go once it runs. When it cannot start, the lead part is ended again like any new task, and the other
+   * parts with it, since nothing would work on them: every part is then in `failures` with the session's error.
+   */
+  async #launchShared(held: readonly HeldPart[], failures: PartFailure[]): Promise<Task[]> {
+    const [lead, ...led] = held;
+    if (lead === undefined) return [];
+    this.#held.delete(lead.task.id);
+    try {
+      await this.#exclusive(lead.task.id, () => this.#launchNew(lead.task));
+    } catch (err) {
+      for (const { task } of led) await this.#dropUnstarted(task);
+      for (const { position, task } of held) failures.push({ position, repo: task.repo, err });
+      return [];
+    }
+    for (const { task } of led) {
+      this.#held.delete(task.id);
+      this.#deps.onCreated(view(task));
+    }
+    return held.map(({ task }) => view(this.#get(task.id)));
+  }
+
+  /** A held part of a change whose one session could not start (ADR-265) leaves the list, its worktree and branch with it. */
+  async #dropUnstarted(part: KnownTask): Promise<void> {
+    this.#held.delete(part.id);
+    await this.#whileRemoving(part.id, () => this.#discard(part, false)).then(
+      () => this.#save(this.#tasks.filter((t) => t.id !== part.id)),
+      // A failed cleanup leaves the part on the list, so that the user can end it themselves.
+      (e: unknown) => this.#deps.log(`cleaning up task ${part.id}: ${messageOf(e)}`),
+    );
   }
 
   /** A task of the repo is being created while `run` runs, so a repo removal waits for it (ADR-83). */
@@ -492,6 +541,9 @@ export class AgentTasks {
    */
   resume(id: string, model?: string | null): Promise<Task> {
     const task = this.#get(id);
+    // A part of a change with one session goes on with that session, the lead part's (ADR-265).
+    const lead = this.sessionTask(id);
+    if (lead !== id) return this.#resumeLed(id, lead, model);
     return this.#exclusive(id, async () => {
       this.#refuseRunning(task, "resuming");
       this.#closeSessions(task);
@@ -501,6 +553,15 @@ export class AgentTasks {
       // After the start: a start that failed leaves the task paused, so no agent resumes it in the user's place.
       return view(this.#withUnpaused(this.#get(id)));
     });
+  }
+
+  /**
+   * Resume of a part whose change runs in one session (ADR-265): the lead part's session starts again unless it runs,
+   * and the part's own pause, which stopped only its service and mise tasks, is over.
+   */
+  async #resumeLed(id: string, lead: string, model?: string | null): Promise<Task> {
+    if (!this.#deps.sessions.of(lead).some((s) => s.run.kind !== "exited")) await this.resume(lead, model);
+    return view(this.#withUnpaused(this.#get(id)));
   }
 
   /**
@@ -657,7 +718,36 @@ export class AgentTasks {
   change(id: string): ChangeFacts | null {
     const change = this.#tasks.find((t) => t.id === id)?.change ?? null;
     if (change === null) return null;
-    return { parts: this.#parts(change.id).map(({ id: task, repo, branch }) => ({ task, repo, branch })) };
+    return {
+      parts: this.#parts(change.id).map(({ id: task, repo, branch }) => ({ task, repo, branch })),
+      oneSession: change.session !== null,
+    };
+  }
+
+  /**
+   * The task whose session works on task `id` (ADR-265): the lead part for a part of a change with one session, while
+   * that part is listed, otherwise the task itself.
+   */
+  sessionTask(id: string): string {
+    const lead = this.#tasks.find((t) => t.id === id)?.change?.session ?? null;
+    return lead !== null && this.#tasks.some((t) => t.id === lead) ? lead : id;
+  }
+
+  /**
+   * The tasks the session of task `id` works on (ADR-265), in the parts' order: for the lead part of a change with one
+   * session every listed part, the lead included; for any other task with a session only itself (also a part whose
+   * lead part is gone); for a part without one, none.
+   */
+  worksOn(id: string): string[] {
+    const task = this.#tasks.find((t) => t.id === id);
+    if (task === undefined) return [];
+    const candidates = task.change === null ? [task] : this.#parts(task.change.id);
+    return candidates.filter((t) => this.sessionTask(t.id) === id).map((t) => t.id);
+  }
+
+  /** Where the session of task `id` runs: its worktree, or for the lead part of a change with one session the change's folder (ADR-265). */
+  sessionFolder(id: string): string {
+    return sessionFolderOf(this.#get(id));
   }
 
   /**
@@ -784,6 +874,14 @@ export class AgentTasks {
     const summarized = { ...this.#get(id), summary: { ...report, reportedAt }, inReview: true };
     this.#save(this.#tasks.map((t) => (t.id === id ? summarized : t)));
     return view(summarized);
+  }
+
+  /**
+   * The summary of the one session of a change (ADR-265): it did every part, so its report is every part's summary and
+   * hands every part over for review. Returns the parts in their order; for a task with a session of its own, only it.
+   */
+  setSummaries(id: string, report: ReportedSummary): Task[] {
+    return this.worksOn(id).map((part) => this.setSummary(part, report));
   }
 
   /**
@@ -1130,6 +1228,12 @@ export class AgentTasks {
     if (discardFingerprint !== undefined && !(keepBranch && discardChanges))
       throw new DomainError("bad_request", "a confirmed fingerprint goes only with discarding changes and keeping the branch");
     if (keptInstead !== null) this.#refuseUnlessOtherAttempt(task, keptInstead);
+    const led = this.worksOn(id).filter((t) => t !== id);
+    if (led.length > 0)
+      throw new DomainError(
+        "bad_request",
+        `the session of this part works on the other parts of its change too (${led.map((t) => this.#get(t).repo).join(", ")}); end those parts first`,
+      );
     return this.#exclusive(id, async () => {
       this.#refuseRunning(task, "ending it");
       const facts = await this.#whileRemoving(id, async () => {
@@ -1242,6 +1346,14 @@ export class AgentTasks {
   async #discard(task: KnownTask, keepBranch: boolean): Promise<void> {
     await asRepoUnavailable(task.branch, this.#deps.vcs.removeWorktree(task.repoDir, task.worktree));
     if (!keepBranch) await asRepoUnavailable(task.branch, this.#deps.vcs.deleteBranch(task.repoDir, task.branch));
+    // The folder of a change with one session goes with its last part (ADR-265); `rmdir` refuses a folder that still has one.
+    if (inOneSession(task)) {
+      try {
+        rmdirSync(dirname(task.worktree));
+      } catch {
+        // Another part's worktree, or a file the session left beside them, is still there.
+      }
+    }
   }
 
   /** A failure to copy does not stop the task: the agent can still work, and the panel shows what is missing. */
@@ -1275,7 +1387,7 @@ export class AgentTasks {
     const sandboxArgs = task.sandbox ? [SANDBOX_ARG] : [];
     const place = {
       repo: task.repo,
-      cwd: task.worktree,
+      cwd: sessionFolderOf(task),
       task: task.id,
       // While its plan waits the agent asks before every tool, also with auto approvals: Plan mode refuses only the
       // changes Copilot CLI recognises, not a script that writes (ADR-229 addendum).
@@ -1327,7 +1439,8 @@ export class AgentTasks {
 
   /** A running session writes in the worktree and holds its files (on Windows it blocks deletion), so stop it first. */
   #refuseRunning(task: KnownTask, action: string): void {
-    if (this.#deps.sessions.of(task.id).some((s) => s.run.kind !== "exited"))
+    // A part of a change with one session is written by the lead part's session (ADR-265).
+    if (this.#deps.sessions.of(this.sessionTask(task.id)).some((s) => s.run.kind !== "exited"))
       throw new DomainError("bad_request", `task ${task.branch} has a running session; stop it before ${action}`);
   }
 
@@ -1373,7 +1486,9 @@ export class AgentTasks {
   }
 
   #known(task: StoredTask & { port: number }): KnownTask {
-    return { ...task, worktree: taskWorktree(task.worktreesDir ?? this.#deps.legacyWorktreesDir, task.repo, task.branch) };
+    const worktreesDir = task.worktreesDir ?? this.#deps.legacyWorktreesDir;
+    const place = inOneSession(task) ? changePartWorktree : taskWorktree;
+    return { ...task, worktree: place(worktreesDir, task.repo, task.branch) };
   }
 
   #save(tasks: KnownTask[]): void {
@@ -1388,6 +1503,16 @@ export class AgentTasks {
       this.#tasks.flatMap((t) => (t.runSettings === null ? [] : [{ worktree: t.worktree, repoDir: t.repoDir, digest: t.runSettings }])),
     );
   }
+}
+
+/** Where a task's session runs: its worktree, or for the lead part of a change with one session the change's folder (ADR-265). */
+function sessionFolderOf(task: KnownTask): string {
+  return task.change?.session === task.id ? dirname(task.worktree) : task.worktree;
+}
+
+/** The task is a part of a change with one session (ADR-265), so its worktree is in the change's folder. */
+function inOneSession(task: Pick<StoredTask, "change">): boolean {
+  return task.change !== null && task.change.session !== null;
 }
 
 /**
