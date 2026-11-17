@@ -123,12 +123,13 @@ import { outcome, sessionWaitStatus, type WaitOutcome, waitUntilSettled } from "
 import { SupervisorSessions } from "./supervisor-sessions.ts";
 import { supervisorSituation } from "./supervisor-situation.ts";
 import { TaskBoardItem, type TaskBoardItemDeps } from "./task-board-item.ts";
+import { sharedSession } from "./task-change.ts";
 import { TaskCoordination } from "./task-coordination.ts";
 import { TaskFile } from "./task-file.ts";
 import { PLAN_APPROVED_MESSAGE } from "./task-plan.ts";
 import { TaskProposals } from "./task-proposals.ts";
 import { type RefreshVcs, refreshTask } from "./task-refresh.ts";
-import { TaskReviews, type UnreadReview } from "./task-reviews.ts";
+import { type PartReview, TaskReviews, type UnreadReview } from "./task-reviews.ts";
 import { type RoundsVcs, TASK_ROUNDS_FILE, TaskRoundList } from "./task-rounds.ts";
 import { secondInTreeRefusal } from "./task-tree.ts";
 import { AgentTasks, type TaskLaunch, type TaskOptions, type TasksVcs } from "./tasks.ts";
@@ -368,6 +369,7 @@ export class Agents {
       tokens: this.#tokens,
       resumable: this.#resumable,
       lastSupervisor: this.#lastSupervisor,
+      sessionTask: (task) => this.#tasks.sessionTask(task),
       log: deps.log,
     });
     this.#supervisor = new SupervisorSessions({
@@ -692,7 +694,10 @@ export class Agents {
    * options and notes as the user left them; the first part made takes the proposal's id and every part its proposer. The proposal waits again only when
    * no part started; otherwise it is gone, and its proposer hears which parts started.
    */
-  async approveChangeProposal(id: string, { prompt, parts, model, approvals, view }: ApproveChangeRequest): Promise<CreatedChange> {
+  async approveChangeProposal(
+    id: string,
+    { prompt, parts, model, approvals, view, sessions }: ApproveChangeRequest,
+  ): Promise<CreatedChange> {
     const proposal = this.#proposals.get(id);
     if (proposal.parts === null) throw new DomainError("bad_request", `proposal ${id} is not a change`);
     const proposed = proposalRepos(proposal);
@@ -705,7 +710,8 @@ export class Agents {
     const prompts = kept.map((part) => ({ repo: part.repo, prompt: changePartPrompt(prompt, part) }));
     let created: CreatedChange;
     try {
-      created = await this.#tasks.createChange(prompts, { title, proposedBy, model, approvals, javaNavigation: false, item, view }, id);
+      const origin = { title, proposedBy, model, approvals, javaNavigation: false, item, view };
+      created = await this.#tasks.createChange(prompts, origin, id, sharedSession(sessions, prompt, kept));
     } catch (err) {
       this.#proposals.release(id, true);
       throw err;
@@ -773,13 +779,18 @@ export class Agents {
         "bad_request",
         "your plan waits for the user's approval: end your turn with the plan, and report the result once it is implemented",
       );
-    const reported = this.#tasks.setSummary(own.task, report);
-    this.#reviewReturns.forget(own.task);
-    this.#autoReviews.afterReport(own.task);
-    this.#boardItems.handedOver(reported);
-    // Awaited, so the update is there for the proposer by the time the tool answers.
-    await this.#coordination.resultReported(reported, own.session, this.#reportedChanges(own.task));
-    return reported;
+    // The one session of a change reports for every part it works on (ADR-265); any other task's session for its own.
+    const reported = this.#tasks.setSummaries(own.task, report);
+    for (const part of reported) {
+      this.#reviewReturns.forget(part.id);
+      this.#autoReviews.afterReport(part.id);
+      this.#boardItems.handedOver(part);
+      // Awaited, so the update is there for the proposer by the time the tool answers.
+      await this.#coordination.resultReported(part, own.session, this.#reportedChanges(part.id));
+    }
+    const ownTask = reported.find((part) => part.id === own.task);
+    if (ownTask === undefined) throw new Error(`task ${own.task} is not among the tasks its session works on`);
+    return ownTask;
   }
 
   /**
@@ -837,22 +848,34 @@ export class Agents {
 
   /** The prompt for what waits unread for a session: its task's review comments and messages, and its updates. */
   #readRequestPrompt(session: { id: string; supervisor: boolean; task: string | null }): string | undefined {
-    const reviewComments = session.task === null ? 0 : this.#reviews.unread(session.task);
+    // The one session of a change reads what waits for every part it works on (ADR-265).
+    const tasks = this.#worksOn(session.task);
     return readRequestPrompt({
-      reviewComments,
-      pipelineFix: session.task !== null && this.#reviews.pipelineFixUnread(session.task),
-      mergeRequestThreads: session.task !== null && this.#reviews.threadsUnread(session.task),
+      reviewComments: tasks.reduce((unread, task) => unread + this.#reviews.unread(task), 0),
+      pipelineFix: tasks.some((task) => this.#reviews.pipelineFixUnread(task)),
+      mergeRequestThreads: tasks.some((task) => this.#reviews.threadsUnread(task)),
       handoffMoved: session.task !== null && this.#handoffs.waiting(session.task),
-      roundUndone: session.task !== null && this.#rounds.undoneUntold(session.task),
-      refreshed: session.task !== null && this.#rounds.refreshedUntold(session.task),
-      ...this.#coordination.unread(session),
+      roundUndone: tasks.some((task) => this.#rounds.undoneUntold(task)),
+      refreshed: tasks.some((task) => this.#rounds.refreshedUntold(task)),
+      ...this.#coordination.unread(session, tasks),
       trustNotice: this.#miseTrust.waiting(trustRecipientOf(session)),
     });
   }
 
+  /** The tasks the session of `task` works on (ADR-265): for a session without a task, none. */
+  #worksOn(task: string | null): string[] {
+    return task === null ? [] : this.#tasks.worksOn(task);
+  }
+
   /** The unread review comments, pipeline fix and merge request comments of session `caller`'s own task (`get_review_comments`), which now count as read. */
-  takeReviewComments(caller: string | null): UnreadReview {
-    return this.#reviews.take(this.#ownTask(caller, "has review comments").task);
+  takeReviewComments(caller: string | null): UnreadReview & { otherParts: PartReview[] } {
+    const own = this.#ownTask(caller, "has review comments").task;
+    // The one session of a change reads the reviews of the other parts it works on with its own (ADR-265).
+    const otherParts = this.#worksOn(own)
+      .filter((task) => task !== own)
+      .map((task) => ({ task, repo: this.#tasks.task(task).repo, ...this.#reviews.take(task) }))
+      .filter((part) => part.comments.length > 0 || part.pipelineFix !== null || part.mergeRequestComments !== null);
+    return { ...this.#reviews.take(own), otherParts };
   }
 
   /**
@@ -874,7 +897,8 @@ export class Agents {
 
   /** The unread messages to session `caller`'s own task (`get_messages`), which now count as read. */
   takeMessages(caller: string | null): TaskMessage[] {
-    return this.#coordination.takeMessages(this.#ownTask(caller, "gets messages").task);
+    // The one session of a change reads the messages to every part it works on (ADR-265).
+    return this.#worksOn(this.#ownTask(caller, "gets messages").task).flatMap((task) => this.#coordination.takeMessages(task));
   }
 
   /** Where the work session `caller`'s own task builds on is now (`get_handoff`, ADR-144), whose head now counts as read. */
@@ -918,7 +942,9 @@ export class Agents {
     }
     const task = this.#tasks.find(target.task);
     if (task) {
-      const session = this.#sessions.views().find((s) => s.task === task.id) ?? null;
+      // A part of a change with one session is followed by the lead part's session (ADR-265).
+      const worker = this.#tasks.sessionTask(task.id);
+      const session = this.#sessions.views().find((s) => s.task === worker) ?? null;
       const status = session ? sessionWaitStatus(session) : this.#tasks.busy(task.id) ? "starting" : "no_session";
       return outcome(status, { task, session });
     }
@@ -976,19 +1002,11 @@ export class Agents {
   }
 
   /** A change the user typed (ADR-171): a task per part, see `AgentTasks.createChange`; `item` must be on the board. */
-  async createChange({ title, prompt, parts, approvals, model, item, view }: ChangeRequest): Promise<CreatedChange> {
+  async createChange({ title, prompt, parts, approvals, model, item, view, sessions }: ChangeRequest): Promise<CreatedChange> {
     await this.#assertOnBoard(item);
     const prompts = parts.map((part) => ({ repo: part.repo, prompt: changePartPrompt(prompt, part) }));
-    const created = await this.#tasks.createChange(prompts, {
-      title,
-      proposedBy: null,
-      model,
-      approvals,
-      javaNavigation: false,
-      item,
-      view,
-    });
-    return created;
+    const origin = { title, proposedBy: null, model, approvals, javaNavigation: false, item, view };
+    return this.#tasks.createChange(prompts, origin, undefined, sharedSession(sessions, prompt, parts));
   }
 
   /**
@@ -1088,6 +1106,12 @@ export class Agents {
     if (onlyUser !== null) throw new DomainError("bad_request", `task ${id} ${onlyUser}; ask the user to resume it`);
     const resumed = await this.#tasks.resume(id);
     return { task: resumed, session: this.#sessionOfTask(id) };
+  }
+
+  /** The folder the session of task `id` runs in when it is not the task's worktree: a change's folder, for its lead part (ADR-265); `null` otherwise. */
+  changeFolderOf(id: string): string | null {
+    const folder = this.#tasks.sessionFolder(id);
+    return folder === this.#tasks.task(id).worktree ? null : folder;
   }
 
   /** A task by identifier (`not_found` when it does not exist or the user ended it). */
@@ -1669,7 +1693,9 @@ export class Agents {
 
   /** A task's only session after resuming it, which closes its ended ones: running, or already ended when its agent exited at once. */
   #sessionOfTask(task: string): Session {
-    const session = this.#sessions.views().find((s) => s.task === task);
+    // A part of a change with one session resumes the lead part's session (ADR-265).
+    const worker = this.#tasks.sessionTask(task);
+    const session = this.#sessions.views().find((s) => s.task === worker);
     if (!session) throw new Error(`task ${task} has no session after resuming`);
     return session;
   }
@@ -1737,6 +1763,23 @@ export class Agents {
     if (session.task === null) this.#miseTrust.forget({ session: session.id });
   }
 
+  /** A turn of session `session` ended for task `task`, one of the tasks it works on. */
+  #taskTurnOver(task: string, session: string): void {
+    // Decided now: the next turn may start while the round is committed.
+    const answeredWork = this.#reviewReturns.turnOver(task);
+    // The round commit first: it tells whether the turn changed anything, it moves the branch, which the tasks it
+    // handed work to then hear about (ADR-144), and which the impact proposals compare (ADR-198).
+    void this.#rounds
+      .turnOver(task)
+      .then((changed) => {
+        if (answeredWork && !changed) this.#backInReview(task);
+      })
+      .then(() => this.#handoffs.turnOver(task))
+      // A failed handoff check does not hold back the impact proposals.
+      .catch((err: unknown) => this.#deps.log(`task ${task}: after its turn: ${String(err)}`))
+      .then(() => this.#impactProposals.turnOver(task, session));
+  }
+
   /** How a session of either view tells the daemon what it did. */
   #sessionCallbacks({ id, supervisor, task }: { id: string; supervisor: boolean; task: string | null }): SessionCallbacks {
     return {
@@ -1745,29 +1788,18 @@ export class Agents {
       onUserText: () => this.#coordination.userTyped({ id, task }),
       onPromptSent: () => {
         this.#miseTrust.promptSent(trustRecipientOf({ id, task }));
-        if (task !== null) this.#rounds.promptSent(task);
+        for (const worked of this.#worksOn(task)) this.#rounds.promptSent(worked);
       },
       onTurnStart: () => {
         this.#coordination.turnStarted(id);
-        if (task === null) return;
-        this.#reviewReturns.turnStarted(task);
-        void this.#rounds.turnStarted(task);
+        // A turn of the one session of a change is a turn in every part it works on (ADR-265).
+        for (const worked of this.#worksOn(task)) {
+          this.#reviewReturns.turnStarted(worked);
+          void this.#rounds.turnStarted(worked);
+        }
       },
       onTurnOver: () => {
-        if (task === null) return;
-        // Decided now: the next turn may start while the round is committed.
-        const answeredWork = this.#reviewReturns.turnOver(task);
-        // The round commit first: it tells whether the turn changed anything, it moves the branch, which the tasks it
-        // handed work to then hear about (ADR-144), and which the impact proposals compare (ADR-198).
-        void this.#rounds
-          .turnOver(task)
-          .then((changed) => {
-            if (answeredWork && !changed) this.#backInReview(task);
-          })
-          .then(() => this.#handoffs.turnOver(task))
-          // A failed handoff check does not hold back the impact proposals.
-          .catch((err: unknown) => this.#deps.log(`task ${task}: after its turn: ${String(err)}`))
-          .then(() => this.#impactProposals.turnOver(task, id));
+        for (const worked of this.#worksOn(task)) this.#taskTurnOver(worked, id);
       },
       onTokenBudgetReached: async () => {
         this.#deps.log(`session ${id}: stopped at its token budget`);

@@ -46,6 +46,12 @@ export interface KnownTask {
   repo: string;
   branch: string;
   worktree: string | null;
+  /**
+   * The folder its session runs in when that is not its worktree: the folder of a change with one session, for its lead
+   * part while it is listed (ADR-265); `null` otherwise. The task journal does not keep a task's change, so the
+   * conversation of an ended change with one session counts outside the projects folder.
+   */
+  sessionFolder: string | null;
   title: string | null;
   prompt: string;
 }
@@ -71,6 +77,9 @@ const OUTSIDE: WorkPlace = { kind: "outside", task: null, repo: null, label: "" 
 export function workPlace(recorded: RecordedPlace, known: KnownPlaces): WorkPlace {
   const { cwd, branch } = recorded;
   if (cwd === undefined) return OUTSIDE;
+  // The folder of a change with one session is no repo, so Copilot CLI records no branch for it (ADR-265).
+  const lead = known.tasks.find((t) => t.sessionFolder !== null && isSamePath(t.sessionFolder, cwd));
+  if (lead !== undefined) return { kind: "task", task: lead.id, repo: lead.repo, label: taskLabel(lead) };
   if (branch !== undefined && known.isTaskBranch(branch)) return taskPlace(cwd, branch, known.tasks);
   if (known.projectsDir !== null && isSamePath(known.projectsDir, cwd)) return { kind: "supervisor", task: null, repo: null, label: "" };
   const repo = known.repos.find((r) => isInside(r.path, cwd));
@@ -105,7 +114,13 @@ function taskLabel(task: KnownTask): string {
 export async function withRealPaths(known: KnownPlaces): Promise<KnownPlaces> {
   return {
     ...known,
-    tasks: await Promise.all(known.tasks.map(async (t) => ({ ...t, worktree: t.worktree === null ? null : await realPathOf(t.worktree) }))),
+    tasks: await Promise.all(
+      known.tasks.map(async (t) => ({
+        ...t,
+        worktree: t.worktree === null ? null : await realPathOf(t.worktree),
+        sessionFolder: t.sessionFolder === null ? null : await realPathOf(t.sessionFolder),
+      })),
+    ),
     repos: await Promise.all(known.repos.map(async (r) => ({ ...r, path: await realPathOf(r.path) }))),
     projectsDir: known.projectsDir === null ? null : await realPathOf(known.projectsDir),
   };

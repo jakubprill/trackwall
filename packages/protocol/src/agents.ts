@@ -112,8 +112,31 @@ export const TaskChange = z.object({
     .int()
     .min(0)
     .max(CHANGE_PARTS_MAX - 1),
+  /**
+   * The part whose session works on this part (ADR-265): in a change with one session every part names the same part,
+   * the **lead part**, which names itself; `null` when every part has a session of its own (ADR-171).
+   */
+  session: TaskId.nullable().default(null),
 });
 export type TaskChange = z.infer<typeof TaskChange>;
+
+/**
+ * How many sessions a change runs in (ADR-265): `shared`, one session in a folder that holds every part's worktree, so
+ * one conversation makes the whole change; `perPart`, a session per part, which work at the same time (ADR-171).
+ */
+export const ChangeSessions = z.enum(["shared", "perPart"]);
+export type ChangeSessions = z.infer<typeof ChangeSessions>;
+/** One conversation costs a fraction of one per repo (ADR-265), so a change runs in one unless the request says otherwise. */
+export const DEFAULT_CHANGE_SESSIONS: ChangeSessions = "shared";
+
+/**
+ * The prompt of the one session of a change (ADR-265): the change's prompt, then every part's note with its repo, since
+ * that session does every part.
+ */
+export function sharedChangePrompt(prompt: string, parts: readonly ChangePart[]): string {
+  const notes = parts.filter((part) => part.note !== "").map(({ repo, note }) => `In ${repo}: ${note}`);
+  return [prompt, ...notes].join("\n\n");
+}
 
 /** What one part of a change adds to the prompt of the whole: what its repo has to do, when the user said so. */
 export const CHANGE_PART_NOTE_MAX = 1000;
@@ -139,9 +162,12 @@ export const ChangeParts = changeParts(ChangePart);
 
 /** Whether every part's prompt, the change's with the part's note, fits a task's prompt. */
 export function changePromptsFit(prompt: string, parts: readonly ChangePart[]): boolean {
-  return parts.every((part) => changePartPrompt(prompt, part).length <= TASK_PROMPT_MAX);
+  return (
+    parts.every((part) => changePartPrompt(prompt, part).length <= TASK_PROMPT_MAX) &&
+    sharedChangePrompt(prompt, parts).length <= TASK_PROMPT_MAX
+  );
 }
-export const CHANGE_PROMPTS_TOO_LONG = `a part's prompt with its note is at most ${TASK_PROMPT_MAX} characters`;
+export const CHANGE_PROMPTS_TOO_LONG = `a part's prompt with its note, and the prompt with every part's note, is at most ${TASK_PROMPT_MAX} characters`;
 
 /** The characters the UI does not show but a model reads or a paste carries (`visibleText`). */
 const INVISIBLE_CHARACTERS = /[\p{Cf}\p{Co}\u2028\u2029]/gu;
@@ -1142,6 +1168,7 @@ export const agentsApi = {
         model: TaskModel.nullable().default(null),
         item: BoardItemId.nullable().default(null),
         view: SessionView.default("terminal"),
+        sessions: ChangeSessions.default(DEFAULT_CHANGE_SESSIONS),
       })
       .strict()
       .refine(({ prompt, parts }) => changePromptsFit(prompt, parts), CHANGE_PROMPTS_TOO_LONG),
@@ -1276,6 +1303,7 @@ export const agentsApi = {
       model: TaskModel.nullable(),
       approvals: TaskApprovals,
       view: SessionView.default("terminal"),
+      sessions: ChangeSessions.default(DEFAULT_CHANGE_SESSIONS),
     }),
     CreatedChange,
   ),

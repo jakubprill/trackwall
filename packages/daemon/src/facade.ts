@@ -744,12 +744,21 @@ async function knownPlaces(agents: Agents, taskJournal: TaskJournal, workspace: 
   ];
   return {
     tasks: [
-      ...agents.tasks().map((t) => ({ id: t.id, repo: t.repo, branch: t.branch, worktree: t.worktree, title: t.title, prompt: t.prompt })),
+      ...agents.tasks().map((t) => ({
+        id: t.id,
+        repo: t.repo,
+        branch: t.branch,
+        worktree: t.worktree,
+        sessionFolder: agents.changeFolderOf(t.id),
+        title: t.title,
+        prompt: t.prompt,
+      })),
       ...taskJournal.records().map((r) => ({
         id: r.task,
         repo: r.repo,
         branch: r.branch,
         worktree: worktreesDir === null ? null : taskWorktree(worktreesDir, r.repo, r.branch),
+        sessionFolder: null,
         title: r.title,
         prompt: r.prompt,
       })),

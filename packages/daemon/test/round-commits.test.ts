@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
@@ -28,6 +28,45 @@ function taskWorktree(files: Record<string, string>) {
 }
 
 describe("round commits in a task worktree (ADR-168), on real git", () => {
+  test(
+    "a round commit takes the new commit of a repo inside the worktree without running a filter that repo's own config names",
+    async () => {
+      const { place, dir } = taskWorktree({ "a.txt": "a\n" });
+      // What an agent can do in its worktree: a repo of its own, added to the index, whose config names a clean filter.
+      const nested = join(dir, "nested");
+      const ran = join(place.repoDir, "..", "ran-by-the-nested-filter.txt");
+      mkdirSync(nested);
+      gitIn(nested, "init", "-q");
+      gitIn(nested, "config", "user.name", "Agent");
+      gitIn(nested, "config", "user.email", "agent@example.com");
+      writeFileSync(join(nested, "f.txt"), "one\n");
+      gitIn(nested, "add", ".");
+      gitIn(nested, "commit", "-q", "-m", "one");
+      gitIn(dir, "add", "nested");
+      const first = await vcs.commitRound(place, "WIP round 1", []);
+      gitIn(nested, "config", "filter.trace.clean", `tee "${ran.replaceAll("\\", "/")}"`);
+      writeFileSync(join(nested, ".git", "info", "attributes"), "* filter=trace\n");
+      // A file of the same size under an unchanged HEAD: `git add` in the worktree would ask the nested repo for its
+      // status, which reads the file through the filter to see whether it changed.
+      writeFileSync(join(nested, "f.txt"), "two\n");
+      utimesSync(join(nested, "f.txt"), new Date(), new Date(Date.now() + 5_000));
+      writeFileSync(join(dir, "a.txt"), "a changed\n");
+
+      const second = await vcs.commitRound(place, "WIP round 2", []);
+
+      expect(existsSync(ran)).toBe(false);
+      expect((await vcs.roundChanges(dir, first, second, 1_000_000)).files.map((f) => f.path)).toEqual(["a.txt"]);
+
+      gitIn(nested, "-c", "filter.trace.clean=cat", "commit", "-q", "-a", "-m", "two");
+      const third = await vcs.commitRound(place, "WIP round 3", []);
+
+      expect(existsSync(ran)).toBe(false);
+      expect(gitIn(dir, "ls-tree", "HEAD", "nested").trim()).toBe(`160000 commit ${head(nested)}\tnested`);
+      expect((await vcs.roundChanges(dir, second, third, 1_000_000)).files.map((f) => f.path)).toEqual(["nested"]);
+    },
+    SLOW_TEST_TIMEOUT_MS,
+  );
+
   test(
     "a round commit takes every change, new and deleted files too, under the user's identity, without running the repo's hooks",
     async () => {

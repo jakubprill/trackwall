@@ -183,13 +183,13 @@ const groupsAndLevels: GalleryState = {
           task(321, {
             repo: "billing",
             proposedBy: proposedBy(320),
-            change: { id: sampleId(900), position: 0 },
+            change: { id: sampleId(900), position: 0, session: null },
             title: "Rename the invoice field",
           }),
           task(322, {
             repo: "web-frontend",
             proposedBy: proposedBy(320),
-            change: { id: sampleId(900), position: 1 },
+            change: { id: sampleId(900), position: 1, session: null },
             title: "Rename the invoice field",
           }),
           task(331, { repo: "web-frontend", proposedBy: proposedBy(330) }),

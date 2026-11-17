@@ -15,6 +15,7 @@ import {
   TASK_MESSAGE_RULE,
   type UsageReport,
 } from "@trackwall/protocol";
+import { copilotCliVersion } from "../scripts/copilot-cli.ts";
 import { conversationEventLog } from "../src/infra/copilot-home.ts";
 import { alwaysAllowPattern } from "../src/modules/agents/copilot-always-allow.ts";
 import { backgroundAgentEventOf } from "../src/modules/agents/copilot-background-agent.ts";
@@ -22,12 +23,13 @@ import { windowTitleFromOsc } from "../src/modules/agents/copilot-osc.ts";
 import { OscParser } from "../src/modules/agents/osc-parser.ts";
 import { readRequestPrompt } from "../src/modules/agents/read-request-prompt.ts";
 import { sessionHooksFile } from "../src/modules/agents/session-launcher.ts";
+import { compareVersions } from "../src/modules/doctor/version.ts";
 import { viewer, waitFor } from "../test/support/agents.ts";
 import { REFERENCE_COLS, REFERENCE_ROWS } from "../test/support/copilot-reference.ts";
 import { screenLines, untilInputBox } from "../test/support/screen-lines.ts";
 import { hookRecords, startRealCopilotDaemon } from "./support/real-copilot.ts";
 import { type Recorder, startRecorder } from "./support/recorder.ts";
-import { commitEscapeScript, ESCAPE_COMMAND, sandboxRefusedEverything } from "./support/sandbox-escape.ts";
+import { commitEscapeScript, ESCAPE_COMMAND, linuxGitDirectoryEscapes, sandboxRefusedEverything } from "./support/sandbox-escape.ts";
 import { type ModelRequest, SCRIPTED_MODEL, type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
 import { USER_MCP_ISSUES, USER_MCP_SERVER, USER_MCP_TOOL } from "./support/user-mcp-server.ts";
 
@@ -36,6 +38,15 @@ const FAKE_LANGUAGE_SERVER = join(import.meta.dir, "support", "fake-language-ser
 
 // The contract with the real Copilot CLI (ADR-67): what the daemon relies on, checked on the pinned version with a
 // scripted model. A failure here after a Copilot CLI upgrade means the fake in test/fixtures is out of date too.
+
+/**
+ * How long a session may take to start and to finish a turn: a cold ~170 MB binary that Windows Defender scans.
+ */
+const SESSION_MS = 60_000;
+// A test waits for at most three such steps; its own limit is above their sum, so a slow step fails on its own message.
+// Set before the hooks below: bun gives a hook the limit of the moment it is registered, and stopping the daemon with
+// its sessions takes longer than bun's 5 s on macOS.
+setDefaultTimeout(4 * SESSION_MS);
 
 let model: ScriptedModel;
 let daemon: Awaited<ReturnType<typeof startRealCopilotDaemon>>;
@@ -83,14 +94,10 @@ function shellCall(request: ModelRequest, command: { bash: string; powershell: s
   return { tool, arguments: { command: command[tool], description: "Create a file" } };
 }
 
-/**
- * How long a session may take to start and to finish a turn: a cold ~170 MB binary that Windows Defender scans.
- */
-const SESSION_MS = 60_000;
+/** The first Copilot CLI that scrolls an approval taller than the terminal inside its box and squeezes it in a short one (§4.4). */
+const SQUEEZES_TALL_APPROVALS_FROM = "1.0.112";
 /** A model other than the scripted model's default (`COPILOT_MODEL`), which only a task's `--model` asks for (ADR-98). */
 const REVIEW_MODEL = "trackwall-review-model";
-// A test waits for at most three such steps; its own limit is above their sum, so a slow step fails on its own message.
-setDefaultTimeout(4 * SESSION_MS);
 
 type Daemon = typeof daemon;
 
@@ -295,7 +302,7 @@ describe("a session of the real Copilot CLI", () => {
     recorder.approval(records, dialogBox);
   });
 
-  test("an MCP tool approval taller than a short terminal loses its heading, and the daemon reads it with the notification's text", async () => {
+  test("an MCP tool approval taller than a short terminal is read: cut above its heading with the notification's text (to 1.0.111), or squeezed with its detail scrolled (from 1.0.112)", async () => {
     const { agents } = daemon.facade;
     const { id, window } = await startSession();
     // A task terminal squeezed by the panels above it (1280×720 at 150%): the JSON arguments do not fit.
@@ -307,11 +314,12 @@ describe("a session of the real Copilot CLI", () => {
     const approval = await waitFor(agents, id, (s) => s.state?.state === "Approval" && s.dialog !== null, "approval dialog", SESSION_MS);
     const { dialog } = approval;
     if (dialog?.kind !== "approval") throw new Error(`no approval dialog: ${JSON.stringify(dialog)}`);
-    expect(dialog).toMatchObject({
-      title: `Use MCP tool: ${MCP_SERVER_NAME}/${mcpTools.verifyTask.name}`,
-      question: "Do you want to use this tool?",
-    });
-    expect(dialog.detail[0]).toBe("…");
+    expect(dialog.question).toBe("Do you want to use this tool?");
+    // Cut above, the heading comes from the notification and the detail starts with "…"; squeezed, the box keeps its
+    // own heading and the detail it scrolls ends with "…".
+    const squeezed = compareVersions(copilotCliVersion(), SQUEEZES_TALL_APPROVALS_FROM) >= 0;
+    expect(dialog.title).toBe(squeezed ? mcpTools.verifyTask.name : `Use MCP tool: ${MCP_SERVER_NAME}/${mcpTools.verifyTask.name}`);
+    expect(squeezed ? dialog.detail.at(-1) : dialog.detail[0]).toBe("…");
     expect(dialog.options[0]).toEqual({ key: "1", label: "Yes" });
 
     model.reply({ text: "There is no such task." });
@@ -1137,13 +1145,13 @@ describe("a task in Copilot CLI's sandbox with the real Copilot CLI (ADR-181)", 
         expect({ inside: existsSync(join(task.worktree, "inside.txt")), answers }).toMatchObject({ inside: true });
         const lastCommit = spawnSync("git", ["log", "-1", "--format=%s"], { cwd: task.worktree, encoding: "utf8" }).stdout.trim();
         expect({ lastCommit, answers }).toMatchObject({ lastCommit: "sandboxed" });
-        // On Linux the repo's whole git directory is granted for the worktree's commits, hooks and config with it: a
-        // gap in §8, pinned here so that a change in Copilot CLI shows.
+        // On Linux Copilot CLI up to 1.0.110 grants the repo's whole git directory, hooks and config with it (a gap in
+        // §8), and a newer one keeps those two read-only: pinned by version, so that a change in Copilot CLI shows.
         const escapes = probe.escapes(task.worktree);
         expect(escapes).not.toContain("the user's home");
         // The state folder with the daemon token lies in the user's home, so the task cannot take the token (§8).
         expect(escapes).not.toContain("a token file in the user's home");
-        if (process.platform === "linux") expect(escapes).toEqual(["the repo's git hooks", "the repo's git config"]);
+        if (process.platform === "linux") expect(escapes).toEqual(linuxGitDirectoryEscapes());
         // What the agent wrote there would run outside the sandbox at the daemon's next git command, so the daemon
         // refuses git in the repo until it is undone (ADR-181 addendum).
         if (escapes.length > 0) await expect(agents.taskChanges(task.id)).rejects.toThrow("changed since a task in the sandbox started");
