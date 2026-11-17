@@ -27,6 +27,8 @@ async function chooseTheme(page: Page, label: string): Promise<void> {
     .getByRole("button", { name: /^Settings/ })
     .click();
   await page.getByRole("navigation", { name: "Settings categories" }).getByRole("button", { name: "App" }).click();
+  // A setting is a folded row (ADR-263): its form shows once the row is opened.
+  await page.getByRole("button", { name: /^Theme/, expanded: false }).click();
   await page
     .getByRole("group", { name: "Theme" })
     .getByRole("radio", { name: new RegExp(`^${label}`) })

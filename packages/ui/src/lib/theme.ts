@@ -15,7 +15,7 @@ export const THEME_CHOICE_LABELS: Record<ThemeChoice, string> = { dark: "Dark", 
 /** The theme a page paints: a choice with "system" resolved. */
 export type Theme = Exclude<ThemeChoice, "system">;
 
-const DEFAULT_THEME_CHOICE: ThemeChoice = "dark";
+export const DEFAULT_THEME_CHOICE: ThemeChoice = "dark";
 
 /** The `localStorage` key; the `storage` event carries it to the other windows. */
 export const THEME_KEY = "trackwall.theme";

@@ -2,7 +2,6 @@ import { type JavaNavigationInstall, javaNavigationApi } from "@trackwall/protoc
 import { useCallback } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
-import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
@@ -31,14 +30,12 @@ export function JavaNavigationSurface({ conn }: { conn: Connection }) {
   const install = useRemote(load, { pollMs: (data) => (data?.step ? RUNNING_POLL_MS : IDLE_POLL_MS) });
   const start = useAction(() => post(conn, javaNavigationApi.startInstall, {}), install.reload);
   return (
-    <Surface label="Java navigation">
-      <div className="flex flex-col gap-3 p-4">
-        {install.error && <ErrorWithRetry message={install.error} onRetry={install.reload} />}
-        {!install.data && !install.error && <Loading />}
-        {install.data && <JavaNavigationSetup install={install.data} pending={start.pending} onInstall={start.run} />}
-        {start.error && <p className="text-destructive text-xs break-words">{start.error}</p>}
-      </div>
-    </Surface>
+    <div className="flex flex-col gap-3 p-4">
+      {install.error && <ErrorWithRetry message={install.error} onRetry={install.reload} />}
+      {!install.data && !install.error && <Loading />}
+      {install.data && <JavaNavigationSetup install={install.data} pending={start.pending} onInstall={start.run} />}
+      {start.error && <p className="text-destructive text-xs break-words">{start.error}</p>}
+    </div>
   );
 }
 

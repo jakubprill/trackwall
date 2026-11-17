@@ -1,7 +1,6 @@
 import { DevContainerForm } from "@/components/DevContainerForm";
 import { HostProjectsFolderForm } from "@/components/HostProjectsFolderForm";
 import { RemoteDaemonForm } from "@/components/RemoteDaemonForm";
-import { Surface } from "@/components/Surface";
 import { inDesktopShell } from "@/lib/app-window";
 
 /**
@@ -10,20 +9,16 @@ import { inDesktopShell } from "@/lib/app-window";
  */
 export function RemoteDaemonSurface() {
   return (
-    <Surface label="Daemon in a container">
-      <div className="flex flex-col gap-3 p-4">
-        {inDesktopShell() ? (
-          <>
-            <DevContainerForm />
-            <RemoteDaemonForm />
-            <HostProjectsFolderForm />
-          </>
-        ) : (
-          <p className="text-sm">
-            This page uses the daemon that served it. The desktop app can connect to a daemon in a dev container too.
-          </p>
-        )}
-      </div>
-    </Surface>
+    <div className="flex flex-col gap-3 p-4">
+      {inDesktopShell() ? (
+        <>
+          <DevContainerForm />
+          <RemoteDaemonForm />
+          <HostProjectsFolderForm />
+        </>
+      ) : (
+        <p className="text-sm">This page uses the daemon that served it. The desktop app can connect to a daemon in a dev container too.</p>
+      )}
+    </div>
   );
 }
