@@ -1,6 +1,5 @@
 import type { SceneLabelMode, SceneStyle } from "@trackwall/scene/model";
 import { useState } from "react";
-import { Surface } from "@/components/Surface";
 import { type HomeSceneSettings, readHomeSceneSettings, saveHomeSceneSettings } from "@/lib/home-scene-settings";
 
 const STYLES: ReadonlyArray<{ value: SceneStyle; label: string; hint: string }> = [
@@ -25,25 +24,23 @@ export function HomeSceneSurface() {
     saveHomeSceneSettings(() => window.localStorage, next);
   };
   return (
-    <Surface label="Home scene">
-      <div className="flex flex-col gap-4 p-4">
-        <p className="text-muted-foreground text-sm">How the 3D view on Home draws your repos and sessions on this computer.</p>
-        <Choice
-          name="home-scene-style"
-          legend="Style"
-          options={STYLES}
-          value={settings.style}
-          onChange={(style) => change({ ...settings, style })}
-        />
-        <Choice
-          name="home-scene-labels"
-          legend="Labels"
-          options={LABELS}
-          value={settings.labels}
-          onChange={(labels) => change({ ...settings, labels })}
-        />
-      </div>
-    </Surface>
+    <div className="flex flex-col gap-4 p-4">
+      <p className="text-muted-foreground text-sm">How the 3D view on Home draws your repos and sessions on this computer.</p>
+      <Choice
+        name="home-scene-style"
+        legend="Style"
+        options={STYLES}
+        value={settings.style}
+        onChange={(style) => change({ ...settings, style })}
+      />
+      <Choice
+        name="home-scene-labels"
+        legend="Labels"
+        options={LABELS}
+        value={settings.labels}
+        onChange={(labels) => change({ ...settings, labels })}
+      />
+    </div>
   );
 }
 

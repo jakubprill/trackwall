@@ -2,6 +2,7 @@ import type { GallerySection } from "./gallery-state.ts";
 import { GET_STARTED_STATES } from "./get-started-states.tsx";
 import { HOME_STATES } from "./home-states.tsx";
 import { SESSION_LIST_STATES } from "./session-list-states.tsx";
+import { SETTING_ROWS_STATES } from "./setting-rows-states.tsx";
 import { TRAY_PANEL_STATES } from "./tray-panel-states.tsx";
 
 /** The parts of views the gallery shows, in the order of the page, each at the sizes it takes in the app. */
@@ -26,5 +27,14 @@ export const GALLERY_SECTIONS: readonly GallerySection[] = [
       { name: "narrowest", className: "w-80" },
     ],
     states: GET_STARTED_STATES,
+  },
+  {
+    name: "Settings · a group of settings",
+    // The same column as "Get started".
+    sizes: [
+      { name: "widest", className: "w-xl" },
+      { name: "narrowest", className: "w-80" },
+    ],
+    states: SETTING_ROWS_STATES,
   },
 ];
