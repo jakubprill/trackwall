@@ -29,19 +29,19 @@ describe("Settings categories", () => {
     expect(settingsCategory("agents").sections).toContain("copilot-cli");
   });
 
-  test("Agents holds only settings: connecting Copilot CLI, the session profile, the supervisor's model and whether it changes code, the retry model, the token budget, the running tasks warning, the sandbox, the automatic review and Java navigation", () => {
+  test("Agents holds only settings, in the order of their groups: the tasks' settings, the supervisor's, then the model provider and other clients", () => {
     expect(settingsCategory("agents").sections).toEqual([
-      "copilot-cli",
-      "session-profile",
-      "supervisor-model",
-      "supervisor-changes-code",
-      "retry-model",
-      "task-token-budget",
-      "running-tasks-warning",
-      "always-allow",
       "sandbox",
       "auto-review",
+      "always-allow",
+      "task-token-budget",
+      "running-tasks-warning",
+      "retry-model",
       "java-navigation",
+      "supervisor-model",
+      "supervisor-changes-code",
+      "session-profile",
+      "copilot-cli",
     ]);
   });
 
@@ -58,14 +58,14 @@ describe("Settings categories", () => {
     expect(settingsCategory("app").sections.slice(-2)).toEqual(["theme", "home-scene"]);
   });
 
-  test("keeping the screen on is under App, after starting at sign-in, then where the daemon runs, notifications in the browser and the VS Code extension", () => {
+  test("App starts with the desktop app (sign-in, the screen, where the daemon runs, updates), then the browser and VS Code, then how it looks", () => {
     expect(settingsCategory("app").sections).toEqual([
       "start-at-sign-in",
       "keep-screen-on",
       "remote-daemon",
+      "updates",
       "browser-notifications",
       "vscode-extension",
-      "updates",
       "theme",
       "home-scene",
     ]);
@@ -75,6 +75,6 @@ describe("Settings categories", () => {
     expect(firstSettingsCategory(undefined)).toBe("get-started");
     expect(firstSettingsCategory(0)).toBe("get-started");
     expect(firstSettingsCategory(3)).toBe("workspace");
-    expect(settingsCategory("workspace").sections[0]).toBe("folders");
+    expect(settingsCategory("workspace").sections[0]).toBe("projects-folder");
   });
 });

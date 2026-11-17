@@ -52,6 +52,10 @@ _Avoid_: tab (for a whole screen)
 A group of Settings listed on the left of the Settings view: Get started, then Workspace, Repo hosts, Agents and App under "Settings", and Usage, Files and Diagnostics under "Reports" (ADR-102, ADR-212, ADR-262). Each holds a few sections, such as the projects folder or the daemon's state.
 _Avoid_: tab (that is `TabBar`), page
 
+**Setting row** (`SettingRow`, `SETTING_ROWS`, `SettingValue`):
+A setting in Settings › Workspace, Agents or App, shown folded: its name, one sentence on what it does and its value now, with a dot before a value the user changed; a click opens its form (ADR-263). Rows stand in named groups such as *Tasks* or *Supervisor*. A row whose value is a problem, such as a projects folder that is not set, stands open.
+_Avoid_: accordion, advanced settings, panel
+
 **Command palette** (`CommandPalette`, `lib/command-palette.ts`; a **command** is `PaletteCommand`):
 The field Ctrl+K (⌘K) opens over any view, Ctrl+Shift+K from a terminal: a few letters find a session, task, repo, view or Settings category, or an action such as "New session", and Enter goes there (ADR-246).
 _Avoid_: quick open, search (that is the Repos view's repo search), launcher

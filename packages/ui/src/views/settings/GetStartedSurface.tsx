@@ -1,13 +1,12 @@
-import { type DoctorReport, workspaceApi } from "@trackwall/protocol";
-import { useCallback, useContext } from "react";
+import type { DoctorReport, WorkspaceSettings } from "@trackwall/protocol";
+import { useContext } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
-import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { DaemonPlaceContext } from "@/lib/desktop";
 import { getStartedHeadline, getStartedPlace, getStartedPlan } from "@/lib/get-started";
-import { type RemoteHandle, useRemote } from "@/lib/use-remote";
+import type { RemoteHandle } from "@/lib/use-remote";
 import { GetStartedSteps } from "./GetStartedSteps.tsx";
 import { ProjectsFolderForm } from "./ProjectsFolderForm.tsx";
 
@@ -19,12 +18,15 @@ import { ProjectsFolderForm } from "./ProjectsFolderForm.tsx";
 export function GetStartedSurface({
   conn,
   report,
+  settings,
   onRetry,
   onStart,
   onOpenDiagnostics,
 }: {
   conn: Connection;
   report: RemoteHandle<DoctorReport>;
+  /** The workspace settings Settings already read, for the form of the projects folder. */
+  settings: RemoteHandle<WorkspaceSettings>;
   /** Reconnects to the daemon, for a read that failed because the daemon is gone. */
   onRetry: () => void;
   /** Shows where sessions start, once nothing needed is left. */
@@ -58,7 +60,7 @@ export function GetStartedSurface({
             plan={plan}
             action={(step) =>
               step.id === "projects-folder" && step.state === "todo" ? (
-                <ProjectsFolderStep conn={conn} onRetry={onRetry} onSaved={report.reload} />
+                <ProjectsFolderForm conn={conn} settings={settings} onRetry={onRetry} onSaved={report.reload} />
               ) : null
             }
           />
@@ -74,11 +76,4 @@ export function GetStartedSurface({
       )}
     </div>
   );
-}
-
-/** The projects folder set inside its step: the same form as in "Settings > Workspace", and the list is checked again once it is saved. */
-function ProjectsFolderStep({ conn, onRetry, onSaved }: { conn: Connection; onRetry: () => void; onSaved: () => void }) {
-  const load = useCallback(() => post(conn, workspaceApi.settings, {}), [conn]);
-  const settings = useRemote(load);
-  return <ProjectsFolderForm conn={conn} settings={settings} onSaved={onSaved} onRetry={onRetry} />;
 }
