@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { Stats } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { isInside } from "../../infra/path-inside.ts";
 import { gitDirs, readIfExists, statIfExists } from "./git-dir.ts";
 import { pathKey } from "./path-key.ts";
 
@@ -14,6 +15,9 @@ import { pathKey } from "./path-key.ts";
  * leads to the task's repo. It cannot close a race in which the agent swaps a file back and forth between the check
  * and git's own read; Copilot CLI's read-only paths do (§8).
  *
+ * Hooks are not part of it for the daemon: its git runs none in such a repo (`git.ts`), since a hooks path may name a
+ * folder of the worktree.
+ *
  * Read: the keys of the repo configuration `config` that make git run a program or read another file (`RUN_KEYS`),
  * without following includes, so the digest does not depend on the directory git runs in; `config.worktree` of the
  * repo and of each worktree; `info/attributes`; and the hook files in `hooks/`. Every daemon git call compares the
@@ -21,12 +25,17 @@ import { pathKey } from "./path-key.ts";
  */
 
 /**
- * Keys with which git runs a program, reads another configuration or works elsewhere. A relative `core.hooksPath`
- * without `..` (husky's `.husky`) is left out: it names a folder of the checkout git runs in, and the daemon's own
- * writing calls in a task's worktree run without hooks.
+ * Keys with which git runs a program, reads another configuration, works elsewhere or sends its requests elsewhere:
+ * `protocol.*` lets a remote's address name a program (`ext::`), `http.*` a proxy and whether its certificate is
+ * checked, git-lfs runs the program of `lfs.customtransfer.*` at a checkout and those of `lfs.extension.*` on every LFS
+ * file it reads or writes, and `gc` runs `gc.recentObjectsHook`. A relative `core.hooksPath` without
+ * `..` (husky's `.husky`) is left out: a tool writes it in ordinary work, and it names a folder an agent writes anyway,
+ * so the daemon's git runs no hooks at all in a repo with a task in the sandbox (`NO_HOOKS` in `no-hooks.ts`).
  */
 const RUN_KEYS = [
-  /^(filter|diff|difftool|mergetool|pager|alias|credential|include|includeif|url|uploadpack|extensions|gpg|ssh|man|browser|sequence|trailer|fsmonitor)\./,
+  /^(filter|diff|difftool|mergetool|pager|alias|credential|include|includeif|url|uploadpack|extensions|gpg|ssh|man|browser|sequence|trailer|fsmonitor|protocol|http)\./,
+  /^lfs\.(standalonetransferagent|customtransfer\..+|extension\..+)$/s,
+  /^gc\.recentobjectshook$/,
   /^merge\.(tool|.+\.driver)$/s,
   /^core\.(fsmonitor|sshcommand|pager|editor|askpass|attributesfile|gitproxy|worktree|bare|alternaterefscommand)$/,
   /^remote\..+\.(vcs|uploadpack|receivepack|proxy)$/s,
@@ -102,7 +111,8 @@ export function useRunSettingsBaselines(next: readonly RunSettingsBaseline[]): v
 }
 
 /**
- * Throws when `dir` is a sandboxed task's worktree whose `.git` leads elsewhere than its repo, or when `dir`'s repo has a
+ * Throws when `dir` is a sandboxed task's worktree, its repo's root or another worktree of that repo and its git
+ * directory leads elsewhere than the repo's common directory (a rewritten `.git` file or `commondir`), or when `dir`'s repo has a
  * sandboxed task and its run settings match none of the baselines of its tasks. Returns whether the repo is guarded,
  * so that git leaves its submodules alone, whose own git directories the guard does not read.
  */
@@ -112,12 +122,13 @@ export async function assertRunSettings(dir: string, readConfig: ReadConfigFile)
   const dirs = await gitDirs(dir).catch(() => null);
   const common = dirs === null ? null : await pathKey(dirs.commonDir);
   const dirKey = await pathKey(dir);
+  const gitDir = dirs === null ? null : await pathKey(dirs.gitDir);
   const expected = new Set<string>();
   for (const b of baselines) {
     const repoCommon = await repoCommonDir(b.repoDir);
-    if ((await pathKey(b.worktree)) === dirKey && (repoCommon === null || repoCommon !== common))
-      throw new Error(`git in ${dir} is refused: the worktree's .git no longer leads to its repo's git directory`);
     if (repoCommon !== null && repoCommon === common) expected.add(b.digest);
+    else if (await belongsTo(b, repoCommon, dirKey, gitDir))
+      throw new Error(`git in ${dir} is refused: its .git no longer leads to its repo's git directory`);
   }
   if (common === null || expected.size === 0) return false;
   const stamp = await runSettingsStamp(common);
@@ -129,6 +140,16 @@ export async function assertRunSettings(dir: string, readConfig: ReadConfigFile)
     );
   matched.set(common, stamp);
   return true;
+}
+
+/**
+ * Whether the directory `dirKey` is the task's worktree, its repo's root or another worktree of the repo (its git
+ * directory `gitDir` lies in the repo's common directory), whose `commondir` the agent can write too.
+ */
+async function belongsTo(b: RunSettingsBaseline, repoCommon: string | null, dirKey: string, gitDir: string | null): Promise<boolean> {
+  if (dirKey === (await pathKey(b.worktree))) return true;
+  if (repoCommon === null) return false;
+  return dirKey === (await pathKey(b.repoDir)) || (gitDir !== null && isInside(repoCommon, gitDir));
 }
 
 function repoCommonDir(repoDir: string): Promise<string | null> {
