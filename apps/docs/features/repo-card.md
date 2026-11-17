@@ -23,6 +23,8 @@ Select a repo: it opens on its "Card" tab. Trackwall reads the build and configu
 
 Under it, "Agent readiness" lists the repo's gaps, the same ones as in the [connection graph](/features/graph): no `build` or `test` task, an untrusted mise config, problems mise finds in it, a config `mise fmt` would rewrite, a Spring Boot app without `dev`, tool versions outside mise. "Open mise tasks" takes you to the tab that adds tasks and trusts the config, "Format" runs `mise fmt` in the repo, and "Ask an agent…" starts a task with a prompt you can edit first.
 
+Under that, each kind of fact is one folded row with its count: "Tags", "Mechanisms", "Required tools", "Apps", "HTTP endpoints", "DTOs", "HTTP clients", "Provides", "Uses" and "Build files". Press a row to see its facts. The kinds the repo has nothing of share one row at the end, "Not found in this repo", which says for each what Trackwall looked for.
+
 The card covers the packages the repo provides and uses, required tools (`mise.toml`, `.tool-versions`, `.nvmrc`, build wrappers), frameworks, Spring Boot apps and their ports, HTTP endpoints from controllers and OpenAPI specs with their request and response types, the fields of those types (Java records and classes, Kotlin `data class`, enums), and HTTP clients (Feign, `@HttpExchange`, WebClient, RestClient, RestTemplate) with the addresses from `application*.yml` in every profile, from `.env` and from the frontend's dev proxy.
 
 From the card Trackwall gives each repo tags: `java`, `typescript`, `frontend`, `backend`, `bff`, `library`, `monorepo`, `no-mise` for a repo without mise tasks, and `local-mise` for a repo with mise tasks only your clone has, in `mise.local.toml` or a `mise.toml` kept out of git. The tags show on the repo list, with the reason in a tooltip, and the filter above the list narrows it to repos that have every tag you select.
@@ -30,7 +32,8 @@ From the card Trackwall gives each repo tags: `java`, `typescript`, `frontend`, 
 ## Use it
 
 1. Open "Repos" and select a repo; its card is the first tab.
-2. To narrow the list, pick tags in the filter above it.
+2. Press a row under "At a glance", such as "HTTP endpoints", to see its facts with the file and line each comes from.
+3. To narrow the list, pick tags in the filter above it.
 
 ## Good to know
 
