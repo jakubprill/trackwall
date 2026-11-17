@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:gallery": "vite build --config vite.gallery.config.ts",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json",
     "test": "bun test"
