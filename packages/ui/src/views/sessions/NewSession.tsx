@@ -25,6 +25,7 @@ import type { Connection } from "@/lib/connection";
 import { type JavaNavigationOffer, javaNavigationInChange, javaNavigationInView, javaNavigationOffer } from "@/lib/java-navigation";
 import {
   type ChangePartDraft,
+  changeRequest,
   type FromItem,
   firstListedRepo,
   formChangeStart,
@@ -136,7 +137,7 @@ export function NewSession({
     if (model !== undefined) saveStartChoice(() => window.localStorage, chosen, choice);
     if (start.kind === "task") createTask.run(start.repo, start.prompt);
     if (start.kind === "session") startSession.run(start.repo, start.prompt);
-    if (start.kind === "change") change.create.run({ ...start, approvals, model: model ?? null, item, view: choice.view });
+    if (start.kind === "change") change.create.run(changeRequest(start, { approvals, model: model ?? null, item, view: choice.view }));
   };
 
   return (

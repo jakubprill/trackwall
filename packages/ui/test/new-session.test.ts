@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { Session } from "@trackwall/protocol";
+import { agentsApi, type Session } from "@trackwall/protocol";
 import {
+  changeRequest,
   changeStart,
   firstListedRepo,
   formChangeStart,
@@ -190,6 +191,34 @@ describe("a task with more repos is a change (ADR-171)", () => {
     expect(mayAddPart(added(5), 20)).toBe(false);
     // With two other repos in the projects folder, a third row would have no repo left to pick.
     expect(mayAddPart(added(2), 2)).toBe(false);
+  });
+});
+
+describe("the request that starts a change (ADR-171)", () => {
+  test("carries the change's title, prompt and parts with the form's options, and the daemon's schema takes it", () => {
+    const start = {
+      kind: "change" as const,
+      title: "OTP in e2e tests",
+      prompt: "Read one-time codes in the e2e tests",
+      parts: [
+        { repo: "auth", note: "" },
+        { repo: "web", note: "the e2e tests are here" },
+      ],
+    };
+    const request = changeRequest(start, { approvals: "ask", model: null, item: null, view: "terminal" });
+    expect(request).toEqual({
+      title: "OTP in e2e tests",
+      prompt: "Read one-time codes in the e2e tests",
+      parts: [
+        { repo: "auth", note: "" },
+        { repo: "web", note: "the e2e tests are here" },
+      ],
+      approvals: "ask",
+      model: null,
+      item: null,
+      view: "terminal",
+    });
+    expect(agentsApi.createChange.request.safeParse(request).error?.issues).toBeUndefined();
   });
 });
 
