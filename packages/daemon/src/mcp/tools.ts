@@ -5,6 +5,7 @@ import {
   ancestorsOf,
   childrenOf,
   compareSiblings,
+  GET_REPO_README_MAX_CHARS,
   GET_SESSION_PROMPT_ARG,
   isSupervisor,
   type McpCaller,
@@ -47,11 +48,6 @@ import { sessionText } from "./session-text.ts";
  * when the user trusts it (ADR-92).
  */
 
-/**
- * A README longer than this does not fit sensibly into the agent's context anyway (the result carries it twice: in the
- * text and in `structuredContent`); the preview limit in the UI (512 KB) is for a human who scrolls.
- */
-const README_MAX_CHARS = 32_000;
 /** How many recent commits `get_repo` returns: enough for the agent to know what has happened lately. */
 const RECENT_COMMITS = 10;
 /**
@@ -202,8 +198,8 @@ const runs: ToolRuns = {
       repo: agentRepo(repo, facade.workspace.syncRun(), tags),
       readme: overview.readme && {
         ...overview.readme,
-        text: overview.readme.text.slice(0, README_MAX_CHARS),
-        truncated: overview.readme.truncated || overview.readme.text.length > README_MAX_CHARS,
+        text: overview.readme.text.slice(0, GET_REPO_README_MAX_CHARS),
+        truncated: overview.readme.truncated || overview.readme.text.length > GET_REPO_README_MAX_CHARS,
       },
       commits: overview.commits.slice(0, RECENT_COMMITS),
       miseTasks,

@@ -167,6 +167,12 @@ export const ListReposResult = z.object({
 });
 export type ListReposResult = z.infer<typeof ListReposResult>;
 
+/**
+ * How much of a README `get_repo` returns (ADR-257, addendum): its beginning says what the repo is, and the result stays in
+ * the agent's context for the rest of the conversation, so the rest is read from the file when it is needed.
+ */
+export const GET_REPO_README_MAX_CHARS = 4000;
+
 export const GetRepoResult = z.object({
   repo: AgentRepo,
   /** The README from the HEAD commit, cut for the agent's context; `null` when the repo has none. */
@@ -472,7 +478,7 @@ export const mcpTools = {
     readOnly: true,
     auditArgs: ["repo"] as const,
     description:
-      `Details of one repo: the same as ${LIST_REPOS} (with tags; empty when the card cannot be built), the README from the latest commit (truncated), ` +
+      `Details of one repo: the same as ${LIST_REPOS} (with tags; empty when the card cannot be built), the beginning of the README from the latest commit (up to ${GET_REPO_README_MAX_CHARS} characters; truncated: true means read the file at path for the rest), ` +
       "recent commits and mise tasks (name, description, run state, origin: repo for a file in the repo's git, local for a file of the repo git " +
       "does not keep, outside for a mise config outside the repo, with the file as source) or the reason mise did not list them.",
     args: z.object({ repo: RepoArg }).strict(),

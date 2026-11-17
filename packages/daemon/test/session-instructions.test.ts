@@ -39,6 +39,7 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
       "Before you report that you are done, call verify_task with repo `shop` and task `1b4e28ba-2fa1-11d2-883f-0016d3cca427`",
     );
     expect(text).toContain("If the repo has no mise task test, do not add one");
+    expect(text).toContain("verify_task runs the repo's whole test suite: do not also run the whole suite yourself");
     expect(text).toContain(
       "When Trackwall asks you to call get_messages, the session that proposed your task, or the supervisor the user handed it to, has written to you",
     );
@@ -72,6 +73,8 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     expect(text).toContain("call verify_task with repo `shop` and task `1b4e28ba-2fa1-11d2-883f-0016d3cca427`");
     expect(text).toContain("more than 4000 characters is refused");
     expect(text).toContain("propose it with propose_task");
+    expect(text).toContain("verify_task runs the repo's whole test suite: do not also run the whole suite yourself");
+    expect(text).not.toContain("you may also run the build");
     expect(text).toContain("- how-to, `shop`: Run the build with mvn -o.");
     expect(text).not.toContain(MCP_INSTRUCTIONS);
     expect(text).not.toContain("get_messages");
