@@ -1,0 +1,10 @@
+/*
+ * The gallery's own styles (packages/ui/gallery.html). Not part of the app.
+ *
+ * The UI takes the system's font (Segoe UI on Windows, SF on macOS), whose words run wider than the fallback font a
+ * browser on Linux has; this letter spacing stands in for the widest of them, with a margin. The E2E tests use the same
+ * value (`WIDER_FONT` in packages/daemon/e2e/support/text-overflow.ts), and the gallery's test checks that they agree.
+ */
+.gallery-wide-font {
+  letter-spacing: 0.08em;
+}

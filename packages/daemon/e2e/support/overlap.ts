@@ -2,7 +2,7 @@
  * Finds things drawn over each other inside one element: two pieces of text, or a piece of text, an icon or a button
  * over another one that does not hold it. Hidden and see-through things do not count, and text cut off with an ellipsis
  * counts by the part that shows. Runs in the page; Playwright sends the function as its source, so its helpers live
- * inside it (which is also why `clipped` is not shared with `text-overflow.ts`).
+ * inside it (which is also why `clipped` is not shared with `layout-faults.ts`).
  */
 export function overlapsIn(root: Element): string[] {
   type Drawn = { what: string; el: Element; box: DOMRect };

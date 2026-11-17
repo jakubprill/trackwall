@@ -10,11 +10,12 @@ const CLOCK_MS = 30_000;
 /**
  * A session's state, with how long it has waited for you after it (ADR-247), the same in every place that shows a
  * session's state: the Sessions list, a grid tile, the session and task headers, the dashboard and the tray panel.
+ * Where the place is too narrow for both on one line, the waiting time goes under the state, and a long state wraps.
  */
 export function SessionStateLabel({ session, labelClassName }: { session: Session; labelClassName?: string }) {
   return (
-    <span className="flex min-w-0 items-center gap-1.5">
-      <StatusLabel {...sessionStateLabel(session)} labelClassName={labelClassName} />
+    <span className="flex min-w-0 flex-wrap items-center gap-x-1.5">
+      <StatusLabel {...sessionStateLabel(session)} labelClassName={labelClassName} className="min-w-0 shrink" />
       {session.waitingSince !== null && <WaitingTime since={session.waitingSince} />}
     </span>
   );

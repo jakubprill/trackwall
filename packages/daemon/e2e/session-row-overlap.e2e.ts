@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { WIDER_FONT } from "./support/layout-faults.ts";
 import { overlapsIn } from "./support/overlap.ts";
-import { WIDER_FONT } from "./support/text-overflow.ts";
 import {
   changeSessionLists,
   type SessionListBody,

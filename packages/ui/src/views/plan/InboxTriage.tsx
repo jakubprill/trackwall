@@ -195,7 +195,8 @@ function InboxHeader({
       <span className="text-muted-foreground text-sm">
         {open.length === 0 ? "Nothing to sort" : `${countLabel(open.length, { one: "idea", other: "ideas" })} to sort`}
       </span>
-      <fieldset aria-label="Show ideas" className="ml-auto flex rounded-md border">
+      {/* The filters wrap in a narrow column (a small screen with the supervisor panel pinned) instead of being cut off. */}
+      <fieldset aria-label="Show ideas" className="ml-auto flex min-w-0 flex-wrap rounded-md border">
         {INBOX_FILTERS.map(({ filter: f, label }) => (
           <Button key={f} variant={f === filter ? "secondary" : "ghost"} size="sm" aria-pressed={f === filter} onClick={() => onFilter(f)}>
             {label} <span className="text-muted-foreground font-mono text-xs">{open.filter((idea) => matchesFilter(idea, f)).length}</span>
