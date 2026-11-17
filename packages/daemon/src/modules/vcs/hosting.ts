@@ -6,6 +6,7 @@ import {
   MAX_REMOTE_REPO_PAGES,
   type MergeRequest,
   type MergeRequestForm,
+  type MergeRequestThreads,
   type RemoteRepoMore,
   type RemoteRepoSearch,
   type RepoHost,
@@ -14,6 +15,7 @@ import {
 import { runProgram } from "../../infra/run-program.ts";
 import { gitEnv } from "./git.ts";
 import { findMergeRequest, jobLogPath, mergeRequestFormUrl } from "./hosted-merge-request.ts";
+import { findMergeRequestThreads, type ThreadsOf } from "./hosted-merge-request-threads.ts";
 import { githubApi, gitlabApi, type HostedRepoFilter, type HostingApi, type ListedRepo } from "./hosted-repo.ts";
 
 /**
@@ -122,6 +124,22 @@ export class Hosting {
   }
 
   /**
+   * The unresolved threads of merge request `mr` in `project` (ADR-255), read now: only on the user's request, so a
+   * review's comments go to the agent as the repo host shows them.
+   */
+  mergeRequestThreads(project: HostedProject, mr: ThreadsOf): Promise<MergeRequestThreads> {
+    const host = { kind: project.kind, host: project.host };
+    return findMergeRequestThreads(
+      {
+        rest: (path, schema) => this.api(host, path, (json) => schema.parse(json)),
+        graphql: (query, variables, schema) => this.graphql(host, query, variables, (json) => schema.parse(json)),
+      },
+      project,
+      mr,
+    );
+  }
+
+  /**
    * The log of a failed job as the repo host gives it (ADR-197), up to `JOB_LOG_MAX_BYTES`; `cut` when it was longer, so
    * the end is missing. Read only on the user's request: logs are large.
    */
@@ -153,8 +171,23 @@ export class Hosting {
   }
 
   /** One `<cli> api` call; the response is outside data, so JSON checked by `parse`, and an error without a dump of it. */
-  private async api<T>(host: RepoHost, path: string, parse: (json: unknown) => T): Promise<T> {
-    const { stdout } = await this.run(host, ["api", "--hostname", host.host, path], PAGE_TIMEOUT_MS);
+  private api<T>(host: RepoHost, path: string, parse: (json: unknown) => T): Promise<T> {
+    return this.apiCall(host, [path], parse);
+  }
+
+  /**
+   * One `gh api graphql` call: the query is the daemon's own, and the variables go as fields (`-f` for text, which `gh`
+   * takes as it is, `-F` only for numbers), never into the query.
+   */
+  private graphql<T>(host: RepoHost, query: string, variables: Record<string, string | number>, parse: (json: unknown) => T): Promise<T> {
+    const fields = Object.entries(variables).flatMap(([name, value]) =>
+      typeof value === "number" ? ["-F", `${name}=${value}`] : ["-f", `${name}=${value}`],
+    );
+    return this.apiCall(host, ["graphql", "-f", `query=${query}`, ...fields], parse);
+  }
+
+  private async apiCall<T>(host: RepoHost, args: string[], parse: (json: unknown) => T): Promise<T> {
+    const { stdout } = await this.run(host, ["api", "--hostname", host.host, ...args], PAGE_TIMEOUT_MS);
     try {
       return parse(JSON.parse(stdout.toString("utf8")));
     } catch {

@@ -1,22 +1,35 @@
-import { PipelineFix, REVIEW_UNREAD_MAX, ReviewComment, TaskId } from "@trackwall/protocol";
+import {
+  MERGE_REQUEST_THREADS_MAX,
+  MergeRequestComments,
+  PipelineFix,
+  REVIEW_UNREAD_MAX,
+  ReviewComment,
+  TaskId,
+} from "@trackwall/protocol";
 import { z } from "zod";
 import { DomainError } from "../../infra/errors.ts";
 
 /**
  * Review comments the user sent on a task's changes and its agent has not read yet (ADR-62), per task, oldest first,
- * and the user's latest pipeline fix (ADR-197), which `get_review_comments` returns with them.
+ * the user's latest pipeline fix (ADR-197) and the merge request threads the user handed over (ADR-255), which
+ * `get_review_comments` returns with them.
  * Since ADR-115 they outlive a daemon restart in `agent-queues.json` (`stored`, `restore`), so the resumed task session
  * reads them; every change is reported to `changed`, which writes the file. A comment counts as read once `take`
  * returns it, also when the agent's call is cancelled before the result reaches it.
  */
 
-/** What `agent-queues.json` keeps of the reviews: the unread comments of each task, and its unread pipeline fix. */
+/**
+ * What `agent-queues.json` keeps of the reviews: the unread comments of each task, its unread pipeline fix and its
+ * unread merge request comments.
+ */
 export const StoredReviews = z.array(
   z.object({
     task: TaskId,
     comments: z.array(ReviewComment).max(REVIEW_UNREAD_MAX),
     // A file from before ADR-197 has none.
     pipelineFix: PipelineFix.nullable().default(null),
+    // A file from before ADR-255 has none.
+    mergeRequestComments: MergeRequestComments.nullable().default(null),
   }),
 );
 export type StoredReviews = z.infer<typeof StoredReviews>;
@@ -25,11 +38,13 @@ export type StoredReviews = z.infer<typeof StoredReviews>;
 export interface UnreadReview {
   comments: ReviewComment[];
   pipelineFix: PipelineFix | null;
+  mergeRequestComments: MergeRequestComments | null;
 }
 
 export class TaskReviews {
   readonly #unread = new Map<string, ReviewComment[]>();
   readonly #pipelineFixes = new Map<string, PipelineFix>();
+  readonly #threads = new Map<string, MergeRequestComments>();
   readonly #changed: () => void;
 
   constructor(changed: () => void) {
@@ -37,11 +52,12 @@ export class TaskReviews {
   }
 
   stored(): StoredReviews {
-    const tasks = new Set([...this.#unread.keys(), ...this.#pipelineFixes.keys()]);
+    const tasks = new Set([...this.#unread.keys(), ...this.#pipelineFixes.keys(), ...this.#threads.keys()]);
     return [...tasks].map((task) => ({
       task,
       comments: this.#unread.get(task) ?? [],
       pipelineFix: this.#pipelineFixes.get(task) ?? null,
+      mergeRequestComments: this.#threads.get(task) ?? null,
     }));
   }
 
@@ -49,10 +65,12 @@ export class TaskReviews {
   restore(stored: StoredReviews, hasTask: (task: string) => boolean): void {
     this.#unread.clear();
     this.#pipelineFixes.clear();
-    for (const { task, comments, pipelineFix } of stored) {
+    this.#threads.clear();
+    for (const { task, comments, pipelineFix, mergeRequestComments } of stored) {
       if (!hasTask(task)) continue;
       if (comments.length > 0) this.#unread.set(task, comments);
       if (pipelineFix) this.#pipelineFixes.set(task, pipelineFix);
+      if (mergeRequestComments) this.#threads.set(task, mergeRequestComments);
     }
   }
 
@@ -75,6 +93,27 @@ export class TaskReviews {
     this.#changed();
   }
 
+  /**
+   * Merge request threads the user handed over (ADR-255), joined with the unread ones by thread: a thread sent again
+   * replaces its older copy, and a merge request other than the one before (the branch got a new one) starts afresh.
+   * More than `MERGE_REQUEST_THREADS_MAX` unread is refused.
+   */
+  addThreads(task: string, comments: MergeRequestComments): void {
+    const before = this.#threads.get(task);
+    const kept = before?.mergeRequest === comments.mergeRequest ? before.threads : [];
+    const sent = new Set(comments.threads.map((t) => t.id));
+    const [first, ...rest] = [...kept.filter((t) => !sent.has(t.id)), ...comments.threads];
+    if (!first) return;
+    const threads = [first, ...rest];
+    if (threads.length > MERGE_REQUEST_THREADS_MAX)
+      throw new DomainError(
+        "bad_request",
+        `the agent has not read ${kept.length} merge request threads yet; at most ${MERGE_REQUEST_THREADS_MAX} can wait for it`,
+      );
+    this.#threads.set(task, { mergeRequest: comments.mergeRequest, threads });
+    this.#changed();
+  }
+
   unread(task: string): number {
     return this.#unread.get(task)?.length ?? 0;
   }
@@ -83,14 +122,22 @@ export class TaskReviews {
     return this.#pipelineFixes.has(task);
   }
 
-  /** The unread comments and pipeline fix, which from now on count as read. */
+  threadsUnread(task: string): boolean {
+    return this.#threads.has(task);
+  }
+
+  /** The unread comments, pipeline fix and merge request comments, which from now on count as read. */
   take(task: string): UnreadReview {
-    const comments = this.#unread.get(task) ?? [];
-    const pipelineFix = this.#pipelineFixes.get(task) ?? null;
-    if (comments.length === 0 && pipelineFix === null) return { comments, pipelineFix };
+    const review = {
+      comments: this.#unread.get(task) ?? [],
+      pipelineFix: this.#pipelineFixes.get(task) ?? null,
+      mergeRequestComments: this.#threads.get(task) ?? null,
+    };
+    if (review.comments.length === 0 && review.pipelineFix === null && review.mergeRequestComments === null) return review;
     this.#unread.delete(task);
     this.#pipelineFixes.delete(task);
+    this.#threads.delete(task);
     this.#changed();
-    return { comments, pipelineFix };
+    return review;
   }
 }

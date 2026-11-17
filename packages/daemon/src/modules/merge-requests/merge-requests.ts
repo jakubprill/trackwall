@@ -6,11 +6,13 @@ import {
   type HostedProject,
   type JobLog,
   type MergeRequest,
+  type MergeRequestComments,
   type MergeRequestDraft,
   type MergeRequestEvidence,
   type MergeRequestForm,
   type MergeRequestLookup,
   type MergeRequestTemplate,
+  type MergeRequestThreads,
   PIPELINE_FIX_LOGS_MAX,
   type Pipeline,
   type PipelineFix,
@@ -32,7 +34,8 @@ import { ACTIVE_CHECK_MS, nextCheckMs, pipelineFailedNow, type WatchRead } from 
  * permission there beyond what `gh` and `glab` already read with, and a merge request made any other way (by the
  * user, an agent, another MCP server) shows the same. It also follows every task's merge request in the background
  * (ADR-154): the Sessions list shows it, and a pipeline that fails is announced. On the user's request it reads the end
- * of a failed job's log, and hands the failed jobs' logs to the task's agent as a pipeline fix (ADR-197). Kept only in
+ * of a failed job's log, and hands the failed jobs' logs to the task's agent as a pipeline fix (ADR-197), and it reads
+ * the unresolved threads of the merge request and hands those the user picks to the agent (ADR-255). Kept only in
  * memory: the repo host's last answers, and what it last read of each task.
  */
 
@@ -58,6 +61,8 @@ interface MergeRequestTasks {
   pushWithRoundsSquashed(id: string, push: (source: string | undefined) => Promise<void>): Promise<void>;
   /** Queues the user's pipeline fix for the task's agent and asks its session to read it. */
   askToFixPipeline(id: string, fix: PipelineFix): PromptDelivery;
+  /** Queues the merge request threads the user picked for the task's agent and asks its session to read them (ADR-255). */
+  askToAddressThreads(id: string, comments: MergeRequestComments): PromptDelivery;
   /** The task's last rules check (ADR-234), and whether the task's changes moved on after it; `null` without one. */
   rulesCheck(id: string): Promise<FreshAutoReview | null>;
   /** What the task's conversation has used so far, and on which models (ADR-228). */
@@ -71,9 +76,13 @@ interface MergeRequestVcs extends TemplateVcs {
   pushBranch(dir: string, branch: string, source?: string): Promise<void>;
 }
 
-/** What the module needs from the repo hosts in `vcs`: the merge request from a branch, the new merge request form, and a job's log. */
+/**
+ * What the module needs from the repo hosts in `vcs`: the merge request from a branch and its unresolved threads, the new
+ * merge request form, and a job's log.
+ */
 interface MergeRequestHosting {
   mergeRequest(project: HostedProject, branch: string): Promise<MergeRequest | null>;
+  mergeRequestThreads(project: HostedProject, mr: { number: number; url: string }): Promise<MergeRequestThreads>;
   mergeRequestForm(project: HostedProject, form: MergeRequestForm): string;
   jobLog(project: HostedProject, job: string): Promise<{ raw: string; cut: boolean }>;
 }
@@ -334,20 +343,53 @@ export class MergeRequests {
     return { delivery: this.#deps.tasks.askToFixPipeline(id, fix) };
   }
 
+  /** The unresolved threads of the task's open merge request, read from the repo host now (ADR-255). */
+  async threads(id: string): Promise<MergeRequestThreads> {
+    const { project, mergeRequest } = await this.#openMergeRequest(id, "has no open merge request");
+    return this.#readThreads(project, mergeRequest);
+  }
+
+  /**
+   * Hands the threads the user picked to the task's agent (ADR-255): read again, so the agent gets each as the repo host
+   * shows it now, and a thread resolved since the user saw it stays out. Refused when none of them is unresolved now.
+   */
+  async sendThreads(id: string, picked: readonly string[]): Promise<{ delivery: PromptDelivery; sent: number }> {
+    const { project, mergeRequest } = await this.#openMergeRequest(id, "has no open merge request");
+    const wanted = new Set(picked);
+    const now = await this.#readThreads(project, mergeRequest);
+    const [first, ...rest] = now.threads.filter((t) => wanted.has(t.id));
+    if (!first) throw new DomainError("bad_request", "the threads you picked are resolved or gone on the repo host now");
+    const comments = { mergeRequest: now.mergeRequest, threads: [first, ...rest] };
+    return { delivery: this.#deps.tasks.askToAddressThreads(id, comments), sent: comments.threads.length };
+  }
+
+  async #readThreads(project: HostedProject, mergeRequest: MergeRequest): Promise<MergeRequestThreads> {
+    return this.#deps.hosting.mergeRequestThreads(project, mergeRequest).catch((err: unknown) => {
+      throw new DomainError("bad_request", `cannot read the threads of the merge request: ${messageOf(err)}`);
+    });
+  }
+
   /** The task's open merge request whose pipeline failed, as the repo host shows it now (or within `LOOKUP_CACHE_MS`). */
   async #failedPipeline(id: string): Promise<{ project: HostedProject; pipeline: Pipeline }> {
+    const { project, mergeRequest } = await this.#openMergeRequest(id, "has no open merge request whose pipeline failed");
+    if (mergeRequest.pipeline?.state !== "failed")
+      throw new DomainError("bad_request", `branch ${this.#deps.tasks.task(id).branch} has no open merge request whose pipeline failed`);
+    return { project, pipeline: mergeRequest.pipeline };
+  }
+
+  /** The task's open merge request, as the repo host shows it now (or within `LOOKUP_CACHE_MS`); `lacks` ends the refusal. */
+  async #openMergeRequest(id: string, lacks: string): Promise<{ project: HostedProject; mergeRequest: MergeRequest }> {
     const task = this.#deps.tasks.task(id);
     const { onRemote, project } = await this.#branch(task);
     if (!project) throw unknownHost(task);
-    if (!onRemote?.published) throw new DomainError("bad_request", `branch ${task.branch} is not pushed, so it has no pipeline`);
+    if (!onRemote?.published) throw new DomainError("bad_request", `branch ${task.branch} is not pushed, so it ${lacks}`);
     const now = Date.now();
     const lookup = await this.#lookup(task, project, now);
     this.#recordLookup(id, project, lookup, now);
     if (lookup.kind === "unavailable") throw new DomainError("bad_request", `cannot read the merge request: ${lookup.message}`);
     const mergeRequest = lookup.kind === "found" ? lookup.mergeRequest : null;
-    if (mergeRequest?.state !== "open" || mergeRequest.pipeline?.state !== "failed")
-      throw new DomainError("bad_request", `branch ${task.branch} has no open merge request whose pipeline failed`);
-    return { project, pipeline: mergeRequest.pipeline };
+    if (mergeRequest?.state !== "open") throw new DomainError("bad_request", `branch ${task.branch} ${lacks}`);
+    return { project, mergeRequest };
   }
 
   async #readJobLog(project: HostedProject, job: JobWithLog): Promise<JobLog> {
