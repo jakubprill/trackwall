@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { MAX_FOLDER_TERMINALS, type RunState } from "@trackwall/protocol";
 import { DomainError, SpawnFailure } from "../src/infra/errors.ts";
 import { FolderTerminals, type TerminalProcs } from "../src/modules/terminals/folder-terminals.ts";
@@ -23,6 +26,30 @@ function fakeProcs(fail?: () => Error) {
     },
   };
   return { procs, started };
+}
+
+/** Stops that wait until the test releases or fails them, as a shell that ignores the gentle stop makes `procs` wait. */
+function heldStops(procs: TerminalProcs) {
+  const stop = procs.stop;
+  const waiting: { owner: string; release: () => void; fail: (err: Error) => void }[] = [];
+  procs.stop = (owner) =>
+    new Promise((resolve, reject) => {
+      waiting.push({ owner, release: () => resolve(stop(owner)), fail: reject });
+    });
+  return {
+    waiting: () => waiting.map((w) => w.owner),
+    release: () => {
+      for (const w of waiting.splice(0)) w.release();
+    },
+    fail: (err: Error) => {
+      for (const w of waiting.splice(0)) w.fail(err);
+    },
+  };
+}
+
+/** Lets the queued work of a place run as far as it can. */
+function settled(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 function terminals(procs: TerminalProcs, folder = async () => "/projects/shop") {
@@ -80,6 +107,84 @@ describe("folder terminals", () => {
     expect(again.id).not.toBe(first.id);
     expect(started.map((s) => s.cwd)).toEqual(["/projects", "/elsewhere"]);
     expect(open.list().map((t) => t.id)).toEqual([again.id]);
+  });
+
+  test("a close takes the terminal off its place at once, so the place opens a new shell while the old one still ends", async () => {
+    const { procs, started } = fakeProcs();
+    const ends = heldStops(procs);
+    const open = terminals(procs);
+    const old = await open.start({ repo: "shop", task: null });
+    const windowClosed: string[] = [];
+    open.attach(
+      old.id,
+      () => {},
+      () => {},
+      () => windowClosed.push(old.id),
+    );
+
+    const closing = open.close(old.id);
+    await settled();
+    expect(open.list()).toEqual([]);
+    expect(windowClosed).toEqual([old.id]);
+    const fresh = await open.start({ repo: "shop", task: null });
+
+    expect(fresh.id).not.toBe(old.id);
+    expect(started).toHaveLength(2);
+    expect(ends.waiting()).toEqual([`terminal:${old.id}`]);
+    ends.release();
+    await closing;
+    expect(open.list().map((t) => t.id)).toEqual([fresh.id]);
+  });
+
+  test("a close whose end is not confirmed puts the terminal back at its place, with the error for the user", async () => {
+    const { procs } = fakeProcs();
+    const ends = heldStops(procs);
+    const open = terminals(procs);
+    const shell = await open.start({ repo: "shop", task: null });
+
+    const closing = open.close(shell.id);
+    await settled();
+    ends.fail(new DomainError("stop_unconfirmed", "still running after the kill"));
+
+    await expect(closing).rejects.toMatchObject({ code: "stop_unconfirmed" });
+    expect(open.list().map((t) => t.id)).toEqual([shell.id]);
+    expect((await open.start({ repo: "shop", task: null })).id).toBe(shell.id);
+  });
+
+  test("a close not confirmed after the place got a new shell leaves the new one as the place's only terminal", async () => {
+    const { procs } = fakeProcs();
+    const ends = heldStops(procs);
+    const open = terminals(procs);
+    const old = await open.start({ repo: "shop", task: null });
+    const closing = open.close(old.id);
+    const fresh = await open.start({ repo: "shop", task: null });
+    await settled();
+
+    ends.fail(new DomainError("stop_unconfirmed", "still running after the kill"));
+
+    await expect(closing).rejects.toMatchObject({ code: "stop_unconfirmed" });
+    expect(open.list().map((t) => t.id)).toEqual([fresh.id]);
+  });
+
+  test("ending a task waits for its shell that a close is still ending", async () => {
+    const { procs } = fakeProcs();
+    const ends = heldStops(procs);
+    const worktree = mkdtempSync(join(tmpdir(), "worktree-"));
+    const open = terminals(procs, async () => worktree);
+    const shell = await open.start({ repo: "shop", task: "t1" });
+    const closing = open.close(shell.id);
+    let taskEnded = false;
+
+    const ending = open.closeTask("t1").then(() => {
+      taskEnded = true;
+    });
+    await settled();
+    expect(taskEnded).toBe(false);
+
+    ends.release();
+    await Promise.all([closing, ending]);
+    expect(taskEnded).toBe(true);
+    rmSync(worktree, { recursive: true });
   });
 
   test("a place the daemon cannot find starts nothing", async () => {

@@ -8,7 +8,8 @@ import { checkedPlaceFolder } from "./place-folder.ts";
 /**
  * Folder terminals (§4.23, ADR-185): the user's own shell in the projects folder, a repo root or a task's worktree, in a PTY from `procs`,
  * with a screen on the daemon side like a session's, so a window that connects later starts from the current screen.
- * One terminal per place: a second start hands back the live one. They live in memory only; a daemon restart ends
+ * One terminal per place: a second start hands back the live one. A close takes the terminal off its place at once and
+ * ends its shell after, so the place opens a new shell while the old one is still ending. They live in memory only; a daemon restart ends
  * them with every other group. The place comes as ids and the shell from the daemon's environment, so a request
  * never names a path or a program.
  */
@@ -60,6 +61,8 @@ interface Entry {
   pty?: { write(data: string): void; resize(cols: number, rows: number): void };
   /** Windows to tell that the terminal is gone (`close`), so they stop waiting for output. */
   readonly closers: Set<() => void>;
+  /** The end of its shell after a close took it off its place; `undefined` while it is the place's terminal. */
+  closing?: Promise<void>;
 }
 
 /** The group owner key of a folder terminal in `procs`; only ever built, never taken apart again. */
@@ -88,8 +91,9 @@ export class FolderTerminals {
       let known = this.#atPlace.get(placeKey(place));
       if (known && this.#live(known)) {
         if (!(await this.#movedAway(known))) return this.#view(known);
-        // The projects folder changed in Settings: its shell is no longer in it.
-        await this.#close(known);
+        // The projects folder changed in Settings: its shell is no longer in it, and ends while the new one starts.
+        const moved = known;
+        this.#takeOff(moved).catch((err: unknown) => this.#deps.log(`closing folder terminal ${moved.id}: ${String(err)}`));
         known = undefined;
       }
       if (!known && this.#entries.size >= MAX_FOLDER_TERMINALS)
@@ -109,9 +113,10 @@ export class FolderTerminals {
     });
   }
 
-  /** Every terminal whose shell has started, also one that ended and was not closed yet. */
+  /** Every terminal whose shell has started, also one that ended and was not closed yet; not one being closed. */
   list(): FolderTerminal[] {
     return [...this.#entries.values()].flatMap((entry) => {
+      if (entry.closing) return [];
       const run = this.#deps.procs.state(terminalOwner(entry.id));
       return run ? [viewOf(entry, run)] : [];
     });
@@ -123,6 +128,7 @@ export class FolderTerminals {
    */
   attach(id: string, viewer: ScreenViewer, onSnapshot: (snapshot: string) => void, onClosed: () => void): TerminalWindow {
     const entry = this.#get(id);
+    if (entry.closing) throw new DomainError("not_found", `terminal ${id} is closing`);
     const detach = entry.screen.attach(viewer, onSnapshot);
     entry.closers.add(onClosed);
     return {
@@ -137,25 +143,61 @@ export class FolderTerminals {
     };
   }
 
-  /** Ends the shell, once its end is confirmed (`stop_unconfirmed` otherwise, and the terminal stays), and forgets it. */
+  /**
+   * Takes the terminal off its place and closes its windows at once, so that a start of the place right after gets a
+   * new shell, then returns once the old shell's end is confirmed and forgets it. When the end is not confirmed
+   * (`stop_unconfirmed`), the terminal goes back to its place if the place has no other one yet.
+   */
   async close(id: string): Promise<void> {
     const entry = this.#get(id);
-    await this.#places.run(placeKey(entry.place), () => this.#close(entry));
+    // Only taking it off runs in the place's queue: a start waits for that, not for the shell's end.
+    const { ended } = await this.#places.run(placeKey(entry.place), async () => ({ ended: this.#takeOff(entry) }));
+    await ended;
   }
 
-  /** Closes the terminal in a task's worktree, also one starting now, before the worktree goes away. */
-  closeTask(task: string): Promise<void> {
+  /** Closes the terminal in a task's worktree, also one starting or ending now, before the worktree goes away. */
+  async closeTask(task: string): Promise<void> {
     const key = taskKey(task);
-    return this.#places.run(key, async () => {
-      const entry = this.#atPlace.get(key);
-      if (entry) await this.#close(entry);
+    const { ended } = await this.#places.run(key, async () => {
+      const here = [...this.#entries.values()].filter((entry) => entry.place.task === task);
+      return { ended: Promise.all(here.map((entry) => this.#takeOff(entry))) };
     });
+    await ended;
   }
 
-  /** Within the place's queue; a close that another one already finished does nothing. */
-  async #close(entry: Entry): Promise<void> {
-    if (this.#entries.get(entry.id) !== entry) return;
-    await this.#deps.procs.stop(terminalOwner(entry.id));
+  /** Within the place's queue; the end of a close already under way, or nothing for a terminal already forgotten. */
+  #takeOff(entry: Entry): Promise<void> {
+    if (entry.closing) return entry.closing;
+    if (this.#entries.get(entry.id) !== entry) return Promise.resolve();
+    this.#atPlace.delete(placeKey(entry.place));
+    this.#closeWindows(entry);
+    entry.closing = this.#end(entry);
+    return entry.closing;
+  }
+
+  async #end(entry: Entry): Promise<void> {
+    try {
+      await this.#deps.procs.stop(terminalOwner(entry.id));
+    } catch (err) {
+      // In the place's queue, so that a start under way finishes first and the place is not given twice.
+      await this.#places.run(placeKey(entry.place), async () => this.#putBack(entry));
+      throw err;
+    }
+    this.#forget(entry);
+  }
+
+  /**
+   * A shell whose end was not confirmed stays the user's to close again, at its place; when the place already has a
+   * new shell, `procs` keeps the group and stops it again when the daemon exits.
+   */
+  #putBack(entry: Entry): void {
+    entry.closing = undefined;
+    const key = placeKey(entry.place);
+    if (!this.#atPlace.has(key)) {
+      this.#atPlace.set(key, entry);
+      return;
+    }
+    this.#deps.log(`folder terminal ${entry.id}: its shell did not end, and its place has a new one; it is no longer listed`);
     this.#forget(entry);
   }
 
@@ -207,10 +249,15 @@ export class FolderTerminals {
 
   #forget(entry: Entry): void {
     this.#entries.delete(entry.id);
-    this.#atPlace.delete(placeKey(entry.place));
+    // The place may already have a new terminal, started while this one was ending.
+    if (this.#atPlace.get(placeKey(entry.place)) === entry) this.#atPlace.delete(placeKey(entry.place));
+    this.#closeWindows(entry);
+    entry.screen.dispose();
+  }
+
+  #closeWindows(entry: Entry): void {
     for (const closed of entry.closers) closed();
     entry.closers.clear();
-    entry.screen.dispose();
   }
 
   #get(id: string): Entry {
