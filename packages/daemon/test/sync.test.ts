@@ -378,7 +378,10 @@ function commitOnBranch(upstream: string, branch: string, files: Record<string, 
 function clonedOnDevelop(projects: string, remotes: string, name: string): { upstream: string; clone: string } {
   const upstream = makeRepo({ "README.md": `# ${name}\n` }, name, remotes);
   gitIn(upstream, "branch", "develop");
-  gitIn(projects, "clone", "-q", upstream, name);
+  // Git on Windows checks files out with CRLF by default, and putting changes aside and back makes git write them
+  // again, so the files the tests read back hold the line ends they wrote only when the clone turns that off, from
+  // its first checkout on (turned off later, the CRLF files already checked out would count as changed).
+  gitIn(projects, "clone", "-q", "-c", "core.autocrlf=false", upstream, name);
   const clone = join(projects, name);
   gitIn(clone, "checkout", "-q", "develop");
   return { upstream, clone };
