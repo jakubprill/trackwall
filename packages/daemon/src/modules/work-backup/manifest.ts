@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * `manifest.json` of a work backup (ADR-274): what each entry of the archive is, so that a restore reads the file
+ * `manifest.json` of a work backup (ADR-275): what each entry of the archive is, so that a restore reads the file
  * without guessing. It is parsed with this schema on the way back in, since a file the user hands Trackwall is input
  * from outside like any other. `format` changes when the meaning of an entry does.
  */

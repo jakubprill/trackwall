@@ -138,7 +138,7 @@ export interface Facade {
   folderFiles: FolderFiles;
   /** Files dropped on a terminal from another computer, saved in `.trackwall/drops` (ADR-226). */
   droppedFiles: DroppedFiles;
-  /** The backup of the work that lives only in the container, for the user to download (ADR-274). */
+  /** The backup of the work that lives only in the container, for the user to download (ADR-275). */
   workBackup: WorkBackup;
   testReports: TestReports;
   verifications: Verifications;

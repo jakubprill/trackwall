@@ -11,7 +11,7 @@ import { useRemote } from "@/lib/use-remote";
 import { workBackupContents, workBackupWhen } from "@/lib/work-backup";
 
 /**
- * The work backup (ADR-274): in a container, one file with the commits, stashes and uncommitted changes that exist only
+ * The work backup (ADR-275): in a container, one file with the commits, stashes and uncommitted changes that exist only
  * in its volume, and Trackwall's own files. The user makes it here and saves it on their computer, where the agents in
  * the container cannot reach it; the file in the container holds only the last one.
  */

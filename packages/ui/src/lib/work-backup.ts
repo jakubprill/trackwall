@@ -2,7 +2,7 @@ import { countLabel, type WorkBackupInfo } from "@trackwall/protocol";
 import { formatBytes, relativeTime } from "./format.ts";
 
 /**
- * The work backup in Settings (ADR-274): one line on when the last backup was made, one on what it holds, and the
+ * The work backup in Settings (ADR-275): one line on when the last backup was made, one on what it holds, and the
  * repos it lacks. Pure functions, tested in `test/work-backup.test.ts`.
  */
 

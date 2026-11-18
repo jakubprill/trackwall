@@ -5,7 +5,7 @@ import { pipeline } from "node:stream/promises";
 import { createGzip } from "node:zlib";
 
 /**
- * The work backup's file (ADR-274): a gzipped tar in the ustar format, which `tar` on every system lists and unpacks,
+ * The work backup's file (ADR-275): a gzipped tar in the ustar format, which `tar` on every system lists and unpacks,
  * written by hand because Node has no tar and the entries are few, regular files with short names Trackwall chose
  * (`manifest.json`, `repos/<n>.bundle`, `state/<n>`), so no other name from a repo or a file ever lands in a header.
  */

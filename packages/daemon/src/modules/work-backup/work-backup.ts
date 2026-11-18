@@ -9,7 +9,7 @@ import { type ArchiveEntry, writeArchive } from "./archive.ts";
 import { BACKUP_FORMAT, type BackupManifest, type BackupRepo, type BackupStateFile } from "./manifest.ts";
 
 /**
- * The work backup (§4.29, ADR-274): one file with everything that lives only in the container's volume, so that
+ * The work backup (§4.29, ADR-275): one file with everything that lives only in the container's volume, so that
  * removing the volume, resetting Docker or a broken virtual disk loses nothing the user cannot get back. It holds, for
  * each repo with work on no remote (the list of ADR-162), a `git bundle` of that work (`vcs`), and Trackwall's own
  * files a new container would lack: the state files of tasks and their journal, and the board, knowledge, routines and

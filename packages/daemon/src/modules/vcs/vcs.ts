@@ -181,7 +181,7 @@ export class Vcs {
     return this.statuses.get(dir, how, () => this.readStatus(dir));
   }
 
-  /** The work of `dir` on no remote as a verified bundle in `out` (ADR-274); `null` when there is none. */
+  /** The work of `dir` on no remote as a verified bundle in `out` (ADR-275); `null` when there is none. */
   async bundleWork(dir: string, out: string): Promise<WorkBundle | null> {
     return bundleWork(dir, out, await this.scratch(), this.indexPlaces);
   }

@@ -279,7 +279,7 @@ The git repo in the projects folder that holds the local config of every repo as
 _Avoid_: backup repo, overlay folder
 
 **Work backup** (`WorkBackup`, module `work-backup`, `WorkBackupInfo`; UI "Container work backup"):
-One file, `trackwall-backup-<date>-<time>.tar.gz`, with everything that lives only in the container's volume: for each repo with unpushed work a `git bundle` of its branches, stashes and the uncommitted changes of each of its worktrees, and Trackwall's own files a new container lacks (ADR-274). Only where the daemon runs in a container; only the last one stays there, and the user downloads it to their computer. Files git ignores and sign-ins never go in.
+One file, `trackwall-backup-<date>-<time>.tar.gz`, with everything that lives only in the container's volume: for each repo with unpushed work a `git bundle` of its branches, stashes and the uncommitted changes of each of its worktrees, and Trackwall's own files a new container lacks (ADR-275). Only where the daemon runs in a container; only the last one stays there, and the user downloads it to their computer. Files git ignores and sign-ins never go in.
 _Avoid_: snapshot (that is a copy of the whole volume), local config store (that is the files kept out of git)
 
 **Card** (repo card, `RepoCard`):

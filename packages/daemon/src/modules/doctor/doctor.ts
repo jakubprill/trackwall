@@ -1,6 +1,8 @@
 import { realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  type CopilotCliRelation,
+  type CopilotCliVersion,
   countLabel,
   type DoctorCheck,
   DoctorCheckId,
@@ -119,6 +121,12 @@ export interface DoctorDeps {
 }
 
 type Settled<T> = { ok: true; value: T } | { ok: false; message: string };
+
+/** What the Copilot CLI of sessions said about its version: not found, failed to answer, or answered. */
+type CopilotVersionRead =
+  | { kind: "missing"; message: string }
+  | { kind: "failed"; message: string }
+  | { kind: "answered"; version: string | null };
 
 interface CheckContext {
   env: NodeJS.ProcessEnv;
@@ -329,12 +337,32 @@ export class Doctor {
   }
 
   private async copilotCli({ env }: CheckContext): Promise<Outcome> {
+    const read = await this.copilotVersionRead(env);
+    if (read.kind === "missing")
+      return fail(`${read.message}.`, "Install GitHub Copilot CLI, sign in by running `copilot` once, and restart Trackwall.");
+    if (read.kind === "failed") return fail(`Copilot CLI: ${read.message}`, "Run `copilot --version` in a terminal to see what is wrong.");
+    return copilotVersionOutcome(read.version);
+  }
+
+  /**
+   * Only the Copilot CLI check's version, for the window's strip about an untested version (ADR-274): the same program
+   * and comparison as the check, so the strip and "Diagnostics" never disagree.
+   */
+  async copilotCliVersion(): Promise<CopilotCliVersion> {
+    const read = await this.copilotVersionRead(await this.deps.env());
+    const tested = TESTED_COPILOT_CLI_VERSION;
+    const version = read.kind === "answered" ? read.version : null;
+    const relation = copilotVersionRelation(version);
+    return version === null || relation === "unknown" ? { relation: "unknown", version: null, tested } : { relation, version, tested };
+  }
+
+  /** Copilot CLI found as sessions find it and its `--version`, as `x.y.z` (`null` when it names none). */
+  private async copilotVersionRead(env: NodeJS.ProcessEnv): Promise<CopilotVersionRead> {
     const copilot = this.deps.resolveCopilot(env);
-    if ("missing" in copilot)
-      return fail(`${copilot.message}.`, "Install GitHub Copilot CLI, sign in by running `copilot` once, and restart Trackwall.");
-    const version = await settle(this.version([copilot.program, ...copilot.args], env));
-    if (!version.ok) return fail(`Copilot CLI: ${version.message}`, "Run `copilot --version` in a terminal to see what is wrong.");
-    return copilotVersionOutcome(versionIn(version.value));
+    if ("missing" in copilot) return { kind: "missing", message: copilot.message };
+    const output = await settle(this.version([copilot.program, ...copilot.args], env));
+    if (!output.ok) return { kind: "failed", message: output.message };
+    return { kind: "answered", version: versionIn(output.value) };
   }
 
   private async copilotTrustedFolder({ env, projectsDir }: CheckContext): Promise<Outcome> {
@@ -418,17 +446,35 @@ export class Doctor {
   }
 }
 
-/** Older than the tested version may lack what the daemon relies on; newer is what users get first, so only noted. */
+/** Where a Copilot CLI version stands against the tested one (ADR-274); `unknown` without a version. */
+function copilotVersionRelation(version: string | null): CopilotCliRelation {
+  if (version === null) return "unknown";
+  const diff = compareVersions(version, TESTED_COPILOT_CLI_VERSION);
+  return diff < 0 ? "older" : diff > 0 ? "newer" : "tested";
+}
+
+/**
+ * Older than the tested version may lack what the daemon relies on; newer may have changed it, which the nightly contract
+ * tests find only after users have it (ADR-274). Both work as a rule, so both are warnings, not failures.
+ */
 export function copilotVersionOutcome(version: string | null): NonNullable<Outcome> {
   const tested = TESTED_COPILOT_CLI_VERSION;
-  if (version === null) return warn("Copilot CLI did not say its version.", `Trackwall is tested with Copilot CLI ${tested}.`);
-  const diff = compareVersions(version, tested);
-  if (diff < 0)
-    return warn(
-      `Copilot CLI ${version} is older than ${tested}, the version Trackwall is tested with.`,
-      "Update Copilot CLI the way you installed it (npm, Homebrew or WinGet).",
-    );
-  return ok(diff === 0 ? `Copilot CLI ${version}` : `Copilot CLI ${version} (Trackwall is tested with ${tested})`);
+  switch (copilotVersionRelation(version)) {
+    case "unknown":
+      return warn("Copilot CLI did not say its version.", `Trackwall is tested with Copilot CLI ${tested}.`);
+    case "older":
+      return warn(
+        `Copilot CLI ${version} is older than ${tested}, the version Trackwall is tested with.`,
+        "Update Copilot CLI the way you installed it (npm, Homebrew or WinGet).",
+      );
+    case "newer":
+      return warn(
+        `Copilot CLI ${version} is newer than ${tested}, the version Trackwall is tested with.`,
+        `Sessions usually work, but a change in Copilot CLI can make Trackwall show a session's state wrong. If one does, install Copilot CLI ${tested} again the way you installed it, and update Trackwall when a version tested with ${version} comes out.`,
+      );
+    case "tested":
+      return ok(`Copilot CLI ${version}`);
+  }
 }
 
 /** A call's value or its error's first line, so that one failed program never fails the report. */

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { apiEndpoints } from "./api.ts";
 
 /**
- * Contract of the `work-backup` module (§4.29, ADR-274): a backup of the work that lives only in the container, the
+ * Contract of the `work-backup` module (§4.29, ADR-275): a backup of the work that lives only in the container, the
  * commits, stashes and uncommitted changes on no remote with Trackwall's own state, made in one file the user downloads
  * to their computer. Only where the daemon runs in a container (ADR-162). Every action is `POST /api/work-backup/<action>`;
  * the file itself comes from `WORK_BACKUP_DOWNLOAD_PATH`, whose answer is its bytes.

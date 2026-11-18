@@ -9,7 +9,7 @@ import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
 import { fakeHostingClis } from "./support/hosting.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
-// The work backup (ADR-274) through the real facade, real git and the system's `tar`: work that lives only in the
+// The work backup (ADR-275) through the real facade, real git and the system's `tar`: work that lives only in the
 // container's volume goes into one file, and from that file alone, with a fresh clone of the remote, every commit,
 // stash and uncommitted change comes back, while the repo the backup read stays exactly as it was.
 
@@ -57,7 +57,7 @@ async function downloadedAndUnpacked(facade: Awaited<ReturnType<typeof facadeWit
   return { dir, name: file.name };
 }
 
-describe("the work backup of a container (ADR-274)", () => {
+describe("the work backup of a container (ADR-275)", () => {
   test(
     "commits on no remote, a stash and a task worktree's uncommitted files come back from the file alone; ignored files stay out",
     async () => {

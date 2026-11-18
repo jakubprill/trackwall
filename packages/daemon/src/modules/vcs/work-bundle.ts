@@ -12,7 +12,7 @@ import { copyIndex } from "./worktree-changes.ts";
 import { listWorktrees } from "./worktree-list.ts";
 
 /**
- * A repo's work that is on no remote as one `git bundle` (ADR-274, §4.29): its local branches, its stashes, the
+ * A repo's work that is on no remote as one `git bundle` (ADR-275, §4.29): its local branches, its stashes, the
  * detached HEAD of a worktree and, for every worktree with changed or new files, a commit of those files made beside the
  * worktree, all as refs of a scratch git directory, bundled without the objects any remote-tracking branch already has.
  * Nothing in the repo changes: the scratch directory borrows the repo's objects and takes the new ones (the files of
