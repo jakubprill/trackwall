@@ -45,16 +45,14 @@ import type { SessionTree } from "@/lib/use-session-tree";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { cn } from "@/lib/utils";
 import { SessionJavaNavigationMark } from "./JavaNavigationMark.tsx";
-import { NewSession } from "./NewSession.tsx";
+import { NewSessionPane } from "./NewSessionPane.tsx";
 import { ProposalInbox } from "./ProposalInbox.tsx";
-import { RoutineList } from "./RoutineList.tsx";
 import { SessionEditorButton } from "./SessionEditorButton.tsx";
 import { SessionEnvironment } from "./SessionEnvironment.tsx";
 import { SessionGrid } from "./SessionGrid.tsx";
 import { GroupFilterChip } from "./SessionGroupMarks.tsx";
 import { NEXT_WAITING, SessionListPanel } from "./SessionListPanel.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
-import { WorktreeCleanup } from "./WorktreeCleanup.tsx";
 
 /**
  * The Sessions view (§4.4, ADR-26, ADR-31): several Copilot CLI sessions at once, each in a repo from the projects
@@ -79,6 +77,8 @@ export function SessionsView({
   tree,
   supervisor,
   outcomes,
+  projectsDir,
+  onOpenGetStarted,
 }: {
   conn: Connection;
   sessions: RemoteHandle<SessionList>;
@@ -97,6 +97,10 @@ export function SessionsView({
   supervisor: SupervisorSummary;
   /** What each task's work came to, by task (ADR-154), for the marks on its row. */
   outcomes: ReadonlyMap<string, TaskOutcome>;
+  /** The projects folder (`useProjectsDir`): the form waits for it. */
+  projectsDir: string | null | undefined;
+  /** Opens Settings › Get started, where the view sends the user while no projects folder is set. */
+  onOpenGetStarted: () => void;
 }) {
   const list = sessions.data?.sessions ?? [];
   const { tasks, rows } = tree;
@@ -181,16 +185,15 @@ export function SessionsView({
           </div>
         )}
         {sessions.data && !current && (
-          <div className="min-h-0 overflow-y-auto">
-            <NewSession
-              conn={conn}
-              sessions={sessions.data.sessions}
-              onStarted={started}
-              onCancel={entries.length > 0 ? () => select(undefined) : undefined}
-            />
-            <RoutineList conn={conn} onStarted={started} />
-            <WorktreeCleanup conn={conn} onRemoved={sessions.reload} />
-          </div>
+          <NewSessionPane
+            conn={conn}
+            sessions={sessions.data.sessions}
+            projectsDir={projectsDir}
+            onStarted={started}
+            onCancel={entries.length > 0 ? () => select(undefined) : undefined}
+            onWorktreesRemoved={sessions.reload}
+            onOpenGetStarted={onOpenGetStarted}
+          />
         )}
         {current && (
           <SelectedEntry
