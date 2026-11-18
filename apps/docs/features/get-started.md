@@ -40,4 +40,5 @@ The number next to "Get started" in the list of categories says how many steps a
 - Whether Copilot CLI is signed in is not checked; a session that cannot sign in says so in its terminal.
 - The list only looks, like the doctor. The one thing it changes is your projects folder, when you save it.
 - "Settings > Diagnostics" shows every check of the doctor, also those that do not stop a session, such as free disk space.
+- [Troubleshooting](/guide/troubleshooting) explains each step that does not turn green: installing and signing in to Copilot CLI, trusting your projects folder, and a company proxy.
 - In a container, Trackwall has to be running before the list can help; [Run in a dev container](/guide/dev-container) describes that part.
