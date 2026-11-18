@@ -186,7 +186,7 @@ A fetch of every repo from the projects folder and a fast-forward of its default
 _Avoid_: pull, update (without qualification)
 
 **Pull** (`PullResult`, `workspaceApi.pull`, "Pull <n>" in the repo header's Upstream tile):
-The user's fetch of one repo from its header: the sync of its default branch, then a fast-forward of the checked-out branch to the branch it tracks, under the same rules (ADR-268). It never merges, rebases, pushes or overwrites local changes; a skip has a reason (`PullSkipReason`). Only from the UI.
+The user's fetch of one repo from its header: the sync of its default branch, then a fast-forward of the checked-out branch to the branch it tracks, under the same rules (ADR-269). It never merges, rebases, pushes or overwrites local changes; a skip has a reason (`PullSkipReason`). Only from the UI.
 _Avoid_: sync (that moves the default branch of every repo), update, `git pull` (which can merge or rebase)
 
 **Batch command** (`BatchRun`, step `BatchStep`, repo result `BatchRepo`):

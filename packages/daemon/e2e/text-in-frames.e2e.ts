@@ -53,7 +53,9 @@ describe("text in the UI", () => {
     }
     const categories = page.getByRole("navigation", { name: "Settings categories" }).getByRole("button");
     await categories.first().waitFor();
-    for (const category of await categories.allInnerTexts()) {
+    for (const entry of await categories.allInnerTexts()) {
+      // "Get started" has a second line that says what is left to do, which changes once the doctor ran.
+      const category = entry.split("\n")[0] ?? entry;
       await categories.filter({ hasText: category }).click();
       await page.waitForLoadState("networkidle");
       found.push(...(await outside(page, `Settings, ${category}`)));

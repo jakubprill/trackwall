@@ -591,7 +591,7 @@ export const workspaceApi = {
   /** The last sync of the current projects folder since the daemon started; `null` when there was none. */
   syncRun: endpoint("sync-run", z.object({}).strict(), SyncRun.nullable()),
   /**
-   * Pulls one repo from its header (ADR-268): the sync of its default branch, then a fast-forward of the checked-out branch
+   * Pulls one repo from its header (ADR-269): the sync of its default branch, then a fast-forward of the checked-out branch
    * to the branch it tracks, never a merge, rebase or overwrite; answers when both are done. No MCP tool does it: an agent
    * does not move the user's branches.
    */

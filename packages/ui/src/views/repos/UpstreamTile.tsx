@@ -16,7 +16,7 @@ type PullState =
   | { kind: "failed"; message: string };
 
 /**
- * The Upstream tile of the repo header (ADR-268): the checked-out branch against the branch it tracks, and the pull that
+ * The Upstream tile of the repo header (ADR-269): the checked-out branch against the branch it tracks, and the pull that
  * moves it there. When it will not pull, it says why and leads to the tab that gets the user out (Changes or Shell).
  * The new status comes with the repo list, which sees the moved HEAD.
  */

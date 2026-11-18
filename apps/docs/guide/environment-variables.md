@@ -15,10 +15,12 @@ An agent's environment is built in layers: your own, then mise's for the folder 
 |---|---|
 | `TRACKWALL_HOME` | Trackwall's own folder instead of `~/.trackwall` (`%USERPROFILE%\.trackwall` on Windows): `workspace.yaml`, the task list, logs and the files of each session. An empty value counts as not set. |
 | `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` | the proxy Trackwall and git use to reach your repo hosts, as in your terminal |
+| `NODE_EXTRA_CA_CERTS` | a PEM file with your company proxy's root certificate, for a proxy that replaces certificates: Copilot CLI runs on Node.js, which trusts only its own list; the [doctor](/features/doctor) names the file when your system already trusts the certificate |
+| `NODE_USE_SYSTEM_CA` | `1` makes Node.js 22.15 or newer, and with it Copilot CLI, trust the certificates your system trusts, in place of `NODE_EXTRA_CA_CERTS` |
 | `GIT_SSH_COMMAND`, `GIT_SSH` | your own ssh program for git; without one, Trackwall makes ssh fail instead of waiting for a password it cannot ask for |
 | `COPILOT_HOME` | Copilot CLI's own folder instead of `~/.copilot`, as Copilot CLI reads it: Trackwall looks there for its `config.json` and for the logs that [Copilot usage](/features/copilot-usage) and each session's usage add up |
 
-Trackwall reads these when it starts, so set them where the app sees them: on Windows in your account's environment variables, on macOS with `launchctl setenv` (an app opened from the Dock or Finder does not read your shell profile). Then choose "Quit" in Trackwall's tray menu and start it again.
+Trackwall reads these when it starts, so set them where the app sees them: on Windows in your account's environment variables, on macOS with `launchctl setenv` (an app opened from the Dock or Finder does not read your shell profile; `launchctl setenv` lasts until the Mac restarts, so set it again after the Mac restarts). Then choose "Quit" in Trackwall's tray menu and start it again.
 
 ## Variables sessions get
 

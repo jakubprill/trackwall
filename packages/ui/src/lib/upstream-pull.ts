@@ -12,7 +12,7 @@ import {
 import { sessionTitle } from "./session-state.ts";
 
 /**
- * The pull in the repo header's Upstream tile (ADR-268): when it is offered, why not, what the result says, and what
+ * The pull in the repo header's Upstream tile (ADR-269): when it is offered, why not, what the result says, and what
  * works in the repo folder itself and would see its files change. The daemon applies the same rules again after its
  * fetch, which can find more commits or a diverged branch; this is only what the tile shows before the click.
  */

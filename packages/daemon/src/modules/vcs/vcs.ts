@@ -240,7 +240,7 @@ export class Vcs {
   }
 
   /**
-   * The sync of the default branch, then a fast-forward of the checked-out branch to the branch it tracks (ADR-268), in the
+   * The sync of the default branch, then a fast-forward of the checked-out branch to the branch it tracks (ADR-269), in the
    * same queue as sync: both fetch into the same remote-tracking refs.
    */
   async pull(dir: string): Promise<PullResult> {

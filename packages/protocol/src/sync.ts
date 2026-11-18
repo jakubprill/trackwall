@@ -94,7 +94,7 @@ export const SyncRun = z.object({
 export type SyncRun = z.infer<typeof SyncRun>;
 
 /**
- * Why a pull from the repo header (ADR-268) did not move the checked-out branch: the reasons of the sync, which applies
+ * Why a pull from the repo header (ADR-269) did not move the checked-out branch: the reasons of the sync, which applies
  * the same rules to it, and two of its own. Every reason leaves the branch untouched.
  */
 export const PullSkipReason = z.enum([
@@ -111,7 +111,7 @@ export const PullBranchOutcome = branchOutcome(PullSkipReason);
 export type PullBranchOutcome = z.infer<typeof PullBranchOutcome>;
 
 /**
- * The result of a pull of one repo from its header (ADR-268): the sync of the default branch, exactly as "Sync all" does
+ * The result of a pull of one repo from its header (ADR-269): the sync of the default branch, exactly as "Sync all" does
  * it, and the fast-forward of the checked-out branch to the branch it tracks. `checkedOut` is `null` when the checked-out
  * branch is the default branch, whose outcome is then `defaultBranch`. `workingTree` as in the sync result.
  */

@@ -8,7 +8,7 @@ import { UpstreamTile } from "./UpstreamTile.tsx";
 
 /**
  * State tiles in the repo header: branch, tracking branch, working directory and last commit (§4.5). Working directory
- * changes lead to the "Changes" tab (ADR-34), and commits to pull to a pull (ADR-268), so that a number alone is not a dead end.
+ * changes lead to the "Changes" tab (ADR-34), and commits to pull to a pull (ADR-269), so that a number alone is not a dead end.
  */
 export function RepoStats({
   conn,

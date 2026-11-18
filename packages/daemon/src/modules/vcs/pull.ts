@@ -4,7 +4,7 @@ import { mainRemote, readConfig } from "./git-config.ts";
 import { fastForward, fetchRemote, syncDefaultBranch, workingTree } from "./sync.ts";
 
 /**
- * A pull of one repo from its header (§4.5, ADR-268): the sync of the default branch exactly as "Sync all" does it
+ * A pull of one repo from its header (§4.5, ADR-269): the sync of the default branch exactly as "Sync all" does it
  * (ADR-21), then a fast-forward of the checked-out branch to the branch it tracks, under the same rules. "Sync all"
  * leaves the checked-out branch alone when it is not the default one, and its fetch is what makes the header show
  * commits to pull, so this is the one place that moves it, and only on the user's click. Nothing here merges, rebases,

@@ -84,7 +84,7 @@ export interface FastForwardTarget {
 
 /**
  * A fast-forward of a local branch to a remote-tracking ref under the rules of ADR-21: never a merge, never over changes in
- * the working directory, never a branch checked out in another worktree. Also the checked-out branch of a pull (ADR-268).
+ * the working directory, never a branch checked out in another worktree. Also the checked-out branch of a pull (ADR-269).
  */
 export async function fastForward(dir: string, target: FastForwardTarget, network: GitNetwork): Promise<SyncBranchOutcome> {
   const { branch, remoteRef, remoteBranch } = target;
