@@ -99,6 +99,7 @@ import { Hosting, type HostingClis } from "./modules/vcs/hosting.ts";
 import { systemTempFolder, Vcs } from "./modules/vcs/vcs.ts";
 import { VERIFICATIONS_FILE, VERIFICATIONS_FORMAT, Verifications } from "./modules/verification/verifications.ts";
 import { ViewerAccess } from "./modules/viewer-access/viewer-access.ts";
+import { WORK_BACKUP_DIR, WORK_BACKUP_INFO_FILE, WORK_BACKUP_INFO_FORMAT, WorkBackup } from "./modules/work-backup/work-backup.ts";
 import { RepoWatch } from "./modules/workspace/repo-watch.ts";
 import { Workspace } from "./modules/workspace/workspace.ts";
 import { WorkspaceFile } from "./modules/workspace/workspace-file.ts";
@@ -138,6 +139,8 @@ export interface Facade {
   folderFiles: FolderFiles;
   /** Files dropped on a terminal from another computer, saved in `.trackwall/drops` (ADR-226). */
   droppedFiles: DroppedFiles;
+  /** The backup of the work that lives only in the container, for the user to download (ADR-275). */
+  workBackup: WorkBackup;
   testReports: TestReports;
   verifications: Verifications;
   /** Whether a task's reproduction test fails without its fix and passes with it, in a copy of the repo (ADR-227). */
@@ -243,6 +246,7 @@ export const STATE_FILES: StateFiles = {
   [REPRODUCTION_CHECKS_FILE]: REPRODUCTION_CHECKS_FORMAT,
   [ROUTINE_APPROVALS_FILE]: approvalsFormat(RoutineName),
   [KNOWLEDGE_APPROVALS_FILE]: approvalsFormat(KnowledgeName),
+  [WORK_BACKUP_INFO_FILE]: WORK_BACKUP_INFO_FORMAT,
 };
 const LOGS_DIR = "logs";
 /** The limit of one source JSONL file; with the previous file after rotation a source takes at most twice that. */
@@ -570,6 +574,7 @@ export function createFacade(o: FacadeOptions): Facade {
       "local-config-push-repo": join(o.home, LOCAL_CONFIG_PUSH_DIR),
       "legacy-worktrees-dir": join(o.home, LEGACY_WORKTREES_DIR),
       "state-backups-dir": join(o.home, STATE_BACKUPS_DIR),
+      "work-backup-dir": join(o.home, WORK_BACKUP_DIR),
     },
     // A projects folder that is not set or cannot be read is a state the view shows, not an error of the whole list.
     projectsDir: () => workspace.projectsDir().catch(() => null),
@@ -640,6 +645,18 @@ export function createFacade(o: FacadeOptions): Facade {
     terminals,
     folderFiles: new FolderFiles({ folder: placeFolder }),
     droppedFiles: new DroppedFiles({ projectsDir: () => workspace.projectsDir(), now: () => new Date(), maxBytes: MAX_DROP_BYTES }),
+    workBackup: new WorkBackup({
+      inContainer: o.inContainer,
+      stateDir: o.home,
+      stateFiles: [WORKSPACE_FILE, TASK_JOURNAL_FILE, ...Object.keys(STATE_FILES)],
+      unpushedWork: () => workspace.unpushedWork(),
+      repoPath: (repo) => workspace.repoPath(repo),
+      projectsDir: () => workspace.projectsDir(),
+      bundleWork: (dir, out) => vcs.bundleWork(dir, out),
+      version: o.version,
+      now: () => new Date(),
+      log: o.log,
+    }),
     testReports,
     verifications,
     reproductionChecks,

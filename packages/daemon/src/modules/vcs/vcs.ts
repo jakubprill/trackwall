@@ -78,6 +78,7 @@ import { StatusMemo, type TimedStatus } from "./status-memo.ts";
 import { syncRepo } from "./sync.ts";
 import { mergeIntoRepo, trialMergeConflicts, trialMergeInput } from "./trial-merge.ts";
 import { type RepoUnpushed, readUnpushed } from "./unpushed.ts";
+import { bundleWork, type WorkBundle } from "./work-bundle.ts";
 import { addCheckout, addWorktree, defaultBase, deleteBranch, pendingWork, removeWorktree } from "./worktree.ts";
 import { type ChangesScratch, changedPaths, workingTreeChanges, worktreeChanges } from "./worktree-changes.ts";
 import { discardFingerprint, worktreeFingerprint } from "./worktree-fingerprint.ts";
@@ -178,6 +179,11 @@ export class Vcs {
    */
   status(dir: string, how: StatusRead): Promise<RepoStatusOk> {
     return this.statuses.get(dir, how, () => this.readStatus(dir));
+  }
+
+  /** The work of `dir` on no remote as a verified bundle in `out` (ADR-275); `null` when there is none. */
+  async bundleWork(dir: string, out: string): Promise<WorkBundle | null> {
+    return bundleWork(dir, out, await this.scratch(), this.indexPlaces);
   }
 
   /**

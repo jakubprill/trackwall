@@ -17,6 +17,7 @@ import {
   PAGE_CODE_PATH,
   type PageCode,
   type PageCodeExchange,
+  WORK_BACKUP_DOWNLOAD_PATH,
 } from "@trackwall/protocol";
 import type { Facade } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
@@ -246,7 +247,7 @@ function authenticate(
  */
 function journalArea(url: string | undefined): string {
   const path = (url ?? "").split("?")[0] ?? "";
-  if (postRoutes.has(path) || path === DOWNLOAD_PATH || path === DROP_PATH) return `api:${path}`;
+  if (postRoutes.has(path) || path === DOWNLOAD_PATH || path === WORK_BACKUP_DOWNLOAD_PATH || path === DROP_PATH) return `api:${path}`;
   return path.startsWith(HOOKS_PATH) ? "api:hooks" : "api:other";
 }
 
@@ -268,6 +269,10 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
   }
   if (path === DOWNLOAD_PATH && req.method === "POST")
     return sendDownload(res, await o.facade.folderFiles.download(downloadRequest(await readJson(req, API_BODY_MAX_BYTES))));
+  if (path === WORK_BACKUP_DOWNLOAD_PATH && req.method === "POST") {
+    await drain(req);
+    return sendDownload(res, await o.facade.workBackup.download());
+  }
   if (path === DROP_PATH && req.method === "POST") return receiveDrop(req, res, o);
   const post = req.method === "POST" ? postRoutes.get(path) : undefined;
   // The token was checked before any of the body is read, so only the daemon's own clients send a large one.
