@@ -6,22 +6,16 @@ import {
   type WorkspaceSettings,
   workspaceApi,
 } from "@trackwall/protocol";
-import { Fragment, type ReactNode, useCallback, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { RemoteDaemonSurface } from "@/components/RemoteDaemonSurface";
 import { Surface } from "@/components/Surface";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { getStartedPlan } from "@/lib/get-started";
+import { readOpenSteps, saveOpenSteps } from "@/lib/get-started-memory";
 import { SETTING_ROWS, type SettingRowId, type SettingSources, settingRowOpen, settingsParts, settingValue } from "@/lib/setting-rows";
-import {
-  SETTINGS_CATEGORIES,
-  SETTINGS_GROUP_LABELS,
-  type SettingsCategory,
-  type SettingsGroup,
-  type SettingsSection,
-  settingsCategory,
-} from "@/lib/settings-categories";
+import { type SettingsCategory, type SettingsSection, settingsCategory } from "@/lib/settings-categories";
 import { useTheme } from "@/lib/theme-controller";
 import type { AppUpdateHandle } from "@/lib/use-app-update";
 import { useDoctorReport } from "@/lib/use-doctor-report";
@@ -52,6 +46,7 @@ import { RunningTasksWarningSurface } from "./RunningTasksWarningSurface.tsx";
 import { SandboxSurface } from "./SandboxSurface.tsx";
 import { SessionProfileSurface } from "./SessionProfileSurface.tsx";
 import { SettingRow } from "./SettingRow.tsx";
+import { SettingsNav } from "./SettingsNav.tsx";
 import { StartAtSignInSurface } from "./StartAtSignInSurface.tsx";
 import { SupervisorChangesCodeSurface } from "./SupervisorChangesCodeSurface.tsx";
 import { SupervisorModelSurface } from "./SupervisorModelSurface.tsx";
@@ -82,7 +77,7 @@ type SettingsProps = {
  * key in `workspace.yaml`, which can be edited by hand (ADR-13, ADR-18, ADR-84). The view is as wide as a wide category
  * needs (ADR-212), so the list stays in one place when the user moves between categories, and starts at the left edge
  * of the window (ADR-262). "Get started" and "Diagnostics" show one run of the doctor (`useDoctorReport`), whose open steps
- * stay as a number next to "Get started". A setting is a folded row (ADR-263): the rows of a category read their values from
+ * stay as a line under "Get started" in the list (`SettingsNav`, ADR-268). A setting is a folded row (ADR-263): the rows of a category read their values from
  * one read of the workspace settings, which their forms share, so a saved value shows in its row at once.
  */
 export function SettingsView({ initialCategory, ...props }: SettingsProps & { initialCategory: SettingsCategory }) {
@@ -92,7 +87,7 @@ export function SettingsView({ initialCategory, ...props }: SettingsProps & { in
     props.conn,
     category.sections.some((s) => s === "get-started" || s === "doctor"),
   );
-  const open = doctor.data ? getStartedPlan(doctor.data).open : 0;
+  const open = useOpenSteps(doctor.data);
   const loadSettings = useCallback(() => post(props.conn, workspaceApi.settings, {}), [props.conn]);
   const settings = useRemote(loadSettings);
   const sectionProps = { ...props, doctor, settings, onOpenCategory: setCurrent };
@@ -100,33 +95,7 @@ export function SettingsView({ initialCategory, ...props }: SettingsProps & { in
   return (
     <div className="@container w-full max-w-6xl">
       <div className="flex flex-col gap-4 @3xl:flex-row @3xl:items-start @3xl:gap-6">
-        <nav aria-label="Settings categories" className="flex shrink-0 gap-1 overflow-x-auto @3xl:w-44 @3xl:flex-col">
-          {SETTINGS_CATEGORIES.map((c, i) => (
-            <Fragment key={c.id}>
-              <GroupCaption group={c.group} previous={SETTINGS_CATEGORIES[i - 1]?.group} />
-              <button
-                type="button"
-                aria-current={c.id === current ? "page" : undefined}
-                onClick={() => setCurrent(c.id)}
-                className={cn(
-                  "flex shrink-0 items-center justify-between gap-2 rounded-md px-3 py-1.5 text-left text-sm whitespace-nowrap transition-colors",
-                  c.id === current ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                )}
-              >
-                {c.label}
-                {c.id === "get-started" && open > 0 && (
-                  <span
-                    role="img"
-                    aria-label={`${open} to do`}
-                    className="bg-warning/20 text-warning rounded-full px-1.5 font-mono text-xs"
-                  >
-                    {open}
-                  </span>
-                )}
-              </button>
-            </Fragment>
-          ))}
-        </nav>
+        <SettingsNav current={current} openSteps={open} onSelect={setCurrent} />
         <div className={cn("flex w-full min-w-0 flex-col gap-4", !category.wide && "max-w-xl")}>
           <header className="flex flex-col gap-1">
             <h1 className="text-lg font-semibold">{category.label}</h1>
@@ -151,11 +120,16 @@ export function SettingsView({ initialCategory, ...props }: SettingsProps & { in
   );
 }
 
-/** The caption of a group of categories, above its first one; only in the list on the left, a row of categories has none. */
-function GroupCaption({ group, previous }: { group: SettingsGroup; previous: SettingsGroup | undefined }) {
-  const label = SETTINGS_GROUP_LABELS[group];
-  if (label === null || group === previous) return null;
-  return <span className="hud-label hidden px-3 pt-3 pb-1 @3xl:block">{label}</span>;
+/**
+ * The open steps of "Get started": from the doctor's report once it ran, and until then as its last run left them
+ * (ADR-268), which a new report replaces.
+ */
+function useOpenSteps(report: DoctorReport | undefined): number | null {
+  const open = report ? getStartedPlan(report).open : null;
+  useEffect(() => {
+    if (open !== null) saveOpenSteps(() => window.localStorage, open);
+  }, [open]);
+  return useMemo(() => open ?? readOpenSteps(() => window.localStorage), [open]);
 }
 
 /** One setting's folded row, which remembers whether the user opened or folded it while the category is shown. */
