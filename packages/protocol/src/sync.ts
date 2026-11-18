@@ -121,7 +121,7 @@ export const PullResult = z.object({
   checkedOut: PullBranchOutcome.nullable(),
   workingTree: SyncWorkingTree.nullable(),
   /**
-   * The changes put aside before the pull when the user asked for it (ADR-270); `null` when nothing was put aside, also
+   * The changes put aside before the pull when the user asked for it (ADR-271); `null` when nothing was put aside, also
    * when the pull could not move the branch and the changes were brought back.
    */
   putAside: PutAside.nullable(),

@@ -13,7 +13,7 @@ import type { BatchRunHandle } from "@/lib/use-batch-run";
 import { useRunningMiseTasks } from "@/lib/use-running-mise-tasks";
 import { BatchResults } from "./BatchResults.tsx";
 
-/** The batch command with what works in each repo's folder, read from the sessions and running mise tasks (ADR-270). */
+/** The batch command with what works in each repo's folder, read from the sessions and running mise tasks (ADR-271). */
 export function BatchPanel({
   conn,
   batch,
@@ -44,7 +44,7 @@ export function BatchView({
   conn: Connection;
   batch: BatchRunHandle;
   repos: readonly Repo[];
-  /** What works in a repo's folder itself (`workInRepoFolder`), which putting changes aside leaves out (ADR-270). */
+  /** What works in a repo's folder itself (`workInRepoFolder`), which putting changes aside leaves out (ADR-271). */
   workInFolder: (repo: string) => readonly string[];
 }) {
   // Nothing is ticked at the start: the user picks what runs, so a build of every repo never starts on a click by habit.

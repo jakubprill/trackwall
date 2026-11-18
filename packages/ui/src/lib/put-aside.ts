@@ -3,7 +3,7 @@ import { relativeTime } from "./format.ts";
 import { pullResultLine } from "./upstream-pull.ts";
 
 /**
- * Putting changes aside to pull (ADR-270): which repos of a batch command can be offered it, and the words for its result
+ * Putting changes aside to pull (ADR-271): which repos of a batch command can be offered it, and the words for its result
  * and for a put-aside in the Changes tab. The daemon moves only tracked changes into a git stash and brings them back
  * when the pull still cannot move the branch, so nothing here decides what is safe; it only says what happened.
  */

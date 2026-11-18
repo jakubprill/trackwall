@@ -249,10 +249,10 @@ export class Vcs {
     return this.syncing.run(await this.commonDir(dir), () => pullRepo(dir, options));
   }
 
-  /** What a pull with `putAside` would move into the stash (ADR-270). */
+  /** What a pull with `putAside` would move into the stash (ADR-271). */
   readonly putAsideFiles = changedTrackedFiles;
 
-  /** Trackwall's put-asides in the repo's stash list, newest first (ADR-270). */
+  /** Trackwall's put-asides in the repo's stash list, newest first (ADR-271). */
   readonly putAsides = listPutAsides;
 
   /** Brings a put-aside back and returns the ones left; in the sync queue, since a pull may be putting changes aside. */

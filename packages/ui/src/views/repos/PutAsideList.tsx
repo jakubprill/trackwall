@@ -8,7 +8,7 @@ import { putAsideLabel } from "@/lib/put-aside";
 import { useRemote } from "@/lib/use-remote";
 
 /**
- * "Put aside by Trackwall" in a repo's Changes tab (ADR-270): the changes a pull moved into the stash, each with Restore
+ * "Put aside by Trackwall" in a repo's Changes tab (ADR-271): the changes a pull moved into the stash, each with Restore
  * and Delete, so they never pile up out of sight. Delete asks once more in place, since it is the one step that loses them.
  */
 export function PutAsideList({ conn, repo, refreshKey }: { conn: Connection; repo: string; refreshKey: string }) {

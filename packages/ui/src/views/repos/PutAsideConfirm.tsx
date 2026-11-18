@@ -17,7 +17,7 @@ export interface PutAsideTarget {
 type RepoOutcome = { kind: "pulled"; result: PullResult } | { kind: "failed"; message: string };
 
 /**
- * The question before changes are put aside to pull (ADR-270), in the Upstream tile and in the batch command's results:
+ * The question before changes are put aside to pull (ADR-271), in the Upstream tile and in the batch command's results:
  * every file that leaves the working directory, per repo, and where the changes go. A repo where a session or mise task
  * works in the folder itself is left out with the reason. The repos are pulled one after another, each with its result.
  */

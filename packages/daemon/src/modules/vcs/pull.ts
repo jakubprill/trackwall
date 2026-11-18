@@ -15,7 +15,7 @@ import { fastForward, fetchRemote, syncDefaultBranch, workingTree } from "./sync
 const HEADS = "refs/heads/";
 
 /**
- * With `putAside`, changes in tracked files are first moved into a stash (ADR-270), and brought back when the pull then
+ * With `putAside`, changes in tracked files are first moved into a stash (ADR-271), and brought back when the pull then
  * does not move the checked-out branch (skipped or already up to date) or fails, so they are put aside only for a pull that happened.
  */
 export async function pullRepo(dir: string, options: { putAside: boolean }): Promise<PullResult> {

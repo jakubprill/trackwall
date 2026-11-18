@@ -31,7 +31,7 @@ export const BatchStepState = z.discriminatedUnion("state", [
   z.object({
     state: z.literal("skipped"),
     message: z.string(),
-    /** Why the sync skipped the repo, so the UI can offer the way out (ADR-270); `null` for every other skip. */
+    /** Why the sync skipped the repo, so the UI can offer the way out (ADR-271); `null` for every other skip. */
     syncReason: SyncSkipReason.nullable(),
   }),
   /** `lastLines`: the end of the process output when the step was a process; a git or mise message has only `message`. */

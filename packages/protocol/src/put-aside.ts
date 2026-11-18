@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Changes put aside so a pull can go on (ADR-270): the tracked changes of the working directory moved into a git stash
+ * Changes put aside so a pull can go on (ADR-271): the tracked changes of the working directory moved into a git stash
  * whose message starts with `PUT_ASIDE_MESSAGE`, never deleted. Untracked files stay where they are, since they never
  * stop a fast-forward. The stash is git's own, so the user can also bring it back with `git stash pop`.
  */

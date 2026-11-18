@@ -597,9 +597,9 @@ export const workspaceApi = {
    * does not move the user's branches.
    */
   pull: endpoint("pull", z.object({ repo: RepoId, putAside: z.boolean().default(false) }).strict(), PullResult),
-  /** The changed tracked files a pull with `putAside` would move into the stash (ADR-270), for the user to read first. */
+  /** The changed tracked files a pull with `putAside` would move into the stash (ADR-271), for the user to read first. */
   putAsideFiles: endpoint("put-aside-files", RepoRequest, z.array(PutAsideFile)),
-  /** The changes Trackwall put aside in the repo (ADR-270), newest first. */
+  /** The changes Trackwall put aside in the repo (ADR-271), newest first. */
   putAsides: endpoint("put-asides", RepoRequest, z.array(PutAside)),
   /**
    * Brings put-aside changes back into the working directory (`git stash pop --index`) and returns the ones left; when

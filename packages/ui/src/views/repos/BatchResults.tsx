@@ -11,7 +11,7 @@ import { PutAsideConfirm } from "./PutAsideConfirm.tsx";
 
 /**
  * The result of every step in every repo of the batch command (ADR-27). A skipped sync shows its reason, and one skipped
- * only for changed tracked files can put them aside and sync (ADR-270), per repo or for all such repos at once.
+ * only for changed tracked files can put them aside and sync (ADR-271), per repo or for all such repos at once.
  */
 export function BatchResults({
   conn,

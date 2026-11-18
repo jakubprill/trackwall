@@ -427,7 +427,7 @@ export class Workspace {
     return this.deps.vcs.pull(entry.path, options);
   }
 
-  /** The changed tracked files a pull with `putAside` would move into the stash (ADR-270). */
+  /** The changed tracked files a pull with `putAside` would move into the stash (ADR-271). */
   async putAsideFiles(id: string): Promise<PutAsideFile[]> {
     const entry = await this.entry(id);
     return this.inRepo(entry, () => this.deps.vcs.putAsideFiles(entry.path));

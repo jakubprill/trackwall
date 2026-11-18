@@ -190,7 +190,7 @@ The user's fetch of one repo from its header: the sync of its default branch, th
 _Avoid_: sync (that moves the default branch of every repo), update, `git pull` (which can merge or rebase)
 
 **Put aside** (`PutAside`, `PUT_ASIDE_MESSAGE`, `pull` with `putAside`, "Put aside and pull…", "Put aside by Trackwall" in the Changes tab):
-Changes in tracked files that Trackwall moved into a git stash so that a pull could go on, on the user's confirmation with the list of files (ADR-270). Brought back with Restore, or deleted for good with Delete; brought back at once when the pull did not move anything.
+Changes in tracked files that Trackwall moved into a git stash so that a pull could go on, on the user's confirmation with the list of files (ADR-271). Brought back with Restore, or deleted for good with Delete; brought back at once when the pull did not move anything.
 _Avoid_: force, discard, reset (nothing is deleted), stash (for the user's own stashes, which Trackwall does not touch)
 
 **Batch command** (`BatchRun`, step `BatchStep`, repo result `BatchRepo`):

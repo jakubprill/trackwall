@@ -2,7 +2,7 @@ import { PUT_ASIDE_MESSAGE, type PutAside, type PutAsideFile } from "@trackwall/
 import { git } from "./git.ts";
 
 /**
- * Changes put aside so that a pull can go on (§4.5, ADR-270): the tracked changes of the working directory, staged or not,
+ * Changes put aside so that a pull can go on (§4.5, ADR-271): the tracked changes of the working directory, staged or not,
  * go into a git stash with Trackwall's message, never deleted; untracked files stay, since a fast-forward never touches
  * them. The stash is git's own, so `git stash pop` in a terminal brings it back too. An entry is named by its commit,
  * because the `stash@{n}` numbers shift with every newer stash.

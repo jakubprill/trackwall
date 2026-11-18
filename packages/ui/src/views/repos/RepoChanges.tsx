@@ -13,7 +13,7 @@ import { PutAsideList } from "./PutAsideList.tsx";
  * A repo's "Changes" tab (ADR-34): the files and diff of the working directory against HEAD, with new files, read-only.
  * Polled (the next request after the response, so a slow git in a big repo does not pile up requests), because the repo
  * watch does not see uncommitted changes (ADR-63), and anew after a new commit (`refreshKey`: HEAD). Above them, the
- * changes a pull put aside (ADR-270).
+ * changes a pull put aside (ADR-271).
  */
 export function RepoChanges({ conn, repo, refreshKey }: { conn: Connection; repo: string; refreshKey: string }) {
   const load = useCallback(() => post(conn, workspaceApi.changes, { repo }), [conn, repo]);
