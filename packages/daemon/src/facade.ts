@@ -1,9 +1,10 @@
-import { homedir } from "node:os";
+import { arch, homedir, platform, release } from "node:os";
 import { join } from "node:path";
 import {
   type AppConfig,
   type agentsApi,
   DEFAULT_TASK_BRANCH_PREFIX,
+  type Diagnostics,
   KnowledgeName,
   MAX_DROP_BYTES,
   type MiseTarget,
@@ -196,6 +197,11 @@ export interface Facade {
    * from `merge-requests`, for the Sessions list and the notification of a failed pipeline. A read from memory.
    */
   taskOutcomes: () => TaskOutcome[];
+  /**
+   * The diagnostics for a bug report (§4.14): a run of `doctor` and the `error-journal`, anonymized, with the version and
+   * the system this daemon runs on, for "Copy diagnostics".
+   */
+  diagnostics: () => Promise<Diagnostics>;
   /**
    * Daemon exit, before `procs.stopAll`: what a restart is to bring back stays as it is now, the sessions to resume
    * (ADR-95), the agent queues and the verifications (ADR-115), so what the stop of the groups changes does not reach it.
@@ -593,6 +599,13 @@ export function createFacade(o: FacadeOptions): Facade {
     });
   }
 
+  /** The diagnostics for a bug report: the doctor's checks need the facade's other modules, the journal anonymizes them. */
+  async function diagnostics(): Promise<Diagnostics> {
+    const runtime = process.versions.bun ? `Bun ${process.versions.bun}` : `Node ${process.versions.node}`;
+    const system = { system: `${platform()} ${arch()} ${release()}`, runtime, inContainer: o.inContainer };
+    return { text: await errorJournal.diagnostics(await doctor.run(), system) };
+  }
+
   const placeFolder = async ({ repo, task }: TerminalPlace): Promise<string> => {
     if (repo === null) {
       if (task !== null) throw new DomainError("bad_request", "a task's place names its repo");
@@ -667,6 +680,7 @@ export function createFacade(o: FacadeOptions): Facade {
       return { repo, task, profile, ...read, envProblem: run.problem === null ? null : mask(run.problem) };
     },
     taskOutcomes,
+    diagnostics,
     keepForRestart: () => {
       agents.keepRunningSessionsForResume();
       verifications.keepForRestart();
