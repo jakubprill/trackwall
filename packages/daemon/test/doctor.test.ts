@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { type DoctorCheckId, type DoctorStatus, TESTED_COPILOT_CLI_VERSION } from "@trackwall/protocol";
 import { createFacade } from "../src/facade.ts";
 import { defaultSandboxTasks } from "../src/modules/agents/copilot-sandbox.ts";
 import { trustedFolderOf } from "../src/modules/doctor/copilot-trust.ts";
+import { COPILOT_CONFIG_BACKUP, withTrustedFolder } from "../src/modules/doctor/copilot-trust-write.ts";
 import { copilotVersionOutcome, Doctor, type DoctorDeps } from "../src/modules/doctor/doctor.ts";
 import { FILES_PER_ROUND, folderCosts, measureFileWrites } from "../src/modules/doctor/file-scanning.ts";
 import { folderStorage } from "../src/modules/doctor/folder-storage.ts";
@@ -271,6 +272,81 @@ describe("doctor", () => {
     expect(check?.fix).toBe(
       `Add ${projects} to "trustedFolders" in ${join(copilotHome, "config.json")}, so Copilot CLI stops asking for every repo and task.`,
     );
+  });
+
+  test("trusting the projects folder adds it to Copilot CLI's config.json, keeps the comment lines and the other keys, copies the file as it was, and the check turns ok", async () => {
+    const config = [
+      "// User settings belong in settings.json.",
+      "{",
+      '  "banner": "never",',
+      '  "trustedFolders": ["/somewhere/else"]',
+      "}",
+      "",
+    ].join("\n");
+    const { facade, projects, copilotHome } = doctorFacade({ copilot: true, mise: "2026.10.1", copilotConfig: config });
+    await facade.workspace.setProjectsDir(projects);
+    const file = join(copilotHome, "config.json");
+
+    const written = await facade.doctor.trustProjectsFolder();
+
+    const backup = join(realpathSync(copilotHome), COPILOT_CONFIG_BACKUP);
+    expect(written).toEqual({ file, folder: projects, added: true, backup });
+    expect(readFileSync(file, "utf8")).toBe(
+      `// User settings belong in settings.json.\n${JSON.stringify({ banner: "never", trustedFolders: ["/somewhere/else", projects] }, null, 2)}\n`,
+    );
+    expect(readFileSync(backup, "utf8")).toBe(config);
+    const check = (await facade.doctor.run()).checks.find((c) => c.id === "copilot-trusted-folder");
+    expect(check).toMatchObject({ status: "ok", summary: `Copilot CLI trusts ${projects}.` });
+  });
+
+  test("trusting the projects folder without a config.json creates Copilot CLI's home and the file with that one folder", async () => {
+    const { facade, projects, copilotHome } = doctorFacade({ copilot: true, mise: "2026.10.1", copilotConfig: null });
+    await facade.workspace.setProjectsDir(projects);
+    rmSync(copilotHome, { recursive: true });
+
+    const written = await facade.doctor.trustProjectsFolder();
+
+    expect(written).toEqual({ file: join(copilotHome, "config.json"), folder: projects, added: true, backup: null });
+    expect(JSON.parse(readFileSync(join(copilotHome, "config.json"), "utf8"))).toEqual({ trustedFolders: [projects] });
+  });
+
+  test("trusting a projects folder that a trusted folder covers already writes nothing and names that folder", async () => {
+    const { facade, projects, copilotHome } = doctorFacade({ copilot: true, mise: "2026.10.1", copilotConfig: trusting });
+    await facade.workspace.setProjectsDir(projects);
+    const file = join(copilotHome, "config.json");
+    const before = readFileSync(file, "utf8");
+
+    expect(await facade.doctor.trustProjectsFolder()).toEqual({ file, folder: projects, added: false, backup: null });
+
+    expect(readFileSync(file, "utf8")).toBe(before);
+    expect(readdirSync(copilotHome)).toEqual(["config.json"]);
+  });
+
+  test.each([
+    ["{ not json", "not valid JSON"],
+    ['{"trustedFolders":"<projects>"}', "trustedFolders is not a list of folders"],
+    ["[]", "trustedFolders is not a list of folders"],
+  ])("a config.json %j that is not Copilot CLI's is refused and left as it is", async (config, why) => {
+    const { facade, projects, copilotHome } = doctorFacade({ copilot: true, mise: "2026.10.1", copilotConfig: config });
+    await facade.workspace.setProjectsDir(projects);
+    const file = join(copilotHome, "config.json");
+    const before = readFileSync(file, "utf8");
+
+    expect(facade.doctor.trustProjectsFolder()).rejects.toMatchObject({ code: "bad_request", message: expect.stringContaining(why) });
+
+    expect(readFileSync(file, "utf8")).toBe(before);
+    expect(readdirSync(copilotHome)).toEqual(["config.json"]);
+  });
+
+  test("without a projects folder there is nothing to trust, and Copilot CLI's home is not touched", async () => {
+    const { facade, copilotHome } = doctorFacade({ copilot: true, mise: "2026.10.1", copilotConfig: null });
+
+    expect(facade.doctor.trustProjectsFolder()).rejects.toMatchObject({
+      code: "bad_request",
+      message: expect.stringContaining("No projects folder"),
+    });
+
+    expect(readdirSync(copilotHome)).toEqual([]);
   });
 
   test("gh not signed in to two repo hosts names both with their login commands; a kind without hosts is not checked", async () => {
@@ -683,5 +759,31 @@ describe("the doctor on antivirus scanning (ADR-255)", () => {
     const ms = await measureFileWrites(folder, 5);
     expect(ms).toBeGreaterThan(0);
     expect(readdirSync(folder)).toEqual([]);
+  });
+});
+
+describe("withTrustedFolder: Copilot CLI's config.json with one more trusted folder (ADR-270)", () => {
+  test("a Windows path is written as JSON escapes it, after the folders that were there", () => {
+    const edit = withTrustedFolder('{"trustedFolders":["C:\\\\Other"],"theme":"dark"}', "C:\\Users\\me\\Dev");
+    expect(edit).toEqual({
+      kind: "edit",
+      text: '{\n  "trustedFolders": [\n    "C:\\\\Other",\n    "C:\\\\Users\\\\me\\\\Dev"\n  ],\n  "theme": "dark"\n}\n',
+    });
+  });
+
+  test("comment lines with CRLF line ends stay before the object, each on its own line", () => {
+    const edit = withTrustedFolder("// managed automatically\r\n// second line\r\n{}\r\n", "/projects");
+    expect(edit).toEqual({
+      kind: "edit",
+      text: '// managed automatically\n// second line\n{\n  "trustedFolders": [\n    "/projects"\n  ]\n}\n',
+    });
+  });
+
+  test("a folder inside a trusted folder is covered by it", () => {
+    const projects = join(tmpdir(), "dev", "projects");
+    expect(withTrustedFolder(JSON.stringify({ trustedFolders: [join(tmpdir(), "dev")] }), projects)).toEqual({
+      kind: "covered",
+      folder: join(tmpdir(), "dev"),
+    });
   });
 });

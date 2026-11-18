@@ -1,7 +1,9 @@
+import type { TrustedProjectsFolder } from "@trackwall/protocol";
 import { Check } from "lucide-react";
 import type { ReactNode } from "react";
 import { CopyableCode } from "@/components/CopyableCode";
 import { Surface } from "@/components/Surface";
+import { TrustFolderButton } from "@/components/TrustFolderButton";
 import { fixCommand, type GetStartedPlan, type GetStartedStep, type GoodToHave, goodToHaveSummary } from "@/lib/get-started";
 import { cn } from "@/lib/utils";
 
@@ -37,6 +39,24 @@ export function GetStartedSteps({ plan, action }: { plan: GetStartedPlan; action
           </details>
         </Surface>
       )}
+    </>
+  );
+}
+
+/** The open trusted folder step: the button first, and the doctor's sentence for doing the same by hand under it. */
+export function TrustFolderStep({
+  fix,
+  trust,
+  onTrusted,
+}: {
+  fix: string | null;
+  trust: () => Promise<TrustedProjectsFolder>;
+  onTrusted?: () => void;
+}) {
+  return (
+    <>
+      <TrustFolderButton trust={trust} onTrusted={onTrusted} />
+      {fix && <span className="text-muted-foreground text-xs break-words">By hand: {fix}</span>}
     </>
   );
 }
