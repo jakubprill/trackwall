@@ -10,6 +10,7 @@ import type { Connection } from "@/lib/connection";
 import { errorJournalEntry } from "@/lib/error-journal";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
+import { CopyDiagnostics } from "./CopyDiagnostics.tsx";
 
 /**
  * The error journal (ADR-94): Trackwall's own errors with where in its code they came from, so that one seen yesterday can
@@ -28,6 +29,7 @@ export function ErrorJournalSurface({ conn }: { conn: Connection }) {
           Errors of Trackwall itself, from the daemon, the desktop app and this window, with the place in Trackwall's code each came from.
           They stay on this computer. Paths, user and computer names, repo names and hosts are replaced before an error is saved.
         </p>
+        <CopyDiagnostics conn={conn} />
         {journal.error && <ErrorWithRetry message={journal.error} onRetry={journal.reload} />}
         <Steady name="trackwall-errors" loading={loading} className="flex flex-col gap-3">
           {loading && (

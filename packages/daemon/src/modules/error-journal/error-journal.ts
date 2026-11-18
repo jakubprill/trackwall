@@ -1,11 +1,18 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { type ErrorJournal as ErrorJournalData, TrackwallError, type TrackwallErrorSource, type UiErrorReport } from "@trackwall/protocol";
+import {
+  type DoctorReport,
+  type ErrorJournal as ErrorJournalData,
+  TrackwallError,
+  type TrackwallErrorSource,
+  type UiErrorReport,
+} from "@trackwall/protocol";
 import { z } from "zod";
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
 import { messageOf } from "../../infra/errors.ts";
 import { anonymize, compileKnownValues, type KnownValue, type KnownValues } from "./anonymize.ts";
+import { type DiagnosticsSystem, diagnosticsText } from "./diagnostics.ts";
 import { type ErrorJournalWorkspace, systemValues, workspaceValues } from "./known-values.ts";
 import { SHELL_ERRORS_FILE, shellFrame, takeShellErrors } from "./shell-errors.ts";
 import { parseStack, repoPath, trackwallFrames } from "./stack-frames.ts";
@@ -105,6 +112,12 @@ export class ErrorJournal {
       });
     }
     return { errors: [...this.errors.values()].sort((a, b) => b.lastSeen.localeCompare(a.lastSeen)) };
+  }
+
+  /** The diagnostics for a bug report (`diagnostics.ts`), every doctor line anonymized with what the workspace knows now. */
+  async diagnostics(doctor: DoctorReport, system: Omit<DiagnosticsSystem, "version">): Promise<string> {
+    const { errors } = await this.list();
+    return diagnosticsText({ ...system, version: this.deps.version }, doctor, errors, (text) => anonymize(text, this.known));
   }
 
   clear(): void {
