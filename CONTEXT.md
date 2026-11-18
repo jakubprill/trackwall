@@ -282,6 +282,10 @@ _Avoid_: backup repo, overlay folder
 One file, `trackwall-backup-<date>-<time>.tar.gz`, with everything that lives only in the container's volume: for each repo with unpushed work a `git bundle` of its branches, stashes and the uncommitted changes of each of its worktrees, and Trackwall's own files a new container lacks (ADR-275). Only where the daemon runs in a container; only the last one stays there, and the user downloads it to their computer. Files git ignores and sign-ins never go in. Restoring one (`WorkRestore`, `WorkBackupRestore`; UI "Restore from a backup…") brings it back into clones the user made and only adds: new branches, forward moves, stashes, `restored/` branches and missing `.trackwall` files.
 _Avoid_: snapshot (that is a copy of the whole volume), local config store (that is the files kept out of git)
 
+**Container health** (`ContainerHealth`, module `container-health`, `HealthWarning`; UI "Container health"):
+How the container Trackwall runs in is doing, read from its own control group: memory, processors and processes against the container's limits, the disk of Docker's virtual machine, the processes the kernel killed for memory (`OomKill`) and the daemon's restarts (`DaemonRestart`) in the last day, and the warnings they add up to (ADR-279). Only in a container.
+_Avoid_: container stats (that is Docker's command, read from outside), monitoring
+
 **Card** (repo card, `RepoCard`):
 Facts about a repo extracted deterministically from build files, configuration and code in the HEAD commit: build files, what the repo provides (`provides`), what it uses (`consumes`), required tools, mechanisms and problems, every fact with evidence. It depends only on the commit, so it is computed once per commit (ADR-25). An LLM will add only a description and connection proposals marked `origin: 'llm'` (ADR-6). In the UI, the "Card" tab in the repo details.
 _Avoid_: profile, metadata; "repo card" for the whole repo details panel

@@ -1,5 +1,6 @@
-import { appendFileSync, mkdirSync, renameSync, statSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, renameSync, statSync } from "node:fs";
 import { dirname } from "node:path";
+import type { z } from "zod";
 
 /**
  * A JSONL file appended to with one rotation: the file of one log source (§4.2) and the MCP audit (§4.21). Writes are
@@ -81,4 +82,30 @@ function sizeOf(path: string): number {
 
 export function rotatedPath(path: string): string {
   return path.replace(/\.jsonl$/, ".1.jsonl");
+}
+
+/**
+ * The lines of a rotating file and its rotated copy that `schema` accepts, oldest first; a missing file reads as empty
+ * and a line that is not one (cut off by a crash, written by an older version) is skipped.
+ */
+export function readRotatingJsonl<T>(path: string, schema: z.ZodType<T>): T[] {
+  return [rotatedPath(path), path].flatMap((file) => {
+    let text: string;
+    try {
+      text = readFileSync(file, "utf8");
+    } catch {
+      return [];
+    }
+    return text.split("\n").flatMap((line) => {
+      if (line.trim() === "") return [];
+      let raw: unknown;
+      try {
+        raw = JSON.parse(line);
+      } catch {
+        return [];
+      }
+      const parsed = schema.safeParse(raw);
+      return parsed.success ? [parsed.data] : [];
+    });
+  });
 }

@@ -1,4 +1,4 @@
-import { arch, homedir, platform, release } from "node:os";
+import { arch, availableParallelism, homedir, platform, release, totalmem } from "node:os";
 import { join } from "node:path";
 import {
   type AppConfig,
@@ -24,6 +24,7 @@ import {
 import type { z } from "zod";
 import { approvalsFormat } from "./infra/approved-folder.ts";
 import { copilotHome } from "./infra/copilot-home.ts";
+import { readRestarts } from "./infra/daemon-restarts.ts";
 import { downloadVerified } from "./infra/download.ts";
 import { vscodeUrl } from "./infra/editor-url.ts";
 import { configOrProblem, DomainError, messageOf } from "./infra/errors.ts";
@@ -61,10 +62,12 @@ import type { AppConfigQuery } from "./modules/cards/app-config.ts";
 import { CardCache } from "./modules/cards/card-cache.ts";
 import { Cards } from "./modules/cards/cards.ts";
 import { ConfigFiles } from "./modules/config-files/config-files.ts";
+import { CONTAINER_HEALTH_DIR, ContainerHealth } from "./modules/container-health/container-health.ts";
+import { readContainerStart } from "./modules/container-health/container-start.ts";
+import { CONTROL_GROUP_ROOT } from "./modules/container-health/control-group.ts";
 import { DayStart } from "./modules/day-start/day-start.ts";
 import { DayStartFile } from "./modules/day-start/day-start-file.ts";
 import { trustedFolderOf, trustedFolders } from "./modules/doctor/copilot-trust.ts";
-import { type DiskSpace, diskSpace } from "./modules/doctor/disk-space.ts";
 import { Doctor } from "./modules/doctor/doctor.ts";
 import { measureFileWrites } from "./modules/doctor/file-scanning.ts";
 import { profileEnvironment } from "./modules/doctor/model-provider-check.ts";
@@ -105,6 +108,7 @@ import { WorkRestore } from "./modules/work-backup/work-restore.ts";
 import { RepoWatch } from "./modules/workspace/repo-watch.ts";
 import { Workspace } from "./modules/workspace/workspace.ts";
 import { WorkspaceFile } from "./modules/workspace/workspace-file.ts";
+import { type DiskSpace, diskSpace, LOW_DISK_BYTES } from "./platform/disk-space.ts";
 import { groupPlatform } from "./platform/group-platform.ts";
 import { mountTable } from "./platform/mount-table.ts";
 import { terminalPlatform } from "./platform/terminal.ts";
@@ -145,6 +149,8 @@ export interface Facade {
   workBackup: WorkBackup;
   /** Bringing a work backup back into the repos of a new container, after a look at what it does (ADR-275). */
   workRestore: WorkRestore;
+  /** How the container Trackwall runs in is doing, with a day of history and its warnings (ADR-279). */
+  containerHealth: ContainerHealth;
   testReports: TestReports;
   verifications: Verifications;
   /** Whether a task's reproduction test fails without its fix and passes with it, in a copy of the repo (ADR-227). */
@@ -306,6 +312,8 @@ export interface FacadeOptions {
   diskSpace?: (folder: string) => Promise<DiskSpace>;
   /** Only for tests, like `diskSpace`, so that the report does not depend on the runner's antivirus; the daemon leaves it out for `measureFileWrites` (ADR-255). */
   measureFileWrites?: (folder: string, files: number) => Promise<number>;
+  /** Only for tests, which point the container's health at a folder of control group files; the daemon leaves it out for `/sys/fs/cgroup` (ADR-279). */
+  controlGroupRoot?: string;
   /** The folder the daemon serves the UI from: the error journal maps the UI's frames with its source maps (ADR-94). */
   uiDir?: string;
   log: (msg: string) => void;
@@ -586,6 +594,7 @@ export function createFacade(o: FacadeOptions): Facade {
       "legacy-worktrees-dir": join(o.home, LEGACY_WORKTREES_DIR),
       "state-backups-dir": join(o.home, STATE_BACKUPS_DIR),
       "work-backup-dir": join(o.home, WORK_BACKUP_DIR),
+      "container-health-dir": join(o.home, CONTAINER_HEALTH_DIR),
     },
     // A projects folder that is not set or cannot be read is a state the view shows, not an error of the whole list.
     projectsDir: () => workspace.projectsDir().catch(() => null),
@@ -620,6 +629,40 @@ export function createFacade(o: FacadeOptions): Facade {
     };
   }
 
+  const workBackup = new WorkBackup({
+    inContainer: o.inContainer,
+    stateDir: o.home,
+    stateFiles: [WORKSPACE_FILE, TASK_JOURNAL_FILE, ...Object.keys(STATE_FILES)],
+    unpushedWork: () => workspace.unpushedWork(),
+    repoPath: (repo) => workspace.repoPath(repo),
+    projectsDir: () => workspace.projectsDir(),
+    bundleWork: (dir, out) => vcs.bundleWork(dir, out),
+    version: o.version,
+    now: () => new Date(),
+    log: o.log,
+  });
+  const containerHealth = new ContainerHealth({
+    inContainer: o.inContainer,
+    stateDir: o.home,
+    controlGroupRoot: o.controlGroupRoot ?? CONTROL_GROUP_ROOT,
+    machine: () => ({ memoryBytes: totalmem(), processors: availableParallelism() }),
+    daemonStartedAt: new Date(),
+    containerStartedAt: () => readContainerStart(),
+    restarts: (since) => readRestarts(o.home, since),
+    diskSpace: async () => {
+      const folder = await workspace.projectsDir().catch(() => null);
+      return folder === null ? null : (o.diskSpace ?? diskSpace)(folder).catch(() => null);
+    },
+    lowDiskBytes: LOW_DISK_BYTES,
+    lastBackupAt: async () => (await workBackup.state()).last?.createdAt ?? null,
+    reposWithUnpushedWork: () =>
+      workspace.unpushedWork().then(
+        (work) => work.repos.length,
+        () => 0,
+      ),
+    now: () => new Date(),
+    log: o.log,
+  });
   /** The outcome of every task with a verification or a merge request (ADR-154), for the UI and the supervisor (ADR-156). */
   function taskOutcomes(): TaskOutcome[] {
     const followed = mergeRequests.followed();
@@ -674,18 +717,8 @@ export function createFacade(o: FacadeOptions): Facade {
     terminals,
     folderFiles: new FolderFiles({ folder: placeFolder }),
     droppedFiles: new DroppedFiles({ projectsDir: () => workspace.projectsDir(), now: () => new Date(), maxBytes: MAX_DROP_BYTES }),
-    workBackup: new WorkBackup({
-      inContainer: o.inContainer,
-      stateDir: o.home,
-      stateFiles: [WORKSPACE_FILE, TASK_JOURNAL_FILE, ...Object.keys(STATE_FILES)],
-      unpushedWork: () => workspace.unpushedWork(),
-      repoPath: (repo) => workspace.repoPath(repo),
-      projectsDir: () => workspace.projectsDir(),
-      bundleWork: (dir, out) => vcs.bundleWork(dir, out),
-      version: o.version,
-      now: () => new Date(),
-      log: o.log,
-    }),
+    workBackup,
+    containerHealth,
     workRestore: new WorkRestore({
       inContainer: o.inContainer,
       stateDir: o.home,

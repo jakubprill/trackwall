@@ -683,7 +683,7 @@ describe("the doctor on free disk space", () => {
   });
 
   test("the real disk of the system's temp folder can be read, and a folder in it is on the same disk", async () => {
-    const { diskSpace } = await import("../src/modules/doctor/disk-space.ts");
+    const { diskSpace } = await import("../src/platform/disk-space.ts");
     const space = await diskSpace(tmpdir());
     expect(space.total).toBeGreaterThan(0);
     expect(space.free).toBeGreaterThan(0);

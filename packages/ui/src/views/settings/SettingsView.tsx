@@ -26,6 +26,7 @@ import { AutoReviewSurface } from "./AutoReviewSurface.tsx";
 import { BrowserNotificationsSurface } from "./BrowserNotificationsSurface.tsx";
 import { ConfigFilesSurface } from "./ConfigFilesSurface.tsx";
 import { ConnectCopilotSurface } from "./ConnectCopilotSurface.tsx";
+import { ContainerHealthSurface } from "./ContainerHealthSurface.tsx";
 import { CopilotUsageSurface } from "./CopilotUsageSurface.tsx";
 import { DaemonSurface } from "./DaemonSurface.tsx";
 import { DoctorSurface } from "./DoctorSurface.tsx";
@@ -240,6 +241,8 @@ function Section({
       return <LocalConfigReposSurface conn={conn} />;
     case "doctor":
       return <DoctorSurface report={doctor} />;
+    case "container-health":
+      return <ContainerHealthSurface conn={conn} />;
     case "trackwall-errors":
       return <ErrorJournalSurface conn={conn} />;
   }
