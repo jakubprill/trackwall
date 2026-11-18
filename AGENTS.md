@@ -105,6 +105,7 @@ The repo is meant to be published as open source (header of `docs/architecture.m
   - the test `packages/ui/test/sibling-keys.test.ts`: no two children of one JSX parent share a `key` (React keeps stale copies of such children); strips that mount again with each session go through `components/SessionNotices.tsx`;
   - the test `packages/ui/test/design-tokens.test.ts`: UI components without raw colours or arbitrary appearance values, only tokens from `index.css` (ADR-16);
   - the test `apps/design/test/gallery.test.ts`: the design gallery's tokens equal the app's, the index and the mockups list each other, and no mockup redefines a token or is left in Polish (ADR-176);
+  - the tests `packages/protocol/test/mcp-contract.test.ts` and `packages/daemon/test/workspace-files.test.ts`: every MCP tool and argument an earlier release offered is still there (a tool goes only after a release that deprecated it), and every `workspace.yaml` an earlier release read still reads (ADR-278);
   - daemon compatibility with Node (ADR-1): `erasableSyntaxOnly` in the `tsconfig.json` of the daemon and `protocol`, `useImportExtensions` in Biome for their `src` (also in `packages/scene/src`), the ban on Bun APIs in the daemon outside `platform/`, and daemon process tests under Bun and under Node.
 
   No tool guards `as` casts on external data, so the review does.
