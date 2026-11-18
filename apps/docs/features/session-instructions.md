@@ -1,6 +1,7 @@
 ---
 title: Session instructions
 description: Every Copilot CLI session you start in Trackwall knows from its first message where it runs, what it can do there and where to read more.
+status: stable
 ---
 
 # Session instructions

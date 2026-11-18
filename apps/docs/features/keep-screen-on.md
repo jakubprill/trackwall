@@ -1,6 +1,7 @@
 ---
 title: Keep the screen on
 description: Keep the screen from turning off and locking while agents work, so you can glance at them without signing in again.
+status: stable
 ---
 
 # Keep the screen on

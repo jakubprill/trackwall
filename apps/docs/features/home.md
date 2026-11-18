@@ -1,6 +1,7 @@
 ---
 title: Home dashboard
 description: See your whole environment in one 3D view, with everything that needs you in one queue.
+status: stable
 ---
 
 # Home dashboard

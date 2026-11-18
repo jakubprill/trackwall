@@ -1,6 +1,7 @@
 ---
 title: Shell
 description: Open your own shell in the projects folder, a repo or a task's worktree, already in the right folder, also when Trackwall runs in a container.
+status: stable
 ---
 
 # Shell
