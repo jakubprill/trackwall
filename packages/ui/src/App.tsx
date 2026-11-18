@@ -396,6 +396,7 @@ export function App() {
                     focused={supervisorFocused}
                     onFocusedChange={setSupervisorFocused}
                     onOpenInSessions={openInSessions}
+                    onOpenGetStarted={() => openSettings("get-started")}
                     onChanged={sessions.reload}
                   />
                 </KeyboardElsewhere.Provider>

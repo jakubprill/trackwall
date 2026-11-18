@@ -70,7 +70,7 @@ export async function worktreeChanges(
  * the index was written no later than that mtime ("racy git"); a fresh mtime on the copy would hide a same-size edit
  * made in the second the index was written, e.g. right after the worktree was checked out.
  */
-async function copyIndex(index: string, copy: string): Promise<void> {
+export async function copyIndex(index: string, copy: string): Promise<void> {
   try {
     const { atimeMs, mtimeMs } = await stat(index);
     await copyFile(index, copy);

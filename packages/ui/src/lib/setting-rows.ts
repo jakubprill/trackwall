@@ -23,6 +23,11 @@ export const SETTING_ROWS = {
   "worktrees-dir": { title: "Task worktrees folder", what: "Where each task gets its own copy of a repo.", group: "Folders" },
   "git-program": { title: "Git program", what: "The git that reads your repos.", group: "Folders" },
   "local-config-store": { title: "Local config store", what: "Backs up the files your repos keep out of git.", group: "Backup" },
+  "work-backup": {
+    title: "Container work backup",
+    what: "One file with the commits and changes only this container has.",
+    group: "Backup",
+  },
   sandbox: { title: "Sandbox", what: "Which tasks run their commands closed inside their own worktree.", group: "Tasks" },
   "auto-review": { title: "Automatic review", what: "Review a task's changes when its agent reports its result.", group: "Tasks" },
   "always-allow": { title: "Always allowed in tasks", what: 'The tools you chose "Always allow" for, by repo.', group: "Tasks" },

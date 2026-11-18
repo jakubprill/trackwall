@@ -54,6 +54,7 @@ import { TaskTokenBudgetSurface } from "./TaskTokenBudgetSurface.tsx";
 import { ThemeSurface } from "./ThemeSurface.tsx";
 import { UpdatesSurface } from "./UpdatesSurface.tsx";
 import { VsCodeExtensionSurface } from "./VsCodeExtensionSurface.tsx";
+import { WorkBackupSurface } from "./WorkBackupSurface.tsx";
 import { WorktreesDirSurface } from "./WorktreesDirSurface.tsx";
 
 type SettingsProps = {
@@ -183,6 +184,8 @@ function Section({
       return <GitProgramSurface conn={conn} settings={settings} />;
     case "local-config-store":
       return <LocalConfigStoreSurface conn={conn} />;
+    case "work-backup":
+      return <WorkBackupSurface conn={conn} />;
     case "repo-hosts":
       return <RepoHostsSurface conn={conn} />;
     case "copilot-cli":

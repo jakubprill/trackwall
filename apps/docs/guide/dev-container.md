@@ -192,7 +192,15 @@ What each part does, and what it costs:
 
 ## Back up the repos
 
-Commits you have not pushed, stashes and task worktrees live only in the `workspace-repos` volume. Before you remove the volume, reset Docker, or move to another computer, copy the volume into one file on your computer:
+Commits you have not pushed, stashes and task worktrees live only in the `workspace-repos` volume. Removing the volume, resetting Docker or a broken virtual disk deletes them.
+
+### Back up your work from Trackwall
+
+Trackwall puts everything only this container has into one small file while your sessions keep running: in Settings › Workspace › Container work backup, click "Back up now", then "Download backup" to keep the file on your computer. [Container work backup](/features/work-backup) says what goes in and how to get your work back from it.
+
+### Copy the whole volume
+
+To keep everything, files git ignores and builds included, for example before you move to another computer, copy the volume into one file on your computer:
 
 1. Stop the container, so that neither Trackwall nor git changes the repos while they are copied: `docker stop <container name>`, or stop it in Docker or Rancher Desktop.
 2. On your computer, not in the container, in the folder where the file should go, run:
@@ -224,4 +232,4 @@ Trackwall's state (`workspace-trackwall`) and the Copilot CLI sign-in (`workspac
 - To update without rebuilding, run `trackwall-container update <version>` in the container, for example `trackwall-container update 0.6.0`. It answers at once and does the rest in the background: it downloads that version from GitHub, checks that it was signed by Trackwall's release key, restarts Trackwall on it, and goes back to the version you had when the new one does not start within a minute. Running sessions stop and resume as after any restart. `logs/daemon.log` in Trackwall's state folder says how it went, and `trackwall-container address` gives the new address with its token. The update stays in the state volume; rebuilding the container returns to the version in the Feature's address unless you change `<version>` there too, which is the other way to update.
 - VS Code's port forward starts a program for every new connection, which can take a few seconds when the computer is busy or its security software checks every program that starts. The desktop app waits up to 10 seconds for Trackwall in a container before it says it lost the connection. If it still loses it while Trackwall in the container runs (inside the container `curl http://127.0.0.1:7700/api/health` answers at once), the forward is slower than that: close other work or ask whoever runs the security software to exclude `docker.exe`.
 - When the app cannot connect, its message says which way it failed. "No Trackwall daemon answers at 127.0.0.1:7700" means nothing takes connections on the port: start the container and check that VS Code forwards 7700. "Something accepted the connection at 127.0.0.1:7700, but no answer came back" means the port is forwarded but no answer came through it: forward the port again in VS Code's Ports view and check that Trackwall runs in the container. "Something answers at 127.0.0.1:7700, but not as a Trackwall daemon" means the port leads to another program.
-- Repos with changes you have not pushed live only in the `workspace-repos` volume. Removing the volume, or "Reset to factory defaults" in Docker Desktop, deletes them. "Only in this container" on [Home](/features/home) and the [doctor](/features/doctor) list what is at stake. [Back up the repos](#back-up-the-repos) before you remove the volume.
+- Repos with changes you have not pushed live only in the `workspace-repos` volume. Removing the volume, or "Reset to factory defaults" in Docker Desktop, deletes them. "Only in this container" on [Home](/features/home) and the [doctor](/features/doctor) list what is at stake. [Back up your work](#back-up-your-work-from-trackwall) before you remove the volume.
