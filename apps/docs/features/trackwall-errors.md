@@ -1,6 +1,7 @@
 ---
 title: Trackwall errors
 description: Trackwall keeps its own errors on your computer, anonymized, with the place in its code each came from, so a problem can be looked into later.
+status: stable
 ---
 
 # Trackwall errors

@@ -1,6 +1,7 @@
 ---
 title: Services
 description: Start a service together with the services it calls, see when it is ready, and call its endpoints.
+status: stable
 ---
 
 # Services

@@ -1,6 +1,7 @@
 ---
 title: Automatic review
 description: Let Copilot CLI explain, review and check an agent task's changes against the repo's rules before the merge request, and turn findings into review comments.
+status: stable
 ---
 
 # Automatic review

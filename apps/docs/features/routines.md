@@ -1,6 +1,7 @@
 ---
 title: Routines
 description: Save a task you repeat, such as updating an API client and checking it compiles, and run it again with one click.
+status: stable
 ---
 
 # Routines

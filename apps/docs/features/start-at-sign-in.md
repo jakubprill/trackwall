@@ -1,6 +1,7 @@
 ---
 title: Start at sign-in
 description: Have Trackwall start hidden in the tray when you sign in, so your repos and agents are ready before you open it.
+status: stable
 ---
 
 # Start at sign-in

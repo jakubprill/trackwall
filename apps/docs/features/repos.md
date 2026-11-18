@@ -1,6 +1,7 @@
 ---
 title: Repos
 description: Browse, clone and sync every git repo in your projects folder from one list.
+status: stable
 ---
 
 # Repos

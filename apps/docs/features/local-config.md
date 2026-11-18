@@ -1,6 +1,7 @@
 ---
 title: Local config backup
 description: Keep mise tasks only on your computer, out of the repo, with every version backed up and restored into a new clone.
+status: stable
 ---
 
 # Local config backup

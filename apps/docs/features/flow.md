@@ -1,11 +1,16 @@
 ---
 title: Flow
 description: Watch every group of agent work on one wall, on a second monitor, with what waits for you and what has stood too long.
+status: preview
 ---
 
 # Flow
 
 Watch every group of agent work on one wall, on a second monitor, with what waits for you and what has stood too long.
+
+::: warning Preview
+Flow is new: its columns, the time after which a card counts as standing too long and how it groups work can change in a 1.x version.
+:::
 
 ![Flow: the tasks of the demo shop in rows by group and columns by state, each card with how long it has been there](/screenshots/flow.png)
 

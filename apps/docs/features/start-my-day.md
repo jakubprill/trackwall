@@ -1,6 +1,7 @@
 ---
 title: Start my day
 description: One button syncs every repo and starts the supervisor with a briefing of what changed since your last day and what waits for you.
+status: stable
 ---
 
 # Start my day

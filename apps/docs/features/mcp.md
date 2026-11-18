@@ -1,6 +1,7 @@
 ---
 title: MCP server
 description: "Give Copilot CLI and other agents your whole projects folder: repos, code search, graph, logs and services."
+status: stable
 ---
 
 # MCP server

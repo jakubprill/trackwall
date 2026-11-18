@@ -1,6 +1,7 @@
 ---
 title: Copilot CLI sessions
 description: Run several Copilot CLI agents side by side, each in its own repo, and always know which one is waiting for you.
+status: stable
 ---
 
 # Copilot CLI sessions
