@@ -165,7 +165,7 @@ function SupervisorBody({
   const day = useDayStart(conn, onChanged);
   const running = session !== undefined && isLive(session) ? session : undefined;
   // The start card's projects folder, read only while the card shows: often until one is set, since that happens in
-  // Settings while the panel stays open, and rarely after, since a set folder is only ever replaced by another.
+  // Settings while the panel stays open, and rarely after, since only a hand edit of `workspace.yaml` takes it away.
   const loadSettings = useCallback(() => post(conn, workspaceApi.settings, {}), [conn]);
   const settings = useRemote(running ? undefined : loadSettings, {
     pollMs: (data) => (data?.projectsDir === null ? FOLDER_UNSET_POLL_MS : FOLDER_SET_POLL_MS),
