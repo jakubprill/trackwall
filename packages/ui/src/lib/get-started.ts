@@ -65,6 +65,9 @@ const STEPS: readonly { id: DoctorCheckId; title: string; need: GetStartedNeed; 
   { id: "git-remotes", title: "Git access to your repo hosts", need: "recommended" },
 ];
 
+/** The step Trackwall settles itself on the user's click, with "Trust folder" (ADR-270). */
+export const TRUST_FOLDER_STEP: DoctorCheckId = "copilot-trusted-folder";
+
 /** Tools Trackwall works without, in the order of how much they add. */
 const GOOD_TO_HAVE: readonly DoctorCheckId[] = ["mise", "copilot-sandbox", "github-cli", "gitlab-cli"];
 

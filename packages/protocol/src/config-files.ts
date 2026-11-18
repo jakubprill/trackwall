@@ -318,7 +318,8 @@ export const CONFIG_ENTRIES: Record<ConfigEntryId, ConfigEntryInfo> = {
     kind: "file",
     writer: "copilot-cli",
     internal: false,
-    purpose: "The folders Copilot CLI trusts without asking. Trackwall only reads it.",
+    purpose:
+      'The folders Copilot CLI trusts without asking. Trackwall reads it, and adds your projects folder to it when you click "Trust folder".',
     docs: "doctor",
   },
 };

@@ -126,6 +126,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(readinessApi.repo, (f, b) => f.readiness.repo(b.repo)),
   route(taskOutcomesApi.list, (f) => f.taskOutcomes()),
   route(doctorApi.run, (f) => f.doctor.run()),
+  route(doctorApi.trustProjectsFolder, (f) => f.doctor.trustProjectsFolder()),
   route(providerModelsApi.list, (f) => f.providerModels.list()),
   route(javaNavigationApi.state, (f) => f.javaNavigation.state()),
   route(javaNavigationApi.startInstall, (f) => f.javaNavigation.startInstall()),
