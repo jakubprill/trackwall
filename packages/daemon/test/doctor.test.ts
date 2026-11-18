@@ -8,7 +8,7 @@ import { defaultSandboxTasks } from "../src/modules/agents/copilot-sandbox.ts";
 import { trustedFolderOf } from "../src/modules/doctor/copilot-trust.ts";
 import { COPILOT_CONFIG_BACKUP, withTrustedFolder } from "../src/modules/doctor/copilot-trust-write.ts";
 import { copilotVersionOutcome, Doctor, type DoctorDeps } from "../src/modules/doctor/doctor.ts";
-import { FILES_PER_ROUND, folderCosts, measureFileWrites } from "../src/modules/doctor/file-scanning.ts";
+import { FILES_PER_ROUND, folderCosts, measureFileWrites, writeCheckFile } from "../src/modules/doctor/file-scanning.ts";
 import { folderStorage } from "../src/modules/doctor/folder-storage.ts";
 import type { TlsProbe } from "../src/modules/doctor/tls-probe.ts";
 import { compareVersions, versionIn } from "../src/modules/doctor/version.ts";
@@ -753,6 +753,19 @@ describe("the doctor on antivirus scanning (ADR-255)", () => {
       ["A", 1],
       ["B", 4],
     ]);
+  });
+
+  test("a measurement never writes through a file or link already under a check file's name", async () => {
+    const folder = mkdtempSync(join(tmpdir(), "trackwall-doctor-planted-"));
+    try {
+      const planted = join(folder, "Check0.java");
+      writeFileSync(planted, "the user's own file");
+
+      await expect(writeCheckFile(planted, "measurement")).rejects.toMatchObject({ code: "EEXIST" });
+      expect(readFileSync(planted, "utf8")).toBe("the user's own file");
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
   });
 
   test("a measurement writes and reads real files and leaves nothing behind", async () => {
