@@ -105,10 +105,12 @@ export const SETTINGS_GROUP_LABELS: Record<SettingsGroup, string | null> = { sta
 
 /**
  * The category Settings opens on: "Get started" until a session exists, which shows the setup is behind the user, and
- * from then on the folders, the settings changed most often.
+ * also later while the doctor's last run left a step open (ADR-268); otherwise the folders, the settings changed most
+ * often.
  */
-export function firstSettingsCategory(sessionCount: number | undefined): SettingsCategory {
-  return sessionCount !== undefined && sessionCount > 0 ? "workspace" : "get-started";
+export function firstSettingsCategory(sessionCount: number | undefined, openSteps: number | null): SettingsCategory {
+  const started = sessionCount !== undefined && sessionCount > 0;
+  return started && (openSteps ?? 0) === 0 ? "workspace" : "get-started";
 }
 
 export function settingsCategory(id: SettingsCategory): (typeof SETTINGS_CATEGORIES)[number] {

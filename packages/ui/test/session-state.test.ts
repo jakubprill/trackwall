@@ -13,6 +13,7 @@ import {
   agentsInTurn,
   closeCutsOffTurn,
   inTurn,
+  repoSessionRepo,
   sessionPlace,
   sessionStateLabel,
   taskStateLabel,
@@ -280,5 +281,19 @@ describe("a task's state (ADR-253)", () => {
 
   test("a paused task reads Paused even when it was handed over for review", () => {
     expect(taskStateLabel({ paused: pause, inReview: true }, undefined)).toEqual({ label: "Paused" });
+  });
+});
+
+describe("the repo of a repo session, which its VS Code button opens", () => {
+  test("a session in a repo's root without its own worktree works in that repo", () => {
+    expect(repoSessionRepo({ repo: "shop", task: null })).toBe("shop");
+  });
+
+  test("a task's session has none, because the task's own button opens its worktree", () => {
+    expect(repoSessionRepo({ repo: "shop", task: "task-1" })).toBeNull();
+  });
+
+  test("the supervisor and a free session in the projects folder have none", () => {
+    expect(repoSessionRepo({ repo: null, task: null })).toBeNull();
   });
 });

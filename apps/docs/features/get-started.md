@@ -19,11 +19,11 @@ One list in Settings shows what is left before your first session and says when 
 
 Trackwall needs only one setting to work: your projects folder. Everything else in Settings has a default that works. What else can stop a first session is outside Settings: Copilot CLI is not installed, or a company proxy stands between your sessions and GitHub.
 
-"Get started" is the first category of Settings, and Settings opens on it until you have a session. It runs the [doctor](/features/doctor) and shows a few of its checks as steps. A step with a green mark is done. A step with a number has something for you to do: the line under it says what was found, the next one what to do, and a command to run comes with a copy button. A step marked "needed" stops a first session; one marked "recommended" does not, but saves you questions later, such as Copilot CLI asking whether it may trust each repo.
+"Get started" is the first category of Settings, in a frame of its own above the others. Settings opens on it until you have a session, and also later while a step is still open. It runs the [doctor](/features/doctor) and shows a few of its checks as steps. A step with a green mark is done. A step with a number has something for you to do: the line under it says what was found, the next one what to do, and a command to run comes with a copy button. A step marked "needed" stops a first session; one marked "recommended" does not, but saves you questions later, such as Copilot CLI asking whether it may trust each repo.
 
 Under the steps, "Good to have" lists tools Trackwall works without and what each adds: mise for repo tasks and services, Copilot CLI's sandbox, and the command-line tool of your repo host. Click it to open the list.
 
-The number next to "Get started" in the list of categories says how many steps are still open.
+The line under "Get started" in the list of categories says what is left: how many steps are to do, in yellow, or "All set". It shows what the last check found, so it is there as soon as Settings opens, and it updates when you open "Get started" or "Diagnostics", which run the check again.
 
 ## Use it
 
@@ -40,4 +40,5 @@ The number next to "Get started" in the list of categories says how many steps a
 - Whether Copilot CLI is signed in is not checked; a session that cannot sign in says so in its terminal.
 - The list only looks, like the doctor. The one thing it changes is your projects folder, when you save it.
 - "Settings > Diagnostics" shows every check of the doctor, also those that do not stop a session, such as free disk space.
+- [Troubleshooting](/guide/troubleshooting) explains each step that does not turn green: installing and signing in to Copilot CLI, trusting your projects folder, and a company proxy.
 - In a container, Trackwall has to be running before the list can help; [Run in a dev container](/guide/dev-container) describes that part.
