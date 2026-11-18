@@ -143,6 +143,13 @@ export const MergeRequestThreads = z.object({
 });
 export type MergeRequestThreads = z.infer<typeof MergeRequestThreads>;
 
+/**
+ * A thread the user picked, with the notes the user saw (ADR-256): the agent gets those words or nothing, so a reviewer's
+ * edit or reply after the user read the thread never reaches the agent unseen.
+ */
+export const SeenMergeRequestThread = MergeRequestThread.pick({ id: true, notes: true });
+export type SeenMergeRequestThread = z.infer<typeof SeenMergeRequestThread>;
+
 /** The most threads read from the repo host: GitHub's largest page, and as many as fit a long review. */
 export const MERGE_REQUEST_THREADS_READ_MAX = 100;
 
@@ -325,12 +332,13 @@ export const mergeRequestsApi = {
    */
   threads: endpoint("threads", TaskRequest, MergeRequestThreads),
   /**
-   * Hands the threads the user picked to the task's agent (ADR-256): the daemon reads them from the repo host again and
-   * queues those still unresolved as merge request comments for `get_review_comments`. `bad_request` when none of them is.
+   * Hands the threads the user picked, with the notes the user saw, to the task's agent (ADR-256): the daemon reads them
+   * from the repo host again and queues those still unresolved as merge request comments for `get_review_comments`.
+   * `bad_request`, with nothing sent, when a picked thread's notes differ from what the user saw, or none is unresolved.
    */
   sendThreads: endpoint(
     "send-threads",
-    TaskRequest.extend({ threads: z.array(MergeRequestThreadId).min(1).max(MERGE_REQUEST_THREADS_MAX) }),
+    TaskRequest.extend({ threads: z.array(SeenMergeRequestThread).min(1).max(MERGE_REQUEST_THREADS_MAX) }),
     z.object({ delivery: PromptDelivery, sent: z.number().int().positive() }),
   ),
 };
