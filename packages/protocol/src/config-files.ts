@@ -33,6 +33,7 @@ export const ConfigEntryId = z.enum([
   "legacy-worktrees-dir",
   "state-backups-dir",
   "work-backup-dir",
+  "container-health-dir",
   "projects-mise-config",
   "local-config-store",
   "task-worktrees-dir",
@@ -72,7 +73,8 @@ export type DocsPage =
   | "tasks"
   | "trackwall-errors"
   | "updates"
-  | "work-backup";
+  | "work-backup"
+  | "container-health";
 
 export interface ConfigEntryInfo {
   place: ConfigPlace;
@@ -207,7 +209,7 @@ export const CONFIG_ENTRIES: Record<ConfigEntryId, ConfigEntryInfo> = {
     kind: "folder",
     writer: "trackwall",
     internal: true,
-    purpose: "The output of mise tasks, Trackwall's own errors and the MCP calls agents made.",
+    purpose: "The output of mise tasks, Trackwall's own errors, the MCP calls agents made and, in a dev container, the daemon's restarts.",
     docs: "trackwall-errors",
   },
   "local-config-push-repo": {
@@ -242,6 +244,14 @@ export const CONFIG_ENTRIES: Record<ConfigEntryId, ConfigEntryInfo> = {
     internal: true,
     purpose: "The last backup of the work that exists only in this container, for you to download. Only in a dev container.",
     docs: "work-backup",
+  },
+  "container-health-dir": {
+    place: "state",
+    kind: "folder",
+    writer: "trackwall",
+    internal: true,
+    purpose: "A reading of the container's memory, processors and processes every 30 seconds, kept for a day. Only in a dev container.",
+    docs: "container-health",
   },
   "projects-mise-config": {
     place: "projects",

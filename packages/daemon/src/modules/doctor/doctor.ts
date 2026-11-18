@@ -22,9 +22,9 @@ import {
 } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
 import { isInside } from "../../infra/path-inside.ts";
+import { type DiskSpace, gigabytes, LOW_DISK_BYTES, VERY_LOW_DISK_BYTES } from "../../platform/disk-space.ts";
 import { trustedFolderOf, trustedFolders } from "./copilot-trust.ts";
 import { trustFolder } from "./copilot-trust-write.ts";
-import { type DiskSpace, gigabytes, LOW_DISK_BYTES, VERY_LOW_DISK_BYTES } from "./disk-space.ts";
 import { fileScanningOutcome, folderCosts, type ScanFolder } from "./file-scanning.ts";
 import { firstLine } from "./first-line.ts";
 import { folderStorage } from "./folder-storage.ts";

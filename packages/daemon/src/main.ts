@@ -184,6 +184,7 @@ async function start(
     facade.repoWatch.start();
     facade.localConfig.start();
     facade.mergeRequests.start();
+    facade.containerHealth.start();
     facade.verifications.startOutdatedCheck();
     // After the API: the viewer token goes into `viewer.json` with the port it answers on (ADR-221).
     facade.viewerAccess.open({ port: api.port, instance: api.instance });

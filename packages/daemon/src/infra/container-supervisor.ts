@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { CONTAINER_COMMAND, containerProxyPort, SUPERVISE_COMMAND } from "./args.ts";
 import { appendNote } from "./container-log.ts";
+import { recordRestart } from "./daemon-restarts.ts";
 import { isAlive, readDaemonFile } from "./discovery.ts";
 import { claimPidFile, pidFileHolder, releasePidFile } from "./pid-file.ts";
 import { selfCommand } from "./self-command.ts";
@@ -149,6 +150,7 @@ export async function superviseDaemon(home: string, port: number): Promise<void>
       if (next.kind === "stop") return note(next.why);
       if (next.kind === "final") return note(finalExitNote(home, next.code, daemon.pid));
       crashes = next.crashes;
+      recordRestart(home, { at: new Date().toISOString(), exitCode: code, signal: daemon.signalCode ?? null }, note);
       note(`the daemon ended with ${code === null ? "a signal" : `code ${code}`}; starting it again in ${next.delayMs / 1000} s`);
       await new Promise((r) => setTimeout(r, next.delayMs));
     }

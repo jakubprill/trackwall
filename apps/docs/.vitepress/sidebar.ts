@@ -29,6 +29,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       { text: "Shell", link: "/features/shell" },
       { text: "Local config backup", link: "/features/local-config" },
       { text: "Container work backup", link: "/features/work-backup" },
+      { text: "Container health", link: "/features/container-health" },
       { text: "Environment from mise", link: "/features/mise-environment" },
       { text: "Services", link: "/features/services" },
       { text: "Batch command", link: "/features/batch-command" },

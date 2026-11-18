@@ -62,6 +62,7 @@ describe("Settings as folded rows (ADR-263)", () => {
   test("a category of reports keeps its sections open, each on its own", () => {
     expect(settingsParts(settingsCategory("diagnostics").sections)).toEqual([
       { kind: "section", section: "doctor" },
+      { kind: "section", section: "container-health" },
       { kind: "section", section: "daemon" },
       { kind: "section", section: "trackwall-errors" },
     ]);

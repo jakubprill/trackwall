@@ -90,7 +90,7 @@ export const SETTINGS_CATEGORIES = [
     id: "diagnostics",
     label: "Diagnostics",
     description: "Where to look when something does not work.",
-    sections: ["doctor", "daemon", "trackwall-errors"],
+    sections: ["doctor", "container-health", "daemon", "trackwall-errors"],
     wide: false,
     group: "reports",
   },

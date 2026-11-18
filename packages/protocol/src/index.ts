@@ -12,6 +12,7 @@ export * from "./code-search.ts";
 export * from "./commit-search.ts";
 export * from "./config-files.ts";
 export * from "./container.ts";
+export * from "./container-health.ts";
 export * from "./conversation.ts";
 export * from "./copilot-cli-version.ts";
 export * from "./copilot-prompt-box.ts";
