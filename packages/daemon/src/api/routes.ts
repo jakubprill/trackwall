@@ -146,6 +146,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     return null;
   }),
   route(errorJournalApi.errors, (f) => f.errorJournal.list()),
+  route(errorJournalApi.diagnostics, (f) => f.diagnostics()),
   route(errorJournalApi.recordUiError, (f, b) => {
     f.errorJournal.recordUiError(b);
     return null;
