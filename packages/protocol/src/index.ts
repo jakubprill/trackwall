@@ -73,4 +73,5 @@ export * from "./unpushed-work.ts";
 export * from "./usage-report.ts";
 export * from "./verification.ts";
 export * from "./viewer.ts";
+export * from "./work-backup.ts";
 export * from "./workspace.ts";

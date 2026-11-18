@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "fileName": "trackwall-backup-2026-11-18-1440.tar.gz",
+  "createdAt": "2026-11-18T14:40:00.000Z",
+  "bytes": 421888,
+  "repos": 2,
+  "branches": 3,
+  "stashes": 1,
+  "changedWorktrees": 1,
+  "stateFiles": 6,
+  "skipped": [{ "repo": "billing", "message": "git could not read it" }]
+}

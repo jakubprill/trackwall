@@ -35,6 +35,7 @@ import {
   verificationApi,
   viewerApi,
   viewerSessionList,
+  workBackupApi,
   workspaceApi,
 } from "@trackwall/protocol";
 import { z } from "zod";
@@ -160,6 +161,8 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(usageReportApi.week, (f, b) => f.usageReport.week(b.weeksAgo)),
   route(usageReportApi.trend, (f) => f.usageReport.trend()),
   route(taskJournalApi.modelStats, (f, b) => f.taskJournal.modelStats(b.period)),
+  route(workBackupApi.state, (f) => f.workBackup.state()),
+  route(workBackupApi.create, (f) => f.workBackup.create()),
   route(localConfigApi.store, (f) => f.localConfig.store()),
   route(localConfigApi.repo, (f, b) => f.localConfig.repo(b.repo)),
   route(localConfigApi.repos, (f) => f.localConfig.repos()),
