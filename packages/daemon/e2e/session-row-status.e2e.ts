@@ -6,9 +6,16 @@ const trackwall = useTrackwall();
 /** What a conversation that called a model used, as the daemon reports it; the fake Copilot CLI reports none. */
 const USAGE = { modelCalls: 3, inputTokens: 18_000, outputTokens: 400, aiCredits: 0.34, aiCreditsPartial: false, premiumRequests: 0 };
 
+/**
+ * In the middle of the sixth minute: the row counts the wait from its own clock, which it reads every 30 seconds, so a
+ * list that reaches the page after that reading is counted from up to 30 seconds earlier, and the test reads the row
+ * seconds later. Half a minute either way still shows "5 min".
+ */
+const WAITED_MS = 5.5 * 60_000;
+
 /** Makes every waiting session of a session list wait for five minutes, and every session use `USAGE`. */
 function withWaitAndUsage(list: { sessions: { waitingSince: string | null; usage: unknown }[] }): void {
-  const waitingSince = new Date(Date.now() - 5 * 60_000).toISOString();
+  const waitingSince = new Date(Date.now() - WAITED_MS).toISOString();
   for (const session of list.sessions) {
     if (session.waitingSince !== null) session.waitingSince = waitingSince;
     session.usage = USAGE;
