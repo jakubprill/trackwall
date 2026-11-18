@@ -23,13 +23,13 @@ The shell keeps running when you switch tabs or views, and Trackwall keeps its s
 
 "Files on disk" above the shell opens a list of the same folder as it is now, with files you have not committed and build output too. Click a folder to open it, and the path above the list to go back up. Click a file to download it: your browser or the app saves it like any other download. The list only reads: nothing in the folder changes. Links are shown but not followed.
 
-For work that is no single repo's, such as cloning a repo by hand or looking across all of them, choose "Shell" next to the projects folder's path at the top of the list in "Repos". It opens a shell in the projects folder itself, which in a dev container is the volume with your repos, with "Files on disk" beside it too.
+For work that is no single repo's, such as cloning a repo by hand or looking across all of them, press "…" above the list in "Repos" and choose "Shell". It opens a shell in the projects folder itself, which in a dev container is the volume with your repos, with "Files on disk" beside it too.
 
 A task's "Terminal" tab is still the agent's session; "Shell" is yours. Ctrl+PageDown and Ctrl+PageUp (⌘⇧] and ⌘⇧[ on macOS) switch between them, and on to the next tabs, like tabs in a browser, also while you type in either one. Ending a task closes its shell first, since nothing may run in a worktree that goes away.
 
 ## Use it
 
-1. Open a repo in "Repos", or a task in "Sessions", and choose its "Shell" tab; or choose "Shell" next to the projects folder in "Repos".
+1. Open a repo in "Repos", or a task in "Sessions", and choose its "Shell" tab; or press "…" above the list in "Repos" and choose "Shell".
 2. Choose "Open a shell".
 3. Type. Choose "Close" when you are done.
 4. To take a file out, choose "Files on disk", open its folder and click the file.

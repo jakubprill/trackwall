@@ -33,7 +33,7 @@ From the card Trackwall gives each repo tags: `java`, `typescript`, `frontend`, 
 
 1. Open "Repos" and select a repo; its card is the first tab.
 2. Press a row under "At a glance", such as "HTTP endpoints", to see its facts with the file and line each comes from.
-3. To narrow the list, pick tags in the filter above it.
+3. To narrow the list, open "Tag filter" above it and pick tags. Folded, the filter still shows the tags you picked.
 
 ## Good to know
 

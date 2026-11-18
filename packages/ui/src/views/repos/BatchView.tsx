@@ -109,13 +109,14 @@ export function BatchView({
   );
 }
 
-/** Under the repo list: the way to the batch command, with progress while it runs. */
+/** Under the list's header while a batch command runs (ADR-273): its progress and the way to its results. */
 export function BatchBar({ batch, onShow }: { batch: BatchRunHandle; onShow: () => void }) {
-  const progress = batch.run?.finishedAt === null ? batchProgress(batch.run) : undefined;
+  if (batch.run?.finishedAt !== null) return null;
+  const progress = batchProgress(batch.run);
   return (
     <div className="flex px-4 pb-3">
       <Button variant="outline" size="sm" onClick={onShow}>
-        <ListChecks /> {progress ? `Batch command ${progress.done}/${progress.total}` : "Batch command"}
+        <ListChecks /> {`Batch command ${progress.done}/${progress.total}`}
       </Button>
     </div>
   );
